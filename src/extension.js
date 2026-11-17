@@ -1,0 +1,108 @@
+'use strict';
+const vscode = require('vscode');
+const { registerNavigation } = require('./navigation');
+const { registerJavaFeatures } = require('./java');
+
+class ProjectTree {
+  constructor() { this.events = new vscode.EventEmitter(); this.onDidChangeTreeData = this.events.event; }
+  getTreeItem(item) { return item; }
+  async getChildren(parent) {
+    if (!parent) return (vscode.workspace.workspaceFolders || []).map(f => { const item = this.item(f.uri, true, f.name); item.collapsibleState = vscode.TreeItemCollapsibleState.Expanded; return item; });
+    try {
+      const hidden = new Set(['.git', '.idea', 'node_modules', 'dist', 'target', '.vscode-test']);
+      return (await vscode.workspace.fs.readDirectory(parent.resourceUri)).filter(([name]) => !hidden.has(name)).sort((a, b) => Number(b[1] === vscode.FileType.Directory) - Number(a[1] === vscode.FileType.Directory) || a[0].localeCompare(b[0])).map(([name, kind]) => this.item(vscode.Uri.joinPath(parent.resourceUri, name), kind === vscode.FileType.Directory, name));
+    } catch { return []; }
+  }
+  item(uri, directory, label) {
+    const item = new vscode.TreeItem(label, directory ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+    item.id = uri.toString(); item.resourceUri = uri;
+    if (!directory) item.command = { command: 'vscode.open', title: 'Open File', arguments: [uri] };
+    return item;
+  }
+  refresh() { this.events.fire(); }
+  dispose() { this.events.dispose(); }
+}
+class SchemaTree {
+  constructor(state) { this.state = state; this.events = new vscode.EventEmitter(); this.onDidChangeTreeData = this.events.event; }
+  getTreeItem(item) { return item; }
+  getChildren(parent) {
+    if (!parent) {
+      const root = new vscode.TreeItem(this.state.label, vscode.TreeItemCollapsibleState.Expanded);
+      root.kind = 'database'; root.iconPath = new vscode.ThemeIcon('database'); root.description = this.state.mysql ? 'MySQL / MariaDB · console sessions' : 'SQLite · sample data'; return [root];
+    }
+    if (parent.kind === 'database') return this.state.schema.map(table => {
+      const item = new vscode.TreeItem(table.name, vscode.TreeItemCollapsibleState.Collapsed);
+      item.kind = 'table'; item.contextValue='rocketbrain.table'; item.table = table; item.iconPath = new vscode.ThemeIcon('table'); item.description = `${table.columns.length} columns`;
+      item.command = { command: 'rocketbrain.openTable', title: 'Preview Table', arguments: [table.name] }; return item;
+    });
+    return (parent.table?.columns || []).map(col => { const item = new vscode.TreeItem(col.name); item.description = col.type + (col.primaryKey ? ' · PK' : ''); item.iconPath = new vscode.ThemeIcon(col.primaryKey ? 'key' : 'symbol-field'); return item; });
+  }
+  refresh() { this.events.fire(); }
+  dispose() { this.events.dispose(); }
+}
+let activeJava,activeJavaTesting,activeSchemaRename,activeSqlScripts,activeSchemaComparison,activeStreamImports,activeSchemaPrograms,activeSchemaCoordinator,activeDatabase,activeDbConnections,activeDbAuthoring,activeSpringProjects;
+async function activate(context) {
+  const database = await require("./database-workbench").registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree);
+  activeDatabase=database;
+  const dbConnections=require('./db/connection-profiles-vscode').registerConnectionProfiles(context,vscode,{database});activeDbConnections=dbConnections;
+  const dbAuthoring=require('./db/db-authoring-vscode').registerDatabaseAuthoring(context,vscode,{database});activeDbAuthoring=dbAuthoring;
+  context.subscriptions.push(registerNavigation(vscode, context));
+  const java = registerJavaFeatures(context, vscode);
+  activeJava = java;
+  const springProjects=require('./spring/project-vscode').registerSpringProjectTools(context,vscode,{java});activeSpringProjects=springProjects;
+  context.subscriptions.push(java);
+  const javaTesting=require('./java/testing-vscode').registerJavaTesting(context,vscode,{java});
+  activeJavaTesting=javaTesting;context.subscriptions.push(javaTesting);
+  const jpa = require('./jpa/vscode').registerJPAFeatures(context, vscode, { catalog: database.databaseCatalog });
+  context.subscriptions.push(jpa);
+  const analysis = require('./analysis-tree').registerAnalysisTree(context, vscode, { spring: java.spring, jpa });
+  context.subscriptions.push(analysis);
+  const sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase});
+  context.subscriptions.push(sqlAnalysis);
+  const schemaRename=require('./db/schema-vscode').registerSchemaRename(context,vscode,{database,sqlAnalysis});
+  activeSchemaRename=schemaRename;context.subscriptions.push(schemaRename);
+  const sqlScripts=require('./db/sql-script-vscode').registerSqlScripts(context,vscode,{database});
+  activeSqlScripts=sqlScripts;context.subscriptions.push(sqlScripts);
+  const schemaComparison=require('./db/schema-diff-vscode').registerSchemaComparison(context,vscode,{
+    capture:options=>database.captureSchemaSnapshot(options),
+    prepare:request=>database.previewSchemaMigration(request),
+    apply:request=>database.applySchemaMigration(request),
+    discard:reviewId=>database.discardSchemaMigration(reviewId),
+    prepareRebuild:request=>database.previewSchemaRebuild(request),
+    applyRebuild:request=>database.applySchemaRebuild(request),
+    recoverRebuild:request=>database.recoverSchemaRebuild(request),
+    listRecoveries:()=>database.listSchemaRecoveries(),discardRebuild:reviewId=>database.discardSchemaRebuild(reviewId)
+  });
+  activeSchemaComparison=schemaComparison;context.subscriptions.push(schemaComparison);
+  const schemaPrograms=require('./db/schema-programs-vscode').registerSchemaPrograms(context,vscode,{list:()=>database.listSchemaPrograms(),analyze:request=>database.analyzeSchemaPrograms(request),onDidChangeDatabase:database.onDidChangeDatabase});
+  activeSchemaPrograms=schemaPrograms;context.subscriptions.push(schemaPrograms);
+  const schemaCoordinator=require('./db/schema-coordinator-vscode').registerSchemaCoordinator(context,vscode,{withExclusiveSchemaWork:database.withExclusiveSchemaWork});
+  activeSchemaCoordinator=schemaCoordinator;context.subscriptions.push(schemaCoordinator);
+  const streamImports=require('./db/import-stream-vscode').registerStreamImports(context,vscode,{
+    inspect:request=>database.inspectStreamImport(request),prepare:request=>database.prepareStreamImport(request),
+    run:request=>database.runStreamImport(request),commit:request=>database.commitStreamImport(request),
+    rollback:request=>database.rollbackStreamImport(request),discard:reviewId=>database.discardStreamImport(reviewId),
+    pending:()=>database.pendingStreamImports(),tables:()=>database.schema().filter(table=>table.kind==='table'&&String(table.engine).toUpperCase()==='INNODB'&&!table.name.startsWith('__rb_')),dispose:()=>database.disposeStreamImports()
+  });
+  activeStreamImports=streamImports;context.subscriptions.push(streamImports);
+  context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
+  return { ...database, java, javaTesting, jpa, analysis, sqlAnalysis,schemaRename,sqlScripts,schemaComparison,streamImports,schemaPrograms,schemaCoordinator,dbConnections,dbAuthoring,springProjects };
+}
+async function deactivate() {
+  const connections=activeDbConnections;activeDbConnections=undefined;if(connections)await connections.dispose();
+  const authoring=activeDbAuthoring;activeDbAuthoring=undefined;if(authoring)await authoring.dispose();
+  const springProjects=activeSpringProjects;activeSpringProjects=undefined;if(springProjects)await springProjects.dispose();
+  const coordinator=activeSchemaCoordinator;activeSchemaCoordinator=undefined;if(coordinator)await coordinator.dispose();
+  const programs=activeSchemaPrograms;activeSchemaPrograms=undefined;if(programs)await programs.dispose();
+  const imports=activeStreamImports;activeStreamImports=undefined;if(imports)await imports.dispose();
+  const scripts=activeSqlScripts;activeSqlScripts=undefined;if(scripts)await scripts.dispose();
+  const comparison=activeSchemaComparison;activeSchemaComparison=undefined;if(comparison)await comparison.dispose();
+  const schemaRename=activeSchemaRename;activeSchemaRename=undefined;if(schemaRename)await schemaRename.dispose();
+  const java = activeJava;
+  const testing=activeJavaTesting;activeJavaTesting=undefined;
+  activeJava = undefined;
+  if(testing)await testing.dispose();
+  if (java) await java.dispose();
+  const database=activeDatabase;activeDatabase=undefined;if(database)await database.dispose();
+}
+module.exports = { activate, deactivate };

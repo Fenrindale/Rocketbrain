@@ -1,0 +1,111 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const mysql = require('mysql2/promise');
+const { MysqlService } = require('../src/db/mysql');
+const { ResultsView } = require('../src/results');
+const { TableEditor } = require('../src/table-editor');
+const { browserRuntime } = require('./helpers/browser-runtime');
+const runtime = browserRuntime();
+const configPath = process.env.ROCKETBRAIN_TEST_MYSQL_CONFIG || process.env.ROCKETBRAIN_MYSQL_TEST_CONFIG;
+const config = process.env.ROCKETBRAIN_TEST_MYSQL_JSON ? JSON.parse(process.env.ROCKETBRAIN_TEST_MYSQL_JSON) : configPath ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : null;
+
+test('table editing UI stages, reviews and applies real SQL without losing transaction or conflict state', { timeout: 90000, skip: runtime.skip || (!config && 'Run with an explicitly provisioned disposable MySQL/MariaDB fixture.') }, async t => {
+  const observer = await mysql.createConnection({ ...config, supportBigNumbers: true, bigNumberStrings: true });
+  const table = 'rb_ui_' + crypto.randomBytes(4).toString('hex');
+  let db;
+  t.after(async () => { await db?.dispose(); await observer.query('DROP TABLE IF EXISTS `' + table + '`'); await observer.end(); });
+  await observer.query('CREATE TABLE `' + table + '` (id int PRIMARY KEY AUTO_INCREMENT, title varchar(255) NOT NULL, amount decimal(30,8) NOT NULL DEFAULT 0, nullable_text varchar(100) NULL, big_value bigint unsigned NOT NULL DEFAULT 9007199254740993, generated_title varchar(256) GENERATED ALWAYS AS (CONCAT(title,\'!\')) STORED) ENGINE=InnoDB');
+  await observer.execute('INSERT INTO `' + table + '` (title,amount,nullable_text) VALUES (?,?,?)', ['Alpha', '10.12345678', 'keep']);
+  db = new MysqlService(config); t.after(() => db.dispose());
+  await db.openSession('grid-ui', { readOnly: true });
+  const browser = await runtime.chromium.launch({ executablePath: runtime.executablePath, headless: true }); t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const pageErrors = [], requests = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.route('**/*', async route => {
+    const name = route.request().url().split('/').at(-1);
+    if (['results.js', 'results.css'].includes(name)) await route.fulfill({ contentType: name.endsWith('.js') ? 'application/javascript' : 'text/css', body: (name.endsWith('.css') ? fs.readFileSync(path.join(__dirname, 'helpers/webview-palette.css'), 'utf8') : '') + fs.readFileSync(path.join(__dirname, '../src/ui', name), 'utf8') });
+    else { requests.push(route.request().url()); await route.abort(); }
+  });
+  let receive, lastPost = Promise.resolve(), controller;
+  const connection = { db, mysql: true, epoch: 1, label: 'disposable grid test' };
+  const host = new ResultsView({ Uri: { joinPath: (root, ...parts) => path.posix.join(root, ...parts), file: value => value }, window: { showWarningMessage: async () => 'Close Result', showErrorMessage: message => { throw new Error(message); } } }, { extensionUri: '/virtual/rocketbrain', subscriptions: [] }, { editAction: (id, message) => controller.handle(id, message) });
+  controller = new TableEditor({ results: host, connection: () => connection, trusted: () => true, withSession: async (id, action) => action(id) });
+  host.resolveWebviewView({ webview: { cspSource: 'https://rocketbrain.test', asWebviewUri: uri => `https://rocketbrain.test/${path.posix.basename(uri)}`, onDidReceiveMessage: handler => { receive = handler; return { dispose() {} }; }, postMessage(data) { lastPost = lastPost.then(() => page.evaluate(data => window.dispatchEvent(new MessageEvent('message', { data })), data)); return lastPost; } }, onDidDispose() {} });
+  await lastPost;
+  await page.exposeFunction('__postToHost', async message => { await receive(message); });
+  await page.evaluate(() => { window.acquireVsCodeApi = () => ({ postMessage: message => window.__postToHost(message), getState: () => window.__savedState, setState: state => { window.__savedState = structuredClone(state); } }); });
+  await page.setContent(host.view.webview.html, { waitUntil: 'networkidle' });
+  await controller.open({ table, sessionId: 'grid-ui', sql: 'SELECT * FROM `' + table + '` LIMIT 200' }); await lastPost;
+  assert.equal(await page.locator('#enable-edit').isVisible(), true);
+  assert.equal(await page.locator('[aria-label$="column generated_title"]').count(), 0);
+  await page.locator('#enable-edit').click();
+  await page.waitForFunction(() => document.getElementById('enable-edit').hidden && !document.getElementById('add-row').disabled);
+  const originalId = host.history.at(-1).id;
+  async function edit(column, value, inserted = false) {
+    const cells = page.locator(`td[role="button"][aria-label^="Edit ${inserted ? 'new row' : 'row'} "][aria-label$="column ${column}"]`);
+    await cells.first().dblclick();
+    if (value === null) await page.locator('#cell-null').check(); else { await page.locator('#cell-null').uncheck(); await page.locator('#cell-value').fill(value); }
+    await page.getByRole('button', { name: 'Stage Cell', exact: true }).click();
+  }
+  async function action(id, messagePattern) {
+    await page.locator('#' + id).click();
+    if (messagePattern) await page.waitForFunction(pattern => new RegExp(pattern, 'i').test(document.getElementById('edit-status').textContent) && !document.getElementById('edit-tools').querySelector('#reload').disabled, messagePattern);
+    await lastPost;
+  }
+  const hostile = '<img src="https://evil.invalid/x" onerror="window.__xss=true">\'; DROP TABLE people; --';
+  await edit('title', hostile); await edit('nullable_text', null); await edit('amount', '1234567890123456789012.12345678');
+  for (let i = 0; i < 9; i++) { const id = host.begin('SELECT 1', 'Other result'); host.finish(id, { columns: ['n'], rows: [[1]], rowCount: 1, durationMs: 1 }); }
+  await lastPost;
+  assert.ok(host.history.some(record => record.id === originalId), 'New results must not evict a table with drafts.');
+  assert.equal(host.history.length, 8);
+  await page.getByRole('button', { name: `Result ${originalId}`, exact: true }).click();
+  assert.match(await page.locator('#draft-count').textContent(), /1 staged/);
+  await page.setContent(host.view.webview.html, { waitUntil: 'networkidle' }); await lastPost;
+  await page.getByRole('button', { name: `Result ${originalId}`, exact: true }).click();
+  assert.ok((await page.locator('#grid').textContent()).includes('DROP TABLE people'));
+  assert.equal((await observer.query('SELECT title FROM `' + table + '`'))[0][0].title, 'Alpha');
+  const reviewChangeSet = db.reviewChangeSet.bind(db);
+  let releaseReview; const gate = new Promise(resolve => { releaseReview = resolve; }); t.after(() => releaseReview());
+  db.reviewChangeSet = async changes => { await gate; return reviewChangeSet(changes); };
+  await page.locator('#review').click();
+  assert.equal(await page.locator('#add-row').isDisabled(), true, 'Draft mutations are locked before a delayed review response arrives.');
+  assert.equal(await page.locator('td.editable').count(), 0);
+  releaseReview(); db.reviewChangeSet = reviewChangeSet;
+  await page.locator('#review-panel').waitFor({ state: 'visible' });
+  assert.match(await page.locator('#review-sql').textContent(), /UPDATE.*\?/s);
+  const reviewText = await page.locator('#review-sql').textContent();
+  assert.ok(reviewText.includes(JSON.stringify(hostile).slice(1, -1)));
+  assert.equal(await page.locator('#review-panel img').count(), 0);
+  fs.mkdirSync(path.join(__dirname, '../test-output'), { recursive: true });
+  await page.screenshot({ path: path.join(__dirname, '../test-output/table-edit-review.png') });
+  await action('apply', 'Changes applied');
+  assert.equal((await observer.query('SELECT title FROM `' + table + '`'))[0][0].title, 'Alpha');
+  assert.ok((await db.query('SELECT title,amount,nullable_text FROM `' + table + '`', { sessionId: 'grid-ui' })).rows[0].includes(hostile));
+  await action('rollback', 'rolled back');
+  assert.equal((await observer.query('SELECT title FROM `' + table + '`'))[0][0].title, 'Alpha');
+  await edit('title', 'Committed'); await page.locator('#review').click(); await page.locator('#review-panel').waitFor({ state: 'visible' }); await action('apply', 'Changes applied'); await action('commit', 'committed');
+  assert.equal((await observer.query('SELECT title FROM `' + table + '`'))[0][0].title, 'Committed');
+  await page.locator('#add-row').click(); await edit('title', 'Inserted', true); await page.locator('#review').click(); await page.locator('#review-panel').waitFor({ state: 'visible' }); await action('apply', 'Changes applied'); await action('commit', 'committed');
+  assert.equal(String((await observer.query('SELECT COUNT(*) AS n FROM `' + table + '`'))[0][0].n), '2');
+  await page.locator('tbody tr').last().getByRole('button', { name: /^Delete row / }).click();
+  await page.locator('#review').click(); await page.locator('#review-panel').waitFor({ state: 'visible' }); await action('apply', 'Changes applied'); await action('commit', 'committed');
+  assert.equal(String((await observer.query('SELECT COUNT(*) AS n FROM `' + table + '`'))[0][0].n), '1');
+  await observer.execute('UPDATE `' + table + '` SET title=? WHERE id=1', ['External change']);
+  await edit('title', 'Should conflict'); await page.locator('#review').click(); await page.locator('#review-panel').waitFor({ state: 'visible' }); await page.locator('#apply').click();
+  await page.waitForFunction(() => document.getElementById('edit-status').classList.contains('error'));
+  assert.match(await page.locator('#edit-status').textContent(), /conflict|changed|stale/i);
+  assert.equal((await observer.query('SELECT title FROM `' + table + '`'))[0][0].title, 'External change');
+  await page.locator('#discard').click(); await action('rollback', 'rolled back');
+  assert.ok((await page.locator('#grid').textContent()).includes('External change'));
+  connection.epoch++;
+  await controller.handle(originalId, { type: 'reviewChanges', changes: { updates: [], inserts: [], deletes: [] } }); await lastPost;
+  assert.match(await page.locator('#edit-status').textContent(), /inactive connection/i);
+  assert.equal(await page.locator('#add-row').isDisabled(), true);
+  assert.equal(await page.evaluate(() => window.__xss), undefined);
+  assert.deepEqual(pageErrors, []); assert.deepEqual(requests, []);
+});

@@ -1,0 +1,12 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'dev.rocketbrain'
+version = '1.0.0'
+
+// No remote repository or dependency is needed for this original fixture.
+application {
+    mainClass = 'dev.rocketbrain.gradle.Application'
+}

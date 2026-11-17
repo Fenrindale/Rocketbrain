@@ -1,0 +1,121 @@
+'use strict';
+const path = require('node:path');
+const { independentJavaExecutable, argumentString } = require('./debug-runtime');
+const { JavaDebugAdapter } = require('./debug-adapter');
+const DEBUG_TYPE = 'rocketbrain-java';
+
+function registerJavaDebugger(vscode, api, output) {
+  const sessions = new Map(); let disposed = false;
+  function record(session) {
+    if (!sessions.has(session.id)) sessions.set(session.id, { session, state: 'starting', buildVersion: 0, appliedVersion: 0, hcrEvents: [] });
+    return sessions.get(session.id);
+  }
+  function observe(session, message) {
+    const info = sessions.get(session.id); if (!info) return;
+    if (message.type === 'response' && message.command === 'initialize' && message.success) info.capabilities = message.body;
+    if (message.type === 'event') {
+      if (message.event === 'stopped') { info.state = 'stopped'; info.threadId = message.body?.threadId; }
+      if (message.event === 'continued') info.state = 'running';
+      if (message.event === 'terminated') info.state = 'terminated';
+      if (message.event === 'hotcodereplace') {
+        const event = { ...message.body, time: Date.now() }; info.hcrEvents.push(event); if (info.hcrEvents.length > 20) info.hcrEvents.shift();
+        if (event.changeType === 'BUILD_COMPLETE') info.buildVersion++;
+        output.appendLine(`Hot code replace ${event.changeType}: ${event.message || ''}`);
+      }
+    }
+  }
+  const ensureTrusted = () => { if (disposed) throw new Error('Java debugger is disposed.'); if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before running or attaching Java code.'); };
+  const run = async (command, ...args) => {
+    ensureTrusted(); await api.start();
+    if (!api.getState().debugBundlePath) throw new Error('Install the Rocketbrain Java engine to configure its public Java debug bundle, or set rocketbrain.java.debugBundlePath.');
+    return api.executeWorkspaceCommand(command, ...args);
+  };
+  async function resolve(folder, value, token) {
+    ensureTrusted();
+    const config = { ...value, type: DEBUG_TYPE, name: value.name || 'Rocketbrain Java', request: value.request || 'launch' };
+    if (token?.isCancellationRequested) return undefined;
+    if (config.request === 'attach') {
+      config.hostName = config.hostName || '127.0.0.1'; config.port = config.port === undefined ? 5005 : Number(config.port);
+      if (typeof config.hostName !== 'string' || !config.hostName.trim() || !Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Attach requires a hostName and TCP port from 1 to 65535.');
+      return config;
+    }
+    if (config.request !== 'launch') throw new Error('Rocketbrain Java supports launch and attach requests.');
+    const active = vscode.window.activeTextEditor?.document;
+    if (!config.mainClass || config.mainClass === '${file}' || /\.java$/i.test(config.mainClass)) {
+      const uri = config.mainClass && config.mainClass !== '${file}' ? vscode.Uri.file(config.mainClass) : active?.languageId === 'java' ? active.uri : undefined;
+      let candidates = uri ? await run('vscode.java.resolveMainMethod', uri.toString()) : [];
+      if (!candidates?.length) candidates = await run('vscode.java.resolveMainClass', folder?.uri.toString());
+      if (token?.isCancellationRequested) return undefined;
+      if (!candidates?.length) throw new Error('No Java main method was found. Wait for project import, or supply mainClass and projectName in launch.json.');
+      const selected = candidates.length === 1 ? candidates[0] : await vscode.window.showQuickPick(candidates.map(item => ({ label: item.mainClass, description: item.projectName, candidate: item })), { title: 'Rocketbrain · Select Java main class' }, token);
+      if (!selected || token?.isCancellationRequested) return undefined;
+      const main = selected.candidate || selected; config.mainClass = main.mainClass; config.projectName = config.projectName || main.projectName;
+    }
+    if (typeof config.mainClass !== 'string' || !config.mainClass.trim()) throw new Error('Launch requires a Java mainClass.');
+    if (vscode.workspace.textDocuments.some(document => document.languageId === 'java' && document.isDirty)) throw new Error('Save the modified Java source files before debugging so breakpoints and compiled classes agree.');
+    const build = await run('vscode.java.buildWorkspace', JSON.stringify({ mainClass: config.mainClass, projectName: config.projectName || '', isFullBuild: false }));
+    if (token?.isCancellationRequested) return undefined;
+    if (build !== 'SUCCEED' && build !== 1) throw new Error(`Java build did not succeed (${String(build)}). Fix compilation errors before debugging.`);
+    if (!config.classPaths?.length && !config.modulePaths?.length) {
+      const paths = await run('vscode.java.resolveClasspath', config.mainClass, config.projectName || '');
+      if (!Array.isArray(paths) || !Array.isArray(paths[0]) || !Array.isArray(paths[1])) throw new Error('Java engine did not resolve launch classpaths.');
+      [config.modulePaths, config.classPaths] = paths;
+    }
+    if (!config.classPaths?.length && !config.modulePaths?.length) throw new Error('No Java launch classpath was found.');
+    config.javaExec = config.javaExec || await run('vscode.java.resolveJavaExecutable', config.mainClass, config.projectName || '');
+    config.javaExec = independentJavaExecutable(config.javaExec);
+    config.cwd = config.cwd || folder?.uri.fsPath || path.dirname(active?.uri.fsPath || config.javaExec);
+    config.console = config.console || 'internalConsole'; config.encoding = config.encoding || 'UTF-8'; config.sourcePaths = config.sourcePaths || [];
+    config.args = argumentString(config.args); config.vmArgs = argumentString(config.vmArgs);
+    return token?.isCancellationRequested ? undefined : config;
+  }
+  const provider = {
+    provideDebugConfigurations: () => [{ type: DEBUG_TYPE, name: 'Rocketbrain: Debug Java main', request: 'launch', mainClass: '${file}' }, { type: DEBUG_TYPE, name: 'Rocketbrain: Attach Java', request: 'attach', hostName: '127.0.0.1', port: 5005 }],
+    resolveDebugConfiguration: (folder, config) => Object.keys(config).length ? config : { type: DEBUG_TYPE, name: 'Rocketbrain: Debug Java main', request: 'launch', mainClass: '${file}' },
+    async resolveDebugConfigurationWithSubstitutedVariables(folder, config, token) {
+      try { return await resolve(folder, config, token); }
+      catch (error) { output.appendLine(`Debugger: ${error.message}`); void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return undefined; }
+    }
+  };
+  const factory = { async createDebugAdapterDescriptor(session) {
+    ensureTrusted();
+    const mode = vscode.workspace.getConfiguration?.('rocketbrain.java').get('hotCodeReplace', 'manual') || 'manual';
+    await run('vscode.java.updateDebugSettings', JSON.stringify({ hotCodeReplace: mode === 'never' ? 'never' : 'manual', logLevel: 'WARNING', javaHome: api.getState().javaHome }));
+    const port = await run('vscode.java.startDebugSession'); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Java engine returned an invalid debugger port.');
+    record(session);
+    return new vscode.DebugAdapterInlineImplementation(new JavaDebugAdapter(vscode, port, message => observe(session, message), output));
+  } };
+  async function hotCodeReplace(sessionId) {
+    ensureTrusted();
+    if (vscode.workspace.getConfiguration?.('rocketbrain.java').get('hotCodeReplace', 'manual') === 'never') throw new Error('Hot code replace is disabled in Rocketbrain Java settings.');
+    const session = sessionId ? sessions.get(sessionId)?.session : vscode.debug.activeDebugSession;
+    const info = session && sessions.get(session.id);
+    if (!info || session.type !== DEBUG_TYPE || info.state !== 'stopped') throw new Error('Pause a Rocketbrain Java debug session before applying code changes.');
+    if (info.reloading) throw new Error('Hot code replacement is already running for this session.');
+    if (vscode.workspace.textDocuments.some(document => document.languageId === 'java' && document.isDirty)) throw new Error('Save Java source changes before applying hot code replacement.');
+    info.reloading = true;
+    try {
+      const config = session.configuration;
+      const build = await run('vscode.java.buildWorkspace', JSON.stringify({ mainClass: config.mainClass || '', projectName: config.projectName || '', isFullBuild: false }));
+      if (build !== 'SUCCEED' && build !== 1) throw new Error(`Hot code replacement build failed (${String(build)}).`);
+      ensureTrusted();
+      if (info.state === 'terminated') throw new Error('The debug session ended during compilation.');
+      const result = await session.customRequest('redefineClasses');
+      if (result?.errorMessage) throw new Error(`JVM rejected hot code replacement: ${result.errorMessage}. Structural changes may require restarting the JVM.`);
+      info.appliedVersion = info.buildVersion; info.lastHcrResult = { success: true, changedClasses: result?.changedClasses || [] };
+      output.appendLine(`Hot code replace applied: ${info.lastHcrResult.changedClasses.join(', ') || 'No pending class changes.'}`);
+      return { ...info.lastHcrResult, events: info.hcrEvents.slice(-5) };
+    } catch (error) { info.lastHcrResult = { success: false, error: error.message }; throw error; }
+    finally { info.reloading = false; }
+  }
+  const disposables = [vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, provider), vscode.debug.registerDebugAdapterDescriptorFactory(DEBUG_TYPE, factory), vscode.debug.onDidStartDebugSession(session => { if (session.type === DEBUG_TYPE) record(session); }), vscode.debug.onDidTerminateDebugSession(session => sessions.delete(session.id)), vscode.commands.registerCommand('rocketbrain.java.hotCodeReplace', async sessionId => {
+    try { return await hotCodeReplace(typeof sessionId === 'string' ? sessionId : undefined); }
+    catch (error) { output.appendLine(error.message); void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return { success: false, error: error.message }; }
+  }), vscode.commands.registerCommand('rocketbrain.java.debug', async () => {
+    try { ensureTrusted(); const uri = vscode.window.activeTextEditor?.document.uri || vscode.workspace.workspaceFolders?.[0]?.uri; return await vscode.debug.startDebugging(uri ? vscode.workspace.getWorkspaceFolder(uri) : undefined, { type: DEBUG_TYPE, name: 'Rocketbrain: Debug Java main', request: 'launch', mainClass: '${file}' }); }
+    catch (error) { void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return false; }
+  })];
+  return { hotCodeReplace, getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; }, async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); }, dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
+}
+
+module.exports = { DEBUG_TYPE, registerJavaDebugger };

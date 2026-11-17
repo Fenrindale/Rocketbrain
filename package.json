@@ -1,0 +1,1390 @@
+{
+  "name": "rocketbrain",
+  "displayName": "Rocketbrain",
+  "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
+  "version": "0.19.0",
+  "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
+  "homepage": "https://github.com/Fenrindale/Rocketbrain",
+  "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
+  "publisher": "rocketbrain-local",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other",
+    "Themes",
+    "Debuggers"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:rocketbrain.project",
+    "onView:rocketbrain.databases",
+    "onView:rocketbrain.results",
+    "onView:rocketbrain.analysis",
+    "onLanguage:java",
+    "onDebug:rocketbrain-java",
+    "workspaceContains:**/pom.xml",
+    "workspaceContains:**/build.gradle",
+    "workspaceContains:**/build.gradle.kts",
+    "onView:rocketbrain.javaProjects",
+    "onView:rocketbrain.connections"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "commands": [
+      { "command": "rocketbrain.java.move", "title": "Move Java Class File", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.changeSignature", "title": "Change Java Signature", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.safeDelete", "title": "Safe Delete Java Declaration", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.restoreDeleted", "title": "Restore Deleted Java File", "category": "Rocketbrain" },
+      {
+        "command": "rocketbrain.openConsole",
+        "title": "Open SQL Console",
+        "category": "Rocketbrain",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "rocketbrain.connectMysql",
+        "title": "Connect MySQL / MariaDB",
+        "category": "Rocketbrain",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "rocketbrain.useDemo",
+        "title": "Use Offline SQL Demo",
+        "category": "Rocketbrain",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "rocketbrain.disconnect",
+        "title": "Disconnect Database",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.runQuery",
+        "title": "Run Selected SQL or Current Statement",
+        "category": "Rocketbrain",
+        "icon": "$(play)"
+      },
+      {
+        "command": "rocketbrain.refresh",
+        "title": "Refresh Workspace and Schema",
+        "category": "Rocketbrain",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "rocketbrain.openTable",
+        "title": "Preview Table",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.searchEverywhere",
+        "title": "Search Everywhere",
+        "category": "Rocketbrain",
+        "icon": "$(search)"
+      },
+      {
+        "command": "rocketbrain.recentFiles",
+        "title": "Recent Files",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.goToClass",
+        "title": "Go to Workspace Symbol",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.javaSupport",
+        "title": "Set Up Java / Spring Support",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.restart",
+        "title": "Restart Java Language Server",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.start",
+        "title": "Start Java Language Server",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.installEngine",
+        "title": "Install and Configure Independent Java Engine",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.status",
+        "title": "Get Java Engine Status",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.debug",
+        "title": "Debug Java Main Class",
+        "category": "Rocketbrain",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "rocketbrain.java.hotCodeReplace",
+        "title": "Apply Hot Code Replace",
+        "category": "Rocketbrain",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "rocketbrain.spring.endpoints",
+        "title": "Spring: Navigate to Endpoint",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.analyze",
+        "title": "Spring: Analyze Beans and Configuration",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.beans",
+        "title": "Spring: Navigate to Bean",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.refresh",
+        "title": "Spring: Refresh Analysis",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.connectRuntime",
+        "title": "Spring: Connect Local Runtime",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.refreshRuntime",
+        "title": "Spring: Refresh Runtime Snapshot",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.disconnectRuntime",
+        "title": "Spring: Disconnect Runtime",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.runtimeBeans",
+        "title": "Spring: Browse Observed Runtime Beans",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.compareRuntime",
+        "title": "Spring: Compare Source and Runtime",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.analyze",
+        "title": "JPA: Analyze Entities and Queries",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.entities",
+        "title": "JPA: Navigate to Entity",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.refresh",
+        "title": "JPA: Refresh Analysis",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.compareCatalog",
+        "title": "JPA: Compare with Connected Database",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.queryTypes",
+        "title": "JPA: Show Query Types and Coverage",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.analysis.refresh",
+        "title": "Refresh Spring and JPA Analysis View",
+        "category": "Rocketbrain",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "rocketbrain.analysis.compareCatalog",
+        "title": "Compare JPA with Database in Analysis View",
+        "category": "Rocketbrain",
+        "icon": "$(database)"
+      },
+      {
+        "command": "rocketbrain.consoleMode",
+        "title": "Change Console Mode",
+        "category": "Rocketbrain",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "rocketbrain.beginTransaction",
+        "title": "Begin Console Transaction",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.commit",
+        "title": "Commit Console Transaction",
+        "category": "Rocketbrain",
+        "icon": "$(check)"
+      },
+      {
+        "command": "rocketbrain.rollback",
+        "title": "Roll Back Console Transaction",
+        "category": "Rocketbrain",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "rocketbrain.cancelQuery",
+        "title": "Cancel Console Query",
+        "category": "Rocketbrain",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "rocketbrain.reconnectSession",
+        "title": "Reconnect Console Session",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.sessionStatus",
+        "title": "Show Console Session Details",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.manageSessions",
+        "title": "Manage Console Sessions",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.prepare",
+        "title": "Prepare Independent JPA Observer Agent",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.connect",
+        "title": "Connect JPA Provider Observer",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.refresh",
+        "title": "Refresh JPA Provider Snapshot",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.disconnect",
+        "title": "Disconnect JPA Provider Observer",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.inspect",
+        "title": "Inspect JPA Runtime Mappings and Queries",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.validate",
+        "title": "Validate Query with Running Hibernate",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.testing.install",
+        "title": "Install Independent Java Test and Coverage Runtime",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.testing.discover",
+        "title": "Discover Java Tests",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.testing.run",
+        "title": "Run Java Tests",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.testing.coverage",
+        "title": "Run Java Tests with Coverage",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.testing.rerunFailed",
+        "title": "Rerun Failed Java Tests",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.testing.cancel",
+        "title": "Cancel Java Tests",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.sql.analyze",
+        "title": "Analyze Current SQL Document",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.sql.refreshAnalysisMetadata",
+        "title": "Refresh SQL Analysis Metadata",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.testing.debug",
+        "title": "Debug Java Tests",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.testing.coverageByTest",
+        "title": "Run Java Tests with Coverage by Test (Serial)",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.refactor",
+        "title": "Refactor Java Selection with Preview",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.sql.findReferences",
+        "title": "Find SQL References in Query Roots",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.renameTable",
+        "title": "Review and Rename Database Table",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.renameColumn",
+        "title": "Review and Rename Database Column",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.sql.runScript",
+        "title": "Run SQL Script or Selection",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.sql.reviewScript",
+        "title": "Review SQL Script Before Running",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.sql.runWithParameters",
+        "title": "Run SQL with Typed Parameters",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.sql.openScriptResult",
+        "title": "Open Retained Script Statement Result",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.saveSnapshot",
+        "title": "Save Database Schema Snapshot",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.compareSnapshot",
+        "title": "Compare Current Database with Schema Snapshot",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.validateMigration",
+        "title": "Revalidate Selected Schema Migration Review",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.applyMigration",
+        "title": "Apply Reviewed Schema Migration",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.reviewRebuild",
+        "title": "Review Complex Schema Rebuild",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.applyRebuild",
+        "title": "Apply Reviewed Schema Rebuild with Recovery",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.recoverRebuild",
+        "title": "Inspect and Recover Schema Rebuild",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.import.stream",
+        "title": "Review and Stream a Large Data Import",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.import.commitStream",
+        "title": "Commit Pending Streamed Import",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.import.rollbackStream",
+        "title": "Roll Back Pending Streamed Import",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.programs",
+        "title": "Inspect Stored Program Dependencies",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.programsWithInputs",
+        "title": "Inspect Dynamic SQL with Inputs",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.ddlCapabilities",
+        "title": "Inspect DDL Guarantees",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.reviewDistributed",
+        "title": "Review Multi-Server Schema Rebuild",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.applyDistributed",
+        "title": "Apply Reviewed Multi-Server Schema Rebuild",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.recoverDistributed",
+        "title": "Inspect and Recover Multi-Server Schema Rebuild",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.refresh",
+        "title": "Refresh Java Projects",
+        "category": "Rocketbrain",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "rocketbrain.java.workbench.resync",
+        "title": "Synchronize Java Project",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.build",
+        "title": "Build Java Project",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.tasks",
+        "title": "Choose Build Task",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.runTask",
+        "title": "Run Build Task",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.configureRun",
+        "title": "Add Java Run Configuration",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.run",
+        "title": "Run Java Configuration",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.debug",
+        "title": "Debug Java Configuration",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.stop",
+        "title": "Stop Managed Java Work",
+        "category": "Rocketbrain",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "rocketbrain.java.workbench.deleteRunConfiguration",
+        "title": "Delete Java Run Configuration",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.openSource",
+        "title": "Open Java Source",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.createProject",
+        "title": "Create Spring Project",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.editStarters",
+        "title": "Edit Spring Starters",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.applyProjectReview",
+        "title": "Apply Spring Project Review",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.resyncProject",
+        "title": "Synchronize Spring Project",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.connections.add",
+        "title": "Add Database Connection",
+        "category": "Rocketbrain",
+        "icon": "$(add)"
+      },
+      {
+        "command": "rocketbrain.connections.edit",
+        "title": "Edit Database Connection",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.connections.connect",
+        "title": "Connect Database Profile",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.connections.test",
+        "title": "Test Database Connection",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.connections.disconnect",
+        "title": "Disconnect Database",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.connections.refresh",
+        "title": "Refresh Connections",
+        "category": "Rocketbrain",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "rocketbrain.connections.selectSchema",
+        "title": "Select Database Schema",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.connections.remove",
+        "title": "Remove Database Connection",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.connections.import",
+        "title": "Import Connection Profiles",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.connections.export",
+        "title": "Export Connection Profiles",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.createTable",
+        "title": "Create Table with Designer",
+        "category": "Rocketbrain",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "rocketbrain.schema.editTable",
+        "title": "Modify Table with Designer",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.openObjectSource",
+        "title": "Open View or Procedure Source",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.reviewObjectSource",
+        "title": "Review Database Object Source",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.deployObjectSource",
+        "title": "Deploy Reviewed Database Object Source",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.restoreObjectSource",
+        "title": "Restore Retained Database Object Source",
+        "category": "Rocketbrain"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "rocketbrain",
+          "title": "Rocketbrain",
+          "icon": "media/rocketbrain.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "rocketbrain-query-panel",
+          "title": "Query Results",
+          "icon": "media/rocketbrain.svg"
+        }
+      ]
+    },
+    "views": {
+      "rocketbrain": [
+        {
+          "id": "rocketbrain.project",
+          "name": "Project"
+        },
+        {
+          "id": "rocketbrain.databases",
+          "name": "Database"
+        },
+        {
+          "id": "rocketbrain.analysis",
+          "name": "Spring & JPA Analysis"
+        },
+        {
+          "id": "rocketbrain.javaProjects",
+          "name": "Java Projects"
+        },
+        {
+          "id": "rocketbrain.connections",
+          "name": "Database Connections"
+        }
+      ],
+      "rocketbrain-query-panel": [
+        {
+          "id": "rocketbrain.results",
+          "name": "Query Results",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "rocketbrain.databases",
+        "contents": "Explore a local sample or connect your database.\n[Open SQL Console](command:rocketbrain.openConsole)\n[Connect MySQL / MariaDB](command:rocketbrain.connectMysql)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "rocketbrain.searchEverywhere",
+          "when": "view == rocketbrain.project",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.refresh",
+          "when": "view == rocketbrain.project || view == rocketbrain.databases",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.connectMysql",
+          "when": "view == rocketbrain.databases",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.openConsole",
+          "when": "view == rocketbrain.databases",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.analysis.refresh",
+          "when": "view == rocketbrain.analysis",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.spring.connectRuntime",
+          "when": "view == rocketbrain.analysis",
+          "group": "analysis@1"
+        },
+        {
+          "command": "rocketbrain.spring.refreshRuntime",
+          "when": "view == rocketbrain.analysis",
+          "group": "analysis@2"
+        },
+        {
+          "command": "rocketbrain.analysis.compareCatalog",
+          "when": "view == rocketbrain.analysis && rocketbrain.mysqlConnected",
+          "group": "analysis@3"
+        },
+        {
+          "command": "rocketbrain.java.workbench.refresh",
+          "when": "view == rocketbrain.javaProjects",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.java.workbench.stop",
+          "when": "view == rocketbrain.javaProjects",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.spring.createProject",
+          "when": "view == rocketbrain.javaProjects",
+          "group": "project"
+        },
+        {
+          "command": "rocketbrain.spring.editStarters",
+          "when": "view == rocketbrain.javaProjects",
+          "group": "project"
+        },
+        {
+          "command": "rocketbrain.connections.add",
+          "when": "view == rocketbrain.connections",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.connections.refresh",
+          "when": "view == rocketbrain.connections",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.connections.import",
+          "when": "view == rocketbrain.connections",
+          "group": "transfer"
+        },
+        {
+          "command": "rocketbrain.connections.export",
+          "when": "view == rocketbrain.connections",
+          "group": "transfer"
+        },
+        {
+          "command": "rocketbrain.connections.disconnect",
+          "when": "view == rocketbrain.connections",
+          "group": "connection"
+        },
+        {
+          "command": "rocketbrain.schema.createTable",
+          "when": "view == rocketbrain.databases",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.schema.openObjectSource",
+          "when": "view == rocketbrain.databases",
+          "group": "source"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "rocketbrain.runQuery",
+          "when": "resourceLangId == sql",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.cancelQuery",
+          "when": "resourceLangId == sql && rocketbrain.sqlRunning && rocketbrain.mysqlConnected",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.consoleMode",
+          "when": "resourceLangId == sql && rocketbrain.mysqlConnected",
+          "group": "rocketbrain@1"
+        },
+        {
+          "command": "rocketbrain.beginTransaction",
+          "when": "resourceLangId == sql && rocketbrain.mysqlConnected",
+          "group": "rocketbrain@2"
+        },
+        {
+          "command": "rocketbrain.commit",
+          "when": "resourceLangId == sql && rocketbrain.mysqlConnected",
+          "group": "rocketbrain@3"
+        },
+        {
+          "command": "rocketbrain.rollback",
+          "when": "resourceLangId == sql && rocketbrain.mysqlConnected",
+          "group": "rocketbrain@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "rocketbrain.schema.renameTable",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table",
+          "group": "schema"
+        },
+        {
+          "command": "rocketbrain.schema.renameColumn",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table",
+          "group": "schema"
+        },
+        {
+          "command": "rocketbrain.java.workbench.resync",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
+          "group": "project"
+        },
+        {
+          "command": "rocketbrain.java.workbench.build",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
+          "group": "project"
+        },
+        {
+          "command": "rocketbrain.java.workbench.tasks",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
+          "group": "project"
+        },
+        {
+          "command": "rocketbrain.java.workbench.configureRun",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
+          "group": "launch"
+        },
+        {
+          "command": "rocketbrain.java.workbench.runTask",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaBuildTask",
+          "group": "inline"
+        },
+        {
+          "command": "rocketbrain.java.workbench.run",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaRunConfiguration",
+          "group": "inline"
+        },
+        {
+          "command": "rocketbrain.java.workbench.debug",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaRunConfiguration",
+          "group": "inline"
+        },
+        {
+          "command": "rocketbrain.java.workbench.deleteRunConfiguration",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaRunConfiguration",
+          "group": "configuration"
+        },
+        {
+          "command": "rocketbrain.connections.connect",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile",
+          "group": "inline"
+        },
+        {
+          "command": "rocketbrain.connections.test",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile",
+          "group": "connection"
+        },
+        {
+          "command": "rocketbrain.connections.edit",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile",
+          "group": "connection"
+        },
+        {
+          "command": "rocketbrain.connections.selectSchema",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile",
+          "group": "connection"
+        },
+        {
+          "command": "rocketbrain.connections.remove",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile",
+          "group": "connection"
+        },
+        {
+          "command": "rocketbrain.schema.editTable",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table",
+          "group": "schema"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "rocketbrain.runQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == sql"
+      },
+      {
+        "command": "rocketbrain.searchEverywhere",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "!inDebugMode"
+      },
+      {
+        "command": "rocketbrain.recentFiles",
+        "key": "ctrl+e",
+        "mac": "cmd+e",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "editor.action.rename",
+        "key": "shift+f6",
+        "when": "editorTextFocus && editorHasRenameProvider"
+      },
+      {
+        "command": "editor.action.quickFix",
+        "key": "alt+enter",
+        "when": "editorTextFocus && editorHasCodeActionsProvider"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "rocketbrain-java",
+        "label": "Rocketbrain Java",
+        "languages": [
+          "java"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "mainClass"
+            ],
+            "properties": {
+              "mainClass": {
+                "type": "string",
+                "description": "Fully qualified main class."
+              },
+              "projectName": {
+                "type": "string",
+                "description": "JDT project name for classpath resolution."
+              },
+              "classPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Explicit application classpath, or omit to resolve from the project."
+              },
+              "javaExec": {
+                "type": "string",
+                "description": "Standalone Java executable used to run the application."
+              },
+              "cwd": {
+                "type": "string",
+                "default": "${workspaceFolder}"
+              },
+              "args": {
+                "type": [
+                  "string",
+                  "array"
+                ],
+                "description": "Application arguments."
+              },
+              "vmArgs": {
+                "type": [
+                  "string",
+                  "array"
+                ],
+                "description": "Java virtual machine arguments."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false
+              },
+              "hotCodeReplace": {
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "never"
+                ],
+                "default": "manual",
+                "description": "Apply changed method bodies only when explicitly requested."
+              },
+              "console": {
+                "type": "string",
+                "enum": [
+                  "internalConsole",
+                  "integratedTerminal",
+                  "externalTerminal"
+                ],
+                "default": "internalConsole"
+              }
+            }
+          },
+          "attach": {
+            "required": [
+              "hostName",
+              "port"
+            ],
+            "properties": {
+              "hostName": {
+                "type": "string",
+                "default": "127.0.0.1"
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "projectName": {
+                "type": "string"
+              },
+              "sourcePaths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "rocketbrain-java",
+            "request": "launch",
+            "name": "Debug Java Main",
+            "mainClass": "com.example.Application"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Rocketbrain Java: launch main class",
+            "body": {
+              "type": "rocketbrain-java",
+              "request": "launch",
+              "name": "Debug Java",
+              "mainClass": "${1:com.example.Application}"
+            }
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Rocketbrain",
+      "properties": {
+        "rocketbrain.java.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start Rocketbrain's directly connected Java language engine in trusted workspaces."
+        },
+        "rocketbrain.java.serverPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to an independently downloaded Eclipse JDT Language Server distribution."
+        },
+        "rocketbrain.java.javaHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to a standalone JDK 25 or later for the language server. Do not use an IDE's embedded runtime."
+        },
+        "rocketbrain.java.gradleHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional absolute path to an independently installed Gradle distribution for project import."
+        },
+        "rocketbrain.java.gradleJavaHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional standalone JDK path for importing Gradle projects."
+        },
+        "rocketbrain.java.debugBundlePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to the separately provisioned open-source Java debug JDT plugin JAR."
+        },
+        "rocketbrain.java.hotCodeReplace": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "never"
+          ],
+          "default": "manual",
+          "description": "Allow explicitly triggered Java Hot Code Replace; no automatic source edits or code replacement."
+        },
+        "rocketbrain.java.projectJdks": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "default": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Project execution environments, e.g. name JavaSE-21 with a standalone JDK path."
+        },
+        "rocketbrain.spring.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Rocketbrain's Spring source analysis and configuration assistance."
+        },
+        "rocketbrain.spring.activeProfiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Profiles selected for static Spring analysis."
+        },
+        "rocketbrain.spring.properties": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "description": "Explicit property overrides for static Spring analysis."
+        },
+        "rocketbrain.spring.basePackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Optional source package boundaries for the analysis model."
+        },
+        "rocketbrain.spring.configurationRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Explicit Spring configuration directories, relative to a workspace folder or absolute. Multiple unscoped application contexts remain uncertain."
+        },
+        "rocketbrain.spring.closedWorld": {
+          "type": "boolean",
+          "default": false,
+          "description": "Treat the selected source model as the complete bean set. Enable only for controlled projects; external auto-configuration may otherwise supply missing beans."
+        },
+        "rocketbrain.spring.parameterNames": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use Java parameter names as bean-name fallback when the application is compiled with -parameters."
+        },
+        "rocketbrain.spring.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Publish diagnostics for supported Spring resolution cases; unresolved dynamic conditions remain unknown."
+        },
+        "rocketbrain.spring.runtime.url": {
+          "type": "string",
+          "default": "http://127.0.0.1:8080/actuator",
+          "description": "Local Actuator base URL. No request is made until Connect Local Runtime is explicitly invoked."
+        },
+        "rocketbrain.spring.runtime.timeoutMs": {
+          "type": "integer",
+          "minimum": 250,
+          "maximum": 30000,
+          "default": 5000,
+          "description": "Timeout for explicitly requested runtime observations."
+        },
+        "rocketbrain.spring.runtime.maxResponseBytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 16777216,
+          "default": 2097152,
+          "description": "Maximum bytes accepted per runtime response."
+        },
+        "rocketbrain.jpa.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Analyze supported JPA source mappings and JPQL references."
+        },
+        "rocketbrain.jpa.basePackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Explicit source package boundary for this JPA model; ambiguous persistence-unit bindings remain unresolved."
+        },
+        "rocketbrain.jpa.mappingFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Optional ORM XML file paths inside workspace folders, relative or absolute. When empty, discover META-INF/orm.xml. Explicit paths replace automatic discovery; each file must be local and no larger than one MiB."
+        },
+        "rocketbrain.jpa.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Publish JPA diagnostics for supported mapping and query cases."
+        },
+        "rocketbrain.jpa.physicalNaming": {
+          "type": "string",
+          "enum": [
+            "unknown",
+            "standard",
+            "snake_case"
+          ],
+          "default": "unknown",
+          "description": "Explicit physical naming assumption for mapping/catalog comparison. Unknown naming does not prove a missing physical table."
+        },
+        "rocketbrain.jpa.namingStrategy": {
+          "type": "object",
+          "default": {},
+          "properties": {
+            "physical": {
+              "type": "string",
+              "description": "Fully qualified physical naming strategy class available in workspace source, or a supported Hibernate built-in."
+            },
+            "implicit": {
+              "type": "string",
+              "description": "Fully qualified implicit naming strategy class available in workspace source, or a supported Hibernate built-in."
+            },
+            "profile": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "explicit",
+                    "observed"
+                  ]
+                },
+                "tables": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "columns": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Explicit naming configuration. A bounded source interpreter reads supported pure methods without loading Java classes. Unsupported behavior and missing profile entries remain unresolved; no automatic catalog guessing is performed."
+        },
+        "rocketbrain.java.testing.runtimePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the separately provisioned java-testing-runtime.json. Empty uses the extension storage installation."
+        },
+        "rocketbrain.java.testing.projects": {
+          "type": "array",
+          "default": [],
+          "description": "Explicit compiled Java test project profiles. Empty resolves imported Maven/Gradle test classpaths through the independent Java language engine.",
+          "items": {
+            "type": "object",
+            "required": [
+              "workspace",
+              "classPath"
+            ],
+            "properties": {
+              "workspace": {
+                "type": "string"
+              },
+              "classPath": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "testClassPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sourceRoots": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "classDirectories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "envFile": {
+                "type": "string"
+              },
+              "jvmArgs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "framework": {
+                "type": "string",
+                "enum": [
+                  "junit",
+                  "testng"
+                ],
+                "default": "junit",
+                "description": "JUnit Platform or TestNG runner; automatic resolution creates separate profiles when both are imported."
+              }
+            }
+          }
+        },
+        "rocketbrain.sql.analysis.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Analyze supported SQL scopes using the explicitly connected database catalog, without executing the analyzed SQL."
+        },
+        "rocketbrain.sql.project.roots": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Local query folders inside the workspace for bounded semantic .sql reference scans. Empty scans workspace SQL files. Unsupported migrations or SQL are reported as incomplete and block a combined source rename."
+        },
+        "rocketbrain.java.mavenHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "Optional Apache Maven home for explicit Java project tasks. Maven is not bundled."
+        },
+        "rocketbrain.spring.initializr.endpoint": {
+          "type": "string",
+          "default": "https://start.spring.io/",
+          "scope": "machine-overridable",
+          "description": "HTTPS Spring Initializr service used for explicit metadata and project creation requests."
+        }
+      }
+    },
+    "themes": [
+      {
+        "label": "Rocketbrain Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/rocketbrain-dark.json"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test:offline": "node scripts/test-offline.js",
+    "test": "node --test test/*.test.js",
+    "package": "node scripts/package.js",
+    "test:extension": "node scripts/test-extension.js",
+    "test:vsix": "node scripts/test-vsix.js",
+    "test:integration": "node scripts/integration-db.js run --test --test-concurrency=1 test/*.test.js test/integration/*.test.js",
+    "test:mysql": "node scripts/integration-mysql.js run --test --test-concurrency=1 test/*.test.js test/integration/*.test.js"
+  },
+  "dependencies": {
+    "mysql2": "3.24.6",
+    "saxes": "6.0.0",
+    "sql.js": "1.13.0",
+    "vscode-languageclient": "11.0.0",
+    "yauzl": "3.4.0"
+  },
+  "devDependencies": {
+    "@vscode/test-electron": "2.5.2",
+    "@vscode/vsce": "3.6.2",
+    "esbuild": "0.25.11",
+    "ssh2": "1.17.0"
+  }
+}

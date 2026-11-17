@@ -1,0 +1,12 @@
+:root {
+  --vscode-foreground:#d4d4d4; --vscode-editor-background:#1e1f22;
+  --vscode-font-size:13px; --vscode-font-family:"Segoe UI",sans-serif;
+  --vscode-editor-font-family:Consolas,monospace; --vscode-descriptionForeground:#9da2ad;
+  --vscode-panel-border:#393b40; --vscode-sideBar-background:#26282e;
+  --vscode-toolbar-hoverBackground:#35383f; --vscode-focusBorder:#6c95eb;
+  --vscode-tab-activeBackground:#30333b; --vscode-errorForeground:#f48771;
+  --vscode-list-hoverBackground:#2b2f38; --vscode-charts-blue:#6ca7e8;
+  --vscode-charts-yellow:#d7ba7d; --vscode-input-background:#30333b;
+  --vscode-input-foreground:#e2e5eb; --vscode-input-border:#575b65;
+  --vscode-diffEditor-insertedTextBackground:#254633;
+}

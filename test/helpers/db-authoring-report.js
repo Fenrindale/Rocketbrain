@@ -1,0 +1,4 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+async function writeAuthoringReport(family,engine,value){let isolation;if(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG){const runtime=JSON.parse(fs.readFileSync(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG));isolation=await(await fetch(runtime.baseUrl+'/probe/testing-state')).json();assert.deepEqual(isolation,{people:2,departments:1,rolledBackNames:0});}const file=path.resolve(__dirname,'../../test-output/'+(process.env.ROCKETBRAIN_TEST_REPORT_PREFIX||'v0.18')+'-db-authoring-'+family+'-'+engine+'.json');fs.writeFileSync(file,JSON.stringify({asOf:new Date().toISOString(),version:process.env.ROCKETBRAIN_RELEASE_VERSION||'0.18.0',engine,...value,isolation},null,2)+'\n');return file;}
+module.exports={writeAuthoringReport};

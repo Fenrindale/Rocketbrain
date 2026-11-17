@@ -1,0 +1,25 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{randomUUID}=require('node:crypto'),mysql=require('mysql2/promise');
+const {MysqlService}=require('../src/db/mysql');
+const {captureSchema,compareSnapshots,planMigration,validateMigrationPlan}=require('../src/db/schema-diff');
+const file=process.env.ROCKETBRAIN_TEST_MYSQL_CONFIG||process.env.ROCKETBRAIN_MYSQL_TEST_CONFIG;let config;
+if(file){const marker=JSON.parse(fs.readFileSync(path.join(path.dirname(file),'owner.json')));if(!['RocketbrainDisposableMariaDbFixture-v1','RocketbrainDisposableOracleMysqlFixture-v1'].includes(marker.kind))throw Error('Schema comparison tests require the disposable fixture.');config=JSON.parse(fs.readFileSync(file));if(config.host!=='127.0.0.1'||config.database!=='rocketbrain_fixture')throw Error('Schema comparison tests refuse non-fixture databases.');}
+const q=name=>'`'+name.replaceAll('`','``')+'`';
+test('LIVE SCHEMA DIFF: captured structure, selected additive SQL and fresh validation converge without changing existing rows',{skip:!config&&'Run on an owned MySQL/MariaDB fixture.',timeout:90000},async()=>{
+ const actor=await mysql.createConnection({...config,supportBigNumbers:true,bigNumberStrings:true,dateStrings:true}),db=new MysqlService(config),prefix='rb_diff_'+randomUUID().replaceAll('-','').slice(0,12),base=prefix+'_base',created=prefix+'_created',scope={tables:[base,created]};
+ try{
+  await actor.query('CREATE TABLE '+q(base)+' (id INT PRIMARY KEY,note VARCHAR(20) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin');await actor.query('INSERT INTO '+q(base)+" VALUES (1,'Alpha'),(2,'Beta')");
+  const rows=(await actor.query('SELECT * FROM '+q(base)+' ORDER BY id'))[0],before=await captureSchema(db,scope);assert.equal(before.rowDataIncluded,false);assert.equal(before.atomicSnapshot,false);assert.equal(before.tables.length,1);
+  await actor.query('ALTER TABLE '+q(base)+" ADD COLUMN extra_text VARCHAR(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL COMMENT 'added comment', ADD COLUMN amount DECIMAL(24,8) NULL");await actor.query('CREATE INDEX '+q('note_index')+' ON '+q(base)+' (extra_text(10),id)');
+  await actor.query('CREATE TABLE '+q(created)+' (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,label VARCHAR(30) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT=\'simple created table\'');
+  const desired=await captureSchema(db,scope);await actor.query('DROP TABLE '+q(created));await actor.query('ALTER TABLE '+q(base)+' DROP INDEX '+q('note_index')+', DROP COLUMN amount, DROP COLUMN extra_text');
+  const fresh=await captureSchema(db,scope);assert.equal(fresh.fingerprint,before.fingerprint,'Restored metadata matches the original reviewed snapshot');
+  const comparison=compareSnapshots(fresh,desired);assert.equal(comparison.summary.selectable,4,JSON.stringify(comparison.changes));const plan=planMigration(fresh,desired,{changeIds:comparison.changes.filter(c=>c.selectable).map(c=>c.id)});assert.equal(plan.steps.length,4);assert.equal(plan.executesSql,false);assert.equal(validateMigrationPlan(plan,fresh).state,'fresh');
+  // Explicit test-only execution: planning itself never submits DDL.
+  for(const step of plan.steps)await actor.query(step.sql);
+  const after=await captureSchema(db,scope),remaining=compareSnapshots(after,desired);assert.equal(remaining.summary.changes,0,JSON.stringify(remaining.changes));assert.deepEqual((await actor.query('SELECT id,note FROM '+q(base)+' ORDER BY id'))[0],rows);assert.equal((await actor.query('SELECT COUNT(*) AS n FROM '+q(created)))[0][0].n,'0');
+  await assert.rejects(Promise.resolve().then(()=>validateMigrationPlan(plan,after)),/changed/);
+  const runtimeFile=process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG;let isolation;if(runtimeFile){const runtime=JSON.parse(fs.readFileSync(runtimeFile));isolation=await(await fetch(runtime.baseUrl+'/probe/testing-state')).json();assert.deepEqual(isolation,{people:2,departments:1,rolledBackNames:0});}
+  const engine=/mariadb/i.test(before.server.version)?'mariadb':'mysql';const report={asOf:new Date().toISOString(),version:process.env.ROCKETBRAIN_RELEASE_VERSION||'0.11.0',engine,snapshotTables:after.tables.length,comparison:comparison.summary,plan:{steps:plan.steps,executionState:plan.executionState,atomicAcrossSteps:plan.atomicAcrossSteps},remaining:remaining.summary,rowsPreserved:true,stalePlanRejected:true,isolation,scope:'Explicit test execution of selected additive SQL on fresh owned tables; snapshot capture and planning themselves execute no user DDL.'};const serialized=JSON.stringify(report,null,2);assert.ok(!serialized.includes(config.password));fs.writeFileSync(path.resolve('test-output/'+(process.env.ROCKETBRAIN_TEST_REPORT_PREFIX||'v0.11')+'-schema-diff-'+engine+'.json'),serialized+'\n');
+ }finally{await db.dispose();await actor.query('DROP TABLE IF EXISTS '+q(created));await actor.query('DROP TABLE IF EXISTS '+q(base));await actor.end();}
+});

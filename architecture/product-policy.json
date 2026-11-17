@@ -1,0 +1,504 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-11-17",
+  "product": "Rocketbrain",
+  "decision": "독립형 VS Code 확장",
+  "userRequirement": "JetBrains 제품이나 별도로 판매되는 상용 확장의 라이선스·구독에 의존하지 않고 독립적으로 만든다.",
+  "runtimeRequirements": {
+    "jetBrainsInstallationRequired": false,
+    "jetBrainsAccountRequired": false,
+    "jetBrainsSubscriptionRequired": false,
+    "paidExtensionRequired": false,
+    "externalMarketplaceExtensionRequired": false,
+    "host": "Visual Studio Code",
+    "openSourceComponentReuse": "소스와 배포 조건을 확인한 구성요소를 Rocketbrain 소유 클라이언트·배포물에 직접 통합할 수 있다. 최상위 저장소의 라이선스만으로 전체 배포물의 검토가 완료된 것으로 보지 않는다."
+  },
+  "excludedRequiredProviders": [
+    {
+      "id": "JetBrains.intellij-server",
+      "reason": "별도 상용 엔진·구독 경로이므로 필수 공급자로 채택하지 않는다."
+    },
+    {
+      "id": "dbcode.dbcode",
+      "reason": "다른 제품의 유료 범위와 내부 API에 제품 핵심을 의존시키지 않는다."
+    },
+    {
+      "id": "commercial-ide-runtime",
+      "reason": "설치된 IntelliJ IDEA·DataGrip 바이너리, JAR, 런타임, 계정 또는 라이선스 검사를 제품 실행 경로로 사용하지 않는다."
+    },
+    {
+      "id": "unreviewed-marketplace-vsix",
+      "reason": "무료 설치 가능하다는 이유로 타사 VSIX를 추출·재배포하거나 필수 기능 공급자로 가정하지 않는다."
+    }
+  ],
+  "ownership": {
+    "client": "Rocketbrain이 VS Code 명령·화면·작업 공간·LSP/DAP 연결을 소유한다.",
+    "javaAndSpring": "Rocketbrain이 공개 Java LSP/DAP 수명주기와 자체 Spring/JPA 모델, typed JPQL AST·bounded dynamic Java·symbolic SpEL·pure naming source/profile, Java/XML cross-URI references와 owner별 physical bindings를 소유한다. Actuator metadata/DB catalog/실제 query 실행 관찰은 정적 모델과 분리한다. v0.7 adds owned JDK-agent sources, explicit provider semantic observation and separately tagged application/manual-validation event origins.",
+    "database": "드라이버·파서와 별도로 SQL 문맥 모델, 메타데이터 캐시, 연결별 세션, 트랜잭션과 변경 제출 상태를 소유한다.",
+    "interaction": "키맵·검색·편집기·결과 그리드의 동작 명세와 검증을 직접 관리한다.",
+    "distribution": "구성요소 버전·출처·해시·고지문·해당 소스 제공 범위를 기록하고 독립 환경에서 배포물을 검증한다."
+  },
+  "acceptanceGates": [
+    "JetBrains 제품과 타사 Marketplace 확장이 없는 별도 시험 환경에서 핵심 기능이 동작한다.",
+    "제품 기능을 열기 위해 JetBrains 또는 타사 상용 제품의 계정·구독·체험 활성화를 요구하지 않는다.",
+    "공개 소스 구성요소는 고정한 revision·배포물의 전이 의존성과 재배포 조건까지 확인한다.",
+    "필요한 Java 런타임은 별도 공개 배포 경로로 공급하거나 명시적인 일반 JDK 경로를 사용한다. 원본 IDE의 런타임을 찾는 fallback은 두지 않는다.",
+    "동일한 Java·Spring 및 MySQL/MariaDB 예제에서 기능별 동작과 알려진 제한을 검증한다.",
+    "SQL 파싱 성공, 의미 분석 성공, DB 실행 성공, UI 상태 일치를 서로 다른 판정으로 기록한다.",
+    "원본 프로그램은 화면·동작을 비교하는 참조이며 제품 실행 의존성이 아니다.",
+    "VS Code 전체 창 구조의 정확한 교체는 일반 확장 API 한계로 별도 요구사항 결정을 남긴다.",
+    "지원 query AST 구성요소의 coverage와 known/invalid/unknown을 구분하고 미확정 문법·형식·바인딩을 완전한 유효성 판정으로 확대하지 않는다.",
+    "동적Java의 알려진/유한 후보와 source URI별 원본 span을 보존한다. 분석 목적으로 사용자Java·SpEL·naming전략·query를 실행하지 않는다.",
+    "SpEL의 고정 String서명은 반환형/인수형만 추론하며 임의bean·reflection·method는 미확정으로 남긴다.",
+    "지원 naming source/profile과 quoting의 certainty를 보존하고 미지원 전략·default joins를 임의standard naming으로 대체하지 않는다."
+  ],
+  "currentPrototype": {
+    "version": "0.19.0",
+    "status": "research/implementation/status.json",
+    "verification": "research/implementation/v0.19-verification.json",
+    "featureAudit": "research/implementation/v0.19-feature-audit.json",
+    "fullProductParityVerified": false
+  },
+  "activeAnalysis": "research/independent",
+  "historicalComparison": "research/feature-matrix",
+  "runtimeObservationPolicy": {
+    "explicitConnectionRequired": true,
+    "workspaceTrustRequired": true,
+    "loopbackOnly": true,
+    "httpMethods": [
+      "GET"
+    ],
+    "actuatorEndpoints": [
+      "beans",
+      "conditions",
+      "configprops",
+      "env",
+      "mappings"
+    ],
+    "authorization": "Basic/Bearer는 작업공간·URL별 SecretStorage에만 보관",
+    "retainedPropertyValues": false,
+    "retainedOrigins": false,
+    "retainedRawConditionMessages": false,
+    "followRedirects": false,
+    "executeJavaForAnalysis": false,
+    "comparison": "정적 unknown과 관찰을 분리하고 runtime absence/source revision을 단정하지 않는다.",
+    "scope": "Spring Actuator only; provider observation has its own policy"
+  },
+  "jpaAnalysisPolicy": {
+    "mappingFiles": "기본 META-INF/orm.xml과 명시 mappingFiles만 bounded local input으로 읽는다. 생성 bin/out/build/target은 자동 발견에서 제외하며 genuine overlap은 unknown 처리한다.",
+    "xml": "Strict namespace/구조 subset; no DTD/external entities. XML-only/metadata-complete/override/named-query는 localJava결합과source ranges를유지한다. 불가독/충돌/미지원metadata가 확정된annotationdefaults로돌아가지않는다.",
+    "physical": "owner별 table/column/type와 implicit/physical/quoted naming certainty를분리한다. parent/embedded XMLpartial과configuredunknown을전파하며 accountvisibility/case를DB절대부재로간주하지않는다.",
+    "converters": "Source mapping analysis reads generic/autoApply/Convert metadata and does not execute converter bodies. Live provider mapping metadata is observed separately.",
+    "queries": "지원 AST의 Java 도메인 형식·함수/DTO/파라미터/대입 계약을 검사한다. known은 coverage가 지원한 구성요소에서 미확정 부분을 찾지 않았다는 뜻이며 전체 JPQL/HQL provider 문법·모든 실행 유효성·IDE 동등성의 판정이 아니다.",
+    "schemaChanges": "분석/대조는DDL·migration·query실행을하지않는다. 실제fixture의bulk행위는명시적으로분리된rollback-only테스트다.",
+    "dynamicJava": "bounded final/staticfinal·crossfile상수/로컬concat/StringBuilder/known조건·finitebranches를source단위로해석하고 원본URI·offset·대안을유지한다. 임의호출/alias/escape/loop/복잡controlflow/외부값은unknown이다.",
+    "spel": "declared parameter/index/root/property와지원operators·safe-nav/Elvis/ternary, exactString고정서명만 symbolicparameter type으로변환한다. 원문식과진단범위를보존하고실행하지않는다. bean/type/reflection/임의method/context는unknown이다.",
+    "naming": "explicit localFQN의pure source subset 및explicit/observed profile만bounded해석한다. 이름결정을위해source코드·DBquery를실행하지않고catalog로profile을추측하지않는다. 미지원전략/Unicode변환/implicitjoin문맥은unknown이며standardfallback을두지않는다.",
+    "providerObservation": "Explicit loopback Bearer agent; observed runtime metadata and source unknowns remain separate.",
+    "arbitraryCode": "Actual application paths/inputs can be observed; universal arbitrary-code analysis and same-source-build identity are not claimed.",
+    "semanticValidation": "Manual provider SQM compilation only; no observer SQL execution or binding. Configured compiler callbacks may run.",
+    "implementation": "research/implementation/v0.7-plan.json"
+  },
+  "providerRuntimeObservationPolicy": {
+    "explicitConnectionRequired": true,
+    "explicitJavaAgentLaunchRequired": true,
+    "workspaceTrustRequired": true,
+    "loopbackOnly": true,
+    "httpMethods": {
+      "snapshot": "GET",
+      "semanticValidation": "POST"
+    },
+    "authentication": "Mandatory Bearer; VS Code Secret Storage",
+    "automaticHttpOnActivationOrTreeExpansion": false,
+    "queryCaptureDefault": false,
+    "boundParameterValuesRetained": false,
+    "arbitraryEvaluatorEndpoint": false,
+    "events": "Application and explicit semantic validation origins are distinguished on the instrumented thread.",
+    "providerCallbacks": "Configured compiler callbacks may run during explicit validation. The observer does not request SQL execution or binding."
+  },
+  "javaTestingPolicy": {
+    "workspaceTrustRequired": true,
+    "explicitRuntimeInstall": true,
+    "runDiscoveryOnActivation": false,
+    "framework": "Pinned separately provisioned JUnit Platform6.0.3 and TestNG7.11.0; owned embedded launcher source",
+    "coverage": "Actual JaCoCo0.8.16 aggregate plus explicit serial callback-interval per-test measurements; shared/configuration intervals separately unattributed; background/async causal exclusivity not claimed",
+    "dirtyBuffers": "Save before compiled testing; changed source/class inputs suppress coverage mapping",
+    "runtimeBinariesBundled": false,
+    "sourceRevisionIdentityVerified": false,
+    "debug": "Windows managed suspended test JVM only; OS-verified loopback PID ownership and marked native DAP session; cancellation/disposal await owned operations",
+    "coverageDebugCombined": false,
+    "implicitCoverageReruns": false,
+    "perTestReportLimit": 100,
+    "frameworkLifecycle": "JUnit includes per-test lifecycle; TestNG test callbacks exclude BeforeMethod/AfterMethod, which remain unattributed",
+    "unsupported": "JPMS test launching, remote tests, every TestNG factory/retry/listener configuration and other-OS debug ownership remain unverified or unsupported"
+  },
+  "sqlAnalysisPolicy": {
+    "sourceOnly": true,
+    "catalog": "Explicit connect/refresh cached current-account catalog and observed server SQL mode/name rules",
+    "executeAnalyzedSql": false,
+    "supported": "Scoped CTE/derived/correlated/UNION name and projection contracts",
+    "unknown": "Unsupported grammar, coercion, recursion, incomplete input and stale script DDL/session context remain uncertain",
+    "sourceProof": "research/implementation/v0.10-sql-project.json",
+    "rename": "Existing statement-local rename plus separately reviewed catalog table/column source edits across selected query roots; snapshot/hash/version/file inventory guards; database DDL has its own explicit operation",
+    "schemaMutation": false,
+    "physicalSchemaRenameImplemented": true,
+    "workspaceReferences": "Bounded SELECT-only local .sql roots, semantic catalog provenance and explicit unknown file coverage; references include implicit outputs and wildcard impact without blind text replacement"
+  },
+  "schemaRenamePolicy": {
+    "explicitReviewAndApply": true,
+    "requiresWorkspaceTrust": true,
+    "source": "research/implementation/v0.10-schema-rename.json",
+    "dedicatedOwnedConnection": true,
+    "implicitCommit": true,
+    "transactionalRollback": false,
+    "oneStatementNoAutomaticRetry": true,
+    "pinnedPrecondition": "Server identity, fresh structural fingerprint and WRITE lock through DDL",
+    "postcondition": "Observed selected object attributes/indexes and visible FK metadata; not universal reference or concurrency proof",
+    "visibleStoredDependencies": "Refused for separate migration planning",
+    "hiddenDependencies": "Explicit separate acknowledgment required; never claimed absent or automatically approved",
+    "sourceEdits": "Separate source plan and application; changed files after database DDL remain pending, no distributed atomicity claim"
+  },
+  "gridBrowsePolicy": {
+    "source": "research/implementation/v0.10-grid-browse.json",
+    "serverSide": true,
+    "typedParameterizedFilters": true,
+    "metadataAllowlist": true,
+    "primaryKeyTiebreakers": true,
+    "pageSize": 500,
+    "pageIndex": 2000,
+    "sortColumns": 8,
+    "andFilters": 20,
+    "offsetCrossPageSnapshot": false,
+    "totalRowCountClaimed": false,
+    "draftsAndTransactions": "Page/sort/filter changes refuse drafts and unresolved transactions. Explicit rollback-to-read-only is separate user action."
+  },
+  "schemaComparisonPolicy": {
+    "source": "research/implementation/v0.11-schema-diff.json",
+    "capture": "Fresh bounded account-visible metadata only; no row data; multiple reads are not an atomic snapshot",
+    "comparison": "Canonical table, column, index, foreign key, check, partition, option and raw view-definition differences; routines, triggers and privileges excluded",
+    "migration": "Selected additive SQL review/export and explicitly acknowledged product application for nullable NULL-default ordinary columns, ordinary nonunique BTREE indexes and simple empty supported InnoDB tables",
+    "targetRevalidation": true,
+    "automaticApply": true,
+    "transactionalDdl": false
+  },
+  "gridBulkPolicy": {
+    "source": "research/implementation/v0.11-grid-bulk.json",
+    "formats": [
+      "CSV",
+      "TSV",
+      "XLSX"
+    ],
+    "xlsx": true,
+    "limits": {
+      "bytes": 1048576,
+      "rows": 500,
+      "columns": 200,
+      "cellBytes": 131072
+    },
+    "null": "Explicit unquoted NULL token is distinct from quoted token and empty text",
+    "operations": "Loaded rectangular paste, explicit field mapping, duplicate without generated/primary-key values",
+    "writePath": "Stage into an unchanged empty draft, then existing Review, Apply and explicit Commit; no direct import SQL"
+  },
+  "schemaMigrationPolicy": {
+    "source": "research/implementation/v0.12-schema-apply.json",
+    "execution": "One-shot private reviewed additive plan on a dedicated owned write connection; explicit implicit-commit acknowledgment; per-step outcomes and fresh target checks",
+    "transactionIsolation": "Refuse running, queued, manual, active, unknown or disconnected console work; never commit a console transaction",
+    "concurrency": "Rocketbrain advisory coordination plus per-existing-table WRITE lock and fresh structural observation; CREATE collision is a server error; no universal external-DDL exclusion or cross-step atomicity",
+    "recovery": "Stop after error, cancellation or failed postcondition; no automatic retry or reverse DDL; acknowledge applied, failed, not-run and uncertain outcomes",
+    "guard": "Workspace trust, current connection epoch, server identity, SQL mode, immutable selected SQL and fresh schema preconditions",
+    "lockRequirements": "Dedicated autocommit=0 with innodb_table_locks=1 around each existing-target WRITE lock; user console modes unchanged; MariaDB Galera/wsrep is refused",
+    "limits": {
+      "reviews": 10,
+      "reviewLifetimeMs": 120000,
+      "statementTimeoutMs": 10000
+    },
+    "atomic": false
+  },
+  "schemaRebuildRecoveryPolicy": {
+    "source": "research/implementation/v0.13-schema-recovery.json",
+    "workflow": "Immutable reviewed typed InnoDB shadow rebuild or retained table removal; explicit destructive/implicit-commit acknowledgment; original table/data retained with a durable owned database journal",
+    "scope": "Supported ordinary column type/default/nullability/order/removal, primary/unique/index and supported CHECK changes; unsupported dependencies are refused",
+    "publish": "MySQL reviewed multi-name RENAME and MariaDB journaled ALTER RENAME steps differ; no uniform cross-step atomicity claim",
+    "recovery": "Automatic compensation after known failures plus explicit guarded inspection/recovery; schema and row digests under locks must match before restoring originals; changed live data is not overwritten",
+    "uncertainty": "Inspect actual owned object and journal states after lost acknowledgments; no blind DDL replay or automatic backup deletion",
+    "dependencies": "Visible dependencies blocked; hidden stored definitions require a separate explicit acknowledgment and are never claimed absent",
+    "limits": {
+      "tables": 10,
+      "observedRowsPerTable": 100000,
+      "observedBytesPerTable": 33554432,
+      "copyBatchRows": 250,
+      "journals": 100,
+      "journalBytesPerOperation": 4194304,
+      "reviewLifetimeMs": 120000
+    },
+    "excluded": [
+      "foreign-key or trigger/view dependent rebuilds without verified support",
+      "universal external dependency proof",
+      "recovery that overwrites intervening application data",
+      "automatic cleanup of retained originals"
+    ]
+  },
+  "schemaDependencyPolicy": {
+    "source": "research/implementation/v0.16-schema-programs.json",
+    "workflow": "Capture same-server schema-qualified typed FK/view/trigger graph and complete supported definitions/context; selected rebuild tables stay in the active schema; immutable dependency DDL and owned fences are journaled and revalidated around rebuild/recovery",
+    "approval": "Separate explicit acknowledgment for temporary dependency changes; hidden affected definitions cannot be bypassed with an acknowledgment",
+    "writeFence": "Reviewed owned BEFORE INSERT/UPDATE/DELETE guards block application DML across affected tables/shadows until dependency/data checks finish; interrupted or manual-recovery states can retain guards and must be reported",
+    "foreignKeys": "Supported same-server incoming/outgoing/self/cyclic FK graphs across schemas; exact qualified identities and actual relationship/type/key/nullability validation; FK checks remain enabled",
+    "metadataCapability": "Preexisting direct global SELECT/SHOW VIEW/TRIGGER and PROCESS/global FK dictionary visibility plus actual affected-schema change rights; incomplete or role-only visibility is refused; product never grants privileges",
+    "triggerViewContext": "Preserve observed definition, security/definer, ordering and SQL/character context or refuse unsupported cases",
+    "environment": "Current-server normal client DML scope; known read-only, group replication/wsrep and log-bin non-ROW contexts are refused; operators must quiesce replication/appliers/administrator DDL outside ordinary trigger fencing",
+    "limits": "Bounded observed same-server table/FK/view/program graph; cross-server coordination has a separate explicit saga policy",
+    "failure": "Retained originals and durable dependency state support guarded compensation; changed live objects/data are not overwritten and uncertain outcomes are not blindly replayed",
+    "journalCompatibility": "Ordinary typed rebuild planformat3 records owned UTC requirements; spatial typed-copy projection uses planformat4. Qualified dependency bundleformat2 is distinct from validated v13 plans and v14 local bundleformat1. Ordinary legacy digest semantics remain validated; ambiguous escaped routine summaries or old MySQL GEOMCOLLECTION SRS records may refuse conservatively. Raw client/journal SQL is never trusted.",
+    "structuredTriggers": {
+      "supported": [
+        "BEGIN",
+        "DECLARE scalar locals",
+        "SET",
+        "IF/ELSEIF/ELSE",
+        "CASE",
+        "statically resolved INSERT/UPDATE/DELETE",
+        "LOOP/WHILE/REPEAT/LEAVE/ITERATE",
+        "current-definer PROCEDURE CALL"
+      ],
+      "limits": {
+        "bytes": 131072,
+        "tokens": 20000,
+        "statements": 200,
+        "nesting": 8,
+        "branches": 20
+      },
+      "unsupported": "Unknown executable syntax, handlers/cursors, recursive CALL, trigger-reachable dynamic SQL/resultsets, unsupported scalar/subquery forms and unprovable target/read sets"
+    },
+    "coordination": "Same-server v15 rebuild/recovery acquires one shared advisory coordinator before the existing active-database coordinator, including legacy recovery; active-schema differences cannot interleave owned graph transitions. External/older clients and administrators are outside this lock. This same-server lock does not itself coordinate cross-server operations; see schemaCoordinatorPolicy."
+  },
+  "schemaConversionPolicy": {
+    "source": "research/implementation/v0.17-schema-spatial-advanced.json",
+    "workflow": "Explicit typed per-column conversion descriptors are immutable, reviewed and journaled; no user SQL, code or functions",
+    "validation": "Deterministic transformed rows are compared with observed target semantics before publication; overflow, ambiguity and unsupported cases fail before replacing originals",
+    "loss": "Lossy transformation requires a supported explicit strategy and separate approval; no silent rounding, truncation or fallback casts",
+    "recovery": "Original values and schema remain in retained originals; conversion rules do not replace data/ownership/counter guards during recovery",
+    "limits": {
+      "valueBytes": 131072,
+      "jsonDepth": 40,
+      "jsonNodes": 100000,
+      "exponent": 1024,
+      "conversionDialogColumns": 200,
+      "quantizeIntegerDigits": 35,
+      "quantizeFractionDigits": 30,
+      "quantizeTargetScale": 18
+    },
+    "strategies": 42,
+    "additional": "Four YEAR4 strategies, canonical binary hex/base64 encode/decode, four explicitly reviewed UTC TIMESTAMP/calendar/text strategies; explicit approved EPSG4326/3857 vertex projection",
+    "year": "0000 remains distinct fromNULL; only0 or1901..2155 accepted; no two-digit century inference",
+    "binary": "Uppercase even-length hex without prefix and canonical padded RFC4648 base64 without whitespace; empty andzero bytes preserved",
+    "utc": "Immutable timezone:UTC rule; verify dedicated workerUTC before source/target observation and guarded recovery; user console timezone unchanged; UTC operations refuse literal TIMESTAMP defaults; only supported absent/NULL/CURRENT_TIMESTAMP defaults",
+    "utcLimits": {
+      "minimum": "1970-01-01 00:00:01.000000Z",
+      "maximum": "2038-01-19 03:14:07.499999Z",
+      "fractionDigits": 6,
+      "dateProjection": "UTC midnight only"
+    },
+    "unsupportedAdditional": "Named timezone/DST inference and unsupported spatial formats/operations remain explicit; see schemaSpatialPolicy"
+  },
+  "streamImportPolicy": {
+    "source": "research/implementation/v0.13-stream-import.json",
+    "formats": [
+      "CSV",
+      "TSV",
+      "XLSX"
+    ],
+    "workflow": "Local source inspection and full reviewed validation, then bounded batches on one dedicated transaction; final Commit or Roll Back is explicit",
+    "sourceGuard": "Exact source hash/file identity, immutable mapping/options, server/schema and connection epoch pinned",
+    "failure": "Validation/error/cancellation rolls back every uncommitted batch; commit acknowledgment loss is uncertain and never auto-retried",
+    "transactionScope": "InnoDB row changes; ordinary server-side AUTO_INCREMENT allocations can leave gaps after rollback",
+    "limits": {
+      "fileBytes": 1073741824,
+      "expandedBytes": 4294967296,
+      "sheetBytes": 2147483648,
+      "rows": 1000000,
+      "columns": 200,
+      "metadataBytes": 8388608,
+      "sharedStrings": 20000,
+      "sheets": 100,
+      "zipEntries": 1024,
+      "cellBytes": 131072,
+      "rowBytes": 1048576,
+      "batchRows": 100,
+      "batchBytes": 1048576,
+      "readChunkBytes": 16384,
+      "reviewLifetimeMs": 600000,
+      "pendingTransactionMs": 300000,
+      "statementTimeoutMs": 15000,
+      "runTimeoutMs": 1800000
+    },
+    "memory": "Stream source/selected worksheet with backpressure; retain bounded metadata/preview/batch only",
+    "metadataScope": "8 MiB per metadata part, 20k shared strings and 200k parsed XML nodes per part; worksheet row queue bounded to 4096 rows/2 MiB; no measured RSS guarantee",
+    "automaticRollback": "Unconfirmed pending import expires after five minutes and rolls back; no implicit commit or automatic resume"
+  },
+  "xlsxImportPolicy": {
+    "source": "research/implementation/v0.12-xlsx-import.json",
+    "runtime": "Pinned open-source ZIP and XML readers bundled with Rocketbrain; no Excel/Office or spreadsheet authoring runtime required",
+    "workflow": "Local bounded XLSX, explicit worksheet/header/field mapping and formula/blank policies, then existing unchanged-draft Review/Apply/Commit pipeline",
+    "execution": "Spreadsheet formulas, macros and external links are never executed or fetched; cached formula values need explicit selection and are not recalculated",
+    "precision": "Preserve numeric lexical precision, explicit text and supported calendar date conversion; unsupported or ambiguous cells are rejected",
+    "limits": {
+      "fileBytes": 8388608,
+      "expandedBytes": 25165824,
+      "partBytes": 8388608,
+      "entries": 256,
+      "sheets": 20,
+      "rows": 500,
+      "columns": 200,
+      "cellBytes": 131072,
+      "draftBytes": 1048576
+    },
+    "excluded": [
+      "legacy XLS",
+      "XLSM",
+      "streaming multi-batch import",
+      "arbitrary formula evaluation"
+    ]
+  },
+  "sqlScriptPolicy": {
+    "source": "research/implementation/v0.11-sql-script.json",
+    "limits": {
+      "sqlBytes": 131072,
+      "statements": 100,
+      "parameterBytes": 1048576,
+      "retainedResultBytes": 4194304
+    },
+    "preflight": "Entire batch boundaries, observed session SQL mode, bindings and policy checked before execution; server syntax and semantic success are not guaranteed",
+    "parameters": "Named or positional prepared values; exact integer/decimal/date/JSON descriptor strings retain precision, server column or CAST supplies conversion",
+    "reuse": "Explicit RAM-only reuse scoped by document text, SQL selection, connection epoch/ID, SQL mode and keys; cleared on document close/disposal",
+    "resultPrivacy": "Review and binding metadata omit values; actual query results may echo parameter values",
+    "execution": "Single console queue, stop on first error/cancellation/budget; no automatic retry or transaction wrapper; earlier successes preserved",
+    "atomic": false,
+    "ddl": "Explicit implicit-commit approval; active transaction rejects schema scripts",
+    "excluded": [
+      "transaction SQL",
+      "routines",
+      "DELIMITER",
+      "session/database mode changes"
+    ]
+  },
+  "javaRefactoringPolicy": {
+    "source": "research/implementation/v0.19-java-refactoring.json",
+    "ownedPreviewAndApply": true,
+    "engine": "Independently provisioned public Eclipse JDT LS protocols with owned review and reference guards",
+    "edits": "Bounded local Java edits and individual-file rename/delete; private plans, version/buffer/disk/project/resource-membership/trust guards; explicit non-overwriting file restoration; no arbitrary client command execution",
+    "supportedScope": "Five existing code actions; one plain public Java class file moved within one observed source root; plain direct method/constructor parameter reorder, literal-default addition and unused removal; unused private method or package-private final class file Safe Delete",
+    "verification": "Actual feature evidence and known limitations are recorded separately in the v0.19 reports; supported scope is not whole-product parity.",
+    "resourceOperations": "Text edits remain unsaved; native file rename/delete affects disk. Text edits and moves support native Undo. File deletion closes its only editor and uses an explicit owned restore action rather than a claimed working file Ctrl+Z. No operation is atomic against arbitrary external writers.",
+    "fileRestoration": "Private exact disk-byte snapshot, at most10combined records and2MiB/file, current session only for1hour; target absence/case, physical parent/workspace identity, trust and dirty-buffer guards; one-shot native createFile without overwriting.",
+    "remaining": "General non-Java/member/package/cross-project moves, full signature/type/access/hierarchy contracts, external binary consumers, arbitrary runtime/reflection and framework-safe deletion remain incomplete."
+  },
+  "schemaProgramPolicy": {
+    "source": "research/implementation/v0.17-schema-dynamic-programs.json",
+    "workflow": "Explicit read-only observed procedure dependency report; no user-program execution during analysis",
+    "supported": "Context-free conservative dependency paths and separate explicit-invocation analysis; branch/finite-loop prepared state, nonrecursive CALL session state and IN/OUT/INOUT propagation without running user programs; resolved SQL templates are one supported statically named SELECT/INSERT/UPDATE/DELETE only",
+    "termination": "Only proven simple-counter bounds are known; unknown termination is explicit, not a universal termination proof",
+    "limits": {
+      "routines": 20,
+      "callDepth": 8,
+      "parameters": 32,
+      "templates": 16,
+      "templateBytes": 65536
+    },
+    "unsupported": "Arbitrary user execution, dynamic DDL, unknown/infinite paths, recursion, trigger-reachable dynamic SQL/resultsets, unproved SQL coercion, functions/UDFs, handlers/cursors and unsupported grammar; dynamic CALL, CTE, UNION and general JOIN templates",
+    "context": "Explicit invocation cases are inspection-only and never reusable as universal migration dependency proof. Bound-value summaries are types/hashes; resolved SQL text/literals derived from inputs may be visible in the readonly report.",
+    "contextLimits": {
+      "cases": 16,
+      "sessionVariables": 32,
+      "contextBytes": 1048576,
+      "paths": 32,
+      "loopIterations": 32,
+      "steps": 1024,
+      "stringBytes": 65536
+    }
+  },
+  "schemaSpatialPolicy": {
+    "source": "research/implementation/v0.17-schema-spatial-advanced.json",
+    "strategies": [
+      "wkt-geometry",
+      "wkb-geometry",
+      "geometry-wkb",
+      "geometry-family",
+      "web-mercator-forward",
+      "web-mercator-inverse"
+    ],
+    "srid": "Legacy0Cartesianxy/4326longitude-latitude plus separately reviewed EPSG4326/3857 vertex reprojection; explicit direction/axes, no SRID relabel",
+    "coordinates": "Exact WKT binary64 default or explicitly approved nearest-even with changed-row/coordinate counts; WKB finite bits preserved and actual target WKB/SRID verified",
+    "limits": {
+      "bytes": 131072,
+      "vertices": 4096,
+      "geometries": 1024,
+      "depth": 8
+    },
+    "unsupported": "Composite/prefix spatial indexes, arbitrary SRS/datum grids, densification/dateline/topology repair, geometry-to-WKT, EMPTY/Z/M/EWKB/GeoJSON and nonfinite/negative-zero WKB; Maria nested parenthesized MULTIPOINT",
+    "reprojection": "Owned bounded spherical Web Mercator formula and parameterized WKB copy; separate loss approval and actual target bits/SRID verified; retained original values and restrictions",
+    "indexes": "Single full NOT NULL geometry column, InnoDB SPATIAL/R-tree; MySQL explicit column SRID restriction, Maria planar index semantics; add/drop/rebuild/recovery",
+    "profile": {
+      "id": "web-mercator-vertices-v1",
+      "radiusMetres": 6378137,
+      "roundtripMetres": 0.000001,
+      "copyRows": 100,
+      "copyBytes": 1048576
+    },
+    "legacyRecovery": "A v0.16 MySQL GEOMCOLLECTION journal with unobserved column SRS metadata is refused before effects; unknown metadata is never normalized away."
+  },
+  "schemaCoordinatorPolicy": {
+    "source": "research/implementation/v0.16-schema-coordinator.json",
+    "participants": "2..4 distinct server identities, one active-schema participant/server; private live services and SecretStorage credentials",
+    "workflow": "Immutable reviewed participant plans, deterministic owned worker/guardian locks, durable coordinator/participant decisions and held ordinary-DML fences until verified release",
+    "recovery": "Before commit decision guarded compensation; after durable commit decision verified completion; reconcile lost acknowledgments/reconnect using typed journals; never blind forward-DDL retry",
+    "atomicDistributedDDL": false,
+    "passwordsJournaled": false,
+    "rawSQLJournalReplay": false,
+    "limits": {
+      "participants": 4,
+      "reviews": 3,
+      "reviewMs": 120000,
+      "operations": 100,
+      "payloadBytes": 262144,
+      "events": 120,
+      "operationMs": 1800000
+    },
+    "unsupported": "Universal external application/admin coordination, cross-server FK constraints, atomic XA DDL, arbitrary remote SQL and unsafe overwrite after drift/unreachable participants",
+    "durability": "Owned guardian/identity sessions explicitly enable and verify autocommit using server SQL and MySQL protocol transaction-status flags before journal work. Independent real observers verify commit decisions before fence release; user console modes remain unchanged."
+  },
+  "schemaDdlAtomicityPolicy": {
+    "source": "research/implementation/v0.17-schema-atomic-ddl.json",
+    "nativeAtomicDistributedDDL": false,
+    "sameServerAtomicStatement": "Conditional documented engine guarantee; not a multi-statement or cross-server DDL transaction; crash behavior not experimentally proved",
+    "atomicRequests": "Rejected before lookup, exclusive scheduling, connections, review or DDL with no silent saga fallback",
+    "observations": "Owned actual MySQL/Maria probes for implicit commit, failed multi-rename, ACTIVE-XA DDL refusal and cross-server partial state surviving rollback",
+    "existingSagaPolicy": "schemaCoordinatorPolicy"
+  },
+  "dailyJavaPolicy": {
+    "source": "research/implementation/v0.18-java-workbench.json",
+    "supported": "Observed imported Java source/package/library/JDK model; explicit native Maven lifecycle/Gradle task handles; saved observed-main Run/Debug with private environment values, successful prelaunch build and owned stop",
+    "execution": "Trusted initial JDT import and source autobuild remain; changed build configuration requires explicit synchronization. Project/build tasks may execute project code.",
+    "unsupported": "Universal JDK/Lombok/JPMS/multi-root composite-project parity, arbitrary server commands or full configuration-template catalog"
+  },
+  "springProjectPolicy": {
+    "source": "research/implementation/v0.18-spring-projects.json",
+    "supported": "Explicit official Initializr metadata/Java Maven or Gradle ZIP in new absent directory; bounded safe private review and supported literal starter dependency edits with source/version/context checks",
+    "execution": "Writes inside an open trusted workspace require explicit project-execution acknowledgement; synchronization is a separate explicit action",
+    "unsupported": "Overwrite or merge existing directories, arbitrary procedural build rewrites, version catalogs and unobserved BOM configurations"
+  },
+  "connectionProfilesPolicy": {
+    "source": "research/implementation/v0.18-db-connections.json",
+    "supported": "32 workspace profiles with groups/colors, one active connection, verified credential storage, visible schema selection, credential-free exports and local-path-free import metadata; strict TLS CA/DNS identity, paired PEM client certificates and owned system OpenSSH key/agent loopback forwards",
+    "credentials": "Passwords in VS Code Secret Storage only after verification; private keys read from user-selected local paths; no credential/key data in profile metadata/export/reports. SSH imports require local verified host/key paths again.",
+    "guards": "Pending grid drafts prevent switching; explicit native acknowledgement before rollback/switch of open or uncertain console transactions; fresh trust/epoch checks; close DB sessions before owned tunnel",
+    "unsupported": "Simultaneous active data sources, password/interactive SSH authentication, unknown host-key auto-acceptance, SSH password import/export or arbitrary SSH options"
+  },
+  "databaseAuthoringPolicy": {
+    "source": "research/implementation/v0.18-db-authoring.json",
+    "supported": "Private typed table designer for supported InnoDB CREATE/ALTER/PK/index/FK/CHECK/default shapes; actual owned empty-table validation then reviewed schema application/rebuild/recovery; editable existing view SELECT/procedure BODY with typed original context/grants retained",
+    "guards": "Private model/review identities and connection epochs; trust, busy, draft and transaction checks before owned validation DDL; compile without executing SELECT/procedure BODY",
+    "routineReplacement": "Explicitly non-atomic DROP/CREATE. Temporary unavailability, retained typed original journal, actual known automatic own grant preservation; other/unknown grants and changed definitions refuse. Unknown outcomes are never automatically retried; guarded fresh-client restoration is explicit.",
+    "unsupported": "Arbitrary complete DDL passthrough, source CREATE, all routine types/grants, unsupported generated/partitioned tables and unproved transformations"
+  }
+}

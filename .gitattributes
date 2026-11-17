@@ -1,0 +1,3 @@
+# Keep public Git blobs byte-identical to the audited source vector.
+# The build embeds Java helper sources verbatim, so EOL conversion changes payloads.
+* -text

@@ -1,0 +1,8 @@
+{
+  "upstream": "https://raw.githubusercontent.com/lddubeau/saxes/v6.0.0/LICENSE",
+  "reason": "The exact installed npm archive declares ISC but omits its upstream LICENSE file. Include all upstream notices from the same release tag in generated bundle notices.",
+  "name": "saxes",
+  "version": "6.0.0",
+  "commit": "211fa0ebec9b628affc09219199639887174bfc3",
+  "sha256": "0fac2374380621b22e6b50451057721a9c52935b02d16d106a9f04897f061d0e"
+}

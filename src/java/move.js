@@ -1,0 +1,83 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const {inside}=require('./testing-projects');
+const {parseJavaFile,lexJava}=require('../spring/java');
+const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
+const key=file=>process.platform==='win32'?path.resolve(file).toLowerCase():path.resolve(file);
+const excluded=new Set(['.git','node_modules','target','build','bin','out','.gradle','.vscode-test']);
+const extensions=new Set(['.java','.xml','.yml','.yaml','.properties','.json','.sql','.kt','.groovy','.scala','.jsp','.html','.txt']);
+function projectFiles(root){const files=[];let examined=0;function walk(folder,depth=0){if(depth>64)throw Error('Java reference review exceeds its directory depth limit.');for(const name of fs.readdirSync(folder).sort()){if(excluded.has(name.toLowerCase()))continue;if(++examined>20000)throw Error('Java reference review exceeds its directory entry limit.');const file=path.join(folder,name),stat=fs.lstatSync(file);if(stat.isSymbolicLink())throw Error('Java Move cannot establish reference coverage through a symbolic link or junction.');if(stat.isDirectory())walk(file,depth+1);else if(stat.isFile()&&extensions.has(path.extname(name).toLowerCase())){files.push(file);if(files.length>1500)throw Error('Java Move exceeds the 1500-file project reference review limit.');}}}walk(root);return files.sort();}
+function declarationHeader(tokens,start){const index=tokens.findIndex(t=>t.start===start);if(index<0)throw Error('Java Move could not identify declaration access precisely.');let begin=index-1;while(begin>=0&&![';','{','}'].includes(tokens[begin].text))begin--;return tokens.slice(begin+1,index).map(t=>t.text);}
+function inspectMoveClass(text,uri,sources){
+ const parsed=parseJavaFile({text,uri}),lexed=lexJava(text),tokens=lexed.tokens;
+ if(parsed.issues.length||lexed.issues.length||parsed.types.length!==1)throw Error('Java Move supports one plain public top-level class per file.');
+ const selected=parsed.types[0],header=declarationHeader(tokens,selected.start),typeWords=tokens.filter((t,i)=>['class','interface','enum','record'].includes(t.text)&&tokens[i-1]?.text!=='.');
+ if(selected.kind!=='class'||!header.includes('public')||selected.superTypes.length||typeWords.length!==1||tokens.some(t=>['extends','implements','sealed','permits'].includes(t.text)))throw Error('Java Move supports plain public classes without inheritance or nested type declarations.');
+ for(const member of [...selected.methods,...selected.fields]){const access=declarationHeader(tokens,member.start);if(!access.includes('public')&&!access.includes('private'))throw Error('A package-private or protected class member requires additional Move accessibility analysis.');}
+ const identifiers=new Set(tokens.filter(t=>t.kind==='id').map(t=>t.text));
+ for(const source of sources){if(!source.file.endsWith('.java')||source.uri===uri)continue;const peer=parseJavaFile({text:source.text,uri:source.uri}),lex=lexJava(source.text);if(peer.issues.length||lex.issues.length)throw Error('A project Java source prevents complete Move accessibility inspection.');if(peer.packageName!==parsed.packageName)continue;
+  for(const type of peer.types){if(!identifiers.has(type.name))continue;const access=declarationHeader(lex.tokens,type.start);if(!access.includes('public'))throw Error('A known package-private peer type requires additional Move accessibility analysis: '+type.name);
+   for(const member of [...type.methods,...type.fields])if(identifiers.has(member.name)&&!declarationHeader(lex.tokens,member.start).includes('public'))throw Error('A known non-public peer member requires additional Move accessibility analysis: '+type.name+'.'+member.name);
+  }
+ }
+ return {className:selected.name,packageName:parsed.packageName};
+}
+async function resolveMoveProject(request,vscode,uri,cancellation){
+ const cp=await request('workspace/executeCommand',{command:'java.project.getClasspaths',arguments:[uri.toString(),{scope:'runtime'}]},cancellation);
+ const settings=await request('workspace/executeCommand',{command:'java.project.getSettings',arguments:[uri.toString(),['org.eclipse.jdt.ls.core.sourcePaths']]},cancellation);
+ if(!cp?.projectRoot)throw Error('Import this Java project before moving its source files.');
+ const rootUri=vscode.Uri.parse(cp.projectRoot),workspace=vscode.workspace.getWorkspaceFolder(uri);
+ if(rootUri.scheme!=='file'||!workspace||!inside(fs.realpathSync(workspace.uri.fsPath),fs.realpathSync(rootUri.fsPath))||!inside(fs.realpathSync(rootUri.fsPath),fs.realpathSync(uri.fsPath)))throw Error('Move requires an imported project physically inside the open workspace.');
+ const root=fs.realpathSync(rootUri.fsPath),sourceRoots=(settings?.['org.eclipse.jdt.ls.core.sourcePaths']||[]).filter(value=>typeof value==='string'&&fs.existsSync(value)&&fs.statSync(value).isDirectory()&&inside(root,fs.realpathSync(value))&&!/(?:^|[\\/])(?:target|build|bin|out|generated|generated-sources|generated-test-sources)(?:[\\/]|$)/.test(value)).map(value=>fs.realpathSync(value));
+ const sourceRoot=sourceRoots.filter(value=>inside(value,fs.realpathSync(uri.fsPath))).sort((a,b)=>b.length-a.length)[0];
+ if(!sourceRoot)throw Error('Move supports observed non-generated Java source roots only.');return {root,sourceRoots,sourceRoot};
+}
+function registerJavaMove(context,vscode,{request,refactoring}={}){
+ const operations=new Set(),subscriptions=[];let closed=false;
+ function trusted(token){if(closed)throw Error('Java Move is closed.');if(!vscode.workspace.isTrusted)throw Error('Trust the workspace before moving Java sources.');if(token?.isCancellationRequested)throw Error('Java Move cancelled.');}
+ async function send(method,params,cancellation){trusted(cancellation);let timer;try{const value=await Promise.race([request(method,params,cancellation),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Java Move request timed out. Wait for project import and try again.')),30000);})]);trusted(cancellation);return value;}finally{clearTimeout(timer);}}
+ function local(uri,{destination=false}={}){if(uri?.scheme!=='file'||uri.query||uri.fragment||!uri.fsPath.endsWith('.java'))throw Error('Choose a local Java source file.');const folder=vscode.workspace.getWorkspaceFolder(uri),candidate=destination?path.dirname(uri.fsPath):uri.fsPath;if(!folder||!inside(fs.realpathSync(folder.uri.fsPath),fs.realpathSync(candidate)))throw Error('Java Move paths must remain physically inside the workspace.');return uri;}
+ async function scan(project,token){
+  trusted(token);const files=projectFiles(project.root).map(file=>vscode.Uri.file(file));const values=[];let bytes=0;
+  for(const uri of files){trusted(token);const real=fs.realpathSync(uri.fsPath);if(!inside(project.root,real)||fs.lstatSync(uri.fsPath).isSymbolicLink())throw Error('Java Move reference files must remain physically inside the imported project.');const data=fs.readFileSync(uri.fsPath);bytes+=data.length;if(data.length>2*1024*1024||bytes>16*1024*1024)throw Error('Java Move reference scan exceeds its source size limit.');const doc=await vscode.workspace.openTextDocument(uri);if(doc.isDirty)throw Error('Save project sources and resources before moving a Java class.');values.push({uri:uri.toString(),file:uri.fsPath,version:doc.version,hash:digest(doc.getText()),diskHash:digest(data),text:doc.getText()});}
+  return values.sort((a,b)=>a.uri.localeCompare(b.uri));
+ }
+ async function prepare(document,target,{cancellation}={}){
+  trusted(cancellation);local(document.uri);const destination=local(typeof target==='string'?vscode.Uri.parse(target):target,{destination:true});
+  if(document.languageId!=='java'||document.isClosed||document.isDirty)throw Error('Open and save the Java source before moving its class file.');
+  if(path.basename(document.uri.fsPath)!==path.basename(destination.fsPath))throw Error('Move preserves the Java file name. Use Java Rename separately to change its class name.');
+  if(fs.existsSync(destination.fsPath)||key(document.uri.fsPath)===key(destination.fsPath))throw Error('Move destination already exists or collides with the source.');
+  const before=document.getText(),version=document.version,project=await resolveMoveProject(send,vscode,document.uri,cancellation);
+  if(!inside(project.sourceRoot,fs.realpathSync(path.dirname(destination.fsPath))))throw Error('Move must remain inside the same observed Java source root.');
+  const relative=path.relative(project.sourceRoot,path.dirname(destination.fsPath)),targetPackage=relative.split(path.sep).filter(Boolean).join('.');
+  if(!targetPackage||!targetPackage.split('.').every(value=>/^[A-Za-z_$][\w$]*$/.test(value)))throw Error('Choose a named Java package directory with valid identifiers.');
+  const packageMatch=/^\s*package\s+([\w$.]+)\s*;/m.exec(before);if(!packageMatch)throw Error('Move currently requires a named source package.');
+  if(packageMatch[1]===targetPackage)throw Error('Choose a different package for this Java class file.');
+  const sources=await scan(project,cancellation),qualified=packageMatch[1]+'.'+path.basename(document.uri.fsPath,'.java');
+  if(!sources.some(value=>key(value.file)===key(document.uri.fsPath)))throw Error('The Java source is outside the reviewed project source set.');
+  inspectMoveClass(before,document.uri.toString(),sources);
+  for(const source of sources){
+   if(!source.file.endsWith('.java')&&source.text.includes(qualified))throw Error('A resource/framework reference needs manual review before moving: '+path.basename(source.file));
+   if(source.file.endsWith('.java')&&/\b(?:Class\s*\.\s*forName|loadClass|ServiceLoader|ClassLoader)\b/.test(source.text))throw Error('Dynamic Java class lookup prevents a complete Move reference review.');
+   if(source.file.endsWith('.java')&&/\b(?:ComponentScan|EntityScan|EnableJpaRepositories)\b/.test(source.text))throw Error('Explicit framework package scanning requires a separate Move review.');
+   if(source.file.endsWith('.java')&&/\bSpringBootApplication\b/.test(source.text)){if(/SpringBootApplication\s*\(/.test(source.text))throw Error('Configured Spring Boot application scanning requires a separate Move review.');const app=/^\s*package\s+([\w$.]+)\s*;/m.exec(source.text)?.[1];if(!app||!(targetPackage===app||targetPackage.startsWith(app+'.')))throw Error('Move would leave the observed Spring Boot application scan package.');}
+   // A Java string containing the old qualified name is outside JDT Java reference updates.
+   if(source.file.endsWith('.java')&&new RegExp('["\'`]'+qualified.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'["\'`]').test(source.text))throw Error('A Java string class reference requires a separate Move review.');
+  }
+  const response=await send('workspace/willRenameFiles',{files:[{oldUri:document.uri.toString(),newUri:destination.toString()}]},cancellation);trusted(cancellation);
+  if(!response||(!Object.keys(response.changes||{}).length&&!(response.documentChanges||[]).length))throw Error('The Java engine could not establish package and reference updates for this move.');
+  if((response.documentChanges||[]).some(value=>value.kind))throw Error('Unexpected Java engine file operations require a separate Move review.');
+  const textEntries=[...Object.entries(response.changes||{}).map(([uri,edits])=>({textDocument:{uri,version:null},edits})),...(response.documentChanges||[])];
+  for(const entry of textEntries){const uri=local(vscode.Uri.parse(entry.textDocument?.uri));if(!inside(project.root,fs.realpathSync(uri.fsPath)))throw Error('A Java Move reference edit is outside the selected imported project.');}
+  if(document.version!==version||document.getText()!==before)throw Error('The source changed while computing its Java Move.');
+  const check=async()=>{const fresh=await scan(project,cancellation);if(fresh.length!==sources.length||fresh.some((s,i)=>s.uri!==sources[i].uri||s.version!==sources[i].version||s.hash!==sources[i].hash||s.diskHash!==sources[i].diskHash))throw Error('The Java Move reference file set changed after review. Preview again.');};
+  const preApply=()=>{trusted(cancellation);const files=projectFiles(project.root).map(key).sort(),original=sources.map(s=>key(s.file)).sort();if(files.length!==original.length||files.some((value,i)=>value!==original[i]))throw Error('The Java Move reference file set changed after review.');for(const source of sources){if(digest(fs.readFileSync(source.file))!==source.diskHash)throw Error('A Java Move reference source changed after review.');const doc=vscode.workspace.textDocuments?.find(d=>key(d.uri.fsPath)===key(source.file));if(doc&&(doc.isDirty||doc.version!==source.version||digest(doc.getText())!==source.hash))throw Error('A Java Move reference buffer changed after review.');}};
+  const edit={documentChanges:[...textEntries,{kind:'rename',oldUri:document.uri.toString(),newUri:destination.toString(),options:{overwrite:false,ignoreIfExists:false}}]};
+  const plan=await refactoring.previewWorkspaceEdit(edit,{title:'Move '+path.basename(document.uri.fsPath)+' to '+targetPackage,kind:'refactor.move.file',anchorDocument:document,cancellation,allowedResourceOperations:['rename'],guards:[{uri:document.uri.toString()}],warnings:['Package changes can expose additional Java accessibility or external-client conflicts. Known non-public peer dependencies are refused; review every edit and compile the project after applying.'],validate:check,preApply});
+  return {...plan,move:{source:document.uri.toString(),destination:destination.toString(),oldPackage:packageMatch[1],newPackage:targetPackage,reviewedFiles:sources.length,scope:'One saved plain public Java class file without inheritance or nested types inside the same imported project and source root. Known non-public peer dependencies are refused. Full semantic conflicts, package directories, member/cross-project moves, dynamic and external clients remain outside this proof.'}};
+ }
+ function tracked(fn){return(...args)=>{const op=Promise.resolve().then(()=>fn(...args));operations.add(op);void op.finally(()=>operations.delete(op)).catch(()=>{});return op;};}
+ const api={prepare:tracked(prepare),preview:tracked(prepare),async dispose(){closed=true;await Promise.allSettled([...operations]);for(const sub of subscriptions)sub.dispose();}};
+ subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.move',async()=>{try{const editor=vscode.window.activeTextEditor;if(!editor)throw Error('Open the Java class file to move.');const selected=await vscode.window.showOpenDialog({title:'Choose an existing destination Java package',canSelectFiles:false,canSelectFolders:true,canSelectMany:false});if(!selected?.length)return;const target=vscode.Uri.file(path.join(selected[0].fsPath,path.basename(editor.document.uri.fsPath))),plan=await api.prepare(editor.document,target);return await refactoring.review(plan);}catch(error){if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java Move: '+error.message);}}));return api;
+}
+module.exports={registerJavaMove,resolveMoveProject,projectFiles,inspectMoveClass};

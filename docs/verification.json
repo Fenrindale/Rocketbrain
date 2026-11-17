@@ -1,0 +1,109 @@
+{
+  "version": "0.19.0",
+  "verifiedAt": "2026-11-17T07:34:14.001Z",
+  "fullProductParityVerified": false,
+  "scope": "Documented independent Java/Spring and MySQL/MariaDB workflows on Windows; no claim of complete IntelliJ IDEA or DataGrip parity.",
+  "artifact": {
+    "name": "rocketbrain-0.19.0.vsix",
+    "sha256": "e60d8f5be99c80bec033ac01e92ef5f751cd50ee1e63850a895844cb0cab1fcd",
+    "bytes": 1452173,
+    "files": 13
+  },
+  "source": {
+    "frozenPublicInputs": 490,
+    "inputVectorSha256": "3015d5f3198652e25aa7cbfa30405d0236946cf830e0ae28c391bfd4ad67baad",
+    "gitBlobByteEqualityVerified": true,
+    "generatedFeatureAndVerificationSummariesAreMetadata": true
+  },
+  "focusedUnitTests": {
+    "tests": 51,
+    "passed": 51,
+    "failed": 0,
+    "skipped": 0
+  },
+  "realSpringDatabaseTests": [
+    {
+      "engine": "mysql",
+      "tests": 802,
+      "passed": 800,
+      "failed": 0,
+      "skipped": 2
+    },
+    {
+      "engine": "mariadb",
+      "tests": 802,
+      "passed": 797,
+      "failed": 0,
+      "skipped": 5
+    }
+  ],
+  "nodeEvidenceScope": "The MySQL run retains its original input vector. A separately audited single native-host empty-directory cleanup correction changes no runtime or Node-test dependency input, and is verified by the final native runs. The MariaDB run uses the final vector directly.",
+  "newRefactoringNativeChecks": [
+    {
+      "engine": "mysql",
+      "passed": 4,
+      "vscode": "1.145.3"
+    },
+    {
+      "engine": "mariadb",
+      "passed": 4,
+      "vscode": "1.145.3"
+    }
+  ],
+  "wholePackagedNativeChecks": [
+    {
+      "engine": "mysql",
+      "passed": 128,
+      "vscode": "1.145.3"
+    },
+    {
+      "engine": "mariadb",
+      "passed": 116,
+      "vscode": "1.145.3"
+    }
+  ],
+  "publicOnlyReproduction": {
+    "node": "v24.22.1",
+    "pnpm": "10.34.9",
+    "tests": 623,
+    "passed": 586,
+    "failed": 0,
+    "skipped": 37,
+    "runtimeNotices": 24,
+    "payloadBodiesIdenticalToFrozenVsix": true,
+    "zipContainerTimestampsCanDiffer": true,
+    "privateRuntimesOrEvidenceCopied": false
+  },
+  "craftAnything": {
+    "channel": "CLI",
+    "sourceCorrespondences": 112,
+    "sourceScripts": 112,
+    "correspondenceConfidence": "inferred",
+    "archiveFiles": 13,
+    "archiveEvidenceIsSeparateFromRuntimeTests": true
+  },
+  "progress": {
+    "counts": {
+      "implemented": 9,
+      "partial": 100,
+      "not-implemented": 85,
+      "host-provided": 13,
+      "unverified": 7,
+      "platform-limited": 2
+    },
+    "referencePercent": 33.33333333333333,
+    "formula": "(implemented + host-provided + partial * 0.5) / 216",
+    "notEffortOrTimeCompletion": true
+  },
+  "limitations": [
+    "This validates documented supported scopes, not original-product parity or all Java semantics.",
+    "Move supports one saved plain public class without inheritance/nested types in one imported project/source root. Known accessibility, resource/framework, dynamic lookup and path conflicts refuse; remaining semantic/external-client conflicts require review and compilation.",
+    "Change Signature supports plain non-polymorphic methods/constructors with direct project callers, parameter reorder, compatible literal-default addition and unused removal. Overloads, inheritance, framework contracts, arbitrary evaluation effects and external binary/reflection callers remain unsupported.",
+    "Safe Delete supports unused plain private methods and package-private final class files under saved local project/reference coverage. Private-method edits support native Undo; closed-editor file Ctrl+Z is not claimed. File deletion has explicit non-overwriting original-byte restoration with session-only bounded one-hour tokens. Framework entries, constructors, fields, computed reflection and external consumers are not proven absent.",
+    "Native WorkspaceEdit text changes remain unsaved; resource move/delete affects disk. Validation narrows stale-source races but is not atomic against arbitrary external filesystem writers.",
+    "Reference scans, project/file sizes, plan lifetimes and Java/import/runtime combinations are bounded. The final matrices retain all other implementation gaps.",
+    "The progress value is a feature-count reference score; it is not a labor percentage.",
+    "Public repository creation/push and its visibility/current commit are separate publication evidence; this private report does not infer publication from local validation."
+  ],
+  "ci": "Maintainer-local validation is separate from the public Windows Node22 CI workflow. See this repository Actions for the actual result of each pushed commit."
+}

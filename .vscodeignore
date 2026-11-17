@@ -1,0 +1,8 @@
+**/*
+!package.json
+!README.md
+!NOTICE.txt
+!THIRD-PARTY-LICENSES.txt
+!dist/**
+!themes/**
+!media/**
