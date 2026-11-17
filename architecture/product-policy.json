@@ -53,10 +53,10 @@
     "지원 naming source/profile과 quoting의 certainty를 보존하고 미지원 전략·default joins를 임의standard naming으로 대체하지 않는다."
   ],
   "currentPrototype": {
-    "version": "0.20.0",
+    "version": "0.21.0",
     "status": "research/implementation/status.json",
-    "verification": "research/implementation/v0.20-verification.json",
-    "featureAudit": "research/implementation/v0.20-feature-audit.json",
+    "verification": "research/implementation/v0.21-verification.json",
+    "featureAudit": "research/implementation/v0.21-feature-audit.json",
     "fullProductParityVerified": false
   },
   "activeAnalysis": "research/independent",
@@ -383,15 +383,15 @@
     ]
   },
   "javaRefactoringPolicy": {
-    "source": "research/implementation/v0.20-java-refactoring.json",
+    "source": "research/implementation/v0.21-java-refactoring.json",
     "ownedPreviewAndApply": true,
     "engine": "Independently provisioned public Eclipse JDT LS protocols with owned review and reference guards",
     "edits": "Bounded local Java edits and individual-file rename/delete; private plans, version/buffer/disk/project/resource-membership/trust guards; explicit non-overwriting file restoration; no arbitrary client command execution",
-    "supportedScope": "Reviewed pure public static method/literal-constant moves and plain utility-class moves across an existing bounded Gradle app-to-library dependency; source hierarchy/overload-aware parameter operations with owned before/after compiler binding checks; Spring-related reference reports and unreferenced private helper deletion. Existing class move, direct signatures, class-file deletion/restoration remain.",
+    "supportedScope": "Reviewed pure public static members, bounded explicit-parameter stateless instance methods, flat Java utility packages across observed same-project source roots, and plain utility classes across literal bounded Gradle DAG/composite or Maven reactor dependencies. Source hierarchy/overload parameter operations additionally check bounded generic substitutions, covariant returns, bounds, erasures and caller result types. Spring source-only composed AliasFor and literal import/registration/identity processor contracts enrich private-helper deletion and signature guards. Existing class move, direct signatures, class-file deletion/restoration remain.",
     "verification": "Actual Spring and both DBs, current source/VSIX evidence at documented bounded scopes; not full product parity.",
     "resourceOperations": "Text edits remain unsaved; native file rename/delete affects disk. Text edits and moves support native Undo. File deletion closes its only editor and uses an explicit owned restore action rather than a claimed working file Ctrl+Z. No operation is atomic against arbitrary external writers.",
     "fileRestoration": "Private exact disk-byte snapshot, at most10combined records and2MiB/file, current session only for1hour; target absence/case, physical parent/workspace identity, trust and dirty-buffer guards; one-shot native createFile without overwriting.",
-    "remaining": "Instance/stateful member and package-directory moves, arbitrary Maven/Gradle/module graphs and build edits, full generic/external signature contracts, custom Spring extensions and arbitrary dynamic/runtime dependencies remain incomplete.",
+    "remaining": "Stateful/field/effectful/external instance receivers, nested packages/resources/configuration strings, arbitrary Maven/Gradle/module graphs and build edits, full generic/external signature contracts and arbitrary computed/conditional Spring extensions or runtime dependencies remain incomplete.",
     "compilerAnalysis": "Owned JDK compiler parse/analyze helper, no project application/processor/plugin execution; explicit empty processor/source paths, cleared JVM option environment, guarded compiler classpath providers and manifests."
   },
   "schemaProgramPolicy": {

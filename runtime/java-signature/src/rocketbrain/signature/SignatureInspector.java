@@ -8,6 +8,7 @@ import java.util.*;
 import javax.lang.model.element.*;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.*;
 import com.sun.source.tree.*;
 import com.sun.source.util.*;
@@ -34,6 +35,9 @@ public final class SignatureInspector {
     }
     static Map<String, Object> object(Object... values) {
         Map<String, Object> map = new LinkedHashMap<>(); for (int i = 0; i < values.length; i += 2) map.put((String) values[i], values[i + 1]); return map;
+    }
+    static List<Map<String,Object>> typeParameters(List<? extends TypeParameterElement> parameters) {
+        return parameters.stream().map(p -> object("name",p.getSimpleName().toString(),"bounds",p.getBounds().stream().map(Object::toString).toList())).toList();
     }
     static final class Method {
         ExecutableElement element; MethodTree tree; CompilationUnitTree unit; String uri; long start, end, nameStart;
@@ -66,7 +70,7 @@ public final class SignatureInspector {
             StringWriter compilerOutput = new StringWriter();
             JavacTask task = (JavacTask) compiler.getTask(compilerOutput, files, diagnostics, options, null, sources);
             List<CompilationUnitTree> units = new ArrayList<>(); task.parse().forEach(units::add); task.analyze();
-            Trees trees = Trees.instance(task); Elements elements = task.getElements(); SourcePositions positions = trees.getSourcePositions();
+            Trees trees = Trees.instance(task); Elements elements = task.getElements(); Types types=task.getTypes(); SourcePositions positions = trees.getSourcePositions();
             List<Method> methods = new ArrayList<>(); List<Map<String, Object>> calls = new ArrayList<>(); List<Map<String, Object>> references = new ArrayList<>();
             for (CompilationUnitTree unit : units) {
                 String uri = unit.getSourceFile().toUri().toString(), text = byUri.get(uri).text;
@@ -81,8 +85,12 @@ public final class SignatureInspector {
                         int open = tree.getParameters().isEmpty() ? text.lastIndexOf('(', (int)headerEnd) : text.lastIndexOf('(', (int)positions.getStartPosition(unit, tree.getParameters().getFirst()));
                         int cursor = open; while (cursor > start && Character.isWhitespace(text.charAt(cursor - 1))) cursor--;
                         int nameAt = cursor - name.length(); method.nameStart = nameAt >= start && text.regionMatches(nameAt, name, 0, name.length()) ? nameAt : -1;
-                        for (VariableElement variable : executable.getParameters()) method.parameters.add(object("type", variable.asType().toString(), "name", variable.getSimpleName().toString(), "used", false, "annotated", !variable.getAnnotationMirrors().isEmpty()));
+                        for (VariableElement variable : executable.getParameters()) method.parameters.add(object("type", variable.asType().toString(), "erasure", types.erasure(variable.asType()).toString(), "name", variable.getSimpleName().toString(), "used", false, "annotated", !variable.getAnnotationMirrors().isEmpty() || !variable.asType().getAnnotationMirrors().isEmpty()));
                         method.model = object("key", key(executable), "uri", uri, "owner", owner.getQualifiedName().toString(), "ownerKind", owner.getKind().toString(), "name", name, "constructor", executable.getKind() == ElementKind.CONSTRUCTOR, "start", start, "end", end, "nameStart", method.nameStart, "parameters", method.parameters, "returnType", executable.getReturnType().toString(), "throwsTypes", executable.getThrownTypes().stream().map(Object::toString).toList(), "modifiers", executable.getModifiers().stream().map(Object::toString).sorted().toList(), "annotations", executable.getAnnotationMirrors().stream().map(a -> a.getAnnotationType().toString()).toList(), "generic", !owner.getTypeParameters().isEmpty() || !executable.getTypeParameters().isEmpty(), "varargs", executable.isVarArgs());
+                        method.model.put("typeParameters",typeParameters(executable.getTypeParameters()));
+                        method.model.put("ownerTypeParameters",typeParameters(owner.getTypeParameters()));
+                        method.model.put("ownerSupertypes",types.directSupertypes(owner.asType()).stream().map(Object::toString).toList());
+                        method.model.put("erasureKey",owner.getQualifiedName()+"#"+executable.getSimpleName()+"("+String.join(",",executable.getParameters().stream().map(v->types.erasure(v.asType()).toString()).toList())+")");
                         methods.add(method); Method previous=current; int previousOrdinal=ordinal; current=method; ordinal=0; Void result=super.visitMethod(tree,p); current=previous; ordinal=previousOrdinal; method.model.put("bodyIdentifiers", method.identifiers); return result;
                     }
                     public Void visitIdentifier(IdentifierTree tree, Void p) {
@@ -95,7 +103,7 @@ public final class SignatureInspector {
                     void call(Tree tree, List<? extends ExpressionTree> arguments, boolean constructor) {
                         long start=positions.getStartPosition(unit,tree),end=positions.getEndPosition(unit,tree); Element element=trees.getElement(getCurrentPath());
                         if(start<0 || end<start || !(element instanceof ExecutableElement executable)) return;
-                        calls.add(object("uri",uri,"start",start,"end",end,"methodKey",key(executable),"enclosingKey",current==null?"<initializer>":key(current.element),"ordinal",ordinal++,"constructor",constructor,"safeArguments",arguments.stream().allMatch(v->safeArgument(getCurrentPath(),v,trees))));
+                        calls.add(object("uri",uri,"start",start,"end",end,"methodKey",key(executable),"enclosingKey",current==null?"<initializer>":key(current.element),"ordinal",ordinal++,"constructor",constructor,"resultType",trees.getTypeMirror(getCurrentPath()).toString(),"safeArguments",arguments.stream().allMatch(v->safeArgument(getCurrentPath(),v,trees))));
                     }
                     public Void visitMethodInvocation(MethodInvocationTree tree, Void p) { call(tree,tree.getArguments(),false); return super.visitMethodInvocation(tree,p); }
                     public Void visitNewClass(NewClassTree tree, Void p) { call(tree,tree.getArguments(),true); return super.visitNewClass(tree,p); }

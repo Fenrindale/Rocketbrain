@@ -1,37 +1,37 @@
 {
-  "version": "0.20.0",
-  "verifiedAt": "2026-11-17T11:38:11.725Z",
+  "version": "0.21.0",
+  "verifiedAt": "2026-11-17T15:32:58.321Z",
   "fullProductParityVerified": false,
   "scope": "Documented independent Java/Spring and MySQL/MariaDB workflows on Windows; no claim of complete IntelliJ IDEA or DataGrip parity.",
   "artifact": {
-    "name": "rocketbrain-0.20.0.vsix",
-    "sha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5",
-    "bytes": 1478331,
+    "name": "rocketbrain-0.21.0.vsix",
+    "sha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77",
+    "bytes": 1496392,
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 530,
-    "inputVectorSha256": "79ce23b5d793f37cf264b45d2ca35d18aea48340297dbbb31b462c621f139ae0",
+    "frozenPublicInputs": 581,
+    "inputVectorSha256": "41734a26cd8acdeb92f4235c48c005194a71b459ee19fc14d5f15f12852a71eb",
     "generatedFeatureAndVerificationSummariesAreMetadata": true
   },
   "focusedUnitTests": {
-    "tests": 95,
-    "passed": 95,
+    "tests": 140,
+    "passed": 140,
     "failed": 0,
     "skipped": 0
   },
   "realSpringDatabaseTests": [
     {
       "engine": "mysql",
-      "tests": 847,
-      "passed": 846,
+      "tests": 893,
+      "passed": 892,
       "failed": 0,
       "skipped": 1
     },
     {
       "engine": "mariadb",
-      "tests": 847,
-      "passed": 843,
+      "tests": 893,
+      "passed": 889,
       "failed": 0,
       "skipped": 4
     }
@@ -40,12 +40,12 @@
   "newRefactoringNativeChecks": [
     {
       "engine": "mysql",
-      "passed": 8,
+      "passed": 12,
       "vscode": "1.145.3"
     },
     {
       "engine": "mariadb",
-      "passed": 8,
+      "passed": 12,
       "vscode": "1.145.3"
     }
   ],
@@ -71,10 +71,10 @@
   "publicOnlyReproduction": {
     "node": "v24.22.1",
     "pnpm": "10.34.9",
-    "tests": 660,
-    "passed": 619,
+    "tests": 702,
+    "passed": 657,
     "failed": 0,
-    "skipped": 41,
+    "skipped": 45,
     "runtimeNotices": 24,
     "payloadBodiesIdenticalToFrozenVsix": true,
     "zipContainerTimestampsCanDiffer": true,
@@ -82,8 +82,8 @@
   },
   "craftAnything": {
     "channel": "CLI",
-    "sourceCorrespondences": 116,
-    "sourceScripts": 116,
+    "sourceCorrespondences": 120,
+    "sourceScripts": 120,
     "correspondenceConfidence": "inferred",
     "archiveFiles": 13,
     "archiveEvidenceIsSeparateFromRuntimeTests": true
@@ -102,9 +102,9 @@
     "notEffortOrTimeCompletion": true
   },
   "limitations": [
-    "Bounded public static member and two-sibling Gradle app-to-library moves; instance/stateful members, package directories and arbitrary build graphs remain incomplete.",
-    "Source-only simple hierarchy/overload signature contracts; generic/varargs/external/framework and arbitrary dynamic clients remain unverified or refused.",
-    "Spring reference reports protect known Bean, injection, resource and JPA contracts; custom extensions and arbitrary runtime behavior are not universally analyzed."
+    "Bounded pure static/explicit-parameter instance members, flat Java packages and literal Gradle DAG/composite or Maven reactor dependencies; stateful/field/effectful receivers, nested package resources and arbitrary build logic remain incomplete.",
+    "Source-only hierarchy/overload plus bounded generic substitution, covariance, bounds, erasure and caller result checks; varargs, external/binary/framework and arbitrary dynamic clients remain unverified or refused.",
+    "Spring source contracts additionally resolve supported composed AliasFor and literal Import/selector/registration/identity processor forms; arbitrary computed/conditional extensions and runtime behavior remain unknown or refused."
   ],
   "ci": "Maintainer-local validation is separate from the public Windows Node22 CI workflow. See this repository Actions for the actual result of each pushed commit."
 }

@@ -1,6 +1,6 @@
 {
-  "version": "0.20.0",
-  "asOf": "2026-11-17",
+  "version": "0.21.0",
+  "asOf": "2026-11-18",
   "total": 216,
   "fullProductParityVerified": false,
   "statuses": {
@@ -708,24 +708,26 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 같은 소스 루트의 단일 일반 public 클래스 파일 이동을 유지한다. 관찰한 두 Gradle 형제 프로젝트의 기존 app→library 의존성 안에서 독립 유틸리티 클래스와 public static 순수 반환 메서드·리터럴 상수 필드를 이동한다. JDT의 Java 참조 편집과 변경 전후 컴파일러 검사를 검토·적용·Undo/Redo에 연결한다.",
+      "scope": "기존 클래스·static 멤버 이동에 제한된 무상태 인스턴스 메서드와 완전한 단층 Java 유틸리티 패키지 이동을 더한다. 명시한 receiver 인자와 순수 호출을 검사하고 패키지의 각 파일을 검토·개별 이동한다. 리터럴 Gradle 형제 DAG·leaf includeBuild 좌표 치환과 명시적 Maven sibling reactor의 기존 의존성·관찰한 클라이언트를 검사한다. 빌드 의존성을 자동 생성·수정하지 않는다.",
       "remaining": [
-        "인스턴스·상태를 가진 멤버, 패키지 디렉터리, 일반 비Java 파일의 참조 전파와 임의 Maven/Gradle·composite·module 빌드 그래프의 이동은 남는다. 빌드 의존성 자체를 만들거나 수정하지 않는다.",
-        "프로젝트 간 이동은 기존 implementation/api 의존성이 있는 두 형제 Gradle 프로젝트와 의존성이 없는 대상 library의 범위다. 단일 유틸리티 클래스·기존 plain public 대상 타입·primitive/String 순수 static 메서드와 단일 리터럴 상수로 제한한다.",
-        "상속·오버로드·어노테이션·초기화·비공개/외부 의존, 확인한 문자열·리소스·반사·framework 패키지 위험을 거부한다. 외부 바이너리·생성 코드와 임의 동적 소비자 전체 및 원본 IDE 전체 동등성은 증명하지 않는다."
+        "인스턴스 이동은 같은 패키지의 final·무상태 plain source/target, 명시한 첫 target 인자와 primitive/String 순수 반환식·리터럴 getter, source 내부의 제한된 호출에 한정한다. 필드·초기화·상속·null/부작용·외부 호출과 일반 상태 이전은 남는다.",
+        "패키지 이동은 한 imported project의 같은 것으로 입증한 MAIN 소스 집합에서 기존 루트·대상 디렉터리 사이의 완전한 단층1–12개 Java 유틸리티 클래스 범위다. MAIN→test/unclassified·하위 패키지·리소스·일반 파일·framework/문자열 설정 패키지 참조의 자동 전파는 남는다.",
+        "2–12개 리터럴 Gradle DAG의 첫 implementation/api 뒤 api compile 노출, 외향 local edge가 없는 java-library leaf includeBuild의 리터럴 group/artifact/version 치환, 명시적 compile 좌표의 Maven sibling reactor만 분석한다. property version·profile·plugin/management·동적 settings·module path·외부/미가져온 소비자와 임의 복합 빌드 전체는 미지원이다."
       ],
       "verification": {
         "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "동결 소스530개·같은 VSIX의 단위95개 통과. DB 회귀는 MySQL847개(846통과·1제외), MariaDB847개(843통과·4제외), 실패0. 공개 재현660개(619통과·41제외), 본문13개·고지24개 일치. 집중 native8+8·전체128+116 통과. 기존 클래스 이동과 새 static 메서드·리터럴 상수·유틸리티 클래스의 Gradle app→library 이동3건을 양 DB에서 검증했다. 독립 빌드·새 Spring HTTP·DB2/1/0·Undo/Redo와 descriptor/membership/collision/dependency 거부를 대조했다.",
+        "testedScope": "동결 소스581개·같은 VSIX. 단위140개 통과. MySQL893개(892통과·1제외), MariaDB893개(889통과·4제외), 실패0. 공개 재현702개(657통과·45제외), payload13개·고지24개 일치. 집중 native(MySQL/MariaDB)12/12·전체128/116 통과. 양 DB 새 이동4/4건·거부7/7건으로 인스턴스·같은 MAIN 소스 집합의 패키지·transitive DAG·leaf composite를 새 빌드·Spring HTTP·DB2/1/0·Undo/Redo로 확인했다. 선택 대상은 기존 plain 제약을 유지하고, generic peer 공존은 독립 compiler 검사와 저장 소스/빌드/classpath guard 아래서 확인했다. Maven은 별도 소스 결합 JDT 2모듈·3소스의 전후 검사와 새 core/app 개별 Javac·실행42를 확인했다. 해당 이동 검증에서는 Maven CLI를 호출하지 않았다. Spring·DB 근거는 Gradle fixture의 별도 실행이다.",
         "publicEvidence": [
           "src/java/move.js",
           "src/java/member-move.js",
+          "src/java/move-instance.js",
+          "src/java/move-package.js",
+          "src/java/move-builds.js",
           "src/java/move-scope.js",
           "src/java/signature-compiler.js",
-          "src/java/refactoring.js",
-          "test/java-move.test.js",
-          "test/java-move-v20.test.js",
-          "test/java-move-v20-host.js"
+          "test/java-move-v21.test.js",
+          "test/java-move-v21-host.js",
+          "test/java-move-v21.integration.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -739,23 +741,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 매개변수 순서 변경·리터럴 기본값 추가·미사용 인자 제거와 호출 인수 전파를 제공한다. 한 프로젝트의 지원하는 interface·base·override 소스 계열과 메서드·생성자 오버로드를 구분하며, 변경 전후 컴파일러 바인딩으로 계열 선언·모든 구현의 인자 사용·호출 대상·다른 오버로드의 보존을 검사한다.",
+      "scope": "기존 순서 변경·리터럴 인자 추가·미사용 인자 제거에 소스 generic class/interface 치환, 공변 반환 계열, 교차 bound 메서드 타입 변수와 기존 parameterized/wildcard 인자를 더한다. 각 선언의 formal 타입을 보존하며 변경 전후 Javac의 bound·타입 변수·상위 타입·erasure·override edge와 호출 대상·추론 결과 타입을 대조한다. 사용자 Spring 확장 callback·등록 Bean/lifecycle과 미해결 계약은 사전 거부한다.",
       "remaining": [
-        "기존 이름·타입을 유지하는 제한된 primitive/String/Object 서명이다. 이름·기존 타입·반환형·접근성·throws 변경, 계산된 기본값, generic·varargs·default·복수 interface/diamond와 외부 binary 계열 계약은 남는다.",
-        "메서드 참조·사용하는 인자 제거·복잡한 인수 평가/부작용·확인한 문자열/리소스·framework 계약과 충돌/의도하지 않은 오버로드 재바인딩은 거부한다. 사용자 정의 확장·임의 동적 조회·생성/외부 호출자의 전체 부재는 증명하지 않는다.",
-        "선택한 저장 로컬 Maven/Gradle 프로젝트의 관찰 소스·클래스 경로 범위다. 다른 프로젝트·모듈·모든 JDK/Lombok·혼합 빌드와 모든 Java 조합의 원본 IDE 동등성은 미검증이다."
+        "기존 이름·타입·반환형·접근성·throws를 유지하며 새 인자는 지원 scalar 리터럴이다. varargs·default/native·주석 있는 framework 메서드/인자·복수 interface/diamond·메서드/생성자 참조와 계산된 기본값은 남는다.",
+        "소스에서 관찰한 generic 치환과 계열 범위다. 외부 binary 계열·생성/미관찰 호출자·임의 반사·동적/provider/custom Spring 동작 전체 및 모든 JDK/Lombok·혼합 빌드는 증명하지 않는다.",
+        "사용하는 인자 제거·부작용 평가·이름 충돌·의도하지 않은 overload 재바인딩·erasure collision·bound/계열 변경과 새 외부 binary override를 거부한다. Spring 계약은 보호된 소스·리소스 집합으로 검토하며 Javac에는 Java만 전달한다. 리터럴/identity 소스 언어 밖의 확장과 framework 계약의 자동 변경은 지원하지 않는다."
       ],
       "verification": {
         "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "동결 소스530개·같은 VSIX의 단위95개 통과. DB 회귀는 MySQL847개(846통과·1제외), MariaDB847개(843통과·4제외), 실패0. 공개 재현660개(619통과·41제외), 본문13개·고지24개 일치. 집중 native8+8·전체128+116 통과. interface/base/override 계열, 선택 메서드·생성자 오버로드의 순서 변경·추가·제거9건을 양 DB에서 새 컴파일·Spring HTTP·DB2/1/0·Undo/Redo로 검증했다. collision/rebinding/body-use/external-binary/multiple-interface 거부도 확인했다.",
+        "testedScope": "동결 소스581개·같은 VSIX. 단위140개 통과. MySQL893개(892통과·1제외), MariaDB893개(889통과·4제외), 실패0. 공개 재현702개(657통과·45제외), payload13개·고지24개 일치. 집중 native(MySQL/MariaDB)12/12·전체128/116 통과. 양 DB generic 3/3선언의 순서 변경·추가·제거 9/9건과 erasure/새 외부 override 거부 2/2건을 새 컴파일·Spring HTTP·DB2/1/0·Undo/Redo로 확인했다. bound·치환·공변 반환·wildcard·호출 결과와 변경 전후 외부 override 계약을 대조했다. Spring 계약은 보호된 Java/리소스 전체를 읽고 Javac에는 Java만 전달한다. 실제 JDT의 로컬 XML 허용 및 missing/external/custom-reader·리소스 변경 거부도 확인했다.",
         "publicEvidence": [
           "src/java/change-signature.js",
           "src/java/signature-compiler.js",
+          "src/java/spring-contract-analysis.js",
           "src/java/refactoring.js",
-          "test/java-change-signature.test.js",
-          "test/java-change-signature-v20.integration.test.js",
-          "test/java-signature-compiler.test.js",
-          "test/java-change-signature-v20-host.js"
+          "test/java-generic-signature-v21.test.js",
+          "test/java-change-signature-v21.integration.test.js",
+          "test/java-change-signature-v21-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -769,25 +771,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "알려진 Spring 타입의 미사용·무주석 private 보조 메서드를 Java 의미 참조와 저장 소스·Spring 이름·리소스를 검토한 뒤 삭제한다. Bean 별칭·주입·Import·SpEL·XML·YAML/properties 및 JPA 연관 참조를 위치가 있는 보고서로 표시한다. 프레임워크 계약은 자동 삭제하지 않는다. 기존 제한된 일반 클래스 파일 삭제와 세션 내 원본 바이트 복원을 유지한다.",
+      "scope": "Java·Spring·이름·리소스 참조 보고서를 유지하고 소스의 composed/meta annotation과 명시한 AliasFor, 리터럴 Import/ImportSelector, RootBeanDefinition의 Bean 이름·타입·별칭 등록, identity-only final BeanPostProcessor를 분석한다. 이 계약이 모두 해석되면 composed controller의 미사용 무주석 private 보조 메서드를 삭제할 수 있다. callback·Bean·lifecycle·HTTP·JPA는 위치가 있는 보호 계약으로 남긴다.",
       "remaining": [
-        "필드·생성자·공개 API와 복잡한 타입의 삭제, Bean·HTTP·lifecycle·scheduled·JPA 계약의 자동 제거는 지원하지 않는다. JPA·ConfigurationProperties 소유자의 무주석 멤버도 접근자·provider 분석이 필요하다.",
-        "관찰한 reflection·Bean 등록/후처리·custom condition·임의 SpEL·동적 XML/lifecycle 및 외부 ImportResource는 unknown으로 거부한다. 분석 예산을 넘는 별칭·이름·검색·보고서도 incomplete로 거부한다. 외부 프로젝트·클라이언트·의존성·생성/바이너리 소비자 전체는 증명하지 않는다.",
-        "같은 검토 범위의 저장 소스·리소스·Gradle 메타데이터와 파일 집합을 적용 직전에 다시 검사한다. 삭제 파일 복원은 세션 내 최대10개·파일당2MiB·1시간이며 uncertain 결과는 새 검사·명시적 복원으로만 처리한다. 영구 복구와 원본 IDE 전체 동등성은 남는다."
+        "확장 분석은 저장한 소스만 읽는다. 리터럴 클래스 목록/등록과 수동 지정 meta annotation AliasFor·문자열 기본값, final·추가 상태가 없는 identity processor만 지원한다. local mirror alias·상속/생성자/초기화·임의 metadata·conditional/계산된 selector/등록·factory/provider/사용자 후처리 전체는 남는다.",
+        "reflection·임의 SpEL·custom condition·외부/계산된 Import/ImportResource와 동적 XML/lifecycle은 unknown으로 거부한다. 소스/그래프/멤버/별칭/검색/보고서 예산 초과도 거부한다. 외부 프로젝트·binary·생성 코드와 모든 동적 소비자 부재는 증명하지 않는다.",
+        "필드·생성자·공개 API와 framework 계약의 자동 제거, JPA/ConfigurationProperties accessor/provider 전체 분석은 남는다. 저장 소스·리소스·빌드 파일과 집합을 적용 직전에 재검사하며 삭제 파일 복원은 최대10건·2MiB/파일·세션1시간이다."
       ],
       "verification": {
         "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "동결 소스530개·같은 VSIX의 단위95개 통과. DB 회귀는 MySQL847개(846통과·1제외), MariaDB847개(843통과·4제외), 실패0. 공개 재현660개(619통과·41제외), 본문13개·고지24개 일치. 집중 native8+8·전체128+116 통과. 기존5건과 새7건을 양 DB에서 검증했다. 실제 RestController의 무주석 private 보조 메서드 삭제·새 컴파일·Spring HTTP·DB2/1/0·Undo, Bean 별칭/주입/SpEL/XML/YAML 보고서, HTTP/lifecycle/scheduled/JPA 거부와 late resource guard를 확인했다.",
+        "testedScope": "동결 소스581개·같은 VSIX. 단위140개 통과. MySQL893개(892통과·1제외), MariaDB893개(889통과·4제외), 실패0. 공개 재현702개(657통과·45제외), payload13개·고지24개 일치. 집중 native(MySQL/MariaDB)12/12·전체128/116 통과. 양 DB 새6/6건에서 composed AliasFor와 리터럴 selector/registrar·identity processor 3/3종을 해석했다. private helper 적용·새 Spring HTTP/DB2/1/0·Undo 1/1건, callback/lifecycle blocked 4/4건, 조건부 selector unknown 1/1건을 확인했다. 분석 중 확장은 실행하지 않았다. 구형 시나리오 정의0.19/0.20도 현재 동결본으로 다시 실행했다.",
         "publicEvidence": [
           "src/java/safe-delete.js",
           "src/java/spring-delete-analysis.js",
-          "src/spring/java.js",
-          "src/spring/model.js",
+          "src/java/spring-contract-analysis.js",
           "src/java/refactoring.js",
           "test/java-safe-delete.test.js",
           "test/java-spring-safe-delete.test.js",
-          "test/java-safe-delete-host.js",
-          "test/java-safe-delete-v20-host.js"
+          "test/java-spring-contract-analysis.test.js",
+          "test/java-safe-delete-v21-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -851,26 +852,26 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "추출·변수 인라인·import 정리와 클래스/파일·제한된 static 멤버/프로젝트 이동, 계열·오버로드 Change Signature, Spring 참조 보고서 Safe Delete를 비공개 일회용 계획과 전후 비교에 연결한다. JDT 수명주기·리소스 동기화 후 편집을 요청하며 mutation을 자동 재시도하지 않는다. 문서·디스크·파일 집합·빌드·classpath 재검토, native Undo/Redo와 삭제 파일 별도 원본 복원을 구분한다.",
+      "scope": "검토 계획·전후 비교에 제한된 인스턴스/패키지 이동, literal Maven/Gradle·leaf composite 경계 분석, generic 계열·overload 서명 변경과 소스 Spring 사용자 확장 계약 검사를 통합한다. 저장 문서·디스크·파일 집합·빌드·classpath를 다시 확인하고, 분석 중 프로젝트 코드/processor/plugin/확장을 실행하지 않는다. 텍스트·이동 Undo/Redo와 삭제 파일의 세션 내 별도 원본 복원을 구분한다.",
       "remaining": [
-        "지원된 개별 리팩터링과 소스 범위의 조합이며 원본 IDE의 전체 대화형·일괄 리팩터링이 아니다. 인스턴스·상태/패키지 이동, 임의 빌드 그래프·generic/외부 계열과 framework 계약의 자동 제거는 남는다.",
-        "새 파일 생성·재귀 삭제·덮어쓰기·예상 밖 리소스 작업과 임의 엔진 명령을 거부한다. Java 컴파일러 분석은 사용자 application/annotation processor/plugin을 실행하지 않으며 관찰된 classpath provider도 경계 검사한다.",
-        "텍스트·이동의 Undo/Redo와 최대10건·2MiB/파일·세션1시간의 삭제 파일 원본 복원을 구분한다. 외부 writer와의 원자성·영구 복구·관찰 밖 동적/provider/생성/바이너리 참조 전체의 안전성을 보장하지 않는다."
+        "지원하는 소스 언어·receiver·유틸리티 패키지·명시적 빌드 그래프의 조합이다. 상태 있는 멤버/자원·중첩 패키지·동적/임의 복합 빌드·외부/복수 interface 계열·임의 Spring provider/framework 계약의 자동 변경/제거는 남는다.",
+        "예상 밖 리소스 작업·덮어쓰기·재귀 삭제·임의 engine 명령과 미해결 계약을 거부한다. 선택 Move 대상의 plain 제약을 유지하며 generic peer 공존은 독립 compiler·소스/빌드/classpath guard 아래서만 허용한다. Spring 계약에는 보호된 리소스도 포함하며 mutation은 자동 재시도하지 않는다. 모든 JDK/Lombok·혼합 빌드·동적 소비자 전체 동등성은 미검증이다.",
+        "Undo/Redo와 최대10건·2MiB/파일·세션1시간의 삭제 파일 원본 복원은 구분한다. 외부 writer와 원자성·영구 복구·관찰 밖 reflection/provider·생성/binary 참조 전체의 안전성은 보장하지 않는다."
       ],
       "verification": {
         "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "동결 소스530개·같은 VSIX의 단위95개 통과. DB 회귀는 MySQL847개(846통과·1제외), MariaDB847개(843통과·4제외), 실패0. 공개 재현660개(619통과·41제외), 본문13개·고지24개 일치. 집중 native8+8·전체128+116 통과. 양 DB 집중 호스트에서 읽기 전용 class-output 준비 확인 후 원래 제품 API32개를 각각 한 번 호출했고 재시도·우회·소스 drift가 없으며 원래 메서드 identity를 복구했다. 기존·확장 검토/이동/서명/삭제, Undo/Redo와 삭제 파일 별도 원본 복원을 검증했다. 외부 writer 원자성은 주장하지 않는다.",
+        "testedScope": "동결 소스581개·같은 VSIX. 단위140개 통과. MySQL893개(892통과·1제외), MariaDB893개(889통과·4제외), 실패0. 공개 재현702개(657통과·45제외), payload13개·고지24개 일치. 집중 native(MySQL/MariaDB)12/12·전체128/116 통과. 양 DB 원래 API 59/59회(준비 55/55·descriptor 거부 4/4)를 각각 한 번 호출했고 재시도·우회·분석을 위한 강제 빌드0, 소스 guard와 메서드 identity를 보존했다. generic peer/guarded Spring resource 통합을 포함해 이동·서명·삭제의 검토·컴파일·새 Spring/DB·Undo/Redo·별도 삭제 파일 복원을 확인했다. Maven은 별도 소스 결합 JDT 2모듈·3소스의 전후 검사와 새 core/app 개별 Javac·실행42를 확인했다. 해당 이동 검증에서는 Maven CLI를 호출하지 않았다. Spring·DB 근거는 Gradle fixture의 별도 실행이다.",
         "publicEvidence": [
           "src/java/refactoring.js",
           "src/java/move.js",
-          "src/java/member-move.js",
-          "src/java/move-scope.js",
+          "src/java/move-instance.js",
+          "src/java/move-package.js",
+          "src/java/move-builds.js",
           "src/java/change-signature.js",
           "src/java/signature-compiler.js",
-          "src/java/safe-delete.js",
+          "src/java/spring-contract-analysis.js",
           "src/java/spring-delete-analysis.js",
-          "test/java-refactoring.test.js",
-          "test/java-refactoring-v20-host.js"
+          "test/java-refactoring-v21-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5215,17 +5216,17 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5",
-    "sourceManifestSha256": "79ce23b5d793f37cf264b45d2ca35d18aea48340297dbbb31b462c621f139ae0",
+    "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77",
+    "sourceManifestSha256": "41734a26cd8acdeb92f4235c48c005194a71b459ee19fc14d5f15f12852a71eb",
     "publicOnlySourceReproduction": {
-      "sourceFiles": 530,
+      "sourceFiles": 581,
       "offlineCounts": {
-        "tests": 660,
+        "tests": 702,
         "suites": 0,
-        "pass": 619,
+        "pass": 657,
         "fail": 0,
         "cancelled": 0,
-        "skipped": 41,
+        "skipped": 45,
         "todo": 0
       },
       "verifiedVsixEntries": 13,
@@ -5236,25 +5237,25 @@
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "reportedChecks": 8,
-        "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5"
+        "reportedChecks": 12,
+        "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77"
       },
       {
         "engine": "mariadb",
-        "reportedChecks": 8,
-        "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5"
+        "reportedChecks": 12,
+        "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77"
       }
     ],
     "wholeNativeHosts": [
       {
         "engine": "mysql",
         "reportedChecks": 128,
-        "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5"
+        "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77"
       },
       {
         "engine": "mariadb",
         "reportedChecks": 116,
-        "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5"
+        "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77"
       }
     ],
     "ciScope": "Public GitHub Windows/Node22 offline and package workflow is configured. This local verification summary does not assert that a remote CI run has completed."
