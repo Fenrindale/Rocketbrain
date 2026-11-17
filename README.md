@@ -29,7 +29,7 @@ pnpm run test:offline
 pnpm run package
 ```
 
-생성된 `rocketbrain-0.19.0.vsix`를 VS Code 확장 메뉴의 **Install from VSIX…**로 설치합니다. 패키지 명령은 로컬 VSIX를 만들며 Marketplace에 자동 게시하지 않습니다. 확장 패키지에는 Java 엔진과 DB 서버 바이너리를 포함하지 않습니다.
+생성된 `rocketbrain-0.20.0.vsix`를 VS Code 확장 메뉴의 **Install from VSIX…**로 설치합니다. 패키지 명령은 로컬 VSIX를 만들며 Marketplace에 자동 게시하지 않습니다. 확장 패키지에는 Java 엔진과 DB 서버 바이너리를 포함하지 않습니다.
 
 `test:offline`은 실제 DB·Java·브라우저·VS Code 실행 환경을 요구하는 검사를 구분하여 제외하거나 건너뜁니다. 이 결과가 실제 Spring·MySQL·MariaDB 검증을 대신하지 않습니다. 실환경 도구와 별도 검증 조건은 [공개 소스 안내](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/public-source.md)를 참고하세요.
 
@@ -51,12 +51,15 @@ Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후�
 
 | 명령 | 지원 범위 | 추가 분석이 필요한 범위 |
 |---|---|---|
-| **Move Java Class File** | 같은 가져온 프로젝트·소스 루트의 기존 패키지로 Java 클래스 파일 이동과 확인된 Java 참조 수정 | 일반 리소스·멤버·프로젝트 간 이동, 모든 framework·동적 참조 |
-| **Change Java Signature** | 단순한 비다형 메서드·생성자의 인자 순서 변경, 리터럴 기본값을 넣는 인자 추가, 본문에서 쓰지 않는 인자 제거와 직접 호출자 수정 | 이름·기존 타입·반환형·접근성·예외 변경, 오버로드·상속·제네릭·가변 인자·메서드 참조·framework 계약 |
-| **Safe Delete Java Declaration** | 검토한 프로젝트의 저장된 소스·텍스트 리소스에서 사용되지 않는 일반 private 메서드 또는 제한된 package-private final 클래스 파일 삭제 | 공개 API·어노테이션·상속·동적/외부 바이너리 참조·생성 코드의 전체 부재 증명 |
+| **Move Java Class File / Move Java Class Across Projects** | 같은 소스 루트의 클래스 이동, 명시한 Gradle 앱·라이브러리 의존성 사이의 일반 유틸리티 클래스 이동과 Java 참조 수정 | 임의 파일·패키지 디렉터리·빌드 구성 변경, 복합 Maven·모듈·동적 참조 |
+| **Move Java Static Member** | 일반 클래스의 public static 순수 반환 메서드·리터럴 상수 필드를 기존 Gradle 의존성의 대상으로 이동 | 인스턴스·상태를 가진 멤버, 오버로드·상속·어노테이션·임의 외부 사용 |
+| **Change Java Signature** | 인자 순서·리터럴 기본값 추가·미사용 인자 제거. 지원하는 소스 상속 관계와 오버로드를 변경 전후 컴파일러 바인딩으로 검사 | 이름·기존 타입·반환형·접근성·예외 변경, 임의 제네릭·가변 인자·외부 바이너리·메서드 참조·framework 계약 |
+| **Safe Delete Java Declaration** | 미사용 private 보조 메서드·제한된 클래스 파일 삭제. Spring Bean 별칭·주입·설정·XML·JPA 관련 참조와 보호 사유를 위치와 함께 표시 | framework 진입점·수명주기, 사용자 정의 확장·동적/외부 바이너리 참조·생성 코드의 전체 부재 증명 |
 | **Restore Deleted Java File** | Safe Delete가 확인한 원본 바이트를 덮어쓰기 없이 복원 | 최근 최대 10건을 같은 실행 세션에서 1시간 동안 제공하며, 대상 파일이 새로 생겼거나 상위 폴더가 바뀌면 거부 |
 
 Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 기존 인자의 이름·타입은 유지하며 새 인자에는 명시적인 리터럴 기본값이 필요합니다. 평가 순서에 영향을 줄 수 있는 복잡한 호출식과 확인된 문자열·리소스 참조는 거부합니다. 이 기능들은 검토한 프로젝트 범위에 한정되며 임의 리플렉션과 외부 사용자의 계약까지 자동 증명하지 않습니다.
+
+상속·오버로드 분석과 새 이동 검사는 별도 JDK 컴파일러로 파싱·타입 연결을 검사합니다. 프로젝트 클래스·어노테이션 처리기·컴파일러 플러그인을 분석 목적으로 실행하지 않습니다. 지원하지 않는 확장이나 불완전한 클래스 경로는 거부합니다.
 
 기존 메서드·지역 변수·필드 추출, 지역 변수 인라인과 import 정리는 **Refactor Java Selection with Preview**에서 계속 사용할 수 있습니다.
 
@@ -77,7 +80,7 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 = (9 + 13 + 100 × 0.5) / 216
 ```
 
-이는 항목 수에 기반한 비교 점수이며 개발 시간·잔여 작업량·제품 완성도의 측정값은 아닙니다. 정확한 검증 범위와 남은 항목은 [기능 현황](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/FEATURES.md)에 기록합니다. 다음 우선순위는 일반 파일·멤버·프로젝트 간 이동, 더 넓은 Change Signature 계약 분석, 여러 활성 DB 연결과 고급 객체 작성 화면입니다.
+이는 항목 수에 기반한 비교 점수이며 개발 시간·잔여 작업량·제품 완성도의 측정값은 아닙니다. 정확한 검증 범위와 남은 항목은 [기능 현황](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/FEATURES.md)에 기록합니다. 다음 우선순위는 인스턴스 멤버·패키지 이동과 복합 빌드, 제네릭·외부 계약을 포함한 Change Signature, 사용자 정의 Spring 확장 분석, 여러 활성 DB 연결과 고급 객체 작성 화면입니다.
 
 ## 공개 저장소 관리
 

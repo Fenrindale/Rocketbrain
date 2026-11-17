@@ -88,7 +88,7 @@ function registerJavaFeatures(context, vscode) {
     dispose() {
       if (!disposing) {
         disposed = true;
-        disposing = serial(async()=>{await api.workbench?.dispose();await api.move?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
+        disposing = serial(async()=>{await api.workbench?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
       }
       return disposing;
     }
@@ -97,16 +97,25 @@ function registerJavaFeatures(context, vscode) {
   api.debug = debuggerController;
   subscriptions.push(debuggerController);
   const refactoringRequest=async(method,params,cancellation)=>{
-    if(!['textDocument/codeAction','codeAction/resolve','textDocument/documentSymbol','textDocument/references','workspace/willRenameFiles','java/getChangeSignatureInfo','java/getRefactorEdit'].includes(method)&&!(method==='workspace/executeCommand'&&['java.project.getClasspaths','java.project.getSettings'].includes(params?.command)))throw new Error('Unsupported Java refactoring request.');
+    if(!['textDocument/codeAction','codeAction/resolve','textDocument/documentSymbol','textDocument/references','workspace/willRenameFiles','java/getChangeSignatureInfo','java/getRefactorEdit','java/move','java/getMoveDestinations'].includes(method)&&!(method==='workspace/executeCommand'&&['java.project.getClasspaths','java.project.getSettings','java.project.getAll'].includes(params?.command)))throw new Error('Unsupported Java refactoring request.');
     await api.start();if(!vscode.workspace.isTrusted||!client||state.state!=='running')throw new Error('Start Java support in a trusted workspace before refactoring.');
     return client.sendRequest(method,params,...(cancellation?[cancellation]:[]));
   };
   api.refactoring=require('./refactoring').registerJavaRefactoring(context,vscode,{request:refactoringRequest});
   subscriptions.push(api.refactoring);
-  api.move=require('./move').registerJavaMove(context,vscode,{request:refactoringRequest,refactoring:api.refactoring});
-  api.changeSignature=require('./change-signature').registerJavaChangeSignature(context,vscode,{request:refactoringRequest,refactoring:api.refactoring});
+  const refactoringRuntime=()=>({javaHome:api.getState().javaHome,storagePath:(context.storageUri||context.globalStorageUri).fsPath});
+  const synchronizeRefactoringFiles=async changes=>{
+    if(!vscode.workspace.isTrusted||!Array.isArray(changes)||!changes.length||changes.length>2)throw Error('Invalid Java resource synchronization.');
+    const fs=require('node:fs');
+    for(const change of changes){const uri=vscode.Uri.parse(change.uri);if(uri.scheme!=='file'||uri.query||uri.fragment||!uri.fsPath.endsWith('.java')||!vscode.workspace.getWorkspaceFolder(uri)||![1,2,3].includes(change.type))throw Error('Java resource synchronization must remain within the reviewed workspace.');const exists=fs.existsSync(uri.fsPath);if(exists!== (change.type!==3)||exists&&!fs.lstatSync(uri.fsPath).isFile())throw Error('Java resource synchronization must describe the current file state.');}
+    await api.start();if(!vscode.workspace.isTrusted||!client||state.state!=='running')throw Error('Start Java support before synchronizing reviewed resources.');
+    await client.sendNotification('workspace/didChangeWatchedFiles',{changes});
+  };
+  api.move=require('./move').registerJavaMove(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
+  api.memberMove=require('./member-move').registerJavaMemberMove(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
+  api.changeSignature=require('./change-signature').registerJavaChangeSignature(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,getJavaHome:()=>api.getState().javaHome});
   api.safeDelete=require('./safe-delete').registerJavaSafeDelete(context,vscode,{request:refactoringRequest,refactoring:api.refactoring});
-  subscriptions.push(api.move,api.changeSignature,api.safeDelete);
+  subscriptions.push(api.move,api.memberMove,api.changeSignature,api.safeDelete);
   api.workbench=require('./workbench').registerJavaWorkbench(context,vscode,api,output);
   subscriptions.push(api.workbench);
   async function installEngine() {

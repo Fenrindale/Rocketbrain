@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -41,6 +41,8 @@
   "contributes": {
     "commands": [
       { "command": "rocketbrain.java.move", "title": "Move Java Class File", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.moveCrossProject", "title": "Move Java Class Across Projects", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.moveMember", "title": "Move Java Static Member", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.changeSignature", "title": "Change Java Signature", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.safeDelete", "title": "Safe Delete Java Declaration", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.restoreDeleted", "title": "Restore Deleted Java File", "category": "Rocketbrain" },

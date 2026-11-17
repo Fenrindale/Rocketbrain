@@ -1,55 +1,61 @@
 {
-  "version": "0.19.0",
-  "verifiedAt": "2026-11-17T07:34:14.001Z",
+  "version": "0.20.0",
+  "verifiedAt": "2026-11-17T11:38:11.725Z",
   "fullProductParityVerified": false,
   "scope": "Documented independent Java/Spring and MySQL/MariaDB workflows on Windows; no claim of complete IntelliJ IDEA or DataGrip parity.",
   "artifact": {
-    "name": "rocketbrain-0.19.0.vsix",
-    "sha256": "e60d8f5be99c80bec033ac01e92ef5f751cd50ee1e63850a895844cb0cab1fcd",
-    "bytes": 1452173,
+    "name": "rocketbrain-0.20.0.vsix",
+    "sha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5",
+    "bytes": 1478331,
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 490,
-    "inputVectorSha256": "3015d5f3198652e25aa7cbfa30405d0236946cf830e0ae28c391bfd4ad67baad",
-    "gitBlobByteEqualityVerified": true,
+    "frozenPublicInputs": 530,
+    "inputVectorSha256": "79ce23b5d793f37cf264b45d2ca35d18aea48340297dbbb31b462c621f139ae0",
     "generatedFeatureAndVerificationSummariesAreMetadata": true
   },
   "focusedUnitTests": {
-    "tests": 51,
-    "passed": 51,
+    "tests": 95,
+    "passed": 95,
     "failed": 0,
     "skipped": 0
   },
   "realSpringDatabaseTests": [
     {
       "engine": "mysql",
-      "tests": 802,
-      "passed": 800,
+      "tests": 847,
+      "passed": 846,
       "failed": 0,
-      "skipped": 2
+      "skipped": 1
     },
     {
       "engine": "mariadb",
-      "tests": 802,
-      "passed": 797,
+      "tests": 847,
+      "passed": 843,
       "failed": 0,
-      "skipped": 5
+      "skipped": 4
     }
   ],
-  "nodeEvidenceScope": "The MySQL run retains its original input vector. A separately audited single native-host empty-directory cleanup correction changes no runtime or Node-test dependency input, and is verified by the final native runs. The MariaDB run uses the final vector directly.",
+  "nodeEvidenceScope": "Both complete actual Spring/database Node suites identify the same final source vector and VSIX; final source freshness is rechecked after each run.",
   "newRefactoringNativeChecks": [
     {
       "engine": "mysql",
-      "passed": 4,
+      "passed": 8,
       "vscode": "1.145.3"
     },
     {
       "engine": "mariadb",
-      "passed": 4,
+      "passed": 8,
       "vscode": "1.145.3"
     }
   ],
+  "nativeFixturePrecondition": {
+    "scope": "Owned synthetic fixtures",
+    "description": "After scripted Undo/save, document symbols and observed class-output membership and hashes settle for at least two seconds before each original API is invoked once. Production guards stay enabled. Intentional build-descriptor negative cases reach the original guard directly.",
+    "originalOperationRetries": 0,
+    "productionGuardBypasses": 0,
+    "buildForAnalysisInvocations": 0
+  },
   "wholePackagedNativeChecks": [
     {
       "engine": "mysql",
@@ -65,10 +71,10 @@
   "publicOnlyReproduction": {
     "node": "v24.22.1",
     "pnpm": "10.34.9",
-    "tests": 623,
-    "passed": 586,
+    "tests": 660,
+    "passed": 619,
     "failed": 0,
-    "skipped": 37,
+    "skipped": 41,
     "runtimeNotices": 24,
     "payloadBodiesIdenticalToFrozenVsix": true,
     "zipContainerTimestampsCanDiffer": true,
@@ -76,8 +82,8 @@
   },
   "craftAnything": {
     "channel": "CLI",
-    "sourceCorrespondences": 112,
-    "sourceScripts": 112,
+    "sourceCorrespondences": 116,
+    "sourceScripts": 116,
     "correspondenceConfidence": "inferred",
     "archiveFiles": 13,
     "archiveEvidenceIsSeparateFromRuntimeTests": true
@@ -96,14 +102,9 @@
     "notEffortOrTimeCompletion": true
   },
   "limitations": [
-    "This validates documented supported scopes, not original-product parity or all Java semantics.",
-    "Move supports one saved plain public class without inheritance/nested types in one imported project/source root. Known accessibility, resource/framework, dynamic lookup and path conflicts refuse; remaining semantic/external-client conflicts require review and compilation.",
-    "Change Signature supports plain non-polymorphic methods/constructors with direct project callers, parameter reorder, compatible literal-default addition and unused removal. Overloads, inheritance, framework contracts, arbitrary evaluation effects and external binary/reflection callers remain unsupported.",
-    "Safe Delete supports unused plain private methods and package-private final class files under saved local project/reference coverage. Private-method edits support native Undo; closed-editor file Ctrl+Z is not claimed. File deletion has explicit non-overwriting original-byte restoration with session-only bounded one-hour tokens. Framework entries, constructors, fields, computed reflection and external consumers are not proven absent.",
-    "Native WorkspaceEdit text changes remain unsaved; resource move/delete affects disk. Validation narrows stale-source races but is not atomic against arbitrary external filesystem writers.",
-    "Reference scans, project/file sizes, plan lifetimes and Java/import/runtime combinations are bounded. The final matrices retain all other implementation gaps.",
-    "The progress value is a feature-count reference score; it is not a labor percentage.",
-    "Public repository creation/push and its visibility/current commit are separate publication evidence; this private report does not infer publication from local validation."
+    "Bounded public static member and two-sibling Gradle app-to-library moves; instance/stateful members, package directories and arbitrary build graphs remain incomplete.",
+    "Source-only simple hierarchy/overload signature contracts; generic/varargs/external/framework and arbitrary dynamic clients remain unverified or refused.",
+    "Spring reference reports protect known Bean, injection, resource and JPA contracts; custom extensions and arbitrary runtime behavior are not universally analyzed."
   ],
   "ci": "Maintainer-local validation is separate from the public Windows Node22 CI workflow. See this repository Actions for the actual result of each pushed commit."
 }

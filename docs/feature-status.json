@@ -1,5 +1,5 @@
 {
-  "version": "0.19.0",
+  "version": "0.20.0",
   "asOf": "2026-11-17",
   "total": 216,
   "fullProductParityVerified": false,
@@ -708,22 +708,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "관찰한 같은 Java 프로젝트·소스 루트의 기존 이름 있는 패키지 사이로 상속·중첩 타입 없는 단일 public 일반 클래스의 .java 파일을 이동한다. JDT의 패키지·import·호출자 편집과 이동을 네이티브 변경으로 검토·적용하고 Undo/Redo한다. 충돌·오래된 계획과 관찰 가능한 Spring·리소스·동적 조회 위험은 거부한다.",
+      "scope": "기존 같은 소스 루트의 단일 일반 public 클래스 파일 이동을 유지한다. 관찰한 두 Gradle 형제 프로젝트의 기존 app→library 의존성 안에서 독립 유틸리티 클래스와 public static 순수 반환 메서드·리터럴 상수 필드를 이동한다. JDT의 Java 참조 편집과 변경 전후 컴파일러 검사를 검토·적용·Undo/Redo에 연결한다.",
       "remaining": [
-        "파일명은 유지한다. 멤버·패키지 디렉터리·프로젝트 간 이동, 일반 비Java 파일의 참조 전파는 지원하지 않는다.",
-        "기존 대상 패키지와 같은 관찰 프로젝트·소스 루트의 범위다. 생성 소스·링크·대소문자 충돌·대상 덮어쓰기, package-private/protected 멤버와 확인한 기존 패키지의 비공개 타입/멤버 의존은 거부한다.",
-        "소스·문자열·리소스에서 확인한 위험만 차단한다. Java 접근 권한·외부 바이너리·생성 코드·임의 반사/프레임워크 참조 전체를 증명하지 않아 적용 후 컴파일이 필요하다. 원본 IDE 전체 이동 기능의 동등성은 미검증이다."
+        "인스턴스·상태를 가진 멤버, 패키지 디렉터리, 일반 비Java 파일의 참조 전파와 임의 Maven/Gradle·composite·module 빌드 그래프의 이동은 남는다. 빌드 의존성 자체를 만들거나 수정하지 않는다.",
+        "프로젝트 간 이동은 기존 implementation/api 의존성이 있는 두 형제 Gradle 프로젝트와 의존성이 없는 대상 library의 범위다. 단일 유틸리티 클래스·기존 plain public 대상 타입·primitive/String 순수 static 메서드와 단일 리터럴 상수로 제한한다.",
+        "상속·오버로드·어노테이션·초기화·비공개/외부 의존, 확인한 문자열·리소스·반사·framework 패키지 위험을 거부한다. 외부 바이너리·생성 코드와 임의 동적 소비자 전체 및 원본 IDE 전체 동등성은 증명하지 않는다."
       ],
       "verification": {
         "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "고정한 같은 VSIX를 실제 VS Code에서 실행해 클래스 파일·package·호출자 변경과 Undo/Redo를 확인한다. 독립 JDK25의 실제 Spring JDBC 프로젝트를 빌드·실행하고 MySQL/MariaDB의 초기 데이터·롤백 상태가 유지되는지 대조한다. 별도 소스 검사는 충돌·대상 경로·문서/디스크·파일 집합의 변경을 차단한다.",
+        "testedScope": "동결 소스530개·같은 VSIX의 단위95개 통과. DB 회귀는 MySQL847개(846통과·1제외), MariaDB847개(843통과·4제외), 실패0. 공개 재현660개(619통과·41제외), 본문13개·고지24개 일치. 집중 native8+8·전체128+116 통과. 기존 클래스 이동과 새 static 메서드·리터럴 상수·유틸리티 클래스의 Gradle app→library 이동3건을 양 DB에서 검증했다. 독립 빌드·새 Spring HTTP·DB2/1/0·Undo/Redo와 descriptor/membership/collision/dependency 거부를 대조했다.",
         "publicEvidence": [
           "src/java/move.js",
+          "src/java/member-move.js",
+          "src/java/move-scope.js",
+          "src/java/signature-compiler.js",
           "src/java/refactoring.js",
-          "src/java/index.js",
           "test/java-move.test.js",
-          "test/java-move-host.js",
-          "test/java-move-probe.js"
+          "test/java-move-v20.test.js",
+          "test/java-move-v20-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -737,22 +739,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "일반 클래스의 제한된 메서드·생성자에서 기존 매개변수 순서 변경, 리터럴 기본값이 있는 추가, 본문에서 쓰지 않는 매개변수 제거와 호출 인수 전파를 제공한다. 실제 JDT의 서명 정보·리팩터링 편집을 전후 비교하고 네이티브 변경·Undo에 연결한다. 분석 범위·문서·디스크가 바뀌면 계획을 거부한다.",
+      "scope": "기존 매개변수 순서 변경·리터럴 기본값 추가·미사용 인자 제거와 호출 인수 전파를 제공한다. 한 프로젝트의 지원하는 interface·base·override 소스 계열과 메서드·생성자 오버로드를 구분하며, 변경 전후 컴파일러 바인딩으로 계열 선언·모든 구현의 인자 사용·호출 대상·다른 오버로드의 보존을 검사한다.",
       "remaining": [
-        "어노테이션·상속/구현이 없는 일반 클래스에서 private/static/final 메서드 또는 final 클래스의 메서드와 생성자를 다룬다. 같은 이름의 오버로드·메서드 참조·생성자 체인·generic·varargs는 거부한다.",
-        "primitive/String/Object의 제한된 타입과 기존 이름·타입을 유지한다. 이름·타입·반환형·접근 수준·throws 변경과 계산된 기본값은 남는다.",
-        "부작용 있는 호출 인수, 사용하는 매개변수 제거, 알려진 프레임워크/리소스·반사 위험과 범위 밖 호출자는 거부한다. 임의 동적 조회·외부 바이너리 호출자와 전체 Java 조합은 미검증이다."
+        "기존 이름·타입을 유지하는 제한된 primitive/String/Object 서명이다. 이름·기존 타입·반환형·접근성·throws 변경, 계산된 기본값, generic·varargs·default·복수 interface/diamond와 외부 binary 계열 계약은 남는다.",
+        "메서드 참조·사용하는 인자 제거·복잡한 인수 평가/부작용·확인한 문자열/리소스·framework 계약과 충돌/의도하지 않은 오버로드 재바인딩은 거부한다. 사용자 정의 확장·임의 동적 조회·생성/외부 호출자의 전체 부재는 증명하지 않는다.",
+        "선택한 저장 로컬 Maven/Gradle 프로젝트의 관찰 소스·클래스 경로 범위다. 다른 프로젝트·모듈·모든 JDK/Lombok·혼합 빌드와 모든 Java 조합의 원본 IDE 동등성은 미검증이다."
       ],
       "verification": {
         "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "실제 JDT1.63의 매개변수 재정렬·추가·제거 편집을 제품 검토 경로로 처리한다. 같은 VSIX의 실제 VS Code에서 호출자와 선언 변경·Undo를 확인하고, 독립 JDK25의 실제 Spring JDBC 프로젝트를 빌드·실행해 MySQL/MariaDB 데이터·롤백 상태를 대조한다. 소스 검사는 본문 사용·중복·부작용·지원 밖 서명과 오래된 검토를 차단한다.",
+        "testedScope": "동결 소스530개·같은 VSIX의 단위95개 통과. DB 회귀는 MySQL847개(846통과·1제외), MariaDB847개(843통과·4제외), 실패0. 공개 재현660개(619통과·41제외), 본문13개·고지24개 일치. 집중 native8+8·전체128+116 통과. interface/base/override 계열, 선택 메서드·생성자 오버로드의 순서 변경·추가·제거9건을 양 DB에서 새 컴파일·Spring HTTP·DB2/1/0·Undo/Redo로 검증했다. collision/rebinding/body-use/external-binary/multiple-interface 거부도 확인했다.",
         "publicEvidence": [
           "src/java/change-signature.js",
+          "src/java/signature-compiler.js",
           "src/java/refactoring.js",
-          "src/java/index.js",
           "test/java-change-signature.test.js",
-          "test/java-change-signature-host.js",
-          "test/java-change-signature-probe.js"
+          "test/java-change-signature-v20.integration.test.js",
+          "test/java-signature-compiler.test.js",
+          "test/java-change-signature-v20-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -766,22 +769,25 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "참조가 없는 일반 private 메서드와 package-private final 클래스 파일을 제한된 사용처 확인 뒤 삭제한다. Java 의미 참조와 소스·문자열·리소스를 검사하고 전후 비교한다. 메서드는 텍스트 Undo를 사용한다. 삭제 파일은 세션 내 별도 Restore Deleted Java File로 원본 바이트를 복원하며 충돌·동적 조회·오래된 계획을 거부한다.",
+      "scope": "알려진 Spring 타입의 미사용·무주석 private 보조 메서드를 Java 의미 참조와 저장 소스·Spring 이름·리소스를 검토한 뒤 삭제한다. Bean 별칭·주입·Import·SpEL·XML·YAML/properties 및 JPA 연관 참조를 위치가 있는 보고서로 표시한다. 프레임워크 계약은 자동 삭제하지 않는다. 기존 제한된 일반 클래스 파일 삭제와 세션 내 원본 바이트 복원을 유지한다.",
       "remaining": [
-        "클래스 파일은 클래스 한 개·어노테이션/상속 없음·main 없음의 범위다. 메서드는 일반 private 메서드이며 생성자·필드·수명주기 hook은 다루지 않는다.",
-        "Spring/JPA 어노테이션이 있는 선언, 알려진 리소스·문자열 참조·반사 조회와 불확실한 범위는 거부한다. 생성 코드·외부 호출자·임의 런타임 참조 전체를 안전하다고 증명하지 않는다.",
-        "파일 삭제 뒤 닫힌 편집기의 Ctrl+Z가 복원한다고 보장하지 않는다. 별도 복원은 세션 내 최대10개 검토/복원 토큰·파일당2MiB·삭제 후1시간으로 제한하며 신뢰·원래 부모 디렉터리 식별자·대상 부재를 검사하고 덮어쓰지 않는다.",
-        "프로젝트·소스·문서·디스크·파일 집합이 변경되면 재검토한다. 전체 프레임워크·상속·다중 프로젝트·모든 Java 요소의 Safe Delete와 세션을 넘는 영구 복구는 남는다."
+        "필드·생성자·공개 API와 복잡한 타입의 삭제, Bean·HTTP·lifecycle·scheduled·JPA 계약의 자동 제거는 지원하지 않는다. JPA·ConfigurationProperties 소유자의 무주석 멤버도 접근자·provider 분석이 필요하다.",
+        "관찰한 reflection·Bean 등록/후처리·custom condition·임의 SpEL·동적 XML/lifecycle 및 외부 ImportResource는 unknown으로 거부한다. 분석 예산을 넘는 별칭·이름·검색·보고서도 incomplete로 거부한다. 외부 프로젝트·클라이언트·의존성·생성/바이너리 소비자 전체는 증명하지 않는다.",
+        "같은 검토 범위의 저장 소스·리소스·Gradle 메타데이터와 파일 집합을 적용 직전에 다시 검사한다. 삭제 파일 복원은 세션 내 최대10개·파일당2MiB·1시간이며 uncertain 결과는 새 검사·명시적 복원으로만 처리한다. 영구 복구와 원본 IDE 전체 동등성은 남는다."
       ],
       "verification": {
         "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "같은 VSIX의 실제 VS Code에서 private 메서드 삭제·텍스트 Undo와 일반 클래스 파일 삭제·별도 원본 복원을 구분해 확인한다. 참조가 있는 선언과 Spring/JPA 엔티티·동적 조회 위험, 복원 대상 충돌은 차단한다. 독립 JDK25의 실제 Spring JDBC 프로젝트와 MySQL/MariaDB 초기 데이터·롤백 상태를 대조한다. 파일 Ctrl+Z 복원은 완료 근거로 사용하지 않는다.",
+        "testedScope": "동결 소스530개·같은 VSIX의 단위95개 통과. DB 회귀는 MySQL847개(846통과·1제외), MariaDB847개(843통과·4제외), 실패0. 공개 재현660개(619통과·41제외), 본문13개·고지24개 일치. 집중 native8+8·전체128+116 통과. 기존5건과 새7건을 양 DB에서 검증했다. 실제 RestController의 무주석 private 보조 메서드 삭제·새 컴파일·Spring HTTP·DB2/1/0·Undo, Bean 별칭/주입/SpEL/XML/YAML 보고서, HTTP/lifecycle/scheduled/JPA 거부와 late resource guard를 확인했다.",
         "publicEvidence": [
           "src/java/safe-delete.js",
+          "src/java/spring-delete-analysis.js",
+          "src/spring/java.js",
+          "src/spring/model.js",
           "src/java/refactoring.js",
-          "src/java/index.js",
           "test/java-safe-delete.test.js",
-          "test/java-safe-delete-host.js"
+          "test/java-spring-safe-delete.test.js",
+          "test/java-safe-delete-host.js",
+          "test/java-safe-delete-v20-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -845,24 +851,26 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 추출·지역 변수 인라인·import 정리와 새 이동·Change Signature·Safe Delete를 비공개 일회용 계획과 전후 비교에 연결한다. 네이티브 변경을 적용하고 이동·서명 변경의 Undo/Redo, 메서드 삭제의 텍스트 Undo, 삭제 파일의 세션 내 별도 복원을 구분한다. 신뢰·충돌·문서/디스크·파일 집합·만료를 다시 검사한다.",
+      "scope": "추출·변수 인라인·import 정리와 클래스/파일·제한된 static 멤버/프로젝트 이동, 계열·오버로드 Change Signature, Spring 참조 보고서 Safe Delete를 비공개 일회용 계획과 전후 비교에 연결한다. JDT 수명주기·리소스 동기화 후 편집을 요청하며 mutation을 자동 재시도하지 않는다. 문서·디스크·파일 집합·빌드·classpath 재검토, native Undo/Redo와 삭제 파일 별도 원본 복원을 구분한다.",
       "remaining": [
-        "일반 파일 생성·재귀 삭제·덮어쓰기·연쇄 이동·리소스 작업 뒤의 추가 편집과 임의 엔진 명령은 거부한다. 별도 파일 생성은 검토한 Safe Delete 원본을 명시적으로 복원할 때만 허용한다.",
-        "새 세 리팩터링은 행별 지원 범위와 검사 한도에 제한된다. 전체 리팩터링의 의미 충돌·외부/동적 참조와 원본 IDE의 모든 대화형 작업을 포괄하지 않는다.",
-        "닫힌 삭제 파일의 Ctrl+Z 복원을 보장하지 않는다. 별도 복원은 세션 내 최대10개 검토/복원 토큰·파일당2MiB·1시간이며 신뢰·부모 식별자·대상 부재를 검사한다. 네이티브 편집과 저장·실행은 구분하며 임의 외부 쓰기를 원자적으로 잠그지는 않는다."
+        "지원된 개별 리팩터링과 소스 범위의 조합이며 원본 IDE의 전체 대화형·일괄 리팩터링이 아니다. 인스턴스·상태/패키지 이동, 임의 빌드 그래프·generic/외부 계열과 framework 계약의 자동 제거는 남는다.",
+        "새 파일 생성·재귀 삭제·덮어쓰기·예상 밖 리소스 작업과 임의 엔진 명령을 거부한다. Java 컴파일러 분석은 사용자 application/annotation processor/plugin을 실행하지 않으며 관찰된 classpath provider도 경계 검사한다.",
+        "텍스트·이동의 Undo/Redo와 최대10건·2MiB/파일·세션1시간의 삭제 파일 원본 복원을 구분한다. 외부 writer와의 원자성·영구 복구·관찰 밖 동적/provider/생성/바이너리 참조 전체의 안전성을 보장하지 않는다."
       ],
       "verification": {
         "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "소스 검사는 겹침·오래된 버퍼/디스크·파일 집합·신뢰/취소·충돌과 지원 밖 작업을 거부한다. 같은 VSIX의 두 실제 VS Code 호스트에서 전후 검토, 이동·서명 변경의 Undo/Redo, 메서드 삭제의 텍스트 Undo와 삭제 파일의 별도 원본 복원을 구분해 확인하고 실제 Spring JDBC·MySQL/MariaDB 상태를 대조한다. 전체 리팩터링 동등성은 판정하지 않는다.",
+        "testedScope": "동결 소스530개·같은 VSIX의 단위95개 통과. DB 회귀는 MySQL847개(846통과·1제외), MariaDB847개(843통과·4제외), 실패0. 공개 재현660개(619통과·41제외), 본문13개·고지24개 일치. 집중 native8+8·전체128+116 통과. 양 DB 집중 호스트에서 읽기 전용 class-output 준비 확인 후 원래 제품 API32개를 각각 한 번 호출했고 재시도·우회·소스 drift가 없으며 원래 메서드 identity를 복구했다. 기존·확장 검토/이동/서명/삭제, Undo/Redo와 삭제 파일 별도 원본 복원을 검증했다. 외부 writer 원자성은 주장하지 않는다.",
         "publicEvidence": [
           "src/java/refactoring.js",
           "src/java/move.js",
+          "src/java/member-move.js",
+          "src/java/move-scope.js",
           "src/java/change-signature.js",
+          "src/java/signature-compiler.js",
           "src/java/safe-delete.js",
+          "src/java/spring-delete-analysis.js",
           "test/java-refactoring.test.js",
-          "test/java-move.test.js",
-          "test/java-change-signature.test.js",
-          "test/java-safe-delete.test.js"
+          "test/java-refactoring-v20-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5207,17 +5215,17 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "e60d8f5be99c80bec033ac01e92ef5f751cd50ee1e63850a895844cb0cab1fcd",
-    "sourceManifestSha256": "3015d5f3198652e25aa7cbfa30405d0236946cf830e0ae28c391bfd4ad67baad",
+    "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5",
+    "sourceManifestSha256": "79ce23b5d793f37cf264b45d2ca35d18aea48340297dbbb31b462c621f139ae0",
     "publicOnlySourceReproduction": {
-      "sourceFiles": 490,
+      "sourceFiles": 530,
       "offlineCounts": {
-        "tests": 623,
+        "tests": 660,
         "suites": 0,
-        "pass": 586,
+        "pass": 619,
         "fail": 0,
         "cancelled": 0,
-        "skipped": 37,
+        "skipped": 41,
         "todo": 0
       },
       "verifiedVsixEntries": 13,
@@ -5228,25 +5236,25 @@
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "reportedChecks": 4,
-        "vsixSha256": "e60d8f5be99c80bec033ac01e92ef5f751cd50ee1e63850a895844cb0cab1fcd"
+        "reportedChecks": 8,
+        "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5"
       },
       {
         "engine": "mariadb",
-        "reportedChecks": 4,
-        "vsixSha256": "e60d8f5be99c80bec033ac01e92ef5f751cd50ee1e63850a895844cb0cab1fcd"
+        "reportedChecks": 8,
+        "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5"
       }
     ],
     "wholeNativeHosts": [
       {
         "engine": "mysql",
         "reportedChecks": 128,
-        "vsixSha256": "e60d8f5be99c80bec033ac01e92ef5f751cd50ee1e63850a895844cb0cab1fcd"
+        "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5"
       },
       {
         "engine": "mariadb",
         "reportedChecks": 116,
-        "vsixSha256": "e60d8f5be99c80bec033ac01e92ef5f751cd50ee1e63850a895844cb0cab1fcd"
+        "vsixSha256": "cd9fcb60465ff028ebdc10c8942259a673dabc21b7aefdb9af1991fa678042e5"
       }
     ],
     "ciScope": "Public GitHub Windows/Node22 offline and package workflow is configured. This local verification summary does not assert that a remote CI run has completed."

@@ -1,0 +1,3 @@
+deletev20:
+  documented-bean: v20KeptAlias
+  documented-expression: '#{@v20KeptBean}'
