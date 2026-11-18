@@ -1,0 +1,19 @@
+dependencies {
+    if (providers.gradleProperty('route').getOrElse('bridge') == 'bridge' &&
+        !(providers.gradleProperty('skipBridge').getOrElse('no') == 'yes')) {
+        implementation project(':v23-bridge')
+    } else if (providers.gradleProperty('route').getOrElse('bridge') != 'alternate') {
+        implementation project(':v23-core')
+    } else {
+        implementation project(':v23-alternate')
+    }
+    implementation platform('org.springframework.boot:spring-boot-dependencies:4.1.2')
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
+}
+tasks.register('writeClasspath') {
+    dependsOn classes;
+    doLast { layout.buildDirectory.file('runtime-classpath.txt').get().asFile.text = sourceSets.main.runtimeClasspath.asPath }
+}

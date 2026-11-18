@@ -1,0 +1,2 @@
+rootProject.name = 'rocketbrain-build-v23'
+include 'v23-app', 'v23-bridge', 'v23-core', 'v23-alternate'

@@ -34,7 +34,7 @@ function instanceReceiverCandidates(sourceText,sourceUri,targetText,targetUri,of
  if(!selected)throw Error('Select the Java instance method name before choosing its receiver.');
  const first=selected.parameters[0];
  if(first?.type.raw===targetName)return [{name:first.name,isField:false,description:'First target parameter'}];
- return source.types[0].fields.filter(field=>field.type.raw===targetName).map(field=>({name:field.name,isField:true,description:'Source target field; immutable state is checked before review'}));
+ return source.types[0].fields.filter(field=>field.type.raw===targetName).map(field=>({name:field.name,isField:true,description:'Source target field; non-null construction, state ownership and evaluation order are checked before review'}));
 }
 function registerJavaMemberMove(context,vscode,{request,refactoring,runtime,synchronizeFiles}={}){
  const operations=new Set(),subscriptions=[];let closed=false;

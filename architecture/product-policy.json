@@ -53,10 +53,10 @@
     "지원 naming source/profile과 quoting의 certainty를 보존하고 미지원 전략·default joins를 임의standard naming으로 대체하지 않는다."
   ],
   "currentPrototype": {
-    "version": "0.22.0",
+    "version": "0.23.0",
     "status": "research/implementation/status.json",
-    "verification": "research/implementation/v0.22-verification.json",
-    "featureAudit": "research/implementation/v0.22-feature-audit.json",
+    "verification": "research/implementation/v0.23-verification.json",
+    "featureAudit": "research/implementation/v0.23-feature-audit.json",
     "fullProductParityVerified": false
   },
   "activeAnalysis": "research/independent",
@@ -383,15 +383,15 @@
     ]
   },
   "javaRefactoringPolicy": {
-    "source": "research/implementation/v0.22-java-refactoring.json",
+    "source": "research/implementation/v0.23-java-refactoring.json",
     "ownedPreviewAndApply": true,
     "engine": "Independently provisioned public Eclipse JDT LS protocols with owned review and reference guards",
     "edits": "Bounded local Java edits and individual-file rename/delete; private plans, version/buffer/disk/project/resource-membership/trust guards; explicit non-overwriting file restoration; no arbitrary client command execution",
-    "supportedScope": "Reviewed pure static members and immutable final instance state/explicit parameter or final direct field receivers, nested Java utility packages and proven standard main UTF-8 text resources. Existing literal Gradle DAG/composite and Maven reactor graphs additionally admit immutable dependency constants and finite exhaustive property branches, requiring compile visibility in every conservative scenario. Generic signature checks retain source substitution, covariance, bounds, erasure and caller results. Spring annotation/literal contracts additionally retain every target/name/alias from supported exhaustive metadata-dependent selector/registrar branches. Independent compiler and exact before/after declaration/caller/resource guards remain. Each declared client that can compile against the source in any reviewed scenario must compile against the destination in every reviewed scenario before a cross-project candidate is requested.",
+    "supportedScope": "Reviewed pure static members and instance methods with bounded retained scalar state, simple constructors and supported target mutations. Nested utility packages can move verified text and opaque binary resources from standard or reviewed literal Gradle main roots. Gradle compound source property predicates and Maven additive module dependency profiles are analyzed over all conservative scenarios. Each possible source client must retain destination compile exposure in every scenario. Generic signature checks retain substitution, covariance, bounds, erasure and caller results. Spring contracts retain every supported import, bean and alias across composed metadata-dependent selector and registrar conditions.",
     "verification": "Actual Spring and both DBs, current source/VSIX evidence at documented bounded scopes; not full product parity.",
-    "resourceOperations": "Text edits remain unsaved; native file rename/delete affects disk. Text edits and moves support native Undo. File deletion closes its only editor and uses an explicit owned restore action rather than a claimed working file Ctrl+Z. No operation is atomic against arbitrary external writers. Non-Java resources are rename-only, exact URI-pair/byte-hash authorized UTF-8 snapshots; text edits and deletions are not generalized to resources.",
+    "resourceOperations": "Text edits remain unsaved. Native renames and Safe Delete affect disk. Moves use native Undo and Safe Delete offers explicit restoration. Reviewed non-Java resources are rename-only and exact URI-pair, byte-hash and identity authorized. Opaque binary resources have a hash-only review and no text edits.",
     "fileRestoration": "Private exact disk-byte snapshot, at most10combined records and2MiB/file, current session only for1hour; target absence/case, physical parent/workspace identity, trust and dirty-buffer guards; one-shot native createFile without overwriting.",
-    "remaining": "Mutable state, custom constructors, source-state passing, effectful/external receivers; arbitrary resource formats/loaders/configuration references and new destination folders; procedural settings/plugins/build scripts and dependency edits; arbitrary generic/binary/framework clients and computed runtime Spring behavior remain incomplete.",
+    "remaining": "Source-state transfer, constructor effects or delegation beyond the supported forms, nullable or effectful receivers and arbitrary state updates. Other resource formats, loaders, metadata and new destinations. Arbitrary providers, overriding or inherited Maven profiles, procedural build settings, binary clients and computed Spring behavior need further analysis.",
     "compilerAnalysis": "Owned JDK compiler parse/analyze helper, no project application/processor/plugin execution; explicit empty processor/source paths, cleared JVM option environment, guarded compiler classpath providers and manifests."
   },
   "schemaProgramPolicy": {

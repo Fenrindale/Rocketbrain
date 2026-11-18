@@ -75,3 +75,7 @@
 **/*.sqlite*
 **/connection*.local.json
 **/application-local.*
+
+# Owned v0.23 package test input, generated from pinned fixture bytes.
+/test/fixtures/refactoring-v23-package/src/package-assets/fixture/packagev23/payload/payload.bin
+/test/fixtures/refactoring-v23-package/src/package-assets/fixture/packagev23/relocated/payload.bin
