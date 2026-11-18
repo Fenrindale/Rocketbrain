@@ -29,7 +29,7 @@ pnpm run test:offline
 pnpm run package
 ```
 
-생성된 `rocketbrain-0.21.0.vsix`를 VS Code 확장 메뉴의 **Install from VSIX…**로 설치합니다. 패키지 명령은 로컬 VSIX를 만들며 Marketplace에 자동 게시하지 않습니다. 확장 패키지에는 Java 엔진과 DB 서버 바이너리를 포함하지 않습니다.
+생성된 `rocketbrain-0.22.0.vsix`를 VS Code 확장 메뉴의 **Install from VSIX…**로 설치합니다. 패키지 명령은 로컬 VSIX를 만들며 Marketplace에 자동 게시하지 않습니다. 확장 패키지에는 Java 엔진과 DB 서버 바이너리를 포함하지 않습니다.
 
 `test:offline`은 실제 DB·Java·브라우저·VS Code 실행 환경을 요구하는 검사를 구분하여 제외하거나 건너뜁니다. 이 결과가 실제 Spring·MySQL·MariaDB 검증을 대신하지 않습니다. 실환경 도구와 별도 검증 조건은 [공개 소스 안내](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/public-source.md)를 참고하세요.
 
@@ -51,12 +51,12 @@ Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후�
 
 | 명령 | 지원 범위 | 추가 분석이 필요한 범위 |
 |---|---|---|
-| **Move Java Class File / Move Java Class Across Projects** | 같은 소스 루트의 클래스 이동, 명시적인 Gradle 의존 그래프·단순 포함 빌드 및 제한된 Maven reactor의 일반 유틸리티 클래스 이동과 Java 참조 수정 | 임의 빌드 스크립트·중첩 모듈·외부 바이너리·동적 참조, 의존 관계 자체의 자동 변경 |
+| **Move Java Class File / Move Java Class Across Projects** | 같은 소스 루트의 클래스 이동, 명시적인 Gradle 의존 그래프·포함 빌드·지원하는 상수/속성 조건의 모든 분기와 소비 모듈의 가시성, 제한된 Maven reactor의 일반 유틸리티 클래스 이동과 Java 참조 수정 | 임의 빌드 스크립트·중첩 모듈·외부 바이너리·동적 참조, 의존 관계 자체의 자동 변경 |
 | **Move Java Static Member** | 일반 클래스의 public static 순수 반환 메서드·리터럴 상수 필드를 기존 Gradle 의존성의 대상으로 이동 | 인스턴스·상태를 가진 멤버, 오버로드·상속·어노테이션·임의 외부 사용 |
-| **Move Java Instance Method** | 같은 패키지의 상태 없는 final 클래스, 첫 인자로 받은 대상 객체, 순수 반환식과 확인된 소유 클래스 내부 호출 | 필드 대상·상태·상속·외부 호출·오버로드·실행 효과가 있는 수신 객체·일반 인스턴스 이동 |
-| **Move Java Package** | 한 프로젝트의 관찰된 소스 루트 사이에서 최대12개 일반 Java 파일로 된 평평한 패키지 이동과 일괄 참조 수정 | 하위 패키지·리소스·설정 문자열·어노테이션 클래스·임의 폴더 이동, 새 대상 폴더 자동 생성 |
+| **Move Java Instance Method** | 같은 패키지의 final 클래스, 리터럴 final 상태·순수 getter, 첫 인자 또는 직접 초기화한 private final 대상 필드, 소유 클래스 내부의 순수 호출 | 가변 상태·사용자 생성자·원본 상태를 넘기는 메서드·상속·외부 호출·오버로드·실행 효과가 있는 수신 객체 |
+| **Move Java Package** | 한 프로젝트의 관찰된 소스 루트 사이에서 중첩 Java 유틸리티 패키지와 표준 main 리소스의 UTF-8 .txt 이동, 확인한 class literal 리소스 경로 수정 | 임의 리소스 형식·동적 로더·설정 문자열·어노테이션 클래스·임의 폴더 이동, 새 대상 폴더 자동 생성 |
 | **Change Java Signature** | 인자 순서·리터럴 기본값 추가·미사용 인자 제거. 소스 상속·오버로드, 제한된 제네릭 타입 치환·공변 반환형·메서드 타입 변수·경계·와일드카드를 변경 전후 컴파일러로 검사 | 이름·기존 타입·반환형·접근성·예외 변경, 임의 제네릭·가변 인자·외부 바이너리·메서드 참조·framework 계약 |
-| **Safe Delete Java Declaration** | 미사용 private 보조 메서드·제한된 클래스 파일 삭제. Spring Bean 별칭·주입·설정·XML·JPA 참조, 제한된 합성 어노테이션·리터럴 Import/등록·단순 전달 PostProcessor 계약을 위치와 함께 표시 | framework 진입점·수명주기, 조건부·계산형 사용자 확장·동적/외부 바이너리 참조·생성 코드의 전체 부재 증명 |
+| **Safe Delete Java Declaration** | 미사용 private 보조 메서드·제한된 클래스 파일 삭제. Spring Bean 별칭·주입·설정·XML·JPA 참조, 제한된 합성 어노테이션·리터럴 및 지원하는 조건의 모든 분기 Import/등록·단순 전달 PostProcessor 계약을 위치와 함께 표시 | framework 진입점·수명주기, 임의 조건·효과·루프·외부 확장·동적/바이너리 참조·생성 코드의 전체 부재 증명 |
 | **Restore Deleted Java File** | Safe Delete가 확인한 원본 바이트를 덮어쓰기 없이 복원 | 최근 최대 10건을 같은 실행 세션에서 1시간 동안 제공하며, 대상 파일이 새로 생겼거나 상위 폴더가 바뀌면 거부 |
 
 Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 기존 인자의 이름·타입은 유지하며 새 인자에는 명시적인 리터럴 기본값이 필요합니다. 평가 순서에 영향을 줄 수 있는 복잡한 호출식과 확인된 문자열·리소스 참조는 거부합니다. 이 기능들은 검토한 프로젝트 범위에 한정되며 임의 리플렉션과 외부 사용자의 계약까지 자동 증명하지 않습니다.
@@ -82,7 +82,7 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 = (9 + 13 + 100 × 0.5) / 216
 ```
 
-이는 항목 수에 기반한 비교 점수이며 개발 시간·잔여 작업량·제품 완성도의 측정값은 아닙니다. 정확한 검증 범위와 남은 항목은 [기능 현황](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/FEATURES.md)에 기록합니다. 다음 우선순위는 상태·필드·외부 호출을 다루는 인스턴스 이동, 하위 패키지·리소스·복잡한 빌드 구성, 더 넓은 제네릭·Spring 동적 계약, 여러 활성 DB 연결과 고급 객체 작성 화면입니다.
+이는 항목 수에 기반한 비교 점수이며 개발 시간·잔여 작업량·제품 완성도의 측정값은 아닙니다. 정확한 검증 범위와 남은 항목은 [기능 현황](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/FEATURES.md)에 기록합니다. 다음 우선순위는 가변 상태·생성자·외부 호출을 다루는 인스턴스 이동, 리소스 형식·로더·설정 참조 확대, 더 넓은 빌드·제네릭·Spring 동적 계약, 여러 활성 DB 연결과 고급 객체 작성 화면입니다.
 
 ## 공개 저장소 관리
 

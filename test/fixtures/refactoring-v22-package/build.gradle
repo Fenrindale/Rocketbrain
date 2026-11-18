@@ -1,0 +1,12 @@
+plugins { id 'java' }
+repositories { mavenCentral() }
+java { sourceCompatibility = JavaVersion.VERSION_25; targetCompatibility = JavaVersion.VERSION_25 }
+dependencies {
+    implementation platform('org.springframework.boot:spring-boot-dependencies:4.1.2')
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.incremental = false }
+tasks.register('writeClasspath') { dependsOn classes; doLast { layout.buildDirectory.file('runtime-classpath.txt').get().asFile.text = sourceSets.main.runtimeClasspath.asPath } }

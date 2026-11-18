@@ -1,0 +1,3 @@
+rootProject.name = 'rocketbrain-refactoring-v22-build'
+include 'app', 'bridge', 'core'
+includeBuild 'included'

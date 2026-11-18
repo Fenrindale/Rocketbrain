@@ -1,0 +1,5 @@
+plugins { id 'java-library' }
+group = 'fixture.composite.v22'
+version = '1'
+java { sourceCompatibility = JavaVersion.VERSION_25; targetCompatibility = JavaVersion.VERSION_25 }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.incremental = false }

@@ -1,60 +1,133 @@
 {
-  "version": "0.21.0",
-  "verifiedAt": "2026-11-17T15:32:58.321Z",
+  "version": "0.22.0",
+  "verifiedAt": "2026-11-18T08:38:12.462Z",
   "fullProductParityVerified": false,
   "scope": "Documented independent Java/Spring and MySQL/MariaDB workflows on Windows; no claim of complete IntelliJ IDEA or DataGrip parity.",
   "artifact": {
-    "name": "rocketbrain-0.21.0.vsix",
-    "sha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77",
-    "bytes": 1496392,
+    "name": "rocketbrain-0.22.0.vsix",
+    "sha256": "7c2da3ae3026b2d53e3ccba32573c01cc9b6684c1e543df454a24207806b9ead",
+    "bytes": 1513077,
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 581,
-    "inputVectorSha256": "41734a26cd8acdeb92f4235c48c005194a71b459ee19fc14d5f15f12852a71eb",
+    "frozenPublicInputs": 655,
+    "inputVectorSha256": "2eebf9fd94bbf0c2782a8e516ddbfa8a06181dbe57ae5ce2d3c0d6e58284a90f",
     "generatedFeatureAndVerificationSummariesAreMetadata": true
   },
   "focusedUnitTests": {
-    "tests": 140,
-    "passed": 140,
+    "tests": 230,
+    "passed": 230,
     "failed": 0,
     "skipped": 0
   },
   "realSpringDatabaseTests": [
     {
       "engine": "mysql",
-      "tests": 893,
-      "passed": 892,
+      "tests": 984,
+      "passed": 983,
       "failed": 0,
       "skipped": 1
     },
     {
       "engine": "mariadb",
-      "tests": 893,
-      "passed": 889,
+      "tests": 984,
+      "passed": 980,
       "failed": 0,
       "skipped": 4
     }
   ],
-  "nodeEvidenceScope": "Both complete actual Spring/database Node suites identify the same final source vector and VSIX; final source freshness is rechecked after each run.",
+  "nodeEvidenceScope": "Both complete actual Spring/database Node suites retain their original MF402 execution receipts and verified freshness. Their product payloads, Node test definitions, reachable workspace dependencies, fixture definitions and launch-wrapper source bytes match the final release. Three later source deltas affect only test/java-move-v21-host.js (one exact expected-error assertion) and test/java-change-signature-v20-host.js plus test/java-change-signature-v21-host.js (reviewed owned-document pinning, native baseline revert and editor focus). All three native helpers are outside the audited Node dependency closure; fresh unit, public reproduction and native checks use the final source vector.",
+  "nodeExecutionVectors": [
+    {
+      "engine": "mysql",
+      "sourceManifestSha256": "402171772f762791a68c74ec0e7e400dff9c69694c2ff116686f98c372460910",
+      "finalSourceManifestSha256": "2eebf9fd94bbf0c2782a8e516ddbfa8a06181dbe57ae5ce2d3c0d6e58284a90f"
+    },
+    {
+      "engine": "mariadb",
+      "sourceManifestSha256": "402171772f762791a68c74ec0e7e400dff9c69694c2ff116686f98c372460910",
+      "finalSourceManifestSha256": "2eebf9fd94bbf0c2782a8e516ddbfa8a06181dbe57ae5ce2d3c0d6e58284a90f"
+    }
+  ],
+  "nativeOnlySourceDeltas": [
+    {
+      "file": "test/java-move-v21-host.js",
+      "kind": "exact expected-error assertion"
+    },
+    {
+      "file": "test/java-change-signature-v20-host.js",
+      "kind": "owned native-test document pinning, guarded native baseline revert and explicit editor focus"
+    },
+    {
+      "file": "test/java-change-signature-v21-host.js",
+      "kind": "owned generic native-test document pinning, guarded native baseline revert and explicit editor focus"
+    }
+  ],
+  "originalNodeReceiptsPreserved": true,
+  "productAndNodeTestDependencyFixtureWrapperSourceBytesUnchanged": true,
+  "nativeSignatureFixtureProducer": {
+    "scope": "Owned native test fixtures only",
+    "helpers": [
+      {
+        "file": "test/java-change-signature-v20-host.js",
+        "initialRetainedDocumentsPinned": 8
+      },
+      {
+        "file": "test/java-change-signature-v21-host.js",
+        "initialRetainedDocumentsPinned": 6
+      }
+    ],
+    "guardedNativeBaselineRevert": true,
+    "explicitJavaEditorFocusBeforeUndoRedo": true,
+    "originalProductAndNegativeAssertionsPreserved": true,
+    "originalOperationRetries": 0,
+    "closedHandleReacquisitionFallbacks": 0
+  },
   "newRefactoringNativeChecks": [
     {
       "engine": "mysql",
-      "passed": 12,
+      "passed": 16,
       "vscode": "1.145.3"
     },
     {
       "engine": "mariadb",
-      "passed": 12,
+      "passed": 16,
       "vscode": "1.145.3"
     }
   ],
+  "runtimeReceiptWindow": {
+    "end": "awaited validation completion",
+    "reportConstructionTimeIsSeparate": true,
+    "timestampToleranceMilliseconds": 1,
+    "originalReportBytesAndTimesPreserved": true
+  },
   "nativeFixturePrecondition": {
     "scope": "Owned synthetic fixtures",
-    "description": "After scripted Undo/save, document symbols and observed class-output membership and hashes settle for at least two seconds before each original API is invoked once. Production guards stay enabled. Intentional build-descriptor negative cases reach the original guard directly.",
+    "description": "Before each original API call, owned build descriptors match their pinned baseline and observed class-output membership and hashes remain quiet for at least two seconds. Document-symbol responses are required around that window; this does not establish symbol-model stability or correct Outline rendering. Production guards stay enabled. Intentional build-descriptor negative cases reach the original guard directly.",
     "originalOperationRetries": 0,
     "productionGuardBypasses": 0,
-    "buildForAnalysisInvocations": 0
+    "buildForAnalysisInvocations": 0,
+    "generatedImportPreparation": {
+      "scope": "Owned synthetic fixtures only",
+      "ignoredEclipseDescriptorsArchived": 3,
+      "actualFreshImportedFixtureRoots": 14,
+      "sourceOrProductCodeChangedByGeneratedImportPreparation": false,
+      "historicalPreparationOnly": true,
+      "executionSourceManifestSha256": "002277e2542e0ef833bf2fa3a488c629e893f7dcf868ff1237f3622b75f668c4",
+      "finalSourceManifestSha256": "2eebf9fd94bbf0c2782a8e516ddbfa8a06181dbe57ae5ce2d3c0d6e58284a90f",
+      "originalReportRebound": false,
+      "allRelevantProductBuildFixtureInputBytesUnchanged": true,
+      "allProjectBuildOnlyPreflightPassed": true,
+      "fullNativeChecksRemainSeparate": true
+    }
+  },
+  "importFixtureProducerPrecondition": {
+    "scope": "Owned generated test sources only",
+    "knownBytesVerified": true,
+    "fullNanosecondFileIdentityQuietMilliseconds": 1000,
+    "boundedReadinessTimeoutMilliseconds": 5000,
+    "importScanRetries": 0,
+    "productionMetadataAndHashChecksUnchanged": true
   },
   "wholePackagedNativeChecks": [
     {
@@ -71,10 +144,10 @@
   "publicOnlyReproduction": {
     "node": "v24.22.1",
     "pnpm": "10.34.9",
-    "tests": 702,
-    "passed": 657,
+    "tests": 788,
+    "passed": 742,
     "failed": 0,
-    "skipped": 45,
+    "skipped": 46,
     "runtimeNotices": 24,
     "payloadBodiesIdenticalToFrozenVsix": true,
     "zipContainerTimestampsCanDiffer": true,
@@ -82,12 +155,66 @@
   },
   "craftAnything": {
     "channel": "CLI",
-    "sourceCorrespondences": 120,
-    "sourceScripts": 120,
+    "sourceCorrespondences": 123,
+    "sourceScripts": 123,
     "correspondenceConfidence": "inferred",
     "archiveFiles": 13,
     "archiveEvidenceIsSeparateFromRuntimeTests": true
   },
+  "expandedV22": [
+    {
+      "engine": "mysql",
+      "immutableInstance": {
+        "positive": 2,
+        "negative": 2
+      },
+      "nestedPackageResources": {
+        "positive": 1,
+        "negative": 4,
+        "resourceBytesPreserved": true
+      },
+      "finiteSpring": {
+        "cases": 7,
+        "allBranchesRetained": true,
+        "projectCodeExecutedDuringAnalysis": false
+      },
+      "finiteBuild": {
+        "positive": 1,
+        "negative": 2,
+        "routes": [
+          "bridge",
+          "core"
+        ],
+        "everyScenarioCompileExposureRequired": true
+      }
+    },
+    {
+      "engine": "mariadb",
+      "immutableInstance": {
+        "positive": 2,
+        "negative": 2
+      },
+      "nestedPackageResources": {
+        "positive": 1,
+        "negative": 4,
+        "resourceBytesPreserved": true
+      },
+      "finiteSpring": {
+        "cases": 7,
+        "allBranchesRetained": true,
+        "projectCodeExecutedDuringAnalysis": false
+      },
+      "finiteBuild": {
+        "positive": 1,
+        "negative": 2,
+        "routes": [
+          "bridge",
+          "core"
+        ],
+        "everyScenarioCompileExposureRequired": true
+      }
+    }
+  ],
   "progress": {
     "counts": {
       "implemented": 9,
@@ -98,13 +225,14 @@
       "platform-limited": 2
     },
     "referencePercent": 33.33333333333333,
-    "formula": "(implemented + host-provided + partial * 0.5) / 216",
+    "formula": "(implemented + host-provided + partial * 0.5) / 216 * 100",
     "notEffortOrTimeCompletion": true
   },
   "limitations": [
-    "Bounded pure static/explicit-parameter instance members, flat Java packages and literal Gradle DAG/composite or Maven reactor dependencies; stateful/field/effectful receivers, nested package resources and arbitrary build logic remain incomplete.",
+    "Observed Outline conversion and source-model synchronization limitations remain documented. Asynchronous symbols can differ from newer source buffers, and some outside-API range samples remain unresolved; no general Outline fix or warning-free display is claimed. Production snapshot guards remain enabled.",
+    "Pure static members, bounded immutable final instance state/field receivers, nested utility packages and proven standard-main UTF-8 text resources, plus existing literal build graphs and supported finite Gradle dependency branches. Mutable state, constructors, external/effectful receivers, arbitrary resources/loaders and build logic remain incomplete.",
     "Source-only hierarchy/overload plus bounded generic substitution, covariance, bounds, erasure and caller result checks; varargs, external/binary/framework and arbitrary dynamic clients remain unverified or refused.",
-    "Spring source contracts additionally resolve supported composed AliasFor and literal Import/selector/registration/identity processor forms; arbitrary computed/conditional extensions and runtime behavior remain unknown or refused."
+    "Spring source contracts retain every import/bean/alias in supported exhaustive metadata-dependent selector/registrar branches and literal/annotation/identity processor forms. Arbitrary computed conditions, effects, loops, external contracts and runtime behavior remain unknown or refused."
   ],
   "ci": "Maintainer-local validation is separate from the public Windows Node22 CI workflow. See this repository Actions for the actual result of each pushed commit."
 }

@@ -1,0 +1,1 @@
+Retain the existing destination resource directory.

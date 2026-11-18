@@ -1,0 +1,12 @@
+def coreProject = ':core'
+dependencies {
+    if (providers.gradleProperty('rocketbrainRoute').getOrElse('bridge') == 'bridge') { implementation project(':bridge') } else { implementation project(coreProject) }
+    implementation 'fixture.composite.v22:included-v22:1'
+    implementation platform('org.springframework.boot:spring-boot-dependencies:4.1.2')
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
+}
+sourceSets.main.java.srcDir('src/shared/java')
+tasks.register('writeClasspath') { dependsOn classes; doLast { layout.buildDirectory.file('runtime-classpath.txt').get().asFile.text = sourceSets.main.runtimeClasspath.asPath } }

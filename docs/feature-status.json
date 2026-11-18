@@ -1,5 +1,5 @@
 {
-  "version": "0.21.0",
+  "version": "0.22.0",
   "asOf": "2026-11-18",
   "total": 216,
   "fullProductParityVerified": false,
@@ -43,12 +43,23 @@
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
+    "IDEA-019",
     "IDEA-028",
     "IDEA-029",
     "IDEA-030",
     "IDEA-033"
   ],
+  "expandedFeatures": [
+    "IDEA-028",
+    "IDEA-029",
+    "IDEA-030",
+    "IDEA-033"
+  ],
+  "boundsReaffirmedFeatures": [
+    "IDEA-019"
+  ],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
+  "verificationDisclosure": "갱신하지 않은 행의 검증 수치·동일 최종 VSIX 표현은 보존한 이전 검증 이력을 뜻한다. 현재 릴리스의 실제 통합 집계와 실행 소스 귀속은 docs/verification.json에 별도로 기록한다.",
   "rows": [
     {
       "id": "IDEA-001",
@@ -65,7 +76,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "공개 확장 API 경계와 기존 설계/구현 문서 기준. 전체 원본 창 동등성은 실행 판정하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 공개 확장 API 경계와 기존 설계/구현 문서 기준. 전체 원본 창 동등성은 실행 판정하지 않는다.",
         "publicEvidence": [
           "src/extension.js",
           "package.json"
@@ -89,7 +106,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 JDT 프로젝트/패키지/소스 열기와 classpath 트리, 네이티브 빌드·실행 연결을 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 JDT 프로젝트/패키지/소스 열기와 classpath 트리, 네이티브 빌드·실행 연결을 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -109,7 +132,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
         "publicEvidence": [
           "src/navigation.js",
           "src/extension.js"
@@ -132,7 +161,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
         "publicEvidence": [
           "src/navigation.js",
           "src/extension.js"
@@ -155,7 +190,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -178,7 +219,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -203,7 +250,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -228,7 +281,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -253,7 +312,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -276,7 +341,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -301,7 +372,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 JDT의 Organize Imports 편집을 적용하고 독립 JDK 컴파일·실행 전후 결과를 비교한다. 오래된 문서·디스크 변경과 지원하지 않는 추가 명령을 거부한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 JDT의 Organize Imports 편집을 적용하고 독립 JDK 컴파일·실행 전후 결과를 비교한다. 오래된 문서·디스크 변경과 지원하지 않는 추가 명령을 거부한다.",
         "publicEvidence": [
           "src/java/refactoring.js",
           "src/java/index.js",
@@ -326,7 +403,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -351,7 +434,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -374,7 +463,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -397,7 +492,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -422,7 +523,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -447,7 +554,13 @@
       ],
       "verification": {
         "state": "unverified",
-        "testedScope": "본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -472,7 +585,13 @@
       ],
       "verification": {
         "state": "unverified",
-        "testedScope": "본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -491,13 +610,20 @@
       "status": "host-provided",
       "label": "VS Code 재사용",
       "delivery": "vscode-core",
-      "scope": "VS Code Outline/기호 UI에 언어 서버의 구조 정보를 표시한다.",
+      "scope": "VS Code Outline/기호 UI와 언어 서버 구조 정보 연결을 재사용한다. UI 전달에서 관찰한 제한은 별도로 표시한다.",
       "remaining": [
-        "대형 파일과 언어별 구조 필터 동등성은 남는다."
+        "대형 파일과 언어별 구조 필터 동등성은 남는다.",
+        "현재 검증에서 document-symbol UI provider의 undefined 반환과 DocumentSymbol 범위 변환 오류가 관찰됐다. 해당 UI 상태의 정확한 기호와 upstream 원인·복구는 미확인이다. Outline 전체의 무경고 동작을 검증 완료로 보지 않는다."
       ],
       "verification": {
-        "state": "host-baseline",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "state": "host-baseline-with-observed-ui-provider-limitation",
+        "scopeProvenance": {
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "VS Code Outline 재사용 판정을 유지한다. 보존한 MariaDB UI 경로에서 30초 동안 UI provider 폴링112회가 undefined였고 'selectionRange must be contained in fullRange' 오류가 관찰됐고 원래 작업 호출은0회였다. 당시 raw 요청·좌표를 수집하지 않아 정확한 기호·URI/버전·upstream 원인은 미확인이다. 별도 paired trace에서는 합성 unsaved 전체 문서 reset 뒤 Base 라벨이 이전 순서를 유지해 생산 계열 guard가1회 올바르게 거부했으며, 당시 UI undefined는 재현되지 않았다. 별도 초기 focus 실험의9개 positive·18개 editor Undo/Redo는 부분 결과이고 후속 negative의 닫힌 문서 handle 문제로 그 실험의 전체 통과를 주장하지 않는다. 추가 DEDE MariaDB 집중 실행에서는 49번째 changeSignature.info 준비의 genericv21/GenericChild.java UI 경로에서 30초 동안 undefined 폴링112회(전체 DocumentSymbol UI 명령131회)가 관찰됐다. 최초 기호 barrier에서 중단되어 class 출력 표본과 원래 API 호출은 각각0회였고 raw trace가 없어 정확한 원인은 미확인이다. 이 두 UI 폴링 수는 raw protocol 요청 수가 아니다. DEDE의 MySQL 집중16그룹과 v20 준비 경로의9개 positive·negative 통과는 별도 부분 결과이며 MariaDB 전체 native 통과를 뜻하지 않는다. 별도 v21 시험 준비 검토에서 안정 소스와 원래 API 구간의 계열 응답은 일치했지만, 그 API 구간 밖 비동기 요청614·946의 범위 표본은 관찰 소스와 일관되게 대응시키지 못해 upstream 원인·서버 AST 버전이 미확인으로 남는다. 이 관찰로 Outline 수정·Undo 단독 결함·최신 도착 응답 전체의 정확성·무경고 전체 지원을 확정하지 않는다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -522,7 +648,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -545,7 +677,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -568,7 +706,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -591,7 +735,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -614,7 +764,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -639,7 +795,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "지원하는 식에서 Extract Local Variable과 Extract Field를 실제 JDT로 생성한다. 변경 전후 javac·Java 실행 결과를 비교하고 편집 범위와 거부 경계를 검증한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 지원하는 식에서 Extract Local Variable과 Extract Field를 실제 JDT로 생성한다. 변경 전후 javac·Java 실행 결과를 비교하고 편집 범위와 거부 경계를 검증한다.",
         "publicEvidence": [
           "src/java/refactoring.js",
           "src/java/index.js",
@@ -664,7 +826,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 선택 영역에 대한 Extract Method 편집을 적용하고 독립 javac·실행 전후 결과를 비교한다. 지원되지 않는 엔진 추가 상호작용은 성공으로 처리하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 선택 영역에 대한 Extract Method 편집을 적용하고 독립 javac·실행 전후 결과를 비교한다. 지원되지 않는 엔진 추가 상호작용은 성공으로 처리하지 않는다.",
         "publicEvidence": [
           "src/java/refactoring.js",
           "src/java/index.js",
@@ -689,7 +857,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 JDT의 Inline Local Variable 편집을 적용한 Java를 컴파일·실행해 이전 결과와 비교한다. 문서/디스크가 바뀐 계획과 지원하지 않는 추가 명령을 거부한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 JDT의 Inline Local Variable 편집을 적용한 Java를 컴파일·실행해 이전 결과와 비교한다. 문서/디스크가 바뀐 계획과 지원하지 않는 추가 명령을 거부한다.",
         "publicEvidence": [
           "src/java/refactoring.js",
           "src/java/index.js",
@@ -708,26 +882,36 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 클래스·static 멤버 이동에 제한된 무상태 인스턴스 메서드와 완전한 단층 Java 유틸리티 패키지 이동을 더한다. 명시한 receiver 인자와 순수 호출을 검사하고 패키지의 각 파일을 검토·개별 이동한다. 리터럴 Gradle 형제 DAG·leaf includeBuild 좌표 치환과 명시적 Maven sibling reactor의 기존 의존성·관찰한 클라이언트를 검사한다. 빌드 의존성을 자동 생성·수정하지 않는다.",
+      "scope": "기존 클래스·static 멤버 이동에 불변 상태가 있는 target과 source의 private final 필드 receiver를 사용하는 인스턴스 메서드 이동을 더한다. 중첩 Java 유틸리티 패키지와 표준 main 리소스의 지정한 UTF-8 .txt 파일을 함께 이동하며 상대 경로는 유지하고 절대 getResource 경로는 정확한 Java 리터럴만 바꾼다. Java 요청은 대상 폴더별로 나누고 겹친 import는 설명한 타입 매핑만 합성한다. Gradle 사용 전에 선언한 문자열 상수·한정한 property의 모든 분기에서 기존 compile 의존성과 관찰한 소비자의 대상 가시성을 검사한다. 빌드 파일을 자동 수정하지 않는다. 검증에 사용한 소스 판본은 실행 범위에서 별도로 구분한다.",
       "remaining": [
-        "인스턴스 이동은 같은 패키지의 final·무상태 plain source/target, 명시한 첫 target 인자와 primitive/String 순수 반환식·리터럴 getter, source 내부의 제한된 호출에 한정한다. 필드·초기화·상속·null/부작용·외부 호출과 일반 상태 이전은 남는다.",
-        "패키지 이동은 한 imported project의 같은 것으로 입증한 MAIN 소스 집합에서 기존 루트·대상 디렉터리 사이의 완전한 단층1–12개 Java 유틸리티 클래스 범위다. MAIN→test/unclassified·하위 패키지·리소스·일반 파일·framework/문자열 설정 패키지 참조의 자동 전파는 남는다.",
-        "2–12개 리터럴 Gradle DAG의 첫 implementation/api 뒤 api compile 노출, 외향 local edge가 없는 java-library leaf includeBuild의 리터럴 group/artifact/version 치환, 명시적 compile 좌표의 Maven sibling reactor만 분석한다. property version·profile·plugin/management·동적 settings·module path·외부/미가져온 소비자와 임의 복합 빌드 전체는 미지원이다."
+        "인스턴스는 같은 패키지의 final plain source/target, private final primitive/String 리터럴 상태·정확한 getter와 순수 반환식 범위다. 첫 target 인자 또는 private final Target field=new Target()을 사용하고 owner 내부의 제한된 리터럴 호출만 이동한다. mutable·공개 상태·상속·사용자 생성자/초기화·null/부작용·외부 호출과 일반 상태 이전은 남는다.",
+        "패키지는 같은 imported project의 유틸리티 Java1–16개·깊이8까지다. 표준 src/main/resources의 대응 패키지 아래 UTF-8 .txt 최대8개·파일64KiB·합계256KiB만 지원하고 모든 파일의 ClassLiteral.getResource/getResourceAsStream 호출이 확인되어야 한다. 겹친 import 변경은 원래 명시적 일반 import를 모두 보존하는 경우만 합성하고 static/wildcard/주석·다른 코드 겹침은 거부한다. 디렉터리 생성·임의 binary/XML/properties·사용자 리소스 루트·동적/ClassLoader/getClass·Files/Path/URI/URL/일반 I/O/ResourceBundle/Spring loader 조회와 미확인 소비자는 남는다.",
+        "Gradle은 사용 전에 선언하고 의존성에서만 쓰이는 top-level def 문자열 상수·연결·단순 GString과 providers.gradleProperty(name).getOrElse(리터럴)==리터럴의 명시적 if/else, 조건 최대4개·조합16개까지다. 어느 조합에서든 source를 볼 수 있는 모든 검토 소비자는 모든 조합에서 destination을 볼 수 있어야 한다. 별도 includeBuild 연결은 검토한 좌표 치환만 지원한다. Maven도 검토한 compile 소비자 노출을 검사한다. 동적 settings·스크립트/플러그인 실행·외부/미가져온 소비자·임의 빌드 전체와 Maven property/profile/management 전개는 남는다."
       ],
       "verification": {
-        "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "동결 소스581개·같은 VSIX. 단위140개 통과. MySQL893개(892통과·1제외), MariaDB893개(889통과·4제외), 실패0. 공개 재현702개(657통과·45제외), payload13개·고지24개 일치. 집중 native(MySQL/MariaDB)12/12·전체128/116 통과. 양 DB 새 이동4/4건·거부7/7건으로 인스턴스·같은 MAIN 소스 집합의 패키지·transitive DAG·leaf composite를 새 빌드·Spring HTTP·DB2/1/0·Undo/Redo로 확인했다. 선택 대상은 기존 plain 제약을 유지하고, generic peer 공존은 독립 compiler 검사와 저장 소스/빌드/classpath guard 아래서 확인했다. Maven은 별도 소스 결합 JDT 2모듈·3소스의 전후 검사와 새 core/app 개별 Javac·실행42를 확인했다. 해당 이동 검증에서는 Maven CLI를 호출하지 않았다. Spring·DB 근거는 Gradle fixture의 별도 실행이다.",
+        "state": "final-unit-public-native-and-attributed-Node-with-actual-Spring-MySQL-MariaDB",
+        "scopeProvenance": {
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "최종 소스655개에서 단위230개·공개 재현788개(742통과·46제외)·집중 native(MySQL/MariaDB)16/16·전체128/116 통과. Node는 실제 실행 소스402171772f76에서 MySQL984개(983통과·1제외), MariaDB984개(980통과·4제외), 실패0. 최종2eebf9fd94bb와 native 전용 세 helper의 Move 기대값과 v20/v21 시험 준비·문서 고정·Revert·focus만 달라 제품·Node 입력 동일성을 별도 귀속 검증했다. 같은 VSIX의 payload13개·고지24개 일치. 양 DB에서 불변 상태의 필드/인자 receiver 이동2/2건과 거부2/2건, 중첩 Java2/2개·리소스2/2개·상대/절대 lookup3/3개 이동1/1건과 거부4/4건을 확인했다. 리소스 SHA 보존·clean Gradle의 옛 산출물 부재·새 Spring HTTP·DB2/1/0·native Undo/Redo를 검사했다. 유한 build 이동1/1건은 실제 Gradle bridge/core 두 경로2/2개와 모든 검토 source 소비자의 대상 compile 가시성을 확인했다. 불안전한 compile 노출·미지원 조건 거부2/2건도 확인했다. 단위 검사에서 선언 전 상수 참조와 별도 includeBuild의 project 오인을 거부하고 올바른 상수·좌표 치환은 유지했다.",
         "publicEvidence": [
           "src/java/move.js",
-          "src/java/member-move.js",
           "src/java/move-instance.js",
           "src/java/move-package.js",
+          "src/java/package-resources.js",
           "src/java/move-builds.js",
+          "src/java/move-build-contracts.js",
           "src/java/move-scope.js",
-          "src/java/signature-compiler.js",
-          "test/java-move-v21.test.js",
-          "test/java-move-v21-host.js",
-          "test/java-move-v21.integration.test.js"
+          "test/java-move-v22-state.test.js",
+          "test/java-package-move-v22.test.js",
+          "test/java-package-move-v22.integration.test.js",
+          "test/java-build-contracts-v22.test.js",
+          "test/java-move-v22-state-host.js",
+          "test/java-package-move-v22-host.js",
+          "test/java-build-contract-v22-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -741,23 +925,31 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 순서 변경·리터럴 인자 추가·미사용 인자 제거에 소스 generic class/interface 치환, 공변 반환 계열, 교차 bound 메서드 타입 변수와 기존 parameterized/wildcard 인자를 더한다. 각 선언의 formal 타입을 보존하며 변경 전후 Javac의 bound·타입 변수·상위 타입·erasure·override edge와 호출 대상·추론 결과 타입을 대조한다. 사용자 Spring 확장 callback·등록 Bean/lifecycle과 미해결 계약은 사전 거부한다.",
+      "scope": "기존 source generic class/interface 치환·공변 반환·교차 bound·wildcard Change Signature를 유지한다. 변경 전후 Javac의 formal 타입·상위 타입·erasure·override edge와 호출 대상·추론 결과 타입을 대조한다. Spring의 유한 분기 selector/registrar에서도 모든 등록 대상·이름·별칭과 callback을 보호하며 미해결 확장 계약은 서명 변경 전에 거부한다. 검증에 사용한 소스 판본은 실행 범위에서 별도로 구분한다.",
       "remaining": [
         "기존 이름·타입·반환형·접근성·throws를 유지하며 새 인자는 지원 scalar 리터럴이다. varargs·default/native·주석 있는 framework 메서드/인자·복수 interface/diamond·메서드/생성자 참조와 계산된 기본값은 남는다.",
-        "소스에서 관찰한 generic 치환과 계열 범위다. 외부 binary 계열·생성/미관찰 호출자·임의 반사·동적/provider/custom Spring 동작 전체 및 모든 JDK/Lombok·혼합 빌드는 증명하지 않는다.",
-        "사용하는 인자 제거·부작용 평가·이름 충돌·의도하지 않은 overload 재바인딩·erasure collision·bound/계열 변경과 새 외부 binary override를 거부한다. Spring 계약은 보호된 소스·리소스 집합으로 검토하며 Javac에는 Java만 전달한다. 리터럴/identity 소스 언어 밖의 확장과 framework 계약의 자동 변경은 지원하지 않는다."
+        "소스에서 관찰한 generic 치환과 계열만 검사한다. 외부 binary 계열·생성/미관찰 호출자·임의 반사·동적/provider 동작과 모든 JDK/Lombok·혼합 빌드를 증명하지 않는다. 사용하는 인자 제거·부작용 평가·이름 충돌·의도하지 않은 overload 재바인딩·erasure/bound/계열 변경을 거부한다.",
+        "Spring 분석은 기존 리터럴/identity 계약과 정확한 AnnotationMetadata.isAnnotated 상수 조건의 완전한 if/else·불변 지역 String 연결까지다. 조건은 실행하지 않고 모든 분기 결과를 보호한다. 환경/임의 Java·누락된 else·외부 대상·상태/생성자/루프 등 미해결 계약은 거부하며 framework 계약의 자동 서명 변경은 지원하지 않는다."
       ],
       "verification": {
-        "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "동결 소스581개·같은 VSIX. 단위140개 통과. MySQL893개(892통과·1제외), MariaDB893개(889통과·4제외), 실패0. 공개 재현702개(657통과·45제외), payload13개·고지24개 일치. 집중 native(MySQL/MariaDB)12/12·전체128/116 통과. 양 DB generic 3/3선언의 순서 변경·추가·제거 9/9건과 erasure/새 외부 override 거부 2/2건을 새 컴파일·Spring HTTP·DB2/1/0·Undo/Redo로 확인했다. bound·치환·공변 반환·wildcard·호출 결과와 변경 전후 외부 override 계약을 대조했다. Spring 계약은 보호된 Java/리소스 전체를 읽고 Javac에는 Java만 전달한다. 실제 JDT의 로컬 XML 허용 및 missing/external/custom-reader·리소스 변경 거부도 확인했다.",
+        "state": "final-unit-public-native-and-attributed-Node-with-actual-Spring-MySQL-MariaDB",
+        "scopeProvenance": {
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "최종 소스655개에서 단위230개·공개 재현788개(742통과·46제외)·집중 native(MySQL/MariaDB)16/16·전체128/116 통과. Node는 실제 실행 소스402171772f76에서 MySQL984개(983통과·1제외), MariaDB984개(980통과·4제외), 실패0. 최종2eebf9fd94bb와 native 전용 세 helper의 Move 기대값과 v20/v21 시험 준비·문서 고정·Revert·focus만 달라 제품·Node 입력 동일성을 별도 귀속 검증했다. 같은 VSIX의 payload13개·고지24개 일치. 기존 generic3/3선언의 순서 변경·추가·제거9/9건과 erasure/새 외부 override 거부2/2건을 현재 동결본으로 다시 확인했다. bound·치환·공변 반환·wildcard·호출 결과와 외부 override 계약을 대조하고 Java/리소스 guard를 유지했다. 단위 검사에서 유한 Spring의 두 branch 등록 owner와 callback의 서명 보호도 확인했다. v20/v21 시험은 각각 초기8/6문서를 비미리보기 탭으로 고정하고 case 사이 baseline 디스크 확인·공식 Revert, Undo/Redo 전 Java 편집기 focus를 준비하며 기존 guard·부정 검사를 유지했다. 별도 generic 준비 검토의 API 구간 밖 비동기 요청614·946 범위 표본은 원인·서버 AST 버전이 미확인이며 Outline 수정이나 최신 도착 응답 전체의 정확성은 주장하지 않는다.",
         "publicEvidence": [
           "src/java/change-signature.js",
           "src/java/signature-compiler.js",
           "src/java/spring-contract-analysis.js",
+          "src/java/spring-contract-flow.js",
           "src/java/refactoring.js",
           "test/java-generic-signature-v21.test.js",
           "test/java-change-signature-v21.integration.test.js",
-          "test/java-change-signature-v21-host.js"
+          "test/java-change-signature-v21-host.js",
+          "test/java-spring-contract-v22.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -771,24 +963,33 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Java·Spring·이름·리소스 참조 보고서를 유지하고 소스의 composed/meta annotation과 명시한 AliasFor, 리터럴 Import/ImportSelector, RootBeanDefinition의 Bean 이름·타입·별칭 등록, identity-only final BeanPostProcessor를 분석한다. 이 계약이 모두 해석되면 composed controller의 미사용 무주석 private 보조 메서드를 삭제할 수 있다. callback·Bean·lifecycle·HTTP·JPA는 위치가 있는 보호 계약으로 남긴다.",
+      "scope": "Java·Spring·이름·리소스 보고서와 composed/meta annotation·AliasFor·리터럴 Import·등록·identity processor 분석을 유지한다. final 소스 ImportSelector/Registrar에서 불변 지역 String 상수·연결과 정확한 AnnotationMetadata.isAnnotated 조건의 명시적 if/else를 분석하고 모든 분기의 타입·Bean 이름·별칭을 합집합으로 보호한다. 이 계약이 해석되면 무주석 private 보조 메서드를 삭제할 수 있고 callback·등록 대상·Bean·lifecycle·HTTP·JPA 계약은 계속 보호한다. 검증에 사용한 소스 판본은 실행 범위에서 별도로 구분한다.",
       "remaining": [
-        "확장 분석은 저장한 소스만 읽는다. 리터럴 클래스 목록/등록과 수동 지정 meta annotation AliasFor·문자열 기본값, final·추가 상태가 없는 identity processor만 지원한다. local mirror alias·상속/생성자/초기화·임의 metadata·conditional/계산된 selector/등록·factory/provider/사용자 후처리 전체는 남는다.",
-        "reflection·임의 SpEL·custom condition·외부/계산된 Import/ImportResource와 동적 XML/lifecycle은 unknown으로 거부한다. 소스/그래프/멤버/별칭/검색/보고서 예산 초과도 거부한다. 외부 프로젝트·binary·생성 코드와 모든 동적 소비자 부재는 증명하지 않는다.",
-        "필드·생성자·공개 API와 framework 계약의 자동 제거, JPA/ConfigurationProperties accessor/provider 전체 분석은 남는다. 저장 소스·리소스·빌드 파일과 집합을 적용 직전에 재검사하며 삭제 파일 복원은 최대10건·2MiB/파일·세션1시간이다."
+        "조건·selector·registrar는 분석 중 실행하지 않는다. 유한 소스 문법 안의 모든 분기만 보존하며 실제 활성 profile을 근거로 다른 분기를 제거하지 않는다. 임의/환경 조건·불완전한 else·필드/생성자/초기화·루프·외부 대상·factory/provider·사용자 후처리 전체는 남는다.",
+        "reflection·임의 SpEL·custom condition·외부/계산된 Import/ImportResource와 동적 XML/lifecycle은 unknown으로 거부한다. 소스/그래프/멤버/분기/문자열/별칭/검색/보고서 예산을 넘겨도 거부한다. 외부 프로젝트·binary·생성 코드와 모든 동적 소비자 부재는 증명하지 않는다.",
+        "필드·생성자·공개 API와 framework 계약의 자동 제거, JPA/ConfigurationProperties accessor/provider 전체 분석은 남는다. 저장 소스·리소스·빌드 파일과 집합을 적용 직전에 재검사한다. 삭제 파일 복원은 최대10건·파일2MiB·세션1시간이다."
       ],
       "verification": {
-        "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "동결 소스581개·같은 VSIX. 단위140개 통과. MySQL893개(892통과·1제외), MariaDB893개(889통과·4제외), 실패0. 공개 재현702개(657통과·45제외), payload13개·고지24개 일치. 집중 native(MySQL/MariaDB)12/12·전체128/116 통과. 양 DB 새6/6건에서 composed AliasFor와 리터럴 selector/registrar·identity processor 3/3종을 해석했다. private helper 적용·새 Spring HTTP/DB2/1/0·Undo 1/1건, callback/lifecycle blocked 4/4건, 조건부 selector unknown 1/1건을 확인했다. 분석 중 확장은 실행하지 않았다. 구형 시나리오 정의0.19/0.20도 현재 동결본으로 다시 실행했다.",
+        "state": "final-unit-public-native-and-attributed-Node-with-actual-Spring-MySQL-MariaDB",
+        "scopeProvenance": {
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "최종 소스655개에서 단위230개·공개 재현788개(742통과·46제외)·집중 native(MySQL/MariaDB)16/16·전체128/116 통과. Node는 실제 실행 소스402171772f76에서 MySQL984개(983통과·1제외), MariaDB984개(980통과·4제외), 실패0. 최종2eebf9fd94bb와 native 전용 세 helper의 Move 기대값과 v20/v21 시험 준비·문서 고정·Revert·focus만 달라 제품·Node 입력 동일성을 별도 귀속 검증했다. 같은 VSIX의 payload13개·고지24개 일치. 양 DB 새 Spring7/7건에서 유한 selector/registrar2/2종의 모든 분기를 해석했다. private helper 적용·새 전체 Javac·Spring HTTP/DB2/1/0·Undo1/1건, callback/두 등록 대상 blocked4/4건, 임의 조건·외부 대상 unknown1/1건, preview 후 확장 추가 거부1/1건을 확인했다. 두 importing configuration이 서로 다른 분기를 실행하고 두 selected configuration·Bean·별칭이 함께 보존됐다. 분석 중 조건·확장은 실행하지 않았다.",
         "publicEvidence": [
           "src/java/safe-delete.js",
           "src/java/spring-delete-analysis.js",
           "src/java/spring-contract-analysis.js",
+          "src/java/spring-contract-flow.js",
           "src/java/refactoring.js",
           "test/java-safe-delete.test.js",
           "test/java-spring-safe-delete.test.js",
           "test/java-spring-contract-analysis.test.js",
-          "test/java-safe-delete-v21-host.js"
+          "test/java-spring-contract-v22.test.js",
+          "test/java-spring-contract-v22.integration.test.js",
+          "test/java-spring-contract-v22-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -808,7 +1009,13 @@
       ],
       "verification": {
         "state": "unverified",
-        "testedScope": "본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -833,7 +1040,13 @@
       ],
       "verification": {
         "state": "unverified",
-        "testedScope": "본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -852,26 +1065,39 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "검토 계획·전후 비교에 제한된 인스턴스/패키지 이동, literal Maven/Gradle·leaf composite 경계 분석, generic 계열·overload 서명 변경과 소스 Spring 사용자 확장 계약 검사를 통합한다. 저장 문서·디스크·파일 집합·빌드·classpath를 다시 확인하고, 분석 중 프로젝트 코드/processor/plugin/확장을 실행하지 않는다. 텍스트·이동 Undo/Redo와 삭제 파일의 세션 내 별도 원본 복원을 구분한다.",
+      "scope": "검토 계획·전후 비교·충돌 차단에 불변 상태/필드 receiver 이동, 중첩 유틸리티 패키지와 제한된 main .txt 리소스 이동, Gradle property의 모든 분기와 Gradle/Maven 검토 소비자의 compile 노출 계약, 모든 분기의 Spring 확장 계약을 통합한다. 저장 문서·디스크·파일/리소스 집합·디렉터리·빌드·classpath와 리소스 원본 SHA를 재확인한다. 유한 소스 계약 해석기는 프로젝트 코드·processor·plugin·확장을 실행하지 않는다. 신뢰한 프로젝트의 일반 JDT 가져오기와 Gradle/Maven 빌드는 별도 실행 경로다. 텍스트/이동 Undo·Redo와 삭제 파일의 세션 내 별도 원본 복원을 구분한다. 검증에 사용한 소스 판본은 실행 범위에서 별도로 구분한다.",
       "remaining": [
-        "지원하는 소스 언어·receiver·유틸리티 패키지·명시적 빌드 그래프의 조합이다. 상태 있는 멤버/자원·중첩 패키지·동적/임의 복합 빌드·외부/복수 interface 계열·임의 Spring provider/framework 계약의 자동 변경/제거는 남는다.",
-        "예상 밖 리소스 작업·덮어쓰기·재귀 삭제·임의 engine 명령과 미해결 계약을 거부한다. 선택 Move 대상의 plain 제약을 유지하며 generic peer 공존은 독립 compiler·소스/빌드/classpath guard 아래서만 허용한다. Spring 계약에는 보호된 리소스도 포함하며 mutation은 자동 재시도하지 않는다. 모든 JDK/Lombok·혼합 빌드·동적 소비자 전체 동등성은 미검증이다.",
-        "Undo/Redo와 최대10건·2MiB/파일·세션1시간의 삭제 파일 원본 복원은 구분한다. 외부 writer와 원자성·영구 복구·관찰 밖 reflection/provider·생성/binary 참조 전체의 안전성은 보장하지 않는다."
+        "지원하는 불변 source/target·유틸리티 패키지·명시적 리소스 lookup과 유한 source/property 분기만 조합한다. mutable 상태의 일반 이전·임의 자원·새 디렉터리·동적 settings/플러그인·외부/복수 interface 계열·임의 custom/provider 계약의 자동 변경/제거는 남는다.",
+        "예상 밖 리소스 작업·덮어쓰기·재귀 삭제·임의 engine 명령·미해결 계약을 거부한다. JDT 의미 참조와 변경 전후 compiler 바인딩을 검사한다. 필드 receiver에서 engine이 불필요하게 넓힌 private 접근성은 검토한 원본 선언으로만 정규화한 뒤 정확한 본문·호출·컴파일을 검증한다. mutation은 자동 재시도하지 않는다.",
+        "Undo/Redo와 최대10건·파일2MiB·세션1시간의 삭제 원본 복원은 구분한다. 외부 writer와 원자성·영구 복구·관찰 밖 reflection/provider·생성/binary 참조 전체 및 모든 JDK/Lombok·혼합 빌드 동등성은 증명하지 않는다."
       ],
       "verification": {
-        "state": "source-and-native-VSIX-with-actual-Spring-MySQL-MariaDB",
-        "testedScope": "동결 소스581개·같은 VSIX. 단위140개 통과. MySQL893개(892통과·1제외), MariaDB893개(889통과·4제외), 실패0. 공개 재현702개(657통과·45제외), payload13개·고지24개 일치. 집중 native(MySQL/MariaDB)12/12·전체128/116 통과. 양 DB 원래 API 59/59회(준비 55/55·descriptor 거부 4/4)를 각각 한 번 호출했고 재시도·우회·분석을 위한 강제 빌드0, 소스 guard와 메서드 identity를 보존했다. generic peer/guarded Spring resource 통합을 포함해 이동·서명·삭제의 검토·컴파일·새 Spring/DB·Undo/Redo·별도 삭제 파일 복원을 확인했다. Maven은 별도 소스 결합 JDT 2모듈·3소스의 전후 검사와 새 core/app 개별 Javac·실행42를 확인했다. 해당 이동 검증에서는 Maven CLI를 호출하지 않았다. Spring·DB 근거는 Gradle fixture의 별도 실행이다.",
+        "state": "final-unit-public-native-and-attributed-Node-with-actual-Spring-MySQL-MariaDB",
+        "scopeProvenance": {
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "최종 소스655개에서 단위230개·공개 재현788개(742통과·46제외)·집중 native(MySQL/MariaDB)16/16·전체128/116 통과. Node는 실제 실행 소스402171772f76에서 MySQL984개(983통과·1제외), MariaDB984개(980통과·4제외), 실패0. 최종2eebf9fd94bb와 native 전용 세 helper의 Move 기대값과 v20/v21 시험 준비·문서 고정·Revert·focus만 달라 제품·Node 입력 동일성을 별도 귀속 검증했다. 같은 VSIX의 payload13개·고지24개 일치. 양 DB 신규4그룹에서 불변 필드/인자 이동2/2건, 중첩 Java2/2·리소스2/2·lookup3/3개 이동, 실제 Gradle 두 경로2/2개와 Spring 유한 분기7/7건을 검사했다. 새 컴파일·Spring/DB·리소스 SHA·Undo/Redo·stale 거부를 확인했다. 원래 API71/71회(준비65/65·descriptor 거부6/6)를 각각 한 번 호출했고 재시도·우회·분석을 위한 강제 빌드0이다. 기존 이동·generic 서명·삭제/별도 원본 복원도 다시 검사했다. 소유 fixture의 v20/v21 초기 문서 고정·baseline Revert·편집기 focus는 시험 준비 조건이다.",
         "publicEvidence": [
           "src/java/refactoring.js",
           "src/java/move.js",
           "src/java/move-instance.js",
           "src/java/move-package.js",
+          "src/java/package-resources.js",
           "src/java/move-builds.js",
+          "src/java/move-build-contracts.js",
           "src/java/change-signature.js",
           "src/java/signature-compiler.js",
           "src/java/spring-contract-analysis.js",
+          "src/java/spring-contract-flow.js",
           "src/java/spring-delete-analysis.js",
-          "test/java-refactoring-v21-host.js"
+          "test/java-refactoring-resources-v22.test.js",
+          "test/java-move-v22-state-host.js",
+          "test/java-package-move-v22-host.js",
+          "test/java-build-contract-v22-host.js",
+          "test/java-spring-contract-v22-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -891,7 +1117,13 @@
       ],
       "verification": {
         "state": "unverified",
-        "testedScope": "본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -916,7 +1148,13 @@
       ],
       "verification": {
         "state": "unverified",
-        "testedScope": "본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -941,7 +1179,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -966,7 +1210,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -991,7 +1241,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1014,7 +1270,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1037,7 +1299,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1060,7 +1328,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1083,7 +1357,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "독립 JDK25에서 Maven/Gradle 빌드와 실제 Run/Debug·중단점을 확인하며 다른 JDK 검증으로 확대하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 독립 JDK25에서 Maven/Gradle 빌드와 실제 Run/Debug·중단점을 확인하며 다른 JDK 검증으로 확대하지 않는다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -1103,7 +1383,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1126,7 +1412,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1149,7 +1441,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1172,7 +1470,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1195,7 +1499,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1218,7 +1528,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/runtime.js",
@@ -1243,7 +1559,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1266,7 +1588,13 @@
       ],
       "verification": {
         "state": "source-audit-unverified-processor-behavior",
-        "testedScope": "새 작업 트리는 관찰된 JDT 설정을 표시한다. 어노테이션 프로세서·Lombok 생성 멤버/소스 이동은 새 검증 대상이 아니므로 기존 미검증 판정과 남은 범위를 그대로 유지한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 새 작업 트리는 관찰된 JDT 설정을 표시한다. 어노테이션 프로세서·Lombok 생성 멤버/소스 이동은 새 검증 대상이 아니므로 기존 미검증 판정과 남은 범위를 그대로 유지한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -1287,7 +1615,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "공식 아카이브의 길이/CRC·불변 검토·경로 거부와 실제 생성 앱의 빌드/실행·DB/Actuator·소유 Stop을 확인한다. 생성 앱의 별도 schema 데이터3/2와 두 기준 Spring 앱의2/1/0을 구분한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 공식 아카이브의 길이/CRC·불변 검토·경로 거부와 실제 생성 앱의 빌드/실행·DB/Actuator·소유 Stop을 확인한다. 생성 앱의 별도 schema 데이터3/2와 두 기준 Spring 앱의2/1/0을 구분한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -1308,7 +1642,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 파일/문서 지문·버전·dirty guard, 불변 검토와 Undo/Redo·저장·명시 resync를 확인한다. 최초 import/configuration 실행 가능성은 별도로 표시한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 파일/문서 지문·버전·dirty guard, 불변 검토와 Undo/Redo·저장·명시 resync를 확인한다. 최초 import/configuration 실행 가능성은 별도로 표시한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -1328,7 +1668,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
         "publicEvidence": [
           "src/spring/model.js",
           "src/spring/vscode.js",
@@ -1353,7 +1699,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
         "publicEvidence": [
           "src/spring/model.js",
           "src/spring/vscode.js",
@@ -1378,7 +1730,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
         "publicEvidence": [
           "src/spring/model.js",
           "src/spring/vscode.js",
@@ -1403,7 +1761,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
         "publicEvidence": [
           "src/spring/model.js",
           "src/spring/vscode.js",
@@ -1428,7 +1792,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
         "publicEvidence": [
           "src/spring/model.js",
           "src/spring/vscode.js",
@@ -1453,7 +1823,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
         "publicEvidence": [
           "src/spring/model.js",
           "src/spring/vscode.js",
@@ -1478,7 +1854,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
         "publicEvidence": [
           "src/jpa/model.js",
           "src/jpa/query.js",
@@ -1503,7 +1885,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
         "publicEvidence": [
           "src/jpa/model.js",
           "src/jpa/query.js",
@@ -1528,7 +1916,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1551,7 +1945,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
         "publicEvidence": [
           "src/jpa/model.js",
           "src/jpa/query.js",
@@ -1576,7 +1976,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
         "publicEvidence": [
           "src/jpa/model.js",
           "src/jpa/query.js",
@@ -1601,7 +2007,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1624,7 +2036,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
         "publicEvidence": [
           "src/spring/model.js",
           "src/spring/vscode.js",
@@ -1649,7 +2067,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1672,7 +2096,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1695,7 +2125,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1719,7 +2155,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 JDT Maven import, 목표 탐색과 compile 작업 및 소유 작업 완료/중지를 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 JDT Maven import, 목표 탐색과 compile 작업 및 소유 작업 완료/중지를 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -1739,7 +2181,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 Gradle task 발견·compile과 작업 소유권을 확인한다. Spring 생성 앱의 실행 근거는 Gradle Groovy이며 Kotlin/Maven 생성·편집 시험과 구분한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 Gradle task 발견·compile과 작업 소유권을 확인한다. Spring 생성 앱의 실행 근거는 Gradle Groovy이며 Kotlin/Maven 생성·편집 시험과 구분한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -1759,7 +2207,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "공개 프로젝트/settings/classpath 모델과 명시적 resync 및 실제 빌드 경로를 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 공개 프로젝트/settings/classpath 모델과 명시적 resync 및 실제 빌드 경로를 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -1779,7 +2233,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 양 빌드 도구 작업과 명시적 재동기화·사전 작업을 확인하며 파일 작성만으로 전역 실행이 없다고 표시하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 양 빌드 도구 작업과 명시적 재동기화·사전 작업을 확인하며 파일 작성만으로 전역 실행이 없다고 표시하지 않는다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -1800,7 +2260,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 사전 build, 저장 구성, 비밀 환경 보관, 관리 Run/Debug·중단점·접속·소유 Stop을 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 사전 build, 저장 구성, 비밀 환경 보관, 관리 Run/Debug·중단점·접속·소유 Stop을 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -1820,7 +2286,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -1843,7 +2315,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
         "publicEvidence": [
           "src/java/debug.js",
           "src/java/debug-adapter.js",
@@ -1868,7 +2346,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
         "publicEvidence": [
           "src/java/debug.js",
           "src/java/debug-adapter.js",
@@ -1893,7 +2377,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -1916,7 +2406,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
         "publicEvidence": [
           "src/java/debug.js",
           "src/java/debug-adapter.js",
@@ -1941,7 +2437,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
         "publicEvidence": [
           "src/java/debug.js",
           "src/java/debug-adapter.js",
@@ -1966,7 +2468,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
         "publicEvidence": [
           "src/java/debug.js",
           "src/java/debug-adapter.js",
@@ -1991,7 +2499,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
         "publicEvidence": [
           "src/java/debug.js",
           "src/java/debug-adapter.js",
@@ -2016,7 +2530,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2039,7 +2559,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2062,7 +2588,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 Spring/JPA의 JUnit·TestNG 테스트를 MySQL8.4.13·MariaDB11.4.8에서 실행한다. 네이티브 Debug profile의 실제 query 결과2, source 중단점·locals/watch·step/continue와 중단 시 소유 JVM/정확한 session 종료를 구분한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 Spring/JPA의 JUnit·TestNG 테스트를 MySQL8.4.13·MariaDB11.4.8에서 실행한다. 네이티브 Debug profile의 실제 query 결과2, source 중단점·locals/watch·step/continue와 중단 시 소유 JVM/정확한 session 종료를 구분한다.",
         "publicEvidence": [
           "src/java/testing/index.js",
           "runtime/java-testing/src/rocketbrain/testing/TestNgAdapter.java",
@@ -2088,7 +2620,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 TestNG public listener의 실패·의존성 skip·disabled·DataProvider와 순서 변경 후 안전한 scalar case 재실행을 검사한다. 실제 Spring/양DB의 rollback과 네이티브 Test Explorer 결과·선택 재실행을 대조한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 TestNG public listener의 실패·의존성 skip·disabled·DataProvider와 순서 변경 후 안전한 scalar case 재실행을 검사한다. 실제 Spring/양DB의 rollback과 네이티브 Test Explorer 결과·선택 재실행을 대조한다.",
         "publicEvidence": [
           "src/java/testing/index.js",
           "runtime/java-testing/src/rocketbrain/testing/TestNgAdapter.java",
@@ -2114,7 +2652,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 JUnit·TestNG의 서로 다른 테스트가 각 RiskPolicy branch를 통과하며 테스트별 covered/missed와 전체 OR 병합을 대조한다. shared configuration·JUnit lifecycle·TestNG BeforeMethod 경계를 구분하고 실제 동시 callback 겹침 시 전체 귀속을 억제한다. 양DB 네이티브 상세는 serial 구간 측정이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 JUnit·TestNG의 서로 다른 테스트가 각 RiskPolicy branch를 통과하며 테스트별 covered/missed와 전체 OR 병합을 대조한다. shared configuration·JUnit lifecycle·TestNG BeforeMethod 경계를 구분하고 실제 동시 callback 겹침 시 전체 귀속을 억제한다. 양DB 네이티브 상세는 serial 구간 측정이다.",
         "publicEvidence": [
           "runtime/java-testing/src/rocketbrain/testing/PerTestCoverage.java",
           "src/java/testing/coverage.js",
@@ -2140,7 +2684,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2163,7 +2713,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2186,7 +2742,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2209,7 +2771,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -2232,7 +2800,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2255,7 +2829,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -2278,7 +2858,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -2301,7 +2887,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -2324,7 +2916,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2347,7 +2945,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2370,7 +2974,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2393,7 +3003,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2416,7 +3032,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2439,7 +3061,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2462,7 +3090,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -2485,7 +3119,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2508,7 +3148,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2531,7 +3177,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2554,7 +3206,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -2578,7 +3236,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -2601,7 +3265,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2624,7 +3294,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -2647,7 +3323,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2670,7 +3352,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2693,7 +3381,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2716,7 +3410,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -2739,7 +3439,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
         "publicEvidence": [
           "src/navigation.js",
           "src/extension.js"
@@ -2762,7 +3468,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -2785,7 +3497,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2808,7 +3526,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2831,7 +3555,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2854,7 +3584,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-trust-tests",
-        "testedScope": "기존 실제/단위 검사에서 untrusted 시작/attach·관찰 거부와 await 중 trust 철회/stale 응답 폐기를 확인했다. 신규 native wrapper 단위11/11에서 테스트 발견 중 철회·각 다음 project engine 호출 직전 trust 재검사와 SQL metadata await 이후 재검사를 확인했다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 기존 실제/단위 검사에서 untrusted 시작/attach·관찰 거부와 await 중 trust 철회/stale 응답 폐기를 확인했다. 신규 native wrapper 단위11/11에서 테스트 발견 중 철회·각 다음 project engine 호출 직전 trust 재검사와 SQL metadata await 이후 재검사를 확인했다.",
         "publicEvidence": [
           "src/java/index.js",
           "src/java/debug.js",
@@ -2887,7 +3623,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
         "publicEvidence": [
           "src/jpa/model.js",
           "src/jpa/query.js",
@@ -2912,7 +3654,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -2935,7 +3683,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -2959,7 +3713,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -2983,7 +3743,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3006,7 +3772,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3029,7 +3801,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3052,7 +3830,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -3076,7 +3860,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 연결 Test/Save/Connect·비밀번호 분리·DTO/내보내기 제외와 실패/반복 stale 편집 보호를 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 연결 Test/Save/Connect·비밀번호 분리·DTO/내보내기 제외와 실패/반복 stale 편집 보호를 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -3097,7 +3887,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 MySQL/MariaDB의 제품 드라이버 SQL에서 올바른 CA/DNS와 잘못된 CA/DNS 거부를 확인한다. 네이티브 profile helper 자체의 TLS/SSH 접속은 미시험이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB의 제품 드라이버 SQL에서 올바른 CA/DNS와 잘못된 CA/DNS 거부를 확인한다. 네이티브 profile helper 자체의 TLS/SSH 접속은 미시험이다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -3117,7 +3913,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "별도 실제 양DB 보안 시험에서 클라이언트 인증서 접속과 누락/키 불일치 거부를 확인한다. 네이티브 폼 접속은 이 mTLS 검증과 구분한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 별도 실제 양DB 보안 시험에서 클라이언트 인증서 접속과 누락/키 불일치 거부를 확인한다. 네이티브 폼 접속은 이 mTLS 검증과 구분한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -3138,7 +3940,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 양DB와 OpenSSH 경로에서 올바른 키/host 검증·잘못된 키·취소 및 소유 리스너 종료를 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 양DB와 OpenSSH 경로에서 올바른 키/host 검증·잘못된 키·취소 및 소유 리스너 종료를 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -3158,7 +3966,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3181,7 +3995,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3204,7 +4024,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -3228,7 +4054,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 연결 폼/트리·저장·전환과 pending draft/거래 거부 후 명시 rollback·재접속을 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 연결 폼/트리·저장·전환과 pending draft/거래 거부 후 명시 rollback·재접속을 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -3248,7 +4080,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "비밀정보 없는 교환과 새 식별자·stale 저장 보호·재입력 흐름을 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 비밀정보 없는 교환과 새 식별자·stale 저장 보호·재입력 흐름을 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -3268,7 +4106,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -3292,7 +4136,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 schema 선택/메타데이터 갱신과 편집·거래를 보존하는 전환 guard를 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 schema 선택/메타데이터 갱신과 편집·거래를 보존하는 전환 guard를 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -3312,7 +4162,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -3336,7 +4192,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -3360,7 +4222,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3383,7 +4251,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3406,7 +4280,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
         "publicEvidence": [
           "src/navigation.js",
           "src/extension.js"
@@ -3429,7 +4309,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -3453,7 +4339,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -3477,7 +4369,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3500,7 +4398,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3523,7 +4427,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
         "publicEvidence": [
           "src/db/sql-analysis.js",
           "src/db/completion.js",
@@ -3550,7 +4460,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3573,7 +4489,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
         "publicEvidence": [
           "src/db/completion.js",
           "src/db/sql-policy.js",
@@ -3597,7 +4519,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
         "publicEvidence": [
           "src/db/sql-analysis.js",
           "src/db/completion.js",
@@ -3624,7 +4552,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
         "publicEvidence": [
           "src/db/sql-analysis.js",
           "src/db/sql-policy.js",
@@ -3650,7 +4584,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
         "publicEvidence": [
           "src/db/completion.js",
           "src/db/sql-policy.js",
@@ -3674,7 +4614,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3697,7 +4643,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
         "publicEvidence": [
           "src/db/sql-analysis.js",
           "src/db/completion.js",
@@ -3724,7 +4676,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
         "publicEvidence": [
           "src/db/completion.js",
           "src/db/sql-policy.js",
@@ -3748,7 +4706,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3771,7 +4735,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "MySQL8.4.13·MariaDB11.4.8의 실제 테이블/열 Rename, 값·속성·FK 보존, 충돌·stale review·활성 거래 거부와 별도 DDL 연결을 검사한다. 선택 SQL 파일의 참조 편집과 DB 적용 결과를 각각 확인하고 비원자적 경계를 표시한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): MySQL8.4.13·MariaDB11.4.8의 실제 테이블/열 Rename, 값·속성·FK 보존, 충돌·stale review·활성 거래 거부와 별도 DDL 연결을 검사한다. 선택 SQL 파일의 참조 편집과 DB 적용 결과를 각각 확인하고 비원자적 경계를 표시한다.",
         "publicEvidence": [
           "src/db/schema-rename.js",
           "src/db/schema-vscode.js",
@@ -3799,7 +4769,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 연결한 양DB 카탈로그와 여러 SQL 파일에서 물리 table/column의 스코프·별칭 가리기·CTE/derived 참조를 대조한다. 문자열/주석 보존, 파일 집합/버전/디스크/카탈로그 변경 거부와 미지원 파일 범위를 네이티브 API에서 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 연결한 양DB 카탈로그와 여러 SQL 파일에서 물리 table/column의 스코프·별칭 가리기·CTE/derived 참조를 대조한다. 문자열/주석 보존, 파일 집합/버전/디스크/카탈로그 변경 거부와 미지원 파일 범위를 네이티브 API에서 확인한다.",
         "publicEvidence": [
           "src/db/sql-project.js",
           "src/db/sql-vscode.js",
@@ -3827,7 +4803,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
         "publicEvidence": [
           "src/db/sql-analysis.js",
           "src/db/completion.js",
@@ -3854,7 +4836,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3877,7 +4865,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3900,7 +4894,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -3923,7 +4923,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 MySQL/MariaDB의 named·positional·반복 값과 정확한 큰 정수·decimal·날짜·JSON·binary·NULL을 비교한다. 네이티브 VS Code 문서/API에서 값 검토·실행·결과를 확인한다. 입력·취소·명시적 재사용과 소스/연결/모드 경계는 제어한 호스트 UI 시험으로 구분해 검사한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB의 named·positional·반복 값과 정확한 큰 정수·decimal·날짜·JSON·binary·NULL을 비교한다. 네이티브 VS Code 문서/API에서 값 검토·실행·결과를 확인한다. 입력·취소·명시적 재사용과 소스/연결/모드 경계는 제어한 호스트 UI 시험으로 구분해 검사한다.",
         "publicEvidence": [
           "src/db/sql-script.js",
           "src/db/sql-script-vscode.js",
@@ -3952,7 +4958,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
         "publicEvidence": [
           "src/db/completion.js",
           "src/db/sql-policy.js",
@@ -3976,7 +4988,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 Spring 프로젝트와 양DB에서 문자열/주석/SQL 모드별 문장 경계, 순서·stop-on-error·기존 거래 보존·DDL 경계·취소/시간 제한을 검사한다. 네이티브 VS Code 문서/API의 검토·실행·문장별 결과와 제어한 호스트 UI의 명령 흐름을 별도로 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 Spring 프로젝트와 양DB에서 문자열/주석/SQL 모드별 문장 경계, 순서·stop-on-error·기존 거래 보존·DDL 경계·취소/시간 제한을 검사한다. 네이티브 VS Code 문서/API의 검토·실행·문장별 결과와 제어한 호스트 UI의 명령 흐름을 별도로 확인한다.",
         "publicEvidence": [
           "src/db/sql-script.js",
           "src/db/sql-script-vscode.js",
@@ -4005,7 +5023,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -4029,7 +5053,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -4053,7 +5083,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -4077,7 +5113,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4100,7 +5142,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -4124,7 +5172,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -4148,7 +5202,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4171,7 +5231,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4194,7 +5260,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
         "publicEvidence": [
           "src/table-editor.js",
           "src/db/grid.js",
@@ -4218,7 +5290,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -4242,7 +5320,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4265,7 +5349,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -4289,7 +5379,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4312,7 +5408,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 MySQL/MariaDB의 페이지 경계·빈 마지막 페이지·한 행 lookahead와 정렬된 기본 키를 대조한다. 실제 Webview의 다음/이전/페이지 크기 변경과 초안·활성 거래 보호를 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB의 페이지 경계·빈 마지막 페이지·한 행 lookahead와 정렬된 기본 키를 대조한다. 실제 Webview의 다음/이전/페이지 크기 변경과 초안·활성 거래 보호를 확인한다.",
         "publicEvidence": [
           "src/db/grid.js",
           "src/table-editor.js",
@@ -4341,7 +5443,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "두 서버에서 중복 정렬 값과 다중 정렬 열을 가진 결과를 실제 ORDER BY 결과와 비교한다. 실제 Webview에서 두 정렬 조건을 적용하고 기본 키 보조 순서·페이지 전환을 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 두 서버에서 중복 정렬 값과 다중 정렬 열을 가진 결과를 실제 ORDER BY 결과와 비교한다. 실제 Webview에서 두 정렬 조건을 적용하고 기본 키 보조 순서·페이지 전환을 확인한다.",
         "publicEvidence": [
           "src/db/grid.js",
           "src/table-editor.js",
@@ -4368,7 +5476,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 양DB에서 큰 정수·정밀 decimal·NULL·리터럴 wildcard·SQL처럼 보이는 값을 바인딩해 결과를 확인한다. 실제 Webview의 복수 필터·형식 오류 보존·초안 보호와 명시적인 읽기 전용 복귀를 검사한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 양DB에서 큰 정수·정밀 decimal·NULL·리터럴 wildcard·SQL처럼 보이는 값을 바인딩해 결과를 확인한다. 실제 Webview의 복수 필터·형식 오류 보존·초안 보호와 명시적인 읽기 전용 복귀를 검사한다.",
         "publicEvidence": [
           "src/db/grid.js",
           "src/table-editor.js",
@@ -4397,7 +5511,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
         "publicEvidence": [
           "src/table-editor.js",
           "src/db/grid.js",
@@ -4421,7 +5541,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
         "publicEvidence": [
           "src/table-editor.js",
           "src/db/grid.js",
@@ -4445,7 +5571,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 MySQL/MariaDB와 Webview에서2행 붙여넣기·복제·정밀 값·리터럴 SQL/HTML·NULL/빈 문자열을 검증한다. 기존 초안·stale 모델 보호와 Review/Apply/Commit/Rollback, 외부 관찰 및 무관한 기존 거래 보존을 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB와 Webview에서2행 붙여넣기·복제·정밀 값·리터럴 SQL/HTML·NULL/빈 문자열을 검증한다. 기존 초안·stale 모델 보호와 Review/Apply/Commit/Rollback, 외부 관찰 및 무관한 기존 거래 보존을 확인한다.",
         "publicEvidence": [
           "src/db/grid-bulk.js",
           "src/table-editor.js",
@@ -4475,7 +5607,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
         "publicEvidence": [
           "src/table-editor.js",
           "src/db/grid.js",
@@ -4499,7 +5637,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4522,7 +5666,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4545,7 +5695,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4568,7 +5724,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB InnoDB table의 제한된 행·typed edit·추가/삭제·충돌·검토/commit 표본과 export 형식 검사.",
         "publicEvidence": [
           "src/table-editor.js",
           "src/db/grid.js",
@@ -4592,7 +5754,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4615,7 +5783,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4639,7 +5813,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "기존 입력 한도를 넘는 실제 소유 CSV/TSV·XLSX 파일과 실제 Spring/양DB에서 행·배치 수, 저장 값·NULL/수식 정책, 검토 중 무실행, 커밋 전 외부 비가시성, 명시적 커밋/전체 롤백, 오류·취소·오래된 파일/스키마·기존 거래 차단과 메모리 한도를 검사한다. 제어한 파일 선택/화면과 네이티브 적용 API의 검증 범위를 구분한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 기존 입력 한도를 넘는 실제 소유 CSV/TSV·XLSX 파일과 실제 Spring/양DB에서 행·배치 수, 저장 값·NULL/수식 정책, 검토 중 무실행, 커밋 전 외부 비가시성, 명시적 커밋/전체 롤백, 오류·취소·오래된 파일/스키마·기존 거래 차단과 메모리 한도를 검사한다. 제어한 파일 선택/화면과 네이티브 적용 API의 검증 범위를 구분한다.",
         "publicEvidence": [
           "src/db/import-stream-source.js",
           "src/db/import-stream.js",
@@ -4672,7 +5852,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4695,7 +5881,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4718,7 +5910,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4741,7 +5939,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4764,7 +5968,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4788,7 +5998,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 Chromium 폼과 네이티브 명령/API에서 PK/FK/CHECK/ENUM·정확 기본값·DECIMAL 변경/원본 복구·readonly SQL·카탈로그 갱신을 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 Chromium 폼과 네이티브 명령/API에서 PK/FK/CHECK/ENUM·정확 기본값·DECIMAL 변경/원본 복구·readonly SQL·카탈로그 갱신을 확인한다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -4809,7 +6025,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 양DB에서 FK/CHECK 강제, PK/index 폼·검토·DDL 적용과 원본 구조/값 복구를 확인한다. 임의 식별자/타입/검토 변조와 동시 변경은 덮어쓰지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 양DB에서 FK/CHECK 강제, PK/index 폼·검토·DDL 적용과 원본 구조/값 복구를 확인한다. 임의 식별자/타입/검토 변조와 동시 변경은 덮어쓰지 않는다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -4829,7 +6051,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4853,7 +6081,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 양DB에서 뷰/프로시저 배포·컴파일 오류·버퍼/원문 drift·원본 재접속 복원, DROP/CREATE 직후 응답 손실의 무재시도와 권한 보존/거부를 확인한다. Latin1 초기 café/변경 café2/복원 café의 실제 HEX도 각각 검증했다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 양DB에서 뷰/프로시저 배포·컴파일 오류·버퍼/원문 drift·원본 재접속 복원, DROP/CREATE 직후 응답 손실의 무재시도와 권한 보존/거부를 확인한다. Latin1 초기 café/변경 café2/복원 café의 실제 HEX도 각각 검증했다.",
         "publicEvidence": [],
         "originalProductParityVerified": false
       }
@@ -4873,7 +6107,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 Spring 프로젝트와 MySQL/MariaDB의 별도 소유 테이블에서 새 구조 snapshot과 canonical 차이를 비교한다. 객체 순서·속성·미지원 범위를 검사하고 실제 VS Code 구조 비교 진입점과 snapshot 상태 표시를 확인한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 Spring 프로젝트와 MySQL/MariaDB의 별도 소유 테이블에서 새 구조 snapshot과 canonical 차이를 비교한다. 객체 순서·속성·미지원 범위를 검사하고 실제 VS Code 구조 비교 진입점과 snapshot 상태 표시를 확인한다.",
         "publicEvidence": [
           "src/db/schema-diff.js",
           "src/db/schema-diff-vscode.js",
@@ -4904,7 +6144,13 @@
       ],
       "verification": {
         "state": "source-and-actual-Spring-and-native-VSIX",
-        "testedScope": "실제 두 Spring 앱·MySQL/MariaDB 전체 회귀684/681통과, Maria에서 MySQL 전용 검사3제외. 동일 최종 VSIX114/102통과. 분기·NULL/SQL모드·유한루프·CALL 준비 상태와 입력 사례 한정, 공간 인덱스·재투영의 실제 WKB/SRID·손실 승인·원본 복구·서버 간 조정, 원자적 모드의 변경 전 거부와 실제 XA/암묵커밋/부분DDL을 확인했다. 기존 Java/Spring/JPA/디버깅/테스트/SQL/그리드/스트리밍과 두 앱 초기2/1/0을 검증한다. 전체 원본 동등성과 임의 SQL의 일반 보장은 미검증.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 두 Spring 앱·MySQL/MariaDB 전체 회귀684/681통과, Maria에서 MySQL 전용 검사3제외. 동일 최종 VSIX114/102통과. 분기·NULL/SQL모드·유한루프·CALL 준비 상태와 입력 사례 한정, 공간 인덱스·재투영의 실제 WKB/SRID·손실 승인·원본 복구·서버 간 조정, 원자적 모드의 변경 전 거부와 실제 XA/암묵커밋/부분DDL을 확인했다. 기존 Java/Spring/JPA/디버깅/테스트/SQL/그리드/스트리밍과 두 앱 초기2/1/0을 검증한다. 전체 원본 동등성과 임의 SQL의 일반 보장은 미검증.",
         "publicEvidence": [
           "src/db/schema-program-paths.js",
           "src/db/schema-reprojection.js",
@@ -4929,7 +6175,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4952,7 +6204,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4975,7 +6233,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -4998,7 +6262,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -5021,7 +6291,13 @@
       ],
       "verification": {
         "state": "host-baseline",
-        "testedScope": "VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code 기본 기능·명령 연결의 문서/소스 기준. 원본과의 전체 동작 비교는 하지 않았다.",
         "publicEvidence": [
           "src/navigation.js",
           "package.json"
@@ -5044,7 +6320,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -5067,7 +6349,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -5090,7 +6378,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -5113,7 +6407,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -5136,7 +6436,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
         "publicEvidence": [
           "package.json",
           "src/extension.js"
@@ -5159,7 +6465,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
         "publicEvidence": [
           "src/navigation.js",
           "src/extension.js"
@@ -5182,7 +6494,13 @@
       ],
       "verification": {
         "state": "source-audit",
-        "testedScope": "공개 확장 API 경계와 기존 설계/구현 문서 기준. 전체 원본 창 동등성은 실행 판정하지 않는다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 공개 확장 API 경계와 기존 설계/구현 문서 기준. 전체 원본 창 동등성은 실행 판정하지 않는다.",
         "publicEvidence": [
           "src/extension.js",
           "package.json"
@@ -5205,7 +6523,13 @@
       ],
       "verification": {
         "state": "source-and-scoped-execution",
-        "testedScope": "로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "scopeProvenance": {
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.21.0",
+          "currentAggregate": "docs/verification.json",
+          "historicalCountsAreNotRebound": true
+        },
+        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
@@ -5216,17 +6540,17 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77",
-    "sourceManifestSha256": "41734a26cd8acdeb92f4235c48c005194a71b459ee19fc14d5f15f12852a71eb",
+    "vsixSha256": "7c2da3ae3026b2d53e3ccba32573c01cc9b6684c1e543df454a24207806b9ead",
+    "sourceManifestSha256": "2eebf9fd94bbf0c2782a8e516ddbfa8a06181dbe57ae5ce2d3c0d6e58284a90f",
     "publicOnlySourceReproduction": {
-      "sourceFiles": 581,
+      "sourceFiles": 655,
       "offlineCounts": {
-        "tests": 702,
+        "tests": 788,
         "suites": 0,
-        "pass": 657,
+        "pass": 742,
         "fail": 0,
         "cancelled": 0,
-        "skipped": 45,
+        "skipped": 46,
         "todo": 0
       },
       "verifiedVsixEntries": 13,
@@ -5237,25 +6561,25 @@
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "reportedChecks": 12,
-        "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77"
+        "reportedChecks": 16,
+        "vsixSha256": "7c2da3ae3026b2d53e3ccba32573c01cc9b6684c1e543df454a24207806b9ead"
       },
       {
         "engine": "mariadb",
-        "reportedChecks": 12,
-        "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77"
+        "reportedChecks": 16,
+        "vsixSha256": "7c2da3ae3026b2d53e3ccba32573c01cc9b6684c1e543df454a24207806b9ead"
       }
     ],
     "wholeNativeHosts": [
       {
         "engine": "mysql",
         "reportedChecks": 128,
-        "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77"
+        "vsixSha256": "7c2da3ae3026b2d53e3ccba32573c01cc9b6684c1e543df454a24207806b9ead"
       },
       {
         "engine": "mariadb",
         "reportedChecks": 116,
-        "vsixSha256": "add15b96fa5396b292c292b3e1acfa9d786abbe74f93d3dcdfd230ea210d5d77"
+        "vsixSha256": "7c2da3ae3026b2d53e3ccba32573c01cc9b6684c1e543df454a24207806b9ead"
       }
     ],
     "ciScope": "Public GitHub Windows/Node22 offline and package workflow is configured. This local verification summary does not assert that a remote CI run has completed."
