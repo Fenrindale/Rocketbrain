@@ -18,6 +18,14 @@ function allocation(tokens,target){
  const values=tokens.slice(3,-1),args=[];for(let i=0;i<values.length;i+=2){if(!literal(values[i])||i+1<values.length&&values[i+1]?.text!==',')return false;args.push(values[i]);}
  return (!values.length||values.length===args.length*2-1)&&(target.constructors.length?target.constructors.some(item=>item.method.parameters.length===args.length):args.length===0);
 }
+function referenceAssignment(tokens,target,fields,field,assigned){
+ const phase=assigned?'constructor':'initializer';
+ if(allocation(tokens,target))return {field:field.name,root:field.name,kind:'allocation',phase};
+ const qualified=tokens.length===3&&tokens[0].text==='this'&&tokens[1].text==='.';
+ const name=qualified?tokens[2].text:!assigned&&tokens.length===1?tokens[0].text:null;
+ const previous=fields.find(item=>item.field.name===name&&item.kind==='target'&&(item.initialized||assigned?.has(name)));
+ if(previous?.reference)return {field:field.name,root:previous.reference.root,kind:'alias',phase,from:previous.field.name};
+}
 function memberTokens(model,method){
  const tokens=model.tokens,index=tokens.findIndex(token=>token.start===method.start);let begin=index-1;
  while(begin>=0&&!['{','}',';'].includes(tokens[begin].text))begin--;
@@ -45,7 +53,10 @@ function inspectConstructors(model,target){
    const statement=shape.body.slice(start,at++),name=statement[2]?.text,field=model.fields.find(item=>item.field.name===name),value=statement.slice(4);
    if(statement[0]?.text!=='this'||statement[1]?.text!=='.'||statement[3]?.text!=='='||!field||field.initialized||assigned.has(name)||shape.body[at-1]?.text!==';')throw Error('Instance Move constructor assignments must initialize each blank private field exactly once with an explicit this.field target.');
    const parameter=parameters.find(p=>p.name===value[0]?.text&&p.type.raw===field.field.type.raw);
-   if(field.kind==='target'?!allocation(value,target):value.length!==1||!literal(value[0])&&!parameter)throw Error('Instance Move constructor values require scalar literals/parameters or a non-null target allocation with literal arguments.');
+   if(field.kind==='target'){
+    field.reference=referenceAssignment(value,target,model.fields,field.field,assigned);
+    if(!field.reference)throw Error('Instance Move constructor reference state requires a non-null target allocation or an exact alias of an already assigned private final reference.');
+   }else if(value.length!==1||!literal(value[0])&&!parameter)throw Error('Instance Move constructor values require scalar literals/parameters or a non-null target allocation with literal arguments.');
    assigned.add(name);
   }
   for(const field of model.fields)if(!field.initialized&&!assigned.has(field.field.name))throw Error('Instance Move fields require an explicit literal initializer or a complete constructor assignment.');
@@ -67,9 +78,11 @@ function tokensFor(text,uri,{target,role='target'}={}){
  if(new Set(type.fields.map(field=>field.name)).size!==type.fields.length)throw Error('Instance Move requires unique immutable field identities.');
  for(const field of type.fields){
   const shape=fieldTokens(model,field),isLiteral=primitive.has(field.type.raw)&&(!shape.initialized||shape.value.length===1&&literal(shape.value[0]));
-  const isTarget=role==='source'&&field.type.raw===target.type.name&&shape.isFinal&&(!shape.initialized||allocation(shape.value,target));
-  if(!isLiteral&&!isTarget)throw Error('Instance Move fields require primitive/String literal or constructor state, or a private final non-null target allocation with reviewed constructor arguments.');
-  model.fields.push({...shape,kind:isTarget?'target':'literal'});
+  const referenceEligible=role==='source'&&field.type.raw===target.type.name&&shape.isFinal;
+  const reference=referenceEligible&&shape.initialized?referenceAssignment(shape.value,target,model.fields,field):null;
+  const isTarget=referenceEligible&&(!shape.initialized||reference);
+  if(!isLiteral&&!isTarget)throw Error('Instance Move fields require primitive/String state or a private final non-null target allocation or earlier-field alias.');
+  model.fields.push({...shape,kind:isTarget?'target':'literal',reference});
  }
  const members=[...model.fields.map(field=>field.tokens),...type.methods.map(method=>memberTokens(model,method).all)],lastClose=lex.tokens.findLastIndex(token=>token.text==='}');
  if(lex.tokens.slice(at+2,lastClose).some(token=>!members.some(member=>token.start>=member[0].start&&token.end<=member.at(-1).end)))throw Error('Instance Move requires complete private field and method membership; unmodeled multi-field declarations or initializer effects are refused.');
@@ -94,20 +107,36 @@ function reviewedTargetMethod(model,method){
  for(let i=0;i<body.length;i++)if(body[i].text==='this'&&(body[i+1]?.text!=='.'||body[i+2]?.text!==field.field.name))throw Error('Instance Move state updates cannot qualify parameters or other owners.');
  return {method,shape,mutates:true,field:field.field.name};
 }
-function scalarCallArguments(tokens,wrapper,source,parameters){
+function reviewedCallArguments(tokens,wrapper,source,parameters,referenceNames){
  const groups=[];let start=0;for(let i=0;i<tokens.length;i++)if(tokens[i].text===','){groups.push(tokens.slice(start,i));start=i+1;}if(tokens.length)groups.push(tokens.slice(start));
  if(groups.length!==parameters.length)throw Error('Instance Move caller argument arity differs from the selected method.');
- const expected=[],transfers=[];
+ const expected=[],transfers=[],references=[];
  for(const [index,group]of groups.entries()){
   if(index)expected.push({text:','});
-  const explicitField=group.length===3&&group[0].text==='this'&&group[1].text==='.',name=group[explicitField?2:0]?.text,param=!explicitField&&wrapper.parameters.find(p=>p.name===name),field=!param&&source.fields.find(item=>item.field.name===name&&item.kind==='literal');
+  const explicitField=group.length===3&&group[0].text==='this'&&group[1].text==='.',name=group[explicitField?2:0]?.text,param=!explicitField&&wrapper.parameters.find(p=>p.name===name);
+  if(referenceNames.has(parameters[index].name)){
+   const field=!param&&source.fields.find(item=>item.field.name===name&&item.field.type.raw===parameters[index].type.raw&&item.reference);
+   if((group.length!==1&&!explicitField)||!field)throw Error('Instance Move object arguments must capture the exact private final non-null owner reference or proven alias.');
+   const shadowed=wrapper.parameters.some(p=>p.name===name);
+   expected.push(...(shadowed?group.map(token=>({text:token.text})):[{text:name,allowThis:true}]));
+   references.push({field:name,root:field.reference.root,parameter:index,type:field.field.type.raw});
+   continue;
+  }
+  const field=!param&&source.fields.find(item=>item.field.name===name&&item.kind==='literal');
   if(group.length===1&&literal(group[0])){expected.push({text:group[0].text});continue;}
   if((group.length!==1&&!explicitField)||(!param&&!field))throw Error('Instance Move arguments require a scalar literal, unchanged caller parameter or exact private owner field read.');
   const type=param?param.type.raw:field.field.type.raw;if(type!==parameters[index].type.raw)throw Error('Instance Move scalar state passing requires matching explicit parameter and field types.');
   if(param){expected.push({text:name});transfers.push({kind:'caller-parameter',name,parameter:index,type});}
   else{const shadowed=wrapper.parameters.some(p=>p.name===name);expected.push(...(shadowed?group.map(token=>({text:token.text})):[{text:name,allowThis:true}]));transfers.push({kind:'owner-field',name,parameter:index,type});}
  }
- return {expected,transfers};
+ return {expected,transfers,references};
+}
+function reviewedAccessorEnd(expression,index,getters,scalarNames){
+ const accessor=getters.get(expression[index+2]?.text);
+ if(expression[index+1]?.text!=='.'||!accessor||expression[index+3]?.text!=='(')throw Error('The target receiver or captured reference may only invoke a reviewed literal getter or constructor-state accessor.');
+ const arity=accessor.method.parameters.length,close=index+4+arity;
+ if(expression[close]?.text!==')'||arity&&!(literal(expression[index+4])||scalarNames.has(expression[index+4]?.text)))throw Error('Reviewed target accessors require exactly their scalar literal/parameter arguments.');
+ return close;
 }
 function inspectInstanceMove(sourceText,sourceUri,targetText,targetUri,offset,targetParameter){
  const target=tokensFor(targetText,targetUri),source=tokensFor(sourceText,sourceUri,{target,role:'source'});
@@ -118,22 +147,34 @@ function inspectInstanceMove(sourceText,sourceUri,targetText,targetUri,offset,ta
  const field=source.fields.find(shape=>shape.field.name===targetParameter&&shape.kind==='target');
  if(parameter&&parameter.annotations.length||!parameter&&!field||!parameter&&method.parameters.some(candidate=>candidate.name===targetParameter))throw Error('Instance Move requires an explicit first target parameter or a definitely non-null private final target field.');
  const receiver=parameter?{...parameter,isField:false}:{...field.field,isField:true},parameters=parameter?method.parameters.slice(1):method.parameters;
- if(parameters.some(candidate=>!primitive.has(candidate.type.raw)||candidate.annotations.length))throw Error('Instance Move requires plain primitive/String parameters after the explicit target receiver or on the field-receiver method.');
+ const referenceNames=new Set(parameters.filter(candidate=>candidate.type.raw===target.type.name&&!primitive.has(candidate.type.raw)).map(candidate=>candidate.name));
+ const scalarNames=new Set(parameters.filter(candidate=>!referenceNames.has(candidate.name)).map(candidate=>candidate.name));
+ if(parameters.some(candidate=>!primitive.has(candidate.type.raw)&&!referenceNames.has(candidate.name)||candidate.annotations.length)||referenceNames.size+scalarNames.size!==parameters.length)throw Error('Instance Move requires unique plain scalar parameters or exact destination-typed object captures.');
  const getters=new Map();
  for(const candidate of target.type.methods){
   if(candidate.constructor)continue;
   if(getters.has(candidate.name))throw Error('Instance Move destination methods require unique non-overloaded accessor names.');
   getters.set(candidate.name,reviewedTargetMethod(target,candidate));
  }
- const selected=methodTokens(source,method),expression=selected.body.slice(1,-1),names=new Set(parameters.map(candidate=>candidate.name));
+ const selected=methodTokens(source,method),expression=selected.body.slice(1,-1);
  if(selected.body[0]?.text!=='return'||selected.body.at(-1)?.text!==';'||!expression.length)throw Error('Instance Move requires one pure return expression.');
+ const usedReferences=new Set();
  let targetUses=0;for(let i=0;i<expression.length;i++){
   const token=expression[i];
-  if(token.text===receiver.name){const accessor=getters.get(expression[i+2]?.text);if(expression[i+1]?.text!=='.'||!accessor||expression[i+3]?.text!=='(')throw Error('The target receiver may only invoke a reviewed literal getter or constructor-state accessor.');const close=i+4+accessor.method.parameters.length;if(expression[close]?.text!==')'||accessor.method.parameters.length&&!(literal(expression[i+4])||names.has(expression[i+4]?.text)))throw Error('Reviewed target accessors require exactly their scalar literal/parameter arguments.');i=close;targetUses++;continue;}
+  if(token.text===receiver.name){i=reviewedAccessorEnd(expression,i,getters,scalarNames);targetUses++;continue;}
+  if(referenceNames.has(token.text)){
+   usedReferences.add(token.text);
+   const right=expression[i+3]?.text;
+   if(['=','!'].includes(expression[i+1]?.text)&&expression[i+2]?.text==='='&&referenceNames.has(right)&&expression[i+4]?.text!=='.'){
+    usedReferences.add(right);i+=3;continue;
+   }
+   i=reviewedAccessorEnd(expression,i,getters,scalarNames);continue;
+  }
   if(token.text==='='&&!['=','!','<','>'].includes(expression[i-1]?.text)&&expression[i+1]?.text!=='='||['+','-'].includes(token.text)&&expression[i+1]?.text===token.text)throw Error('Instance Move return expressions cannot assign or increment parameters; only the reviewed target accessor may mutate state.');
-  if(token.kind==='id'&&!names.has(token.text)&&!['true','false'].includes(token.text)||token.kind==='symbol'&&!['+','-','*','/','%','(',')','?',':','!','<','>','=','&','|','^','~'].includes(token.text)||!['id','symbol','number','string','char'].includes(token.kind))throw Error('Instance Move return expressions cannot use source state, arbitrary calls or effects.');
+  if(token.kind==='id'&&!scalarNames.has(token.text)&&!['true','false'].includes(token.text)||token.kind==='symbol'&&!['+','-','*','/','%','(',')','?',':','!','<','>','=','&','|','^','~'].includes(token.text)||!['id','symbol','number','string','char'].includes(token.kind))throw Error('Instance Move return expressions cannot use source state, arbitrary calls or effects.');
  }
  if(!targetUses)throw Error('The moved method must actually use its target receiver.');
+ if(usedReferences.size!==referenceNames.size)throw Error('Every captured object reference must be used by a reviewed accessor or identity comparison.');
  const calls=[],wrappers=[];
  for(const candidate of source.type.methods){
   if(candidate===method||candidate.constructor)continue;
@@ -142,12 +183,13 @@ function inspectInstanceMove(sourceText,sourceUri,targetText,targetUri,offset,ta
   let argumentsTokens=body.slice(3,-2);
   let receiverTokens=[];
   if(!receiver.isField){const close=argumentsTokens.findIndex(token=>token.text===')');receiverTokens=argumentsTokens.slice(0,close+1);if(close<0||!allocation(receiverTokens,target))throw Error('Instance Move callers require a new non-null target with reviewed constructor literal arguments.');argumentsTokens=argumentsTokens.slice(close+1);if(parameters.length){if(argumentsTokens[0]?.text!==',')throw Error('Instance Move caller argument arity differs from the selected method.');argumentsTokens=argumentsTokens.slice(1);}}
-  const argumentsProof=scalarCallArguments(argumentsTokens,candidate,source,parameters);
+  const argumentsProof=reviewedCallArguments(argumentsTokens,candidate,source,parameters,referenceNames);
   if(candidate.parameters.some(parameter=>argumentsProof.transfers.filter(item=>item.kind==='caller-parameter'&&item.name===parameter.name).length!==1))throw Error('Instance Move caller arguments must explicitly forward every scalar caller parameter exactly once.');
   calls.push(body[1].start);wrappers.push({method:candidate,arguments:argumentsTokens,argumentsProof,receiverTokens});
  }
  if(!calls.length)throw Error('Instance Move requires an observed definitely non-null source-owner call.');
- return {source,target,method,receiver,parameters,calls,wrappers,selected,selection:method.start,immutableState:source.fields.length>0||target.fields.length>0,mutableState:source.mutableState||target.mutableState,explicitConstructors:!!(source.constructor||target.constructor),targetAccessors:[...getters.values()],scalarTransfers:wrappers.flatMap(wrapper=>wrapper.argumentsProof.transfers),constructorDelegations:[...source.constructors,...target.constructors].filter(item=>item.delegation).length};
+ const referenceFields=source.fields.filter(item=>item.reference).map(item=>item.reference);
+ return {source,target,method,receiver,parameters,calls,wrappers,selected,selection:method.start,immutableState:source.fields.length>0||target.fields.length>0,mutableState:source.mutableState||target.mutableState,explicitConstructors:!!(source.constructor||target.constructor),targetAccessors:[...getters.values()],scalarTransfers:wrappers.flatMap(wrapper=>wrapper.argumentsProof.transfers),referenceFields,referenceCaptures:wrappers.flatMap(wrapper=>wrapper.argumentsProof.references.map(capture=>({caller:wrapper.method.name,...capture}))),constructorDelegations:[...source.constructors,...target.constructors].filter(item=>item.delegation).length};
 }
 function matchesReviewedTokens(actual,expected){
  let at=0;
@@ -176,7 +218,10 @@ function inspectStatefulResult(model,sourceText,targetText){
  for(const [before,after]of [[model.source,source],[model.target,target]]){
   if(after.type.fqn!==before.type.fqn||after.type.superTypes.length||after.type.annotations.length||words(after.tokens.filter(token=>['import','@','extends','implements','static','synchronized','volatile','transient'].includes(token.text))))throw Error('The stateful instance Move changed owner identity or lifecycle.');
   if(after.type.fields.length!==before.fields.length)throw Error('The stateful instance Move changed private state field membership.');
-  for(const field of before.fields){const moved=after.type.fields.find(candidate=>candidate.name===field.field.name);if(!moved||words(fieldTokens(after,moved).tokens)!==words(field.tokens))throw Error('The stateful instance Move changed a field initializer, modifier or ownership.');}
+  for(const [index,field]of before.fields.entries()){
+   const moved=after.fields[index];
+   if(moved.field.name!==field.field.name||words(moved.tokens)!==words(field.tokens))throw Error('The stateful instance Move changed a field initializer, declaration order, modifier or ownership.');
+  }
   if(before.constructors.length!==after.constructors.length||before.constructors.some((constructor,index)=>words(constructor.all)!==words(after.constructors[index].all)))throw Error('The stateful instance Move changed constructor delegation, parameters, assignment order or initialization behavior.');
  }
  const moved=target.type.methods.find(candidate=>candidate.name===model.method.name);
@@ -188,10 +233,14 @@ function inspectStatefulResult(model,sourceText,targetText){
  }
  if(!matchesReviewedTokens(methodTokens(target,moved).body,expected))throw Error('The stateful instance Move changed the pure return expression, Java field/parameter binding or receiver evaluation.');
  for(const original of model.target.type.methods){if(original.constructor)continue;const current=target.type.methods.find(candidate=>candidate.name===original.name);if(!current||words(methodTokens(target,current).all)!==words(methodTokens(model.target,original).all))throw Error('The stateful instance Move changed an existing destination getter or state update.');}
- for(const wrapper of model.wrappers){const current=source.type.methods.find(candidate=>candidate.name===wrapper.method.name);if(!current||words(methodTokens(source,current).header)!==words(methodTokens(model.source,wrapper.method).header))throw Error('The stateful instance Move changed source-owner callers.');const body=methodTokens(source,current).body,receiver=model.receiver.isField?(wrapper.method.parameters.some(p=>p.name===model.receiver.name)?['this','.',model.receiver.name].map(text=>({text})):[{text:model.receiver.name,allowThis:true}]):wrapper.receiverTokens.map(token=>({text:token.text})),expected=[{text:'return'},...receiver,{text:'.'},{text:model.method.name},{text:'('},...wrapper.argumentsProof.expected,{text:')'},{text:';'}];if(!matchesReviewedTokens(body,expected))throw Error('The stateful instance Move changed call evaluation, scalar argument capture or owner-field/parameter binding.');}
- const proof={immutableFieldsPreserved:true,ownerOnlyLiteralCallsPreserved:model.scalarTransfers.length===0,returnExpressionPreserved:true,receiverNonNullByFinalInitializer:model.receiver.isField,receiverKind:model.receiver.isField?'field':'parameter'};
+ for(const wrapper of model.wrappers){const current=source.type.methods.find(candidate=>candidate.name===wrapper.method.name);if(!current||words(methodTokens(source,current).header)!==words(methodTokens(model.source,wrapper.method).header))throw Error('The stateful instance Move changed source-owner callers.');const body=methodTokens(source,current).body,receiver=model.receiver.isField?(wrapper.method.parameters.some(p=>p.name===model.receiver.name)?['this','.',model.receiver.name].map(text=>({text})):[{text:model.receiver.name,allowThis:true}]):wrapper.receiverTokens.map(token=>({text:token.text})),expected=[{text:'return'},...receiver,{text:'.'},{text:model.method.name},{text:'('},...wrapper.argumentsProof.expected,{text:')'},{text:';'}];if(!matchesReviewedTokens(body,expected))throw Error('The stateful instance Move changed call evaluation, scalar/reference argument capture or owner-field/parameter binding.');}
+ const proof={immutableFieldsPreserved:true,ownerOnlyLiteralCallsPreserved:model.scalarTransfers.length===0&&model.referenceCaptures.length===0,returnExpressionPreserved:true,receiverNonNullByFinalInitializer:model.receiver.isField,receiverKind:model.receiver.isField?'field':'parameter'};
  if(model.mutableState||model.explicitConstructors)Object.assign(proof,{mutableFieldsPreserved:true,constructorsPreserved:true,stateUpdateOrderPreserved:true,constructorCount:model.source.constructors.length+model.target.constructors.length,mutableFieldCount:model.source.fields.filter(f=>!f.isFinal).length+model.target.fields.filter(f=>!f.isFinal).length,reviewedMutatorCount:model.targetAccessors.filter(a=>a.mutates).length});
  if(model.scalarTransfers.length||model.constructorDelegations)Object.assign(proof,{ownerOnlyReviewedCallsPreserved:true,scalarStatePassingPreserved:true,ownerFieldIdentityPreserved:true,constructorDelegationPreserved:true,scalarArgumentCaptures:model.scalarTransfers,constructorDelegationCount:model.constructorDelegations});
+ if(model.referenceCaptures.length||model.referenceFields.some(field=>field.kind==='alias')){
+  const receiverReference=model.receiver.isField?model.referenceFields.find(field=>field.field===model.receiver.name):{kind:'fresh-caller-allocation'};
+  Object.assign(proof,{ownerReferenceFieldsPreserved:true,sharedReferenceIdentityPreserved:true,referenceCaptureOrderPreserved:true,receiverReference,referenceFields:model.referenceFields,referenceArgumentCaptures:model.referenceCaptures});
+ }
  return proof;
 }
 async function prepareInstanceMove(deps,document,range,targetDocument,{targetParameter,cancellation}={}){
@@ -205,7 +254,7 @@ async function prepareInstanceMove(deps,document,range,targetDocument,{targetPar
  const destinations=await send('java/getMoveDestinations',{moveKind:'moveInstanceMethod',params},cancellation);if(destinations?.errorMessage)throw Error(destinations.errorMessage);const matches=destinations?.destinations?.filter(item=>item?.name===targetParameter&&item.type===model.target.type.name&&item.isField===model.receiver.isField&&typeof item.bindingKey==='string');if(matches?.length!==1)throw Error('The Java engine did not offer the exact reviewed instance receiver binding.');guard();
  const response=await send('java/move',{moveKind:'moveInstanceMethod',params,destination:{...matches[0]},updateReferences:true},cancellation);if(response?.errorMessage||response?.confirmationToken)throw Error('The Java engine requires a separate instance Move conflict review: '+(response.errorMessage||'confirmation'));const normalized=restoreReceiverEncapsulation(model,sources,S.textEntries(response?.edit,sources)),entries=normalized.entries,after=S.transformed(sources,entries);if(!entries.some(entry=>entry.textDocument.uri===document.uri.toString())||!entries.some(entry=>entry.textDocument.uri===targetDocument.uri.toString()))throw Error('The Java engine did not relocate the instance method.');for(const [uri,count]of [[document.uri.toString(),0],[targetDocument.uri.toString(),1]])if(parseJavaFile({uri,text:after.find(source=>source.uri===uri).text}).types.flatMap(type=>type.methods).filter(method=>method.name===model.method.name).length!==count)throw Error('The Java engine did not move exactly the selected instance declaration.');
  const statefulContract=inspectStatefulResult(model,after.find(source=>source.uri===document.uri.toString()).text,after.find(source=>source.uri===targetDocument.uri.toString()).text),immutableState=model.immutableState&&!model.mutableState?statefulContract:null;
- const compiled=await S.validateCompilation(scope,sources,entries,null,runtime,cancellation),preApply=()=>{guard();compiled.validate();};preApply();const plan=await refactoring.previewWorkspaceEdit({documentChanges:entries},{title:'Move '+model.method.name+' to '+model.target.type.name,kind:'refactor.move.instanceMethod',anchorDocument:document,cancellation,guards:sources.map(source=>({uri:source.uri})),validate:async()=>{await S.validateScope(scope,vscode,send,document.uri,targetDocument.uri,cancellation);preApply();},preApply,warnings:['Saved source-owner calls may pass scalar literals, exact private field reads and explicitly forwarded caller parameters to a proven non-null target. Field ownership, scalar capture order, bounded same-owner constructor delegation and target state updates are preserved. Object ownership transfer, arbitrary constructors, binary, external and reflective clients require separate analysis.']});
- return {...plan,memberMove:{kind:'instance-method',member:model.method.name,source:model.source.type.fqn,destination:model.target.type.fqn,targetParameter,receiverKind:model.receiver.isField?'field':'parameter',immutableState,statefulContract,normalization:normalized.normalization,reviewedCalls:model.calls.length,reviewedFiles:sources.length,semantic:compiled.report,scope:'Final same-package owners; first target parameter or private final non-null target field; scalar literal/owner-field/caller-parameter arguments, unique-arity same-owner scalar constructor delegation and direct scalar/target constructor assignments; exact literal/field getters or constructor-initialized int/long updates followed by the updated field return; owner-only calls. State remains on its original owner. Object ownership transfer, implicit source-object injection, nullable/effectful receivers, arbitrary constructors, external calls, ambiguous overloads, hierarchy and annotations require separate analysis.'}};
+ const compiled=await S.validateCompilation(scope,sources,entries,null,runtime,cancellation),preApply=()=>{guard();compiled.validate();};preApply();const plan=await refactoring.previewWorkspaceEdit({documentChanges:entries},{title:'Move '+model.method.name+' to '+model.target.type.name,kind:'refactor.move.instanceMethod',anchorDocument:document,cancellation,guards:sources.map(source=>({uri:source.uri})),validate:async()=>{await S.validateScope(scope,vscode,send,document.uri,targetDocument.uri,cancellation);preApply();},preApply,warnings:['Saved source-owner calls may capture private final non-null destination-typed references and proven aliases alongside scalar arguments. Field ownership, shared identity, capture order, bounded constructor delegation and reviewed target updates are preserved. Reassignment, escaping references, arbitrary constructors, binary, external and reflective clients require separate analysis.']});
+ return {...plan,memberMove:{kind:'instance-method',member:model.method.name,source:model.source.type.fqn,destination:model.target.type.fqn,targetParameter,receiverKind:model.receiver.isField?'field':'parameter',immutableState,statefulContract,normalization:normalized.normalization,reviewedCalls:model.calls.length,reviewedFiles:sources.length,semantic:compiled.report,scope:'Final same-package owners; first target parameter or private final non-null target field. Bounded constructor delegation, scalar captures, and explicit private final destination-typed allocations and earlier-field aliases. Owner-only calls preserve field ownership, shared identity, accessor order and captured reference identity comparisons. Reference reassignment, arbitrary object graphs, escaping references, nullable/effectful receivers, unreviewed constructors, external clients, hierarchy and annotations require separate analysis.'}};
 }
 module.exports={inspectInstanceMove,inspectStatefulResult,restoreReceiverEncapsulation,prepareInstanceMove};

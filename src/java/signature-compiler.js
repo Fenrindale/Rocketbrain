@@ -31,4 +31,4 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   if(!child||exited){const marker=JSON.parse(fs.readFileSync(path.join(folder,'owner.json'),'utf8'));if(marker.kind!==kind||marker.id!==id||path.dirname(fs.realpathSync(folder))!==parentReal)throw Error('Compiler inspection cleanup ownership changed.');fs.rmSync(folder,{recursive:true,force:false});}
  }
 }
-module.exports={analyzeJavaSources,inspectCompilerJar,snapshotClasspath,sanitizeCompilerJar,crc32};
+module.exports={analyzeJavaSources,inspectCompilerJar,snapshotClasspath,sanitizeCompilerJar,visitJar,crc32};

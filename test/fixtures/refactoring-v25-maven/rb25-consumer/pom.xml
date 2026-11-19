@@ -1,0 +1,25 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.rocketbrain.fixture.v25</groupId>
+        <artifactId>rb25-reactor</artifactId>
+        <version>1.0.0</version>
+    </parent>
+    <artifactId>rb25-consumer</artifactId>
+    <dependencies>
+        <dependency><groupId>org.rocketbrain.fixture.v25</groupId><artifactId>rb25-app</artifactId></dependency>
+    </dependencies>
+    <dependencyManagement><dependencies><dependency><groupId>org.rocketbrain.fixture.v25</groupId><artifactId>rb25-core</artifactId><version>1.0.0</version><scope>compile</scope></dependency></dependencies></dependencyManagement>
+    <profiles>
+        <profile>
+            <id>rb25-runtime</id>
+            <activation><property><name>rb25-runtime</name><value>yes</value></property></activation>
+            <dependencyManagement><dependencies><dependency><groupId>org.rocketbrain.fixture.v25</groupId><artifactId>rb25-app</artifactId><version>1.0.0</version><scope>runtime</scope></dependency></dependencies></dependencyManagement>
+        </profile>
+        <profile>
+            <id>rb25-compile</id>
+            <activation><property><name>rb25-compile</name><value>yes</value></property></activation>
+            <dependencies><dependency><groupId>org.rocketbrain.fixture.v25</groupId><artifactId>rb25-app</artifactId><scope>compile</scope></dependency></dependencies>
+        </profile>
+    </profiles>
+</project>

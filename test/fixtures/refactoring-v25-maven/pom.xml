@@ -1,0 +1,11 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.rocketbrain.fixture.v25</groupId>
+    <artifactId>rb25-reactor</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <modules><module>rb25-core</module><module>rb25-app</module><module>rb25-consumer</module></modules>
+    <properties><maven.compiler.release>25</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+    <dependencies><dependency><groupId>org.rocketbrain.fixture.v25</groupId><artifactId>rb25-core</artifactId></dependency></dependencies>
+    <dependencyManagement><dependencies><dependency><groupId>org.rocketbrain.fixture.v25</groupId><artifactId>rb25-core</artifactId><version>1.0.0</version><scope>compile</scope></dependency><dependency><groupId>org.rocketbrain.fixture.v25</groupId><artifactId>rb25-app</artifactId><version>1.0.0</version><scope>compile</scope></dependency></dependencies></dependencyManagement>
+</project>

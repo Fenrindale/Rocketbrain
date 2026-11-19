@@ -90,11 +90,11 @@ function pom(file) {
  parser.write(text).close();
  if(error||stack.length||root?.name!=='project')throw Error('Invalid Maven reactor descriptor.');
  const allowed={
-  project:['modelVersion','groupId','artifactId','version','packaging','modules','properties','name','description','parent','dependencies','profiles'],
+  project:['modelVersion','groupId','artifactId','version','packaging','modules','properties','name','description','parent','dependencies','dependencyManagement','profiles'],
   parent:['groupId','artifactId','version','relativePath'],modules:['module'],
   properties:['maven.compiler.release','project.build.sourceEncoding'],
-  dependencies:['dependency'],dependency:['groupId','artifactId','version','scope'],
-  profiles:['profile'],profile:['id','activation','dependencies'],
+  dependencyManagement:['dependencies'],dependencies:['dependency'],dependency:['groupId','artifactId','version','scope'],
+  profiles:['profile'],profile:['id','activation','dependencies','dependencyManagement'],
   activation:['property'],property:['name','value']
  };
  function validate(node) {
@@ -111,51 +111,100 @@ function pom(file) {
  const value=(node,name)=>children(node,name)[0]?.text.trim();
  if(value(root,'modelVersion')!=='4.0.0')throw Error('Only the Maven 4.0.0 POM model is reviewed.');
  const literal=value=>typeof value==='string'&&/^[\w.-]+$/.test(value);
- function readDependencies(node) {
+ function readDependencies(node,{managed=false}={}) {
   const seen=new Set();
   return children(children(node,'dependencies')[0],'dependency').map(dep=>{
    const group=value(dep,'groupId'),artifact=value(dep,'artifactId'),version=value(dep,'version'),scope=value(dep,'scope');
-   if(![group,artifact,version].every(literal)||scope!==undefined&&!['compile','runtime','provided','test'].includes(scope))throw Error('Maven dependencies require explicit literal coordinates and a reviewed scope.');
+   if(![group,artifact].every(literal)||(managed||version!==undefined)&&!literal(version)||scope!==undefined&&!['compile','runtime','provided','test'].includes(scope))throw Error('Maven dependencies require literal coordinates, literal managed versions and a reviewed scope.');
    const identity=group+':'+artifact;
    if(seen.has(identity))throw Error('Duplicate Maven dependencies in one declaration layer require a separate Move review.');
    seen.add(identity);
    return {group,artifact,version,scope};
   });
  }
+ const readManagement=node=>readDependencies(children(node,'dependencyManagement')[0],{managed:true});
  const parent=children(root,'parent')[0];
  const parentModel=parent?{group:value(parent,'groupId'),artifact:value(parent,'artifactId'),version:value(parent,'version'),relativePath:value(parent,'relativePath')}:null;
  if(parentModel&&parentModel.relativePath!==undefined&&parentModel.relativePath!=='../pom.xml')throw Error('Maven parent paths must identify the reviewed reactor descriptor.');
  const profiles=children(children(root,'profiles')[0],'profile').map(profile=>{
   const id=value(profile,'id'),activation=children(profile,'activation')[0],property=children(activation,'property')[0];
-  const name=value(property,'name'),expected=value(property,'value'),dependencies=readDependencies(profile);
-  if(!literal(id)||!literal(name)||expected!==undefined&&!literal(expected)||!dependencies.length)throw Error('Only literal Maven property-activated dependency profiles are reviewed.');
-  return {id,property:name,value:expected,dependencies};
+  const name=value(property,'name'),expected=value(property,'value'),dependencies=readDependencies(profile),management=readManagement(profile);
+  if(!literal(id)||!literal(name)||expected!==undefined&&!literal(expected)||!dependencies.length&&!management.length)throw Error('Only literal Maven property-activated dependency profiles are reviewed.');
+  return {id,property:name,value:expected,dependencies,management};
  });
  if(new Set(profiles.map(profile=>profile.id)).size!==profiles.length)throw Error('Duplicate Maven dependency profile IDs require a separate Move review.');
  return {
   group:value(root,'groupId')||value(parent,'groupId'),artifact:value(root,'artifactId'),version:value(root,'version')||value(parent,'version'),
-  packaging:value(root,'packaging'),modules:children(children(root,'modules')[0],'module').map(node=>node.text.trim()),dependencies:readDependencies(root),parent:parentModel,profiles
+  packaging:value(root,'packaging'),modules:children(children(root,'modules')[0],'module').map(node=>node.text.trim()),dependencies:readDependencies(root),management:readManagement(root),parent:parentModel,profiles
  };
 }
 function dependencyIdentity(dep) {
  // The descriptor grammar permits only unclassified default JAR dependencies.
  return dep.group+':'+dep.artifact;
 }
-function mergeMavenDependencies(base,profiles) {
- const dependencies=new Map(base.map(dep=>[dependencyIdentity(dep),dep]));
+function mavenDeclarationLayers(model,profiles) {
+ const dependencies=new Map(model.dependencies.map(dep=>[dependencyIdentity(dep),dep]));
+ const management=new Map(model.management.map(dep=>[dependencyIdentity(dep),dep]));
  const overrides=[];
  for(const profile of profiles){
-  for(const dep of profile.dependencies){
-   const identity=dependencyIdentity(dep);
-   if(dependencies.has(identity))overrides.push({identity,profile:profile.id});
-   dependencies.set(identity,dep);
+  for(const [entries,byIdentity,section] of [
+   [profile.dependencies,dependencies,'dependencies'],
+   [profile.management,management,'dependencyManagement']
+  ]){
+   for(const dep of entries){
+    const identity=dependencyIdentity(dep);
+    if(byIdentity.has(identity))overrides.push({identity,profile:profile.id,section});
+    byIdentity.set(identity,dep);
+   }
   }
  }
- return {dependencies:[...dependencies.values()],overrides};
+ return {dependencies,management,overrides};
+}
+function effectiveMavenModel(layers,parent) {
+ // A declaration in the child replaces the corresponding inherited declaration.
+ // Management fills missing fields after inheritance and profile replacement.
+ const declarations=new Map([...(parent?.dependencies||[]),...layers.dependencies]);
+ const management=new Map([...(parent?.management||[]),...layers.management]);
+ const dependencies=new Map(),managed=[];
+ for(const [identity,dep] of declarations){
+  const defaults=management.get(identity);
+  const version=dep.version??defaults?.version,scope=dep.scope??defaults?.scope??'compile';
+  if(version===undefined)throw Error('Maven dependency '+identity+' requires a literal version or a matching reviewed management declaration.');
+  dependencies.set(identity,{version,scope});
+  const fields=[];
+  if(dep.version===undefined)fields.push('version');
+  if(dep.scope===undefined&&defaults?.scope!==undefined)fields.push('scope');
+  if(fields.length)managed.push({identity,fields});
+ }
+ const inherited=parent?[...parent.dependencies.keys()].filter(identity=>!layers.dependencies.has(identity)):[];
+ return {dependencies,management,managed,inherited};
+}
+function validateTransitiveManagement(graph,edgeKinds,models,coordinates) {
+ for(const [module,model] of models){
+  const direct=graph.get(module);
+  for(const [identity,managed] of model.management){
+   const target=coordinates.get(identity);
+   if(!target||direct.includes(target.name))continue;
+   // A managed entry alone never creates a direct dependency. Maven may apply
+   // it during transitive resolution, which requires a separate review if it
+   // could change a reviewed path's version or scope.
+   const pending=[...direct],visited=new Set();
+   while(pending.length){
+    const via=pending.pop();
+    if(visited.has(via))continue;
+    visited.add(via);
+    const scope=edgeKinds.get(via).get(target.name);
+    if(scope&&(managed.version!==target.model.version||managed.scope!==undefined&&managed.scope!==scope)){
+     throw Error('Maven transitive dependencyManagement changes a reviewed reactor path from '+module+' to '+target.name+'; review mediation separately.');
+    }
+    pending.push(...graph.get(via));
+   }
+  }
+ }
 }
 function mavenBuild(root) {
  const file=path.join(root,'pom.xml'),parent=pom(file),roots=new Map(),files=[file],models=new Map();
- if(parent.parent||parent.packaging!=='pom'||parent.dependencies.length||parent.profiles.length||!parent.modules.length||parent.modules.length>12||parent.modules.some(name=>!/^[$\w-]+$/.test(name))||new Set(parent.modules).size!==parent.modules.length)throw Error('Move requires a bounded literal sibling Maven reactor without inherited dependencies or profiles.');
+ if(parent.parent||parent.packaging!=='pom'||![parent.group,parent.artifact,parent.version].every(value=>typeof value==='string'&&/^[\w.-]+$/.test(value))||!parent.modules.length||parent.modules.length>12||parent.modules.some(name=>!/^[$\w-]+$/.test(name))||new Set(parent.modules).size!==parent.modules.length)throw Error('Move requires a bounded literal sibling Maven reactor with one local parent.');
  for(const name of parent.modules){
   const folder=path.join(root,name);
   if(fs.lstatSync(folder).isSymbolicLink()||!inside(fs.realpathSync(root),fs.realpathSync(folder)))throw Error('Maven modules must stay physically inside the reactor.');
@@ -165,25 +214,37 @@ function mavenBuild(root) {
   roots.set(name,folder);models.set(name,model);files.push(descriptor);
  }
  const coordinates=new Map([...models].map(([name,model])=>[model.group+':'+model.artifact,{name,model}]));
- const profiles=[...models].flatMap(([module,model])=>model.profiles.map(profile=>({module,...profile})));
+ const profiles=[[null,parent],...models].flatMap(([module,model])=>model.profiles.map(profile=>({module,...profile})));
  if(profiles.length>4)throw Error('Maven dependency profile scenario budget exceeded.');
  function scenario(active) {
-  const graph=new Map(),edgeKinds=new Map(),overrides=[];
+  const graph=new Map(),edgeKinds=new Map(),effective=new Map(),modelContracts=[];
+  const parentLayers=mavenDeclarationLayers(parent,active.filter(profile=>profile.module===null));
+  const overrides=parentLayers.overrides.map(override=>({module:null,...override}));
+  const parentModel=effectiveMavenModel(parentLayers);
+  for(const [identity,dep] of parentModel.dependencies){
+   const target=coordinates.get(identity);
+   if(target&&dep.version!==target.model.version)throw Error('Maven profile and base dependencies must use the exact reviewed reactor version.');
+   if(target?.model.parent)throw Error('An inherited Maven dependency would make a module depend on itself.');
+  }
   for(const [name,model] of models){
-   const merged=mergeMavenDependencies(model.dependencies,active.filter(profile=>profile.module===name));
-   overrides.push(...merged.overrides.map(override=>({module:name,...override})));
+   const layers=mavenDeclarationLayers(model,active.filter(profile=>profile.module===name));
+   const merged=effectiveMavenModel(layers,model.parent?parentLayers:undefined);
+   effective.set(name,merged);
+   overrides.push(...layers.overrides.map(override=>({module:name,...override})));
+   modelContracts.push({module:name,localParent:Boolean(model.parent),inheritedDependencies:merged.inherited,managedFields:merged.managed});
    const edges=new Map();
-   for(const dep of merged.dependencies){
-    const target=coordinates.get(dependencyIdentity(dep));
+   for(const [identity,dep] of merged.dependencies){
+    const target=coordinates.get(identity);
     if(!target)continue;
     if(dep.version!==target.model.version)throw Error('Maven profile and base dependencies must use the exact reviewed reactor version.');
-    edges.set(target.name,dep.scope??'compile');
+    edges.set(target.name,dep.scope);
    }
    edgeKinds.set(name,edges);
    graph.set(name,[...edges.keys()]);
   }
   dag(graph);
-  return {kind:'maven-reactor',root,files,roots,graph,edgeKinds,overrides,activeProfiles:active.map(({module,id})=>({module,id}))};
+  validateTransitiveManagement(graph,edgeKinds,effective,coordinates);
+  return {kind:'maven-reactor',root,files,roots,graph,edgeKinds,modelContracts,overrides,activeProfiles:active.map(({module,id})=>({module,id}))};
  }
  if(!profiles.length)return scenario([]);
  // Explicit profile selection and external property values can change activation.
@@ -196,7 +257,7 @@ function mavenBuild(root) {
  }))]));
  return {...scenarios[0],graph,edgeKinds,scenarios,dynamicContracts:{mode:'all-finite-maven-profile-subsets',scenarioCount:scenarios.length,
   dependencyMerge:'later-active-declaration-replaces-matching-default-jar',allScenariosCompileExposureRequired:true,executedBuildCode:false,
-  profiles:profiles.map(({dependencies,...profile})=>profile),scenarios:scenarios.map(({activeProfiles,overrides})=>({activeProfiles,overrides}))}};
+  profiles:profiles.map(({dependencies,management,...profile})=>profile),scenarios:scenarios.map(({activeProfiles,overrides,modelContracts})=>({activeProfiles,overrides,modelContracts}))}};
 }
 function findBuild(source,target,workspace){let folder=path.dirname(source);while(inside(workspace,folder)){if(inside(folder,target)){if(fs.existsSync(path.join(folder,'settings.gradle')))return gradleBuild(folder);if(fs.existsSync(path.join(folder,'pom.xml')))return mavenBuild(folder);}if(key(folder)===key(workspace)||path.dirname(folder)===folder)break;folder=path.dirname(folder);}throw Error('Cross-project Move requires a reviewed literal Gradle DAG/composite or Maven reactor.');}
 function reachable(graph,from,to,seen=new Set()){if(from===to)return true;if(seen.has(from))return false;seen.add(from);return (graph.get(from)||[]).some(next=>reachable(graph,next,to,seen));}
@@ -208,13 +269,14 @@ function transitiveMavenScope(parent,dependency) {
  return 'compile';
 }
 function mavenExposure(build,from,to) {
- if(from===to)return {possible:true,guaranteed:true};
+ if(from===to)return {possible:true,guaranteed:true,testVisible:true};
  const direct=build.edgeKinds.get(from)?.get(to);
- if(direct==='compile'||direct==='provided')return {possible:true,guaranteed:true};
+ if(direct==='compile'||direct==='provided')return {possible:true,guaranteed:true,testVisible:true};
  const seen=new Set();
- let possible=false,competing=false;
+ let possible=false,competing=false,testVisible=false;
  function visit(name,scope) {
   if(name===to){
+   testVisible=true;
    if(scope==='compile'||scope==='provided')possible=true;
    else competing=true;
    return;
@@ -230,7 +292,7 @@ function mavenExposure(build,from,to) {
  visit(from,undefined);
  // A restricted direct or competing path may affect Maven's effective
  // scope. Retain a potential client while withholding destination proof.
- return {possible,guaranteed:possible&&!competing};
+ return {possible,guaranteed:possible&&!competing,testVisible};
 }
 function compileReachable(build,from,to){if(build.scenarios)return build.scenarios.every(scenario=>compileReachable(scenario,from,to));if(build.kind==='maven-reactor')return mavenExposure(build,from,to).guaranteed;const visit=(name,first,seen=new Set())=>{if(name===to)return true;if(seen.has(name))return false;seen.add(name);return (build.graph.get(name)||[]).some(next=>(first||build.edgeKinds.get(name)?.get(next)==='api')&&visit(next,false,new Set(seen)));};return visit(from,true);}
 
@@ -238,7 +300,23 @@ function moveClientProof(build,source,target){
  if(!build?.roots?.has(source)||!build.roots.has(target))throw Error('Move client contracts require known reviewed source and destination projects.');
  const scenarios=build.scenarios||[build];if(!Array.isArray(scenarios)||!scenarios.length||scenarios.length>16)throw Error('Move client contract scenario coverage is incomplete.');
  const names=[...build.roots.keys()],reviewedClients=[];for(const scenario of scenarios)if(!scenario.roots||JSON.stringify([...scenario.roots.keys()].sort())!==JSON.stringify([...names].sort()))throw Error('Move client contracts require identical reviewed project membership in every scenario.');
- for(const project of names){const sourceExposureByScenario=scenarios.map(scenario=>scenario.kind==='maven-reactor'?mavenExposure(scenario,project,source).possible:compileReachable(scenario,project,source)),destinationExposureByScenario=scenarios.map(scenario=>compileReachable(scenario,project,target)),sourceExposedInAnyScenario=sourceExposureByScenario.some(Boolean),destinationExposedInEveryScenario=destinationExposureByScenario.every(Boolean);if(sourceExposedInAnyScenario&&!destinationExposedInEveryScenario)throw Error('Move would hide the destination from reviewed compile client '+project+'. Every finite build scenario must compile-expose the destination to each possible source client.');reviewedClients.push({project,sourceExposedInAnyScenario,destinationExposedInEveryScenario,sourceExposureByScenario,destinationExposureByScenario});}
- return {mode:'all-reviewed-source-client-compile-exposure',source,target,scenarioCount:scenarios.length,policy:'Any source exposure scenario requires destination exposure in every scenario.',reviewedClients,executedBuildCode:false};
+ const maven=build.kind==='maven-reactor';
+ for(const project of names){
+  const sourceCoverage=maven?scenarios.map(scenario=>mavenExposure(scenario,project,source)):null;
+  const targetCoverage=maven?scenarios.map(scenario=>mavenExposure(scenario,project,target)):null;
+  const sourceExposureByScenario=maven?sourceCoverage.map(value=>value.possible):scenarios.map(scenario=>compileReachable(scenario,project,source));
+  const destinationExposureByScenario=maven?targetCoverage.map(value=>value.guaranteed):scenarios.map(scenario=>compileReachable(scenario,project,target));
+  const sourceExposedInAnyScenario=sourceExposureByScenario.some(Boolean);
+  const destinationExposedInEveryScenario=destinationExposureByScenario.every(Boolean);
+  if(sourceExposedInAnyScenario&&!destinationExposedInEveryScenario)throw Error('Move would hide the destination from reviewed compile client '+project+'. Every finite build scenario must compile-expose the destination to each possible source client.');
+  const review={project,sourceExposedInAnyScenario,destinationExposedInEveryScenario,sourceExposureByScenario,destinationExposureByScenario};
+  if(maven){
+   review.sourceTestExposureByScenario=sourceCoverage.map(value=>value.testVisible);
+   review.destinationTestExposureByScenario=targetCoverage.map(value=>value.testVisible);
+   if(review.sourceTestExposureByScenario.some(Boolean)&&!review.destinationTestExposureByScenario.every(Boolean))throw Error('Move would hide the destination from reviewed Maven test client '+project+'. Every finite build scenario must expose the destination to each possible test client.');
+  }
+  reviewedClients.push(review);
+ }
+ return {mode:'all-reviewed-source-client-compile-exposure',source,target,scenarioCount:scenarios.length,policy:'Any source exposure scenario requires destination exposure in every scenario.',reviewedClients,executedBuildCode:false,...(maven?{mavenTestClasspathReviewed:true}:{})};
 }
 module.exports={gradleBuild,literalGradleBuild,mavenBuild,findBuild,reachable,compileReachable,moveClientProof,dag,gradleGrammar};

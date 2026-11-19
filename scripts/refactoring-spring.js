@@ -18,8 +18,12 @@ async function startRefactoringApp(config,{classpath}={}){
   [path.join(root,'test/fixtures/refactoring-v23-state'),'fixture.statev23.StateApplication'],
   [path.join(root,'test/fixtures/refactoring-v24-state'),'fixture.statev24.StateApplication'],
   [path.join(root,'test/fixtures/refactoring-v24-package'),'fixture.packagev24.PackageRefactoringApplication'],
+  [path.join(root,'test/fixtures/refactoring-v25-package'),'fixture.packagev25.PackageRefactoringApplication'],
   [path.join(root,'test/fixtures/refactoring-v24-spring'),'fixture.dynamicv24.app.DynamicContractsApplication'],
-  [path.join(root,'test/fixtures/refactoring-v24-maven/rb24-app'),'fixture.mavenv24.MavenContractApplication']
+  [path.join(root,'test/fixtures/refactoring-v25-spring'),'fixture.conditionsv25.app.ConditionsApplication'],
+  [path.join(root,'test/fixtures/refactoring-v24-maven/rb24-app'),'fixture.mavenv24.MavenContractApplication'],
+  [path.join(root,'test/fixtures/refactoring-v25-maven/rb25-app'),'fixture.mavenv25.MavenContractApplication'],
+  [path.join(root,'test/fixtures/refactoring-v25-state'),'fixture.statev25.StateApplication']
  ];
  const selected=candidates.find(([folder])=>fs.existsSync(folder)&&path.relative(fs.realpathSync(config.projectPath),fs.realpathSync(folder))==='');
  if(!selected||cp.length>28000)throw Error('Use an owned refactoring Spring fixture and bounded classpath.');

@@ -1,26 +1,18 @@
 'use strict';
 const { parseJavaFile, annotation, strings, literal, rangeAt } = require('./java');
 const { configuration, resolveTemplate } = require('./configuration');
+const { parseProfileExpression, matchesProfileTree } = require('./profile-expression');
 
 const COMPONENTS = ['Component', 'Service', 'Repository', 'Controller', 'RestController', 'Configuration', 'SpringBootApplication', 'Named'];
 function decapitalize(name) { return /^[A-Z]{2}/.test(name) ? name : name[0].toLowerCase() + name.slice(1); }
 function triAnd(states) { return states.some(item => item.state === 'inactive') ? { state: 'inactive', reasons: states.filter(item => item.state === 'inactive').map(item => item.reason) } : states.some(item => item.state === 'unknown') ? { state: 'unknown', reasons: states.filter(item => item.state === 'unknown').map(item => item.reason) } : { state: 'active', reasons: [] }; }
 
 function profileExpression(expression, profiles) {
-  const tokens = expression.match(/[!&|()]|[^\s!&|()]+/g) || []; let cursor = 0;
-  function primary() {
-    const next = tokens[cursor++];
-    if (next === '!') return !primary();
-    if (next === '(') { const value = group(); if (tokens[cursor++] !== ')') throw new Error('Unbalanced profile expression'); return value; }
-    if (!next || !/^[\w.-]+$/.test(next)) throw new Error('Unsupported profile expression');
-    return profiles.includes(next);
-  }
-  function group() {
-    let value = primary(), operator;
-    while (tokens[cursor] === '&' || tokens[cursor] === '|') { const op = tokens[cursor++]; if (operator && operator !== op) throw new Error('Mixed profile operators require parentheses'); operator = op; const right = primary(); value = op === '&' ? value && right : value || right; }
-    return value;
-  }
-  try { const value = group(); if (cursor !== tokens.length) throw new Error('Trailing profile expression'); return { state: value ? 'active' : 'inactive', reason: `Profile expression ${expression}: ${value}` }; } catch (error) { return { state: 'unknown', reason: error.message }; }
+  try {
+    const { tree } = parseProfileExpression(expression);
+    const value = matchesProfileTree(tree, profiles);
+    return { state: value ? 'active' : 'inactive', reason: `Profile expression ${expression}: ${value}` };
+  } catch (error) { return { state: 'unknown', reason: error.message }; }
 }
 
 function conditions(annotations, config, options) {

@@ -84,22 +84,212 @@ async function proveSpringResourceProvider(classpaths){
 }
 const resourceDeclarationCache=new WeakMap();
 function classLiteral(tokens,index,file){if(tokens[index]?.text!=='class'||tokens[index-1]?.text!=='.')throw Error('Resource owner must be an exact source class literal.');let start=index-2;while(start>=2&&tokens[start-1]?.text==='.'&&tokens[start-2]?.kind==='id')start-=2;const parts=tokens.slice(start,index-1);if(!parts.length||parts.some((token,i)=>i%2===0?token.kind!=='id':token.text!=='.'))throw Error('Resource owner must be an exact source class literal.');const name=parts.map(token=>token.text).join(''),owner=resolveClass(name,file),head=parts[0].text;let cache=resourceDeclarationCache.get(file);if(!cache){cache={counts:new Map(),types:new Map()};for(let i=0;i<tokens.length;i++)if(tokens[i].kind==='id'&&['class','interface','enum','record'].includes(tokens[i-1]?.text))cache.counts.set(tokens[i].text,(cache.counts.get(tokens[i].text)||0)+1);for(const type of file.types){const list=cache.types.get(type.name)||[];list.push(type);cache.types.set(type.name,list);}resourceDeclarationCache.set(file,cache);}const declarations=cache.counts.get(head)||0,declared=cache.types.get(head)||[];if(parts.length>1&&(file.imports[head]||file.wildcards.length||declarations)||parts.length===1&&(declarations!==declared.length||declared.some(type=>type.fqn!==owner)))throw Error('A source class literal head/import/type shadow needs separate resource lookup analysis.');return {owner,start};}
-function reviewLookups(sources,javaTree,resources,oldPackage,newPackage){
- const movedTypes=new Set(),sourceTypes=new Set(sources.filter(source=>source.file.endsWith('.java')).flatMap(source=>parseJavaFile(source).types.map(type=>type.fqn))),lookup=[],edits=new Map(),oldPath=oldPackage.replaceAll('.','/'),newPath=newPackage.replaceAll('.','/'),byPath=new Map();let springConstructors=0;
- for(const file of javaTree.files){const parsed=parseJavaFile({uri:sources.find(s=>key(s.file)===key(file.file))?.uri||'',text:fs.readFileSync(file.file,'utf8')});for(const type of parsed.types)movedTypes.add(type.fqn);}
- if(resources)for(const file of resources.files){const resourcePath=oldPath+'/'+file.relative.split(path.sep).join('/');byPath.set(resourcePath,{...file,resourcePath,newResourcePath:newPath+'/'+file.relative.split(path.sep).join('/')});if(!file.binary){const text=new TextDecoder('utf-8',{fatal:true}).decode(fs.readFileSync(file.file)),data=plainResourceData(text,path.extname(file.file));if([text,...data.strings].some(value=>value.includes(oldPackage)||value.includes(oldPath)))throw Error('Embedded resource/package references in moved data need separate analysis; data bytes are never rewritten.');}}
- const springHeadShadow=sources.some(source=>source.file.endsWith('.java')&&lexJava(source.text).tokens.some((token,index,tokens)=>token.kind==='id'&&token.text==='org'&&tokens[index+1]?.text!=='.'))||[...sourceTypes].some(name=>name.startsWith('org.springframework.core.')||name.startsWith('org.springframework.util.')||name.endsWith('.org'));
- for(const source of sources){if(!source.file.endsWith('.java')){if(source.text.includes(oldPackage)||source.text.includes(oldPath))throw Error('Configured or resource-content package references require a separate Package Move review.');continue;}const file=parseJavaFile(source),lexed=lexJava(source.text),tokens=lexed.tokens,acceptedStrings=new Set(),acceptedLoaders=new Set(),acceptedSpring=new Set();if(lexed.issues.length)throw Error('Unmodeled Java lexical syntax prevents complete package resource client review.');
-  function consume(owner,literal,method,loader){if(!resources?.files.length)throw Error('A package-relative resource client requires a reviewed resources tree.');const value=literal?.value;if(literal?.kind!=='string'||typeof value!=='string'||!value||value.includes('\\')||value.includes('?')||value.includes('#')||value.split('/').some(p=>p==='..'||p==='.')||value.includes('//')||loader==='classloader'&&value.startsWith('/'))throw Error('Resource lookup requires one normalized literal path; classloader paths must be root-relative without a slash prefix.');const absolute=loader==='classloader'||value.startsWith('/'),resolved=loader==='classloader'?value:absolute?value.slice(1):owner.slice(0,owner.lastIndexOf('.')).replaceAll('.','/')+'/'+value,item=byPath.get(resolved);if(['classloader','spring-class'].includes(loader)&&!sourceTypes.has(owner))throw Error('Classloader resource lookup requires a reviewed source class owner.');if(!item){if(loader!=='classloader'&&movedTypes.has(owner)||resolved===oldPath||resolved.startsWith(oldPath+'/'))throw Error('A moved class resource lookup is missing from the reviewed package resources.');return;}if(!sourceTypes.has(owner))throw Error('Package resource lookup requires a reviewed source class owner; binary or bootstrap classloaders need separate analysis.');if(!absolute&&!movedTypes.has(owner))throw Error('A relative resource client outside the moved package would change its lookup base.');acceptedStrings.add(literal.start);const newValue=loader==='classloader'?item.newResourcePath:absolute?'/'+item.newResourcePath:value;if(newValue!==value){const list=edits.get(source.uri)||[];list.push({range:rangeAt(source.text,literal.start,literal.end),newText:JSON.stringify(newValue)});edits.set(source.uri,list);}lookup.push({uri:source.uri,method,owner,oldPath:resolved,newPath:item.newResourcePath,absolute,literal:value,newLiteral:newValue,resourceSha256:item.sha256,loader});}
-  for(let i=0;i<tokens.length;i++)if(tokens[i].text==='new'&&tokens.slice(i+1,i+10).map(token=>token.text).join('')==='org.springframework.core.io.ClassPathResource'){if(springHeadShadow||file.imports.org||file.wildcards.length||tokens[i-1]?.text==='.')throw Error('A source type or head-token shadow prevents exact Spring resource type resolution.');const open=i+10,literal=tokens[open+1];if(tokens[open]?.text!=='('||literal?.kind!=='string'||tokens[open+2]?.text!==',')throw Error('Spring resources require the exact literal String, source-class overload.');let end=open+3;while(end<tokens.length&&end<open+32&&tokens[end].text!=='class')end++;const owner=classLiteral(tokens,end,file);if(owner.start!==open+3||tokens.slice(end+1,end+6).map(token=>token.text).join('')!==').getInputStream()')throw Error('Spring resources require an immediate exact class-literal getInputStream call; aliases and custom semantics need separate analysis.');acceptedSpring.add(tokens[i+9].start);springConstructors++;consume(owner.owner,literal,'getInputStream','spring-class');}
-  for(let i=0;i<tokens.length;i++){const token=tokens[i];if(!['getResource','getResourceAsStream','getResources'].includes(token.text))continue;
-   if(!resources?.files.length)throw Error('A package-relative resource client requires a reviewed resources tree.');
-   if(token.text==='getResources'||tokens[i-1]?.text!=='.'||tokens[i+1]?.text!=='('||tokens[i+2]?.kind!=='string'||tokens[i+3]?.text!==')')throw Error('Dynamic, receiver-based or multiple resource lookup calls require a separate Package Move review.');let index=i-2,loader='class';if(tokens[index]?.text===')'&&tokens[i-3]?.text==='('&&tokens[i-4]?.text==='getClassLoader'&&tokens[i-5]?.text==='.'){index=i-6;loader='classloader';acceptedLoaders.add(tokens[i-4].start);}if(tokens[index]?.text!=='class')throw Error('Dynamic, receiver-based or custom classloader resource lookup requires separate review.');consume(classLiteral(tokens,index,file).owner,tokens[i+2],token.text,loader);
-  }
-  for(const token of tokens){if(resources?.files.length&&token.kind==='id'&&(UNMODELED_RESOURCE_CLIENTS.has(token.text)&&!(token.text==='ClassPathResource'&&acceptedSpring.has(token.start))||token.text==='getClassLoader'&&!acceptedLoaders.has(token.start)))throw Error('Filesystem, URI or resource-loader clients require a separate Package Move review; only exact modeled source-class loader expressions are supported.');if(['string','char','text-block'].includes(token.kind)&&(String(token.value??token.text).includes(oldPackage)||String(token.value??token.text).includes(oldPath))&&!acceptedStrings.has(token.start))throw Error('Unresolved Java string package or resource references require a separate Package Move review.');}
+function readClassLiteral(tokens, start, file) {
+ let end = start;
+ while (end < tokens.length && end < start + 30 && tokens[end].text !== 'class') end++;
+ if (end === start + 30) throw Error('Resource source class literal exceeds its bound.');
+ const parsed = classLiteral(tokens, end, file);
+ if (parsed.start !== start) throw Error('Resource owner must be one exact source class literal.');
+ return { ...parsed, end };
+}
+const spelling = (tokens, index, words) => words.every((word, offset) => tokens[index + offset]?.text === word);
+const CLASS_LOADER_TAIL = ['.', 'getClassLoader', '(', ')'];
+const SYSTEM_LOADER = ['java', '.', 'lang', '.', 'ClassLoader', '.'];
+const SERVICE_LOADER = ['java', '.', 'util', '.', 'ServiceLoader', '.', 'load', '('];
+const SPRING_CONSTRUCTOR = ['new','org','.','springframework','.','core','.','io','.','ClassPathResource','('];
+const ROOT_RELATIVE_LOADERS = new Set(['classloader', 'spring-classloader', 'system-classloader']);
+
+function reviewLookups(sources, javaTree, resources, oldPackage, newPackage, services = new Map()) {
+ const movedTypes = new Set(), sourceTypes = new Set(), lookup = [], edits = new Map(), bindings = [], serviceCalls = [];
+ const oldPath = oldPackage.replaceAll('.', '/'), newPath = newPackage.replaceAll('.', '/'), byPath = new Map();
+ let springConstructors = 0;
+ for (const source of sources) if (source.file.endsWith('.java')) {
+  for (const type of parseJavaFile(source).types) sourceTypes.add(type.fqn);
  }
- if(resources?.files.length){for(const file of byPath.values())if(!lookup.some(value=>value.oldPath===file.resourcePath))throw Error('Each moved resource requires a known literal class-resource client; external or unobserved clients remain unverified.');}
- return {lookup,entries:[...edits].map(([uri,edits])=>({textDocument:{uri,version:null},edits})),resources:byPath.size,mode:'literal-source-class-resource-paths',springConstructors,springProviderRequired:springConstructors>0,externalClientsVerified:false,embeddedDataReferencesRewritten:false,opaqueMediaValidityVerified:false};
+ for (const file of javaTree.files) {
+  const parsed = parseJavaFile({ uri: '', text: fs.readFileSync(file.file, 'utf8') });
+  for (const type of parsed.types) movedTypes.add(type.fqn);
+ }
+ for (const file of resources?.files || []) {
+  const relative = file.relative.split(path.sep).join('/');
+  byPath.set(oldPath + '/' + relative, { ...file, newResourcePath: newPath + '/' + relative });
+  if (file.binary) continue;
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(file.file));
+  const data = plainResourceData(text, path.extname(file.file));
+  if ([text, ...data.strings].some(value => value.includes(oldPackage) || value.includes(oldPath))) {
+   throw Error('Embedded resource/package references in moved data need separate analysis; data bytes are never rewritten.');
+  }
+ }
+ const springHeadShadow = sources.some(source => source.file.endsWith('.java') &&
+  lexJava(source.text).tokens.some((token, index, tokens) => token.kind === 'id' && token.text === 'org' && tokens[index + 1]?.text !== '.')) ||
+  [...sourceTypes].some(name => name.startsWith('org.springframework.core.') || name.startsWith('org.springframework.util.') || name.endsWith('.org'));
+
+ for (const source of sources) {
+  if (!source.file.endsWith('.java')) {
+   if (source.text.includes(oldPackage) || source.text.includes(oldPath)) throw Error('Configured or resource-content package references require a separate Package Move review.');
+   continue;
+  }
+  const file = parseJavaFile(source), lexed = lexJava(source.text), tokens = lexed.tokens;
+  const acceptedStrings = new Set(), acceptedLoaders = new Set(), acceptedSpring = new Set();
+  if (lexed.issues.length) throw Error('Unmodeled Java lexical syntax prevents complete package resource client review.');
+
+  function addBinding(end, methodKey, resultType) {
+   bindings.push({ uri: source.uri, end: tokens[end].end, methodKey, ...(resultType ? { resultType } : {}) });
+  }
+  function sourceClassLoader(start) {
+   if (!spelling(tokens, start, CLASS_LOADER_TAIL)) throw Error('Resource and service classloaders require the exact source class-literal getClassLoader() call.');
+   acceptedLoaders.add(tokens[start + 1].start);
+   addBinding(start + 3, 'java.lang.Class#getClassLoader()');
+   return start + CLASS_LOADER_TAIL.length;
+  }
+  function consume(owner, literal, method, loader) {
+   if (!byPath.size) throw Error('A package-relative resource client requires a reviewed resources tree.');
+   const value = literal?.value, rootRelative = ROOT_RELATIVE_LOADERS.has(loader);
+   if (literal?.kind !== 'string' || typeof value !== 'string' || !value || value.includes('\\') ||
+       value.includes('?') || value.includes('#') || value.split('/').some(part => part === '..' || part === '.') ||
+       value.includes('//') || rootRelative && value.startsWith('/')) {
+    throw Error('Resource lookup requires one normalized literal path; classloader paths must be root-relative without a slash prefix.');
+   }
+   const absolute = rootRelative || value.startsWith('/');
+   const resolved = rootRelative ? value : absolute ? value.slice(1) : owner.slice(0, owner.lastIndexOf('.')).replaceAll('.', '/') + '/' + value;
+   const item = byPath.get(resolved);
+   if (owner && (rootRelative || loader === 'spring-class' || item) && !sourceTypes.has(owner)) {
+    throw Error('Classloader resource lookup requires a reviewed source class owner.');
+   }
+   if (!item) {
+    if (!rootRelative && movedTypes.has(owner) || resolved === oldPath || resolved.startsWith(oldPath + '/')) {
+     throw Error('A moved class resource lookup is missing from the reviewed package resources.');
+    }
+    return;
+   }
+   if (!absolute && !movedTypes.has(owner)) throw Error('A relative resource client outside the moved package would change its lookup base.');
+   acceptedStrings.add(literal.start);
+   const newValue = rootRelative ? item.newResourcePath : absolute ? '/' + item.newResourcePath : value;
+   if (newValue !== value) {
+    const list = edits.get(source.uri) || [];
+    list.push({ range: rangeAt(source.text, literal.start, literal.end), newText: JSON.stringify(newValue) });
+    edits.set(source.uri, list);
+   }
+   lookup.push({ uri: source.uri, method, owner, oldPath: resolved, newPath: item.newResourcePath, absolute,
+    literal: value, newLiteral: newValue, resourceSha256: item.sha256, loader });
+  }
+
+  for (let index = 0; index < tokens.length; index++) {
+   const token = tokens[index];
+   if (token.text === 'new' && spelling(tokens, index, SPRING_CONSTRUCTOR.slice(0, -1))) {
+    if (springHeadShadow || file.imports.org || file.wildcards.length || tokens[index - 1]?.text === '.') {
+     throw Error('A source type or head-token shadow prevents exact Spring resource type resolution.');
+    }
+    const open = index + 10, literal = tokens[open + 1];
+    if (tokens[open]?.text !== '(' || literal?.kind !== 'string' || tokens[open + 2]?.text !== ',') {
+     throw Error('Spring resources require the exact literal String, source-class overload.');
+    }
+    const owner = readClassLiteral(tokens, open + 3, file);
+    const classloader = spelling(tokens, owner.end + 1, CLASS_LOADER_TAIL);
+    const end = classloader ? sourceClassLoader(owner.end + 1) : owner.end + 1;
+    if (!spelling(tokens, end, [')', '.', 'getInputStream', '(', ')'])) {
+     throw Error('Spring resources require an immediate exact class-literal or source-classloader getInputStream call; aliases and custom semantics need separate analysis.');
+    }
+    acceptedSpring.add(tokens[index + 9].start);
+    springConstructors++;
+    if (classloader) {
+     addBinding(end, 'org.springframework.core.io.ClassPathResource#<init>(java.lang.String,java.lang.@org.jspecify.annotations.Nullable ClassLoader)');
+     addBinding(end + 4, 'org.springframework.core.io.ClassPathResource#getInputStream()');
+    }
+    consume(owner.owner, literal, 'getInputStream', classloader ? 'spring-classloader' : 'spring-class');
+   }
+   if (token.text === 'ServiceLoader') {
+    const start = index - 4;
+    if (!spelling(tokens, start, SERVICE_LOADER)) {
+     throw Error('Dynamic or configured package references require an exact Java service loader call.');
+    }
+    const first = readClassLiteral(tokens, index + 4, file), service = services.get(first.owner);
+    if (tokens[first.end + 1]?.text !== ',' || !service) {
+     throw Error('Service loading requires an exact reviewed service interface and explicit classloader.');
+    }
+    const second = readClassLiteral(tokens, first.end + 2, file);
+    if (first.owner !== second.owner) throw Error('A service lookup must use its own source interface classloader.');
+    const end = sourceClassLoader(second.end + 1);
+    if (!spelling(tokens, end, [')', '.', 'findFirst', '(', ')', '.', 'orElseThrow', '(', ')', '.', service.method, '(', ')'])) {
+     throw Error('Service providers require immediate scalar consumption without caching or reflective provider access.');
+    }
+    addBinding(end, 'java.util.ServiceLoader#load(java.lang.Class<S>,java.lang.ClassLoader)', 'java.util.ServiceLoader<' + service.service + '>');
+    addBinding(end + 12, service.service + '#' + service.method + '()');
+    serviceCalls.push({ uri: source.uri, service: service.service, loader: 'source-service-classloader', method: service.method });
+   }
+   if (token.text === 'ClassLoader') {
+    const method = tokens[index + 2]?.text, literal = tokens[index + 4];
+    if (!spelling(tokens, index - 4, SYSTEM_LOADER) || !['getSystemResource', 'getSystemResourceAsStream'].includes(method) ||
+        tokens[index + 3]?.text !== '(' || literal?.kind !== 'string' || tokens[index + 5]?.text !== ')') {
+     throw Error('Custom or dynamic classloader references require a separate Package Move review.');
+    }
+    acceptedLoaders.add(token.start);
+    addBinding(index + 5, 'java.lang.ClassLoader#' + method + '(java.lang.String)');
+    consume(undefined, literal, method, 'system-classloader');
+   }
+  }
+
+  for (let index = 0; index < tokens.length; index++) {
+   const token = tokens[index];
+   if (!['getResource', 'getResourceAsStream', 'getResources'].includes(token.text)) continue;
+   if (token.text === 'getResources' || tokens[index - 1]?.text !== '.' || tokens[index + 1]?.text !== '(' ||
+       tokens[index + 2]?.kind !== 'string' || tokens[index + 3]?.text !== ')') {
+    throw Error('Dynamic, receiver-based or multiple resource lookup calls require a separate Package Move review.');
+   }
+   let literalIndex = index - 2, loader = 'class';
+   if (spelling(tokens, index - 5, CLASS_LOADER_TAIL)) {
+    literalIndex = index - 6;
+    loader = 'classloader';
+    acceptedLoaders.add(tokens[index - 4].start);
+   }
+   if (tokens[literalIndex]?.text !== 'class') throw Error('Dynamic, receiver-based or custom classloader resource lookup requires separate review.');
+   consume(classLiteral(tokens, literalIndex, file).owner, tokens[index + 2], token.text, loader);
+  }
+  for (const token of tokens) {
+   if (token.kind === 'id' && ((byPath.size && UNMODELED_RESOURCE_CLIENTS.has(token.text) &&
+     !(token.text === 'ClassPathResource' && acceptedSpring.has(token.start))) ||
+     token.text === 'getClassLoader' && !acceptedLoaders.has(token.start))) {
+    throw Error('Filesystem, URI or resource-loader clients require a separate Package Move review; only exact modeled source-class loader expressions are supported.');
+   }
+   if (['string', 'char', 'text-block'].includes(token.kind) &&
+       (String(token.value ?? token.text).includes(oldPackage) || String(token.value ?? token.text).includes(oldPath)) &&
+       !acceptedStrings.has(token.start)) {
+    throw Error('Unresolved Java string package or resource references require a separate Package Move review.');
+   }
+  }
+ }
+ for (const [resourcePath] of byPath) {
+  if (!lookup.some(value => value.oldPath === resourcePath)) {
+   throw Error('Each moved resource requires a known literal class-resource client; external or unobserved clients remain unverified.');
+  }
+ }
+ for (const service of services.keys()) {
+  if (!serviceCalls.some(call => call.service === service)) throw Error('Each changed service descriptor requires a reviewed Java source consumer.');
+ }
+ return { lookup, entries: [...edits].map(([uri, edits]) => ({ textDocument: { uri, version: null }, edits })),
+  resources: byPath.size, mode:'literal-source-class-resource-paths', springConstructors, springProviderRequired: springConstructors > 0,
+  serviceCalls, bindings, externalClientsVerified: false, embeddedDataReferencesRewritten: false, opaqueMediaValidityVerified: false };
+}
+
+function verifyResourceBindings(bindings, sources, entries, renames, before, after) {
+ for (const binding of bindings) {
+  const same = call => call.methodKey === binding.methodKey && (!binding.resultType || binding.resultType === call.resultType);
+  if (before.calls.filter(call => call.uri === binding.uri && call.end === binding.end && same(call)).length !== 1) {
+   throw Error('The Java compiler did not bind the reviewed resource or service call to its exact provider: ' + binding.methodKey);
+  }
+  const source = sources.find(item => item.uri === binding.uri);
+  const entry = entries.find(item => item.textDocument.uri === binding.uri);
+  const spans = editSpans(source.text, entry?.edits || []);
+  if (spans.some(span => span.start < binding.end && span.end > binding.end)) {
+   throw Error('A Java engine edit overlaps a verified resource or service call boundary.');
+  }
+  const end = spans.filter(span => span.end <= binding.end).reduce((offset, span) =>
+   offset + span.newText.length - (span.end - span.start), binding.end);
+  const uri = renames.find(rename => rename.oldUri === binding.uri)?.newUri || binding.uri;
+  if (after.calls.filter(call => call.uri === uri && call.end === end && same(call)).length !== 1) {
+   throw Error('The move would change a verified resource or service call binding: ' + binding.methodKey);
+  }
+ }
 }
 function mergeEntries(entries,additional){const result=structuredClone(entries);for(const entry of additional){const existing=result.find(value=>value.textDocument.uri===entry.textDocument.uri);if(existing)existing.edits.push(...entry.edits);else result.push(structuredClone(entry));}return result;}
 function editSpans(text,edits){
@@ -135,4 +325,4 @@ function mergePackageEngineEdits(sources,groups){
  }
  return {entries,proof:{mode:'explicit-baseline-imports-and-exact-group-type-mappings',groups:groups.length,mergedImportFiles,conflictAnnotationsAccepted:false,nonImportOverlapsAccepted:false}};
 }
-module.exports={LIMITS,UNMODELED_RESOURCE_CLIENTS,collectTree,verifyTree,resourceTree,resourceRoots,resourceDirectoryInsideProject,reviewLookups,plainResourceData,proveSpringResourceProvider,SPRING_RESOURCE_SHA256,mergeEntries,mergePackageEngineEdits,within};
+module.exports={LIMITS,UNMODELED_RESOURCE_CLIENTS,collectTree,verifyTree,resourceTree,resourceRoots,resourceDirectoryInsideProject,reviewLookups,verifyResourceBindings,plainResourceData,proveSpringResourceProvider,SPRING_RESOURCE_SHA256,mergeEntries,mergePackageEngineEdits,within};

@@ -1,5 +1,5 @@
 {
-  "version": "0.24.0",
+  "version": "0.25.0",
   "asOf": "2026-11-19",
   "total": 216,
   "fullProductParityVerified": false,
@@ -45,12 +45,16 @@
   "changedFeatures": [
     "IDEA-028",
     "IDEA-030",
-    "IDEA-033"
+    "IDEA-033",
+    "IDEA-055",
+    "IDEA-069"
   ],
   "expandedFeatures": [
     "IDEA-028",
     "IDEA-030",
-    "IDEA-033"
+    "IDEA-033",
+    "IDEA-055",
+    "IDEA-069"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -877,11 +881,11 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 제한된 인스턴스·패키지 이동에 원래 owner의 명시적 scalar 필드·호출자 인자 포착과 유한 생성자 위임을 더한다. 필드·생성자 선언은 원래 owner에 남기고 인자 순서·타입을 보존한다. 검토한 main 리소스의 제한된 CSV·flat JSON·properties와 불투명 이미지 bytes, 정확한 class-loader·Spring lookup을 함께 이동한다. Maven은 같은 POM property profile의 선언 순서에 따른 dependency 대체를 모든 시나리오의 소비자 가시성으로 검사한다.",
+      "scope": "같은 패키지의 final 소스·목적지 클래스와 검토한 생성자에서 private final 목적지 타입 객체의 직접 생성·앞서 초기화한 필드 별칭을 추적한다. 원래 필드 소유권, 참조의 동일성, 인수 및 검토된 접근자 갱신 순서를 유지한다. 검토한 단일 클래스 경로 서비스의 META-INF/services 제공자 이름과 지원하는 리터럴 로더 경로를 함께 편집한다. 파일 충돌과 관찰된 클래스 경로 중복을 확인하며 기존 UTF-8 리소스 및 불투명 바이너리 바이트를 보존한다. 한 단계 로컬 Maven 부모의 선언과 자식의 기본 JAR 의존성을 병합한다. 한정된 속성 프로필을 적용하고 dependencyManagement에서 비어 있는 version·scope를 보완한 뒤 모든 시나리오에서 이동 소비자의 컴파일·테스트 소스 가시성을 확인한다.",
       "remaining": [
-        "같은 패키지의 public final plain owner·nonnull final target field 또는 literal new target과 제한된 int/long 갱신 범위다. owner-only wrapper는 scalar 리터럴·정확한 private 필드 읽기·최대8개 caller scalar 인자를 그대로 전달하며 각 caller 인자는 한 번만 사용한다. shadowed 필드·receiver는 this로 구분한다. owner별 최대4개 public 생성자는 서로 다른 arity·최대8개 scalar 인자이며 this(literal/unchanged-param) 위임만 허용하고 모든 체인은 하나의 직접 대입 생성자로 끝나야 한다. 일반 상태 그래프·source-object 주입·선택 body의 source 필드 암묵 읽기·부작용/임의 생성자·모호한 overload·상속은 남는다.",
-        "패키지는 같은 imported project의 표준 main Java root·유틸리티 Java1–16개·깊이8, 리소스는 기본 main root와 최대3개 literal Gradle 추가 root다. 전체8개·각64KiB·합계256KiB에서 UTF-8 txt, 제한된 무인용 CSV(32열/1000행), flat scalar JSON(64key), literal properties(128key), 불투명 bin/png/jpg/jpeg를 지원한다. metadata의 중첩·escape·간접 참조·기존 package/resource 참조는 거부한다. 이미지 형식 유효성을 추론하지 않는다. 정확한 Class literal lookup, class-literal getClassLoader lookup, 검토한 SpringCore7.0.10의 정확한 FQN ClassPathResource만 허용한다. 다른 loader/provider·reflection·동적 경로·임의 processor·Maven/test/custom Java root는 남는다.",
-        "Maven 4.0.0 modelVersion의 검토한 literal sibling JAR module과 같은 leaf POM의 property profile 최대4개·16부분집합을 분석한다. 같은 G:A default-JAR 선언은 POM 순서대로 대체해 나중의 active 선언을 적용한다. 정확한 reactor version·직접 compile/provided와 runtime/test·경쟁 transitive scope를 구분한다. 어느 시나리오에서든 source를 보는 소비자는 모든 시나리오에서 destination도 보여야 한다. 같은 layer 중복·상속/managed/typed/classified/external dependency/profile·절차적 활성화와 임의 Gradle DSL·외부/미가져온 소비자는 남는다."
+        "임의 객체 그래프, 참조 재할당·외부 유출, 일반 소유권 이전, 복잡한 생성자·상속 및 외부 바이너리는 별도 분석이 필요하다.",
+        "외부·모듈형 서비스 제공자, 사용자 로더, 동적 경로, 임의 리소스 메타데이터와 클래스 경로 외부의 참조가 남는다.",
+        "다단계·외부 부모, BOM import, 컴파일 경로에 영향을 주는 전이 의존성 중재, 확장된 모듈·플러그인·저장소 모델이 남는다."
       ],
       "verification": {
         "state": "final-same-source-offline-and-four-focused-packaged-native-groups-per-actual-DB",
@@ -891,22 +895,16 @@
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "동일 VSIX13항목·최종 소스786개(28b33ad0)에서 source-only snapshot offline939개(893통과·46제외·실패0)와 실제 MySQL/MariaDB 핵심native4/4그룹을 실행했다. 이전의 더 넓은 DB/native 집계를 이번에 재실행한 것으로 보지 않는다. 상태 이동2/2건·거부4/4건에서 field/parameter receiver, owner-field/caller-parameter 포착과 생성자 선언5개·위임3개를 각각 보존했다. 새 Spring HTTP/DB2/1/0·반복값15/31/21/19/21/25·native Undo/Redo와6개 awaited editor-save receipt를 확인했다. 패키지 이동1/1건·거부3/3건에서 리소스6/6개(불투명 이미지2/2개)·lookup8/8개와 검토한 SpringCore7.0.10 provider, bytes/SHA·새 빌드/HTTP·Undo/Redo를 확인했다. Maven native cross-project Move1/1건과 숨은 소비자 거부, 네 profile 조합의 실제 effective POM·빌드·Spring HTTP42·DB2/1/0 및 Undo/Redo를 확인했다. base/runtime/compile/both의 effective scope는 compile/runtime/compile/compile이며 POM 선언 순서를 따른다.",
+        "testedScope": "최종 v0.25.0 VSIX를 설치한 VS Code에서 MySQL 8.4.13 및 MariaDB 11.4.8에 연결한 실제 Spring 프로젝트로 검증했다. 네이티브 JDT Move 두 건과 실행 취소·다시 실행, Spring의 공유·독립 객체 결과값 일곱 개, 늦은 별칭 변경·null·순환·가변 참조 네 거부 사례, 네이티브 서비스 등록 편집 1건과 바이트를 보존한 리소스 이동 2건, 실행 취소·다시 실행, 새 Spring 실행의 서비스 제공자와 로더 조회 세 곳, JDT Maven 프로젝트 간 Move, 실행 취소·다시 실행, 소비자 가시성 거부, Maven 3.9.11에서 세 모듈의 유효 POM과 변경한 테스트 소스의 네 가지 프로필 조합 컴파일을 확인했다.",
         "publicEvidence": [
           "src/java/move-instance.js",
           "src/java/move-package.js",
-          "src/java/package-resources.js",
+          "src/java/package-services.js",
+          "src/java/package-classpath.js",
           "src/java/move-builds.js",
-          "src/java/move-build-contracts.js",
-          "test/java-move-v24-state.test.js",
-          "test/java-move-v24-state.integration.test.js",
-          "test/java-package-move-v24.test.js",
-          "test/java-package-provider-v24.test.js",
-          "test/java-refactoring-resources-v24.test.js",
-          "test/java-maven-merge-v24.test.js",
-          "test/java-move-v24-state-host.js",
-          "test/java-package-move-v24-host.js",
-          "test/java-maven-merge-v24-host.js"
+          "test/java-move-v25-state-host.js",
+          "test/java-package-move-v25-host.js",
+          "test/java-maven-management-v25-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -958,11 +956,10 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 Java·Spring·리소스 Safe Delete에 검토한 source class 이름과 source annotation의 scalar String 속성 비교를 더한다. final source selector의 유한 return 삼항식과 selector/registrar의 exhaustive class-name arrow-block switch를 모든 arm의 합집합으로 분석한다. 반환 타입·등록 Bean/별칭과 비교에 쓰인 source class·annotation 속성 계약을 보호한다. 해석된 계약 아래 무주석 private 보조 메서드만 삭제할 수 있다.",
+      "scope": "기존 Java·Spring·리소스 Safe Delete와 유한 Import 계약에서 형식이 확인된 조건을 보호한다. 검토한 @Profile 식, 닫힌 리터럴 SpEL, 리터럴 Bean·클래스 조건과 명시적 소스 Condition의 제한된 프로필·환경·메타데이터 조건에서 가능한 계약을 수집한다. 조건식을 실행하거나 가능한 가지를 제거하지 않고 보호 계약을 유지한다.",
       "remaining": [
-        "String literal/final 상수의 equals에 정확한 metadata.getClassName() 또는 getAnnotationAttributes(literal).get(literal)을 허용하며 class 이름은 검토한 source type, 속성은 검토한 source annotation의 scalar String member여야 한다. return 삼항식은 finite String 배열만, switch는 class-name·source-backed case·arrow block·마지막 default를 요구한다. 모든 arm을 남기고 조건을 실행하거나 참값으로 가지를 제거하지 않는다. nullable annotation map이 일반 실행에서 예외를 내지 않는다는 보장은 아니다.",
-        "기존 grouped boolean·final local·완전한 if/else·presence query 범위와 함께 토큰4096·분기 깊이4·분기16·switch arm16·boolean local16·조건 노드256·조건 깊이24 등의 예산을 적용한다. 임의 map/attribute 타입·계산값·external target·mutable/forward local·임의 environment 조건·boolean 삼항식·fallthrough/pattern/expression switch·필드/생성자·루프·미완전 else·factory/provider는 unknown으로 거부한다.",
-        "임의 reflection·SpEL·custom condition·외부/계산 Import·동적 XML/lifecycle·custom post-processor와 공개 API/JPA/accessor/provider 전체 분석은 남는다. callback·Bean·lifecycle·HTTP·JPA 계약은 계속 보호하고 적용 직전 소스·리소스·빌드 bytes와 집합을 다시 검사한다. 삭제 파일의 별도 원본 복원은 최대10건·파일2MiB·세션1시간이다."
+        "임의 SpEL·placeholder·프로젝트 메서드 호출·상태를 가진 Condition, 모호한 조건과 사용자 확장 전체 분석이 남는다. 지원하지 않는 조건은 삭제 검토에서 unknown으로 처리한다.",
+        "임의 reflection·외부/계산 Import·동적 XML·lifecycle, 공개 API·JPA·provider 전체 분석이 남는다. 기존 별도 삭제 파일 복원 한계를 적용한다."
       ],
       "verification": {
         "state": "final-same-source-offline-and-four-focused-packaged-native-groups-per-actual-DB",
@@ -972,16 +969,13 @@
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "동일 VSIX13항목·최종 소스786개(28b33ad0)에서 source-only snapshot offline939개(893통과·46제외·실패0)와 실제 MySQL/MariaDB 핵심native4/4그룹을 실행했다. 이전의 더 넓은 DB/native 집계를 이번에 재실행한 것으로 보지 않는다. Spring9/9사례는 private helper 삭제·새 전체 Javac(-proc:none)·Spring/DB·Undo1/1건, callback·Bean·metadata source owner 보호6/6건, 임의 조건 unknown1/1건과 preview 후 집합 변경 거부1/1건이다. selector의 source String 속성 읽기·return 삼항식과 registrar의 default 포함3-arm class-name switch를 기록하고 실제 두 importing configuration의 선택·Bean·별칭을 보존했다. 모든 분기/arm을 유지하고 metadata 값·조건을 실행하지 않는다. nullable annotation map의 일반 실행 성공이나 임의 provider 전체를 보장하지 않는다. 일반 신뢰 프로젝트의 JDT 가져오기·빌드는 별도 경로다.",
+        "testedScope": "최종 v0.25.0 VSIX를 설치한 VS Code에서 MySQL 8.4.13 및 MariaDB 11.4.8에 연결한 실제 Spring 프로젝트로 검증했다. 네이티브 Safe Delete 미리보기·적용·복원, 새 Spring 실행의 조건 등록 결과 9개와 보호·변경·미확인 계약 6건을 확인했다.",
         "publicEvidence": [
-          "src/java/safe-delete.js",
-          "src/java/spring-delete-analysis.js",
+          "src/java/spring-condition-analysis.js",
           "src/java/spring-contract-analysis.js",
-          "src/java/spring-contract-flow.js",
-          "test/java-spring-contract-v24.test.js",
-          "test/java-spring-contract-v24.runtime.test.js",
-          "test/java-spring-contract-v24.integration.test.js",
-          "test/java-spring-contract-v24-host.js"
+          "src/java/spring-delete-analysis.js",
+          "src/spring/profile-expression.js",
+          "test/java-spring-contract-v25-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1057,11 +1051,13 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "검토·비교·충돌 차단에 명시적 scalar 포착·유한 생성자 위임, 검토한 metadata/이미지 byte 이동·정확한 lookup, Maven profile 선언 순서별 dependency 병합, Spring String metadata·삼항식·switch의 모든 계약을 연결한다. 원본 선언·인자 순서·compiler 바인딩·문서/디스크/집합·리소스 SHA·classpath를 다시 검사한다. 유한 소스 계약 해석기는 프로젝트 코드·processor·plugin·확장을 실행하지 않는다. 신뢰한 프로젝트의 일반 JDT 가져오기·Gradle/Maven 빌드는 별도 실행 경로다. 텍스트/이동 Undo·Redo와 삭제 파일의 별도 복원을 구분한다.",
+      "scope": "미리보기와 적용 전 충돌 검사에 원래 참조 소유권·서비스 등록 편집·리터럴 로더·Spring 조건·Maven 상속 및 관리 의존성 검토를 연결한다. 문서·파일 집합·리소스와 클래스 경로가 바뀌면 검토를 갱신한다.",
       "remaining": [
-        "명시적 scalar 전달·유한 생성자 chain·기존 제한된 mutator, 검토한 literal resource/loader/provider, 유한 property-profile 병합과 source-backed metadata 조건만 조합한다. 일반 상태 이전·임의 constructor/side effect·metadata 변환·동적 설정/plugin·외부/복수 interface 계열·임의 custom/provider 계약의 자동 변경/제거는 남는다.",
-        "미확인 소스·리소스·provider/classpath identity·중복 root·덮어쓰기·예상 밖 작업은 거부한다. 원래 owner의 필드/생성자 선언과 compiler 바인딩을 보존한다. 불투명 bytes는 hash-only preview로 검토하고 텍스트 모델로 열지 않으며 실제 bytes·stat를 적용 직전 다시 검사한다. mutation은 자동 재시도하지 않는다.",
-        "외부 writer와 원자성·영구 복구·관찰 밖 reflection/provider·생성/binary 소비자·모든 JDK/Lombok·혼합 빌드 동등성은 증명하지 않는다. 원본 제품과 전체 동등성·Explorer/Outline의 경고 없는 동작도 주장하지 않는다. 미변경 행의 지원 범위와 시험 수치는 이전 판본에서 보존한 검증 기록이다."
+        "임의 객체 그래프, 참조 재할당·외부 유출, 일반 소유권 이전, 복잡한 생성자·상속 및 외부 바이너리는 별도 분석이 필요하다.",
+        "외부·모듈형 서비스 제공자, 사용자 로더, 동적 경로, 임의 리소스 메타데이터와 클래스 경로 외부의 참조가 남는다.",
+        "임의 SpEL·placeholder·프로젝트 메서드 호출·상태를 가진 Condition, 모호한 조건과 사용자 확장 전체 분석이 남는다. 지원하지 않는 조건은 삭제 검토에서 unknown으로 처리한다.",
+        "다단계·외부 부모, BOM import, 컴파일 경로에 영향을 주는 전이 의존성 중재, 확장된 모듈·플러그인·저장소 모델이 남는다.",
+        "파일 이동과 텍스트 편집을 함께 실행 취소·다시 실행하는 범위를 검증했다. 외부 writer가 개입하는 원자성과 VS Code 탐색기·Outline의 표시 동작은 별도 범위다."
       ],
       "verification": {
         "state": "final-same-source-offline-and-four-focused-packaged-native-groups-per-actual-DB",
@@ -1071,22 +1067,22 @@
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "동일 VSIX13항목·최종 소스786개(28b33ad0)에서 source-only snapshot offline939개(893통과·46제외·실패0)와 실제 MySQL/MariaDB 핵심native4/4그룹을 실행했다. 이전의 더 넓은 DB/native 집계를 이번에 재실행한 것으로 보지 않는다. 새4그룹은 명시적 scalar 포착/생성자 위임 이동, 검토한 metadata·불투명 이미지·정확한 class-loader/Spring 리소스 이동, source-backed String/삼항식/switch Spring 계약, Maven profile 병합이다. 적용 전 snapshot·선언·compiler 바인딩과 적용 후 새 빌드·HTTP/DB2/1/0·리소스 bytes·native Undo/Redo 및 부정 조건 거부를 검증했다. 검증 범위는 검토한 편집·파일·bytes·복원이며 Explorer/Outline의 경고 없는 동등성을 주장하지 않는다. 이전 Outline 관측과 미변경213행의 수치는 이전 기록이다. Craft CLI source 대응123/123은 inferred, archive13항목 검사는 observed다.",
+        "testedScope": "최종 v0.25.0 VSIX를 설치한 VS Code에서 MySQL 8.4.13 및 MariaDB 11.4.8에 연결한 실제 Spring 프로젝트로 검증했다. 네이티브 JDT Move 두 건과 실행 취소·다시 실행, Spring의 공유·독립 객체 결과값 일곱 개, 늦은 별칭 변경·null·순환·가변 참조 네 거부 사례, 네이티브 서비스 등록 편집 1건과 바이트를 보존한 리소스 이동 2건, 실행 취소·다시 실행, 새 Spring 실행의 서비스 제공자와 로더 조회 세 곳, 네이티브 Safe Delete 미리보기·적용·복원, 새 Spring 실행의 조건 등록 결과 9개와 보호·변경·미확인 계약 6건, JDT Maven 프로젝트 간 Move, 실행 취소·다시 실행, 소비자 가시성 거부, Maven 3.9.11에서 세 모듈의 유효 POM과 변경한 테스트 소스의 네 가지 프로필 조합 컴파일을 확인했다.",
         "publicEvidence": [
           "src/java/refactoring.js",
           "src/java/move-instance.js",
           "src/java/move-package.js",
-          "src/java/package-resources.js",
+          "src/java/package-services.js",
+          "src/java/package-classpath.js",
           "src/java/move-builds.js",
-          "src/java/move-build-contracts.js",
-          "src/java/change-signature.js",
-          "src/java/signature-compiler.js",
+          "test/java-move-v25-state-host.js",
+          "test/java-package-move-v25-host.js",
+          "test/java-maven-management-v25-host.js",
+          "src/java/spring-condition-analysis.js",
           "src/java/spring-contract-analysis.js",
-          "src/java/spring-contract-flow.js",
-          "test/java-move-v24-state-host.js",
-          "test/java-package-move-v24-host.js",
-          "test/java-spring-contract-v24-host.js",
-          "test/java-maven-merge-v24-host.js"
+          "src/java/spring-delete-analysis.js",
+          "src/spring/profile-expression.js",
+          "test/java-spring-contract-v25-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1713,24 +1709,27 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "명시 프로필·패키지·closed-world 소스 모델과 실행 컨텍스트 관찰을 분리한다.",
+      "scope": "명시 프로필·패키지·closed-world 소스 모델과 실행 컨텍스트 관찰을 분리한다. 소스 Profile 식 구문을 공유하고, Safe Delete에서 검토한 @Profile 식, 닫힌 리터럴 SpEL, 리터럴 Bean·클래스 조건과 명시적 소스 Condition의 제한된 프로필·환경·메타데이터 조건에서 가능한 계약을 수집한다.",
       "remaining": [
-        "여러 context/persistence unit 자동 식별·빌드 동일성 보증이 남는다."
+        "여러 context/persistence unit 자동 식별·빌드 동일성 보증이 남는다.",
+        "임의 SpEL·placeholder·프로젝트 메서드 호출·상태를 가진 Condition, 모호한 조건과 사용자 확장 전체 분석이 남는다. 지원하지 않는 조건은 삭제 검토에서 unknown으로 처리한다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "final-same-source-offline-and-four-focused-packaged-native-groups-per-actual-DB",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "testedScope": "최종 v0.25.0 VSIX를 설치한 VS Code에서 MySQL 8.4.13 및 MariaDB 11.4.8에 연결한 실제 Spring 프로젝트로 검증했다. 네이티브 Safe Delete 미리보기·적용·복원, 새 Spring 실행의 조건 등록 결과 9개와 보호·변경·미확인 계약 6건을 확인했다.",
         "publicEvidence": [
           "src/spring/model.js",
-          "src/spring/vscode.js",
-          "src/spring/runtime-client.js",
-          "src/analysis-tree.js"
+          "src/java/spring-condition-analysis.js",
+          "src/java/spring-contract-analysis.js",
+          "src/java/spring-delete-analysis.js",
+          "src/spring/profile-expression.js",
+          "test/java-spring-contract-v25-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2137,21 +2136,27 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Maven lifecycle과 로컬에 선언된 plugin execution 목표를 탐색하고 지문을 검토한 프로젝트의 목표를 네이티브 빌드 작업으로 실행·중지한다. 의존 경로는 관찰된 JDT 메타데이터로 표시한다.",
+      "scope": "Maven lifecycle과 로컬에 선언된 plugin execution 목표를 탐색하고 지문을 검토한 프로젝트의 목표를 네이티브 빌드 작업으로 실행·중지한다. 의존 경로는 관찰된 JDT 메타데이터로 표시한다. 클래스 이동 검토에는 로컬 부모 상속과 기본 JAR dependencyManagement의 유효 모델을 추가한다.",
       "remaining": [
-        "부모 POM·프로필·사설 저장소·복잡한 다중 모듈과 일반 effective dependency 모델은 남는다.",
-        "신뢰된 프로젝트의 빌드/목표 실행은 프로젝트 설정 코드를 실행할 수 있다."
+        "다단계·외부 부모, BOM import, 컴파일 경로에 영향을 주는 전이 의존성 중재, 확장된 모듈·플러그인·저장소 모델이 남는다.",
+        "유효 모델 검토는 한정된 클래스 이동에 사용한다. Maven 목표 실행은 신뢰한 프로젝트의 빌드 설정을 실행할 수 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "final-same-source-offline-and-four-focused-packaged-native-groups-per-actual-DB",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 JDT Maven import, 목표 탐색과 compile 작업 및 소유 작업 완료/중지를 확인한다.",
-        "publicEvidence": [],
+        "testedScope": "최종 v0.25.0 VSIX를 설치한 VS Code에서 MySQL 8.4.13 및 MariaDB 11.4.8에 연결한 실제 Spring 프로젝트로 검증했다. JDT Maven 프로젝트 간 Move, 실행 취소·다시 실행, 소비자 가시성 거부, Maven 3.9.11에서 세 모듈의 유효 POM과 변경한 테스트 소스의 네 가지 프로필 조합 컴파일을 확인했다.",
+        "publicEvidence": [
+          "src/java/move-builds.js",
+          "src/java/move-scope.js",
+          "scripts/refactoring-v25-maven.js",
+          "test/java-maven-management-v25-host.js",
+          "test/java-maven-management-v25.test.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -6529,8 +6534,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "03796dbaefb77b6df46d9537338681cf8c75bfa40a6c0b9b52e67bd11833bdfc",
-    "sourceManifestSha256": "28b33ad0f566383da77f38d19272f5d6e2a7f2a228bc508664d95705631bfd8b",
+    "vsixSha256": "0aa914e5d6e9e364fe6311670c80d1c748458cce893bf8e0f27121cf707f41e3",
+    "sourceManifestSha256": "9c872143be25989e4c6f95958a3f8c12d141522c1b6f9383599cf32e17e55c24",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6543,12 +6548,12 @@
     ],
     "offline": {
       "node": "v24.22.1",
-      "tests": 939,
+      "tests": 996,
       "suites": 0,
-      "pass": 893,
+      "pass": 949,
       "fail": 0,
       "cancelled": 0,
-      "skipped": 46,
+      "skipped": 47,
       "todo": 0
     },
     "publicWorkflow": "docs/verification.json"

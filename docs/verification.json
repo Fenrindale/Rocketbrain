@@ -1,27 +1,30 @@
 {
-  "version": "0.24.0",
-  "verifiedAt": "2026-11-19T01:57:00.142Z",
+  "version": "0.25.0",
+  "verifiedAt": "2026-11-19T07:01:26.890Z",
   "fullProductParityVerified": false,
-  "scope": "Four focused packaged native groups against actual Spring on each database. Maven actual effective POM, compile, HTTP and Undo/Redo tested on all four allowed profile sets. Full source-only offline regression.",
+  "scope": "Final packaged VS Code extension and actual Spring builds with fresh MySQL and MariaDB instances.",
   "artifact": {
-    "name": "rocketbrain-0.24.0.vsix",
-    "sha256": "03796dbaefb77b6df46d9537338681cf8c75bfa40a6c0b9b52e67bd11833bdfc",
-    "bytes": 1528192,
+    "name": "rocketbrain-0.25.0.vsix",
+    "bytes": 1542318,
+    "sha256": "0aa914e5d6e9e364fe6311670c80d1c748458cce893bf8e0f27121cf707f41e3",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 786,
-    "inputVectorSha256": "28b33ad0f566383da77f38d19272f5d6e2a7f2a228bc508664d95705631bfd8b",
+    "frozenPublicInputs": 847,
+    "inputVectorSha256": "9c872143be25989e4c6f95958a3f8c12d141522c1b6f9383599cf32e17e55c24",
+    "nativeTestInputVectorSha256": "691f31dafe3aafc534f8e3fc5f72f807783b570de16cbe7297a21b06e8b1f421",
+    "packagedPayloadsReproducedAfterTestOnlyUpdate": 13,
+    "testOnlyUpdate": "Updated a legacy assertion to cover unsupported BOM imports after adding literal dependency management.",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 939,
+    "tests": 996,
     "suites": 0,
-    "pass": 893,
+    "pass": 949,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 46,
+    "skipped": 47,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -31,75 +34,33 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "vscode": "1.145.3",
       "groupCount": 4,
-      "state": {
-        "positive": 2,
-        "negative": 4,
-        "nativeUndoRedo": true
-      },
-      "resources": {
-        "positive": 1,
-        "negative": 3,
-        "byteIdenticalFiles": 6,
-        "opaqueBinaryFiles": 2,
-        "verifiedSpringProvider": "7.0.10",
-        "lookupCount": 8,
-        "nativeUndoRedo": true,
-        "explorerRefreshErrors": 1
-      },
-      "spring": {
-        "cases": 9,
-        "finiteInterpreterExecutedProjectCode": false,
-        "nativeUndo": true
-      },
-      "maven": {
-        "nativeMoves": 1,
-        "hiddenClientRefused": true,
-        "routes": [
-          {
-            "route": "base",
-            "effectiveScope": "compile",
-            "value": 42,
-            "database": {
-              "rolledBackNames": 0,
-              "people": 2,
-              "departments": 1
-            }
-          },
-          {
-            "route": "runtime",
-            "effectiveScope": "runtime",
-            "value": 42,
-            "database": {
-              "people": 2,
-              "departments": 1,
-              "rolledBackNames": 0
-            }
-          },
-          {
-            "route": "compile",
-            "effectiveScope": "compile",
-            "value": 42,
-            "database": {
-              "departments": 1,
-              "people": 2,
-              "rolledBackNames": 0
-            }
-          },
-          {
-            "route": "both",
-            "effectiveScope": "compile",
-            "value": 42,
-            "database": {
-              "rolledBackNames": 0,
-              "people": 2,
-              "departments": 1
-            }
-          }
-        ],
-        "nativeUndoRedo": true
-      }
+      "groups": [
+        {
+          "group": "state",
+          "checks": 1,
+          "explorerRefreshErrors": 0,
+          "recoveredOnRetry": true
+        },
+        {
+          "group": "package",
+          "checks": 1,
+          "explorerRefreshErrors": 6,
+          "recoveredOnRetry": false
+        },
+        {
+          "group": "spring",
+          "checks": 1,
+          "explorerRefreshErrors": 0,
+          "recoveredOnRetry": false
+        },
+        {
+          "group": "maven",
+          "checks": 1,
+          "explorerRefreshErrors": 0,
+          "recoveredOnRetry": false
+        }
+      ]
     },
     {
       "engine": "mariadb",
@@ -107,92 +68,62 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "vscode": "1.145.3",
       "groupCount": 4,
-      "state": {
-        "positive": 2,
-        "negative": 4,
-        "nativeUndoRedo": true
-      },
-      "resources": {
-        "positive": 1,
-        "negative": 3,
-        "byteIdenticalFiles": 6,
-        "opaqueBinaryFiles": 2,
-        "verifiedSpringProvider": "7.0.10",
-        "lookupCount": 8,
-        "nativeUndoRedo": true,
-        "explorerRefreshErrors": 2
-      },
-      "spring": {
-        "cases": 9,
-        "finiteInterpreterExecutedProjectCode": false,
-        "nativeUndo": true
-      },
-      "maven": {
-        "nativeMoves": 1,
-        "hiddenClientRefused": true,
-        "routes": [
-          {
-            "route": "base",
-            "effectiveScope": "compile",
-            "value": 42,
-            "database": {
-              "departments": 1,
-              "rolledBackNames": 0,
-              "people": 2
-            }
-          },
-          {
-            "route": "runtime",
-            "effectiveScope": "runtime",
-            "value": 42,
-            "database": {
-              "people": 2,
-              "rolledBackNames": 0,
-              "departments": 1
-            }
-          },
-          {
-            "route": "compile",
-            "effectiveScope": "compile",
-            "value": 42,
-            "database": {
-              "rolledBackNames": 0,
-              "departments": 1,
-              "people": 2
-            }
-          },
-          {
-            "route": "both",
-            "effectiveScope": "compile",
-            "value": 42,
-            "database": {
-              "departments": 1,
-              "people": 2,
-              "rolledBackNames": 0
-            }
-          }
-        ],
-        "nativeUndoRedo": true
-      }
+      "groups": [
+        {
+          "group": "state",
+          "checks": 1,
+          "explorerRefreshErrors": 0,
+          "recoveredOnRetry": false
+        },
+        {
+          "group": "package",
+          "checks": 1,
+          "explorerRefreshErrors": 6,
+          "recoveredOnRetry": false
+        },
+        {
+          "group": "spring",
+          "checks": 1,
+          "explorerRefreshErrors": 0,
+          "recoveredOnRetry": true
+        },
+        {
+          "group": "maven",
+          "checks": 1,
+          "explorerRefreshErrors": 0,
+          "recoveredOnRetry": false
+        }
+      ]
     }
   ],
+  "newlyVerified": {
+    "state": "네이티브 JDT Move 두 건과 실행 취소·다시 실행, Spring의 공유·독립 객체 결과값 일곱 개, 늦은 별칭 변경·null·순환·가변 참조 네 거부 사례",
+    "package": "네이티브 서비스 등록 편집 1건과 바이트를 보존한 리소스 이동 2건, 실행 취소·다시 실행, 새 Spring 실행의 서비스 제공자와 로더 조회 세 곳",
+    "spring": "네이티브 Safe Delete 미리보기·적용·복원, 새 Spring 실행의 조건 등록 결과 9개와 보호·변경·미확인 계약 6건",
+    "maven": "JDT Maven 프로젝트 간 Move, 실행 취소·다시 실행, 소비자 가시성 거부, Maven 3.9.11에서 세 모듈의 유효 POM과 변경한 테스트 소스의 네 가지 프로필 조합 컴파일"
+  },
   "maven": {
     "version": "3.9.11",
-    "nativeMovePerEngine": true,
-    "effectivePomProfilesTested": [
+    "effectivePomModules": 3,
+    "profileCombinations": [
       "base",
       "runtime",
       "compile",
       "both"
     ],
-    "providedRuntimeTransitivityChecked": true,
-    "reviewedScope": "Same-POM replacement of matching default JAR dependencies in declaration order."
+    "effectiveConsumerAppScopes": [
+      "compile",
+      "runtime",
+      "compile",
+      "compile"
+    ],
+    "testClientCompiledInEachCombination": true,
+    "parentProfileAnalysis": "targeted source tests"
   },
   "craftAnything": {
-    "channel": "CLI",
-    "sourceCorrespondences": 123,
+    "channel": "Craft Anything CLI",
+    "sourceCorrespondences": 127,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
@@ -207,14 +138,15 @@
       "platform-limited": 2
     },
     "referencePercent": 33.33333333333333,
-    "formula": "(implemented + host-provided + partial * 0.5) / 216 * 100"
+    "formula": "(implemented + host-provided + partial * 0.5) / 216 * 100",
+    "featureStatusChanges": 0
   },
   "limitations": [
-    "Reviewed scalar state transfers and same-class constructor delegation preserve the original field owners. General object graph transfer, arbitrary effects and nullable or aliased receivers remain outside this scope.",
-    "Package resources use reviewed main roots, bounded UTF-8 text/CSV/flat JSON/properties and opaque BIN/PNG/JPEG bytes. Java class-loader paths are literal. The reviewed Spring ClassPathResource overload requires the exact Spring Core 7.0.10 provider. General resource metadata and custom loaders require separate analysis.",
-    "Maven models same-POM default JAR replacement in every bounded profile subset and conservatively handles scope. Inherited profiles, dependency management and arbitrary external resolution require separate analysis.",
-    "Spring retains reviewed annotation attribute, metadata class-name, ternary and switch outcomes. General Spring callbacks and computed conditions require separate analysis.",
-    "Explorer and Outline display behavior is separate from the checked file, byte, Spring and Undo/Redo results."
+    "임의 객체 그래프, 참조 재할당·외부 유출, 일반 소유권 이전, 복잡한 생성자·상속 및 외부 바이너리는 별도 분석이 필요하다.",
+    "외부·모듈형 서비스 제공자, 사용자 로더, 동적 경로, 임의 리소스 메타데이터와 클래스 경로 외부의 참조가 남는다.",
+    "임의 SpEL·placeholder·프로젝트 메서드 호출·상태를 가진 Condition, 모호한 조건과 사용자 확장 전체 분석이 남는다. 지원하지 않는 조건은 삭제 검토에서 unknown으로 처리한다.",
+    "다단계·외부 부모, BOM import, 컴파일 경로에 영향을 주는 전이 의존성 중재, 확장된 모듈·플러그인·저장소 모델이 남는다.",
+    "VS Code 탐색기 새로 고침 관찰은 각 실행 묶음에 기록했다."
   ],
-  "ci": "The public Windows/Node22 workflow reports its own results for the pushed commit; local actual-server validation is recorded above."
+  "ci": "The exact pushed commit has its own GitHub Actions workflow. Local actual-server validation is recorded above."
 }
