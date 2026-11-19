@@ -1,36 +1,27 @@
 {
-  "version": "0.23.0",
-  "verifiedAt": "2026-11-18T15:59:08.510Z",
+  "version": "0.24.0",
+  "verifiedAt": "2026-11-19T01:57:00.142Z",
   "fullProductParityVerified": false,
-  "scope": "Four focused packaged native feature groups on each actual DB and the full offline regression suite. Separate Maven CLI reactor proof. Historical wider runtime counts remain attributable to earlier releases.",
+  "scope": "Four focused packaged native groups against actual Spring on each database. Maven actual effective POM, compile, HTTP and Undo/Redo tested on all four allowed profile sets. Full source-only offline regression.",
   "artifact": {
-    "name": "rocketbrain-0.23.0.vsix",
-    "sha256": "679bf3cfa78b2bedc58854349920c7f8e992534243021ca66e8a343c580a727e",
-    "bytes": 1520408,
+    "name": "rocketbrain-0.24.0.vsix",
+    "sha256": "03796dbaefb77b6df46d9537338681cf8c75bfa40a6c0b9b52e67bd11833bdfc",
+    "bytes": 1528192,
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 719,
-    "inputVectorSha256": "17369b3067be1df33869e01e14c7020ea2b13657426dfa98a732611c4768d554",
+    "frozenPublicInputs": 786,
+    "inputVectorSha256": "28b33ad0f566383da77f38d19272f5d6e2a7f2a228bc508664d95705631bfd8b",
     "generatedSummariesAreMetadata": true
-  },
-  "nativeHostAttribution": {
-    "previousSourceManifestSha256": "4947392bbb26d1d1a0d027d9e9a16aab7b7ed86e14421cac8904355dee78efbc",
-    "finalSourceManifestSha256": "17369b3067be1df33869e01e14c7020ea2b13657426dfa98a732611c4768d554",
-    "testOnlyFiles": [
-      "test/java-move-v23-state-host.js",
-      "test/java-package-move-v23-host.js"
-    ],
-    "scope": "The same VSIX ran in each group. Two isolated state/package native test producer helpers changed and were rerun; earlier Spring/build groups retain their actual source vector."
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 862,
+    "tests": 939,
     "suites": 0,
-    "pass": 817,
+    "pass": 893,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 45,
+    "skipped": 46,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -44,43 +35,70 @@
       "groupCount": 4,
       "state": {
         "positive": 2,
-        "negative": 3,
-        "repeatStateValues": {
-          "fieldFirst": 47,
-          "fieldSecond": 51,
-          "parameterFirst": 48,
-          "parameterSecond": 48
-        },
+        "negative": 4,
         "nativeUndoRedo": true
       },
       "resources": {
         "positive": 1,
-        "negative": 5,
-        "byteIdenticalFiles": 3,
-        "opaqueBinaryFiles": 1,
-        "nativeUndoRedo": true
+        "negative": 3,
+        "byteIdenticalFiles": 6,
+        "opaqueBinaryFiles": 2,
+        "verifiedSpringProvider": "7.0.10",
+        "lookupCount": 8,
+        "nativeUndoRedo": true,
+        "explorerRefreshErrors": 1
       },
       "spring": {
-        "cases": 7,
-        "bothBranchesObserved": true,
+        "cases": 9,
         "finiteInterpreterExecutedProjectCode": false,
         "nativeUndo": true
       },
-      "gradle": {
+      "maven": {
         "nativeMoves": 1,
-        "unsafeExposureRejected": true,
-        "actualRoutes": [
-          "bridge",
-          "core",
-          "alternate"
+        "hiddenClientRefused": true,
+        "routes": [
+          {
+            "route": "base",
+            "effectiveScope": "compile",
+            "value": 42,
+            "database": {
+              "rolledBackNames": 0,
+              "people": 2,
+              "departments": 1
+            }
+          },
+          {
+            "route": "runtime",
+            "effectiveScope": "runtime",
+            "value": 42,
+            "database": {
+              "people": 2,
+              "departments": 1,
+              "rolledBackNames": 0
+            }
+          },
+          {
+            "route": "compile",
+            "effectiveScope": "compile",
+            "value": 42,
+            "database": {
+              "departments": 1,
+              "people": 2,
+              "rolledBackNames": 0
+            }
+          },
+          {
+            "route": "both",
+            "effectiveScope": "compile",
+            "value": 42,
+            "database": {
+              "rolledBackNames": 0,
+              "people": 2,
+              "departments": 1
+            }
+          }
         ],
         "nativeUndoRedo": true
-      },
-      "executionSourceVectors": {
-        "state": "17369b3067be1df33869e01e14c7020ea2b13657426dfa98a732611c4768d554",
-        "package": "17369b3067be1df33869e01e14c7020ea2b13657426dfa98a732611c4768d554",
-        "spring": "4947392bbb26d1d1a0d027d9e9a16aab7b7ed86e14421cac8904355dee78efbc",
-        "build": "4947392bbb26d1d1a0d027d9e9a16aab7b7ed86e14421cac8904355dee78efbc"
       }
     },
     {
@@ -93,66 +111,84 @@
       "groupCount": 4,
       "state": {
         "positive": 2,
-        "negative": 3,
-        "repeatStateValues": {
-          "fieldFirst": 47,
-          "fieldSecond": 51,
-          "parameterFirst": 48,
-          "parameterSecond": 48
-        },
+        "negative": 4,
         "nativeUndoRedo": true
       },
       "resources": {
         "positive": 1,
-        "negative": 5,
-        "byteIdenticalFiles": 3,
-        "opaqueBinaryFiles": 1,
-        "nativeUndoRedo": true
+        "negative": 3,
+        "byteIdenticalFiles": 6,
+        "opaqueBinaryFiles": 2,
+        "verifiedSpringProvider": "7.0.10",
+        "lookupCount": 8,
+        "nativeUndoRedo": true,
+        "explorerRefreshErrors": 2
       },
       "spring": {
-        "cases": 7,
-        "bothBranchesObserved": true,
+        "cases": 9,
         "finiteInterpreterExecutedProjectCode": false,
         "nativeUndo": true
       },
-      "gradle": {
+      "maven": {
         "nativeMoves": 1,
-        "unsafeExposureRejected": true,
-        "actualRoutes": [
-          "bridge",
-          "core",
-          "alternate"
+        "hiddenClientRefused": true,
+        "routes": [
+          {
+            "route": "base",
+            "effectiveScope": "compile",
+            "value": 42,
+            "database": {
+              "departments": 1,
+              "rolledBackNames": 0,
+              "people": 2
+            }
+          },
+          {
+            "route": "runtime",
+            "effectiveScope": "runtime",
+            "value": 42,
+            "database": {
+              "people": 2,
+              "rolledBackNames": 0,
+              "departments": 1
+            }
+          },
+          {
+            "route": "compile",
+            "effectiveScope": "compile",
+            "value": 42,
+            "database": {
+              "rolledBackNames": 0,
+              "departments": 1,
+              "people": 2
+            }
+          },
+          {
+            "route": "both",
+            "effectiveScope": "compile",
+            "value": 42,
+            "database": {
+              "departments": 1,
+              "people": 2,
+              "rolledBackNames": 0
+            }
+          }
         ],
         "nativeUndoRedo": true
-      },
-      "executionSourceVectors": {
-        "state": "17369b3067be1df33869e01e14c7020ea2b13657426dfa98a732611c4768d554",
-        "package": "17369b3067be1df33869e01e14c7020ea2b13657426dfa98a732611c4768d554",
-        "spring": "4947392bbb26d1d1a0d027d9e9a16aab7b7ed86e14421cac8904355dee78efbc",
-        "build": "4947392bbb26d1d1a0d027d9e9a16aab7b7ed86e14421cac8904355dee78efbc"
       }
     }
   ],
   "maven": {
     "version": "3.9.11",
-    "builds": 4,
-    "beforeAfterRuntimeResult": 42,
-    "manualRelocation": true,
-    "nativeMoveVerified": false,
-    "activationModes": [
-      {
-        "mode": "inactive",
-        "profileOnlyClientCompiled": false
-      },
-      {
-        "mode": "property",
-        "profileOnlyClientCompiled": true
-      },
-      {
-        "mode": "explicit",
-        "profileOnlyClientCompiled": true
-      }
-    ]
+    "nativeMovePerEngine": true,
+    "effectivePomProfilesTested": [
+      "base",
+      "runtime",
+      "compile",
+      "both"
+    ],
+    "providedRuntimeTransitivityChecked": true,
+    "reviewedScope": "Same-POM replacement of matching default JAR dependencies in declaration order."
   },
   "craftAnything": {
     "channel": "CLI",
@@ -174,11 +210,11 @@
     "formula": "(implemented + host-provided + partial * 0.5) / 216 * 100"
   },
   "limitations": [
-    "Bounded private scalar state and simple constructors stay on their original owners. General state transfer, nullable and effectful receivers, and arbitrary constructors require further analysis.",
-    "Verified UTF-8 .txt and opaque .bin moves cover reviewed main resource roots and literal class-relative and absolute paths. General loaders, custom processors and other formats require separate analysis.",
-    "Gradle checks all supported compound property branches. Maven checks every subset of bounded additive property dependency profiles. Procedural build settings, conflicting or inherited profiles, and arbitrary providers remain outside the supported analysis.",
-    "Spring retains every supported branch result from source metadata predicates. Runtime and external conditions may remain unknown. Trusted JDT import and explicit build validation are separate from source interpretation.",
-    "Outline conversion and display limits remain. VS Code Explorer logged refresh errors during MySQL package rename testing. File, byte, Undo/Redo and fresh Spring checks passed."
+    "Reviewed scalar state transfers and same-class constructor delegation preserve the original field owners. General object graph transfer, arbitrary effects and nullable or aliased receivers remain outside this scope.",
+    "Package resources use reviewed main roots, bounded UTF-8 text/CSV/flat JSON/properties and opaque BIN/PNG/JPEG bytes. Java class-loader paths are literal. The reviewed Spring ClassPathResource overload requires the exact Spring Core 7.0.10 provider. General resource metadata and custom loaders require separate analysis.",
+    "Maven models same-POM default JAR replacement in every bounded profile subset and conservatively handles scope. Inherited profiles, dependency management and arbitrary external resolution require separate analysis.",
+    "Spring retains reviewed annotation attribute, metadata class-name, ternary and switch outcomes. General Spring callbacks and computed conditions require separate analysis.",
+    "Explorer and Outline display behavior is separate from the checked file, byte, Spring and Undo/Redo results."
   ],
   "ci": "The public Windows/Node22 workflow reports its own results for the pushed commit; local actual-server validation is recorded above."
 }

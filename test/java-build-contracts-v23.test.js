@@ -55,9 +55,11 @@ test('Maven considers profile-only source consumers even when they are absent fr
  assert.throws(()=>moveClientProof(mavenBuild(mavenFixture(optional)),'app','core'),/compile client client/);
 });
 
-test('Maven refuses inherited profiles, activation effects and dependency overrides',()=>{
+test('Maven refuses inherited profiles, activation effects and duplicates within one dependency layer',()=>{
  const optional=`<profiles>${profile('extra',property,dependency('app'))}</profiles>`;
  assert.throws(()=>mavenBuild(mavenFixture('',dependency('core'),optional)),/inherited/);
  assert.throws(()=>mavenBuild(mavenFixture(`<profiles>${profile('extra','<file><exists>some-file</exists></file>',dependency('app'))}</profiles>`)),/unreviewed/);
- assert.throws(()=>mavenBuild(mavenFixture(dependency('app')+optional)),/overrides/);
+ const base=dependency('app');
+ const duplicate=base.replace('</dependencies>',base.replace(/<\/?dependencies>/g,'')+'</dependencies>');
+ assert.throws(()=>mavenBuild(mavenFixture(duplicate)),/Duplicate Maven dependencies/);
 });

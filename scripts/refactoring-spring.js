@@ -15,7 +15,11 @@ async function startRefactoringApp(config,{classpath}={}){
   [path.join(root,'test/fixtures/refactoring-v23-build/v23-app'),'fixture.buildv23.BuildApplication'],
   [path.join(root,'test/fixtures/refactoring-v23-package'),'fixture.packagev23.PackageRefactoringApplication'],
   [path.join(root,'test/fixtures/refactoring-v23-spring'),'fixture.dynamicv23.app.DynamicContractsApplication'],
-  [path.join(root,'test/fixtures/refactoring-v23-state'),'fixture.statev23.StateApplication']
+  [path.join(root,'test/fixtures/refactoring-v23-state'),'fixture.statev23.StateApplication'],
+  [path.join(root,'test/fixtures/refactoring-v24-state'),'fixture.statev24.StateApplication'],
+  [path.join(root,'test/fixtures/refactoring-v24-package'),'fixture.packagev24.PackageRefactoringApplication'],
+  [path.join(root,'test/fixtures/refactoring-v24-spring'),'fixture.dynamicv24.app.DynamicContractsApplication'],
+  [path.join(root,'test/fixtures/refactoring-v24-maven/rb24-app'),'fixture.mavenv24.MavenContractApplication']
  ];
  const selected=candidates.find(([folder])=>fs.existsSync(folder)&&path.relative(fs.realpathSync(config.projectPath),fs.realpathSync(folder))==='');
  if(!selected||cp.length>28000)throw Error('Use an owned refactoring Spring fixture and bounded classpath.');

@@ -79,3 +79,9 @@
 # Owned v0.23 package test input, generated from pinned fixture bytes.
 /test/fixtures/refactoring-v23-package/src/package-assets/fixture/packagev23/payload/payload.bin
 /test/fixtures/refactoring-v23-package/src/package-assets/fixture/packagev23/relocated/payload.bin
+
+# Owned v0.24 image inputs generated during the package move test.
+/test/fixtures/refactoring-v24-package/src/package-assets/fixture/packagev24/payload/pixel.png
+/test/fixtures/refactoring-v24-package/src/package-assets/fixture/packagev24/payload/nested/pixel.jpg
+/test/fixtures/refactoring-v24-package/src/package-assets/fixture/packagev24/relocated/pixel.png
+/test/fixtures/refactoring-v24-package/src/package-assets/fixture/packagev24/relocated/nested/pixel.jpg
