@@ -8,6 +8,7 @@ const { completeSql } = require('./db/completion');
 const { TableEditor } = require('./table-editor');
 const { relatedRows } = require('./db/related-rows');
 const { tableLayoutConnectionKey } = require('./db/result-layouts');
+const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
 
 async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree) {
   const output = vscode.window.createOutputChannel('Rocketbrain');
@@ -16,6 +17,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const schemaMigrations = new Map();
   const schemaRebuilds=new Map(),streamManagers=new Map(),streamReviews=new Map(),streamTransactions=new Map();
   const connectionEvents = new vscode.EventEmitter();
+  const completedUserSql = new vscode.EventEmitter();
+  context.subscriptions.push(completedUserSql);
   let sequence = 0;
   let tableEditor;
   const project = new ProjectTree(), schemaTree = new SchemaTree(state), results = new ResultsView(vscode, context, {
@@ -206,15 +209,23 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const chosen = await vscode.window.showQuickPick(options, { title:'Open Related Rows' });
     if (chosen) return openRelatedRows(id, selection, chosen.key);
   }
-  async function runSql(sql, document = currentDocument(), { connectionEpoch, saved = false } = {}) {
+  function savedQueryTarget() {
+    return { connectionEpoch:state.epoch, label:state.label, key:state.mysql?state.tableLayoutConnection:demoHistoryKey,
+      profile:state.profile?{id:state.profile.id,database:state.profile.database}:null };
+  }
+  async function runSql(sql, document = currentDocument(), { connectionEpoch, connectionKey, saved = false, userQuery = false, beforeRun } = {}) {
     if (!sql.trim()) return;
     if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
-    if (connectionEpoch !== undefined && connectionEpoch !== state.epoch) throw new Error('The active database changed. Choose the saved query destination again.');
+    if (connectionEpoch !== undefined && (connectionEpoch !== state.epoch ||
+        connectionKey !== undefined && connectionKey !== savedQueryTarget().key)) {
+      throw new Error('The active database changed. Choose the saved query destination again.');
+    }
     const binding = await bind(document);
     assertBinding(document, binding);
     const db = state.db;
     if (state.running.has(binding.id)) throw new Error('This console already has a running query.');
     const session = state.mysql ? db.getSessionState(binding.id) : null;
+    const historyTarget = userQuery && !saved && (session?.readOnly ?? true) ? savedQueryTarget() : null;
     if (saved && session && !session.readOnly) throw new Error('Run the saved query in a read-only console.');
     state.running.add(binding.id); updateStatus();
     const source = state.mysql ? `${state.label} · ${binding.id} · ${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}` : 'Offline demo · SQLite · sample data';
@@ -224,8 +235,12 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       await results.show();
       if (editor) await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
       if (saved && (!vscode.workspace.isTrusted || document.isClosed || document.getText() !== sql)) throw new Error('The saved SQL changed or the workspace is unavailable.');
+      beforeRun?.();
       id = results.begin(sql, source, { readOnly: session?.readOnly ?? true, sessionId: binding.id });
       results.finish(id, await db.query(sql, { sessionId: binding.id, maxRows: 500, timeoutMs: 5000 }));
+      if (historyTarget?.key && vscode.workspace.isTrusted && binding.epoch===state.epoch && db===state.db) {
+        completedUserSql.fire({ sql, target:historyTarget });
+      }
     } catch (error) {
       if (id) results.finish(id, undefined, error instanceof Error ? error.message : String(error), error.state); else throw error;
     } finally { state.running.delete(binding.id); updateStatus(); }
@@ -244,7 +259,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   });
   command('rocketbrain.runQuery', async () => {
     const editor = vscode.window.activeTextEditor;
-    return runSql(selectedSql(editor), editor.document);
+    return runSql(selectedSql(editor), editor.document,{userQuery:true});
   });
   command('rocketbrain.openTable', async name => {
     if (typeof name !== 'string' || !state.schema.some(table => table.name === name)) return;
@@ -382,10 +397,12 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     queryDemo: sql => state.mysql ? Promise.reject(new Error('Demo checks require the demo connection.')) : state.db.query(sql),
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
     exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination),
+    analyzeResult: (id, options) => results.analyzeSnapshot(id, options),
     savedResultLayout: id => results.savedLayout(id),
     saveResultLayout: (id, modelId, columns) => results.saveLayout(id, modelId, columns),
     inspectRelatedRows, openRelatedRows,
     onDidChangeDatabase: connectionEvents.event,
+    onDidCompleteUserSql: completedUserSql.event,
     async withExclusiveSchemaWork(action){
       reconcileStreamTransactions();
       if(typeof action!=='function'||!vscode.workspace.isTrusted||state.disposed||state.switching)throw new Error('Use a trusted open workspace for coordinated schema work.');
@@ -445,15 +462,16 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       });
     },
     selectedSql,
-    savedQueryTarget: () => ({ connectionEpoch: state.epoch, label: state.label }),
-    async openSavedQuery(sql, destination) {
+    savedQueryTarget,
+    async openSavedQuery(sql, destination, { beforeRun } = {}) {
       if (!vscode.workspace.isTrusted || state.disposed || state.switching) throw new Error('Open a trusted workspace before using saved queries.');
       if (destination && destination.connectionEpoch !== state.epoch) throw new Error('The active database changed. Choose the saved query destination again.');
       const document = await vscode.workspace.openTextDocument({ language: 'sql', content: sql });
       await vscode.window.showTextDocument(document, { preview: false });
       if (!destination) return { documentUri: document.uri.toString() };
       if (!vscode.workspace.isTrusted || document.isClosed || document.getText() !== sql) throw new Error('The saved SQL changed or the workspace is unavailable.');
-      const resultId = await runSql(sql, document, { connectionEpoch: destination.connectionEpoch, saved: true });
+      const resultId = await runSql(sql, document, { connectionEpoch:destination.connectionEpoch, connectionKey:destination.key,
+        saved:true,beforeRun });
       return { documentUri: document.uri.toString(), resultId };
     },
     tableAction: (id, message) => tableEditor.handle(id, message),

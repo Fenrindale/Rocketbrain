@@ -36,6 +36,8 @@ test('table preference identity uses the logical saved endpoint, account, schema
   const first = tableLayoutConnectionKey({ ...direct, host: '127.0.0.1', port: 54001 }, profile);
   const next = tableLayoutConnectionKey({ ...direct, host: '127.0.0.1', port: 54002 }, { ...profile, name: 'Renamed' });
   assert.equal(first, next);
+  const summary = { id:profile.id, host:profile.host, database:profile.database, ssh:true, connectionKey:first };
+  assert.equal(tableLayoutConnectionKey({ ...direct,host:'127.0.0.1',port:54003 },summary),first);
   assert.notEqual(first, tableLayoutConnectionKey(direct, { ...profile, ssh: { ...profile.ssh, user: 'different' } }));
   assert.notEqual(first, tableLayoutConnectionKey(direct, { ...profile, database: 'next_schema' }));
   assert.notEqual(resultTableKey(connection, 'orders'), resultTableKey(connection, 'customers'));

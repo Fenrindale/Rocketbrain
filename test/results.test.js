@@ -397,6 +397,92 @@ test('actual result Webview renders database values as text and routes history/c
     assert.equal(await page.locator('th.result-pinned').evaluate(cell => cell.getBoundingClientRect().width), 245);
   });
 
+  await t.test('captured chart draws a grouped measure, pages categories and exports exact aggregates', async () => {
+    const result = {
+      columns: ['Category', 'Money'], fields: [{ type: 253 }, { type: 246 }], truncated: true,
+      rows: [['Store', '12345678901234567890.000000000000001'], ['Store', '-12345678901234567889.999999999999998'],
+        ['Store', '0.000000000000001'], [null, null], ...Array.from({ length: 26 }, (_, index) => ['Shop ' + index, '4.25'])],
+      rowCount: 30, durationMs: 1.5
+    };
+    const id = host.begin('SELECT category, amount FROM totals', 'DB');
+    host.finish(id, result);
+    await lastPost;
+    await page.locator('#result-view').selectOption('chart');
+    await page.locator('.chart-data tbody td').last().waitFor();
+    assert.equal(await page.locator('.chart-data tbody td').last().textContent(), '30');
+    await page.locator('#chart-category').selectOption('0');
+    await page.locator('#chart-operation').selectOption('sum');
+    await page.getByText('0.000000000000004', { exact: true }).waitFor();
+    assert.match(await page.locator('#chart-status').textContent(), /30 captured rows.*28 plotted categories.*preview can omit other rows/);
+    assert.deepEqual(await page.locator('.chart-data tbody tr').nth(1).locator('td').allTextContents(), ['NULL', '1', '0', 'NULL']);
+    await page.locator('#chart-shape').selectOption('line');
+    assert.ok(await page.locator('.result-chart-canvas').evaluate(canvas => canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(value => value > 0)));
+    await page.getByRole('button', { name: 'Next Categories' }).click();
+    assert.equal(await page.locator('.chart-data tbody tr').count(), 4);
+    assert.match(await page.locator('.chart-navigation').textContent(), /25–28 of 28 categories/);
+    await page.getByRole('button', { name: 'Export Chart Data' }).click();
+    await page.waitForFunction(() => window.__completed.some(message => message.type === 'exportAnalysis'));
+    assert.equal(writes.at(-1).uri, '/virtual/query-analysis.json');
+    const exported = JSON.parse(writes.at(-1).text);
+    assert.equal(exported.groups.length, 28);
+    assert.equal(exported.groups[0].value, '0.000000000000004');
+    assert.equal(exported.truncated, true);
+  });
+
+  await t.test('typed editors stage original line endings, exact JSON text and binary bytes as one ordinary draft', async () => {
+    const columns = [
+      { name: 'body', type: 'longtext', kind: 'text', editable: true, nullable: true },
+      { name: 'config', type: 'json', kind: 'json', editable: true, nullable: true },
+      { name: 'payload', type: 'blob', kind: 'binary', editable: true, nullable: true }
+    ];
+    const original = 'first\r\nsecond\rthird\nfourth\0tail';
+    const exactText = 'edited\r\nsecond\rthird\nfourth\0끝';
+    const exactJson = '{\n  "exact":9007199254740993, "optional":null\n}';
+    const id = host.begin('SELECT * FROM editor_types', 'DB', { readOnly: false });
+    host.finish(id, { columns: columns.map(column => column.name), rows: [[original, null, '0x00ff'], ['old\r\ntext\r\n', 'null', null]], rowCount: 2,
+      durationMs: 1, edit: { table: 'editor_types', modelId: 'type-model', canEdit: true, columns, rowIds: ['typed', 'crlf'] } });
+    await lastPost;
+    await page.getByRole('button', { name: 'Edit row typed column body' }).press('F2');
+    assert.equal(await page.locator('#cell-format').inputValue(), 'escaped');
+    assert.equal(await page.locator('#cell-value').inputValue(), JSON.stringify(original));
+    await page.locator('#cell-value').fill(JSON.stringify(exactText));
+    await page.getByRole('button', { name: 'Stage Cell' }).click();
+    await page.locator('#result-view').selectOption('record');
+    await page.getByRole('button', { name: 'Edit row typed column config' }).press('Enter');
+    assert.equal(await page.locator('#cell-null').isChecked(), true);
+    await page.locator('#cell-null').uncheck();
+    await page.locator('#cell-value').fill('{bad json}');
+    await page.getByRole('button', { name: 'Stage Cell' }).click();
+    assert.match(await page.locator('#cell-error').textContent(), /Enter valid JSON/);
+    await page.locator('#cell-value').fill(exactJson);
+    await page.getByRole('button', { name: 'Stage Cell' }).click();
+    await page.getByRole('button', { name: 'Edit row typed column payload' }).press('Enter');
+    await page.locator('#cell-format').selectOption('base64');
+    assert.equal(await page.locator('#cell-value').inputValue(), 'AP8=');
+    await page.locator('#cell-value').fill('AA0K/w==');
+    await page.locator('#cell-format').selectOption('hex');
+    assert.equal(await page.locator('#cell-value').inputValue(), '0x000d0aff');
+    await page.locator('#cell-value').fill('0xf');
+    await page.getByRole('button', { name: 'Stage Cell' }).click();
+    assert.match(await page.locator('#cell-error').textContent(), /even number/);
+    await page.locator('#cell-value').fill('0x00 0D\n0a FF');
+    await page.getByRole('button', { name: 'Stage Cell' }).click();
+    await page.locator('#result-row-next').click();
+    await page.getByRole('button', { name: 'Edit row crlf column body' }).press('Enter');
+    assert.equal(await page.locator('#cell-format').inputValue(), 'crlf');
+    assert.equal(await page.locator('#cell-value').inputValue(), 'old\ntext\n');
+    await page.locator('#cell-value').fill('new\ntext\n');
+    await page.getByRole('button', { name: 'Stage Cell' }).click();
+    assert.equal(await page.locator('#result-view option[value=chart]').isDisabled(), true);
+    await page.locator('#review').click();
+    await page.locator('#review-panel').waitFor({ state: 'visible' });
+    const review = await page.evaluate(id => window.__sent.find(message => message.type === 'reviewChanges' && message.id === id), id);
+    assert.deepEqual(review.changes.updates[0].values, {
+      body: { kind: 'value', text: exactText }, config: { kind: 'value', text: exactJson }, payload: { kind: 'value', text: '0x000d0aff' }
+    });
+    assert.equal(review.changes.updates[1].values.body.text, 'new\r\ntext\r\n');
+  });
+
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(unexpectedRequests, []);
 });

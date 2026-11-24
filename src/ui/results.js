@@ -3,12 +3,23 @@
   const vscode = acquireVsCodeApi();
   let history = [], currentId = null, editingCell = null, requestSequence = 0;
   const drafts = new Map(), browseForms = new Map(),bulkForms=new Map(), layouts = new Map();
-  const viewModes = ['grid', 'record', 'tree', 'text', 'transpose'];
+  const charts = new Map();
+  const viewModes = ['grid', 'record', 'tree', 'text', 'transpose', 'chart'];
   const editableModes = new Set(['grid', 'record']);
   let insertExport;
+  let chartObserver;
   const savedLayouts = new Map(vscode.getState?.()?.layouts || []);
   for (const [id, item] of vscode.getState?.()?.drafts || []) drafts.set(id, { ...item, updates: new Map(item.updates), deletes: new Set(item.deletes) });
   const $ = id => document.getElementById(id);
+  function options(control, values, selected) {
+    control.replaceChildren(...values.map(({ value, label }) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      return option;
+    }));
+    control.value = selected ?? '';
+  }
   const text = value => value === null ? 'NULL' : typeof value === 'object' ? JSON.stringify(value) : Object.is(value, -0) ? '-0' : String(value);
   const current = () => history.find(row => row.id === currentId) || history.at(-1);
   function draft(record) {
@@ -45,13 +56,84 @@
     vscode.postMessage({ type: 'draftChanged', id: record.id,modelId:record.result.edit.modelId,count: count(item), draftRevision: item.revision });
     persist(); render();
   }
+  const cellLimit = 128 * 1024;
+  const lineEndings = { lf: '\n', crlf: '\r\n', cr: '\r' };
+  const cellModes = {
+    raw: { label: 'Value', hint: 'The value is staged as entered and validated by the SQL review.' },
+    lf: { label: 'Text · LF', hint: 'Stage line breaks as LF.' },
+    crlf: { label: 'Text · CRLF', hint: 'Stage line breaks as CRLF.' },
+    cr: { label: 'Text · CR', hint: 'Stage line breaks as CR.' },
+    escaped: { label: 'Escaped text', hint: 'Edit a JSON string literal. Escapes preserve mixed line endings and control characters.' },
+    hex: { label: 'Hex bytes', hint: 'Use pairs of hexadecimal digits, with an optional 0x prefix. Spaces and line breaks between digits are ignored.' },
+    base64: { label: 'Base64 bytes', hint: 'Use standard Base64 including any padding. An empty byte sequence is valid.' }
+  };
+  function cellError(error) {
+    $('cell-error').textContent = error || '';
+    $('cell-error').hidden = !error;
+    $('cell-value').setAttribute('aria-invalid', String(Boolean(error)));
+  }
+  function preferredTextMode(value) {
+    const breaks = new Set(value.match(/\r\n|\r|\n/g));
+    if (breaks.size > 1 || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)) return 'escaped';
+    if (breaks.has('\r\n')) return 'crlf';
+    if (breaks.has('\r')) return 'cr';
+    return 'lf';
+  }
+  function decodeCell(value, mode) {
+    if (value.length > 6 * cellLimit + 2) throw Error('This cell exceeds its input size limit. Use a smaller value.');
+    if (mode === 'escaped') {
+      let decoded;
+      try { decoded = JSON.parse(value); } catch { /* Use the actionable error below. */ }
+      if (typeof decoded !== 'string') throw Error('Enter a valid JSON string literal, with double quotes and escaped control characters.');
+      return decoded;
+    }
+    if (mode === 'hex') {
+      const hex = value.replace(/[ \t\r\n]/g, '').replace(/^0x/i, '');
+      if (!/^(?:[\da-f]{2})*$/i.test(hex)) throw Error('Hex bytes require an even number of hexadecimal digits.');
+      return '0x' + hex.toLowerCase();
+    }
+    if (mode === 'base64') {
+      const source = value.replace(/[ \t\r\n]/g, '');
+      let bytes;
+      try { bytes = atob(source); } catch { /* Use the actionable error below. */ }
+      if (bytes === undefined || btoa(bytes) !== source) throw Error('Enter standard Base64 with its exact padding.');
+      const pairs = [];
+      for (let i = 0; i < bytes.length; i++) pairs.push(bytes.charCodeAt(i).toString(16).padStart(2, '0'));
+      return '0x' + pairs.join('');
+    }
+    return lineEndings[mode] ? value.replace(/\n/g, lineEndings[mode]) : value;
+  }
+  function encodeCell(value, mode) {
+    if (mode === 'escaped') return JSON.stringify(value);
+    if (mode === 'base64') {
+      const hex = decodeCell(value, 'hex').slice(2), bytes = [];
+      for (let i = 0; i < hex.length; i += 2) bytes.push(String.fromCharCode(Number.parseInt(hex.slice(i, i + 2), 16)));
+      return btoa(bytes.join(''));
+    }
+    return value;
+  }
+  function showCellMode(mode) {
+    const editor = $('cell-value'), selection = $('cell-format');
+    selection.value = mode;
+    editor.disabled = selection.disabled = $('cell-null').checked;
+    $('cell-hint').textContent = cellModes[mode].hint + (editingCell?.column.kind === 'json' ?
+      ' JSON syntax is checked without rewriting the supplied text. JSON null is a value separate from SQL NULL.' : '');
+  }
   function openCell(record, rowId, column, value, inserted = false) {
-    editingCell = { id: record.id, rowId, column, inserted, modelId: record.result.edit.modelId };
+    if (editingCell) { $('cell-value').focus(); return; }
+    const source = value === null || value === undefined ? '' : String(value);
+    const modes = column.kind === 'binary' ? ['hex', 'base64'] :
+      !column.kind || ['text', 'json'].includes(column.kind) ? ['lf', 'crlf', 'cr', 'escaped'] : ['raw'];
+    const mode = modes[0] === 'lf' ? preferredTextMode(source) : modes[0];
+    editingCell = { id: record.id, rowId, column, inserted, modelId: record.result.edit.modelId, mode };
     $('cell-label').textContent = `${column.name} · ${column.type}`;
-    $('cell-value').value = value === null || value === undefined ? '' : String(value);
+    $('cell-value').value = encodeCell(source, mode);
     $('cell-null').checked = value === null;
     $('cell-null').disabled = !column.nullable;
-    $('cell-value').disabled = value === null;
+    options($('cell-format'), modes.map(value => ({ value, label: cellModes[value].label })), mode);
+    $('cell-format-label').hidden = modes.length === 1;
+    showCellMode(mode);
+    cellError();
     $('cell-editor').hidden = false; render(); $('cell-value').focus(); $('cell-value').select();
   }
   function editableCell(td, record, rowId, column, value, inserted) {
@@ -71,7 +153,6 @@
     $('bulk-panel').hidden=!form.open||!model||record.readOnly;if($('bulk-panel').hidden)return;
     const xlsx=form.format==='xlsx';$('bulk-title').textContent=form.mode==='import'?(xlsx?'Import XLSX rows as staged inserts':'Import rows as staged inserts'):'Paste into loaded cells';$('bulk-header-label').hidden=form.mode!=='import';$('bulk-anchor').hidden=form.mode!=='paste';$('bulk-inspect').hidden=form.mode!=='import';$('xlsx-options').hidden=!xlsx;$('bulk-format-label').hidden=xlsx;$('bulk-null-label').hidden=$('bulk-null-token').hidden=xlsx;$('bulk-text').readOnly=xlsx;$('bulk-text-label').textContent=xlsx?'Preview of the first five data rows (values only)':'Text data';$('bulk-inspect').textContent=xlsx?'Inspect Worksheet and Map Columns':'Inspect Input and Map Columns';
     $('bulk-delimiter').value=form.delimiter===','?'comma':'tab';$('bulk-text').value=form.text;$('bulk-header').checked=form.hasHeader;$('bulk-null-enabled').checked=form.nullEnabled;$('bulk-null-token').value=form.nullToken;
-    const options=(control,values,value)=>{control.replaceChildren(...values.map(v=>{const option=document.createElement('option');option.value=v.value;option.textContent=v.label;return option;}));control.value=value||'';};
     if(xlsx){options($('xlsx-sheet'),(form.sheets||[]).map(sheet=>({value:sheet.id,label:sheet.name+(sheet.state!=='visible'?' ('+sheet.state+')':'')})),form.sheetId);$('xlsx-formulas').value=form.formulaPolicy;$('xlsx-blanks').value=form.blankPolicy;}
     options($('bulk-row'),(model.rowIds||[]).map((id,index)=>({value:id,label:String(index+1+(record.result.browse?.page||0)*(record.result.browse?.pageSize||0))})),form.anchorRowId);
     options($('bulk-column'),model.columns.filter(c=>c.editable).map(c=>({value:c.name,label:c.name})),form.anchorColumn);
@@ -439,6 +520,176 @@
     }
   }
 
+  const chartPageSize = 24;
+  const chartCountOps = new Set(['count', 'nonnull']);
+  function chartFor(record) {
+    const revision = record.chart.revision;
+    let chart = charts.get(record.id);
+    if (chart?.revision !== revision) {
+      const signature = JSON.stringify(record.result.columns);
+      const previous = chart?.signature === signature ? chartOptions(chart) : { category: null, operation: 'count', measure: null };
+      chart = { revision, signature, shape: chart?.shape || 'bar', ...previous, page: 0 };
+      charts.set(record.id, chart);
+    }
+    return chart;
+  }
+  const chartOptions = ({ category, operation, measure }) => ({ category, operation, measure });
+  function useChart(record, chart, type) {
+    const requestId = ++requestSequence;
+    if (type === 'analyzeResult') {
+      chart.pending = requestId;
+      chart.analysis = chart.error = undefined;
+      chart.page = 0;
+    }
+    vscode.postMessage({ type, id: record.id, revision: chart.revision, requestId, options: chartOptions(chart) });
+  }
+  const categoryText = group => group.category === null ? 'NULL' : group.category === '' ? '(empty text)' :
+    group.negativeZero ? '-0' : typeof group.category === 'string' && /^(?:NULL|\(empty text\)|true|false|-?\d)/.test(group.category) ?
+      JSON.stringify(group.category) : text(group.category);
+
+  function drawResultChart(canvas, groups, axis, shape) {
+    const width = canvas.clientWidth, height = canvas.clientHeight, ratio = window.devicePixelRatio || 1;
+    if (width < 25 || height < 25) return;
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(ratio, ratio);
+    const colors = getComputedStyle(document.body);
+    const color = (name, fallback) => colors.getPropertyValue('--vscode-' + name).trim() || fallback;
+    const left = Math.min(83, width / 5), right = width - 14, top = 16, bottom = height - 35;
+    const step = (right - left) / Math.max(groups.length, 1);
+    const x = index => left + (index + 0.5) * step;
+    const y = position => bottom - position * (bottom - top);
+    const origin = y(axis.zero);
+    ctx.strokeStyle = color('panel-border', '#777');
+    for (const position of [0, 0.25, 0.5, 0.75, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(left, y(position));
+      ctx.lineTo(right, y(position));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = color('foreground', '#bbb');
+    ctx.beginPath();
+    ctx.moveTo(left, origin);
+    ctx.lineTo(right, origin);
+    ctx.stroke();
+    const positive = color('charts-blue', '#3794ff'), negative = color('charts-orange', '#d18616');
+    if (shape === 'line') {
+      ctx.strokeStyle = positive;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let connected = false;
+      groups.forEach((group, index) => {
+        if (group.position === null) { connected = false; return; }
+        if (connected) ctx.lineTo(x(index), y(group.position));
+        else ctx.moveTo(x(index), y(group.position));
+        connected = true;
+      });
+      ctx.stroke();
+    }
+    groups.forEach((group, index) => {
+      if (group.position === null) return;
+      const pointX = x(index), pointY = y(group.position);
+      ctx.fillStyle = pointY > origin ? negative : positive;
+      if (shape === 'line') {
+        ctx.beginPath();
+        ctx.arc(pointX, pointY, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const barWidth = Math.min(40, step * 0.72);
+        ctx.fillRect(pointX - barWidth / 2, Math.min(origin, pointY), barWidth, Math.max(2, Math.abs(origin - pointY)));
+      }
+    });
+    ctx.fillStyle = color('foreground', '#bbb');
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    if (axis.minimum === axis.maximum) ctx.fillText(axis.minimum, left - 5, origin, left - 10);
+    else {
+      ctx.fillText(axis.maximum, left - 5, top, left - 10);
+      ctx.fillText(axis.minimum, left - 5, bottom, left - 10);
+      if (axis.zero > 0 && axis.zero < 1) ctx.fillText('0', left - 5, origin, left - 10);
+    }
+    ctx.textAlign = 'center';
+    const cadence = Math.max(1, Math.ceil(groups.length / Math.max(1, Math.floor(width / 95))));
+    for (let index = 0; index < groups.length; index += cadence) {
+      const label = categoryText(groups[index]).replace(/\s+/g, ' ');
+      ctx.fillText(label.length > 14 ? label.slice(0, 13) + '…' : label, x(index), bottom + 20, Math.min(88, step * cadence));
+    }
+  }
+  function renderChart(record, busy) {
+    const chart = chartFor(record), all = record.result.columns;
+    $('chart-tools').hidden = false;
+    $('chart-shape').value = chart.shape;
+    $('chart-operation').value = chart.operation;
+    for (const option of $('chart-operation').options) option.disabled = !chartCountOps.has(option.value) && !record.chart.numeric.length;
+    const choice = (name, index) => ({ value: String(index), label: (index + 1) + '. ' + name });
+    options($('chart-category'), [{ value: '', label: chart.operation === 'values' ? 'Row numbers' : 'All rows' }, ...all.map(choice)],
+      chart.category === null ? '' : String(chart.category));
+    const measureIndexes = chart.operation === 'nonnull' ? all.map((_, index) => index) : record.chart.numeric;
+    options($('chart-measure'), measureIndexes.map(index => choice(all[index], index)), String(chart.measure));
+    $('chart-shape').disabled = $('chart-operation').disabled = $('chart-category').disabled = busy;
+    $('chart-measure').disabled = busy || chart.operation === 'count';
+    $('chart-export').disabled = busy || !chart.analysis;
+    if (busy) { $('chart-status').textContent = 'Waiting for the current table action…'; return; }
+    if (!chart.analysis && !chart.error && !chart.pending) useChart(record, chart, 'analyzeResult');
+    if (!chart.analysis) {
+      $('chart-status').textContent = chart.error || 'Calculating captured results…';
+      return;
+    }
+    const analysis = chart.analysis, grid = $('grid');
+    const coverage = analysis.page === undefined ? 'captured rows' : 'captured rows on table page ' + analysis.page;
+    const partial = analysis.truncated || analysis.hasPrevious || (analysis.page !== undefined && analysis.hasNext !== false);
+    $('chart-status').textContent = analysis.rows + ' ' + coverage + ' · ' + analysis.groups.length + ' plotted categories' +
+      (partial ? ' · preview can omit other rows' : '') +
+      (analysis.uncommitted ? ' · includes this session’s uncommitted values' : '');
+    const groupStart = chart.page * chartPageSize, groups = analysis.groups.slice(groupStart, groupStart + chartPageSize);
+    if (!groups.length) return;
+    const panel = document.createElement('section'), extent = document.createElement('div'), canvas = document.createElement('canvas');
+    panel.className = 'chart-panel';
+    extent.className = 'chart-extent';
+    extent.textContent = 'Vertical scale · minimum ' + analysis.axis.minimum + ' · maximum ' + analysis.axis.maximum;
+    canvas.className = 'result-chart-canvas';
+    canvas.setAttribute('aria-hidden', 'true');
+    panel.append(extent, canvas);
+    if (analysis.groups.length > chartPageSize) {
+      const controls = document.createElement('div'), range = document.createElement('span');
+      controls.className = 'chart-navigation';
+      range.textContent = `${groupStart + 1}–${groupStart + groups.length} of ${analysis.groups.length} categories`;
+      for (const [delta, name] of [[-1, 'Previous Categories'], [1, 'Next Categories']]) {
+        const button = document.createElement('button');
+        button.textContent = name;
+        button.disabled = delta < 0 ? chart.page === 0 : groupStart + groups.length >= analysis.groups.length;
+        button.onclick = () => { chart.page += delta; render(); };
+        controls.append(button);
+      }
+      controls.append(range);
+      panel.append(controls);
+    }
+    const table = document.createElement('table');
+    table.className = 'chart-data';
+    const heading = table.createTHead().insertRow(), body = table.createTBody();
+    for (const label of [analysis.category, 'Rows', ...(chart.operation !== 'count' ? ['Non-NULL'] : []), 'Exact value']) {
+      const cell = document.createElement('th');
+      cell.scope = 'col';
+      cell.textContent = label;
+      heading.append(cell);
+    }
+    for (const group of groups) {
+      const row = body.insertRow();
+      for (const value of [categoryText(group), group.rows, ...(chart.operation !== 'count' ? [group.nonNull] : []), group.value]) {
+        presentValue(row.insertCell(), value);
+      }
+    }
+    panel.append(table);
+    grid.append(panel);
+    const draw = () => drawResultChart(canvas, groups, analysis.axis, chart.shape);
+    draw();
+    chartObserver = new ResizeObserver(draw);
+    chartObserver.observe(canvas);
+  }
+
   function renderResultLayout(record, layout, rows, { busy, needsDraftView }) {
     const result = record.result, order = columnOrder(layout);
     const visible = order.filter(index => !layout.hidden.has(index));
@@ -531,9 +782,13 @@
     $('tabs').replaceChildren(...history.map(record => {
       const button = document.createElement('button'); button.textContent = `Result ${record.id}` + (record.state === 'running' ? ' …' : record.state === 'error' ? ' !' : '');
       button.className = record.id === currentId ? 'active' : ''; button.title = record.sql; button.setAttribute('aria-pressed', String(record.id === currentId));
-      button.onclick = () => { currentId = record.id; editingCell = null; $('cell-editor').hidden = true; render(); }; return button;
+      button.disabled = Boolean(editingCell && record.id !== editingCell.id);
+      button.onclick = () => { currentId = record.id; render(); }; return button;
     }));
+    chartObserver?.disconnect();
+    chartObserver = undefined;
     $('grid').replaceChildren();
+    $('chart-tools').hidden = true;
     const exportable = Boolean(active?.state === 'done' && active.result?.columns.length && !active.editBusy &&
       !active.hasDraft && !active.review && !active.sessionState?.outcomeUnknown && !draft(active).pendingRequestId);
     $('copy').disabled = $('export').disabled = $('export-format').disabled = !exportable;
@@ -541,7 +796,7 @@
     $('result-view').disabled = true;
     $('result-layout').hidden = $('result-column-panel').hidden = true;
     renderExportAction(active);
-    $('close-result').disabled = !active || active.state === 'running' || active.editBusy || Boolean(active && draft(active).pendingRequestId);
+    $('close-result').disabled = !active || active.state === 'running' || active.editBusy || Boolean(editingCell || active && draft(active).pendingRequestId);
     $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('browse-tools').hidden = $('bulk-panel').hidden = true;
     if (!active) { editingCell = null; $('cell-editor').hidden = true; $('source').textContent = 'No result selected'; $('message').textContent = 'Run SQL from the editor with Ctrl+Enter.'; $('status').textContent = 'Ready'; return; }
     $('source').textContent = active.source;
@@ -555,7 +810,7 @@
     const result = active.result, enabled = renderTools(active, result), layout = resultLayout(active);
     const item = draft(active), cellOpen = editingCell?.id === active.id;
     const busy = Boolean(cellOpen || item.pendingRequestId || active.editBusy || active.sessionState?.outcomeUnknown || bulkForms.get(active.id)?.open);
-    const needsDraftView = Boolean(busy || count(item) || active.hasDraft || active.review);
+    const needsDraftView = Boolean(count(item) || active.hasDraft || active.review || active.sessionState?.outcomeUnknown);
     const rows = resultRows(active);
     const columns = renderResultLayout(active, layout, rows, { busy, needsDraftView });
     renderBrowse(active, result);
@@ -564,7 +819,8 @@
     else if (layout.mode === 'record') renderRecord(active, rows[layout.row], columns, enabled);
     else {
       $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('bulk-panel').hidden = true;
-      renderSnapshot(result, layout, columns);
+      if (layout.mode === 'chart') renderChart(active, busy);
+      else renderSnapshot(result, layout, columns);
     }
     $('export-format').options[3].disabled = !result.fields?.length;
     $('export-format').disabled = $('export').disabled;
@@ -577,6 +833,16 @@
     if (result.state?.needsReconnect) $('message').textContent += ' Session closed; reconnect explicitly before running another statement.';
   }
   window.addEventListener('message', event => {
+    if (event.data?.type === 'resultAnalysis') {
+      const { id, revision, requestId, analysis, error } = event.data, chart = charts.get(id);
+      if (chart?.revision === revision && chart.pending === requestId) {
+        chart.pending = undefined;
+        chart.analysis = analysis;
+        chart.error = error;
+        if (current()?.id === id) render();
+      }
+      return;
+    }
     if (event.data?.type !== 'results' || !Array.isArray(event.data.history)) return;
     const previous = history.at(-1)?.id, keepEditor = editingCell || current()?.result?.edit && !current().readOnly; history = event.data.history;
     if (editingCell && history.find(record => record.id === editingCell.id)?.result?.edit?.modelId !== editingCell.modelId) { editingCell = null; $('cell-editor').hidden = true; }
@@ -585,6 +851,7 @@
     for (const id of browseForms.keys()) if (!history.some(record => record.id === id)) browseForms.delete(id);
     for(const id of bulkForms.keys())if(!history.some(record=>record.id===id))bulkForms.delete(id);
     for (const id of layouts.keys()) if (!history.some(record => record.id === id)) layouts.delete(id);
+    for (const id of charts.keys()) if (!history.some(record => record.id === id)) charts.delete(id);
     for(const record of history){
       if(!record.result?.edit)continue;const model=record.result.edit,form=bulkForm(record),item=draft(record),source=record.bulkSource,bulk=record.bulkDraft;
       const workbook=record.xlsxWorkbook;if(workbook&&workbook.modelId===model.modelId&&workbook.id!==form.workbookId){form.workbookId=workbook.id;form.sheets=workbook.sheets;form.sheetId=workbook.sheets.find(s=>s.state==='visible')?.id||workbook.sheets[0]?.id;form.mode='import';form.format='xlsx';form.open=true;form.text='';form.sourceId=undefined;form.mapping=[];form.formulaPolicy='reject';form.blankPolicy='empty';form.hasHeader=true;}
@@ -593,20 +860,51 @@
     }
     render(); persist();
   });
-  $('cell-null').onchange = () => { $('cell-value').disabled = $('cell-null').checked; };
+  $('cell-null').onchange = () => { if (editingCell) showCellMode(editingCell.mode); cellError(); };
+  $('cell-value').oninput = () => cellError();
+  $('cell-format').onchange = () => {
+    if (!editingCell) return;
+    const mode = $('cell-format').value;
+    try {
+      const value = decodeCell($('cell-value').value, editingCell.mode);
+      $('cell-value').value = encodeCell(value, mode);
+      editingCell.mode = mode;
+      cellError();
+    } catch (error) {
+      cellError(error.message);
+    }
+    showCellMode(editingCell.mode);
+  };
   $('cancel-cell').onclick = () => { editingCell = null; $('cell-editor').hidden = true; render(); };
   $('cell-editor').onsubmit = event => {
     event.preventDefault();
     const record = current();
-    if (!record || !editingCell || editingCell.id !== record.id || record.editBusy || record.readOnly) return;
-    const item = draft(record), cell = $('cell-null').checked ? { kind: 'null' } : { kind: 'value', text: $('cell-value').value };
+    if (!record || !editingCell || editingCell.id !== record.id || editingCell.modelId !== record.result?.edit?.modelId ||
+        record.editBusy || record.readOnly || record.sessionState?.outcomeUnknown) return;
+    const item = draft(record);
     if (item.pendingRequestId) return;
-    if (cell.kind === 'value' && new TextEncoder().encode(cell.text).length > 128 * 1024) { $('edit-status').textContent = 'A staged cell must be at most 128 KiB.'; $('edit-status').className = 'error'; return; }
+    let cell = { kind: 'null' };
+    if (!$('cell-null').checked) {
+      try {
+        const value = decodeCell($('cell-value').value, editingCell.mode);
+        if (/[\ud800-\udfff]/u.test(value)) throw Error('A cell requires valid Unicode text.');
+        if (new TextEncoder().encode(value).length > cellLimit) throw Error('A staged cell must be at most 128 KiB in its database representation.');
+        if (editingCell.column.kind === 'json') {
+          try { JSON.parse(value); } catch { throw Error('Enter valid JSON, or select SQL NULL to clear a nullable cell.'); }
+        }
+        cell = { kind: 'value', text: value };
+      } catch (error) {
+        cellError(error.message);
+        return;
+      }
+    }
     const candidate = { ...item, updates: new Map(item.updates), inserts: item.inserts.map(row => ({ ...row, values: { ...row.values } })) };
     if (editingCell.inserted) {
-      const row = candidate.inserts.find(row => row.id === editingCell.rowId); row.values = { ...row.values, [editingCell.column.name]: cell };
+      const row = candidate.inserts.find(row => row.id === editingCell.rowId);
+      if (!row) { cellError('This draft row is no longer available. Cancel the editor and select a row.'); return; }
+      row.values = { ...row.values, [editingCell.column.name]: cell };
     } else candidate.updates.set(editingCell.rowId, { ...candidate.updates.get(editingCell.rowId), [editingCell.column.name]: cell });
-    if (new TextEncoder().encode(JSON.stringify(changes(candidate))).length > 1024 * 1024) { $('edit-status').textContent = 'The local change set must be at most 1 MiB. Apply the current batch first.'; $('edit-status').className = 'error'; return; }
+    if (new TextEncoder().encode(JSON.stringify(changes(candidate))).length > 1024 * 1024) { cellError('The local change set must be at most 1 MiB. Apply the current batch first.'); return; }
     item.updates = candidate.updates; item.inserts = candidate.inserts;
     editingCell = null; $('cell-editor').hidden = true; changed(record);
   };
@@ -672,6 +970,33 @@
     render();
   }
   $('result-view').onchange = () => updateResultLayout(layout => { layout.mode = $('result-view').value; });
+  $('chart-shape').onchange = () => {
+    const record = current();
+    if (!record?.chart) return;
+    chartFor(record).shape = $('chart-shape').value;
+    render();
+  };
+  function changeChartOptions() {
+    const record = current();
+    if (!record?.chart) return;
+    const chart = chartFor(record);
+    const category = $('chart-category').value;
+    chart.category = category === '' ? null : Number(category);
+    chart.operation = $('chart-operation').value;
+    const selected = $('chart-measure').value;
+    const choices = chart.operation === 'nonnull' ? record.result.columns.map((_, index) => index) : record.chart.numeric;
+    chart.measure = chart.operation === 'count' ? null :
+      selected !== '' && choices.includes(Number(selected)) ? Number(selected) : choices[0] ?? null;
+    useChart(record, chart, 'analyzeResult');
+    render();
+  }
+  for (const id of ['chart-category', 'chart-operation', 'chart-measure']) $(id).onchange = changeChartOptions;
+  $('chart-export').onclick = () => {
+    const record = current();
+    if (!record?.chart) return;
+    const chart = chartFor(record);
+    if (chart.analysis) useChart(record, chart, 'exportAnalysis');
+  };
   $('result-columns').onclick = () => updateResultLayout(layout => { layout.open = !layout.open; });
   $('result-row-previous').onclick = () => updateResultLayout(layout => { layout.row--; });
   $('result-row-next').onclick = () => updateResultLayout(layout => { layout.row++; });

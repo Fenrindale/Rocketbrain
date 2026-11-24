@@ -61,6 +61,8 @@ async function activate(context) {
   const javaNavigation = require('./java/navigation-vscode').registerJavaNavigation(context, vscode, { java });
   activeJavaNavigation = javaNavigation;
   context.subscriptions.push(javaNavigation);
+  const javaEditing = require('./java/editing-vscode').registerJavaEditing(context,vscode,{java});
+  context.subscriptions.push(javaEditing);
   const javaUtilities = require('./java/utilities-vscode').registerJavaUtilities(context, vscode, { java });
   activeJavaUtilities = javaUtilities;
   context.subscriptions.push(javaUtilities);
@@ -68,6 +70,9 @@ async function activate(context) {
   context.subscriptions.push(java);
   const javaTesting=require('./java/testing-vscode').registerJavaTesting(context,vscode,{java});
   activeJavaTesting=javaTesting;context.subscriptions.push(javaTesting);
+  const httpTools = require('./http/vscode').registerHttpTools(context,vscode);
+  const openApi = require('./http/openapi-vscode').registerOpenApiTools(context,vscode);
+  context.subscriptions.push(httpTools,openApi);
   const jpa = require('./jpa/vscode').registerJPAFeatures(context, vscode, { catalog: database.databaseCatalog });
   context.subscriptions.push(jpa);
   const analysis = require('./analysis-tree').registerAnalysisTree(context, vscode, { spring: java.spring, jpa });
@@ -101,7 +106,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, java, javaTesting, javaUtilities, javaNavigation, jpa, analysis, sqlAnalysis,schemaRename,sqlScripts,schemaComparison,streamImports,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,springProjects };
+  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, httpTools, openApi, jpa, analysis, sqlAnalysis,schemaRename,sqlScripts,schemaComparison,streamImports,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,springProjects };
 }
 async function deactivate() {
   const ddlExport = activeSchemaDdlExport;

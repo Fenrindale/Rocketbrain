@@ -8,6 +8,7 @@ const isKey = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
 const limit = { tables: 128, columns: 4096, bytes: 1024 * 1024 };
 
 function tableLayoutConnectionKey(config, profile) {
+  if (isKey(profile?.connectionKey)) return profile.connectionKey;
   const route = profile || config;
   if (!route || typeof route.host !== 'string' || typeof route.user !== 'string' || typeof route.database !== 'string') return undefined;
   const ssh = profile?.ssh;

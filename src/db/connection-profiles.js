@@ -36,7 +36,8 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
  async function prepare(profile,pass,signal){
   const config={host:profile.host,port:profile.port,user:profile.user,database:profile.database,password:pass,readOnly:true};
   if(profile.tls.mode==='verify'){config.ssl={rejectUnauthorized:true,verifyIdentity:true,serverName:profile.tls.serverName};for(const [field,file]of [['ca',profile.tls.caPath],['cert',profile.tls.certPath],['key',profile.tls.keyPath]])if(file)config.ssl[field]=await readPem(file);connectionSecurity(config);}
-  const info={id:profile.id,name:profile.name,group:profile.group,color:profile.color,host:profile.host,port:profile.port,database:profile.database,tls:profile.tls.mode==='verify',ssh:Boolean(profile.ssh)};
+  const info={id:profile.id,name:profile.name,group:profile.group,color:profile.color,host:profile.host,port:profile.port,database:profile.database,tls:profile.tls.mode==='verify',ssh:Boolean(profile.ssh),
+   connectionKey:require('./result-layouts').tableLayoutConnectionKey(config,profile)};
   let tunnel;if(profile.ssh){tunnel=await createTunnel(profile.ssh,{host:profile.host,port:profile.port},{cancellation:signal,onExit:()=>events.emit('change')});return{config:bindConnectionResource(config,{endpoint:tunnel.endpoint,dispose:tunnel.dispose,profile:info}),dispose:tunnel.dispose};}
   return{config:identifyConnection(config,info),dispose:async()=>{}};
  }

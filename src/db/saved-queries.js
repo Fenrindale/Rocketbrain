@@ -23,7 +23,36 @@ function queryText(value) {
 }
 
 const nameKey = value => value.normalize('NFKC').toLowerCase();
-const summary = ({ id, name, favorite, revision }) => ({ id, name, favorite, revision });
+const summary = ({ id, name, favorite, revision, tags, binding }) => ({ id, name, favorite, revision,
+  ...(tags?.length ? { tags: [...tags] } : {}), ...(binding ? { binding: { ...binding } } : {}) });
+
+function queryTags(value) {
+  if (!Array.isArray(value) || value.length > 8) throw new Error('Use up to eight SQL query tags.');
+  const tags = value.map(tag => {
+    if (typeof tag !== 'string' || !tag.trim() || tag.trim().length > 24 || /[,\u0000-\u001f\u007f]/.test(tag)) {
+      throw new Error('Each tag must contain 1–24 characters without commas or control characters.');
+    }
+    return tag.trim();
+  });
+  if (new Set(tags.map(nameKey)).size !== tags.length) throw new Error('Choose distinct SQL query tags.');
+  return tags;
+}
+
+function queryBinding(value) {
+  if (value == null) return null;
+  if (Object.keys(value).length !== 3 || typeof value.id !== 'string' || !uuid.test(value.id) ||
+      typeof value.database !== 'string' || !value.database.trim() || value.database.length > 64 ||
+      /[\u0000-\u001f\u007f]/.test(value.database) || typeof value.key !== 'string' || !/^[0-9a-f]{64}$/.test(value.key)) {
+    throw new Error('Bind the query to an observed saved database profile and schema.');
+  }
+  return { id: value.id, database: value.database, key: value.key };
+}
+
+function assertQueryTarget(expected, active) {
+  if (!Number.isInteger(expected?.connectionEpoch) || expected.connectionEpoch !== active.connectionEpoch || expected.key !== active.key) {
+    throw new Error('The active database changed. Choose the query destination again.');
+  }
+}
 
 function createSavedQueries(state, checkAccess) {
   let queue = Promise.resolve();
@@ -42,6 +71,8 @@ function createSavedQueries(state, checkAccess) {
         throw new Error('The saved query collection has an invalid entry.');
       }
       queryText(query.sql);
+      if (query.tags !== undefined) queryTags(query.tags);
+      if (query.binding !== undefined) queryBinding(query.binding);
       ids.add(query.id);
       names.add(nameKey(query.name));
     }
@@ -73,28 +104,34 @@ function createSavedQueries(state, checkAccess) {
   }
 
   return {
-    list() {
-      return read().map(summary).sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.name.localeCompare(b.name));
+    list({ tag } = {}) {
+      return read().filter(query => tag === undefined || query.tags?.some(value => nameKey(value) === nameKey(tag)))
+        .map(summary).sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.name.localeCompare(b.name));
     },
-    source(id, revision) {
-      return checkRevision(read(), id, revision).sql;
+    resolve(id, revision) {
+      const query = checkRevision(read(), id, revision);
+      return { ...summary(query), sql: query.sql };
     },
-    save(name, sql) {
+    source(id, revision) { return checkRevision(read(), id, revision).sql; },
+    save(name, sql, { tags = [], binding } = {}) {
       return mutate(queries => {
         if (queries.length >= capacity) throw new Error('Store at most 64 workspace queries.');
-        const entry = { id: randomUUID(), revision: randomUUID(), name: queryName(name), sql: queryText(sql), favorite: false };
+        const entry = { id: randomUUID(), revision: randomUUID(), name: queryName(name), sql: queryText(sql), favorite: false,
+          tags: queryTags(tags), binding: queryBinding(binding) };
         ensureUnique(queries, entry.name);
         return { queries: [...queries, entry], entry };
       });
     },
-    update(id, revision, { name, sql, favorite } = {}) {
+    update(id, revision, { name, sql, favorite, tags, binding } = {}) {
       return mutate(queries => {
         const previous = checkRevision(queries, id, revision);
         if (favorite !== undefined && typeof favorite !== 'boolean') throw new Error('Choose whether to mark the query as a favorite.');
         const entry = { ...previous, revision: randomUUID(),
           name: name === undefined ? previous.name : queryName(name),
           sql: sql === undefined ? previous.sql : queryText(sql),
-          favorite: favorite === undefined ? previous.favorite : favorite };
+          favorite: favorite === undefined ? previous.favorite : favorite,
+          tags: tags === undefined ? previous.tags : queryTags(tags),
+          binding: binding === undefined ? previous.binding : queryBinding(binding) };
         ensureUnique(queries, entry.name, id);
         return { queries: queries.map(query => query.id === id ? entry : query), entry };
       });
@@ -106,4 +143,4 @@ function createSavedQueries(state, checkAccess) {
   };
 }
 
-module.exports = { createSavedQueries, queryName, queryText };
+module.exports = { createSavedQueries, queryName, queryText, queryTags, queryBinding, assertQueryTarget };

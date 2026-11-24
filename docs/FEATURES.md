@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.29.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.30.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 19 |
-| 부분 구현 | 106 |
-| 미구현 | 71 |
+| 구현 | 25 |
+| 부분 구현 | 105 |
+| 미구현 | 67 |
 | VS Code 재사용 | 13 |
-| 지원 미확인 | 5 |
+| 지원 미확인 | 4 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **39.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **41.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.29에서는 Java 호출·타입 계층과 의존성 순환 탐색, FK 관련 행과 스키마 ERD, 가상 FK, 결과 레코드 편집·열 배치 저장, 정렬된 DDL 내보내기를 추가했다. 상태가 바뀐 항목은 10개이고 가중 점수는 77.5점에서 85점으로 늘었다.
+v0.30에서는 Java 라이브 템플릿·멤버 생성, HTTP·OpenAPI JSON 작업, 쿼리 이력, DB 결과 차트와 타입별 셀 편집을 추가했다. 저장 프로필의 열 배치도 재연결 뒤 확인했다. 상태가 바뀐 항목은 8개이고 가중 점수는 85점에서 90.5점으로 늘었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -29,7 +29,7 @@ v0.29에서는 Java 호출·타입 계층과 의존성 순환 탐색, FK 관련 
 | IDEA-006 | IntelliJ IDEA | 의미 기반 선택 확장·축소 | 부분 구현 |
 | IDEA-007 | IntelliJ IDEA | 문맥·타입 기반 코드 완성 | 부분 구현 |
 | IDEA-008 | IntelliJ IDEA | 파라미터 정보·빠른 문서 | 부분 구현 |
-| IDEA-009 | IntelliJ IDEA | Live Templates·Postfix 완성 | 미구현 |
+| IDEA-009 | IntelliJ IDEA | Live Templates·Postfix 완성 | 구현 |
 | IDEA-010 | IntelliJ IDEA | 코드 포맷·EditorConfig | 부분 구현 |
 | IDEA-011 | IntelliJ IDEA | 자동 import·사용하지 않는 import 정리 | 부분 구현 |
 | IDEA-012 | IntelliJ IDEA | 인레이 힌트·의미 강조 | 부분 구현 |
@@ -55,7 +55,7 @@ v0.29에서는 Java 호출·타입 계층과 의존성 순환 탐색, FK 관련 
 | IDEA-032 | IntelliJ IDEA | 멤버 Pull Up·Push Down | 지원 미확인 |
 | IDEA-033 | IntelliJ IDEA | 리팩터링 미리보기·충돌·일괄 undo | 부분 구현 |
 | IDEA-034 | IntelliJ IDEA | 람다·익명 클래스·루프 변환 | 지원 미확인 |
-| IDEA-035 | IntelliJ IDEA | 생성자·접근자·equals·delegate 생성 | 지원 미확인 |
+| IDEA-035 | IntelliJ IDEA | 생성자·접근자·equals·delegate 생성 | 구현 |
 | IDEA-036 | IntelliJ IDEA | 실시간 Java/Kotlin 오류·null 검사 | 부분 구현 |
 | IDEA-037 | IntelliJ IDEA | Intention·Quick Fix·코드 정리 | 부분 구현 |
 | IDEA-038 | IntelliJ IDEA | 프로젝트 검사·스코프·심각도 프로필 | 미구현 |
@@ -122,8 +122,8 @@ v0.29에서는 Java 호출·타입 계층과 의존성 순환 탐색, FK 관련 
 | IDEA-099 | IntelliJ IDEA | Docker·Compose·Registry 관리 | 미구현 |
 | IDEA-100 | IntelliJ IDEA | Kubernetes·Helm·클러스터 탐색 | 미구현 |
 | IDEA-101 | IntelliJ IDEA | 내장 터미널·셸·세션 | VS Code 재사용 |
-| IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 미구현 |
-| IDEA-103 | IntelliJ IDEA | OpenAPI·Swagger 편집·미리보기·코드 생성 | 미구현 |
+| IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 부분 구현 |
+| IDEA-103 | IntelliJ IDEA | OpenAPI·Swagger 편집·미리보기·코드 생성 | 부분 구현 |
 | IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 미구현 |
 | IDEA-105 | IntelliJ IDEA | IDE 안의 DB 연결·SQL·데이터 편집 | 부분 구현 |
 | IDEA-106 | IntelliJ IDEA | JavaScript·TypeScript·Node/브라우저 디버그 | VS Code 재사용 |
@@ -191,9 +191,9 @@ v0.29에서는 Java 호출·타입 계층과 의존성 순환 탐색, FK 관련 
 | DG-048 | DataGrip | 수동 commit/rollback·auto-commit 전환 | 구현 |
 | DG-049 | DataGrip | 트랜잭션 격리 수준 선택 | 구현 |
 | DG-050 | DataGrip | 실행 취소·connection 종료 | 구현 |
-| DG-051 | DataGrip | 쿼리 이력·검색·재실행 | 부분 구현 |
+| DG-051 | DataGrip | 쿼리 이력·검색·재실행 | 구현 |
 | DG-052 | DataGrip | 전체 SQL 로그·메타데이터 요청 기록 | 미구현 |
-| DG-053 | DataGrip | 즐겨찾기·저장 쿼리·다시 실행 | 부분 구현 |
+| DG-053 | DataGrip | 즐겨찾기·저장 쿼리·다시 실행 | 구현 |
 | DG-054 | DataGrip | 여러 result set·탭 유지·고정 | 부분 구현 |
 | DG-055 | DataGrip | EXPLAIN 원본·tree/table | 부분 구현 |
 | DG-056 | DataGrip | 시각 실행 계획·cost graph | 미구현 |
@@ -205,7 +205,7 @@ v0.29에서는 Java 호출·타입 계층과 의존성 순환 탐색, FK 관련 
 | DG-062 | DataGrip | 셀 직접 편집·저장·충돌 확인 | 구현 |
 | DG-063 | DataGrip | pending DML 미리보기·변경 되돌리기 | 구현 |
 | DG-064 | DataGrip | 행 추가·삭제·복제·일괄 붙여넣기 | 부분 구현 |
-| DG-065 | DataGrip | NULL·긴 text·JSON·binary 값 편집 | 부분 구현 |
+| DG-065 | DataGrip | NULL·긴 text·JSON·binary 값 편집 | 구현 |
 | DG-066 | DataGrip | FK 따라 관련 행으로 이동 | 부분 구현 |
 | DG-067 | DataGrip | record·tree·text·transpose 보기 | 구현 |
 | DG-068 | DataGrip | 컬럼 고정·숨김·순서·폭 조절 | 구현 |
@@ -216,7 +216,7 @@ v0.29에서는 Java 호출·타입 계층과 의존성 순환 탐색, FK 관련 
 | DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 미구현 |
 | DG-074 | DataGrip | native dump·restore 도구 통합 | 미구현 |
 | DG-075 | DataGrip | table·result dataset 비교·sync | 미구현 |
-| DG-076 | DataGrip | 그리드 결과 차트·집계 | 미구현 |
+| DG-076 | DataGrip | 그리드 결과 차트·집계 | 구현 |
 | DG-077 | DataGrip | 지리 데이터 지도 보기 | 미구현 |
 | DG-078 | DataGrip | table create/alter 시각 designer | 부분 구현 |
 | DG-079 | DataGrip | PK·FK·index·제약조건 편집 | 부분 구현 |

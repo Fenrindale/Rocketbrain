@@ -1,22 +1,22 @@
 {
-  "version": "0.29.0",
-  "verifiedAt": "2026-11-24T15:47:39.198Z",
+  "version": "0.30.0",
+  "verifiedAt": "2026-11-24T16:07:19.106Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.29.0.vsix",
-    "bytes": 1624975,
-    "sha256": "715949756b02a83098e088284739f81c4ae73099e2926b3a507cffe44173b132",
+    "name": "rocketbrain-0.30.0.vsix",
+    "bytes": 1656109,
+    "sha256": "cf5e53d5a781fb2148137faca82121ed8d9f8d381c5c6dcf4c4c31896325e6ec",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1045,
-    "inputVectorSha256": "b95ab65fa85fa49a556c5339652491adf882643fae9c217e97a87ce6fa724f1e",
+    "frozenPublicInputs": 1065,
+    "inputVectorSha256": "32e820fbdc5706602419e040ee0d47673c89eca814f716f3c05a5b95f82b8f6e",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1115,
-    "pass": 1064,
+    "tests": 1136,
+    "pass": 1085,
     "fail": 0,
     "cancelled": 0,
     "skipped": 51,
@@ -29,22 +29,18 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 5,
+      "groupCount": 4,
       "groups": [
-        {
-          "group": "related",
-          "checks": 1
-        },
-        {
-          "group": "erd",
-          "checks": 1
-        },
         {
           "group": "results",
           "checks": 1
         },
         {
-          "group": "ddl",
+          "group": "http",
+          "checks": 1
+        },
+        {
+          "group": "history",
           "checks": 1
         },
         {
@@ -63,22 +59,18 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 5,
+      "groupCount": 4,
       "groups": [
-        {
-          "group": "related",
-          "checks": 1
-        },
-        {
-          "group": "erd",
-          "checks": 1
-        },
         {
           "group": "results",
           "checks": 1
         },
         {
-          "group": "ddl",
+          "group": "http",
+          "checks": 1
+        },
+        {
+          "group": "history",
           "checks": 1
         },
         {
@@ -93,150 +85,134 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-017": {
-      "scope": "최종 설치본에서 실제 Spring 메서드의 양방향 호출, 공통 호출 위치, int·String 오버로드와 네이티브 호출 트리를 확인했다.",
+    "IDEA-009": {
+      "scope": "실제 VS Code·Spring에서 사용자 정의 Java 템플릿과 편집 가능한 자리표시자를 삽입하고 postfix 표현식의 컴파일·실행을 확인했다.",
       "runtimeGroups": [
         "java"
       ]
     },
-    "IDEA-018": {
-      "scope": "최종 설치본에서 실제 Spring 프로젝트의 JPA 부모·자식과 인터페이스 구현을 양방향으로 확인하고 네이티브 타입 트리를 열었다.",
+    "IDEA-035": {
+      "scope": "실제 Spring 프로젝트에서 일곱 멤버를 생성했다. 충돌 거부, 취소, 실행 취소·다시 실행, 컴파일된 접근·동등성과 위임 반환값 42를 확인했다.",
       "runtimeGroups": [
         "java"
       ]
     },
-    "IDEA-023": {
-      "scope": "실제 Spring 소스와 컴파일 결과에서 각각 2개 연결의 패키지 순환을 확인했다. 도구 검사에서 JPMS 클래스 파일과 Maven·Gradle 선언을 별도로 확인했다.",
+    "IDEA-102": {
+      "scope": "최종 VSIX의 HTTP 명령으로 실제 Spring·JDBC 조회의 응답 조건 네 개를 확인했다. 소유 HTTP 서버에서 인증, 비밀값 표시 제거, 응답 제한과 취소를 검증했다.",
       "runtimeGroups": [
-        "java"
+        "http"
       ]
     },
-    "DG-025": {
-      "scope": "실제 MySQL·MariaDB에서 가상 FK가 같은 프로필의 재연결 뒤 복원되고 다른 연결에 나타나지 않음을 확인했다. 물리 키 중복은 거부했고 서버 DDL과 행을 대조했다.",
+    "IDEA-103": {
+      "scope": "실제 Spring 엔드포인트의 OpenAPI 작업에서 요청을 만든 뒤 두 DB를 사용하는 런타임에서 응답을 확인했다. 로컬 참조와 중복·순환 진단도 검증했다.",
       "runtimeGroups": [
-        "erd"
+        "http"
       ]
     },
-    "DG-066": {
-      "scope": "Spring 테이블 부모 1행·자식 2행, 별도 복합 FK 값의 양방향 결합, NULL과 오래된 행·관계 거부를 실제 MySQL·MariaDB에서 검증했다. Chromium에서 원본 행 식별자 전달을 확인했다.",
+    "DG-051": {
+      "scope": "실제 두 DB에서 사용자 SQL 기록, 검색·삭제·전체 지우기, 같은 연결의 재실행과 불일치 거부를 확인했다. 스크립트·바인딩 입력과 재실행은 기록에서 제외했다.",
       "runtimeGroups": [
-        "related"
+        "history"
       ]
     },
-    "DG-067": {
-      "scope": "Chromium에서 Grid와 Record 사이의 양방향 변경 반영·보기 전환·검토 입력을 확인했다. 실제 MySQL·MariaDB에서는 검토·Apply·Rollback과 원본 행 보존을 확인했다.",
+    "DG-053": {
+      "scope": "실제 두 서버에서 태그 검색, 저장 프로필 바인딩과 재연결, 연결 불일치 거부를 확인했다. 쿼리 내용은 선택한 SQL 그대로 보존됐다.",
+      "runtimeGroups": [
+        "history"
+      ]
+    },
+    "DG-065": {
+      "scope": "브라우저에서 LF·CRLF·CR 및 혼합 줄바꿈 편집을 확인했다. 실제 두 서버의 커밋에서 줄바꿈·NUL·JSON 큰 숫자·바이너리·NULL 표현을 대조했다.",
       "runtimeGroups": [
         "results"
       ]
     },
     "DG-068": {
-      "scope": "실제 MySQL·MariaDB에서 테이블 다시 열기·재연결·초기화와 다른 테이블의 설정 분리를 확인했다. Chromium 및 상태 저장소 재생성 검사에서도 복원됐다.",
+      "scope": "저장 프로필의 내부 표시 정보에서 연결 식별값을 전달하도록 수정했다. 두 실제 DB의 저장 프로필을 재연결한 뒤 같은 테이블의 배치 복원 확인을 추가했다.",
+      "runtimeGroups": [
+        "history"
+      ]
+    },
+    "DG-076": {
+      "scope": "Chromium에서 차트와 범주 페이지 이동을 확인했다. 실제 두 DB의 정밀 DECIMAL 집계에서 합계 0.000000000000004와 분수 평균을 확인했다.",
       "runtimeGroups": [
         "results"
-      ]
-    },
-    "DG-085": {
-      "scope": "최종 설치본에서 실제 두 엔진의 SQL 파일을 대조하고 FK·의존 뷰 순서를 확인했다. 테스트용 재생성의 열 문자셋·정렬 규칙과 FK 동작을 대조했으며 바뀐 정의의 저장을 거부했다.",
-      "runtimeGroups": [
-        "ddl"
-      ]
-    },
-    "DG-086": {
-      "scope": "실제 두 서버의 메타데이터를 사용해 복합 FK와 두 PK 열, 시작 테이블의 인접 탐색, 읽기 범위를 확인했다.",
-      "runtimeGroups": [
-        "erd"
-      ]
-    },
-    "DG-087": {
-      "scope": "Chromium에서 노드 이동, 관계 탐색과 PNG를 확인했다. 실제 두 DB에 연결한 VS Code에서 배치 JSON 왕복과 재연결 뒤 위치 복원, 만료된 다이어그램 저장 거부를 확인했다.",
-      "runtimeGroups": [
-        "erd"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 151,
+    "sourceCorrespondences": 161,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 19,
-      "partial": 106,
-      "not-implemented": 71,
+      "implemented": 25,
+      "partial": 105,
+      "not-implemented": 67,
       "host-provided": 13,
-      "unverified": 5,
+      "unverified": 4,
       "platform-limited": 2
     },
-    "weightedPoints": 85,
-    "previousWeightedPoints": 77.5,
+    "weightedPoints": 90.5,
+    "previousWeightedPoints": 85,
     "targetWeightedPoints": 108,
-    "referencePercent": 39.4,
+    "referencePercent": 41.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-017",
+        "id": "IDEA-009",
+        "before": "not-implemented",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-035",
         "before": "unverified",
         "after": "implemented"
       },
       {
-        "id": "IDEA-018",
-        "before": "unverified",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-023",
+        "id": "IDEA-102",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "DG-025",
-        "before": "not-implemented",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-066",
+        "id": "IDEA-103",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "DG-067",
+        "id": "DG-051",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-068",
+        "id": "DG-053",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-085",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-086",
-        "before": "not-implemented",
+        "id": "DG-065",
+        "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-087",
+        "id": "DG-076",
         "before": "not-implemented",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "관련 행은 접근 가능한 같은 스키마의 물리 FK와 테이블 캡처의 스칼라 키를 사용한다.",
-    "가상 FK는 저장한 연결에 속하는 로컬 다이어그램 정보다.",
-    "DDL 내보내기는 지원하는 테이블과 정적 뷰를 포함한다."
+    "HTTP 응답 검사는 상태·헤더·JSON 경로의 선언형 조건을 사용한다.",
+    "OpenAPI 작업은 3.0·3.1 JSON과 로컬 참조 형식에 적용한다.",
+    "차트 집계는 캡처한 결과 페이지의 값에서 계산한다."
   ],
   "next": [
-    "캡처한 DB 결과의 차트·정확 집계와 멀티라인·JSON·바이너리 편집",
-    "Java 코드 작성·생성 흐름과 실제 JVM 진단",
-    "저장한 DB 작업의 재사용과 데이터셋 비교"
+    "실제 JVM의 JFR·스레드·메모리 진단",
+    "MySQL·MariaDB SQL 포맷과 문맥 템플릿",
+    "데이터셋 차이와 검토하는 테이블 간 데이터 복사"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.29.0",
+  "version": "0.30.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -39,6 +39,13 @@
     "virtualWorkspaces": false
   },
   "contributes": {
+    "languages": [
+      {
+        "id": "rocketbrain-http",
+        "aliases": ["Rocketbrain HTTP", "HTTP"],
+        "extensions": [".http", ".rest"]
+      }
+    ],
     "commands": [
       { "command": "rocketbrain.java.move", "title": "Move Java Class File", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.moveCrossProject", "title": "Move Java Class Across Projects", "category": "Rocketbrain" },
@@ -54,9 +61,17 @@
       { "command": "rocketbrain.java.dependencyGraph", "title": "Inspect Java Dependencies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.callHierarchy", "title": "Explore Java Call Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.typeHierarchy", "title": "Explore Java Type Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.insertLiveTemplate", "title": "Insert Java Live Template", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.generateMembers", "title": "Generate Java Members", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.setTransactionIsolation", "title": "Set SQL Session Isolation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.sql.saveQuery", "title": "Save SQL Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.http.run", "title": "Send HTTP Request", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted", "icon": "$(play)" },
+      { "command": "rocketbrain.http.environment", "title": "Select HTTP Environment", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
+      { "command": "rocketbrain.http.saveSecret", "title": "Set HTTP Environment Secret", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
+      { "command": "rocketbrain.openapi.inspect", "title": "Inspect OpenAPI JSON", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc" },
+      { "command": "rocketbrain.openapi.createRequest", "title": "Create HTTP Request from OpenAPI JSON", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc" },
       { "command": "rocketbrain.schema.diagram", "title": "Open Schema Diagram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.schema.exportDdl", "title": "Save Schema DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       {
@@ -695,6 +710,11 @@
     "menus": {
       "editor/context": [
         {
+          "command": "rocketbrain.java.generateMembers",
+          "when": "editorLangId == java && isWorkspaceTrusted",
+          "group": "refactor"
+        },
+        {
           "command": "rocketbrain.java.callHierarchy",
           "when": "editorLangId == java && isWorkspaceTrusted",
           "group": "navigation"
@@ -820,6 +840,11 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "rocketbrain.http.run",
+          "when": "resourceLangId == rocketbrain-http && isWorkspaceTrusted",
+          "group": "navigation"
+        },
         {
           "command": "rocketbrain.setTransactionIsolation",
           "when": "resourceLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1109,6 +1134,16 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.http.environments": {
+          "type": "object",
+          "scope": "resource",
+          "default": {},
+          "description": "Named sets of HTTP text variables. Store credentials with Set HTTP Environment Secret.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        },
         "rocketbrain.java.enabled": {
           "type": "boolean",
           "default": true,
@@ -1141,6 +1176,28 @@
               "template": { "type": "string" }
             }
           }
+        },
+        "rocketbrain.java.liveTemplates": {
+          "type": "array",
+          "scope": "resource",
+          "default": [],
+          "description": "Additional Java snippets with a prefix, body and optional description.",
+          "items": {
+            "type": "object",
+            "required": ["prefix", "body"],
+            "additionalProperties": false,
+            "properties": {
+              "prefix": { "type": "string" },
+              "body": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "rocketbrain.java.postfixCompletion": {
+          "type": "boolean",
+          "scope": "resource",
+          "default": true,
+          "description": "Suggest Rocketbrain postfix transformations for reviewed Java expression shapes."
         },
         "rocketbrain.java.gradleHome": {
           "type": "string",
