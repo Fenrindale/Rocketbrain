@@ -4,6 +4,7 @@ const {SchemaObjectEditor}=require('./object-editor');
 
 const { performance } = require('node:perf_hooks');
 const { validateQuery, validateReadQuery, parameters } = require('./sql-policy');
+const { operationOf, outcomeOf } = require('./activity-log');
 const { readMetadata } = require('./metadata');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
 const { TableEditor } = require('./grid');
@@ -87,11 +88,12 @@ function newSession(id, readOnly, database) {
  * The SQL policy is not a sandbox for privileged server UDFs.
  */
 class MysqlService {
-  constructor(config, { createConnection } = {}) {
+  constructor(config, { createConnection, reportActivity } = {}) {
     this._options = connectionOptions(config);
     const security = require('./connection-security').connectionSecurity(config);Object.assign(this._options,security.options);this._connectionCleanup=security.dispose;
     this._defaultReadOnly = config.readOnly !== false;
     this._createConnection = createConnection || (options => require('mysql2').createConnection(options));
+    this._reportActivity = reportActivity;
     this._sessions = new Map([['default', newSession('default', this._defaultReadOnly, this._options.database)]]);
     this._metadataSession = newSession(METADATA_ID, true, this._options.database);
     this._disposed = false; this._revision = 0;
@@ -227,7 +229,7 @@ class MysqlService {
       const policy = validateQuery(sql, { readOnly: session.readOnly });
       await this._ensureConnection(session);
       let result, queryError;
-      try { result = await this._stream(session, sql, values, bounded, policy.mayWrite); }
+      try { result = await this._stream(session, sql, values, bounded, policy.mayWrite, { category: 'query', operation: policy.first }); }
       catch (error) { queryError = error; }
       if (session.connected) {
         try { await this._refreshState(session); }
@@ -243,7 +245,7 @@ class MysqlService {
   }
   async _scriptContext(session){
     await this._ensureConnection(session);
-    const result=await this._stream(session,'SELECT @@SESSION.sql_mode, VERSION(), DATABASE(), CONNECTION_ID()',[],{maxRows:2,timeoutMs:5000},false);
+    const result=await this._stream(session,'SELECT @@SESSION.sql_mode, VERSION(), DATABASE(), CONNECTION_ID()',[],{maxRows:2,timeoutMs:5000},false,{category:'metadata',operation:'SELECT'});
     if(result.truncated||result.rows.length!==1||result.rows[0].length!==4)throw fail('ROCKETBRAIN_SCRIPT_CONTEXT','The server SQL context could not be observed.');
     const [mode,version,database,connectionId]=result.rows[0];
     if(typeof mode!=='string'||typeof version!=='string'||database!==this._options.database||!/^[0-9]+$/.test(String(connectionId)))throw fail('ROCKETBRAIN_SCRIPT_CONTEXT','The server SQL context does not match this console.');
@@ -299,7 +301,7 @@ class MysqlService {
           if(session.closed||session.needsReconnect||!session.connected){resultState='stopped';stopReason='connection-unavailable';break;}
           if(elapsed>=review.totalTimeoutMs){resultState='stopped';stopReason='script-time-limit';break;}
           entry.stateBefore=this._state(session);const statementStart=performance.now();let result,error;
-          try{result=await this._stream(session,statement.preparedSql,statement.values,{maxRows:review.bounded.maxRows,timeoutMs:Math.max(1,Math.floor(Math.min(review.bounded.timeoutMs,review.totalTimeoutMs-elapsed)))},statement.mayWrite);}catch(failure){error=failure;}
+          try{result=await this._stream(session,statement.preparedSql,statement.values,{maxRows:review.bounded.maxRows,timeoutMs:Math.max(1,Math.floor(Math.min(review.bounded.timeoutMs,review.totalTimeoutMs-elapsed)))},statement.mayWrite,{category:'script',operation:statement.first});}catch(failure){error=failure;}
           if(session.connected)try{await this._refreshState(session);}catch(failure){if(statement.mayWrite)session.outcomeUnknown=true;if(!error)error=fail('ROCKETBRAIN_STATE_UNAVAILABLE','The statement finished but its transaction state could not be confirmed.',{queryCompleted:Boolean(result)});}
           if(statement.mayWrite)this._editor.invalidate(session.id);
           entry.durationMs=Math.round((performance.now()-statementStart)*100)/100;entry.stateAfter=this._state(session);
@@ -319,15 +321,16 @@ class MysqlService {
       return {reviewId,sessionId:session.id,scriptHash:scriptEngine.digest(review.script.sql),state:resultState,statements,completed,failed,notRun:statements.filter(entry=>entry.status==='not-run').length,stopReason,durationMs:Math.round((performance.now()-started)*100)/100,stateBefore,stateAfter:this._state(session),atomic:false,autoRetried:false,resultBytes:bytes,parameterBindingsIncluded:false,resultMayContainParameterValues:true};
     });
   }
-  _stream(session, sql, values, { maxRows, timeoutMs }, mayWrite) {
+  _stream(session, sql, values, { maxRows, timeoutMs }, mayWrite, activity) {
     const started = performance.now();
     return new Promise((resolve, reject) => {
-      let finished = false, bytes = 0;
+      let finished = false, bytes = 0, reportOutcome;
       const result = { columns: [], rows: [], rowCount: 0, truncated: false, durationMs: 0, affectedRows: 0, warningCount: 0, fields: [] };
       const finish = error => {
         if (finished) return;
         finished = true; clearTimeout(timer);
         if (session.active === active) session.active = null;
+        try { reportOutcome?.(outcomeOf(error && (error.code || true), result.truncated)); } catch { /* Recording is independent of the query. */ }
         if (error) reject(safeError(error));
         else { result.rowCount = result.rows.length; result.durationMs = Math.round((performance.now() - started) * 100) / 100; resolve(result); }
       };
@@ -342,6 +345,9 @@ class MysqlService {
         // Binary-protocol binding avoids SQL_MODE-dependent value escaping.
         const query = values.length ? session.connection.execute({ sql, values, rowsAsArray: true })
           : session.connection.query({ sql, rowsAsArray: true });
+        if (activity) {
+          try { reportOutcome = this._reportActivity?.(session, activity); } catch { /* Recording is independent of the query. */ }
+        }
         query.on('fields', fields => {
           if (finished || !fields) return;
           result.columns = fields.map(field => String(field.name));
@@ -508,10 +514,28 @@ class MysqlService {
     }
     return this._enqueue(session, async () => {
       await this._ensureConnection(session);
-      const result = await this._stream(session, sql, parameters(values), { maxRows: 5000, timeoutMs: 10000 }, false);
+      const result = await this._stream(session, sql, parameters(values), { maxRows: 5000, timeoutMs: 10000 }, false,
+        { category: 'metadata', operation: operationOf(sql) });
       if (result.truncated) throw new Error('The metadata exceeds the 5000-row or 4 MiB limit. Narrow the database scope.');
       await this._refreshState(session); return result;
     });
+  }
+  async explainQueryPlan(sql, { assertCurrent, format = 'json' } = {}) {
+    const { explainSql, normalizePlan } = require('./explain-plan');
+    // Detect unsafe or ambiguous input before opening an introspection session.
+    explainSql(sql, undefined, format);
+    const context = await this._metadataQuery('SELECT VERSION(), DATABASE(), @@SESSION.sql_mode');
+    const [version, database, mode] = context.rows[0] ?? [];
+    if (typeof version !== 'string' || typeof database !== 'string' || typeof mode !== 'string') {
+      throw Error('Could not confirm the database and SQL mode for visual EXPLAIN.');
+    }
+    const engine = /mariadb/i.test(version) ? 'mariadb' : 'mysql';
+    if (engine !== 'mysql' && format === 'tree') throw Error('Use JSON with this MariaDB connection. MySQL TREE text requires MySQL.');
+    const statement = explainSql(sql, mode.split(',').filter(Boolean), format);
+    assertCurrent?.();
+    const result = await this._metadataQuery(statement);
+    if (result.rows.length !== 1 || result.rows[0].length !== 1) throw Error('Expected one plan from the server.');
+    return normalizePlan({ raw: result.rows[0][0], engine, version, database, format });
   }
   async schema() {
     const result = await this._metadataQuery('SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME, ORDINAL_POSITION', [this._options.database]);

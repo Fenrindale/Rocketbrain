@@ -6,6 +6,13 @@ function registerSqlScripts(context,vscode,{database}={}) {
   const descriptions=new Map(),reviews=new Map(),runs=new Map(),priorValues=new Map(),operations=new Set(),controllers=new Set(),subscriptions=[];let closed=false;
   const trusted=()=>{if(closed)throw new Error('SQL scripts are closed.');if(!vscode.workspace.isTrusted)throw new Error('Trust the workspace before preparing or running SQL.');};
   function bounded(map,limit=16){while(map.size>=limit)map.delete(map.keys().next().value);}
+  function retainRun(id, capture) {
+    if (runs.size >= 8) {
+      const expired = [...runs.keys()].find(previous => !database.scriptResultRetained?.(previous));
+      runs.delete(expired ?? runs.keys().next().value);
+    }
+    runs.set(id, capture);
+  }
   function frame(document,range){
     trusted();if(!document||document.isClosed||document.languageId!=='sql')throw new Error('Open a SQL document first.');
     const text=document.getText(),start=range?document.offsetAt(range.start):0,end=range?document.offsetAt(range.end):text.length,sql=text.slice(start,end);
@@ -38,20 +45,35 @@ function registerSqlScripts(context,vscode,{database}={}) {
     try{
       assertFrame(review);
       const report=await database.runSqlScript({reviewId:b.reviewId,sessionId:b.sessionId,connectionEpoch:b.connectionEpoch,documentUri:b.documentUri,allowImplicitCommit,cancellation:abort.signal});
-      bounded(runs,8);runs.set(summaryId,{source,report});
+      retainRun(summaryId,{source,report});
       const rows=report.statements.map(statement=>[statement.index+1,statement.status,statement.result?.rowCount??0,statement.result?.affectedRows??0,statement.durationMs??0,statement.error?.message||(statement.result?.resultOmitted?'Result omitted: script result limit reached.':'')]);
-      const summary={columns:['Statement','Status','Rows','Affected','Milliseconds','Error'],rows,rowCount:rows.length,affectedRows:report.statements.reduce((sum,s)=>sum+(s.result?.affectedRows||0),0),durationMs:report.durationMs,truncated:false,state:report.stateAfter};
+      const scriptStatements = report.statements.flatMap(statement =>
+        statement.result && !statement.result.resultOmitted ? [{ index: statement.index,
+          label: 'Statement ' + (statement.index + 1) + ' · ' + statement.sql.replace(/\s+/g, ' ').slice(0, 88) }] : []);
+      const summary={columns:['Statement','Status','Rows','Affected','Milliseconds','Error'],rows,rowCount:rows.length,affectedRows:report.statements.reduce((sum,s)=>sum+(s.result?.affectedRows||0),0),durationMs:report.durationMs,truncated:false,state:report.stateAfter,scriptStatements};
       database.scriptResultFinish(summaryId,summary,undefined,report.stateAfter);
       return {resultId:summaryId,...structuredClone(report)};
     }catch(error){database.scriptResultFinish(summaryId,undefined,error.message,error.state);throw error;}
     finally{external?.dispose();controllers.delete(abort);}
   }
   async function openStatement(resultId,index){
-    if(closed)throw new Error('SQL scripts are closed.');const cached=runs.get(resultId),statement=cached?.report.statements[index];
-    if(!statement||!Number.isInteger(index)||!statement.result||statement.result.resultOmitted)throw new Error('This statement has no retained result to display. SQL was not re-executed.');
-    const id=database.scriptResultBegin(statement.sql,cached.source+' · cached statement '+(index+1),{readOnly:true,sessionId:cached.report.sessionId});
-    database.scriptResultFinish(id,structuredClone(statement.result),undefined,statement.stateAfter);await database.showResults();
-    return {resultId:id,executedSql:false,index};
+    if (closed) throw new Error('SQL scripts are closed.');
+    if (!Number.isInteger(resultId) || !Number.isInteger(index) || index < 0) throw Error('Choose a retained statement result.');
+    const existing = database.scriptStatementResult?.(resultId, index);
+    if (existing) {
+      await database.showResults();
+      await database.activateResult?.(existing);
+      return { resultId: existing, executedSql: false, index };
+    }
+    const cached = runs.get(resultId), statement = cached?.report.statements[index];
+    if (!statement?.result || statement.result.resultOmitted) throw Error('This statement has no retained result to display.');
+    const id = database.scriptResultBegin(statement.sql, cached.source + ' · cached statement ' + (index + 1), {
+      readOnly: true, sessionId: cached.report.sessionId, scriptCapture: { resultId, index }
+    });
+    database.scriptResultFinish(id, structuredClone(statement.result), undefined, statement.stateAfter);
+    await database.showResults();
+    await database.activateResult?.(id);
+    return { resultId: id, executedSql: false, index };
   }
   function reviewText(review){
     const b=review.backend;
@@ -93,7 +115,8 @@ function registerSqlScripts(context,vscode,{database}={}) {
       return {resultId:report.resultId,state:report.state,completed:report.completed,failed:report.failed,notRun:report.notRun};
     }catch(error){if(!closed)await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}
   }
-  subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runScript',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.reviewScript',()=>command(true)),vscode.commands.registerCommand('rocketbrain.sql.runWithParameters',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.openScriptResult',async()=>{
+  subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runScript',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.reviewScript',()=>command(true)),vscode.commands.registerCommand('rocketbrain.sql.runWithParameters',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.openScriptResult',async selection=>{
+    if (selection !== undefined) return api.openStatement(selection?.resultId, selection?.index);
     const choices=[];for(const [id,cached]of runs)for(const statement of cached.report.statements)if(statement.result&&!statement.result.resultOmitted)choices.push({label:'Run '+id+' · statement '+(statement.index+1),description:statement.sql.slice(0,90),id,index:statement.index});
     const selected=await vscode.window.showQuickPick(choices,{title:'Open retained statement result · no SQL rerun'});if(selected)return api.openStatement(selected.id,selected.index);
   }));

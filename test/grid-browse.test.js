@@ -11,6 +11,21 @@ test('literal text filters escape LIKE wildcards independently of backslash mode
  const plan=browseQuery(definition,{filters:[{column:'label',operator:'contains',value:{kind:'value',text:hostile}},{column:'payload',operator:'isNull'},{column:'id',operator:'eq',value:{kind:'null'}}]},'app');
  assert.ok(!plan.sql.includes(hostile));assert.match(plan.sql,/LIKE \? ESCAPE '='/);assert.deepEqual(plan.parameters,["%x=%=_==\\'; DROP TABLE t; --%"]);assert.match(plan.sql,/`payload` IS NULL AND `id` IS NULL/);
 });
+test('nested OR and AND preserve precedence and exact parameter order across typed search rules',()=>{
+ const match={column:'label',operator:'contains',value:{kind:'value',text:'_%'}};
+ const threshold={column:'amount',operator:'gt',value:{kind:'value',text:'1234567890123456.12345678'}};
+ const filters=[{logic:'or',filters:[match,{logic:'and',filters:[threshold,{column:'payload',operator:'isNull'}]}]},
+  {column:'id',operator:'gte',value:{kind:'value',text:'9007199254740993'}}];
+ const result=browseQuery(definition,{filters},'app');
+ assert.ok(result.sql.includes("WHERE (`label` LIKE ? ESCAPE '=' OR (`amount` > ? AND `payload` IS NULL)) AND `id` >= ?"));
+ assert.deepEqual(result.parameters,['%=_=%%','1234567890123456.12345678','9007199254740993']);
+ assert.deepEqual(result.query.filters,filters);
+ for(const bad of [{logic:'xor',filters:[match]},{logic:'or',filters:[]},{logic:'or',filters:[match],sql:'DROP TABLE other'},
+  {logic:'or',filters:[{logic:'or',filters:[{logic:'or',filters:[{logic:'or',filters:[match]}]}]}]}]){
+  assert.throws(()=>browseQuery(definition,{filters:[bad]},'app'),/AND or OR groups/);
+ }
+ assert.throws(()=>browseQuery(definition,{filters:[{logic:'or',filters:Array(11).fill(match)},{logic:'and',filters:Array(10).fill(match)}]},'app'),/20 conditions/);
+});
 test('browse options reject injected identifiers, raw SQL, duplicate sort, invalid types, oversized filters and unstable pages',()=>{
  const bad=[{sort:[{column:'label;DROP TABLE t',direction:'asc'}]},{sort:[{column:'id',direction:'ASC'}]},{sort:[{column:'id',direction:'asc'},{column:'id',direction:'desc'}]},{where:'1=1'},{page:-1},{page:2001},{pageSize:501},{filters:[{column:'missing',operator:'eq',value:'x'}]},{filters:[{column:'id',operator:'contains',value:'3'}]},{filters:[{column:'id',operator:'eq',value:'18446744073709551616'}]},{filters:[{column:'amount',operator:'eq',value:'0.000000001'}]},{filters:[{column:'label',operator:'eq',value:'x'.repeat(8193)}]},{filters:[{column:'payload',operator:'eq',value:'0xff'}]},{filters:[{column:'json',operator:'eq',value:'{}'}]}];
  for(const input of bad)assert.throws(()=>browseQuery(definition,input,'app'));

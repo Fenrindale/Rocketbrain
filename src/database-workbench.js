@@ -11,6 +11,7 @@ const { tableLayoutConnectionKey } = require('./db/result-layouts');
 const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
 
 async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree, isVirtualSqlPreview = () => false) {
+  const activityLog = require('./db/activity-log-vscode').registerSqlActivity(context, vscode);
   const output = vscode.window.createOutputChannel('Rocketbrain');
   const state = { db: new DatabaseService(), schema: [], metadata:null, profile:null, tableLayoutConnection:undefined, label: 'Offline demo', mysql: false, running: new Set(), connecting: new Set(), switching: false, disposed: false, candidates: new Set(), epoch: 0 };
   const bindings = new Map();
@@ -35,7 +36,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   function reconcileStreamTransactions(){let removed=false;for(const [id,saved]of streamTransactions){if(!streamManagers.get(saved.db)?.hasPendingTransaction(id)){streamTransactions.delete(id);removed=true;}}if(removed&&!streamTransactions.size)state.running.delete('stream-import');}
   const exclusiveDatabaseWork=()=>{
     reconcileStreamTransactions();
-    return ['schema-migration','stream-import','table-transfer'].some(key=>state.running.has(key));
+    return ['schema-migration','stream-import','table-transfer','database-admin'].some(key=>state.running.has(key));
   };
   const databaseGuard=(db,epoch)=>()=>vscode.workspace.isTrusted&&!state.disposed&&!state.switching&&state.db===db&&state.epoch===epoch;
   function assertExclusiveReady(){reconcileStreamTransactions();if(!vscode.workspace.isTrusted||!state.mysql||state.disposed||state.switching)throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');if(state.running.size||state.connecting.size)throw new Error('Finish the current database operation or pending import transaction first.');}
@@ -99,7 +100,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if (!vscode.workspace.isTrusted) throw connectionError('Trust this workspace before connecting to a database.');
     if (state.running.size || state.connecting.size || state.switching) throw connectionError('Wait for the current database operation first.');
     const expectedEpoch = state.epoch;
-    const next = new MysqlService(config); state.candidates.add(next);
+    const next = new MysqlService(config, { reportActivity: activityLog.createReporter() }); state.candidates.add(next);
     try {
       const metadata = await next.metadata();
       const schema = [...metadata.tables,...metadata.views];
@@ -395,7 +396,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   // Deliberate local extension API for integration callers; credentials are never returned or persisted here.
   return {
     ...require('./db/authoring-facade').authoringFacade({state,assertReady:assertExclusiveReady,pendingDraft:pendingTableDraft,isTrusted:()=>vscode.workspace.isTrusted,sessions:()=>[...bindings.values()].map(binding=>state.db.getSessionState(binding.id)),updateStatus,refresh:refreshAfterSchemaAttempt}),
-    dispose:disposeDatabase,disconnectMysql:useDemo,activeConnectionProfile:()=>state.profile?structuredClone(state.profile):null,
+    dispose:disposeDatabase,disconnectMysql:useDemo,activityLog,activeConnectionProfile:()=>state.profile?structuredClone(state.profile):null,
     schema: () => structuredClone(state.schema),
     catalogSnapshot:()=>state.metadata?structuredClone(state.metadata):null,
     queryDemo: sql => state.mysql ? Promise.reject(new Error('Demo checks require the demo connection.')) : state.db.query(sql),
@@ -477,6 +478,21 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       assertExclusiveReady();const{db,epoch}=state;if(request.connectionEpoch!==undefined&&request.connectionEpoch!==epoch)throw new Error('The procedure selection belongs to an older connection. Inspect again.');
       const key='schema-program-analysis';state.running.add(key);updateStatus();
       try{const input=structuredClone({routines:request.routines,...(request.inputs!==undefined?{inputs:request.inputs}:{}),...(request.sessionVariables!==undefined?{sessionVariables:request.sessionVariables}:{})});const report=await db.analyzeSchemaPrograms(input);if(!databaseGuard(db,epoch)())throw new Error('The database changed during stored-program analysis. Inspect again.');return{...report,connectionEpoch:epoch};}finally{state.running.delete(key);updateStatus();}
+    },
+    async explainQueryPlan(sql, { cancellation, beforeDispatch, format } = {}) {
+      assertExclusiveReady();
+      const { db, epoch } = state, key = 'visual-explain';
+      const assertCurrent = () => {
+        if (cancellation?.isCancellationRequested) throw Error('Visual EXPLAIN was cancelled.');
+        if (!databaseGuard(db, epoch)()) throw Error('The database connection changed. Explain the query again.');
+      };
+      assertCurrent();
+      state.running.add(key); updateStatus();
+      try {
+        const plan = await db.explainQueryPlan(sql, { format, assertCurrent: () => { assertCurrent(); beforeDispatch?.(); } });
+        assertCurrent();
+        return plan;
+      } finally { state.running.delete(key); updateStatus(); }
     },
     async databaseCatalog() {
       if(exclusiveDatabaseWork())throw new Error('Finish the schema operation or pending import transaction before reading database metadata.');
@@ -614,6 +630,13 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     async disposeStreamImports(){const manager=streamManagers.get(state.db);if(manager){await manager.dispose();streamManagers.delete(state.db);}streamReviews.clear();streamTransactions.clear();state.running.delete('stream-import');updateStatus();},
     scriptResultBegin(sql,source,options){return results.begin(sql,source,options);},
     scriptResultFinish(id,result,error,sessionState){results.finish(id,result,error,sessionState);},
+    scriptResultRetained: id => results.hasResult(id),
+    scriptStatementResult: (id, index) => results.findStatement(id, index),
+    activateResult: id => results.activateResult(id),
+    setResultTab: (id, settings) => results.setResultTab(id, settings),
+    savedResultFilters: id => results.savedFilters(id),
+    saveResultFilter: (id, modelId, name) => results.saveFilterPreset(id, modelId, name),
+    removeResultFilter: (id, modelId, name) => results.removeFilterPreset(id, modelId, name),
     showResults:()=>results.show(),
     async configureConsoleSession(sessionId,{readOnly,autocommit}={}) {
       if(![...bindings.values()].some(binding=>binding.id===sessionId))throw new Error('Unknown SQL console.');

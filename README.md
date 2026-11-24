@@ -46,6 +46,7 @@ pnpm run package
 9. **Insert Java Live Template**과 `rocketbrain.java.liveTemplates`에서 Java 스니펫을 사용합니다. **Generate Java Members**에서 선택한 필드의 생성자·접근자·`equals`와 `hashCode` 또는 위임 메서드를 미리 보고 적용합니다.
 10. **Record JVM Profile**, **Capture JVM Threads**, **Inspect JVM Heap Histogram**에서 로컬 JVM을 직접 선택합니다. 저장한 JFR과 스레드 스냅샷도 다시 열 수 있습니다. 일부 Windows JDK에서 JFR이 빈 파일을 보고하면, 대상 JVM을 쓰기 가능한 ASCII 경로의 JFR 저장소로 시작한 뒤 다시 녹화합니다.
 11. **Run Java Inspection Profile**은 선택한 Java 소스 범위와 검사별 심각도를 VS Code Problems에 적용합니다. **Find Duplicate Java Code**는 정확한 토큰 일치 또는 리터럴을 무시한 후보를 표시하고 원본 범위를 엽니다. 사용자 프로필은 `rocketbrain.java.inspectionProfiles`에 저장합니다.
+12. **Show Java Class Diagram**은 Javac가 확인한 상속·구현·중첩 타입 관계와 소스 링크를 표시하고 Mermaid로 내보냅니다. **Trace Java Local Value**는 직선형 메서드에서 지역값의 정의와 사용 범위를 연결합니다. 구조 편집, 분기 병합, 객체의 공유 참조와 메서드 간 흐름은 지원 범위 밖입니다.
 
 ### HTTP 요청과 OpenAPI
 
@@ -95,6 +96,10 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - **Query History**를 켜면 사용자가 편집기에서 직접 실행해 성공한 읽기 전용 쿼리를 기록합니다. 30일 범위에서 검색·삭제하고 원래 연결의 새 콘솔로 재실행할 수 있습니다.
 - **Format SQL**은 현재 문서나 선택한 SQL에서 절의 줄 배치와 들여쓰기를 정리합니다. **Insert SQL Template**은 활성 카탈로그의 테이블·열을 넣으며, 알 수 없는 이름과 모호한 열에는 확인한 빠른 수정을 제공합니다.
 - **Preview SQL with a Virtual Schema**는 로컬 UTF-8 DDL 파일 또는 관찰한 DB 카탈로그를 바탕으로 현재 SQL 문서의 테이블·뷰와 열 변경을 순서대로 분석합니다. 편집기의 완성·진단에만 반영합니다. 파일을 수정한 뒤에는 다시 선택해 캡처하고, **Exit Virtual SQL Schema Preview**로 종료합니다.
+- `rocketbrain.sql.analysis.resolutionScopes`에서 `source`에 작업 공간 내 파일 또는 `queries/` 같은 폴더를 지정하고, `ddl`의 상대 경로와 `database`, `dialect`를 설정할 수 있습니다. 더 구체적인 경로가 우선하며 로컬 카탈로그를 읽을 수 없으면 진단을 표시합니다.
+- **Visualize SQL Execution Plan**은 선택한 읽기 쿼리의 계획을 트리와 표, 서버 원본 JSON으로 표시합니다. MySQL은 서버의 TREE 원문도 표시합니다. 서버에서 반환한 행 추정치와 비용을 보존합니다.
+- **Show SQL Activity Log**에서 작업 공간의 로컬 기록을 선택적으로 켭니다. 콘솔·스크립트·메타데이터 요청의 상태와 소요 시간이 메모리에 기록되며 SQL 원문·변수 값은 보관하지 않습니다. **Browse Database Object Names**에서는 테이블·뷰 이름을 먼저 읽고 선택한 객체의 열과 인덱스를 조회합니다.
+- 결과 탭에 이름을 붙이거나 고정하고, 보관된 스크립트 결과에서 각 문장의 캡처를 다시 엽니다. 테이블 필터는 중첩 AND/OR와 타입별 열 검색을 지원하며, 저장한 조건을 같은 연결·테이블에서 다시 선택할 수 있습니다.
 - **Generate JPA Entity from Table**은 현재 스키마의 컬럼과 기본 키에서 Jakarta Persistence 클래스를 미리 봅니다. 충돌과 카탈로그·패키지 변경을 재검사한 뒤 새 Java 파일을 만듭니다. 외래 키 연관관계는 원본 열로 유지합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.

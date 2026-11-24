@@ -136,24 +136,41 @@ function browseQuery(definition, input = {}, schema) {
   const sort = order.map(item => ({ ...item }));
   for (const column of pk) if (!used.has(column.name)) order.push({ column: column.name, direction: 'asc' });
   const operators = { eq: '=', ne: '<>', lt: '<', lte: '<=', gt: '>', gte: '>=' };
-  for (const item of input.filters || []) {
+  let conditions = 0, groups = 0;
+  function buildFilter(item, depth) {
+    if (item && Object.hasOwn(item, 'logic')) {
+      if (!['and', 'or'].includes(item.logic) || !Array.isArray(item.filters) || !item.filters.length || item.filters.length > 20 ||
+          Object.keys(item).some(key => !['logic', 'filters'].includes(key)) || depth >= 3 || ++groups > 20) {
+        throw fail('ROCKETBRAIN_GRID_QUERY', 'Use nonempty AND or OR groups nested at most three levels.');
+      }
+      const children = item.filters.map(filter => buildFilter(filter, depth + 1));
+      return { sql: '(' + children.map(child => child.sql).join(item.logic === 'or' ? ' OR ' : ' AND ') + ')',
+        filter: { logic: item.logic, filters: children.map(child => child.filter) } };
+    }
+    if (++conditions > 20) throw fail('ROCKETBRAIN_GRID_QUERY', 'Use at most 20 conditions across filter groups.');
     const column = columns.get(item?.column), operator = item?.operator;
     if (!column || ![...Object.keys(operators), 'contains', 'startsWith', 'endsWith', 'isNull', 'isNotNull'].includes(operator)) throw fail('ROCKETBRAIN_GRID_QUERY', 'Select a catalog column and a supported filter operator.');
     const name = quote(column.name), isNull = item.value === null || item.value?.kind === 'null';
     if (operator === 'isNull' || operator === 'isNotNull' || isNull && ['eq', 'ne'].includes(operator)) {
       const negate = operator === 'isNotNull' || operator === 'ne';
-      where.push(name + (negate ? ' IS NOT NULL' : ' IS NULL')); filters.push({ column: column.name, operator: negate ? 'isNotNull' : 'isNull' }); continue;
+      return { sql: name + (negate ? ' IS NOT NULL' : ' IS NULL'), filter: { column: column.name, operator: negate ? 'isNotNull' : 'isNull' } };
     }
     if (isNull || ['json', 'binary', 'unsupported'].includes(column.kind)) throw fail('ROCKETBRAIN_GRID_QUERY', 'This filter requires a supported non-NULL scalar value. JSON and binary values support only NULL filters.');
     const value = typeof item.value === 'string' ? { kind: 'value', text: item.value } : item.value;
     if (!value || value.kind !== 'value' || typeof value.text !== 'string' || Buffer.byteLength(value.text, 'utf8') > 8192) throw fail('ROCKETBRAIN_GRID_QUERY', 'A filter requires at most 8 KiB of explicit text.');
     const typed = typedCell(value, column);
+    let sql;
     if (['contains', 'startsWith', 'endsWith'].includes(operator)) {
       if (column.kind !== 'text') throw fail('ROCKETBRAIN_GRID_QUERY', 'Text matching requires a text column.');
       const literal = typed.parameter.replace(/[=%_]/g, character => '=' + character);
-      where.push(name + " LIKE ? ESCAPE '='"); parameters.push((operator !== 'startsWith' ? '%' : '') + literal + (operator !== 'endsWith' ? '%' : ''));
-    } else { where.push(name + ' ' + operators[operator] + ' ?'); parameters.push(typed.parameter); }
-    filters.push({ column: column.name, operator, value: { kind: 'value', text: value.text } });
+      sql = name + " LIKE ? ESCAPE '='"; parameters.push((operator !== 'startsWith' ? '%' : '') + literal + (operator !== 'endsWith' ? '%' : ''));
+    } else { sql = name + ' ' + operators[operator] + ' ?'; parameters.push(typed.parameter); }
+    return { sql, filter: { column: column.name, operator, value: { kind: 'value', text: value.text } } };
+  }
+  for (const item of input.filters || []) {
+    const compiled = buildFilter(item, 0);
+    where.push(compiled.sql);
+    filters.push(compiled.filter);
   }
   if (Buffer.byteLength(JSON.stringify(filters), 'utf8') > 65536) throw fail('ROCKETBRAIN_GRID_QUERY', 'Combined table filters exceed 64 KiB.');
   const sql = 'SELECT ' + definition.columns.map(column => quote(column.name)).join(',') + ' FROM ' + quote(schema) + '.' + quote(definition.name)

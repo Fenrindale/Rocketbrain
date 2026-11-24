@@ -18,6 +18,35 @@ test('a protected result history blocks scripts before database execution and re
 test('retained statement results are displayed without re-executing SQL',async()=>{
  const h=host();try{const d=await h.api.describe(h.document),p=await h.api.preview(d.id,{value:{kind:'integer',value:'42'}}),r=await h.api.run(p.id);assert.equal(h.finished[0][1].rows.length,2);const opened=await h.api.openStatement(r.resultId,0);assert.equal(opened.executedSql,false);assert.equal(h.counts.runCalls,1);assert.deepEqual(h.finished.at(-1)[1].rows,[[42]]);}finally{await h.api.dispose();}
 });
+test('an open script summary retains both exact results under cache pressure and reuses its opened child tab',async()=>{
+ const h=host(), open=new Map(), activated=[];
+ const begin=h.database.scriptResultBegin;
+ h.database.scriptResultBegin=(sql,source,options)=>{
+  const id=begin(sql,source,options);
+  if(options.scriptCapture)open.set(JSON.stringify(options.scriptCapture),id);
+  return id;
+ };
+ h.database.scriptStatementResult=(resultId,index)=>open.get(JSON.stringify({resultId,index}));
+ h.database.activateResult=id=>activated.push(id);
+ const run=async()=>{
+  const d=await h.api.describe(h.document);
+  const p=await h.api.preview(d.id,{value:{kind:'integer',value:'42'}});
+  return h.api.run(p.id);
+ };
+ try{
+  const retained=await run();
+  h.database.scriptResultRetained=id=>id===retained.resultId;
+  for(let i=0;i<9;i++)await run();
+  const counts=h.counts;
+  assert.deepEqual(h.finished[0][1].scriptStatements.map(value=>value.index),[0,1]);
+  const first=await h.api.openStatement(retained.resultId,0), second=await h.api.openStatement(retained.resultId,1);
+  assert.deepEqual(h.finished.slice(-2).map(([,result])=>result.rows),[[[42]],[[2]]]);
+  assert.deepEqual(await h.api.openStatement(retained.resultId,0),first);
+  assert.equal(counts.runCalls,h.counts.runCalls);
+  assert.equal(counts.reserveCalls+2,h.counts.reserveCalls);
+  assert.deepEqual(activated,[first.resultId,second.resultId,first.resultId]);
+ }finally{await h.api.dispose();}
+});
 test('DDL requires explicit approval and trust is rechecked before execution',async()=>{
  const h=host();h.ddl=true;try{const d=await h.api.describe(h.document),p=await h.api.preview(d.id,{value:{kind:'text',value:'x'}});await assert.rejects(h.api.run(p.id),/acknowledge/);assert.equal(h.counts.runCalls,0);h.vscode.workspace.isTrusted=false;await assert.rejects(h.api.run(p.id,{allowImplicitCommit:true}),/Trust/);assert.equal(h.counts.runCalls,0);}finally{await h.api.dispose();}
 });

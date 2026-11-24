@@ -40,7 +40,7 @@ class SchemaTree {
   refresh() { this.events.fire(); }
   dispose() { this.events.dispose(); }
 }
-let activeJava,activeJavaTesting,activeJavaUtilities,activeJavaNavigation,activeJavaInspections,activeJvmDiagnostics,activeSchemaRename,activeSqlScripts,activeSchemaComparison,activeStreamImports,activeTableTransfer,activeSchemaPrograms,activeSchemaCoordinator,activeSchemaDiagrams,activeSchemaDdlExport,activeDatabase,activeDbConnections,activeDbAuthoring,activeDbSessionTools,activeSpringProjects;
+let activeJava,activeJavaTesting,activeJavaUtilities,activeJavaNavigation,activeJavaInspections,activeJavaSourceAnalysis,activeJvmDiagnostics,activeSchemaRename,activeSqlScripts,activeSchemaComparison,activeStreamImports,activeTableTransfer,activeSchemaPrograms,activeSchemaCoordinator,activeSchemaDiagrams,activeSchemaDdlExport,activeDatabase,activeDbConnections,activeDbAuthoring,activeDbSessionTools,activeSpringProjects;
 async function activate(context) {
   let sqlAnalysis;
   const database = await require("./database-workbench").registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree,
@@ -53,6 +53,9 @@ async function activate(context) {
   context.subscriptions.push(dbSessionTools);
   const dbAdmin=require('./db/database-admin-vscode').registerDatabaseAdmin(context,vscode,{database});
   context.subscriptions.push(dbAdmin);
+  const lazyCatalog=require('./db/lazy-catalog-vscode').registerLazyCatalog(context,vscode,{database});
+  const explainPlans=require('./db/explain-plan-vscode').registerExplainPlans(context,vscode,{database});
+  context.subscriptions.push(lazyCatalog,explainPlans);
   const tableTransfer=require('./db/table-transfer-vscode').registerTableTransfer(context,vscode,{database});
   activeTableTransfer=tableTransfer;
   context.subscriptions.push(tableTransfer);
@@ -68,6 +71,9 @@ async function activate(context) {
   const javaInspections=require('./java/inspections-vscode').registerJavaInspections(context,vscode);
   activeJavaInspections=javaInspections;
   context.subscriptions.push(javaInspections);
+  const javaSourceAnalysis=require('./java/source-analysis-vscode').registerJavaSourceAnalysis(context,vscode,{java});
+  activeJavaSourceAnalysis=javaSourceAnalysis;
+  context.subscriptions.push(javaSourceAnalysis);
   const jvmDiagnostics=require('./java/jvm-diagnostics-vscode').registerJvmDiagnostics(context,vscode,{java});
   activeJvmDiagnostics=jvmDiagnostics;
   context.subscriptions.push(jvmDiagnostics);
@@ -123,9 +129,12 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, jvmDiagnostics, httpTools, openApi, jpa, jpaScaffold, analysis, sqlAnalysis,sqlEditing,schemaRename,sqlScripts,schemaComparison,streamImports,tableTransfer,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,dbAdmin,springProjects };
+  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, openApi, jpa, jpaScaffold, analysis, sqlAnalysis,sqlEditing,schemaRename,sqlScripts,schemaComparison,streamImports,tableTransfer,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,dbAdmin,lazyCatalog,explainPlans,springProjects };
 }
 async function deactivate() {
+  const sourceAnalysis=activeJavaSourceAnalysis;
+  activeJavaSourceAnalysis=undefined;
+  if(sourceAnalysis)await sourceAnalysis.dispose();
   const inspections=activeJavaInspections;
   activeJavaInspections=undefined;
   if(inspections)await inspections.dispose();

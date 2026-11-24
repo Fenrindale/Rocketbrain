@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.32.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.33.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 33 |
-| 부분 구현 | 113 |
-| 미구현 | 51 |
+| 구현 | 39 |
+| 부분 구현 | 112 |
+| 미구현 | 46 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 4 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **47.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **50%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.32에서는 Java 검사 프로필과 중복 탐색, 실제 카탈로그에서 JPA 엔티티 생성, 시스템 스키마와 직접 권한 검토, 편집기 가상 DDL을 확인했다. 상태가 바뀐 항목은 8개이고 가중 점수는 96점에서 102.5점으로 늘었다.
+v0.33에서는 Java 클래스 다이어그램과 지역값 흐름, 실행 계획, SQL 활동 로그, 지연 카탈로그와 해석 범위, 결과 탭·저장 필터를 검증했다. 상태가 바뀐 항목은 9개이고 가중 점수는 102.5점에서 108점으로 늘었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -40,9 +40,9 @@ v0.32에서는 Java 검사 프로필과 중복 탐색, 실제 카탈로그에서
 | IDEA-017 | IntelliJ IDEA | 호출 계층 | 구현 |
 | IDEA-018 | IntelliJ IDEA | 타입·상속 계층 | 구현 |
 | IDEA-019 | IntelliJ IDEA | Structure·현재 파일 기호 | VS Code 재사용 |
-| IDEA-020 | IntelliJ IDEA | 정적 Data Flow to/from Here | 미구현 |
+| IDEA-020 | IntelliJ IDEA | 정적 Data Flow to/from Here | 부분 구현 |
 | IDEA-021 | IntelliJ IDEA | 구조 검색·치환 | 미구현 |
-| IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 미구현 |
+| IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 부분 구현 |
 | IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 부분 구현 |
 | IDEA-024 | IntelliJ IDEA | 기호·패키지 이름 변경 | 부분 구현 |
 | IDEA-025 | IntelliJ IDEA | 변수·상수·필드 추출 | 부분 구현 |
@@ -160,7 +160,7 @@ v0.32에서는 Java 검사 프로필과 중복 탐색, 실제 카탈로그에서
 | DG-017 | DataGrip | introspection 대상 schema 선택 | 부분 구현 |
 | DG-018 | DataGrip | 로컬 메타데이터 cache·오프라인 재사용 | 부분 구현 |
 | DG-019 | DataGrip | 전체·증분·객체별 refresh | 부분 구현 |
-| DG-020 | DataGrip | 이름 우선·지연 상세 로딩 | 미구현 |
+| DG-020 | DataGrip | 이름 우선·지연 상세 로딩 | 구현 |
 | DG-021 | DataGrip | 시스템 schema minicatalog | 구현 |
 | DG-022 | DataGrip | 객체 이름·DDL·파일 검색 | 부분 구현 |
 | DG-023 | DataGrip | DDL·object source 보기 | 부분 구현 |
@@ -172,7 +172,7 @@ v0.32에서는 Java 검사 프로필과 중복 탐색, 실제 카탈로그에서
 | DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 부분 구현 |
 | DG-030 | DataGrip | alias·약어·함수 구문 완성 | 부분 구현 |
 | DG-031 | DataGrip | MySQL/MariaDB dialect별 구문·키워드 | 부분 구현 |
-| DG-032 | DataGrip | 파일·폴더별 SQL resolution scope | 부분 구현 |
+| DG-032 | DataGrip | 파일·폴더별 SQL resolution scope | 구현 |
 | DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 부분 구현 |
 | DG-034 | DataGrip | 실시간·범위별 정적 검사 | 부분 구현 |
 | DG-035 | DataGrip | 위험한 UPDATE/DELETE 경고 | 부분 구현 |
@@ -192,16 +192,16 @@ v0.32에서는 Java 검사 프로필과 중복 탐색, 실제 카탈로그에서
 | DG-049 | DataGrip | 트랜잭션 격리 수준 선택 | 구현 |
 | DG-050 | DataGrip | 실행 취소·connection 종료 | 구현 |
 | DG-051 | DataGrip | 쿼리 이력·검색·재실행 | 구현 |
-| DG-052 | DataGrip | 전체 SQL 로그·메타데이터 요청 기록 | 미구현 |
+| DG-052 | DataGrip | 전체 SQL 로그·메타데이터 요청 기록 | 부분 구현 |
 | DG-053 | DataGrip | 즐겨찾기·저장 쿼리·다시 실행 | 구현 |
-| DG-054 | DataGrip | 여러 result set·탭 유지·고정 | 부분 구현 |
-| DG-055 | DataGrip | EXPLAIN 원본·tree/table | 부분 구현 |
-| DG-056 | DataGrip | 시각 실행 계획·cost graph | 미구현 |
+| DG-054 | DataGrip | 여러 result set·탭 유지·고정 | 구현 |
+| DG-055 | DataGrip | EXPLAIN 원본·tree/table | 구현 |
+| DG-056 | DataGrip | 시각 실행 계획·cost graph | 구현 |
 | DG-057 | DataGrip | EXPLAIN ANALYZE 실제 실행 통계 | 부분 구현 |
 | DG-058 | DataGrip | 편집기 안 결과·SQL notebook 대안 | 미구현 |
 | DG-059 | DataGrip | 페이지 이동·row limit·지연 조회 | 부분 구현 |
 | DG-060 | DataGrip | 서버 정렬·다중 column 정렬 | 부분 구현 |
-| DG-061 | DataGrip | WHERE·column filter·검색·저장 filter | 부분 구현 |
+| DG-061 | DataGrip | WHERE·column filter·검색·저장 filter | 구현 |
 | DG-062 | DataGrip | 셀 직접 편집·저장·충돌 확인 | 구현 |
 | DG-063 | DataGrip | pending DML 미리보기·변경 되돌리기 | 구현 |
 | DG-064 | DataGrip | 행 추가·삭제·복제·일괄 붙여넣기 | 부분 구현 |

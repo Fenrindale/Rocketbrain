@@ -52,8 +52,227 @@ public final class SignatureInspector {
         }
         return false;
     }
+    static List<Map<String,Object>> errors(DiagnosticCollector<JavaFileObject> diagnostics) {
+        return diagnostics.getDiagnostics().stream().filter(d -> d.getKind() == Diagnostic.Kind.ERROR).limit(30)
+            .map(d -> object("uri",d.getSource() == null ? null : d.getSource().toUri().toString(),
+                "start",d.getStartPosition(),"end",d.getEndPosition(),"code",d.getCode(),"message",d.getMessage(Locale.ROOT))).toList();
+    }
+
+    static Map<String,Object> location(CompilationUnitTree unit, Tree node, SourcePositions positions) {
+        return object("uri",unit.getSourceFile().toUri().toString(),"start",positions.getStartPosition(unit,node),
+            "end",positions.getEndPosition(unit,node));
+    }
+
+    static List<Map<String,Object>> diagrams(List<CompilationUnitTree> units, Trees trees, Types types) {
+        SourcePositions positions = trees.getSourcePositions();
+        List<Map<String,Object>> declarations = new ArrayList<>();
+        for (var unit : units) {
+            new TreePathScanner<Void,Void>() {
+                @Override public Void visitClass(ClassTree node, Void unused) {
+                    var bound = trees.getElement(getCurrentPath());
+                    if (!(bound instanceof TypeElement declared) ||
+                            (declared.getNestingKind() != NestingKind.TOP_LEVEL && declared.getNestingKind() != NestingKind.MEMBER)) {
+                        return super.visitClass(node,unused);
+                    }
+                    List<Map<String,Object>> members = new ArrayList<>(), relations = new ArrayList<>();
+                    int omittedMembers = 0;
+                    for (var parent : types.directSupertypes(declared.asType())) {
+                        if (!(types.asElement(parent) instanceof TypeElement owner)) continue;
+                        boolean contract = owner.getKind().isInterface();
+                        if (!contract && node.getExtendsClause() == null) continue;
+                        relations.add(object("target",owner.getQualifiedName().toString(),
+                            "kind",contract && !declared.getKind().isInterface() ? "implements" : "extends",
+                            "signature",parent.toString()));
+                    }
+                    Element enclosing = declared.getEnclosingElement();
+                    if (enclosing instanceof TypeElement container) {
+                        relations.add(object("target",container.getQualifiedName().toString(),"kind","nestedIn",
+                            "signature",container.getQualifiedName().toString()));
+                    }
+                    for (var member : declared.getEnclosedElements()) {
+                        var memberPath = trees.getPath(member);
+                        if (memberPath == null) continue;
+                        var ownerUnit = memberPath.getCompilationUnit();
+                        var declaration = memberPath.getLeaf();
+                        var anchor = location(ownerUnit,declaration,positions);
+                        if ((long) anchor.get("start") < 0 || (long) anchor.get("end") < 0) continue;
+                        if (members.size() >= 80) { omittedMembers++; continue; }
+                        if (member instanceof VariableElement field && field.getKind().isField()) {
+                            members.add(object("name",field.getSimpleName().toString(),"signature",field.asType().toString(),
+                                "kind","field","modifiers",modifiers(field),"location",anchor));
+                        } else if (member instanceof ExecutableElement method) {
+                            boolean ctor = method.getKind() == ElementKind.CONSTRUCTOR;
+                            String memberName = ctor ? declared.getSimpleName().toString() : method.getSimpleName().toString();
+                            members.add(object("name",memberName,"signature",memberName + "(" +
+                                String.join(", ",method.getParameters().stream().map(p -> p.asType().toString()).toList()) + ")"
+                                + (ctor ? "" : " : " + method.getReturnType()),
+                                "kind",ctor ? "constructor" : "method","modifiers",modifiers(method),"location",anchor));
+                        }
+                    }
+                    declarations.add(object("id",declared.getQualifiedName().toString(),
+                        "name",declared.getSimpleName().toString(),"kind",declared.getKind().toString(),
+                        "modifiers",modifiers(declared),"location",location(unit,node,positions),
+                        "relations",relations,"members",members,"omittedMembers",omittedMembers));
+                    if (declarations.size() > 300) throw new IllegalArgumentException("Java diagram declaration limit");
+                    return super.visitClass(node,unused);
+                }
+            }.scan(unit,null);
+        }
+        return declarations;
+    }
+
+    static List<String> modifiers(Element element) {
+        return element.getModifiers().stream().map(Object::toString).sorted().toList();
+    }
+
+    static final class Flow {
+        private record Event(int id, String kind, String name, int start, int end, List<Integer> inputs) {}
+        final Map<Element,Integer> definitions = new HashMap<>();
+        final List<Event> events = new ArrayList<>();
+        final CompilationUnitTree unit;
+        final Trees trees;
+        final SourcePositions positions;
+        final String text;
+
+        Flow(CompilationUnitTree unit, Trees trees, String text) {
+            this.unit = unit;
+            this.trees = trees;
+            this.positions = trees.getSourcePositions();
+            this.text = text;
+        }
+        UnsupportedOperationException outsideScope() {
+            return new UnsupportedOperationException("Trace a straight-line method with initialized local primitive or String values, simple assignments and returns.");
+        }
+        int add(String kind, String name, int start, int end, List<Integer> inputs) {
+            if (events.size() >= 700 || start < 0 || end <= start || end > text.length()) throw outsideScope();
+            int index = events.size();
+            events.add(new Event(index,kind,name,start,end,List.copyOf(inputs)));
+            return index;
+        }
+        int start(Tree node) { return (int) positions.getStartPosition(unit,node); }
+        int end(Tree node) { return (int) positions.getEndPosition(unit,node); }
+
+        VariableElement variable(TreePath route) {
+            Element value = trees.getElement(route);
+            if (!(value instanceof VariableElement local) ||
+                    (local.getKind() != ElementKind.LOCAL_VARIABLE && local.getKind() != ElementKind.PARAMETER) ||
+                    (!local.asType().getKind().isPrimitive() && !local.asType().toString().equals("java.lang.String"))) {
+                throw outsideScope();
+            }
+            return local;
+        }
+
+        int nameAt(VariableTree tree) {
+            String name = tree.getName().toString();
+            int low = start(tree);
+            int until = tree.getInitializer() == null ? end(tree) : start(tree.getInitializer());
+            if (low < 0 || until < low || until > text.length()) throw outsideScope();
+            var matcher = java.util.regex.Pattern.compile("/\\*[\\s\\S]*?\\*/|//[^\\r\\n]*|"
+                + "\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|[\\p{javaJavaIdentifierStart}][\\p{javaJavaIdentifierPart}]*")
+                .matcher(text);
+            matcher.region(low,until);
+            int found = -1;
+            while (matcher.find()) if (matcher.group().equals(name)) found = matcher.start();
+            if (found < 0) throw outsideScope();
+            return found;
+        }
+
+        void declaration(TreePath at, VariableTree tree, boolean parameter) {
+            VariableElement value = variable(at);
+            if (!parameter && tree.getInitializer() == null) throw outsideScope();
+            List<Integer> inputs = parameter ? List.of() : expression(new TreePath(at,tree.getInitializer()));
+            int offset = nameAt(tree);
+            definitions.put(value,add(parameter ? "parameter" : "definition",value.getSimpleName().toString(),
+                offset,offset + tree.getName().length(),inputs));
+        }
+
+        List<Integer> expression(TreePath route) {
+            Tree leaf = route.getLeaf();
+            return switch (leaf.getKind()) {
+                case BOOLEAN_LITERAL, CHAR_LITERAL, DOUBLE_LITERAL, FLOAT_LITERAL, INT_LITERAL, LONG_LITERAL,
+                     STRING_LITERAL, NULL_LITERAL -> {
+                    int from = start(leaf), to = end(leaf);
+                    String value = text.substring(from,to);
+                    yield List.of(add("literal",value.length() > 60 ? value.substring(0,57) + "..." : value,from,to,List.of()));
+                }
+                case IDENTIFIER -> {
+                    VariableElement local = variable(route);
+                    Integer from = definitions.get(local);
+                    if (from == null) throw outsideScope();
+                    yield List.of(add("read",local.getSimpleName().toString(),start(leaf),end(leaf),List.of(from)));
+                }
+                case PARENTHESIZED -> expression(new TreePath(route,((ParenthesizedTree) leaf).getExpression()));
+                case TYPE_CAST -> expression(new TreePath(route,((TypeCastTree) leaf).getExpression()));
+                case LOGICAL_COMPLEMENT, UNARY_MINUS, UNARY_PLUS, BITWISE_COMPLEMENT ->
+                    expression(new TreePath(route,((UnaryTree) leaf).getExpression()));
+                case PLUS, MINUS, MULTIPLY, DIVIDE, REMAINDER, LEFT_SHIFT, RIGHT_SHIFT, UNSIGNED_RIGHT_SHIFT,
+                     LESS_THAN, LESS_THAN_EQUAL, GREATER_THAN, GREATER_THAN_EQUAL, EQUAL_TO, NOT_EQUAL_TO,
+                     AND, OR, XOR -> {
+                    BinaryTree binary = (BinaryTree) leaf;
+                    List<Integer> inputs = new ArrayList<>(expression(new TreePath(route,binary.getLeftOperand())));
+                    inputs.addAll(expression(new TreePath(route,binary.getRightOperand())));
+                    yield inputs;
+                }
+                default -> throw outsideScope();
+            };
+        }
+
+        List<Map<String,Object>> trace(TreePath methodPath) {
+            MethodTree node = (MethodTree) methodPath.getLeaf();
+            for (VariableTree parameter : node.getParameters()) declaration(new TreePath(methodPath,parameter),parameter,true);
+            TreePath body = new TreePath(methodPath,node.getBody());
+            for (StatementTree statement : node.getBody().getStatements()) {
+                TreePath line = new TreePath(body,statement);
+                if (statement instanceof VariableTree local) {
+                    declaration(line,local,false);
+                } else if (statement instanceof ExpressionStatementTree expr && expr.getExpression() instanceof AssignmentTree assignment
+                        && assignment.getVariable() instanceof IdentifierTree target) {
+                    TreePath operation = new TreePath(line,assignment);
+                    var variable = variable(new TreePath(operation,target));
+                    List<Integer> inputs = expression(new TreePath(operation,assignment.getExpression()));
+                    definitions.put(variable,add("assignment",variable.getSimpleName().toString(),start(target),end(target),inputs));
+                } else if (statement instanceof ReturnTree returned && returned.getExpression() != null) {
+                    List<Integer> inputs = expression(new TreePath(line,returned.getExpression()));
+                    add("return","return",start(returned),start(returned) + 6,inputs);
+                } else if (statement.getKind() != Tree.Kind.EMPTY_STATEMENT) {
+                    throw outsideScope();
+                }
+            }
+            return events.stream().map(event -> object("id",event.id(),"kind",event.kind(),"name",event.name(),
+                "start",event.start(),"end",event.end(),"inputs",event.inputs())).toList();
+        }
+    }
+
+    static Map<String,Object> dataFlow(List<CompilationUnitTree> units, Trees trees, Map<String,Source> sources, String uri, int offset) {
+        for (var unit : units) {
+            if (!unit.getSourceFile().toUri().toString().equals(uri)) continue;
+            var selected = new TreePath[1];
+            var positions = trees.getSourcePositions();
+            new TreePathScanner<Void,Void>() {
+                @Override public Void visitMethod(MethodTree method, Void unused) {
+                    if (method.getBody() != null && positions.getStartPosition(unit,method) <= offset
+                            && positions.getEndPosition(unit,method) > offset) {
+                        selected[0] = getCurrentPath();
+                    }
+                    return super.visitMethod(method,unused);
+                }
+            }.scan(unit,null);
+            if (selected[0] == null) return object("error","Place the cursor in a Java method.");
+            try {
+                var events = new Flow(unit,trees,sources.get(uri).text).trace(selected[0]);
+                return object("uri",uri,"events",events);
+            } catch (UnsupportedOperationException outside) {
+                return object("error",outside.getMessage());
+            }
+        }
+        return object("error","The selected Java source is outside the compiler scope.");
+    }
+
     public static void main(String[] args) throws Exception {
-        if (args.length != 4) throw new IllegalArgumentException("Use classpath-file, source-list, empty-provider-path and release.");
+        if (args.length != 4 && !(args.length == 5 && args[4].equals("diagram")) &&
+                !(args.length == 7 && args[4].equals("dataflow"))) {
+            throw new IllegalArgumentException("Use classpath-file, source-list, empty-provider-path and release.");
+        }
         String classpath = Files.readString(Path.of(args[0]), StandardCharsets.UTF_8);
         List<Source> sources = new ArrayList<>(); Map<String, Source> byUri = new HashMap<>();
         for (String line : Files.readAllLines(Path.of(args[1]), StandardCharsets.UTF_8)) {
@@ -79,6 +298,18 @@ public final class SignatureInspector {
             JavacTask task = (JavacTask) compiler.getTask(compilerOutput, files, diagnostics, options, null, sources);
             List<CompilationUnitTree> units = new ArrayList<>(); task.parse().forEach(units::add); task.analyze();
             Trees trees = Trees.instance(task); Elements elements = task.getElements(); Types types=task.getTypes(); SourcePositions positions = trees.getSourcePositions();
+            if (args.length > 4) {
+                System.setOut(new PrintStream(System.out,false,StandardCharsets.UTF_8));
+                var problems = errors(diagnostics);
+                Map<String,Object> report = object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,
+                    "classGenerationEnabled",false,"errors",problems);
+                if (problems.isEmpty()) {
+                    if (args[4].equals("diagram")) report.put("declarations",diagrams(units,trees,types));
+                    else report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
+                }
+                System.out.print(json(report));
+                return;
+            }
             List<Method> methods = new ArrayList<>(); List<Map<String, Object>> calls = new ArrayList<>(); List<Map<String, Object>> references = new ArrayList<>();
             for (CompilationUnitTree unit : units) {
                 String uri = unit.getSourceFile().toUri().toString(), text = byUri.get(uri).text;
@@ -133,7 +364,7 @@ public final class SignatureInspector {
                     }
                 }
             }
-            List<Map<String,Object>> errors=diagnostics.getDiagnostics().stream().filter(d->d.getKind()==Diagnostic.Kind.ERROR).limit(30).map(d->object("uri",d.getSource()==null?null:d.getSource().toUri().toString(),"start",d.getStartPosition(),"end",d.getEndPosition(),"code",d.getCode(),"message",d.getMessage(Locale.ROOT))).toList();
+            List<Map<String,Object>> errors=errors(diagnostics);
             System.out.print(json(object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,"classGenerationEnabled",false,"errors",errors,"methods",methods.stream().map(m->m.model).toList(),"calls",calls,"methodReferences",references,"overrideEdges",edges,"externalOverrides",external)));
         }
     }

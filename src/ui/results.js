@@ -5,6 +5,7 @@
   const drafts = new Map(), browseForms = new Map(),bulkForms=new Map(), layouts = new Map();
   const charts = new Map();
   const comparisons = new Map();
+  const statementChoices = new Map();
   const viewModes = ['grid', 'record', 'tree', 'text', 'transpose', 'chart', 'compare'];
   const editableModes = new Set(['grid', 'record']);
   let insertExport;
@@ -44,7 +45,9 @@
   }
   function send(type, payload = {}) {
     const record = current(); if (!record) return;
-    if (['copy', 'export', 'closeResult', 'openRelatedRows'].includes(type)) { vscode.postMessage({ type, id: record.id, ...payload }); return; }
+    if (['copy', 'export', 'closeResult', 'openRelatedRows', 'setResultPin', 'renameResult', 'openScriptStatement', 'saveFilterPreset', 'removeFilterPreset'].includes(type)) {
+      vscode.postMessage({ type, id: record.id, ...payload }); return;
+    }
     const item = draft(record);
     if (item.pendingRequestId || record.editBusy) return;
     const requestId=`${record.id}:${Date.now()}:${++requestSequence}`,message={type,id:record.id,requestId,draftRevision:item.revision,...payload};
@@ -169,7 +172,8 @@
     if (!browse || !model) return;
     let form = browseForms.get(record.id);
     if (!form || form.modelId !== model.modelId) {
-      form = { modelId: model.modelId, expanded: form?.expanded || false, sort: (browse.sort || []).map(item => ({ ...item })), filters: (browse.filters || []).map(item => ({ ...item, value: item.value ? { ...item.value } : undefined })) };
+      form = { modelId: model.modelId, expanded: form?.expanded || false, sort: structuredClone(browse.sort || []),
+        filters: structuredClone(browse.filters || []), selectedFilter: form?.selectedFilter, search: '' };
       browseForms.set(record.id, form);
     }
     const session = record.sessionState || result.state, item = draft(record);
@@ -199,23 +203,134 @@
         select(`Sort direction ${index + 1}`, [{ value: 'asc', label: 'Ascending' }, { value: 'desc', label: 'Descending' }], rule.direction, value => { rule.direction = value; }),
         remove(`Remove sort ${index + 1}`, () => { form.sort.splice(index, 1); render(); })); return row;
     }));
-    const labels = { eq: 'Equals', ne: 'Does not equal', lt: 'Less than', lte: 'At most', gt: 'Greater than', gte: 'At least', contains: 'Contains text', startsWith: 'Starts with', endsWith: 'Ends with', isNull: 'Is NULL', isNotNull: 'Is not NULL' };
-    const filterOperators = column => ['json', 'binary', 'unsupported'].includes(column?.kind) ? ['isNull', 'isNotNull'] : ['eq', 'ne', 'lt', 'lte', 'gt', 'gte', ...(column?.kind === 'text' ? ['contains', 'startsWith', 'endsWith'] : []), 'isNull', 'isNotNull'];
-    $('filter-rules').replaceChildren(...form.filters.map((rule, index) => {
-      const row = document.createElement('div'); row.className = 'browse-rule';
-      const column = model.columns.find(column => column.name === rule.column), operators = filterOperators(column);
-      row.append(select(`Filter column ${index + 1}`, model.columns.map(column => ({ value: column.name, label: column.name })), rule.column, value => { rule.column = value; const next = model.columns.find(column => column.name === value); if (!filterOperators(next).includes(rule.operator)) rule.operator = filterOperators(next)[0]; render(); }),
-        select(`Filter operator ${index + 1}`, operators.map(value => ({ value, label: labels[value] })), rule.operator, value => { rule.operator = value; render(); }));
-      const value = document.createElement('input'); value.type = 'text'; value.autocomplete = 'off'; value.spellcheck = false; value.setAttribute('aria-label', `Filter value ${index + 1}`); value.placeholder = column?.type || 'Value';
-      value.value = rule.value?.text || ''; value.disabled = blocked || ['isNull', 'isNotNull'].includes(rule.operator); value.oninput = () => { rule.value = { kind: 'value', text: value.value }; };
-      row.append(value, remove(`Remove filter ${index + 1}`, () => { form.filters.splice(index, 1); render(); })); return row;
-    }));
+    renderFilterRules(record, form, scalar, blocked, select, remove);
+    renderFilterPresets(record, form, blocked);
     $('add-sort').disabled = blocked || !scalar.length || form.sort.length >= Math.min(scalar.length, 8);
-    $('add-filter').disabled = blocked || !model.columns.length || form.filters.length >= 20;
     $('apply-browse').disabled = $('clear-browse').disabled = blocked;
     $('browse-status').textContent = localChanges ? 'Apply or discard staged changes before changing pages, sorting or filters.' : session?.inTransaction ? 'Commit or roll back the current transaction before changing pages, sorting or filters.' : !browse.pageable ? 'First page only: this table has no primary key.' : 'Server-side results. Concurrent data changes may move rows between pages.';
     $('add-sort').onclick = () => { const column = scalar.find(column => !form.sort.some(rule => rule.column === column.name)); if (column) { form.sort.push({ column: column.name, direction: 'asc' }); render(); } };
-    $('add-filter').onclick = () => { const column = scalar[0] || model.columns[0]; form.filters.push({ column: column.name, operator: filterOperators(column)[0], value: { kind: 'value', text: '' } }); render(); };
+  }
+  const filterLabels = { eq: 'Equals', ne: 'Does not equal', lt: 'Less than', lte: 'At most', gt: 'Greater than', gte: 'At least',
+    contains: 'Contains text', startsWith: 'Starts with', endsWith: 'Ends with', isNull: 'Is NULL', isNotNull: 'Is not NULL' };
+  function filterOperators(column) {
+    return ['json', 'binary', 'unsupported'].includes(column?.kind) ? ['isNull', 'isNotNull'] :
+      ['eq', 'ne', 'lt', 'lte', 'gt', 'gte', ...(column?.kind === 'text' ? ['contains', 'startsWith', 'endsWith'] : []), 'isNull', 'isNotNull'];
+  }
+  function filterInput(filters) {
+    return filters.map(rule => rule.logic ? { logic: rule.logic, filters: filterInput(rule.filters) } : {
+      column: rule.column, operator: rule.operator,
+      ...(['isNull', 'isNotNull'].includes(rule.operator) ? {} : { value: rule.value || { kind: 'value', text: '' } })
+    });
+  }
+  function renderFilterRules(record, form, scalar, blocked, select, remove) {
+    const columns = record.result.edit.columns;
+    const columnChoices = columns.map(column => ({ value: column.name, label: column.name }));
+    const first = scalar[0] || columns[0];
+    let leaves = 0, groups = 0;
+    const count = rules => rules.forEach(rule => {
+      if (rule.logic) { groups++; count(rule.filters); }
+      else leaves++;
+    });
+    count(form.filters);
+    const disabledAdd = blocked || !first || leaves >= 20;
+    const canAdd = rules => !disabledAdd && rules.length < 20;
+    const blank = () => ({ column: first.name, operator: filterOperators(first)[0], value: { kind: 'value', text: '' } });
+    const add = (rules, isGroup) => {
+      rules.push(isGroup ? { logic: 'or', filters: [blank()] } : blank());
+      render();
+    };
+    const addButton = (text, label, rules, isGroup, depth) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = text;
+      button.setAttribute('aria-label', label);
+      button.disabled = !canAdd(rules) || (isGroup && (depth >= 3 || groups >= 20));
+      button.onclick = () => add(rules, isGroup);
+      return button;
+    };
+    function renderRules(rules, depth, prefix = '') {
+      return rules.map((rule, index) => {
+        const position = prefix + (index + 1);
+        const discard = remove(rule.logic ? 'Remove filter group ' + position : 'Remove filter ' + position,
+          () => { rules.splice(index, 1); render(); });
+        discard.disabled = blocked || (depth > 0 && rules.length === 1);
+        if (rule.logic) {
+          const section = document.createElement('fieldset'), title = document.createElement('legend');
+          section.className = 'browse-group';
+          title.textContent = 'Group ' + position;
+          const header = document.createElement('div');
+          header.className = 'browse-actions';
+          header.append(select('Filter group ' + position + ' mode', [
+            { value: 'and', label: 'All match (AND)' }, { value: 'or', label: 'Any match (OR)' }
+          ], rule.logic, value => { rule.logic = value; }), discard);
+          section.append(title, header, ...renderRules(rule.filters, depth + 1, position + '.'),
+            addButton('Add Filter', 'Add filter in group ' + position, rule.filters, false, depth + 1),
+            addButton('Add Group', 'Add group in group ' + position, rule.filters, true, depth + 1));
+          return section;
+        }
+        const row = document.createElement('div');
+        row.className = 'browse-rule';
+        const column = columns.find(column => column.name === rule.column);
+        row.append(select('Filter column ' + position, columnChoices, rule.column, value => {
+          rule.column = value;
+          const operators = filterOperators(columns.find(column => column.name === value));
+          if (!operators.includes(rule.operator)) rule.operator = operators[0];
+          render();
+        }), select('Filter operator ' + position, filterOperators(column).map(value => ({ value, label: filterLabels[value] })),
+          rule.operator, value => { rule.operator = value; render(); }));
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.setAttribute('aria-label', 'Filter value ' + position);
+        input.placeholder = column?.type || 'Value';
+        input.value = rule.value?.text || '';
+        input.disabled = blocked || ['isNull', 'isNotNull'].includes(rule.operator);
+        input.oninput = () => { rule.value = { kind: 'value', text: input.value }; };
+        row.append(input, discard);
+        return row;
+      });
+    }
+    $('filter-rules').replaceChildren(...renderRules(form.filters, 0));
+    $('add-filter').disabled = !canAdd(form.filters);
+    $('add-filter-group').disabled = !canAdd(form.filters) || groups >= 20;
+    $('add-filter').onclick = () => add(form.filters, false);
+    $('add-filter-group').onclick = () => add(form.filters, true);
+    const search = $('browse-search-column'), input = $('browse-search-text'), button = $('browse-search-add');
+    $('column-search').hidden = !scalar.length;
+    if (!scalar.length) return;
+    const column = scalar.find(item => item.name === form.searchColumn) || scalar[0];
+    options(search, scalar.map(item => ({ value: item.name, label: item.name })), column.name);
+    search.disabled = input.disabled = !canAdd(form.filters);
+    const operator = column.kind === 'text' ? 'contains' : 'eq';
+    input.placeholder = filterLabels[operator] + ' · ' + column.type;
+    input.value = form.search;
+    button.disabled = !canAdd(form.filters) || !form.search;
+    search.onchange = () => { form.searchColumn = search.value; render(); };
+    input.oninput = () => { form.search = input.value; button.disabled = !canAdd(form.filters) || !form.search; };
+    button.onclick = () => {
+      form.filters.push({ column: column.name, operator, value: { kind: 'value', text: form.search } });
+      form.search = '';
+      render();
+    };
+  }
+  function renderFilterPresets(record, form, blocked) {
+    const presets = record.filterPresets;
+    $('filter-presets').hidden = !presets;
+    if (!presets) return;
+    const select = $('saved-filter'), current = presets.find(item => item.name === form.selectedFilter);
+    options(select, [{ value: '', label: 'Choose a saved filter' }, ...presets.map(item => ({
+      value: item.name, label: item.name + (item.applicable ? '' : ' (columns changed)')
+    }))], current?.name || '');
+    select.disabled = blocked;
+    select.onchange = () => { form.selectedFilter = select.value; render(); };
+    $('load-filter').disabled = blocked || !current?.applicable;
+    $('load-filter').onclick = () => { form.filters = structuredClone(current.filters); render(); };
+    $('remove-filter').disabled = blocked || !current;
+    $('remove-filter').onclick = () => send('removeFilterPreset', { name: current.name, modelId: form.modelId });
+    const saved = record.result.browse.filters || [];
+    $('save-filter').disabled = blocked || !saved.length;
+    $('save-filter').onclick = () => send('saveFilterPreset', { name: current?.name, modelId: form.modelId });
   }
   function renderTools(record, result) {
     const model = result.edit, item = draft(record), session = record.sessionState || result.state;
@@ -934,8 +1049,10 @@
     const active = current();
     if (active) currentId = active.id;
     $('tabs').replaceChildren(...history.map(record => {
-      const button = document.createElement('button'); button.textContent = `Result ${record.id}` + (record.state === 'running' ? ' …' : record.state === 'error' ? ' !' : '');
+      const button = document.createElement('button'), label = record.tabName || `Result ${record.id}`;
+      button.textContent = label + (record.state === 'running' ? ' …' : record.state === 'error' ? ' !' : '');
       button.className = record.id === currentId ? 'active' : ''; button.title = record.sql; button.setAttribute('aria-pressed', String(record.id === currentId));
+      if (record.tabPinned) { button.classList.add('retained'); button.setAttribute('aria-label', label + ' (pinned)'); }
       button.disabled = Boolean(editingCell && record.id !== editingCell.id);
       button.onclick = () => { currentId = record.id; render(); }; return button;
     }));
@@ -952,6 +1069,16 @@
     $('result-layout').hidden = $('result-column-panel').hidden = true;
     renderExportAction(active);
     $('close-result').disabled = !active || active.state === 'running' || active.editBusy || Boolean(editingCell || active && draft(active).pendingRequestId);
+    const pin = $('pin-result'), statement = $('script-result-selection'), captured = active?.result?.scriptStatements;
+    pin.disabled = $('rename-result').disabled = $('close-result').disabled;
+    pin.textContent = active?.tabPinned ? 'Unpin Result' : 'Pin Result';
+    pin.setAttribute('aria-pressed', String(active?.tabPinned === true));
+    $('script-result-sets').hidden = !captured?.length;
+    if (captured?.length) {
+      const prior = statementChoices.get(active.id);
+      const selected = captured.some(item => item.index === prior) ? prior : captured[0].index;
+      options(statement, captured.map(item => ({ value: String(item.index), label: item.label })), String(selected));
+    }
     $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('browse-tools').hidden = $('bulk-panel').hidden = true;
     if (!active) { editingCell = null; $('cell-editor').hidden = true; $('source').textContent = 'No result selected'; $('message').textContent = 'Run SQL from the editor with Ctrl+Enter.'; $('status').textContent = 'Ready'; return; }
     $('source').textContent = active.source;
@@ -989,6 +1116,14 @@
     if (result.state?.needsReconnect) $('message').textContent += ' Session closed; reconnect explicitly before running another statement.';
   }
   window.addEventListener('message', event => {
+    if (event.data?.type === 'activateResult') {
+      const id = event.data.id;
+      if ((!editingCell || editingCell.id === id) && history.some(record => record.id === id)) {
+        currentId = id;
+        render();
+      }
+      return;
+    }
     if (event.data?.type === 'datasetComparison' || event.data?.type === 'datasetStageError') {
       const { id, comparison, error, requestId, type } = event.data, form = comparisons.get(id);
       if (form && (type === 'datasetStageError' || form.pending === requestId)) {
@@ -1019,6 +1154,7 @@
     for (const id of layouts.keys()) if (!history.some(record => record.id === id)) layouts.delete(id);
     for (const id of charts.keys()) if (!history.some(record => record.id === id)) charts.delete(id);
     for (const id of comparisons.keys()) if (!history.some(record => record.id === id)) comparisons.delete(id);
+    for (const id of statementChoices.keys()) if (!history.some(record => record.id === id)) statementChoices.delete(id);
     for(const record of history){
       if(!record.result?.edit)continue;const model=record.result.edit,form=bulkForm(record),item=draft(record),source=record.bulkSource,bulk=record.bulkDraft;
       const workbook=record.xlsxWorkbook;if(workbook&&workbook.modelId===model.modelId&&workbook.id!==form.workbookId){form.workbookId=workbook.id;form.sheets=workbook.sheets;form.sheetId=workbook.sheets.find(s=>s.state==='visible')?.id||workbook.sheets[0]?.id;form.mode='import';form.format='xlsx';form.open=true;form.text='';form.sourceId=undefined;form.mapping=[];form.formulaPolicy='reject';form.blankPolicy='empty';form.hasHeader=true;}
@@ -1218,12 +1354,18 @@
     saveColumnLayout(record, layout, true);
   });
   $('close-result').onclick = () => send('closeResult');
+  $('pin-result').onclick = () => send('setResultPin', { pinned: !current()?.tabPinned });
+  $('rename-result').onclick = () => send('renameResult');
+  $('script-result-selection').onchange = () => {
+    if (current()) statementChoices.set(current().id, Number($('script-result-selection').value));
+  };
+  $('open-script-statement').onclick = () => send('openScriptStatement', { index: Number($('script-result-selection').value) });
   function browse(page, size) { const record = current(), query = record?.result?.edit?.query; if (query) send('browseTable', { query: { ...query, page, pageSize: size ?? query.pageSize } }); }
   $('page-previous').onclick = () => browse(current().result.browse.page - 1);
   $('page-next').onclick = () => browse(current().result.browse.page + 1);
   $('page-size').onchange = () => browse(0, Number($('page-size').value));
   $('browse-options').onclick = () => { const form = browseForms.get(current()?.id); if (form) { form.expanded = !form.expanded; render(); } };
-  $('browse-form').onsubmit = event => { event.preventDefault(); const record = current(), form = browseForms.get(record?.id); if (form) send('browseTable', { query: { page: 0, pageSize: record.result.browse.pageSize, sort: form.sort, filters: form.filters.map(rule => ({ column: rule.column, operator: rule.operator, ...(['isNull', 'isNotNull'].includes(rule.operator) ? {} : { value: rule.value || { kind: 'value', text: '' } }) })) } }); };
+  $('browse-form').onsubmit = event => { event.preventDefault(); const record = current(), form = browseForms.get(record?.id); if (form) send('browseTable', { query: { page: 0, pageSize: record.result.browse.pageSize, sort: form.sort, filters: filterInput(form.filters) } }); };
   $('clear-browse').onclick = () => send('browseTable', { query: { page: 0, pageSize: current().result.browse.pageSize, sort: [], filters: [] } });
   vscode.postMessage({ type: 'ready' });
 })();

@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ResultsView } = require('../src/results');
 const { tableLayoutConnectionKey } = require('../src/db/result-layouts');
+const { browseQuery } = require('../src/db/grid');
 
 function browserRuntime() {
   const candidates = [
@@ -82,12 +83,17 @@ test('actual result Webview renders database values as text and routes history/c
   let lastPost = Promise.resolve();
   let clipboard = '';
   let relatedSelection;
+  let statementSelection;
+  let browsed;
   const writes = [];
   const memories = new Map();
   const vscode = {
     Uri: { joinPath: (base, ...parts) => path.posix.join(base, ...parts), file: value => value },
     env: { clipboard: { writeText: async text => { clipboard = text; } } },
-    window: { showSaveDialog: async options => '/virtual/' + options.defaultUri, showErrorMessage: message => { throw new Error(message); } },
+    commands: { async executeCommand(command, selection) { statementSelection = { command, ...selection }; } },
+    window: { showSaveDialog: async options => '/virtual/' + options.defaultUri,
+      showInputBox: async options => options.title.startsWith('Rename') ? 'Quarterly results' : 'Compound search',
+      showWarningMessage: async () => undefined, showErrorMessage: message => { throw new Error(message); } },
     workspace: { fs: { writeFile: async (uri, data) => { writes.push({ uri, data, text: data.toString('utf8') }); } } },
   };
   const host = new ResultsView(vscode, {
@@ -105,6 +111,13 @@ test('actual result Webview renders database values as text and routes history/c
     if (message.type === 'reviewChanges') host.editState(id, {
       editResponseId: message.requestId, review: { statements: [{ sql: 'UPDATE fixture SET note = ?', parameters: [null] }] }
     });
+    if (message.type === 'browseTable') {
+      const record = host.history.find(item => item.id === id), result = record.result, prior = result.edit;
+      browsed = browseQuery({ name: prior.table, columns: prior.columns }, message.query, 'fixture');
+      host.finish(id, { ...result, edit: { ...prior, modelId: prior.modelId + '-next', query: browsed.query },
+        browse: { ...result.browse, ...browsed.query } });
+      host.editState(id, { editResponseId: message.requestId });
+    }
   } });
   const fakeView = {
     webview: {
@@ -516,6 +529,62 @@ test('actual result Webview renders database values as text and routes history/c
     assert.equal(await page.locator('#result-view').inputValue(), 'grid');
     assert.equal(await page.locator('tbody tr').count(), 2);
     assert.equal(await page.locator('#review').isEnabled(), true);
+  });
+
+  await t.test('naming and pinning a tab stays visible while a captured statement opens by exact index', async () => {
+    const id = host.begin('SELECT 1; SELECT 2;', 'Script');
+    host.finish(id, { columns: ['Statement'], rows: [[1], [2]], rowCount: 2, durationMs: 1,
+      scriptStatements: [{ index: 0, label: 'Statement 1 · SELECT 1' }, { index: 1, label: 'Statement 2 · SELECT 2' }] });
+    await lastPost;
+    await page.getByRole('button', { name: `Result ${id}`, exact: true }).click();
+    await page.getByRole('button', { name: 'Rename Result' }).click();
+    await page.getByRole('button', { name: 'Quarterly results', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Pin Result' }).click();
+    await page.getByRole('button', { name: 'Quarterly results (pinned)', exact: true }).waitFor();
+    await page.locator('#script-result-selection').selectOption('1');
+    await page.getByRole('button', { name: 'Open Captured Statement' }).click();
+    await page.waitForFunction(() => window.__completed.some(message => message.type === 'openScriptStatement'));
+    assert.deepEqual(statementSelection, { command: 'rocketbrain.sql.openScriptResult', resultId: id, index: 1 });
+    await page.getByRole('button', { name: 'Close Result' }).click();
+    await page.waitForFunction(id => window.__completed.some(message => message.type === 'closeResult' && message.id === id), id);
+    assert.ok(await page.getByRole('button', { name: 'Quarterly results (pinned)', exact: true }).isVisible());
+    await page.getByRole('button', { name: 'Unpin Result' }).click();
+    await page.getByRole('button', { name: 'Quarterly results', exact: true }).waitFor();
+  });
+
+  await t.test('Webview builds grouped filters from typed column search and reloads an applied named preset', async () => {
+    const table = 'preset_table';
+    const connection = tableLayoutConnectionKey({ host: 'localhost', database: 'fixture', user: 'reader' });
+    const id = host.begin('SELECT * FROM preset_table', 'DB', { tableLayoutConnection: connection, table });
+    const columns = [{ name: 'id', kind: 'integer', type: 'int', primaryKey: true },
+      { name: 'label', kind: 'text', type: 'varchar(60)', editable: true, nullable: true }];
+    const query = { page: 0, pageSize: 25, sort: [], filters: [] };
+    host.finish(id, { columns: ['id', 'label'], rows: [[1, 'x_%']], rowCount: 1, durationMs: 1,
+      browse: { ...query, pageable: true, hasPrevious: false, hasNext: false },
+      edit: { table, modelId: 'filters-model', rowIds: ['r'], columns, query } });
+    await lastPost;
+    await page.getByRole('button', { name: `Result ${id}`, exact: true }).click();
+    await page.getByRole('button', { name: 'Sort and Filter' }).click();
+    await page.getByRole('button', { name: 'Add Filter Group' }).click();
+    await page.getByRole('textbox', { name: 'Filter value 1.1', exact: true }).fill('1');
+    await page.getByRole('button', { name: 'Add group in group 1', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Filter group 1.2 mode', exact: true }).selectOption('and');
+    await page.getByRole('textbox', { name: 'Filter value 1.2.1', exact: true }).fill('2');
+    await page.locator('#browse-search-column').selectOption('label');
+    await page.getByRole('textbox', { name: 'Column search value', exact: true }).fill('_%');
+    await page.getByRole('button', { name: 'Add Search Rule' }).click();
+    await page.getByRole('button', { name: 'Apply Sort and Filters' }).click();
+    await page.waitForFunction(id => window.__completed.some(message => message.type === 'browseTable' && message.id === id), id);
+    assert.deepEqual(browsed.parameters, ['1', '2', '%=_=%%']);
+    assert.ok(browsed.sql.includes("WHERE (`id` = ? OR (`id` = ?)) AND `label` LIKE ? ESCAPE '='"));
+    await page.getByRole('button', { name: 'Save Applied Filters' }).click();
+    await page.locator('#saved-filter option[value="Compound search"]').waitFor({ state: 'attached' });
+    await page.getByRole('button', { name: 'Clear Sort and Filters' }).click();
+    await page.getByRole('button', { name: 'Save Applied Filters' }).waitFor();
+    await page.locator('#saved-filter').selectOption('Compound search');
+    await page.getByRole('button', { name: 'Load Filter' }).click();
+    assert.equal(await page.getByRole('textbox', { name: 'Filter value 1.2.1' }).inputValue(), '2');
+    assert.equal(await page.getByRole('textbox', { name: 'Filter value 2' }).inputValue(), '_%');
   });
 
   assert.deepEqual(pageErrors, []);

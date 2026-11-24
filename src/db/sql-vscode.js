@@ -7,15 +7,38 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   const events=new vscode.EventEmitter(),subscriptions=[collection,events];
   let metadata=catalogSnapshot?.()||null,epoch=0,request=0,disposed=false;
   const cache=new Map(),preparedRenames=new Map(),projectPlans=new Map(),ddlPreviews=new Map();let projectGeneration=0,lastProjectReport=null;
+  const resolutionScopes=require('./sql-resolution-scopes');
+  const scopeCache=new Map();
   const engine=()=>require('./sql-analysis');
   const config=()=>vscode.workspace.getConfiguration('rocketbrain.sql.analysis');
   function invalidate(){epoch++;request++;metadata=null;cache.clear();collection.clear();if(!disposed)events.fire();}
   function options(){return {dialect:metadata?.dialect||'mysql',database:metadata?.database,catalogComplete:Boolean(metadata?.coverage?.tables==='loaded'&&metadata?.coverage?.columns==='loaded'),tableNameCaseSensitive:metadata?.tableNameCaseSensitive,sqlMode:metadata?.sqlMode};}
-  const virtualActive=document=>vscode.workspace.isTrusted&&ddlPreviews.has(document.uri.toString());
+  function configuredScope(document){
+    if(!vscode.workspace.isTrusted||document.uri.scheme!=='file')return null;
+    const folder=vscode.workspace.getWorkspaceFolder?.(document.uri);
+    if(folder?.uri.scheme!=='file')return null;
+    const rules=vscode.workspace.getConfiguration('rocketbrain.sql.analysis',document.uri).get('resolutionScopes',[]);
+    const rule=resolutionScopes.selectScope(folder.uri.fsPath,document.uri.fsPath,rules);
+    return rule&&{folder:folder.uri.fsPath,rule};
+  }
+  const virtualActive=document=>vscode.workspace.isTrusted&&
+    (ddlPreviews.has(document.uri.toString())||Boolean(configuredScope(document)));
   function analyzeDocument(document){
     if(disposed||!config().get('enabled',true)||document.languageId!=='sql')return {state:'disabled',statements:[]};
     const key=document.uri.toString(),previous=cache.get(key);
-    const preview=virtualActive(document)?ddlPreviews.get(key):null;
+    let preview=vscode.workspace.isTrusted?ddlPreviews.get(key):null;
+    const configured=preview?null:configuredScope(document);
+    if(configured){
+      try{preview=resolutionScopes.loadScope(configured.folder,configured.rule,scopeCache);}
+      catch(error){
+        const diagnostic=new vscode.Diagnostic(new vscode.Range(0,0,0,0),
+          error.code==='ENOENT'?'The configured DDL catalog could not be opened.':error.message,
+          vscode.DiagnosticSeverity.Information);
+        diagnostic.code='sql.scope.unavailable';diagnostic.source='Rocketbrain SQL (resolution scope)';
+        collection.set(document.uri,[diagnostic]);
+        return {state:'unknown',reason:'configured-catalog-unavailable',virtualPreview:true,statements:[],executedSql:false};
+      }
+    }
     const seed=preview?.type==='local'?preview.model:metadata;
     if(!seed){collection.delete(document.uri);return {state:'not-connected',statements:[]};}
     if(previous?.version===document.version&&previous.epoch===epoch&&previous.preview===preview)return previous.value;
@@ -47,7 +70,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     const states=statements.map(s=>s.model.state),value={state:states.includes('invalid')?'invalid':states.includes('unknown')||contextChanged||parts.length>100||split?.unknown.length?'unknown':'known',contextMayChange:contextChanged,unknown:split?.unknown||[],catalogObservedAt:metadata?.loadedAt||null,catalogVisibility:metadata?.visibility||'not-observed',validityVerified:false,executedSql:false,statements};
     if(virtual)Object.assign(value,{state:virtual.state,contextMayChange:virtual.contextMayChange,
       unknown:virtual.unknown,catalogObservedAt:seed.loadedAt||null,catalogVisibility:seed.visibility,
-      virtualPreview:true,ddlChanges:virtual.changes});
+      virtualPreview:true,ddlChanges:virtual.changes,...(preview.configuredScope?{configuredScope:preview.configuredScope}:{})});
     cache.set(key,{version:document.version,epoch,preview,value});return value;
   }
   function locate(document,position){const offset=document.offsetAt(position),report=analyzeDocument(document),statement=report.statements.find(s=>offset>=s.start&&offset<=s.end);return statement?{...statement,offset:offset-statement.start}:null;}
@@ -130,6 +153,10 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     if(inventory.limited)unknownFiles.push({reason:'SQL project scanning is limited to200 files.'});
     for(const uri of inventory.files.slice(0,200)){
       projectTrusted(token);assertProjectFrame(frame,token);
+      if(configuredScope({uri})){
+        unknownFiles.push({uri:uri.toString(),reason:'A local DDL resolution scope supplies this SQL file’s catalog.'});
+        continue;
+      }
       try{
         const stat=fs.lstatSync(uri.fsPath),real=fs.realpathSync(uri.fsPath);
         if(!stat.isFile()||stat.isSymbolicLink()||!roots.some(root=>inside(root,real)))throw new Error('SQL files must be regular local files inside the selected query roots.');
@@ -259,7 +286,10 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   subscriptions.push(vscode.languages.registerHoverProvider({language:'sql'}, {provideHover(document,position){const scope=locate(document,position);if(!scope)return;const value=engine().hoverAt(scope.model,scope.offset);if(!value)return;const markdown=new vscode.MarkdownString();markdown.appendText(value);return new vscode.Hover(markdown);}}));
   if(vscode.languages.registerRenameProvider)subscriptions.push(vscode.languages.registerRenameProvider({language:'sql'},{prepareRename,provideRenameEdits:renameDocument}));
   if(vscode.languages.registerReferenceProvider)subscriptions.push(vscode.languages.registerReferenceProvider({language:'sql'},{provideReferences}));
-  subscriptions.push(vscode.workspace.onDidChangeTextDocument(event=>{if(event.document.languageId==='sql')analyzeDocument(event.document);}),vscode.workspace.onDidCloseTextDocument(document=>{cache.delete(document.uri.toString());ddlPreviews.delete(document.uri.toString());preparedRenames.delete(document.uri.toString());collection.delete(document.uri);}),vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.analysis'))reanalyze();}));
+  if(vscode.workspace.onDidOpenTextDocument)subscriptions.push(vscode.workspace.onDidOpenTextDocument(document=>{
+    if(document.languageId==='sql'&&configuredScope(document))analyzeDocument(document);
+  }));
+  subscriptions.push(vscode.workspace.onDidChangeTextDocument(event=>{if(event.document.languageId==='sql')analyzeDocument(event.document);}),vscode.workspace.onDidCloseTextDocument(document=>{cache.delete(document.uri.toString());ddlPreviews.delete(document.uri.toString());preparedRenames.delete(document.uri.toString());collection.delete(document.uri);}),vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.analysis')){scopeCache.clear();reanalyze();}}));
   if(onDidChangeDatabase)subscriptions.push(onDidChangeDatabase(value=>{
     for(const [uri,preview] of ddlPreviews)if(preview.type==='observed')ddlPreviews.delete(uri);
     invalidate();
@@ -289,9 +319,9 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   });
   command('rocketbrain.sql.clearDdlPreview',()=>clearDdlPreview(vscode.window.activeTextEditor?.document));
   command('rocketbrain.sql.findReferences',async()=>{const editor=vscode.window.activeTextEditor;if(!editor||editor.document.languageId!=='sql')throw new Error('Open a SQL document first.');const locations=await provideReferences(editor.document,editor.selection.active,{includeDeclaration:true});await vscode.commands.executeCommand('editor.action.showReferences',editor.document.uri,editor.selection.active,locations);return {references:locations.length,coverage:lastProjectReport?.coverage};});
-  command('rocketbrain.sql.analyze',async()=>{const document=vscode.window.activeTextEditor?.document;if(!document||document.languageId!=='sql')throw new Error('Open a SQL document first.');await refreshMetadata();const report=analyzeDocument(document);output?.appendLine('SQL source analysis: '+report.state+'; '+report.statements.length+' statements. No user query was executed.');return report;});
+  command('rocketbrain.sql.analyze',async()=>{const document=vscode.window.activeTextEditor?.document;if(!document||document.languageId!=='sql')throw new Error('Open a SQL document first.');if(!virtualActive(document))await refreshMetadata();const report=analyzeDocument(document);output?.appendLine('SQL source analysis: '+report.state+'; '+report.statements.length+' statements. No user query was executed.');return report;});
   if(vscode.workspace.onDidChangeWorkspaceFolders)subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{projectGeneration++;projectPlans.clear();}));
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.project')){projectGeneration++;projectPlans.clear();}}));
-  return {analyzeDocument,refreshMetadata,useDdlPreview,clearDdlPreview,virtualActive,prepareRename,renameDocument,findCatalogReferences,catalogTargetAt,planCatalogRename,validateCatalogRename,catalogRenameEdit,projectSnapshot:()=>lastProjectReport?structuredClone(lastProjectReport):null,invalidate,onDidChange:events.event,snapshot:()=>metadata?{database:metadata.database,dialect:metadata.dialect,loadedAt:metadata.loadedAt}:null,dispose(){disposed=true;ddlPreviews.clear();preparedRenames.clear();projectPlans.clear();invalidate();for(const sub of subscriptions)sub.dispose();}};
+  return {analyzeDocument,refreshMetadata,useDdlPreview,clearDdlPreview,virtualActive,prepareRename,renameDocument,findCatalogReferences,catalogTargetAt,planCatalogRename,validateCatalogRename,catalogRenameEdit,projectSnapshot:()=>lastProjectReport?structuredClone(lastProjectReport):null,invalidate,onDidChange:events.event,snapshot:()=>metadata?{database:metadata.database,dialect:metadata.dialect,loadedAt:metadata.loadedAt}:null,dispose(){disposed=true;scopeCache.clear();ddlPreviews.clear();preparedRenames.clear();projectPlans.clear();invalidate();for(const sub of subscriptions)sub.dispose();}};
 }
 module.exports={registerSQLAnalysis};
