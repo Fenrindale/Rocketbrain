@@ -1,22 +1,22 @@
 {
-  "version": "0.33.0",
-  "verifiedAt": "2026-11-24T16:51:18.425Z",
+  "version": "0.34.0",
+  "verifiedAt": "2026-11-24T18:02:34.368Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.33.0.vsix",
-    "bytes": 1752502,
-    "sha256": "0eaabab2186d13af1daed7420d86596dad6cfcbdd553a39f4c7b93f20d23422d",
+    "name": "rocketbrain-0.34.0.vsix",
+    "bytes": 1766596,
+    "sha256": "42a0903058ea081da09d7756d08d3c12d429edfa69fbccab72ba7eb01a190c1f",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1130,
-    "inputVectorSha256": "d2232abc2eed2158a82c60e43e4ebf796f372792c14fe41865b608500bcbf8c2",
+    "frozenPublicInputs": 1141,
+    "inputVectorSha256": "c597ccbc9705f5ca7726b9828eb87112e2bc32707c39fda7bfd3c8e049f33eac",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1191,
-    "pass": 1138,
+    "tests": 1200,
+    "pass": 1147,
     "fail": 0,
     "cancelled": 0,
     "skipped": 53,
@@ -29,30 +29,18 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 6,
+      "groupCount": 3,
       "groups": [
-        {
-          "group": "results",
-          "checks": 1
-        },
         {
           "group": "explain",
           "checks": 1
         },
         {
-          "group": "activity",
+          "group": "relationships",
           "checks": 1
         },
         {
-          "group": "catalog",
-          "checks": 1
-        },
-        {
-          "group": "scope",
-          "checks": 1
-        },
-        {
-          "group": "java",
+          "group": "stream",
           "checks": 1
         }
       ],
@@ -67,30 +55,18 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 6,
+      "groupCount": 3,
       "groups": [
-        {
-          "group": "results",
-          "checks": 1
-        },
         {
           "group": "explain",
           "checks": 1
         },
         {
-          "group": "activity",
+          "group": "relationships",
           "checks": 1
         },
         {
-          "group": "catalog",
-          "checks": 1
-        },
-        {
-          "group": "scope",
-          "checks": 1
-        },
-        {
-          "group": "java",
+          "group": "stream",
           "checks": 1
         }
       ],
@@ -101,140 +77,74 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-020": {
-      "scope": "실제 Spring 작업 공간에서 매개변수·할당·반환과 원본 위치를 대조했다. 수정 뒤 이전 범위를 거부했고 분기와 취소를 확인했다.",
+    "IDEA-061": {
+      "scope": "실제 Spring 클래스패스에서 단일 ManyToOne, 순서 있는 복합 OneToOne을 생성했다. Hibernate 관계 읽기·쓰기·롤백, 고유 인덱스와 대상 Java 소스 변경에 대한 적용 거부를 검증했다.",
       "runtimeGroups": [
-        "java"
-      ]
-    },
-    "IDEA-022": {
-      "scope": "실제 Spring 프로젝트의 타입·상속·구현과 중첩 선언을 읽고 네이티브 패널에서 원본을 열었다. Mermaid 저장과 기존 파일 보존을 확인했다.",
-      "runtimeGroups": [
-        "java"
-      ]
-    },
-    "DG-020": {
-      "scope": "두 실제 DB에서 Spring 객체의 첫 이름 페이지와 선택 테이블의 열·인덱스를 실제 카탈로그와 대조했다. 재연결 뒤 이전 페이지 접근을 거부했다.",
-      "runtimeGroups": [
-        "catalog"
-      ]
-    },
-    "DG-032": {
-      "scope": "실제 Spring 작업 공간에서 파일이 폴더 매핑을 재정의하고 저장한 DDL 변경을 반영했다. 파일이 사라지면 실제 카탈로그로 대체하지 않음을 확인했다.",
-      "runtimeGroups": [
-        "scope"
-      ]
-    },
-    "DG-052": {
-      "scope": "실제 JDBC 프로젝트에서 두 서버의 쿼리·바인딩 DML·메타데이터, 취소와 실패를 관찰했다. 리터럴·바인딩 값·연결 설정이 기록에 없음을 확인했다.",
-      "runtimeGroups": [
-        "activity"
-      ]
-    },
-    "DG-054": {
-      "scope": "이후 스크립트 여덟 건과 실제 DB 변경 뒤에도 두 원본 문장의 캡처가 보존됐고 같은 결과 탭을 재사용했다.",
-      "runtimeGroups": [
-        "results"
-      ]
-    },
-    "DG-055": {
-      "scope": "실제 Spring JOIN에서 두 서버의 원본 JSON을 직접 쿼리와 대조했다. MySQL의 TREE 원문과 선택 SQL의 정확한 위치도 확인했다.",
-      "runtimeGroups": [
-        "explain"
+        "relationships"
       ]
     },
     "DG-056": {
-      "scope": "실제 Spring JOIN·정렬·조건의 연산자와 서버 숫자 값을 검증했다. 실제 쿼리를 수행하는 ANALYZE와 쓰기를 거부했다.",
+      "scope": "실제 Spring JOIN에서 두 실측 캡처를 열어 연산자와 수치 차이를 비교했다. 별도 DB 요청이 생기지 않았음을 확인했다.",
       "runtimeGroups": [
         "explain"
       ]
     },
-    "DG-061": {
-      "scope": "두 실제 서버에서 정확한 소수·SQL NULL·리터럴 wildcard 그룹을 확인했다. 테이블 재열기 뒤 저장한 조건이 실행됐으며 진행 중 트랜잭션은 변경을 차단했다.",
+    "DG-057": {
+      "scope": "실제 두 서버에서 Spring JOIN의 시간·행·반복을 대조했다. 실행 중 취소, 오래된 승인, 쓰기와 제한을 바꿀 수 있는 옵티마이저 힌트의 거부를 확인했다.",
       "runtimeGroups": [
-        "results"
+        "explain"
+      ]
+    },
+    "DG-073": {
+      "scope": "실제 MySQL과 MariaDB 사이에서 768행과 1 MiB를 넘는 스냅샷을 양방향 전송했다. 원본 동시 변경 격리, 소수·큰 정수·시각·텍스트·바이너리·NULL 보존, 배치 메모리 범위와 커밋 전 비가시성, 취소·명시적 롤백을 검증했다.",
+      "runtimeGroups": [
+        "stream"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 192,
+    "sourceCorrespondences": 196,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 39,
-      "partial": 112,
+      "implemented": 41,
+      "partial": 110,
       "not-implemented": 46,
       "host-provided": 13,
       "unverified": 4,
       "platform-limited": 2
     },
-    "weightedPoints": 108,
-    "previousWeightedPoints": 102.5,
+    "weightedPoints": 109,
+    "previousWeightedPoints": 108,
     "targetWeightedPoints": 108,
-    "referencePercent": 50,
+    "referencePercent": 50.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-020",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "IDEA-022",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-020",
-        "before": "not-implemented",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-032",
+        "id": "DG-057",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-052",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-054",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-055",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-056",
-        "before": "not-implemented",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-061",
+        "id": "DG-073",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java 다이어그램은 컴파일러가 확인한 읽기 전용 모델이다. 값 흐름은 직선형 지역값에 적용한다.",
-    "실행 계획은 옵티마이저가 반환한 추정치와 비용을 표시한다. 비용을 제공하지 않은 노드에는 그 상태를 표시한다.",
-    "SQL 활동 기록은 사용자가 선택할 때 이 세션의 메모리에 저장하고 값·식별자·SQL 원문을 제외한다.",
-    "결과 고정은 열린 작업 공간에 적용하며 저장 필터는 확인 가능한 열과 바인딩 조건을 사용한다."
+    "실측은 사용자가 승인한 SELECT에 적용한다. 계획 비교는 같은 서버·형식·캡처 모드의 열린 계획 중 디코딩된 연산자를 나란히 표시한다.",
+    "JPA 연관은 확인한 물리 외래 키와 검토한 Java 대상에 적용한다.",
+    "스트리밍 전송은 관찰한 기본 키가 있는 InnoDB와 호환 타입의 명시적 매핑에 적용한다. 암호화 임시 파일의 키는 확장 세션에만 보관한다."
   ],
   "next": [
-    "실행 통계 기반 EXPLAIN ANALYZE와 계획 비교",
-    "JPA 관계 매핑·변환기와 Java 분기·메서드 간 값 흐름",
-    "대량 서버 간 스트리밍 전송과 지원 DB 타입 확대"
+    "대형 SQL 계획의 비교 정밀도와 측정 표본 탐색",
+    "JPA 양방향·중간 테이블 연관과 별도 영속성 유닛",
+    "서버 간 스트리밍 전송의 타입·복구 범위 확대"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

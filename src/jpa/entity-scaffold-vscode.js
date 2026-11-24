@@ -8,6 +8,8 @@ const { checkPackage, contained, physicalDirectory, validIdentifier, writeTempla
 const { buildFingerprint, local } = require('../java/workbench-model');
 const { analyzeJavaSources } = require('../java/signature-compiler');
 const { defaultEntityName, inspectTable, planEntity } = require('./entity-scaffold');
+const { MAX_RELATIONSHIPS, associationRequests } = require('./entity-relationships');
+const { captureRelationshipSources, chooseableDeclarations } = require('./entity-relationship-sources');
 
 const GENERATE_ENTITY = 'rocketbrain.jpa.generateEntity';
 const PREVIEW_SCHEME = 'rocketbrain-jpa-entity';
@@ -130,6 +132,7 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
 
   async function prepare(options = {}) {
     const { table, name, packageName, projectUri, sourceRootId, cancellation } = options;
+    const relationships = associationRequests(options.relationships);
     trusted(cancellation);
     if (preparing) throw Error('Wait for the current entity preview to finish.');
     preparing = true;
@@ -137,20 +140,24 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
       const target = database.savedQueryTarget();
       const catalog = await database.databaseCatalog();
       assertTarget(target, cancellation);
-      const selection = { table, name, packageName, projectUri, sourceRootId };
+      const selection = { table, name, packageName, projectUri, sourceRootId, relationships };
       const scope = await projectScope({ ...selection, cancellation });
       const fileUri = vscode.Uri.file(scope.file).toString();
-      const plan = planEntity({ catalog, table, name, packageName, uri: fileUri });
+      const targets = captureRelationshipSources(vscode, scope.project, relationships);
+      const plan = planEntity({ catalog, table, name, packageName, uri: fileUri, relationships, targetSources: targets.sources });
       const compiler = await analyzeJavaSources({ javaHome: scope.javaHome, classpath: scope.classpath,
-        release: scope.release, storagePath, sources: [{ uri: fileUri, text: plan.text }], cancellation,
+        release: scope.release, storagePath, sources: [{ uri: fileUri, text: plan.text }, ...targets.sources], cancellation,
         manifestLimit: 256 * 1024 });
       if (compiler.errors.length) throw Error('Generated Java source failed compiler validation: ' + compiler.errors[0].message);
       const owner = packageName + '.' + name;
-      if (plan.mapping.fields.some(field => !compiler.methods.some(method => method.owner === owner &&
+      const generated = [...plan.relationshipPlan.fields, ...plan.relationshipPlan.relations.map(relation =>
+        ({ accessor: relation.accessor, javaClass: relation.targetType }))];
+      if (generated.some(field => !compiler.methods.some(method => method.owner === owner &&
           method.name === 'get' + field.accessor && method.returnType === field.javaClass))) {
         throw Error('The compiler could not confirm every generated Java field type.');
       }
       assertTarget(target, cancellation);
+      targets.verify();
       if (scope.sourceFingerprint !== sourceReview(vscode, scope.project, packageName, name)) {
         throw Error('A Java source changed while preparing the preview. Generate again.');
       }
@@ -159,8 +166,10 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
       const id = randomUUID();
       const uri = vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: '/' + id + '/' + name + '.java' }).toString();
       const output = { id, uri, fileUri, database: catalog.database, table, name, packageName, text: plan.text,
-        notes: plan.mapping.notes, comparison: plan.comparison, keyColumns: plan.mapping.keys.map(field => field.sql) };
-      previews.set(id, { createdAt: Date.now(), output, selection, scope, target, plan, compiler, applying: false });
+        notes: plan.mapping.notes, comparison: plan.comparison, keyColumns: plan.mapping.keys.map(field => field.sql),
+        relationships: plan.relationshipPlan.relations.map(({ property, cardinality, optional, columns, mode, foreignKey, targetType }) =>
+          ({ property, cardinality, optional, columns, mode, foreignKey, targetType })) };
+      previews.set(id, { createdAt: Date.now(), output, selection, scope, target, targets, plan, compiler, applying: false });
       return structuredClone(output);
     } finally { preparing = false; }
   }
@@ -171,8 +180,9 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
     if (!record || record.applying) throw Error('Review a current JPA entity preview before applying it.');
     record.applying = true;
     try {
-      const { selection, plan, target } = record;
+      const { selection, plan, target, targets } = record;
       assertTarget(target, cancellation);
+      targets.verify();
       const current = await projectScope({ ...selection, cancellation });
       if (current.fingerprint !== record.scope.fingerprint || current.sourceFingerprint !== record.scope.sourceFingerprint) {
         throw Error('The Java source or project changed after review. Generate a new preview.');
@@ -183,10 +193,18 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
       if (inspectTable(catalog, selection.table).fingerprint !== plan.mapping.fingerprint) {
         throw Error('The database table changed after review. Generate a new preview.');
       }
+      if (selection.relationships.length) {
+        let next;
+        try { next = planEntity({ ...selection, catalog, uri: record.output.fileUri, targetSources: targets.sources }); } catch {}
+        if (next?.relationshipPlan.fingerprint !== plan.relationshipPlan.fingerprint) {
+          throw Error('Relationship metadata changed after review. Generate a new preview.');
+        }
+      }
       return await writeTemplateFile({ workspaceRoot: current.folder.uri.fsPath, sourceRoot: current.root.path,
         template: plan.template, name: selection.name, packageName: selection.packageName,
         assertTrusted: () => assertTarget(target, cancellation),
         assertTarget: file => {
+          targets.verify();
           if (!sameFile(file, current.file) || !vscode.workspace.getWorkspaceFolder(vscode.Uri.file(file)) ||
               buildFingerprint(current.project.root) !== current.project.buildFingerprint ||
               sourceReview(vscode, current.project, selection.packageName, selection.name) !== current.sourceFingerprint) {
@@ -201,6 +219,38 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
   const pick = (items, title) => vscode.window.showQuickPick(items, { title, matchOnDescription: true });
   const progress = (title, run) => vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title, cancellable: true },
     (_, token) => run(token));
+
+  async function chooseRelationships(catalog, name, project) {
+    if (catalog.coverage.foreignKeys !== 'loaded') return [];
+    const foreignKeys = catalog.tables.find(table => table.name === name)?.foreignKeys?.filter(key =>
+      key.referencedSchema === catalog.database && key.referencedTable !== name) ?? [];
+    if (!foreignKeys.length) return [];
+    const targetTables = new Set(foreignKeys.map(key => key.referencedTable));
+    const declarations = chooseableDeclarations(vscode, project, targetTables);
+    const items = foreignKeys.filter(key => declarations.some(declaration => declaration.table === key.referencedTable))
+      .map(key => ({ label: key.name, description: key.referencedTable, key }));
+    if (!items.length) return [];
+    const selected = await vscode.window.showQuickPick(items, { title: 'JPA Entity · Relationships', canPickMany: true,
+      placeHolder: 'Confirm with no selection to keep the foreign-key fields scalar' });
+    if (!selected) return undefined;
+    if (selected.length > MAX_RELATIONSHIPS) throw Error('Review up to eight owning relationships per generated entity.');
+    const relations = [];
+    for (const { key } of selected) {
+      const target = await pick(declarations.filter(item => item.table === key.referencedTable).map(item =>
+        ({ label: item.targetType, description: item.table, item })), 'Relationship target · ' + key.name);
+      if (!target) return undefined;
+      const simple = target.item.targetType.split('.').at(-1);
+      const property = await vscode.window.showInputBox({ title: 'Relationship field · ' + key.name,
+        value: simple[0].toLowerCase() + simple.slice(1) + 'Reference',
+        validateInput: value => validIdentifier(value) ? undefined : 'Enter a valid Java field name.' });
+      if (property === undefined) return undefined;
+      const ownership = await pick([{ label: 'Scalar fields own writes', mode: 'scalar' },
+        { label: 'Association owns writes', mode: 'association' }], 'Foreign key writes · ' + key.name);
+      if (!ownership) return undefined;
+      relations.push({ foreignKey: key.name, targetType: target.item.targetType, targetUri: target.item.targetUri, property, mode: ownership.mode });
+    }
+    return relations;
+  }
 
   async function generate(argument) {
     trusted();
@@ -222,9 +272,11 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
     const name = await vscode.window.showInputBox({ title: 'JPA Entity · Class name', value: defaultEntityName(table),
       validateInput: value => validIdentifier(value) ? undefined : 'Enter a valid Java class name.' });
     if (name === undefined) return;
+    const relationships = await chooseRelationships(catalog, table, source.project);
+    if (relationships === undefined) return;
     assertTarget(startingTarget);
     const preview = await progress('Validate JPA entity source', cancellation => prepare({ table, name, packageName: pkg.label,
-      projectUri: source.project.uri, sourceRootId: source.root.id, cancellation }));
+      projectUri: source.project.uri, sourceRootId: source.root.id, relationships, cancellation }));
     try {
       const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(preview.uri));
       await vscode.window.showTextDocument(document, { preview: false });

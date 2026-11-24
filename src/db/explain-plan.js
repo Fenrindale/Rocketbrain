@@ -26,6 +26,10 @@ const ROW_FIELDS = {
   rows_examined_per_scan: 'Rows examined per scan', rows_produced_per_join: 'Rows produced per join',
   rows: 'Rows per access', estimated_rows: 'Estimated output rows', filtered: 'Filtered (%)'
 };
+const ACTUAL_FIELDS = {
+  r_loops: 'Loops', r_rows: 'Observed rows per loop', r_output_rows: 'Output rows per loop', r_filtered: 'Observed filtered (%)',
+  r_total_time_ms: 'Total time (ms)', r_table_time_ms: 'Table time (ms)', r_other_time_ms: 'Other time (ms)'
+};
 const TAG_FIELDS = {
   access_type: 'Access', index_access_type: 'Index access', key: 'Index', index_name: 'Index',
   join_type: 'Join type', join_algorithm: 'Join algorithm', using_join_buffer: 'Join buffer',
@@ -37,11 +41,22 @@ const EXPRESSION_FIELDS = {
   having_condition: 'Having filter', sort_key: 'Sort key'
 };
 
+function validatePlanQuery(sql, sqlMode, { measured = false } = {}) {
+  const statement = validateQuery(sql, { readOnly: true, sqlMode, allowOptimizerHints: !measured });
+  if (!['SELECT', 'WITH'].includes(statement.first)) throw Error('Visual EXPLAIN accepts a SELECT or WITH SELECT statement.');
+}
+
 function explainSql(sql, sqlMode, format = 'json') {
   if (!['json', 'tree'].includes(format)) throw Error('Choose JSON or MySQL TREE plan output.');
-  const statement = validateQuery(sql, { readOnly: true, sqlMode });
-  if (!['SELECT', 'WITH'].includes(statement.first)) throw Error('Visual EXPLAIN accepts a SELECT or WITH SELECT statement.');
+  validatePlanQuery(sql, sqlMode);
   return 'EXPLAIN FORMAT=' + format.toUpperCase() + '\n' + sql;
+}
+
+function measuredSql(sql, sqlMode, engine) {
+  validatePlanQuery(sql, sqlMode, { measured: true });
+  if (engine === 'mysql') return 'EXPLAIN ANALYZE FORMAT=TREE\n' + sql;
+  if (engine === 'mariadb') return 'ANALYZE FORMAT=JSON\n' + sql;
+  throw Error('Choose MySQL or MariaDB to measure a query plan.');
 }
 
 function parseExact(raw) {
@@ -67,12 +82,51 @@ function metricList(value, fields) {
   });
 }
 
-function normalizePlan({ raw, engine, version, database, format = 'json' }) {
+const numeric = '([+-]?(?:[0-9]+(?:\\.[0-9]+)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)';
+const actualSuffix = new RegExp('\\s+\\(actual time=' + numeric + '\\.\\.' + numeric + ' rows=' + numeric + ' loops=' + numeric + '\\)$');
+const estimateSuffix = new RegExp('\\s+\\(cost=' + numeric + ' rows=' + numeric + '\\)$');
+
+function mysqlMeasuredTree(identity) {
+  const nodes = [], rootIds = [], warnings = [], parents = [];
+  let omitted = false;
+  for (const line of identity.raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const part = /^(\s*)->\s+(.+)$/.exec(line);
+    if (!part) { omitted = true; continue; }
+    const indent = part[1].replaceAll('\t', '    ').length;
+    while (parents.length && parents.at(-1).indent >= indent) parents.pop();
+    if (nodes.length >= MAX_NODES || parents.length > MAX_DEPTH) { omitted = true; continue; }
+    let operation = part[2].trimEnd();
+    const actual = actualSuffix.exec(operation);
+    const never = !actual && /\s+\(never executed\)$/i.exec(operation);
+    if (actual || never) operation = operation.slice(0, (actual || never).index);
+    const estimate = estimateSuffix.exec(operation);
+    if (estimate) operation = operation.slice(0, estimate.index);
+    const id = 'node-' + (nodes.length + 1);
+    const parentId = parents.at(-1)?.id ?? null;
+    const entry = (key, label, value) => ({ key, label, value });
+    const measured = actual ? [
+      entry('first_ms', 'First row (ms)', actual[1]), entry('last_ms', 'Last row (ms)', actual[2]),
+      entry('actual_rows', 'Observed rows per loop', actual[3]), entry('loops', 'Loops', actual[4])
+    ] : [];
+    nodes.push({ id, parentId, depth: parents.length, kind: 'iterator', name: short(operation), expressions: [],
+      tags: never ? [{ label: 'Execution', value: 'Never executed' }] : [],
+      costs: estimate ? [entry('cost', 'Cost', estimate[1])] : [],
+      rows: estimate ? [entry('estimated_rows', 'Estimated output rows', estimate[2])] : [], actual: measured });
+    if (!parentId) rootIds.push(id);
+    parents.push({ indent, id });
+  }
+  if (omitted) warnings.push('Some server text is available only in the original TREE output.');
+  if (!nodes.some(node => node.actual.length)) warnings.push('No iterator timing or row statistics were decoded. Inspect the original TREE output.');
+  return { ...identity, nodes, rootIds, warnings };
+}
+
+function normalizePlan({ raw, engine, version, database, format = 'json', measured = false }) {
   if (typeof raw !== 'string' || !raw.trim() || Buffer.byteLength(raw) > MAX_PLAN_BYTES) {
     throw Error('Visual EXPLAIN accepts plans up to 512 KiB. Narrow the query and try again.');
   }
-  const identity = { raw, engine, version, database, format };
-  if (format === 'tree') return identity;
+  const identity = { raw, engine, version, database, format, ...(measured ? { measured: true } : {}) };
+  if (format === 'tree') return measured ? mysqlMeasuredTree(identity) : identity;
   const base = { ...identity, nodes: [], rootIds: [], warnings: [] };
   let document;
   try { document = parseExact(raw); }
@@ -95,7 +149,8 @@ function normalizePlan({ raw, engine, version, database, format = 'json' }) {
     });
     const expressions = Object.entries(EXPRESSION_FIELDS).filter(([key]) => typeof data[key] === 'string' && data[key])
       .map(([key, label]) => ({ label, value: short(data[key]) }));
-    nodes.push({ id, parentId, depth, kind, name, tags, expressions, costs: metricList(cost, COST_FIELDS), rows: metricList(data, ROW_FIELDS) });
+    nodes.push({ id, parentId, depth, kind, name, tags, expressions, costs: metricList(cost, COST_FIELDS),
+      rows: metricList(data, ROW_FIELDS), ...(measured ? { actual: metricList(data, ACTUAL_FIELDS) } : {}) });
     if (Array.isArray(value)) {
       for (const item of value) {
         if (nodes.length >= MAX_NODES) { truncated = true; break; }
@@ -138,4 +193,36 @@ function normalizePlan({ raw, engine, version, database, format = 'json' }) {
   return { ...base, nodes, rootIds, warnings };
 }
 
-module.exports = { MAX_PLAN_BYTES, explainSql, normalizePlan };
+function comparePlans(left, right) {
+  if (left.engine !== right.engine || left.version !== right.version || left.database !== right.database ||
+      left.format !== right.format || Boolean(left.measured) !== Boolean(right.measured)) {
+    throw Error('Choose two captured plans from the same server, format and capture mode.');
+  }
+  if (!left.nodes?.length || !right.nodes?.length) throw Error('Both plans need a decoded tree to compare.');
+  function index(plan) {
+    const paths = new Map(), counts = new Map(), result = new Map();
+    for (const node of plan.nodes) {
+      const parent = paths.get(node.parentId) ?? '';
+      const slot = (counts.get(node.parentId) || 0) + 1;
+      counts.set(node.parentId, slot);
+      const key = parent + '/' + JSON.stringify([slot, node.kind, node.name]);
+      paths.set(node.id, key);
+      const values = [...node.costs, ...node.rows, ...(node.actual || [])];
+      result.set(key, { name: node.name, depth: node.depth, values,
+        detail: [...node.tags, ...node.expressions].map(item => [item.label, item.value]) });
+    }
+    return result;
+  }
+  const a = index(left), b = index(right);
+  const rows = [...new Set([...a.keys(), ...b.keys()])].map(key => {
+    const before = a.get(key), after = b.get(key);
+    const state = !before ? 'added' : !after ? 'removed' :
+      JSON.stringify(before) === JSON.stringify(after) ? 'same' : 'changed';
+    return { state, before, after };
+  });
+  return { engine: left.engine, version: left.version, database: left.database, measured: Boolean(left.measured), rows,
+    baselineWarnings: left.warnings, candidateWarnings: right.warnings,
+    counts: Object.fromEntries(['same', 'changed', 'removed', 'added'].map(state => [state, rows.filter(row => row.state === state).length])) };
+}
+
+module.exports = { MAX_PLAN_BYTES, explainSql, measuredSql, validatePlanQuery, normalizePlan, comparePlans };

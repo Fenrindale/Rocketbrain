@@ -3,6 +3,7 @@
 const { createHash } = require('node:crypto');
 const { checkPackage, renderJavaFile, validIdentifier } = require('../java/file-templates');
 const { analyzeJPA, compareCatalog } = require('./model');
+const { associationRequests, planRelationships } = require('./entity-relationships');
 
 const SQL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const KEY_TYPES = new Set(['Short', 'Integer', 'Long']);
@@ -119,8 +120,21 @@ function idClass(keys) {
   ];
 }
 
-function classBody(table, mapping) {
-  const { fields, keys } = mapping;
+function associationLines(relation) {
+  const annotations = relation.columns.map(column => {
+    const args = ['name = ' + delimited(column.name), 'referencedColumnName = ' + literal(column.reference), 'nullable = ' + column.nullable];
+    if (relation.mode === 'scalar') args.push('insertable = false', 'updatable = false');
+    return '@JoinColumn(' + args.join(', ') + ')';
+  });
+  const join = annotations.length === 1 ? ['    ' + annotations[0]] :
+    ['    @JoinColumns({', '        ' + annotations.join(',\n        '), '    })'];
+  return ['    @' + relation.cardinality + '(fetch = FetchType.LAZY, optional = ' + relation.optional + ')', ...join,
+    '    private ' + relation.targetType + ' ' + relation.property + ';', ''];
+}
+
+function classBody(table, mapping, relationshipPlan) {
+  const { keys } = mapping;
+  const { fields, relations } = relationshipPlan;
   const composite = keys.length > 1;
   const imports = new Set(['jakarta.persistence.Column', 'jakarta.persistence.Entity', 'jakarta.persistence.Id', 'jakarta.persistence.Table']);
   if (fields.some(field => field.identity)) {
@@ -133,6 +147,14 @@ function classBody(table, mapping) {
     imports.add('java.util.Objects');
   }
   for (const field of fields) if (TYPE_IMPORTS[field.type]) imports.add(TYPE_IMPORTS[field.type]);
+  if (relations.length) {
+    imports.add('jakarta.persistence.FetchType');
+    imports.add('jakarta.persistence.JoinColumn');
+    for (const relation of relations) {
+      imports.add('jakarta.persistence.' + relation.cardinality);
+      if (relation.columns.length > 1) imports.add('jakarta.persistence.JoinColumns');
+    }
+  }
   const lines = [...imports].sort().map(name => 'import ' + name + ';');
   lines.push('', '@Entity', '@Table(name = ' + delimited(table) + ')');
   if (composite) lines.push('@IdClass(${name}.PrimaryKey.class)');
@@ -144,6 +166,7 @@ function classBody(table, mapping) {
     const args = ['name = ' + delimited(field.sql), 'nullable = ' + String(field.nullable), ...field.arguments];
     lines.push('    @Column(' + args.join(', ') + ')', '    private ' + field.type + ' ' + field.property + ';', '');
   }
+  for (const relation of relations) lines.push(...associationLines(relation));
   lines.push('    public ${name}() {', '    }', '');
   for (const field of orderedFields) {
     const getter = field.accessor;
@@ -151,29 +174,55 @@ function classBody(table, mapping) {
     if (!field.identity) lines.push('    public void set' + getter + '(' + field.type + ' value) {',
       '        this.' + field.property + ' = value;', '    }', '');
   }
+  for (const relation of relations) {
+    lines.push('    public ' + relation.targetType + ' get' + relation.accessor + '() {',
+      '        return ' + relation.property + ';', '    }', '');
+    if (relation.mode === 'association') lines.push('    public void set' + relation.accessor + '(' + relation.targetType + ' value) {',
+      '        this.' + relation.property + ' = value;', '    }', '');
+  }
   if (composite) lines.push(...idClass(keys));
   lines.pop();
   lines.push('}', '');
   return lines.join('\n');
 }
 
-function planEntity({ catalog, table, name, packageName, uri }) {
+function planEntity({ catalog, table, name, packageName, uri, relationships, targetSources = [] }) {
   if (!validIdentifier(name)) throw Error('Use a valid Java class name.');
   if (!checkPackage(packageName)) throw Error('Choose a named Java package.');
   const mapping = inspectTable(catalog, table);
   if (name === 'PrimaryKey' && mapping.keys.length > 1) throw Error('Choose a class name other than PrimaryKey for a composite-key entity.');
-  const template = { name: 'JPA entity from database table', source: 'any', template: '${packageDeclaration}' + classBody(table, mapping) };
+  const owner = packageName + '.' + name;
+  const relationshipPlan = planRelationships({ catalog, table, mapping, owner, requests: associationRequests(relationships),
+    sources: targetSources, inspectTable });
+  const template = { name: 'JPA entity from database table', source: 'any', template: '${packageDeclaration}' + classBody(table, mapping, relationshipPlan) };
   const text = renderJavaFile(template, name, packageName);
-  const model = analyzeJPA([{ uri, text }], { physicalNaming: 'standard' });
-  const comparison = compareCatalog(model, catalog);
-  const entity = model.entities.find(item => item.fqn === packageName + '.' + name);
+  const model = analyzeJPA([{ uri, text }, ...targetSources], { physicalNaming: 'standard' });
+  const entity = model.entities.find(item => item.fqn === owner);
+  const comparison = compareCatalog({ ...model, entities: entity ? [entity] : [] }, catalog);
   const ids = entity?.identity?.attributes;
   if (!entity || entity.table.physicalName !== table || ids?.length !== mapping.keys.length ||
       mapping.keys.some((field, index) => ids[index] !== field.property) || comparison.mismatches.length ||
-      comparison.matches.length !== mapping.fields.length) {
+      new Set(comparison.matches.map(match => match.column)).size !== mapping.fields.length) {
     throw Error('The local JPA mapping check could not confirm the generated table, columns and primary key.');
   }
-  return { text, template, mapping, comparison: comparison.summary };
+  for (const relation of relationshipPlan.relations) {
+    const bindings = entity.columnMappings.filter(binding => binding.property === relation.property && binding.status === 'known');
+    const writable = relation.mode === 'association';
+    if (bindings.length !== relation.columns.length || relation.columns.some(column => !bindings.some(binding =>
+      binding.column.physicalName === column.name && binding.column.referencedColumnName === column.reference &&
+      binding.column.insertable === writable && binding.column.updatable === writable))) {
+      throw Error('The local JPA mapping check could not confirm every reviewed relationship column and ownership rule.');
+    }
+  }
+  if (relationshipPlan.relations.length) {
+    mapping.notes = mapping.notes.filter(note => !note.startsWith('Foreign-key columns are scalar fields.'));
+    mapping.notes.push('Only the selected foreign keys become associations. Other columns remain scalar fields.');
+    for (const relation of relationshipPlan.relations) {
+      mapping.notes.push(relation.property + ' · ' + relation.cardinality + ' · ' +
+        (relation.mode === 'scalar' ? 'Scalar fields own writes' : 'The association owns writes') + '.');
+    }
+  }
+  return { text, template, mapping, relationshipPlan, comparison: comparison.summary };
 }
 
 module.exports = { defaultEntityName, inspectTable, planEntity };

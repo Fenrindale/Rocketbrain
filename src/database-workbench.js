@@ -494,6 +494,23 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
         return plan;
       } finally { state.running.delete(key); updateStatus(); }
     },
+    async measureQueryPlan(sql, { confirmed, cancellation, beforeDispatch } = {}) {
+      if (confirmed !== true) throw Error('Approve execution of the selected read-only SQL before measuring it.');
+      assertExclusiveReady();
+      const { db, epoch } = state, key = 'visual-explain';
+      const assertCurrent = () => {
+        if (cancellation?.isCancellationRequested) throw Error('The query measurement was cancelled.');
+        if (!databaseGuard(db, epoch)()) throw Error('The database connection changed. Review the query again.');
+        beforeDispatch?.();
+      };
+      state.running.add(key);
+      updateStatus();
+      try {
+        const plan = await db.measureQueryPlan(sql, { assertCurrent, cancellation });
+        assertCurrent();
+        return plan;
+      } finally { state.running.delete(key); updateStatus(); }
+    },
     async databaseCatalog() {
       if(exclusiveDatabaseWork())throw new Error('Finish the schema operation or pending import transaction before reading database metadata.');
       if (!state.mysql || state.disposed) throw new Error('Connect to MySQL or MariaDB before comparing JPA mappings.');

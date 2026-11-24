@@ -7,7 +7,7 @@ const MAX_ENTRIES = 400;
 const categories = Object.freeze({ query: 'SQL console', script: 'SQL script', metadata: 'Metadata' });
 const statuses = Object.freeze({ running: 'Running', succeeded: 'Succeeded', failed: 'Failed',
   cancelled: 'Cancelled', timeout: 'Timed out', limited: 'Result limit' });
-const operations = new Set(['SELECT', 'WITH', 'EXPLAIN', 'SHOW', 'DESCRIBE', 'DESC', 'INSERT', 'UPDATE', 'DELETE',
+const operations = new Set(['SELECT', 'WITH', 'EXPLAIN', 'ANALYZE', 'SHOW', 'DESCRIBE', 'DESC', 'INSERT', 'UPDATE', 'DELETE',
   'REPLACE', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'SET']);
 
 function operationOf(sql) {
@@ -18,7 +18,7 @@ function operationOf(sql) {
 function outcomeOf(code, truncated = false) {
   if (truncated || code === 'ROCKETBRAIN_RESULT_LIMIT') return 'limited';
   if (code === 'ROCKETBRAIN_CANCELLED') return 'cancelled';
-  if (code === 'ROCKETBRAIN_TIMEOUT') return 'timeout';
+  if (['ROCKETBRAIN_TIMEOUT', 'ER_QUERY_TIMEOUT', 'ER_STATEMENT_TIMEOUT'].includes(code)) return 'timeout';
   return code ? 'failed' : 'succeeded';
 }
 

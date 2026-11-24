@@ -98,16 +98,17 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - **Preview SQL with a Virtual Schema**는 로컬 UTF-8 DDL 파일 또는 관찰한 DB 카탈로그를 바탕으로 현재 SQL 문서의 테이블·뷰와 열 변경을 순서대로 분석합니다. 편집기의 완성·진단에만 반영합니다. 파일을 수정한 뒤에는 다시 선택해 캡처하고, **Exit Virtual SQL Schema Preview**로 종료합니다.
 - `rocketbrain.sql.analysis.resolutionScopes`에서 `source`에 작업 공간 내 파일 또는 `queries/` 같은 폴더를 지정하고, `ddl`의 상대 경로와 `database`, `dialect`를 설정할 수 있습니다. 더 구체적인 경로가 우선하며 로컬 카탈로그를 읽을 수 없으면 진단을 표시합니다.
 - **Visualize SQL Execution Plan**은 선택한 읽기 쿼리의 계획을 트리와 표, 서버 원본 JSON으로 표시합니다. MySQL은 서버의 TREE 원문도 표시합니다. 서버에서 반환한 행 추정치와 비용을 보존합니다.
+- **Measure SQL Execution Plan**은 승인한 읽기 쿼리를 별도 읽기 전용 세션으로 실행해 서버가 보고한 행, 반복 횟수, 시간을 표시합니다. **Compare Captured SQL Plans**는 같은 연결과 캡처 모드의 열린 계획을 나란히 보여줍니다.
 - **Show SQL Activity Log**에서 작업 공간의 로컬 기록을 선택적으로 켭니다. 콘솔·스크립트·메타데이터 요청의 상태와 소요 시간이 메모리에 기록되며 SQL 원문·변수 값은 보관하지 않습니다. **Browse Database Object Names**에서는 테이블·뷰 이름을 먼저 읽고 선택한 객체의 열과 인덱스를 조회합니다.
 - 결과 탭에 이름을 붙이거나 고정하고, 보관된 스크립트 결과에서 각 문장의 캡처를 다시 엽니다. 테이블 필터는 중첩 AND/OR와 타입별 열 검색을 지원하며, 저장한 조건을 같은 연결·테이블에서 다시 선택할 수 있습니다.
-- **Generate JPA Entity from Table**은 현재 스키마의 컬럼과 기본 키에서 Jakarta Persistence 클래스를 미리 봅니다. 충돌과 카탈로그·패키지 변경을 재검사한 뒤 새 Java 파일을 만듭니다. 외래 키 연관관계는 원본 열로 유지합니다.
+- **Generate JPA Entity from Table**은 현재 스키마의 열과 기본 키에서 Jakarta Persistence 클래스를 만듭니다. 선택한 외래 키와 같은 프로젝트의 대상 엔티티를 대조해 `@ManyToOne` 또는 `@OneToOne`을 추가할 수 있습니다. 스칼라 필드 또는 연관 필드 중 하나를 쓰기 소유자로 지정하고, 적용 전에 카탈로그와 Java 원본을 다시 확인합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
 - Grid와 Record에서 같은 변경 초안을 편집하고 검토합니다. 테이블별 열 배치는 같은 연결·스키마에서 다시 열 때 복원됩니다. 읽기 전용 테이블 행의 **Related Rows**는 물리 FK의 모든 키 값을 바인딩해 별도 결과를 엽니다.
 - **Chart** 보기에서 캡처한 결과 페이지의 막대·선 그래프와 정확한 그룹 합계·평균을 확인합니다. 셀 편집기는 줄바꿈 종류, JSON 원문, Hex·Base64와 SQL NULL을 구분합니다.
 - **Compare**에서 두 캡처 결과의 키와 비교 열을 매핑합니다. 변경된 일치 행을 선택해 대상 그리드의 초안에 넣고 SQL 검토와 트랜잭션으로 적용합니다.
-- **Capture Table Copy Source**로 테이블 행을 메모리에 캡처합니다. 대상 연결로 전환한 뒤 **Copy Captured Rows**에서 열 매핑을 검토하고, **Finish Table Copy**에서 커밋 또는 롤백합니다.
+- **Capture Table Copy Source**에서 작은 메모리 캡처 또는 **Stream Large Table**을 선택합니다. 스트리밍은 InnoDB 기본 키 순서의 읽기 스냅샷을 로컬 임시 파일에 암호화해 최대 100만 행·1 GiB까지 보관합니다. 대상 연결로 전환해 **Copy Captured Rows**에서 열 매핑을 검토하고, 일괄 삽입을 모두 스테이징한 뒤 **Finish Table Copy**에서 커밋 또는 롤백합니다. 스트리밍 스냅샷의 키는 현재 확장 세션에만 보관합니다.
 - **Open Schema Diagram**에서 실제 FK와 저장 연결의 워크스페이스 가상 FK를 탐색합니다. 노드 위치를 저장하거나 JSON으로 교환하고 PNG로 내보낼 수 있습니다.
 - **Save Schema DDL**에서 테이블·외래 키·지원하는 뷰의 순서를 검토하고 SQL 파일을 저장합니다. 저장 전 현재 정의와 비교하며, 파일 생성 과정에서는 서버 정의를 읽습니다.
 

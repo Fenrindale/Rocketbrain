@@ -18,6 +18,8 @@ function costMeter(group, maxima) {
 }
 
 function explanationHtml(plan, { nonce, source = false }) {
+  const rawLabel = plan.format === 'tree' ? 'TREE text' : 'JSON';
+  const captureTreeSeparately = plan.engine === 'mysql' && !plan.measured;
   const byId = new Map(plan.nodes.map(node => [node.id, node]));
   const children = new Map(), maxima = new Map();
   for (const node of plan.nodes) {
@@ -32,22 +34,25 @@ function explanationHtml(plan, { nonce, source = false }) {
   function branch(id) {
     const node = byId.get(id), nested = children.get(id) ?? [];
     const content = '<span class="node-name">' + escape(node.name) + '</span><span class="metrics">' +
-      fields(node.costs, ' cost') + fields(node.rows, ' rows') + '</span>' + costMeter(node.costs, maxima);
+      fields(node.costs, ' cost') + fields(node.rows, ' rows') + fields(node.actual || [], ' actual') +
+      '</span>' + costMeter(node.costs, maxima);
     const detail = '<div class="node-detail">' + fields(node.tags) + node.expressions.map(item =>
       '<p><span>' + escape(item.label) + '</span> <code>' + escape(item.value) + '</code></p>').join('') + '</div>';
     const element = nested.length ? '<details' + (node.depth < 2 ? ' open' : '') + '><summary>' + content +
       '</summary>' + detail + '<ul>' + nested.map(branch).join('') + '</ul></details>' :
       '<div class="leaf"><div class="leaf-summary">' + content + '</div>' + detail + '</div>';
-    const terms = [node.name, ...node.costs.concat(node.rows, node.tags, node.expressions).map(item => item.label + ' ' + item.value)].join(' ');
+    const terms = [node.name, ...node.costs.concat(node.rows, node.actual || [], node.tags, node.expressions)
+      .map(item => item.label + ' ' + item.value)].join(' ');
     return '<li class="branch" data-id="' + id + '" data-terms="' + escape(terms) + '">' + element + '</li>';
   }
   const title = plan.engine === 'mariadb' ? 'MariaDB' : 'MySQL';
   const tableRows = plan.nodes.map(node => '<tr data-id="' + node.id + '"><th scope="row">' + escape(node.name) + '</th><td>' +
     escape(byId.get(node.parentId)?.name ?? 'Root') + '</td><td>' + fields(node.tags) + '</td><td>' + fields(node.rows, ' rows') +
-    '</td><td>' + fields(node.costs, ' cost') + '</td><td>' + node.expressions.map(item => '<p>' + escape(item.label) + ' <code>' +
+    '</td><td>' + fields(node.costs, ' cost') + '</td>' + (plan.measured ? '<td>' + fields(node.actual || [], ' actual') + '</td>' : '') +
+    '<td>' + node.expressions.map(item => '<p>' + escape(item.label) + ' <code>' +
       escape(item.value) + '</code></p>').join('') + '</td></tr>').join('');
   const warnings = plan.warnings.map(value => '<p class="notice">' + escape(value) + '</p>').join('');
-  const empty = plan.nodes.length ? '' : '<p class="notice">Inspect the original server output in JSON.</p>';
+  const empty = plan.nodes.length ? '' : '<p class="notice">Inspect the original server ' + rawLabel + ' output.</p>';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -64,23 +69,24 @@ function explanationHtml(plan, { nonce, source = false }) {
   .tree ul{margin-left:.82rem;border-left:1px solid var(--vscode-panel-border);padding-left:.85rem}.branch{position:relative;margin:.35rem 0;min-width:0}.tree ul>.branch:before{content:"";position:absolute;left:-.85rem;top:.95rem;width:.8rem;border-top:1px solid var(--vscode-panel-border)}
   summary,.leaf-summary{padding:.45rem .52rem;background:var(--vscode-editorWidget-background);border-radius:3px;overflow-wrap:anywhere} summary{cursor:pointer} .node-name{font-weight:600;margin-right:.5rem}.metrics{display:inline-flex;gap:.3rem;flex-wrap:wrap;vertical-align:middle}
   .field{display:inline-flex;gap:.28rem;align-items:baseline;font-size:.92em;padding:.08rem .25rem;border-radius:2px;margin:.09rem .15rem .09rem 0;color:var(--vscode-descriptionForeground)} .field strong{color:var(--vscode-editor-foreground);font-weight:500}.cost{color:var(--vscode-charts-orange);background:var(--vscode-textBlockQuote-background)} .rows{color:var(--vscode-charts-blue);background:var(--vscode-textBlockQuote-background)}
+  .actual{color:var(--vscode-charts-green);background:var(--vscode-textBlockQuote-background)}
   .node-detail{padding:.24rem .55rem .24rem .85rem}.node-detail:empty{display:none}.node-detail p,td p{margin:.2rem 0;overflow-wrap:anywhere}.node-detail p>span{color:var(--vscode-descriptionForeground);margin-right:.35rem} code,pre{font-family:var(--vscode-editor-font-family,monospace)}
   meter{display:inline-block;width:min(7rem,22vw);height:.55rem;margin-left:.42rem;vertical-align:middle}.table-scroll{overflow:auto} table{border-collapse:collapse;width:100%;text-align:left} th,td{vertical-align:top;border-bottom:1px solid var(--vscode-panel-border);padding:.38rem .52rem;min-width:6.5rem} thead{background:var(--vscode-editorWidget-background)}
   pre{tab-size:2;white-space:pre-wrap;word-break:break-word;border:1px solid var(--vscode-panel-border);padding:.75rem}.action{margin-left:auto}
 </style></head><body>
-<header><h1>Visual EXPLAIN</h1><span>${escape(title)} ${escape(plan.version)} · ${escape(plan.database)}</span></header>
+<header><h1>${plan.measured ? 'Measured SQL plan' : 'Visual EXPLAIN'}</h1><span>${escape(title)} ${escape(plan.version)} · ${escape(plan.database)}</span></header>
 <div class="bar" aria-label="Plan controls">
-  <div class="views" role="group" aria-label="Plan view"><button type="button" data-view="tree" aria-pressed="true">Tree</button><button type="button" data-view="table" aria-pressed="false">Table</button><button type="button" data-view="raw" aria-pressed="false">JSON</button>${plan.engine === 'mysql' ? '<button type="button" data-view="raw-tree" aria-pressed="false">MySQL TREE text</button>' : ''}</div>
+  <div class="views" role="group" aria-label="Plan view"><button type="button" data-view="tree" aria-pressed="true">Tree</button><button type="button" data-view="table" aria-pressed="false">Table</button><button type="button" data-view="raw" aria-pressed="false">${rawLabel}</button>${captureTreeSeparately ? '<button type="button" data-view="raw-tree" aria-pressed="false">MySQL TREE text</button>' : ''}</div>
   <div class="tools"><label class="find">Filter <input type="search" id="filter" placeholder="Operator, index or condition"></label>
   <button type="button" id="expand">Expand all</button><button type="button" id="collapse">Collapse all</button></div>
   ${source ? '<button type="button" class="action" id="source">Open SQL</button>' : ''}
 </div>
-<p class="hint">${plan.nodes.length} plan node${plan.nodes.length === 1 ? '' : 's'} · Optimizer estimates · Read-only metadata session</p>
+<p class="hint">${plan.nodes.length} plan node${plan.nodes.length === 1 ? '' : 's'} · ${plan.measured ? 'Server estimates and observed execution · Separate read-only session' : 'Optimizer estimates · Read-only metadata session'}</p>
 ${warnings}<p id="no-results" class="notice" role="status" hidden>No matching plan nodes.</p>
 <section id="tree" aria-label="Plan tree">${empty}<ul class="tree">${plan.rootIds.map(branch).join('')}</ul></section>
-<section id="table" aria-label="Plan table" hidden>${empty}<div class="table-scroll"><table><thead><tr><th scope="col">Operator</th><th scope="col">Parent</th><th scope="col">Details</th><th scope="col">Rows</th><th scope="col">Cost</th><th scope="col">Conditions</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>
-<section id="raw" aria-label="Original plan JSON" hidden><button type="button" id="copy">Copy JSON</button><pre id="original">${escape(plan.raw)}</pre></section>
-${plan.engine === 'mysql' ? `<section id="raw-tree" aria-label="Original MySQL TREE text" hidden>
+<section id="table" aria-label="Plan table" hidden>${empty}<div class="table-scroll"><table><thead><tr><th scope="col">Operator</th><th scope="col">Parent</th><th scope="col">Details</th><th scope="col">Rows</th><th scope="col">Cost</th>${plan.measured ? '<th scope="col">Observed</th>' : ''}<th scope="col">Conditions</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>
+<section id="raw" aria-label="Original plan ${rawLabel}" hidden><button type="button" id="copy">Copy ${rawLabel}</button><pre id="original">${escape(plan.raw)}</pre></section>
+${captureTreeSeparately ? `<section id="raw-tree" aria-label="Original MySQL TREE text" hidden>
   <p class="hint">MySQL TREE uses a separate optimizer request and may observe newer statistics.</p>
   <button type="button" id="capture-tree">Capture TREE text</button><button type="button" id="copy-tree" hidden>Copy TREE text</button>
   <p id="tree-status" class="notice" role="status" hidden></p><pre id="original-tree" hidden></pre>
@@ -149,4 +155,33 @@ if (captureTree) window.addEventListener('message', event => {
 </script></body></html>`;
 }
 
-module.exports = { explanationHtml };
+function comparisonHtml(result, nonce) {
+  const status = { same: 'Unchanged', changed: 'Changed', removed: 'Baseline only', added: 'Candidate only' };
+  function cell(node) {
+    if (!node) return '—';
+    const fields = [...node.values.map(item => [item.label, item.value]), ...node.detail];
+    return fields.map(([label, value]) => '<div>' + escape(label) + ' <strong>' + escape(value) + '</strong></div>').join('') || '—';
+  }
+  const rows = result.rows.map(({ state, before, after }) => {
+    const node = before || after;
+    return '<tr><th scope="row">' + escape(node.name) + ' <small>Level ' + escape(node.depth + 1) +
+      '</small></th><td>' + status[state] + '</td><td>' + cell(before) + '</td><td>' + cell(after) + '</td></tr>';
+  }).join('');
+  const counts = Object.entries(status).map(([state, label]) => label + ' ' + result.counts[state]).join(' · ');
+  const warnings = ['baseline', 'candidate'].flatMap(side => (result[side + 'Warnings'] || [])
+    .map(message => '<p><strong>' + (side === 'baseline' ? 'Baseline' : 'Candidate') + '</strong> · ' + escape(message) + '</p>')).join('');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';">
+<title>Compare SQL plans</title><style nonce="${nonce}">
+  body{margin:0;padding:1rem;color:var(--vscode-editor-foreground);background:var(--vscode-editor-background);font:var(--vscode-font-size) var(--vscode-font-family,sans-serif)}
+  h1{font-size:1.2rem;margin:0}p,small{color:var(--vscode-descriptionForeground)}table{border-collapse:collapse;width:100%}
+  th,td{text-align:left;vertical-align:top;overflow-wrap:anywhere;border-bottom:1px solid var(--vscode-panel-border);padding:.5rem}
+  thead{background:var(--vscode-editorWidget-background)}strong{font-weight:600}
+</style></head><body><h1>Compare SQL plans</h1><p>${escape(result.version)} · ${escape(result.database)} ·
+${result.measured ? 'Measured captures' : 'Optimizer estimates'}</p><p>${escape(counts)}</p>
+<p>Decoded operators align by their name and position in the tree. Timings are the samples reported by each run.</p>${warnings}
+<table><thead><tr><th scope="col">Operator</th><th scope="col">State</th><th scope="col">Baseline</th><th scope="col">Candidate</th></tr></thead>
+<tbody>${rows}</tbody></table></body></html>`;
+}
+
+module.exports = { explanationHtml, comparisonHtml };

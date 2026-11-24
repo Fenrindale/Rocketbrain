@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.33.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.34.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 39 |
-| 부분 구현 | 112 |
+| 구현 | 41 |
+| 부분 구현 | 110 |
 | 미구현 | 46 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 4 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **50%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **50.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.33에서는 Java 클래스 다이어그램과 지역값 흐름, 실행 계획, SQL 활동 로그, 지연 카탈로그와 해석 범위, 결과 탭·저장 필터를 검증했다. 상태가 바뀐 항목은 9개이고 가중 점수는 102.5점에서 108점으로 늘었다.
+v0.34에서는 실측 SQL 계획과 두 캡처 비교, JPA 외래 키 연관 매핑, 두 서버 간 대량 테이블 스트리밍 전송을 검증했다. 상태가 바뀐 항목은 2개이고 가중 점수는 108점에서 109점으로 늘었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -197,7 +197,7 @@ v0.33에서는 Java 클래스 다이어그램과 지역값 흐름, 실행 계획
 | DG-054 | DataGrip | 여러 result set·탭 유지·고정 | 구현 |
 | DG-055 | DataGrip | EXPLAIN 원본·tree/table | 구현 |
 | DG-056 | DataGrip | 시각 실행 계획·cost graph | 구현 |
-| DG-057 | DataGrip | EXPLAIN ANALYZE 실제 실행 통계 | 부분 구현 |
+| DG-057 | DataGrip | EXPLAIN ANALYZE 실제 실행 통계 | 구현 |
 | DG-058 | DataGrip | 편집기 안 결과·SQL notebook 대안 | 미구현 |
 | DG-059 | DataGrip | 페이지 이동·row limit·지연 조회 | 부분 구현 |
 | DG-060 | DataGrip | 서버 정렬·다중 column 정렬 | 부분 구현 |
@@ -213,7 +213,7 @@ v0.33에서는 Java 클래스 다이어그램과 지역값 흐름, 실행 계획
 | DG-070 | DataGrip | INSERT/JSON/Excel 등 출력 형식 | 구현 |
 | DG-071 | DataGrip | 사용자 data extractor 스크립트 | 미구현 |
 | DG-072 | DataGrip | CSV/Excel import·column/type mapping | 부분 구현 |
-| DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 부분 구현 |
+| DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 구현 |
 | DG-074 | DataGrip | native dump·restore 도구 통합 | 미구현 |
 | DG-075 | DataGrip | table·result dataset 비교·sync | 부분 구현 |
 | DG-076 | DataGrip | 그리드 결과 차트·집계 | 구현 |

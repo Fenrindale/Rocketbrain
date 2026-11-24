@@ -16,7 +16,7 @@ function policyError(message, readOnly = true) {
  * Ambiguous SQL_MODE escaping and executable comments are intentionally refused.
  * The server's READ ONLY setting remains the read-only enforcement boundary.
  */
-function tokenize(sql, readOnly = true, { sqlMode } = {}) {
+function tokenize(sql, readOnly = true, { sqlMode, allowOptimizerHints = true } = {}) {
   if (typeof sql !== 'string' || !sql.trim()) throw policyError('Enter a SQL statement.', readOnly);
   if (sql.includes('\0') || Buffer.byteLength(sql, 'utf8') > MAX_SQL_BYTES) throw policyError('SQL must not contain NUL and must be at most 128 KiB.', readOnly);
   const tokens = [];
@@ -30,6 +30,7 @@ function tokenize(sql, readOnly = true, { sqlMode } = {}) {
     }
     if (sql.startsWith('/*', i)) {
       if (/^\/\*(?:!|[mM]!)/.test(sql.slice(i))) throw policyError('Executable SQL comments are not supported.', readOnly);
+      if (!allowOptimizerHints && sql.startsWith('/*+', i)) throw policyError('Remove optimizer hints before measuring this read-only SQL.', readOnly);
       const end = sql.indexOf('*/', i + 2);
       if (end < 0) throw policyError('The SQL comment is not closed.', readOnly);
       i = end + 2; continue;
@@ -75,8 +76,8 @@ function tokenize(sql, readOnly = true, { sqlMode } = {}) {
   return tokens;
 }
 
-function validateQuery(sql, { readOnly = true, sqlMode } = {}) {
-  const tokens = tokenize(sql, readOnly,{sqlMode});
+function validateQuery(sql, { readOnly = true, sqlMode, allowOptimizerHints = true } = {}) {
+  const tokens = tokenize(sql, readOnly,{sqlMode,allowOptimizerHints});
   const words = tokens.filter(t => t.kind === 'word').map(t => t.upper);
   const first = tokens[0]?.kind === 'word' ? tokens[0].upper : '';
   if (TRANSACTION_STARTS.has(first)) throw policyError('Use the transaction controls to begin, commit or roll back a console transaction.', readOnly);

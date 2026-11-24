@@ -2,8 +2,8 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { explainSql, normalizePlan } = require('../src/db/explain-plan');
-const { explanationHtml } = require('../src/db/explain-plan-view');
+const { explainSql, measuredSql, normalizePlan, comparePlans } = require('../src/db/explain-plan');
+const { explanationHtml, comparisonHtml } = require('../src/db/explain-plan-view');
 const { browserRuntime } = require('./helpers/browser-runtime');
 
 const mysqlJson = `{
@@ -88,6 +88,36 @@ test('visual EXPLAIN keeps unfamiliar or oversized graphs inspectable as raw ser
   assert.throws(() => plan('x'.repeat(513 * 1024)), /512 KiB/);
 });
 
+test('measured plans keep exact estimates and real MySQL TREE or MariaDB JSON metrics', () => {
+  assert.match(measuredSql('SELECT 1;', [], 'mysql'), /^EXPLAIN ANALYZE FORMAT=TREE/);
+  assert.match(measuredSql('SELECT 1;', [], 'mariadb'), /^ANALYZE FORMAT=JSON/);
+  assert.throws(() => measuredSql('SELECT /*+ MAX_EXECUTION_TIME(90000) */ 1;', [], 'mysql'), /Remove optimizer hints/);
+  assert.match(measuredSql("SELECT '/*+ MAX_EXECUTION_TIME(90000) */';", [], 'mysql'), /^EXPLAIN ANALYZE/);
+  for (const sql of ['DELETE FROM t', 'SELECT 1; SELECT 2', 'SELECT 1 INTO OUTFILE \'a\'']) {
+    assert.throws(() => measuredSql(sql, [], 'mariadb'), /read-only|one statement/);
+  }
+  const raw = '-> Sort: <sample>  (cost=12.000 rows=4) (actual time=0.0010..5.02e-3 rows=2 loops=1)\n' +
+    '    -> Table scan on t  (cost=0.1 rows=2) (actual time=0.012..0.12 rows=2 loops=1)\n' +
+    '        -> Optional iterator (never executed)\n';
+  const mysql = normalizePlan({ raw, engine: 'mysql', version:'8.4', database:'test', format:'tree', measured:true });
+  assert.equal(mysql.raw,raw);
+  assert.deepEqual(mysql.nodes[0].actual.map(metric=>metric.value), ['0.0010','5.02e-3','2','1']);
+  assert.equal(mysql.nodes[0].rows[0].value,'4');
+  assert.equal(mysql.nodes[1].parentId,mysql.nodes[0].id);
+  assert.deepEqual(mysql.nodes[2].tags,[{label:'Execution',value:'Never executed'}]);
+  assert.match(explanationHtml(mysql,{nonce:'test'}), /Sort: &lt;sample&gt;/);
+  const maria = normalizePlan({ raw:'{"query_block":{"select_id":1,"r_total_time_ms":0.012300,"table":{"table_name":"t","rows":10,"r_loops":2,"r_rows":3.20}}}',
+    engine:'mariadb',version:'11.4',database:'test',measured:true });
+  assert.equal(maria.nodes[0].actual[0].value,'0.012300');
+  assert.deepEqual(maria.nodes[1].actual.map(metric=>metric.value), ['2','3.20']);
+  assert.throws(()=>comparePlans(mysql,maria), /same server/);
+  const candidate=normalizePlan({ ...mysql, raw:raw.replace('0.0010','0.0020').replace(/        ->.*\n/,'') });
+  const comparison=comparePlans(mysql,candidate);
+  assert.deepEqual(comparison.counts,{same:1,changed:1,removed:1,added:0});
+  assert.deepEqual(comparison.rows[0].after.values.map(metric=>metric.value), ['12.000','4','0.0020','5.02e-3','2','1']);
+  assert.match(comparisonHtml(comparison,'test'), /Baseline only/);
+});
+
 const runtime = browserRuntime();
 test('visual EXPLAIN Webview displays the tree, keyboard filter, rows, cost markers and raw view', { skip: runtime.skip, timeout: 30000 }, async () => {
   const browser = await runtime.chromium.launch({ executablePath: runtime.executablePath, headless: true });
@@ -124,6 +154,20 @@ test('visual EXPLAIN Webview displays the tree, keyboard filter, rows, cost mark
     await page.getByRole('button', { name: 'Copy TREE text' }).click();
     assert.deepEqual(await page.evaluate(() => window.messages),
       [{ type: 'copy' }, { type: 'source' }, { type: 'tree' }, { type: 'tree' }, { type: 'copy-tree' }]);
+    const measured = normalizePlan({ raw: '-> Table scan on p (cost=2 rows=8) (actual time=0.001..0.017 rows=5 loops=1)',
+      engine: 'mysql', database: 'fixture', version: 'test', format: 'tree', measured: true });
+    const candidate = normalizePlan({ ...measured, raw: measured.raw.replace('rows=5', 'rows=6') });
+    await page.route('https://measured.local/', route => route.fulfill({ contentType:'text/html',
+      body:explanationHtml(measured,{nonce:'test-only'}) }));
+    await page.goto('https://measured.local/');
+    await page.getByRole('button',{name:'Table',exact:true}).click();
+    assert.match(await page.getByRole('cell').filter({hasText:'Observed rows per loop'}).innerText(), /Observed rows per loop\s+5/);
+    await page.getByRole('button',{name:'TREE text',exact:true}).click();
+    assert.equal(await page.locator('#original').textContent(), measured.raw);
+    await page.route('https://comparison.local/', route => route.fulfill({ contentType:'text/html',
+      body:comparisonHtml(comparePlans(measured,candidate),'test-only') }));
+    await page.goto('https://comparison.local/');
+    assert.match(await page.locator('tbody').innerText(), /Changed[\s\S]*Observed rows per loop\s+5[\s\S]*Observed rows per loop\s+6/);
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

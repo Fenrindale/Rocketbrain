@@ -59,6 +59,8 @@ function safeError(error) {
     ER_LOCK_WAIT_TIMEOUT: 'The server lock wait timed out. Inspect the transaction state before retrying.',
     ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION: 'The server refused this operation in a read-only transaction.',
     ER_QUERY_INTERRUPTED: 'The database query was interrupted.',
+    ER_QUERY_TIMEOUT: 'The server stopped the query at its time limit.',
+    ER_STATEMENT_TIMEOUT: 'The server stopped the query at its time limit.',
     HANDSHAKE_SSL_ERROR: 'The MySQL TLS connection failed. Check the server certificate.',
     SELF_SIGNED_CERT_IN_CHAIN: 'The MySQL TLS certificate is not trusted. Supply the issuing CA certificate.',
     DEPTH_ZERO_SELF_SIGNED_CERT: 'The MySQL TLS certificate is not trusted. Supply the issuing CA certificate.',
@@ -537,6 +539,58 @@ class MysqlService {
     if (result.rows.length !== 1 || result.rows[0].length !== 1) throw Error('Expected one plan from the server.');
     return normalizePlan({ raw: result.rows[0][0], engine, version, database, format });
   }
+  async measureQueryPlan(sql, { assertCurrent, cancellation } = {}) {
+    const { validatePlanQuery, measuredSql, normalizePlan } = require('./explain-plan');
+    validatePlanQuery(sql, undefined, { measured: true });
+    this._assertOpen();
+    if (this._measurementSession) throw Error('Wait for the current query measurement.');
+    const session = newSession('query-measurement', true, this._options.database);
+    this._measurementSession = session;
+    const cancelled = () => fail('ROCKETBRAIN_CANCELLED', 'The query measurement was cancelled.');
+    let subscription;
+    const check = () => {
+      if (cancellation?.isCancellationRequested) throw cancelled();
+      this._assertOpen();
+      assertCurrent?.();
+    };
+    try {
+      subscription = cancellation?.onCancellationRequested?.(() => this._lose(session, cancelled()));
+      check();
+      await this._ensureConnection(session);
+      check();
+      const context = await this._stream(session, 'SELECT VERSION(), DATABASE(), @@SESSION.sql_mode', [], { maxRows: 2, timeoutMs: 5000 }, false);
+      const [version, database, mode] = context.rows[0] ?? [];
+      if (typeof version !== 'string' || database !== this._options.database || typeof mode !== 'string') {
+        throw Error('Could not confirm the database and SQL mode for query measurement.');
+      }
+      const engine = /mariadb/i.test(version) ? 'mariadb' : 'mysql';
+      const statement = measuredSql(sql, mode.split(',').filter(Boolean), engine);
+      check();
+      await this._control(session, engine === 'mysql' ? 'SET SESSION max_execution_time = 8000' : 'SET SESSION max_statement_time = 8');
+      check();
+      this._observe(session, await this._control(session, 'START TRANSACTION READ ONLY'));
+      check();
+      let result;
+      try {
+        result = await this._stream(session, statement, [], { maxRows: 1, timeoutMs: 10000 }, false,
+          { category: 'query', operation: engine === 'mysql' ? 'EXPLAIN' : 'ANALYZE' });
+      } catch (error) {
+        if (['ER_QUERY_TIMEOUT', 'ER_STATEMENT_TIMEOUT'].includes(error.code)) {
+          throw fail('ROCKETBRAIN_TIMEOUT', 'The server stopped the measurement at its time limit.');
+        }
+        throw error;
+      }
+      check();
+      if (result.truncated || result.rows.length !== 1 || result.rows[0].length !== 1) throw Error('Expected one measurement plan from the server.');
+      return normalizePlan({ raw: result.rows[0][0], engine, version, database, measured: true,
+        format: engine === 'mysql' ? 'tree' : 'json' });
+    } finally {
+      subscription?.dispose();
+      session.closed = true;
+      this._lose(session, fail('ROCKETBRAIN_CLOSED', 'The isolated measurement session closed.'));
+      if (this._measurementSession === session) this._measurementSession = undefined;
+    }
+  }
   async schema() {
     const result = await this._metadataQuery('SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME, ORDINAL_POSITION', [this._options.database]);
     const tables = new Map();
@@ -592,6 +646,9 @@ class MysqlService {
   async dispose() {
     if (this._disposed) return;
     this._disposed = true;
+    if (this._measurementSession) {
+      this._lose(this._measurementSession, fail('ROCKETBRAIN_CLOSED', 'The isolated measurement session closed.'));
+    }
     try{
     this._schemaRenamer.dispose();
     await this._schemaDesigner.dispose();
