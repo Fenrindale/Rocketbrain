@@ -18,6 +18,9 @@ function inspectMoveClass(text,uri,sources,{compilerGenericPeers=false,serviceIn
  const identifiers=new Set(tokens.filter(t=>t.kind==='id').map(t=>t.text)),genericPeers=[];
  for(const source of sources){if(!source.file.endsWith('.java')||source.uri===uri)continue;const peer=parseJavaFile({text:source.text,uri:source.uri}),lex=lexJava(source.text),genericOnly=peer.issues.length>0&&peer.issues.every(issue=>issue==='Generic type specialization is not modeled');if(lex.issues.length||peer.issues.length&&(!compilerGenericPeers||!genericOnly))throw Error('A project Java source prevents complete Move accessibility inspection.');if(genericOnly)genericPeers.push(source.uri);if(peer.packageName!==parsed.packageName)continue;
   for(const type of peer.types){if(!identifiers.has(type.name))continue;const access=declarationHeader(lex.tokens,type.start);if(!access.includes('public'))throw Error('A known package-private peer type requires additional Move accessibility analysis: '+type.name);
+   // Package Move proves this exact scalar service interface separately. Its
+   // implicitly public method is available after the package changes.
+   if(type.kind==='interface'&&type.fqn===serviceInterface)continue;
    for(const member of [...type.methods,...type.fields])if(identifiers.has(member.name)&&!declarationHeader(lex.tokens,member.start).includes('public'))throw Error('A known non-public peer member requires additional Move accessibility analysis: '+type.name+'.'+member.name);
   }
  }

@@ -1,0 +1,10 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.rocketbrain.fixture.v26</groupId><artifactId>rb26-library-bom</artifactId><version>1.0.0</version>
+    <packaging>pom</packaging>
+    <dependencyManagement>
+        <dependencies>
+            <dependency><groupId>org.rocketbrain.fixture.v26</groupId><artifactId>rb26-core</artifactId><version>1.0.0</version><scope>compile</scope></dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

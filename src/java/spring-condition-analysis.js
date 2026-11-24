@@ -2,17 +2,23 @@
 
 const { lexJava } = require('../spring/java');
 const { parseProfileExpression } = require('../spring/profile-expression');
+const { booleanExpression, analyzeConditionFlow } = require('./spring-condition-flow');
 
 const CONTEXT = 'org.springframework.context.annotation.';
 const BOOT = 'org.springframework.boot.autoconfigure.condition.';
 const METADATA = 'org.springframework.core.type.AnnotatedTypeMetadata';
+const ENVIRONMENT = 'org.springframework.core.env.Environment';
+const PROFILES = 'org.springframework.core.env.Profiles';
 const CONDITION_TYPES = Object.freeze({
   Profile: CONTEXT + 'Profile',
   Conditional: CONTEXT + 'Conditional',
   Condition: CONTEXT + 'Condition',
   ConditionContext: CONTEXT + 'ConditionContext',
   AnnotatedTypeMetadata: METADATA,
+  Environment: ENVIRONMENT,
+  Profiles: PROFILES,
   ConditionalOnExpression: BOOT + 'ConditionalOnExpression',
+  ConditionalOnBooleanProperty: BOOT + 'ConditionalOnBooleanProperty',
   ConditionalOnClass: BOOT + 'ConditionalOnClass',
   ConditionalOnMissingClass: BOOT + 'ConditionalOnMissingClass',
   ConditionalOnBean: BOOT + 'ConditionalOnBean',
@@ -21,7 +27,8 @@ const CONDITION_TYPES = Object.freeze({
 });
 const CLASS_NAMES = new Set(['ConditionalOnClass', 'ConditionalOnMissingClass']);
 const BEAN_NAMES = new Set(['ConditionalOnBean', 'ConditionalOnMissingBean', 'ConditionalOnSingleCandidate']);
-const LIMITS = Object.freeze({ tokens: 256, depth: 16, characters: 1024, arguments: 16, reportItems: 2048 });
+const LIMITS = Object.freeze({ tokens: 256, depth: 16, branches: 16, locals: 16, characters: 1024, arguments: 16, reportItems: 2048 });
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 const QUALIFIED = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
 const PROPERTY = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 const BEAN = /^[A-Za-z_$][\w.$:-]*$/;
@@ -60,36 +67,6 @@ function profileNames(values) {
   }
 }
 
-function booleanExpression(tokens, readAtom) {
-  if (!tokens.length || tokens.length > LIMITS.tokens) return false;
-  let index = 0;
-  function unary(depth) {
-    if (depth > LIMITS.depth) return false;
-    if (tokens[index]?.text === '!') {
-      index++;
-      return unary(depth + 1);
-    }
-    if (tokens[index]?.text === '(') {
-      index++;
-      return expression('||', depth + 1, conjunction) && tokens[index++]?.text === ')';
-    }
-    const next = readAtom(index);
-    if (next === null) return false;
-    index = next;
-    return true;
-  }
-  function expression(operator, depth, read) {
-    if (!read(depth)) return false;
-    while (tokens[index]?.text === operator) {
-      index++;
-      if (!read(depth)) return false;
-    }
-    return true;
-  }
-  const conjunction = depth => expression('&&', depth, unary);
-  return expression('||', 0, conjunction) && index === tokens.length;
-}
-
 function joinOperators(tokens) {
   const result = [];
   for (let i = 0; i < tokens.length; i++) {
@@ -104,17 +81,17 @@ function joinOperators(tokens) {
 }
 
 function closedSpel(value) {
-  if (value === null) return false;
+  if (value === null) return null;
   const body = value.startsWith('#{') && value.endsWith('}') ? value.slice(2, -1) : value;
   const tokens = lexJava(body).tokens;
   // The Java lexer discards comments and some spacing. Check that the
   // entire input consists of checked tokens and ASCII whitespace.
   let offset = 0;
   for (const token of tokens) {
-    if (!/^[ \t]*$/.test(body.slice(offset, token.start))) return false;
+    if (!/^[ \t]*$/.test(body.slice(offset, token.start))) return null;
     offset = token.end;
   }
-  if (!/^[ \t]*$/.test(body.slice(offset))) return false;
+  if (!/^[ \t]*$/.test(body.slice(offset))) return null;
   const input = joinOperators(tokens);
   function literal(token) {
     if (/^(?:true|false)$/.test(token?.text)) return 'boolean';
@@ -125,29 +102,39 @@ function closedSpel(value) {
   // In SpEL unary negation binds ahead of equality. A bare non-Boolean
   // operand would invoke conversion instead of comparing closed literals.
   if (input.some((token, index) => token.text === '!'
-      && !['!', '(', 'true', 'false'].includes(input[index + 1]?.text))) return false;
-  return booleanExpression(input, index => {
+      && !['!', '(', 'true', 'false'].includes(input[index + 1]?.text))) return null;
+  let ternaryExpressions = 0;
+  const recognized = booleanExpression(input, index => {
     const kind = literal(input[index]);
     if (!kind) return null;
     if (['==', '!='].includes(input[index + 1]?.text)) {
       return literal(input[index + 2]) === kind ? index + 3 : null;
     }
     return kind === 'boolean' ? index + 1 : null;
-  });
+  }, { limits: LIMITS, retainChoice: () => ++ternaryExpressions <= LIMITS.branches });
+  return recognized ? { ternaryExpressions } : null;
 }
 
 function isReviewedConditionName(name) {
   return name === 'Conditional' || name === 'Profile' || name === 'ConditionalOnExpression'
-    || CLASS_NAMES.has(name) || BEAN_NAMES.has(name);
+    || name === 'ConditionalOnBooleanProperty' || CLASS_NAMES.has(name) || BEAN_NAMES.has(name);
 }
 
 function createConditionReviewer({ byName, resolve }) {
   const hasImport = (file, name) => Object.hasOwn(file.imports, name);
+  const staticImports = new WeakMap();
+  function hasStaticImports(file) {
+    if (!staticImports.has(file)) {
+      const tokens = lexJava(file.text).tokens;
+      staticImports.set(file, tokens.some((token, index) => token.text === 'import' && tokens[index + 1]?.text === 'static'));
+    }
+    return staticImports.get(file);
+  }
 
   function resolvesTo(raw, expected, file) {
     if (resolve(raw, file) !== expected || byName.has(expected)) return false;
     if (raw.includes('.') || hasImport(file, raw) && file.imports[raw] === expected) return true;
-    if (byName.has((file.packageName ? file.packageName + '.' : '') + raw)) return false;
+    if (hasStaticImports(file) || byName.has((file.packageName ? file.packageName + '.' : '') + raw)) return false;
     const expectedPackage = expected.slice(0, expected.lastIndexOf('.'));
     return file.wildcards.every(imported => imported === expectedPackage);
   }
@@ -193,43 +180,56 @@ function createConditionReviewer({ byName, resolve }) {
         || !resolvesTo(method.parameters[0].rawType, CONDITION_TYPES.ConditionContext, type.file)
         || !resolvesTo(method.parameters[1].rawType, METADATA, type.file)) return null;
     const [context, metadata] = method.parameters.map(parameter => parameter.name);
-    if (!QUALIFIED.test(context) || !QUALIFIED.test(metadata) || context === metadata) return null;
-    if (method.body[0]?.text !== 'return' || method.body.at(-1)?.text !== ';'
-        || method.body.length > LIMITS.tokens) return null;
-    const tokens = joinOperators(method.body.slice(1, -1));
-    const environment = [context, '.', 'getEnvironment', '(', ')', '.'];
-    const matches = (index, part) => part.every((value, offset) => tokens[index + offset]?.text === value);
+    if (!IDENTIFIER.test(context) || !IDENTIFIER.test(metadata) || context === metadata || method.body.length > LIMITS.tokens) return null;
+    const tokens = joinOperators(method.body);
+    const contextEnvironment = [context, '.', 'getEnvironment', '(', ')'];
+    const profilesFactoryBound = resolvesTo('Profiles', PROFILES, type.file) && !hasStaticImports(type.file);
+    const matches = (input, index, part) => part.every((value, offset) => input[index + offset]?.text === value);
     const queries = [], references = [];
 
-    function call(index, prefix) {
-      if (!matches(index, prefix)) return null;
+    function call(input, index, prefix) {
+      if (!matches(input, index, prefix)) return null;
       const args = [];
       let next = index + prefix.length;
       for (;;) {
-        const arg = javaString(tokens[next++]);
+        const arg = javaString(input[next++]);
         if (arg === null || args.length >= LIMITS.arguments) return null;
         args.push(arg);
-        if (tokens[next]?.text === ')') return { args, next: next + 1 };
-        if (tokens[next++]?.text !== ',') return null;
+        if (input[next]?.text === ')') return { args, next: next + 1 };
+        if (input[next++]?.text !== ',') return null;
       }
     }
 
-    function atom(index) {
-      if (/^(?:true|false)$/.test(tokens[index]?.text)) return index + 1;
-      const profile = call(index, [...environment, 'matchesProfiles', '(']);
+    function environment(input, index, scope) {
+      return scope.get(input[index]?.text) === 'environment' ? [input[index].text, '.'] : [...contextEnvironment, '.'];
+    }
+
+    function atom(input, index, scope) {
+      if (/^(?:true|false)$/.test(input[index]?.text)) return index + 1;
+      const receiver = environment(input, index, scope);
+      const profile = call(input, index, [...receiver, 'matchesProfiles', '(']);
       if (profile) {
         const names = profileNames(profile.args);
         if (!names) return null;
         queries.push({ kind: 'environment-profiles', names });
         return profile.next;
       }
-      const property = call(index, [...environment, 'containsProperty', '(']);
+      if (profilesFactoryBound && !scope.has('Profiles')) {
+        const accepted = call(input, index, [...receiver, 'acceptsProfiles', '(', 'Profiles', '.', 'of', '(']);
+        if (accepted) {
+          const names = profileNames(accepted.args);
+          if (!names || input[accepted.next]?.text !== ')') return null;
+          queries.push({ kind: 'environment-accepted-profiles', names });
+          return accepted.next + 1;
+        }
+      }
+      const property = call(input, index, [...receiver, 'containsProperty', '(']);
       if (property) {
         if (property.args.length !== 1 || !PROPERTY.test(property.args[0])) return null;
         queries.push({ kind: 'environment-property-presence', name: property.args[0] });
         return property.next;
       }
-      const annotation = call(index, [metadata, '.', 'isAnnotated', '(']);
+      const annotation = call(input, index, [metadata, '.', 'isAnnotated', '(']);
       if (annotation) {
         const [name] = annotation.args;
         if (annotation.args.length !== 1 || !QUALIFIED.test(name) || byName.get(name)?.kind !== 'annotation') return null;
@@ -237,17 +237,25 @@ function createConditionReviewer({ byName, resolve }) {
         references.push(...typeReferences([name], 'spring.condition-metadata-reference'));
         return annotation.next;
       }
-      const expected = javaString(tokens[index]);
-      if (expected === null || !matches(index + 1, ['.', 'equals', '('])) return null;
-      const comparison = call(index + 4, [...environment, 'getProperty', '(']);
+      const expected = javaString(input[index]);
+      if (expected === null || !matches(input, index + 1, ['.', 'equals', '('])) return null;
+      const comparison = call(input, index + 4, [...environment(input, index + 4, scope), 'getProperty', '(']);
       if (!comparison || comparison.args.length !== 1 || !PROPERTY.test(comparison.args[0])
-          || tokens[comparison.next]?.text !== ')') return null;
+          || input[comparison.next]?.text !== ')') return null;
       queries.push({ kind: 'environment-string-equality', name: comparison.args[0] });
       return comparison.next + 1;
     }
 
-    if (!booleanExpression(tokens, atom)) return null;
-    return { type, method, queries, references };
+    const flow = analyzeConditionFlow(tokens, {
+      limits: LIMITS, parameterNames: [context, metadata], readAtom: atom,
+      isEnvironmentAlias: (declaration, initial) => {
+        const raw = spelling(declaration);
+        return declaration.every((token, index) => index % 2 ? token.text === '.' : token.kind === 'id')
+          && QUALIFIED.test(raw) && resolvesTo(raw, ENVIRONMENT, type.file)
+          && initial.length === contextEnvironment.length && matches(initial, 0, contextEnvironment);
+      }
+    });
+    return flow && { type, method, queries, references, flow };
   }
 
   return function review(annotation, file) {
@@ -262,7 +270,27 @@ function createConditionReviewer({ byName, resolve }) {
     }
     if (shortName === 'ConditionalOnExpression') {
       const value = attributes.value ? javaString(attributes.value.length === 1 ? attributes.value[0] : null) : 'true';
-      return supported(['value']) && closedSpel(value) ? { kind: 'closed-spel-expression', queries: [] } : null;
+      const expression = supported(['value']) ? closedSpel(value) : null;
+      return expression && { kind: 'closed-spel-expression', queries: [], expression };
+    }
+    if (shortName === 'ConditionalOnBooleanProperty') {
+      if (!supported(['value', 'name', 'prefix', 'havingValue', 'matchIfMissing'])
+          || (attributes.value && attributes.name)) return null;
+      const names = strings(attributes.name || attributes.value);
+      const prefix = attributes.prefix ? javaString(attributes.prefix.length === 1 ? attributes.prefix[0] : null) : '';
+      const path = prefix?.replace(/\.$/, '');
+      const attributeBoolean = (key, fallback) => {
+        if (!attributes[key]) return fallback;
+        if (attributes[key].length !== 1 || !['true', 'false'].includes(attributes[key][0].text)) return null;
+        return attributes[key][0].text === 'true';
+      };
+      const expected = attributeBoolean('havingValue', true), matchIfMissing = attributeBoolean('matchIfMissing', false);
+      if (path == null || (prefix && !PROPERTY.test(path)) || expected === null || matchIfMissing === null
+          || !names?.length || new Set(names).size !== names.length || names.some(name => !PROPERTY.test(name))) return null;
+      const fullNames = path ? names.map(name => path + '.' + name) : names;
+      if (fullNames.some(name => name.length > LIMITS.characters)) return null;
+      return { kind: 'literal-boolean-property-condition',
+        queries: fullNames.map(name => ({ kind: 'environment-boolean-property', name, expected, matchIfMissing })) };
     }
     if (shortName === 'Conditional') {
       if (!supported(['value'])) return null;

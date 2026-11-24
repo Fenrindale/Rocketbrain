@@ -93,7 +93,7 @@ function pom(file) {
   project:['modelVersion','groupId','artifactId','version','packaging','modules','properties','name','description','parent','dependencies','dependencyManagement','profiles'],
   parent:['groupId','artifactId','version','relativePath'],modules:['module'],
   properties:['maven.compiler.release','project.build.sourceEncoding'],
-  dependencyManagement:['dependencies'],dependencies:['dependency'],dependency:['groupId','artifactId','version','scope'],
+  dependencyManagement:['dependencies'],dependencies:['dependency'],dependency:['groupId','artifactId','version','scope','type'],
   profiles:['profile'],profile:['id','activation','dependencies','dependencyManagement'],
   activation:['property'],property:['name','value']
  };
@@ -114,18 +114,21 @@ function pom(file) {
  function readDependencies(node,{managed=false}={}) {
   const seen=new Set();
   return children(children(node,'dependencies')[0],'dependency').map(dep=>{
-   const group=value(dep,'groupId'),artifact=value(dep,'artifactId'),version=value(dep,'version'),scope=value(dep,'scope');
-   if(![group,artifact].every(literal)||(managed||version!==undefined)&&!literal(version)||scope!==undefined&&!['compile','runtime','provided','test'].includes(scope))throw Error('Maven dependencies require literal coordinates, literal managed versions and a reviewed scope.');
-   const identity=group+':'+artifact;
+   const group=value(dep,'groupId'),artifact=value(dep,'artifactId'),version=value(dep,'version'),scope=value(dep,'scope'),type=value(dep,'type')??'jar';
+   const bom=managed&&type==='pom'&&scope==='import';
+   if(!bom&&(type!=='jar'||scope!==undefined&&!['compile','runtime','provided','test'].includes(scope)))throw Error('Unreviewed Maven configuration: only default JARs and managed POM BOM imports are supported.');
+   if(![group,artifact].every(literal)||(managed||version!==undefined)&&!literal(version))throw Error('Maven dependencies require literal coordinates and literal managed versions.');
+   const identity=group+':'+artifact+(bom?':pom':'');
    if(seen.has(identity))throw Error('Duplicate Maven dependencies in one declaration layer require a separate Move review.');
    seen.add(identity);
-   return {group,artifact,version,scope};
+   return {group,artifact,version,scope,bom};
   });
  }
  const readManagement=node=>readDependencies(children(node,'dependencyManagement')[0],{managed:true});
  const parent=children(root,'parent')[0];
  const parentModel=parent?{group:value(parent,'groupId'),artifact:value(parent,'artifactId'),version:value(parent,'version'),relativePath:value(parent,'relativePath')}:null;
- if(parentModel&&parentModel.relativePath!==undefined&&parentModel.relativePath!=='../pom.xml')throw Error('Maven parent paths must identify the reviewed reactor descriptor.');
+ if(parentModel&&(![parentModel.group,parentModel.artifact,parentModel.version].every(literal)||
+  parentModel.relativePath!==undefined&&!/^(?:\.\.\/)*(?:[A-Za-z0-9_$-][\w.$-]*\/)*pom\.xml$/.test(parentModel.relativePath)))throw Error('Maven parent paths and coordinates must identify a reviewed local reactor descriptor.');
  const profiles=children(children(root,'profiles')[0],'profile').map(profile=>{
   const id=value(profile,'id'),activation=children(profile,'activation')[0],property=children(activation,'property')[0];
   const name=value(property,'name'),expected=value(property,'value'),dependencies=readDependencies(profile),management=readManagement(profile);
@@ -139,12 +142,12 @@ function pom(file) {
  };
 }
 function dependencyIdentity(dep) {
- // The descriptor grammar permits only unclassified default JAR dependencies.
  return dep.group+':'+dep.artifact;
 }
+const managementIdentity=dep=>dependencyIdentity(dep)+(dep.bom?':pom':'');
 function mavenDeclarationLayers(model,profiles) {
  const dependencies=new Map(model.dependencies.map(dep=>[dependencyIdentity(dep),dep]));
- const management=new Map(model.management.map(dep=>[dependencyIdentity(dep),dep]));
+ const management=new Map(model.management.map(dep=>[managementIdentity(dep),dep]));
  const overrides=[];
  for(const profile of profiles){
   for(const [entries,byIdentity,section] of [
@@ -152,7 +155,7 @@ function mavenDeclarationLayers(model,profiles) {
    [profile.management,management,'dependencyManagement']
   ]){
    for(const dep of entries){
-    const identity=dependencyIdentity(dep);
+    const identity=managementIdentity(dep);
     if(byIdentity.has(identity))overrides.push({identity,profile:profile.id,section});
     byIdentity.set(identity,dep);
    }
@@ -160,11 +163,12 @@ function mavenDeclarationLayers(model,profiles) {
  }
  return {dependencies,management,overrides};
 }
-function effectiveMavenModel(layers,parent) {
- // A declaration in the child replaces the corresponding inherited declaration.
- // Management fills missing fields after inheritance and profile replacement.
- const declarations=new Map([...(parent?.dependencies||[]),...layers.dependencies]);
- const management=new Map([...(parent?.management||[]),...layers.management]);
+function mavenInheritedEntries(child,parent) {
+ const result=new Map(child);
+ for(const [identity,value] of parent||[])if(!result.has(identity))result.set(identity,value);
+ return result;
+}
+function effectiveMavenModel(declarations,management) {
  const dependencies=new Map(),managed=[];
  for(const [identity,dep] of declarations){
   const defaults=management.get(identity);
@@ -176,8 +180,7 @@ function effectiveMavenModel(layers,parent) {
   if(dep.scope===undefined&&defaults?.scope!==undefined)fields.push('scope');
   if(fields.length)managed.push({identity,fields});
  }
- const inherited=parent?[...parent.dependencies.keys()].filter(identity=>!layers.dependencies.has(identity)):[];
- return {dependencies,management,managed,inherited};
+ return {dependencies,management,managed};
 }
 function validateTransitiveManagement(graph,edgeKinds,models,coordinates) {
  for(const [module,model] of models){
@@ -202,49 +205,151 @@ function validateTransitiveManagement(graph,edgeKinds,models,coordinates) {
   }
  }
 }
-function mavenBuild(root) {
- const file=path.join(root,'pom.xml'),parent=pom(file),roots=new Map(),files=[file],models=new Map();
- if(parent.parent||parent.packaging!=='pom'||![parent.group,parent.artifact,parent.version].every(value=>typeof value==='string'&&/^[\w.-]+$/.test(value))||!parent.modules.length||parent.modules.length>12||parent.modules.some(name=>!/^[$\w-]+$/.test(name))||new Set(parent.modules).size!==parent.modules.length)throw Error('Move requires a bounded literal sibling Maven reactor with one local parent.');
- for(const name of parent.modules){
-  const folder=path.join(root,name);
-  if(fs.lstatSync(folder).isSymbolicLink()||!inside(fs.realpathSync(root),fs.realpathSync(folder)))throw Error('Maven modules must stay physically inside the reactor.');
-  const descriptor=path.join(folder,'pom.xml'),model=pom(descriptor);
-  if(model.modules.length||(model.packaging??'jar')!=='jar'||![model.group,model.artifact,model.version].every(value=>typeof value==='string'&&/^[\w.-]+$/.test(value))||model.parent&&(model.parent.group!==parent.group||model.parent.artifact!==parent.artifact||model.parent.version!==parent.version))throw Error('Nested, non-JAR, external-parent or unresolved Maven reactor modules require a separate Move review.');
-  if([...models.values()].some(previous=>previous.group===model.group&&previous.artifact===model.artifact))throw Error('Duplicate Maven reactor coordinates prevent Move.');
-  roots.set(name,folder);models.set(name,model);files.push(descriptor);
+const pomCoordinates=model=>[model.group,model.artifact,model.version];
+const pomVersionMatches=(record,dependency)=>record.model.version===dependency.version;
+function mavenReactor(root) {
+ const file=path.join(root,'pom.xml'),reactor=pom(file),roots=new Map();
+ if(reactor.packaging!=='pom'||!reactor.modules.length||reactor.modules.length>12||
+   reactor.modules.some(name=>!/^[$\w-]+$/.test(name))||new Set(reactor.modules.map(name=>key(path.join(root,name)))).size!==reactor.modules.length){
+  throw Error('Move requires a bounded literal sibling Maven reactor.');
  }
- const coordinates=new Map([...models].map(([name,model])=>[model.group+':'+model.artifact,{name,model}]));
- const profiles=[[null,parent],...models].flatMap(([module,model])=>model.profiles.map(profile=>({module,...profile})));
+ const descriptors=[{name:null,file,model:reactor}];
+ const physicalRoot=fs.realpathSync(root);
+ for(const name of reactor.modules){
+  const folder=path.join(root,name),descriptor=path.join(folder,'pom.xml');
+  if(fs.lstatSync(folder).isSymbolicLink()||!inside(physicalRoot,fs.realpathSync(folder)))throw Error('Maven modules must stay physically inside the reactor.');
+  const model=pom(descriptor);
+  if(model.modules.length||!['jar','pom'].includes(model.packaging??'jar')){
+   throw Error('Nested aggregators and Maven module packaging other than default JAR or metadata POM require a separate Move review.');
+  }
+  if(model.packaging!=='pom')roots.set(name,folder);
+  descriptors.push({name,file:descriptor,model});
+ }
+ const byPath=new Map(descriptors.map(record=>[key(record.file),record])),byCoordinates=new Map();
+ for(const record of descriptors){
+  const {model}=record;
+  if(!pomCoordinates(model).every(value=>typeof value==='string'&&/^[\w.-]+$/.test(value)))throw Error('Maven modules require literal reactor coordinates.');
+  const identity=dependencyIdentity(model);
+  if(byCoordinates.has(identity))throw Error('Duplicate Maven reactor coordinates prevent Move.');
+  byCoordinates.set(identity,record);
+  if(model.parent){
+   const descriptor=path.resolve(path.dirname(record.file),model.parent.relativePath??'../pom.xml');
+   const parent=byPath.get(key(descriptor));
+   if(!parent||parent.model.packaging!=='pom'||!pomCoordinates(parent.model).every((value,index)=>value===pomCoordinates(model.parent)[index])){
+    throw Error('An unresolved or external Maven parent is outside the reviewed local reactor.');
+   }
+   record.parent=parent;
+  }
+ }
+ return {descriptors,byCoordinates,roots};
+}
+function mavenProfileVariants(descriptors,byCoordinates) {
+ const profiles=descriptors.flatMap(({name,model})=>model.profiles.map(profile=>({module:name,...profile})));
+ const bomContexts=new Set();
+ for(const {model} of descriptors){
+  for(const layer of [model,...model.profiles])for(const dependency of layer.management){
+   if(!dependency.bom)continue;
+   let bom=byCoordinates.get(dependencyIdentity(dependency));
+   while(bom&&!bomContexts.has(bom.name)){
+    bomContexts.add(bom.name);
+    bom=bom.parent;
+   }
+  }
+ }
+ // Maven can import a BOM using properties without the reactor's explicit
+ // profile selections. A shared parent can therefore see a different subset
+ // when it is read while building the imported BOM. Review both contexts.
+ return [...profiles,...profiles.filter(profile=>bomContexts.has(profile.module))
+  .map(profile=>({...profile,context:'bom-import'}))];
+}
+function mavenScenarioModels(descriptors,byCoordinates,active) {
+ const reactor={raw:new Map(),effective:new Map()},bomContext={raw:new Map(),effective:new Map()};
+ function raw(record,context,trail=new Set()) {
+  if(trail.has(record))throw Error('Cyclic Maven parent declarations prevent Move.');
+  if(trail.size>4)throw Error('Maven parent chain exceeds four links.');
+  const previous=context.raw.get(record);
+  if(previous){
+   if(previous.parentChain.length+trail.size>4)throw Error('Maven parent chain exceeds four links.');
+   return previous;
+  }
+  const layers=mavenDeclarationLayers(record.model,active.filter(profile=>profile.module===record.name&&Boolean(profile.context)===(context===bomContext)));
+  const parent=record.parent&&raw(record.parent,context,new Set([...trail,record]));
+  const model={
+   dependencies:mavenInheritedEntries(layers.dependencies,parent?.dependencies),
+   management:mavenInheritedEntries(layers.management,parent?.management),
+   parentChain:record.parent?[record.parent,...parent.parentChain]:[],
+   inherited:parent?[...parent.dependencies.keys()].filter(identity=>!layers.dependencies.has(identity)):[],
+   overrides:layers.overrides
+  };
+  context.raw.set(record,model);
+  return model;
+ }
+ function resolved(record,context,trail=new Set()) {
+  if(trail.has(record))throw Error('Cyclic Maven BOM imports prevent Move.');
+  if(trail.size>4)throw Error('Maven BOM chain exceeds four imports.');
+  const previous=context.effective.get(record);
+  if(previous){
+   if(previous.importDepth+trail.size>4)throw Error('Maven BOM chain exceeds four imports.');
+   return previous;
+  }
+  const model=raw(record,context);
+  const management=new Map([...model.management].filter(([,dep])=>!dep.bom));
+  const imports=[];
+  let importDepth=0;
+  for(const dep of model.management.values()){
+   if(!dep.bom)continue;
+   const identity=dependencyIdentity(dep);
+   const bom=byCoordinates.get(identity);
+   if(!bom||bom.name===null||bom.model.packaging!=='pom'||!pomVersionMatches(bom,dep)){
+    throw Error('An unreviewed Maven configuration imports a BOM outside the exact local reactor: '+identity+'.');
+   }
+   const imported=resolved(bom,bomContext,new Set([...trail,record]));
+   importDepth=Math.max(importDepth,1+imported.importDepth);
+   imports.push({module:bom.name,identity,version:dep.version});
+   for(const [key,entry] of imported.management)if(!management.has(key))management.set(key,entry);
+  }
+  const result={...model,...effectiveMavenModel(model.dependencies,management),imports,importDepth};
+  context.effective.set(record,result);
+  return result;
+ }
+ for(const record of descriptors)resolved(record,reactor);
+ return reactor.effective;
+}
+function mavenBuild(root) {
+ const {descriptors,byCoordinates,roots}=mavenReactor(root);
+ const files=descriptors.map(record=>record.file);
+ const coordinates=new Map([...byCoordinates].filter(([,record])=>roots.has(record.name)));
+ const profiles=mavenProfileVariants(descriptors,byCoordinates);
  if(profiles.length>4)throw Error('Maven dependency profile scenario budget exceeded.');
  function scenario(active) {
-  const graph=new Map(),edgeKinds=new Map(),effective=new Map(),modelContracts=[];
-  const parentLayers=mavenDeclarationLayers(parent,active.filter(profile=>profile.module===null));
-  const overrides=parentLayers.overrides.map(override=>({module:null,...override}));
-  const parentModel=effectiveMavenModel(parentLayers);
-  for(const [identity,dep] of parentModel.dependencies){
-   const target=coordinates.get(identity);
-   if(target&&dep.version!==target.model.version)throw Error('Maven profile and base dependencies must use the exact reviewed reactor version.');
-   if(target?.model.parent)throw Error('An inherited Maven dependency would make a module depend on itself.');
-  }
-  for(const [name,model] of models){
-   const layers=mavenDeclarationLayers(model,active.filter(profile=>profile.module===name));
-   const merged=effectiveMavenModel(layers,model.parent?parentLayers:undefined);
-   effective.set(name,merged);
-   overrides.push(...layers.overrides.map(override=>({module:name,...override})));
-   modelContracts.push({module:name,localParent:Boolean(model.parent),inheritedDependencies:merged.inherited,managedFields:merged.managed});
+  const graph=new Map(),edgeKinds=new Map(),effective=new Map(),modelContracts=[],buildGraph=new Map(),overrides=[];
+  const models=mavenScenarioModels(descriptors,byCoordinates,active);
+  for(const record of descriptors){
+   const {name}=record, merged=models.get(record);
+   overrides.push(...merged.overrides.map(override=>({module:name,...override})));
    const edges=new Map();
    for(const [identity,dep] of merged.dependencies){
-    const target=coordinates.get(identity);
+    const target=byCoordinates.get(identity);
     if(!target)continue;
-    if(dep.version!==target.model.version)throw Error('Maven profile and base dependencies must use the exact reviewed reactor version.');
+    if(!pomVersionMatches(target,dep))throw Error('Maven profile and base dependencies must use the exact reviewed reactor version.');
+    if(target===record)throw Error('An inherited Maven dependency would make a module depend on itself.');
+    if(!roots.has(target.name))throw Error('A default JAR dependency points to a metadata-only Maven POM.');
     edges.set(target.name,dep.scope);
    }
+   buildGraph.set(name,[...edges.keys(),...(record.parent?[record.parent.name]:[])]);
+   if(!roots.has(name))continue;
+   effective.set(name,merged);
+   modelContracts.push({module:name,localParent:Boolean(record.parent),inheritedDependencies:merged.inherited,managedFields:merged.managed,
+    ...(merged.parentChain.length>1?{parentChain:merged.parentChain.map(value=>value.name??value.model.artifact)}:{}),
+    ...(merged.imports.length?{bomImports:merged.imports,bomImportDepth:merged.importDepth}:{}),
+   });
    edgeKinds.set(name,edges);
    graph.set(name,[...edges.keys()]);
   }
-  dag(graph);
+  dag(buildGraph);
   validateTransitiveManagement(graph,edgeKinds,effective,coordinates);
-  return {kind:'maven-reactor',root,files,roots,graph,edgeKinds,modelContracts,overrides,activeProfiles:active.map(({module,id})=>({module,id}))};
+  return {kind:'maven-reactor',root,files,roots,graph,edgeKinds,modelContracts,overrides,
+   activeProfiles:active.map(({module,id,context})=>({module,id,...(context?{context}:{})}))};
  }
  if(!profiles.length)return scenario([]);
  // Explicit profile selection and external property values can change activation.

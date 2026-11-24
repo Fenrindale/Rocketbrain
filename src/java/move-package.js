@@ -13,13 +13,16 @@ async function preparePackageMove(deps,sourceUri,targetUri,{cancellation}={}){
  const sources=await S.snapshotScope(scope,vscode,trusted,cancellation),moved=new Map(tree.files.map(file=>[vscode.Uri.file(file.file).toString(),file]));
  const project=scope.source.root,resourceRoots=resources.resourceRoots;
  const services=reviewPackageServices({project,roots:resourceRoots.roots,directoryExists:P.resourceDirectoryInsideProject,sources,moved,oldPackage,newPackage,uriFor:file=>vscode.Uri.file(file).toString()});
+ renames.push(...services.renames);
  for(const source of sources){
   if(moved.has(source.uri)){
    const item=moved.get(source.uri),sub=path.dirname(item.relative),expected=oldPackage+(sub==='.'?'':'.'+sub.split(path.sep).join('.'));
    if(parseJavaFile(source).packageName!==expected)throw Error('A nested package member declaration does not match its observed directory package.');
    const serviceInterface=services.providers.get(source.uri);
-   require('./move').inspectMoveClass(source.text,source.uri,sources,{compilerGenericPeers:true,serviceInterface});
-   if(!serviceInterface)require('./member-move').inspectMoveOwner(source.text,source.uri);
+   if(!services.interfaces.has(source.uri)){
+    require('./move').inspectMoveClass(source.text,source.uri,sources,{compilerGenericPeers:true,serviceInterface});
+    if(!serviceInterface)require('./member-move').inspectMoveOwner(source.text,source.uri);
+   }
   }
   if(/\b(?:Class\s*\.\s*forName|loadClass|ComponentScan|EntityScan|EnableJpaRepositories)\b/.test(source.text))throw Error('Dynamic or configured package references require a separate package Move review.');
   if(source.file.endsWith('.java')&&/\bSpringBootApplication\b/.test(source.text)){
@@ -31,11 +34,15 @@ async function preparePackageMove(deps,sourceUri,targetUri,{cancellation}={}){
  const classpaths=scope.source.classpaths.classpaths;
  const identities=new Map(),classEntry=name=>name.replaceAll('.','/')+'.class';
  for(const service of services.services.values()){
-  if([sourceRoot,targetRoot].some(root=>S.key(root)!==S.key(path.join(project,'src/main/java'))))throw Error('Service providers require movement within the same standard main Java source set.');
+  if([sourceRoot,targetRoot].some(root=>S.key(root)!==S.key(path.join(project,'src/main/java'))))throw Error('Service providers and interfaces require movement within the same standard main Java source set.');
   identities.set(service.path,{sha256:service.sha256});
   identities.set(classEntry(service.service),{classFile:true});
   for(const provider of service.providers)identities.set(classEntry(provider),{classFile:true});
   for(const change of service.rewrites)identities.set(classEntry(change.to),null);
+  if(service.nextService!==service.service){
+   identities.set(service.newPath,null);
+   identities.set(classEntry(service.nextService),null);
+  }
  }
  for(const lookup of resourceProof.lookup){
   if(!['spring-classloader','system-classloader'].includes(lookup.loader))continue;
@@ -49,9 +56,12 @@ async function preparePackageMove(deps,sourceUri,targetUri,{cancellation}={}){
  const guard=S.scopeGuards(scope,sources,vscode,trusted,cancellation),groups=new Map();for(const entry of javaRenames){const destination=path.dirname(vscode.Uri.parse(entry.newUri).fsPath),id=S.key(destination),group=groups.get(id)||{destination,renames:[],mapping:[]},source=sources.find(value=>value.uri===entry.oldUri),type=parseJavaFile(source).types[0],item=moved.get(entry.oldUri),sub=path.dirname(item.relative),destinationPackage=newPackage+(sub==='.'?'':'.'+sub.split(path.sep).join('.'));group.renames.push(entry);group.mapping.push({oldFqn:type.fqn,newFqn:destinationPackage+'.'+type.name});groups.set(id,group);}
  const responses=[];for(const group of groups.values()){guard();const response=await send('workspace/willRenameFiles',{files:group.renames.map(entry=>({oldUri:entry.oldUri,newUri:entry.newUri}))},cancellation);responses.push({...group,entries:S.textEntries(response,sources)});guard();}const merged=P.mergePackageEngineEdits(sources,responses),entries=P.mergeEntries(merged.entries,resourceProof.entries),after=S.transformed(sources,entries,javaRenames),engineMove={strategy:'one-request-per-destination-folder',requestCount:groups.size,groups:[...groups.values()].map(group=>({destination:vscode.Uri.file(group.destination).toString(),javaFiles:group.renames.length,mapping:group.mapping})),mergeProof:merged.proof,automaticRetries:0,missingEditsOrConflictsAccepted:false};
  services.verifyProviders(after,javaRenames);
+ P.verifyServiceClients(resourceProof.serviceCalls,after,javaRenames,services.services);
  for(const item of tree.files){const uri=vscode.Uri.file(item.newFile).toString(),sub=path.dirname(item.relative),expected=newPackage+(sub==='.'?'':'.'+sub.split(path.sep).join('.')),transformed=after.find(s=>s.uri===uri);if(!transformed||parseJavaFile({text:transformed.text,uri}).packageName!==expected)throw Error('The Java engine did not update every nested package declaration.');}
- const compiled=await S.validateCompilation(scope,sources,entries,javaRenames,runtime,cancellation,
-  (before,after)=>P.verifyResourceBindings(resourceProof.bindings,sources,entries,javaRenames,before,after));
+ const compiled=await S.validateCompilation(scope,sources,entries,javaRenames,runtime,cancellation,(before,after)=>{
+  P.verifyResourceBindings(resourceProof.bindings,sources,entries,javaRenames,before,after);
+  services.verifyCompilerBindings(before,after,javaRenames);
+ });
  const preApply=()=>{guard();compiled.validate();springProvider?.validate();classpathProof?.validate();P.verifyTree(tree);P.verifyTree(resources);services.validate();};
  preApply();
  const allowedResourceRenames=resources.files.map(file=>({oldUri:vscode.Uri.file(file.file).toString(),newUri:vscode.Uri.file(file.newFile).toString(),sha256:file.sha256,...(file.binary?{binary:true,bytes:file.bytes}:{})}));
@@ -60,9 +70,9 @@ async function preparePackageMove(deps,sourceUri,targetUri,{cancellation}={}){
   title:'Move package '+oldPackage+' to '+newPackage,kind:'refactor.move.package',anchorDocument:document,cancellation,
   allowedResourceOperations:['rename'],allowedResourceRenames,allowedServiceEdits:services.permissions,guards:sources.map(s=>({uri:s.uri})),
   validate:async()=>{await S.validateScope(scope,vscode,send,first,targetUri,cancellation);preApply();},preApply,
-  warnings:['Reviewed package data and opaque resources retain their exact bytes. Service registration edits replace reviewed provider names in the existing descriptors.',
+  warnings:['Reviewed package data and opaque resources retain their exact bytes. Service registrations update provider names in order and follow a moved interface to its new descriptor filename.',
    'Reviewed class, classloader and Spring stream lookups must resolve through the observed classpath. Custom loaders, processing and external clients require separate analysis.']
  });
- return {...plan,move:{kind:'package',source:sourceUri.toString(),destination:targetUri.toString(),oldPackage,newPackage,sourceRoot,targetRoot,sourceSet,sourceSetChange:S.key(sourceRoot)!==S.key(targetRoot),movedFiles:renames.length,movedJavaFiles:javaRenames.length,movedResourceFiles:resourceRenames.length,nestedDirectories:tree.directories.length-1,reviewedFiles:sources.length,semantic:compiled.report,engineMove,resourceProof:{...resourceProof,entries:undefined,bindings:undefined,compilerCheckedCalls:resourceProof.bindings.length,services:[...services.services.values()],classpathIsolation:classpathProof?.proof,files:resources.files.map(({file,newFile,bytes,sha256,binary,resourceRoot,format})=>({file,newFile,bytes,sha256,...(binary?{binary:true}:{}),...(resourceRoot?{resourceRoot}:{}),...(format?{format}:{})})),roots:resourceRoots,descriptor:resources.descriptor,bytePreservingRenames:true,binaryTextModelsOpened:false},scope:'A bounded utility package tree and reviewed scalar service providers move in one imported project. Exact class, classloader and pinned Spring stream lookups and existing service descriptors are reviewed with compiler, classpath and file snapshots. Binary resources retain their exact bytes. Service interface moves, custom processors, dynamic loaders and external clients require separate analysis.'}};
+ return {...plan,move:{kind:'package',source:sourceUri.toString(),destination:targetUri.toString(),oldPackage,newPackage,sourceRoot,targetRoot,sourceSet,sourceSetChange:S.key(sourceRoot)!==S.key(targetRoot),movedFiles:renames.length,movedJavaFiles:javaRenames.length,movedResourceFiles:resourceRenames.length,movedServiceDescriptors:services.renames.length,nestedDirectories:tree.directories.length-1,reviewedFiles:sources.length,semantic:compiled.report,engineMove,resourceProof:{...resourceProof,entries:undefined,bindings:undefined,compilerCheckedCalls:resourceProof.bindings.length,compilerCheckedServiceDeclarations:services.compilerContractCount,services:[...services.services.values()],classpathIsolation:classpathProof?.proof,files:resources.files.map(({file,newFile,bytes,sha256,binary,resourceRoot,format})=>({file,newFile,bytes,sha256,...(binary?{binary:true}:{}),...(resourceRoot?{resourceRoot}:{}),...(format?{format}:{})})),roots:resourceRoots,descriptor:resources.descriptor,bytePreservingRenames:true,binaryTextModelsOpened:false},scope:'A bounded utility package tree and reviewed scalar service interfaces and providers move in one imported project. Source service calls and ordered provider registrations are reviewed with compiler, classpath and file snapshots. Binary resources retain their exact bytes. JPMS, custom processors, dynamic loaders and external clients require separate analysis.'}};
 }
 module.exports={preparePackageMove,packageDirectory,proveSourceSet};

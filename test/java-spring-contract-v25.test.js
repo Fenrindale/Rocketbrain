@@ -82,7 +82,7 @@ for (const [description, body] of [
   ['metadata overload', 'return metadata.isAnnotated("demo.Marker", true);'],
   ['dynamic profile', 'return context.getEnvironment().matchesProfiles(variable);'],
   ['mixed profile operators', 'return context.getEnvironment().matchesProfiles("a & b | c");'],
-  ['extra statement', 'final boolean yes = true; return yes;'],
+  ['mutable boolean local', 'boolean yes = true; return yes;'],
   ['loop', 'for (;;) { return true; }'],
   ['separated logical operator', 'return true & & false;']
 ]) test('Safe Delete refuses opaque Condition callback ' + description, () => {
@@ -125,7 +125,7 @@ test('Only exact reviewed Spring condition annotation argument spans suppress th
 
 for (const body of ['"@bean.enabled"', '"T(java.lang.String).valueOf(1) == \'1\'"', '"\${spring.flag:true}"',
   '"\'\${spring.mode:blue}\' == \'blue\'"', '"true /* bytes hidden by Java lexer */"', '"1 == \'1\'"',
-  '"(true"', '"true ? false : true"', '"!3 == 3"', '"true" + " || false"', 'Expressions.CONDITION', 'value="true", value="false"']) {
+  '"(true"', '"true ? false : @bean.enabled"', '"!3 == 3"', '"true" + " || false"', 'Expressions.CONDITION', 'value="true", value="false"']) {
   test('Unclosed, dynamic or nonliteral SpEL stays unknown for ' + body, () => {
     const report = inspect([host, guard('ConditionalOnExpression', '(' + body + ')')]);
     assert.equal(report.verdict, 'unknown');

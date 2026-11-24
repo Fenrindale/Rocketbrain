@@ -59,11 +59,13 @@ function analyzeSpringContracts(sources){
    finding(unknowns,'spring.dynamic-condition',file,a.start,a.end,'Conditional form or callback exceeds the bounded source review.',{annotation:a.name});
    return;
   }
-  const {kind,queries,references:conditionReferences=[],callbacks=[]}=reviewed;
+  const {kind,queries,references:conditionReferences=[],callbacks=[],expression}=reviewed;
   conditionReportItems+=1+callbacks.length+conditionReferences.length+queries.reduce((total,query)=>total+1+(query.names?.length||0),0);
   if(conditionReportItems>SPRING_CONDITION_LIMITS.reportItems){stopConditionReview(file,a);return;}
   conditions.push({kind,annotation:a.name,uri:file.uri,range:rangeAt(file.text,a.start,a.end),queries,
-   callbackOwners:callbacks.map(callback=>callback.type.fqn),evaluated:false,allOutcomesRetained:true});
+   callbackOwners:callbacks.map(callback=>callback.type.fqn),evaluated:false,allOutcomesRetained:true,
+   ...(callbacks.length?{callbackFlows:callbacks.map(callback=>({owner:callback.type.fqn,...callback.flow}))}:{}),
+   ...(expression?{expression}:{})});
   resolvedConditionSpans.push({uri:file.uri,start:a.start,end:a.end,kind});
   for(const {kind,...reference}of conditionReferences)finding(references,kind,file,a.start,a.end,'Conditional input is a potential Spring registration dependency for all deployment outcomes.',reference);
   for(const {type,method}of callbacks)if(!protectedCallbacks.has(type.fqn)){

@@ -197,4 +197,4 @@ async function runJavaSpringContractV25Checks(api, vscode, checks) {
   return report;
 }
 
-module.exports = { runJavaSpringContractV25Checks, assertConditionReview, FIXTURE_ROOT };
+module.exports = { runJavaSpringContractV25Checks, assertConditionReview, stageFreshClasses, FIXTURE_ROOT };

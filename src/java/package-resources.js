@@ -99,6 +99,58 @@ const SERVICE_LOADER = ['java', '.', 'util', '.', 'ServiceLoader', '.', 'load', 
 const SPRING_CONSTRUCTOR = ['new','org','.','springframework','.','core','.','io','.','ClassPathResource','('];
 const ROOT_RELATIVE_LOADERS = new Set(['classloader', 'spring-classloader', 'system-classloader']);
 
+function readServiceClient(tokens, index, file, services) {
+ const start = index - 4;
+ if (!spelling(tokens, start, SERVICE_LOADER)) {
+  throw Error('Dynamic or configured package references require an exact Java service loader call.');
+ }
+ const first = readClassLiteral(tokens, index + 4, file), service = services.get(first.owner);
+ if (tokens[first.end + 1]?.text !== ',' || !service) {
+  throw Error('Service loading requires an exact reviewed service interface and explicit classloader.');
+ }
+ const second = readClassLiteral(tokens, first.end + 2, file);
+ if (first.owner !== second.owner) throw Error('A service lookup must use its own source interface classloader.');
+ const loaderStart = second.end + 1;
+ if (!spelling(tokens, loaderStart, CLASS_LOADER_TAIL)) throw Error('Service classloaders require the exact interface-literal getClassLoader() call.');
+ const end = loaderStart + CLASS_LOADER_TAIL.length;
+ if (spelling(tokens, end, [')', '.', 'findFirst', '(', ')', '.', 'orElseThrow', '(', ')', '.', service.method, '(', ')'])) {
+  return { service, loaderStart, end, methodEnd: end + 12, consumption: 'first' };
+ }
+ const parameter = tokens[end + 8];
+ if (parameter?.kind === 'id' && spelling(tokens, end, [
+  ')', '.', 'stream', '(', ')', '.', 'map', '(', parameter.text, '-', '>', parameter.text,
+  '.', 'get', '(', ')', '.', service.method, '(', ')', ')', '.', 'toList', '(', ')'
+ ])) {
+  return { service, loaderStart, end, methodEnd: end + 19, consumption: 'ordered-list' };
+ }
+ throw Error('Service providers require immediate scalar consumption without caching or reflective provider access.');
+}
+
+function verifyServiceClients(reviewed, transformed, renames, services) {
+ if (!services.size) return;
+ const newServices = new Map([...services.values()].map(service => [
+  service.nextService || service.service, { ...service, service: service.nextService || service.service }
+ ]));
+ const moved = new Map(renames.map(rename => [rename.oldUri, rename.newUri]));
+ const expected = reviewed.map(call => JSON.stringify({
+  uri: moved.get(call.uri) || call.uri,
+  service: services.get(call.service).nextService || call.service,
+  consumption: call.consumption
+ })).sort();
+ const actual = [];
+ for (const source of transformed) {
+  const { tokens } = lexJava(source.text), file = parseJavaFile(source);
+  for (const [index, token] of tokens.entries()) {
+   if (token.text !== 'ServiceLoader') continue;
+   const { service, consumption } = readServiceClient(tokens, index, file, newServices);
+   actual.push(JSON.stringify({ uri: source.uri, service: service.service, consumption }));
+  }
+ }
+ if (JSON.stringify(actual.sort()) !== JSON.stringify(expected)) {
+  throw Error('The Java engine changed the reviewed service consumer set or provider consumption.');
+ }
+}
+
 function reviewLookups(sources, javaTree, resources, oldPackage, newPackage, services = new Map()) {
  const movedTypes = new Set(), sourceTypes = new Set(), lookup = [], edits = new Map(), bindings = [], serviceCalls = [];
  const oldPath = oldPackage.replaceAll('.', '/'), newPath = newPackage.replaceAll('.', '/'), byPath = new Map();
@@ -133,8 +185,8 @@ function reviewLookups(sources, javaTree, resources, oldPackage, newPackage, ser
   const acceptedStrings = new Set(), acceptedLoaders = new Set(), acceptedSpring = new Set();
   if (lexed.issues.length) throw Error('Unmodeled Java lexical syntax prevents complete package resource client review.');
 
-  function addBinding(end, methodKey, resultType) {
-   bindings.push({ uri: source.uri, end: tokens[end].end, methodKey, ...(resultType ? { resultType } : {}) });
+  function addBinding(end, methodKey, resultType, after) {
+   bindings.push({ uri: source.uri, end: tokens[end].end, methodKey, ...(resultType ? { resultType } : {}), ...(after ? { after } : {}) });
   }
   function sourceClassLoader(start) {
    if (!spelling(tokens, start, CLASS_LOADER_TAIL)) throw Error('Resource and service classloaders require the exact source class-literal getClassLoader() call.');
@@ -199,23 +251,21 @@ function reviewLookups(sources, javaTree, resources, oldPackage, newPackage, ser
     consume(owner.owner, literal, 'getInputStream', classloader ? 'spring-classloader' : 'spring-class');
    }
    if (token.text === 'ServiceLoader') {
-    const start = index - 4;
-    if (!spelling(tokens, start, SERVICE_LOADER)) {
-     throw Error('Dynamic or configured package references require an exact Java service loader call.');
+    const { service, loaderStart, end, methodEnd, consumption } = readServiceClient(tokens, index, file, services);
+    sourceClassLoader(loaderStart);
+    const nextService = service.nextService || service.service;
+    addBinding(end, 'java.util.ServiceLoader#load(java.lang.Class<S>,java.lang.ClassLoader)', 'java.util.ServiceLoader<' + service.service + '>',
+     { resultType: 'java.util.ServiceLoader<' + nextService + '>' });
+    addBinding(methodEnd, service.service + '#' + service.method + '()', undefined, { methodKey: nextService + '#' + service.method + '()' });
+    if (consumption === 'ordered-list') {
+     const provider = type => 'java.util.ServiceLoader.Provider<' + type + '>';
+     addBinding(end + 4, 'java.util.ServiceLoader#stream()', 'java.util.stream.Stream<' + provider(service.service) + '>',
+      { resultType: 'java.util.stream.Stream<' + provider(nextService) + '>' });
+     addBinding(end + 15, 'java.util.ServiceLoader.Provider#get()', service.service, { resultType: nextService });
+     addBinding(end + 20, 'java.util.stream.Stream#map(java.util.function.Function<? super T,? extends R>)');
+     addBinding(end + 24, 'java.util.stream.Stream#toList()');
     }
-    const first = readClassLiteral(tokens, index + 4, file), service = services.get(first.owner);
-    if (tokens[first.end + 1]?.text !== ',' || !service) {
-     throw Error('Service loading requires an exact reviewed service interface and explicit classloader.');
-    }
-    const second = readClassLiteral(tokens, first.end + 2, file);
-    if (first.owner !== second.owner) throw Error('A service lookup must use its own source interface classloader.');
-    const end = sourceClassLoader(second.end + 1);
-    if (!spelling(tokens, end, [')', '.', 'findFirst', '(', ')', '.', 'orElseThrow', '(', ')', '.', service.method, '(', ')'])) {
-     throw Error('Service providers require immediate scalar consumption without caching or reflective provider access.');
-    }
-    addBinding(end, 'java.util.ServiceLoader#load(java.lang.Class<S>,java.lang.ClassLoader)', 'java.util.ServiceLoader<' + service.service + '>');
-    addBinding(end + 12, service.service + '#' + service.method + '()');
-    serviceCalls.push({ uri: source.uri, service: service.service, loader: 'source-service-classloader', method: service.method });
+    serviceCalls.push({ uri: source.uri, service: service.service, loader: 'source-service-classloader', method: service.method, consumption });
    }
    if (token.text === 'ClassLoader') {
     const method = tokens[index + 2]?.text, literal = tokens[index + 4];
@@ -273,8 +323,8 @@ function reviewLookups(sources, javaTree, resources, oldPackage, newPackage, ser
 
 function verifyResourceBindings(bindings, sources, entries, renames, before, after) {
  for (const binding of bindings) {
-  const same = call => call.methodKey === binding.methodKey && (!binding.resultType || binding.resultType === call.resultType);
-  if (before.calls.filter(call => call.uri === binding.uri && call.end === binding.end && same(call)).length !== 1) {
+  const same = (call, expected) => call.methodKey === expected.methodKey && (!expected.resultType || expected.resultType === call.resultType);
+  if (before.calls.filter(call => call.uri === binding.uri && call.end === binding.end && same(call, binding)).length !== 1) {
    throw Error('The Java compiler did not bind the reviewed resource or service call to its exact provider: ' + binding.methodKey);
   }
   const source = sources.find(item => item.uri === binding.uri);
@@ -286,7 +336,8 @@ function verifyResourceBindings(bindings, sources, entries, renames, before, aft
   const end = spans.filter(span => span.end <= binding.end).reduce((offset, span) =>
    offset + span.newText.length - (span.end - span.start), binding.end);
   const uri = renames.find(rename => rename.oldUri === binding.uri)?.newUri || binding.uri;
-  if (after.calls.filter(call => call.uri === uri && call.end === end && same(call)).length !== 1) {
+  const expected = { ...binding, ...binding.after };
+  if (after.calls.filter(call => call.uri === uri && call.end === end && same(call, expected)).length !== 1) {
    throw Error('The move would change a verified resource or service call binding: ' + binding.methodKey);
   }
  }
@@ -325,4 +376,4 @@ function mergePackageEngineEdits(sources,groups){
  }
  return {entries,proof:{mode:'explicit-baseline-imports-and-exact-group-type-mappings',groups:groups.length,mergedImportFiles,conflictAnnotationsAccepted:false,nonImportOverlapsAccepted:false}};
 }
-module.exports={LIMITS,UNMODELED_RESOURCE_CLIENTS,collectTree,verifyTree,resourceTree,resourceRoots,resourceDirectoryInsideProject,reviewLookups,verifyResourceBindings,plainResourceData,proveSpringResourceProvider,SPRING_RESOURCE_SHA256,mergeEntries,mergePackageEngineEdits,within};
+module.exports={LIMITS,UNMODELED_RESOURCE_CLIENTS,collectTree,verifyTree,resourceTree,resourceRoots,resourceDirectoryInsideProject,reviewLookups,verifyResourceBindings,verifyServiceClients,plainResourceData,proveSpringResourceProvider,SPRING_RESOURCE_SHA256,mergeEntries,mergePackageEngineEdits,within};

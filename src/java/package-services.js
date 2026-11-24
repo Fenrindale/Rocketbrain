@@ -73,9 +73,13 @@ function readServiceInventory(project, roots, directoryExists) {
 
 function scalarService(source) {
   const { tokens, issues } = lexJava(source.text);
-  const declaration = tokens.findIndex(token => token.text === 'interface');
+  const parsed = parseJavaFile(source);
+  const packageEnd = tokens.findIndex(token => token.text === ';');
+  const declaration = packageEnd + 2;
   const body = tokens.slice(declaration + 2).map(token => token.text);
-  if (issues.length || tokens.some(token => token.text === '@') || tokens[declaration - 1]?.text !== 'public' || body.length !== 7 ||
+  if (issues.length || parsed.issues.length || parsed.types.length !== 1 || !parsed.packageName || packageEnd < 0 ||
+      tokens[0]?.text !== 'package' || tokens[declaration - 1]?.text !== 'public' || tokens[declaration]?.text !== 'interface' ||
+      tokens[declaration + 1]?.text !== parsed.types[0].name || body.length !== 7 ||
       body[0] !== '{' || !/^(?:boolean|byte|short|int|long|char|float|double|String)$/.test(body[1]) ||
       !/^[A-Za-z_][\w]*$/.test(body[2]) || body.slice(3).join('') !== '();}') {
     throw Error('A service descriptor needs one public source interface with a single no-argument scalar method.');
@@ -83,7 +87,7 @@ function scalarService(source) {
   return { type: body[1], method: body[2] };
 }
 
-function validateProvider(source, model, service, contract) {
+function providerShape(source, model, service, contract) {
   const { tokens, issues } = lexJava(source.text);
   const at = tokens.findIndex(token => token.start === model.start);
   const word = index => tokens[index]?.text;
@@ -112,15 +116,19 @@ function validateProvider(source, model, service, contract) {
       body.slice(-3).map(token => token.text).join('') !== ';}}') {
     throw Error('A service provider needs an empty public constructor and one literal scalar return, with no state or custom initialization.');
   }
+  const packageEnd = tokens.findIndex(token => token.text === ';');
+  return {
+    // Resolve the implements clause first. Its text and the matching explicit
+    // import may legitimately change when the interface moves.
+    imports: tokens.slice(packageEnd + 1, at - 3).map(token => token.text).join(' ').replace(
+      'import ' + service.split('.').join(' . ') + ' ;', ''
+    ).trim(),
+    body: tokens.slice(open).map(token => token.text)
+  };
 }
 
-function providerBody(text) {
-  const { tokens, issues } = lexJava(text);
-  const declarationEnd = tokens.findIndex(token => token.text === ';');
-  if (issues.length || tokens[0]?.text !== 'package' || declarationEnd < 0) {
-    throw Error('A reviewed service provider must have a plain package declaration.');
-  }
-  return JSON.stringify(tokens.slice(declarationEnd + 1).map(token => token.text));
+function sameProviderBody(before, after) {
+  return JSON.stringify(before) === JSON.stringify(after);
 }
 
 function reviewPackageServices({ project, roots, directoryExists, sources, moved, oldPackage, newPackage, uriFor }) {
@@ -134,64 +142,121 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
       }
     }
   }
-  const isMainSource = (entry, name) => entry &&
-    path.relative(path.join(project, 'src/main/java', ...name.split('.')) + '.java', entry.source.file) === '';
+  const mainSource = name => path.join(project, 'src/main/java', ...name.split('.')) + '.java';
+  const isMainSource = (entry, name) => entry && path.relative(mainSource(name), entry.source.file) === '';
+  const nextName = name => newPackage + name.slice(oldPackage.length);
+  const hasType = name => [...data.keys()].some(value => value.toLowerCase() === name.toLowerCase());
   const services = new Map();
   const providers = new Map();
+  const checkedProviders = new Map();
+  const interfaces = new Map();
+  const compilerMethods = [];
   const edits = [];
   const permissions = [];
+  const renames = [];
   for (const descriptor of inventory) {
-    if (inPackage(descriptor.service, oldPackage)) throw Error('Moving a service interface requires a separate descriptor filename and external client review.');
+    const movingService = inPackage(descriptor.service, oldPackage);
     const changing = descriptor.providers.filter(provider => inPackage(provider.name, oldPackage));
-    if (!changing.length) continue;
+    if (!movingService && !changing.length) continue;
+    if (sources.some(source => path.basename(source.file) === 'module-info.java')) {
+      throw Error('Module service declarations need separate Package Move analysis.');
+    }
     if (descriptor.test || inventory.filter(item => item.service.toLowerCase() === descriptor.service.toLowerCase()).length !== 1) {
       throw Error('Competing service descriptors or test-only service registrations require a separate Package Move review.');
     }
     const spi = data.get(descriptor.service);
-    if (!isMainSource(spi, descriptor.service) || spi.type.kind !== 'interface' || moved.has(spi.source.uri)) {
+    if (movingService && (!isMainSource(spi, descriptor.service) || spi.type.kind !== 'interface' || !moved.has(spi.source.uri))) {
+      throw Error('Moving a service interface requires a separate review unless its exact scalar interface belongs to the selected main source package.');
+    }
+    if (!isMainSource(spi, descriptor.service) || spi.type.kind !== 'interface' || movingService !== moved.has(spi.source.uri)) {
       throw Error('The exact public service interface must remain in the reviewed main source set.');
     }
     const contract = scalarService(spi.source);
+    if (!descriptor.providers.length) throw Error('The reviewed service descriptor must name at least one provider.');
+    const nextService = movingService ? nextName(descriptor.service) : descriptor.service;
+    if (movingService && (hasType(nextService) || inventory.some(item => item.service.toLowerCase() === nextService.toLowerCase()))) {
+      throw Error('A destination service interface or descriptor identity already exists.');
+    }
+    if (movingService) interfaces.set(spi.source.uri, { nextService, contract });
+    const returnType = contract.type === 'String' ? 'java.lang.String' : contract.type;
+    compilerMethods.push({ uri: spi.source.uri, owner: descriptor.service, nextOwner: nextService, method: contract.method, returnType, kind: 'INTERFACE' });
     const rewrites = [];
     for (const registered of descriptor.providers) {
       const provider = data.get(registered.name);
       if (!isMainSource(provider, registered.name) || provider.type.kind !== 'class') {
         throw Error('All registered providers must bind to reviewed top-level main source classes.');
       }
-      validateProvider(provider.source, provider.type, descriptor.service, contract);
+      const shape = providerShape(provider.source, provider.type, descriptor.service, contract);
       const shouldMove = changing.includes(registered);
       if (shouldMove !== moved.has(provider.source.uri)) throw Error('A registered provider does not match the selected Java package tree.');
+      const nextOwner = shouldMove ? nextName(registered.name) : registered.name;
+      compilerMethods.push({ uri: provider.source.uri, owner: registered.name, nextOwner, method: contract.method, returnType,
+        kind: 'CLASS', service: descriptor.service, nextService });
+      if (movingService || shouldMove) {
+        if (checkedProviders.has(provider.source.uri)) throw Error('Provider sharing between service descriptors needs separate analysis.');
+        checkedProviders.set(provider.source.uri, { shape, nextService, contract, name: nextOwner });
+      }
       if (!shouldMove) continue;
-      if (providers.has(provider.source.uri)) throw Error('Provider sharing between service descriptors needs separate analysis.');
-      const nextName = newPackage + registered.name.slice(oldPackage.length);
-      if (data.has(nextName) || descriptor.providers.some(item => item.name.toLowerCase() === nextName.toLowerCase())) {
+      const replacement = nextName(registered.name);
+      if (hasType(replacement) || descriptor.providers.some(item => item.name.toLowerCase() === replacement.toLowerCase())) {
         throw Error('A destination service provider identity already exists.');
       }
       providers.set(provider.source.uri, descriptor.service);
-      rewrites.push({ ...registered, nextName });
+      rewrites.push({ ...registered, nextName: replacement });
     }
     const after = rewrites.reduceRight((text, item) => text.slice(0, item.start) + item.nextName + text.slice(item.end), descriptor.text);
+    if (Buffer.byteLength(after) > MAX_BYTES) throw Error('A rewritten service descriptor exceeds its 8 KiB review bound.');
     const uri = uriFor(descriptor.file);
-    const edit = { textDocument: { uri, version: null }, edits: rewrites.map(item => ({
+    if (rewrites.length) edits.push({ textDocument: { uri, version: null }, edits: rewrites.map(item => ({
       range: rangeAt(descriptor.text, item.start, item.end), newText: item.nextName
-    })) };
-    edits.push(edit);
-    permissions.push({ uri, beforeSha256: descriptor.sha256, afterSha256: sha256(after) });
+    })) });
+    const newFile = movingService ? path.join(path.dirname(descriptor.file), nextService) : descriptor.file;
+    const newUri = uriFor(newFile);
+    if (movingService) {
+      renames.push({ kind: 'rename', oldUri: uri, newUri, options: { overwrite: false, ignoreIfExists: false } });
+    }
+    permissions.push({ uri, beforeSha256: descriptor.sha256, afterSha256: sha256(after), ...(movingService ? { newUri } : {}) });
     services.set(descriptor.service, {
-      service: descriptor.service, file: descriptor.file, path: SERVICE_PREFIX + descriptor.service, method: contract.method,
+      service: descriptor.service, nextService, file: descriptor.file, newFile, path: SERVICE_PREFIX + descriptor.service,
+      newPath: SERVICE_PREFIX + nextService, method: contract.method,
       sha256: descriptor.sha256, afterSha256: sha256(after), providers: descriptor.providers.map(item => item.name),
-      rewrites: rewrites.map(({ name, nextName }) => ({ from: name, to: nextName }))
+      newProviders: descriptor.providers.map(item => inPackage(item.name, oldPackage) ? nextName(item.name) : item.name),
+      rewrites: rewrites.map(({ name, nextName: to }) => ({ from: name, to }))
     });
   }
   const snapshot = JSON.stringify(inventory);
   return {
-    services, providers, edits, permissions,
+    services, providers, interfaces, edits, permissions, renames,
+    compilerContractCount: compilerMethods.length,
+    verifyCompilerBindings(before, after, renames) {
+      const relocated = new Map(renames.map(rename => [rename.oldUri, rename.newUri]));
+      for (const expected of compilerMethods) {
+        const check = (report, uri, owner, service) => report.methods.filter(method =>
+          method.uri === uri && method.key === owner + '#' + expected.method + '()' && method.ownerKind === expected.kind &&
+          method.returnType === expected.returnType && method.modifiers.includes('public') &&
+          (!service || method.ownerSupertypes.includes(service))).length === 1;
+        if (!check(before, expected.uri, expected.owner, expected.service) ||
+            !check(after, relocated.get(expected.uri) || expected.uri, expected.nextOwner, expected.nextService)) {
+          throw Error('The Java compiler could not prove the reviewed service/interface implementation contract: ' + expected.owner);
+        }
+      }
+    },
     verifyProviders(transformed, renames) {
-      for (const uri of providers.keys()) {
-        const before = sources.find(source => source.uri === uri);
+      for (const [uri, expected] of interfaces) {
         const nextUri = renames.find(rename => rename.oldUri === uri)?.newUri;
         const after = transformed.find(source => source.uri === nextUri);
-        if (!after || providerBody(before.text) !== providerBody(after.text)) {
+        if (!after || nextUri !== uriFor(mainSource(expected.nextService)) ||
+          parseJavaFile(after).types[0]?.fqn !== expected.nextService ||
+          !sameProviderBody(expected.contract, scalarService(after))) {
+          throw Error('The Java engine changed a reviewed service interface or its scalar contract.');
+        }
+      }
+      for (const [uri, expected] of checkedProviders) {
+        const nextUri = renames.find(rename => rename.oldUri === uri)?.newUri || uri;
+        const after = transformed.find(source => source.uri === nextUri);
+        const type = after && parseJavaFile(after).types[0];
+        if (!type || nextUri !== uriFor(mainSource(expected.name)) || type.fqn !== expected.name ||
+          !sameProviderBody(expected.shape, providerShape(after, type, expected.nextService, expected.contract))) {
           throw Error('The Java engine changed a reviewed service provider body or import.');
         }
       }

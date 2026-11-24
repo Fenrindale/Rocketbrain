@@ -1,0 +1,13 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.rocketbrain.fixture.v26</groupId><artifactId>rb26-company-parent</artifactId><version>1.0.0</version>
+        <relativePath>rb26-company-parent/pom.xml</relativePath>
+    </parent>
+    <groupId>org.rocketbrain.fixture.v26</groupId>
+    <artifactId>rb26-reactor</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <modules><module>rb26-core</module><module>rb26-app</module><module>rb26-consumer</module><module>rb26-company-parent</module><module>rb26-project-parent</module><module>rb26-base-bom</module><module>rb26-library-bom</module><module>rb26-conflict-bom</module></modules>
+    <properties><maven.compiler.release>25</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+</project>

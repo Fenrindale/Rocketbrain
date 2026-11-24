@@ -17,7 +17,7 @@ const routes = Object.freeze({
  base: [], runtime: ['-Prb25-runtime'], compile: ['-Prb25-compile'], both: ['-Prb25-compile,rb25-runtime']
 });
 
-function effectiveReactorDependencies(file) {
+function effectiveReactorDependencies(file, projectGroup = group, reactorModules = modules) {
  const parser = new SaxesParser({ xmlns: false });
  const stack = [];
  const edges = new Map();
@@ -33,8 +33,8 @@ function effectiveReactorDependencies(file) {
   const item = stack.pop();
   if (current && stack.length === 3) current[item.name] = item.text.trim();
   if (current && stack.length === 2 && item.name === 'dependency') {
-   if (current.groupId === group) {
-    assert.ok(modules.includes(current.artifactId) && !edges.has(current.artifactId));
+   if (current.groupId === projectGroup) {
+    assert.ok(reactorModules.includes(current.artifactId) && !edges.has(current.artifactId));
     assert.equal(current.version, '1.0.0');
     edges.set(current.artifactId, current.scope ?? 'compile');
    }
@@ -100,4 +100,4 @@ if (require.main === module) main().catch(error => {
  console.error(error.stack);
  process.exitCode = 1;
 });
-module.exports = { buildMavenV25, routes };
+module.exports = { buildMavenV25, routes, effectiveReactorDependencies };

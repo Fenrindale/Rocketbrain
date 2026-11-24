@@ -1,0 +1,5 @@
+# Retain provider order and comments.
+  fixture.packagev26.payload.nested.ScalarProvider 	# first
+
+fixture.packagev26.peers.OutsideProvider # stationary
+fixture.packagev26.payload.SecondProvider # last
