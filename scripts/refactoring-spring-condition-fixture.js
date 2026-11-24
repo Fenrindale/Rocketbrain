@@ -8,7 +8,7 @@ const { startRefactoringApp } = require('./refactoring-spring');
 
 const root = path.resolve(__dirname, '..');
 function fixturePath(version) {
-  if (version !== 25 && version !== 26) throw Error('Use an owned Spring condition fixture.');
+  if (version !== 25 && version !== 26 && version !== 27) throw Error('Use an owned Spring condition fixture.');
   return path.join(root, 'test/fixtures/refactoring-v' + version + '-spring');
 }
 

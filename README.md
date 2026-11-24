@@ -29,7 +29,7 @@ pnpm run test:offline
 pnpm run package
 ```
 
-생성된 `rocketbrain-0.26.0.vsix`를 VS Code 확장 메뉴의 **Install from VSIX…**로 설치합니다. 패키지 명령은 로컬 VSIX를 만들며 Marketplace에 자동 게시하지 않습니다. 확장 패키지에는 Java 엔진과 DB 서버 바이너리를 포함하지 않습니다.
+생성된 `rocketbrain-0.27.0.vsix`를 VS Code 확장 메뉴의 **Install from VSIX…**로 설치합니다. 패키지 명령은 로컬 VSIX를 만들며 Marketplace에 자동 게시하지 않습니다. 확장 패키지에는 Java 엔진과 DB 서버 바이너리를 포함하지 않습니다.
 
 `test:offline`은 실제 DB·Java·브라우저·VS Code 실행 환경을 요구하는 검사를 구분하여 제외하거나 건너뜁니다. 이 결과가 실제 Spring·MySQL·MariaDB 검증을 대신하지 않습니다. 실환경 도구와 별도 검증 조건은 [공개 소스 안내](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/public-source.md)를 참고하세요.
 
@@ -51,15 +51,17 @@ Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후�
 
 | 명령 | 지원 범위 | 추가 분석이 필요한 범위 |
 |---|---|---|
-| **Move Java Class File / Move Java Class Across Projects** | 같은 소스 루트의 클래스 이동. Gradle 복합 조건과 Maven 리액터의 다단계 로컬 부모, 리액터 안의 중첩 BOM, 속성 프로필을 분석한다. 조합별 소비 모듈의 컴파일·테스트 가시성을 확인한다 | 임의 빌드 스크립트, 외부 부모·BOM, 전이 의존성 중재, 외부 바이너리 계약, 의존 관계 자동 변경 |
+| **Move Java Class File / Move Java Class Across Projects** | 같은 소스 루트의 클래스 이동. Gradle 복합 조건과 Maven 리액터의 부모·중첩 BOM·속성 프로필을 분석한다. 기본 로컬 Maven 저장소의 외부 부모·BOM도 좌표와 SHA-256을 검증해 가시성 계산에 포함한다 | 사용자 지정 저장소 배치, 원격 확인, SNAPSHOT·복합 외부 POM, 전이 의존성 중재, 의존 관계 자동 변경 |
 | **Move Java Static Member** | 일반 클래스의 public static 순수 반환 메서드·리터럴 상수 필드를 기존 Gradle 의존성의 대상으로 이동 | 인스턴스·상태를 가진 멤버, 오버로드·상속·어노테이션·임의 외부 사용 |
-| **Move Java Instance Method** | 원래 객체의 스칼라 값과 검토한 private final 참조를 명시적으로 전달한다. 제한된 중첩 객체의 생성자와 필드 접근 경로를 따라 별칭을 추적하고 원래 소유권·동일성·갱신 순서를 보존한다 | 가변 참조와 순환·외부 객체 그래프, 소유권 이전, 모호한 생성자와 상속·오버로드 |
-| **Move Java Package** | 지원하는 리소스 바이트를 보존하고 리터럴 로더를 갱신한다. 검토한 서비스 파일의 여러 제공자 순서와 주석을 보존하며, 소스 서비스 인터페이스를 이동하면 등록 파일 이름도 함께 바꾼다 | 동적·사용자 정의 로더, 외부·모듈형 서비스 공급자, 복잡한 메타데이터와 새 대상 폴더 생성 |
+| **Move Java Instance Method** | 포착한 참조를 명시적으로 전달한다. 검토한 private 가변 필드의 재할당과 호출자가 넘긴 참조를 추적하고 원래 소유권, 객체 동일성, 인수 평가와 갱신 순서를 보존한다 | 순환·외부 객체 그래프, 분기·다중 작성자, 소유권 이전, 모호한 생성자와 상속·오버로드 |
+| **Move Java Package** | 리소스의 바이트와 서비스 등록 순서를 보존한다. 검토한 클래스 경로 등록과 단일 JPMS 모듈의 서비스 소비·제공 선언을 함께 이동하고, 제한된 정적 서비스 팩터리를 확인한다 | 다중·외부 모듈의 서비스 계약, 동적·사용자 정의 로더, 복합 팩터리, 복잡한 메타데이터와 새 대상 폴더 생성 |
 | **Change Java Signature** | 인자 순서·리터럴 기본값 추가·미사용 인자 제거. 소스 상속·오버로드, 제한된 제네릭 타입 치환·공변 반환형·메서드 타입 변수·경계·와일드카드를 변경 전후 컴파일러로 검사 | 이름·기존 타입·반환형·접근성·예외 변경, 임의 제네릭·가변 인자·외부 바이너리·메서드 참조·framework 계약 |
-| **Safe Delete Java Declaration** | 미사용 private 보조 메서드와 제한된 클래스 삭제. Spring Bean·주입·설정·XML·JPA 참조, 닫힌 SpEL 분기, 불리언 속성 조건 및 검토한 `Condition`의 중첩 분기·조기 반환을 분석한다 | 임의 조건·호출·효과·루프, 외부 Spring 확장, 동적·바이너리 의존성의 전체 부재 증명 |
+| **Safe Delete Java Declaration** | 미사용 private 보조 메서드와 제한된 클래스 삭제. Spring Bean·주입·설정·XML·JPA 참조와 검토한 조건을 분석한다. 소스 합성 어노테이션의 메타 조건과 확인 가능한 `@AliasFor`도 따라간다 | 임의 조건·호출·효과·루프, 바이트코드 전용 합성 어노테이션과 불명확한 별칭 계약 |
 | **Restore Deleted Java File** | Safe Delete가 확인한 원본 바이트를 덮어쓰기 없이 복원 | 최근 최대 10건을 같은 실행 세션에서 1시간 동안 제공하며, 대상 파일이 새로 생겼거나 상위 폴더가 바뀌면 거부 |
 
 Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 기존 인자의 이름·타입은 유지하며 새 인자에는 명시적인 리터럴 기본값이 필요합니다. 평가 순서에 영향을 줄 수 있는 복잡한 호출식과 확인된 문자열·리소스 참조는 거부합니다. 이 기능들은 검토한 프로젝트 범위에 한정되며 임의 리플렉션과 외부 사용자의 계약까지 자동 증명하지 않습니다.
+
+외부 Maven 모델을 사용하는 리액터는 루트의 `.rocketbrain-maven-models.json`에 `version`을 `1`로 설정하고, `models` 배열에 각 모델의 `groupId`, `artifactId`, `version`, `sha256`을 기록합니다. 외부 부모에는 `<relativePath/>`를 사용합니다. 검토 범위는 기본 로컬 Maven 저장소에 설치한 릴리스 POM과 원격 출처 추적이 없는 기존 로컬 POM입니다. 미리보기 뒤 핀·모델·출처 기록이 바뀌면 적용을 중단합니다. [핀 파일 예제](test/fixtures/refactoring-v27-maven/.rocketbrain-maven-models.json)
 
 상속·오버로드 분석과 새 이동 검사는 별도 JDK 컴파일러로 파싱·타입 연결을 검사합니다. 프로젝트 클래스·어노테이션 처리기·컴파일러 플러그인을 분석 목적으로 실행하지 않습니다. 지원하지 않는 확장이나 불완전한 클래스 경로는 거부합니다.
 
@@ -82,7 +84,7 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 = (9 + 13 + 100 × 0.5) / 216
 ```
 
-기능표 가중 점수는 각 항목의 상태를 집계하며 부분 구현에 0.5점을 배정합니다. 지원 범위와 검증 결과는 [기능 현황](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/FEATURES.md)에 기록합니다. 다음 우선순위는 가변 참조와 외부 생성자 계약, 서비스 로딩과 리소스 메타데이터 확대, 외부 Maven 모델 검증 및 조건식 추적입니다.
+기능표 가중 점수는 각 항목의 상태를 집계하며 부분 구현에 0.5점을 배정합니다. 지원 범위와 검증 결과는 [기능 현황](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/FEATURES.md)에 기록합니다. 다음 우선순위는 분기별 참조 추적, 다중 모듈 서비스 계약, 합성 조건의 별칭 검증 확대와 사용자 지정 Maven 저장소의 검증입니다.
 
 ## 공개 저장소 관리
 

@@ -1,24 +1,30 @@
 {
-  "version": "0.26.0",
-  "verifiedAt": "2026-11-24T02:51:13.001Z",
+  "version": "0.27.0",
+  "verifiedAt": "2026-11-24T03:25:05.470Z",
   "fullProductParityVerified": false,
   "scope": "Final packaged VS Code extension and actual Spring builds with fresh MySQL and MariaDB instances.",
   "artifact": {
-    "name": "rocketbrain-0.26.0.vsix",
-    "bytes": 1550636,
-    "sha256": "7eba7f220d199c01f659d72902369cd3f44cd0b4e85e6018660d2f0be046f273",
+    "name": "rocketbrain-0.27.0.vsix",
+    "bytes": 1561726,
+    "sha256": "23daabf7a0ff8d5aa63e90f4251c89e719749577cce8603622ba6d55ed79a3d1",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 920,
-    "inputVectorSha256": "19b2f0b4b3de58a70c2786f4da90fdde44293c91d59f1ac2e05090213782c131",
+    "frozenPublicInputs": 993,
+    "inputVectorSha256": "f2639dc0e1ebc1257cfe197564af5518e375282983b50f52c42c15e58f49dc4c",
+    "nativeTestedInputVectorSha256": "f9cf9c8e6a6c3535e706f3944a5847db1ab2a8966eae39ba3124b9c50b092e52",
+    "testOnlyChangesAfterNativeFreeze": [
+      "test/java-move-v22-state.test.js"
+    ],
+    "reconciliation": "An existing rejection test now accepts the updated private-field diagnostic. A clean rebuild matched the 13 payloads of the installer exercised against both servers.",
+    "reproducedPayloadsEqual": 13,
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1038,
+    "tests": 1070,
     "suites": 0,
-    "pass": 990,
+    "pass": 1022,
     "fail": 0,
     "cancelled": 0,
     "skipped": 48,
@@ -37,24 +43,28 @@
           "group": "state",
           "checks": 1,
           "explorerRefreshErrors": 0,
+          "unresponsiveHostNotices": 2,
           "recoveredOnRetry": false
         },
         {
           "group": "package",
           "checks": 1,
-          "explorerRefreshErrors": 3,
+          "explorerRefreshErrors": 0,
+          "unresponsiveHostNotices": 1,
           "recoveredOnRetry": false
         },
         {
           "group": "spring",
           "checks": 1,
           "explorerRefreshErrors": 0,
+          "unresponsiveHostNotices": 0,
           "recoveredOnRetry": false
         },
         {
           "group": "maven",
           "checks": 1,
           "explorerRefreshErrors": 0,
+          "unresponsiveHostNotices": 5,
           "recoveredOnRetry": false
         }
       ]
@@ -71,34 +81,38 @@
           "group": "state",
           "checks": 1,
           "explorerRefreshErrors": 0,
+          "unresponsiveHostNotices": 2,
           "recoveredOnRetry": false
         },
         {
           "group": "package",
           "checks": 1,
-          "explorerRefreshErrors": 6,
+          "explorerRefreshErrors": 0,
+          "unresponsiveHostNotices": 1,
           "recoveredOnRetry": false
         },
         {
           "group": "spring",
           "checks": 1,
           "explorerRefreshErrors": 0,
+          "unresponsiveHostNotices": 0,
           "recoveredOnRetry": false
         },
         {
           "group": "maven",
           "checks": 1,
           "explorerRefreshErrors": 0,
+          "unresponsiveHostNotices": 5,
           "recoveredOnRetry": false
         }
       ]
     }
   ],
   "newlyVerified": {
-    "state": "중첩 깊이 4와 2의 네이티브 JDT Move 두 건, 실행 취소·다시 실행, 새 Spring 실행 결과 일곱 개, 수정·부작용·가변 참조 거부",
-    "package": "서비스 인터페이스와 제공자 두 개 이동, 등록 파일명과 내용 갱신, 제공자 세 개 순서와 리소스 두 개의 바이트 보존, 실행 취소·다시 실행, 새 Spring의 서비스 및 리소스 조회",
-    "spring": "네이티브 Safe Delete 적용·복원, 조건 계약 10개와 새 Spring의 등록 결과 9개, 보호·변경·미해결 계약 거부",
-    "maven": "부모 세 링크와 BOM 두 링크를 사용하는 Maven 프로젝트 간 Move 및 실행 취소·다시 실행, 범위가 좁아진 소비자와 수정된 BOM 거부, 실제 Maven의 세 모듈 유효 POM 및 네 조합의 테스트 컴파일"
+    "state": "가변 필드와 호출자 참조의 JDT Move 두 건, 재할당 순서 5개와 새 Spring 실행 결과 11개, 실행 취소·다시 실행 및 보호 사례",
+    "package": "서비스 팩터리와 JPMS uses·provides를 포함한 Package Move, 실행 취소·다시 실행, 모듈 경로 실행의 제공자 두 개 순서와 Spring DB 조회",
+    "spring": "합성 조건의 Safe Delete 적용·복원, 합성 조건 후보 27개와 실제 Spring 결과 12개, 보호·변경·미해결 계약 거부",
+    "maven": "외부 부모·BOM 모델 네 개의 SHA-256, Maven 프로젝트 간 Move 및 실행 취소·다시 실행, 변경된 핀 거부, 세 모듈의 유효 POM과 프로필 네 조합의 테스트 컴파일"
   },
   "maven": {
     "version": "3.9.11",
@@ -118,12 +132,17 @@
     "testClientCompiledInEachCombination": true,
     "nativeParentChainLinks": 3,
     "nativeBomImportDepth": 2,
-    "staleNestedBomRefused": true,
-    "profileContextControl": "Standalone Maven 3.9.11 effective POM confirmed a mixed inherited/imported profile scenario with two provided paths. The Move proof refuses the hidden destination."
+    "externalModelPinsVerified": 4,
+    "stalePinsRefused": true,
+    "standaloneOriginControl": {
+      "legacyUntracked": true,
+      "unavailableOriginRefused": true,
+      "locallyInstalled": true
+    }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 128,
+    "sourceCorrespondences": 131,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
@@ -142,11 +161,11 @@
     "featureStatusChanges": 0
   },
   "limitations": [
-    "가변·순환 객체 그래프, 참조 재할당·외부 유출, 일반 소유권 이전, 임의 생성자·상속과 외부 바이너리 분석이 남는다.",
-    "외부·모듈형 서비스 제공자, 동적·사용자 로더, 복수 클래스 경로 등록 파일 병합, 임의 리소스 메타데이터 분석이 남는다.",
-    "임의 SpEL·placeholder·프로젝트 메서드 호출, 상태와 반복을 가진 Condition, 사용자 확장의 전체 분석이 남는다. 해석할 수 없는 조건은 Safe Delete에서 미해결로 처리한다.",
-    "외부 부모·BOM, 중첩 집계 모듈, 컴파일 경로를 바꾸는 전이 의존성 중재, 확장된 플러그인·저장소 모델이 남는다.",
-    "VS Code 탐색기 새로 고침 관찰은 각 실행 묶음에 기록했다."
+    "분기·반복·여러 작성자의 별칭 추적, 순환 객체 그래프와 외부 유출, 일반 소유권 이전, 임의 생성자·상속과 외부 바이너리 분석이 남는다.",
+    "여러 모듈·외부 제공자, 가변 팩터리·사용자 로더, 복수 클래스 경로 등록 파일 병합, 임의 리소스 메타데이터 분석이 남는다.",
+    "바이트코드 전용 합성 어노테이션, 모호하거나 순환하는 별칭, 임의 SpEL과 상태가 있는 조건의 분석이 남는다. 해석할 수 없는 조건은 Safe Delete에서 미해결로 처리한다.",
+    "사용자 지정 저장소와 원격 출처가 붙은 캐시, SNAPSHOT·복합 외부 POM, 전이 의존성 중재 및 확장 플러그인 모델이 남는다.",
+    "VS Code 탐색기 새로 고침 오류와 확장 호스트 응답 지연 알림을 각 실행 묶음에 기록했다."
   ],
   "ci": "The exact pushed commit has its own GitHub Actions workflow. Local actual-server validation is recorded above."
 }

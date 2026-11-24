@@ -109,15 +109,13 @@ test('Nullable, forward, cyclic, mutable and externally bound object fields are 
   for (const source of invalid) assert.throws(() => f.inspect(source), /field|reference|constructors/i);
 });
 
-test('Caller object injection, fresh substitutions and reference escapes are refused', () => {
+test('Direct null or fresh object substitutions and reference escapes are refused', () => {
   const f = fixture();
   const invalid = [
     f.source.replace('this.mirror, this.forward', 'null, this.forward'),
     f.source.replace('this.mirror, this.forward', 'new FieldTarget(2), this.forward'),
-    f.source.replace('runShared(int delta)', 'runShared(FieldTarget left, int delta)').replace('this.mirror, this.forward', 'left, this.forward'),
     f.source.replace('left.advance(1)', 'left.unreviewed(1)'),
     f.source.replace('left.advance(1)', 'left.advance(right)'),
-    f.source.replace('left == right', 'left == null'),
     f.source.replace(/}\s*$/, 'public FieldTarget leak() { return mirror; }\n}')
   ];
   for (const source of invalid) assert.throws(() => f.inspect(source), /object arguments|caller|accessor|primitive/i);

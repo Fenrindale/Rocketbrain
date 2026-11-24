@@ -96,6 +96,7 @@ const spelling = (tokens, index, words) => words.every((word, offset) => tokens[
 const CLASS_LOADER_TAIL = ['.', 'getClassLoader', '(', ')'];
 const SYSTEM_LOADER = ['java', '.', 'lang', '.', 'ClassLoader', '.'];
 const SERVICE_LOADER = ['java', '.', 'util', '.', 'ServiceLoader', '.', 'load', '('];
+const BOOT_LAYER = ['java', '.', 'lang', '.', 'ModuleLayer', '.', 'boot', '(', ')', ','];
 const SPRING_CONSTRUCTOR = ['new','org','.','springframework','.','core','.','io','.','ClassPathResource','('];
 const ROOT_RELATIVE_LOADERS = new Set(['classloader', 'spring-classloader', 'system-classloader']);
 
@@ -104,24 +105,36 @@ function readServiceClient(tokens, index, file, services) {
  if (!spelling(tokens, start, SERVICE_LOADER)) {
   throw Error('Dynamic or configured package references require an exact Java service loader call.');
  }
- const first = readClassLiteral(tokens, index + 4, file), service = services.get(first.owner);
- if (tokens[first.end + 1]?.text !== ',' || !service) {
-  throw Error('Service loading requires an exact reviewed service interface and explicit classloader.');
+ const argument = index + 4;
+ let service, loaderStart, bootEnd, end;
+ if (spelling(tokens, argument, BOOT_LAYER)) {
+  const first = readClassLiteral(tokens, argument + BOOT_LAYER.length, file);
+  service = services.get(first.owner);
+  if (!service?.moduleName) throw Error('Boot-layer service loading requires an exact reviewed named module service interface.');
+  bootEnd = argument + BOOT_LAYER.length - 2;
+  end = first.end + 1;
+ } else {
+  const first = readClassLiteral(tokens, argument, file);
+  service = services.get(first.owner);
+  if (tokens[first.end + 1]?.text !== ',' || !service || service.moduleName) {
+   throw Error('Service loading requires an exact reviewed interface and its explicit classloader or the named module boot layer.');
+  }
+  const second = readClassLiteral(tokens, first.end + 2, file);
+  if (first.owner !== second.owner) throw Error('A service lookup must use its own source interface classloader.');
+  loaderStart = second.end + 1;
+  if (!spelling(tokens, loaderStart, CLASS_LOADER_TAIL)) throw Error('Service classloaders require the exact interface-literal getClassLoader() call.');
+  end = loaderStart + CLASS_LOADER_TAIL.length;
  }
- const second = readClassLiteral(tokens, first.end + 2, file);
- if (first.owner !== second.owner) throw Error('A service lookup must use its own source interface classloader.');
- const loaderStart = second.end + 1;
- if (!spelling(tokens, loaderStart, CLASS_LOADER_TAIL)) throw Error('Service classloaders require the exact interface-literal getClassLoader() call.');
- const end = loaderStart + CLASS_LOADER_TAIL.length;
+ const loader = service.moduleName ? 'named-module-boot-layer' : 'source-service-classloader';
  if (spelling(tokens, end, [')', '.', 'findFirst', '(', ')', '.', 'orElseThrow', '(', ')', '.', service.method, '(', ')'])) {
-  return { service, loaderStart, end, methodEnd: end + 12, consumption: 'first' };
+  return { service, loader, loaderStart, bootEnd, end, methodEnd: end + 12, consumption: 'first' };
  }
  const parameter = tokens[end + 8];
  if (parameter?.kind === 'id' && spelling(tokens, end, [
   ')', '.', 'stream', '(', ')', '.', 'map', '(', parameter.text, '-', '>', parameter.text,
   '.', 'get', '(', ')', '.', service.method, '(', ')', ')', '.', 'toList', '(', ')'
  ])) {
-  return { service, loaderStart, end, methodEnd: end + 19, consumption: 'ordered-list' };
+  return { service, loader, loaderStart, bootEnd, end, methodEnd: end + 19, consumption: 'ordered-list' };
  }
  throw Error('Service providers require immediate scalar consumption without caching or reflective provider access.');
 }
@@ -135,6 +148,7 @@ function verifyServiceClients(reviewed, transformed, renames, services) {
  const expected = reviewed.map(call => JSON.stringify({
   uri: moved.get(call.uri) || call.uri,
   service: services.get(call.service).nextService || call.service,
+  loader: call.loader,
   consumption: call.consumption
  })).sort();
  const actual = [];
@@ -142,8 +156,8 @@ function verifyServiceClients(reviewed, transformed, renames, services) {
   const { tokens } = lexJava(source.text), file = parseJavaFile(source);
   for (const [index, token] of tokens.entries()) {
    if (token.text !== 'ServiceLoader') continue;
-   const { service, consumption } = readServiceClient(tokens, index, file, newServices);
-   actual.push(JSON.stringify({ uri: source.uri, service: service.service, consumption }));
+   const { service, loader, consumption } = readServiceClient(tokens, index, file, newServices);
+   actual.push(JSON.stringify({ uri: source.uri, service: service.service, loader, consumption }));
   }
  }
  if (JSON.stringify(actual.sort()) !== JSON.stringify(expected)) {
@@ -251,10 +265,12 @@ function reviewLookups(sources, javaTree, resources, oldPackage, newPackage, ser
     consume(owner.owner, literal, 'getInputStream', classloader ? 'spring-classloader' : 'spring-class');
    }
    if (token.text === 'ServiceLoader') {
-    const { service, loaderStart, end, methodEnd, consumption } = readServiceClient(tokens, index, file, services);
-    sourceClassLoader(loaderStart);
+    const { service, loader, loaderStart, bootEnd, end, methodEnd, consumption } = readServiceClient(tokens, index, file, services);
+    if (bootEnd === undefined) sourceClassLoader(loaderStart);
+    else addBinding(bootEnd, 'java.lang.ModuleLayer#boot()', 'java.lang.ModuleLayer');
     const nextService = service.nextService || service.service;
-    addBinding(end, 'java.util.ServiceLoader#load(java.lang.Class<S>,java.lang.ClassLoader)', 'java.util.ServiceLoader<' + service.service + '>',
+    const loadArguments = bootEnd === undefined ? 'java.lang.Class<S>,java.lang.ClassLoader' : 'java.lang.ModuleLayer,java.lang.Class<S>';
+    addBinding(end, 'java.util.ServiceLoader#load(' + loadArguments + ')', 'java.util.ServiceLoader<' + service.service + '>',
      { resultType: 'java.util.ServiceLoader<' + nextService + '>' });
     addBinding(methodEnd, service.service + '#' + service.method + '()', undefined, { methodKey: nextService + '#' + service.method + '()' });
     if (consumption === 'ordered-list') {
@@ -265,7 +281,7 @@ function reviewLookups(sources, javaTree, resources, oldPackage, newPackage, ser
      addBinding(end + 20, 'java.util.stream.Stream#map(java.util.function.Function<? super T,? extends R>)');
      addBinding(end + 24, 'java.util.stream.Stream#toList()');
     }
-    serviceCalls.push({ uri: source.uri, service: service.service, loader: 'source-service-classloader', method: service.method, consumption });
+    serviceCalls.push({ uri: source.uri, service: service.service, loader, method: service.method, consumption });
    }
    if (token.text === 'ClassLoader') {
     const method = tokens[index + 2]?.text, literal = tokens[index + 4];

@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path');
 const {SaxesParser}=require('saxes');
 const {inside}=require('./testing-projects');
+const {openExternalMavenModels}=require('./maven-external-models');
 const key=file=>process.platform==='win32'?path.resolve(file).toLowerCase():path.resolve(file);
 const strip=text=>text.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g,'');
 function gradleGrammar(text,{root=false}={}){
@@ -68,8 +69,7 @@ function gradleBuild(root){
  for(const scenario of scenarios)for(const [from,targets]of scenario.graph)for(const target of targets){if(!graph.get(from).includes(target))graph.get(from).push(target);const exposure=scenario.edgeKinds.get(from).get(target);if(edgeKinds.get(from).get(target)!=='api')edgeKinds.get(from).set(target,exposure);}
  return {...first,graph,edgeKinds,scenarios,dynamicContracts:{mode:'all-finite-source-branches',scenarioCount:scenarios.length,allScenariosCompileExposureRequired:true,executedBuildCode:false,contracts}};
 }
-function pom(file) {
- const text=plain(file);
+function pom(file,text=plain(file)) {
  if(/<!DOCTYPE|<!ENTITY|\$\{|<build\b|<repositories\b/.test(text))throw Error('Dynamic Maven properties, plugins or repositories require a separate Move review.');
  const parser=new SaxesParser({xmlns:false}),stack=[];
  let error,root;
@@ -128,7 +128,7 @@ function pom(file) {
  const parent=children(root,'parent')[0];
  const parentModel=parent?{group:value(parent,'groupId'),artifact:value(parent,'artifactId'),version:value(parent,'version'),relativePath:value(parent,'relativePath')}:null;
  if(parentModel&&(![parentModel.group,parentModel.artifact,parentModel.version].every(literal)||
-  parentModel.relativePath!==undefined&&!/^(?:\.\.\/)*(?:[A-Za-z0-9_$-][\w.$-]*\/)*pom\.xml$/.test(parentModel.relativePath)))throw Error('Maven parent paths and coordinates must identify a reviewed local reactor descriptor.');
+  parentModel.relativePath!==undefined&&parentModel.relativePath!==''&&!/^(?:\.\.\/)*(?:[A-Za-z0-9_$-][\w.$-]*\/)*pom\.xml$/.test(parentModel.relativePath)))throw Error('Maven parent paths and coordinates must identify a reviewed local reactor descriptor or an exact external pin.');
  const profiles=children(children(root,'profiles')[0],'profile').map(profile=>{
   const id=value(profile,'id'),activation=children(profile,'activation')[0],property=children(activation,'property')[0];
   const name=value(property,'name'),expected=value(property,'value'),dependencies=readDependencies(profile),management=readManagement(profile);
@@ -207,7 +207,7 @@ function validateTransitiveManagement(graph,edgeKinds,models,coordinates) {
 }
 const pomCoordinates=model=>[model.group,model.artifact,model.version];
 const pomVersionMatches=(record,dependency)=>record.model.version===dependency.version;
-function mavenReactor(root) {
+function mavenReactor(root,options) {
  const file=path.join(root,'pom.xml'),reactor=pom(file),roots=new Map();
  if(reactor.packaging!=='pom'||!reactor.modules.length||reactor.modules.length>12||
    reactor.modules.some(name=>!/^[$\w-]+$/.test(name))||new Set(reactor.modules.map(name=>key(path.join(root,name)))).size!==reactor.modules.length){
@@ -232,16 +232,46 @@ function mavenReactor(root) {
   const identity=dependencyIdentity(model);
   if(byCoordinates.has(identity))throw Error('Duplicate Maven reactor coordinates prevent Move.');
   byCoordinates.set(identity,record);
+ }
+ const repository=openExternalMavenModels(root,descriptors.map(record=>path.dirname(record.file)),options);
+ function external(dependency) {
+  const identity=dependencyIdentity(dependency),existing=byCoordinates.get(identity);
+  if(existing){
+   if(!existing.external||!pomVersionMatches(existing,dependency))throw Error('An external Maven model conflicts with the reviewed reactor coordinates: '+identity+'.');
+   return existing;
+  }
+  const input=repository.read(dependency);
+  const model=pom(input.file,input.bytes.toString('utf8'));
+  if(model.packaging!=='pom'||model.modules.length||
+    !pomCoordinates(model).every((value,index)=>value===pomCoordinates(dependency)[index])){
+   throw Error('A pinned external Maven model must be a metadata POM with exactly its pinned coordinates.');
+  }
+  const record={name:input.id,file:input.file,model,external:true};
+  byCoordinates.set(identity,record);
+  descriptors.push(record);
+  return record;
+ }
+ // The list grows only through exact pins. Resolve all model references,
+ // including imports in inactive branches, before enumerating profiles.
+ for(const record of descriptors){
+  const {model}=record;
   if(model.parent){
-   const descriptor=path.resolve(path.dirname(record.file),model.parent.relativePath??'../pom.xml');
-   const parent=byPath.get(key(descriptor));
+   const relativePath=model.parent.relativePath;
+   const parent=relativePath===''?external(model.parent):!record.external&&byPath.get(key(path.resolve(path.dirname(record.file),relativePath??'../pom.xml')));
    if(!parent||parent.model.packaging!=='pom'||!pomCoordinates(parent.model).every((value,index)=>value===pomCoordinates(model.parent)[index])){
-    throw Error('An unresolved or external Maven parent is outside the reviewed local reactor.');
+    throw Error('An unresolved or external Maven parent requires an exact local relative path or an empty relativePath with a verified pin.');
    }
    record.parent=parent;
   }
+  for(const layer of [model,...model.profiles])for(const dependency of layer.management){
+   if(dependency.bom&&!byCoordinates.has(dependencyIdentity(dependency))){
+    try{external(dependency);}catch(error){
+     throw Error('A BOM outside the exact local reactor could not be verified. '+error.message,{cause:error});
+    }
+   }
+  }
  }
- return {descriptors,byCoordinates,roots};
+ return {descriptors,byCoordinates,roots,externalModels:repository.finish()};
 }
 function mavenProfileVariants(descriptors,byCoordinates) {
  const profiles=descriptors.flatMap(({name,model})=>model.profiles.map(profile=>({module:name,...profile})));
@@ -315,9 +345,10 @@ function mavenScenarioModels(descriptors,byCoordinates,active) {
  for(const record of descriptors)resolved(record,reactor);
  return reactor.effective;
 }
-function mavenBuild(root) {
- const {descriptors,byCoordinates,roots}=mavenReactor(root);
- const files=descriptors.map(record=>record.file);
+function mavenBuild(root,options) {
+ const {descriptors,byCoordinates,roots,externalModels}=mavenReactor(root,options);
+ const files=descriptors.filter(record=>!record.external).map(record=>record.file);
+ if(externalModels)files.push(externalModels.lock);
  const coordinates=new Map([...byCoordinates].filter(([,record])=>roots.has(record.name)));
  const profiles=mavenProfileVariants(descriptors,byCoordinates);
  if(profiles.length>4)throw Error('Maven dependency profile scenario budget exceeded.');
@@ -348,7 +379,7 @@ function mavenBuild(root) {
   }
   dag(buildGraph);
   validateTransitiveManagement(graph,edgeKinds,effective,coordinates);
-  return {kind:'maven-reactor',root,files,roots,graph,edgeKinds,modelContracts,overrides,
+  return {kind:'maven-reactor',root,files,roots,graph,edgeKinds,modelContracts,overrides,externalModels,
    activeProfiles:active.map(({module,id,context})=>({module,id,...(context?{context}:{})}))};
  }
  if(!profiles.length)return scenario([]);

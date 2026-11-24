@@ -62,9 +62,17 @@ public final class SignatureInspector {
         }
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler(); if (compiler == null) throw new IllegalStateException("A full independent JDK is required.");
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        boolean namedModule = sources.stream().anyMatch(source -> source.toUri().getPath().endsWith("/module-info.java"));
         try (StandardJavaFileManager standard = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
             JavaFileManager files = new ForwardingJavaFileManager<StandardJavaFileManager>(standard) {
                 public JavaFileObject getJavaFileForOutput(Location location, String name, JavaFileObject.Kind kind, FileObject sibling) throws IOException { throw new IOException("Class generation is disabled."); }
+                @Override
+                public boolean contains(Location location, FileObject input) throws IOException {
+                    // javac requires every source unit to belong to a named module location.
+                    // Explicit in-memory inputs play the source path role without a filesystem lookup.
+                    if (namedModule && input instanceof Source) return location == StandardLocation.SOURCE_PATH;
+                    return super.contains(location, input);
+                }
             };
             List<String> options = List.of("-proc:none", "-implicit:none", "-Xlint:none", "-encoding", "UTF-8", "-sourcepath", args[2], "-processorpath", args[2], "-classpath", classpath, "--release", args[3]);
             StringWriter compilerOutput = new StringWriter();

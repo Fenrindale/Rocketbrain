@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "groupId": "org.rocketbrain.fixture.v27.external",
+      "artifactId": "rb27-company-parent",
+      "version": "1.0.0",
+      "sha256": "405499c5aa789889a3b7149c1f78db22430f3f740ea69077068ea43bf12bc853"
+    },
+    {
+      "groupId": "org.rocketbrain.fixture.v27.external",
+      "artifactId": "rb27-base-bom",
+      "version": "1.0.0",
+      "sha256": "a078174ce4392141fc48c1c469235eefcaea6c6b34e09ef0aa26e1ab19127b0d"
+    },
+    {
+      "groupId": "org.rocketbrain.fixture.v27.external",
+      "artifactId": "rb27-library-bom",
+      "version": "1.0.0",
+      "sha256": "4ebcf357ccd01464e74ad60477779c2f874e40f6983113cb98e4d2913027d6ca"
+    },
+    {
+      "groupId": "org.rocketbrain.fixture.v27.external",
+      "artifactId": "rb27-conflict-bom",
+      "version": "1.0.0",
+      "sha256": "2585d24d69a80e89313bbdde8f9a7e626763ae6a85d7c8ff59fd29e6c3c34b17"
+    }
+  ]
+}

@@ -322,4 +322,4 @@ function createConditionReviewer({ byName, resolve }) {
   };
 }
 
-module.exports = { createConditionReviewer, isReviewedConditionName, CONDITION_TYPES, SPRING_CONDITION_LIMITS: LIMITS };
+module.exports = { createConditionReviewer, isReviewedConditionName, javaString, strings, CONDITION_TYPES, SPRING_CONDITION_LIMITS: LIMITS };

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { lexJava, parseJavaFile, rangeAt } = require('../spring/java');
+const { reviewClosedModule } = require('./package-module');
 
 const DOTTED_TYPE = /^[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)+$/;
 const SERVICE_PREFIX = 'META-INF/services/';
@@ -131,10 +132,39 @@ function sameProviderBody(before, after) {
   return JSON.stringify(before) === JSON.stringify(after);
 }
 
+function factoryShape(source, type, service) {
+  const { tokens, issues } = lexJava(source.text);
+  const parsed = parseJavaFile(source);
+  const start = tokens.findIndex(token => token.start === type.start);
+  const words = tokens.map(token => token.text);
+  const resolve = name => DOTTED_TYPE.test(name) ? name :
+    /^[A-Za-z_][\w]*$/.test(name) ? parsed.imports[name] || parsed.packageName + '.' + name : null;
+  const unsupported = () => Error('A module provider factory needs one public static provider() with one exact no-argument source implementation allocation.');
+  if (issues.length || parsed.issues.length || parsed.wildcards.length || parsed.types.length !== 1 ||
+      type.superTypes.length || words.slice(start - 3, start).join(' ') !== 'public final class' || words[start + 1] !== '{') throw unsupported();
+  let body = words.slice(start + 2);
+  const emptyConstructor = ['private', type.name, '(', ')', '{', '}'];
+  const privateConstructor = body.slice(0, emptyConstructor.length).every((token, index) => token === emptyConstructor[index]);
+  if (privateConstructor) body = body.slice(emptyConstructor.length);
+  const method = body.indexOf('provider');
+  if (body[0] !== 'public' || body[1] !== 'static' || method <= 2 || resolve(body.slice(2, method).join('')) !== service ||
+      body.slice(method + 1, method + 6).join(' ') !== '( ) { return new' || body.slice(-5).join(' ') !== '( ) ; } }') throw unsupported();
+  const implementation = resolve(body.slice(method + 6, -5).join(''));
+  if (!implementation || implementation === type.fqn) throw unsupported();
+  const packageEnd = words.indexOf(';');
+  let imports = words.slice(packageEnd + 1, start - 3).join(' ');
+  for (const name of [service, implementation]) imports = imports.replace('import ' + name.split('.').join(' . ') + ' ;', '');
+  if (imports.trim()) throw unsupported();
+  return { implementation, privateConstructor };
+}
+
 function reviewPackageServices({ project, roots, directoryExists, sources, moved, oldPackage, newPackage, uriFor }) {
   const inventory = readServiceInventory(project, roots, directoryExists);
+  const module = reviewClosedModule(project, sources);
+  if (module && inventory.length) throw Error('Module service declarations cannot be mixed with classpath service descriptors.');
+  const registrations = module ? [...module.registrations.values()] : inventory;
   const data = new Map();
-  if (inventory.some(item => inPackage(item.service, oldPackage) || item.providers.some(provider => inPackage(provider.name, oldPackage)))) {
+  if (module || registrations.some(item => inPackage(item.service, oldPackage) || item.providers.some(provider => inPackage(provider.name, oldPackage)))) {
     for (const source of sources.filter(value => value.file.endsWith('.java'))) {
       for (const type of parseJavaFile(source).types) {
         if (data.has(type.fqn)) throw Error('Duplicate source class identity prevents service registration analysis.');
@@ -148,20 +178,50 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
   const hasType = name => [...data.keys()].some(value => value.toLowerCase() === name.toLowerCase());
   const services = new Map();
   const providers = new Map();
+  const factories = new Map();
   const checkedProviders = new Map();
   const interfaces = new Map();
   const compilerMethods = [];
   const edits = [];
   const permissions = [];
   const renames = [];
-  for (const descriptor of inventory) {
+  const moduleReplacements = [];
+  if (module) {
+    for (const use of module.uses.values()) {
+      if (!module.registrations.has(use.name)) throw Error('Module service uses must name a locally reviewed provides registration.');
+      if (inPackage(use.name, oldPackage)) moduleReplacements.push({ span: use, replacement: nextName(use.name) });
+    }
+  }
+  function verifyPlainProvider(name, service, nextService, contract, { allowFactory = false } = {}) {
+    const provider = data.get(name);
+    if (!isMainSource(provider, name) || provider.type.kind !== 'class') {
+      throw Error('All registered providers and factory implementations must bind to reviewed top-level main source classes.');
+    }
+    const changes = inPackage(name, oldPackage);
+    if (changes !== moved.has(provider.source.uri)) throw Error('A registered provider does not match the selected Java package tree.');
+    const nextOwner = changes ? nextName(name) : name;
+    const factory = allowFactory && provider.type.methods.some(method => method.name === 'provider') &&
+      lexJava(provider.source.text).tokens.some(token => token.text === 'static');
+    const shape = factory ? factoryShape(provider.source, provider.type, service) : providerShape(provider.source, provider.type, service, contract);
+    if (changes && hasType(nextOwner)) throw Error('A destination service provider identity already exists.');
+    if (checkedProviders.has(provider.source.uri)) throw Error('Provider sharing between service descriptors or factories needs separate analysis.');
+    checkedProviders.set(provider.source.uri, { shape, nextService, contract, name: nextOwner, factory });
+    if (changes) (factory ? factories : providers).set(provider.source.uri, service);
+    if (factory) {
+      const impl = verifyPlainProvider(shape.implementation, service, nextService, contract);
+      compilerMethods.push({ uri: provider.source.uri, owner: name, nextOwner, method: 'provider', returnType: service,
+        nextReturnType: nextService, kind: 'CLASS', implementation: shape.implementation, nextImplementation: impl.nextOwner });
+      return { nextOwner, implementation: shape.implementation, nextImplementation: impl.nextOwner };
+    }
+    compilerMethods.push({ uri: provider.source.uri, owner: name, nextOwner, method: contract.method,
+      returnType: contract.type === 'String' ? 'java.lang.String' : contract.type, kind: 'CLASS', service, nextService });
+    return { nextOwner };
+  }
+  for (const descriptor of registrations) {
     const movingService = inPackage(descriptor.service, oldPackage);
     const changing = descriptor.providers.filter(provider => inPackage(provider.name, oldPackage));
-    if (!movingService && !changing.length) continue;
-    if (sources.some(source => path.basename(source.file) === 'module-info.java')) {
-      throw Error('Module service declarations need separate Package Move analysis.');
-    }
-    if (descriptor.test || inventory.filter(item => item.service.toLowerCase() === descriptor.service.toLowerCase()).length !== 1) {
+    if (!module && !movingService && !changing.length) continue;
+    if (descriptor.test || !module && inventory.filter(item => item.service.toLowerCase() === descriptor.service.toLowerCase()).length !== 1) {
       throw Error('Competing service descriptors or test-only service registrations require a separate Package Move review.');
     }
     const spi = data.get(descriptor.service);
@@ -173,6 +233,7 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
     }
     const contract = scalarService(spi.source);
     if (!descriptor.providers.length) throw Error('The reviewed service descriptor must name at least one provider.');
+    if (module && !module.uses.has(descriptor.service)) throw Error('A reviewed module service must also have its exact uses directive.');
     const nextService = movingService ? nextName(descriptor.service) : descriptor.service;
     if (movingService && (hasType(nextService) || inventory.some(item => item.service.toLowerCase() === nextService.toLowerCase()))) {
       throw Error('A destination service interface or descriptor identity already exists.');
@@ -181,7 +242,15 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
     const returnType = contract.type === 'String' ? 'java.lang.String' : contract.type;
     compilerMethods.push({ uri: spi.source.uri, owner: descriptor.service, nextOwner: nextService, method: contract.method, returnType, kind: 'INTERFACE' });
     const rewrites = [];
+    const providerFactories = [];
     for (const registered of descriptor.providers) {
+      if (module) {
+        const proof = verifyPlainProvider(registered.name, descriptor.service, nextService, contract, { allowFactory: true });
+        if (registered.name !== proof.nextOwner) rewrites.push({ ...registered, nextName: proof.nextOwner });
+        if (proof.implementation) providerFactories.push({ provider: registered.name, nextProvider: proof.nextOwner,
+          implementation: proof.implementation, nextImplementation: proof.nextImplementation });
+        continue;
+      }
       const provider = data.get(registered.name);
       if (!isMainSource(provider, registered.name) || provider.type.kind !== 'class') {
         throw Error('All registered providers must bind to reviewed top-level main source classes.');
@@ -204,6 +273,17 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
       providers.set(provider.source.uri, descriptor.service);
       rewrites.push({ ...registered, nextName: replacement });
     }
+    if (module) {
+      if (movingService) moduleReplacements.push({ span: descriptor.serviceName, replacement: nextService });
+      moduleReplacements.push(...rewrites.map(item => ({ span: item, replacement: item.nextName })));
+      services.set(descriptor.service, {
+        service: descriptor.service, nextService, moduleName: module.name, method: contract.method,
+        providers: descriptor.providers.map(item => item.name),
+        newProviders: descriptor.providers.map(item => inPackage(item.name, oldPackage) ? nextName(item.name) : item.name),
+        rewrites: rewrites.map(({ name, nextName: to }) => ({ from: name, to })), providerFactories
+      });
+      continue;
+    }
     const after = rewrites.reduceRight((text, item) => text.slice(0, item.start) + item.nextName + text.slice(item.end), descriptor.text);
     if (Buffer.byteLength(after) > MAX_BYTES) throw Error('A rewritten service descriptor exceeds its 8 KiB review bound.');
     const uri = uriFor(descriptor.file);
@@ -224,19 +304,33 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
       rewrites: rewrites.map(({ name, nextName: to }) => ({ from: name, to }))
     });
   }
+  if (module && !moduleReplacements.length && ![...services.values()].some(value =>
+    value.providerFactories.some(factory => factory.implementation !== factory.nextImplementation))) {
+    throw Error('Module Package Move requires a reviewed service interface, provider or factory implementation within the moved set.');
+  }
   const snapshot = JSON.stringify(inventory);
   return {
-    services, providers, interfaces, edits, permissions, renames,
+    services, providers, factories, interfaces, edits, permissions, renames,
+    moduleEntry: module?.makeEntry(moduleReplacements),
+    ...(module ? { module: { name: module.name, uri: module.uri, directiveEdits: moduleReplacements.length } } : {}),
     compilerContractCount: compilerMethods.length,
     verifyCompilerBindings(before, after, renames) {
       const relocated = new Map(renames.map(rename => [rename.oldUri, rename.newUri]));
       for (const expected of compilerMethods) {
-        const check = (report, uri, owner, service) => report.methods.filter(method =>
-          method.uri === uri && method.key === owner + '#' + expected.method + '()' && method.ownerKind === expected.kind &&
-          method.returnType === expected.returnType && method.modifiers.includes('public') &&
-          (!service || method.ownerSupertypes.includes(service))).length === 1;
-        if (!check(before, expected.uri, expected.owner, expected.service) ||
-            !check(after, relocated.get(expected.uri) || expected.uri, expected.nextOwner, expected.nextService)) {
+        const check = (report, uri, owner, service, returns, implementation) => {
+          const methodKey = owner + '#' + expected.method + '()';
+          const methods = report.methods.filter(method => method.uri === uri && method.key === methodKey &&
+            method.ownerKind === expected.kind && method.returnType === returns && method.modifiers.includes('public') &&
+            (!service || method.ownerSupertypes.includes(service)) && (!implementation || method.modifiers.includes('static')));
+          if (methods.length !== 1) return false;
+          if (!implementation) return true;
+          const calls = report.calls.filter(call => call.uri === uri && call.enclosingKey === methodKey);
+          return calls.length === 1 && calls[0].constructor && calls[0].methodKey === implementation + '#<init>()' &&
+            calls[0].resultType === implementation;
+        };
+        if (!check(before, expected.uri, expected.owner, expected.service, expected.returnType, expected.implementation) ||
+            !check(after, relocated.get(expected.uri) || expected.uri, expected.nextOwner, expected.nextService,
+                expected.nextReturnType || expected.returnType, expected.nextImplementation)) {
           throw Error('The Java compiler could not prove the reviewed service/interface implementation contract: ' + expected.owner);
         }
       }
@@ -256,7 +350,9 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
         const after = transformed.find(source => source.uri === nextUri);
         const type = after && parseJavaFile(after).types[0];
         if (!type || nextUri !== uriFor(mainSource(expected.name)) || type.fqn !== expected.name ||
-          !sameProviderBody(expected.shape, providerShape(after, type, expected.nextService, expected.contract))) {
+          !sameProviderBody(expected.factory ? { ...expected.shape, implementation: inPackage(expected.shape.implementation, oldPackage)
+            ? nextName(expected.shape.implementation) : expected.shape.implementation } : expected.shape,
+          expected.factory ? factoryShape(after, type, expected.nextService) : providerShape(after, type, expected.nextService, expected.contract))) {
           throw Error('The Java engine changed a reviewed service provider body or import.');
         }
       }
