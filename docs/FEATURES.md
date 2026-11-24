@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.28.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.29.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 12 |
-| 부분 구현 | 105 |
-| 미구현 | 77 |
+| 구현 | 19 |
+| 부분 구현 | 106 |
+| 미구현 | 71 |
 | VS Code 재사용 | 13 |
-| 지원 미확인 | 7 |
+| 지원 미확인 | 5 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **35.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **39.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.28에서는 파일 템플릿·JShell, 사용자 DB 세션과 쿼리, 외래 키 JOIN 자동 완성, 결과 보기·내보내기를 추가했다. 분기별 Java 참조 이동도 검증했다. 상태가 바뀐 항목은 8개이고 가중 점수는 72점에서 77.5점으로 늘었다.
+v0.29에서는 Java 호출·타입 계층과 의존성 순환 탐색, FK 관련 행과 스키마 ERD, 가상 FK, 결과 레코드 편집·열 배치 저장, 정렬된 DDL 내보내기를 추가했다. 상태가 바뀐 항목은 10개이고 가중 점수는 77.5점에서 85점으로 늘었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -37,13 +37,13 @@ v0.28에서는 파일 템플릿·JShell, 사용자 DB 세션과 쿼리, 외래 �
 | IDEA-014 | IntelliJ IDEA | 새 파일 템플릿 | 부분 구현 |
 | IDEA-015 | IntelliJ IDEA | 선언·타입·구현·상위 메서드 이동 | 부분 구현 |
 | IDEA-016 | IntelliJ IDEA | Find Usages·참조 탐색 | 부분 구현 |
-| IDEA-017 | IntelliJ IDEA | 호출 계층 | 지원 미확인 |
-| IDEA-018 | IntelliJ IDEA | 타입·상속 계층 | 지원 미확인 |
+| IDEA-017 | IntelliJ IDEA | 호출 계층 | 구현 |
+| IDEA-018 | IntelliJ IDEA | 타입·상속 계층 | 구현 |
 | IDEA-019 | IntelliJ IDEA | Structure·현재 파일 기호 | VS Code 재사용 |
 | IDEA-020 | IntelliJ IDEA | 정적 Data Flow to/from Here | 미구현 |
 | IDEA-021 | IntelliJ IDEA | 구조 검색·치환 | 미구현 |
 | IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 미구현 |
-| IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 미구현 |
+| IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 부분 구현 |
 | IDEA-024 | IntelliJ IDEA | 기호·패키지 이름 변경 | 부분 구현 |
 | IDEA-025 | IntelliJ IDEA | 변수·상수·필드 추출 | 부분 구현 |
 | IDEA-026 | IntelliJ IDEA | 메서드 추출 | 부분 구현 |
@@ -165,7 +165,7 @@ v0.28에서는 파일 템플릿·JShell, 사용자 DB 세션과 쿼리, 외래 �
 | DG-022 | DataGrip | 객체 이름·DDL·파일 검색 | 부분 구현 |
 | DG-023 | DataGrip | DDL·object source 보기 | 부분 구현 |
 | DG-024 | DataGrip | 루틴·인덱스·트리거·MariaDB package | 부분 구현 |
-| DG-025 | DataGrip | 실제 FK 없는 관계 정의 | 미구현 |
+| DG-025 | DataGrip | 실제 FK 없는 관계 정의 | 구현 |
 | DG-026 | DataGrip | virtual view·virtual column | 미구현 |
 | DG-027 | DataGrip | schema-aware 이름·열 완성 | 부분 구현 |
 | DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 부분 구현 |
@@ -206,9 +206,9 @@ v0.28에서는 파일 템플릿·JShell, 사용자 DB 세션과 쿼리, 외래 �
 | DG-063 | DataGrip | pending DML 미리보기·변경 되돌리기 | 구현 |
 | DG-064 | DataGrip | 행 추가·삭제·복제·일괄 붙여넣기 | 부분 구현 |
 | DG-065 | DataGrip | NULL·긴 text·JSON·binary 값 편집 | 부분 구현 |
-| DG-066 | DataGrip | FK 따라 관련 행으로 이동 | 미구현 |
-| DG-067 | DataGrip | record·tree·text·transpose 보기 | 부분 구현 |
-| DG-068 | DataGrip | 컬럼 고정·숨김·순서·폭 조절 | 부분 구현 |
+| DG-066 | DataGrip | FK 따라 관련 행으로 이동 | 부분 구현 |
+| DG-067 | DataGrip | record·tree·text·transpose 보기 | 구현 |
+| DG-068 | DataGrip | 컬럼 고정·숨김·순서·폭 조절 | 구현 |
 | DG-069 | DataGrip | CSV/TSV·clipboard 내보내기 | 구현 |
 | DG-070 | DataGrip | INSERT/JSON/Excel 등 출력 형식 | 구현 |
 | DG-071 | DataGrip | 사용자 data extractor 스크립트 | 미구현 |
@@ -225,9 +225,9 @@ v0.28에서는 파일 템플릿·JShell, 사용자 DB 세션과 쿼리, 외래 �
 | DG-082 | DataGrip | 서로 다른 서버 schema/object 구조 diff | 부분 구현 |
 | DG-083 | DataGrip | 선택 변경의 migration DDL 생성·검토·실행 | 부분 구현 |
 | DG-084 | DataGrip | DDL 파일을 가상 DB 의미 모델로 사용 | 미구현 |
-| DG-085 | DataGrip | DB schema→정렬된 DDL 파일·VCS | 미구현 |
-| DG-086 | DataGrip | live schema ERD 생성·관계 탐색 | 미구현 |
-| DG-087 | DataGrip | diagram 출력·레이아웃 보존 | 미구현 |
+| DG-085 | DataGrip | DB schema→정렬된 DDL 파일·VCS | 부분 구현 |
+| DG-086 | DataGrip | live schema ERD 생성·관계 탐색 | 구현 |
+| DG-087 | DataGrip | diagram 출력·레이아웃 보존 | 구현 |
 | DG-088 | DataGrip | SQL 파일 Git·diff·변경 검토 | VS Code 재사용 |
 | DG-089 | DataGrip | schema 문맥의 자연어 SQL·설명 | 미구현 |
 | DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 미구현 |

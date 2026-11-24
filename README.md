@@ -42,6 +42,7 @@ pnpm run package
 5. **Create Spring Project**로 공식 Initializr 프로젝트를 생성하거나 **Edit Spring Starters**로 지원하는 의존성 변경을 검토합니다.
 6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. `rocketbrain.java.fileTemplates`에서 사용자 템플릿과 변수 `${name}`, `${package}`, `${packageDeclaration}`를 사용할 수 있습니다.
 7. **New JShell Scratch**로 저장할 코드를 만들고 **Run JShell Scratch**로 독립 JDK에서 실행합니다. 프로젝트 클래스가 필요하면 실행할 때 관찰된 로컬 클래스 경로를 선택합니다.
+8. **Explore Java Call Hierarchy**와 **Explore Java Type Hierarchy**에서 JDT가 확인한 호출과 상속·구현 관계를 이동합니다. **Inspect Java Dependencies**는 소스 import, 선언된 빌드·모듈과 빌드된 클래스의 의존성을 구분해 순환 경로를 보여줍니다.
 
 기존 독립 런타임을 사용할 때는 `rocketbrain.java.javaHome`, `rocketbrain.java.serverPath`, 필요한 디버그 번들을 설정합니다. 서버용 JDK와 프로젝트용 JDK는 별개이며 프로젝트 JDK는 `rocketbrain.java.projectJdks`로 선택합니다. 원본 IDE의 내장 JBR은 거부합니다.
 
@@ -77,6 +78,9 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - **Save SQL Query**는 현재 선택 구간이나 문서를 작업 공간에 저장합니다. **Saved SQL Queries**에서 검색·즐겨찾기·열기와 활성 연결을 사용한 새 읽기 전용 콘솔 실행을 제공합니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
+- Grid와 Record에서 같은 변경 초안을 편집하고 검토합니다. 테이블별 열 배치는 같은 연결·스키마에서 다시 열 때 복원됩니다. 읽기 전용 테이블 행의 **Related Rows**는 물리 FK의 모든 키 값을 바인딩해 별도 결과를 엽니다.
+- **Open Schema Diagram**에서 실제 FK와 저장 연결의 워크스페이스 가상 FK를 탐색합니다. 노드 위치를 저장하거나 JSON으로 교환하고 PNG로 내보낼 수 있습니다.
+- **Save Schema DDL**에서 테이블·외래 키·지원하는 뷰의 순서를 검토하고 SQL 파일을 저장합니다. 저장 전 현재 정의와 비교하며, 파일 생성 과정에서는 서버 정의를 읽습니다.
 
 테이블 설계와 기존 뷰·프로시저 원문 편집은 검토·명시적 적용 흐름을 제공합니다. 서버 검증에는 DDL 권한이 필요할 수 있습니다. MySQL/MariaDB DDL과 객체 교체에는 비원자적인 단계가 있으므로 표시된 범위·복구 조건·미완료 트랜잭션을 확인하세요. 모호한 결과를 자동 재실행하지 않습니다.
 

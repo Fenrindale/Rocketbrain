@@ -31,12 +31,14 @@ class TableEditor {
     const context = this.contexts.get(id); this.contexts.delete(id);
     if (context?.modelId) { try { context.db.releaseTableSnapshot({ sessionId: context.sessionId, modelId: context.modelId }); } catch { /* Disposed connection. */ } }
   }
-  async open({ table, sessionId, sql }) {
+  async open({ table, sessionId, sql, filters = [] }) {
     const current = this.connection();
     if (!current.mysql || !this.trusted()) throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');
     const session = current.db.getSessionState(sessionId);
-    const id = this.results.begin(sql, `${current.label} · ${sessionId} · ${table}`, { sessionId, readOnly: session.readOnly });
-    const context = { db: current.db, epoch: current.epoch, sessionId, table, query: { page: 0, pageSize: 200, sort: [], filters: [] } };
+    const id = this.results.begin(sql, `${current.label} · ${sessionId} · ${table}`, {
+      sessionId, readOnly: session.readOnly, tableLayoutConnection: current.tableLayoutConnection, table
+    });
+    const context = { db: current.db, epoch: current.epoch, sessionId, table, query: { page: 0, pageSize: 200, sort: [], filters } };
     this.contexts.set(id, context);
     for (const key of this.contexts.keys()) if (!this.results.history.some(record => record.id === key)) this.forget(key);
     try {
@@ -45,10 +47,32 @@ class TableEditor {
         const result = await context.db.previewTable(table, { sessionId, ...context.query });
         context.query = result.edit?.query || context.query;
         this._retain(context, result); this.results.finish(id, result);
+        if (filters.length && result.browse?.sql) this.results.editState(id, { sql: result.browse.sql });
       });
     } catch (error) { this.results.finish(id, undefined, error.message, error.state); }
     finally { this.onStatus(); }
     return id;
+  }
+  relatedSnapshot(id, { rowId, modelId } = {}) {
+    const context = this._context(id);
+    const record = this._record(id);
+    const result = record.result;
+    const index = result?.edit?.rowIds?.indexOf(rowId) ?? -1;
+    const validate = () => {
+      if (this._context(id) !== context || this._record(id) !== record || record.result !== result ||
+          index < 0 || !modelId || context.modelId !== modelId || result?.edit?.modelId !== modelId ||
+          record.state !== 'done' || record.closing || record.hasDraft || record.review || record.editBusy || !record.readOnly) {
+        throw Error('Choose a current saved row from a read-only table preview without local drafts.');
+      }
+      const session = context.db.getSessionState(context.sessionId);
+      if (!session.readOnly || !session.autocommit || session.inTransaction || !session.connected ||
+          session.outcomeUnknown || session.needsReconnect || session.connectionId !== result.state?.connectionId) {
+        throw Error('Resolve the console session state before following a relation.');
+      }
+    };
+    validate();
+    return { db:context.db, sessionId:context.sessionId, table:context.table,
+      columns:[...result.columns], values:[...result.rows[index]], validate };
   }
   async _load(id, context, message, query = context.query) {
     const result = await context.db.previewTable(context.table, { sessionId: context.sessionId, ...query });

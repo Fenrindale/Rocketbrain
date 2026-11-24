@@ -2,8 +2,14 @@
 const crypto = require('node:crypto');
 const { spreadsheetText } = require('./sql');
 const { createResultExport } = require('./db/result-export');
+const { createResultLayouts, resultTableKey } = require('./db/result-layouts');
 class ResultsView {
-  constructor(vscode, context, { editAction, resultClosed } = {}) { this.vscode = vscode; this.context = context; this.history = []; this.view = null; this.sequence = 0; this.editAction = editAction; this.resultClosed = resultClosed; }
+  constructor(vscode, context, { editAction, relatedAction, resultClosed } = {}) {
+    this.vscode = vscode; this.context = context; this.history = []; this.view = null; this.sequence = 0;
+    this.editAction = editAction; this.relatedAction = relatedAction; this.resultClosed = resultClosed;
+    this.layouts = createResultLayouts(context.workspaceState);
+    this.layoutKeys = new WeakMap();
+  }
   resolveWebviewView(view) {
     this.view = view;
     const v = this.vscode, root = v.Uri.joinPath(this.context.extensionUri, 'dist');
@@ -49,6 +55,10 @@ class ResultsView {
         else this.editState(record.id,{editResponseId:msg.requestId});
       } else if (['enableEdit', 'reviewChanges', 'applyChanges', 'commitChanges', 'rollbackChanges', 'reloadTable', 'browseTable', 'restoreBrowsing','inspectBulk','inspectXlsxSheet','prepareBulk', 'invalidateReview', 'draftChanged'].includes(msg.type)) {
         if (this.editAction) await this.editAction(record.id, msg);
+      } else if (msg.type === 'saveLayout') {
+        await this.saveLayout(record.id, msg.modelId, msg.columns);
+      } else if (msg.type === 'openRelatedRows') {
+        await this.relatedAction?.(record.id, { modelId:msg.modelId, rowId:msg.rowId });
       } else if (msg.type === 'export') {
         const result = record.result;
         const { data, label, extension } = this.exportSnapshot(record.id, msg.format, msg.destination);
@@ -68,13 +78,15 @@ class ResultsView {
     this.send();
   }
   async show() { await this.vscode.commands.executeCommand('rocketbrain.results.focus'); this.view?.show(true); }
-  begin(sql, source, { readOnly = true, sessionId } = {}) {
+  begin(sql, source, { readOnly = true, sessionId, tableLayoutConnection, table } = {}) {
     while (this.history.length >= 8) {
       const removable = this.history.findIndex(record => !this.pinned(record));
       if (removable < 0) throw new Error('All eight result tabs contain active editing, running work or unresolved outcomes. Finish the work or explicitly close a result before opening another.');
       const [removed] = this.history.splice(removable, 1); this.resultClosed?.(removed.id);
     }
     const record = { id: ++this.sequence, sql: sql.slice(0, 4000), source, state: 'running', readOnly, sessionId };
+    const key = resultTableKey(tableLayoutConnection, table);
+    if (key) this.layoutKeys.set(record, { key, table });
     this.history.push(record); this.send(); return record.id;
   }
   pinned(record) { return Boolean(record.state === 'running' || record.editBusy || record.hasDraft || record.review || record.result?.edit && !record.readOnly || record.sessionState?.outcomeUnknown); }
@@ -87,6 +99,21 @@ class ResultsView {
     if (!this.exportable(record)) throw Error('Select a completed result and apply or discard drafts before exporting.');
     return createResultExport(record.result, format, destination);
   }
+  layoutKey(record) {
+    if (this.vscode.workspace?.isTrusted === false || !this.layouts.available || !record?.result?.edit) return undefined;
+    const layout = this.layoutKeys.get(record);
+    return layout && layout.table === record.result.edit.table ? layout.key : undefined;
+  }
+  savedLayout(id) {
+    const record = this.history.find(item => item.id === id), key = this.layoutKey(record);
+    return key ? structuredClone(this.layouts.read(key)) : undefined;
+  }
+  async saveLayout(id, modelId, columns) {
+    const record = this.history.find(item => item.id === id), key = this.layoutKey(record);
+    if (!key || record.closing || record.result.edit.modelId !== modelId) throw Error('Open the current table preview before saving columns.');
+    await this.layouts.write(key, columns, record.result.columns);
+    this.send();
+  }
   finish(id, result, error, sessionState) {
     const record = this.history.find(h => h.id === id);
     if (record) { record.state = error ? 'error' : 'done'; record.result = result; record.error = error; record.sessionState = sessionState || result?.state; this.send(); }
@@ -95,6 +122,13 @@ class ResultsView {
     const record = this.history.find(item => item.id === id);
     if (record) { Object.assign(record, patch); this.send(); }
   }
-  send() { this.view?.webview.postMessage({ type: 'results', history: this.history }); }
+  send() {
+    if (!this.view) return;
+    const history = this.history.map(record => {
+      const key = this.layoutKey(record);
+      return key ? { ...record, tableLayout: { columns: this.layouts.read(key) || [] } } : record;
+    });
+    this.view.webview.postMessage({ type: 'results', history });
+  }
 }
 module.exports = { ResultsView };

@@ -1,5 +1,5 @@
 {
-  "version": "0.28.0",
+  "version": "0.29.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,41 +30,41 @@
     }
   },
   "summary": {
-    "implemented": 12,
-    "partial": 105,
-    "not-implemented": 77,
+    "implemented": 19,
+    "partial": 106,
+    "not-implemented": 71,
     "host-provided": 13,
-    "unverified": 7,
+    "unverified": 5,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 35.9,
+    "percent": 39.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-014",
-    "IDEA-028",
-    "IDEA-033",
-    "IDEA-049",
-    "DG-028",
-    "DG-049",
-    "DG-053",
+    "IDEA-017",
+    "IDEA-018",
+    "IDEA-023",
+    "DG-025",
+    "DG-066",
     "DG-067",
     "DG-068",
-    "DG-070"
+    "DG-085",
+    "DG-086",
+    "DG-087"
   ],
   "expandedFeatures": [
-    "IDEA-014",
-    "IDEA-028",
-    "IDEA-033",
-    "IDEA-049",
-    "DG-028",
-    "DG-049",
-    "DG-053",
+    "IDEA-017",
+    "IDEA-018",
+    "IDEA-023",
+    "DG-025",
+    "DG-066",
     "DG-067",
     "DG-068",
-    "DG-070"
+    "DG-085",
+    "DG-086",
+    "DG-087"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -473,8 +473,8 @@
       "verification": {
         "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.28.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -556,27 +556,25 @@
       "category": "탐색·구조 분석",
       "feature": "호출 계층",
       "priority": "P1",
-      "status": "unverified",
-      "label": "지원 미확인",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT LSP의 호출 계층 제공 가능성과 자체 전용 UX는 구분한다.",
+      "scope": "Java 소스의 호출자·피호출자를 JDT가 제공하는 호출 계층에서 탐색한다. 방향별 트리, 정확한 호출 위치, 소스 열기와 오버로드 구별을 제공한다.",
       "remaining": [
-        "호출 계층의 실제 제공·동적 호출 한계·탐색 시험이 없다."
+        "실행 시 리플렉션·프록시·동적 디스패치의 실제 흐름은 별도 런타임 분석으로 다룬다."
       ],
       "verification": {
-        "state": "unverified",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
+        "testedScope": "최종 설치본에서 실제 Spring 메서드의 양방향 호출, 공통 호출 위치, int·String 오버로드와 네이티브 호출 트리를 확인했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/navigation-vscode.js",
+          "test/java-navigation-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -587,27 +585,25 @@
       "category": "탐색·구조 분석",
       "feature": "타입·상속 계층",
       "priority": "P1",
-      "status": "unverified",
-      "label": "지원 미확인",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT 엔진을 연결했으나 타입 계층 전용 기능을 완료로 판정하지 않는다.",
+      "scope": "Java 선언의 상위·하위 타입, 인터페이스의 구현과 관련 소스 위치를 JDT 타입 계층에서 탐색한다.",
       "remaining": [
-        "상속·인터페이스 계층의 개별 통합·UI·실기 검증이 필요하다."
+        "Java 외 언어와 생성 코드 계층은 추가 확인이 필요하다."
       ],
       "verification": {
-        "state": "unverified",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
+        "testedScope": "최종 설치본에서 실제 Spring 프로젝트의 JPA 부모·자식과 인터페이스 구현을 양방향으로 확인하고 네이티브 타입 트리를 열었다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/navigation-vscode.js",
+          "test/java-navigation-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -737,25 +733,28 @@
       "category": "탐색·구조 분석",
       "feature": "모듈·패키지 의존성과 순환 분석",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "모듈·패키지 의존성과 순환 분석 도구가 없다.",
+      "scope": "Java 패키지 import, 컴파일된 클래스 참조, Maven·Gradle·JPMS 선언을 각각 분석한다. 각 층에서 방향성 있는 의존 관계와 순환 경로, 확인 가능한 소스 위치를 탐색한다.",
       "remaining": [
-        "빌드/소스 의존 그래프와 순환 원인 탐색이 필요하다."
+        "동적 빌드 설정, 전체 패키지 참조, 외부 바이너리와 Maven 프로필 전반의 의미 분석을 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 Spring 소스와 컴파일 결과에서 각각 2개 연결의 패키지 순환을 확인했다. 도구 검사에서 JPMS 클래스 파일과 Maven·Gradle 선언을 별도로 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/dependency-builds.js",
+          "src/java/dependency-graph.js",
+          "src/java/dependency-workspace.js",
+          "test/java-dependency-graph.test.js",
+          "test/java-navigation-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -903,8 +902,8 @@
       "verification": {
         "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.28.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1079,8 +1078,8 @@
       "verification": {
         "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.28.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1565,8 +1564,8 @@
       "verification": {
         "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.28.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4378,25 +4377,26 @@
       "category": "메타데이터·탐색",
       "feature": "실제 FK 없는 관계 정의",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "사용자 지정 가상 FK 관계 정의가 없다.",
+      "scope": "저장한 데이터 소스의 작업 공간에서 실제 FK가 없는 열 사이의 논리 관계를 만든다. 두 테이블·열 대응과 저장 범위를 검증하고 다이어그램에서 물리 키와 구별한다.",
       "remaining": [
-        "실제 제약과 분리한 관계 저장·탐색·완성이 필요하다."
+        "가상 키를 이용한 SQL 제안·관련 행 탐색은 추가 범위다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 MySQL·MariaDB에서 가상 FK가 같은 프로필의 재연결 뒤 복원되고 다른 연결에 나타나지 않음을 확인했다. 물리 키 중복은 거부했고 서버 DDL과 행을 대조했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/schema-erd.js",
+          "src/db/schema-erd-vscode.js",
+          "test/schema-erd-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4479,8 +4479,8 @@
       "verification": {
         "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.28.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5132,8 +5132,8 @@
       "verification": {
         "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.28.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5253,8 +5253,8 @@
       "verification": {
         "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.28.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5651,25 +5651,29 @@
       "category": "데이터 그리드",
       "feature": "FK 따라 관련 행으로 이동",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "FK를 따라 관련 행으로 이동하는 UI가 없다.",
+      "scope": "Grid·Record의 캡처 행에서 현재 스키마의 물리 FK를 양방향으로 따른다. 복합 키의 순서와 값을 보존하고 새 읽기 전용 콘솔에서 매개변수화된 관련 행을 조회한다.",
       "remaining": [
-        "복합 관계·연결 문맥·조건 조회/뒤로 이동이 필요하다."
+        "다른 스키마, 가상 FK와 지원 밖 타입의 이동, 임의 쿼리 결과의 원본 행 추적을 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "Spring 테이블 부모 1행·자식 2행, 별도 복합 FK 값의 양방향 결합, NULL과 오래된 행·관계 거부를 실제 MySQL·MariaDB에서 검증했다. Chromium에서 원본 행 식별자 전달을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/related-rows.js",
+          "src/database-workbench.js",
+          "src/table-editor.js",
+          "src/ui/results.js",
+          "test/db-related-rows-host.js",
+          "test/results.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5680,28 +5684,27 @@
       "category": "데이터 그리드",
       "feature": "record·tree·text·transpose 보기",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "결과 패널에서 같은 캡처 결과를 Grid·Record·Tree·Text·Transpose로 전환하고 레코드 단위로 탐색한다.",
+      "scope": "Grid·Record·Tree·Text·Transpose로 같은 결과를 표시한다. Grid와 Record는 같은 변경 초안, 행 추가·삭제, NULL 입력과 SQL 검토를 공유한다.",
       "remaining": [
-        "대체 보기에서 직접 편집하고 그리드 초안과 동기화하는 범위가 남는다."
+        "Tree·Text·Transpose는 캡처 결과 확인에 사용한다. 대체 보기의 직접 편집은 추가 범위다."
       ],
       "verification": {
-        "state": "v0.28-installed-coverage",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "동일 소스의 브라우저 검증에서 동일한 캡처 결과 모델로 네 대체 보기를 렌더링하고 Chromium에서 보기 전환·레코드 탐색·결과 텍스트 처리를 확인했다.",
+        "testedScope": "Chromium에서 Grid와 Record 사이의 양방향 변경 반영·보기 전환·검토 입력을 확인했다. 실제 MySQL·MariaDB에서는 검토·Apply·Rollback과 원본 행 보존을 확인했다.",
         "publicEvidence": [
-          "src/results.js",
           "src/ui/results.js",
-          "src/ui/results.css",
+          "src/results.js",
           "test/results.test.js",
-          "test/db-results-v28-host.js"
+          "test/db-results-v29-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5712,28 +5715,25 @@
       "category": "데이터 그리드",
       "feature": "컬럼 고정·숨김·순서·폭 조절",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "결과 탭의 열 고정·숨김·재정렬·너비 변경을 제공한다. 열 배치는 원본 데이터·내보내기 열 순서와 독립적이다.",
-      "remaining": [
-        "결과를 닫고 다시 열었을 때 테이블별 레이아웃 저장·복원을 확장한다."
-      ],
+      "scope": "열 고정·숨김·순서·너비를 연결·스키마·테이블 단위로 저장하고 새 결과에서 복원한다. 유지된 열 이름의 배치를 복원하고 새 열에는 기본값을 사용한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.28-installed-coverage",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "동일 소스의 브라우저 검증에서 실제 결과 Webview에서 열 고정 위치, 너비, 숨김·순서를 확인하고 원래 순서대로 전체 열을 내보냈다.",
+        "testedScope": "실제 MySQL·MariaDB에서 테이블 다시 열기·재연결·초기화와 다른 테이블의 설정 분리를 확인했다. Chromium 및 상태 저장소 재생성 검사에서도 복원됐다.",
         "publicEvidence": [
-          "src/results.js",
+          "src/db/result-layouts.js",
           "src/ui/results.js",
-          "src/ui/results.css",
-          "test/results.test.js",
-          "test/db-results-v28-host.js"
+          "test/result-layouts.test.js",
+          "test/db-results-v29-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5784,8 +5784,8 @@
       "verification": {
         "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.28.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6230,25 +6230,27 @@
       "category": "오프라인 schema·버전 관리",
       "feature": "DB schema→정렬된 DDL 파일·VCS",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "DB 구조를 정렬된 DDL 파일로 추출·VCS 동기화하지 않는다.",
+      "scope": "접근 가능한 MySQL·MariaDB 테이블과 지원 뷰를 읽어 테이블·FK·의존 뷰 순서의 재현 가능한 SQL 파일을 저장한다. 변하는 카운터를 정규화하며 저장 전 정의를 다시 읽는다.",
       "remaining": [
-        "안정적 DDL 생성·변경 검토·버전 관리가 필요하다."
+        "루틴·트리거, 외부 참조, 복잡한 뷰와 전체 SQL 문법의 내보내기를 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "최종 설치본에서 실제 두 엔진의 SQL 파일을 대조하고 FK·의존 뷰 순서를 확인했다. 테스트용 재생성의 열 문자셋·정렬 규칙과 FK 동작을 대조했으며 바뀐 정의의 저장을 거부했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/schema-ddl-export.js",
+          "src/db/schema-ddl-export-vscode.js",
+          "test/schema-ddl-export.test.js",
+          "test/schema-ddl-export-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6259,25 +6261,27 @@
       "category": "ERD·모델",
       "feature": "live schema ERD 생성·관계 탐색",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "live schema ERD·관계 탐색 화면이 없다.",
+      "scope": "활성 MySQL·MariaDB 스키마의 ERD를 열고 테이블, 키, 관계와 인접 테이블을 탐색한다. 접근 가능한 범위와 복합 FK 순서를 표시한다.",
       "remaining": [
-        "실제/가상 FK·레이아웃·객체 이동이 필요하다."
+        "대형 스키마, 여러 스키마 관계와 서버의 추가 객체 계층을 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 두 서버의 메타데이터를 사용해 복합 FK와 두 PK 열, 시작 테이블의 인접 탐색, 읽기 범위를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/schema-erd.js",
+          "src/db/schema-erd-view.js",
+          "test/schema-erd-ui.test.js",
+          "test/schema-erd-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6288,25 +6292,25 @@
       "category": "ERD·모델",
       "feature": "diagram 출력·레이아웃 보존",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "diagram 출력·레이아웃 저장이 없다.",
-      "remaining": [
-        "ERD 모델과 export·프로젝트별 위치 보존이 필요하다."
-      ],
+      "scope": "스키마 ERD의 자동 배치, 위치 편집·저장, JSON 배치 가져오기·내보내기, 정적 PNG 내보내기를 제공한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.29-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "Chromium에서 노드 이동, 관계 탐색과 PNG를 확인했다. 실제 두 DB에 연결한 VS Code에서 배치 JSON 왕복과 재연결 뒤 위치 복원, 만료된 다이어그램 저장 거부를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/schema-erd-vscode.js",
+          "src/db/schema-erd-view.js",
+          "test/schema-erd-ui.test.js",
+          "test/schema-erd-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6575,68 +6579,78 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "a82af21ba96c74928a04064bd9710962eb4c7eef9e84414af214d059f0ef9cde",
-    "sourceManifestSha256": "cbc9fccf6ec0a9c4887208f8d9e37d4d51d4edad54b05fcb14831242ca00d16a",
+    "vsixSha256": "715949756b02a83098e088284739f81c4ae73099e2926b3a507cffe44173b132",
+    "sourceManifestSha256": "b95ab65fa85fa49a556c5339652491adf882643fae9c217e97a87ce6fa724f1e",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 2
+        "featureGroups": 5
       },
       {
         "engine": "mariadb",
-        "featureGroups": 2
+        "featureGroups": 5
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-014",
+      "id": "IDEA-017",
+      "before": "unverified",
+      "after": "implemented"
+    },
+    {
+      "id": "IDEA-018",
+      "before": "unverified",
+      "after": "implemented"
+    },
+    {
+      "id": "IDEA-023",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-049",
+      "id": "DG-025",
       "before": "not-implemented",
       "after": "implemented"
     },
     {
-      "id": "DG-028",
-      "before": "not-implemented",
-      "after": "partial"
-    },
-    {
-      "id": "DG-049",
-      "before": "not-implemented",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-053",
+      "id": "DG-066",
       "before": "not-implemented",
       "after": "partial"
     },
     {
       "id": "DG-067",
-      "before": "not-implemented",
-      "after": "partial"
+      "before": "partial",
+      "after": "implemented"
     },
     {
       "id": "DG-068",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-085",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "DG-070",
+      "id": "DG-086",
+      "before": "not-implemented",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-087",
       "before": "not-implemented",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.1",
-    "tests": 1091,
-    "pass": 1042,
+    "tests": 1115,
+    "pass": 1064,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 49,
+    "skipped": 51,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

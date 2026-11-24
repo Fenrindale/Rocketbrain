@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.28.0",
+  "version": "0.29.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -51,9 +51,14 @@
       { "command": "rocketbrain.java.newFileFromTemplate", "title": "New Java File from Template", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.openScratch", "title": "New JShell Scratch", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.runScratch", "title": "Run JShell Scratch", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.dependencyGraph", "title": "Inspect Java Dependencies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.callHierarchy", "title": "Explore Java Call Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.typeHierarchy", "title": "Explore Java Type Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.setTransactionIsolation", "title": "Set SQL Session Isolation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.sql.saveQuery", "title": "Save SQL Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.schema.diagram", "title": "Open Schema Diagram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.schema.exportDdl", "title": "Save Schema DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       {
         "command": "rocketbrain.openConsole",
         "title": "Open SQL Console",
@@ -688,6 +693,18 @@
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "rocketbrain.java.callHierarchy",
+          "when": "editorLangId == java && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.java.typeHierarchy",
+          "when": "editorLangId == java && isWorkspaceTrusted",
+          "group": "navigation"
+        }
+      ],
       "explorer/context": [
         {
           "command": "rocketbrain.java.newFileFromTemplate",
@@ -696,6 +713,16 @@
         }
       ],
       "view/title": [
+        {
+          "command": "rocketbrain.schema.exportDdl",
+          "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "schema"
+        },
+        {
+          "command": "rocketbrain.schema.diagram",
+          "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "schema"
+        },
         {
           "command": "rocketbrain.searchEverywhere",
           "when": "view == rocketbrain.project",
@@ -835,6 +862,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "rocketbrain.schema.exportDdl",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "schema"
+        },
+        {
+          "command": "rocketbrain.schema.diagram",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "schema"
+        },
         {
           "command": "rocketbrain.schema.renameTable",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table",

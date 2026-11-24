@@ -1,25 +1,25 @@
 {
-  "version": "0.28.0",
-  "verifiedAt": "2026-11-24T15:19:52.829Z",
+  "version": "0.29.0",
+  "verifiedAt": "2026-11-24T15:47:39.198Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.28.0.vsix",
-    "bytes": 1586920,
-    "sha256": "a82af21ba96c74928a04064bd9710962eb4c7eef9e84414af214d059f0ef9cde",
+    "name": "rocketbrain-0.29.0.vsix",
+    "bytes": 1624975,
+    "sha256": "715949756b02a83098e088284739f81c4ae73099e2926b3a507cffe44173b132",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1022,
-    "inputVectorSha256": "cbc9fccf6ec0a9c4887208f8d9e37d4d51d4edad54b05fcb14831242ca00d16a",
+    "frozenPublicInputs": 1045,
+    "inputVectorSha256": "b95ab65fa85fa49a556c5339652491adf882643fae9c217e97a87ce6fa724f1e",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1091,
-    "pass": 1042,
+    "tests": 1115,
+    "pass": 1064,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 49,
+    "skipped": 51,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,20 +29,33 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
+      "groupCount": 5,
       "groups": [
         {
-          "group": "state",
-          "checks": 1,
-          "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 1
+          "group": "related",
+          "checks": 1
         },
         {
-          "group": "workbench",
-          "checks": 4,
-          "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 0
+          "group": "erd",
+          "checks": 1
+        },
+        {
+          "group": "results",
+          "checks": 1
+        },
+        {
+          "group": "ddl",
+          "checks": 1
+        },
+        {
+          "group": "java",
+          "checks": 1
         }
-      ]
+      ],
+      "observations": {
+        "explorerRefreshErrors": 0,
+        "unresponsiveHostNotices": 0
+      }
     },
     {
       "engine": "mariadb",
@@ -50,107 +63,180 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
+      "groupCount": 5,
       "groups": [
         {
-          "group": "state",
-          "checks": 1,
-          "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 1
+          "group": "related",
+          "checks": 1
         },
         {
-          "group": "workbench",
-          "checks": 4,
-          "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 0
+          "group": "erd",
+          "checks": 1
+        },
+        {
+          "group": "results",
+          "checks": 1
+        },
+        {
+          "group": "ddl",
+          "checks": 1
+        },
+        {
+          "group": "java",
+          "checks": 1
         }
-      ]
+      ],
+      "observations": {
+        "explorerRefreshErrors": 0,
+        "unresponsiveHostNotices": 0
+      }
     }
   ],
   "newlyVerified": {
-    "IDEA-014": "사용자 템플릿으로 Spring @Service를 생성하고, 같은 Java 경로의 추가 생성을 거부한 뒤 JDT로 컴파일했다.",
-    "IDEA-028": "JDT 이동, 조건부 쓰기 세 건, 참조 동일성과 NULL을 포함한 Spring 결과 8개, Undo/Redo 및 계산 조건 거부를 확인했다.",
-    "IDEA-033": "JDT 이동, 조건부 쓰기 세 건, 참조 동일성과 NULL을 포함한 Spring 결과 8개, Undo/Redo 및 계산 조건 거부를 확인했다.",
-    "IDEA-049": "JDK 25에서 격리 실행과 프로젝트 클래스 경로 실행을 구분했다. 미저장 스크래치로 새 Spring 클래스와 HTTP/JDBC를 호출하고 저장본을 다시 열었다.",
-    "DG-028": "등록된 VS Code SQL 자동 완성에서 Spring 테이블의 외래 키 결합을 적용하고 실제 결과 2행을 집계했다. 복합 키와 자체 조인을 단위 검증했다.",
-    "DG-049": "네 가지 서버 설정, 다른 콘솔 격리, 현재 트랜잭션과 데이터 초안 보호 및 이전 검토의 설정 변경 거부를 확인했다.",
-    "DG-053": "편집기 선택 SQL, 즐겨찾기와 재열기 후 새 읽기 전용 세션의 Spring 테이블 조회를 확인했다. 연결·개정 불일치와 쓰기 실행을 차단했다.",
-    "DG-067": "동일한 캡처 결과 모델로 네 대체 보기를 렌더링하고 Chromium에서 보기 전환·레코드 탐색·결과 텍스트 처리를 확인했다.",
-    "DG-068": "실제 결과 Webview에서 열 고정 위치, 너비, 숨김·순서를 확인하고 원래 순서대로 전체 열을 내보냈다.",
-    "DG-070": "두 DB의 BIGINT·DECIMAL·JSON·BLOB·BIT·시간·유니코드를 내보냈다. Excel을 다시 읽고 호환 임시 테이블에 생성된 INSERT를 재실행해 값을 대조했다."
+    "IDEA-017": {
+      "scope": "최종 설치본에서 실제 Spring 메서드의 양방향 호출, 공통 호출 위치, int·String 오버로드와 네이티브 호출 트리를 확인했다.",
+      "runtimeGroups": [
+        "java"
+      ]
+    },
+    "IDEA-018": {
+      "scope": "최종 설치본에서 실제 Spring 프로젝트의 JPA 부모·자식과 인터페이스 구현을 양방향으로 확인하고 네이티브 타입 트리를 열었다.",
+      "runtimeGroups": [
+        "java"
+      ]
+    },
+    "IDEA-023": {
+      "scope": "실제 Spring 소스와 컴파일 결과에서 각각 2개 연결의 패키지 순환을 확인했다. 도구 검사에서 JPMS 클래스 파일과 Maven·Gradle 선언을 별도로 확인했다.",
+      "runtimeGroups": [
+        "java"
+      ]
+    },
+    "DG-025": {
+      "scope": "실제 MySQL·MariaDB에서 가상 FK가 같은 프로필의 재연결 뒤 복원되고 다른 연결에 나타나지 않음을 확인했다. 물리 키 중복은 거부했고 서버 DDL과 행을 대조했다.",
+      "runtimeGroups": [
+        "erd"
+      ]
+    },
+    "DG-066": {
+      "scope": "Spring 테이블 부모 1행·자식 2행, 별도 복합 FK 값의 양방향 결합, NULL과 오래된 행·관계 거부를 실제 MySQL·MariaDB에서 검증했다. Chromium에서 원본 행 식별자 전달을 확인했다.",
+      "runtimeGroups": [
+        "related"
+      ]
+    },
+    "DG-067": {
+      "scope": "Chromium에서 Grid와 Record 사이의 양방향 변경 반영·보기 전환·검토 입력을 확인했다. 실제 MySQL·MariaDB에서는 검토·Apply·Rollback과 원본 행 보존을 확인했다.",
+      "runtimeGroups": [
+        "results"
+      ]
+    },
+    "DG-068": {
+      "scope": "실제 MySQL·MariaDB에서 테이블 다시 열기·재연결·초기화와 다른 테이블의 설정 분리를 확인했다. Chromium 및 상태 저장소 재생성 검사에서도 복원됐다.",
+      "runtimeGroups": [
+        "results"
+      ]
+    },
+    "DG-085": {
+      "scope": "최종 설치본에서 실제 두 엔진의 SQL 파일을 대조하고 FK·의존 뷰 순서를 확인했다. 테스트용 재생성의 열 문자셋·정렬 규칙과 FK 동작을 대조했으며 바뀐 정의의 저장을 거부했다.",
+      "runtimeGroups": [
+        "ddl"
+      ]
+    },
+    "DG-086": {
+      "scope": "실제 두 서버의 메타데이터를 사용해 복합 FK와 두 PK 열, 시작 테이블의 인접 탐색, 읽기 범위를 확인했다.",
+      "runtimeGroups": [
+        "erd"
+      ]
+    },
+    "DG-087": {
+      "scope": "Chromium에서 노드 이동, 관계 탐색과 PNG를 확인했다. 실제 두 DB에 연결한 VS Code에서 배치 JSON 왕복과 재연결 뒤 위치 복원, 만료된 다이어그램 저장 거부를 확인했다.",
+      "runtimeGroups": [
+        "erd"
+      ]
+    }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 140,
+    "sourceCorrespondences": 151,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 12,
-      "partial": 105,
-      "not-implemented": 77,
+      "implemented": 19,
+      "partial": 106,
+      "not-implemented": 71,
       "host-provided": 13,
-      "unverified": 7,
+      "unverified": 5,
       "platform-limited": 2
     },
-    "weightedPoints": 77.5,
-    "previousWeightedPoints": 72,
+    "weightedPoints": 85,
+    "previousWeightedPoints": 77.5,
     "targetWeightedPoints": 108,
-    "referencePercent": 35.9,
+    "referencePercent": 39.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-014",
+        "id": "IDEA-017",
+        "before": "unverified",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-018",
+        "before": "unverified",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-023",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-049",
+        "id": "DG-025",
         "before": "not-implemented",
         "after": "implemented"
       },
       {
-        "id": "DG-028",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-049",
-        "before": "not-implemented",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-053",
+        "id": "DG-066",
         "before": "not-implemented",
         "after": "partial"
       },
       {
         "id": "DG-067",
-        "before": "not-implemented",
-        "after": "partial"
+        "before": "partial",
+        "after": "implemented"
       },
       {
         "id": "DG-068",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-085",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "DG-070",
+        "id": "DG-086",
+        "before": "not-implemented",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-087",
         "before": "not-implemented",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "분기 리팩터링은 확인한 불리언 매개변수와 명시적인 필드 갱신에 적용한다.",
-    "조회 결과의 대체 보기와 열 레이아웃은 현재 결과 탭에서 사용한다.",
-    "통합 실행의 VS Code 탐색기 및 확장 호스트 로그는 각 묶음에 집계했다."
+    "관련 행은 접근 가능한 같은 스키마의 물리 FK와 테이블 캡처의 스칼라 키를 사용한다.",
+    "가상 FK는 저장한 연결에 속하는 로컬 다이어그램 정보다.",
+    "DDL 내보내기는 지원하는 테이블과 정적 뷰를 포함한다."
   ],
   "next": [
-    "Java 모듈·패키지 의존성과 순환 탐색 및 JDT 호출·타입 계층",
-    "실제 DB 스키마 ERD와 배치 저장·내보내기",
-    "다중 JPMS 서비스 모듈의 계약 확대"
+    "캡처한 DB 결과의 차트·정확 집계와 멀티라인·JSON·바이너리 편집",
+    "Java 코드 작성·생성 흐름과 실제 JVM 진단",
+    "저장한 DB 작업의 재사용과 데이터셋 비교"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

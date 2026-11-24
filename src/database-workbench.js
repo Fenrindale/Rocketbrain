@@ -6,17 +6,23 @@ const { ResultsView } = require('./results');
 const { statementAt } = require('./sql');
 const { completeSql } = require('./db/completion');
 const { TableEditor } = require('./table-editor');
+const { relatedRows } = require('./db/related-rows');
+const { tableLayoutConnectionKey } = require('./db/result-layouts');
 
 async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree) {
   const output = vscode.window.createOutputChannel('Rocketbrain');
-  const state = { db: new DatabaseService(), schema: [], metadata:null, profile:null, label: 'Offline demo', mysql: false, running: new Set(), connecting: new Set(), switching: false, disposed: false, candidates: new Set(), epoch: 0 };
+  const state = { db: new DatabaseService(), schema: [], metadata:null, profile:null, tableLayoutConnection:undefined, label: 'Offline demo', mysql: false, running: new Set(), connecting: new Set(), switching: false, disposed: false, candidates: new Set(), epoch: 0 };
   const bindings = new Map();
   const schemaMigrations = new Map();
   const schemaRebuilds=new Map(),streamManagers=new Map(),streamReviews=new Map(),streamTransactions=new Map();
   const connectionEvents = new vscode.EventEmitter();
   let sequence = 0;
   let tableEditor;
-  const project = new ProjectTree(), schemaTree = new SchemaTree(state), results = new ResultsView(vscode, context, { editAction: (id, message) => tableEditor.handle(id, message), resultClosed: id => tableEditor.forget(id) });
+  const project = new ProjectTree(), schemaTree = new SchemaTree(state), results = new ResultsView(vscode, context, {
+    editAction: (id, message) => tableEditor.handle(id, message),
+    relatedAction: chooseRelatedRows,
+    resultClosed: id => tableEditor.forget(id)
+  });
   tableEditor = new TableEditor({ results, connection: () => state, withSession, trusted: () => vscode.workspace.isTrusted, onStatus: () => updateStatus() });
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 30);
   status.command = 'rocketbrain.sessionStatus'; status.show();
@@ -54,7 +60,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   }
   const connectionError=message=>Object.assign(new Error(message),{code:'ROCKETBRAIN_CONNECTION_CONTEXT'});
   function pendingTableDraft(){return results.history.some(record=>tableEditor.contexts.has(record.id)&&(record.hasDraft||record.review||record.bulkDraft||record.editBusy));}
-  async function switchDatabase(next, label, mysql, schema, expectedEpoch = state.epoch,metadata=null,profile=null) {
+  async function switchDatabase(next, label, mysql, schema, expectedEpoch = state.epoch,metadata=null,profile=null,tableLayoutConnection) {
     reconcileStreamTransactions();
     if (state.disposed) throw connectionError('The workspace has closed.');
     if (state.running.size || state.connecting.size || state.switching) throw connectionError('Wait for the running query or database switch to finish.');
@@ -75,6 +81,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       if (state.disposed || (mysql&&!vscode.workspace.isTrusted)) throw connectionError('The workspace closed or trust changed while connecting.');
       const previous = state.db;
       state.epoch++; state.db = next; state.schema = knownSchema; state.metadata=metadata;state.label = label; state.mysql = mysql;state.profile=profile;
+      state.tableLayoutConnection = tableLayoutConnection;
       connectionEvents.fire({ epoch: state.epoch, label: state.label, mysql,metadata });
       bindings.clear();schemaMigrations.clear();schemaRebuilds.clear();streamReviews.clear();streamTransactions.clear(); schemaTree.refresh(); updateStatus();
       await closeDatabaseResources(previous);
@@ -86,7 +93,14 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if (state.running.size || state.connecting.size || state.switching) throw connectionError('Wait for the current database operation first.');
     const expectedEpoch = state.epoch;
     const next = new MysqlService(config); state.candidates.add(next);
-    try { const metadata=await next.metadata();const schema=[...metadata.tables,...metadata.views];const profile=require('./db/connection-security').connectionProfile(config);await switchDatabase(next, profile?profile.name+' · '+config.database:`${config.database} @ ${config.host}`, true, schema, expectedEpoch,metadata,profile); }
+    try {
+      const metadata = await next.metadata();
+      const schema = [...metadata.tables,...metadata.views];
+      const profile = require('./db/connection-security').connectionProfile(config);
+      const layoutConnection = tableLayoutConnectionKey(config, profile);
+      await switchDatabase(next, profile ? profile.name+' · '+config.database : `${config.database} @ ${config.host}`,
+        true, schema, expectedEpoch, metadata, profile, layoutConnection);
+    }
     catch (error) { if (state.db !== next) await next.dispose(); throw error; }
     finally { state.candidates.delete(next); }
   }
@@ -140,6 +154,57 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const document = await vscode.workspace.openTextDocument({ language: 'sql', content: text });
     const editor = await vscode.window.showTextDocument(document, { preview: false });
     await bind(document); return editor;
+  }
+  async function inspectRelatedRows(id, selection) {
+    const snapshot = tableEditor.relatedSnapshot(id, selection);
+    return withSession(snapshot.sessionId, async () => {
+      const catalog = await snapshot.db.metadata();
+      snapshot.validate();
+      return relatedRows(catalog, snapshot.table, snapshot.columns, snapshot.values)
+        .map(({ key, label, table, direction, columns }) => ({ key, label, table, direction, columns }));
+    });
+  }
+  async function openRelatedRows(id, selection, key) {
+    if (typeof key !== 'string' || key.length > 16384) throw Error('Choose a visible foreign key relation.');
+    const snapshot = tableEditor.relatedSnapshot(id, selection);
+    return withSession(snapshot.sessionId, async () => {
+      const catalog = await snapshot.db.metadata();
+      snapshot.validate();
+      const match = relatedRows(catalog, snapshot.table, snapshot.columns, snapshot.values).find(item => item.key === key);
+      if (!match) throw Error('The foreign key or visible row changed. Choose the relation again.');
+      const document = await vscode.workspace.openTextDocument({
+        language: 'sql', content: '-- Related rows are fetched by the Results view with bound key values.\n'
+      });
+      const binding = await bind(document);
+      let opened;
+      try {
+        assertBinding(document, binding);
+        snapshot.validate();
+        opened = await tableEditor.open({ table:match.table, sessionId:binding.id,
+          sql:document.getText(), filters:match.filters });
+      } catch (error) {
+        if (bindings.get(document.uri.toString()) === binding && snapshot.db === state.db) {
+          await state.db.closeSession(binding.id);
+          bindings.delete(document.uri.toString());
+        }
+        throw error;
+      }
+      await vscode.window.showTextDocument(document, { preview:false, preserveFocus:true });
+      return opened;
+    });
+  }
+  async function chooseRelatedRows(id, selection) {
+    const matches = await inspectRelatedRows(id, selection);
+    if (!matches.length) {
+      await vscode.window.showInformationMessage('This row has no navigable foreign keys in the current schema.');
+      return;
+    }
+    const options = matches.map(item => ({ label:item.label,
+      description:item.direction === 'referenced' ? 'Referenced rows' : 'Referencing rows',
+      detail:item.columns.map(([from,to]) => from + ' → ' + to).join(', '),
+      key:item.key }));
+    const chosen = await vscode.window.showQuickPick(options, { title:'Open Related Rows' });
+    if (chosen) return openRelatedRows(id, selection, chosen.key);
   }
   async function runSql(sql, document = currentDocument(), { connectionEpoch, saved = false } = {}) {
     if (!sql.trim()) return;
@@ -317,6 +382,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     queryDemo: sql => state.mysql ? Promise.reject(new Error('Demo checks require the demo connection.')) : state.db.query(sql),
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
     exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination),
+    savedResultLayout: id => results.savedLayout(id),
+    saveResultLayout: (id, modelId, columns) => results.saveLayout(id, modelId, columns),
+    inspectRelatedRows, openRelatedRows,
     onDidChangeDatabase: connectionEvents.event,
     async withExclusiveSchemaWork(action){
       reconcileStreamTransactions();

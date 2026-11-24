@@ -70,6 +70,11 @@ th.row-number { z-index: 4; }
 .result-fields dt { max-width: clamp(100px, 35vw, 220px); font-weight: 600; }
 .result-fields dd { white-space: pre-wrap; }
 .result-fields dd.null { color: var(--vscode-descriptionForeground); font-style: italic; }
+.result-fields dd.editable { cursor: text; }
+.result-fields dd.editable:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.result-fields dd.modified { background: var(--vscode-diffEditor-insertedTextBackground); box-shadow: inset 0 -2px var(--vscode-charts-yellow); }
+.result-record-actions { display: flex; gap: 6px; margin: 8px 14px 0; }
+.result-record-deleted .result-fields { opacity: .65; text-decoration: line-through; }
 .result-tree-row { border-bottom: 1px solid var(--vscode-panel-border); padding: 5px 14px; }
 .result-tree-row summary { width: fit-content; cursor: pointer; }
 .result-plain-text { margin: 8px 14px; font: 12px/1.5 var(--vscode-editor-font-family); tab-size: 4; }

@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { ResultsView } = require('../src/results');
+const { tableLayoutConnectionKey } = require('../src/db/result-layouts');
 
 function browserRuntime() {
   const candidates = [
@@ -80,14 +81,26 @@ test('actual result Webview renders database values as text and routes history/c
   let receiveMessage;
   let lastPost = Promise.resolve();
   let clipboard = '';
+  let relatedSelection;
   const writes = [];
+  const memories = new Map();
   const vscode = {
     Uri: { joinPath: (base, ...parts) => path.posix.join(base, ...parts), file: value => value },
     env: { clipboard: { writeText: async text => { clipboard = text; } } },
     window: { showSaveDialog: async options => '/virtual/' + options.defaultUri, showErrorMessage: message => { throw new Error(message); } },
     workspace: { fs: { writeFile: async (uri, data) => { writes.push({ uri, data, text: data.toString('utf8') }); } } },
   };
-  const host = new ResultsView(vscode, { extensionUri: '/virtual/rocketbrain', subscriptions: [] });
+  const host = new ResultsView(vscode, {
+    extensionUri: '/virtual/rocketbrain', subscriptions: [], workspaceState: {
+      get: key => memories.get(key),
+      async update(key, value) { memories.set(key, structuredClone(value)); }
+    }
+  }, { relatedAction: (id, selection) => { relatedSelection = { id, ...selection }; }, editAction: (id, message) => {
+    if (message.type === 'draftChanged') host.editState(id, { hasDraft: message.count > 0, draftRevision: message.draftRevision, review: undefined });
+    if (message.type === 'reviewChanges') host.editState(id, {
+      editResponseId: message.requestId, review: { statements: [{ sql: 'UPDATE fixture SET note = ?', parameters: [null] }] }
+    });
+  } });
   const fakeView = {
     webview: {
       cspSource: 'https://rocketbrain.test',
@@ -285,6 +298,103 @@ test('actual result Webview renders database values as text and routes history/c
     await lastPost;
     assert.equal(await page.locator('#tabs button').count(), 8);
     assert.equal(await page.getByRole('button', { name: `Result ${firstId}`, exact: true }).count(), 0);
+  });
+
+  await t.test('Grid and Record send only the captured row identity when following a foreign key', async () => {
+    const id = host.begin('SELECT id FROM employees', 'Read-only table');
+    host.finish(id,{columns:['id'],rows:[[1]],rowCount:1,durationMs:1,
+      state:{readOnly:true,autocommit:true},edit:{
+        modelId:'captured-relation',table:'employees',rowIds:['saved-employee'],columns:[{name:'id',type:'int'}]
+      }});
+    await lastPost;
+    for (const mode of ['grid','record']) {
+      await page.locator('#result-view').selectOption(mode);
+      await page.getByRole('button',{name:'Open related rows for row 1'}).click();
+      await page.waitForFunction(value => window.__completed.filter(message => message.type==='openRelatedRows' && message.id===value.id).length >= value.count,
+        {id,count:mode==='grid'?1:2});
+      assert.deepEqual(relatedSelection,{id,modelId:'captured-relation',rowId:'saved-employee'});
+    }
+    await page.locator('#close-result').click();
+    await page.waitForFunction(value => window.__completed.some(message => message.type==='closeResult' && message.id===value),id);
+    await lastPost;
+  });
+
+  await t.test('Grid and Record share staged cells and review; a named table retains display settings after reopening', async () => {
+    const connection = tableLayoutConnectionKey({ host: 'localhost', database: 'fixture', user: 'test' });
+    const table = 'records';
+    const allColumns = [
+      { name: 'id', type: 'int', primaryKey: true, editable: false, insertable: false, nullable: false },
+      { name: 'label', type: 'varchar(100)', editable: true, insertable: true, nullable: false },
+      { name: 'note', type: 'varchar(100)', editable: true, insertable: true, nullable: true }
+    ];
+    const sample = {
+      columns: allColumns.map(column => column.name), rows: [[1, 'First', 'original'], [2, 'Second', null]],
+      rowCount: 2, durationMs: 1, edit: { modelId: 'model-a', table, canEdit: true, columns: allColumns, rowIds: ['a', 'b'] }
+    };
+    const id = host.begin('SELECT * FROM records', 'fixture', { tableLayoutConnection: connection, table, readOnly: false });
+    host.finish(id, sample);
+    await lastPost;
+
+    await page.locator('#result-view').selectOption('record');
+    assert.equal(await page.getByRole('button', { name: 'Edit row a column id' }).count(), 0);
+    await page.getByRole('button', { name: 'Edit row a column label' }).press('Enter');
+    await page.locator('#cell-value').fill('Draft Record');
+    await page.getByRole('button', { name: 'Stage Cell' }).click();
+    assert.equal(await page.locator('.result-record dd.modified').textContent(), 'Draft Record');
+    assert.equal(await page.locator('#result-view option[value=tree]').isDisabled(), true);
+    assert.equal(await page.locator('#result-view option[value=text]').isDisabled(), true);
+    assert.equal(await page.locator('#result-view option[value=transpose]').isDisabled(), true);
+    assert.equal(await page.locator('#export').isDisabled(), true);
+    assert.equal(await page.locator('#copy').isDisabled(), true);
+    await page.locator('#result-view').selectOption('grid');
+    assert.equal(await page.getByRole('button', { name: 'Edit row a column label' }).textContent(), 'Draft Record');
+    await page.getByRole('button', { name: 'Edit row a column note' }).press('F2');
+    await page.locator('#cell-null').check();
+    await page.getByRole('button', { name: 'Stage Cell' }).click();
+    await page.locator('#result-view').selectOption('record');
+    assert.equal(await page.getByRole('button', { name: 'Edit row a column note' }).textContent(), 'NULL');
+    await page.locator('#result-row-next').click();
+    assert.equal(await page.getByRole('button', { name: 'Edit row b column label' }).textContent(), 'Second');
+
+    await page.locator('#add-row').click();
+    assert.match(await page.locator('#result-row-status').textContent(), /New row 1.*local draft/);
+    assert.equal(await page.getByRole('button', { name: 'Edit new row new-1 column label' }).textContent(), 'DEFAULT');
+    await page.getByRole('button', { name: 'Delete new row new-1' }).click();
+    await page.getByRole('button', { name: 'Delete row b' }).click();
+    assert.match(await page.locator('#result-row-status').textContent(), /deletion staged/);
+    await page.getByRole('button', { name: 'Restore row b' }).click();
+    await page.locator('#review').click();
+    await page.locator('#review-panel').waitFor({ state: 'visible' });
+    const review = await page.evaluate(() => window.__sent.find(message => message.type === 'reviewChanges'));
+    assert.deepEqual(review.changes, { updates: [{ rowId: 'a', values: {
+      label: { kind: 'value', text: 'Draft Record' }, note: { kind: 'null' }
+    } }], deletes: [], inserts: [] });
+    await page.locator('#result-view').selectOption('grid');
+    assert.equal(await page.locator('#review-panel').isVisible(), true);
+    await page.locator('#discard').click();
+    await page.waitForFunction(() => !document.getElementById('export').disabled);
+
+    await page.locator('#result-columns').click();
+    await page.getByRole('checkbox', { name: 'Pin column 2 label' }).check();
+    await page.getByRole('checkbox', { name: 'Show column 3 note' }).uncheck();
+    const width = page.getByRole('spinbutton', { name: 'Column 2 width in pixels' });
+    await width.fill('245');
+    await width.press('Tab');
+    await page.waitForFunction(() => window.__completed.some(message =>
+      message.type === 'saveLayout' && message.columns.some(column => column.name === 'label' && column.width === 245)));
+    await lastPost;
+    host.editState(id, { readOnly: true });
+    await lastPost;
+    await page.locator('#close-result').click();
+    await page.getByRole('button', { name: `Result ${id}`, exact: true }).waitFor({ state: 'detached' });
+
+    const reopened = host.begin('SELECT * FROM records', 'fixture, renamed connection', { tableLayoutConnection: connection, table });
+    const reordered = ['extra', 'note', 'id', 'label'];
+    host.finish(reopened, { ...sample, columns: reordered, rows: [['new', 'original', 1, 'First']],
+      edit: { ...sample.edit, modelId: 'model-b', rowIds: ['other'], columns: reordered.map(name => allColumns.find(column => column.name === name) || { name, type: 'text' }) } });
+    await lastPost;
+    assert.deepEqual(await page.locator('thead th').allTextContents(), ['#', 'label', 'id', 'extra']);
+    assert.equal(await page.locator('th.result-pinned').evaluate(cell => cell.getBoundingClientRect().width), 245);
   });
 
   assert.deepEqual(pageErrors, []);
