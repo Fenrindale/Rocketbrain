@@ -25,15 +25,24 @@ function targetDeclarations(source) {
   });
 }
 
+function targetRequest(request = {}) {
+  const { targetUri, targetType, property } = request;
+  if (typeof targetUri !== 'string' || !targetUri.startsWith('file:') || targetUri.length > 4096 ||
+      typeof targetType !== 'string' || targetType.length > 420 || !targetType.includes('.') ||
+      !targetType.split('.').every(validIdentifier) || !validIdentifier(property)) {
+    throw Error('Choose an observed local Java target entity and its Java field name.');
+  }
+  return { targetUri, targetType, property };
+}
+
 function associationRequests(value = []) {
   if (!Array.isArray(value) || value.length > MAX_RELATIONSHIPS) throw Error('Review up to eight owning relationships per generated entity.');
   return value.map(request => {
-    const { foreignKey, targetUri, targetType, property, mode } = request ?? {};
-    if (typeof foreignKey !== 'string' || !foreignKey || foreignKey.length > 64 || typeof targetUri !== 'string' ||
-        !targetUri.startsWith('file:') || targetUri.length > 4096 || typeof targetType !== 'string' || targetType.length > 420 ||
-        !targetType.includes('.') || !targetType.split('.').every(validIdentifier) || !validIdentifier(property) ||
-        !['scalar', 'association'].includes(mode)) throw Error('Choose an observed foreign key, a local Java target entity and its ownership mode.');
-    return { foreignKey, targetUri, targetType, property, mode };
+    const { foreignKey, mode } = request ?? {};
+    if (typeof foreignKey !== 'string' || !foreignKey || foreignKey.length > 64 || !['scalar', 'association'].includes(mode)) {
+      throw Error('Choose an observed foreign key, a local Java target entity and its ownership mode.');
+    }
+    return { foreignKey, ...targetRequest(request), mode };
   });
 }
 
@@ -128,4 +137,5 @@ function planRelationships({ catalog, table, mapping, owner, requests, sources, 
   return { fields: mapping.fields.filter(field => !trackedColumns.has(field.sql)), relations, fingerprint };
 }
 
-module.exports = { MAX_RELATIONSHIPS, associationRequests, planRelationships, targetDeclarations };
+module.exports = { MAX_RELATIONSHIPS, associationRequests, planRelationships, targetDeclarations, targetRequest,
+  exactTarget, sameColumns, jakartaAnnotation };

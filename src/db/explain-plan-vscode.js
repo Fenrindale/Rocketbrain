@@ -2,12 +2,15 @@
 
 const { createHash, randomBytes, randomUUID } = require('node:crypto');
 const { statementAt } = require('../sql');
-const { explanationHtml, comparisonHtml } = require('./explain-plan-view');
-const { comparePlans, validatePlanQuery } = require('./explain-plan');
+const { explanationHtml, comparisonHtml, seriesHtml } = require('./explain-plan-view');
+const { comparePlans, comparablePlans, validatePlanQuery } = require('./explain-plan');
+const { sampleCount, summarizeSeries, compareSeries } = require('./explain-plan-series');
 
 const VISUAL_EXPLAIN = 'rocketbrain.sql.explainVisual';
 const MEASURE_PLAN = 'rocketbrain.sql.measurePlan';
 const COMPARE_PLANS = 'rocketbrain.sql.comparePlans';
+const MEASURE_SERIES = 'rocketbrain.sql.measurePlanSeries';
+const COMPARE_SERIES = 'rocketbrain.sql.comparePlanSeries';
 const MAX_PANELS = 8;
 const hash = text => createHash('sha256').update(text).digest('hex');
 
@@ -25,6 +28,7 @@ function captureSource(document, selection) {
 
 function registerExplainPlans(context, vscode, { database }) {
   const panels = new Map(), comparisons = new Set(), reviews = new Map();
+  const seriesPanels = new Map(), seriesReviews = new Map();
   let disposed = false, opening = false;
 
   function trusted(cancellation) {
@@ -103,14 +107,7 @@ function registerExplainPlans(context, vscode, { database }) {
     trusted(cancellation);
     if (opening) throw Error('Wait for the current visual EXPLAIN capture.');
     if (panels.size >= MAX_PANELS) throw Error('Close a visual EXPLAIN panel before opening another.');
-    const unchanged = () => {
-      trusted(cancellation);
-      if (source.document.isClosed || source.document.version !== source.version) throw Error('The SQL source changed before capture.');
-      const current = database.savedQueryTarget();
-      if (target.connectionEpoch !== current.connectionEpoch || target.key !== current.key) {
-        throw Error('The database connection changed. Review the query again.');
-      }
-    };
+    const unchanged = () => checkCapture(source, target, cancellation);
     opening = true;
     try {
       unchanged();
@@ -149,6 +146,99 @@ function registerExplainPlans(context, vscode, { database }) {
       panel.webview.html = explanationHtml(report, { nonce: randomBytes(24).toString('base64'), source: true });
       return { id, ...structuredClone(report) };
     } finally { opening = false; }
+  }
+
+  function checkCapture(source, target, cancellation) {
+    trusted(cancellation);
+    if (source.document.isClosed || source.document.version !== source.version) throw Error('The SQL source changed before capture.');
+    const current = database.savedQueryTarget();
+    if (target.connectionEpoch !== current.connectionEpoch || target.key !== current.key) {
+      throw Error('The database connection changed. Review the query again.');
+    }
+  }
+
+  function prepareSeries({ document, selection, samples }) {
+    trusted();
+    sampleCount(samples);
+    const source = captureSource(document, selection);
+    validatePlanQuery(source.sql, undefined, { measured: true });
+    const target = database.savedQueryTarget();
+    while (seriesReviews.size >= 4) seriesReviews.delete(seriesReviews.keys().next().value);
+    const id = randomUUID(), expiresAt = Date.now() + 120000;
+    seriesReviews.set(id, { source, target, expiresAt, samples });
+    return { id, expiresAt, samples, destination: target.label, queryPreview:source.sql.trim().slice(0, 180) };
+  }
+
+  async function measureSeries(id, { confirmed, cancellation, onProgress } = {}) {
+    trusted(cancellation);
+    if (confirmed !== true) throw Error('Approve the repeated executions before measuring the series.');
+    const review = seriesReviews.get(id);
+    seriesReviews.delete(id);
+    if (!review || Date.now() >= review.expiresAt) throw Error('The measurement series review expired.');
+    if (opening) throw Error('Wait for the current plan capture.');
+    if (seriesPanels.size >= 4) throw Error('Close a measurement series before capturing another.');
+    const unchanged = () => checkCapture(review.source, review.target, cancellation);
+    const plans = [];
+    opening = true;
+    try {
+      for (let index = 0; index < review.samples; index++) {
+        unchanged();
+        const plan = await database.measureQueryPlan(review.source.sql, { confirmed: true, cancellation, beforeDispatch: unchanged });
+        unchanged();
+        plans.push(plan);
+        await onProgress?.({ completed: plans.length, total: review.samples });
+      }
+      unchanged();
+      const series = summarizeSeries(plans), seriesId = randomUUID();
+      const panel = vscode.window.createWebviewPanel('rocketbrain.planSeries', 'SQL measurement series · ' + series.engine,
+        vscode.ViewColumn.Beside, { enableScripts: false, localResourceRoots: [] });
+      seriesPanels.set(seriesId, { panel, plans, series, target:review.target, source:review.source, capturedAt:new Date().toISOString() });
+      panel.onDidDispose(() => seriesPanels.delete(seriesId));
+      panel.webview.html = seriesHtml(series, plans, randomBytes(24).toString('base64'));
+      return { id:seriesId, ...structuredClone(series) };
+    } finally { opening = false; }
+  }
+
+  function getSample(id, index) {
+    trusted();
+    const plan = Number.isInteger(index) && seriesPanels.get(id)?.plans[index];
+    if (!plan) throw Error('Choose an available sample from an open series.');
+    return structuredClone(plan);
+  }
+
+  function seriesComparison(leftId, rightId) {
+    trusted();
+    const left = seriesPanels.get(leftId), right = seriesPanels.get(rightId);
+    if (!left || !right || left === right || left.target.key !== right.target.key) {
+      throw Error('Choose two open measurement series from the same database connection.');
+    }
+    return compareSeries(left.series, right.series);
+  }
+
+  function showSeriesComparison(leftId, rightId) {
+    if (comparisons.size >= 4) throw Error('Close a plan comparison before opening another.');
+    const result = seriesComparison(leftId, rightId);
+    const panel = vscode.window.createWebviewPanel('rocketbrain.comparePlanSeries', 'Compare SQL measurement series', vscode.ViewColumn.Beside,
+      { enableScripts: false, localResourceRoots: [] });
+    comparisons.add(panel);
+    panel.onDidDispose(() => comparisons.delete(panel));
+    panel.webview.html = seriesHtml(result, null, randomBytes(24).toString('base64'));
+    return result;
+  }
+
+  async function chooseSeriesComparison() {
+    trusted();
+    const choices = [...seriesPanels].map(([id, record]) => ({
+      id, record, label: record.series.totalSamples + ' samples · ' + record.series.database, description: record.capturedAt,
+      detail:record.source.sql.replace(/\s+/g, ' ').slice(0, 150)
+    }));
+    const compatible = (a, b) => a.id !== b.id && a.record.target.key === b.record.target.key && comparablePlans(a.record.series, b.record.series);
+    const possible = choices.filter(item => choices.some(other => compatible(item, other)));
+    if (!possible.length) throw Error('Open two comparable SQL measurement series.');
+    const left = await vscode.window.showQuickPick(possible, { title:'Compare Measurement Series · Baseline' });
+    if (!left) return;
+    const right = await vscode.window.showQuickPick(possible.filter(item => compatible(left, item)), { title:'Compare Measurement Series · Candidate' });
+    if (right) return showSeriesComparison(left.id, right.id);
   }
 
   function comparison(leftId, rightId) {
@@ -211,14 +301,40 @@ function registerExplainPlans(context, vscode, { database }) {
   }), vscode.commands.registerCommand(COMPARE_PLANS, async () => {
     try { return await chooseComparison(); }
     catch (error) { await vscode.window.showErrorMessage(error.message); }
+  }), vscode.commands.registerCommand(MEASURE_SERIES, async () => {
+    let review;
+    try {
+      const editor = vscode.window.activeTextEditor, document = editor?.document, selection = editor?.selection;
+      const version = document?.version;
+      const count = await vscode.window.showQuickPick(['2', '3', '4', '5'], { title:'Number of read-only executions' });
+      if (!count) return;
+      if (document?.version !== version || vscode.window.activeTextEditor !== editor) throw Error('The SQL editor changed. Review the query again.');
+      review = prepareSeries({ document, selection, samples:Number(count) });
+      const action = 'Run ' + count + ' measurements';
+      const approved = await vscode.window.showWarningMessage(action + ' on ' + review.destination + '?',
+        { modal:true, detail:review.queryPreview + '\n\nRuns the selected SQL sequentially in separate read-only sessions.' }, action);
+      if (approved !== action) return;
+      return await vscode.window.withProgress({ location:vscode.ProgressLocation.Notification, title:'Measure SQL plan series', cancellable:true },
+        (progress, cancellation) => measureSeries(review.id, { confirmed:true, cancellation,
+          onProgress:({ completed,total })=>progress.report({ increment:100/total, message:completed+' / '+total }) }));
+    } catch (error) { await vscode.window.showErrorMessage(error.message); }
+    finally { if (review) seriesReviews.delete(review.id); }
+  }), vscode.commands.registerCommand(COMPARE_SERIES, async () => {
+    try { return await chooseSeriesComparison(); }
+    catch (error) { await vscode.window.showErrorMessage(error.message); }
   }));
   return { open, revealSource, loadTree, prepareMeasurement, measure, comparison, showComparison, close(id) { panels.get(id)?.panel.dispose(); },
+    prepareSeries, measureSeries, getSample, seriesComparison, showSeriesComparison,
+    closeSeries(id) { seriesPanels.get(id)?.panel.dispose(); },
     dispose() {
       disposed = true;
       reviews.clear();
+      seriesReviews.clear();
       for (const { panel } of panels.values()) panel.dispose();
+      for (const { panel } of seriesPanels.values()) panel.dispose();
       for (const panel of comparisons) panel.dispose();
       panels.clear();
+      seriesPanels.clear();
       comparisons.clear();
     } };
 }

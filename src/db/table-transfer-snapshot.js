@@ -19,15 +19,16 @@ function sourceQuery(schema, table, columns, keys) {
   const exceeds = '(' + [...sizes, '(' + counts.join(' + ') + ') > ' + streamLimits.wireRowBytes].join(' OR ') + ')';
   let flag = '__rb_source_overflow';
   while (columns.some(column => column.name.toLowerCase() === flag)) flag += '_';
-  const projection = columns.map(column => 'CASE WHEN ' + exceeds + ' THEN NULL ELSE ' + field(column.name) + ' END AS ' + quote(column.name));
+  const value = column => /^bit(?:\(|$)/i.test(column.type) ? 'CAST(CAST(' + field(column.name) + ' AS UNSIGNED) AS CHAR)' : field(column.name);
+  const projection = columns.map(column => 'CASE WHEN ' + exceeds + ' THEN NULL ELSE ' + value(column) + ' END AS ' + quote(column.name));
   const sql = 'SELECT ' + [...projection, 'CASE WHEN ' + exceeds + ' THEN 1 ELSE 0 END AS ' + quote(flag)].join(', ') +
     ' FROM ' + quote(schema, true) + '.' + quote(table, true) + ' AS rb_source ORDER BY ' + keys.map(key => field(key.name)).join(', ');
   return { sql, headers: [...columns.map(column => column.name), flag] };
 }
 
-async function readSnapshot({ db, session, schema, table, columns, keys, cancellation, onProgress, check, serializeRow, verify }) {
+async function readSnapshot({ db, session, schema, table, columns, keys, cancellation, onProgress, check, serializeRow, verify, directory }) {
   const { sql, headers } = sourceQuery(schema, table, columns, keys);
-  const spool = await createRowSpool({ columns, maxRows: streamLimits.rows, maxRowBytes: streamLimits.rowBytes, maxBytes: streamLimits.bytes });
+  const spool = await createRowSpool({ columns, maxRows: streamLimits.rows, maxRowBytes: streamLimits.rowBytes, maxBytes: streamLimits.bytes, directory });
   let stream, active, retained = false, report, reportedError, stopped;
   const close = error => {
     stopped ||= error;

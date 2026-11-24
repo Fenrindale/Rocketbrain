@@ -1,9 +1,12 @@
 'use strict';
 
 const { createTableTransfer } = require('./table-transfer');
+const { createTransferRecovery } = require('./table-transfer-recovery');
 
 function registerTableTransfer(context, vscode, { database }) {
-  const core = createTableTransfer(database);
+  const recovery = createTransferRecovery({ storagePath: context.storageUri?.fsPath, secrets: context.secrets,
+    isTrusted: () => !closed && vscode.workspace.isTrusted });
+  const core = createTableTransfer(database, { recovery });
   const subscriptions = [], documents = new Map();
   let closed = false;
 
@@ -42,7 +45,8 @@ function registerTableTransfer(context, vscode, { database }) {
       '-- Rows ' + plan.rowCount + ' · Source SHA-256 ' + plan.source.sourceHash,
       '-- Column mapping ' + JSON.stringify(plan.mapping),
       '-- Commit or roll back the destination transaction after staging.',
-      plan.source.mode === 'stream' ? '-- Source rows use an encrypted temporary snapshot. Destination batches use bound parameters.' :
+      plan.source.recoveryState ? '-- Source rows use a saved encrypted snapshot. A resumed copy starts a fresh destination transaction.' :
+        plan.source.mode === 'stream' ? '-- Source rows use an encrypted temporary snapshot. Destination batches use bound parameters.' :
         '-- The source rows are kept in memory. The statement uses bound parameters.',
       '',
       plan.sql + ';'
@@ -58,13 +62,15 @@ function registerTableTransfer(context, vscode, { database }) {
     if (!selected) return;
     const choice = await vscode.window.showQuickPick([
       { label: 'Small Snapshot', description: 'Retain up to 500 rows in memory', mode: 'captured' },
-      { label: 'Stream Large Table', description: 'Retain up to 1,000,000 rows in an encrypted temporary snapshot of at most 1 GiB', mode: 'stream' }
+      { label: 'Stream Large Table', description: 'Retain up to 1,000,000 rows in an encrypted temporary snapshot of at most 1 GiB', mode: 'stream' },
+      ...(core.canRecover ? [{ label: 'Stream and Save for Resume', description: 'Keep the encrypted snapshot in this workspace for up to 24 hours',
+        mode: 'stream', recoverable: true }] : [])
     ], { title: 'Capture Source Rows' });
     if (!choice) return;
     trusted();
     const result = await vscode.window.withProgress({
       location: vscode.ProgressLocation.Notification, title: 'Capturing committed source rows', cancellable: true
-    }, (progress, cancellation) => core.capture({ table: selected, mode: choice.mode, cancellation,
+    }, (progress, cancellation) => core.capture({ table: selected, mode: choice.mode, recoverable: choice.recoverable, cancellation,
       onProgress: ({ rows }) => progress.report({ message: rows + ' rows captured' }) }));
     await vscode.window.showInformationMessage(result.rowCount + ' rows captured from ' + result.database + '.' + result.table +
       '. Connect to the destination and run Copy Captured Rows.' +
@@ -87,17 +93,38 @@ function registerTableTransfer(context, vscode, { database }) {
   }
   command('rocketbrain.data.finishTransfer', finish);
 
+  async function discardSaved(saved) {
+    const item = await vscode.window.showQuickPick(saved.map(source => ({ label: source.database + '.' + source.table,
+      description: source.recoveryState === 'settlement-unconfirmed' ? 'Commit unconfirmed' : 'Saved snapshot', source })),
+    { title: 'Select a Saved Snapshot to Discard' });
+    if (!item) return;
+    const question = item.source.recoveryState === 'settlement-unconfirmed' ?
+      'Check the destination rows before discarding the snapshot for an unconfirmed commit. Discard this snapshot?' :
+      'Discard this saved snapshot?';
+    const answer = await vscode.window.showWarningMessage(question, { modal: true }, 'Discard Snapshot');
+    if (answer === 'Discard Snapshot') return core.discardRecoverableSource({ captureId: item.source.id });
+  }
+
   command('rocketbrain.data.transfer', async item => {
     if (core.pending()) return finish();
-    const sources = core.listSources().map(capture => ({ label: capture.database + '.' + capture.table,
-      description: capture.engine + ' · ' + capture.rowCount + ' rows' + (capture.mode === 'stream' ? ' · streamed' : ''), capture }));
+    const saved = core.canRecover ? await core.listRecoverableSources() : [];
+    const sources = [...core.listSources().filter(capture => !capture.recoveryState), ...saved].map(capture => ({
+      label: capture.database + '.' + capture.table,
+      description: capture.engine + ' · ' + capture.rowCount + ' rows' + (capture.recoveryState === 'settlement-unconfirmed' ? ' · commit unconfirmed' :
+        capture.recoveryState ? ' · saved' : capture.mode === 'stream' ? ' · streamed' : ''), capture }));
+    if (saved.length) sources.push({ label: 'Discard a Saved Snapshot', discard: true });
     if (!sources.length) throw new Error('Capture a source table with Capture Table Copy Source first.');
     const selected = await vscode.window.showQuickPick(sources, { title: 'Select Captured Source' });
     if (!selected) return;
+    if (selected.discard) return discardSaved(saved);
+    if (selected.capture.recoveryState === 'settlement-unconfirmed') throw new Error('Check the destination rows for the unconfirmed commit before discarding this snapshot.');
     const table = item?.table?.name || (await vscode.window.showQuickPick(tableChoices(), { title: 'Select Destination Table' }))?.label;
     if (!table) return;
     trusted();
-    const { capture } = selected, destination = await core.inspectDestination({ captureId: capture.id, table });
+    const capture = selected.capture.recoveryState ? await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification, title: 'Authenticating the saved source snapshot', cancellable: true
+    }, (_, cancellation) => core.resumeSource({ captureId: selected.capture.id, cancellation })) : selected.capture;
+    const destination = await core.inspectDestination({ captureId: capture.id, table });
     const mapping = [], used = new Set();
     for (const source of capture.columns) {
       const available = destination.columns.filter(column => column.insertable && !used.has(column.name));

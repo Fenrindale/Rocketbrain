@@ -193,20 +193,32 @@ function normalizePlan({ raw, engine, version, database, format = 'json', measur
   return { ...base, nodes, rootIds, warnings };
 }
 
+function comparablePlans(left, right) {
+  return left.engine === right.engine && left.version === right.version && left.database === right.database &&
+    left.format === right.format && Boolean(left.measured) === Boolean(right.measured);
+}
+
+function planPaths(plan) {
+  const paths = new Map(), counts = new Map(), result = new Map();
+  for (const node of plan.nodes) {
+    const parent = paths.get(node.parentId) ?? '';
+    const slot = (counts.get(node.parentId) || 0) + 1;
+    counts.set(node.parentId, slot);
+    const key = parent + '/' + JSON.stringify([slot, node.kind, node.name]);
+    paths.set(node.id, key);
+    result.set(key, node);
+  }
+  return result;
+}
+
 function comparePlans(left, right) {
-  if (left.engine !== right.engine || left.version !== right.version || left.database !== right.database ||
-      left.format !== right.format || Boolean(left.measured) !== Boolean(right.measured)) {
+  if (!comparablePlans(left, right)) {
     throw Error('Choose two captured plans from the same server, format and capture mode.');
   }
   if (!left.nodes?.length || !right.nodes?.length) throw Error('Both plans need a decoded tree to compare.');
   function index(plan) {
-    const paths = new Map(), counts = new Map(), result = new Map();
-    for (const node of plan.nodes) {
-      const parent = paths.get(node.parentId) ?? '';
-      const slot = (counts.get(node.parentId) || 0) + 1;
-      counts.set(node.parentId, slot);
-      const key = parent + '/' + JSON.stringify([slot, node.kind, node.name]);
-      paths.set(node.id, key);
+    const result = new Map();
+    for (const [key, node] of planPaths(plan)) {
       const values = [...node.costs, ...node.rows, ...(node.actual || [])];
       result.set(key, { name: node.name, depth: node.depth, values,
         detail: [...node.tags, ...node.expressions].map(item => [item.label, item.value]) });
@@ -225,4 +237,4 @@ function comparePlans(left, right) {
     counts: Object.fromEntries(['same', 'changed', 'removed', 'added'].map(state => [state, rows.filter(row => row.state === state).length])) };
 }
 
-module.exports = { MAX_PLAN_BYTES, explainSql, measuredSql, validatePlanQuery, normalizePlan, comparePlans };
+module.exports = { MAX_PLAN_BYTES, explainSql, measuredSql, validatePlanQuery, normalizePlan, comparePlans, comparablePlans, planPaths };

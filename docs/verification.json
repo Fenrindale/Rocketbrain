@@ -1,22 +1,22 @@
 {
-  "version": "0.34.0",
-  "verifiedAt": "2026-11-24T18:02:34.368Z",
+  "version": "0.35.0",
+  "verifiedAt": "2026-11-24T18:40:26.248Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.34.0.vsix",
-    "bytes": 1766596,
-    "sha256": "42a0903058ea081da09d7756d08d3c12d429edfa69fbccab72ba7eb01a190c1f",
+    "name": "rocketbrain-0.35.0.vsix",
+    "bytes": 1776748,
+    "sha256": "1456a30063c44da977c6c758f7ed19cd5090b81eff822e9130113dfdea034b02",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1141,
-    "inputVectorSha256": "c597ccbc9705f5ca7726b9828eb87112e2bc32707c39fda7bfd3c8e049f33eac",
+    "frozenPublicInputs": 1152,
+    "inputVectorSha256": "605048da48d70948a412ba6d9126b999d56b35e137ada093e593a936f3953fd9",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1200,
-    "pass": 1147,
+    "tests": 1212,
+    "pass": 1159,
     "fail": 0,
     "cancelled": 0,
     "skipped": 53,
@@ -78,25 +78,25 @@
   ],
   "newlyVerified": {
     "IDEA-061": {
-      "scope": "실제 Spring 클래스패스에서 단일 ManyToOne, 순서 있는 복합 OneToOne을 생성했다. Hibernate 관계 읽기·쓰기·롤백, 고유 인덱스와 대상 Java 소스 변경에 대한 적용 거부를 검증했다.",
+      "scope": "두 실제 Spring 환경에서 기존 child mappedBy와 복합 대상 키를 연결했고, Hibernate에서 양방향 읽기·연결 행 쓰기·롤백과 Java 소스 및 연결 테이블 변경 시 거부를 확인했다.",
       "runtimeGroups": [
         "relationships"
       ]
     },
     "DG-056": {
-      "scope": "실제 Spring JOIN에서 두 실측 캡처를 열어 연산자와 수치 차이를 비교했다. 별도 DB 요청이 생기지 않았음을 확인했다.",
+      "scope": "실제 Spring JOIN의 세 개 기준 표본과 두 개 후보 표본을 비교했다. 원본과 계획 형태를 보존하고 비교 시 DB 요청이 없음을 검증했다.",
       "runtimeGroups": [
         "explain"
       ]
     },
     "DG-057": {
-      "scope": "실제 두 서버에서 Spring JOIN의 시간·행·반복을 대조했다. 실행 중 취소, 오래된 승인, 쓰기와 제한을 바꿀 수 있는 옵티마이저 힌트의 거부를 확인했다.",
+      "scope": "실제 두 서버에서 표본별 원문과 행·시간 범위를 재확인했다. 명시적 승인과 취소에 따른 후속 실행 중단을 검증했다.",
       "runtimeGroups": [
         "explain"
       ]
     },
     "DG-073": {
-      "scope": "실제 MySQL과 MariaDB 사이에서 768행과 1 MiB를 넘는 스냅샷을 양방향 전송했다. 원본 동시 변경 격리, 소수·큰 정수·시각·텍스트·바이너리·NULL 보존, 배치 메모리 범위와 커밋 전 비가시성, 취소·명시적 롤백을 검증했다.",
+      "scope": "실제 확장 호스트 종료와 재시작 후 MySQL과 MariaDB 사이에서 양방향 저장 스냅샷을 열었다. 취소·롤백 뒤 재검토하고 추가 타입의 정확한 값을 커밋했다.",
       "runtimeGroups": [
         "stream"
       ]
@@ -104,7 +104,7 @@
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 196,
+    "sourceCorrespondences": 199,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
@@ -119,32 +119,21 @@
       "platform-limited": 2
     },
     "weightedPoints": 109,
-    "previousWeightedPoints": 108,
+    "previousWeightedPoints": 109,
     "targetWeightedPoints": 108,
     "referencePercent": 50.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
-    "stateChanges": [
-      {
-        "id": "DG-057",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-073",
-        "before": "partial",
-        "after": "implemented"
-      }
-    ]
+    "stateChanges": []
   },
   "limits": [
-    "실측은 사용자가 승인한 SELECT에 적용한다. 계획 비교는 같은 서버·형식·캡처 모드의 열린 계획 중 디코딩된 연산자를 나란히 표시한다.",
-    "JPA 연관은 확인한 물리 외래 키와 검토한 Java 대상에 적용한다.",
-    "스트리밍 전송은 관찰한 기본 키가 있는 InnoDB와 호환 타입의 명시적 매핑에 적용한다. 암호화 임시 파일의 키는 확장 세션에만 보관한다."
+    "실행 계획은 승인한 SELECT의 2~5개 순차 표본을 사용한다. 디코딩된 같은 이름과 트리 위치의 연산자를 비교한다.",
+    "JPA는 관찰한 외래 키와 명시적인 Jakarta 소스에 따라 새 엔티티를 생성한다.",
+    "스트리밍은 현재 작업 공간의 암호화 스냅샷을 재개하고, 새 대상 검토 후 하나의 트랜잭션으로 다시 스테이징한다."
   ],
   "next": [
-    "대형 SQL 계획의 비교 정밀도와 측정 표본 탐색",
-    "JPA 양방향·중간 테이블 연관과 별도 영속성 유닛",
-    "서버 간 스트리밍 전송의 타입·복구 범위 확대"
+    "반복 실행 계획의 다른 트리 위치 대응과 표본 내보내기",
+    "JPA self-reference·교차 스키마와 기존 엔티티 변경 검토",
+    "스트리밍 형식과 명시적 미확정 커밋 확인 도구 확대"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

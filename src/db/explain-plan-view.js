@@ -184,4 +184,50 @@ ${result.measured ? 'Measured captures' : 'Optimizer estimates'}</p><p>${escape(
 <tbody>${rows}</tbody></table></body></html>`;
 }
 
-module.exports = { explanationHtml, comparisonHtml };
+function seriesHtml(series, plans, nonce) {
+  const comparing = !plans;
+  const describeStats = (row, total) => {
+    if (!row) return '—';
+    const availability = row.count + '/' + total + ' samples' + (row.omitted ? ' · ' + row.omitted + ' unparsed' : '');
+    const values = row.count ? '<div>Min <strong>' + escape(row.min) + '</strong> · Median <strong>' +
+      escape(row.median) + '</strong> · Max <strong>' + escape(row.max) + '</strong></div>' : '';
+    return '<span>' + escape(availability) + '</span>' + values;
+  };
+  const rows = series.metrics.slice(0, 400).map(item => {
+    const row = comparing ? item.baseline || item.candidate : item;
+    const id = '<th scope="row">' + escape(row.name) + ' <small>Level ' + escape(row.depth + 1) + '</small></th>';
+    const metric = '<td>' + escape(row.label) + '</td>';
+    const summaries = comparing
+      ? '<td>' + describeStats(item.baseline, series.baseline.samples) + '</td><td>' + describeStats(item.candidate, series.candidate.samples) + '</td>'
+      : '<td>' + describeStats(item, series.totalSamples) + '</td>';
+    return '<tr>' + id + metric + summaries + '</tr>';
+  }).join('');
+  const warnings = comparing
+    ? [...series.baseline.warnings.map(note => 'Baseline · ' + note), ...series.candidate.warnings.map(note => 'Candidate · ' + note)]
+    : series.warnings;
+  const report = comparing
+    ? 'Baseline · ' + series.baseline.samples + ' samples, ' + series.baseline.shapes + ' shapes. Candidate · ' +
+      series.candidate.samples + ' samples, ' + series.candidate.shapes + ' shapes.'
+    : series.totalSamples + ' sequential samples · ' + series.shapes.length + ' decoded plan shapes';
+  const details = plans ? '<h2>Raw captures</h2>' + plans.map((plan, index) =>
+    '<details><summary>Sample ' + (index + 1) + ' · Shape ' +
+    series.shapes.find(shape => shape.samples.includes(index + 1)).label + ' · ' + escape(plan.format.toUpperCase()) +
+    '</summary><pre>' + escape(plan.raw) + '</pre></details>').join('') : '';
+  const title = comparing ? 'Compare SQL measurement series' : 'SQL measurement series';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';">
+<title>${title}</title><style nonce="${nonce}">
+  body{margin:0;padding:1rem;color:var(--vscode-editor-foreground);background:var(--vscode-editor-background);font:var(--vscode-font-size) var(--vscode-font-family,sans-serif)}
+  h1{font-size:1.2rem;margin:0}h2{font-size:1rem}p,small,td span{color:var(--vscode-descriptionForeground)}table{border-collapse:collapse;width:100%}
+  th,td{text-align:left;vertical-align:top;overflow-wrap:anywhere;border-bottom:1px solid var(--vscode-panel-border);padding:.5rem}
+  thead{background:var(--vscode-editorWidget-background)}strong{font-weight:600}
+  details{margin:.45rem 0}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+</style></head><body><h1>${title}</h1><p>${escape(series.version)} · ${escape(series.database)} · ${escape(report)}</p>
+<p>Statistics use the observed server samples. Operators align by name and position in the decoded tree.</p>
+${warnings.map(warning => '<p>' + escape(warning) + '</p>').join('')}
+${series.metrics.length > 400 ? '<p>Showing the first 400 operator metrics.</p>' : ''}
+<table><thead><tr><th scope="col">Operator</th><th scope="col">Metric</th>${comparing ? '<th scope="col">Baseline</th><th scope="col">Candidate</th>' : '<th scope="col">Observed distribution</th>'}</tr></thead>
+<tbody>${rows}</tbody></table>${details}</body></html>`;
+}
+
+module.exports = { explanationHtml, comparisonHtml, seriesHtml };

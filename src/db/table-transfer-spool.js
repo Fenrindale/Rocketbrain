@@ -27,22 +27,30 @@ async function readAll(file, bytes, position) {
   }
 }
 
-async function createRowSpool({ columns, maxRows, maxRowBytes, maxBytes, directoryRoot = os.tmpdir() }) {
-  const directory = await fs.mkdtemp(path.join(directoryRoot, 'rocketbrain-table-copy-'));
+async function createRowSpool({ columns, maxRows, maxRowBytes, maxBytes, directoryRoot = os.tmpdir(), directory, recovery }) {
+  const managed = directory !== undefined;
+  if (!managed) directory = await fs.mkdtemp(path.join(directoryRoot, 'rocketbrain-table-copy-'));
   const file = path.join(directory, 'rows.bin'), original = await fs.lstat(directory);
+  if (!original.isDirectory()) throw fail('The encrypted source directory is invalid.');
   const cleanup = async () => {
     const owner = await fs.lstat(directory).catch(error => { if (error.code !== 'ENOENT') throw error; });
     if (!owner?.isDirectory() || owner.ino !== original.ino || owner.dev !== original.dev) return;
     await fs.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
     await fs.rmdir(directory);
   };
-  const key = randomBytes(32), prefix = randomBytes(8);
+  if (recovery && (!managed || !/^[0-9a-f]{64}$/.test(recovery.key) || !/^[0-9a-f]{16}$/.test(recovery.prefix) ||
+      !Number.isSafeInteger(recovery.sealed?.rowCount) || recovery.sealed.rowCount < 1 || recovery.sealed.rowCount > maxRows ||
+      !Number.isSafeInteger(recovery.sealed.bytes) || recovery.sealed.bytes > maxBytes || recovery.sealed.bytes < 22 ||
+      !/^[0-9a-f]{64}$/.test(recovery.sealed.sourceHash))) throw fail('The encrypted source recovery record is invalid.');
+  const key = recovery ? Buffer.from(recovery.key, 'hex') : randomBytes(32);
+  const prefix = recovery ? Buffer.from(recovery.prefix, 'hex') : randomBytes(8);
   let writer;
-  try { writer = await fs.open(file, 'wx', 0o600); }
-  catch (error) { key.fill(0); await cleanup(); throw error; }
+  try { if (!recovery) writer = await fs.open(file, 'wx', 0o600); }
+  catch (error) { key.fill(0); if (!managed) await cleanup(); throw error; }
   const hashRows = () => createHash('sha256').update(JSON.stringify(columns) + '\n');
   const observed = hashRows();
-  let size = 0, rows = 0, maxFrameBytes = 0, readers = 0, writing = false, sealed, disposed = false, disposal, disposeResolve, disposeReject;
+  let size = 0, rows = 0, maxFrameBytes = 0, readers = 0, writing = false, sealed = recovery?.sealed;
+  let disposed = false, disposal, disposeResolve, disposeReject;
   const nonce = index => {
     const value = Buffer.alloc(12);
     prefix.copy(value);
@@ -60,11 +68,16 @@ async function createRowSpool({ columns, maxRows, maxRowBytes, maxBytes, directo
     key.fill(0);
     void (async () => {
       try { if (writer) await writer.close(); }
-      finally { await cleanup(); }
+      finally { if (!managed) await cleanup(); }
     })().then(resolve, reject);
   }
 
   return {
+    recoveryRecord() {
+      check();
+      if (!managed || !sealed) throw fail('The source snapshot cannot be retained across restarts.');
+      return { key: key.toString('hex'), prefix: prefix.toString('hex'), sealed: structuredClone(sealed) };
+    },
     async append(row, signal) {
       check(signal);
       if (sealed || !writer) throw fail('The source snapshot is sealed.');
@@ -149,12 +162,12 @@ async function createRowSpool({ columns, maxRows, maxRowBytes, maxBytes, directo
             throw fail('The source row shape changed.');
           }
           check(cancellation);
-          await onRow?.(row, count++);
+          await onRow?.(row, count);
+          count++;
           position = end;
         }
-        if (count !== sealed.rowCount || hash.digest('hex') !== sealed.sourceHash || !same(statIdentity(await reader.stat()), sealed.identity)) {
-          throw fail('The encrypted source snapshot changed during the read.');
-        }
+        if (count !== sealed.rowCount || hash.digest('hex') !== sealed.sourceHash) throw fail('The authenticated source rows differ from the sealed snapshot.');
+        if (!same(statIdentity(await reader.stat()), sealed.identity)) throw fail('The encrypted source snapshot changed during the read.');
         check(cancellation);
         return structuredClone(sealed);
       } finally {

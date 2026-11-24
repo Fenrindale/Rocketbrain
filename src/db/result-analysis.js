@@ -149,4 +149,19 @@ function analyzeResult(result, options = {}) {
 
 const normalizeCapturedNumber = value => format(rational(decimal(value)));
 
-module.exports = { analyzeResult, numericColumns, normalizeCapturedNumber };
+function summarizeDecimalSamples(values) {
+  const parsed = values.flatMap(value => {
+    try { return [{ value, number: decimal(value.replace(/^([+-]?)\./, (_, sign) => sign + '0.')) }]; }
+    catch { return []; }
+  });
+  parsed.sort((a, b) => {
+    const order = compareDecimals(a.number, b.number);
+    return order < 0n ? -1 : order > 0n ? 1 : 0;
+  });
+  const count = parsed.length, middle = Math.floor(count / 2);
+  if (!count) return { count, omitted: values.length, min: null, median: null, max: null };
+  const median = count % 2 ? parsed[middle].value : format(rational(sum(parsed[middle-1].number, parsed[middle].number), 2));
+  return { count, omitted: values.length-count, min: parsed[0].value, median, max: parsed.at(-1).value };
+}
+
+module.exports = { analyzeResult, numericColumns, normalizeCapturedNumber, summarizeDecimalSamples };

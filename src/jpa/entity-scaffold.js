@@ -3,7 +3,8 @@
 const { createHash } = require('node:crypto');
 const { checkPackage, renderJavaFile, validIdentifier } = require('../java/file-templates');
 const { analyzeJPA, compareCatalog } = require('./model');
-const { associationRequests, planRelationships } = require('./entity-relationships');
+const { planRelationships } = require('./entity-relationships');
+const { INVERSE, THROUGH, relationshipRequests, planCollections } = require('./entity-collection-relationships');
 
 const SQL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const KEY_TYPES = new Set(['Short', 'Integer', 'Long']);
@@ -120,12 +121,25 @@ function idClass(keys) {
   ];
 }
 
+function joinColumn(column, mode) {
+  const args = ['name = ' + delimited(column.name), 'referencedColumnName = ' + literal(column.reference), 'nullable = ' + column.nullable];
+  if (mode === 'scalar') args.push('insertable = false', 'updatable = false');
+  return '@JoinColumn(' + args.join(', ') + ')';
+}
+
 function associationLines(relation) {
-  const annotations = relation.columns.map(column => {
-    const args = ['name = ' + delimited(column.name), 'referencedColumnName = ' + literal(column.reference), 'nullable = ' + column.nullable];
-    if (relation.mode === 'scalar') args.push('insertable = false', 'updatable = false');
-    return '@JoinColumn(' + args.join(', ') + ')';
-  });
+  if (relation.kind === INVERSE) return [
+    '    @OneToMany(mappedBy = ' + literal(relation.mappedBy) + ', fetch = FetchType.LAZY)',
+    '    private List<' + relation.targetType + '> ' + relation.property + ' = new ArrayList<>();', ''
+  ];
+  if (relation.kind === THROUGH) return [
+    '    @ManyToMany(fetch = FetchType.LAZY)',
+    '    @JoinTable(name = ' + delimited(relation.joinTable) + ',',
+    '        joinColumns = { ' + relation.columns.map(column => joinColumn(column)).join(',\n            ') + ' },',
+    '        inverseJoinColumns = { ' + relation.targetColumns.map(column => joinColumn(column)).join(',\n            ') + ' })',
+    '    private Set<' + relation.targetType + '> ' + relation.property + ' = new LinkedHashSet<>();', ''
+  ];
+  const annotations = relation.columns.map(column => joinColumn(column, relation.mode));
   const join = annotations.length === 1 ? ['    ' + annotations[0]] :
     ['    @JoinColumns({', '        ' + annotations.join(',\n        '), '    })'];
   return ['    @' + relation.cardinality + '(fetch = FetchType.LAZY, optional = ' + relation.optional + ')', ...join,
@@ -149,10 +163,20 @@ function classBody(table, mapping, relationshipPlan) {
   for (const field of fields) if (TYPE_IMPORTS[field.type]) imports.add(TYPE_IMPORTS[field.type]);
   if (relations.length) {
     imports.add('jakarta.persistence.FetchType');
-    imports.add('jakarta.persistence.JoinColumn');
     for (const relation of relations) {
       imports.add('jakarta.persistence.' + relation.cardinality);
-      if (relation.columns.length > 1) imports.add('jakarta.persistence.JoinColumns');
+      if (relation.kind === INVERSE) {
+        imports.add('java.util.ArrayList');
+        imports.add('java.util.List');
+      } else if (relation.kind === THROUGH) {
+        imports.add('jakarta.persistence.JoinColumn');
+        imports.add('jakarta.persistence.JoinTable');
+        imports.add('java.util.LinkedHashSet');
+        imports.add('java.util.Set');
+      } else {
+        imports.add('jakarta.persistence.JoinColumn');
+        if (relation.columns.length > 1) imports.add('jakarta.persistence.JoinColumns');
+      }
     }
   }
   const lines = [...imports].sort().map(name => 'import ' + name + ';');
@@ -175,7 +199,8 @@ function classBody(table, mapping, relationshipPlan) {
       '        this.' + field.property + ' = value;', '    }', '');
   }
   for (const relation of relations) {
-    lines.push('    public ' + relation.targetType + ' get' + relation.accessor + '() {',
+    const resultType = relation.container ? relation.container + '<' + relation.targetType + '>' : relation.targetType;
+    lines.push('    public ' + resultType + ' get' + relation.accessor + '() {',
       '        return ' + relation.property + ';', '    }', '');
     if (relation.mode === 'association') lines.push('    public void set' + relation.accessor + '(' + relation.targetType + ' value) {',
       '        this.' + relation.property + ' = value;', '    }', '');
@@ -192,9 +217,20 @@ function planEntity({ catalog, table, name, packageName, uri, relationships, tar
   const mapping = inspectTable(catalog, table);
   if (name === 'PrimaryKey' && mapping.keys.length > 1) throw Error('Choose a class name other than PrimaryKey for a composite-key entity.');
   const owner = packageName + '.' + name;
-  const relationshipPlan = planRelationships({ catalog, table, mapping, owner, requests: associationRequests(relationships),
+  const requests = relationshipRequests(relationships);
+  const relationshipPlan = planRelationships({ catalog, table, mapping, owner, requests: requests.filter(request => request.kind === undefined),
     sources: targetSources, inspectTable });
-  const template = { name: 'JPA entity from database table', source: 'any', template: '${packageDeclaration}' + classBody(table, mapping, relationshipPlan) };
+  const build = relationPlan => ({ name: 'JPA entity from database table', source: 'any',
+    template: '${packageDeclaration}' + classBody(table, mapping, relationPlan) });
+  const collections = requests.filter(request => request.kind !== undefined);
+  if (collections.length) {
+    const ownerSource = { uri, text: renderJavaFile(build(relationshipPlan), name, packageName) };
+    const collectionPlan = planCollections({ requests: collections, catalog, table, mapping, owner, ownerSource,
+      sources: targetSources, direct: relationshipPlan.relations, inspectTable });
+    relationshipPlan.relations.push(...collectionPlan.relations);
+    relationshipPlan.fingerprint = JSON.stringify([relationshipPlan.fingerprint, collectionPlan.fingerprint]);
+  }
+  const template = build(relationshipPlan);
   const text = renderJavaFile(template, name, packageName);
   const model = analyzeJPA([{ uri, text }, ...targetSources], { physicalNaming: 'standard' });
   const entity = model.entities.find(item => item.fqn === owner);
@@ -202,10 +238,29 @@ function planEntity({ catalog, table, name, packageName, uri, relationships, tar
   const ids = entity?.identity?.attributes;
   if (!entity || entity.table.physicalName !== table || ids?.length !== mapping.keys.length ||
       mapping.keys.some((field, index) => ids[index] !== field.property) || comparison.mismatches.length ||
-      new Set(comparison.matches.map(match => match.column)).size !== mapping.fields.length) {
+      new Set(comparison.matches.filter(match => match.table === table).map(match => match.column)).size !== mapping.fields.length) {
     throw Error('The local JPA mapping check could not confirm the generated table, columns and primary key.');
   }
   for (const relation of relationshipPlan.relations) {
+    if (relation.kind === INVERSE) {
+      if (!entity.attributes.some(attribute => attribute.name === relation.property && attribute.kind === 'oneToMany' &&
+          attribute.mappedBy === relation.mappedBy && attribute.targetFqn === relation.targetType)) {
+        throw Error('The local JPA mapping check could not confirm the inverse collection.');
+      }
+      continue;
+    }
+    if (relation.kind === THROUGH) {
+      const roles = [['<owner>', relation.columns], ['<inverse>', relation.targetColumns]];
+      for (const [role, columns] of roles) {
+        const bindings = entity.columnMappings.filter(binding => binding.status === 'known' &&
+          binding.property === relation.property + '.' + role && binding.storageTable.physicalName === relation.joinTable);
+        if (bindings.length !== columns.length || columns.some(column => !bindings.some(binding =>
+          binding.column.physicalName === column.name && binding.column.referencedColumnName === column.reference))) {
+          throw Error('The local JPA mapping check could not confirm the join table columns.');
+        }
+      }
+      continue;
+    }
     const bindings = entity.columnMappings.filter(binding => binding.property === relation.property && binding.status === 'known');
     const writable = relation.mode === 'association';
     if (bindings.length !== relation.columns.length || relation.columns.some(column => !bindings.some(binding =>
@@ -216,10 +271,12 @@ function planEntity({ catalog, table, name, packageName, uri, relationships, tar
   }
   if (relationshipPlan.relations.length) {
     mapping.notes = mapping.notes.filter(note => !note.startsWith('Foreign-key columns are scalar fields.'));
-    mapping.notes.push('Only the selected foreign keys become associations. Other columns remain scalar fields.');
+    mapping.notes.push('The preview lists the selected relationships. Review collection lifecycles in the application.');
     for (const relation of relationshipPlan.relations) {
-      mapping.notes.push(relation.property + ' · ' + relation.cardinality + ' · ' +
-        (relation.mode === 'scalar' ? 'Scalar fields own writes' : 'The association owns writes') + '.');
+      const role = relation.kind === INVERSE ? 'Child field ' + relation.mappedBy + ' owns writes' :
+        relation.kind === THROUGH ? relation.joinTable + ' join table owns linkage' :
+          relation.mode === 'scalar' ? 'Scalar fields own writes' : 'The association owns writes';
+      mapping.notes.push(relation.property + ' · ' + relation.cardinality + ' · ' + role + '.');
     }
   }
   return { text, template, mapping, relationshipPlan, comparison: comparison.summary };

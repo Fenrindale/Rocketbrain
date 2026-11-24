@@ -8,7 +8,8 @@ const { checkPackage, contained, physicalDirectory, validIdentifier, writeTempla
 const { buildFingerprint, local } = require('../java/workbench-model');
 const { analyzeJavaSources } = require('../java/signature-compiler');
 const { defaultEntityName, inspectTable, planEntity } = require('./entity-scaffold');
-const { MAX_RELATIONSHIPS, associationRequests } = require('./entity-relationships');
+const { MAX_RELATIONSHIPS } = require('./entity-relationships');
+const { INVERSE, THROUGH, relationshipRequests } = require('./entity-collection-relationships');
 const { captureRelationshipSources, chooseableDeclarations } = require('./entity-relationship-sources');
 
 const GENERATE_ENTITY = 'rocketbrain.jpa.generateEntity';
@@ -132,7 +133,7 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
 
   async function prepare(options = {}) {
     const { table, name, packageName, projectUri, sourceRootId, cancellation } = options;
-    const relationships = associationRequests(options.relationships);
+    const relationships = relationshipRequests(options.relationships);
     trusted(cancellation);
     if (preparing) throw Error('Wait for the current entity preview to finish.');
     preparing = true;
@@ -151,7 +152,7 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
       if (compiler.errors.length) throw Error('Generated Java source failed compiler validation: ' + compiler.errors[0].message);
       const owner = packageName + '.' + name;
       const generated = [...plan.relationshipPlan.fields, ...plan.relationshipPlan.relations.map(relation =>
-        ({ accessor: relation.accessor, javaClass: relation.targetType }))];
+        ({ accessor: relation.accessor, javaClass: relation.javaClass ?? relation.targetType }))];
       if (generated.some(field => !compiler.methods.some(method => method.owner === owner &&
           method.name === 'get' + field.accessor && method.returnType === field.javaClass))) {
         throw Error('The compiler could not confirm every generated Java field type.');
@@ -167,8 +168,11 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
       const uri = vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: '/' + id + '/' + name + '.java' }).toString();
       const output = { id, uri, fileUri, database: catalog.database, table, name, packageName, text: plan.text,
         notes: plan.mapping.notes, comparison: plan.comparison, keyColumns: plan.mapping.keys.map(field => field.sql),
-        relationships: plan.relationshipPlan.relations.map(({ property, cardinality, optional, columns, mode, foreignKey, targetType }) =>
-          ({ property, cardinality, optional, columns, mode, foreignKey, targetType })) };
+        relationships: plan.relationshipPlan.relations.map(({ property, cardinality, optional, columns, mode, foreignKey, targetType,
+          kind, targetColumns, mappedBy, childTable, joinTable, ownerForeignKey, targetForeignKey }) =>
+          ({ property, cardinality, optional, columns, mode, foreignKey, targetType,
+            ...(kind === INVERSE ? { kind, childTable, mappedBy } : {}),
+            ...(kind === THROUGH ? { kind, joinTable, ownerForeignKey, targetForeignKey, targetColumns } : {}) })) };
       previews.set(id, { createdAt: Date.now(), output, selection, scope, target, targets, plan, compiler, applying: false });
       return structuredClone(output);
     } finally { preparing = false; }
@@ -222,32 +226,58 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
 
   async function chooseRelationships(catalog, name, project) {
     if (catalog.coverage.foreignKeys !== 'loaded') return [];
-    const foreignKeys = catalog.tables.find(table => table.name === name)?.foreignKeys?.filter(key =>
-      key.referencedSchema === catalog.database && key.referencedTable !== name) ?? [];
-    if (!foreignKeys.length) return [];
-    const targetTables = new Set(foreignKeys.map(key => key.referencedTable));
-    const declarations = chooseableDeclarations(vscode, project, targetTables);
-    const items = foreignKeys.filter(key => declarations.some(declaration => declaration.table === key.referencedTable))
-      .map(key => ({ label: key.name, description: key.referencedTable, key }));
+    const options = [];
+    const sameSchema = key => key.referencedSchema === catalog.database;
+    for (const table of catalog.tables.filter(item => item.kind === 'table')) {
+      const keys = table.foreignKeys.filter(sameSchema);
+      if (table.name === name) {
+        for (const key of keys.filter(item => item.referencedTable !== name)) {
+          options.push({ label: key.name, description: 'Owning association · ' + key.referencedTable,
+            targetTable: key.referencedTable, request: { foreignKey: key.name } });
+        }
+        continue;
+      }
+      for (const key of keys.filter(item => item.referencedTable === name)) {
+        options.push({ label: key.name, description: 'Inverse one-to-many · ' + table.name, targetTable: table.name,
+          request: { kind: INVERSE, foreignKey: key.name, childTable: table.name } });
+        const other = keys.length === 2 && table.foreignKeys.length === 2 ? keys.find(item => item !== key && item.referencedTable !== name) : undefined;
+        if (other && key.columns.length + other.columns.length === table.columns.length) {
+          options.push({ label: table.name, description: 'Many-to-many join table · ' + other.referencedTable, targetTable: other.referencedTable,
+            request: { kind: THROUGH, joinTable: table.name, ownerForeignKey: key.name, targetForeignKey: other.name } });
+        }
+      }
+    }
+    if (!options.length) return [];
+    const declarations = chooseableDeclarations(vscode, project, new Set(options.map(item => item.targetTable)));
+    const items = options.filter(item => declarations.some(declaration => declaration.table === item.targetTable));
     if (!items.length) return [];
     const selected = await vscode.window.showQuickPick(items, { title: 'JPA Entity · Relationships', canPickMany: true,
       placeHolder: 'Confirm with no selection to keep the foreign-key fields scalar' });
     if (!selected) return undefined;
     if (selected.length > MAX_RELATIONSHIPS) throw Error('Review up to eight owning relationships per generated entity.');
     const relations = [];
-    for (const { key } of selected) {
-      const target = await pick(declarations.filter(item => item.table === key.referencedTable).map(item =>
-        ({ label: item.targetType, description: item.table, item })), 'Relationship target · ' + key.name);
+    for (const { label, targetTable, request } of selected) {
+      const target = await pick(declarations.filter(item => item.table === targetTable).map(item =>
+        ({ label: item.targetType, description: item.table, item })), 'Relationship target · ' + label);
       if (!target) return undefined;
       const simple = target.item.targetType.split('.').at(-1);
-      const property = await vscode.window.showInputBox({ title: 'Relationship field · ' + key.name,
-        value: simple[0].toLowerCase() + simple.slice(1) + 'Reference',
+      const property = await vscode.window.showInputBox({ title: 'Relationship field · ' + label,
+        value: simple[0].toLowerCase() + simple.slice(1) + (request.kind ? 'Items' : 'Reference'),
         validateInput: value => validIdentifier(value) ? undefined : 'Enter a valid Java field name.' });
       if (property === undefined) return undefined;
-      const ownership = await pick([{ label: 'Scalar fields own writes', mode: 'scalar' },
-        { label: 'Association owns writes', mode: 'association' }], 'Foreign key writes · ' + key.name);
-      if (!ownership) return undefined;
-      relations.push({ foreignKey: key.name, targetType: target.item.targetType, targetUri: target.item.targetUri, property, mode: ownership.mode });
+      const relation = { ...request, targetType: target.item.targetType, targetUri: target.item.targetUri, property };
+      if (request.kind === INVERSE) {
+        relation.mappedBy = await vscode.window.showInputBox({ title: 'Existing child @ManyToOne field · ' + label,
+          prompt: 'Field declared on the child with explicit join columns',
+          validateInput: value => validIdentifier(value) ? undefined : 'Enter a valid child field name.' });
+        if (relation.mappedBy === undefined) return undefined;
+      } else if (request.kind !== THROUGH) {
+        const ownership = await pick([{ label: 'Scalar fields own writes', mode: 'scalar' },
+          { label: 'Association owns writes', mode: 'association' }], 'Foreign key writes · ' + label);
+        if (!ownership) return undefined;
+        relation.mode = ownership.mode;
+      }
+      relations.push(relation);
     }
     return relations;
   }

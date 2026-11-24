@@ -5,6 +5,7 @@ const { SchemaRenamer, identifier } = require('./schema-rename');
 const { canonicalValue, describeType } = require('./schema-conversion');
 const { StreamImporter, newSession, LIMITS: IMPORT_LIMITS } = require('./import-stream');
 const { readSnapshot, streamLimits } = require('./table-transfer-snapshot');
+const { recoveryLifetimeMs } = require('./table-transfer-recovery');
 
 const limits = Object.freeze({ rows: 500, columns: 64, bytes: 1024 * 1024, entries: 4, durationMs: 10 * 60 * 1000 });
 const fail = message => Object.assign(new Error(message), { code: 'ROCKETBRAIN_TABLE_TRANSFER' });
@@ -12,6 +13,7 @@ const digest = value => createHash('sha256').update(JSON.stringify(value)).diges
 const quote = name => '`' + identifier(name, { table: true }).replaceAll('`', '``') + '`';
 const publicColumn = ({ name, type, nullable, primaryKey, insertable, required }) => ({ name, type, nullable, primaryKey, insertable, required });
 const cancelled = token => token?.isCancellationRequested || token?.aborted;
+const exactDeclaration = type => ['enum', 'set', 'binary'].includes(type.kind);
 
 function targetDefinition(definition) {
   if (definition.kind !== 'BASE TABLE' || String(definition.engine).toUpperCase() !== 'INNODB' || /^__rb_/i.test(definition.name)) {
@@ -28,10 +30,9 @@ function transferable(column) {
       ? { ...column, type: column.type.replace(/ \(JSON_VALID\)$/, ''), json: true } : column;
     type = describeType(normalized);
   } catch { return null; }
-  // TIMESTAMP depends on session time zones; normalize neither time zones nor
-  // floating, CHAR-padding or fixed binary representations during a copy.
-  if (['integer', 'decimal', 'date', 'datetime', 'time', 'json'].includes(type.kind)) return type;
-  if (type.category === 'binary' && type.kind !== 'binary') return type;
+  // TIMESTAMP, floating values and CHAR padding require separate transfer rules.
+  if (['integer', 'decimal', 'date', 'datetime', 'time', 'json', 'year', 'bit'].includes(type.kind) || type.category === 'binary') return type;
+  if (['enum', 'set'].includes(type.kind)) return type.charset === 'utf8mb4' && !type.members.includes('') ? type : null;
   if (type.category === 'text' && type.charset === 'utf8mb4' && /^(?:varchar|(?:tiny|medium|long)?text)$/.test(type.kind)) return type;
   return null;
 }
@@ -45,7 +46,8 @@ function useValue(value, column) {
 function mappedTypes(columns, selected) {
   return selected.map(({ source: index, column }) => {
     const origin = columns[index], from = transferable(origin), into = transferable(column);
-    if (!from || !into || from.kind !== into.kind && !(from.category === into.category && ['text', 'binary'].includes(from.category))) {
+    if (!from || !into || (exactDeclaration(from) || exactDeclaration(into)) && (from.kind !== into.kind || from.type !== into.type) ||
+        from.kind !== into.kind && !(from.category === into.category && ['text', 'binary'].includes(from.category))) {
       throw fail('Map compatible exact types for ' + origin.name + ' and ' + column.name + '.');
     }
     return { index, column, from, into };
@@ -88,7 +90,7 @@ async function inspectIdentity(db) {
   finally { reader.dispose(); }
 }
 
-async function captureTable(lease, table, { mode, cancellation, onProgress }) {
+async function captureTable(lease, table, { id, mode, cancellation, onProgress, directory }) {
   identifier(table, { table: true });
   if (/^__rb_/i.test(table)) throw fail('Choose a user table.');
   const { db } = lease;
@@ -112,18 +114,24 @@ async function captureTable(lease, table, { mode, cancellation, onProgress }) {
           throw fail('The source definition or server context changed during capture.');
         }
       };
+      const types = columns.map(transferable);
       const serializeRow = row => row.map((value, index) => {
         if (value === null) return null;
+        if (types[index].kind === 'bit') {
+          const hex = BigInt(canonicalValue(value, types[index])).toString(16);
+          return '0x' + hex.padStart(hex.length + hex.length % 2, '0');
+        }
         const serialized = Buffer.isBuffer(value) ? '0x' + value.toString('hex') : String(value);
         useValue(serialized, columns[index]);
         return serialized;
       });
-      const metadata = { id: randomUUID(), database: identity.database, table, scope: tableIdentity(identity, table),
+      const metadata = { id, database: identity.database, table, scope: tableIdentity(identity, table),
         engine: identity.dialect, columns, omittedColumns: definition.columns.length - columns.length };
       if (mode === 'stream') {
         const snapshot = await readSnapshot({ db, session, schema: identity.database, table, columns, keys, cancellation, onProgress,
-          check: () => leaseGuard(lease, cancellation), serializeRow, verify });
-        return { ...metadata, expiresAt: Date.now() + streamLimits.lifetimeMs, ...snapshot };
+          check: () => leaseGuard(lease, cancellation), serializeRow, verify, directory });
+        return { ...metadata, expiresAt: Date.now() + (directory ? recoveryLifetimeMs : streamLimits.lifetimeMs), ...snapshot,
+          ...(directory && { recoveryState: 'ready' }) };
       }
       const sql = 'SELECT ' + columns.map(column => quote(column.name)).join(',') + ' FROM ' +
         quote(identity.database) + '.' + quote(table) + ' ORDER BY ' + keys.map(column => quote(column.name)).join(',') +
@@ -143,9 +151,10 @@ async function captureTable(lease, table, { mode, cancellation, onProgress }) {
 }
 
 function returnCapture(capture) {
-  const { id, expiresAt, database, table, scope, engine, rowCount, omittedColumns, sourceHash } = capture;
+  const { id, expiresAt, database, table, scope, engine, rowCount, omittedColumns, sourceHash, recoveryState } = capture;
   return { id, expiresAt, database, table, scope, engine, rowCount, omittedColumns, sourceHash, columns: capture.columns.map(publicColumn),
-    ...(capture.spool && { mode: 'stream', encryptedBytes: capture.bytes, maxFrameBytes: capture.maxFrameBytes, maxBufferedRows: capture.maxBufferedRows }) };
+    ...((capture.spool || recoveryState) && { mode: 'stream', encryptedBytes: capture.bytes, maxFrameBytes: capture.maxFrameBytes, maxBufferedRows: capture.maxBufferedRows }),
+    ...(recoveryState && { recoveryState }) };
 }
 
 function retainedSource(capture, target) {
@@ -153,6 +162,17 @@ function retainedSource(capture, target) {
   const metadata = { width: capture.columns.length, headers: capture.columns.map(column => column.name) };
   return {
     options: () => ({ file: capture.table, format: capture.spool ? 'streamed-table' : 'retained-table' }),
+    placeholder(column) {
+      return transferable(column)?.kind === 'bit' ? 'CAST(? AS UNSIGNED)' : '?';
+    },
+    bindParameters(values) {
+      return values.map((value, index) => {
+        const kind = compatibility[index].into.kind;
+        if (value === '0' && kind === 'year') return 0;
+        if (value !== null && kind === 'bit') return canonicalValue(value, compatibility[index].into);
+        return value;
+      });
+    },
     async scan(options, callbacks) {
       if (capture.expiresAt <= Date.now()) throw fail('The source snapshot expired. Capture the source table again.');
       const identity = { snapshotId: capture.id, scope: capture.scope, ...(capture.spool && { encrypted: capture.identity }) };
@@ -179,8 +199,8 @@ function retainedSource(capture, target) {
     },
     validateSelection({ selected, definition }) {
       if (digest(definition) !== target.definitionHash) throw fail('The destination definition changed. Choose the destination again.');
-      if (capture.spool) compatibility = mappedTypes(capture.columns, selected);
-      else assertMappedValues(capture, selected);
+      compatibility = mappedTypes(capture.columns, selected);
+      if (!capture.spool) for (const [index, row] of capture.rows.entries()) assertMappedRow(row, index, compatibility);
     },
     validateTarget({ identity, definition }) {
       const scope = tableIdentity(identity, definition.name);
@@ -190,9 +210,9 @@ function retainedSource(capture, target) {
   };
 }
 
-function createTableTransfer(database) {
+function createTableTransfer(database, { recovery } = {}) {
   const captures = new Map(), targets = new Map(), reviews = new Map(), operations = new Set(), controllers = new Set(), removals = new Set();
-  let pending, closed = false;
+  let pending, writingCapture, closed = false;
   const tracked = (action, abortable = false) => (...args) => {
     if (closed) return Promise.reject(fail('Table copy is closed.'));
     let controller, subscription;
@@ -240,22 +260,65 @@ function createTableTransfer(database) {
     leaseGuard(lease);
   };
 
+  const getRecovery = () => {
+    if (!recovery) throw fail('Saved snapshots require storage in a trusted workspace.');
+    return recovery;
+  };
+  const remember = capture => {
+    discardSource(capture.id);
+    bounded(captures, discardSource);
+    capture.expiryTimer = setTimeout(() => discardSource(capture.id), Math.max(0, capture.expiresAt - Date.now()));
+    capture.expiryTimer.unref?.();
+    captures.set(capture.id, capture);
+    return returnCapture(capture);
+  };
+  const confirmReady = capture => capture.recoveryState ? getRecovery().assertReady(capture.id) : undefined;
+
   const api = {
-    capture: tracked(async ({ table, mode = 'captured', cancellation, onProgress } = {}) => database.withTableTransfer(async lease => {
+    capture: tracked(async ({ table, mode = 'captured', recoverable = false, cancellation, onProgress } = {}) => database.withTableTransfer(async lease => {
       if (!['captured', 'stream'].includes(mode)) throw fail('Choose a captured or streamed source snapshot.');
-      const capture = await captureTable(lease, table, { mode, cancellation, onProgress });
-      try { leaseGuard(lease, cancellation); }
-      catch (error) { await capture.spool?.dispose(); throw error; }
-      bounded(captures, discardSource);
-      capture.expiryTimer = setTimeout(() => discardSource(capture.id), Math.max(0, capture.expiresAt - Date.now()));
-      capture.expiryTimer.unref?.();
-      captures.set(capture.id, capture);
-      return returnCapture(capture);
+      if (typeof recoverable !== 'boolean' || recoverable && mode !== 'stream') throw fail('Only streamed snapshots can be saved across restarts.');
+      const id = randomUUID();
+      const directory = recoverable ? await getRecovery().reserve(id) : undefined;
+      let capture;
+      try {
+        capture = await captureTable(lease, table, { id, mode, cancellation, onProgress, directory });
+        leaseGuard(lease, cancellation);
+        if (recoverable) await recovery.save(capture);
+        leaseGuard(lease, cancellation);
+        return remember(capture);
+      } catch (error) {
+        await capture?.spool?.dispose();
+        if (directory) await recovery.discard(id, { skipTrust: true }).catch(() => {});
+        throw error;
+      }
     }), true),
     listSources: () => [...captures.values()].filter(capture => capture.expiresAt > Date.now()).map(returnCapture),
     discardSource,
+    canRecover: Boolean(recovery),
+    listRecoverableSources: tracked(async () => (await getRecovery().list()).map(returnCapture)),
+    resumeSource: tracked(async ({ captureId, cancellation } = {}) => {
+      if (writingCapture === captureId || pending?.captureId === captureId) throw fail('Finish the pending table copy before reopening its source.');
+      const capture = await getRecovery().resume(captureId);
+      try {
+        await capture.spool.scan({ cancellation });
+        await confirmReady(capture);
+        if (writingCapture === captureId || pending?.captureId === captureId) throw fail('Finish the pending table copy before reopening its source.');
+        if (captures.has(captureId)) {
+          await capture.spool.dispose();
+          return returnCapture(retained(captures, captureId, 'source snapshot'));
+        }
+        return remember(capture);
+      } catch (error) { await capture.spool.dispose(); throw error; }
+    }, true),
+    discardRecoverableSource: tracked(async ({ captureId } = {}) => {
+      if (writingCapture === captureId || pending?.captureId === captureId) throw fail('Finish the pending table copy before discarding its source.');
+      discardSource(captureId);
+      return getRecovery().discard(captureId);
+    }),
     inspectDestination: tracked(async ({ captureId, table } = {}) => database.withTableTransfer(async lease => {
       const capture = retained(captures, captureId, 'source snapshot');
+      await confirmReady(capture);
       identifier(table, { table: true });
       const definition = targetDefinition(await lease.db._editor.definition(table)), identity = await inspectIdentity(lease.db);
       leaseGuard(lease);
@@ -272,6 +335,7 @@ function createTableTransfer(database) {
     })),
     preview: tracked(async ({ captureId, destinationId, mapping, cancellation } = {}) => database.withTableTransfer(async lease => {
       const capture = retained(captures, captureId, 'source snapshot');
+      await confirmReady(capture);
       const target = retained(targets, destinationId, 'destination inspection');
       live(lease, target);
       if (target.captureId !== captureId) throw fail('The destination inspection belongs to another source snapshot.');
@@ -308,17 +372,20 @@ function createTableTransfer(database) {
     run: tracked(async ({ reviewId, cancellation, onProgress } = {}) => database.withTableTransfer(async lease => {
       const review = retained(reviews, reviewId, 'table copy review');
       live(lease, review);
-      retained(captures, review.captureId, 'source snapshot');
+      const capture = retained(captures, review.captureId, 'source snapshot');
+      await confirmReady(capture);
       reviews.delete(reviewId);
       let wait = false;
+      writingCapture = capture.id;
       try {
         const report = await review.manager.run({ reviewId, guard: lease.guard, cancellation, onProgress });
         if (report.state === 'awaiting-commit') {
-          pending = { db: lease.db, epoch: lease.epoch, manager: review.manager, releasePending: lease.releasePending, report };
+          pending = { db: lease.db, epoch: lease.epoch, manager: review.manager, releasePending: lease.releasePending, report,
+            captureId: capture.id, recoverable: Boolean(capture.recoveryState) };
           wait = true;
         }
         return structuredClone(report);
-      } finally { if (!wait) await review.manager.dispose(); }
+      } finally { writingCapture = undefined; if (!wait) await review.manager.dispose(); }
     }), true),
     pending: () => pending ? structuredClone(pending.report) : null,
     settle: tracked(async ({ transactionId, commit } = {}) => {
@@ -327,7 +394,19 @@ function createTableTransfer(database) {
       if (!selected || selected.report.transactionId !== transactionId) throw fail('No matching pending table copy remains.');
       return database.withTableTransfer(async lease => {
         if (commit) live(lease, selected);
-        try { return await (commit ? selected.manager.commit({ transactionId, guard: lease.guard }) : selected.manager.rollback({ transactionId })); }
+        try {
+          const beforeCommit = selected.recoverable ? () => recovery.beginCommit(selected.captureId) : undefined;
+          const report = await (commit ? selected.manager.commit({ transactionId, guard: lease.guard, beforeCommit }) : selected.manager.rollback({ transactionId }));
+          if (selected.recoverable && report.committed) {
+            discardSource(selected.captureId);
+            try { await recovery.discard(selected.captureId); }
+            catch { report.recoveryCleanupPending = true; }
+          } else if (selected.recoverable && commit && report.outcomeUnknown) {
+            discardSource(selected.captureId);
+            report.recoveryState = 'settlement-unconfirmed';
+          }
+          return report;
+        }
         finally { if (!selected.manager.hasPendingTransaction(transactionId)) await selected.manager.dispose(); }
       }, { settling: true });
     }),
