@@ -40,7 +40,7 @@ class SchemaTree {
   refresh() { this.events.fire(); }
   dispose() { this.events.dispose(); }
 }
-let activeJava,activeJavaTesting,activeJavaUtilities,activeJavaNavigation,activeSchemaRename,activeSqlScripts,activeSchemaComparison,activeStreamImports,activeSchemaPrograms,activeSchemaCoordinator,activeSchemaDiagrams,activeSchemaDdlExport,activeDatabase,activeDbConnections,activeDbAuthoring,activeDbSessionTools,activeSpringProjects;
+let activeJava,activeJavaTesting,activeJavaUtilities,activeJavaNavigation,activeJvmDiagnostics,activeSchemaRename,activeSqlScripts,activeSchemaComparison,activeStreamImports,activeTableTransfer,activeSchemaPrograms,activeSchemaCoordinator,activeSchemaDiagrams,activeSchemaDdlExport,activeDatabase,activeDbConnections,activeDbAuthoring,activeDbSessionTools,activeSpringProjects;
 async function activate(context) {
   const database = await require("./database-workbench").registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree);
   activeDatabase=database;
@@ -49,6 +49,11 @@ async function activate(context) {
   const dbSessionTools = require('./db/session-tools-vscode').registerDbSessionTools(context, vscode, { database });
   activeDbSessionTools = dbSessionTools;
   context.subscriptions.push(dbSessionTools);
+  const tableTransfer=require('./db/table-transfer-vscode').registerTableTransfer(context,vscode,{database});
+  activeTableTransfer=tableTransfer;
+  context.subscriptions.push(tableTransfer);
+  const sqlEditing=require('./db/sql-editing-vscode').registerSqlEditing(context,vscode,{database});
+  context.subscriptions.push(sqlEditing);
   const schemaDiagrams = require('./db/schema-erd-vscode').registerSchemaDiagrams(context, vscode, { database });
   activeSchemaDiagrams = schemaDiagrams;
   context.subscriptions.push(schemaDiagrams);
@@ -58,6 +63,9 @@ async function activate(context) {
   context.subscriptions.push(registerNavigation(vscode, context));
   const java = registerJavaFeatures(context, vscode);
   activeJava = java;
+  const jvmDiagnostics=require('./java/jvm-diagnostics-vscode').registerJvmDiagnostics(context,vscode,{java});
+  activeJvmDiagnostics=jvmDiagnostics;
+  context.subscriptions.push(jvmDiagnostics);
   const javaNavigation = require('./java/navigation-vscode').registerJavaNavigation(context, vscode, { java });
   activeJavaNavigation = javaNavigation;
   context.subscriptions.push(javaNavigation);
@@ -106,9 +114,15 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, httpTools, openApi, jpa, analysis, sqlAnalysis,schemaRename,sqlScripts,schemaComparison,streamImports,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,springProjects };
+  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, jvmDiagnostics, httpTools, openApi, jpa, analysis, sqlAnalysis,sqlEditing,schemaRename,sqlScripts,schemaComparison,streamImports,tableTransfer,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,springProjects };
 }
 async function deactivate() {
+  const diagnostics=activeJvmDiagnostics;
+  activeJvmDiagnostics=undefined;
+  if(diagnostics)await diagnostics.dispose();
+  const transfer=activeTableTransfer;
+  activeTableTransfer=undefined;
+  if(transfer)await transfer.dispose();
   const ddlExport = activeSchemaDdlExport;
   activeSchemaDdlExport = undefined;
   if (ddlExport) await ddlExport.dispose();

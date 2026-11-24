@@ -20,10 +20,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const completedUserSql = new vscode.EventEmitter();
   context.subscriptions.push(completedUserSql);
   let sequence = 0;
-  let tableEditor;
+  let tableEditor, transferLease;
   const project = new ProjectTree(), schemaTree = new SchemaTree(state), results = new ResultsView(vscode, context, {
     editAction: (id, message) => tableEditor.handle(id, message),
     relatedAction: chooseRelatedRows,
+    datasetAction: (id, input) => tableEditor.stageDatasetChanges(id, input),
     resultClosed: id => tableEditor.forget(id)
   });
   tableEditor = new TableEditor({ results, connection: () => state, withSession, trusted: () => vscode.workspace.isTrusted, onStatus: () => updateStatus() });
@@ -32,7 +33,10 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const currentDocument = () => vscode.window.activeTextEditor?.document;
   const existingBinding = () => bindings.get(currentDocument()?.uri.toString());
   function reconcileStreamTransactions(){let removed=false;for(const [id,saved]of streamTransactions){if(!streamManagers.get(saved.db)?.hasPendingTransaction(id)){streamTransactions.delete(id);removed=true;}}if(removed&&!streamTransactions.size)state.running.delete('stream-import');}
-  const exclusiveDatabaseWork=()=>{reconcileStreamTransactions();return state.running.has('schema-migration')||state.running.has('stream-import');};
+  const exclusiveDatabaseWork=()=>{
+    reconcileStreamTransactions();
+    return ['schema-migration','stream-import','table-transfer'].some(key=>state.running.has(key));
+  };
   const databaseGuard=(db,epoch)=>()=>vscode.workspace.isTrusted&&!state.disposed&&!state.switching&&state.db===db&&state.epoch===epoch;
   function assertExclusiveReady(){reconcileStreamTransactions();if(!vscode.workspace.isTrusted||!state.mysql||state.disposed||state.switching)throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');if(state.running.size||state.connecting.size)throw new Error('Finish the current database operation or pending import transaction first.');}
   function streamFor(db){let manager=streamManagers.get(db);if(!manager){manager=new(require('./db/import-stream').StreamImporter)(db,{onStateChange:()=>{reconcileStreamTransactions();updateStatus();}});streamManagers.set(db,manager);}return manager;}
@@ -398,11 +402,47 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
     exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination),
     analyzeResult: (id, options) => results.analyzeSnapshot(id, options),
+    compareDatasets: (targetId, sourceId, mapping) => results.compareDatasets(targetId,sourceId,mapping),
+    stageDatasetComparison: (id, input) => results.stageDatasetComparison(id,input),
     savedResultLayout: id => results.savedLayout(id),
     saveResultLayout: (id, modelId, columns) => results.saveLayout(id, modelId, columns),
     inspectRelatedRows, openRelatedRows,
     onDidChangeDatabase: connectionEvents.event,
     onDidCompleteUserSql: completedUserSql.event,
+    async withTableTransfer(action,{settling=false}={}){
+      const key='table-transfer';
+      if(typeof action!=='function')throw Error('Choose a table copy operation.');
+      if(settling){
+        if(!transferLease||transferLease.busy||state.db!==transferLease.db||state.epoch!==transferLease.epoch||
+            !state.mysql||state.disposed||!vscode.workspace.isTrusted)throw Error('The pending table copy is no longer available.');
+      }else{
+        assertExclusiveReady();
+        if(pendingTableDraft()||[...bindings.values()].some(binding=>{
+          const session=state.db.getSessionState(binding.id);
+          return session?.inTransaction||session?.outcomeUnknown||session?.needsReconnect;
+        }))throw Error('Resolve console transactions and drafts before copying a table.');
+        transferLease={db:state.db,epoch:state.epoch,busy:false};
+        state.running.add(key);
+        updateStatus();
+      }
+      const lease=transferLease;
+      lease.busy=true;
+      const releasePending=()=>{
+        if(transferLease!==lease)return;
+        transferLease=undefined;
+        state.running.delete(key);
+        updateStatus();
+      };
+      const guard=()=>transferLease===lease&&databaseGuard(lease.db,lease.epoch)()&&!pendingTableDraft();
+      let result;
+      try{
+        result=await action({db:lease.db,epoch:lease.epoch,guard,releasePending});
+        return result;
+      }finally{
+        lease.busy=false;
+        if((!settling||result)&&result?.state!=='awaiting-commit')releasePending();
+      }
+    },
     async withExclusiveSchemaWork(action){
       reconcileStreamTransactions();
       if(typeof action!=='function'||!vscode.workspace.isTrusted||state.disposed||state.switching)throw new Error('Use a trusted open workspace for coordinated schema work.');

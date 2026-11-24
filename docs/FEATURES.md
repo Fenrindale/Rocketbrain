@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.30.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.31.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 25 |
-| 부분 구현 | 105 |
-| 미구현 | 67 |
+| 구현 | 28 |
+| 부분 구현 | 110 |
+| 미구현 | 59 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 4 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **41.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **44.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.30에서는 Java 라이브 템플릿·멤버 생성, HTTP·OpenAPI JSON 작업, 쿼리 이력, DB 결과 차트와 타입별 셀 편집을 추가했다. 저장 프로필의 열 배치도 재연결 뒤 확인했다. 상태가 바뀐 항목은 8개이고 가중 점수는 85점에서 90.5점으로 늘었다.
+v0.31에서는 실제 Spring JVM의 JFR·스레드·힙 진단, SQL 포맷·템플릿·열 이름 수정, 두 DB 서버 간 테이블 전송과 캡처한 데이터 비교를 검증했다. 상태가 바뀐 항목은 8개이고 가중 점수는 90.5점에서 96점으로 늘었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -107,9 +107,9 @@ v0.30에서는 Java 라이브 템플릿·멤버 생성, HTTP·OpenAPI JSON 작�
 | IDEA-084 | IntelliJ IDEA | JUnit·TestNG 발견·실행·디버그 | 부분 구현 |
 | IDEA-085 | IntelliJ IDEA | 테스트 결과·실패 diff·재실행 | 부분 구현 |
 | IDEA-086 | IntelliJ IDEA | 코드 커버리지·분기·테스트별 커버 | 부분 구현 |
-| IDEA-087 | IntelliJ IDEA | CPU·할당·JFR 프로파일 | 미구현 |
-| IDEA-088 | IntelliJ IDEA | 힙 덤프·메모리 누수 분석 | 미구현 |
-| IDEA-089 | IntelliJ IDEA | 스레드·가상 스레드·덤프 분석 | 미구현 |
+| IDEA-087 | IntelliJ IDEA | CPU·할당·JFR 프로파일 | 구현 |
+| IDEA-088 | IntelliJ IDEA | 힙 덤프·메모리 누수 분석 | 부분 구현 |
+| IDEA-089 | IntelliJ IDEA | 스레드·가상 스레드·덤프 분석 | 구현 |
 | IDEA-090 | IntelliJ IDEA | Git 변경·부분 stage·blame·기록 | VS Code 재사용 |
 | IDEA-091 | IntelliJ IDEA | Changelist·작업 컨텍스트 | 미구현 |
 | IDEA-092 | IntelliJ IDEA | Shelf·Stash·선택 변경 보관 | 부분 구현 |
@@ -176,12 +176,12 @@ v0.30에서는 Java 라이브 템플릿·멤버 생성, HTTP·OpenAPI JSON 작�
 | DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 미구현 |
 | DG-034 | DataGrip | 실시간·범위별 정적 검사 | 부분 구현 |
 | DG-035 | DataGrip | 위험한 UPDATE/DELETE 경고 | 부분 구현 |
-| DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 미구현 |
+| DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 부분 구현 |
 | DG-037 | DataGrip | 테이블·열·alias 의미적 Rename | 부분 구현 |
 | DG-038 | DataGrip | 의미적 Find Usages·영향 추적 | 부분 구현 |
 | DG-039 | DataGrip | SQL 참조→정의·DDL·빠른 설명 | 부분 구현 |
-| DG-040 | DataGrip | dialect별 SQL formatting | 미구현 |
-| DG-041 | DataGrip | live template·snippet·문맥 변수 | 미구현 |
+| DG-040 | DataGrip | dialect별 SQL formatting | 부분 구현 |
+| DG-041 | DataGrip | live template·snippet·문맥 변수 | 구현 |
 | DG-042 | DataGrip | 문자열 안 SQL/JSON 언어 주입 | 미구현 |
 | DG-043 | DataGrip | 쿼리 parameter 입력·재사용 | 부분 구현 |
 | DG-044 | DataGrip | 현재 문장·선택 SQL 실행 | 부분 구현 |
@@ -213,9 +213,9 @@ v0.30에서는 Java 라이브 템플릿·멤버 생성, HTTP·OpenAPI JSON 작�
 | DG-070 | DataGrip | INSERT/JSON/Excel 등 출력 형식 | 구현 |
 | DG-071 | DataGrip | 사용자 data extractor 스크립트 | 미구현 |
 | DG-072 | DataGrip | CSV/Excel import·column/type mapping | 부분 구현 |
-| DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 미구현 |
+| DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 부분 구현 |
 | DG-074 | DataGrip | native dump·restore 도구 통합 | 미구현 |
-| DG-075 | DataGrip | table·result dataset 비교·sync | 미구현 |
+| DG-075 | DataGrip | table·result dataset 비교·sync | 부분 구현 |
 | DG-076 | DataGrip | 그리드 결과 차트·집계 | 구현 |
 | DG-077 | DataGrip | 지리 데이터 지도 보기 | 미구현 |
 | DG-078 | DataGrip | table create/alter 시각 designer | 부분 구현 |

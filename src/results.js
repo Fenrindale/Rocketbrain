@@ -4,10 +4,13 @@ const { spreadsheetText } = require('./sql');
 const { createResultExport } = require('./db/result-export');
 const { createResultLayouts, resultTableKey } = require('./db/result-layouts');
 const { analyzeResult, numericColumns } = require('./db/result-analysis');
+const { compareDatasets: compareCaptures, selectUpdates } = require('./db/dataset-comparison');
 class ResultsView {
-  constructor(vscode, context, { editAction, relatedAction, resultClosed } = {}) {
+  constructor(vscode, context, { editAction, relatedAction, datasetAction, resultClosed } = {}) {
     this.vscode = vscode; this.context = context; this.history = []; this.view = null; this.sequence = 0;
     this.editAction = editAction; this.relatedAction = relatedAction; this.resultClosed = resultClosed;
+    this.datasetAction = datasetAction;
+    this.comparisons = new WeakMap();
     this.resultSequence = 0;
     this.layouts = createResultLayouts(context.workspaceState);
     this.layoutKeys = new WeakMap();
@@ -20,7 +23,7 @@ class ResultsView {
     const script = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.js'));
     const style = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.css'));
     view.webview.html = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${style}"><title>Query Results</title></head><body>
-<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option></select><button id="export" disabled>Export CSV</button><button id="close-result">Close Result</button></header>
+<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option><option value="compare">Compare</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option></select><button id="export" disabled>Export CSV</button><button id="close-result">Close Result</button></header>
 <nav id="tabs" aria-label="Query result history"></nav>
 <div id="message" role="status" aria-live="polite">Run SQL from the editor with Ctrl+Enter.</div>
 <section id="result-layout" aria-label="Result view options" hidden><div id="result-row-navigation" hidden><button id="result-row-previous">Previous Row</button><span id="result-row-status" role="status"></span><button id="result-row-next">Next Row</button></div><button id="result-columns" aria-expanded="false">Columns</button></section>
@@ -33,6 +36,7 @@ class ResultsView {
 <form id="cell-editor" hidden><label id="cell-label" for="cell-value">Value</label><label id="cell-format-label">Format <select id="cell-format"></select></label><label><input id="cell-null" type="checkbox">SQL NULL</label><textarea id="cell-value" rows="5" autocomplete="off" spellcheck="false" aria-describedby="cell-hint cell-error"></textarea><div id="cell-hint"></div><div id="cell-error" role="alert" hidden></div><button type="submit">Stage Cell</button><button id="cancel-cell" type="button">Cancel</button></form>
 <section id="bulk-panel" aria-label="Bulk table changes" hidden><form id="bulk-form"><strong id="bulk-title">Paste cells</strong><label id="bulk-format-label">Format <select id="bulk-delimiter"><option value="tab">TSV (tabs)</option><option value="comma">CSV (commas)</option></select></label><label id="bulk-header-label"><input type="checkbox" id="bulk-header" checked>First row contains column headers</label><div id="bulk-anchor"><label>Start row <select id="bulk-row"></select></label><label>Start column <select id="bulk-column"></select></label></div><div id="xlsx-options" hidden><label>Worksheet <select id="xlsx-sheet" aria-label="XLSX worksheet"></select></label><label>Formulas <select id="xlsx-formulas"><option value="reject">Reject formula cells</option><option value="cached">Use stored cached results (may be stale)</option></select></label><label>Absent or blank cells <select id="xlsx-blanks"><option value="empty">Empty text</option><option value="null">SQL NULL</option></select></label><p>Formulas are never evaluated. Only stored values are imported. Explicit empty strings stay text. Numeric XML values retain their stored precision; formatting is not imported. Date styles convert with the workbook date system; fractions truncate to microseconds and hidden nonzero time is retained.</p></div><label id="bulk-text-label" for="bulk-text">Text data</label><textarea id="bulk-text" rows="6" spellcheck="false" placeholder="Paste CSV or TSV text here"></textarea><label id="bulk-null-label"><input id="bulk-null-enabled" type="checkbox">Use an unquoted token for SQL NULL</label><input id="bulk-null-token" value="\\N" aria-label="SQL NULL token" maxlength="100"><div id="bulk-mapping"></div><div id="bulk-summary" role="status"></div><button id="bulk-inspect" type="button">Inspect Input and Map Columns</button><button id="bulk-stage" type="submit">Stage Bulk Changes</button><button id="bulk-cancel" type="button">Close</button></form></section>
 <section id="chart-tools" aria-label="Captured result analysis" hidden><label>Plot <select id="chart-shape"><option value="bar">Columns</option><option value="line">Line</option></select></label><label>Category <select id="chart-category"></select></label><label>Aggregate <select id="chart-operation"><option value="count">Count rows</option><option value="nonnull">Count non-NULL values</option><option value="values">Numeric values (one point per row)</option><option value="sum">Sum</option><option value="average">Average</option><option value="min">Minimum</option><option value="max">Maximum</option></select></label><label>Measure <select id="chart-measure"></select></label><button id="chart-export" disabled>Export Chart Data</button><div id="chart-status" role="status"></div></section>
+<section id="compare-tools" aria-label="Compare captured results" hidden><div class="compare-top"><label>Source result <select id="compare-source"></select></label><button id="compare-add" type="button">Add Column Pair</button><button id="compare-run" type="button">Compare Captured Rows</button><button id="compare-stage" type="button" disabled>Stage Selected Updates</button></div><div id="compare-mappings"></div><div id="compare-status" role="status"></div></section>
 <div id="grid" tabindex="0" aria-label="Database query results"></div><footer id="status">Ready</footer><script nonce="${nonce}" src="${script}"></script></body></html>`;
     this.context.subscriptions.push(view.webview.onDidReceiveMessage(async msg => {
       try {
@@ -67,6 +71,19 @@ class ResultsView {
         try { response.analysis = this.analyzeSnapshot(record.id, msg.options, msg.revision); }
         catch (error) { response.error = error.message || String(error); }
         await view.webview.postMessage(response);
+      } else if (msg.type === 'compareDatasets') {
+        const response = { type: 'datasetComparison', id: record.id, requestId: msg.requestId };
+        try { response.comparison = this.compareDatasets(record.id, msg.sourceId, msg.mapping, {
+          target: msg.targetRevision, source: msg.sourceRevision
+        }); }
+        catch (error) { response.error = error.message || String(error); }
+        await view.webview.postMessage(response);
+      } else if (msg.type === 'stageDatasetComparison') {
+        try { await this.stageDatasetComparison(record.id, msg); }
+        catch (error) {
+          this.editState(record.id, { editResponseId: msg.requestId });
+          await view.webview.postMessage({ type: 'datasetStageError', id: record.id, error: error.message || String(error) });
+        }
       } else if (msg.type === 'exportAnalysis') {
         const analysis = this.analyzeSnapshot(record.id, msg.options, msg.revision);
         const target = await v.window.showSaveDialog({ defaultUri: v.Uri.file('query-analysis.json'), filters: { JSON: ['json'] },
@@ -120,6 +137,38 @@ class ResultsView {
       throw Error('Choose a current captured result and apply or discard drafts before analysis.');
     }
     return analyzeResult(record.result, options);
+  }
+  compareDatasets(targetId, sourceId, mapping, revisions = {}) {
+    const target = this.history.find(record => record.id === targetId);
+    const source = this.history.find(record => record.id === sourceId);
+    if (source === target || ![target, source].every(record => this.exportable(record)) ||
+        (revisions.target !== undefined && revisions.target !== target.chart.revision) ||
+        (revisions.source !== undefined && revisions.source !== source.chart.revision)) {
+      throw Error('Choose two current completed results and apply or discard drafts before comparing.');
+    }
+    const comparison = compareCaptures(target.result, source.result, mapping);
+    const reviewId = crypto.randomUUID();
+    this.comparisons.set(target, { reviewId, comparison, source, sourceResult: source.result, targetResult: target.result });
+    return { ...comparison.report, reviewId, sourceId, sourceRevision: source.chart.revision, targetRevision: target.chart.revision };
+  }
+  async stageDatasetComparison(id, { reviewId, rows, modelId, draftRevision, requestId } = {}) {
+    const target = this.history.find(record => record.id === id);
+    const saved = this.comparisons.get(target);
+    if (!saved || saved.reviewId !== reviewId || !this.exportable(target)) {
+      throw Error('Compare the current destination and source before staging changes.');
+    }
+    const assertFresh = () => {
+      if (this.comparisons.get(target) !== saved || !this.exportable(saved.source) || saved.source.result !== saved.sourceResult ||
+          saved.source.sessionState?.inTransaction || !this.history.includes(target) ||
+          target.result !== saved.targetResult || target.hasDraft || target.review || target.closing) {
+        throw Error('The compared results or their drafts changed. Compare again using a committed source capture.');
+      }
+    };
+    assertFresh();
+    if (!this.datasetAction) throw Error('Open an editable table to stage synchronization.');
+    const changes = selectUpdates(saved.comparison, rows);
+    await this.datasetAction(id, { changes, modelId, draftRevision, requestId, assertFresh });
+    if (this.comparisons.get(target) === saved) this.comparisons.delete(target);
   }
   layoutKey(record) {
     if (this.vscode.workspace?.isTrusted === false || !this.layouts.available || !record?.result?.edit) return undefined;

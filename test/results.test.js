@@ -95,7 +95,12 @@ test('actual result Webview renders database values as text and routes history/c
       get: key => memories.get(key),
       async update(key, value) { memories.set(key, structuredClone(value)); }
     }
-  }, { relatedAction: (id, selection) => { relatedSelection = { id, ...selection }; }, editAction: (id, message) => {
+  }, { relatedAction: (id, selection) => { relatedSelection = { id, ...selection }; }, datasetAction: async (id, input) => {
+    input.assertFresh();
+    host.editState(id, { editResponseId: input.requestId, bulkDraft: {
+      id: 'comparison-bulk', modelId: input.modelId, draftRevision: input.draftRevision, ...input.changes
+    } });
+  }, editAction: (id, message) => {
     if (message.type === 'draftChanged') host.editState(id, { hasDraft: message.count > 0, draftRevision: message.draftRevision, review: undefined });
     if (message.type === 'reviewChanges') host.editState(id, {
       editResponseId: message.requestId, review: { statements: [{ sql: 'UPDATE fixture SET note = ?', parameters: [null] }] }
@@ -481,6 +486,36 @@ test('actual result Webview renders database values as text and routes history/c
       body: { kind: 'value', text: exactText }, config: { kind: 'value', text: exactJson }, payload: { kind: 'value', text: '0x000d0aff' }
     });
     assert.equal(review.changes.updates[1].values.body.text, 'new\r\ntext\r\n');
+  });
+
+  await t.test('compare pairs captured columns and stages only selected changed matching destination rows', async () => {
+    const source = host.begin('SELECT number, new_text FROM changes', 'Source result');
+    host.finish(source, { columns: ['number', 'new_text'], fields: [{ type: 3 }, { type: 253 }],
+      rows: [[1, 'changed'], [2, 'same'], [3, 'source only']], rowCount: 3, durationMs: 1 });
+    const target = host.begin('SELECT id, label FROM example', 'Destination result', { readOnly: false });
+    host.finish(target, { columns: ['id', 'label'], rows: [[1, 'original'], [2, 'same']], rowCount: 2, durationMs: 1,
+      edit: { modelId: 'compare-model', table: 'example', canEdit: true, rowIds: ['left-a', 'left-b'],
+        columns: [{ name: 'id', kind: 'integer', type: 'int', primaryKey: true }, { name: 'label', kind: 'text', type: 'varchar(60)', editable: true, nullable: true }] } });
+    await lastPost;
+    await page.getByRole('button', { name: `Result ${target}`, exact: true }).click();
+    await page.locator('#result-view').selectOption('compare');
+    await page.locator('#compare-source').selectOption(String(source));
+    await page.getByRole('button', { name: 'Add Column Pair' }).click();
+    await page.getByRole('checkbox', { name: 'Match key 1' }).check();
+    await page.getByRole('button', { name: 'Add Column Pair' }).click();
+    await page.getByRole('button', { name: 'Compare Captured Rows' }).click();
+    await page.locator('.comparison-data tbody tr').last().waitFor();
+    assert.match(await page.locator('#compare-status').textContent(), /1 equal.*1 different.*0 destination only.*1 source only/);
+    assert.equal(await page.locator('.comparison-data tbody input').count(), 1);
+    await page.locator('.comparison-data summary').click();
+    assert.deepEqual(await page.locator('.comparison-values pre').allTextContents(), ['"original"', '"changed"']);
+    await page.getByRole('checkbox', { name: 'Stage comparison row 1' }).check();
+    await page.getByRole('button', { name: 'Stage Selected Updates' }).click();
+    await page.locator('.modified').waitFor();
+    assert.equal(await page.locator('.modified').textContent(), 'changed');
+    assert.equal(await page.locator('#result-view').inputValue(), 'grid');
+    assert.equal(await page.locator('tbody tr').count(), 2);
+    assert.equal(await page.locator('#review').isEnabled(), true);
   });
 
   assert.deepEqual(pageErrors, []);

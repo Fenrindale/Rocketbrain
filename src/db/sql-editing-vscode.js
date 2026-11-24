@@ -1,0 +1,129 @@
+'use strict';
+
+const { formatSql }=require('./sql-format');
+const { templates,resolveTemplate }=require('./sql-templates');
+const { sqlQuickFixes }=require('./sql-quick-fixes');
+
+function registerSqlEditing(context,vscode,{database}) {
+  let disposed=false;
+  function open(document) {
+    if (disposed||!document||document.languageId!=='sql'||document.isClosed) throw Error('Open a SQL document.');
+  }
+  function format(document,range,options={}) {
+    open(document);
+    const catalog=database.catalogSnapshot();
+    const indent=options.insertSpaces===false?'\t':' '.repeat(Math.min(8,Math.max(1,Number(options.tabSize)||2)));
+    const text=range?document.getText(range):document.getText();
+    return formatSql(text,{dialect:catalog?.dialect||'mysql',sqlMode:catalog?.sqlMode,indent});
+  }
+  const whole=document=>new vscode.Range(document.positionAt(0),document.positionAt(document.getText().length));
+  function values(document) {
+    return templates(vscode.workspace.getConfiguration('rocketbrain.sql',document.uri).get('templates',[]));
+  }
+  function edits(document,range,options) {
+    const text=format(document,range,options);
+    return text===document.getText(range)?[]:[vscode.TextEdit.replace(range,text)];
+  }
+  async function formatEditor() {
+    const editor=vscode.window.activeTextEditor;
+    open(editor?.document);
+    const range=editor.selection.isEmpty?whole(editor.document):editor.selection;
+    const changes=edits(editor.document,range,editor.options);
+    if (!changes.length)return false;
+    return editor.edit(edit=>edit.replace(range,changes[0].newText));
+  }
+  async function insert(editor,{prefix,table}={}) {
+    const document=editor?.document;
+    open(document);
+    const template=values(document).find(item=>item.prefix===prefix);
+    if (!template) throw Error('Choose a known SQL template.');
+    const catalog=database.catalogSnapshot();
+    const snippet=resolveTemplate(template,catalog,table);
+    return editor.insertSnippet(new vscode.SnippetString(snippet),editor.selection);
+  }
+  async function chooseTemplate() {
+    const editor=vscode.window.activeTextEditor,document=editor?.document;
+    open(document);
+    const version=document.version,selection=editor.selection;
+    const choice=await vscode.window.showQuickPick(values(document).map(template=>({
+      label:template.prefix,description:template.description,template
+    })),{title:'Insert SQL Template'});
+    if(!choice)return;
+    let table;
+    if(choice.template.requiresTable) {
+      const catalog=database.catalogSnapshot();
+      const candidates=[...(catalog?.tables||[]),...(catalog?.views||[])].filter(item=>
+        !choice.template.requiresKey||item.columns?.filter(column=>column.primaryKey).length===1);
+      if(!candidates.length)throw Error('Refresh the active schema or choose a template without a table.');
+      table=(await vscode.window.showQuickPick(candidates.map(item=>({label:item.name,description:item.kind})),
+        {title:'Template Table'}))?.label;
+      if(!table)return;
+      if(database.catalogSnapshot()?.revision!==catalog.revision)throw Error('Refresh the template after the active metadata changes.');
+    }
+    if(document.isClosed||document.version!==version||!editor.selection.isEqual(selection)) {
+      throw Error('The editor changed. Choose the SQL template again.');
+    }
+    return insert(editor,{prefix:choice.template.prefix,table});
+  }
+  const command=(id,operation)=>vscode.commands.registerCommand(id,async()=>{
+    try{return await operation();}
+    catch(error){if(!disposed)await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}
+  });
+  const fixCommand='rocketbrain.sql.applyReviewedQuickFix';
+  const subscriptions=[
+    command('rocketbrain.sql.format',formatEditor),
+    command('rocketbrain.sql.insertTemplate',chooseTemplate),
+    vscode.commands.registerCommand(fixCommand,async frame=>{
+      if(disposed||!vscode.workspace.isTrusted)return;
+      const document=vscode.workspace.textDocuments.find(item=>item.uri.toString()===frame?.uri);
+      const catalog=database.catalogSnapshot();
+      if(!document||document.isClosed||document.version!==frame.version||catalog?.revision!==frame.revision)return;
+      const fix=sqlQuickFixes(document.getText(),frame.offset,catalog).find(item=>item.replacement===frame.replacement);
+      if(!fix)return;
+      const change=new vscode.WorkspaceEdit();
+      change.replace(document.uri,new vscode.Range(document.positionAt(fix.start),document.positionAt(fix.end)),fix.replacement);
+      return vscode.workspace.applyEdit(change);
+    }),
+    vscode.languages.registerCodeActionsProvider({language:'sql'},
+      {provideCodeActions(document,range){
+        if(disposed||!vscode.workspace.isTrusted)return [];
+        const catalog=database.catalogSnapshot(),offset=document.offsetAt(range.start);
+        return sqlQuickFixes(document.getText(),offset,catalog).map(fix=>{
+          const action=new vscode.CodeAction('Use '+fix.replacement,vscode.CodeActionKind.QuickFix);
+          action.command={command:fixCommand,title:action.title,arguments:[{
+            uri:document.uri.toString(),version:document.version,revision:catalog.revision,offset,replacement:fix.replacement
+          }]};
+          return action;
+        });
+      }},{providedCodeActionKinds:[vscode.CodeActionKind.QuickFix]}),
+    vscode.languages.registerDocumentFormattingEditProvider({language:'sql'},{
+      provideDocumentFormattingEdits(document,options){try{return edits(document,whole(document),options);}catch{return [];}}
+    }),
+    vscode.languages.registerDocumentRangeFormattingEditProvider({language:'sql'},{
+      provideDocumentRangeFormattingEdits(document,range,options){try{return edits(document,range,options);}catch{return [];}}
+    }),
+    vscode.languages.registerCompletionItemProvider({language:'sql'},{
+      provideCompletionItems(document,position) {
+        try{
+          const line=document.lineAt(position.line).text.slice(0,position.character);
+          const prefix=/^[ \t]*([A-Za-z][A-Za-z0-9-]*)$/.exec(line)?.[1];
+          if(!prefix)return [];
+          return values(document).filter(item=>!item.requiresTable&&item.prefix.startsWith(prefix)).map(template=>{
+            const item=new vscode.CompletionItem(template.prefix,vscode.CompletionItemKind.Snippet);
+            item.insertText=new vscode.SnippetString(template.body);
+            item.detail=template.description;
+            item.range=new vscode.Range(position.translate(0,-prefix.length),position);
+            return item;
+          });
+        }catch{return [];}
+      }
+    })
+  ];
+  return {format,insert,dispose(){
+    if(disposed)return;
+    disposed=true;
+    for(const subscription of subscriptions)subscription.dispose();
+  }};
+}
+
+module.exports={registerSqlEditing};

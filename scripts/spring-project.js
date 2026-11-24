@@ -134,6 +134,11 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   if (!['mysql', 'mariadb'].includes(engine)) throw new Error('Select mysql or mariadb.');
   if(!['standard','custom','opaque'].includes(naming))throw new Error('Select standard, custom or opaque fixture naming.');
   if (debugPort !== undefined && (!Number.isInteger(debugPort) || debugPort < 1 || debugPort > 65535)) throw new Error('Invalid JDWP port.');
+  const jfrRepository=process.env.ROCKETBRAIN_FIXTURE_JFR_REPOSITORY;
+  if (jfrRepository && (!path.isAbsolute(jfrRepository) || !/^[\x21-\x7e]+$/.test(jfrRepository) ||
+      /[,=]/.test(jfrRepository) || !(await fsp.stat(jfrRepository)).isDirectory())) {
+    throw new Error('Use an existing ASCII directory for the fixture recording repository.');
+  }
   const build = await buildSpringProject();
   // Prepare immutable agent artifacts before starting any disposable server.
   const agent=observer?await require('./jpa-observer-build').buildObserver({target:path.join(OUTPUT,'observer'),javaHome:javaHome()}):null;
@@ -160,6 +165,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   if (process.platform === 'win32' && classpath.length > 28000) throw new Error('Fixture classpath exceeds its Windows launch limit.');
   const javaArgs = ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8',
     ...observerArgs,
+    ...(jfrRepository ? ['-XX:FlightRecorderOptions=repository='+jfrRepository] : []),
     ...(debugPort ? ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:' + debugPort] : []), '-cp', classpath, 'fixture.boot.FixtureApplication'];
   db=engine==='mysql'?await startMysqlFixture():await startMariaFixture();
   const url = engine === 'mysql' ? 'jdbc:mysql://127.0.0.1:' + db.config.port + '/' + db.config.database + '?allowPublicKeyRetrieval=true&sslMode=DISABLED'

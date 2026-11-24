@@ -1,0 +1,75 @@
+'use strict';
+
+const { analyzeSql,statementRanges }=require('./sql-analysis');
+const { tokenize }=require('./sql-policy');
+
+const knownCodes=new Set(['sql.name.column','sql.name.ambiguous','sql.name.qualifier','sql.name.table']);
+const quote=value=>'`'+value.replaceAll('`','``')+'`';
+const id=token=>['identifier','word'].includes(token?.kind);
+const same=(left,right)=>typeof left==='string'&&typeof right==='string'&&left.toLowerCase()===right.toLowerCase();
+
+function nearby(left,right) {
+  if (same(left,right)) return true;
+  const [smaller,bigger]=left.length<right.length?[left.toLowerCase(),right.toLowerCase()]:[right.toLowerCase(),left.toLowerCase()];
+  if (!smaller || Math.abs(smaller.length-bigger.length)>1) return false;
+  let i=0,j=0,changes=0;
+  while(i<smaller.length&&j<bigger.length){
+    if(smaller[i]===bigger[j]){i++;j++;continue;}
+    if(++changes>1)return false;
+    if(smaller.length===bigger.length)i++;
+    j++;
+  }
+  return changes+(bigger.length-j)<=1;
+}
+
+function sqlQuickFixes(text,offset,catalog) {
+  if (!catalog?.database||catalog.coverage?.tables!=='loaded'||catalog.coverage?.columns!=='loaded') return [];
+  const options={dialect:catalog.dialect,database:catalog.database,catalogComplete:true,
+    sqlMode:catalog.sqlMode,tableNameCaseSensitive:catalog.tableNameCaseSensitive};
+  const split=statementRanges(text,options),part=split.statements[0];
+  if (!part||split.unknown.length||offset<part.start||offset>=part.end) return [];
+  const source=text.slice(part.start,part.end),on=offset-part.start;
+  const before=analyzeSql(source,catalog,options);
+  if(before.scopes.length!==1||before.scopes[0].partial||before.relations.some(item=>item.kind!=='catalog'))return [];
+  const issue=before.diagnostics.find(item=>knownCodes.has(item.code)&&on>=item.start&&on<item.end);
+  if(!issue)return [];
+  let tokens;
+  try{tokens=tokenize(source,false,options);}catch{return [];}
+  if(tokens[0]?.upper!=='SELECT')return [];
+  const at=tokens.findIndex(item=>item.start===issue.start&&item.end===issue.end);
+  const target=tokens[at];
+  if(!id(target))return [];
+  const possible=new Set();
+  const relations=before.scopes[0].relations;
+  const left=tokens[at-1]?.value==='.'&&id(tokens[at-2])?tokens[at-2].value:null;
+  const column=relation=>relation.columns.some(value=>same(value.name,target.value));
+  const offerSole=candidates=>{
+    const distinct=[...new Set(candidates)];
+    if(distinct.length===1)possible.add(quote(distinct[0]));
+  };
+  if(issue.code==='sql.name.table'){
+    if(left&&!same(left,catalog.database))return [];
+    offerSole([...catalog.tables,...(catalog.views||[])].map(item=>item.name)
+      .filter(name=>name!==target.value&&nearby(name,target.value)));
+  }else if(issue.code==='sql.name.qualifier'){
+    const columnName=tokens[at+1]?.value==='.'&&id(tokens[at+2])?tokens[at+2].value:null;
+    if(!columnName||left)return [];
+    offerSole(relations.filter(item=>nearby(item.alias,target.value)&&item.columns.some(c=>same(c.name,columnName))).map(item=>item.alias));
+  }else if(issue.code==='sql.name.ambiguous'){
+    if(left)return [];
+    for(const relation of relations.filter(column))possible.add(quote(relation.alias)+'.'+quote(target.value));
+  }else{
+    const candidates=left?relations.filter(item=>same(item.alias,left)):relations;
+    if(candidates.length!==1)return [];
+    offerSole(candidates[0].columns.map(item=>item.name)
+      .filter(name=>name!==target.value&&nearby(name,target.value)));
+  }
+  return [...possible].slice(0,24).flatMap(replacement=>{
+    const after=source.slice(0,issue.start)+replacement+source.slice(issue.end);
+    const verified=analyzeSql(after,catalog,options);
+    if(verified.state!=='known'||verified.diagnostics.some(item=>knownCodes.has(item.code)))return [];
+    return [{start:part.start+issue.start,end:part.start+issue.end,replacement,code:issue.code}];
+  });
+}
+
+module.exports={sqlQuickFixes};

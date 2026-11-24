@@ -1,5 +1,5 @@
 {
-  "version": "0.30.0",
+  "version": "0.31.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,39 +30,37 @@
     }
   },
   "summary": {
-    "implemented": 25,
-    "partial": 105,
-    "not-implemented": 67,
+    "implemented": 28,
+    "partial": 110,
+    "not-implemented": 59,
     "host-provided": 13,
     "unverified": 4,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 41.9,
+    "percent": 44.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-009",
-    "IDEA-035",
-    "IDEA-102",
-    "IDEA-103",
-    "DG-051",
-    "DG-053",
-    "DG-065",
-    "DG-068",
-    "DG-076"
+    "IDEA-087",
+    "IDEA-088",
+    "IDEA-089",
+    "DG-036",
+    "DG-040",
+    "DG-041",
+    "DG-073",
+    "DG-075"
   ],
   "expandedFeatures": [
-    "IDEA-009",
-    "IDEA-035",
-    "IDEA-102",
-    "IDEA-103",
-    "DG-051",
-    "DG-053",
-    "DG-065",
-    "DG-068",
-    "DG-076"
+    "IDEA-087",
+    "IDEA-088",
+    "IDEA-089",
+    "DG-036",
+    "DG-040",
+    "DG-041",
+    "DG-073",
+    "DG-075"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -320,8 +318,8 @@
       "verification": {
         "state": "v0.30-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.30.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1153,8 +1151,8 @@
       "verification": {
         "state": "v0.30-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.30.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2692,25 +2690,27 @@
       "category": "테스트·프로파일링",
       "feature": "CPU·할당·JFR 프로파일",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "CPU·할당·JFR 프로파일링 통합이 없다.",
+      "scope": "선택한 JVM의 JFR 녹화를 시작·중지하고 CPU·할당 표본과 메서드별 집계를 표시한다. 저장된 녹화를 다시 분석한다.",
       "remaining": [
-        "수집 세션·flame graph·소스 연결·비교가 필요하다."
+        "플레임 그래프, 타임라인, 녹화 간 비교를 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.31-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 Spring JVM의 JDBC 부하를 유지하며 CPU·할당 표본과 JFR 저장·재열기를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/jvm-diagnostics.js",
+          "src/java/jvm-diagnostics-model.js",
+          "src/java/jvm-diagnostics-vscode.js",
+          "test/jvm-diagnostics-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2721,25 +2721,26 @@
       "category": "테스트·프로파일링",
       "feature": "힙 덤프·메모리 누수 분석",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "힙 덤프·메모리 누수 분석기가 없다.",
+      "scope": "선택한 JVM에서 클래스별 객체 수와 바이트로 힙 히스토그램을 표시한다. JFR 할당 표본을 집계한다.",
       "remaining": [
-        "덤프 로딩·dominator/retained size·GC root 경로 탐색이 필요하다."
+        "HPROF 파일 분석, 참조 경로와 retained size 계산이 남는다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.31-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "MySQL과 MariaDB에 각각 연결한 실제 Spring JVM의 실행 중 힙 히스토그램을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/jvm-diagnostics.js",
+          "src/java/jvm-diagnostics-model.js",
+          "test/jvm-diagnostics-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2750,25 +2751,27 @@
       "category": "테스트·프로파일링",
       "feature": "스레드·가상 스레드·덤프 분석",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "스레드/가상 스레드 덤프 분석 UI가 없다.",
+      "scope": "실행 JVM의 플랫폼·가상 스레드 스택, 잠금 소유·대기와 교착 상태를 표시하고 캡처를 저장·재열기한다.",
       "remaining": [
-        "수집·잠금/교착 그래프·타임라인·소스 탐색이 필요하다."
+        "캡처 간 차이와 스레드 시간 기록을 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.31-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 Spring JVM의 플랫폼 스택을 저장·재열기했다. 별도 소유 JDK 프로세스에서 가상 스레드·잠금·교착 상태 파싱을 검증했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/jvm-diagnostics.js",
+          "src/java/jvm-diagnostics-model.js",
+          "test/jvm-diagnostics.test.js",
+          "test/jvm-diagnostics-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3137,8 +3140,8 @@
       "verification": {
         "state": "v0.30-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.30.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3168,8 +3171,8 @@
       "verification": {
         "state": "v0.30-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.30.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4721,25 +4724,26 @@
       "category": "SQL 의미 분석·편집",
       "feature": "schema-aware quick-fix·의도 동작",
       "priority": "P0",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "schema-aware SQL quick fix를 제공하지 않는다.",
+      "scope": "현재 카탈로그와 SQL 문맥에서 정확히 묶을 수 있는 알 수 없는 열의 이름 수정을 제안한다.",
       "remaining": [
-        "진단과 연결한 수정 후보·미리보기·적용 검증이 필요하다."
+        "DB 객체 생성, 조인 수리와 복합 구문 교정을 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.31-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "VS Code 코드 액션으로 실제 Spring 테이블의 잘못된 열 이름을 수정한 뒤 두 서버에서 쿼리를 실행했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/sql-quick-fixes.js",
+          "src/db/sql-editing-vscode.js",
+          "test/sql-editing-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4851,25 +4855,27 @@
       "category": "SQL 의미 분석·편집",
       "feature": "dialect별 SQL formatting",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "dialect별 SQL formatter를 연결하지 않았다.",
+      "scope": "MySQL·MariaDB의 일반 쿼리와 데이터 변경문의 절·들여쓰기와 키워드 대소문자를 정리한다. 리터럴·주석·줄바꿈을 보존한다.",
       "remaining": [
-        "MySQL/MariaDB 구조·주석·개행 규칙과 미완성 코드 처리가 필요하다."
+        "저장 프로그램과 복합 DELIMITER 구문, 고급 스타일을 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.31-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "세미콜론이 들어간 문자열을 포함하는 JOIN을 포맷하고 두 실제 DB에서 같은 결과를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/sql-format.js",
+          "src/db/sql-editing-vscode.js",
+          "test/sql-editing.test.js",
+          "test/sql-editing-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4880,25 +4886,27 @@
       "category": "SQL 의미 분석·편집",
       "feature": "live template·snippet·문맥 변수",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "SQL live template·문맥 변수 엔진이 없다.",
+      "scope": "현재 연결의 관찰한 테이블·열을 사용하는 SQL 템플릿과 사용자 정의 템플릿을 편집 가능한 자리표시자로 삽입한다.",
       "remaining": [
-        "schema·alias·selection 기반 template 확장이 필요하다."
+        "동적 템플릿 계산식과 팀 공유를 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.31-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 Spring 테이블을 선택해 네이티브 편집기에 템플릿을 삽입하고 두 서버에서 결과 열과 행을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/sql-templates.js",
+          "src/db/sql-editing-vscode.js",
+          "test/sql-editing.test.js",
+          "test/sql-editing-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5198,8 +5206,8 @@
       "verification": {
         "state": "v0.30-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.30.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5258,8 +5266,8 @@
       "verification": {
         "state": "v0.30-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.30.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5636,8 +5644,8 @@
       "verification": {
         "state": "v0.30-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.30.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5729,8 +5737,8 @@
       "verification": {
         "state": "v0.30-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.30.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5884,25 +5892,27 @@
       "category": "가져오기·내보내기",
       "feature": "다른 DB/table로 데이터 복사",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "DB/table 간 데이터 복사 마법사가 없다.",
+      "scope": "연결을 바꾼 뒤에도 제한된 읽기 스냅샷을 유지하고 명시한 열 매핑으로 다른 서버의 InnoDB 테이블에 전송한다. 쓰기 검토 및 커밋·롤백을 분리한다.",
       "remaining": [
-        "원본/대상 매핑·타입·대량 전송·검토/복구가 필요하다."
+        "대량 스트리밍 전송, 지원 타입 확대와 스키마 생성이 남는다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.31-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 두 엔진에서 양방향 복사를 실행했다. 정확한 숫자·UTF-8·바이너리·NULL·시각 값, 커밋 전 격리, 명시적 롤백과 중복 키 실패를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/table-transfer.js",
+          "src/db/table-transfer-vscode.js",
+          "src/db/import-stream.js",
+          "test/table-transfer-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5942,25 +5952,27 @@
       "category": "데이터 비교",
       "feature": "table·result dataset 비교·sync",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "table/result dataset 비교·동기화 엔진이 없다.",
+      "scope": "열·복합 키를 명시적으로 매핑한 캡처를 비교한다. 선택한 대응 행의 차이를 기존 테이블 편집의 검토 가능한 초안으로 만든다.",
       "remaining": [
-        "키 매칭·차이·충돌·검토된 sync SQL이 필요하다."
+        "전체 서버 데이터 비교, 한쪽 행의 삽입·삭제와 반복 가능한 작업을 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.31-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 두 엔진에서 원본과 대상의 정밀 숫자·바이너리·NULL을 대조했다. 병행 수정은 차단하고 재검토 후 수정과 커밋을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/dataset-comparison.js",
+          "src/table-editor.js",
+          "src/ui/results.js",
+          "test/db-datasets-v31-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5981,8 +5993,8 @@
       "verification": {
         "state": "v0.30-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.30.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6587,8 +6599,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "cf5e53d5a781fb2148137faca82121ed8d9f8d381c5c6dcf4c4c31896325e6ec",
-    "sourceManifestSha256": "32e820fbdc5706602419e040ee0d47673c89eca814f716f3c05a5b95f82b8f6e",
+    "vsixSha256": "e86246bb83f663e740ee0166db34e82dcf2ec06d291721e52b83b35be4771604",
+    "sourceManifestSha256": "fc81ea830ad963c7e23e390953c14379202b47631e43061d357763cbaa58be6c",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6602,53 +6614,53 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-009",
+      "id": "IDEA-087",
       "before": "not-implemented",
       "after": "implemented"
     },
     {
-      "id": "IDEA-035",
-      "before": "unverified",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-102",
+      "id": "IDEA-088",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-103",
+      "id": "IDEA-089",
+      "before": "not-implemented",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-036",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "DG-051",
-      "before": "partial",
-      "after": "implemented"
+      "id": "DG-040",
+      "before": "not-implemented",
+      "after": "partial"
     },
     {
-      "id": "DG-053",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-065",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-076",
+      "id": "DG-041",
       "before": "not-implemented",
       "after": "implemented"
+    },
+    {
+      "id": "DG-073",
+      "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "DG-075",
+      "before": "not-implemented",
+      "after": "partial"
     }
   ],
   "offline": {
     "node": "v24.22.1",
-    "tests": 1136,
-    "pass": 1085,
+    "tests": 1151,
+    "pass": 1099,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 51,
+    "skipped": 52,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

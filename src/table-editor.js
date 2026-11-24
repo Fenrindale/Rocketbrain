@@ -83,6 +83,33 @@ class TableEditor {
     context.xlsxWorkbook=undefined;
     this.results.editState(id, { readOnly: result.state.readOnly, review: undefined,hasDraft:false,draftRevision:0,bulkSource:undefined,xlsxWorkbook:undefined,bulkDraft:undefined,editMessage: message, editError: undefined, ...(result.browse?.sql ? { sql: result.browse.sql } : {}) });
   }
+  async stageDatasetChanges(id, { changes, modelId, draftRevision, requestId, assertFresh }) {
+    const context = this._context(id), record = this._record(id);
+    const verify = () => {
+      this._context(id);
+      assertFresh();
+      const session = context.db.getSessionState(context.sessionId);
+      const pendingDraft = record.bulkDraft?.modelId === modelId && record.bulkDraft?.draftRevision === (record.draftRevision || 0);
+      if (record.readOnly || session.readOnly || session.needsReconnect || session.outcomeUnknown || !record.result.edit?.canEdit ||
+          record.hasDraft || record.review || pendingDraft || record.result.edit.modelId !== modelId ||
+          !Number.isInteger(draftRevision) || draftRevision !== (record.draftRevision || 0)) {
+        throw Error('Enable editing, clear pending drafts and compare the current table snapshot again.');
+      }
+    };
+    if (record.editBusy) throw Error('Wait for the current table operation.');
+    verify();
+    this.results.editState(id, { editBusy: true, editError: undefined, editMessage: undefined });
+    try {
+      await this.withSession(context.sessionId, async () => {
+        verify();
+        this.results.editState(id, { bulkDraft: { id: randomUUID(), modelId, draftRevision, ...changes },
+          editMessage: 'Compared rows are staged. Review SQL, Apply, then Commit or Roll Back.' });
+      });
+    } finally {
+      this.results.editState(id, { editBusy: false, editResponseId: requestId });
+      this.onStatus();
+    }
+  }
   async handle(id, message) {
     let context, locked = false, completed;
     try {

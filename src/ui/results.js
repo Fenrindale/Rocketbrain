@@ -4,7 +4,8 @@
   let history = [], currentId = null, editingCell = null, requestSequence = 0;
   const drafts = new Map(), browseForms = new Map(),bulkForms=new Map(), layouts = new Map();
   const charts = new Map();
-  const viewModes = ['grid', 'record', 'tree', 'text', 'transpose', 'chart'];
+  const comparisons = new Map();
+  const viewModes = ['grid', 'record', 'tree', 'text', 'transpose', 'chart', 'compare'];
   const editableModes = new Set(['grid', 'record']);
   let insertExport;
   let chartObserver;
@@ -690,6 +691,159 @@
     chartObserver.observe(canvas);
   }
 
+  function compareForm(target) {
+    let form = comparisons.get(target.id);
+    if (form?.revision !== target.chart.revision) {
+      form = { revision: target.chart.revision, sourceId: null, mapping: [], selected: new Set(), page: 0 };
+      comparisons.set(target.id, form);
+    }
+    return form;
+  }
+  function clearComparison(form) {
+    form.report = form.pending = form.error = undefined;
+    form.selected.clear();
+    form.page = 0;
+  }
+  function comparisonSources(target) {
+    return history.filter(record => record.id !== target.id && record.state === 'done' && record.chart &&
+      !record.hasDraft && !record.editBusy && !record.review && !record.sessionState?.outcomeUnknown);
+  }
+
+  function renderMappings(target, source, form, busy) {
+    const panel = $('compare-mappings');
+    panel.replaceChildren();
+    if (!source) return;
+    for (const [index, pair] of form.mapping.entries()) {
+      const line = document.createElement('div');
+      line.className = 'compare-pair';
+      for (const [side, record, title] of [['target', target, 'Destination column'], ['source', source, 'Source column']]) {
+        const label = document.createElement('label'), control = document.createElement('select');
+        control.setAttribute('aria-label', title + ' ' + (index + 1));
+        control.disabled = busy;
+        options(control, record.result.columns.flatMap((name, column) =>
+          column === pair[side] || !form.mapping.some(other => other[side] === column) ?
+            [{ value: String(column), label: (column + 1) + '. ' + name }] : []), String(pair[side]));
+        control.onchange = () => { pair[side] = Number(control.value); clearComparison(form); render(); };
+        label.append(title, control);
+        line.append(label);
+      }
+      const keyLabel = document.createElement('label'), check = document.createElement('input');
+      check.type = 'checkbox';
+      check.checked = pair.key;
+      check.disabled = busy;
+      check.setAttribute('aria-label', 'Match key ' + (index + 1));
+      check.onchange = () => { pair.key = check.checked; clearComparison(form); render(); };
+      keyLabel.append(check, 'Match key');
+      const remove = document.createElement('button');
+      remove.textContent = 'Remove Pair';
+      remove.setAttribute('aria-label', 'Remove column pair ' + (index + 1));
+      remove.disabled = busy;
+      remove.onclick = () => { form.mapping.splice(index, 1); clearComparison(form); render(); };
+      line.append(keyLabel, remove);
+      panel.append(line);
+    }
+  }
+  const comparisonPageSize = 24;
+  function renderComparisonTable(form, allowStage) {
+    const report = form.report, table = document.createElement('table');
+    table.className = 'comparison-data';
+    const head = table.createTHead().insertRow(), body = table.createTBody();
+    for (const label of ['Stage', 'Matched key', 'Change', 'Mapped differences']) {
+      const cell = document.createElement('th');
+      cell.scope = 'col';
+      cell.textContent = label;
+      head.append(cell);
+    }
+    const start = form.page * comparisonPageSize, entries = report.rows.slice(start, start + comparisonPageSize);
+    for (const item of entries) {
+      const row = body.insertRow(), selected = row.insertCell(), key = row.insertCell(), change = row.insertCell();
+      if (allowStage && item.canStage) {
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = form.selected.has(item.index);
+        check.setAttribute('aria-label', 'Stage comparison row ' + (item.index + 1));
+        check.onchange = () => {
+          if (check.checked) form.selected.add(item.index); else form.selected.delete(item.index);
+          $('compare-stage').disabled = !form.selected.size;
+        };
+        selected.append(check);
+      }
+      presentValue(key, JSON.stringify(item.key));
+      presentValue(change, { changed: 'Different', 'target-only': 'Destination capture only', 'source-only': 'Source capture only' }[item.state]);
+      const detail = row.insertCell();
+      if (item.reason) detail.title = item.reason;
+      if (item.fields?.length) {
+        const disclosure = document.createElement('details'), label = document.createElement('summary');
+        label.textContent = item.fields.length + ' changed fields';
+        disclosure.append(label);
+        for (const field of item.fields) {
+          const group = document.createElement('div'), title = document.createElement('strong');
+          title.textContent = field.targetName + (field.targetName === field.sourceName ? '' : ' ← ' + field.sourceName);
+          group.append(title);
+          for (const [name, value] of [['Destination', field.target], ['Source', field.source]]) {
+            const line = document.createElement('div'), key = document.createElement('span'), literal = document.createElement('pre');
+            key.textContent = name;
+            literal.textContent = value === null ? 'SQL NULL' : JSON.stringify(value);
+            line.className = 'comparison-values';
+            line.append(key, literal);
+            group.append(line);
+          }
+          disclosure.append(group);
+        }
+        detail.append(disclosure);
+      }
+    }
+    $('grid').append(table);
+    if (report.rows.length <= comparisonPageSize) return;
+    const controls = document.createElement('div');
+    controls.className = 'compare-pages';
+    for (const [step, label] of [[-1, 'Previous Differences'], [1, 'Next Differences']]) {
+      const button = document.createElement('button');
+      button.textContent = label;
+      button.disabled = step < 0 ? !form.page : start + entries.length >= report.rows.length;
+      button.onclick = () => { form.page += step; render(); };
+      controls.append(button);
+    }
+    controls.append(`${start + 1}–${start + entries.length} of ${report.rows.length} differences`);
+    $('grid').prepend(controls);
+  }
+
+  function renderCompare(target, busy) {
+    const form = compareForm(target), candidates = comparisonSources(target);
+    const source = candidates.find(record => record.id === form.sourceId);
+    $('compare-tools').hidden = false;
+    options($('compare-source'), [{ value: '', label: 'Choose a result tab' }, ...candidates.map(record =>
+      ({ value: String(record.id), label: 'Result ' + record.id + ' · ' + record.source }))], source ? String(source.id) : '');
+    $('compare-source').disabled = busy;
+    if (source && form.sourceRevision !== source.chart.revision) {
+      form.sourceRevision = source.chart.revision;
+      form.mapping = [];
+      clearComparison(form);
+    }
+    if (!source) clearComparison(form);
+    const maxPairs = Math.min(64, target.result.columns.length, source?.result.columns.length || 0);
+    $('compare-add').disabled = busy || form.mapping.length >= maxPairs;
+    $('compare-run').disabled = busy || !source || !form.mapping.some(pair => pair.key);
+    renderMappings(target, source, form, busy);
+    const report = form.report;
+    const pendingDraft = target.bulkDraft?.modelId === target.result.edit?.modelId &&
+      target.bulkDraft?.draftRevision === (target.draftRevision || 0);
+    const allowStage = !busy && !target.readOnly && !pendingDraft && !source?.sessionState?.inTransaction && Boolean(report?.stageableRows);
+    $('compare-stage').disabled = !allowStage || !form.selected.size;
+    if (form.error) { $('compare-status').textContent = form.error; return; }
+    if (!report) {
+      $('compare-status').textContent = form.pending ? 'Comparing captured rows…' : 'Pair columns and mark a unique key. The current result is the destination.';
+      return;
+    }
+    const { equal, changed, targetOnly, sourceOnly } = report.summary;
+    const partial = report.target.partial || report.source.partial ? ' · at least one capture is filtered or paged' : '';
+    const destination = allowStage ? ' Select changed matched rows to stage updates.' : target.readOnly ?
+      ' Enable editing in Grid or Record to stage updates.' : source?.sessionState?.inTransaction ?
+        ' Finish the source transaction and capture fresh rows before staging.' : ' Staging requires the complete destination primary key and editable changed fields.';
+    $('compare-status').textContent = `${equal} equal · ${changed} different · ${targetOnly} destination only · ${sourceOnly} source only${partial}.${destination}`;
+    if (report.rows.length) renderComparisonTable(form, allowStage);
+  }
+
   function renderResultLayout(record, layout, rows, { busy, needsDraftView }) {
     const result = record.result, order = columnOrder(layout);
     const visible = order.filter(index => !layout.hidden.has(index));
@@ -789,6 +943,7 @@
     chartObserver = undefined;
     $('grid').replaceChildren();
     $('chart-tools').hidden = true;
+    $('compare-tools').hidden = true;
     const exportable = Boolean(active?.state === 'done' && active.result?.columns.length && !active.editBusy &&
       !active.hasDraft && !active.review && !active.sessionState?.outcomeUnknown && !draft(active).pendingRequestId);
     $('copy').disabled = $('export').disabled = $('export-format').disabled = !exportable;
@@ -820,6 +975,7 @@
     else {
       $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('bulk-panel').hidden = true;
       if (layout.mode === 'chart') renderChart(active, busy);
+      else if (layout.mode === 'compare') renderCompare(active, busy);
       else renderSnapshot(result, layout, columns);
     }
     $('export-format').options[3].disabled = !result.fields?.length;
@@ -833,6 +989,16 @@
     if (result.state?.needsReconnect) $('message').textContent += ' Session closed; reconnect explicitly before running another statement.';
   }
   window.addEventListener('message', event => {
+    if (event.data?.type === 'datasetComparison' || event.data?.type === 'datasetStageError') {
+      const { id, comparison, error, requestId, type } = event.data, form = comparisons.get(id);
+      if (form && (type === 'datasetStageError' || form.pending === requestId)) {
+        form.pending = undefined;
+        form.report = comparison;
+        form.error = error;
+        if (current()?.id === id) render();
+      }
+      return;
+    }
     if (event.data?.type === 'resultAnalysis') {
       const { id, revision, requestId, analysis, error } = event.data, chart = charts.get(id);
       if (chart?.revision === revision && chart.pending === requestId) {
@@ -852,6 +1018,7 @@
     for(const id of bulkForms.keys())if(!history.some(record=>record.id===id))bulkForms.delete(id);
     for (const id of layouts.keys()) if (!history.some(record => record.id === id)) layouts.delete(id);
     for (const id of charts.keys()) if (!history.some(record => record.id === id)) charts.delete(id);
+    for (const id of comparisons.keys()) if (!history.some(record => record.id === id)) comparisons.delete(id);
     for(const record of history){
       if(!record.result?.edit)continue;const model=record.result.edit,form=bulkForm(record),item=draft(record),source=record.bulkSource,bulk=record.bulkDraft;
       const workbook=record.xlsxWorkbook;if(workbook&&workbook.modelId===model.modelId&&workbook.id!==form.workbookId){form.workbookId=workbook.id;form.sheets=workbook.sheets;form.sheetId=workbook.sheets.find(s=>s.state==='visible')?.id||workbook.sheets[0]?.id;form.mode='import';form.format='xlsx';form.open=true;form.text='';form.sourceId=undefined;form.mapping=[];form.formulaPolicy='reject';form.blankPolicy='empty';form.hasHeader=true;}
@@ -996,6 +1163,49 @@
     if (!record?.chart) return;
     const chart = chartFor(record);
     if (chart.analysis) useChart(record, chart, 'exportAnalysis');
+  };
+  $('compare-source').onchange = () => {
+    const target = current();
+    if (!target?.chart) return;
+    const form = compareForm(target);
+    form.sourceId = Number($('compare-source').value) || null;
+    form.mapping = [];
+    clearComparison(form);
+    render();
+  };
+  $('compare-add').onclick = () => {
+    const target = current();
+    if (!target?.chart) return;
+    const form = compareForm(target), source = comparisonSources(target).find(record => record.id === form.sourceId);
+    if (!source) return;
+    const unused = (side, index) => !form.mapping.some(pair => pair[side] === index);
+    const left = target.result.columns.findIndex((_, index) => unused('target', index));
+    const sameName = source.result.columns.findIndex((name, index) => name === target.result.columns[left] && unused('source', index));
+    const right = sameName < 0 ? source.result.columns.findIndex((_, index) => unused('source', index)) : sameName;
+    if (left < 0 || right < 0) return;
+    form.mapping.push({ target: left, source: right, key: false });
+    clearComparison(form);
+    render();
+  };
+  $('compare-run').onclick = () => {
+    const target = current();
+    if (!target?.chart) return;
+    const form = compareForm(target), source = comparisonSources(target).find(record => record.id === form.sourceId);
+    if (!source) return;
+    clearComparison(form);
+    form.pending = ++requestSequence;
+    vscode.postMessage({ type: 'compareDatasets', id: target.id, sourceId: source.id, requestId: form.pending,
+      targetRevision: target.chart.revision, sourceRevision: source.chart.revision, mapping: form.mapping });
+    render();
+  };
+  $('compare-stage').onclick = () => {
+    const target = current();
+    if (!target?.chart || !target.result.edit) return;
+    const form = compareForm(target);
+    if (!form.report || !form.selected.size) return;
+    const input = { reviewId: form.report.reviewId, rows: [...form.selected], modelId: target.result.edit.modelId };
+    clearComparison(form);
+    send('stageDatasetComparison', input);
   };
   $('result-columns').onclick = () => updateResultLayout(layout => { layout.open = !layout.open; });
   $('result-row-previous').onclick = () => updateResultLayout(layout => { layout.row--; });

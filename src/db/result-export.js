@@ -137,4 +137,4 @@ function createResultExport(result, format = 'csv', target) {
   return { ...file, data };
 }
 
-module.exports = { createResultExport };
+module.exports = { createResultExport, columnKind };

@@ -147,4 +147,6 @@ function analyzeResult(result, options = {}) {
   };
 }
 
-module.exports = { analyzeResult, numericColumns };
+const normalizeCapturedNumber = value => format(rational(decimal(value)));
+
+module.exports = { analyzeResult, numericColumns, normalizeCapturedNumber };

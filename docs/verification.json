@@ -1,25 +1,25 @@
 {
-  "version": "0.30.0",
-  "verifiedAt": "2026-11-24T16:07:19.106Z",
+  "version": "0.31.0",
+  "verifiedAt": "2026-11-24T16:22:43.159Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.30.0.vsix",
-    "bytes": 1656109,
-    "sha256": "cf5e53d5a781fb2148137faca82121ed8d9f8d381c5c6dcf4c4c31896325e6ec",
+    "name": "rocketbrain-0.31.0.vsix",
+    "bytes": 1686889,
+    "sha256": "e86246bb83f663e740ee0166db34e82dcf2ec06d291721e52b83b35be4771604",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1065,
-    "inputVectorSha256": "32e820fbdc5706602419e040ee0d47673c89eca814f716f3c05a5b95f82b8f6e",
+    "frozenPublicInputs": 1085,
+    "inputVectorSha256": "fc81ea830ad963c7e23e390953c14379202b47631e43061d357763cbaa58be6c",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1136,
-    "pass": 1085,
+    "tests": 1151,
+    "pass": 1099,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 51,
+    "skipped": 52,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "results",
+          "group": "sql",
           "checks": 1
         },
         {
-          "group": "http",
+          "group": "datasets",
           "checks": 1
         },
         {
-          "group": "history",
+          "group": "transfer",
           "checks": 1
         },
         {
-          "group": "java",
+          "group": "jvm",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "results",
+          "group": "sql",
           "checks": 1
         },
         {
-          "group": "http",
+          "group": "datasets",
           "checks": 1
         },
         {
-          "group": "history",
+          "group": "transfer",
           "checks": 1
         },
         {
-          "group": "java",
+          "group": "jvm",
           "checks": 1
         }
       ],
@@ -85,134 +85,128 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-009": {
-      "scope": "실제 VS Code·Spring에서 사용자 정의 Java 템플릿과 편집 가능한 자리표시자를 삽입하고 postfix 표현식의 컴파일·실행을 확인했다.",
+    "IDEA-087": {
+      "scope": "실제 Spring JVM의 JDBC 부하를 유지하며 CPU·할당 표본과 JFR 저장·재열기를 확인했다.",
       "runtimeGroups": [
-        "java"
+        "jvm"
       ]
     },
-    "IDEA-035": {
-      "scope": "실제 Spring 프로젝트에서 일곱 멤버를 생성했다. 충돌 거부, 취소, 실행 취소·다시 실행, 컴파일된 접근·동등성과 위임 반환값 42를 확인했다.",
+    "IDEA-088": {
+      "scope": "MySQL과 MariaDB에 각각 연결한 실제 Spring JVM의 실행 중 힙 히스토그램을 확인했다.",
       "runtimeGroups": [
-        "java"
+        "jvm"
       ]
     },
-    "IDEA-102": {
-      "scope": "최종 VSIX의 HTTP 명령으로 실제 Spring·JDBC 조회의 응답 조건 네 개를 확인했다. 소유 HTTP 서버에서 인증, 비밀값 표시 제거, 응답 제한과 취소를 검증했다.",
+    "IDEA-089": {
+      "scope": "실제 Spring JVM의 플랫폼 스택을 저장·재열기했다. 별도 소유 JDK 프로세스에서 가상 스레드·잠금·교착 상태 파싱을 검증했다.",
       "runtimeGroups": [
-        "http"
+        "jvm"
       ]
     },
-    "IDEA-103": {
-      "scope": "실제 Spring 엔드포인트의 OpenAPI 작업에서 요청을 만든 뒤 두 DB를 사용하는 런타임에서 응답을 확인했다. 로컬 참조와 중복·순환 진단도 검증했다.",
+    "DG-036": {
+      "scope": "VS Code 코드 액션으로 실제 Spring 테이블의 잘못된 열 이름을 수정한 뒤 두 서버에서 쿼리를 실행했다.",
       "runtimeGroups": [
-        "http"
+        "sql"
       ]
     },
-    "DG-051": {
-      "scope": "실제 두 DB에서 사용자 SQL 기록, 검색·삭제·전체 지우기, 같은 연결의 재실행과 불일치 거부를 확인했다. 스크립트·바인딩 입력과 재실행은 기록에서 제외했다.",
+    "DG-040": {
+      "scope": "세미콜론이 들어간 문자열을 포함하는 JOIN을 포맷하고 두 실제 DB에서 같은 결과를 확인했다.",
       "runtimeGroups": [
-        "history"
+        "sql"
       ]
     },
-    "DG-053": {
-      "scope": "실제 두 서버에서 태그 검색, 저장 프로필 바인딩과 재연결, 연결 불일치 거부를 확인했다. 쿼리 내용은 선택한 SQL 그대로 보존됐다.",
+    "DG-041": {
+      "scope": "실제 Spring 테이블을 선택해 네이티브 편집기에 템플릿을 삽입하고 두 서버에서 결과 열과 행을 확인했다.",
       "runtimeGroups": [
-        "history"
+        "sql"
       ]
     },
-    "DG-065": {
-      "scope": "브라우저에서 LF·CRLF·CR 및 혼합 줄바꿈 편집을 확인했다. 실제 두 서버의 커밋에서 줄바꿈·NUL·JSON 큰 숫자·바이너리·NULL 표현을 대조했다.",
+    "DG-073": {
+      "scope": "실제 두 엔진에서 양방향 복사를 실행했다. 정확한 숫자·UTF-8·바이너리·NULL·시각 값, 커밋 전 격리, 명시적 롤백과 중복 키 실패를 확인했다.",
       "runtimeGroups": [
-        "results"
+        "transfer"
       ]
     },
-    "DG-068": {
-      "scope": "저장 프로필의 내부 표시 정보에서 연결 식별값을 전달하도록 수정했다. 두 실제 DB의 저장 프로필을 재연결한 뒤 같은 테이블의 배치 복원 확인을 추가했다.",
+    "DG-075": {
+      "scope": "실제 두 엔진에서 원본과 대상의 정밀 숫자·바이너리·NULL을 대조했다. 병행 수정은 차단하고 재검토 후 수정과 커밋을 확인했다.",
       "runtimeGroups": [
-        "history"
-      ]
-    },
-    "DG-076": {
-      "scope": "Chromium에서 차트와 범주 페이지 이동을 확인했다. 실제 두 DB의 정밀 DECIMAL 집계에서 합계 0.000000000000004와 분수 평균을 확인했다.",
-      "runtimeGroups": [
-        "results"
+        "datasets"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 161,
+    "sourceCorrespondences": 171,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 25,
-      "partial": 105,
-      "not-implemented": 67,
+      "implemented": 28,
+      "partial": 110,
+      "not-implemented": 59,
       "host-provided": 13,
       "unverified": 4,
       "platform-limited": 2
     },
-    "weightedPoints": 90.5,
-    "previousWeightedPoints": 85,
+    "weightedPoints": 96,
+    "previousWeightedPoints": 90.5,
     "targetWeightedPoints": 108,
-    "referencePercent": 41.9,
+    "referencePercent": 44.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-009",
+        "id": "IDEA-087",
         "before": "not-implemented",
         "after": "implemented"
       },
       {
-        "id": "IDEA-035",
-        "before": "unverified",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-102",
+        "id": "IDEA-088",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-103",
+        "id": "IDEA-089",
+        "before": "not-implemented",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-036",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "DG-051",
-        "before": "partial",
-        "after": "implemented"
+        "id": "DG-040",
+        "before": "not-implemented",
+        "after": "partial"
       },
       {
-        "id": "DG-053",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-065",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-076",
+        "id": "DG-041",
         "before": "not-implemented",
         "after": "implemented"
+      },
+      {
+        "id": "DG-073",
+        "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-075",
+        "before": "not-implemented",
+        "after": "partial"
       }
     ]
   },
   "limits": [
-    "HTTP 응답 검사는 상태·헤더·JSON 경로의 선언형 조건을 사용한다.",
-    "OpenAPI 작업은 3.0·3.1 JSON과 로컬 참조 형식에 적용한다.",
-    "차트 집계는 캡처한 결과 페이지의 값에서 계산한다."
+    "JFR은 JDK 도구와 쓰기 가능한 JVM 녹화 저장소를 사용한다. 이 Windows 검증 환경에서는 JVM의 저장소 경로에 ASCII 문자를 사용했다.",
+    "테이블 전송은 관찰한 InnoDB 테이블의 호환 타입, 500행·64열·1 MiB 이하 캡처에 적용한다.",
+    "데이터 비교에서 한쪽에만 있는 행은 차이로 표시한다. 수정은 정확한 기본 키로 대응한 행을 검토한 뒤 적용한다."
   ],
   "next": [
-    "실제 JVM의 JFR·스레드·메모리 진단",
-    "MySQL·MariaDB SQL 포맷과 문맥 템플릿",
-    "데이터셋 차이와 검토하는 테이블 간 데이터 복사"
+    "Java 프로젝트 검사 프로필과 중복 탐색",
+    "MySQL·MariaDB 카탈로그 기반 JPA 엔티티 생성",
+    "오프라인 DDL 모델과 시스템 카탈로그·권한 확인"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

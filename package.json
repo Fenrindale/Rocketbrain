@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -63,10 +63,20 @@
       { "command": "rocketbrain.java.typeHierarchy", "title": "Explore Java Type Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.insertLiveTemplate", "title": "Insert Java Live Template", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.generateMembers", "title": "Generate Java Members", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.recordJvmProfile", "title": "Record JVM Profile", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.inspectJvmRecording", "title": "Inspect JVM Flight Recording", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.captureJvmThreads", "title": "Capture JVM Threads", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.inspectJvmThreads", "title": "Inspect JVM Thread Snapshot", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.inspectJvmHeapHistogram", "title": "Inspect JVM Heap Histogram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.setTransactionIsolation", "title": "Set SQL Session Isolation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.sql.saveQuery", "title": "Save SQL Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
+      { "command": "rocketbrain.sql.insertTemplate", "title": "Insert SQL Template", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
+      { "command": "rocketbrain.data.captureTransferSource", "title": "Capture Table Copy Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.data.transfer", "title": "Copy Captured Rows", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.data.finishTransfer", "title": "Finish Table Copy", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.http.run", "title": "Send HTTP Request", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted", "icon": "$(play)" },
       { "command": "rocketbrain.http.environment", "title": "Select HTTP Environment", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
       { "command": "rocketbrain.http.saveSecret", "title": "Set HTTP Environment Secret", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
@@ -888,6 +898,16 @@
       ],
       "view/item/context": [
         {
+          "command": "rocketbrain.data.captureTransferSource",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "data"
+        },
+        {
+          "command": "rocketbrain.data.transfer",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "data"
+        },
+        {
           "command": "rocketbrain.schema.exportDdl",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
           "group": "schema"
@@ -1134,6 +1154,22 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.sql.templates": {
+          "type": "array",
+          "default": [],
+          "scope": "resource",
+          "description": "SQL templates with prefix, body and optional description. Context fields include relation, table, schema, columns and key.",
+          "items": {
+            "type": "object",
+            "required": ["prefix", "body"],
+            "additionalProperties": false,
+            "properties": {
+              "prefix": { "type": "string" },
+              "body": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        },
         "rocketbrain.http.environments": {
           "type": "object",
           "scope": "resource",

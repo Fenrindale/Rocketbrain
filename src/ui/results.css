@@ -38,6 +38,19 @@
 .result-chart-canvas { display: block; width: 100%; height: clamp(125px, 34vh, 260px); }
 .chart-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
 .chart-data .null { color: var(--vscode-descriptionForeground); font-style: italic; }
+#compare-tools { padding: 8px 14px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 12px; }
+.compare-top, .compare-pair, .compare-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.compare-top label, .compare-pair label { display: inline-flex; align-items: center; gap: 4px; }
+#compare-tools select { max-width: min(35vw, 240px); color: var(--vscode-input-foreground); background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); padding: 4px; font: inherit; }
+#compare-mappings { max-height: 144px; overflow: auto; margin-top: 6px; }
+.compare-pair { margin: 4px 0; }
+#compare-status { margin-top: 6px; color: var(--vscode-descriptionForeground); }
+.comparison-data details { white-space: normal; }
+.comparison-data summary { cursor: pointer; }
+.comparison-values { display: grid; grid-template-columns: 78px 1fr; gap: 6px; font-size: 11px; }
+.comparison-values pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.compare-pages { padding: 7px 14px; }
 
 header label, #result-layout, #result-column-panel, #insert-export { font-size: 12px; }
 header { flex-wrap: wrap; gap: 8px; }
