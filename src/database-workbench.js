@@ -10,7 +10,7 @@ const { relatedRows } = require('./db/related-rows');
 const { tableLayoutConnectionKey } = require('./db/result-layouts');
 const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
 
-async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree) {
+async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree, isVirtualSqlPreview = () => false) {
   const output = vscode.window.createOutputChannel('Rocketbrain');
   const state = { db: new DatabaseService(), schema: [], metadata:null, profile:null, tableLayoutConnection:undefined, label: 'Offline demo', mysql: false, running: new Set(), connecting: new Set(), switching: false, disposed: false, candidates: new Set(), epoch: 0 };
   const bindings = new Map();
@@ -377,7 +377,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     vscode.workspace.onDidChangeWorkspaceFolders(() => project.refresh()),
     vscode.workspace.onDidCreateFiles(() => project.refresh()), vscode.workspace.onDidDeleteFiles(() => project.refresh()), vscode.workspace.onDidRenameFiles(() => project.refresh()),
     vscode.languages.registerCompletionItemProvider('sql', { provideCompletionItems(document, position) {
-      if(state.mysql)return [];
+      if(state.mysql||isVirtualSqlPreview(document))return [];
       // Suggestions use the current statement and metadata; nested SQL name binding remains a later phase.
       const text = document.getText(), offset = document.offsetAt(position);
       const sql = statementAt(text, offset, { dialect: state.mysql ? 'mysql' : 'sqlite' });
@@ -409,6 +409,23 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     inspectRelatedRows, openRelatedRows,
     onDidChangeDatabase: connectionEvents.event,
     onDidCompleteUserSql: completedUserSql.event,
+    async withDatabaseAdmin(action,{write=false}={}){
+      if(typeof action!=='function')throw Error('Choose a database catalog or privilege operation.');
+      assertExclusiveReady();
+      if(write&&(pendingTableDraft()||[...bindings.values()].some(binding=>{
+        const session=state.db.getSessionState(binding.id);
+        return session?.inTransaction||session?.outcomeUnknown||session?.needsReconnect;
+      })))throw Error('Resolve console transactions and drafts before changing a database privilege.');
+      const {db,epoch}=state,key='database-admin';
+      state.running.add(key);
+      updateStatus();
+      try{
+        return await action({db,epoch,guard:databaseGuard(db,epoch)});
+      }finally{
+        state.running.delete(key);
+        updateStatus();
+      }
+    },
     async withTableTransfer(action,{settling=false}={}){
       const key='table-transfer';
       if(typeof action!=='function')throw Error('Choose a table copy operation.');

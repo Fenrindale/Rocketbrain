@@ -1,22 +1,22 @@
 {
-  "version": "0.31.0",
-  "verifiedAt": "2026-11-24T16:22:43.159Z",
+  "version": "0.32.0",
+  "verifiedAt": "2026-11-24T16:42:28.353Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.31.0.vsix",
-    "bytes": 1686889,
-    "sha256": "e86246bb83f663e740ee0166db34e82dcf2ec06d291721e52b83b35be4771604",
+    "name": "rocketbrain-0.32.0.vsix",
+    "bytes": 1716343,
+    "sha256": "fde7b840341409f708422f3dcf0de31070f63db601163f6b07470569bfcc7d3e",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1085,
-    "inputVectorSha256": "fc81ea830ad963c7e23e390953c14379202b47631e43061d357763cbaa58be6c",
+    "frozenPublicInputs": 1105,
+    "inputVectorSha256": "83b91ac26486fe52a8bb39ec0e5fcfab7b449c6ef7dd519e292505e1f90d19ac",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1151,
-    "pass": 1099,
+    "tests": 1167,
+    "pass": 1115,
     "fail": 0,
     "cancelled": 0,
     "skipped": 52,
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "sql",
+          "group": "ddl",
           "checks": 1
         },
         {
-          "group": "datasets",
+          "group": "admin",
           "checks": 1
         },
         {
-          "group": "transfer",
+          "group": "java",
           "checks": 1
         },
         {
-          "group": "jvm",
+          "group": "jpa",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "sql",
+          "group": "ddl",
           "checks": 1
         },
         {
-          "group": "datasets",
+          "group": "admin",
           "checks": 1
         },
         {
-          "group": "transfer",
+          "group": "java",
           "checks": 1
         },
         {
-          "group": "jvm",
+          "group": "jpa",
           "checks": 1
         }
       ],
@@ -85,128 +85,129 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-087": {
-      "scope": "실제 Spring JVM의 JDBC 부하를 유지하며 CPU·할당 표본과 JFR 저장·재열기를 확인했다.",
+    "IDEA-038": {
+      "scope": "실제 Spring 작업 공간에서 세 개 검사 진단의 심각도, 인라인 제외, 외부 범위·미저장 파일 건너뛰기와 문서 수정 후 지우기를 확인했다.",
       "runtimeGroups": [
-        "jvm"
+        "java"
       ]
     },
-    "IDEA-088": {
-      "scope": "MySQL과 MariaDB에 각각 연결한 실제 Spring JVM의 실행 중 힙 히스토그램을 확인했다.",
+    "IDEA-039": {
+      "scope": "실제 Spring 소스에서 정확 일치 두 곳, 리터럴 무시 세 곳을 선택했다. 원본 범위, 취소, 편집 후 오래된 결과 탐색 거부를 확인했다.",
       "runtimeGroups": [
-        "jvm"
+        "java"
       ]
     },
-    "IDEA-089": {
-      "scope": "실제 Spring JVM의 플랫폼 스택을 저장·재열기했다. 별도 소유 JDK 프로세스에서 가상 스레드·잠금·교착 상태 파싱을 검증했다.",
+    "IDEA-061": {
+      "scope": "실제 두 서버에서 단일·복합 기본 키를 생성·컴파일했고, Hibernate가 정밀 숫자·날짜·NULL을 읽었다. 테이블·패키지 변경과 기존 원본 충돌도 차단했다.",
       "runtimeGroups": [
-        "jvm"
+        "jpa"
       ]
     },
-    "DG-036": {
-      "scope": "VS Code 코드 액션으로 실제 Spring 테이블의 잘못된 열 이름을 수정한 뒤 두 서버에서 쿼리를 실행했다.",
+    "DG-021": {
+      "scope": "MySQL·MariaDB 각각에서 실제 계정이 관찰한 시스템 스키마·열과 performance_schema 상태를 직접 카탈로그 결과와 대조했다.",
       "runtimeGroups": [
-        "sql"
+        "admin"
       ]
     },
-    "DG-040": {
-      "scope": "세미콜론이 들어간 문자열을 포함하는 JOIN을 포맷하고 두 실제 DB에서 같은 결과를 확인했다.",
+    "DG-026": {
+      "scope": "두 엔진의 프로필에서 원본 DDL의 가상 뷰와 추가 열의 타입·완성을 확인했다. 실제 Spring 스키마는 그대로였다.",
       "runtimeGroups": [
-        "sql"
+        "ddl"
       ]
     },
-    "DG-041": {
-      "scope": "실제 Spring 테이블을 선택해 네이티브 편집기에 템플릿을 삽입하고 두 서버에서 결과 열과 행을 확인했다.",
+    "DG-033": {
+      "scope": "실제 카탈로그에서 열 추가·이름 수정, SELECT 뷰 작성·제거의 순서별 타입을 확인했다. 물리적 이름 변경은 차단됐다.",
       "runtimeGroups": [
-        "sql"
+        "ddl"
       ]
     },
-    "DG-073": {
-      "scope": "실제 두 엔진에서 양방향 복사를 실행했다. 정확한 숫자·UTF-8·바이너리·NULL·시각 값, 커밋 전 격리, 명시적 롤백과 중복 키 실패를 확인했다.",
+    "DG-080": {
+      "scope": "두 실제 엔진의 테스트 계정에서 부여 전후와 회수 후 SELECT 권한을 독립 접속으로 확인했다. 오래된 계획과 미승인 변경은 거부했고 역할은 유지됐다.",
       "runtimeGroups": [
-        "transfer"
+        "admin"
       ]
     },
-    "DG-075": {
-      "scope": "실제 두 엔진에서 원본과 대상의 정밀 숫자·바이너리·NULL을 대조했다. 병행 수정은 차단하고 재검토 후 수정과 커밋을 확인했다.",
+    "DG-084": {
+      "scope": "각 실제 Spring 검증에서 DB 연결을 내린 상태로 로컬 DDL을 붙이고 VS Code 완성을 확인했다. 미리보기 해제 후 연결 없음으로 돌아왔다.",
       "runtimeGroups": [
-        "datasets"
+        "ddl"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 171,
+    "sourceCorrespondences": 180,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 28,
-      "partial": 110,
-      "not-implemented": 59,
+      "implemented": 33,
+      "partial": 113,
+      "not-implemented": 51,
       "host-provided": 13,
       "unverified": 4,
       "platform-limited": 2
     },
-    "weightedPoints": 96,
-    "previousWeightedPoints": 90.5,
+    "weightedPoints": 102.5,
+    "previousWeightedPoints": 96,
     "targetWeightedPoints": 108,
-    "referencePercent": 44.4,
+    "referencePercent": 47.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-087",
+        "id": "IDEA-038",
         "before": "not-implemented",
         "after": "implemented"
       },
       {
-        "id": "IDEA-088",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "IDEA-089",
+        "id": "IDEA-039",
         "before": "not-implemented",
         "after": "implemented"
       },
       {
-        "id": "DG-036",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-040",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-041",
+        "id": "IDEA-061",
         "before": "not-implemented",
         "after": "implemented"
       },
       {
-        "id": "DG-073",
+        "id": "DG-021",
+        "before": "not-implemented",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-026",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "DG-075",
+        "id": "DG-033",
         "before": "not-implemented",
         "after": "partial"
+      },
+      {
+        "id": "DG-080",
+        "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-084",
+        "before": "not-implemented",
+        "after": "implemented"
       }
     ]
   },
   "limits": [
-    "JFR은 JDK 도구와 쓰기 가능한 JVM 녹화 저장소를 사용한다. 이 Windows 검증 환경에서는 JVM의 저장소 경로에 ASCII 문자를 사용했다.",
-    "테이블 전송은 관찰한 InnoDB 테이블의 호환 타입, 500행·64열·1 MiB 이하 캡처에 적용한다.",
-    "데이터 비교에서 한쪽에만 있는 행은 차이로 표시한다. 수정은 정확한 기본 키로 대응한 행을 검토한 뒤 적용한다."
+    "검사와 중복 탐색은 저장한 로컬 Java 소스에서 지원하는 규칙·토큰 범위에 적용한다.",
+    "JPA는 지원하는 열 타입과 기본 키를 생성한다. 외래 키는 명시적인 열로 보존한다.",
+    "권한 쓰기는 검토한 계정에 대한 테이블 SELECT의 직접 부여·회수에 적용한다.",
+    "DDL 미리보기는 명시한 테이블·열·SELECT 뷰 구문을 로컬에서 모델링하며 실행은 하지 않는다."
   ],
   "next": [
-    "Java 프로젝트 검사 프로필과 중복 탐색",
-    "MySQL·MariaDB 카탈로그 기반 JPA 엔티티 생성",
-    "오프라인 DDL 모델과 시스템 카탈로그·권한 확인"
+    "Java 소스 연동 클래스 관계도와 지역 데이터 흐름",
+    "MySQL·MariaDB 실행 계획 시각화와 원본 연결",
+    "결과 탭 고정·이름과 재사용 가능한 데이터 필터"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

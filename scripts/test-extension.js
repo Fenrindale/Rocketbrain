@@ -15,6 +15,7 @@ if (!fs.existsSync(extensionTestsPath)) throw new Error('The selected native tes
 fs.mkdirSync(path.join(profile, 'User'), { recursive: true });
 fs.mkdirSync(extensions, { recursive: true });
 const settings = { 'telemetry.telemetryLevel': 'off', 'update.mode': 'none', 'extensions.autoCheckUpdates': false, 'extensions.autoUpdate': false, 'workbench.startupEditor': 'none' };
+if (process.env.ROCKETBRAIN_TEST_DISABLE_LOCAL_HISTORY === '1') settings['workbench.localHistory.enabled'] = false;
 if (process.env.ROCKETBRAIN_JAVA_TEST_CONFIG) {
   const java = JSON.parse(fs.readFileSync(process.env.ROCKETBRAIN_JAVA_TEST_CONFIG, 'utf8'));
   for (const key of ['serverPath', 'javaHome', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'debugBundlePath']) if (java[key] !== undefined) settings[`rocketbrain.java.${key}`] = java[key];

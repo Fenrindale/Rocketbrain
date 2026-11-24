@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.31.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.32.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 28 |
-| 부분 구현 | 110 |
-| 미구현 | 59 |
+| 구현 | 33 |
+| 부분 구현 | 113 |
+| 미구현 | 51 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 4 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **44.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **47.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.31에서는 실제 Spring JVM의 JFR·스레드·힙 진단, SQL 포맷·템플릿·열 이름 수정, 두 DB 서버 간 테이블 전송과 캡처한 데이터 비교를 검증했다. 상태가 바뀐 항목은 8개이고 가중 점수는 90.5점에서 96점으로 늘었다.
+v0.32에서는 Java 검사 프로필과 중복 탐색, 실제 카탈로그에서 JPA 엔티티 생성, 시스템 스키마와 직접 권한 검토, 편집기 가상 DDL을 확인했다. 상태가 바뀐 항목은 8개이고 가중 점수는 96점에서 102.5점으로 늘었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -58,8 +58,8 @@ v0.31에서는 실제 Spring JVM의 JFR·스레드·힙 진단, SQL 포맷·템�
 | IDEA-035 | IntelliJ IDEA | 생성자·접근자·equals·delegate 생성 | 구현 |
 | IDEA-036 | IntelliJ IDEA | 실시간 Java/Kotlin 오류·null 검사 | 부분 구현 |
 | IDEA-037 | IntelliJ IDEA | Intention·Quick Fix·코드 정리 | 부분 구현 |
-| IDEA-038 | IntelliJ IDEA | 프로젝트 검사·스코프·심각도 프로필 | 미구현 |
-| IDEA-039 | IntelliJ IDEA | 중복 코드 감지 | 미구현 |
+| IDEA-038 | IntelliJ IDEA | 프로젝트 검사·스코프·심각도 프로필 | 구현 |
+| IDEA-039 | IntelliJ IDEA | 중복 코드 감지 | 구현 |
 | IDEA-040 | IntelliJ IDEA | 의존성 취약점·취약 API 사용 분석 | 미구현 |
 | IDEA-041 | IntelliJ IDEA | Qodana·CI 품질 게이트 연결 | 미구현 |
 | IDEA-042 | IntelliJ IDEA | Java 버전·JDK·언어 수준 | 부분 구현 |
@@ -81,7 +81,7 @@ v0.31에서는 실제 Spring JVM의 JFR·스레드·힙 진단, SQL 포맷·템�
 | IDEA-058 | IntelliJ IDEA | Spring 디버거의 실제 설정값·출처 | 부분 구현 |
 | IDEA-059 | IntelliJ IDEA | Spring Data 파생 메서드·쿼리 | 부분 구현 |
 | IDEA-060 | IntelliJ IDEA | JPQL/HQL 작성·JPA Console | 부분 구현 |
-| IDEA-061 | IntelliJ IDEA | DB 스키마→JPA 엔티티·매핑 생성 | 미구현 |
+| IDEA-061 | IntelliJ IDEA | DB 스키마→JPA 엔티티·매핑 생성 | 구현 |
 | IDEA-062 | IntelliJ IDEA | Persistence 트리·엔티티 관계도 | 부분 구현 |
 | IDEA-063 | IntelliJ IDEA | Hibernate 디버거·SQL 바인딩·N+1 | 부분 구현 |
 | IDEA-064 | IntelliJ IDEA | Spring Security 런타임 진단 | 미구현 |
@@ -161,19 +161,19 @@ v0.31에서는 실제 Spring JVM의 JFR·스레드·힙 진단, SQL 포맷·템�
 | DG-018 | DataGrip | 로컬 메타데이터 cache·오프라인 재사용 | 부분 구현 |
 | DG-019 | DataGrip | 전체·증분·객체별 refresh | 부분 구현 |
 | DG-020 | DataGrip | 이름 우선·지연 상세 로딩 | 미구현 |
-| DG-021 | DataGrip | 시스템 schema minicatalog | 미구현 |
+| DG-021 | DataGrip | 시스템 schema minicatalog | 구현 |
 | DG-022 | DataGrip | 객체 이름·DDL·파일 검색 | 부분 구현 |
 | DG-023 | DataGrip | DDL·object source 보기 | 부분 구현 |
 | DG-024 | DataGrip | 루틴·인덱스·트리거·MariaDB package | 부분 구현 |
 | DG-025 | DataGrip | 실제 FK 없는 관계 정의 | 구현 |
-| DG-026 | DataGrip | virtual view·virtual column | 미구현 |
+| DG-026 | DataGrip | virtual view·virtual column | 부분 구현 |
 | DG-027 | DataGrip | schema-aware 이름·열 완성 | 부분 구현 |
 | DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 부분 구현 |
 | DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 부분 구현 |
 | DG-030 | DataGrip | alias·약어·함수 구문 완성 | 부분 구현 |
 | DG-031 | DataGrip | MySQL/MariaDB dialect별 구문·키워드 | 부분 구현 |
 | DG-032 | DataGrip | 파일·폴더별 SQL resolution scope | 부분 구현 |
-| DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 미구현 |
+| DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 부분 구현 |
 | DG-034 | DataGrip | 실시간·범위별 정적 검사 | 부분 구현 |
 | DG-035 | DataGrip | 위험한 UPDATE/DELETE 경고 | 부분 구현 |
 | DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 부분 구현 |
@@ -220,11 +220,11 @@ v0.31에서는 실제 Spring JVM의 JFR·스레드·힙 진단, SQL 포맷·템�
 | DG-077 | DataGrip | 지리 데이터 지도 보기 | 미구현 |
 | DG-078 | DataGrip | table create/alter 시각 designer | 부분 구현 |
 | DG-079 | DataGrip | PK·FK·index·제약조건 편집 | 부분 구현 |
-| DG-080 | DataGrip | 사용자·역할·권한 관리 | 미구현 |
+| DG-080 | DataGrip | 사용자·역할·권한 관리 | 부분 구현 |
 | DG-081 | DataGrip | routine·view source 수정·deploy | 부분 구현 |
 | DG-082 | DataGrip | 서로 다른 서버 schema/object 구조 diff | 부분 구현 |
 | DG-083 | DataGrip | 선택 변경의 migration DDL 생성·검토·실행 | 부분 구현 |
-| DG-084 | DataGrip | DDL 파일을 가상 DB 의미 모델로 사용 | 미구현 |
+| DG-084 | DataGrip | DDL 파일을 가상 DB 의미 모델로 사용 | 구현 |
 | DG-085 | DataGrip | DB schema→정렬된 DDL 파일·VCS | 부분 구현 |
 | DG-086 | DataGrip | live schema ERD 생성·관계 탐색 | 구현 |
 | DG-087 | DataGrip | diagram 출력·레이아웃 보존 | 구현 |

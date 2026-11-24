@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.31.0",
+  "version": "0.32.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -73,6 +73,15 @@
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
+      { "command": "rocketbrain.sql.previewDdl", "title": "Preview SQL with a Virtual Schema", "category": "Rocketbrain", "enablement": "editorLangId == sql && isWorkspaceTrusted" },
+      { "command": "rocketbrain.sql.clearDdlPreview", "title": "Exit Virtual SQL Schema Preview", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
+      { "command": "rocketbrain.java.inspectProject", "title": "Run Java Inspection Profile", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.findJavaDuplicates", "title": "Find Duplicate Java Code", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.clearProjectInspections", "title": "Clear Java Project Inspections", "category": "Rocketbrain" },
+      { "command": "rocketbrain.jpa.generateEntity", "title": "Generate JPA Entity from Table", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.systemCatalog", "title": "Browse Database System Catalog", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.inspectAccess", "title": "Inspect Database Account Access", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.reviewTableGrant", "title": "Review Table SELECT Grant or Revoke", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.insertTemplate", "title": "Insert SQL Template", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.data.captureTransferSource", "title": "Capture Table Copy Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.data.transfer", "title": "Copy Captured Rows", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -898,6 +907,11 @@
       ],
       "view/item/context": [
         {
+          "command": "rocketbrain.jpa.generateEntity",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "schema"
+        },
+        {
           "command": "rocketbrain.data.captureTransferSource",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
           "group": "data"
@@ -1154,6 +1168,32 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.java.inspectionProfiles": {
+          "type": "array",
+          "default": [],
+          "description": "Named Java inspection profiles with source globs, per-rule severity and duplicate detection settings.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "include": { "type": "array", "items": { "type": "string" } },
+              "exclude": { "type": "array", "items": { "type": "string" } },
+              "rules": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "emptyCatch": { "enum": ["error", "warning", "information", "hint", "off"] },
+                  "emptyFinally": { "enum": ["error", "warning", "information", "hint", "off"] },
+                  "emptyIf": { "enum": ["error", "warning", "information", "hint", "off"] },
+                  "duplicateImport": { "enum": ["error", "warning", "information", "hint", "off"] }
+                }
+              },
+              "duplicateMode": { "enum": ["exact", "ignore-literals"] },
+              "minDuplicateTokens": { "type": "integer" }
+            }
+          }
+        },
         "rocketbrain.sql.templates": {
           "type": "array",
           "default": [],

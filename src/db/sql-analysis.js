@@ -210,4 +210,11 @@ function statementRanges(text,options={}){
   for(const t of tokens)if(t.kind==='symbol'&&t.value===';'){if(text.slice(start,t.end).trim())statements.push({start,end:t.end});start=t.end;}
   if(text.slice(start).trim())statements.push({start,end:text.length});return {statements,unknown};
 }
-module.exports={analyzeSql,completionsAt,definitionsAt,hoverAt,statementRanges,dbType,sourceRange,LIMITS};
+function sourceTokens(text,options={}){
+  if(typeof text!=='string'||Buffer.byteLength(text)>LIMITS.bytes||text.includes('\0'))throw Error('SQL source exceeds limits or contains NUL.');
+  const errors=[];
+  const tokens=lex(text,options,reason=>errors.push(reason),[]);
+  if(errors.length)throw Error(errors[0]);
+  return tokens;
+}
+module.exports={analyzeSql,completionsAt,definitionsAt,hoverAt,statementRanges,sourceTokens,dbType,sourceRange,LIMITS};

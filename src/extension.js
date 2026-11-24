@@ -40,20 +40,22 @@ class SchemaTree {
   refresh() { this.events.fire(); }
   dispose() { this.events.dispose(); }
 }
-let activeJava,activeJavaTesting,activeJavaUtilities,activeJavaNavigation,activeJvmDiagnostics,activeSchemaRename,activeSqlScripts,activeSchemaComparison,activeStreamImports,activeTableTransfer,activeSchemaPrograms,activeSchemaCoordinator,activeSchemaDiagrams,activeSchemaDdlExport,activeDatabase,activeDbConnections,activeDbAuthoring,activeDbSessionTools,activeSpringProjects;
+let activeJava,activeJavaTesting,activeJavaUtilities,activeJavaNavigation,activeJavaInspections,activeJvmDiagnostics,activeSchemaRename,activeSqlScripts,activeSchemaComparison,activeStreamImports,activeTableTransfer,activeSchemaPrograms,activeSchemaCoordinator,activeSchemaDiagrams,activeSchemaDdlExport,activeDatabase,activeDbConnections,activeDbAuthoring,activeDbSessionTools,activeSpringProjects;
 async function activate(context) {
-  const database = await require("./database-workbench").registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree);
+  let sqlAnalysis;
+  const database = await require("./database-workbench").registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree,
+    document=>sqlAnalysis?.virtualActive(document));
   activeDatabase=database;
   const dbConnections=require('./db/connection-profiles-vscode').registerConnectionProfiles(context,vscode,{database});activeDbConnections=dbConnections;
   const dbAuthoring=require('./db/db-authoring-vscode').registerDatabaseAuthoring(context,vscode,{database});activeDbAuthoring=dbAuthoring;
   const dbSessionTools = require('./db/session-tools-vscode').registerDbSessionTools(context, vscode, { database });
   activeDbSessionTools = dbSessionTools;
   context.subscriptions.push(dbSessionTools);
+  const dbAdmin=require('./db/database-admin-vscode').registerDatabaseAdmin(context,vscode,{database});
+  context.subscriptions.push(dbAdmin);
   const tableTransfer=require('./db/table-transfer-vscode').registerTableTransfer(context,vscode,{database});
   activeTableTransfer=tableTransfer;
   context.subscriptions.push(tableTransfer);
-  const sqlEditing=require('./db/sql-editing-vscode').registerSqlEditing(context,vscode,{database});
-  context.subscriptions.push(sqlEditing);
   const schemaDiagrams = require('./db/schema-erd-vscode').registerSchemaDiagrams(context, vscode, { database });
   activeSchemaDiagrams = schemaDiagrams;
   context.subscriptions.push(schemaDiagrams);
@@ -63,6 +65,9 @@ async function activate(context) {
   context.subscriptions.push(registerNavigation(vscode, context));
   const java = registerJavaFeatures(context, vscode);
   activeJava = java;
+  const javaInspections=require('./java/inspections-vscode').registerJavaInspections(context,vscode);
+  activeJavaInspections=javaInspections;
+  context.subscriptions.push(javaInspections);
   const jvmDiagnostics=require('./java/jvm-diagnostics-vscode').registerJvmDiagnostics(context,vscode,{java});
   activeJvmDiagnostics=jvmDiagnostics;
   context.subscriptions.push(jvmDiagnostics);
@@ -83,10 +88,14 @@ async function activate(context) {
   context.subscriptions.push(httpTools,openApi);
   const jpa = require('./jpa/vscode').registerJPAFeatures(context, vscode, { catalog: database.databaseCatalog });
   context.subscriptions.push(jpa);
+  const jpaScaffold=require('./jpa/entity-scaffold-vscode').registerEntityScaffolding(context,vscode,{database,java});
+  context.subscriptions.push(jpaScaffold);
   const analysis = require('./analysis-tree').registerAnalysisTree(context, vscode, { spring: java.spring, jpa });
   context.subscriptions.push(analysis);
-  const sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase});
+  sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase});
   context.subscriptions.push(sqlAnalysis);
+  const sqlEditing=require('./db/sql-editing-vscode').registerSqlEditing(context,vscode,{database,sqlAnalysis});
+  context.subscriptions.push(sqlEditing);
   const schemaRename=require('./db/schema-vscode').registerSchemaRename(context,vscode,{database,sqlAnalysis});
   activeSchemaRename=schemaRename;context.subscriptions.push(schemaRename);
   const sqlScripts=require('./db/sql-script-vscode').registerSqlScripts(context,vscode,{database});
@@ -114,9 +123,12 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, jvmDiagnostics, httpTools, openApi, jpa, analysis, sqlAnalysis,sqlEditing,schemaRename,sqlScripts,schemaComparison,streamImports,tableTransfer,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,springProjects };
+  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, jvmDiagnostics, httpTools, openApi, jpa, jpaScaffold, analysis, sqlAnalysis,sqlEditing,schemaRename,sqlScripts,schemaComparison,streamImports,tableTransfer,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,dbAdmin,springProjects };
 }
 async function deactivate() {
+  const inspections=activeJavaInspections;
+  activeJavaInspections=undefined;
+  if(inspections)await inspections.dispose();
   const diagnostics=activeJvmDiagnostics;
   activeJvmDiagnostics=undefined;
   if(diagnostics)await diagnostics.dispose();

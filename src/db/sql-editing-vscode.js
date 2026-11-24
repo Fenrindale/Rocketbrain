@@ -4,7 +4,7 @@ const { formatSql }=require('./sql-format');
 const { templates,resolveTemplate }=require('./sql-templates');
 const { sqlQuickFixes }=require('./sql-quick-fixes');
 
-function registerSqlEditing(context,vscode,{database}) {
+function registerSqlEditing(context,vscode,{database,sqlAnalysis}) {
   let disposed=false;
   function open(document) {
     if (disposed||!document||document.languageId!=='sql'||document.isClosed) throw Error('Open a SQL document.');
@@ -77,7 +77,7 @@ function registerSqlEditing(context,vscode,{database}) {
       if(disposed||!vscode.workspace.isTrusted)return;
       const document=vscode.workspace.textDocuments.find(item=>item.uri.toString()===frame?.uri);
       const catalog=database.catalogSnapshot();
-      if(!document||document.isClosed||document.version!==frame.version||catalog?.revision!==frame.revision)return;
+      if(!document||document.isClosed||sqlAnalysis?.virtualActive(document)||document.version!==frame.version||catalog?.revision!==frame.revision)return;
       const fix=sqlQuickFixes(document.getText(),frame.offset,catalog).find(item=>item.replacement===frame.replacement);
       if(!fix)return;
       const change=new vscode.WorkspaceEdit();
@@ -86,7 +86,7 @@ function registerSqlEditing(context,vscode,{database}) {
     }),
     vscode.languages.registerCodeActionsProvider({language:'sql'},
       {provideCodeActions(document,range){
-        if(disposed||!vscode.workspace.isTrusted)return [];
+        if(disposed||!vscode.workspace.isTrusted||sqlAnalysis?.virtualActive(document))return [];
         const catalog=database.catalogSnapshot(),offset=document.offsetAt(range.start);
         return sqlQuickFixes(document.getText(),offset,catalog).map(fix=>{
           const action=new vscode.CodeAction('Use '+fix.replacement,vscode.CodeActionKind.QuickFix);
