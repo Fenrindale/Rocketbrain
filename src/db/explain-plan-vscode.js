@@ -1,16 +1,19 @@
 'use strict';
 
 const { createHash, randomBytes, randomUUID } = require('node:crypto');
+const fs = require('node:fs/promises');
+const path = require('node:path');
 const { statementAt } = require('../sql');
 const { explanationHtml, comparisonHtml, seriesHtml } = require('./explain-plan-view');
 const { comparePlans, comparablePlans, validatePlanQuery } = require('./explain-plan');
-const { sampleCount, summarizeSeries, compareSeries } = require('./explain-plan-series');
+const { sampleCount, summarizeSeries, compareSeries, serializeSamples } = require('./explain-plan-series');
 
 const VISUAL_EXPLAIN = 'rocketbrain.sql.explainVisual';
 const MEASURE_PLAN = 'rocketbrain.sql.measurePlan';
 const COMPARE_PLANS = 'rocketbrain.sql.comparePlans';
 const MEASURE_SERIES = 'rocketbrain.sql.measurePlanSeries';
 const COMPARE_SERIES = 'rocketbrain.sql.comparePlanSeries';
+const EXPORT_SAMPLES = 'rocketbrain.sql.exportPlanSamples';
 const MAX_PANELS = 8;
 const hash = text => createHash('sha256').update(text).digest('hex');
 
@@ -206,6 +209,32 @@ function registerExplainPlans(context, vscode, { database }) {
     return structuredClone(plan);
   }
 
+  async function exportSamples(id, uri) {
+    trusted();
+    const record = seriesPanels.get(id);
+    if (!record) throw Error('Choose an open measurement series.');
+    if (uri?.scheme !== 'file' || path.extname(uri.fsPath).toLowerCase() !== '.json') {
+      throw Error('Choose a local JSON file for the measurement samples.');
+    }
+    const contents = serializeSamples(record.series, record.plans, record.capturedAt);
+    let file;
+    try {
+      file = await fs.open(uri.fsPath, 'wx', 0o600);
+    } catch (error) {
+      if (error.code === 'EEXIST') throw Error('Choose a new file name to preserve the existing export.');
+      throw error;
+    }
+    try {
+      await file.writeFile(contents, 'utf8');
+      await file.close();
+    } catch (error) {
+      await file.close().catch(() => {});
+      await fs.unlink(uri.fsPath).catch(() => {});
+      throw error;
+    }
+    return { uri:uri.toString(), samples:record.plans.length };
+  }
+
   function seriesComparison(leftId, rightId) {
     trusted();
     const left = seriesPanels.get(leftId), right = seriesPanels.get(rightId);
@@ -226,12 +255,16 @@ function registerExplainPlans(context, vscode, { database }) {
     return result;
   }
 
-  async function chooseSeriesComparison() {
-    trusted();
-    const choices = [...seriesPanels].map(([id, record]) => ({
+  function seriesChoices() {
+    return [...seriesPanels].map(([id, record]) => ({
       id, record, label: record.series.totalSamples + ' samples · ' + record.series.database, description: record.capturedAt,
       detail:record.source.sql.replace(/\s+/g, ' ').slice(0, 150)
     }));
+  }
+
+  async function chooseSeriesComparison() {
+    trusted();
+    const choices = seriesChoices();
     const compatible = (a, b) => a.id !== b.id && a.record.target.key === b.record.target.key && comparablePlans(a.record.series, b.record.series);
     const possible = choices.filter(item => choices.some(other => compatible(item, other)));
     if (!possible.length) throw Error('Open two comparable SQL measurement series.');
@@ -322,9 +355,24 @@ function registerExplainPlans(context, vscode, { database }) {
   }), vscode.commands.registerCommand(COMPARE_SERIES, async () => {
     try { return await chooseSeriesComparison(); }
     catch (error) { await vscode.window.showErrorMessage(error.message); }
+  }), vscode.commands.registerCommand(EXPORT_SAMPLES, async () => {
+    try {
+      trusted();
+      const choices = seriesChoices();
+      if (!choices.length) throw Error('Open a SQL measurement series before exporting samples.');
+      const series = await vscode.window.showQuickPick(choices, { title:'Choose a SQL measurement series' });
+      if (!series) return;
+      const uri = await vscode.window.showSaveDialog({
+        title:'Export SQL Plan Samples (includes raw server plans)', filters:{ 'Plan samples JSON':['json'] }
+      });
+      if (!uri) return;
+      const result = await exportSamples(series.id, uri);
+      void vscode.window.showInformationMessage('Exported ' + result.samples + ' SQL plan samples.');
+      return result;
+    } catch (error) { await vscode.window.showErrorMessage(error.message); }
   }));
   return { open, revealSource, loadTree, prepareMeasurement, measure, comparison, showComparison, close(id) { panels.get(id)?.panel.dispose(); },
-    prepareSeries, measureSeries, getSample, seriesComparison, showSeriesComparison,
+    prepareSeries, measureSeries, getSample, exportSamples, seriesComparison, showSeriesComparison,
     closeSeries(id) { seriesPanels.get(id)?.panel.dispose(); },
     dispose() {
       disposed = true;

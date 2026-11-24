@@ -3,7 +3,7 @@
 const { createHash } = require('node:crypto');
 const { checkPackage, renderJavaFile, validIdentifier } = require('../java/file-templates');
 const { analyzeJPA, compareCatalog } = require('./model');
-const { planRelationships } = require('./entity-relationships');
+const { CROSS, SELF, directRelationship, planRelationships } = require('./entity-relationships');
 const { INVERSE, THROUGH, relationshipRequests, planCollections } = require('./entity-collection-relationships');
 
 const SQL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
@@ -39,7 +39,7 @@ function scalar(type) {
 }
 
 function inspectTable(catalog, name) {
-  if (catalog?.scope !== 'database' || !catalog.database ||
+  if (!catalog?.database || (catalog.scope !== 'database' && (catalog.scope !== 'table' || catalog.selectedTable !== name)) ||
       !['tables', 'columns', 'indexes'].every(area => catalog.coverage?.[area] === 'loaded')) {
     throw Error('Generation requires a visible MySQL or MariaDB catalog with table, column and index metadata.');
   }
@@ -211,18 +211,18 @@ function classBody(table, mapping, relationshipPlan) {
   return lines.join('\n');
 }
 
-function planEntity({ catalog, table, name, packageName, uri, relationships, targetSources = [] }) {
+function planEntity({ catalog, table, name, packageName, uri, relationships, targetSources = [], targetCatalogs = [] }) {
   if (!validIdentifier(name)) throw Error('Use a valid Java class name.');
   if (!checkPackage(packageName)) throw Error('Choose a named Java package.');
   const mapping = inspectTable(catalog, table);
   if (name === 'PrimaryKey' && mapping.keys.length > 1) throw Error('Choose a class name other than PrimaryKey for a composite-key entity.');
   const owner = packageName + '.' + name;
   const requests = relationshipRequests(relationships);
-  const relationshipPlan = planRelationships({ catalog, table, mapping, owner, requests: requests.filter(request => request.kind === undefined),
-    sources: targetSources, inspectTable });
+  const relationshipPlan = planRelationships({ catalog, table, mapping, owner, requests: requests.filter(directRelationship),
+    sources: targetSources, targets: targetCatalogs, inspectTable });
   const build = relationPlan => ({ name: 'JPA entity from database table', source: 'any',
     template: '${packageDeclaration}' + classBody(table, mapping, relationPlan) });
-  const collections = requests.filter(request => request.kind !== undefined);
+  const collections = requests.filter(request => !directRelationship(request));
   if (collections.length) {
     const ownerSource = { uri, text: renderJavaFile(build(relationshipPlan), name, packageName) };
     const collectionPlan = planCollections({ requests: collections, catalog, table, mapping, owner, ownerSource,
@@ -277,6 +277,8 @@ function planEntity({ catalog, table, name, packageName, uri, relationships, tar
         relation.kind === THROUGH ? relation.joinTable + ' join table owns linkage' :
           relation.mode === 'scalar' ? 'Scalar fields own writes' : 'The association owns writes';
       mapping.notes.push(relation.property + ' · ' + relation.cardinality + ' · ' + role + '.');
+      if (relation.kind === CROSS) mapping.notes.push('Explicit target catalog ' + relation.targetSchema + '.' + relation.targetTable + '.');
+      if (relation.kind === SELF) mapping.notes.push('Self-reference to the generated entity’s reviewed primary key.');
     }
   }
   return { text, template, mapping, relationshipPlan, comparison: comparison.summary };

@@ -5,7 +5,7 @@ const { validIdentifier } = require('../java/file-templates');
 const { parseJavaFile, literal } = require('../spring/java');
 const { analyzeJPA } = require('./model');
 const { nested } = require('./mapping');
-const { MAX_RELATIONSHIPS, associationRequests, targetRequest, exactTarget, jakartaAnnotation } = require('./entity-relationships');
+const { MAX_RELATIONSHIPS, directRelationship, associationRequests, targetRequest, exactTarget, jakartaAnnotation } = require('./entity-relationships');
 
 const INVERSE = 'inverseOneToMany';
 const THROUGH = 'joinTableManyToMany';
@@ -16,7 +16,7 @@ function relationshipRequests(value = []) {
   if (!Array.isArray(value) || value.length > MAX_RELATIONSHIPS) throw Error('Review up to eight relationships per generated entity.');
   return value.map(request => {
     const { kind, foreignKey, childTable, mappedBy, joinTable, ownerForeignKey, targetForeignKey } = request ?? {};
-    if (kind === undefined) return associationRequests([request])[0];
+    if (directRelationship(request)) return associationRequests([request])[0];
     if (kind === INVERSE && databaseName(foreignKey) && databaseName(childTable) && validIdentifier(mappedBy)) {
       return { kind, ...targetRequest(request), foreignKey, childTable, mappedBy };
     }

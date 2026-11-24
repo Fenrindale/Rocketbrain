@@ -5,6 +5,7 @@ const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const { createRowSpool } = require('./table-transfer-spool');
 const { streamLimits } = require('./table-transfer-snapshot');
+const { destinationSummary } = require('./table-transfer-verification');
 
 const recoveryLifetimeMs = 24 * 60 * 60 * 1000;
 const maxSaved = 3;
@@ -85,7 +86,8 @@ function createTransferRecovery({ storagePath, secrets, isTrusted }) {
         continue;
       }
       if (item) sources.push({ ...item.metadata, ...item.recovery.sealed, directory: undefined,
-        recoveryState: blocked ? 'settlement-unconfirmed' : 'ready' });
+        recoveryState: blocked ? 'settlement-unconfirmed' : 'ready',
+        ...(blocked && { verificationTarget: destinationSummary(item.commitEvidence) }) });
     }
     return { occupied, sources: sources.sort((a, b) => b.expiresAt - a.expiresAt) };
   }
@@ -114,7 +116,16 @@ function createTransferRecovery({ storagePath, secrets, isTrusted }) {
         maxBytes: streamLimits.bytes, directory: files(id).directory, recovery });
       return { ...metadata, ...recovery.sealed, recoveryState: 'ready', spool };
     },
-    async beginCommit(id) {
+    async uncertainCommit(id) {
+      trusted();
+      if (!(await ownedDirectory(root))) throw fail('The saved table snapshot is unavailable.');
+      const { item, blocked } = await record(id);
+      if (!item || item.metadata.expiresAt <= Date.now()) throw fail('The saved table snapshot expired or is unavailable.');
+      if (!blocked) throw fail('This snapshot has no unconfirmed Commit.');
+      const evidence = item.commitEvidence;
+      if (evidence?.sourceHash === item.recovery.sealed.sourceHash && evidence.rowCount === item.recovery.sealed.rowCount) return evidence;
+    },
+    async beginCommit(id, commitEvidence) {
       const item = await ready(id);
       const { marker } = files(id);
       trusted();
@@ -126,7 +137,7 @@ function createTransferRecovery({ storagePath, secrets, isTrusted }) {
       }
       try { await file.writeFile('1\n'); await file.sync(); }
       finally { await file.close(); }
-      await secrets.store(secretKey(id), JSON.stringify({ ...item, state: 'settlement-unconfirmed' }));
+      await secrets.store(secretKey(id), JSON.stringify({ ...item, state: 'settlement-unconfirmed', commitEvidence }));
     },
     discard
   };

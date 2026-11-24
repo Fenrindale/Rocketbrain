@@ -520,6 +520,17 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       if (state.db !== db || state.epoch !== epoch || state.disposed) throw new Error('The database changed during metadata inspection. Compare again.');
       return catalog;
     },
+    async relationshipTargetCatalog(request) {
+      if (exclusiveDatabaseWork() || !state.mysql || !vscode.workspace.isTrusted) {
+        throw Error('Use a trusted MySQL or MariaDB workspace connection to inspect a relationship target.');
+      }
+      const { db, epoch } = state;
+      const current = databaseGuard(db, epoch);
+      if (!current()) throw Error('The database connection is unavailable. Inspect again.');
+      const target = await db.relationshipTargetCatalog(request);
+      if (!current()) throw Error('The database changed during relationship inspection. Compare again.');
+      return target;
+    },
     sessionState: () => state.mysql && existingBinding() ? state.db.getSessionState(existingBinding().id) : null,
     sessions: () => state.mysql ? [...bindings.values()].map(binding => ({ ...state.db.getSessionState(binding.id), editorClosed: Boolean(binding.documentClosed) })) : [],
     async inspectConsoleIsolation(document = currentDocument()) {

@@ -5,7 +5,7 @@ const {SchemaObjectEditor}=require('./object-editor');
 const { performance } = require('node:perf_hooks');
 const { validateQuery, validateReadQuery, parameters } = require('./sql-policy');
 const { operationOf, outcomeOf } = require('./activity-log');
-const { readMetadata } = require('./metadata');
+const { readMetadata, readForeignKeyTargetCatalog } = require('./metadata');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
 const { TableEditor } = require('./grid');
 const { SchemaRenamer } = require('./schema-rename');
@@ -609,6 +609,18 @@ class MysqlService {
       catalog.serverVersion=String(version);catalog.dialect=/mariadb/i.test(version)?'mariadb':'mysql';catalog.sqlMode=String(mode).split(',').filter(Boolean);catalog.tableNameCaseSensitive=Number(folding)===0;catalog.semanticContextObserved=true;
     }catch{catalog.semanticContextObserved=false;catalog.warnings.push({area:'semanticContext',message:'Server SQL mode and identifier rules could not be observed.'});}
     return catalog;
+  }
+  async relationshipTargetCatalog(request) {
+    this._assertOpen();
+    let connection;
+    const query = async (sql, values) => {
+      const result = await this._metadataQuery(sql, values);
+      const active = this._metadataSession.connection;
+      if (!active || connection && connection !== active) throw Error('The metadata session changed while inspecting the foreign key. Inspect again.');
+      connection = active;
+      return result;
+    };
+    return readForeignKeyTargetCatalog(query, this._options.database, request, ++this._revision);
   }
   previewTable(name, options) { return this._editor.previewTable(name, options); }
   retainTableSnapshot(binding) { return this._editor.retainTableSnapshot(binding); }

@@ -157,17 +157,19 @@ if (captureTree) window.addEventListener('message', event => {
 
 function comparisonHtml(result, nonce) {
   const status = { same: 'Unchanged', changed: 'Changed', removed: 'Baseline only', added: 'Candidate only' };
-  function cell(node) {
+  function cell(node, position) {
     if (!node) return '—';
-    const fields = [...node.values.map(item => [item.label, item.value]), ...node.detail];
+    const fields = [['Position', position], ...node.values.map(item => [item.label, item.value]), ...node.detail];
     return fields.map(([label, value]) => '<div>' + escape(label) + ' <strong>' + escape(value) + '</strong></div>').join('') || '—';
   }
-  const rows = result.rows.map(({ state, before, after }) => {
+  const rows = result.rows.map(({ state, before, after, alignment, baselinePosition, candidatePosition }) => {
     const node = before || after;
+    const label = alignment === 'moved' ? (state === 'changed' ? 'Moved · Changed' : 'Moved') : status[state];
     return '<tr><th scope="row">' + escape(node.name) + ' <small>Level ' + escape(node.depth + 1) +
-      '</small></th><td>' + status[state] + '</td><td>' + cell(before) + '</td><td>' + cell(after) + '</td></tr>';
+      '</small></th><td>' + label + '</td><td>' + cell(before, baselinePosition) + '</td><td>' + cell(after, candidatePosition) + '</td></tr>';
   }).join('');
-  const counts = Object.entries(status).map(([state, label]) => label + ' ' + result.counts[state]).join(' · ');
+  const counts = Object.entries(status).map(([state, label]) => label + ' ' + result.counts[state]).join(' · ') +
+    ' · Moved ' + result.movedCount;
   const warnings = ['baseline', 'candidate'].flatMap(side => (result[side + 'Warnings'] || [])
     .map(message => '<p><strong>' + (side === 'baseline' ? 'Baseline' : 'Candidate') + '</strong> · ' + escape(message) + '</p>')).join('');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -179,7 +181,7 @@ function comparisonHtml(result, nonce) {
   thead{background:var(--vscode-editorWidget-background)}strong{font-weight:600}
 </style></head><body><h1>Compare SQL plans</h1><p>${escape(result.version)} · ${escape(result.database)} ·
 ${result.measured ? 'Measured captures' : 'Optimizer estimates'}</p><p>${escape(counts)}</p>
-<p>Decoded operators align by their name and position in the tree. Timings are the samples reported by each run.</p>${warnings}
+<p>Position numbers show the path from each root. A move requires a unique match on the decoded operator details in both plans.</p>${warnings}
 <table><thead><tr><th scope="col">Operator</th><th scope="col">State</th><th scope="col">Baseline</th><th scope="col">Candidate</th></tr></thead>
 <tbody>${rows}</tbody></table></body></html>`;
 }
@@ -195,7 +197,9 @@ function seriesHtml(series, plans, nonce) {
   };
   const rows = series.metrics.slice(0, 400).map(item => {
     const row = comparing ? item.baseline || item.candidate : item;
-    const id = '<th scope="row">' + escape(row.name) + ' <small>Level ' + escape(row.depth + 1) + '</small></th>';
+    const location = comparing && item.alignment === 'moved'
+      ? 'Moved ' + item.baselinePosition + ' → ' + item.candidatePosition : 'Level ' + (row.depth + 1);
+    const id = '<th scope="row">' + escape(row.name) + ' <small>' + escape(location) + '</small></th>';
     const metric = '<td>' + escape(row.label) + '</td>';
     const summaries = comparing
       ? '<td>' + describeStats(item.baseline, series.baseline.samples) + '</td><td>' + describeStats(item.candidate, series.candidate.samples) + '</td>'
@@ -207,7 +211,7 @@ function seriesHtml(series, plans, nonce) {
     : series.warnings;
   const report = comparing
     ? 'Baseline · ' + series.baseline.samples + ' samples, ' + series.baseline.shapes + ' shapes. Candidate · ' +
-      series.candidate.samples + ' samples, ' + series.candidate.shapes + ' shapes.'
+      series.candidate.samples + ' samples, ' + series.candidate.shapes + ' shapes. Moved operators · ' + series.movedCount
     : series.totalSamples + ' sequential samples · ' + series.shapes.length + ' decoded plan shapes';
   const details = plans ? '<h2>Raw captures</h2>' + plans.map((plan, index) =>
     '<details><summary>Sample ' + (index + 1) + ' · Shape ' +
@@ -223,7 +227,7 @@ function seriesHtml(series, plans, nonce) {
   thead{background:var(--vscode-editorWidget-background)}strong{font-weight:600}
   details{margin:.45rem 0}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere}
 </style></head><body><h1>${title}</h1><p>${escape(series.version)} · ${escape(series.database)} · ${escape(report)}</p>
-<p>Statistics use the observed server samples. Operators align by name and position in the decoded tree.</p>
+${comparing ? '<p>A move requires a unique match on stable decoded operator details in both series.</p>' : ''}
 ${warnings.map(warning => '<p>' + escape(warning) + '</p>').join('')}
 ${series.metrics.length > 400 ? '<p>Showing the first 400 operator metrics.</p>' : ''}
 <table><thead><tr><th scope="col">Operator</th><th scope="col">Metric</th>${comparing ? '<th scope="col">Baseline</th><th scope="col">Candidate</th>' : '<th scope="col">Observed distribution</th>'}</tr></thead>

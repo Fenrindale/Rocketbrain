@@ -1,12 +1,13 @@
 'use strict';
 
+const { PLAN_TEXT_LIMIT, indexOperators, alignOperators } = require('./explain-plan-alignment');
+
 const { validateQuery } = require('./sql-policy');
 
 const MAX_PLAN_BYTES = 512 * 1024;
 const MAX_NODES = 400;
 const MAX_DEPTH = 36;
 const JSON_NUMBER = /^(?:-)?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
-const XML_SAFE_LENGTH = 2048;
 
 const LABELS = {
   query_block: 'Query block', table: 'Table access', nested_loop: 'Nested loop', 'block-nl-join': 'Block nested loop',
@@ -68,7 +69,7 @@ function parseExact(raw) {
 }
 
 function record(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
-function short(value) { return typeof value === 'string' ? value.slice(0, XML_SAFE_LENGTH) : undefined; }
+function short(value) { return typeof value === 'string' ? value.slice(0, PLAN_TEXT_LIMIT) : undefined; }
 function labelFor(kind) { return Object.hasOwn(LABELS, kind) ? LABELS[kind] : kind.replaceAll('_', ' ').slice(0, 120); }
 function childContainer(key, child) {
   return Object.hasOwn(LABELS, key) || key === 'inputs' || key === 'query_plan' ||
@@ -198,43 +199,27 @@ function comparablePlans(left, right) {
     left.format === right.format && Boolean(left.measured) === Boolean(right.measured);
 }
 
-function planPaths(plan) {
-  const paths = new Map(), counts = new Map(), result = new Map();
-  for (const node of plan.nodes) {
-    const parent = paths.get(node.parentId) ?? '';
-    const slot = (counts.get(node.parentId) || 0) + 1;
-    counts.set(node.parentId, slot);
-    const key = parent + '/' + JSON.stringify([slot, node.kind, node.name]);
-    paths.set(node.id, key);
-    result.set(key, node);
-  }
-  return result;
-}
-
 function comparePlans(left, right) {
   if (!comparablePlans(left, right)) {
     throw Error('Choose two captured plans from the same server, format and capture mode.');
   }
   if (!left.nodes?.length || !right.nodes?.length) throw Error('Both plans need a decoded tree to compare.');
-  function index(plan) {
-    const result = new Map();
-    for (const [key, node] of planPaths(plan)) {
-      const values = [...node.costs, ...node.rows, ...(node.actual || [])];
-      result.set(key, { name: node.name, depth: node.depth, values,
-        detail: [...node.tags, ...node.expressions].map(item => [item.label, item.value]) });
-    }
-    return result;
+  function project(entry) {
+    if (!entry) return undefined;
+    const { node } = entry;
+    return { name:node.name, depth:node.depth, values:[...node.costs, ...node.rows, ...(node.actual || [])],
+      detail:[...node.tags, ...node.expressions].map(item => [item.label, item.value]) };
   }
-  const a = index(left), b = index(right);
-  const rows = [...new Set([...a.keys(), ...b.keys()])].map(key => {
-    const before = a.get(key), after = b.get(key);
-    const state = !before ? 'added' : !after ? 'removed' :
-      JSON.stringify(before) === JSON.stringify(after) ? 'same' : 'changed';
-    return { state, before, after };
+  const rows = alignOperators(indexOperators(left), indexOperators(right)).map(({ before, after, alignment }) => {
+    const a = project(before), b = project(after);
+    const state = !a ? 'added' : !b ? 'removed' :
+      JSON.stringify(a) === JSON.stringify(b) ? 'same' : 'changed';
+    return { state, before:a, after:b, alignment, baselinePosition:before?.address, candidatePosition:after?.address };
   });
   return { engine: left.engine, version: left.version, database: left.database, measured: Boolean(left.measured), rows,
     baselineWarnings: left.warnings, candidateWarnings: right.warnings,
+    movedCount: rows.filter(row => row.alignment === 'moved').length,
     counts: Object.fromEntries(['same', 'changed', 'removed', 'added'].map(state => [state, rows.filter(row => row.state === state).length])) };
 }
 
-module.exports = { MAX_PLAN_BYTES, explainSql, measuredSql, validatePlanQuery, normalizePlan, comparePlans, comparablePlans, planPaths };
+module.exports = { MAX_PLAN_BYTES, explainSql, measuredSql, validatePlanQuery, normalizePlan, comparePlans, comparablePlans };

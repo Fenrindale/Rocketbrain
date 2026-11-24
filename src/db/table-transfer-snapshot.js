@@ -11,8 +11,7 @@ const streamLimits = Object.freeze({
 const fail = (message, code = 'ROCKETBRAIN_TABLE_TRANSFER') => Object.assign(new Error(message), { code });
 const quote = (name, table = false) => '`' + identifier(name, { table }).replaceAll('`', '``') + '`';
 
-function sourceQuery(schema, table, columns, keys) {
-  const field = name => 'rb_source.' + quote(name);
+function boundedProjection(columns, field) {
   const counts = columns.map(column => 'COALESCE(OCTET_LENGTH(' + field(column.name) + '), 0)');
   const sizes = columns.map((column, index) => counts[index] + ' > ' +
     (column.kind === 'binary' ? Math.floor((streamLimits.cellBytes - 2) / 2) : streamLimits.cellBytes));
@@ -21,9 +20,16 @@ function sourceQuery(schema, table, columns, keys) {
   while (columns.some(column => column.name.toLowerCase() === flag)) flag += '_';
   const value = column => /^bit(?:\(|$)/i.test(column.type) ? 'CAST(CAST(' + field(column.name) + ' AS UNSIGNED) AS CHAR)' : field(column.name);
   const projection = columns.map(column => 'CASE WHEN ' + exceeds + ' THEN NULL ELSE ' + value(column) + ' END AS ' + quote(column.name));
-  const sql = 'SELECT ' + [...projection, 'CASE WHEN ' + exceeds + ' THEN 1 ELSE 0 END AS ' + quote(flag)].join(', ') +
-    ' FROM ' + quote(schema, true) + '.' + quote(table, true) + ' AS rb_source ORDER BY ' + keys.map(key => field(key.name)).join(', ');
-  return { sql, headers: [...columns.map(column => column.name), flag] };
+  const fields = [...projection, 'CASE WHEN ' + exceeds + ' THEN 1 ELSE 0 END AS ' + quote(flag)].join(', ');
+  return { fields, headers: [...columns.map(column => column.name), flag], flag };
+}
+
+function sourceQuery(schema, table, columns, keys) {
+  const field = name => 'rb_source.' + quote(name);
+  const { fields, headers, flag } = boundedProjection(columns, field);
+  const sql = 'SELECT ' + fields + ' FROM ' + quote(schema, true) + '.' + quote(table, true) +
+    ' AS rb_source ORDER BY ' + keys.map(key => field(key.name)).join(', ');
+  return { sql, headers, flag };
 }
 
 async function readSnapshot({ db, session, schema, table, columns, keys, cancellation, onProgress, check, serializeRow, verify, directory }) {
@@ -102,4 +108,4 @@ async function readSnapshot({ db, session, schema, table, columns, keys, cancell
   }
 }
 
-module.exports = { readSnapshot, sourceQuery, streamLimits };
+module.exports = { boundedProjection, readSnapshot, sourceQuery, streamLimits };

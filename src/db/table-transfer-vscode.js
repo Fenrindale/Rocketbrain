@@ -78,6 +78,44 @@ function registerTableTransfer(context, vscode, { database }) {
     return result;
   });
 
+  async function verifyDestination(captureId) {
+    const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification,
+      title: 'Checking the reviewed destination rows', cancellable: true },
+    (_, cancellation) => core.verifyUncertainCommit({ captureId, cancellation }));
+    const destination = result.destination ? result.destination.database + '.' + result.destination.table + ': ' : '';
+    const limit = 'This observes current rows. Commit history remains unconfirmed and replay stays blocked.';
+    const reasons = {
+      'missing-review-evidence': 'This saved transfer has no destination evidence.',
+      'primary-key-not-mapped': 'The review did not map every destination primary-key column.',
+      'no-bounded-keys': 'The sampled destination keys exceeded the verification limit.',
+      'destination-identity-changed': 'Connect to the reviewed server, database, endpoint and account.',
+      'destination-definition-changed': 'The reviewed table definition is different or unavailable.',
+      'destination-unavailable': 'The reviewed destination could not be opened for a read-only check.',
+      'sample-unreadable': 'The sampled destination rows could not be read exactly.'
+    };
+    if (result.status === 'inconclusive') {
+      await vscode.window.showWarningMessage(destination + (reasons[result.reason] || reasons['destination-unavailable']) + ' ' + limit);
+    } else {
+      const counts = result.sampledKeys + ' of ' + result.rows + ' reviewed keys checked · ' + result.matching + ' matching · ' +
+        result.missing + ' missing · ' + result.mismatch + ' different. ';
+      const message = destination + counts + limit;
+      if (result.status === 'matching') await vscode.window.showInformationMessage(message);
+      else await vscode.window.showWarningMessage(message);
+    }
+    return result;
+  }
+
+  command('rocketbrain.data.verifyTransferDestination', async () => {
+    const saved = core.canRecover ? await core.listRecoverableSources() : [];
+    const pending = saved.filter(source => source.recoveryState === 'settlement-unconfirmed');
+    if (!pending.length) throw new Error('There are no saved transfers with an unconfirmed Commit.');
+    const choices = pending.map(capture => ({ label: capture.database + '.' + capture.table,
+      description: capture.verificationTarget && ('Destination ' + capture.verificationTarget.engine + ' · ' +
+        capture.verificationTarget.database + '.' + capture.verificationTarget.table), captureId: capture.id }));
+    const selected = await vscode.window.showQuickPick(choices, { title: 'Select a Transfer with an Unconfirmed Commit' });
+    if (selected) return verifyDestination(selected.captureId);
+  });
+
   async function finish() {
     const pending = core.pending();
     if (!pending) throw new Error('No pending table copy remains.');
@@ -87,7 +125,10 @@ function registerTableTransfer(context, vscode, { database }) {
     if (!action || action === 'Leave Pending') return pending;
     trusted();
     const report = await core.settle({ transactionId: pending.transactionId, commit: action === 'Commit Inserted Rows' });
-    if (report.state === 'uncertain') await vscode.window.showWarningMessage(report.error.message);
+    if (report.state === 'uncertain' && report.captureId) {
+      const choice = await vscode.window.showWarningMessage(report.error.message, 'Verify Destination Rows');
+      if (choice === 'Verify Destination Rows') await verifyDestination(report.captureId);
+    } else if (report.state === 'uncertain') await vscode.window.showWarningMessage(report.error.message);
     else await vscode.window.showInformationMessage('Table copy ' + report.state + '.');
     return report;
   }
@@ -110,14 +151,14 @@ function registerTableTransfer(context, vscode, { database }) {
     const saved = core.canRecover ? await core.listRecoverableSources() : [];
     const sources = [...core.listSources().filter(capture => !capture.recoveryState), ...saved].map(capture => ({
       label: capture.database + '.' + capture.table,
-      description: capture.engine + ' · ' + capture.rowCount + ' rows' + (capture.recoveryState === 'settlement-unconfirmed' ? ' · commit unconfirmed' :
+      description: capture.engine + ' · ' + capture.rowCount + ' rows' + (capture.recoveryState === 'settlement-unconfirmed' ? ' · verify destination rows' :
         capture.recoveryState ? ' · saved' : capture.mode === 'stream' ? ' · streamed' : ''), capture }));
     if (saved.length) sources.push({ label: 'Discard a Saved Snapshot', discard: true });
     if (!sources.length) throw new Error('Capture a source table with Capture Table Copy Source first.');
     const selected = await vscode.window.showQuickPick(sources, { title: 'Select Captured Source' });
     if (!selected) return;
     if (selected.discard) return discardSaved(saved);
-    if (selected.capture.recoveryState === 'settlement-unconfirmed') throw new Error('Check the destination rows for the unconfirmed commit before discarding this snapshot.');
+    if (selected.capture.recoveryState === 'settlement-unconfirmed') return verifyDestination(selected.capture.id);
     const table = item?.table?.name || (await vscode.window.showQuickPick(tableChoices(), { title: 'Select Destination Table' }))?.label;
     if (!table) return;
     trusted();

@@ -2,8 +2,8 @@
 
 const assert=require('node:assert/strict');
 const test=require('node:test');
-const { normalizePlan }=require('../src/db/explain-plan');
-const { sampleCount,summarizeSeries,compareSeries }=require('../src/db/explain-plan-series');
+const { normalizePlan,comparePlans }=require('../src/db/explain-plan');
+const { sampleCount,summarizeSeries,compareSeries,serializeSamples }=require('../src/db/explain-plan-series');
 const { seriesHtml }=require('../src/db/explain-plan-view');
 
 const mysql=raw=>normalizePlan({raw,engine:'mysql',version:'8.4',database:'test',format:'tree',measured:true});
@@ -36,4 +36,31 @@ test('series comparison pairs exact metric paths and labels absent samples witho
   assert.match(seriesHtml(report,null,'test'),/Baseline · 3 samples.*Candidate · 2 samples/);
   assert.throws(()=>compareSeries(left,{...right,version:'different'}),/same server/);
   assert.throws(()=>summarizeSeries([plan,{...plan,measured:false}]),/inconsistent/);
+});
+
+test('plan comparisons pair moved unique operators and leave repeated operators unmatched', () => {
+  const source = (name, rows) => '    ' + tree(name, rows);
+  const before = mysql(tree('Append', '6', source('Scan A', '1') + source('Scan B', '2') +
+    source('Scan B', '2') + source('Scan C', '1')));
+  const after = mysql(tree('Append', '9', source('Scan B', '2') + source('Scan C', '3') +
+    source('Scan A', '2') + source('Scan B', '2')));
+  const comparison = comparePlans(before, after);
+  const moves = comparison.rows.filter(row => row.alignment === 'moved');
+  assert.equal(comparison.movedCount, 2);
+  assert.deepEqual(moves.map(row => [row.before.name, row.state, row.baselinePosition, row.candidatePosition]),
+    [['Scan A', 'changed', '1.1', '1.3'], ['Scan C', 'changed', '1.4', '1.2']]);
+  assert.equal(comparison.rows.filter(row => row.alignment === 'unmatched').length, 4);
+  const series = compareSeries(summarizeSeries([before, before]), summarizeSeries([after, after]));
+  assert.equal(series.movedCount, 2);
+  assert.match(seriesHtml(series, null, 'test'), /Moved 1\.1 → 1\.3/);
+});
+
+test('sample export keeps raw plan text and exact summarized values', () => {
+  const first = mysql(tree('Scan', '9007199254740993'));
+  const second = mysql(tree('Scan', '9007199254740994'));
+  const summary = summarizeSeries([first, second]);
+  const report = JSON.parse(serializeSamples(summary, [first, second], '2026-11-25T00:00:00.000Z'));
+  assert.deepEqual(report.samples.map(sample => [sample.number, sample.shape, sample.format, sample.raw]),
+    [[1, 1, 'tree', first.raw], [2, 1, 'tree', second.raw]]);
+  assert.equal(report.summary.metrics.find(item => item.key === 'actual_rows').median, '9007199254740993.5');
 });

@@ -1,5 +1,5 @@
 {
-  "version": "0.35.0",
+  "version": "0.36.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -1918,25 +1918,25 @@
       "status": "implemented",
       "label": "구현",
       "delivery": "none",
-      "scope": "물리적인 열·기본 키와 같은 프로젝트의 Jakarta 엔티티 소스를 확인해 단일 관계와 연관 컬렉션을 생성한다. 자식의 명시적인 쓰기 가능 ManyToOne과 일치하는 역방향 OneToMany 및 두 FK가 전체 기본 키인 연결 테이블의 소유 측 ManyToMany를 지원한다.",
+      "scope": "물리 외래 키와 Jakarta 엔티티 소스에서 단일 관계·컬렉션을 생성한다. 새 엔티티의 자기 참조 및 대상의 catalog가 명시된 동일 서버 교차 스키마 외래 키를 검토·적용한다.",
       "remaining": [
-        "자기 참조·교차 스키마, 역방향 ManyToMany와 연쇄 저장, 기존 양측 엔티티를 편집하는 검토를 확장한다."
+        "기존 양측 엔티티 갱신, 교차 스키마 역방향·연결 테이블, 임의 런타임 매핑과 참조 고유 키를 확장한다."
       ],
       "verification": {
-        "state": "v0.35-installed-coverage",
+        "state": "v0.36-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 Spring 환경에서 기존 child mappedBy와 복합 대상 키를 연결했고, Hibernate에서 양방향 읽기·연결 행 쓰기·롤백과 Java 소스 및 연결 테이블 변경 시 거부를 확인했다.",
+        "testedScope": "두 Spring 환경에서 동명 테이블을 스키마로 구별하고 Hibernate 조회·저장·롤백을 확인했다. 다른 FK 대상과 검토 후 바뀐 대상 스키마 정의·Java 소스를 거부했다.",
         "publicEvidence": [
-          "src/jpa/entity-collection-relationships.js",
+          "src/db/metadata.js",
           "src/jpa/entity-relationships.js",
           "src/jpa/entity-scaffold-vscode.js",
-          "test/jpa-collection-relationships-host.js",
-          "test/fixtures/jpa-entity-proof/GeneratedCollectionRelationshipProof.java"
+          "test/jpa-scoped-relationships-host.js",
+          "test/fixtures/jpa-entity-proof/GeneratedScopedRelationshipProof.java"
         ],
         "originalProductParityVerified": false
       }
@@ -5365,24 +5365,25 @@
       "status": "implemented",
       "label": "구현",
       "delivery": "none",
-      "scope": "실행 계획의 연산자·조건·비용을 시각화하며 같은 형식의 캡처와 반복 측정 시리즈를 나란히 비교한다. 계획 형태가 달라진 표본과 관찰값이 없는 위치를 분리해 표시한다.",
+      "scope": "실행 계획의 연산자·조건·비용을 시각화한다. 캡처와 반복 측정 시리즈에서 양쪽에 한 번씩 나타나는 동일 연산자가 이동하면 이전·현재 트리 위치와 수치 변화가 함께 표시된다.",
       "remaining": [
-        "트리에서 위치가 달라진 연산자의 의미 대응, 다른 버전과 형식의 비교를 확장한다."
+        "조건이나 액세스 방식도 바뀐 연산자의 대응과 다른 버전·형식의 비교를 확장한다."
       ],
       "verification": {
-        "state": "v0.35-installed-coverage",
+        "state": "v0.36-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring JOIN의 세 개 기준 표본과 두 개 후보 표본을 비교했다. 원본과 계획 형태를 보존하고 비교 시 DB 요청이 없음을 검증했다.",
+        "testedScope": "실제 MySQL과 MariaDB에서 Spring 테이블을 읽는 UNION ALL의 분기 순서를 바꾸고 단일 캡처와 2대2 시리즈에서 접근 연산자 두 개의 이동을 각각 확인했다.",
         "publicEvidence": [
+          "src/db/explain-plan-alignment.js",
           "src/db/explain-plan.js",
           "src/db/explain-plan-series.js",
           "src/db/explain-plan-view.js",
-          "test/explain-series-host.js"
+          "test/explain-movement-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5396,25 +5397,24 @@
       "status": "implemented",
       "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "사용자가 승인한 읽기 쿼리의 MySQL TREE와 MariaDB JSON 실측값을 표시한다. 2~5회 관찰한 행·반복·시간의 정확한 중앙값과 범위를 제공한다.",
+      "scope": "승인한 읽기 쿼리의 2~5개 실측 표본에서 행·반복·시간의 분포를 표시하고 원본 서버 텍스트, 표본별 계획 형태와 정확한 통계를 로컬 JSON에 내보낸다.",
       "remaining": [
-        "자세한 엔진별 지표, 큰 계획 전역 보기, 시계열 내보내기와 다중 계측 환경의 비교를 확장한다."
+        "저장한 표본을 다시 열어 비교하고 큰 계획 및 추가 엔진별 계측 지표의 표시를 확장한다."
       ],
       "verification": {
-        "state": "v0.35-installed-coverage",
+        "state": "v0.36-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 두 서버에서 표본별 원문과 행·시간 범위를 재확인했다. 명시적 승인과 취소에 따른 후속 실행 중단을 검증했다.",
+        "testedScope": "MySQL TREE와 MariaDB JSON의 원본 두 표본 및 분포를 비교했고, 기존 파일 덮어쓰기와 내보내기 중 추가 서버 실행이 없음을 검증했다.",
         "publicEvidence": [
           "src/db/explain-plan-series.js",
           "src/db/explain-plan-vscode.js",
-          "src/db/result-analysis.js",
           "test/explain-plan-series.test.js",
-          "test/explain-series-host.js"
+          "test/explain-movement-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5910,27 +5910,25 @@
       "status": "implemented",
       "label": "구현",
       "delivery": "none",
-      "scope": "서버 간 InnoDB 스트리밍 스냅샷을 작업 공간과 Secret Storage에 선택적으로 보존하고, 다시 열어서 새 대상 검토와 트랜잭션으로 재개한다. 커밋 전 기록으로 결과가 불확실한 스냅샷을 잠근다. 호환 BIT, YEAR, ENUM, SET, 고정 BINARY를 추가했다.",
+      "scope": "서버 간 InnoDB의 저장형 스트리밍 스냅샷을 재개하고, 미확정 커밋의 검토한 대상에서 매핑 값의 해시를 최대 32개 키로 대조한다. 현재 표본의 일치·누락·불일치 또는 확인 불가를 보고한다.",
       "remaining": [
-        "작업 공간 간 스냅샷 이동, 확인 가능한 미확정 커밋 복구 도구, 추가 타입·엔진 및 스키마 변환을 확장한다."
+        "전체 범위 확인 및 점검 내역 내보내기, 운영자가 검토하는 복구 절차, 다른 데이터 타입을 확장한다."
       ],
       "verification": {
-        "state": "v0.35-installed-coverage",
+        "state": "v0.36-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 확장 호스트 종료와 재시작 후 MySQL과 MariaDB 사이에서 양방향 저장 스냅샷을 열었다. 취소·롤백 뒤 재검토하고 추가 타입의 정확한 값을 커밋했다.",
+        "testedScope": "실제 MySQL↔MariaDB의 48행 전송에서 커밋 후 응답 유실과 전송 전 실패를 재현했다. 32개 복합 키와 5개 매핑 열에서 변경·삭제를 구별하고, 잘못된 대상 및 테이블 정의 변경을 거부했으며 재실행 잠금을 확인했다.",
         "publicEvidence": [
           "src/db/table-transfer-recovery.js",
-          "src/db/table-transfer-spool.js",
-          "src/db/table-transfer.js",
-          "src/db/import-stream.js",
-          "test/table-transfer-recovery.test.js",
-          "test/table-transfer-resume-host.js",
-          "test/workflows-v35-host.js"
+          "src/db/table-transfer-verification.js",
+          "src/db/table-transfer-vscode.js",
+          "test/table-transfer-verification.test.js",
+          "test/table-transfer-verification-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6621,8 +6619,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "1456a30063c44da977c6c758f7ed19cd5090b81eff822e9130113dfdea034b02",
-    "sourceManifestSha256": "605048da48d70948a412ba6d9126b999d56b35e137ada093e593a936f3953fd9",
+    "vsixSha256": "343c2545700df83a902d0259bfae87be725c7302d84c9021b6e6cf7ea9a85dfd",
+    "sourceManifestSha256": "1cbc83116c023a9a32d5a761748bdf7e3c8bc96070935291fc72fc933be58bc8",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6637,8 +6635,8 @@
   "stateChanges": [],
   "offline": {
     "node": "v24.22.1",
-    "tests": 1212,
-    "pass": 1159,
+    "tests": 1221,
+    "pass": 1168,
     "fail": 0,
     "cancelled": 0,
     "skipped": 53,

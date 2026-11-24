@@ -8,7 +8,7 @@ const { checkPackage, contained, physicalDirectory, validIdentifier, writeTempla
 const { buildFingerprint, local } = require('../java/workbench-model');
 const { analyzeJavaSources } = require('../java/signature-compiler');
 const { defaultEntityName, inspectTable, planEntity } = require('./entity-scaffold');
-const { MAX_RELATIONSHIPS } = require('./entity-relationships');
+const { MAX_RELATIONSHIPS, CROSS, SELF } = require('./entity-relationships');
 const { INVERSE, THROUGH, relationshipRequests } = require('./entity-collection-relationships');
 const { captureRelationshipSources, chooseableDeclarations } = require('./entity-relationship-sources');
 
@@ -131,6 +131,17 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
     return record && (record.applying || Date.now() - record.createdAt <= REVIEW_TTL) ? record : undefined;
   }
 
+  async function relationshipCatalogs(selection, target, cancellation) {
+    const observed = [];
+    for (const { foreignKey, targetSchema, targetTable } of selection.relationships.filter(request => request.kind === CROSS)) {
+      assertTarget(target, cancellation);
+      const proof = await database.relationshipTargetCatalog({ table: selection.table, foreignKey, targetSchema, targetTable });
+      assertTarget(target, cancellation);
+      observed.push(proof);
+    }
+    return observed;
+  }
+
   async function prepare(options = {}) {
     const { table, name, packageName, projectUri, sourceRootId, cancellation } = options;
     const relationships = relationshipRequests(options.relationships);
@@ -145,7 +156,8 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
       const scope = await projectScope({ ...selection, cancellation });
       const fileUri = vscode.Uri.file(scope.file).toString();
       const targets = captureRelationshipSources(vscode, scope.project, relationships);
-      const plan = planEntity({ catalog, table, name, packageName, uri: fileUri, relationships, targetSources: targets.sources });
+      const targetCatalogs = await relationshipCatalogs(selection, target, cancellation);
+      const plan = planEntity({ catalog, table, name, packageName, uri: fileUri, relationships, targetSources: targets.sources, targetCatalogs });
       const compiler = await analyzeJavaSources({ javaHome: scope.javaHome, classpath: scope.classpath,
         release: scope.release, storagePath, sources: [{ uri: fileUri, text: plan.text }, ...targets.sources], cancellation,
         manifestLimit: 256 * 1024 });
@@ -169,10 +181,12 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
       const output = { id, uri, fileUri, database: catalog.database, table, name, packageName, text: plan.text,
         notes: plan.mapping.notes, comparison: plan.comparison, keyColumns: plan.mapping.keys.map(field => field.sql),
         relationships: plan.relationshipPlan.relations.map(({ property, cardinality, optional, columns, mode, foreignKey, targetType,
-          kind, targetColumns, mappedBy, childTable, joinTable, ownerForeignKey, targetForeignKey }) =>
+          kind, targetColumns, mappedBy, childTable, joinTable, ownerForeignKey, targetForeignKey, targetSchema, targetTable }) =>
           ({ property, cardinality, optional, columns, mode, foreignKey, targetType,
             ...(kind === INVERSE ? { kind, childTable, mappedBy } : {}),
-            ...(kind === THROUGH ? { kind, joinTable, ownerForeignKey, targetForeignKey, targetColumns } : {}) })) };
+            ...(kind === THROUGH ? { kind, joinTable, ownerForeignKey, targetForeignKey, targetColumns } : {}),
+            ...(kind === SELF ? { kind } : {}),
+            ...(kind === CROSS ? { kind, targetSchema, targetTable } : {}) })) };
       previews.set(id, { createdAt: Date.now(), output, selection, scope, target, targets, plan, compiler, applying: false });
       return structuredClone(output);
     } finally { preparing = false; }
@@ -199,7 +213,12 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
       }
       if (selection.relationships.length) {
         let next;
-        try { next = planEntity({ ...selection, catalog, uri: record.output.fileUri, targetSources: targets.sources }); } catch {}
+        try {
+          const targetCatalogs = await relationshipCatalogs(selection, target, cancellation);
+          next = planEntity({ ...selection, catalog, uri: record.output.fileUri, targetSources: targets.sources, targetCatalogs });
+        } catch {
+          assertTarget(target, cancellation);
+        }
         if (next?.relationshipPlan.fingerprint !== plan.relationshipPlan.fingerprint) {
           throw Error('Relationship metadata changed after review. Generate a new preview.');
         }
@@ -231,9 +250,18 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
     for (const table of catalog.tables.filter(item => item.kind === 'table')) {
       const keys = table.foreignKeys.filter(sameSchema);
       if (table.name === name) {
-        for (const key of keys.filter(item => item.referencedTable !== name)) {
-          options.push({ label: key.name, description: 'Owning association · ' + key.referencedTable,
-            targetTable: key.referencedTable, request: { foreignKey: key.name } });
+        for (const key of table.foreignKeys) {
+          const foreignKey = key.name;
+          if (sameSchema(key) && key.referencedTable === name) {
+            options.push({ label: foreignKey, description: 'Self-reference · ' + name, request: { kind: SELF, foreignKey } });
+          } else if (sameSchema(key)) {
+            options.push({ label: foreignKey, description: 'Owning association · ' + key.referencedTable,
+              targetTable: key.referencedTable, request: { foreignKey } });
+          } else {
+            const targetSchema = key.referencedSchema, targetTable = key.referencedTable;
+            options.push({ label: foreignKey, description: 'Cross-schema association · ' + targetSchema + '.' + targetTable,
+              targetTable, request: { kind: CROSS, foreignKey, targetSchema, targetTable } });
+          }
         }
         continue;
       }
@@ -248,24 +276,32 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
       }
     }
     if (!options.length) return [];
-    const declarations = chooseableDeclarations(vscode, project, new Set(options.map(item => item.targetTable)));
-    const items = options.filter(item => declarations.some(declaration => declaration.table === item.targetTable));
+    const targetTables = new Set(options.map(item => item.targetTable).filter(Boolean));
+    const declarations = targetTables.size ? chooseableDeclarations(vscode, project, targetTables) : [];
+    const choices = item => declarations.filter(declaration => declaration.table === item.targetTable &&
+      (item.request.kind === CROSS ? declaration.catalog === item.request.targetSchema : !declaration.catalog || declaration.catalog === catalog.database));
+    const items = options.filter(item => item.request.kind === SELF || choices(item).length);
     if (!items.length) return [];
     const selected = await vscode.window.showQuickPick(items, { title: 'JPA Entity · Relationships', canPickMany: true,
       placeHolder: 'Confirm with no selection to keep the foreign-key fields scalar' });
     if (!selected) return undefined;
     if (selected.length > MAX_RELATIONSHIPS) throw Error('Review up to eight owning relationships per generated entity.');
     const relations = [];
-    for (const { label, targetTable, request } of selected) {
-      const target = await pick(declarations.filter(item => item.table === targetTable).map(item =>
-        ({ label: item.targetType, description: item.table, item })), 'Relationship target · ' + label);
-      if (!target) return undefined;
-      const simple = target.item.targetType.split('.').at(-1);
+    for (const option of selected) {
+      const { label, request } = option;
+      let target;
+      if (request.kind !== SELF) {
+        const result = await pick(choices(option).map(item => ({ label: item.targetType, description: item.table, item })),
+          'Relationship target · ' + label);
+        if (!result) return undefined;
+        target = result.item;
+      }
+      const simple = target?.targetType.split('.').at(-1);
       const property = await vscode.window.showInputBox({ title: 'Relationship field · ' + label,
-        value: simple[0].toLowerCase() + simple.slice(1) + (request.kind ? 'Items' : 'Reference'),
+        value: simple ? simple[0].toLowerCase() + simple.slice(1) + ([INVERSE, THROUGH].includes(request.kind) ? 'Items' : 'Reference') : 'parentReference',
         validateInput: value => validIdentifier(value) ? undefined : 'Enter a valid Java field name.' });
       if (property === undefined) return undefined;
-      const relation = { ...request, targetType: target.item.targetType, targetUri: target.item.targetUri, property };
+      const relation = { ...request, ...(target ? { targetType: target.targetType, targetUri: target.targetUri } : {}), property };
       if (request.kind === INVERSE) {
         relation.mappedBy = await vscode.window.showInputBox({ title: 'Existing child @ManyToOne field · ' + label,
           prompt: 'Field declared on the child with explicit join columns',

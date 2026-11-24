@@ -1,7 +1,8 @@
 'use strict';
 
 const { createHash } = require('node:crypto');
-const { comparablePlans, planPaths } = require('./explain-plan');
+const { comparablePlans } = require('./explain-plan');
+const { indexOperators, alignOperators } = require('./explain-plan-alignment');
 const { summarizeDecimalSamples } = require('./result-analysis');
 
 const MIN_SAMPLES = 2;
@@ -21,18 +22,19 @@ function summarizeSeries(plans) {
     throw Error('The measurement series returned an inconsistent server or plan format.');
   }
   for (const [index, plan] of plans.entries()) {
-    const paths = planPaths(plan);
-    const shape = createHash('sha256').update(JSON.stringify([...paths].map(([key, node]) => [
+    const paths = indexOperators(plan);
+    const shape = createHash('sha256').update(JSON.stringify([...paths].map(([key, { node }]) => [
       key, node.tags.filter(tag => tag.label !== 'Execution'), node.expressions
     ]))).digest('hex');
     if (!shapes.has(shape)) shapes.set(shape, { label: shapes.size + 1, samples: [], decodedNodes: paths.size });
     shapes.get(shape).samples.push(index + 1);
     for (const warning of plan.warnings) warnings.add(warning);
-    for (const [path, node] of paths) {
+    for (const [path, { node, address, signature }] of paths) {
       if (!nodes.has(path)) {
-        nodes.set(path, { path, name: node.name, depth: node.depth, observedSamples: 0, measures: new Map() });
+        nodes.set(path, { path, address, signatures:new Set(), name:node.name, depth:node.depth, observedSamples:0, measures:new Map() });
       }
       const item = nodes.get(path);
+      item.signatures.add(signature);
       item.observedSamples++;
       for (const metric of node.actual || []) {
         if (!item.measures.has(metric.key)) item.measures.set(metric.key, { label: metric.label, values: [] });
@@ -45,20 +47,43 @@ function summarizeSeries(plans) {
     ...summarizeDecimalSamples(measure.values)
   })));
   if (!metrics.some(metric => metric.count > 0)) throw Error('The server returned no decodable observed metrics for these plans.');
-  return { engine:first.engine, version:first.version, database:first.database, format:first.format, measured:true,
+  const operators = [...nodes.values()].map(item => {
+    const signatures = [...item.signatures];
+    return { path:item.path, address:item.address, signatures, signature:signatures.length === 1 ? signatures[0] : null };
+  });
+  return { engine:first.engine, version:first.version, database:first.database, format:first.format, measured:true, operators,
     totalSamples:plans.length, metrics, shapes:[...shapes.values()], warnings:[...warnings] };
 }
 
 function compareSeries(baseline, candidate) {
   if (!comparablePlans(baseline, candidate)) throw Error('Choose two series from the same server and plan format.');
-  const index = series => new Map(series.metrics.map(row => [JSON.stringify([row.path, row.key]), row]));
-  const before = index(baseline), after = index(candidate);
-  const metrics = [...new Set([...before.keys(), ...after.keys()])].map(key => ({
-    baseline: before.get(key) || null, candidate: after.get(key) || null
-  }));
+  function index(series) {
+    const index = new Map(series.operators.map(row => [row.path, { ...row, metrics:new Map() }]));
+    for (const metric of series.metrics) index.get(metric.path).metrics.set(metric.key, metric);
+    return index;
+  }
+  const aligned = alignOperators(index(baseline), index(candidate));
+  const metrics = aligned.flatMap(({ before, after, alignment }) =>
+    [...new Set([...(before?.metrics.keys() || []), ...(after?.metrics.keys() || [])])].map(key => ({
+      baseline:before?.metrics.get(key) || null, candidate:after?.metrics.get(key) || null,
+      alignment, baselinePosition:before?.address, candidatePosition:after?.address
+    })));
   return { baseline:{ samples:baseline.totalSamples, shapes:baseline.shapes.length, warnings:baseline.warnings },
     candidate:{ samples:candidate.totalSamples, shapes:candidate.shapes.length, warnings:candidate.warnings },
-    engine: baseline.engine, version: baseline.version, database: baseline.database, metrics };
+    engine: baseline.engine, version: baseline.version, database: baseline.database, metrics,
+    movedCount:aligned.filter(item => item.alignment === 'moved').length };
 }
 
-module.exports = { sampleCount, MAX_SAMPLES, summarizeSeries, compareSeries };
+function serializeSamples(series, plans, capturedAt) {
+  const { operators, ...summary } = series;
+  const shapes = new Map(series.shapes.flatMap(shape => shape.samples.map(sample => [sample, shape.label])));
+  return JSON.stringify({
+    format:'RocketbrainSqlPlanSamples', version:1, capturedAt,
+    summary,
+    samples:plans.map((plan, index) => ({
+      number:index + 1, shape:shapes.get(index + 1), format:plan.format, raw:plan.raw, warnings:plan.warnings
+    }))
+  }, null, 2) + '\n';
+}
+
+module.exports = { sampleCount, MAX_SAMPLES, summarizeSeries, compareSeries, serializeSamples };

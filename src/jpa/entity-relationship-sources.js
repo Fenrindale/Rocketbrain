@@ -26,9 +26,10 @@ function readSource(vscode, file) {
 }
 
 function captureRelationshipSources(vscode, project, requests) {
-  if (!requests.length) return { sources: [], verify() {} };
+  const uris = new Set(requests.map(request => request.targetUri).filter(Boolean));
+  if (!uris.size) return { sources: [], verify() {} };
   const files = observedFiles(project);
-  const retained = [...new Set(requests.map(request => request.targetUri))].map(value => {
+  const retained = [...uris].map(value => {
     const uri = vscode.Uri.parse(value);
     if (uri.scheme !== 'file' || uri.authority || uri.query || uri.fragment || !vscode.workspace.getWorkspaceFolder(uri) ||
         ![...files].some(file => !path.relative(file, uri.fsPath))) {

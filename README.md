@@ -99,11 +99,13 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - `rocketbrain.sql.analysis.resolutionScopes`에서 `source`에 작업 공간 내 파일 또는 `queries/` 같은 폴더를 지정하고, `ddl`의 상대 경로와 `database`, `dialect`를 설정할 수 있습니다. 더 구체적인 경로가 우선하며 로컬 카탈로그를 읽을 수 없으면 진단을 표시합니다.
 - **Visualize SQL Execution Plan**은 선택한 읽기 쿼리의 계획을 트리와 표, 서버 원본 JSON으로 표시합니다. MySQL은 서버의 TREE 원문도 표시합니다. 서버에서 반환한 행 추정치와 비용을 보존합니다.
 - **Measure SQL Execution Plan**은 승인한 읽기 쿼리를 별도 읽기 전용 세션으로 실행해 서버가 보고한 행, 반복 횟수, 시간을 표시합니다. **Compare Captured SQL Plans**는 같은 연결과 캡처 모드의 열린 계획을 나란히 보여줍니다.
-- **Measure SQL Plan Series**는 승인한 쿼리를 2~5회 순차 실행해 관찰된 행·반복·시간의 최솟값·중앙값·최댓값과 원본 표본을 표시합니다. **Compare SQL Measurement Series**는 같은 연결·계획 형식에서 두 시리즈의 동일 트리 위치를 비교합니다.
+- **Measure SQL Plan Series**는 승인한 쿼리를 2~5회 순차 실행해 관찰된 행·반복·시간의 최솟값·중앙값·최댓값과 원본 표본을 표시합니다. 계획과 시리즈 비교는 양쪽에서 고유하게 대응하는 연산자가 이동하면 이전과 현재의 트리 위치를 함께 표시합니다.
+- **Export SQL Plan Samples**는 열린 시리즈의 원본 서버 출력, 표본별 계획 형태, 정확한 통계 요약을 새 로컬 JSON 파일에 저장합니다. 원본 서버 출력에는 쿼리의 리터럴 값이 포함될 수 있습니다.
 - **Show SQL Activity Log**에서 작업 공간의 로컬 기록을 선택적으로 켭니다. 콘솔·스크립트·메타데이터 요청의 상태와 소요 시간이 메모리에 기록되며 SQL 원문·변수 값은 보관하지 않습니다. **Browse Database Object Names**에서는 테이블·뷰 이름을 먼저 읽고 선택한 객체의 열과 인덱스를 조회합니다.
 - 결과 탭에 이름을 붙이거나 고정하고, 보관된 스크립트 결과에서 각 문장의 캡처를 다시 엽니다. 테이블 필터는 중첩 AND/OR와 타입별 열 검색을 지원하며, 저장한 조건을 같은 연결·테이블에서 다시 선택할 수 있습니다.
 - **Generate JPA Entity from Table**은 현재 스키마의 열과 기본 키에서 Jakarta Persistence 클래스를 만듭니다. 선택한 외래 키와 같은 프로젝트의 대상 엔티티를 대조해 `@ManyToOne` 또는 `@OneToOne`을 추가할 수 있습니다. 스칼라 필드 또는 연관 필드 중 하나를 쓰기 소유자로 지정하고, 적용 전에 카탈로그와 Java 원본을 다시 확인합니다.
 - 같은 명령에서 기존 자식 엔티티의 명시적 `@ManyToOne` 필드를 확인해 역방향 `@OneToMany(mappedBy)`를 생성합니다. 두 외래 키가 기본 키를 구성하는 연결 테이블에서는 소유 측 `@ManyToMany`를 생성합니다. 검토한 새 엔티티 파일에 적용합니다.
+- 새 엔티티의 기본 키를 가리키는 자기 참조 FK와 같은 MySQL·MariaDB 서버의 다른 스키마를 가리키는 FK도 매핑할 수 있습니다. 교차 스키마 대상은 실제 FK와 로컬 Jakarta 엔티티의 명시적 `@Table(catalog = …)`을 함께 확인합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
@@ -111,6 +113,7 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - **Chart** 보기에서 캡처한 결과 페이지의 막대·선 그래프와 정확한 그룹 합계·평균을 확인합니다. 셀 편집기는 줄바꿈 종류, JSON 원문, Hex·Base64와 SQL NULL을 구분합니다.
 - **Compare**에서 두 캡처 결과의 키와 비교 열을 매핑합니다. 변경된 일치 행을 선택해 대상 그리드의 초안에 넣고 SQL 검토와 트랜잭션으로 적용합니다.
 - **Capture Table Copy Source**에서 메모리, 임시 스트리밍 또는 **Stream and Save for Resume**을 선택합니다. 스트리밍은 InnoDB 기본 키 순서의 읽기 스냅샷을 최대 100만 행·1 GiB까지 암호화합니다. 재개를 선택한 스냅샷은 작업 공간에 최대 24시간 두고 키는 VS Code Secret Storage에 저장합니다. **Copy Captured Rows**에서 대상을 다시 검토하고 새 트랜잭션에 스테이징한 뒤 **Finish Table Copy**에서 커밋 또는 롤백합니다. 커밋 결과가 불확실한 스냅샷은 재사용이 잠깁니다.
+- **Verify Table Copy Destination**은 미확정 커밋 기록의 검토된 대상 서버·계정·테이블에서 최대 32개 기본 키와 매핑된 값의 해시를 읽기 전용으로 비교합니다. 표본의 현재 상태를 보고하며 재실행 잠금은 유지됩니다.
 - 호환되는 `BIT(64)`, `YEAR`, 같은 레이블의 `ENUM`·`SET`, 같은 길이의 고정 `BINARY`도 테이블 복사에서 검증합니다.
 - **Open Schema Diagram**에서 실제 FK와 저장 연결의 워크스페이스 가상 FK를 탐색합니다. 노드 위치를 저장하거나 JSON으로 교환하고 PNG로 내보낼 수 있습니다.
 - **Save Schema DDL**에서 테이블·외래 키·지원하는 뷰의 순서를 검토하고 SQL 파일을 저장합니다. 저장 전 현재 정의와 비교하며, 파일 생성 과정에서는 서버 정의를 읽습니다.

@@ -6,6 +6,7 @@ const { canonicalValue, describeType } = require('./schema-conversion');
 const { StreamImporter, newSession, LIMITS: IMPORT_LIMITS } = require('./import-stream');
 const { readSnapshot, streamLimits } = require('./table-transfer-snapshot');
 const { recoveryLifetimeMs } = require('./table-transfer-recovery');
+const { createCommitEvidence, verifyCommitEvidence } = require('./table-transfer-verification');
 
 const limits = Object.freeze({ rows: 500, columns: 64, bytes: 1024 * 1024, entries: 4, durationMs: 10 * 60 * 1000 });
 const fail = message => Object.assign(new Error(message), { code: 'ROCKETBRAIN_TABLE_TRANSFER' });
@@ -151,17 +152,22 @@ async function captureTable(lease, table, { id, mode, cancellation, onProgress, 
 }
 
 function returnCapture(capture) {
-  const { id, expiresAt, database, table, scope, engine, rowCount, omittedColumns, sourceHash, recoveryState } = capture;
+  const { id, expiresAt, database, table, scope, engine, rowCount, omittedColumns, sourceHash, recoveryState, verificationTarget } = capture;
   return { id, expiresAt, database, table, scope, engine, rowCount, omittedColumns, sourceHash, columns: capture.columns.map(publicColumn),
     ...((capture.spool || recoveryState) && { mode: 'stream', encryptedBytes: capture.bytes, maxFrameBytes: capture.maxFrameBytes, maxBufferedRows: capture.maxBufferedRows }),
-    ...(recoveryState && { recoveryState }) };
+    ...(recoveryState && { recoveryState }), ...(verificationTarget && { verificationTarget }) };
 }
 
 function retainedSource(capture, target) {
-  let compatibility;
+  let compatibility, sampler;
   const metadata = { width: capture.columns.length, headers: capture.columns.map(column => column.name) };
   return {
     options: () => ({ file: capture.table, format: capture.spool ? 'streamed-table' : 'retained-table' }),
+    takeCommitEvidence() {
+      const evidence = sampler?.evidence();
+      sampler = undefined;
+      return evidence;
+    },
     placeholder(column) {
       return transferable(column)?.kind === 'bit' ? 'CAST(? AS UNSIGNED)' : '?';
     },
@@ -186,6 +192,7 @@ function retainedSource(capture, target) {
       if (capture.spool) {
         await capture.spool.scan({ cancellation: callbacks.cancellation, onStart: start, async onRow(row, index) {
           assertMappedRow(row, index, compatibility);
+          sampler?.observe(row, index);
           await callbacks.onRow?.(rowData(row));
         } });
         return state;
@@ -200,6 +207,11 @@ function retainedSource(capture, target) {
     validateSelection({ selected, definition }) {
       if (digest(definition) !== target.definitionHash) throw fail('The destination definition changed. Choose the destination again.');
       compatibility = mappedTypes(capture.columns, selected);
+      if (capture.recoveryState) {
+        const { identityHash, definitionHash, scope, database, table, engine } = target;
+        sampler = createCommitEvidence({ destination: { identityHash, definitionHash, scope, database, table, engine },
+          capture, definition, selected: compatibility });
+      }
       if (!capture.spool) for (const [index, row] of capture.rows.entries()) assertMappedRow(row, index, compatibility);
     },
     validateTarget({ identity, definition }) {
@@ -316,6 +328,11 @@ function createTableTransfer(database, { recovery } = {}) {
       discardSource(captureId);
       return getRecovery().discard(captureId);
     }),
+    verifyUncertainCommit: tracked(async ({ captureId, cancellation } = {}) => {
+      const evidence = await getRecovery().uncertainCommit(captureId);
+      return verifyCommitEvidence(evidence, { withTableTransfer: database.withTableTransfer, cancellation,
+        transferable, targetDefinition, tableIdentity });
+    }, true),
     inspectDestination: tracked(async ({ captureId, table } = {}) => database.withTableTransfer(async lease => {
       const capture = retained(captures, captureId, 'source snapshot');
       await confirmReady(capture);
@@ -325,7 +342,8 @@ function createTableTransfer(database, { recovery } = {}) {
       const scope = tableIdentity(identity, table);
       if (scope === capture.scope) throw fail('Choose a different destination table.');
       const destination = { id: randomUUID(), captureId, db: lease.db, epoch: lease.epoch, scope, table,
-        definitionHash: digest(definition), identityHash: digest(identity), expiresAt: Date.now() + limits.durationMs };
+        database: identity.database, engine: identity.dialect, definitionHash: digest(definition), identityHash: digest(identity),
+        expiresAt: Date.now() + limits.durationMs };
       bounded(targets);
       targets.set(destination.id, destination);
       return { id: destination.id, scope, table, database: identity.database, engine: identity.dialect,
@@ -341,7 +359,8 @@ function createTableTransfer(database, { recovery } = {}) {
       if (target.captureId !== captureId) throw fail('The destination inspection belongs to another source snapshot.');
       if (!Array.isArray(mapping) || mapping.length !== capture.columns.length) throw fail('Map or explicitly ignore each source column.');
       const numeric = mapping.map(item => ({ source: capture.columns.findIndex(col => col.name === item?.source), target: item?.target }));
-      const manager = new StreamImporter(lease.db, { source: retainedSource(capture, target), onStateChange: value => {
+      const source = retainedSource(capture, target);
+      const manager = new StreamImporter(lease.db, { source, onStateChange: value => {
         if (!value && pending?.manager === manager) {
           const { releasePending } = pending;
           pending = undefined;
@@ -352,7 +371,7 @@ function createTableTransfer(database, { recovery } = {}) {
         const plan = await manager.prepare({ table: target.table, mapping: numeric, guard: lease.guard, cancellation });
         retained(captures, captureId, 'source snapshot');
         const entry = { id: plan.reviewId, expiresAt: Math.min(plan.expiresAt, target.expiresAt, capture.expiresAt),
-          db: lease.db, epoch: lease.epoch, manager, captureId };
+          db: lease.db, epoch: lease.epoch, manager, captureId, commitEvidence: source.takeCommitEvidence() };
         for (const [id, review] of reviews) if (review.expiresAt <= Date.now() || reviews.size >= limits.entries) {
           reviews.delete(id); await review.manager.dispose();
         }
@@ -381,7 +400,7 @@ function createTableTransfer(database, { recovery } = {}) {
         const report = await review.manager.run({ reviewId, guard: lease.guard, cancellation, onProgress });
         if (report.state === 'awaiting-commit') {
           pending = { db: lease.db, epoch: lease.epoch, manager: review.manager, releasePending: lease.releasePending, report,
-            captureId: capture.id, recoverable: Boolean(capture.recoveryState) };
+            captureId: capture.id, recoverable: Boolean(capture.recoveryState), commitEvidence: review.commitEvidence };
           wait = true;
         }
         return structuredClone(report);
@@ -395,7 +414,7 @@ function createTableTransfer(database, { recovery } = {}) {
       return database.withTableTransfer(async lease => {
         if (commit) live(lease, selected);
         try {
-          const beforeCommit = selected.recoverable ? () => recovery.beginCommit(selected.captureId) : undefined;
+          const beforeCommit = selected.recoverable ? () => recovery.beginCommit(selected.captureId, selected.commitEvidence) : undefined;
           const report = await (commit ? selected.manager.commit({ transactionId, guard: lease.guard, beforeCommit }) : selected.manager.rollback({ transactionId }));
           if (selected.recoverable && report.committed) {
             discardSource(selected.captureId);
@@ -404,6 +423,7 @@ function createTableTransfer(database, { recovery } = {}) {
           } else if (selected.recoverable && commit && report.outcomeUnknown) {
             discardSource(selected.captureId);
             report.recoveryState = 'settlement-unconfirmed';
+            report.captureId = selected.captureId;
           }
           return report;
         }
