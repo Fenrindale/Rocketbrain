@@ -32,7 +32,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   function updateStatus() {
     const binding = existingBinding();
     const session = state.mysql && binding ? state.db.getSessionState(binding.id) : null;
-    const mode = streamTransactions.size ? 'import waiting for Commit or Roll Back' : session ? session.needsReconnect ? 'disconnected · reconnect required' : `${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}${session.inTransaction ? ' · transaction active' : ''}` : state.mysql ? 'new console · read only' : 'SQLite demo';
+    const mode = streamTransactions.size ? 'import waiting for Commit or Roll Back' : session ? session.needsReconnect ? 'disconnected · reconnect required' : `${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}${session.inTransaction ? ' · transaction active' : ''}${session.transactionIsolation ? ' · ' + session.transactionIsolation.toLowerCase() : ''}` : state.mysql ? 'new console · read only' : 'SQLite demo';
     status.text = `${state.running.size ? '$(sync~spin)' : '$(database)'} Rocketbrain · ${binding?.id || state.label} · ${mode}`;
     status.command=streamTransactions.size?'rocketbrain.import.stream':'rocketbrain.sessionStatus';
     status.tooltip = `${state.label}\n${mode}\n${streamTransactions.size?'Click to Commit or Roll Back the pending streamed import.':'Each SQL editor uses its own database session. Click for session details.'}`;
@@ -141,26 +141,34 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const editor = await vscode.window.showTextDocument(document, { preview: false });
     await bind(document); return editor;
   }
-  async function runSql(sql, document = currentDocument()) {
+  async function runSql(sql, document = currentDocument(), { connectionEpoch, saved = false } = {}) {
     if (!sql.trim()) return;
     if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
+    if (connectionEpoch !== undefined && connectionEpoch !== state.epoch) throw new Error('The active database changed. Choose the saved query destination again.');
     const binding = await bind(document);
     assertBinding(document, binding);
     const db = state.db;
     if (state.running.has(binding.id)) throw new Error('This console already has a running query.');
-    state.running.add(binding.id); updateStatus();
     const session = state.mysql ? db.getSessionState(binding.id) : null;
+    if (saved && session && !session.readOnly) throw new Error('Run the saved query in a read-only console.');
+    state.running.add(binding.id); updateStatus();
     const source = state.mysql ? `${state.label} · ${binding.id} · ${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}` : 'Offline demo · SQLite · sample data';
     let id;
     try {
       const editor = vscode.window.activeTextEditor;
       await results.show();
       if (editor) await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
+      if (saved && (!vscode.workspace.isTrusted || document.isClosed || document.getText() !== sql)) throw new Error('The saved SQL changed or the workspace is unavailable.');
       id = results.begin(sql, source, { readOnly: session?.readOnly ?? true, sessionId: binding.id });
       results.finish(id, await db.query(sql, { sessionId: binding.id, maxRows: 500, timeoutMs: 5000 }));
     } catch (error) {
       if (id) results.finish(id, undefined, error instanceof Error ? error.message : String(error), error.state); else throw error;
     } finally { state.running.delete(binding.id); updateStatus(); }
+    return id;
+  }
+  function selectedSql(editor) {
+    if (!editor || editor.document.isClosed || editor.document.languageId !== 'sql') throw new Error('Open a SQL editor first.');
+    return editor.selection.isEmpty ? statementAt(editor.document.getText(), editor.document.offsetAt(editor.selection.active), { dialect: state.mysql ? 'mysql' : 'sqlite' }) : editor.document.getText(editor.selection);
   }
   command('rocketbrain.openConsole', async () => {
     await refreshSchema();
@@ -171,9 +179,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   });
   command('rocketbrain.runQuery', async () => {
     const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.languageId !== 'sql') throw new Error('Open a SQL editor first.');
-    const sql = editor.selection.isEmpty ? statementAt(editor.document.getText(), editor.document.offsetAt(editor.selection.active), { dialect: state.mysql ? 'mysql' : 'sqlite' }) : editor.document.getText(editor.selection);
-    return runSql(sql, editor.document);
+    return runSql(selectedSql(editor), editor.document);
   });
   command('rocketbrain.openTable', async name => {
     if (typeof name !== 'string' || !state.schema.some(table => table.name === name)) return;
@@ -310,6 +316,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     catalogSnapshot:()=>state.metadata?structuredClone(state.metadata):null,
     queryDemo: sql => state.mysql ? Promise.reject(new Error('Demo checks require the demo connection.')) : state.db.query(sql),
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
+    exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination),
     onDidChangeDatabase: connectionEvents.event,
     async withExclusiveSchemaWork(action){
       reconcileStreamTransactions();
@@ -340,6 +347,47 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     },
     sessionState: () => state.mysql && existingBinding() ? state.db.getSessionState(existingBinding().id) : null,
     sessions: () => state.mysql ? [...bindings.values()].map(binding => ({ ...state.db.getSessionState(binding.id), editorClosed: Boolean(binding.documentClosed) })) : [],
+    async inspectConsoleIsolation(document = currentDocument()) {
+      if (!state.mysql) throw new Error('Connect to MySQL or MariaDB before choosing an isolation level.');
+      if (!document || document.isClosed || document.languageId !== 'sql') throw new Error('Open a SQL editor first.');
+      const binding = await bind(document);
+      assertBinding(document, binding);
+      return withSession(binding.id, async () => ({
+        ...await state.db.getTransactionIsolation({ sessionId: binding.id }), connectionEpoch: binding.epoch
+      }));
+    },
+    async setConsoleIsolation(document, level, observed) {
+      const binding = document && bindings.get(document.uri.toString());
+      if (!binding || document.isClosed || document.languageId !== 'sql' || binding.id !== observed?.id || binding.epoch !== observed?.connectionEpoch) {
+        throw new Error('This SQL console changed. Open the isolation picker again.');
+      }
+      assertBinding(document, binding);
+      return withSession(binding.id, async () => {
+        const beforeChange = () => {
+          if (document.isClosed || !vscode.workspace.isTrusted) throw new Error('This SQL console is unavailable. Open the isolation picker again.');
+          assertBinding(document, binding);
+          if (pendingTableDraft()) throw new Error('Apply or discard pending table drafts before changing transaction isolation.');
+        };
+        beforeChange();
+        const next = await state.db.setTransactionIsolation(level, {
+          sessionId: binding.id, expectedConnectionId: observed.connectionId,
+          expectedIsolation: observed.transactionIsolation, beforeChange
+        });
+        return { ...next, connectionEpoch: binding.epoch };
+      });
+    },
+    selectedSql,
+    savedQueryTarget: () => ({ connectionEpoch: state.epoch, label: state.label }),
+    async openSavedQuery(sql, destination) {
+      if (!vscode.workspace.isTrusted || state.disposed || state.switching) throw new Error('Open a trusted workspace before using saved queries.');
+      if (destination && destination.connectionEpoch !== state.epoch) throw new Error('The active database changed. Choose the saved query destination again.');
+      const document = await vscode.workspace.openTextDocument({ language: 'sql', content: sql });
+      await vscode.window.showTextDocument(document, { preview: false });
+      if (!destination) return { documentUri: document.uri.toString() };
+      if (!vscode.workspace.isTrusted || document.isClosed || document.getText() !== sql) throw new Error('The saved SQL changed or the workspace is unavailable.');
+      const resultId = await runSql(sql, document, { connectionEpoch: destination.connectionEpoch, saved: true });
+      return { documentUri: document.uri.toString(), resultId };
+    },
     tableAction: (id, message) => tableEditor.handle(id, message),
     async describeSqlScript(sql,{document=currentDocument()}={}) {
       if(!state.mysql)throw new Error('Connect to MySQL or MariaDB before running a SQL script.');

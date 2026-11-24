@@ -5,6 +5,7 @@ const {SchemaObjectEditor}=require('./object-editor');
 const { performance } = require('node:perf_hooks');
 const { validateQuery, validateReadQuery, parameters } = require('./sql-policy');
 const { readMetadata } = require('./metadata');
+const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
 const { TableEditor } = require('./grid');
 const { SchemaRenamer } = require('./schema-rename');
 const { SchemaRecovery } = require('./schema-recovery');
@@ -75,6 +76,7 @@ function cellValue(value) {
 }
 function newSession(id, readOnly, database) {
   return { id, readOnly, database, autocommit: true, inTransaction: false, transactionState: 'idle',
+    transactionIsolation: null,
     outcomeUnknown: false, needsReconnect: false, connected: false, connection: null, connectionId: null,
     queue: Promise.resolve(), active: null, closed: false, cancellationVersion: 0 };
 }
@@ -113,8 +115,8 @@ class MysqlService {
     return session;
   }
   _state(session) {
-    const { id, readOnly, autocommit, inTransaction, transactionState, connected, connectionId, database, outcomeUnknown, needsReconnect } = session;
-    return { id, readOnly, autocommit, inTransaction, transactionState, connected, connectionId, database, outcomeUnknown, needsReconnect, busy: Boolean(session.active||session.scriptRunning) };
+    const { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect } = session;
+    return { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect, busy: Boolean(session.active||session.scriptRunning) };
   }
   getSessionState(id = 'default') { return this._state(this._session(id)); }
   async openSession(id, { readOnly = this._defaultReadOnly } = {}) {
@@ -155,6 +157,7 @@ class MysqlService {
     const connection = session.connection, active = session.active;
     session.outcomeUnknown ||= !session.readOnly && (Boolean(session.inTransaction) || mayWrite || Boolean(active?.mayWrite));
     session.connection = null; session.connected = false; session.connectionId = null;
+    session.transactionIsolation = null;
     session.needsReconnect = true; session.inTransaction = null; session.transactionState = 'unknown';
     if (connection) connection.destroy();
     if (abort && active) active.abort(reason);
@@ -343,7 +346,8 @@ class MysqlService {
           if (finished || !fields) return;
           result.columns = fields.map(field => String(field.name));
           result.fields = fields.map(field => ({ name: String(field.name), schema: field.schema || '', table: field.table || '',
-            originalTable: field.orgTable || '', originalName: field.orgName || '', type: field.columnType ?? null, flags: field.flags ?? 0 }));
+            originalTable: field.orgTable || '', originalName: field.orgName || '', type: field.columnType ?? null, flags: field.flags ?? 0,
+            characterSet: field.characterSet ?? null }));
           bytes = Buffer.byteLength(JSON.stringify(result.columns) + JSON.stringify(result.fields), 'utf8');
           if (bytes > MAX_RESULT_BYTES) this._lose(session, fail('ROCKETBRAIN_RESULT_LIMIT', 'The result column metadata exceeds 4 MiB.'), mayWrite);
         });
@@ -419,6 +423,53 @@ class MysqlService {
       this._observe(session, result); this._editor.invalidate(session.id); return this._state(session);
     });
   }
+  async _observeIsolation(session) {
+    session.transactionIsolation = null;
+    const result = await this._stream(session,
+      "SHOW SESSION VARIABLES WHERE Variable_name IN ('transaction_isolation', 'tx_isolation')",
+      [], { maxRows: 2, timeoutMs: 5000 }, false);
+    await this._refreshState(session);
+    session.transactionIsolation = serverIsolationLevel(result);
+    return this._state(session);
+  }
+  async getTransactionIsolation(options = {}) {
+    const session = this._session(options.sessionId);
+    return this._enqueue(session, async () => {
+      await this._ensureConnection(session);
+      return this._observeIsolation(session);
+    });
+  }
+  async setTransactionIsolation(value, { sessionId, expectedConnectionId, expectedIsolation, beforeChange } = {}) {
+    const level = isolationLevel(value), session = this._session(sessionId);
+    return this._enqueue(session, async () => {
+      await this._ensureConnection(session);
+      if (expectedConnectionId !== undefined && session.connectionId !== expectedConnectionId) {
+        throw new Error('This console reconnected after the isolation picker opened. Open it again.');
+      }
+      await this._observeIsolation(session);
+      if (session.inTransaction || session.outcomeUnknown) {
+        throw new Error('Resolve any active or uncertain transaction before changing isolation.');
+      }
+      if (expectedIsolation !== undefined && session.transactionIsolation !== expectedIsolation) {
+        throw new Error('This console isolation level changed after the picker opened. Open it again.');
+      }
+      beforeChange?.();
+      if (session.transactionIsolation === level) return this._state(session);
+      const result = await this._control(session, 'SET SESSION TRANSACTION ISOLATION LEVEL ' + level);
+      this._editor.invalidate(session.id);
+      for (const [id, review] of this._scriptReviews) if (review.sessionId === session.id) this._scriptReviews.delete(id);
+      try {
+        this._observe(session, result);
+        const state = await this._observeIsolation(session);
+        if (state.transactionIsolation !== level) throw fail('ROCKETBRAIN_ISOLATION_NOT_OBSERVED', 'The server reported a different isolation level.');
+        return state;
+      } catch (error) {
+        this._lose(session, error);
+        error.state = this._state(session);
+        throw error;
+      }
+    });
+  }
   async cancel(id = 'default') {
     const session = this._session(id);
     session.cancellationVersion++;
@@ -433,6 +484,7 @@ class MysqlService {
       if (session.connection) { const connection = session.connection; session.connection = null; connection.destroy(); }
       session.connected = false; session.connectionId = null; session.needsReconnect = false;
       session.autocommit = true; session.inTransaction = false; session.transactionState = 'idle';
+      session.transactionIsolation = null;
       // Reconnect does not prove an earlier write's outcome and replays no SQL.
       this._editor.invalidate(session.id);
       for(const [reviewId,review]of this._scriptReviews)if(review.sessionId===id)this._scriptReviews.delete(reviewId);

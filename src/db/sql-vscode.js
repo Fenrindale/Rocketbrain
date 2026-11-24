@@ -183,6 +183,19 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     metadata=result;epoch++;reanalyze();return {database:result.database,loadedAt:result.loadedAt,dialect:result.dialect,coverage:result.coverage,visibility:result.visibility};
   }
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {provideCompletionItems(document,position){const scope=locate(document,position);if(!scope)return [];return engine().completionsAt(scope.model,scope.offset).map(value=>{const item=new vscode.CompletionItem(value.label,value.kind==='column'?vscode.CompletionItemKind.Field:vscode.CompletionItemKind.Struct);item.detail=value.detail;item.insertText=value.insertText||value.label;return item;});}},'.'));
+  subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {
+    provideCompletionItems(document,position) {
+      if(disposed||!vscode.workspace.isTrusted||!config().get('enabled',true)||!metadata)return [];
+      const candidates=require('./foreign-key-joins').foreignKeyJoins(document.getText(),document.offsetAt(position),metadata,options());
+      return candidates.map(candidate=>{
+        const item=new vscode.CompletionItem(candidate.label,vscode.CompletionItemKind.Reference);
+        item.detail=candidate.detail;
+        item.insertText=candidate.insertText;
+        item.range=new vscode.Range(document.positionAt(candidate.start),document.positionAt(candidate.end));
+        return item;
+      });
+    }
+  },' '));
   subscriptions.push(vscode.languages.registerDefinitionProvider({language:'sql'}, {provideDefinition(document,position){const scope=locate(document,position);if(!scope)return [];return engine().definitionsAt(scope.model,scope.offset).map(value=>new vscode.Location(document.uri,new vscode.Range(document.positionAt(scope.start+value.start),document.positionAt(scope.start+value.end))));}}));
   subscriptions.push(vscode.languages.registerHoverProvider({language:'sql'}, {provideHover(document,position){const scope=locate(document,position);if(!scope)return;const value=engine().hoverAt(scope.model,scope.offset);if(!value)return;const markdown=new vscode.MarkdownString();markdown.appendText(value);return new vscode.Hover(markdown);}}));
   if(vscode.languages.registerRenameProvider)subscriptions.push(vscode.languages.registerRenameProvider({language:'sql'},{prepareRename,provideRenameEdits:renameDocument}));

@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
-const { toCsv, spreadsheetText } = require('./sql');
+const { spreadsheetText } = require('./sql');
+const { createResultExport } = require('./db/result-export');
 class ResultsView {
   constructor(vscode, context, { editAction, resultClosed } = {}) { this.vscode = vscode; this.context = context; this.history = []; this.view = null; this.sequence = 0; this.editAction = editAction; this.resultClosed = resultClosed; }
   resolveWebviewView(view) {
@@ -11,9 +12,12 @@ class ResultsView {
     const script = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.js'));
     const style = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.css'));
     view.webview.html = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${style}"><title>Query Results</title></head><body>
-<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><button id="copy" disabled>Copy TSV</button><button id="export" disabled>Export CSV</button><button id="close-result">Close Result</button></header>
+<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option></select><button id="export" disabled>Export CSV</button><button id="close-result">Close Result</button></header>
 <nav id="tabs" aria-label="Query result history"></nav>
 <div id="message" role="status" aria-live="polite">Run SQL from the editor with Ctrl+Enter.</div>
+<section id="result-layout" aria-label="Result view options" hidden><div id="result-row-navigation" hidden><button id="result-row-previous">Previous Row</button><span id="result-row-status" role="status"></span><button id="result-row-next">Next Row</button></div><button id="result-columns" aria-expanded="false">Columns</button></section>
+<section id="result-column-panel" aria-label="Result columns" hidden><div id="result-column-list"></div><button id="result-column-reset">Reset Columns</button></section>
+<form id="insert-export" hidden><label>Table <input id="export-table" required maxlength="64" autocomplete="off" spellcheck="false"></label><label>Schema <input id="export-schema" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Optional"></label><label>Columns <input id="export-columns" autocomplete="off" spellcheck="false" placeholder="Optional JSON array in query order"></label><button type="submit">Save INSERT Script</button><button id="export-cancel" type="button">Cancel</button></form>
 <section id="browse-tools" aria-label="Server table browsing" hidden><div class="browse-navigation"><button id="page-previous">Previous Page</button><span id="page-label"></span><button id="page-next">Next Page</button><label>Rows <select id="page-size" aria-label="Rows per page"><option>25</option><option>50</option><option>100</option><option selected>200</option><option>500</option></select></label><button id="browse-options" aria-expanded="false">Sort and Filter</button></div><form id="browse-form" hidden><div><strong>Sort columns</strong><div id="sort-rules"></div><button id="add-sort" type="button">Add Sort</button></div><div><strong>Filters (all must match)</strong><div id="filter-rules"></div><button id="add-filter" type="button">Add Filter</button></div><div class="browse-actions"><button id="apply-browse" type="submit">Apply Sort and Filters</button><button id="clear-browse" type="button">Clear Sort and Filters</button></div></form><div id="browse-status" role="status"></div></section>
 <section id="edit-tools" aria-label="Table editing" hidden><button id="enable-edit">Enable Editing</button><button id="restore-browsing" title="Roll back this session and switch to read-only browsing. Commit first to keep applied changes." hidden>Roll Back and Browse</button><button id="add-row">Add Row</button><button id="paste-cells">Paste Cells</button><button id="import-text">Import CSV/TSV</button><button id="import-file">Choose CSV/TSV File</button><button id="import-xlsx">Choose XLSX File</button><button id="discard">Discard Draft</button><button id="review">Review SQL</button><button id="apply">Apply Reviewed Changes</button><button id="commit">Commit</button><button id="rollback">Roll Back</button><button id="reload">Reload</button><span id="draft-count"></span></section>
 <div id="edit-status" role="status" aria-live="polite" hidden></div>
@@ -46,9 +50,15 @@ class ResultsView {
       } else if (['enableEdit', 'reviewChanges', 'applyChanges', 'commitChanges', 'rollbackChanges', 'reloadTable', 'browseTable', 'restoreBrowsing','inspectBulk','inspectXlsxSheet','prepareBulk', 'invalidateReview', 'draftChanged'].includes(msg.type)) {
         if (this.editAction) await this.editAction(record.id, msg);
       } else if (msg.type === 'export') {
-        const target = await v.window.showSaveDialog({ defaultUri: v.Uri.file('query-results.csv'), filters: { CSV: ['csv'] } });
-        if (target) await v.workspace.fs.writeFile(target, Buffer.from(toCsv(record.result), 'utf8'));
+        const result = record.result;
+        const { data, label, extension } = this.exportSnapshot(record.id, msg.format, msg.destination);
+        const target = await v.window.showSaveDialog({ defaultUri: v.Uri.file('query-results.' + extension), filters: { [label]: [extension] },
+          title: 'Export the captured result rows and columns' });
+        if (!target) return;
+        if (record.result !== result || !this.exportable(record)) throw Error('The result changed while choosing a file. Choose it again.');
+        await v.workspace.fs.writeFile(target, data);
       } else if (msg.type === 'copy') {
+        if (!this.exportable(record)) throw Error('Select completed result rows and apply or discard drafts before copying.');
         const clean = value => spreadsheetText(value).replace(/[\t\r\n]/g, ' ');
         await v.env.clipboard.writeText([record.result.columns, ...record.result.rows].map(row => row.map(clean).join('\t')).join('\n'));
       }
@@ -68,6 +78,15 @@ class ResultsView {
     this.history.push(record); this.send(); return record.id;
   }
   pinned(record) { return Boolean(record.state === 'running' || record.editBusy || record.hasDraft || record.review || record.result?.edit && !record.readOnly || record.sessionState?.outcomeUnknown); }
+  exportable(record) {
+    return Boolean(record?.state === 'done' && record.result?.columns.length && this.history.includes(record) && !record.closing &&
+      !record.editBusy && !record.hasDraft && !record.review && !record.sessionState?.outcomeUnknown);
+  }
+  exportSnapshot(id, format, destination) {
+    const record = this.history.find(item => item.id === id);
+    if (!this.exportable(record)) throw Error('Select a completed result and apply or discard drafts before exporting.');
+    return createResultExport(record.result, format, destination);
+  }
   finish(id, result, error, sessionState) {
     const record = this.history.find(h => h.id === id);
     if (record) { record.state = error ? 'error' : 'done'; record.result = result; record.error = error; record.sessionState = sessionState || result?.state; this.send(); }

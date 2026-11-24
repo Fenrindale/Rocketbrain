@@ -2,10 +2,13 @@
 (() => {
   const vscode = acquireVsCodeApi();
   let history = [], currentId = null, editingCell = null, requestSequence = 0;
-  const drafts = new Map(), browseForms = new Map(),bulkForms=new Map();
+  const drafts = new Map(), browseForms = new Map(),bulkForms=new Map(), layouts = new Map();
+  const viewModes = ['grid', 'record', 'tree', 'text', 'transpose'];
+  let insertExport;
+  const savedLayouts = new Map(vscode.getState?.()?.layouts || []);
   for (const [id, item] of vscode.getState?.()?.drafts || []) drafts.set(id, { ...item, updates: new Map(item.updates), deletes: new Set(item.deletes) });
   const $ = id => document.getElementById(id);
-  const text = value => value === null ? 'NULL' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+  const text = value => value === null ? 'NULL' : typeof value === 'object' ? JSON.stringify(value) : Object.is(value, -0) ? '-0' : String(value);
   const current = () => history.find(row => row.id === currentId) || history.at(-1);
   function draft(record) {
     const key = record.result?.edit?.modelId;
@@ -17,7 +20,11 @@
     if (item.pendingRequestId && record.editResponseId === item.pendingRequestId) item.pendingRequestId = undefined;
     return item;
   }
-  function persist() { vscode.setState?.({ drafts: [...drafts].map(([id, item]) => [id, { ...item, updates: [...item.updates], deletes: [...item.deletes] }]) }); }
+  function persist() {
+    const layoutState = [...layouts].map(([id, layout]) => [id, { ...layout, hidden: [...layout.hidden], pinned: [...layout.pinned] }]);
+    vscode.setState?.({ drafts: [...drafts].map(([id, item]) => [id, { ...item, updates: [...item.updates], deletes: [...item.deletes] }]),
+      layouts: layoutState });
+  }
   const count = item => [...item.updates.keys()].filter(id => !item.deletes.has(id)).length + item.deletes.size + item.inserts.length;
   function changes(item) {
     return { updates: [...item.updates].filter(([rowId]) => !item.deletes.has(rowId)).map(([rowId, values]) => ({ rowId, values })), deletes: [...item.deletes], inserts: item.inserts.map(row => ({ values: row.values })) };
@@ -151,7 +158,7 @@
     if (dirty || cellOpen) {
       $('copy').disabled = $('export').disabled = true;
       $('copy').title = $('export').title = 'Apply or discard local drafts before copying the server result.';
-    } else $('copy').title = $('export').title = '';
+    } else $('copy').title = $('export').title = 'Use all captured rows and columns, including hidden columns.';
     $('draft-count').textContent = `${count(item)} staged row changes`;
     $('edit-status').className = record.editError || session?.outcomeUnknown ? 'error' : '';
     $('edit-status').textContent = record.editError || record.editMessage || model.reason || (record.readOnly ? 'Enable Editing to stage changes. Apply and Commit are separate actions.' : 'Double-click a cell or press Enter/F2. Values remain local until Review and Apply.');
@@ -160,6 +167,274 @@
     if (record.review) $('review-sql').textContent = record.review.statements.map((statement, index) => `${index + 1}. ${statement.sql}\nBound values: ${JSON.stringify(statement.parameters)}\n`).join('\n');
     return enabled;
   }
+  function resultLayout(record) {
+    const columns = record.result.columns;
+    const signature = JSON.stringify(columns);
+    let layout = layouts.get(record.id);
+    if (layout?.signature === signature) return layout;
+    const saved = savedLayouts.get(record.id);
+    const validIndex = index => Number.isInteger(index) && index >= 0 && index < columns.length;
+    if (saved?.signature === signature && Array.isArray(saved.order) && saved.order.length === columns.length &&
+        new Set(saved.order).size === columns.length && saved.order.every(validIndex)) {
+      const hidden = new Set(Array.isArray(saved.hidden) ? saved.hidden.filter(validIndex) : []);
+      layout = { signature, order: saved.order, hidden: hidden.size < columns.length ? hidden : new Set(),
+        pinned: new Set(Array.isArray(saved.pinned) ? saved.pinned.filter(validIndex) : []),
+        widths: Object.fromEntries(Object.entries(saved.widths || {}).filter(([index, width]) =>
+          validIndex(Number(index)) && Number.isInteger(width) && width >= 96 && width <= 600)),
+        mode: viewModes.includes(saved.mode) ? saved.mode : 'grid', row: 0, open: false };
+    } else {
+      layout = { signature, order: columns.map((_, index) => index), hidden: new Set(), pinned: new Set(),
+        widths: {}, mode: 'grid', row: 0, open: false };
+    }
+    savedLayouts.delete(record.id);
+    layouts.set(record.id, layout);
+    return layout;
+  }
+
+  const rowNumber = (result, index) => (result.browse?.page || 0) * (result.browse?.pageSize || 0) + index + 1;
+  const columnWidth = (layout, index) => layout.widths[index] || 180;
+  const columnOrder = layout => [true, false].flatMap(pinned => layout.order.filter(index => layout.pinned.has(index) === pinned));
+
+  function renderColumns(result, layout, order, visible) {
+    $('result-columns').setAttribute('aria-expanded', String(layout.open));
+    $('result-column-panel').hidden = !layout.open;
+    const list = $('result-column-list');
+    list.replaceChildren();
+    if (!layout.open) return;
+    function update(action) {
+      const focus = document.activeElement?.getAttribute('aria-label'), scrollTop = list.scrollTop;
+      action();
+      persist();
+      render();
+      list.scrollTop = scrollTop;
+      if (focus) [...list.querySelectorAll('[aria-label]')].find(control => control.getAttribute('aria-label') === focus)?.focus({ preventScroll: true });
+    }
+    for (const [position, index] of order.entries()) {
+      const line = document.createElement('div'), name = result.columns[index];
+      line.className = 'result-column-settings';
+      const heading = document.createElement('strong');
+      heading.textContent = name;
+      heading.title = name;
+      line.append(heading);
+      for (const [label, selected] of [['Show', !layout.hidden.has(index)], ['Pin', layout.pinned.has(index)]]) {
+        const container = document.createElement('label'), control = document.createElement('input');
+        control.type = 'checkbox';
+        control.checked = selected;
+        control.disabled = label === 'Show' && selected && visible.length === 1;
+        control.setAttribute('aria-label', label + ' column ' + (index + 1) + ' ' + name);
+        control.onchange = () => update(() => {
+          const members = label === 'Show' ? layout.hidden : layout.pinned;
+          const include = label === 'Show' ? !control.checked : control.checked;
+          if (include) members.add(index); else members.delete(index);
+        });
+        container.append(control, label);
+        line.append(container);
+      }
+      const sizeLabel = document.createElement('label'), size = document.createElement('input');
+      size.type = 'number';
+      size.min = '96';
+      size.max = '600';
+      size.value = String(columnWidth(layout, index));
+      size.setAttribute('aria-label', 'Column ' + (index + 1) + ' width in pixels');
+      size.onchange = () => {
+        if (!size.value || !size.checkValidity()) size.value = String(columnWidth(layout, index));
+        else update(() => { layout.widths[index] = Number(size.value); });
+      };
+      sizeLabel.append('Width', size);
+      line.append(sizeLabel);
+      for (const [distance, label] of [[-1, 'Earlier'], [1, 'Later']]) {
+        const button = document.createElement('button'), other = order[position + distance];
+        button.textContent = label;
+        button.setAttribute('aria-label', 'Move column ' + (index + 1) + ' ' + label.toLowerCase());
+        button.disabled = other === undefined || layout.pinned.has(other) !== layout.pinned.has(index);
+        button.onclick = () => update(() => {
+          const from = layout.order.indexOf(index), to = layout.order.indexOf(other);
+          [layout.order[from], layout.order[to]] = [layout.order[to], layout.order[from]];
+        });
+        line.append(button);
+      }
+      list.append(line);
+    }
+  }
+
+  function resultCell(row, value) {
+    const cell = row.insertCell();
+    cell.textContent = text(value);
+    cell.title = cell.textContent;
+    if (value === null) cell.classList.add('null');
+    else if (typeof value === 'number') cell.classList.add('numeric');
+    return cell;
+  }
+
+  function columnPairs(result, values, columns) {
+    const fields = document.createElement('dl');
+    fields.className = 'result-fields';
+    for (const index of columns) {
+      const name = document.createElement('dt'), value = document.createElement('dd');
+      name.textContent = result.columns[index];
+      value.textContent = text(values[index]);
+      if (values[index] === null) value.className = 'null';
+      fields.append(name, value);
+    }
+    return fields;
+  }
+
+  function renderSnapshot(result, layout, columns) {
+    const grid = $('grid');
+    if (layout.mode === 'record') {
+      const row = result.rows[layout.row];
+      if (row) grid.append(columnPairs(result, row, columns));
+    } else if (layout.mode === 'tree') {
+      const fragment = document.createDocumentFragment();
+      for (const [index, row] of result.rows.entries()) {
+        const item = document.createElement('details'), label = document.createElement('summary');
+        label.textContent = 'Row ' + rowNumber(result, index);
+        item.className = 'result-tree-row';
+        item.append(label);
+        item.ontoggle = () => {
+          if (item.open && item.childElementCount === 1) item.append(columnPairs(result, row, columns));
+        };
+        fragment.append(item);
+      }
+      grid.append(fragment);
+    } else if (layout.mode === 'text') {
+      const output = document.createElement('pre');
+      output.className = 'result-plain-text';
+      const line = row => columns.map(index => typeof row[index] === 'number' ? text(row[index]) : JSON.stringify(row[index])).join('\t');
+      output.textContent = [line(result.columns), ...result.rows.map(line)].join('\n');
+      grid.append(output);
+    } else {
+      const table = document.createElement('table'), head = table.createTHead().insertRow(), body = table.createTBody();
+      table.className = 'result-transpose';
+      const label = document.createElement('th');
+      label.textContent = 'Column';
+      head.append(label);
+      for (const [index] of result.rows.entries()) {
+        const number = document.createElement('th');
+        number.scope = 'col';
+        number.textContent = 'Row ' + rowNumber(result, index);
+        head.append(number);
+      }
+      for (const index of columns) {
+        const row = body.insertRow(), name = document.createElement('th');
+        name.scope = 'row';
+        name.textContent = result.columns[index];
+        row.append(name);
+        for (const values of result.rows) resultCell(row, values[index]);
+      }
+      grid.append(table);
+    }
+  }
+
+  function renderResultLayout(record, layout, dirty) {
+    const result = record.result, order = columnOrder(layout);
+    const visible = order.filter(index => !layout.hidden.has(index));
+    if (dirty || !result.columns.length) layout.mode = 'grid';
+    $('result-view').value = layout.mode;
+    $('result-view').disabled = dirty || !result.columns.length;
+    $('result-layout').hidden = !result.columns.length;
+    $('result-row-navigation').hidden = layout.mode !== 'record' || !result.rows.length;
+    layout.row = Math.max(0, Math.min(layout.row, result.rows.length - 1));
+    $('result-row-status').textContent = result.rows.length ?
+      `Row ${rowNumber(result, layout.row)} · ${layout.row + 1} of ${result.rows.length} captured` : '';
+    $('result-row-previous').disabled = layout.row <= 0;
+    $('result-row-next').disabled = layout.row >= result.rows.length - 1;
+    renderColumns(result, layout, order, visible);
+    return visible;
+  }
+
+  function renderGrid(active, result, enabled, layout, columns) {
+    const table = document.createElement('table'), head = table.createTHead().insertRow();
+    const corner = document.createElement('th');
+    corner.textContent = '#';
+    corner.className = 'row-number';
+    head.append(corner);
+    const pins = new Map();
+    const numberWidth = enabled ? 104 : 56;
+    if (columns.some(index => layout.pinned.has(index) || layout.widths[index])) {
+      let width = numberWidth;
+      corner.style.width = numberWidth + 'px';
+      for (const index of columns) {
+        if (layout.pinned.has(index)) pins.set(index, width);
+        width += columnWidth(layout, index);
+      }
+      table.classList.add('result-grid-sized');
+      table.style.width = width + 'px';
+    }
+    const pin = (cell, index) => {
+      if (pins.has(index)) {
+        cell.classList.add('result-pinned');
+        cell.style.left = pins.get(index) + 'px';
+      }
+    };
+    for (const index of columns) {
+      const th = document.createElement('th');
+      th.textContent = result.columns[index];
+      th.scope = 'col';
+      const info = result.edit?.columns[index];
+      if (info) th.title = `${info.type}${info.primaryKey ? ' · primary key (updates disabled)' : ''}${info.generated ? ' · generated (read only)' : ''}`;
+      if (table.classList.contains('result-grid-sized')) th.style.width = columnWidth(layout, index) + 'px';
+      pin(th, index);
+      head.append(th);
+    }
+    const body = table.createTBody(), item = draft(active), model = result.edit;
+    function row(values, rowId, numberLabel, inserted) {
+      const tr = body.insertRow(), deleted = item.deletes.has(rowId);
+      if (deleted) tr.className = 'deleted';
+      if (inserted) tr.classList.add('inserted');
+      const number = tr.insertCell();
+      number.className = 'row-number';
+      number.textContent = String(numberLabel);
+      if (enabled) {
+        const remove = document.createElement('button');
+        remove.textContent = deleted ? 'Undo' : '−';
+        remove.title = deleted ? 'Undo row deletion' : 'Stage row deletion';
+        remove.setAttribute('aria-label', `${deleted ? 'Restore' : 'Delete'} ${inserted ? 'new row' : 'row'} ${rowId}`);
+        remove.onclick = () => {
+          if (inserted) item.inserts = item.inserts.filter(row => row.id !== rowId);
+          else if (deleted) item.deletes.delete(rowId); else item.deletes.add(rowId);
+          changed(active);
+        };
+        number.append(remove);
+        if (!inserted) {
+          const duplicate = document.createElement('button');
+          duplicate.textContent = '⧉';
+          duplicate.title = 'Stage a duplicate row without primary/generated keys';
+          duplicate.setAttribute('aria-label', 'Duplicate row ' + rowId);
+          duplicate.disabled = count(item) > 0 || model.insertable === false || Boolean(editingCell);
+          duplicate.onclick = () => send('prepareBulk', { operation: 'duplicate', modelId: model.modelId, rowId });
+          number.append(duplicate);
+        }
+      }
+      const pendingValues = inserted ? item.inserts.find(row => row.id === rowId)?.values : item.updates.get(rowId);
+      for (const index of columns) {
+        const column = model?.columns[index];
+        const pending = pendingValues && Object.hasOwn(pendingValues, column?.name) ? pendingValues[column.name] : undefined;
+        const value = pending ? pending.kind === 'null' ? null : pending.text : values[index];
+        const td = resultCell(tr, inserted && !pending ? 'DEFAULT' : value);
+        pin(td, index);
+        if (pending) td.classList.add('modified');
+        if (enabled && column && (inserted ? column.insertable ?? column.editable : column.editable) && !deleted) {
+          editableCell(td, active, rowId, column, value, inserted);
+        }
+      }
+    }
+    result.rows.forEach((values, index) => row(values, model?.rowIds[index], rowNumber(result, index), false));
+    if (model) for (const insert of item.inserts) row([], insert.id, '+', true);
+    $('grid').append(table);
+  }
+
+  function renderExportAction(record) {
+    const format = $('export-format').value;
+    const labels = { csv: 'CSV', json: 'JSON', xlsx: 'XLSX', insert: 'INSERT' };
+    $('export').textContent = 'Export ' + labels[format];
+    const result = record?.result;
+    const blocked = $('export').disabled || !result || insertExport?.id !== record.id ||
+      insertExport?.modelId !== result.edit?.modelId || format !== 'insert';
+    if (blocked) insertExport = undefined;
+    $('insert-export').hidden = blocked;
+  }
+
   function render() {
     const active = current();
     if (active) currentId = active.id;
@@ -169,7 +444,13 @@
       button.onclick = () => { currentId = record.id; editingCell = null; $('cell-editor').hidden = true; render(); }; return button;
     }));
     $('grid').replaceChildren();
-    $('copy').disabled = $('export').disabled = !active?.result;
+    const exportable = Boolean(active?.state === 'done' && active.result?.columns.length && !active.editBusy &&
+      !active.hasDraft && !active.review && !active.sessionState?.outcomeUnknown && !draft(active).pendingRequestId);
+    $('copy').disabled = $('export').disabled = $('export-format').disabled = !exportable;
+    $('copy').title = $('export').title = 'Use all captured rows and columns, including hidden columns.';
+    $('result-view').disabled = true;
+    $('result-layout').hidden = $('result-column-panel').hidden = true;
+    renderExportAction(active);
     $('close-result').disabled = !active || active.state === 'running' || active.editBusy || Boolean(active && draft(active).pendingRequestId);
     $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('browse-tools').hidden = $('bulk-panel').hidden = true;
     if (!active) { editingCell = null; $('cell-editor').hidden = true; $('source').textContent = 'No result selected'; $('message').textContent = 'Run SQL from the editor with Ctrl+Enter.'; $('status').textContent = 'Ready'; return; }
@@ -181,45 +462,22 @@
       if (active.sessionState?.needsReconnect) $('message').textContent += active.sessionState.outcomeUnknown ? ' The write may have completed. Inspect the database before retrying, then reconnect explicitly.' : ' Session lost. Reconnect explicitly before running another statement.';
       return;
     }
-    const result = active.result, enabled = renderTools(active, result), table = document.createElement('table');
+    const result = active.result, enabled = renderTools(active, result), layout = resultLayout(active);
+    const item = draft(active), cellOpen = editingCell?.id === active.id;
+    const gridRequired = Boolean(count(item) || cellOpen || item.pendingRequestId || active.editBusy || active.hasDraft || active.review ||
+      active.sessionState?.outcomeUnknown || bulkForms.get(active.id)?.open);
+    const columns = renderResultLayout(active, layout, gridRequired);
     renderBrowse(active, result);
     renderBulk(active);
-    const head = table.createTHead().insertRow();
-    const corner = document.createElement('th'); corner.textContent = '#'; corner.className = 'row-number'; head.append(corner);
-    result.columns.forEach((column, index) => {
-      const th = document.createElement('th'); th.textContent = column; th.scope = 'col';
-      const info = result.edit?.columns[index];
-      if (info) th.title = `${info.type}${info.primaryKey ? ' · primary key (updates disabled)' : ''}${info.generated ? ' · generated (read only)' : ''}`;
-      head.append(th);
-    });
-    const body = table.createTBody(), item = draft(active), model = result.edit;
-    function row(values, rowId, rowNumber, inserted) {
-      const tr = body.insertRow(), deleted = item.deletes.has(rowId);
-      if (deleted) tr.className = 'deleted'; if (inserted) tr.classList.add('inserted');
-      const number = tr.insertCell(); number.className = 'row-number'; number.textContent = String(rowNumber);
-      if (enabled) {
-        const remove = document.createElement('button'); remove.textContent = deleted ? 'Undo' : '−'; remove.title = deleted ? 'Undo row deletion' : 'Stage row deletion';
-        remove.setAttribute('aria-label', `${deleted ? 'Restore' : 'Delete'} ${inserted ? 'new row' : 'row'} ${rowId}`);
-        remove.onclick = () => {
-          if (inserted) item.inserts = item.inserts.filter(row => row.id !== rowId);
-          else if (deleted) item.deletes.delete(rowId); else item.deletes.add(rowId);
-          changed(active);
-        }; number.append(remove);
-        if(!inserted){const duplicate=document.createElement('button');duplicate.textContent='⧉';duplicate.title='Stage a duplicate row without primary/generated keys';duplicate.setAttribute('aria-label','Duplicate row '+rowId);duplicate.disabled=count(item)>0||model.insertable===false||Boolean(editingCell);duplicate.onclick=()=>send('prepareBulk',{operation:'duplicate',modelId:model.modelId,rowId});number.append(duplicate);}
-      }
-      values.forEach((original, columnIndex) => {
-        const column = model?.columns[columnIndex], values = inserted ? item.inserts.find(row => row.id === rowId)?.values : item.updates.get(rowId);
-        const pending = values && Object.hasOwn(values, column?.name) ? values[column.name] : undefined;
-        const value = pending ? pending.kind === 'null' ? null : pending.text : original;
-        const td = tr.insertCell(); td.textContent = inserted && !pending ? 'DEFAULT' : text(value); td.title = td.textContent;
-        if (value === null) td.classList.add('null'); else if (typeof value === 'number') td.classList.add('numeric');
-        if (pending) td.classList.add('modified');
-        if (enabled && column && (inserted ? column.insertable ?? column.editable : column.editable) && !deleted) editableCell(td, active, rowId, column, value, inserted);
-      });
+    if (layout.mode === 'grid') renderGrid(active, result, enabled, layout, columns);
+    else {
+      $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('bulk-panel').hidden = true;
+      renderSnapshot(result, layout, columns);
     }
-    result.rows.forEach((values, index) => row(values, model?.rowIds[index], (result.browse?.page || 0) * (result.browse?.pageSize || 0) + index + 1, false));
-    if (model) item.inserts.forEach(insert => row(result.columns.map(() => undefined), insert.id, '+', true));
-    $('grid').append(table);
+    $('export-format').options[3].disabled = !result.fields?.length;
+    $('export-format').disabled = $('export').disabled;
+    if ($('export-format').value === 'insert' && !result.fields?.length) $('export-format').value = 'csv';
+    renderExportAction(active);
     const mode = active.readOnly ? 'read only' : result.state?.autocommit ? 'writes · auto commit' : 'writes · manual commit';
     const transaction = result.state?.inTransaction ? ' · transaction active when completed' : '';
     $('status').textContent = `${result.columns.length ? `${result.rowCount} rows` : `${result.affectedRows || 0} rows affected`}${result.truncated ? ' · limit reached, more rows available' : ''}   ·   ${Number(result.durationMs).toFixed(1)} ms   ·   ${mode}${transaction}${result.warningCount ? ` · ${result.warningCount} warnings` : ''}`;
@@ -234,6 +492,7 @@
     for (const id of drafts.keys()) if (!history.some(record => record.id === id)) drafts.delete(id);
     for (const id of browseForms.keys()) if (!history.some(record => record.id === id)) browseForms.delete(id);
     for(const id of bulkForms.keys())if(!history.some(record=>record.id===id))bulkForms.delete(id);
+    for (const id of layouts.keys()) if (!history.some(record => record.id === id)) layouts.delete(id);
     for(const record of history){
       if(!record.result?.edit)continue;const model=record.result.edit,form=bulkForm(record),item=draft(record),source=record.bulkSource,bulk=record.bulkDraft;
       const workbook=record.xlsxWorkbook;if(workbook&&workbook.modelId===model.modelId&&workbook.id!==form.workbookId){form.workbookId=workbook.id;form.sheets=workbook.sheets;form.sheetId=workbook.sheets.find(s=>s.state==='visible')?.id||workbook.sheets[0]?.id;form.mode='import';form.format='xlsx';form.open=true;form.text='';form.sourceId=undefined;form.mapping=[];form.formulaPolicy='reject';form.blankPolicy='empty';form.hasHeader=true;}
@@ -277,7 +536,54 @@
   $('review').onclick = () => send('reviewChanges', { changes: changes(draft(current())) });
   $('apply').onclick = () => send('applyChanges', { reviewId: current()?.review?.reviewId });
   for (const [id, type] of [['enable-edit', 'enableEdit'], ['restore-browsing', 'restoreBrowsing'], ['commit', 'commitChanges'], ['rollback', 'rollbackChanges'], ['reload', 'reloadTable']]) $(id).onclick = () => send(type);
-  $('copy').onclick = () => send('copy'); $('export').onclick = () => send('export');
+  $('copy').onclick = () => send('copy');
+  $('export-format').onchange = () => renderExportAction(current());
+  $('export').onclick = () => {
+    const format = $('export-format').value;
+    if (format !== 'insert') { send('export', { format }); return; }
+    const record = current(), fields = record.result.fields;
+    insertExport = { id: record.id, modelId: record.result.edit?.modelId };
+    const first = fields[0];
+    const oneTable = first?.originalTable && fields.every(field => field.originalTable === first.originalTable && field.schema === first.schema);
+    $('export-table').value = oneTable ? first.originalTable : '';
+    $('export-schema').value = oneTable ? first.schema : '';
+    $('export-columns').value = '';
+    $('export-columns').setCustomValidity('');
+    renderExportAction(record);
+    $('export-table').focus();
+  };
+  $('export-cancel').onclick = () => { insertExport = undefined; renderExportAction(current()); };
+  $('export-columns').oninput = () => $('export-columns').setCustomValidity('');
+  $('insert-export').onsubmit = event => {
+    event.preventDefault();
+    if (!insertExport || $('insert-export').hidden) return;
+    const target = { table: $('export-table').value, schema: $('export-schema').value };
+    const columns = $('export-columns');
+    if (columns.value.trim()) {
+      try { target.columns = JSON.parse(columns.value); }
+      catch { columns.setCustomValidity('Enter destination column names as a JSON array, for example ["id", "name"].'); columns.reportValidity(); return; }
+    }
+    send('export', { format: 'insert', destination: target });
+    insertExport = undefined;
+    renderExportAction(current());
+  };
+  function updateResultLayout(action) {
+    const record = current();
+    if (!record?.result) return;
+    action(resultLayout(record), record);
+    persist();
+    render();
+  }
+  $('result-view').onchange = () => updateResultLayout(layout => { layout.mode = $('result-view').value; });
+  $('result-columns').onclick = () => updateResultLayout(layout => { layout.open = !layout.open; });
+  $('result-row-previous').onclick = () => updateResultLayout(layout => { layout.row--; });
+  $('result-row-next').onclick = () => updateResultLayout(layout => { layout.row++; });
+  $('result-column-reset').onclick = () => updateResultLayout((layout, record) => {
+    layout.order = record.result.columns.map((_, index) => index);
+    layout.hidden.clear();
+    layout.pinned.clear();
+    layout.widths = {};
+  });
   $('close-result').onclick = () => send('closeResult');
   function browse(page, size) { const record = current(), query = record?.result?.edit?.query; if (query) send('browseTable', { query: { ...query, page, pageSize: size ?? query.pageSize } }); }
   $('page-previous').onclick = () => browse(current().result.browse.page - 1);

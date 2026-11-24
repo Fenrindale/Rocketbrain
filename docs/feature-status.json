@@ -1,6 +1,6 @@
 {
-  "version": "0.27.0",
-  "asOf": "2026-11-24",
+  "version": "0.28.0",
+  "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
   "statuses": {
@@ -30,31 +30,41 @@
     }
   },
   "summary": {
-    "implemented": 9,
-    "partial": 100,
-    "not-implemented": 85,
+    "implemented": 12,
+    "partial": 105,
+    "not-implemented": 77,
     "host-provided": 13,
     "unverified": 7,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 33.3,
+    "percent": 35.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
+    "IDEA-014",
     "IDEA-028",
-    "IDEA-030",
     "IDEA-033",
-    "IDEA-055",
-    "IDEA-069"
+    "IDEA-049",
+    "DG-028",
+    "DG-049",
+    "DG-053",
+    "DG-067",
+    "DG-068",
+    "DG-070"
   ],
   "expandedFeatures": [
+    "IDEA-014",
     "IDEA-028",
-    "IDEA-030",
     "IDEA-033",
-    "IDEA-055",
-    "IDEA-069"
+    "IDEA-049",
+    "DG-028",
+    "DG-049",
+    "DG-053",
+    "DG-067",
+    "DG-068",
+    "DG-070"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -453,25 +463,27 @@
       "category": "작업 공간·편집기",
       "feature": "새 파일 템플릿",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "Rocketbrain 전용 Java/Spring 새 파일 템플릿 관리가 없다.",
+      "scope": "Java·Spring 새 파일 템플릿에서 Maven·Gradle·JDT 소스 루트와 패키지를 선택한다. 사용자 템플릿은 세 변수를 치환하고 헤더를 포함할 수 있다. 기존 파일 충돌을 차단하고 생성한 파일을 연다.",
       "remaining": [
-        "파일 종류·패키지·저작권·변수 확장과 템플릿 UI가 필요하다."
+        "전용 저작권 프로필, 추가 사용자 변수 및 프로젝트 종류별 생성기 연동이 남는다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "최종 v0.28.0 VSIX, 실제 Spring과 MySQL 8.4.13·MariaDB 11.4.8에서 사용자 템플릿으로 Spring @Service를 생성하고, 같은 Java 경로의 추가 생성을 거부한 뒤 JDT로 컴파일했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/file-templates.js",
+          "src/java/utilities-vscode.js",
+          "test/java-utilities.test.js",
+          "test/java-utilities-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -881,21 +893,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "검토한 private 가변 필드의 재할당과 호출자가 넘긴 외부 참조를 호출 시점에 추적한다. 원래 필드 소유권, 인수 평가 및 갱신 순서를 유지한다. 검토한 서비스 인터페이스, 제공자와 팩터리를 옮길 때 단일 JPMS 모듈의 uses·provides 선언과 소비자 참조를 갱신한다. 독립 컴파일러로 모듈과 서비스의 연결을 확인한다. 로컬 부모와 중첩 BOM 분석에 기본 로컬 저장소에 설치했거나 출처 추적이 없는 외부 릴리스 POM을 추가한다. 좌표·SHA-256·출처 기록을 검토하고 적용 직전에 다시 확인한다.",
+      "scope": "검토한 private 가변 필드의 재할당과 호출자가 넘긴 외부 참조를 호출 시점에 추적한다. 원래 필드 소유권, 인수 평가 및 갱신 순서를 유지한다. 검토한 서비스 인터페이스, 제공자와 팩터리를 옮길 때 단일 JPMS 모듈의 uses·provides 선언과 소비자 참조를 갱신한다. 독립 컴파일러로 모듈과 서비스의 연결을 확인한다. 로컬 부모와 중첩 BOM 분석에 기본 로컬 저장소에 설치했거나 출처 추적이 없는 외부 릴리스 POM을 추가한다. 좌표·SHA-256·출처 기록을 검토하고 적용 직전에 다시 확인한다. 검토한 private 가변 필드를 갱신하는 여러 호출자와 불리언 매개변수의 if·else 경로를 보존한다.",
       "remaining": [
-        "분기·반복·여러 작성자의 별칭 추적, 순환 객체 그래프와 외부 유출, 일반 소유권 이전, 임의 생성자·상속과 외부 바이너리 분석이 남는다.",
+        "반복·일반 분기·외부 작성자의 별칭 추적, 순환 객체 그래프와 외부 유출, 일반 소유권 이전, 임의 생성자·상속과 외부 바이너리 분석이 남는다.",
         "여러 모듈·외부 제공자, 가변 팩터리·사용자 로더, 복수 클래스 경로 등록 파일 병합, 임의 리소스 메타데이터 분석이 남는다.",
-        "사용자 지정 저장소와 원격 출처가 붙은 캐시, SNAPSHOT·복합 외부 POM, 전이 의존성 중재 및 확장 플러그인 모델이 남는다."
+        "사용자 지정 저장소와 원격 출처가 붙은 캐시, SNAPSHOT·복합 외부 POM, 전이 의존성 중재 및 확장 플러그인 모델이 남는다.",
+        "계산·중첩 분기와 외부 작성자의 참조 흐름 검토가 남는다."
       ],
       "verification": {
-        "state": "final-offline-and-four-focused-packaged-native-groups-per-actual-DB",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "최종 v0.27.0 VSIX를 설치한 VS Code에서 MySQL 8.4.13 및 MariaDB 11.4.8에 연결한 실제 Spring 프로젝트로 검증했다. 가변 필드와 호출자 참조의 JDT Move 두 건, 재할당 순서 5개와 새 Spring 실행 결과 11개, 실행 취소·다시 실행 및 보호 사례, 서비스 팩터리와 JPMS uses·provides를 포함한 Package Move, 실행 취소·다시 실행, 모듈 경로 실행의 제공자 두 개 순서와 Spring DB 조회, 외부 부모·BOM 모델 네 개의 SHA-256, Maven 프로젝트 간 Move 및 실행 취소·다시 실행, 변경된 핀 거부, 세 모듈의 유효 POM과 프로필 네 조합의 테스트 컴파일을 확인했다.",
+        "testedScope": "최종 v0.28.0 VSIX, 실제 Spring과 MySQL 8.4.13·MariaDB 11.4.8에서 JDT 이동, 조건부 쓰기 세 건, 참조 동일성과 NULL을 포함한 Spring 결과 8개, Undo/Redo 및 계산 조건 거부를 확인했다.",
         "publicEvidence": [
           "src/java/move-instance.js",
           "src/java/move-package.js",
@@ -904,7 +917,9 @@
           "src/java/move-builds.js",
           "test/java-move-v27-state-host.js",
           "test/java-package-move-v27-host.js",
-          "test/java-maven-external-v27-host.js"
+          "test/java-maven-external-v27-host.js",
+          "test/java-move-v28-state.test.js",
+          "test/java-move-v28-state-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -964,8 +979,8 @@
       "verification": {
         "state": "final-offline-and-four-focused-packaged-native-groups-per-actual-DB",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.27.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1052,23 +1067,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "미리보기와 적용 전 충돌 검사에 원래 참조 소유권·서비스 등록 편집·리터럴 로더·Spring 조건·Maven 상속 및 관리 의존성 검토를 연결한다. 문서·파일 집합·리소스와 클래스 경로가 바뀌면 검토를 갱신한다.",
+      "scope": "미리보기와 적용 전 충돌 검사에 원래 참조 소유권·서비스 등록 편집·리터럴 로더·Spring 조건·Maven 상속 및 관리 의존성 검토를 연결한다. 문서·파일 집합·리소스와 클래스 경로가 바뀌면 검토를 갱신한다. 조건부 참조 쓰기와 호출 인수 평가에 대한 이동 미리보기 및 적용 검사를 추가했다.",
       "remaining": [
-        "분기·반복·여러 작성자의 별칭 추적, 순환 객체 그래프와 외부 유출, 일반 소유권 이전, 임의 생성자·상속과 외부 바이너리 분석이 남는다.",
+        "반복·일반 분기·외부 작성자의 별칭 추적, 순환 객체 그래프와 외부 유출, 일반 소유권 이전, 임의 생성자·상속과 외부 바이너리 분석이 남는다.",
         "여러 모듈·외부 제공자, 가변 팩터리·사용자 로더, 복수 클래스 경로 등록 파일 병합, 임의 리소스 메타데이터 분석이 남는다.",
         "바이트코드 전용 합성 어노테이션, 모호하거나 순환하는 별칭, 임의 SpEL과 상태가 있는 조건의 분석이 남는다. 해석할 수 없는 조건은 Safe Delete에서 미해결로 처리한다.",
         "사용자 지정 저장소와 원격 출처가 붙은 캐시, SNAPSHOT·복합 외부 POM, 전이 의존성 중재 및 확장 플러그인 모델이 남는다.",
-        "파일 이동과 텍스트 편집을 함께 실행 취소·다시 실행하는 범위를 검증했다. 외부 writer가 개입하는 원자성과 VS Code 탐색기·Outline의 표시 동작은 별도 범위다."
+        "파일 이동과 텍스트 편집을 함께 실행 취소·다시 실행하는 범위를 검증했다. 외부 writer가 개입하는 원자성과 VS Code 탐색기·Outline의 표시 동작은 별도 범위다.",
+        "계산·중첩 분기와 외부 작성자, 탐색기 표시의 추가 검증이 남는다."
       ],
       "verification": {
-        "state": "final-offline-and-four-focused-packaged-native-groups-per-actual-DB",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "최종 v0.27.0 VSIX를 설치한 VS Code에서 MySQL 8.4.13 및 MariaDB 11.4.8에 연결한 실제 Spring 프로젝트로 검증했다. 가변 필드와 호출자 참조의 JDT Move 두 건, 재할당 순서 5개와 새 Spring 실행 결과 11개, 실행 취소·다시 실행 및 보호 사례, 서비스 팩터리와 JPMS uses·provides를 포함한 Package Move, 실행 취소·다시 실행, 모듈 경로 실행의 제공자 두 개 순서와 Spring DB 조회, 합성 조건의 Safe Delete 적용·복원, 합성 조건 후보 27개와 실제 Spring 결과 12개, 보호·변경·미해결 계약 거부, 외부 부모·BOM 모델 네 개의 SHA-256, Maven 프로젝트 간 Move 및 실행 취소·다시 실행, 변경된 핀 거부, 세 모듈의 유효 POM과 프로필 네 조합의 테스트 컴파일을 확인했다.",
+        "testedScope": "최종 v0.28.0 VSIX, 실제 Spring과 MySQL 8.4.13·MariaDB 11.4.8에서 JDT 이동, 조건부 쓰기 세 건, 참조 동일성과 NULL을 포함한 Spring 결과 8개, Undo/Redo 및 계산 조건 거부를 확인했다.",
         "publicEvidence": [
           "src/java/refactoring.js",
           "src/java/move-instance.js",
@@ -1084,7 +1100,9 @@
           "src/java/spring-contract-analysis.js",
           "src/java/spring-delete-analysis.js",
           "src/spring/profile-expression.js",
-          "test/java-spring-contract-v27-host.js"
+          "test/java-spring-contract-v27-host.js",
+          "test/java-move-v28-state.test.js",
+          "test/java-move-v28-state-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1537,25 +1555,27 @@
       "category": "JVM 언어·프로젝트",
       "feature": "Scratch·JShell 실험 코드",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "Scratch·JShell 세션 전용 기능이 없다.",
+      "scope": "신뢰한 Java 작업 공간에서 저장 가능한 JShell 스크래치를 생성하고 미저장 편집 내용을 별도 JDK 프로세스에서 실행한다. 실행 취소, 출력 제한, 명시적인 로컬 프로젝트 클래스 경로 선택과 저장한 스크래치 재열기를 제공한다.",
       "remaining": [
-        "코드 조각 수명주기·클래스패스·실행 결과 UI가 필요하다."
+        "실행마다 상태를 새로 구성한다. 장기 세션과 모듈 경로는 추가 확장 범위다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "최종 v0.28.0 VSIX, 실제 Spring과 MySQL 8.4.13·MariaDB 11.4.8에서 JDK 25에서 격리 실행과 프로젝트 클래스 경로 실행을 구분했다. 미저장 스크래치로 새 Spring 클래스와 HTTP/JDBC를 호출하고 저장본을 다시 열었다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/scratch-engine.js",
+          "src/java/utilities-vscode.js",
+          "test/java-utilities.test.js",
+          "test/java-utilities-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1719,8 +1739,8 @@
       "verification": {
         "state": "final-offline-and-four-focused-packaged-native-groups-per-actual-DB",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.27.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2147,8 +2167,8 @@
       "verification": {
         "state": "final-offline-and-four-focused-packaged-native-groups-per-actual-DB",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.27.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4449,25 +4469,27 @@
       "category": "SQL 의미 분석·편집",
       "feature": "FK 기반 JOIN/ON 자동 생성",
       "priority": "P0",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "FK를 읽어 JOIN/ON SQL을 생성하는 기능이 없다.",
+      "scope": "현재 스키마의 물리 외래 키를 기준으로 SELECT의 JOIN 대상과 ON을 자동 완성한다. 복합 키의 선언 순서와 자체 조인 별칭을 보존하고 확인한 스키마 이름을 사용한다.",
       "remaining": [
-        "관계 후보·복합키·join 방향 선택과 안전한 삽입이 필요하다."
+        "CTE·중첩 쿼리, 다중 문장과 다른 스키마, 가상 관계의 완성 범위가 남는다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "최종 v0.28.0 VSIX, 실제 Spring과 MySQL 8.4.13·MariaDB 11.4.8에서 등록된 VS Code SQL 자동 완성에서 Spring 테이블의 외래 키 결합을 적용하고 실제 결과 2행을 집계했다. 복합 키와 자체 조인을 단위 검증했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/foreign-key-joins.js",
+          "src/db/sql-vscode.js",
+          "test/db-foreign-key-joins.test.js",
+          "test/db-foreign-key-joins-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5102,25 +5124,26 @@
       "category": "쿼리 실행·세션",
       "feature": "트랜잭션 격리 수준 선택",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "격리 수준 선택 UI·세션 정책이 없다.",
-      "remaining": [
-        "READ COMMITTED/REPEATABLE READ 등의 선택·적용·표시가 필요하다."
-      ],
+      "scope": "SQL 콘솔에서 네 가지 트랜잭션 격리 수준을 선택한다. 적용은 현재 서버 세션에 한정하며 다시 읽은 서버 값을 표시한다. 열린 트랜잭션 및 그리드 초안의 상태를 보호한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "최종 v0.28.0 VSIX, 실제 Spring과 MySQL 8.4.13·MariaDB 11.4.8에서 네 가지 서버 설정, 다른 콘솔 격리, 현재 트랜잭션과 데이터 초안 보호 및 이전 검토의 설정 변경 거부를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/transaction-isolation.js",
+          "src/db/session-tools-vscode.js",
+          "src/db/mysql.js",
+          "test/db-session-tools-host.js",
+          "test/db-session-tools.integration.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5220,25 +5243,27 @@
       "category": "쿼리 실행·세션",
       "feature": "즐겨찾기·저장 쿼리·다시 실행",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "즐겨찾기·저장 쿼리 저장소가 없다.",
+      "scope": "편집기에서 명시적으로 저장한 쿼리를 작업 공간에서 검색·즐겨찾기·이름 변경·삭제·열 수 있다. 선택한 활성 연결에서 새 읽기 전용 콘솔로 재실행한다.",
       "remaining": [
-        "이름/태그·연결 문맥·검색·재실행 관리가 필요하다."
+        "태그·연결 프로필 연계와 여러 호스트 사이의 편집 조정이 남는다. 쓰기·스크립트는 저장 항목을 연 뒤 기존 검토 흐름에서 실행한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "최종 v0.28.0 VSIX, 실제 Spring과 MySQL 8.4.13·MariaDB 11.4.8에서 편집기 선택 SQL, 즐겨찾기와 재열기 후 새 읽기 전용 세션의 Spring 테이블 조회를 확인했다. 연결·개정 불일치와 쓰기 실행을 차단했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/saved-queries.js",
+          "src/db/session-tools-vscode.js",
+          "test/db-session-tools.test.js",
+          "test/db-session-tools-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5655,25 +5680,28 @@
       "category": "데이터 그리드",
       "feature": "record·tree·text·transpose 보기",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "record/tree/text/transpose 전환을 제공하지 않는다.",
+      "scope": "결과 패널에서 같은 캡처 결과를 Grid·Record·Tree·Text·Transpose로 전환하고 레코드 단위로 탐색한다.",
       "remaining": [
-        "결과 모델을 공유하는 대체 뷰·편집 동기화가 필요하다."
+        "대체 보기에서 직접 편집하고 그리드 초안과 동기화하는 범위가 남는다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "동일 소스의 브라우저 검증에서 동일한 캡처 결과 모델로 네 대체 보기를 렌더링하고 Chromium에서 보기 전환·레코드 탐색·결과 텍스트 처리를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/results.js",
+          "src/ui/results.js",
+          "src/ui/results.css",
+          "test/results.test.js",
+          "test/db-results-v28-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5684,25 +5712,28 @@
       "category": "데이터 그리드",
       "feature": "컬럼 고정·숨김·순서·폭 조절",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "partial",
+      "label": "부분 구현",
       "delivery": "none",
-      "scope": "열 고정·숨김·재배치·폭 저장 UI가 없다.",
+      "scope": "결과 탭의 열 고정·숨김·재정렬·너비 변경을 제공한다. 열 배치는 원본 데이터·내보내기 열 순서와 독립적이다.",
       "remaining": [
-        "결과/테이블별 사용자 열 레이아웃 관리가 필요하다."
+        "결과를 닫고 다시 열었을 때 테이블별 레이아웃 저장·복원을 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "동일 소스의 브라우저 검증에서 실제 결과 Webview에서 열 고정 위치, 너비, 숨김·순서를 확인하고 원래 순서대로 전체 열을 내보냈다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/results.js",
+          "src/ui/results.js",
+          "src/ui/results.css",
+          "test/results.test.js",
+          "test/db-results-v28-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5743,25 +5774,31 @@
       "category": "가져오기·내보내기",
       "feature": "INSERT/JSON/Excel 등 출력 형식",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "INSERT/JSON/Excel 등의 결과 extractor를 연결하지 않았다.",
+      "scope": "캡처한 결과를 JSON, XLSX 또는 검토용 MySQL/MariaDB INSERT 파일로 내보낸다. 내보내기에서 열 순서·정밀 숫자·NULL과 빈 문자열을 보존하고 별도 대상에 대한 INSERT 생성을 지원한다.",
       "remaining": [
-        "형식별 타입·NULL·escape·파일 생성 정책이 필요하다."
+        "미조회 페이지의 대량 내보내기와 공간·벡터 INSERT 유형은 별도 확장 범위다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.28-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "최종 v0.28.0 VSIX, 실제 Spring과 MySQL 8.4.13·MariaDB 11.4.8에서 두 DB의 BIGINT·DECIMAL·JSON·BLOB·BIT·시간·유니코드를 내보냈다. Excel을 다시 읽고 호환 임시 테이블에 생성된 INSERT를 재실행해 값을 대조했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/results.js",
+          "src/ui/results.js",
+          "src/ui/results.css",
+          "test/results.test.js",
+          "test/db-results-v28-host.js",
+          "src/db/result-export.js",
+          "src/db/result-xlsx.js",
+          "test/result-export.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6538,28 +6575,69 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "23daabf7a0ff8d5aa63e90f4251c89e719749577cce8603622ba6d55ed79a3d1",
-    "sourceManifestSha256": "f2639dc0e1ebc1257cfe197564af5518e375282983b50f52c42c15e58f49dc4c",
+    "vsixSha256": "a82af21ba96c74928a04064bd9710962eb4c7eef9e84414af214d059f0ef9cde",
+    "sourceManifestSha256": "cbc9fccf6ec0a9c4887208f8d9e37d4d51d4edad54b05fcb14831242ca00d16a",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 4
+        "featureGroups": 2
       },
       {
         "engine": "mariadb",
-        "featureGroups": 4
+        "featureGroups": 2
       }
-    ],
-    "offline": {
-      "node": "v24.22.1",
-      "tests": 1070,
-      "suites": 0,
-      "pass": 1022,
-      "fail": 0,
-      "cancelled": 0,
-      "skipped": 48,
-      "todo": 0
+    ]
+  },
+  "stateChanges": [
+    {
+      "id": "IDEA-014",
+      "before": "not-implemented",
+      "after": "partial"
     },
-    "publicWorkflow": "docs/verification.json"
-  }
+    {
+      "id": "IDEA-049",
+      "before": "not-implemented",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-028",
+      "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "DG-049",
+      "before": "not-implemented",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-053",
+      "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "DG-067",
+      "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "DG-068",
+      "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "DG-070",
+      "before": "not-implemented",
+      "after": "implemented"
+    }
+  ],
+  "offline": {
+    "node": "v24.22.1",
+    "tests": 1091,
+    "pass": 1042,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 49,
+    "todo": 0
+  },
+  "publicWorkflow": "docs/verification.json"
 }

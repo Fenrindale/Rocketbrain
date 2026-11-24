@@ -40,15 +40,21 @@ class SchemaTree {
   refresh() { this.events.fire(); }
   dispose() { this.events.dispose(); }
 }
-let activeJava,activeJavaTesting,activeSchemaRename,activeSqlScripts,activeSchemaComparison,activeStreamImports,activeSchemaPrograms,activeSchemaCoordinator,activeDatabase,activeDbConnections,activeDbAuthoring,activeSpringProjects;
+let activeJava,activeJavaTesting,activeJavaUtilities,activeSchemaRename,activeSqlScripts,activeSchemaComparison,activeStreamImports,activeSchemaPrograms,activeSchemaCoordinator,activeDatabase,activeDbConnections,activeDbAuthoring,activeDbSessionTools,activeSpringProjects;
 async function activate(context) {
   const database = await require("./database-workbench").registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree);
   activeDatabase=database;
   const dbConnections=require('./db/connection-profiles-vscode').registerConnectionProfiles(context,vscode,{database});activeDbConnections=dbConnections;
   const dbAuthoring=require('./db/db-authoring-vscode').registerDatabaseAuthoring(context,vscode,{database});activeDbAuthoring=dbAuthoring;
+  const dbSessionTools = require('./db/session-tools-vscode').registerDbSessionTools(context, vscode, { database });
+  activeDbSessionTools = dbSessionTools;
+  context.subscriptions.push(dbSessionTools);
   context.subscriptions.push(registerNavigation(vscode, context));
   const java = registerJavaFeatures(context, vscode);
   activeJava = java;
+  const javaUtilities = require('./java/utilities-vscode').registerJavaUtilities(context, vscode, { java });
+  activeJavaUtilities = javaUtilities;
+  context.subscriptions.push(javaUtilities);
   const springProjects=require('./spring/project-vscode').registerSpringProjectTools(context,vscode,{java});activeSpringProjects=springProjects;
   context.subscriptions.push(java);
   const javaTesting=require('./java/testing-vscode').registerJavaTesting(context,vscode,{java});
@@ -86,9 +92,12 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, java, javaTesting, jpa, analysis, sqlAnalysis,schemaRename,sqlScripts,schemaComparison,streamImports,schemaPrograms,schemaCoordinator,dbConnections,dbAuthoring,springProjects };
+  return { ...database, java, javaTesting, javaUtilities, jpa, analysis, sqlAnalysis,schemaRename,sqlScripts,schemaComparison,streamImports,schemaPrograms,schemaCoordinator,dbConnections,dbAuthoring,dbSessionTools,springProjects };
 }
 async function deactivate() {
+  const sessionTools = activeDbSessionTools;
+  activeDbSessionTools = undefined;
+  if (sessionTools) await sessionTools.dispose();
   const connections=activeDbConnections;activeDbConnections=undefined;if(connections)await connections.dispose();
   const authoring=activeDbAuthoring;activeDbAuthoring=undefined;if(authoring)await authoring.dispose();
   const springProjects=activeSpringProjects;activeSpringProjects=undefined;if(springProjects)await springProjects.dispose();
@@ -99,8 +108,11 @@ async function deactivate() {
   const comparison=activeSchemaComparison;activeSchemaComparison=undefined;if(comparison)await comparison.dispose();
   const schemaRename=activeSchemaRename;activeSchemaRename=undefined;if(schemaRename)await schemaRename.dispose();
   const java = activeJava;
+  const utilities = activeJavaUtilities;
+  activeJavaUtilities = undefined;
   const testing=activeJavaTesting;activeJavaTesting=undefined;
   activeJava = undefined;
+  if (utilities) await utilities.dispose();
   if(testing)await testing.dispose();
   if (java) await java.dispose();
   const database=activeDatabase;activeDatabase=undefined;if(database)await database.dispose();

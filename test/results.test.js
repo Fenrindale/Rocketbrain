@@ -30,6 +30,34 @@ function browserRuntime() {
 
 const runtime = browserRuntime();
 
+test('result file export rechecks the original snapshot after the save dialog', async () => {
+  let receive, chooseFile;
+  const errors = [], writes = [];
+  const vscode = {
+    Uri: { joinPath: (base, ...parts) => path.posix.join(base, ...parts), file: value => value },
+    window: { showSaveDialog: () => new Promise(resolve => { chooseFile = resolve; }), showErrorMessage: message => errors.push(message) },
+    workspace: { fs: { writeFile: async (uri, data) => writes.push({ uri, data }) } }
+  };
+  const view = new ResultsView(vscode, { extensionUri: '/virtual', subscriptions: [] });
+  view.resolveWebviewView({
+    webview: { cspSource: 'https://rocketbrain.test', asWebviewUri: uri => uri, postMessage() {},
+      onDidReceiveMessage: handler => { receive = handler; return { dispose() {} }; } },
+    onDidDispose() {}
+  });
+  const result = { columns: ['name'], rows: [['before']] };
+  const id = view.begin('SELECT name FROM people', 'MySQL');
+  view.finish(id, result);
+  const request = receive({ type: 'export', id, format: 'json' });
+  assert.equal(typeof chooseFile, 'function');
+  view.finish(id, { ...result, rows: [['after']] });
+  chooseFile('/virtual/output.json');
+  await request;
+  assert.equal(writes.length, 0);
+  assert.match(errors[0], /result changed while choosing a file/);
+  view.editState(id, { hasDraft: true });
+  assert.throws(() => view.exportSnapshot(id, 'json'), /apply or discard drafts/);
+});
+
 test('actual result Webview renders database values as text and routes history/copy/export correctly', { skip: runtime.skip, timeout: 45000 }, async (t) => {
   const browser = await runtime.chromium.launch({ executablePath: runtime.executablePath, headless: true });
   t.after(() => browser.close());
@@ -56,8 +84,8 @@ test('actual result Webview renders database values as text and routes history/c
   const vscode = {
     Uri: { joinPath: (base, ...parts) => path.posix.join(base, ...parts), file: value => value },
     env: { clipboard: { writeText: async text => { clipboard = text; } } },
-    window: { showSaveDialog: async () => '/virtual/query-results.csv', showErrorMessage: message => { throw new Error(message); } },
-    workspace: { fs: { writeFile: async (uri, data) => { writes.push({ uri, text: data.toString('utf8') }); } } },
+    window: { showSaveDialog: async options => '/virtual/' + options.defaultUri, showErrorMessage: message => { throw new Error(message); } },
+    workspace: { fs: { writeFile: async (uri, data) => { writes.push({ uri, data, text: data.toString('utf8') }); } } },
   };
   const host = new ResultsView(vscode, { extensionUri: '/virtual/rocketbrain', subscriptions: [] });
   const fakeView = {
@@ -95,7 +123,9 @@ test('actual result Webview renders database values as text and routes history/c
   const heading = '<svg onload="window.__xss=true">column</svg>';
   const longText = `${'long text '.repeat(1600)}\ncomma, and "quoted" text`;
   const firstId = host.begin("SELECT '<payload>' AS test", '<b>MySQL source</b>');
-  host.finish(firstId, { columns: [heading, 'nullable', 'details', 'formula'], rows: [[attack, null, longText, '=1+1']], rowCount: 1, truncated: true, durationMs: 2.35 });
+  const firstResult = { columns: [heading, 'nullable', 'details', 'formula'], rows: [[attack, null, longText, '=1+1']],
+    fields: [253, 6, 253, 253].map(type => ({ type, characterSet: 45 })), rowCount: 1, truncated: true, durationMs: 2.35 };
+  host.finish(firstId, firstResult);
   await lastPost;
 
   await t.test('HTML-like cells, column titles and source labels stay literal; NULL and full long values remain accessible', async () => {
@@ -124,6 +154,75 @@ test('actual result Webview renders database values as text and routes history/c
     assert.ok(writes[0].text.includes('comma, and ""quoted"" text'));
     assert.ok(writes[0].text.includes(longText.split('\n')[0]));
     assert.ok(writes[0].text.includes('"\'=1+1"'));
+  });
+
+  await t.test('alternate views present the captured records safely and navigate within the current preview', async () => {
+    host.finish(firstId, { ...firstResult, rows: [...firstResult.rows, ['Second', null, '', '']], rowCount: 2 });
+    await lastPost;
+    await page.locator('#result-view').selectOption('record');
+    assert.match(await page.locator('#result-row-status').textContent(), /Row 1.*1 of 2/);
+    assert.equal(await page.locator('.result-fields dd').first().textContent(), attack);
+    await page.locator('#result-row-next').click();
+    assert.equal(await page.locator('.result-fields dd').first().textContent(), 'Second');
+    assert.equal(await page.locator('#result-row-next').isDisabled(), true);
+    await page.locator('#result-view').selectOption('tree');
+    assert.equal(await page.locator('#grid details').count(), 2);
+    await page.locator('#grid summary').first().click();
+    await page.locator('#grid details dd').first().waitFor();
+    assert.equal(await page.locator('#grid details dd').first().textContent(), attack);
+    await page.locator('#result-view').selectOption('text');
+    assert.ok((await page.locator('#grid pre').textContent()).includes(JSON.stringify(attack)));
+    assert.ok((await page.locator('#grid pre').textContent()).includes('\tnull\t'));
+    await page.locator('#result-view').selectOption('transpose');
+    assert.deepEqual(await page.locator('#grid thead th').allTextContents(), ['Column', 'Row 1', 'Row 2']);
+    assert.equal(await page.locator('#grid tbody th').first().textContent(), heading);
+    assert.equal(await page.locator('#grid img, #grid svg').count(), 0);
+    assert.equal(await page.evaluate(() => window.__xss), undefined);
+    await page.locator('#result-view').selectOption('grid');
+    host.finish(firstId, firstResult);
+    await lastPost;
+  });
+
+  await t.test('column display settings pin, hide, reorder and resize by ordinal while exports retain every source column', async () => {
+    await page.setViewportSize({ width: 420, height: 800 });
+    await page.locator('#result-columns').click();
+    await page.getByRole('checkbox', { name: 'Pin column 4 formula' }).check();
+    await page.getByRole('checkbox', { name: 'Show column 3 details' }).uncheck();
+    const width = page.getByRole('spinbutton', { name: 'Column 4 width in pixels' });
+    await width.fill('260');
+    await width.press('Tab');
+    await page.getByRole('button', { name: 'Move column 2 earlier' }).click();
+    assert.deepEqual(await page.locator('#grid thead th').allTextContents(), ['#', 'formula', 'nullable', heading]);
+    assert.equal(await page.locator('th.result-pinned').evaluate(cell => cell.getBoundingClientRect().width), 260);
+    const before = await page.locator('th.result-pinned').evaluate(cell => cell.getBoundingClientRect().left);
+    await page.locator('#grid').evaluate(grid => { grid.scrollLeft = 200; });
+    assert.equal(await page.locator('th.result-pinned').evaluate(cell => cell.getBoundingClientRect().left), before);
+
+    await page.locator('#export-format').selectOption('json');
+    await page.locator('#export').click();
+    await page.waitForFunction(() => window.__completed.some(message => message.type === 'export' && message.format === 'json'));
+    const exported = JSON.parse(writes.at(-1).text);
+    assert.equal(writes.at(-1).uri, '/virtual/query-results.json');
+    assert.deepEqual(exported.columns.map(column => column.name), firstResult.columns);
+    assert.deepEqual(exported.rows, firstResult.rows);
+    await page.locator('#export-format').selectOption('xlsx');
+    await page.locator('#export').click();
+    await page.waitForFunction(() => window.__completed.some(message => message.type === 'export' && message.format === 'xlsx'));
+    assert.equal(writes.at(-1).uri, '/virtual/query-results.xlsx');
+    assert.equal(writes.at(-1).data.readUInt32LE(), 0x04034b50);
+    await page.locator('#export-format').selectOption('insert');
+    await page.locator('#export').click();
+    await page.locator('#export-table').fill('output');
+    await page.locator('#export-schema').fill('example');
+    await page.locator('#export-columns').fill('["a", "b", "c", "d"]');
+    await page.getByRole('button', { name: 'Save INSERT Script' }).click();
+    await page.waitForFunction(() => window.__completed.some(message => message.type === 'export' && message.format === 'insert'));
+    assert.equal(writes.at(-1).uri, '/virtual/query-results.sql');
+    assert.ok(writes.at(-1).text.includes('INSERT INTO `example`.`output` (`a`, `b`, `c`, `d`) VALUES'));
+    await page.locator('#export-format').selectOption('csv');
+    await page.locator('#result-column-reset').click();
+    await page.locator('#result-columns').click();
+    await page.setViewportSize({ width: 1280, height: 800 });
   });
 
   const errorText = '<img src=x onerror="window.__errorXss=true"> Query failed';

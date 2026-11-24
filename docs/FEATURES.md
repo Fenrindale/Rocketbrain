@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-24 기준 Rocketbrain 0.27.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.28.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 9 |
-| 부분 구현 | 100 |
-| 미구현 | 85 |
+| 구현 | 12 |
+| 부분 구현 | 105 |
+| 미구현 | 77 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 7 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **33.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **35.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.27에서는 가변 필드와 호출자 참조, 모듈 서비스 등록과 팩터리, 합성 Spring 조건, SHA-256을 확인한 외부 Maven 부모·BOM을 검토 범위에 추가했다. 지원 범위를 넓힌 5개 행은 부분 구현을 유지한다. 실제 Spring과 두 데이터베이스에서 새로 검증한 범위는 검증 요약에 기록했다.
+v0.28에서는 파일 템플릿·JShell, 사용자 DB 세션과 쿼리, 외래 키 JOIN 자동 완성, 결과 보기·내보내기를 추가했다. 분기별 Java 참조 이동도 검증했다. 상태가 바뀐 항목은 8개이고 가중 점수는 72점에서 77.5점으로 늘었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -34,7 +34,7 @@ v0.27에서는 가변 필드와 호출자 참조, 모듈 서비스 등록과 팩
 | IDEA-011 | IntelliJ IDEA | 자동 import·사용하지 않는 import 정리 | 부분 구현 |
 | IDEA-012 | IntelliJ IDEA | 인레이 힌트·의미 강조 | 부분 구현 |
 | IDEA-013 | IntelliJ IDEA | 로컬 변경 이력·삭제 복구 | VS Code 재사용 |
-| IDEA-014 | IntelliJ IDEA | 새 파일 템플릿 | 미구현 |
+| IDEA-014 | IntelliJ IDEA | 새 파일 템플릿 | 부분 구현 |
 | IDEA-015 | IntelliJ IDEA | 선언·타입·구현·상위 메서드 이동 | 부분 구현 |
 | IDEA-016 | IntelliJ IDEA | Find Usages·참조 탐색 | 부분 구현 |
 | IDEA-017 | IntelliJ IDEA | 호출 계층 | 지원 미확인 |
@@ -69,7 +69,7 @@ v0.27에서는 가변 필드와 호출자 참조, 모듈 서비스 등록과 팩
 | IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 미구현 |
 | IDEA-047 | IntelliJ IDEA | Groovy·Spock·콘솔 | 미구현 |
 | IDEA-048 | IntelliJ IDEA | 외부 라이브러리 소스·바이트코드 디컴파일 | 부분 구현 |
-| IDEA-049 | IntelliJ IDEA | Scratch·JShell 실험 코드 | 미구현 |
+| IDEA-049 | IntelliJ IDEA | Scratch·JShell 실험 코드 | 구현 |
 | IDEA-050 | IntelliJ IDEA | 어노테이션 프로세서·Lombok 생성 코드 | 지원 미확인 |
 | IDEA-051 | IntelliJ IDEA | Spring Initializr 프로젝트 생성 | 부분 구현 |
 | IDEA-052 | IntelliJ IDEA | 기존 프로젝트 starter 편집 | 부분 구현 |
@@ -168,7 +168,7 @@ v0.27에서는 가변 필드와 호출자 참조, 모듈 서비스 등록과 팩
 | DG-025 | DataGrip | 실제 FK 없는 관계 정의 | 미구현 |
 | DG-026 | DataGrip | virtual view·virtual column | 미구현 |
 | DG-027 | DataGrip | schema-aware 이름·열 완성 | 부분 구현 |
-| DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 미구현 |
+| DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 부분 구현 |
 | DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 부분 구현 |
 | DG-030 | DataGrip | alias·약어·함수 구문 완성 | 부분 구현 |
 | DG-031 | DataGrip | MySQL/MariaDB dialect별 구문·키워드 | 부분 구현 |
@@ -189,11 +189,11 @@ v0.27에서는 가변 필드와 호출자 참조, 모듈 서비스 등록과 팩
 | DG-046 | DataGrip | 같은 세션·temporary table 상태 유지 | 구현 |
 | DG-047 | DataGrip | 세션 공유·전용·introspection 분리 | 부분 구현 |
 | DG-048 | DataGrip | 수동 commit/rollback·auto-commit 전환 | 구현 |
-| DG-049 | DataGrip | 트랜잭션 격리 수준 선택 | 미구현 |
+| DG-049 | DataGrip | 트랜잭션 격리 수준 선택 | 구현 |
 | DG-050 | DataGrip | 실행 취소·connection 종료 | 구현 |
 | DG-051 | DataGrip | 쿼리 이력·검색·재실행 | 부분 구현 |
 | DG-052 | DataGrip | 전체 SQL 로그·메타데이터 요청 기록 | 미구현 |
-| DG-053 | DataGrip | 즐겨찾기·저장 쿼리·다시 실행 | 미구현 |
+| DG-053 | DataGrip | 즐겨찾기·저장 쿼리·다시 실행 | 부분 구현 |
 | DG-054 | DataGrip | 여러 result set·탭 유지·고정 | 부분 구현 |
 | DG-055 | DataGrip | EXPLAIN 원본·tree/table | 부분 구현 |
 | DG-056 | DataGrip | 시각 실행 계획·cost graph | 미구현 |
@@ -207,10 +207,10 @@ v0.27에서는 가변 필드와 호출자 참조, 모듈 서비스 등록과 팩
 | DG-064 | DataGrip | 행 추가·삭제·복제·일괄 붙여넣기 | 부분 구현 |
 | DG-065 | DataGrip | NULL·긴 text·JSON·binary 값 편집 | 부분 구현 |
 | DG-066 | DataGrip | FK 따라 관련 행으로 이동 | 미구현 |
-| DG-067 | DataGrip | record·tree·text·transpose 보기 | 미구현 |
-| DG-068 | DataGrip | 컬럼 고정·숨김·순서·폭 조절 | 미구현 |
+| DG-067 | DataGrip | record·tree·text·transpose 보기 | 부분 구현 |
+| DG-068 | DataGrip | 컬럼 고정·숨김·순서·폭 조절 | 부분 구현 |
 | DG-069 | DataGrip | CSV/TSV·clipboard 내보내기 | 구현 |
-| DG-070 | DataGrip | INSERT/JSON/Excel 등 출력 형식 | 미구현 |
+| DG-070 | DataGrip | INSERT/JSON/Excel 등 출력 형식 | 구현 |
 | DG-071 | DataGrip | 사용자 data extractor 스크립트 | 미구현 |
 | DG-072 | DataGrip | CSV/Excel import·column/type mapping | 부분 구현 |
 | DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 미구현 |

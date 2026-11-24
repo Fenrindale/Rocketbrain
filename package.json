@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -48,6 +48,12 @@
       { "command": "rocketbrain.java.changeSignature", "title": "Change Java Signature", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.safeDelete", "title": "Safe Delete Java Declaration", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.restoreDeleted", "title": "Restore Deleted Java File", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.newFileFromTemplate", "title": "New Java File from Template", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.openScratch", "title": "New JShell Scratch", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.runScratch", "title": "Run JShell Scratch", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.setTransactionIsolation", "title": "Set SQL Session Isolation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.sql.saveQuery", "title": "Save SQL Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
+      { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
         "command": "rocketbrain.openConsole",
         "title": "Open SQL Console",
@@ -682,6 +688,13 @@
       }
     ],
     "menus": {
+      "explorer/context": [
+        {
+          "command": "rocketbrain.java.newFileFromTemplate",
+          "when": "explorerResourceIsFolder && resourceScheme == file && isWorkspaceTrusted",
+          "group": "rocketbrain"
+        }
+      ],
       "view/title": [
         {
           "command": "rocketbrain.searchEverywhere",
@@ -780,6 +793,16 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "rocketbrain.setTransactionIsolation",
+          "when": "resourceLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "rocketbrain@5"
+        },
+        {
+          "command": "rocketbrain.sql.saveQuery",
+          "when": "resourceLangId == sql && isWorkspaceTrusted",
+          "group": "rocketbrain@6"
+        },
         {
           "command": "rocketbrain.runQuery",
           "when": "resourceLangId == sql",
@@ -1065,6 +1088,22 @@
           "default": "",
           "scope": "machine",
           "description": "Absolute path to a standalone JDK 25 or later for the language server. Do not use an IDE's embedded runtime."
+        },
+        "rocketbrain.java.fileTemplates": {
+          "type": "array",
+          "default": [],
+          "scope": "resource",
+          "description": "Additional Java file templates. The template body accepts ${name}, ${package}, and ${packageDeclaration}.",
+          "items": {
+            "type": "object",
+            "required": ["name", "template"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "source": { "type": "string", "enum": ["main", "test", "any"], "default": "any" },
+              "template": { "type": "string" }
+            }
+          }
         },
         "rocketbrain.java.gradleHome": {
           "type": "string",

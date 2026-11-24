@@ -1,33 +1,25 @@
 {
-  "version": "0.27.0",
-  "verifiedAt": "2026-11-24T03:25:05.470Z",
+  "version": "0.28.0",
+  "verifiedAt": "2026-11-24T15:19:52.829Z",
   "fullProductParityVerified": false,
-  "scope": "Final packaged VS Code extension and actual Spring builds with fresh MySQL and MariaDB instances.",
   "artifact": {
-    "name": "rocketbrain-0.27.0.vsix",
-    "bytes": 1561726,
-    "sha256": "23daabf7a0ff8d5aa63e90f4251c89e719749577cce8603622ba6d55ed79a3d1",
+    "name": "rocketbrain-0.28.0.vsix",
+    "bytes": 1586920,
+    "sha256": "a82af21ba96c74928a04064bd9710962eb4c7eef9e84414af214d059f0ef9cde",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 993,
-    "inputVectorSha256": "f2639dc0e1ebc1257cfe197564af5518e375282983b50f52c42c15e58f49dc4c",
-    "nativeTestedInputVectorSha256": "f9cf9c8e6a6c3535e706f3944a5847db1ab2a8966eae39ba3124b9c50b092e52",
-    "testOnlyChangesAfterNativeFreeze": [
-      "test/java-move-v22-state.test.js"
-    ],
-    "reconciliation": "An existing rejection test now accepts the updated private-field diagnostic. A clean rebuild matched the 13 payloads of the installer exercised against both servers.",
-    "reproducedPayloadsEqual": 13,
+    "frozenPublicInputs": 1022,
+    "inputVectorSha256": "cbc9fccf6ec0a9c4887208f8d9e37d4d51d4edad54b05fcb14831242ca00d16a",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1070,
-    "suites": 0,
-    "pass": 1022,
+    "tests": 1091,
+    "pass": 1042,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 48,
+    "skipped": 49,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -37,35 +29,18 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 4,
       "groups": [
         {
           "group": "state",
           "checks": 1,
           "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 2,
-          "recoveredOnRetry": false
+          "unresponsiveHostNotices": 1
         },
         {
-          "group": "package",
-          "checks": 1,
+          "group": "workbench",
+          "checks": 4,
           "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 1,
-          "recoveredOnRetry": false
-        },
-        {
-          "group": "spring",
-          "checks": 1,
-          "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 0,
-          "recoveredOnRetry": false
-        },
-        {
-          "group": "maven",
-          "checks": 1,
-          "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 5,
-          "recoveredOnRetry": false
+          "unresponsiveHostNotices": 0
         }
       ]
     },
@@ -75,97 +50,107 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 4,
       "groups": [
         {
           "group": "state",
           "checks": 1,
           "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 2,
-          "recoveredOnRetry": false
+          "unresponsiveHostNotices": 1
         },
         {
-          "group": "package",
-          "checks": 1,
+          "group": "workbench",
+          "checks": 4,
           "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 1,
-          "recoveredOnRetry": false
-        },
-        {
-          "group": "spring",
-          "checks": 1,
-          "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 0,
-          "recoveredOnRetry": false
-        },
-        {
-          "group": "maven",
-          "checks": 1,
-          "explorerRefreshErrors": 0,
-          "unresponsiveHostNotices": 5,
-          "recoveredOnRetry": false
+          "unresponsiveHostNotices": 0
         }
       ]
     }
   ],
   "newlyVerified": {
-    "state": "가변 필드와 호출자 참조의 JDT Move 두 건, 재할당 순서 5개와 새 Spring 실행 결과 11개, 실행 취소·다시 실행 및 보호 사례",
-    "package": "서비스 팩터리와 JPMS uses·provides를 포함한 Package Move, 실행 취소·다시 실행, 모듈 경로 실행의 제공자 두 개 순서와 Spring DB 조회",
-    "spring": "합성 조건의 Safe Delete 적용·복원, 합성 조건 후보 27개와 실제 Spring 결과 12개, 보호·변경·미해결 계약 거부",
-    "maven": "외부 부모·BOM 모델 네 개의 SHA-256, Maven 프로젝트 간 Move 및 실행 취소·다시 실행, 변경된 핀 거부, 세 모듈의 유효 POM과 프로필 네 조합의 테스트 컴파일"
-  },
-  "maven": {
-    "version": "3.9.11",
-    "effectivePomModules": 3,
-    "profileCombinations": [
-      "base",
-      "runtime",
-      "compile",
-      "both"
-    ],
-    "effectiveConsumerAppScopes": [
-      "compile",
-      "runtime",
-      "compile",
-      "compile"
-    ],
-    "testClientCompiledInEachCombination": true,
-    "nativeParentChainLinks": 3,
-    "nativeBomImportDepth": 2,
-    "externalModelPinsVerified": 4,
-    "stalePinsRefused": true,
-    "standaloneOriginControl": {
-      "legacyUntracked": true,
-      "unavailableOriginRefused": true,
-      "locallyInstalled": true
-    }
+    "IDEA-014": "사용자 템플릿으로 Spring @Service를 생성하고, 같은 Java 경로의 추가 생성을 거부한 뒤 JDT로 컴파일했다.",
+    "IDEA-028": "JDT 이동, 조건부 쓰기 세 건, 참조 동일성과 NULL을 포함한 Spring 결과 8개, Undo/Redo 및 계산 조건 거부를 확인했다.",
+    "IDEA-033": "JDT 이동, 조건부 쓰기 세 건, 참조 동일성과 NULL을 포함한 Spring 결과 8개, Undo/Redo 및 계산 조건 거부를 확인했다.",
+    "IDEA-049": "JDK 25에서 격리 실행과 프로젝트 클래스 경로 실행을 구분했다. 미저장 스크래치로 새 Spring 클래스와 HTTP/JDBC를 호출하고 저장본을 다시 열었다.",
+    "DG-028": "등록된 VS Code SQL 자동 완성에서 Spring 테이블의 외래 키 결합을 적용하고 실제 결과 2행을 집계했다. 복합 키와 자체 조인을 단위 검증했다.",
+    "DG-049": "네 가지 서버 설정, 다른 콘솔 격리, 현재 트랜잭션과 데이터 초안 보호 및 이전 검토의 설정 변경 거부를 확인했다.",
+    "DG-053": "편집기 선택 SQL, 즐겨찾기와 재열기 후 새 읽기 전용 세션의 Spring 테이블 조회를 확인했다. 연결·개정 불일치와 쓰기 실행을 차단했다.",
+    "DG-067": "동일한 캡처 결과 모델로 네 대체 보기를 렌더링하고 Chromium에서 보기 전환·레코드 탐색·결과 텍스트 처리를 확인했다.",
+    "DG-068": "실제 결과 Webview에서 열 고정 위치, 너비, 숨김·순서를 확인하고 원래 순서대로 전체 열을 내보냈다.",
+    "DG-070": "두 DB의 BIGINT·DECIMAL·JSON·BLOB·BIT·시간·유니코드를 내보냈다. Excel을 다시 읽고 호환 임시 테이블에 생성된 INSERT를 재실행해 값을 대조했다."
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 131,
+    "sourceCorrespondences": 140,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 9,
-      "partial": 100,
-      "not-implemented": 85,
+      "implemented": 12,
+      "partial": 105,
+      "not-implemented": 77,
       "host-provided": 13,
       "unverified": 7,
       "platform-limited": 2
     },
-    "referencePercent": 33.33333333333333,
-    "formula": "(implemented + host-provided + partial * 0.5) / 216 * 100",
-    "featureStatusChanges": 0
+    "weightedPoints": 77.5,
+    "previousWeightedPoints": 72,
+    "targetWeightedPoints": 108,
+    "referencePercent": 35.9,
+    "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
+    "stateChanges": [
+      {
+        "id": "IDEA-014",
+        "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "IDEA-049",
+        "before": "not-implemented",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-028",
+        "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-049",
+        "before": "not-implemented",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-053",
+        "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-067",
+        "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-068",
+        "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-070",
+        "before": "not-implemented",
+        "after": "implemented"
+      }
+    ]
   },
-  "limitations": [
-    "분기·반복·여러 작성자의 별칭 추적, 순환 객체 그래프와 외부 유출, 일반 소유권 이전, 임의 생성자·상속과 외부 바이너리 분석이 남는다.",
-    "여러 모듈·외부 제공자, 가변 팩터리·사용자 로더, 복수 클래스 경로 등록 파일 병합, 임의 리소스 메타데이터 분석이 남는다.",
-    "바이트코드 전용 합성 어노테이션, 모호하거나 순환하는 별칭, 임의 SpEL과 상태가 있는 조건의 분석이 남는다. 해석할 수 없는 조건은 Safe Delete에서 미해결로 처리한다.",
-    "사용자 지정 저장소와 원격 출처가 붙은 캐시, SNAPSHOT·복합 외부 POM, 전이 의존성 중재 및 확장 플러그인 모델이 남는다.",
-    "VS Code 탐색기 새로 고침 오류와 확장 호스트 응답 지연 알림을 각 실행 묶음에 기록했다."
+  "limits": [
+    "분기 리팩터링은 확인한 불리언 매개변수와 명시적인 필드 갱신에 적용한다.",
+    "조회 결과의 대체 보기와 열 레이아웃은 현재 결과 탭에서 사용한다.",
+    "통합 실행의 VS Code 탐색기 및 확장 호스트 로그는 각 묶음에 집계했다."
   ],
-  "ci": "The exact pushed commit has its own GitHub Actions workflow. Local actual-server validation is recorded above."
+  "next": [
+    "Java 모듈·패키지 의존성과 순환 탐색 및 JDT 호출·타입 계층",
+    "실제 DB 스키마 ERD와 배치 저장·내보내기",
+    "다중 JPMS 서비스 모듈의 계약 확대"
+  ],
+  "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

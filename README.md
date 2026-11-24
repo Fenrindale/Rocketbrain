@@ -29,7 +29,7 @@ pnpm run test:offline
 pnpm run package
 ```
 
-생성된 `rocketbrain-0.27.0.vsix`를 VS Code 확장 메뉴의 **Install from VSIX…**로 설치합니다. 패키지 명령은 로컬 VSIX를 만들며 Marketplace에 자동 게시하지 않습니다. 확장 패키지에는 Java 엔진과 DB 서버 바이너리를 포함하지 않습니다.
+생성된 `rocketbrain-<version>.vsix`를 VS Code 확장 메뉴의 **Install from VSIX…**로 설치합니다. 패키지 명령은 로컬 VSIX를 만들며 Marketplace에 자동 게시하지 않습니다. 확장 패키지에는 Java 엔진과 DB 서버 바이너리를 포함하지 않습니다.
 
 `test:offline`은 실제 DB·Java·브라우저·VS Code 실행 환경을 요구하는 검사를 구분하여 제외하거나 건너뜁니다. 이 결과가 실제 Spring·MySQL·MariaDB 검증을 대신하지 않습니다. 실환경 도구와 별도 검증 조건은 [공개 소스 안내](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/public-source.md)를 참고하세요.
 
@@ -40,6 +40,8 @@ pnpm run package
 3. **Java Projects**에서 가져온 소스 루트·패키지·라이브러리를 확인합니다. Maven 작업에는 별도 Maven 설치와 `rocketbrain.java.mavenHome` 설정이 필요합니다.
 4. **Build Java Project / Choose Build Task**, 저장한 **Run / Debug / Stop** 구성을 사용합니다.
 5. **Create Spring Project**로 공식 Initializr 프로젝트를 생성하거나 **Edit Spring Starters**로 지원하는 의존성 변경을 검토합니다.
+6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. `rocketbrain.java.fileTemplates`에서 사용자 템플릿과 변수 `${name}`, `${package}`, `${packageDeclaration}`를 사용할 수 있습니다.
+7. **New JShell Scratch**로 저장할 코드를 만들고 **Run JShell Scratch**로 독립 JDK에서 실행합니다. 프로젝트 클래스가 필요하면 실행할 때 관찰된 로컬 클래스 경로를 선택합니다.
 
 기존 독립 런타임을 사용할 때는 `rocketbrain.java.javaHome`, `rocketbrain.java.serverPath`, 필요한 디버그 번들을 설정합니다. 서버용 JDK와 프로젝트용 JDK는 별개이며 프로젝트 JDK는 `rocketbrain.java.projectJdks`로 선택합니다. 원본 IDE의 내장 JBR은 거부합니다.
 
@@ -53,7 +55,7 @@ Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후�
 |---|---|---|
 | **Move Java Class File / Move Java Class Across Projects** | 같은 소스 루트의 클래스 이동. Gradle 복합 조건과 Maven 리액터의 부모·중첩 BOM·속성 프로필을 분석한다. 기본 로컬 Maven 저장소의 외부 부모·BOM도 좌표와 SHA-256을 검증해 가시성 계산에 포함한다 | 사용자 지정 저장소 배치, 원격 확인, SNAPSHOT·복합 외부 POM, 전이 의존성 중재, 의존 관계 자동 변경 |
 | **Move Java Static Member** | 일반 클래스의 public static 순수 반환 메서드·리터럴 상수 필드를 기존 Gradle 의존성의 대상으로 이동 | 인스턴스·상태를 가진 멤버, 오버로드·상속·어노테이션·임의 외부 사용 |
-| **Move Java Instance Method** | 포착한 참조를 명시적으로 전달한다. 검토한 private 가변 필드의 재할당과 호출자가 넘긴 참조를 추적하고 원래 소유권, 객체 동일성, 인수 평가와 갱신 순서를 보존한다 | 순환·외부 객체 그래프, 분기·다중 작성자, 소유권 이전, 모호한 생성자와 상속·오버로드 |
+| **Move Java Instance Method** | 포착한 참조를 명시적으로 전달한다. 검토한 private 가변 필드를 갱신하는 여러 호출자와 불리언 매개변수의 `if`·`else` 경로를 보존한다 | 순환·외부 객체 그래프, 계산·중첩 분기, 외부 작성자, 소유권 이전, 모호한 생성자와 상속·오버로드 |
 | **Move Java Package** | 리소스의 바이트와 서비스 등록 순서를 보존한다. 검토한 클래스 경로 등록과 단일 JPMS 모듈의 서비스 소비·제공 선언을 함께 이동하고, 제한된 정적 서비스 팩터리를 확인한다 | 다중·외부 모듈의 서비스 계약, 동적·사용자 정의 로더, 복합 팩터리, 복잡한 메타데이터와 새 대상 폴더 생성 |
 | **Change Java Signature** | 인자 순서·리터럴 기본값 추가·미사용 인자 제거. 소스 상속·오버로드, 제한된 제네릭 타입 치환·공변 반환형·메서드 타입 변수·경계·와일드카드를 변경 전후 컴파일러로 검사 | 이름·기존 타입·반환형·접근성·예외 변경, 임의 제네릭·가변 인자·외부 바이너리·메서드 참조·framework 계약 |
 | **Safe Delete Java Declaration** | 미사용 private 보조 메서드와 제한된 클래스 삭제. Spring Bean·주입·설정·XML·JPA 참조와 검토한 조건을 분석한다. 소스 합성 어노테이션의 메타 조건과 확인 가능한 `@AliasFor`도 따라간다 | 임의 조건·호출·효과·루프, 바이트코드 전용 합성 어노테이션과 불명확한 별칭 계약 |
@@ -71,20 +73,18 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
 
+- **Set SQL Session Isolation**은 열린 SQL 콘솔의 연결에 격리 수준을 적용하고 서버 값을 다시 확인합니다. 트랜잭션과 검토 중인 그리드 초안이 있으면 먼저 정리해야 합니다.
+- **Save SQL Query**는 현재 선택 구간이나 문서를 작업 공간에 저장합니다. **Saved SQL Queries**에서 검색·즐겨찾기·열기와 활성 연결을 사용한 새 읽기 전용 콘솔 실행을 제공합니다.
+- `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
+- 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
+
 테이블 설계와 기존 뷰·프로시저 원문 편집은 검토·명시적 적용 흐름을 제공합니다. 서버 검증에는 DDL 권한이 필요할 수 있습니다. MySQL/MariaDB DDL과 객체 교체에는 비원자적인 단계가 있으므로 표시된 범위·복구 조건·미완료 트랜잭션을 확인하세요. 모호한 결과를 자동 재실행하지 않습니다.
 
 실제 서버 검증 도구는 소유한 임시 loopback 인스턴스와 합성 데이터를 위한 것입니다. 운영 DB에 검증용 fixture 도구를 연결하지 마세요.
 
 ## 진행 상태와 다음 목표
 
-216개 기능표의 현재 분류는 구현 9, 부분 구현 100, 미구현 85, VS Code 기본 제공 13, 지원 미확인 7, 확장 구조 제약 2입니다. 고정된 참고 점수는 **33.3%**입니다.
-
-```text
-(구현 + VS Code 기본 제공 + 부분 구현 × 0.5) / 216
-= (9 + 13 + 100 × 0.5) / 216
-```
-
-기능표 가중 점수는 각 항목의 상태를 집계하며 부분 구현에 0.5점을 배정합니다. 지원 범위와 검증 결과는 [기능 현황](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/FEATURES.md)에 기록합니다. 다음 우선순위는 분기별 참조 추적, 다중 모듈 서비스 계약, 합성 조건의 별칭 검증 확대와 사용자 지정 Maven 저장소의 검증입니다.
+216개 기능의 현재 상태는 [기능표](docs/FEATURES.md)에서 확인합니다. 가중 점수는 (구현 + VS Code 기본 제공 + 부분 구현 × 0.5) ÷ 216으로 계산합니다. 각 릴리스의 실제 실행과 검증 범위는 [검증 요약](docs/verification.json)에 기록합니다.
 
 ## 공개 저장소 관리
 

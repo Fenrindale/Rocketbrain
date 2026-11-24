@@ -13,6 +13,7 @@ function fakeServer(behaviors = []) {
     const behavior = behaviors.shift() || {};
     const c = new EventEmitter();
     c.options = options; c.calls = []; c.destroyed = false; c.status = 2; c.threadId = connections.length + 10;
+    c.isolation = 'REPEATABLE-READ';
     c.connect = callback => queueMicrotask(() => callback(behavior.connectError));
     c.destroy = () => { c.destroyed = true; };
     const stream = (request, protocol) => {
@@ -49,6 +50,8 @@ function fakeServer(behaviors = []) {
         if (['COMMIT', 'ROLLBACK'].includes(request)) c.status &= ~1;
         if (request === 'SET SESSION autocommit = 0') c.status &= ~2;
         if (request === 'SET SESSION autocommit = 1') c.status |= 2;
+        const isolation = /^SET SESSION TRANSACTION ISOLATION LEVEL (.+)$/.exec(request);
+        if (isolation) c.isolation = isolation[1].replaceAll(' ', '-');
         callback(null, { affectedRows: 0, serverStatus: c.status });
       });
     };
@@ -158,6 +161,35 @@ test('explicit begin/commit/rollback and autocommit use server status, mode chan
     assert.equal((await service.commit()).inTransaction, false);
     assert.equal(service.getSessionState().autocommit, false);
     assert.equal((await service.setAutocommit(true)).autocommit, true);
+  });
+});
+test('transaction isolation is verified for a single console and rejects active or stale sessions', async () => {
+  const isolation = (sql, values, connection) => sql.startsWith('SHOW SESSION VARIABLES WHERE Variable_name')
+    ? { columns: ['Variable_name', 'Value'], rows: [['transaction_isolation', connection.isolation]] } : undefined;
+  const server = fakeServer([{ resolve: isolation }, { resolve: isolation }, { resolve: isolation }]);
+  await withService(server, async service => {
+    await assert.rejects(service.setTransactionIsolation('SNAPSHOT'), /supported transaction isolation level/);
+    assert.equal(server.connections.length, 0);
+    await service.openSession('a');
+    await service.openSession('b');
+    const observed = await service.getTransactionIsolation({ sessionId: 'a' });
+    assert.equal(observed.transactionIsolation, 'REPEATABLE READ');
+    await service.begin({ sessionId: 'a' });
+    await assert.rejects(service.setTransactionIsolation('SERIALIZABLE', { sessionId: 'a' }), /active or uncertain/);
+    assert.equal(service.getSessionState('a').inTransaction, true);
+    assert.equal(server.connections[0].calls.filter(call => call.sql.includes('ISOLATION LEVEL ')).length, 0);
+    await service.rollback({ sessionId: 'a' });
+    const updated = await service.setTransactionIsolation('SERIALIZABLE', {
+      sessionId: 'a', expectedConnectionId: observed.connectionId, expectedIsolation: observed.transactionIsolation
+    });
+    assert.equal(updated.transactionIsolation, 'SERIALIZABLE');
+    assert.equal(updated.connectionId, observed.connectionId);
+    assert.equal((await service.getTransactionIsolation({ sessionId: 'b' })).transactionIsolation, 'REPEATABLE READ');
+    await assert.rejects(service.setTransactionIsolation('READ COMMITTED', { sessionId: 'a', expectedIsolation: observed.transactionIsolation }), /changed after the picker/);
+    await service.reconnect('a');
+    assert.equal(service.getSessionState('a').transactionIsolation, null);
+    await assert.rejects(service.setTransactionIsolation('READ COMMITTED', { sessionId: 'a', expectedConnectionId: observed.connectionId }), /reconnected/);
+    assert.equal((await service.getTransactionIsolation({ sessionId: 'a' })).transactionIsolation, 'REPEATABLE READ');
   });
 });
 test('bound values use binary execute, duplicate columns and precision-safe cells survive, DML reports affected rows', async () => {
