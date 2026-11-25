@@ -15,6 +15,24 @@ const quote = name => String.fromCharCode(96) + name + String.fromCharCode(96);
 const qualified = (schema, name) => quote(schema) + '.' + quote(name);
 const digest = value => createHash('sha256').update(value).digest('hex');
 const expectedSpring = { people: 2, departments: 1, rolledBackNames: 0 };
+const springDescriptors = ['build.gradle', 'settings.gradle'];
+
+async function nativeFixtureProject(project, folders) {
+  const expected = await Promise.all(springDescriptors.map(name => fs.readFile(path.join(project, name))));
+  const matching = new Set();
+  for (const { uri } of folders || []) {
+    if (uri.scheme !== 'file' || uri.authority) continue;
+    try {
+      const root = await fs.realpath(uri.fsPath);
+      const actual = await Promise.all(springDescriptors.map(name => fs.readFile(path.join(root, name))));
+      if (actual.every((source, index) => source.equals(expected[index]))) matching.add(root);
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+    }
+  }
+  assert.equal(matching.size, 1, 'Locate exactly one native workspace copy of the owned Spring fixture.');
+  return matching.values().next().value;
+}
 
 async function verifyCatalogUsages(adapter) {
   const runtime = await read(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG);
@@ -58,7 +76,8 @@ async function verifyCatalogUsages(adapter) {
     const project = await fs.realpath(runtime.projectPath);
     const expectedSuffix = path.join('test','fixtures','spring-boot-app');
     assert.ok(project.endsWith(path.sep + expectedSuffix));
-    folder = await fs.mkdtemp(path.join(project, 'rb-catalog-usages-'));
+    const sourceProject = adapter.native ? await nativeFixtureProject(project, adapter.nativeFolders) : project;
+    folder = await fs.mkdtemp(path.join(sourceProject, 'rb-catalog-usages-'));
     file = path.join(folder, 'scope.sql');
     const text = 'SELECT id FROM ' + related + ';\r\nSELECT id FROM ' + shadow + ';\r\n' +
       "SELECT '" + peer + '.' + target.name + "' AS inside_string;";
@@ -156,6 +175,7 @@ async function verifyCatalogUsagesBackend() {
 async function runCatalogUsagesChecks(api, vscode, checks) {
   const result = await verifyCatalogUsages({
     native: true,
+    nativeFolders: vscode.workspace.workspaceFolders,
     connect: config => api.connectMysql(config),
     disconnect: () => api.disconnectMysql(),
     capture: request => vscode.commands.executeCommand('rocketbrain.db.findCatalogUsages',request),
