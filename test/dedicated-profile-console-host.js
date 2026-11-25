@@ -65,7 +65,7 @@ async function runDedicatedProfileConsoleChecks(api, vscode, checks) {
     assert.deepEqual(await jdbcReadback(), jdbcBaseline);
     const primary = await remember(sourceProfile('Primary', main));
     const secondary = await remember(sourceProfile('Secondary', other));
-    const protectedSource = await remember(sourceProfile('Protected secondary', other, { connectionReadOnly: true, protectedTables: [] }));
+    const protectedSource = await remember(sourceProfile('Protected secondary', other, { connectionReadOnly: true }));
     await profiles.connect({ id: primary.id });
     const ordinary = await vscode.workspace.openTextDocument({ language: 'sql', content: select });
     const active = await query(ordinary);
