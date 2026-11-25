@@ -18,13 +18,15 @@ function registerStreamTrace(vscode, java) {
   };
   const keyFor = uri => uri.path.split('/')[1];
   async function confirmJdkType(pipeline, document, offset) {
-    if (pipeline.origin.startsWith('java.util.')) return;
+    if (pipeline.qualifier === pipeline.qualified) return;
     const definitions = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', document.uri, document.positionAt(offset+pipeline.stages[0].start));
-    const expected = pipeline.list ? /(?:java\.util|java\/util)\/List\.class$/ : /(?:java\.util\.stream|java\/util\/stream)\/Stream\.class$/;
+    const packageName = pipeline.qualified.split('.').slice(0, -1).join('.');
+    const basename = '/' + pipeline.typeName + '.class';
     if (!Array.isArray(definitions) || !definitions.length || definitions.some(location => {
       const uri = location.targetUri || location.uri;
-      return uri?.scheme !== 'jdt' || !expected.test(uri.path);
-    })) throw Error('Select a JDK Stream.of or List.of pipeline. A fully qualified JDK class name also identifies the source.');
+      return uri?.scheme !== 'jdt' || !['/' + packageName + basename, '/' + packageName.replaceAll('.', '/') + basename]
+        .some(suffix => uri.path.endsWith(suffix));
+    })) throw Error('Select a JDK stream factory. Use the fully qualified JDK class name when source resolution is unavailable.');
   }
 
   function sourceFrame(document, range) {
@@ -65,17 +67,6 @@ function registerStreamTrace(vscode, java) {
     return { ...structuredClone(receipt), uri:vscode.Uri.from({scheme,path:`/${id}/Java Stream.txt`}) };
   }
 
-  function rendered(receipt) {
-    const value = input => input === null ? 'null' : JSON.stringify(input);
-    const lines = receipt.stages.flatMap((stage,index) => {
-      const events = receipt.events.filter(event => event.stage === index);
-      return [stage.name+' · '+events.length+' events',...events.map(event =>
-        '  '+event.action+' '+value(event.input)+(event.action==='mapped'||event.action==='flat value'?' → '+value(event.output):'')), ''];
-    });
-    if (receipt.truncated) lines.push('The trace reached its 512-event limit.');
-    return lines.join('\n');
-  }
-
   async function reveal(uri, index) {
     const report = uri?.scheme === scheme && reports.get(keyFor(uri));
     const stage = report?.receipt.stages[index];
@@ -90,7 +81,7 @@ function registerStreamTrace(vscode, java) {
   const subscriptions = [vscode.workspace.registerTextDocumentContentProvider(scheme,{
     provideTextDocumentContent(uri) {
       const report = !disposed && vscode.workspace.isTrusted && reports.get(keyFor(uri));
-      return report ? rendered(report.receipt) : '';
+      return report ? renderStreamTrace(report.receipt) : '';
     }
   })];
   function command(name, action) {
@@ -129,4 +120,38 @@ function registerStreamTrace(vscode, java) {
   } };
 }
 
-module.exports = { registerStreamTrace };
+function renderStreamTrace(receipt) {
+  const show = value => value === null ? 'null' : JSON.stringify(value);
+  const outcome = receipt.terminal;
+  const terminal = outcome.kind === 'optional' && outcome.value === null ? 'empty'
+    : ['list', 'array'].includes(outcome.kind) ? outcome.value + ' elements' : show(outcome.value);
+  const demand = receipt.demand;
+  const notes = {
+    'count-without-traversal': 'The JDK returned the count without recording traversal.',
+    'short-circuited': 'The terminal returned before the declared source was fully traversed.',
+    'capture-limited': 'The timeline reached its 512-event limit.',
+    'no-events': 'No values were requested or emitted.',
+    'observed': 'Values were observed during the terminal operation.'
+  };
+  const lines = [
+    outcome.name + ' → ' + terminal + (outcome.type ? ' [' + outcome.type + ']' : ''),
+    demand.inputEvents + ' source events / ' + demand.sourceCount + ' declared source values',
+    notes[demand.evaluation],
+    '',
+    'Evaluation order'
+  ];
+  for (const event of receipt.events) {
+    const hasOutput = ['mapped', 'flat value', 'predicate'].includes(event.action);
+    const types = [event.inputType, hasOutput ? event.outputType : null].filter(Boolean).join(' → ');
+    lines.push(String(event.sequence).padStart(3) + '  ' + receipt.stages[event.stage].name + ' · ' + event.action + ' ' +
+      show(event.input) + (hasOutput ? ' → ' + show(event.output) : '') + (types ? ' [' + types + ']' : ''));
+  }
+  if (!receipt.events.length) lines.push('  No recorded events');
+  lines.push('', 'Pipeline stages');
+  const counts = receipt.stages.map(() => 0);
+  for (const event of receipt.events) counts[event.stage]++;
+  for (const [index, stage] of receipt.stages.entries()) lines.push('  ' + stage.name + ' · ' + counts[index] + ' events');
+  return lines.join('\n') + '\n';
+}
+
+module.exports = { registerStreamTrace, renderStreamTrace };
