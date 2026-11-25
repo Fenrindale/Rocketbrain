@@ -17,6 +17,15 @@ function layout(source, options) {
   return sourceLayout(source, { ...options, formatLayout: true });
 }
 
+function delimiterDirective(line) {
+  const command = /^\uFEFF?[ \t]*DELIMITER(?=[ \t\r]|$)/i.exec(line);
+  if (!command) return undefined;
+  const next = /^[ \t]+([^ \t\r]+)[ \t]*\r?$/.exec(line.slice(command[0].length))?.[1];
+  if (!next || !/^[!$%&*+,./:;<=>?@^_|~-][!$%&*+,./:;<=>?@^_|~\w-]{0,15}$/.test(next) ||
+      /(?:--|\/\*|\*\/)/.test(next)) throw Error('Use a standalone DELIMITER directive between complete SQL statements.');
+  return next;
+}
+
 function splitFormatScript(source, options) {
   const { tokens, nonCode } = layout(source, options);
   const protectedSpans = [...nonCode, ...tokens.filter(token => token.kind === 'identifier')].sort((a, b) => a.start - b.start);
@@ -36,12 +45,9 @@ function splitFormatScript(source, options) {
       const newline = source.indexOf('\n', i);
       const eol = newline < 0 ? source.length : newline;
       const line = source.slice(i, eol);
-      const command = /^\uFEFF?[ \t]*DELIMITER(?=[ \t\r]|$)/i.exec(line);
-      if (command) {
-        const match = /^[ \t]+([^ \t\r]+)[ \t]*\r?$/.exec(line.slice(command[0].length));
-        const next = match?.[1];
-        if (hasCode || !next || !/^[!$%&*+,./:;<=>?@^_|~-][!$%&*+,./:;<=>?@^_|~\w-]{0,15}$/.test(next) ||
-            /(?:--|\/\*|\*\/)/.test(next)) throw Error('Use a standalone DELIMITER directive between complete SQL statements.');
+      const next = delimiterDirective(line);
+      if (next) {
+        if (hasCode) throw Error('Use a standalone DELIMITER directive between complete SQL statements.');
         if (directives.length === 100) throw Error('Format at most 100 DELIMITER changes.');
         directives.push(line);
         delimiter = next;
@@ -95,7 +101,7 @@ function labelIndex(tokens, index) {
 function blockLayout(tokens, first, anonymous) {
   const lines = new Map(), blocks = [], keywords = new Set();
   const initial = first >= 2 && labelIndex(tokens, first - 2) === first ? first - 2 : first;
-  let beginning = true, expressionCases = 0, declaring = false, handler = false;
+  let beginning = true, expressionCases = 0, declaring = false, handler = false, outerEnd;
   if (!anonymous) lines.set(initial, 0);
 
   for (let i = initial; i < tokens.length; i++) {
@@ -146,6 +152,7 @@ function blockLayout(tokens, first, anonymous) {
         if (word(tokens[++i]) !== block.kind) throw mismatch();
         keywords.add(i);
       }
+      if (!blocks.length && outerEnd === undefined) outerEnd = i;
       beginning = false;
       continue;
     }
@@ -183,7 +190,22 @@ function blockLayout(tokens, first, anonymous) {
     }
   }
   if (blocks.length || expressionCases) throw mismatch();
-  return { lines, keywords };
+  return { lines, keywords, outerEnd };
+}
+
+function compoundCreation(source, options) {
+  const { tokens } = layout(source, options);
+  const type = word(tokens[1]);
+  if (word(tokens[0]) !== 'CREATE' || !['PROCEDURE', 'FUNCTION', 'TRIGGER'].includes(type)) return undefined;
+  const header = programHeader(tokens, options.dialect);
+  if (!header || header.start < 0) return undefined;
+  const { outerEnd } = blockLayout(tokens, header.start, false);
+  const label = labelIndex(tokens, header.start - 2) === header.start ? tokens[header.start - 2] : undefined;
+  let next = outerEnd + 1;
+  if (label && identifier(tokens[next]) && tokens[next].value.toLowerCase() === label.value.toLowerCase()) next++;
+  if (symbol(tokens[next], ';')) next++;
+  if (next !== tokens.length) throw Error('End the compound creation before including another SQL command.');
+  return { type, tokens };
 }
 
 function tokenText(source, tokens, keywords, style) {
@@ -223,4 +245,4 @@ function formatProgram(source, options) {
   return formatted;
 }
 
-module.exports = { formatProgram, splitFormatScript, keywordText };
+module.exports = { formatProgram, splitFormatScript, delimiterDirective, compoundCreation, keywordText };

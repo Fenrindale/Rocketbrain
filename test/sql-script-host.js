@@ -33,4 +33,61 @@ async function runSqlScriptChecks(api,vscode,checks){
   if(sessionId)await api.closeConsoleSession(sessionId);await vscode.commands.executeCommand('rocketbrain.useDemo');for(const name of [table,ddlTable])await actor.query('DROP TABLE IF EXISTS '+quote(name));await actor.end();
  }
 }
-module.exports={runSqlScriptChecks};
+async function runDelimiterScriptChecks(api,vscode,checks) {
+ const runtime=JSON.parse(fs.readFileSync(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG,'utf8'));
+ const config=JSON.parse(fs.readFileSync(runtime.dbConfigPath,'utf8'));
+ const owner=JSON.parse(fs.readFileSync(path.join(path.dirname(runtime.dbConfigPath),'owner.json'),'utf8'));
+ assert.ok(['RocketbrainDisposableMariaDbFixture-v1','RocketbrainDisposableOracleMysqlFixture-v1'].includes(owner.kind));
+ assert.equal(config.host,'127.0.0.1');
+ assert.equal(config.database,'rocketbrain_fixture');
+ const actor=await require('mysql2/promise').createConnection(config);
+ const name='rb_script_program_'+crypto.randomBytes(5).toString('hex');
+ const proc=quote(name+'_proc'),trigger=quote(name+'_trigger'),table=quote(name);
+ const workspace=vscode.workspace.workspaceFolders[0].uri.fsPath;
+ assert.equal(path.resolve(workspace),path.resolve(process.env.ROCKETBRAIN_JAVA_TEST_WORKSPACE));
+ const sourcePath=path.join(workspace,name+'.sql');
+ const sql=[
+  'DELIMITER $$',
+  'CREATE PROCEDURE '+proc+"(IN n INT) BEGIN IF n > 0 THEN SELECT 'marker $$', n; ELSE SELECT 0; END IF; END$$",
+  'DELIMITER //',
+  'CREATE TRIGGER '+trigger+' BEFORE INSERT ON '+table+" FOR EACH ROW BEGIN SET NEW.label=CONCAT(NEW.label,'//ok'); END//",
+  'DELIMITER ;', 'INSERT INTO '+table+' VALUES(1,:label);', 'SELECT label FROM '+table+' WHERE id=1;'
+ ].join('\n');
+ let sessionId;
+ try {
+  await actor.query('CREATE TABLE '+table+' (id INT PRIMARY KEY,label VARCHAR(80)) ENGINE=InnoDB');
+  await api.connectMysql(config);
+  fs.writeFileSync(sourcePath,'SELECT 1;', {flag:'wx'});
+  const document=await vscode.workspace.openTextDocument(vscode.Uri.file(sourcePath));
+  await vscode.window.showTextDocument(document);
+  sessionId=(await api.sqlScripts.describe(document)).sessionId;
+  await api.configureConsoleSession(sessionId,{readOnly:false});
+  const edit=new vscode.WorkspaceEdit();
+  edit.replace(document.uri,new vscode.Range(document.positionAt(0),document.positionAt(document.getText().length)),sql);
+  assert.equal(await vscode.workspace.applyEdit(edit),true);
+  assert.equal(await document.save(),true);
+  const description=await api.sqlScripts.describe(document);
+  assert.deepEqual(description.statements.slice(0,2).map(statement=>statement.program),['PROCEDURE','TRIGGER']);
+  assert.equal(description.statementCount,4);
+  const preview=await api.sqlScripts.preview(description.id,{label:{kind:'text',value:'native'}});
+  assert.equal(preview.requiresImplicitCommitApproval,true);
+  await assert.rejects(api.sqlScripts.run(preview.id),/acknowledge/);
+  const result=await api.sqlScripts.run(preview.id,{allowImplicitCommit:true});
+  assert.equal(result.state,'completed',JSON.stringify(result));
+  assert.deepEqual(result.statements[3].result.rows,[['native//ok']]);
+  const [[rows]]=await actor.query('CALL '+proc+'(7)');
+  assert.deepEqual(Object.values(rows[0]).map(String),['marker $$','7']);
+  const statement=await api.sqlScripts.openStatement(result.resultId,3);
+  assert.equal(statement.executedSql,false);
+  checks.push('The installed SQL editor reviewed compound DDL, approved its commit behavior and ran four exact boundaries with a bound value and actual trigger result.');
+  return {engine:runtime.dbEngine,statements:4,nativeReview:true,liveProcedure:true,liveTrigger:true,
+   boundAfterDelimiterReset:true,cachedResultNoReplay:true,ddlApproval:true};
+ }finally {
+  try { if(sessionId)await api.closeConsoleSession(sessionId); await api.disconnectMysql(); }
+  finally {
+   try { await actor.query('DROP TRIGGER IF EXISTS '+trigger); await actor.query('DROP PROCEDURE IF EXISTS '+proc); await actor.query('DROP TABLE IF EXISTS '+table); }
+   finally { try { await actor.end(); } finally { fs.rmSync(sourcePath,{force:true}); } }
+  }
+ }
+}
+module.exports={runSqlScriptChecks,runDelimiterScriptChecks};

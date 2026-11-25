@@ -87,6 +87,7 @@ function registerSqlScripts(context,vscode,{database}={}) {
       '-- This script is not one atomic transaction. Earlier successful changes can remain applied.',
       '-- Boundaries, mode, policy and bindings are checked; the server can still reject syntax, permissions or data.',
       ...(b.requiresImplicitCommitApproval?['-- Schema changes can implicitly commit earlier work and cannot be rolled back as a group.']:[]),
+      ...b.statements.filter(statement=>statement.program).map(statement=>'-- Statement '+(statement.index+1)+' creates a '+statement.program.toLowerCase()+'.'),
       ...(b.unboundedDml || []).map(({ index, command, hasLimit }) => '-- Statement ' + (index + 1) + ' uses ' +
         command + ' without an outer WHERE clause.' + (hasLimit ? ' A LIMIT is present.' : ' It can affect every target row.')),
       ...b.parameterDefinitions.map(p=>'-- Parameter '+(p.name||p.key)+': '+p.valueKind+' (value kept private)'),'',review.sql].join('\n');

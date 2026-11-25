@@ -26,6 +26,46 @@ live('LIVE SCRIPT: policy and binding failures in later statements produce no ea
  await assert.rejects(db.previewScript('INSERT INTO '+q(table)+" (id,label) VALUES(1,'never');DELIMITER $$\nCREATE PROCEDURE nope() BEGIN SELECT 1; END$$"),/supported|controls/);
  assert.equal(String((await actor.query('SELECT COUNT(*) AS n FROM '+q(table)))[0][0].n),'0');records.push({case:'whole-script-policy-and-binding-preflight',noUserWrites:true});
 }));
+live('LIVE SCRIPT: reviewed delimiter batches create compound procedures, functions and triggers',()=>fixture(async({db,actor,table})=>{
+ const proc=q(table+'_proc'),func=q(table+'_func'),trigger=q(table+'_trigger');
+ const sql=[
+  'DELIMITER $$',
+  'CREATE PROCEDURE '+proc+"(IN n INT) BEGIN IF n > 0 THEN SELECT 'literal $$:?' AS marker, n AS received; ELSE SELECT 0; END IF; END$$",
+  'DELIMITER //',
+  'CREATE FUNCTION '+func+'(n INT) RETURNS INT DETERMINISTIC NO SQL BEGIN RETURN n+1; END//',
+  'CREATE TRIGGER '+trigger+' BEFORE INSERT ON '+q(table)+" FOR EACH ROW BEGIN SET NEW.label=CONCAT(NEW.label,'//trigger'); END//",
+  'DELIMITER ;',
+  'INSERT INTO '+q(table)+' (id,label) VALUES(1,:label);',
+  'SELECT label,'+func+'(9) AS n FROM '+q(table)+' WHERE id=1;'
+ ].join('\r\n');
+ try{
+  await assert.rejects(db.describeScript(sql),/read\/write mode/);
+  await db.setReadOnly(false);
+  const description=await db.describeScript(sql);
+  assert.deepEqual(description.statements.map(item=>item.program??null),['PROCEDURE','FUNCTION','TRIGGER',null,null]);
+  assert.equal(description.parameterDefinitions[0].name,'label');
+  assert.ok(description.statements.every(item=>item.sql===sql.slice(item.start,item.end)));
+  assert.ok(!description.statements.some(item=>/^DELIMITER/m.test(item.sql)));
+  await db.begin();
+  await assert.rejects(db.previewScript(sql,{parameters:{label:text('fixture')}}),/existing transaction/);
+  await db.rollback();
+  const reviewed=await db.previewScript(sql,{parameters:{label:text('fixture')}});
+  assert.equal(reviewed.requiresImplicitCommitApproval,true);
+  await assert.rejects(db.runScript({reviewId:reviewed.reviewId}),/acknowledge/);
+  const [uncreated]=await actor.execute('SELECT ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE() AND ROUTINE_NAME=?',[table+'_proc']);
+  assert.equal(uncreated.length,0);
+  const result=await db.runScript({reviewId:reviewed.reviewId,allowImplicitCommit:true});
+  assert.equal(result.state,'completed',JSON.stringify(result));
+  assert.equal(result.completed,5);
+  assert.deepEqual(result.statements[4].result.rows,[['fixture//trigger',10]]);
+  const [[rows]]=await actor.query('CALL '+proc+'(7)');
+  assert.deepEqual(rows.map(row=>[row.marker,Number(row.received)]),[['literal $$:?',7]]);
+  records.push({case:'reviewed-compound-creation',completion:result.completed,exactRanges:true,
+   ddlApproval:true,liveProcedure:true,liveFunction:true,liveTrigger:true,binaryBindingAfterReset:true});
+ }finally{
+  for(const [type,name]of [['TRIGGER',trigger],['FUNCTION',func],['PROCEDURE',proc]])await actor.query('DROP '+type+' IF EXISTS '+name);
+ }
+}));
 live('LIVE SCRIPT: runtime errors stop after acknowledged autocommit writes without false atomicity',()=>fixture(async({db,actor,table})=>{
  await db.setReadOnly(false);const plan=await db.previewScript('INSERT INTO '+q(table)+" (id,label) VALUES(1,'acknowledged');SELECT missing_column FROM "+q(table)+';INSERT INTO '+q(table)+" (id,label) VALUES(2,'not-run');"),result=await db.runScript({reviewId:plan.reviewId});
  assert.equal(result.state,'failed');assert.equal(result.completed,1);assert.equal(result.failed,1);assert.equal(result.notRun,1);assert.equal(result.statements[1].error.code,'ER_BAD_FIELD_ERROR');assert.equal(result.atomic,false);assert.equal(result.autoRetried,false);assert.deepEqual((await actor.query('SELECT id,label FROM '+q(table)))[0].map(row=>[String(row.id),row.label]),[['1','acknowledged']]);records.push({case:'runtime-stop-non-atomic',completed:result.completed,failed:result.failed,notRun:result.notRun,earlierWriteAcknowledged:true});
