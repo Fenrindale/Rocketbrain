@@ -43,7 +43,8 @@ function normalizeProfile(value,{allowUnconfigured=false}={}){
 function password(value){if(value===undefined)return undefined;if(typeof value!=='string'||Buffer.byteLength(value)>16384||value.includes('\0'))throw fail('Use a database password under 16 KiB.');return value;}
 function sanitized(error){const safe=error?.code?.startsWith('ROCKETBRAIN_')?error:fail('The database connection could not be verified. Check the address, credentials, certificates and server availability.');const persisted=savedFailures.get(error);if(persisted)savedFailures.set(safe,persisted);return safe;}
 async function readPem(file){const actual=await fs.realpath(file),stat=await fs.stat(actual);if(!stat.isFile()||stat.size>2*1024*1024)throw fail('Certificate/key files must be regular files under 2 MiB.');return fs.readFile(actual,'utf8');}
-function createConnectionProfiles({state,secrets,connect,disconnect,getActiveProfile,isTrusted,createService,createTunnel=openTunnel}={}){
+function createConnectionProfiles({state,secrets,connect,disconnect,getActiveProfile,isTrusted,createService,createTunnel=openTunnel,
+ openProfileConsole,hasProfileConsole=()=>false}={}){
  const events=new EventEmitter(),records=new Map(),operations=new Set(),controllers=new Set();let disposed=false,busy=false,revision=0;const secretScope=state.get(SCOPE)||crypto.randomUUID();
  for(const saved of state.get(KEY,[])){try{if(records.size>=MAX)break;const p=normalizeProfile(saved.profile,{allowUnconfigured:true});if(records.has(p.id))continue;records.set(p.id,{profile:p,revision:Number.isInteger(saved.revision)?saved.revision:1,rememberPassword:saved.rememberPassword===true,verifiedAt:typeof saved.verifiedAt==='string'?saved.verifiedAt:null,observed:saved.observed||null});}catch{}}
  const trusted=()=>{if(disposed)throw fail('Database connection management is closed.');if(!isTrusted())throw fail('Trust this workspace before using saved database connections.');};
@@ -51,6 +52,9 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
  const secretKey=id=>'rocketbrain.database.'+secretScope+'.'+id;
  const dto=record=>({id:record.profile.id,profile:clone(record.profile),revision:record.revision,hasSavedPassword:record.rememberPassword,verifiedAt:record.verifiedAt,observed:record.observed?clone(record.observed):null});
  const list=()=>[...records.values()].sort((a,b)=>a.profile.group.localeCompare(b.profile.group)||a.profile.name.localeCompare(b.profile.name)).map(dto);
+ function requireClosedProfileConsoles(id) {
+  if(hasProfileConsole(id))throw fail('Close this profile’s dedicated SQL sessions before editing or removing it.');
+ }
  async function run(fn){trusted();if(busy)throw fail('Finish the current connection operation first.');busy=true;const ticket=revision,controller=new AbortController();controllers.add(controller);const operation=(async()=>{try{return await fn(ticket,controller.signal);}catch(error){throw sanitized(error);}finally{busy=false;controllers.delete(controller);events.emit('change');}})();operations.add(operation);try{return await operation;}finally{operations.delete(operation);}}
  async function credentials(profile,value){
   if(profile.auth){
@@ -85,8 +89,26 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   list,
   onDidChange(listener){events.on('change',listener);return{dispose(){events.off('change',listener);}};},
   test(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),pass=await credentials(p,input.password),result=await verify(p,pass,signal,true);guard(ticket);return result;});},
-  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection))throw fail('Disconnect this profile before changing its write protection.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&p.auth)throw fail('RDS IAM profiles use temporary tokens without saving a database password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal);else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal);trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
+  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);requireClosedProfileConsoles(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection))throw fail('Disconnect this profile before changing its write protection.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&p.auth)throw fail('RDS IAM profiles use temporary tokens without saving a database password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal);else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal);trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
   connect(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const effective=clone(record.profile);if(input.database!==undefined)effective.database=text(input.database,'schema',64);const pass=await credentials(effective,input.password);let prepared,transferred=false;try{prepared=await prepare(effective,pass,signal);guard(ticket);await connect(prepared.config);transferred=true;guard(ticket);return{connected:true,profile:clone(effective),credentialSaved:record.rememberPassword};}finally{if(!transferred)await prepared?.dispose();}});},
+  openDedicatedConsole(request) {
+   const input = clone(request);
+   return run(async (ticket, signal) => {
+    if (!openProfileConsole) throw fail('Dedicated profile consoles are unavailable.');
+    const record = records.get(input.id);
+    if (!record || input.revision !== record.revision) throw fail('The saved profile changed. Choose it again.');
+    const pass = await credentials(record.profile, input.password);
+    const prepared = await prepare(record.profile, pass, signal);
+    let transferred = false;
+    try {
+     guard(ticket);
+     const opened = await openProfileConsole(prepared.config);
+     transferred = true;
+     guard(ticket);
+     return opened;
+    } finally { if (!transferred) await prepared.dispose(); }
+   });
+  },
   schemas(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const pass=await credentials(record.profile,input.password),result=await verify(record.profile,pass,signal,true);guard(ticket);return result.schemas;});},
   federatedSelect(request) {
    const input = clone(request);
@@ -125,7 +147,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    });
   },
   disconnect(){return run(async()=>{await disconnect();return{disconnected:true};});},
-  remove(request){const input=clone(request);return run(async(ticket)=>{const record=records.get(input.id);if(!record)throw fail('The connection profile no longer exists.');if(input.expectedRevision!==record.revision)throw fail('This profile edit is stale. Reopen it.');if(getActiveProfile()?.id===input.id){if(input.disconnect!==true)throw fail('Disconnect the active profile before removing it.');await disconnect();}guard(ticket);const next=new Map(records);next.delete(input.id);await persist(next,[{id:input.id,value:undefined}]);return{removed:true};});},
+  remove(request){const input=clone(request);return run(async(ticket)=>{const record=records.get(input.id);if(!record)throw fail('The connection profile no longer exists.');if(input.expectedRevision!==record.revision)throw fail('This profile edit is stale. Reopen it.');requireClosedProfileConsoles(input.id);if(getActiveProfile()?.id===input.id){if(input.disconnect!==true)throw fail('Disconnect the active profile before removing it.');await disconnect();}guard(ticket);const next=new Map(records);next.delete(input.id);await persist(next,[{id:input.id,value:undefined}]);return{removed:true};});},
   exportProfiles(){
    trusted();
    const profiles=list().map(({profile})=>{

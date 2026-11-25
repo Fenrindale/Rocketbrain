@@ -43,6 +43,7 @@
     "onView:rocketbrain.javaProjects",
     "onView:rocketbrain.kotlinCoroutines",
     "onView:rocketbrain.connections",
+    "onFileSystem:rocketbrain-profile-sql",
     "onView:rocketbrain.kubernetes",
     "onNotebook:rocketbrain-sql-notebook",
     "onNotebook:rocketbrain-jupyter"
@@ -239,7 +240,7 @@
       { "command": "rocketbrain.java.captureJvmThreads", "title": "Capture JVM Threads", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.inspectJvmThreads", "title": "Inspect JVM Thread Snapshot", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.inspectJvmHeapHistogram", "title": "Inspect JVM Heap Histogram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
-      { "command": "rocketbrain.setTransactionIsolation", "title": "Set SQL Session Isolation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.setTransactionIsolation", "title": "Set SQL Session Isolation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && (rocketbrain.mysqlConnected || rocketbrain.profileConsole)" },
       { "command": "rocketbrain.sql.saveQuery", "title": "Save SQL Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -534,7 +535,7 @@
         "command": "rocketbrain.openSharedConsole",
         "title": "Open Shared SQL Console",
         "category": "Rocketbrain",
-        "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && editorLangId == sql"
+        "enablement": "isWorkspaceTrusted && (rocketbrain.mysqlConnected || rocketbrain.profileConsole) && editorLangId == sql"
       },
       {
         "command": "rocketbrain.jpa.observer.prepare",
@@ -894,6 +895,12 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.connections.openDedicatedConsole",
+        "title": "Open Dedicated Profile SQL Console",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.connections.test",
         "title": "Test Database Connection",
         "category": "Rocketbrain"
@@ -1055,7 +1062,7 @@
       "editor/context": [
         {
           "command": "rocketbrain.openSharedConsole",
-          "when": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "when": "editorLangId == sql && (rocketbrain.mysqlConnected || rocketbrain.profileConsole) && isWorkspaceTrusted",
           "group": "navigation"
         },
         {
@@ -1227,12 +1234,12 @@
         },
         {
           "command": "rocketbrain.setTransactionIsolation",
-          "when": "resourceLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "when": "resourceLangId == sql && (rocketbrain.mysqlConnected || rocketbrain.profileConsole) && isWorkspaceTrusted",
           "group": "rocketbrain@5"
         },
         {
           "command": "rocketbrain.sql.saveQuery",
-          "when": "resourceLangId == sql && isWorkspaceTrusted",
+          "when": "resourceLangId == sql && isWorkspaceTrusted && !rocketbrain.profileConsole",
           "group": "rocketbrain@6"
         },
         {
@@ -1242,27 +1249,27 @@
         },
         {
           "command": "rocketbrain.cancelQuery",
-          "when": "resourceLangId == sql && rocketbrain.sqlRunning && rocketbrain.mysqlConnected",
+          "when": "resourceLangId == sql && rocketbrain.sqlRunning && (rocketbrain.mysqlConnected || rocketbrain.profileConsole)",
           "group": "navigation"
         },
         {
           "command": "rocketbrain.consoleMode",
-          "when": "resourceLangId == sql && rocketbrain.mysqlConnected",
+          "when": "resourceLangId == sql && (rocketbrain.mysqlConnected || rocketbrain.profileConsole)",
           "group": "rocketbrain@1"
         },
         {
           "command": "rocketbrain.beginTransaction",
-          "when": "resourceLangId == sql && rocketbrain.mysqlConnected",
+          "when": "resourceLangId == sql && (rocketbrain.mysqlConnected || rocketbrain.profileConsole)",
           "group": "rocketbrain@2"
         },
         {
           "command": "rocketbrain.commit",
-          "when": "resourceLangId == sql && rocketbrain.mysqlConnected",
+          "when": "resourceLangId == sql && (rocketbrain.mysqlConnected || rocketbrain.profileConsole)",
           "group": "rocketbrain@3"
         },
         {
           "command": "rocketbrain.rollback",
-          "when": "resourceLangId == sql && rocketbrain.mysqlConnected",
+          "when": "resourceLangId == sql && (rocketbrain.mysqlConnected || rocketbrain.profileConsole)",
           "group": "rocketbrain@4"
         }
       ],
@@ -1358,6 +1365,11 @@
           "command": "rocketbrain.connections.connect",
           "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile",
           "group": "inline"
+        },
+        {
+          "command": "rocketbrain.connections.openDedicatedConsole",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile && isWorkspaceTrusted",
+          "group": "connection"
         },
         {
           "command": "rocketbrain.connections.test",

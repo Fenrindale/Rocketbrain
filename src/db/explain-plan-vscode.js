@@ -4,6 +4,7 @@ const { createHash, randomBytes, randomUUID } = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { statementAt } = require('../sql');
+const { isProfileConsole } = require('./profile-console-files');
 const { explanationHtml, comparisonHtml, seriesHtml } = require('./explain-plan-view');
 const { comparePlans, comparablePlans, validatePlanQuery } = require('./explain-plan');
 const { sampleCount, summarizeSeries, compareSeries, serializeSamples } = require('./explain-plan-series');
@@ -22,6 +23,7 @@ const MAX_PANELS = 8;
 const hash = text => createHash('sha256').update(text).digest('hex');
 
 function captureSource(document, selection) {
+  if (isProfileConsole(document)) throw Error('Switch the active database to this profile before reviewing an execution plan.');
   if (!document || document.isClosed || document.languageId !== 'sql' || !selection) {
     throw Error('Open a SQL editor and select a query or place the cursor in one.');
   }
