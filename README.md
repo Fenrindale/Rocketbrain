@@ -182,6 +182,8 @@ VSIX에서 `extension/dist/ide-mcp-server.js`를 추출하고, 같은 계정의 
 
 `.http` 파일에서 요청에 커서를 두고 **Send HTTP Request**를 실행합니다. `###`로 여러 요청을 구분하고, `@name = value` 또는 `rocketbrain.http.environments`에서 변수를 정의합니다. **Set HTTP Environment Secret**으로 저장한 값은 헤더나 본문에서 `{{secret.name}}`으로 참조합니다.
 
+요청 앞의 `# @derive query url-component "{{searchTerm}}"`은 검색어를 URL 구성 요소로 인코딩해 `{{query}}`에 넣습니다. `json-string`은 JSON 문자열로 이스케이프합니다. 파생 변수는 해당 요청의 일반 변수로 계산하며 Secret Storage 값에 접근하지 않습니다.
+
 gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 기준 `Proto: api/service.proto` 헤더를 사용합니다. 단일 요청은 JSON 객체, 클라이언트 스트림은 객체 배열을 입력합니다. 단항, 서버 스트림, 클라이언트 스트림, 양방향 스트림의 결과를 출력 창에서 확인할 수 있습니다. 현재는 자체 포함 `.proto` 파일을 사용합니다.
 
 **Review WebDAV Deployment**는 `rocketbrain.deploy.webdav`에 정의한 로컬·원격 폴더와 제외 패턴을 사용합니다. **Set WebDAV Password**로 필요한 비밀번호를 저장하고, 파일을 선택해 diff를 검토합니다. **Upload Reviewed WebDAV Files**는 비교한 ETag를 조건으로 전송하고 원격 파일이 바뀌면 충돌을 표시합니다. 기존 원격 폴더의 새 파일과 변경 파일을 업로드할 수 있습니다.
@@ -190,8 +192,11 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 @host = http://127.0.0.1:8080
 # @expect status 200
 # @expect json $.status == "UP"
+# @check healthy ["all",["gte","status",200],["lt","status",300],["eq","json:$.status","UP"]]
 GET {{host}}/actuator/health
 ```
+
+`# @check 이름 JSON식`을 요청 헤더 앞에 두면 여러 응답 조건을 한 검사로 묶을 수 있습니다. `all`, `any`, `not`과 `exists`, `eq`, `lt`, `lte`, `gt`, `gte`를 지원합니다. 값은 `status`, `header:헤더명`, `json:$.경로`에서 가져옵니다. 비교할 값이 없으면 비교 결과는 실패로 표시되고, 값의 부재는 `not`과 `exists`를 조합해 명시적으로 검사할 수 있습니다.
 
 응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI Description**은 Swagger 2.0과 OpenAPI 3.0·3.1의 JSON·YAML 작업을 읽습니다. 신뢰한 작업 공간에서 상대 경로로 연결한 경로 항목, 매개변수, 요청 본문과 스키마를 확인합니다. **Create HTTP Request from OpenAPI**로 요청 초안을 만들고, 환경과 매개변수를 채운 뒤 실행합니다. [OpenAPI 설명 상대 참조](https://spec.openapis.org/oas/v3.1.1.html#relative-references-in-api-description-uris)
 

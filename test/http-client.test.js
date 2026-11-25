@@ -94,3 +94,57 @@ test('response reads have a hard limit and respect cancellation',async t=>{
   try { await assert.rejects(send('/slow',{signal:controller.signal}),/cancelled/); }
   finally { clearTimeout(timer); }
 });
+
+test('named response checks combine exact JSON values, header presence and numeric bounds',async t=>{
+  const base=await fixture(t,(request,response)=>{
+    response.setHeader('X-Fixture','accepted');
+    response.end(request.url==='/invalid'?'oops':'{"count":2,"value":null,"big":9007199254740993}');
+  });
+  const conditions=[
+    '# @check accepted ["all",["gte","status",200],["lt","status",300],["gte","json:$.count",2],["eq","header:x-fixture","accepted"]]',
+    '# @check alternative ["any",["eq","json:$.missing",0],["eq","json:$.value",null]]',
+    '# @check absent ["not",["exists","json:$.missing"]]',
+    '# @check comparison ["not",["eq","json:$.missing",0]]',
+    '# @check unsafe-number ["not",["eq","json:$.big",1]]',
+    '# @check false-branch ["all",["eq","status",201],["eq","json:$.missing",0]]'
+  ];
+  const run=async endpoint=>sendRequest(await resolveRequest(requestAt(conditions.join('\n')+'\nGET '+base+endpoint,0),{},()=>{}));
+  const result=await run('/');
+  assert.deepEqual(result.assertions.map(({name,passed})=>[name,passed]),[
+    ['accepted',true],['alternative',true],['absent',true],['comparison',false],['unsafe-number',false],['false-branch',false]
+  ]);
+  assert.ok((await run('/invalid')).assertions.every(result=>!result.passed));
+});
+
+test('unsupported, duplicate and oversized HTTP response checks fail during request parsing',()=>{
+  const request=checks=>requestAt(`${checks}\nGET https://example.test`,0);
+  assert.throws(()=>request('# @check invalid ["exists","header:Set-Cookie"]'),/response selector/);
+  assert.throws(()=>request('# @check invalid ["exec","status","shell"]'),/supported operation/);
+  assert.throws(()=>request('# @check invalid ["gt","status",9007199254740993]'),/supported operation/);
+  assert.throws(()=>request('# @check invalid ["eq","status",200'),/valid JSON/);
+  assert.throws(()=>request('# @check same ["exists","status"]\n# @check same ["exists","status"]'),/distinct/);
+  assert.throws(()=>request('# @check huge '+JSON.stringify(['eq','header:example','x'.repeat(4096)])),/4 KiB/);
+  assert.throws(()=>request('# @check nested '+JSON.stringify(Array.from({length:9}).reduce(node=>['not',node],['exists','status']))),/supported operation/);
+});
+
+test('request-local transformations encode URL components and JSON and refuse secret and recursive sources',async t=>{
+  const term='한글 + ? & / " 🧪';
+  let observed;
+  const base=await fixture(t,async(request,response)=>{
+    const chunks=[];
+    for await (const chunk of request) chunks.push(chunk);
+    observed={url:request.url,body:JSON.parse(Buffer.concat(chunks).toString('utf8'))};
+    response.writeHead(204).end();
+  });
+  const input='@term = '+term+'\n# @derive query url-component "{{term}}"\n# @derive label json-string "{{term}}"\n'+
+    'POST '+base+'/?q={{query}}\nContent-Type: application/json\n\n{"term":{{label}}}';
+  assert.equal((await sendRequest(await resolveRequest(requestAt(input,0),{},()=>{}))).status,204);
+  assert.equal(new URL(observed.url,base).searchParams.get('q'),term);
+  assert.deepEqual(observed.body,{term});
+  const following=input+'\n### Next\nGET '+base+'/?q={{query}}';
+  await assert.rejects(resolveRequest(requestAt(following,following.lastIndexOf('GET')),{},()=>{}),/Missing HTTP variable/);
+  const bad=expression=>resolveRequest(requestAt(`# @derive query url-component ${expression}\nGET ${base}/{{query}}`,0),{},()=>assert.fail('read a secret'));
+  await assert.rejects(bad('"{{secret.key}}"'),/Secret variables/);
+  await assert.rejects(bad('"{{query}}"'),/recursive reference/);
+  assert.throws(()=>requestAt('@query = literal\n# @derive query json-string "x"\nGET '+base,0),/separate names/);
+});

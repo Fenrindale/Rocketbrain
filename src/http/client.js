@@ -22,6 +22,7 @@ const headerPattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const variable = /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/;
 const controlledHeaders = new Set(['host','content-length','connection','transfer-encoding','expect','upgrade']);
 const responseSecrets = new Set(['set-cookie','www-authenticate','proxy-authenticate','authentication-info']);
+const jsonPathPattern = /^\$(?:\.[A-Za-z_][A-Za-z0-9_-]*|\[(?:0|[1-9][0-9]{0,5})\]){0,16}$/;
 const bytes = input => Buffer.byteLength(input,'utf8');
 
 function splitRequests(text) {
@@ -43,6 +44,7 @@ function requestAt(text, offset) {
   const selected = available.at(-1);
   if (!selected) throw Error('Place the cursor inside a request.');
   const variables = new Map();
+  const derivations = new Map();
   const assertions = [];
   let requestLine, bodyStart = selected.source.length, marker = 0;
   const headers = [];
@@ -56,9 +58,29 @@ function requestAt(text, offset) {
     const raw = line[0].replace(/\r?\n$/, '');
     const content = raw.trim();
     const end = line.index + line[0].length;
+    if (/^#\s*@derive(?:\s|$)/i.test(content)) {
+      const definition=/^#\s*@derive\s+(\S+)\s+(url-component|json-string)\s+(.+)$/i.exec(content);
+      const [,name,op,source]=definition || [];
+      if (!definition || requestLine || !variable.test(name) || name.startsWith('secret.') || derivations.has(name)) {
+        throw Error('Define distinct @derive variables before the request line.');
+      }
+      let template;
+      try { template=JSON.parse(source); } catch { throw Error('Use a JSON string in @derive.'); }
+      if (typeof template!=='string' || bytes(template)>8192) throw Error('Use a JSON string of at most 8 KiB in @derive.');
+      derivations.set(name,{op:op.toLowerCase(),template});
+      continue;
+    }
     const expectation = /^#\s*@expect\s+(.+)$/i.exec(content);
     if (expectation) {
       assertions.push(parseAssertion(expectation[1]));
+      continue;
+    }
+    if (/^#\s*@check(?:\s|$)/i.test(content)) {
+      const check = /^#\s*@check\s+([A-Za-z][A-Za-z0-9_-]{0,63})\s+(.+)$/i.exec(content);
+      if (!check || assertions.some(item=>item.kind==='check' && item.name===check[1])) {
+        throw Error('Use a distinct @check name followed by a JSON expression.');
+      }
+      assertions.push({kind:'check',name:check[1],expression:parseResponseCheck(check[2])});
       continue;
     }
     if (/^(?:#|\/\/)/.test(content)) continue;
@@ -92,13 +114,14 @@ function requestAt(text, offset) {
     headers.push([field,raw.slice(separator+1).trim()]);
   }
   if (!requestLine) throw Error('Place the cursor inside a request.');
-  if (headers.length>40 || assertions.length>32 || variables.size>64) throw Error('Use at most 40 headers, 32 assertions and 64 local variables.');
+  if ([...derivations.keys()].some(name=>variables.has(name))) throw Error('Use separate names for local and derived HTTP variables.');
+  if (headers.length>40 || assertions.length>32 || variables.size+derivations.size>64) throw Error('Use at most 40 headers, 32 assertions and 64 local variables.');
   const body = selected.source.slice(bodyStart);
   if (body && ['GET','HEAD'].includes(requestLine.method)) throw Error('GET and HEAD requests use no body.');
   if (requestLine.method==='WEBSOCKET' && (body.trim() || assertions.length)) {
     throw Error('Open the WebSocket first, then send messages from its workbench commands.');
   }
-  return { ...requestLine, headers, body, assertions, variables, start:marker };
+  return { ...requestLine, headers, body, assertions, variables, derivations, start:marker };
 }
 
 function parseAssertion(source) {
@@ -108,12 +131,72 @@ function parseAssertion(source) {
   if (!expression) throw Error('Use status, header or JSON equality in @expect.');
   const kind = expression[1].toLowerCase(), name = expression[2];
   const valid = kind==='header' ? headerPattern.test(name) && !responseSecrets.has(name.toLowerCase())
-    : /^\$(?:\.[A-Za-z_][A-Za-z0-9_-]*|\[(?:0|[1-9][0-9]{0,5})\]){0,16}$/.test(name);
+    : jsonPathPattern.test(name);
   if (!valid) throw Error('Select an observable response header or a simple JSON path.');
   let value;
   try { value=JSON.parse(expression[3]); } catch { throw Error('Use a JSON literal for equality assertions.'); }
   if (kind==='header' && typeof value!=='string') throw Error('Use a string when testing a response header.');
   return { kind,name,value };
+}
+
+const numericChecks = new Map([
+  ['lt',(actual,expected)=>actual<expected], ['lte',(actual,expected)=>actual<=expected],
+  ['gt',(actual,expected)=>actual>expected], ['gte',(actual,expected)=>actual>=expected]
+]);
+const isExactNumber = value => typeof value==='number' && Number.isFinite(value) &&
+  (!Number.isInteger(value) || Number.isSafeInteger(value));
+
+function parseResponseCheck(source) {
+  if (bytes(source)>4096) throw Error('HTTP response checks are limited to 4 KiB each.');
+  let expression, nodes=0;
+  try { expression=JSON.parse(source); } catch { throw Error('Use a valid JSON expression in @check.'); }
+  const invalid=()=>{ throw Error('Use a supported operation and response selector in @check.'); };
+  function validate(node,depth) {
+    if (!Array.isArray(node) || ++nodes>64 || depth>8) invalid();
+    const [op,selector,expected]=node;
+    if (op==='all' || op==='any') {
+      if (node.length<2 || node.length>17) invalid();
+      for (const child of node.slice(1)) validate(child,depth+1);
+      return;
+    }
+    if (op==='not' && node.length===2) { validate(selector,depth+1); return; }
+    if (typeof selector!=='string') invalid();
+    const header=selector.startsWith('header:') && selector.slice(7);
+    if (selector!=='status' && !(selector.startsWith('json:') && jsonPathPattern.test(selector.slice(5))) &&
+        !(header && headerPattern.test(header) && !responseSecrets.has(header.toLowerCase()))) invalid();
+    if (op==='exists' && node.length===2) return;
+    if (node.length!==3) invalid();
+    if (numericChecks.has(op) && isExactNumber(expected) && !header) return;
+    if (op==='eq' && (expected===null || ['string','boolean'].includes(typeof expected) || isExactNumber(expected))) return;
+    invalid();
+  }
+  validate(expression,1);
+  return expression;
+}
+
+function checkResponse(node,response,json) {
+  const [op,selector,expected]=node;
+  if (op==='not') {
+    const value=checkResponse(selector,response,json);
+    return value===undefined ? undefined : !value;
+  }
+  if (op==='all' || op==='any') {
+    const decisive=op==='any';
+    let unknown=false;
+    for (const child of node.slice(1)) {
+      const value=checkResponse(child,response,json);
+      if (value===decisive) return decisive;
+      unknown ||= value===undefined;
+    }
+    return unknown ? undefined : !decisive;
+  }
+  if (selector.startsWith('json:') && json===undefined) return undefined;
+  const actual=selector==='status' ? response.status : selector.startsWith('header:') ?
+    response.headers.get(selector.slice(7)) ?? undefined : jsonValue(json,selector.slice(5));
+  if (op==='exists') return actual!==undefined;
+  if (actual===undefined || typeof actual==='number' && !isExactNumber(actual)) return undefined;
+  if (op==='eq') return isDeepStrictEqual(actual,expected);
+  return isExactNumber(actual) ? numericChecks.get(op)(actual,expected) : undefined;
 }
 
 async function graphQLBody(body, expand) {
@@ -191,6 +274,11 @@ async function resolveRequest(request, environment, readSecret, {schema=false}={
           secrets.set(name,value);
         }
         result += secrets.get(name);
+      } else if (request.derivations?.has(name)) {
+        const {op,template}=request.derivations.get(name);
+        const expanded=await expand(template,false,[...chain,name]);
+        try { result+=op==='url-component' ? encodeURIComponent(expanded) : JSON.stringify(expanded); }
+        catch { throw Error('Use valid Unicode text in an HTTP URL component.'); }
       } else {
         if (!values.has(name)) throw Error('Missing HTTP variable ' + name + '.');
         result += await expand(values.get(name),allowSecret,[...chain,name]);
@@ -315,10 +403,11 @@ async function sendRequest(request, { signal,fetcher=fetch } = {}) {
     throw Error('Unable to send the HTTP request or read its response.',{cause:error});
   }
   let json;
-  if (!captured.truncated && (request.graphql || request.assertions.some(item=>item.kind==='json'))) {
+  if (!captured.truncated && (request.graphql || request.assertions.some(item=>item.kind==='json' || item.kind==='check'))) {
     try { json=JSON.parse(captured.body); } catch { /* JSON assertions cannot pass on a non-JSON body. */ }
   }
-  const assertions=request.assertions.map(({kind,name,value})=>{
+  const assertions=request.assertions.map(({kind,name,value,expression})=>{
+    if (kind==='check') return {kind,name,passed:checkResponse(expression,response,json)===true};
     const actual=kind==='status'?response.status:kind==='header'?response.headers.get(name):jsonValue(json,name);
     return { kind,name,passed:actual!==undefined && isDeepStrictEqual(actual,value) };
   });
