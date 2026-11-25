@@ -2,6 +2,7 @@
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { independentJavaExecutable, argumentString } = require('./debug-runtime');
+const { applyManagedSpringLaunch } = require('./spring-launch');
 const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
 const { createExceptionControls } = require('./debug-exceptions');
@@ -138,6 +139,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     config.javaExec = independentJavaExecutable(config.javaExec);
     config.cwd = config.cwd || folder?.uri.fsPath || path.dirname(active?.uri.fsPath || config.javaExec);
     config.console = config.console || 'internalConsole'; config.encoding = config.encoding || 'UTF-8'; config.sourcePaths = config.sourcePaths || [];
+    applyManagedSpringLaunch(config);
     config.args = argumentString(config.args); config.vmArgs = argumentString(config.vmArgs);
     return token?.isCancellationRequested ? undefined : config;
   }

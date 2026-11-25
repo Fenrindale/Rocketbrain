@@ -945,6 +945,11 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.java.workbench.configureSpringRun",
+        "title": "Configure Spring Boot Run",
+        "category": "Rocketbrain"
+      },
+      {
         "command": "rocketbrain.java.workbench.configureRun",
         "title": "Add Java Run Configuration",
         "category": "Rocketbrain"
@@ -1490,6 +1495,11 @@
           "command": "rocketbrain.java.workbench.tasks",
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
           "group": "project"
+        },
+        {
+          "command": "rocketbrain.java.workbench.configureSpringRun",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
+          "group": "2_run@1"
         },
         {
           "command": "rocketbrain.java.workbench.configureRun",

@@ -81,6 +81,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 Spring Boot 설정 파일에서 현재 모듈의 생성 메타데이터로 설정 키를 완성하고 Java 선언을 엽니다. 여러 YAML 문서와 프로필별 출처를 지원합니다. [Spring 설정 메타데이터](docs/spring-configuration-metadata.md)
 
+**Configure Spring Boot Run**에서 프로필과 설정별 전달 출처를 정한 뒤 Java Projects의 Run·Debug로 실행합니다. [Spring Boot 실행 설정](docs/spring-boot-run-configurations.md)
+
 **Inspect Spring Security Filter Trace**는 관찰을 켠 로컬 앱에서 요청별 매처 순서, 선택된 체인, 실제 실행에 들어간 필터와 관찰된 인가 결과를 표시합니다. 메서드 추적을 켜면 호출 전·후 판단과 실제 역할 비교 근거도 확인할 수 있습니다. [Spring Security 추적 설정](docs/spring-security-filter-trace.md)
 
 ### Quarkus Maven
