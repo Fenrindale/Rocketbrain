@@ -4,19 +4,28 @@ const { independentJavaExecutable, argumentString } = require('./debug-runtime')
 const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
 const { createExceptionControls } = require('./debug-exceptions');
+const { createSmartStep, mergeStepFilters } = require('./debug-step');
+const { createDebugProcessDiscovery, processId } = require('./debug-processes');
 const DEBUG_TYPE = 'rocketbrain-java';
+const PROCESS_SELECTION = '__rocketbrainJavaProcessSelection';
+const resumeCommands = new Set(['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue', 'restart',
+  'restartFrame', 'goto', 'terminate', 'disconnect']);
 
 function registerJavaDebugger(vscode, api, output, request) {
   const sessions = new Map(); let disposed = false;
   function record(session) {
-    if (!sessions.has(session.id)) sessions.set(session.id, { session, state: 'starting', buildVersion: 0, appliedVersion: 0, hcrEvents: [] });
+    if (!sessions.has(session.id)) sessions.set(session.id, { session, state: 'starting', stopVersion: 0, buildVersion: 0, appliedVersion: 0, hcrEvents: [] });
     return sessions.get(session.id);
   }
   function observe(session, message) {
     const info = sessions.get(session.id); if (!info) return;
     if (message.type === 'response' && message.command === 'initialize' && message.success) info.capabilities = message.body;
+    if (message.type === 'response' && info.resuming !== undefined && info.resuming === message.request_seq) {
+      if (message.success && info.state === 'stopped') info.state = 'running';
+      info.resuming = undefined;
+    }
     if (message.type === 'event') {
-      if (message.event === 'stopped') { info.state = 'stopped'; info.threadId = message.body?.threadId; }
+      if (message.event === 'stopped') { info.state = 'stopped'; info.threadId = message.body?.threadId; info.stopVersion++; info.resuming = undefined; }
       if (message.event === 'continued') info.state = 'running';
       if (message.event === 'terminated') info.state = 'terminated';
       if (message.event === 'hotcodereplace') {
@@ -27,6 +36,10 @@ function registerJavaDebugger(vscode, api, output, request) {
     }
   }
   const ensureTrusted = () => { if (disposed) throw new Error('Java debugger is disposed.'); if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before running or attaching Java code.'); };
+  const discovery = createDebugProcessDiscovery({
+    javaHome: () => api.getState().javaHome || vscode.workspace.getConfiguration?.('rocketbrain.java').get('javaHome'),
+    trusted: ensureTrusted
+  });
   const breakpoints = createJavaBreakpointTools(vscode,{
     request,ensureTrusted,isSupported:session => session.type === DEBUG_TYPE &&
       sessions.get(session.id)?.capabilities?.supportsBreakpointLocationsRequest === true
@@ -52,11 +65,26 @@ function registerJavaDebugger(vscode, api, output, request) {
     run: runReady, ensureTrusted, engineState: () => api.getState(), output,
     hasSessions: () => [...sessions.values()].some(info => info.state !== 'terminated')
   });
+  const smartStep = createSmartStep(vscode, { getState: id => sessions.get(id), ensureTrusted });
   async function resolve(folder, value, token) {
     ensureTrusted();
     const config = { ...value, type: DEBUG_TYPE, name: value.name || 'Rocketbrain Java', request: value.request || 'launch' };
     if (token?.isCancellationRequested) return undefined;
+    const stepFilters = mergeStepFilters(vscode.workspace.getConfiguration?.('rocketbrain.java', folder?.uri).get('stepFilters'), value.stepFilters);
+    if (Object.keys(stepFilters).length || value.stepFilters) config.stepFilters = stepFilters;
     if (config.request === 'attach') {
+      if (config.processId !== undefined) {
+        if (value.hostName !== undefined || value.port !== undefined) throw Error('Choose either a local process ID or a host and port.');
+        const pid = processId(config.processId);
+        const reviewed = config[PROCESS_SELECTION];
+        if (reviewed && reviewed.pid !== pid) throw Error('The selected Java process ID changed.');
+        const selected = await discovery.resolve(reviewed || pid, token);
+        if (token?.isCancellationRequested) return undefined;
+        config.hostName = selected.hostName;
+        config.port = selected.port;
+        delete config.processId;
+        delete config[PROCESS_SELECTION];
+      }
       config.hostName = config.hostName || '127.0.0.1'; config.port = config.port === undefined ? 5005 : Number(config.port);
       if (typeof config.hostName !== 'string' || !config.hostName.trim() || !Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Attach requires a hostName and TCP port from 1 to 65535.');
       return config;
@@ -104,9 +132,30 @@ function registerJavaDebugger(vscode, api, output, request) {
     await api.start();
     await exceptions.sync();
     const port = await runReady('vscode.java.startDebugSession'); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Java engine returned an invalid debugger port.');
-    record(session);
-    return new vscode.DebugAdapterInlineImplementation(new JavaDebugAdapter(vscode, port, message => observe(session, message), output));
+    const info = record(session);
+    const adapter = new JavaDebugAdapter(vscode, port, message => observe(session, message), output, message => {
+      if (message.type !== 'request') return;
+      if (resumeCommands.has(message.command)) { info.stopVersion++; info.resuming = message.seq; }
+      if (message.command === 'redefineClasses') info.stopVersion++;
+    });
+    return new vscode.DebugAdapterInlineImplementation(adapter);
   } };
+  async function attachProcess(selection, { folder, projectName, sourcePaths, name } = {}) {
+    ensureTrusted();
+    const reviewed = selection && typeof selection === 'object' ? selection : undefined;
+    const pid = processId(reviewed?.pid ?? selection);
+    if (!folder) {
+      const uri = vscode.window.activeTextEditor?.document.uri || vscode.workspace.workspaceFolders?.[0]?.uri;
+      if (uri) folder = vscode.workspace.getWorkspaceFolder(uri);
+    }
+    // An external JVM is already running its own bytecode. Attaching is
+    // independent of local editor saves, including unrelated untitled editors.
+    return vscode.debug.startDebugging(folder, {
+      type: DEBUG_TYPE, request: 'attach', name: name || 'Attach to Java PID ' + pid,
+      processId: pid, projectName, sourcePaths,
+      ...(reviewed ? { [PROCESS_SELECTION]: { pid, startedAt: reviewed.startedAt, hostName: reviewed.hostName, port: reviewed.port } } : {})
+    }, { suppressSaveBeforeStart: true });
+  }
   async function hotCodeReplace(sessionId) {
     ensureTrusted();
     if (vscode.workspace.getConfiguration?.('rocketbrain.java').get('hotCodeReplace', 'manual') === 'never') throw new Error('Hot code replace is disabled in Rocketbrain Java settings.');
@@ -138,6 +187,21 @@ function registerJavaDebugger(vscode, api, output, request) {
     catch (error) { void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return false; }
   }),
   breakpointCommand('rocketbrain.java.configureExceptionBreakpoints', () => exceptions.edit()),
+  breakpointCommand('rocketbrain.java.smartStepInto', () => smartStep.choose()),
+  breakpointCommand('rocketbrain.java.attachProcess', async () => {
+    const candidates = await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification, title: 'Finding local Java debug processes', cancellable: true
+    }, async (_, token) => {
+      try { return await discovery.list(token); }
+      catch (error) { if (!token.isCancellationRequested) throw error; }
+    });
+    if (!candidates) return;
+    if (!candidates.length) throw Error('No local Java process is listening for JDWP on 127.0.0.1.');
+    const chosen = await vscode.window.showQuickPick(candidates.map(candidate => ({
+      label: candidate.label, description: 'PID ' + candidate.pid, detail: candidate.hostName + ':' + candidate.port, candidate
+    })), { title: 'Attach to Local Java Process' });
+    if (chosen) return attachProcess(chosen.candidate);
+  }),
   breakpointCommand('rocketbrain.java.addMethodBreakpoint',() => breakpoints.addMethod(activeSelection())),
   breakpointCommand('rocketbrain.java.addInlineBreakpoints',async () => {
     const report = await breakpoints.inspectInline(activeSelection());
@@ -146,7 +210,10 @@ function registerJavaDebugger(vscode, api, output, request) {
     })),{title:'Add Java Inline Breakpoints',canPickMany:true});
     if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
-  return { breakpoints,exceptions,hotCodeReplace, getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; }, async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); }, dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
+  return { breakpoints, exceptions, smartStep, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
+    getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; },
+    async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); },
+    dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
 }
 
 module.exports = { DEBUG_TYPE, registerJavaDebugger };

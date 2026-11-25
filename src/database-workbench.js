@@ -658,6 +658,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     schema: () => structuredClone(state.schema),
     catalogSnapshot:()=>analysisMetadata()?structuredClone(analysisMetadata()):null,
     liveCatalogSnapshot:()=>state.mysql&&!state.offlineMetadata&&state.metadata?structuredClone(state.metadata):null,
+    liveCatalogIdentity:()=>state.mysql&&!state.disposed&&!state.switching&&state.metadata&&state.tableLayoutConnection
+      ? { connection:state.tableLayoutConnection,epoch:state.epoch,database:state.metadata.database } : null,
     refreshObjects: ({ names } = {}) => {
       if (!names) throw Error('Select tables or views to refresh.');
       return refreshLiveObjects(names);
@@ -955,6 +957,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     savedResultFilters: id => results.savedFilters(id),
     saveResultFilter: (id, modelId, name) => results.saveFilterPreset(id, modelId, name),
     removeResultFilter: (id, modelId, name) => results.removeFilterPreset(id, modelId, name),
+    savedResultSorts: id => results.savedSorts(id),
+    saveResultSort: (id, modelId, name) => results.saveSortPreset(id, modelId, name),
+    removeResultSort: (id, modelId, name) => results.removeSortPreset(id, modelId, name),
     showResults:()=>results.show(),
     openTableSnapshot,
     async configureConsoleSession(sessionId,{readOnly,autocommit}={}) {

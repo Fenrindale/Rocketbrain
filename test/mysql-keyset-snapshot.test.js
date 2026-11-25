@@ -13,15 +13,17 @@ test('keyset continuation uses exact casts and nullable mixed directions',() => 
     columnDefinition(['id','bigint unsigned','NO',null,'PRI','']),
     columnDefinition(['rank_value','decimal(30,10)','YES',null,'',''])
   ];
-  const plan=browseQuery({name:'table',columns},{pageSize:2,sort:[{column:'rank_value',direction:'desc'}]},'schema',false,
+  const plan=browseQuery({name:'table',columns},{pageSize:2,sort:[{column:'rank_value',direction:'desc'}]},'schema',false,{},
     ['12345678901234567890.0123456789','9007199254740993']);
   assert.match(plan.sql,/WHERE .*rank_value.*< CAST\(\? AS DECIMAL\(30,10\)\) OR .*rank_value.* IS NULL/);
   assert.match(plan.sql,/id.*> CAST\(\? AS UNSIGNED\)/);
   assert.doesNotMatch(plan.sql,/\bOFFSET\b/);
   assert.deepEqual(plan.parameters,['12345678901234567890.0123456789','12345678901234567890.0123456789','9007199254740993']);
-  const nullable=browseQuery({name:'table',columns},{sort:[{column:'rank_value',direction:'asc'}]},'schema',false,[null,'9']);
+  const nullable=browseQuery({name:'table',columns},{sort:[{column:'rank_value',direction:'asc'}]},'schema',false,{},[null,'9']);
   assert.match(nullable.sql,/IS NOT NULL/);
   assert.deepEqual(nullable.parameters,['9']);
+  assert.throws(() => browseQuery({name:'table',columns},
+    {sort:[{column:'rank_value',direction:'asc',nulls:'last'}]},'schema',false,{},[]), /default-ordered scalar/);
 });
 
 async function ownedGridFixture() {

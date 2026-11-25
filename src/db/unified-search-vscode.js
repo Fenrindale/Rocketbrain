@@ -134,7 +134,7 @@ function coverageNarrative(report) {
   return lines.join('\n');
 }
 
-function registerUnifiedSearch(context, vscode, { database, objectSources }) {
+function registerUnifiedSearch(context, vscode, { database, objectSources, schemaCatalog }) {
   const reports = new Map();
   let generation = 0, disposed = false, searching = false;
 
@@ -217,11 +217,13 @@ function registerUnifiedSearch(context, vscode, { database, objectSources }) {
       after = visible.next;
     }
     guard(undefined, frame);
-    const selection = await vscode.window.showQuickPick(schemas, {
+    const catalogSchemas = new Set(schemaCatalog?.selection()?.schemas.slice(0, limits.schemas) ?? []);
+    const choices = schemas.map(label => ({ label, picked: catalogSchemas.has(label) }));
+    const selection = await vscode.window.showQuickPick(choices, {
       title: 'Choose Up to Eight Account-Visible Schemas', placeHolder: 'Narrow the search to selected schemas', canPickMany: true });
     guard(undefined, frame);
     if (selection?.length > limits.schemas) throw Error('Choose up to eight visible schemas.');
-    return selection;
+    return selection?.map(item => item.label);
   }
 
   async function interactive() {

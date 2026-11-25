@@ -122,4 +122,4 @@ function createExceptionControls(vscode, { run, ensureTrusted, engineState, hasS
   return { get, update, edit, sync, dispose() { listener?.dispose(); } };
 }
 
-module.exports = { createExceptionControls, exceptionPolicy, debugSettings };
+module.exports = { createExceptionControls, exceptionPolicy, debugSettings, classFilter };

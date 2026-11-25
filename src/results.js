@@ -4,6 +4,7 @@ const { spreadsheetText } = require('./sql');
 const { createResultExport } = require('./db/result-export');
 const { createResultLayouts, resultTableKey } = require('./db/result-layouts');
 const { createResultFilters, filterName } = require('./db/result-filters');
+const { createResultSorts, sortPresetName } = require('./db/result-sorts');
 const { analyzeResult, numericColumns } = require('./db/result-analysis');
 const { mapResult, mapColumns } = require('./db/result-map');
 const { compareDatasets: compareCaptures, selectUpdates } = require('./db/dataset-comparison');
@@ -23,6 +24,7 @@ class ResultsView {
     this.resultSequence = 0;
     this.layouts = createResultLayouts(context.workspaceState);
     this.filters = createResultFilters(context.workspaceState);
+    this.sorts = createResultSorts(context.workspaceState);
     this.layoutKeys = new WeakMap();
   }
   resolveWebviewView(view) {
@@ -41,7 +43,7 @@ class ResultsView {
 <section id="result-layout" aria-label="Result view options" hidden><div id="result-row-navigation" hidden><button id="result-row-previous">Previous Row</button><span id="result-row-status" role="status"></span><button id="result-row-next">Next Row</button></div><button id="result-columns" aria-expanded="false">Columns</button></section>
 <section id="result-column-panel" aria-label="Result columns" hidden><div id="result-column-list"></div><button id="result-column-reset">Reset Columns</button></section>
 <form id="insert-export" hidden><label>Table <input id="export-table" required maxlength="64" autocomplete="off" spellcheck="false"></label><label>Schema <input id="export-schema" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Optional"></label><label>Columns <input id="export-columns" autocomplete="off" spellcheck="false" placeholder="Optional JSON array in query order"></label><button type="submit">Save INSERT Script</button><button id="export-cancel" type="button">Cancel</button></form>
-<section id="browse-tools" aria-label="Server table browsing" hidden><div class="browse-navigation"><button id="page-previous">Previous Page</button><span id="page-label"></span><button id="page-next">Next Page</button><label>Rows <select id="page-size" aria-label="Rows per page"><option>25</option><option>50</option><option>100</option><option selected>200</option><option>500</option></select></label><button id="browse-options" aria-expanded="false">Sort and Filter</button></div><form id="browse-form" hidden><div><strong>Sort columns</strong><div id="sort-rules"></div><button id="add-sort" type="button">Add Sort</button></div><div id="filter-presets" class="browse-actions" hidden><label>Saved filter <select id="saved-filter" aria-label="Saved filter"></select></label><button id="load-filter" type="button">Load Filter</button><button id="save-filter" type="button">Save Applied Filters</button><button id="remove-filter" type="button">Remove Saved Filter</button></div><div id="column-search" class="browse-rule"><label>Search column <select id="browse-search-column"></select></label><input id="browse-search-text" aria-label="Column search value" type="text" autocomplete="off" spellcheck="false"><button id="browse-search-add" type="button">Add Search Rule</button></div><div><strong>Filters (top-level conditions all match)</strong><div id="filter-rules"></div><div class="browse-actions"><button id="add-filter" type="button">Add Filter</button><button id="add-filter-group" type="button">Add Filter Group</button></div></div><div class="browse-actions"><button id="apply-browse" type="submit">Apply Sort and Filters</button><button id="clear-browse" type="button">Clear Sort and Filters</button></div></form><div id="browse-status" role="status"></div></section>
+<section id="browse-tools" aria-label="Server table browsing" hidden><div class="browse-navigation"><button id="page-previous">Previous Page</button><span id="page-label"></span><button id="page-next">Next Page</button><label>Rows <select id="page-size" aria-label="Rows per page"><option>25</option><option>50</option><option>100</option><option selected>200</option><option>500</option></select></label><button id="browse-options" aria-expanded="false">Sort and Filter</button></div><form id="browse-form" hidden><div><strong>Sort columns</strong><div id="sort-rules"></div><button id="add-sort" type="button">Add Sort</button></div><div id="sort-presets" class="browse-actions" hidden><label>Saved sort <select id="saved-sort" aria-label="Saved sort"></select></label><button id="load-sort" type="button">Load Sort</button><button id="save-sort" type="button">Save Applied Sort</button><button id="remove-sort" type="button">Remove Saved Sort</button></div><div id="filter-presets" class="browse-actions" hidden><label>Saved filter <select id="saved-filter" aria-label="Saved filter"></select></label><button id="load-filter" type="button">Load Filter</button><button id="save-filter" type="button">Save Applied Filters</button><button id="remove-filter" type="button">Remove Saved Filter</button></div><div id="column-search" class="browse-rule"><label>Search column <select id="browse-search-column"></select></label><input id="browse-search-text" aria-label="Column search value" type="text" autocomplete="off" spellcheck="false"><button id="browse-search-add" type="button">Add Search Rule</button></div><div><strong>Filters (top-level conditions all match)</strong><div id="filter-rules"></div><div class="browse-actions"><button id="add-filter" type="button">Add Filter</button><button id="add-filter-group" type="button">Add Filter Group</button></div></div><div class="browse-actions"><button id="apply-browse" type="submit">Apply Sort and Filters</button><button id="clear-browse" type="button">Clear Sort and Filters</button></div></form><div id="browse-status" role="status"></div></section>
 <section id="edit-tools" aria-label="Table editing" hidden><button id="enable-edit">Enable Editing</button><button id="restore-browsing" title="Roll back this session and switch to read-only browsing. Commit first to keep applied changes." hidden>Roll Back and Browse</button><button id="add-row">Add Row</button><button id="paste-cells">Paste Cells</button><button id="import-text">Import CSV/TSV</button><button id="import-file">Choose CSV/TSV File</button><button id="import-xlsx">Choose XLSX File</button><button id="discard">Discard Draft</button><button id="review">Review SQL</button><button id="apply">Apply Reviewed Changes</button><button id="commit">Commit</button><button id="rollback">Roll Back</button><button id="reload">Reload</button><span id="draft-count"></span></section>
 <div id="edit-status" role="status" aria-live="polite" hidden></div>
 <section id="review-panel" aria-label="SQL change review" hidden><strong>Review SQL and bound values</strong><pre id="review-sql"></pre></section>
@@ -91,6 +93,13 @@ class ResultsView {
         if (name !== undefined) await this.saveFilterPreset(record.id, msg.modelId, name);
       } else if (msg.type === 'removeFilterPreset') {
         await this.removeFilterPreset(record.id, msg.modelId, msg.name);
+      } else if (msg.type === 'saveSortPreset') {
+        if (typeof msg.modelId !== 'string' || !this.sortRecord(record.id, msg.modelId)) throw Error('Choose the current named table and its applied sort.');
+        const name = await v.window.showInputBox({ title: 'Save the applied table sort', value: typeof msg.name === 'string' ? msg.name : '',
+          ignoreFocusOut: true, validateInput(value) { try { sortPresetName(value); } catch (error) { return error.message; } } });
+        if (name !== undefined) await this.saveSortPreset(record.id, msg.modelId, name);
+      } else if (msg.type === 'removeSortPreset') {
+        await this.removeSortPreset(record.id, msg.modelId, msg.name);
       } else if(msg.type==='chooseImportFile'||msg.type==='chooseXlsxFile'){
         if(v.workspace?.isTrusted===false||record.readOnly||!record.result?.edit?.canEdit||record.hasDraft||record.review||record.editBusy)throw new Error('Enable editing and apply or discard existing drafts before choosing an import file.');
         const xlsx=msg.type==='chooseXlsxFile',sourceModel=record.result.edit.modelId,selected=await v.window.showOpenDialog({canSelectMany:false,filters:xlsx?{'Excel workbook':['xlsx']}:{'CSV or TSV text':['csv','tsv']},title:xlsx?'Choose an XLSX workbook to stage':'Choose a UTF-8 CSV or TSV file to stage'});
@@ -282,6 +291,27 @@ class ResultsView {
     await this.filters.remove(entry.key, name);
     this.send();
   }
+  sortRecord(id, modelId) {
+    const entry = this.filterRecord(id, modelId);
+    return entry?.result.browse.sortOptions ? entry : undefined;
+  }
+  savedSorts(id) {
+    const entry = this.sortRecord(id);
+    return entry ? this.sorts.list(entry.key, entry.columns, entry.result.browse.sortOptions) : [];
+  }
+  async saveSortPreset(id, modelId, name) {
+    const entry = this.sortRecord(id, modelId);
+    if (typeof modelId !== 'string' || !entry) throw Error('Choose the current table preview before saving its sort.');
+    const { sort, sortOptions } = entry.result.browse;
+    await this.sorts.save(entry.key, name, sort, entry.columns, sortOptions);
+    this.send();
+  }
+  async removeSortPreset(id, modelId, name) {
+    const entry = this.sortRecord(id, modelId);
+    if (typeof modelId !== 'string' || !entry) throw Error('Choose the current table preview before removing a saved sort.');
+    await this.sorts.remove(entry.key, name);
+    this.send();
+  }
   finish(id, result, error, sessionState) {
     const record = this.history.find(h => h.id === id);
     if (record) {
@@ -305,7 +335,8 @@ class ResultsView {
       if (spatial) record = { ...record, result };
       const key = this.layoutKey(record);
       return key ? { ...record, tableLayout: { columns: this.layouts.read(key) || [] },
-        ...(record.result.browse && { filterPresets: this.filters.list(key, record.result.edit.columns) }) } : record;
+        ...(record.result.browse && { filterPresets: this.filters.list(key, record.result.edit.columns) }),
+        ...(record.result.browse?.sortOptions && { sortPresets: this.sorts.list(key, record.result.edit.columns, record.result.browse.sortOptions) }) } : record;
     });
     this.view.webview.postMessage({ type: 'results', history });
   }

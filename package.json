@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.58.0",
+  "version": "0.59.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -22,6 +22,7 @@
     "onView:rocketbrain.project",
     "onView:rocketbrain.docker",
     "onView:rocketbrain.databases",
+    "onView:rocketbrain.schemaCatalog",
     "onView:rocketbrain.results",
     "onView:rocketbrain.analysis",
     "onView:rocketbrain.sshWorkspace",
@@ -78,6 +79,8 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.java.smartStepInto", "title": "Step Into a Java Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
+      { "command": "rocketbrain.java.attachProcess", "title": "Attach to Local Java Process", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.openTableSnapshot", "title": "Open Consistent Table Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.attach", "title": "Open SSH Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
@@ -234,6 +237,10 @@
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.searchSources", "title": "Search SQL Files, Database Objects and DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(search)" },
+      { "command": "rocketbrain.schemaCatalog.select", "title": "Choose Catalog Schemas", "category": "Rocketbrain", "icon": "$(list-selection)", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.schemaCatalog.refresh", "title": "Refresh Schema Catalog", "category": "Rocketbrain", "icon": "$(refresh)", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.schemaCatalog.hide", "title": "Hide This Catalog Object", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.schemaCatalog.restore", "title": "Restore Hidden Catalog Object", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.draft", "title": "Draft SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
@@ -940,6 +947,12 @@
           "name": "Database"
         },
         {
+          "id": "rocketbrain.schemaCatalog",
+          "name": "Schema Catalog",
+          "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "visibility": "collapsed"
+        },
+        {
           "id": "rocketbrain.analysis",
           "name": "Spring & JPA Analysis"
         },
@@ -978,6 +991,11 @@
       ]
     },
     "viewsWelcome": [
+      {
+        "view": "rocketbrain.schemaCatalog",
+        "contents": "[Choose Catalog Schemas](command:rocketbrain.schemaCatalog.select)",
+        "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted"
+      },
       {
         "view": "rocketbrain.kotlinCoroutines",
         "contents": "[Prepare JVM Probe](command:rocketbrain.coroutines.prepare)\n[Connect Local Probe](command:rocketbrain.coroutines.connect)",
@@ -1018,6 +1036,9 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.schemaCatalog.select", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@1" },
+        { "command": "rocketbrain.schemaCatalog.refresh", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@2" },
+        { "command": "rocketbrain.schemaCatalog.restore", "when": "view == rocketbrain.schemaCatalog", "group": "catalog" },
         { "command": "rocketbrain.db.refreshIncrementalMetadata", "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "navigation@2" },
         { "command": "rocketbrain.sshWorkspace.attach", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.sshWorkspace.refresh", "when": "view == rocketbrain.sshWorkspace", "group": "navigation@2" },
@@ -1195,6 +1216,7 @@
         }
       ],
       "view/item/context": [
+        { "command": "rocketbrain.schemaCatalog.hide", "when": "view == rocketbrain.schemaCatalog && viewItem == rocketbrain.schemaCatalogObject", "group": "catalog" },
         { "command": "rocketbrain.db.refreshObjectMetadata", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "schema" },
         { "command": "rocketbrain.openTableSnapshot", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
@@ -1415,6 +1437,10 @@
                 "type": "boolean",
                 "default": false
               },
+              "stepFilters": {
+                "type": "object",
+                "description": "Per-session overrides for rocketbrain.java.stepFilters."
+              },
               "hotCodeReplace": {
                 "type": "string",
                 "enum": [
@@ -1436,11 +1462,13 @@
             }
           },
           "attach": {
-            "required": [
-              "hostName",
-              "port"
-            ],
             "properties": {
+              "processId": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295,
+                "description": "Windows process ID of a Java JVM already listening for JDWP on 127.0.0.1. Use this field without hostName or port."
+              },
               "hostName": {
                 "type": "string",
                 "default": "127.0.0.1"
@@ -1449,6 +1477,10 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 65535
+              },
+              "stepFilters": {
+                "type": "object",
+                "description": "Per-session overrides for rocketbrain.java.stepFilters."
               },
               "projectName": {
                 "type": "string"
@@ -1786,6 +1818,20 @@
             "exceptionTypes": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Exact Java binary names. Includes subtypes. An empty list matches all exception types." },
             "allowClasses": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Throw-site class names or prefix/suffix wildcard patterns. Every listed pattern must match." },
             "skipClasses": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Throw-site class names or prefix/suffix wildcard patterns to exclude." }
+          }
+        },
+        "rocketbrain.java.stepFilters": {
+          "type": "object",
+          "default": {},
+          "scope": "window",
+          "additionalProperties": false,
+          "description": "Default per-session Java step filters. A stepFilters field in launch.json overrides the matching setting.",
+          "properties": {
+            "allowClasses": { "type": "array", "items": { "type": "string" }, "description": "Restrict Java step locations to classes matching every pattern." },
+            "skipClasses": { "type": "array", "items": { "type": "string" }, "description": "Exclude Java classes or packages by exact name or a leading/trailing wildcard." },
+            "skipSynthetics": { "type": "boolean", "description": "Skip compiler-generated methods during Java step-in." },
+            "skipStaticInitializers": { "type": "boolean", "description": "Skip Java static initializers during step-in." },
+            "skipConstructors": { "type": "boolean", "description": "Skip Java constructors during step-in." }
           }
         },
         "rocketbrain.java.projectJdks": {
