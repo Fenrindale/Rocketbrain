@@ -45,6 +45,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const schemaMigrations = new Map();
   const schemaRebuilds=new Map(),streamManagers=new Map(),streamReviews=new Map(),streamTransactions=new Map();
   const connectionEvents = new vscode.EventEmitter();
+  const profileSessionEvents = new vscode.EventEmitter();
   const completedUserSql = new vscode.EventEmitter();
   context.subscriptions.push(completedUserSql);
   let sequence = 0;
@@ -84,6 +85,24 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     }
     return [...sessions.values()].map(session => ({ ...session, editorClosed: session.openEditors === 0 }));
   }
+  function profileSessionList() {
+    if (state.disposed || !vscode.workspace.isTrusted || !profileSessions.size) return [];
+    const open = openEditorUris();
+    return [...profileSessions].map(([id, record]) => {
+      const session = record.db.getSessionState(id), editors = linkedEditors(id);
+      return { id, profileId: record.profile.id, connected: session.connected, readOnly: session.readOnly,
+        inTransaction: session.inTransaction, outcomeUnknown: session.outcomeUnknown, needsReconnect: session.needsReconnect,
+        busy: state.running.has(id) || state.connecting.has(id), linkedEditors: editors.length,
+        openEditors: editors.filter(binding => open.has(binding.uri.toString())).length };
+    });
+  }
+  let lastProfileState = '[]';
+  function publishProfileSessions() {
+    const next = JSON.stringify(profileSessionList());
+    if (lastProfileState === next) return;
+    lastProfileState = next;
+    profileSessionEvents.fire();
+  }
   function linkedEditors(id) {
     return allBindings().filter(binding => binding.id === id);
   }
@@ -114,6 +133,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     void vscode.commands.executeCommand('setContext', 'rocketbrain.offlineMetadataActive', Boolean(state.offlineMetadata));
     void vscode.commands.executeCommand('setContext', 'rocketbrain.profileConsole', dedicated);
     void vscode.commands.executeCommand('setContext', 'rocketbrain.sqlRunning', state.running.size > 0);
+    publishProfileSessions();
   }
   const command = (id, action) => context.subscriptions.push(vscode.commands.registerCommand(id, async (...args) => {
     try { return await action(...args); }
@@ -369,6 +389,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
     if (state.running.has(id) || state.connecting.has(id)) throw new Error('Cancel or finish the query in this console first.');
     state.running.add(id);
+    publishProfileSessions();
     try { return await action(id, consoleDatabase(id)); }
     finally { state.running.delete(id); updateStatus(); }
   }
@@ -426,6 +447,57 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       state.candidates.delete(db);
       updateStatus();
     }
+  }
+  function requireProfileSession(selection) {
+    const record = profileSessions.get(selection?.sessionId);
+    if (!record || record.profile.id !== selection?.profileId || !vscode.workspace.isTrusted ||
+        state.disposed || state.switching) throw Error('The selected profile session is no longer available. Refresh Database Connections.');
+    return record;
+  }
+  async function revealProfileSession(selection) {
+    const record = requireProfileSession(selection);
+    const editors = linkedEditors(selection.sessionId), open = openEditorUris();
+    const active = currentDocument()?.uri.toString();
+    const entry = editors.find(binding => binding.uri.toString() === active) ??
+      editors.find(binding => open.has(binding.uri.toString())) ?? editors[0];
+    if (!entry) throw Error('No SQL editor is associated with this profile session.');
+    const document = await vscode.workspace.openTextDocument(entry.uri);
+    if (requireProfileSession(selection) !== record) throw Error('The profile session changed while opening its editor.');
+    assertBinding(document, entry);
+    const editor = await vscode.window.showTextDocument(document, { preview: false });
+    assertBinding(editor.document, entry);
+    entry.documentClosed = false;
+    publishProfileSessions();
+    return { sessionId: selection.sessionId, uri: editor.document.uri.toString() };
+  }
+  async function inspectProfileSessionCatalog(selection) {
+    const record = requireProfileSession(selection);
+    return withSession(selection.sessionId, async () => {
+      const session = record.db.getSessionState(selection.sessionId);
+      if (!session.connected || session.needsReconnect || session.outcomeUnknown) {
+        throw Error('Resolve the selected profile session before opening its catalog.');
+      }
+      const catalog = await record.db.metadata();
+      if (requireProfileSession(selection) !== record || catalog.database !== record.profile.database) {
+        throw Error('The profile session changed during catalog inspection.');
+      }
+      return { profile: { ...record.profile }, catalog };
+    });
+  }
+  async function closeProfileSession(selection, confirm) {
+    const record = requireProfileSession(selection);
+    return withSession(selection.sessionId, async id => {
+      const { inTransaction, outcomeUnknown } = record.db.getSessionState(id);
+      const editorCount = linkedEditors(id).length;
+      if ((inTransaction || outcomeUnknown || editorCount > 1) &&
+          await confirm?.({ inTransaction, outcomeUnknown, editorCount }) !== true) {
+        return { state: 'retained' };
+      }
+      if (requireProfileSession(selection) !== record) throw Error('The profile session changed before closing.');
+      if (!outcomeUnknown && record.db.getSessionState(id).outcomeUnknown) return { state: 'retained' };
+      await closeConsoleBindings(id);
+      return { state: 'closed' };
+    });
   }
   async function openSharedConsole(source) {
     if (!state.mysql && !isProfileConsole(source)) throw Error('Connect to MySQL or MariaDB before opening a shared console.');
@@ -851,6 +923,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     vscode.window.registerTreeDataProvider('rocketbrain.databases', schemaTree),
     vscode.window.registerWebviewViewProvider('rocketbrain.results', results, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.window.onDidChangeActiveTextEditor(updateStatus),
+    vscode.window.tabGroups.onDidChangeTabs(publishProfileSessions), profileSessionEvents,
     vscode.workspace.onDidCloseTextDocument(document => {
       const binding = existingBinding(document), dedicated = isProfileConsole(document);
       if (!binding) {
@@ -902,6 +975,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     ...require('./db/authoring-facade').authoringFacade({state,assertReady:assertExclusiveReady,pendingDraft:pendingTableDraft,isTrusted:()=>vscode.workspace.isTrusted,sessions:()=>[...bindings.values()].map(binding=>state.db.getSessionState(binding.id)),updateStatus,refresh:refreshAfterSchemaAttempt}),
     dispose:disposeDatabase,disconnectMysql:useDemo,activityLog,activeConnectionProfile:()=>state.profile?structuredClone(state.profile):null,
     openProfileConsole,sqlDrafts,
+    profileSessionList, revealProfileSession, inspectProfileSessionCatalog, closeProfileSession,
+    onDidChangeProfileSessions: profileSessionEvents.event,
     hasProfileConsole: id => [...profileSessions.values()].some(item => item.profile.id === id),
     schema: () => structuredClone(state.schema),
     catalogSnapshot:()=>analysisMetadata()?structuredClone(analysisMetadata()):null,

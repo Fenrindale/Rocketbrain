@@ -1004,6 +1004,24 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.connections.revealSession",
+        "title": "Reveal Profile SQL Console",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.connections.inspectSessionCatalog",
+        "title": "Inspect Profile Catalog",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.connections.closeSession",
+        "title": "Close Profile SQL Session",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.connections.duplicate",
         "title": "Duplicate Database Profile",
         "category": "Rocketbrain",
@@ -1492,6 +1510,21 @@
           "command": "rocketbrain.connections.openDedicatedConsole",
           "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile && isWorkspaceTrusted",
           "group": "connection"
+        },
+        {
+          "command": "rocketbrain.connections.revealSession",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionSession && isWorkspaceTrusted",
+          "group": "connection@1"
+        },
+        {
+          "command": "rocketbrain.connections.inspectSessionCatalog",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionSession && isWorkspaceTrusted",
+          "group": "connection@2"
+        },
+        {
+          "command": "rocketbrain.connections.closeSession",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionSession && isWorkspaceTrusted",
+          "group": "connection@3"
         },
         {
           "command": "rocketbrain.connections.test",
