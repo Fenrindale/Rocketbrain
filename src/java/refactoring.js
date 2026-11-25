@@ -9,7 +9,7 @@ function offset(text,position){if(!Number.isInteger(position?.line)||!Number.isI
 function editedText(text,edits){const spans=edits.map(edit=>{if(typeof edit.newText!=='string')throw Error('Invalid refactoring replacement.');return {start:offset(text,edit.range?.start),end:offset(text,edit.range?.end),text:edit.newText};}).sort((a,b)=>b.start-a.start||b.end-a.end);let previous=text.length+1,result=text;for(const span of spans){if(span.end<span.start||span.end>previous)throw Error('Overlapping refactoring edits were rejected.');result=result.slice(0,span.start)+span.text+result.slice(span.end);previous=span.start;}return result;}
 
 function registerJavaRefactoring(context,vscode,{request}={}) {
- const plans=new Map(),checkedPlans=new Map(),validators=new Map(),subscriptions=[],operations=new Set();let closed=false;
+ const plans=new Map(),checkedPlans=new Map(),validators=new Map(),subscriptions=[],operations=new Set();let closed=false,prepareConstant;
  const trusted=()=>{if(closed)throw Error('Java refactoring is closed.');if(!vscode.workspace.isTrusted)throw Error('Trust the workspace before refactoring Java sources.');};
  const cancelled=token=>{if(token?.isCancellationRequested)throw Error('Java refactoring was cancelled.');};
  async function send(method,params,cancellation){let timer;try{return await Promise.race([request(method,params,cancellation),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Java refactoring request timed out. Try again after project import completes.')),30000);})]);}finally{clearTimeout(timer);}}
@@ -45,7 +45,16 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
  }
  async function preview(document,range,options={}){
   const action=await resolveAction(document,range,options);
+  if(action.kind==='refactor.extract.constant'){
+   if(!prepareConstant)throw Error('Start Java source analysis before reviewing Extract Constant.');
+   return prepareConstant({document,range,cancellation:options.cancellation});
+  }
   return previewWorkspaceEdit(action.edit,{title:action.title,kind:action.kind,cancellation:options.cancellation,anchorDocument:document});
+ }
+ function registerConstantPreparation(prepare){
+  if(prepareConstant||typeof prepare!=='function')throw Error('The Java constant refactoring planner is already registered or invalid.');
+  prepareConstant=prepare;
+  return {dispose(){if(prepareConstant===prepare)prepareConstant=undefined;}};
  }
  function removePlan(id){plans.delete(id);checkedPlans.delete(id);validators.delete(id);}
  async function previewWorkspaceEdit(workspaceEdit,{title='Java refactoring',kind='refactor',cancellation,anchorDocument,allowedResourceOperations=[],allowedResourceRenames=[],allowedServiceEdits=[],createJavaFile,guards=[],warnings=[],validate:extraValidate,preApply}={}){
@@ -190,8 +199,8 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   if(choice==='Apply Refactoring')return api.apply(plan.id);
   return {state:'cancelled',id:plan.id};
  }
- subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.refactor',async()=>{try{const editor=vscode.window.activeTextEditor;if(!editor||editor.document.languageId!=='java')throw Error('Select Java source to refactor.');const actions=await api.list(editor.document,editor.selection),selected=await vscode.window.showQuickPick(actions.map(action=>({label:action.title,description:action.kind,action})),{title:'Refactor Java selection'});if(!selected)return;return await api.review(await api.preview(editor.document,editor.selection,{title:selected.action.title,kind:selected.action.kind}));}catch(error){if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);}}));
+ subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.refactor',async()=>{try{const editor=vscode.window.activeTextEditor;if(!editor||editor.document.languageId!=='java')throw Error('Select Java source to refactor.');const {document,selection}=editor,version=document.version,actions=await api.list(document,selection),selected=await vscode.window.showQuickPick(actions.map(action=>({label:action.title,description:action.kind,action})),{title:'Refactor Java selection'});if(!selected)return;if(document.isClosed||document.version!==version)throw Error('The Java source changed after listing refactorings. Select the expression again.');return await api.review(await api.preview(document,selection,{title:selected.action.title,kind:selected.action.kind}));}catch(error){if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);}}));
  function tracked(fn){return (...args)=>{const work=fn(...args);operations.add(work);void work.finally(()=>operations.delete(work)).catch(()=>{});return work;};}
- const api={list:tracked(list),resolveAction:tracked(resolveAction),preview:tracked(preview),previewWorkspaceEdit:tracked(previewWorkspaceEdit),review:tracked(review),apply:tracked(apply),validate:tracked(validate),async dispose(){closed=true;plans.clear();checkedPlans.clear();validators.clear();await Promise.allSettled([...operations]);for(const sub of subscriptions)sub.dispose();}};return api;
+ const api={list:tracked(list),resolveAction:tracked(resolveAction),preview:tracked(preview),previewWorkspaceEdit:tracked(previewWorkspaceEdit),review:tracked(review),apply:tracked(apply),validate:tracked(validate),registerConstantPreparation,async dispose(){closed=true;prepareConstant=undefined;plans.clear();checkedPlans.clear();validators.clear();await Promise.allSettled([...operations]);for(const sub of subscriptions)sub.dispose();}};return api;
 }
 module.exports={registerJavaRefactoring,editedText};

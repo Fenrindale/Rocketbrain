@@ -112,7 +112,8 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
           const data=event.test||event.identifier;const item=data?upsert(project,data):undefined;
           if(!item)return;
           if(data.kind==='test'&&!pendingItems.has(item.id)&&!finished.has(item.id)){run.enqueued(item);pendingItems.set(item.id,item);}
-          if(event.type==='start'||event.type==='started')run.started(item);
+          if(event.type==='start'||event.type==='started'&&(event.attempt===undefined||event.attempt===1))run.started(item);
+          if(event.type==='retry')run.appendOutput(`TestNG scheduled another attempt after attempt ${event.attempt}.\r\n`,undefined,item);
           if(event.type==='skipped'){run.skipped(item);finished.add(item.id);pendingItems.delete(item.id);failed.delete(item.id);}
           if(event.type==='finish'||event.type==='finished'){
             const outcome=event.status||event.state;

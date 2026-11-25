@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.61.0",
+  "version": "0.62.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -554,6 +554,11 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectPerformance",
+        "title": "Inspect Hibernate Fetch Activity",
+        "category": "Rocketbrain"
+      },
+      {
         "command": "rocketbrain.jpa.observer.validate",
         "title": "Validate Query with Running Hibernate",
         "category": "Rocketbrain"
@@ -618,6 +623,12 @@
         "title": "Extract Java Interface",
         "category": "Rocketbrain",
         "enablement": "editorLangId == java && isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.extractConstant",
+        "title": "Extract Java Constant",
+        "category": "Rocketbrain",
+        "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.java.pullUpMembers",

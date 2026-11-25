@@ -1,5 +1,5 @@
 {
-  "version": "0.61.0",
+  "version": "0.62.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -43,20 +43,20 @@
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-080",
+    "IDEA-025",
+    "IDEA-063",
+    "IDEA-084",
+    "IDEA-085",
     "DG-024",
-    "DG-038",
-    "DG-039",
-    "DG-044",
-    "DG-045"
+    "DG-027"
   ],
   "expandedFeatures": [
-    "IDEA-080",
+    "IDEA-025",
+    "IDEA-063",
+    "IDEA-084",
+    "IDEA-085",
     "DG-024",
-    "DG-038",
-    "DG-039",
-    "DG-044",
-    "DG-045"
+    "DG-027"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -799,24 +799,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "실제 JDT의 지역 변수 및 필드 추출 코드 액션을 조회하고 전후 소스를 검토한 뒤 VS Code WorkspaceEdit으로 적용한다. 사용자 편집과 디스크 변경을 확인해 오래된 계획을 거부한다.",
+      "scope": "JDT의 지역 변수·필드 추출을 미리 보고 적용한다. 이름 있는 Java 클래스에서는 javac로 확인한 상수식의 선택 위치 하나를 정적 상수로 추출한다. 기존 이름 충돌과 소스 변경을 확인한다.",
       "remaining": [
-        "지역 변수·필드 추출의 검증 사례 범위이며 상수 추출·전체 식/스코프·명명 대화와 전체 프로젝트 조합은 남는다. 추가 엔진 명령이나 대화를 요구하는 refactoring, 파일 생성·삭제·이동 및 전체 Java 문법·대규모 프로젝트 조합은 남는다. 원본 IDE 전체 리팩터링 동등성은 판정하지 않는다."
+        "지역 변수·필드의 이름 편집, 다양한 Java 선언 형태와 JDT가 별도 파일이나 명령을 요구하는 추출이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 지원하는 식에서 Extract Local Variable과 Extract Field를 실제 JDT로 생성한다. 변경 전후 javac·Java 실행 결과를 비교하고 편집 범위와 거부 경계를 검증한다.",
+        "testedScope": "두 Spring 설치 환경에서 실제 JDT 배치와 javac 참조 검증, 다른 동일식 보존, 이름 충돌·부수 효과·오래된 계획 거부, 디스크 보존과 한 번의 Undo를 확인했다.",
         "publicEvidence": [
-          "src/java/refactoring.js",
-          "src/java/index.js",
-          "test/java-refactoring.test.js",
-          "test/java-refactoring-host.js"
+          "src/java/extract-constant.js",
+          "src/java/signature-compiler.js",
+          "runtime/java-signature/src/rocketbrain/signature/ConstantInspector.java",
+          "test/java-extract-constant-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1998,24 +1998,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "실제 Hibernate entity·lazy proxy 디버깅과 쿼리/SQM·매핑 관찰이 있다.",
+      "scope": "Hibernate entity·lazy proxy 디버깅과 쿼리·매핑 관찰을 지원한다. 동기 Spring MVC 요청에서 확인된 단일 키 Hibernate 컬렉션의 N+1 패턴을 SQL 템플릿과 실제 SELECT 수로 표시한다.",
       "remaining": [
-        "SQL bind 값 추적·N+1 탐지·쿼리/엔티티 성능 연결이 남는다."
+        "복합 키, 비동기 요청, 다른 provider의 N+1 패턴과 원시 SQL 바인딩의 사용자 검토 경로가 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
+        "testedScope": "Spring MVC와 Hibernate의 두 실제 DB에서 lazy·fetch join·독립 반복 요청의 SELECT를 4·1·4회로 관찰했다. 서로 다른 키 3개를 읽은 첫 요청만 탐지하고 원시 값을 기록하지 않았다.",
         "publicEvidence": [
-          "src/jpa/model.js",
-          "src/jpa/query.js",
-          "src/jpa/types.js",
-          "src/jpa/observer-vscode.js"
+          "src/jpa/fetch-performance.js",
+          "src/jpa/observer-vscode.js",
+          "test/hibernate-fetch-performance-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2508,8 +2507,8 @@
       "verification": {
         "state": "v0.61-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.61.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2623,25 +2622,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "JUnit Platform/Jupiter/Vintage와 TestNG의 실제 compiled test 발견·선택 실행을 VS Code Testing API에 연결한다. Windows에서 소유한 suspended JVM의 PID·loopback listener를 검증하고 독립 Java Debug profile로 중단점·locals·watch·step·continue·취소를 지원한다.",
+      "scope": "JUnit Platform/Jupiter/Vintage와 TestNG의 실제 테스트 발견·선택 실행을 VS Code Testing API에 연결한다. Windows의 소유 JVM을 디버그하며 TestNG 단순 파라미터의 동일값 중복 행을 위치별로 선택한다.",
       "remaining": [
-        "JPMS module-path·전체 빌드/테스트 엔진 조합과 Windows 이외 debug listener 소유권 검증은 남는다. TestNG object/중복 parameter·retry·factory instance·invocationCount의 개별 invocation 선택과 의존성이 있는 overload별 선택은 지원하지 않는다."
+        "JPMS module-path, Windows 밖의 debug listener, 객체 파라미터·factory·invocationCount, 복합 TestNG 의존성 선택이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 Spring/JPA의 JUnit·TestNG 테스트를 MySQL8.4.13·MariaDB11.4.8에서 실행한다. 네이티브 Debug profile의 실제 query 결과2, source 중단점·locals/watch·step/continue와 중단 시 소유 JVM/정확한 session 종료를 구분한다.",
+        "testedScope": "실제 TestNG 7.11에서 네 논리 호출과 다섯 시도를 관찰했다. 값이 같은 두 번째 데이터 제공자 행 하나를 실행하고 순서가 바뀐 재실행을 거부했다.",
         "publicEvidence": [
           "src/java/testing/index.js",
-          "runtime/java-testing/src/rocketbrain/testing/TestNgAdapter.java",
-          "src/java/testing-vscode.js",
-          "test/testng-testing.test.js",
-          "src/java/testing-debug.js"
+          "test/java-testng-invocations-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2655,25 +2651,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "JUnit·TestNG의 실제 결과·disabled/dependency skip·실패 message/source frame과 JUnit assertion expected/actual을 네이티브 Test Explorer에 연결한다. 안정적인 ID의 실패·method/parameter invocation을 선택 재실행하고 사용자 debug 중단은 통과와 구분한다.",
+      "scope": "JUnit·TestNG의 결과·skip·실패 메시지와 JUnit assertion diff를 네이티브 Testing에 연결한다. TestNG의 단순 파라미터 중복 행은 관찰된 데이터 제공자 일정으로 재실행하고 재시도는 하나의 논리 호출에 묶는다.",
       "remaining": [
-        "TestNG typed expected/actual diff와 object/중복 parameter·retry·factory instance·invocationCount의 안정적인 개별 invocation 재실행은 지원하지 않는다. 전체 프레임워크·late-dynamic 제외·영속 결과 저장과 원본 UI 동등성은 남는다."
+        "TestNG typed expected/actual diff, 복합 invocation 형태와 결과 영속 저장이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 TestNG public listener의 실패·의존성 skip·disabled·DataProvider와 순서 변경 후 안전한 scalar case 재실행을 검사한다. 실제 Spring/양DB의 rollback과 네이티브 Test Explorer 결과·선택 재실행을 대조한다.",
+        "testedScope": "실제 양쪽 Spring DB의 VS Code에서 실패한 논리 호출 하나만 재실행하고 실제 RetryAnalyzer의 최종 실패를 확인했다.",
         "publicEvidence": [
           "src/java/testing/index.js",
-          "runtime/java-testing/src/rocketbrain/testing/TestNgAdapter.java",
-          "src/java/testing-vscode.js",
-          "test/testng-testing.test.js",
-          "test/java-testing-host.js"
+          "test/java-testng-invocations-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4423,19 +4416,19 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "계정이 읽을 수 있는 프로시저 정의와 IN 매개변수를 확인한다. 검토 후 타입을 지정해 호출하고 결과 집합을 각각 별도 그리드에 보관한다.",
+      "scope": "계정이 읽을 수 있는 프로시저 정의와 IN·OUT·INOUT 타입을 확인해 검토 후 호출한다. 각 결과 집합과 정확한 출력 값을 별도 그리드에 보관한다.",
       "remaining": [
-        "OUT·INOUT, MariaDB 패키지 호출, 모든 루틴·트리거 및 이벤트의 편집·배포는 남아 있다."
+        "MariaDB 패키지 호출, 일부 루틴·트리거 및 이벤트의 편집·배포가 남아 있다."
       ],
       "verification": {
-        "state": "v0.61-installed-coverage",
+        "state": "v0.62-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 엔진에서 정밀 BIGINT·DECIMAL 입력과 세 결과 집합, 중복 열 이름·빈 결과 및 검토 재사용과 변경 거부를 확인했다.",
+        "testedScope": "두 실제 엔진의 호출 검토에서 최대 unsigned BIGINT와 고정 정밀 DECIMAL, NULL 및 미설정 OUT, 출력만 있는 프로시저와 읽기 전용 출력 그리드를 확인했다.",
         "publicEvidence": [
           "src/db/routine-call.js",
           "src/db/routine-call-vscode.js",
@@ -4515,26 +4508,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "카탈로그와 CTE chain/명시 열·derived·중첩/상관 SELECT·UNION의 scope에 따른 열 완성을 구현했다.",
+      "scope": "카탈로그와 중첩·상관 SELECT, CTE·derived scope에 따라 열을 완성한다. 단일 대상 INSERT·UPDATE·DELETE에서 실제 테이블 타입을 표시하고 쓰기 열과 필터 열을 구분한다.",
       "remaining": [
-        "전체 dialect·재귀 증가/unknown 문법·완전한 DB 실행 유효성은 남는다."
+        "복수 테이블 변경, 일부 공급자별 문법과 전체 재귀·실행 유효성 분석이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
+        "testedScope": "실제 두 DB의 VS Code 자동 완성에서 교차 스키마 동명 테이블의 별칭과 열 타입, 생성 열의 쓰기 제외와 필터 포함, 복합 변경 구문의 열 제안 제외를 확인했다.",
         "publicEvidence": [
-          "src/db/sql-analysis.js",
-          "src/db/completion.js",
-          "test/sql-analysis.test.js",
-          "test/sql-v08-runtime.test.js",
-          "src/db/sql-vscode.js",
-          "test/sql-analysis-host.js"
+          "src/db/sql-dml-completion.js",
+          "test/sql-dml-completion-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4870,8 +4859,8 @@
       "verification": {
         "state": "v0.61-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.61.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4902,8 +4891,8 @@
       "verification": {
         "state": "v0.61-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.61.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5054,8 +5043,8 @@
       "verification": {
         "state": "v0.61-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.61.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5085,8 +5074,8 @@
       "verification": {
         "state": "v0.61-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.61.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6674,8 +6663,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "6ce2d5a695de058f227cd5282417860ede5d7a9b6f7b63982fd3bd80d527a148",
-    "sourceManifestSha256": "09e988c03a527adbc073b4195ee714d021591be2e3bcfba3f251449765f0a17b",
+    "vsixSha256": "a1f9f6540d2f88df1aae2dbaa746fc99607d6468e112e61a96b2bba7cc3a091e",
+    "sourceManifestSha256": "529c035c9fa031c4012da7ef7ad4afa8a8b1ed603341248cb9c630ef9477f464",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6687,20 +6676,14 @@
       }
     ]
   },
-  "stateChanges": [
-    {
-      "id": "DG-044",
-      "before": "partial",
-      "after": "implemented"
-    }
-  ],
+  "stateChanges": [],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1512,
-    "pass": 1426,
+    "tests": 1524,
+    "pass": 1436,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 86,
+    "skipped": 88,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

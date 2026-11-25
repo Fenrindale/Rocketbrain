@@ -1,25 +1,25 @@
 {
-  "version": "0.61.0",
-  "verifiedAt": "2026-11-25T14:08:51.733Z",
+  "version": "0.62.0",
+  "verifiedAt": "2026-11-25T14:33:57.036Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.61.0.vsix",
-    "sha256": "6ce2d5a695de058f227cd5282417860ede5d7a9b6f7b63982fd3bd80d527a148",
-    "bytes": 3238019,
+    "name": "rocketbrain-0.62.0.vsix",
+    "sha256": "a1f9f6540d2f88df1aae2dbaa746fc99607d6468e112e61a96b2bba7cc3a091e",
+    "bytes": 3255438,
     "files": 20
   },
   "source": {
-    "frozenPublicInputs": 1705,
-    "inputVectorSha256": "09e988c03a527adbc073b4195ee714d021591be2e3bcfba3f251449765f0a17b",
+    "frozenPublicInputs": 1726,
+    "inputVectorSha256": "529c035c9fa031c4012da7ef7ad4afa8a8b1ed603341248cb9c630ef9477f464",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1512,
-    "pass": 1426,
+    "tests": 1524,
+    "pass": 1436,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 86,
+    "skipped": 88,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,23 +32,23 @@
       "groupCount": 5,
       "groups": [
         {
-          "group": "javaFrames",
+          "group": "extractConstant",
           "checks": 1
         },
         {
-          "group": "javaSqlUsages",
+          "group": "testNgInvocations",
           "checks": 1
         },
         {
-          "group": "currentSql",
+          "group": "dmlColumns",
           "checks": 1
         },
         {
-          "group": "dmlSources",
+          "group": "hibernateFetch",
           "checks": 1
         },
         {
-          "group": "routineCalls",
+          "group": "routineOutputs",
           "checks": 1
         }
       ],
@@ -66,23 +66,23 @@
       "groupCount": 5,
       "groups": [
         {
-          "group": "javaFrames",
+          "group": "extractConstant",
           "checks": 1
         },
         {
-          "group": "javaSqlUsages",
+          "group": "testNgInvocations",
           "checks": 1
         },
         {
-          "group": "currentSql",
+          "group": "dmlColumns",
           "checks": 1
         },
         {
-          "group": "dmlSources",
+          "group": "hibernateFetch",
           "checks": 1
         },
         {
-          "group": "routineCalls",
+          "group": "routineOutputs",
           "checks": 1
         }
       ],
@@ -93,47 +93,46 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-080": {
-      "scope": "두 실제 Spring DB의 설치 환경에서 프레임 재진입과 이전 부수 효과 보존, 1,201개 배열과 301개 리스트, 14,010 코드 단위의 Unicode 문자열을 확인했다.",
+    "IDEA-025": {
+      "scope": "두 Spring 설치 환경에서 실제 JDT 배치와 javac 참조 검증, 다른 동일식 보존, 이름 충돌·부수 효과·오래된 계획 거부, 디스크 보존과 한 번의 Undo를 확인했다.",
       "runtimeGroups": [
-        "javaFrames"
+        "extractConstant"
+      ]
+    },
+    "IDEA-063": {
+      "scope": "Spring MVC와 Hibernate의 두 실제 DB에서 lazy·fetch join·독립 반복 요청의 SELECT를 4·1·4회로 관찰했다. 서로 다른 키 3개를 읽은 첫 요청만 탐지하고 원시 값을 기록하지 않았다.",
+      "runtimeGroups": [
+        "hibernateFetch"
+      ]
+    },
+    "IDEA-084": {
+      "scope": "실제 TestNG 7.11에서 네 논리 호출과 다섯 시도를 관찰했다. 값이 같은 두 번째 데이터 제공자 행 하나를 실행하고 순서가 바뀐 재실행을 거부했다.",
+      "runtimeGroups": [
+        "testNgInvocations"
+      ]
+    },
+    "IDEA-085": {
+      "scope": "실제 양쪽 Spring DB의 VS Code에서 실패한 논리 호출 하나만 재실행하고 실제 RetryAnalyzer의 최종 실패를 확인했다.",
+      "runtimeGroups": [
+        "testNgInvocations"
       ]
     },
     "DG-024": {
-      "scope": "두 실제 엔진에서 정밀 BIGINT·DECIMAL 입력과 세 결과 집합, 중복 열 이름·빈 결과 및 검토 재사용과 변경 거부를 확인했다.",
+      "scope": "두 실제 엔진의 호출 검토에서 최대 unsigned BIGINT와 고정 정밀 DECIMAL, NULL 및 미설정 OUT, 출력만 있는 프로시저와 읽기 전용 출력 그리드를 확인했다.",
       "runtimeGroups": [
-        "routineCalls"
+        "routineOutputs"
       ]
     },
-    "DG-038": {
-      "scope": "실제 Spring과 MySQL·MariaDB에서 JDBC 텍스트 블록·정적 문자열 결합을 실행하고 SQL·Java 사용처의 원본 위치를 검증했다. 교차 스키마 쓰기는 후속 읽기와 롤백으로 확인했다.",
+    "DG-027": {
+      "scope": "실제 두 DB의 VS Code 자동 완성에서 교차 스키마 동명 테이블의 별칭과 열 타입, 생성 열의 쓰기 제외와 필터 포함, 복합 변경 구문의 열 제안 제외를 확인했다.",
       "runtimeGroups": [
-        "javaSqlUsages",
-        "dmlSources"
-      ]
-    },
-    "DG-039": {
-      "scope": "두 실제 서버에서 동명 로컬·원격 테이블을 구분해 INSERT·UPDATE·DELETE의 열과 읽기·쓰기 역할을 확인하고 정확한 교차 스키마 DDL로 이동했다.",
-      "runtimeGroups": [
-        "dmlSources"
-      ]
-    },
-    "DG-044": {
-      "scope": "실제 두 Spring DB의 설치 SQL 편집기에서 일반 커서 실행과 복합 문장 전체 선택, 지시문 위치와 불완전 선택 거부, 인접 DDL 제외를 확인했다.",
-      "runtimeGroups": [
-        "currentSql"
-      ]
-    },
-    "DG-045": {
-      "scope": "실제 두 서버에서 동일 호출 검토가 한 번만 적용되고 이미 캡처한 결과를 다시 열 때 호출을 반복하지 않음을 확인했다.",
-      "runtimeGroups": [
-        "routineCalls"
+        "dmlColumns"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 357,
+    "sourceCorrespondences": 361,
     "sourceConfidence": "inferred",
     "archiveEntries": 20,
     "archiveConfidence": "observed"
@@ -148,27 +147,21 @@
       "platform-limited": 2
     },
     "weightedPoints": 151,
-    "previousWeightedPoints": 150.5,
+    "previousWeightedPoints": 151,
     "targetWeightedPoints": 216,
     "referencePercent": 69.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
-    "stateChanges": [
-      {
-        "id": "DG-044",
-        "before": "partial",
-        "after": "implemented"
-      }
-    ]
+    "stateChanges": []
   },
   "limits": [
-    "Java 값 뷰어는 새 독립 디버거와 확인된 JDI 타입을 사용한다.",
-    "MySQL은 호출 트랜잭션 중 프로시저 정의를 고정했다. MariaDB는 호출 전후 정의를 확인하고 드리프트와 서버 커밋 상태를 보고한다.",
+    "Hibernate N+1 판정은 같은 동기 요청·세션의 확인된 단일 키 컬렉션에 적용하며 원시 바인딩 값을 보존하지 않는다.",
+    "프로시저 출력은 MySQL이 트랜잭션으로 정의를 고정하고 MariaDB가 호출 전후 정의와 SQL 모드를 확인하는 경로에서 지원한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "TestNG 중복 행과 재시도 단위 재실행",
-    "Hibernate 요청별 N+1 감지",
-    "Java 상수 추출과 SQL DML 열 자동 완성"
+    "공유 SQL 콘솔의 트랜잭션과 전용 세션",
+    "Spring WebFlux 함수형 라우터와 OpenFeign 선언",
+    "저장 함수 교체 검토와 복구, Java 구현체·상위 선언 탐색"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

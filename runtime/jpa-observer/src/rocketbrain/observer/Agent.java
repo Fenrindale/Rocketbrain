@@ -23,6 +23,7 @@ public final class Agent {
             ObserverRuntime.start(config);
             stage="transformer-registration";
             instrumentation.addTransformer(new HibernateTransformer(instrumentation),false);
+            if(PerformanceRuntime.enabled())instrumentation.addTransformer(new PerformanceTransformer(instrumentation),false);
         } catch (Throwable failure) {
             // Do not expose token/config contents or abort the user's application.
             System.err.println("ROCKETBRAIN_JPA_OBSERVER_DISABLED "+stage+" "+failure.getClass().getSimpleName());

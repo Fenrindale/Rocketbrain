@@ -1,6 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),fsp=fs.promises,path=require('node:path');
 const backend=require('../src/java/testing'),{provisionTestingRuntime,readLauncherSources,execute}=require('../src/java/testing/provision');
+const {testNgInvocationSource,assertObservedInvocations,assertRetry,assertOnlySelectedRow}=require('./helpers/java-testng-invocation-fixture');
 const jdkConfig=process.env.ROCKETBRAIN_JAVA_TEST_CONFIG||path.resolve('test-output/v0.4-java-host-runtime.json');
 const javaHome=fs.existsSync(jdkConfig)?JSON.parse(fs.readFileSync(jdkConfig,'utf8')).javaHome:null;
 const live=(name,fn)=>test(name,{skip:!javaHome&&'Independent JDK25 is not configured.',timeout:180000},fn);let pending;
@@ -32,7 +33,9 @@ public class NativeTestNG {
  @Test(dependsOnMethods="failure") public void dependency(){throw new AssertionError("dependency executed");}
 }`);
  await fsp.writeFile(path.join(tests,'sample/ObjectTestNG.java'),`package sample; import org.testng.annotations.*; public class ObjectTestNG { static class Unsafe { public String toString(){throw new AssertionError("must not call user toString");} } @DataProvider public Object[][] objects(){return new Object[][]{{new Unsafe()}};} @Test(dataProvider="objects") public void object(Unsafe value){} @DataProvider public Object[][] duplicate(){return new Object[][]{{1},{1}};} @Test(dataProvider="duplicate") public void duplicated(int value){} }`);
- await fsp.writeFile(path.join(tests,'sample/RetryTestNG.java'),`package sample; import org.testng.*; import org.testng.annotations.*; public class RetryTestNG { public static class Retry implements IRetryAnalyzer { int n; public boolean retry(ITestResult r){return n++==0;} } int attempts; @Test(retryAnalyzer=Retry.class) public void retry(){if(attempts++==0)throw new AssertionError("first");} }`);
+ await fsp.writeFile(path.join(tests,'sample/RetryTestNG.java'),`package sample; import org.testng.*; import org.testng.annotations.*; public class RetryTestNG { public static class Retry implements IRetryAnalyzer { int n; public boolean retry(ITestResult r){return n++==0;} } int attempts; @Test(retryAnalyzer=Retry.class) public void retry(){if(Logic.choose(attempts++==0?-1:1)<0)throw new AssertionError("first");} }`);
+ await fsp.writeFile(path.join(tests,'sample/InvocationTestNG.java'),testNgInvocationSource('sample','InvocationTestNG'));
+ await fsp.writeFile(path.join(tests,'sample/UncachedRetryTestNG.java'),`package sample; import org.testng.*; import org.testng.annotations.*; public class UncachedRetryTestNG { public static class Retry implements IRetryAnalyzer { int n; public boolean retry(ITestResult r){return n++==0;} } int attempts; @DataProvider(cacheDataForTestRetries=false) public Object[][] input(){return new Object[][]{{1}};} @Test(dataProvider="input",retryAnalyzer=Retry.class) public void retry(int input){if(attempts++==0)throw new AssertionError("first");} @Test(invocationCount=2) public void repeated(){} }`);
  await fsp.writeFile(path.join(tests,'sample/FactoryTestNG.java'),`package sample; import org.testng.annotations.*; public class FactoryTestNG { @Factory public Object[] create(){return new Object[]{new Case(1),new Case(2)};} public static class Case { final int value; Case(int n){value=n;} @Test public void made(){if(value<1)throw new AssertionError();} } }`);
  await fsp.writeFile(path.join(tests,'sample/JupiterCases.java'),`package sample; import org.junit.jupiter.api.*; public class JupiterCases { @BeforeAll static void shared(){Logic.shared();} @BeforeEach void setup(){Logic.configuration();} @Test void positive(){Assertions.assertEquals(Logic.choose(1),1);} @Test void negative(){Assertions.assertEquals(Logic.choose(-1),-1);} }`);
  await fsp.writeFile(path.join(tests,'sample/OverloadTestNG.java'),`package sample; import org.testng.annotations.*; public class OverloadTestNG { @DataProvider public Object[][] integers(){return new Object[][]{{1}};} @DataProvider public Object[][] strings(){return new Object[][]{{"bad"}};} @Test(dataProvider="integers") public void same(int n){} @Test(dataProvider="strings") public void same(String s){throw new AssertionError("wrong overload executed");} }`);
@@ -61,8 +64,58 @@ live('TestNG uses real public listeners for failures, dependencies, disabled and
  const nan=await backend.runTests(config,{selectors:[{kind:'class',value:'sample.NaNTestNG'}]});const nanCase=nan.tests.find(t=>t.kind==='test');assert.equal(nanCase.rerunnable,true);const changedNan=await backend.runTests({...config,jvmArgs:['-DchangedNaN=true']},{selectors:[{kind:'uniqueId',value:nanCase.id}]});assert.equal(changedNan.state,'errored');assert.equal(changedNan.events.filter(e=>e.type==='started'&&e.test?.kind==='test').length,0);
  const surrogate=await backend.runTests(config,{selectors:[{kind:'class',value:'sample.SurrogateTestNG'}]});const surrogateCase=surrogate.tests.find(t=>t.kind==='test');assert.equal(surrogateCase.rerunnable,true);const changedSurrogate=await backend.runTests({...config,jvmArgs:['-DchangedSurrogate=true']},{selectors:[{kind:'uniqueId',value:surrogateCase.id}]});assert.equal(changedSurrogate.state,'errored');assert.equal(changedSurrogate.events.filter(e=>e.type==='started'&&e.test?.kind==='test').length,0);
 });
-live('TestNG object, duplicate, retry and factory case identities remain explicitly unsupported for individual selection',async()=>{
- const {config}=await fixture();for(const className of ['ObjectTestNG','RetryTestNG','FactoryTestNG']){const run=await backend.runTests(config,{selectors:[{kind:'class',value:'sample.'+className}]});assert.equal(run.state,'completed',JSON.stringify(run));const actual=run.tests.filter(t=>t.kind==='test'&&t.id.includes('/[invocation:'));assert.ok(actual.length>0);assert.ok(actual.every(t=>t.rerunnable===false),JSON.stringify(actual));const rerun=await backend.runTests(config,{selectors:[{kind:'uniqueId',value:actual[0].id}]});assert.equal(rerun.state,'errored','Must reject unsupported invocation identity rather than run a different row.');}
+live('TestNG object parameters, unsupported retry providers, invocationCount and factory cases remain explicit',async()=>{
+ const {config}=await fixture();
+ for(const [className,methodName] of [['ObjectTestNG','object'],['UncachedRetryTestNG','retry'],['UncachedRetryTestNG','repeated'],['FactoryTestNG','made']]){
+  const run=await backend.runTests(config,{selectors:[{kind:'class',value:'sample.'+className}]});
+  assert.equal(run.state,'completed',JSON.stringify(run));
+  const actual=run.tests.filter(t=>t.kind==='test'&&t.methodName===methodName);
+  assert.ok(actual.length>0);
+  assert.ok(actual.every(t=>t.rerunnable===false),JSON.stringify(actual));
+  const rerun=await backend.runTests(config,{selectors:[{kind:'uniqueId',value:actual[0].id}]});
+  assert.equal(rerun.state,'errored','Must reject unsupported invocation identity rather than run a different row.');
+ }
+});
+live('duplicate scalar invocations use the real TestNG row index and retries keep one selectable case',async()=>{
+ const {config}=await fixture(),selectClass=[{kind:'class',value:'sample.InvocationTestNG'}];
+ const run=await backend.runTests(config,{selectors:selectClass});
+ const {duplicate,retry}=assertObservedInvocations(run);
+ const exact=target=>[{kind:'uniqueId',value:target.id}];
+ const selected=await backend.runTests(config,{selectors:exact(duplicate)});
+ assertOnlySelectedRow(selected,duplicate);
+ const changed=await backend.runTests({...config,jvmArgs:['-Drocketbrain.fixture.changedOrder=true']},{selectors:exact(duplicate)});
+ assert.equal(changed.state,'errored');
+ assert.doesNotMatch(changed.output,/TESTNG_ROW_/);
+ const skipped=await backend.runTests(config,{selectors:selectClass,excludes:exact(duplicate)});
+ assert.equal(skipped.summary.testsSucceeded,3);
+ assert.doesNotMatch(skipped.output,/TESTNG_ROW_SECOND/);
+ assert.match(skipped.output,/TESTNG_ROW_FIRST/);
+ const changedExclusion=await backend.runTests({...config,jvmArgs:['-Drocketbrain.fixture.changedOrder=true']},{selectors:selectClass,excludes:exact(duplicate)});
+ assert.equal(changedExclusion.state,'errored');
+ assert.doesNotMatch(changedExclusion.output,/TESTNG_ROW_/);
+ const failed=await backend.runTests({...config,jvmArgs:['-Drocketbrain.fixture.retryFails=true']},{selectors:exact(retry)});
+ assert.equal(failed.summary.testsFailed,1);
+ assert.equal(failed.summary.testsFound,1);
+ assertRetry(failed,retry.id,'failed');
+ const rerun=await backend.runTests(config,{selectors:exact(retry)});
+ assert.equal(rerun.summary.testsSucceeded,1);
+ assertRetry(rerun,retry.id,'passed');
+ assert.match(rerun.output,/TESTNG_RETRY_ATTEMPT:1\s+TESTNG_RETRY_ATTEMPT:2/);
+ const noProvider=await backend.runTests(config,{selectors:[{kind:'class',value:'sample.RetryTestNG'}]});
+ const plain=noProvider.tests.find(t=>t.kind==='test');
+ assert.ok(plain.rerunnable);
+ assertRetry(noProvider,plain.id,'passed');
+ const measured=await backend.runTests(config,{selectors:exact(plain),perTestCoverage:true});
+ assertRetry(measured,plain.id,'passed');
+ assert.equal(measured.perTestCoverage.state,'available');
+ assert.deepEqual(measured.perTestCoverage.tests.map(entry=>entry.testId),[plain.id]);
+ const coverage=measured.perTestCoverage.tests[0].coverage;
+ for(const method of ['positive','negative'])assert.equal(methods(coverage).find(entry=>entry.name===method).covered,true);
+ const receipt=process.env.ROCKETBRAIN_TESTNG_INVOCATIONS_RECEIPT;
+ if(receipt)await fsp.writeFile(receipt,JSON.stringify({testng:'7.11.0',logicalInvocations:run.summary.testsFound,attempts:run.summary.testAttempts,
+  parallelProvider:true,duplicateOriginalIndex:duplicate.providerIndex,duplicateOccurrence:duplicate.providerOccurrence,selectedBodyObserved:true,
+  changedScheduleRefused:true,changedExclusionRefused:true,terminalRetryFailure:true,singleInvocationRetryRerun:true,
+  perInvocationCoverageOverBothAttempts:true},null,2)+'\n');
 });
 live('serial TestNG coverage measures actual body intervals, retains shared configurations separately and OR merges both branch sides',async()=>{
  const {config}=await fixture();const run=await backend.runTests(config,{selectors:[{kind:'method',value:'sample.NativeTestNG#positive'},{kind:'method',value:'sample.NativeTestNG#negative'}],perTestCoverage:true});assert.equal(run.state,'completed',JSON.stringify(run.errors));assert.equal(run.coverage.state,'available',JSON.stringify(run.coverage));assert.equal(run.perTestCoverage.state,'available',JSON.stringify(run.perTestCoverage));assert.equal(run.perTestCoverage.tests.length,2);assert.equal(run.coverage.files[0].branches.covered,2);assert.match(run.perTestCoverage.warnings.join(' '),/BeforeMethod/);

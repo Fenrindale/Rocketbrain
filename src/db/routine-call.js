@@ -39,14 +39,13 @@ async function observeProcedure(query, context, target) {
     throw fail('MODE', 'Stored procedures defined in Oracle compatibility mode require a separate invocation workflow.');
   }
   const { rows } = await query("SELECT ORDINAL_POSITION,PARAMETER_NAME,PARAMETER_MODE,DTD_IDENTIFIER,CHARACTER_SET_NAME,COLLATION_NAME FROM information_schema.PARAMETERS WHERE BINARY SPECIFIC_SCHEMA=BINARY ? AND BINARY SPECIFIC_NAME=BINARY ? AND ROUTINE_TYPE='PROCEDURE' ORDER BY ORDINAL_POSITION LIMIT " + (maxParameters + 1), [object.schema, object.name]);
-  if (rows.length > maxParameters) throw fail('LIMIT', 'Use a procedure with at most 32 input parameters.');
+  if (rows.length > maxParameters) throw fail('LIMIT', 'Use a procedure with at most 32 parameters.');
   const names = new Set();
   const parameters = rows.map(([ordinal, rawName, mode, type], index) => {
-    if (mode !== 'IN') throw fail('PARAMETER', 'This invocation supports IN parameters. OUT and INOUT require a different workflow.');
     const name = identifier(rawName);
     const kind = typeof type === 'string' && type.length <= 2048 && typeKind(type);
-    if (Number(ordinal) !== index + 1 || !kind || names.has(name.toLowerCase())) {
-      throw fail('PARAMETER', 'The server parameter signature contains unsupported or ambiguous inputs.');
+    if (Number(ordinal) !== index + 1 || !['IN', 'OUT', 'INOUT'].includes(mode) || !kind || names.has(name.toLowerCase())) {
+      throw fail('PARAMETER', 'The server parameter signature contains unsupported or ambiguous parameters.');
     }
     names.add(name.toLowerCase());
     return { ordinal: index + 1, name, mode, type, kind };
@@ -54,21 +53,22 @@ async function observeProcedure(query, context, target) {
   const fingerprint = digest([object, context.dialect, context.version, ids[0][1], accounts[0], definition.source, definition.settings, rows]);
   // On MariaDB a two-part CALL can resolve a package member. The session already pins the exact database.
   const callee = context.dialect === 'mariadb' ? quote(object.name) : quote(object.schema) + '.' + quote(object.name);
-  const sql = 'CALL ' + callee + '(' + parameters.map(() => '?').join(', ') + ')';
+  const sql = 'CALL ' + callee + '(' + parameters.map(parameter => parameter.mode === 'IN' ? '?' : variable(fingerprint, parameter)).join(', ') + ')';
   return { object, fingerprint, account: accounts[0][0], role: accounts[0][1], dialect: context.dialect,
     version: context.version, source: definition.source, settings: definition.settings, parameters, sql };
 }
 
 function bindProcedure(parameters, inputs) {
-  if (!Array.isArray(inputs) || inputs.length !== parameters.length || Object.keys(inputs).length !== inputs.length) {
+  const declaredInputs = parameters.filter(parameter => parameter.mode !== 'OUT');
+  if (!Array.isArray(inputs) || inputs.length !== declaredInputs.length || Object.keys(inputs).length !== inputs.length) {
     throw fail('PARAMETER', 'Supply one typed value for each listed input parameter.');
   }
   let bytes = 0;
-  const typed = parameters.map(({ kind }, index) => {
+  const typed = declaredInputs.map(({ kind, ordinal }, index) => {
     const entry = Object.getOwnPropertyDescriptor(inputs, index);
     if (!entry || entry.get || entry.set) throw fail('PARAMETER', 'Supply one typed value for each listed input parameter.');
     const value = typedParameter(entry.value);
-    if (value.kind !== 'null' && value.kind !== kind) throw fail('PARAMETER', 'Parameter ' + (index + 1) + ' requires ' + kind + ' or SQL NULL.');
+    if (value.kind !== 'null' && value.kind !== kind) throw fail('PARAMETER', 'Parameter ' + ordinal + ' requires ' + kind + ' or SQL NULL.');
     bytes += value.bytes;
     return value;
   });
@@ -76,4 +76,40 @@ function bindProcedure(parameters, inputs) {
   return { values: typed.map(value => value.bound), kinds: typed.map(value => value.kind) };
 }
 
-module.exports = { listProcedures, observeProcedure, bindProcedure, fail };
+function variable(fingerprint, { ordinal }) {
+  return '@rb_proc_' + fingerprint.slice(0, 24) + '_' + ordinal;
+}
+
+function sessionArguments(procedure, inputs) {
+  const bound = bindProcedure(procedure.parameters, inputs);
+  const callValues = [], variableValues = [], assignments = [], outputs = [];
+  let inputIndex = 0;
+  for (const parameter of procedure.parameters) {
+    if (parameter.mode === 'IN') callValues.push(bound.values[inputIndex++]);
+    else {
+      const name = variable(procedure.fingerprint, parameter);
+      assignments.push(name + ' = ' + (parameter.mode === 'INOUT' ? '?' : 'NULL'));
+      if (parameter.mode === 'INOUT') variableValues.push(bound.values[inputIndex++]);
+      outputs.push({ ...parameter, variable: name });
+    }
+  }
+  return { callValues, variableValues, initializeSql: assignments.length ? 'SET ' + assignments.join(', ') : undefined, outputs };
+}
+
+async function readProcedureOutputs(query, outputs) {
+  if (!outputs.length) return [];
+  const { rows } = await query('SELECT ' + outputs.map(item => item.variable).join(', '));
+  if (rows.length !== 1 || rows[0].length !== outputs.length) throw fail('OUTPUT', 'The procedure output parameters could not be read.');
+  return outputs.map(({ variable: _, ...parameter }, index) => {
+    const value = rows[0][index];
+    const exact = parameter.kind === 'integer' || parameter.kind === 'decimal';
+    if (!exact || value === null) return { ...parameter, value };
+    const pattern = parameter.kind === 'integer' ? /^-?\d+$/u : /^-?\d+(?:\.\d+)?$/u;
+    if (!(typeof value === 'string' ? pattern.test(value) : Number.isSafeInteger(value))) {
+      throw fail('OUTPUT', 'The database did not return an exact procedure output number.');
+    }
+    return { ...parameter, value: String(value) };
+  });
+}
+
+module.exports = { listProcedures, observeProcedure, bindProcedure, sessionArguments, readProcedureOutputs, fail };

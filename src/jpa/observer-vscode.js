@@ -2,11 +2,13 @@
 const crypto = require('node:crypto');
 const {ObserverClient,ObserverError,emptySnapshot} = require('./observer-client');
 const {validateRuntimeUrl} = require('../spring/runtime-client');
+const {summarizePerformance} = require('./fetch-performance');
 
 function registerObserver(context,vscode,output,{source}) {
   const events = new vscode.EventEmitter(), subscriptions=[events];
   let current=emptySnapshot(), client, generation=0, snapshotRequest=0, validationRequest=0, disposed=false;
   const snapshot=()=>structuredClone(current);
+  const performance=()=>summarizePerformance(current.performance);
   const emit=()=>{if(!disposed)events.fire(snapshot());};
   function disconnect(){generation++;snapshotRequest++;client?.dispose();client=undefined;current=emptySnapshot();emit();return snapshot();}
   function trusted(){if(disposed)throw new ObserverError('DISPOSED','Observer is closed.');if(!vscode.workspace.isTrusted){disconnect();throw new ObserverError('UNTRUSTED','Trust the workspace before connecting to a provider observer.');}}
@@ -67,10 +69,44 @@ function registerObserver(context,vscode,output,{source}) {
     const entities=model.entities.map(entity=>({fqn:entity.fqn,sourceTable:entity.table?.physicalName||null,sourceState:entity.status,observations:observed.factories.flatMap(factory=>(factory.entities||[]).filter(e=>e.javaType===entity.fqn).map(e=>({factoryId:factory.id,entity:e})))}));
     return {mode:'source-and-runtime-side-by-side',observedAt:observed.fetchedAt,sourceRevision:model.revision,sameSourceRevisionVerified:false,entities};
   }
+  async function inspectPerformance(requestId){
+    const frame=generation;
+    await refresh();
+    if(frame!==generation)throw new ObserverError('STALE_REQUEST','The Hibernate observer connection changed.');
+    const report=performance();
+    if(!report.requests.length){
+      await vscode.window.showInformationMessage(report.state==='disabled'
+        ? 'Enable performance in the JPA observer configuration and restart the application.'
+        : 'No supported Hibernate request samples have been captured.');
+      return report;
+    }
+    let request=report.requests.find(item=>item.id===requestId);
+    if(requestId!==undefined&&!request)throw new ObserverError('STALE_REQUEST','The Hibernate request sample is no longer retained.');
+    if(!request){
+      const selected=await vscode.window.showQuickPick([...report.requests].reverse().map(item=>({
+        label:[item.method,item.route].filter(Boolean).join(' ')||'Hibernate request '+item.id,
+        description:item.selectCount+' SELECTs · '+item.suspects.length+' collection fetch finding(s)',
+        detail:item.startedAt,request:item
+      })),{title:'Hibernate Fetch Activity'});
+      if(!selected)return;
+      trusted();
+      if(frame!==generation)throw new ObserverError('STALE_REQUEST','The Hibernate observer connection changed.');
+      request=performance().requests.find(item=>item.id===selected.request.id&&item.startedAt===selected.request.startedAt);
+      if(!request)throw new ObserverError('STALE_REQUEST','The Hibernate request sample is no longer retained.');
+    }
+    const {requests,...scope}=report;
+    const detail={...scope,agentVersion:current.agentVersion,processId:current.processId,request};
+    const document=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(detail,null,2)+'\n'});
+    trusted();
+    if(frame!==generation)throw new ObserverError('STALE_REQUEST','The Hibernate observer connection changed.');
+    await vscode.window.showTextDocument(document,{preview:true});
+    return detail;
+  }
   const command=(name,action)=>subscriptions.push(vscode.commands.registerCommand(name,async(...args)=>{try{return await action(...args);}catch(error){output.appendLine('JPA observer: '+error.message);await vscode.window.showErrorMessage(error.message);}}));
   command('rocketbrain.jpa.observer.connect',()=>connect());command('rocketbrain.jpa.observer.refresh',refresh);command('rocketbrain.jpa.observer.disconnect',disconnect);command('rocketbrain.jpa.observer.validate',validateSelection);
   command('rocketbrain.jpa.observer.inspect',async()=>{const report={snapshot:snapshot(),comparison:await compareSource()};const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(report,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return report;});
+  command('rocketbrain.jpa.observer.inspectPerformance',inspectPerformance);
   command('rocketbrain.jpa.observer.prepare',async()=>{trusted();const result=await require('./observer-install').prepareObserver(context,vscode);const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(result,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return result;});
-  return {snapshot,connect,refresh,disconnect,validate,compareSource,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
+  return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
 }
 module.exports={registerObserver};

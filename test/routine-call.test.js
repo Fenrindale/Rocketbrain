@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const test = require('node:test');
-const { observeProcedure, bindProcedure } = require('../src/db/routine-call');
+const { observeProcedure, bindProcedure, sessionArguments, readProcedureOutputs } = require('../src/db/routine-call');
 const { collectRoutineResults } = require('../src/db/routine-call-stream');
 
 const context = { database: 'db', dialect: 'mysql', version: '8.4.13' };
@@ -35,11 +35,37 @@ test('routine review signs the exact visible object, definition, signature and a
   }
   await assert.rejects(observeProcedure(signatureQuery(create), context, { ...target, schema: 'outside' }), /connected database/);
   await assert.rejects(observeProcedure(signatureQuery(null), context, target), /withheld/);
-  await assert.rejects(observeProcedure(signatureQuery(create, [[1, 'i', 'OUT', 'bigint']]), context, target), /supports IN/);
+  await assert.rejects(observeProcedure(signatureQuery(create, [[1, 'i', 'invalid', 'bigint']]), context, target), /ambiguous parameters/);
   assert.deepEqual(bindProcedure(first.parameters, [{ kind: 'integer', value: '9007199254740993' }, { kind: 'null' }]).values,
     ['9007199254740993', null]);
   assert.throws(() => bindProcedure(first.parameters, [{ kind: 'text', value: '9007199254740993' }, { kind: 'null' }]), /requires integer/);
   assert.throws(() => bindProcedure(first.parameters, [{ kind: 'integer', value: '1' }]), /one typed value/);
+});
+
+test('routine binding allocates only internal writable variables and preserves output positions and exact values', async () => {
+  const create = 'CREATE PROCEDURE p(OUT i BIGINT, IN a DECIMAL(30,6), INOUT b BIGINT, OUT note VARCHAR(20)) SELECT a, b';
+  const rows = [[1, 'i', 'OUT', 'bigint'], [2, 'a', 'IN', 'decimal(30,6)'], [3, 'b', 'INOUT', 'bigint'], [4, 'note', 'OUT', 'varchar(20)']];
+  const review = await observeProcedure(signatureQuery(create, rows), context, target);
+  const stem = '@rb_proc_' + review.fingerprint.slice(0, 24) + '_';
+  assert.equal(review.sql, 'CALL `db`.`routine``name`(' + stem + '1, ?, ' + stem + '3, ' + stem + '4)');
+  const amount = '1234567890123456789.123456';
+  const types = [{ kind: 'decimal', value: amount }, { kind: 'null' }];
+  const plan = sessionArguments(review, types);
+  assert.deepEqual(plan.callValues, [amount]);
+  assert.deepEqual(plan.variableValues, [null]);
+  assert.equal(plan.initializeSql, 'SET ' + stem + '1 = NULL, ' + stem + '3 = ?, ' + stem + '4 = NULL');
+  assert.deepEqual(plan.outputs.map(output => output.ordinal), [1, 3, 4]);
+  assert.throws(() => sessionArguments(review, [...types, { kind: 'null' }]), /one typed value/);
+  const result = await readProcedureOutputs(async sql => {
+    assert.equal(sql, 'SELECT ' + stem + '1, ' + stem + '3, ' + stem + '4');
+    return { rows: [['9007199254740993', 12, null]] };
+  }, plan.outputs);
+  assert.deepEqual(result.map(({ ordinal, mode, value }) => [ordinal, mode, value]), [
+    [1, 'OUT', '9007199254740993'], [3, 'INOUT', '12'], [4, 'OUT', null]
+  ]);
+  assert.equal(result.some(item => Object.hasOwn(item, 'variable')), false);
+  await assert.rejects(readProcedureOutputs(async () => ({ rows: [[9007199254740992, 12, null]] }), plan.outputs), /exact procedure output/);
+  await assert.rejects(readProcedureOutputs(async () => ({ rows: [[12]] }), plan.outputs), /could not be read/);
 });
 
 function driverPreview(options = {}) {

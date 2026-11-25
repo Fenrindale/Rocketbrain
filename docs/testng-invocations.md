@@ -1,0 +1,9 @@
+# TestNG invocation selection
+
+Run **Install Independent Java Test and Coverage Runtime** after updating Rocketbrain to refresh its owned launcher. The installer reuses the existing verified TestNG and JaCoCo artifacts.
+
+Run a compiled TestNG test from **Rocketbrain Java Tests** to see the rows the provider actually supplied. Select a row to rerun it. Distinct scalar parameters use a value fingerprint. Equal scalar rows also record their position in the effective provider stream and a fingerprint of the full scalar schedule. A changed schedule invalidates that selection and the runner stops the affected method before executing a body. The identity refers to a position. A provider that interchanges equal rows without changing any observable scalar value still has the same positions.
+
+A no-argument test or a supported scalar data row with a cached provider keeps one test item across its retries. The Test Explorer shows the terminal outcome and reports scheduled retries in test output. Rerunning the item starts the current test from its first attempt, with the current `IRetryAnalyzer`. The serial coverage profile groups measured attempt intervals under that item.
+
+Select the method or class for object-valued rows, factory-created instances, retries that regenerate provider inputs, and `invocationCount` repetitions. A duplicate group mixed with object-valued rows also requires method selection so the complete schedule can be checked. TestNG 7.11 supplies the observed parameter position for the serial and parallel workers and preserves it on retries. [TestNG invocation implementation](https://github.com/testng-team/testng/blob/7.11.0/testng-core/src/main/java/org/testng/internal/invokers/TestInvoker.java)
