@@ -110,6 +110,8 @@ async function runSqlCollationChecks(api, vscode, checks) {
       return response.json();
     }
   });
+  if (Array.isArray(checks)) checks.push('The installed SQL editor diagnosed server collations and refreshed the ranges during an edit.');
+  return checks.sqlCollationChecks;
 }
 
 module.exports = { verifySqlCollationChecks, runSqlCollationChecks };
