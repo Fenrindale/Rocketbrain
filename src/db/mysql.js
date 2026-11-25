@@ -3,7 +3,7 @@ const {SchemaDesigner}=require('./schema-designer');
 const {SchemaObjectEditor}=require('./object-editor');
 
 const { performance } = require('node:perf_hooks');
-const { validateQuery, validateReadQuery, parameters } = require('./sql-policy');
+const { validateQuery, validateReadQuery, parameters, tokenize } = require('./sql-policy');
 const { operationOf, outcomeOf } = require('./activity-log');
 const { readMetadata, attachCheckMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
 const { readCatalogRefresh } = require('./catalog-refresh');
@@ -21,6 +21,13 @@ const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTi
 const { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope } = require('./write-protection');
 const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 const METADATA_ID = '__rocketbrain_metadata__';
+const MAX_PROTECTED_DEPENDENCIES = 128;
+const CASCADE_RULES = new Set(['CASCADE', 'SET NULL', 'SET DEFAULT']);
+const FOREIGN_KEY_RULES = new Set(['RESTRICT', 'NO ACTION', ...CASCADE_RULES]);
+const quoteIdentifier = name => {
+  const quote = String.fromCharCode(96);
+  return quote + name.replaceAll(quote, quote + quote) + quote;
+};
 function fail(code, message, extra = {}) { return Object.assign(new Error(message), { code, ...extra }); }
 function limits(options = {}) {
   const maxRows = options.maxRows ?? 500, timeoutMs = options.timeoutMs ?? 5000;
@@ -382,22 +389,110 @@ class MysqlService {
       return {reviewId,sessionId:session.id,scriptHash:scriptEngine.digest(review.script.sql),state:resultState,statements,completed,failed,notRun:statements.filter(entry=>entry.status==='not-run').length,stopReason,durationMs:Math.round((performance.now()-started)*100)/100,stateBefore,stateAfter:this._state(session),atomic:false,autoRetried:false,resultBytes:bytes,parameterBindingsIncluded:false,resultMayContainParameterValues:true};
     });
   }
-  async _ensureSafeProtectedTarget({ schema, name }) {
-    const definition = await this._editor.definition(name, schema);
-    if (definition.kind !== 'BASE TABLE' || String(definition.engine).toUpperCase() !== 'INNODB'
-      || !definition.triggerVisibility || definition.triggers.length) {
+  async _protectedParents({ schema, name }, definition) {
+    const expected = new Map(definition.foreignKeys.map(([constraint, , , parentSchema, parentName]) => (
+      [constraint, { schema: parentSchema, name: parentName }]
+    )));
+    const tokens = tokenize(definition.createSql, false);
+    const declared = tokens.filter((token, index) => token.kind === 'word' && token.upper === 'FOREIGN'
+      && tokens[index + 1]?.kind === 'word' && tokens[index + 1].upper === 'KEY').length;
+    const observed = await this._metadataQuery(
+      'SELECT CONSTRAINT_NAME,UNIQUE_CONSTRAINT_SCHEMA,REFERENCED_TABLE_NAME,UPDATE_RULE,DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=? AND TABLE_NAME=? ORDER BY CONSTRAINT_NAME',
+      [schema, name]);
+    if (declared !== expected.size || observed.rows.length !== expected.size) {
+      throw protectionError('Foreign key metadata for a protected table could not be verified.');
+    }
+    const parents = [];
+    for (const [constraint, parentSchema, parentName, updateRule, deleteRule] of observed.rows) {
+      const parent = expected.get(constraint);
+      if (!parent || parent.schema !== parentSchema || parent.name !== parentName ||
+        !FOREIGN_KEY_RULES.has(updateRule) || !FOREIGN_KEY_RULES.has(deleteRule)) {
+        throw protectionError('Foreign key metadata for a protected table could not be verified.');
+      }
+      expected.delete(constraint);
+      if (CASCADE_RULES.has(updateRule) || CASCADE_RULES.has(deleteRule)) parents.push(parent);
+    }
+    return parents;
+  }
+  async _ensureSafeProtectedTarget(target, pin) {
+    const observed = new Map();
+    const observe = async table => {
+      const key = JSON.stringify([table.schema, table.name]);
+      if (!observed.has(key)) {
+        if (observed.size >= MAX_PROTECTED_DEPENDENCIES) throw protectionError('The protected table dependencies exceed the supported limit.');
+        await pin?.(table);
+        const definition = await this._editor.definition(table.name, table.schema);
+        if (definition.kind !== 'BASE TABLE' || String(definition.engine).toUpperCase() !== 'INNODB') {
+          throw protectionError('This profile permits writes only when the target and protected dependencies are InnoDB base tables.');
+        }
+        observed.set(key, definition);
+      }
+      return observed.get(key);
+    };
+    const definition = await observe(target);
+    if (!definition.triggerVisibility || definition.triggers.length) {
       throw protectionError('This profile permits writes only to InnoDB base tables with verified trigger visibility and no triggers.');
     }
-    const cascades = await this._metadataQuery(
-      "SELECT CONSTRAINT_NAME FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE UNIQUE_CONSTRAINT_SCHEMA=? AND REFERENCED_TABLE_NAME=? AND (UPDATE_RULE IN ('CASCADE','SET NULL','SET DEFAULT') OR DELETE_RULE IN ('CASCADE','SET NULL','SET DEFAULT')) LIMIT 1",
-      [schema, name]);
-    if (cascades.rows.length) throw protectionError('This write could cascade to other tables protected by the connection profile.');
+    // A cascade into a protected table must pass one of these child-side foreign keys.
+    // Pin each child before reading its outgoing dependency edges.
+    const pending = new Map(this._writeProtection.tables.map(table => [JSON.stringify([table.schema, table.name]), table]));
+    for (const table of pending.values()) {
+      if (table.schema.toLowerCase() === target.schema.toLowerCase() && table.name.toLowerCase() === target.name.toLowerCase()) {
+        throw protectionError('This write could cascade to a table protected by the connection profile.');
+      }
+      for (const parent of await this._protectedParents(table, await observe(table))) {
+        const key = JSON.stringify([parent.schema, parent.name]);
+        if (pending.has(key)) continue;
+        if (pending.size >= MAX_PROTECTED_DEPENDENCIES) throw protectionError('The protected table dependencies exceed the supported limit.');
+        pending.set(key, parent);
+      }
+    }
+  }
+  async _pinnedProtectedWrite(session, target, timeoutMs, executeWrite) {
+    const started = !session.inTransaction;
+    const cancelVersion = session.cancellationVersion;
+    const autoCommit = session.autocommit;
+    const deadline = performance.now() + timeoutMs;
+    let committing = false;
+    const remaining = () => {
+      if (!session.connected || session.cancellationVersion !== cancelVersion) throw fail('ROCKETBRAIN_CANCELLED', 'The protected write was cancelled.');
+      if (!session.inTransaction) throw protectionError('The protected write lost its database transaction.');
+      const left = Math.floor(deadline - performance.now());
+      if (left < 1) throw fail('ROCKETBRAIN_TIMEOUT', 'The protected write exceeded its verification time limit.');
+      return left;
+    };
+    try {
+      if (session.readOnly) throw protectionError('Use a writable console for a protected profile write.');
+      if (started) this._observe(session, await this._control(session, 'START TRANSACTION READ WRITE', timeoutMs));
+      await this._ensureSafeProtectedTarget(target, async ({ schema, name }) => {
+        const sql = 'SELECT 1 FROM ' + quoteIdentifier(schema) + '.' + quoteIdentifier(name) + ' LIMIT 0 FOR UPDATE';
+        await this._executeStream(session, sql, [], { maxRows: 1, timeoutMs: remaining() }, false);
+      });
+      const result = await executeWrite(remaining());
+      if (started && autoCommit) {
+        const commitTimeout = remaining();
+        committing = true;
+        this._observe(session, await this._control(session, 'COMMIT', commitTimeout));
+        if (session.inTransaction) throw protectionError('The protected write commit could not be confirmed.');
+      }
+      return result;
+    } catch (error) {
+      if (committing) session.outcomeUnknown = true;
+      if (started && session.connected && session.inTransaction) {
+        try { this._observe(session, await this._control(session, 'ROLLBACK')); }
+        catch (rollbackError) { this._lose(session, rollbackError, committing); }
+      }
+      throw error;
+    }
   }
   async _stream(session, sql, values, { maxRows, timeoutMs }, mayWrite, activity) {
     const userSql = activity?.category === 'query' || activity?.category === 'script';
     const target = requireStatementScope(this._writeProtection, sql, session.database,
       { mayWrite, readOnly: session.readOnly, userSql, sqlMode: activity?.sqlMode });
-    if (target) await this._ensureSafeProtectedTarget(target);
+    const execute = left => this._executeStream(session, sql, values, { maxRows, timeoutMs: left }, mayWrite, activity);
+    return target ? this._pinnedProtectedWrite(session, target, timeoutMs, execute) : execute(timeoutMs);
+  }
+  _executeStream(session, sql, values, { maxRows, timeoutMs }, mayWrite, activity) {
     const started = performance.now();
     return new Promise((resolve, reject) => {
       let finished = false, bytes = 0, reportOutcome;

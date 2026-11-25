@@ -14,8 +14,8 @@ async function runWriteProtectionChecks(api, vscode, checks) {
   assert.equal(config.host, '127.0.0.1');
   const raw = await mysql.createConnection(config);
   const suffix = randomBytes(5).toString('hex');
-  const names = { parent: 'rb_parent_' + suffix, protected: 'rb_guard_' + suffix,
-    writable: 'rb_writable_' + suffix, triggered: 'rb_triggered_' + suffix };
+  const names = { ancestor: 'rb_ancestor_' + suffix, parent: 'rb_parent_' + suffix, protected: 'rb_guard_' + suffix,
+    writable: 'rb_writable_' + suffix, triggered: 'rb_triggered_' + suffix, unrelated: 'rb_unrelated_' + suffix };
   const routine = 'rb_fn_guard_' + suffix;
   const sessions = new Set(), profiles = [], manager = api.dbConnections;
   const probe = async () => {
@@ -64,8 +64,10 @@ async function runWriteProtectionChecks(api, vscode, checks) {
       await raw.query('CREATE TABLE ' + name + ' (id INT PRIMARY KEY, label VARCHAR(40)) ENGINE=InnoDB');
       await raw.query("INSERT INTO " + name + " VALUES (1,'original')");
     }
+    await raw.query('ALTER TABLE ' + names.parent + ' ADD FOREIGN KEY (id) REFERENCES ' + names.ancestor + ' (id) ON UPDATE CASCADE');
     await raw.query('ALTER TABLE ' + names.protected + ' ADD COLUMN parent_id INT DEFAULT 1, ADD FOREIGN KEY (parent_id) REFERENCES '
       + names.parent + ' (id) ON UPDATE CASCADE');
+    await raw.query('ALTER TABLE ' + names.unrelated + ' ADD FOREIGN KEY (id) REFERENCES ' + names.writable + ' (id) ON UPDATE CASCADE');
     await raw.query("CREATE TRIGGER rb_trigger_" + suffix + ' BEFORE UPDATE ON ' + names.triggered
       + " FOR EACH ROW UPDATE " + names.protected + " SET label='trigger-run' WHERE id=1");
     await raw.query('CREATE FUNCTION ' + routine + '() RETURNS INT DETERMINISTIC MODIFIES SQL DATA SQL SECURITY INVOKER '
@@ -104,6 +106,8 @@ async function runWriteProtectionChecks(api, vscode, checks) {
     assert.match(deniedTrigger.error, /no triggers/);
     const deniedCascade = await query('UPDATE ' + names.parent + ' SET id=2 WHERE id=1', true);
     assert.match(deniedCascade.error, /could cascade/);
+    const deniedAncestor = await query('UPDATE ' + names.ancestor + ' SET id=2 WHERE id=1', true);
+    assert.match(deniedAncestor.error, /could cascade/);
     const deniedFunction = await query('SELECT ' + routine + '()', true);
     assert.match(deniedFunction.error, /unverified SQL functions/);
     const readOnlyFunction = await query('SELECT ' + routine + '()');
@@ -112,21 +116,67 @@ async function runWriteProtectionChecks(api, vscode, checks) {
     assert.match((await query(select, true)).error, /Use a read-only console/);
     assert.deepEqual((await query(select)).result.rows, [['original']]);
 
-    const applicationWrite = await query('UPDATE ' + names.writable + " SET label='allowed' WHERE id=1", true);
+    const service = await api.withDatabaseAdmin(({ db }) => db);
+    await raw.query('SET SESSION lock_wait_timeout=1');
+    const verifyTarget = service._ensureSafeProtectedTarget;
+    const concurrentTrigger = 'CREATE TRIGGER rb_concurrent_' + suffix + ' BEFORE UPDATE ON ' + names.writable
+      + ' FOR EACH ROW SET NEW.label=NEW.label';
+    const fkName = 'rb_concurrent_fk_' + suffix;
+    const concurrentAlter = 'ALTER TABLE ' + names.parent + ' ADD CONSTRAINT ' + fkName
+      + ' FOREIGN KEY (id) REFERENCES ' + names.writable + ' (id) ON UPDATE CASCADE';
+    let ddlChecks = 0;
+    service._ensureSafeProtectedTarget = async function (target, pin) {
+      await verifyTarget.call(this, target, pin);
+      if (!pin || target.name !== names.writable || ddlChecks) return;
+      for (const ddl of [concurrentTrigger, concurrentAlter]) {
+        await assert.rejects(raw.query(ddl), error => error.code === 'ER_LOCK_WAIT_TIMEOUT');
+        ddlChecks++;
+      }
+    };
+    let applicationWrite;
+    try { applicationWrite = await query('UPDATE ' + names.writable + " SET label='allowed' WHERE id=1", true); }
+    finally { service._ensureSafeProtectedTarget = verifyTarget; }
+    assert.equal(ddlChecks, 2);
     assert.equal(applicationWrite.error, undefined);
     assert.equal(applicationWrite.result.affectedRows, 1);
+    assert.equal(applicationWrite.result.state.inTransaction, false);
+    await raw.query(concurrentAlter);
+    assert.match((await query('UPDATE ' + names.writable + ' SET id=2 WHERE id=1', true)).error, /could cascade/);
+    await raw.query('ALTER TABLE ' + names.parent + ' DROP FOREIGN KEY ' + fkName);
+    await raw.query(concurrentTrigger);
+    assert.match((await query('UPDATE ' + names.writable + " SET label='blocked' WHERE id=1", true)).error, /no triggers/);
+    await raw.query('DROP TRIGGER rb_concurrent_' + suffix);
     const writableGrid = await grid(names.writable);
     assert.equal(writableGrid.result.edit.canEdit, true);
     const [[guarded]] = await raw.query('SELECT label,parent_id FROM ' + names.protected + ' WHERE id=1');
     assert.deepEqual({ ...guarded }, { label: 'original', parent_id: 1 });
     const [[allowed]] = await raw.query('SELECT label FROM ' + names.writable + ' WHERE id=1');
     assert.equal(allowed.label, 'allowed');
+    const manual = await document('UPDATE ' + names.writable + " SET label='pending' WHERE id=1", true);
+    await api.configureConsoleSession(manual.sessionId, { autocommit: false });
+    await vscode.commands.executeCommand('rocketbrain.runQuery');
+    assert.equal(api.results().at(-1).result.state.inTransaction, true);
+    assert.equal((await raw.query('SELECT label FROM ' + names.writable + ' WHERE id=1'))[0][0].label, 'allowed');
+    await api.controlConsoleSession(manual.sessionId, 'rollback');
+    assert.equal((await raw.query('SELECT label FROM ' + names.writable + ' WHERE id=1'))[0][0].label, 'allowed');
+    const explicit = await document('UPDATE ' + names.writable + " SET label='explicit' WHERE id=1", true);
+    await api.controlConsoleSession(explicit.sessionId, 'begin');
+    await vscode.commands.executeCommand('rocketbrain.runQuery');
+    assert.equal(api.results().at(-1).result.state.inTransaction, true);
+    assert.equal((await raw.query('SELECT label FROM ' + names.writable + ' WHERE id=1'))[0][0].label, 'allowed');
+    await api.controlConsoleSession(explicit.sessionId, 'commit');
+    assert.equal((await raw.query('SELECT label FROM ' + names.writable + ' WHERE id=1'))[0][0].label, 'explicit');
+    const unrelated = await query('UPDATE ' + names.writable + ' SET id=2 WHERE id=1', true);
+    assert.equal(unrelated.result.affectedRows, 1);
+    assert.equal((await raw.query('SELECT id FROM ' + names.unrelated))[0][0].id, 2);
     assert.deepEqual(await probe(), originalSpring);
     checks.writeProtection = { profileConnectionLock: true, tableGridLock: true, directDmlRejected: true,
       rejectedJoinedMutation: true, rejectedScriptBeforeWrites: true, rejectedObservedTrigger: true,
       rejectedObservedCascade: true, rejectedRoutineInWriteMode: true, serverReadOnlyDeniedRoutineWrite: true,
       tabularReadsUseReadOnlySession: true, unrelatedWriteSucceeded: true, policyExportVersion: 4,
-      rejectedActivePolicyEdit: true, rejectedDatabaseWideWrites: true, spring: originalSpring };
+      rejectedActivePolicyEdit: true, rejectedDatabaseWideWrites: true, transitiveCascadeRefused: true,
+      concurrentTriggerAndDependencyDdlBlocked: true, autocommitReleasedPins: true, manualRollbackPreserved: true,
+      explicitCommitPreserved: true, unrelatedCascadeAllowed: true, spring: originalSpring };
   } finally {
     try {
       for (const id of sessions) await api.closeConsoleSession(id).catch(() => {});
