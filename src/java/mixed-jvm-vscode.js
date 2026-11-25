@@ -11,7 +11,7 @@ const COMMANDS = Object.freeze({
   run:'rocketbrain.java.mixed.run'
 });
 
-function registerMixedJvmWorkbench(vscode,{trusted,storagePath,java,ensureProject,getProjects,refreshProjects,discoverTasks,runTask,track}) {
+function registerMixedJvmWorkbench(vscode,{trusted,java,ensureProject,getProjects,refreshProjects,discoverTasks,runTask,track}) {
   const indexes = new Map(), running = new Set(), subscriptions = [];
   const sourceUri = uri => uri?.scheme === 'file' && !uri.authority && !uri.query && !uri.fragment &&
     /\.(?:java|kt)$/.test(uri.fsPath) && Boolean(vscode.workspace.getWorkspaceFolder(uri));
@@ -49,7 +49,7 @@ function registerMixedJvmWorkbench(vscode,{trusted,storagePath,java,ensureProjec
       assertSaved(project);
       const state = java.getState();
       if (state.state !== 'running' || !state.javaHome) throw fail('Start the independent Java engine before inspecting JVM classes.');
-      const index = await analyzeMixedClasses({project,sources,javaHome:state.javaHome,storagePath,cancellation});
+      const index = await analyzeMixedClasses({project,sources,javaHome:state.javaHome,cancellation});
       trusted();
       if (java.getState().runtimeIdentity !== state.runtimeIdentity || !getProjects().some(item => item.uri === project.uri)) {
         throw fail('The Java engine or its imported project changed during mixed compilation.');
@@ -98,7 +98,7 @@ function registerMixedJvmWorkbench(vscode,{trusted,storagePath,java,ensureProjec
   function register(command,action) {
     subscriptions.push(vscode.commands.registerCommand(command,() => track(async () => {
       try { trusted(); return await action(); }
-      catch (error) { await vscode.window.showErrorMessage('Rocketbrain JVM: '+error.message); return undefined; }
+      catch (error) { void vscode.window.showErrorMessage('Rocketbrain JVM: '+error.message); return undefined; }
     })));
   }
   register(COMMANDS.build,async () => {

@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
+const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
@@ -104,12 +105,12 @@ function parseClasses(output,count) {
   return classes;
 }
 
-async function analyzeMixedClasses({project,sources,javaHome,storagePath,cancellation}) {
+async function analyzeMixedClasses({project,sources,javaHome,cancellation}) {
   const files = compiledClasses(project,cancellation);
   if (!files.length) throw fail('Build the conventional main output folders before indexing mixed Java/Kotlin classes.');
   const executable = independentJavaExecutable(path.join(javaHome,'bin',process.platform === 'win32' ? 'java.exe' : 'java'));
-  await fsp.mkdir(storagePath,{recursive:true});
-  const parent = await fsp.realpath(storagePath);
+  // VS Code's profile/workspace storage can exceed the Windows mkdtemp path limit.
+  const parent = await fsp.realpath(os.tmpdir());
   const workspace = await fsp.mkdtemp(path.join(parent,'mixed-classfiles-'));
   const controller = new AbortController();
   const subscription = cancellation?.onCancellationRequested?.(() => controller.abort());
@@ -136,7 +137,8 @@ async function analyzeMixedClasses({project,sources,javaHome,storagePath,cancell
   } finally {
     subscription?.dispose();
     const verified = await fsp.realpath(workspace);
-    if (path.dirname(verified) !== parent || !path.basename(verified).startsWith('mixed-classfiles-')) {
+    if (path.relative(workspace,verified) || path.dirname(verified) !== parent ||
+        !path.basename(verified).startsWith('mixed-classfiles-')) {
       throw fail('Mixed JVM compiler inspection storage changed before cleanup.');
     }
     await fsp.rm(verified,{recursive:true,force:true,maxRetries:5,retryDelay:150});

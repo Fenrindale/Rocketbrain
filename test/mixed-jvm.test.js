@@ -84,7 +84,7 @@ test('Gradle and Maven compile/test actual Java and Kotlin and resolve compiled 
       assert.equal(result.state,'succeeded');
       const junit = tool === 'gradle' ? 'build/test-results/test' : 'target/surefire-reports';
       assert.match(await fs.readFile(path.join(folder,junit,'TEST-mixed.fixture.JavaApplicationTest.xml'),'utf8'),/tests="1"/);
-      const indexed = await analyzeMixedClasses({project:snapshot,sources:saved,javaHome,storagePath});
+      const indexed = await analyzeMixedClasses({project:snapshot,sources:saved,javaHome});
       const targets = [];
       for (const expected of EXPECTED) {
         const file = mixedFile(folder,expected.source), source = await fs.readFile(file,'utf8');
