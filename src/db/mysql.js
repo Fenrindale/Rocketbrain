@@ -712,6 +712,9 @@ class MysqlService {
   }
   relatedRowsCatalog(request) { return this._relationshipCatalog(readRelatedCatalog, request); }
   previewTable(name, options) { return this._editor.previewTable(name, options); }
+  openKeysetBrowser(name, options) { return this._editor.openKeysetBrowser(name, options); }
+  readKeysetPage(id, options) { return this._editor.readKeysetPage(id, options); }
+  closeKeysetBrowser(id) { return this._editor.closeKeysetBrowser(id); }
   previewRelatedTable(target, options) { return this._editor.previewRelatedTable(target, options); }
   retainTableSnapshot(binding) { return this._editor.retainTableSnapshot(binding); }
   releaseTableSnapshot(binding) { return this._editor.releaseTableSnapshot(binding); }

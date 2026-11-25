@@ -181,15 +181,15 @@
     const session = record.sessionState || result.state, item = draft(record);
     const pending = record.editBusy || item.pendingRequestId || record.editExpired || session?.needsReconnect || session?.outcomeUnknown;
     const localChanges = count(item) > 0 || record.review || editingCell?.id === record.id;
-    const blocked = Boolean(pending || localChanges || session?.inTransaction || session?.transactionState === 'unknown');
+    const blocked = Boolean(pending || localChanges || (!browse.keyset && session?.inTransaction) || session?.transactionState === 'unknown');
     $('page-previous').disabled = blocked || !browse.pageable || !browse.hasPrevious;
-    $('page-next').disabled = blocked || !browse.pageable || browse.hasNext !== true || browse.page >= 2000;
+    $('page-next').disabled = blocked || !browse.pageable || browse.hasNext !== true || (!browse.keyset && browse.page >= 2000);
     $('page-size').disabled = blocked;
     $('page-size').value = String(browse.pageSize);
     if (!$('page-size').value) {
       const option = document.createElement('option'); option.value = option.textContent = String(browse.pageSize); $('page-size').append(option); $('page-size').value = option.value;
     }
-    $('page-label').textContent = `Page ${browse.page + 1} · ${result.rowCount} rows`;
+    $('page-label').textContent = `Page ${browse.page + 1} · ${result.rowCount} rows` + (browse.keyset ? ' · Read snapshot' : '');
     $('browse-options').disabled = Boolean(pending); $('browse-options').setAttribute('aria-expanded', String(form.expanded));
     $('browse-form').hidden = !form.expanded;
     const scalar = model.columns.filter(column => !['binary', 'json', 'unsupported'].includes(column.kind));

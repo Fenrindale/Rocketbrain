@@ -270,6 +270,7 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
+- **Open Consistent Table Snapshot**은 기본 키가 있는 InnoDB 테이블을 별도 읽기 전용 트랜잭션에서 엽니다. 다음·이전 페이지는 정렬 값과 기본 키를 기준으로 서버에서 읽습니다. 탭을 닫으면 스냅샷 연결이 해제됩니다.
 - Grid와 Record에서 같은 변경 초안을 편집하고 검토합니다. 테이블별 열 배치는 같은 연결·스키마에서 다시 열 때 복원됩니다. 읽기 전용 테이블 행의 **Related Rows**는 물리 FK의 모든 키 값을 바인딩해 별도 결과를 엽니다.
 - **Chart** 보기에서 캡처한 결과 페이지의 막대·선 그래프와 정확한 그룹 합계·평균을 확인합니다. 셀 편집기는 줄바꿈 종류, JSON 원문, Hex·Base64와 SQL NULL을 구분합니다.
 - **Map** 보기에서 캡처한 결과의 공간 열을 선택해 지도와 원본 행을 탐색합니다. 지리 좌표와 SRID 0 평면 좌표를 별도 보기로 표시합니다.

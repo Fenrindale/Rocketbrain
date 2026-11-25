@@ -78,6 +78,7 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.openTableSnapshot", "title": "Open Consistent Table Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.attach", "title": "Open SSH Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
       { "command": "rocketbrain.sshWorkspace.refresh", "title": "Refresh SSH Files", "category": "Rocketbrain", "icon": "$(refresh)" },
@@ -1195,6 +1196,7 @@
       ],
       "view/item/context": [
         { "command": "rocketbrain.db.refreshObjectMetadata", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "schema" },
+        { "command": "rocketbrain.openTableSnapshot", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
         { "command": "rocketbrain.docker.lifecycle", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.docker.logs", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },

@@ -474,6 +474,24 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       await tableEditor.open({ table: name, sessionId: binding.id, sql });
     } else await runSql(sql, editor.document);
   });
+  async function openTableSnapshot(name, options) {
+    if (!state.mysql || state.offlineMetadata || state.switching || !vscode.workspace.isTrusted) {
+      throw Error('Connect to MySQL or MariaDB in a trusted workspace before opening a table snapshot.');
+    }
+    if (!state.schema.some(table => table.name === name && table.kind === 'table')) {
+      throw Error('Choose a table from the active database.');
+    }
+    const { db, epoch } = state;
+    await results.show();
+    if (state.db !== db || state.epoch !== epoch || state.switching) throw Error('The active database changed. Open the table snapshot again.');
+    return tableEditor.openKeyset({ table: name, options });
+  }
+  command('rocketbrain.openTableSnapshot', async item => {
+    const name = typeof item === 'string' ? item : item?.table?.name;
+    const selected = name ?? await vscode.window.showQuickPick(state.schema.filter(table => table.kind === 'table').map(table => table.name),
+      { title: 'Choose a Table for a Read Snapshot' });
+    if (selected) return openTableSnapshot(selected);
+  });
   command('rocketbrain.refresh', async () => { project.refresh(); await refreshSchema(); });
   function describeRefresh(report) {
     const detail = report.refreshed.length + ' refreshed · ' + report.unchanged.length + ' unchanged · ' +
@@ -938,6 +956,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     saveResultFilter: (id, modelId, name) => results.saveFilterPreset(id, modelId, name),
     removeResultFilter: (id, modelId, name) => results.removeFilterPreset(id, modelId, name),
     showResults:()=>results.show(),
+    openTableSnapshot,
     async configureConsoleSession(sessionId,{readOnly,autocommit}={}) {
       if(![...bindings.values()].some(binding=>binding.id===sessionId))throw new Error('Unknown SQL console.');
       return withSession(sessionId,async()=>{if(readOnly!==undefined)await state.db.setReadOnly(readOnly,{sessionId});if(autocommit!==undefined)await state.db.setAutocommit(autocommit,{sessionId});return state.db.getSessionState(sessionId);});
