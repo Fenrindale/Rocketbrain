@@ -53,9 +53,12 @@ final class ExtractMethodInspector {
         if (returnsValue && selected.size()<2) return error("Select at least two complete trailing statements ending with a return value.");
         if (callOffset<0 && nameUsed(owner,name)) return error("Choose a new method name unused in the current Java source and its hierarchy.");
         boolean voidMethod = declaration.getReturnType().getKind()==TypeKind.VOID;
+        boolean outputHelper = callOffset>=0 && !returnsValue && !voidMethod;
+        var methodStatements = method.getBody().getStatements();
         if (callOffset>=0 && (!declaration.getSimpleName().contentEquals(name) ||
             !declaration.getModifiers().contains(Modifier.PRIVATE) || selection.block().getLeaf()!=method.getBody() ||
-            selected.size()!=method.getBody().getStatements().size() || returnsValue==voidMethod)) {
+            selected.getFirst()!=methodStatements.getFirst() || selected.size()+(outputHelper?1:0)!=methodStatements.size() ||
+            returnsValue && voidMethod)) {
             return error("Javac could not verify the generated private helper.");
         }
         BodyProof body = new BodyProof(declaration,from,to,returnsValue);
@@ -64,8 +67,16 @@ final class ExtractMethodInspector {
             else body.invalid=true;
         }
         if (body.invalid) return error("Use local statements, if, loops or a trailing return. Captured writes, nonlocal control flow, local types and nested lambdas are unsupported.");
-        if (callOffset<0 && usedOutside(path,body.locals.keySet(),from,to)) {
-            return error("The selected statements declare a local value used outside the extraction.");
+        List<VariableElement> outputs = callOffset<0?usedOutside(path,body.locals.keySet(),from,to):
+            outputHelper?returnedLocals(path,declaration,methodStatements.getLast(),body.locals.keySet()):List.of();
+        if (outputs==null || outputs.size()>4 || outputs.stream().anyMatch(value->!transferable(value,selection))) {
+            return error("A local value used outside the extraction must be an initialized, nonconstant local declared directly in the selection. Use at most four output values.");
+        }
+        if (callOffset<0 && !outputs.isEmpty()) {
+            String resultType=name.substring(0,1).toUpperCase(Locale.ROOT)+name.substring(1)+"Values";
+            if (nameUsed(owner,name+"Result") || nameUsed(owner,resultType)) {
+                return error("Choose a helper name whose generated result variable and type are unused.");
+            }
         }
         Map<String,Object> result = object("owner",owner.getQualifiedName().toString(),"className",owner.getSimpleName().toString(),
             "method",SignatureInspector.key(declaration),"staticMethod",declaration.getModifiers().contains(Modifier.STATIC),
@@ -76,11 +87,12 @@ final class ExtractMethodInspector {
             "typeNames",declaration.getTypeParameters().stream().map(parameter->parameter.getSimpleName().toString()).toList(),
             "sourceThrows",method.getThrows().stream().map(this::source).toList(),
             "throwsTypes",declaration.getThrownTypes().stream().map(Object::toString).toList(),
-            "captures",body.captures.keySet().stream().map(this::variable).toList(),
+            "captures",body.captures.keySet().stream().map(this::variable).toList(),"outputs",outputs.stream().map(this::output).toList(),
             "bindings",body.bindings,"selected",selected.stream().map(Object::toString).toList());
         if (callOffset>=0) {
             result.put("parameters",declaration.getParameters().stream().map(this::variable).toList());
-            result.put("call",call(callOffset,declaration,returnsValue));
+            result.put("call",call(callOffset,declaration,returnsValue,outputs));
+            if (outputHelper) result.put("outputType",declaration.getReturnType().toString());
         }
         return result;
     }
@@ -107,17 +119,47 @@ final class ExtractMethodInspector {
         return matches.size()==1?matches.getFirst():null;
     }
 
-    private boolean usedOutside(TreePath method,Set<VariableElement> locals,int from,int to) {
-        if (locals.isEmpty()) return false;
-        boolean[] used = {false};
+    private List<VariableElement> usedOutside(TreePath method,Set<VariableElement> locals,int from,int to) {
+        if (locals.isEmpty()) return List.of();
+        Set<VariableElement> observed = new HashSet<>();
         new TreePathScanner<Void,Void>() {
             @Override public Void visitIdentifier(IdentifierTree tree,Void unused) {
                 int offset=start(tree);
-                if ((offset<from || offset>=to) && locals.contains(trees.getElement(getCurrentPath()))) used[0]=true;
+                if ((offset<from || offset>=to) && trees.getElement(getCurrentPath()) instanceof VariableElement value &&
+                    locals.contains(value)) observed.add(value);
                 return super.visitIdentifier(tree,unused);
             }
         }.scan(method,null);
-        return used[0];
+        return locals.stream().filter(observed::contains).toList();
+    }
+
+    private boolean transferable(VariableElement value,Selection selection) {
+        TreePath declaration=trees.getPath(value);
+        return declaration!=null && declaration.getParentPath().getLeaf()==selection.block().getLeaf() &&
+            declaration.getLeaf() instanceof VariableTree variable && variable.getInitializer()!=null &&
+            variable.getModifiers().getAnnotations().isEmpty() && value.getConstantValue()==null;
+    }
+
+    private Map<String,Object> output(VariableElement value) {
+        return object("name",value.getSimpleName().toString(),"type",value.asType().toString(),
+            "final",value.getModifiers().contains(Modifier.FINAL));
+    }
+
+    private List<VariableElement> returnedLocals(TreePath method,ExecutableElement helper,StatementTree statement,
+        Set<VariableElement> locals) {
+        if (!(helper.getReturnType() instanceof DeclaredType returnType) || !(returnType.asElement() instanceof TypeElement record) ||
+            record.getKind()!=ElementKind.RECORD || !(statement instanceof ReturnTree returned) ||
+            !(returned.getExpression() instanceof NewClassTree created) || created.getClassBody()!=null) return null;
+        TreePath at=new TreePath(new TreePath(new TreePath(method,((MethodTree)method.getLeaf()).getBody()),returned),created);
+        if (!helper.getReturnType().toString().equals(trees.getTypeMirror(at).toString())) return null;
+        List<VariableElement> outputs = new ArrayList<>();
+        for (ExpressionTree argument : created.getArguments()) {
+            if (!(argument instanceof IdentifierTree) ||
+                !(trees.getElement(new TreePath(at,argument)) instanceof VariableElement value) ||
+                !locals.contains(value) || outputs.contains(value)) return null;
+            outputs.add(value);
+        }
+        return outputs.isEmpty()?null:outputs;
     }
 
     private Map<String,Object> variable(VariableElement element) {
@@ -144,14 +186,15 @@ final class ExtractMethodInspector {
         return used[0];
     }
 
-    private Map<String,Object> call(int offset,ExecutableElement helper,boolean returnsValue) {
+    private Map<String,Object> call(int offset,ExecutableElement helper,boolean returnsValue,List<VariableElement> outputs) {
         List<Map<String,Object>> calls = new ArrayList<>();
         new TreePathScanner<Void,Void>() {
             @Override public Void visitMethodInvocation(MethodInvocationTree call, Void unused) {
                 TreePath path = getCurrentPath(), parent = path.getParentPath();
+                if (start(call)!=offset || !helper.equals(trees.getElement(path))) return super.visitMethodInvocation(call,unused);
                 boolean rightStatement=returnsValue?parent.getLeaf() instanceof ReturnTree:
-                    parent.getLeaf() instanceof ExpressionStatementTree;
-                if (start(call)==offset && rightStatement && helper.equals(trees.getElement(path))) {
+                    outputs.isEmpty()?parent.getLeaf() instanceof ExpressionStatementTree:restoresOutputs(parent,call,helper,outputs);
+                if (rightStatement) {
                     List<Map<String,Object>> arguments = new ArrayList<>();
                     for (ExpressionTree expression : call.getArguments()) {
                         if (!(expression instanceof IdentifierTree) ||
@@ -169,6 +212,31 @@ final class ExtractMethodInspector {
             }
         }.scan(unit,null);
         return calls.size()==1?calls.getFirst():null;
+    }
+
+    private boolean restoresOutputs(TreePath declaration,MethodInvocationTree call,ExecutableElement helper,List<VariableElement> outputs) {
+        if (!(declaration.getLeaf() instanceof VariableTree temporary) || temporary.getInitializer()!=call ||
+            !(declaration.getParentPath().getLeaf() instanceof BlockTree block) ||
+            !(trees.getElement(declaration) instanceof VariableElement result) ||
+            !result.asType().toString().equals(helper.getReturnType().toString()) ||
+            !(helper.getReturnType() instanceof DeclaredType type)) return false;
+        var statements=block.getStatements();
+        int first=statements.indexOf(temporary)+1;
+        if (first<1 || first+outputs.size()>statements.size()) return false;
+        for (int index=0;index<outputs.size();index++) {
+            if (!(statements.get(first+index) instanceof VariableTree restored) ||
+                !(restored.getInitializer() instanceof MethodInvocationTree accessor) ||
+                !accessor.getArguments().isEmpty() || !(accessor.getMethodSelect() instanceof MemberSelectTree select)) return false;
+            TreePath variablePath=new TreePath(declaration.getParentPath(),restored);
+            TreePath accessorPath=new TreePath(variablePath,accessor);
+            TreePath receiver=new TreePath(new TreePath(accessorPath,select),select.getExpression());
+            if (!(trees.getElement(variablePath) instanceof VariableElement variable) ||
+                !output(outputs.get(index)).equals(output(variable)) || !result.equals(trees.getElement(receiver)) ||
+                !(trees.getElement(accessorPath) instanceof ExecutableElement getter) ||
+                !getter.getEnclosingElement().equals(type.asElement()) ||
+                !getter.getSimpleName().contentEquals("value"+index)) return false;
+        }
+        return true;
     }
 
     private final class BodyProof extends TreePathScanner<Void,Void> {

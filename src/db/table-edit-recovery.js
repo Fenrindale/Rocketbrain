@@ -18,6 +18,7 @@ function validArchive(value) {
   return value.operations.every(item => {
     if (!item || !['update', 'insert', 'delete'].includes(item.type) || !boundedString(item.sql, 65536) ||
         !Array.isArray(item.parameters) || !item.parameters.every(scalar)) return false;
+    if (item.exactDatasetDelete !== undefined && (item.type !== 'delete' || item.exactDatasetDelete !== true)) return false;
     if (item.type !== 'insert' && (!digestPattern.test(item.key ?? '') || !digestPattern.test(item.row ?? ''))) return false;
     return item.type === 'delete' || item.values && !Array.isArray(item.values) && typeof item.values === 'object' &&
       Object.entries(item.values).every(([name, cell]) => boundedString(name, 64) && (cell === null || typeof cell === 'string'));

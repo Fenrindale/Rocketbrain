@@ -205,4 +205,4 @@ function selectDatasetChanges(comparison, indices) {
   return changes;
 }
 
-module.exports = { compareDatasets, selectDatasetChanges };
+module.exports = { compareDatasets, selectDatasetChanges, capturedCell };

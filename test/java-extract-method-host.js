@@ -8,11 +8,12 @@ const {extractMethodFixture,voidMethodFixture}=require('./helpers/extract-method
 const {importedSpring,jdbcReadback}=require('./java-source-analysis-host');
 const {until}=require('./helpers/stdio-lsp');
 
-async function runJavaExtractMethodChecks(api,vscode,checks,voidSelection=false) {
+async function runJavaExtractMethodChecks(api,vscode,checks,mode='return') {
   const workspace=vscode.workspace.workspaceFolders[0].uri.fsPath;
   await importedSpring(api,workspace);
   const className='RbExtractMethod'+randomBytes(5).toString('hex'),name='reviewedRun';
-  const fixture=(voidSelection?voidMethodFixture:extractMethodFixture)('fixture.boot',className,{spring:true});
+  const returnsValue=mode==='return',multipleOutputs=mode==='outputs';
+  const fixture=(returnsValue?extractMethodFixture:voidMethodFixture)('fixture.boot',className,{spring:true});
   const file=path.join(workspace,'src/main/java/fixture/boot',className+'.java'),uri=vscode.Uri.file(file);
   let document,created=false;
   const build=async()=>{
@@ -28,7 +29,7 @@ async function runJavaExtractMethodChecks(api,vscode,checks,voidSelection=false)
       assert.ok(offset>=0,marker);
       return new vscode.Range(document.positionAt(offset),document.positionAt(offset+marker.length));
     };
-    const selection=select(fixture.selected);
+    const selection=select(multipleOutputs?fixture.outputs:fixture.selected);
     await build();
     const actions=await vscode.commands.executeCommand('vscode.executeCodeActionProvider',uri,selection,'refactor.extract.method',15);
     assert.ok(actions.some(item=>item.command?.command==='rocketbrain.java.extractMethod'));
@@ -41,7 +42,7 @@ async function runJavaExtractMethodChecks(api,vscode,checks,voidSelection=false)
         }
       }
     }
-    if (voidSelection) {
+    if (!returnsValue) {
       await assert.rejects(prepare(select(fixture.escaping),name),/local value used outside/);
       await assert.rejects(prepare(select(fixture.earlyReturn),name),/nonlocal control flow/);
       await assert.rejects(prepare(select(fixture.outsideLoop),name),/nonlocal control flow/);
@@ -52,10 +53,11 @@ async function runJavaExtractMethodChecks(api,vscode,checks,voidSelection=false)
     const plan=await prepare(selection,name);
     assert.equal(plan.documents.length,1);
     assert.equal(plan.documents[0].edits.length,2);
-    assert.deepEqual(plan.extraction.typeParameters,voidSelection?[]:['T','E']);
-    assert.deepEqual(plan.extraction.throwsTypes,voidSelection?['java.io.IOException']:['E']);
-    assert.deepEqual(plan.extraction.captures.map(item=>item.name),voidSelection?['value','failure']:['value','suffix','allow','failure']);
-    assert.equal(plan.extraction.statements,voidSelection?3:4);
+    assert.deepEqual(plan.extraction.typeParameters,returnsValue?['T','E']:[]);
+    assert.deepEqual(plan.extraction.throwsTypes,returnsValue?['E']:multipleOutputs?[]:['java.io.IOException']);
+    assert.deepEqual(plan.extraction.captures.map(item=>item.name),
+      returnsValue?['value','suffix','allow','failure']:multipleOutputs?['value']:['value','failure']);
+    assert.equal(plan.extraction.statements,returnsValue?4:multipleOutputs?2:3);
     const expected=plan.documents[0].after;
     const preview=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-java-refactor:/'+plan.id+'/0/after.java'));
     assert.equal(preview.getText().replace(/\r\n/g,'\n'),expected.replace(/\r\n/g,'\n'));
@@ -67,7 +69,20 @@ async function runJavaExtractMethodChecks(api,vscode,checks,voidSelection=false)
     await until(()=>!document.isDirty&&document.getText()===fixture.text,10000);
     const jdbc=await jdbcReadback();
     assert.ok(jdbc,'Run with the owned Spring JDBC fixture.');
-    if (voidSelection) {
+    if (multipleOutputs) {
+      assert.equal(plan.extraction.returnType,'fixture.boot.'+className+'.ReviewedRunValues');
+      assert.deepEqual(plan.extraction.outputs,[
+        {name:'clean',type:'java.lang.String',final:true},
+        {name:'length',type:'int',final:false}
+      ]);
+      assert.match(expected,/final java\.lang\.String clean = reviewedRunResult\.value0\(\);/);
+      assert.match(expected,/int length = reviewedRunResult\.value1\(\);/);
+      assert.match(expected,/private record ReviewedRunValues\(java\.lang\.String value0, int value1\)/);
+      checks.push('Extract Method restored two compiler-proven outputs in the original Spring method scope, including a final String and a mutable int.');
+      return {springWorkspace:true,jdbc,statements:2,outputs:plan.extraction.outputs,checkedBindings:plan.extraction.checkedBindings,
+        nativeAction:true,verifiedOutputCarrier:true,compileTimeConstantRefused:true,diskUnchanged:true,nativeUndo:true};
+    }
+    if (!returnsValue) {
       assert.equal(plan.extraction.returnType,'void');
       assert.match(expected,/this\.reviewedRun\(value, failure\);/);
       assert.match(expected,/if \(repeat == 0\) continue;/);
@@ -92,6 +107,7 @@ async function runJavaExtractMethodChecks(api,vscode,checks,voidSelection=false)
   }
 }
 
-const runJavaVoidMethodChecks=(api,vscode,checks)=>runJavaExtractMethodChecks(api,vscode,checks,true);
+const runJavaVoidMethodChecks=(api,vscode,checks)=>runJavaExtractMethodChecks(api,vscode,checks,'void');
+const runJavaMultipleOutputChecks=(api,vscode,checks)=>runJavaExtractMethodChecks(api,vscode,checks,'outputs');
 
-module.exports={runJavaExtractMethodChecks,runJavaVoidMethodChecks};
+module.exports={runJavaExtractMethodChecks,runJavaVoidMethodChecks,runJavaMultipleOutputChecks};

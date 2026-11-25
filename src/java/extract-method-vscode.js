@@ -63,9 +63,9 @@ function createMethodExtraction(vscode,{
       },
       preApply:token=>{checkAnchor(token);verified.validateClasspath();assertUnchangedSourceSnapshots(sources);}
     });
-    return {...reviewed,extraction:{name,owner:before.owner,returnType:before.returnType,throwsTypes:before.throwsTypes,
+    return {...reviewed,extraction:{name,owner:before.owner,returnType:verified.methodExtract.outputType??before.returnType,throwsTypes:before.throwsTypes,
       typeParameters:before.typeNames,captures:before.captures.map(({name,type})=>({name,type})),statements:before.statementCount,
-      checkedBindings:before.bindings.length}};
+      outputs:before.outputs,checkedBindings:before.bindings.length}};
   }
 
   let disposed=false;

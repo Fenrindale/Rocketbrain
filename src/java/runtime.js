@@ -81,6 +81,10 @@ function serverSettings(projectJdks = [], options = {}) {
   if (options.gradleHome) gradle.home = absoluteDirectory(options.gradleHome, 'rocketbrain.java.gradleHome');
   if (options.gradleJavaHome) gradle.java = { home: absoluteDirectory(options.gradleJavaHome, 'rocketbrain.java.gradleJavaHome') };
   const {profile,...nullAnalysis}=resolveNullChecks(options.nullChecks);
+  const favorites=options.favoriteStaticMembers;
+  const qualifiedMember=/^(?:[\p{L}_$][\p{L}\p{N}_$]*\.){2,}(?:[\p{L}_$][\p{L}\p{N}_$]*|\*)$/u;
+  if(favorites!==undefined&&(!Array.isArray(favorites)||favorites.length>32||favorites.some(value=>typeof value!=='string'||value.length>512||!qualifiedMember.test(value))))
+    throw Error('Java static import favorites require at most 32 qualified member names or declaring-type wildcards.');
   return {
     java: {
       // Initial trusted import remains enabled; later build-file changes require
@@ -88,7 +92,7 @@ function serverSettings(projectJdks = [], options = {}) {
       configuration: { updateBuildConfiguration: 'disabled', runtimes },
       import: { maven: { enabled: true }, gradle },
       autobuild: { enabled: true },
-      completion: { enabled: true },
+      completion: { enabled: true, ...(favorites!==undefined?{favoriteStaticMembers:[...new Set(favorites)]}:{}) },
       signatureHelp: { enabled: true },
       inlayHints: { parameterNames: { enabled: 'all' }, variableTypes: { enabled: true }, parameterTypes: { enabled: true } },
       compile: { nullAnalysis },

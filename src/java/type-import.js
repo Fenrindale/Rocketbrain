@@ -40,8 +40,8 @@ function confirmUnresolvedType(text,selection,uri,errors) {
   return occurrences;
 }
 
-function typeImportDraft(text,selection,fqn,occurrences) {
-  if(!qualified(fqn)||fqn.split('.').at(-1)!==selection.name)throw Error('Select a matching qualified Java type.');
+function typeImportDraft(text,selection,fqn,occurrences,{staticMember=false}={}) {
+  if(!qualified(fqn)||fqn.split('.').at(-1)!==selection.name)throw Error(staticMember?'Select a matching qualified Java static member.':'Select a matching qualified Java type.');
   const {tokens,issues}=lexJava(text);
   if(issues.length||!tokens.length)throw Error('Resolve ambiguous Java source tokens before adding an import.');
   const eol=text.includes('\r\n')?'\r\n':'\n';
@@ -51,14 +51,14 @@ function typeImportDraft(text,selection,fqn,occurrences) {
     while(at<tokens.length&&tokens[at].text!==';')at++;
     if(at===tokens.length)throw Error('Complete the Java package and import declarations first.');
     const declaration=tokens.slice(start,at+1);
-    if(declaration[0].text==='import'&&declaration.slice(1,-1).map(token=>token.text).join('')===fqn) {
-      throw Error('The selected Java type is already imported.');
+    if(declaration[0].text==='import'&&declaration.slice(1,-1).map(token=>token.text).join('')===(staticMember?'static':'')+fqn) {
+      throw Error(staticMember?'The selected static member is already imported.':'The selected Java type is already imported.');
     }
     previous=tokens[at++];
   }
   let insertion=previous?.end??tokens[0].start;
   if(insertion>selection.start)throw Error('Select an unresolved type outside the package and import declarations.');
-  let replacement='import '+fqn+';'+eol;
+  let replacement='import '+(staticMember?'static ':'')+fqn+';'+eol;
   if(previous) {
     const nextLine=text.indexOf('\n',insertion);
     const lineTail=nextLine<0?text.slice(insertion):text.slice(insertion,nextLine);

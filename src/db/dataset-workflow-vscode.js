@@ -28,7 +28,7 @@ function registerDatasetWorkflows(context, vscode, command, options) {
       : { snapshotStartedAt: report.snapshotStartedAt };
     visible = { uri, report, text: JSON.stringify({ ...timing, comparisonCompletedAt: report.created,
       source: report.source, destination: report.target,
-      summary: report.summary, omittedDifferences: report.omitted, sample: report.sample }, null, 2) + '\n' };
+      summary: report.summary, oneSided: report.oneSided, omittedDifferences: report.omitted, sample: report.sample }, null, 2) + '\n' };
     const document = await vscode.workspace.openTextDocument(uri);
     await vscode.window.showTextDocument(document, { preview: false });
     return { ...structuredClone(report), uri: uri.toString() };
@@ -82,8 +82,8 @@ function registerDatasetWorkflows(context, vscode, command, options) {
     const selected = await storedItem('Choose a saved comparison to remove');
     if (selected) await workflows.remove(selected.id);
   });
-  async function stage(reportId, recordId, indices) {
-    return options.stage(recordId, async (target, assertCurrent) => workflows.reconcile(reportId, target, indices, assertCurrent));
+  async function stage(reportId, recordId, indices, selection) {
+    return options.stage(recordId, async (target, assertCurrent) => workflows.reconcile(reportId, target, indices, assertCurrent, selection));
   }
   command('rocketbrain.stageDatasetWorkflow', async () => {
     const report = visible?.report;
@@ -96,11 +96,14 @@ function registerDatasetWorkflows(context, vscode, command, options) {
       label: `Table result ${item.id}`, detail: item.label, item
     })), { placeHolder: 'Choose the current editable destination page' }))?.item;
     if (!target) return;
-    const chosen = await vscode.window.showQuickPick(report.sample.filter(row => row.state === 'changed').map(row => ({
-      label: row.key.join(' · '), description: row.changes.map(change => change.target).join(', '), index: row.index
-    })), { canPickMany: true, placeHolder: 'Select changed rows visible on the destination page' });
+    const chosen = await vscode.window.showQuickPick(report.sample.filter(row => row.state === 'changed' || row.operation).map(row => ({
+      label: row.key.join(' · '),
+      description: { insert: 'Insert source row', delete: 'Delete destination row' }[row.operation] ??
+        'Update ' + row.changes.map(change => change.target).join(', '),
+      index: row.index
+    })), { canPickMany: true, placeHolder: 'Select destination operations to stage for SQL review' });
     if (!chosen?.length) return;
-    await stage(report.id, target.id, chosen.map(item => item.index));
+    await stage(report.id, target.id, chosen.map(item => item.index), { includeOneSided: true });
   });
 
   const remove = id => { list(); return workflows.remove(id); };

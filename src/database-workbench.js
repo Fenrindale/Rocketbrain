@@ -182,9 +182,10 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       };
       if (record?.editBusy) throw Error('Wait for the current table operation.');
       assertCurrent(state.db);
-      const { changes, assertFresh } = await reconcile(target, assertCurrent);
+      const { changes, exactDeletes, assertFresh } = await reconcile(target, assertCurrent);
       await tableEditor.stageDatasetChanges(id, { changes, assertFresh, modelId: target.edit.modelId, draftRevision: record.draftRevision || 0,
-        editMessage: 'The selected existing rows are staged from the saved comparison. Review SQL, Apply, then Commit or Roll Back.' });
+        exactDeletes,
+        editMessage: 'The selected destination operations are staged from the saved comparison. Review SQL, Apply, then Commit or Roll Back.' });
       await results.show();
     }
   });

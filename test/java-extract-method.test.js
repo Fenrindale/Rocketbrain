@@ -75,13 +75,30 @@ test('javac proves generic return and nested void extractions and preserves runt
   assert.match((await inspect(voidFixture.text,voidSelection(voidFixture.earlyReturn),name)).error,/nonlocal control flow/);
   assert.match((await inspect(voidFixture.text,voidSelection(voidFixture.outsideLoop),name)).error,/nonlocal control flow/);
   const voidBefore=await execute(voidFixture.text),voidAfter=await execute(voidDraft.text);
-  assert.equal(voidBefore,'before,one,ONE,after,before,after,before,two,same');
+  assert.equal(voidBefore,'before,one,ONE,after,before,after,before,two,same|pair:5');
   assert.equal(voidAfter,voidBefore);
+  const multiple=await inspect(voidFixture.text,voidSelection(voidFixture.outputs),'pair');
+  assert.deepEqual(multiple.outputs,[
+    {name:'clean',type:'java.lang.String',final:true},
+    {name:'length',type:'int',final:false}
+  ]);
+  const multipleDraft=buildMethodExtraction(voidFixture.text,multiple,'pair');
+  const multipleAfter=await inspect(multipleDraft.text,multipleDraft,'pair');
+  verifyMethodExtraction(multiple,multipleAfter);
+  assert.equal(multipleAfter.outputType,'fixture.Sample.PairValues');
+  assert.match(multipleDraft.text,/final java\.lang\.String clean = pairResult\.value0\(\);/);
+  assert.match(multipleDraft.text,/int length = pairResult\.value1\(\);/);
+  const swapped={...multipleAfter,outputs:[...multipleAfter.outputs].reverse()};
+  assert.throws(()=>verifyMethodExtraction(multiple,swapped),/replacement call/);
+  const multipleRun=await execute(multipleDraft.text);
+  assert.equal(multipleRun,voidBefore);
   const jdbc=await jdbcReadback();
   if(process.env.ROCKETBRAIN_METHOD_EXTRACTION_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_METHOD_EXTRACTION_RECEIPT,
     JSON.stringify({beforeRun,afterRun,statements:initial.statementCount,typeParameters:initial.typeNames,throwsTypes:initial.throwsTypes,
       captures:initial.captures.map(({name,type})=>({name,type})),bindings:initial.bindings.length,
       capturedWriteRefused:true,nameConflictRefused:true,partialSelectionRefused:true,...(jdbc&&{jdbc}),
       voidExtraction:{voidBefore,voidAfter,statements:originalVoid.statementCount,localOutputRefused:true,
-        earlyReturnRefused:true,externalContinueRefused:true}},null,2)+'\n');
+        earlyReturnRefused:true,externalContinueRefused:true},
+      multipleOutputs:{outputType:multipleAfter.outputType,outputs:multiple.outputs,beforeRun:voidBefore,afterRun:multipleRun,
+        swappedProofRefused:true,compileTimeConstantRefused:true}},null,2)+'\n');
 });

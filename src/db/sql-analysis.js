@@ -1,6 +1,7 @@
 'use strict';
 
 // A bounded SELECT binder. It never sends SQL or loads server/provider code.
+const { isJsonFunction, checkJsonFunction, checkPath, literalValue } = require('./sql-json-expressions');
 const LIMITS={bytes:128*1024,tokens:24000,scopes:256,depth:32,columns:2048};
 const CLAUSES=new Set(['FROM','WHERE','GROUP','HAVING','ORDER','LIMIT','WINDOW','INTO','FOR','LOCK','PROCEDURE','QUALIFY']);
 const RESERVED=new Set(('SELECT FROM WHERE AS DISTINCT ALL JOIN INNER OUTER LEFT RIGHT CROSS FULL NATURAL LATERAL ON USING GROUP BY HAVING ORDER ASC DESC LIMIT OFFSET UNION INTERSECT EXCEPT WITH RECURSIVE AND OR XOR NOT IS NULL TRUE FALSE UNKNOWN IN EXISTS BETWEEN LIKE REGEXP RLIKE ESCAPE CASE WHEN THEN ELSE END OVER PARTITION ROWS RANGE GROUPS UNBOUNDED PRECEDING FOLLOWING CURRENT ROW ASC DESC COLLATE DIV MOD FOR UPDATE LOCK SHARE MODE SQL_CALC_FOUND_ROWS STRAIGHT_JOIN HIGH_PRIORITY LOW_PRIORITY SQL_SMALL_RESULT SQL_BIG_RESULT SQL_BUFFER_RESULT SQL_NO_CACHE INTO OUTFILE DUMPFILE WINDOW QUALIFY SEPARATOR BOTH LEADING TRAILING FROM RETURNING').split(' '));
@@ -134,6 +135,17 @@ function analyzeSql(text,catalog=[],options={}){
           if(['COUNT','LOWER','UPPER','LCASE','UCASE','LENGTH','CHAR_LENGTH','CHARACTER_LENGTH','SUM','AVG','MIN','MAX','ABS'].includes(t.upper)&&args.length!==1)issue('sql.function.arity',t.value+' requires exactly one argument in this supported form.',t);
           if(t.upper==='EXTRACT'){const from=top(i+2,close,(v,n)=>v.upper==='FROM'?n:undefined);if(from!==undefined){expression(from+1,close,scope,context);atoms.push(family(token[i+2]?.upper==='SECOND'?'decimal':'integer'));}else{unknown('Incomplete EXTRACT form.',t.start);atoms.push(UNKNOWN());}}
           else if(['CAST','CONVERT'].includes(t.upper)){let as=top(i+2,close,(v,n)=>v.upper==='AS'?n:undefined);if(as!==undefined){argTypes=[expression(i+2,as,scope,context)];const target=token[as+1]?.upper;if(TYPE_WORDS.has(target))atoms.push(dbType(target==='SIGNED'||target==='UNSIGNED'?'bigint':target.toLowerCase()));else{unknown('Unsupported CAST target.',t.start);atoms.push(UNKNOWN());}}else{unknown('CONVERT/CAST form is outside the supported subset.',t.start);for(const [x,y]of args)expression(x,y,scope,context);atoms.push(UNKNOWN());}}
+          else if (isJsonFunction(t.upper)) {
+            const slots = i+2===close ? [] : split(i+2,close);
+            const values = slots.map(([x,y])=>{
+              if (x===y) return {empty:true};
+              expression(x,y,scope,context);
+              while (token[x]?.value==='(' && token[x].close===y-1) {x++;y--;}
+              return {location:span(x,y),literal:y===x+1 ? token[x] : undefined};
+            });
+            atoms.push(checkJsonFunction(t.upper,t,values,{source:text,dialect:model.dialect,serverVersion:options.serverVersion||catalog?.serverVersion,sqlMode:options.sqlMode,issue,unknown}));
+            supported.add('json-function-expression');
+          }
           else{argTypes=args.map(([x,y])=>token[x]?.value==='*'&&y===x+1?family('wildcard'):expression(x,y,scope,{...context,uncertain:context.uncertain||!KNOWN_FUNCTIONS.has(t.upper)}));
             if(t.upper==='COUNT')atoms.push(family('integer',{nullable:false}));
             else if(['ROW_NUMBER','RANK','DENSE_RANK','LENGTH','CHAR_LENGTH','CHARACTER_LENGTH','LOCATE','INSTR'].includes(t.upper))atoms.push(family('integer'));
@@ -148,7 +160,21 @@ function analyzeSql(text,catalog=[],options={}){
         const parts=[t];while(token[i+1]?.value==='.'&&(id(token[i+2])||token[i+2]?.value==='*')){parts.push(token[i+2]);i+=2;}
         if(token[i+1]?.value==='.'&&!id(token[i+2])){unknown('Incomplete qualified column reference.',t.start);i++;atoms.push(UNKNOWN());continue;}
         if(parts.at(-1).value==='*'){const r=findRelation(scope,parts.at(-2)?.value);if(r)ref(parts.at(-2),'relation',parts.at(-2).value,UNKNOWN(),r.definition,{scopeId:scope.id,relationId:r.id,physicalTable:r.kind==='catalog'&&!r.definition?r.catalog:undefined});continue;}
-        atoms.push(resolve(scope,parts,parts.at(-1),context));continue;
+        const type=resolve(scope,parts,parts.at(-1),context);
+        const jsonOperator=token[i+1],jsonPathToken=token[i+2];
+        if (i+2<b && parts.length<=3 && ['->','->>'].includes(jsonOperator?.value) && jsonPathToken.kind==='string') {
+          if (model.dialect === 'mysql') {
+            checkPath(jsonOperator.value,jsonPathToken,literalValue(text,jsonPathToken,options.sqlMode),
+              model.dialect,true,issue,unknown);
+            supported.add('json-arrow-expression');
+            atoms.push(family(jsonOperator.value==='->' ? 'json' : 'string',{nullable:true}));
+          } else {
+            unknown('MySQL JSON arrow syntax has no verified MariaDB source contract; use JSON_EXTRACT.',jsonOperator.start);
+            atoms.push(UNKNOWN());
+          }
+          i+=2;
+        } else atoms.push(type);
+        continue;
       }
       if(['=','!=','<>','<','>','>=','<=','<=>','AND','OR','XOR','NOT','IS','IN','EXISTS','BETWEEN','LIKE','REGEXP','RLIKE'].includes(t.upper||t.value))comparison=true;
       else if(t.value==='&&')comparison=true;

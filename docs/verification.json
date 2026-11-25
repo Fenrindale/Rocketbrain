@@ -1,25 +1,25 @@
 {
-  "version": "0.84.0",
-  "verifiedAt": "2026-11-25T20:39:47.841Z",
+  "version": "0.85.0",
+  "verifiedAt": "2026-11-25T21:14:35.282Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.84.0.vsix",
-    "sha256": "c25d0c55a469ff026fe4f41eb23478bd05f629d6b35507c5cd411e61e4b01b86",
-    "bytes": 3624763,
+    "name": "rocketbrain-0.85.0.vsix",
+    "sha256": "7759894311e97cd0824690e74c49a26d9294f106c10cb1fac60052f4b269b971",
+    "bytes": 3635781,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 2071,
-    "inputVectorSha256": "3b37e12ad786353fe95e5ef01b37019e3bd64ac562666dd9f20a9543ec259c0b",
+    "frozenPublicInputs": 2083,
+    "inputVectorSha256": "2fe77b159915cc234360372ba5cea110f42208c4f27022fff82479ef72a62403",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1738,
-    "pass": 1615,
+    "tests": 1747,
+    "pass": 1623,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 123,
+    "skipped": 124,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaBranchCoverage",
+          "group": "javaMultipleOutputs",
           "checks": 1
         },
         {
-          "group": "javaVoidMethod",
+          "group": "javaStaticImports",
           "checks": 1
         },
         {
-          "group": "crossServerDataset",
+          "group": "sqlJsonChecks",
           "checks": 1
         },
         {
-          "group": "clientIdentity",
+          "group": "datasetOneSided",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaBranchCoverage",
+          "group": "javaMultipleOutputs",
           "checks": 1
         },
         {
-          "group": "javaVoidMethod",
+          "group": "javaStaticImports",
           "checks": 1
         },
         {
-          "group": "crossServerDataset",
+          "group": "sqlJsonChecks",
           "checks": 1
         },
         {
-          "group": "clientIdentity",
+          "group": "datasetOneSided",
           "checks": 1
         }
       ],
@@ -85,71 +85,76 @@
     }
   ],
   "newlyVerified": {
+    "IDEA-011": {
+      "scope": "두 실제 Spring 환경의 설치판에서 Math와 StrictMath 제안, Math의 정수·실수 오버로드, Integer 필드와 직접 지정한 프로젝트 필드를 확인했다. 기존 임포트와 디스크를 보존하고 Undo로 되돌렸다.",
+      "runtimeGroups": [
+        "javaStaticImports"
+      ]
+    },
     "IDEA-026": {
-      "scope": "두 실제 Spring 환경의 설치판에서 중첩 세 문장과 IOException·반복 제어를 포함해 추출했다. 원본 디스크는 유지됐고 한 번의 Undo로 되돌렸다. 범위를 벗어나는 return·continue를 거부했다.",
+      "scope": "설치판에서 final String과 수정 가능한 int를 검증한 Java record로 되돌리고 원래 범위의 선언을 복원했다. 컴파일 타임 상수와 경계를 벗어나는 제어는 거부했다. 실제 JDK 실행의 결과와 하나의 Undo를 확인했다.",
       "runtimeGroups": [
-        "javaVoidMethod"
+        "javaMultipleOutputs"
       ]
     },
-    "IDEA-086": {
-      "scope": "두 DB의 Spring 워크스페이스에서 JUnit·TestNG가 반대 가지를 각각 실행한 경우를 확인했다. 전체 집계, 네이티브 원본 위치, 복합 조건의 줄 집계 유지도 검증했다.",
+    "DG-034": {
+      "scope": "두 DB에서 각각 네 표현식의 타입과 여덟 인수·경로 문제를 실제 서버 결과와 대조했다. MySQL 오류와 MariaDB 경고를 구분하고 설치판에서 수정 후 진단이 달라지는 것을 확인했다.",
       "runtimeGroups": [
-        "javaBranchCoverage"
-      ]
-    },
-    "DG-009": {
-      "scope": "실제 REQUIRE X509 계정에서 두 형식으로 연결했다. 틀린 암호, CA·DNS, 인증서 누락, 암호화 모드의 평문 키를 거부했다. 내보내기와 결과에서 해제 비밀을 제외했다.",
-      "runtimeGroups": [
-        "clientIdentity"
+        "sqlJsonChecks"
       ]
     },
     "DG-075": {
-      "scope": "MySQL에서 MariaDB를, MariaDB에서 MySQL을 원본으로 625개 키씩 읽었다. 동시 변경으로부터 캡처와 정의를 보호하고 연결·프로필 변경 시 거부했다. 활성 대상의 한 행만 검토 후 변경했다.",
+      "scope": "두 DB에서 대상 삽입, 중복 키 충돌의 전체 롤백, 원본 보존을 확인했다. MySQL에서 외래 키가 있는 삭제를 거부했고 MariaDB에서는 삭제를 제안하지 않는다.",
       "runtimeGroups": [
-        "crossServerDataset"
+        "datasetOneSided"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 453,
+    "sourceCorrespondences": 455,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 115,
-      "partial": 87,
+      "implemented": 117,
+      "partial": 85,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 170.5,
-    "previousWeightedPoints": 170,
+    "weightedPoints": 171.5,
+    "previousWeightedPoints": 170.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 78.9,
+    "referencePercent": 79.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-086",
+        "id": "IDEA-011",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-026",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "분기 위치는 일치하는 소스·클래스 쌍에서 정확히 계산 가능한 if/else에 제공한다. 복합 조건은 집계만 유지한다.",
-    "메서드 추출은 선택 범위 안에서 끝나는 반복 제어와 확인된 예외를 유지한다. 범위 밖으로 전달할 새 지역 값은 이 버전에서 거부한다.",
-    "서버 간 비교는 서로 독립인 두 읽기 스냅샷을 사용하며 검토한 기존 행만 활성 대상에서 편집한다.",
-    "인증서 암호는 연결 시 입력한다. PEM과 PKCS#12를 지원하며 JDBC JKS와 인증서 회전의 전체 흐름은 남아 있다.",
+    "여러 출력은 선택 안에서 초기화한 비상수 지역 값에 한정하고 최대 4개다. 생성 코드는 Java record를 사용한다.",
+    "정적 임포트는 확인한 한 멤버 이름을 삽입한다. 추천을 사용할 수 없으면 사용자가 선언 타입을 지정하고 Javac으로 검증한다.",
+    "JSON 진단은 각 방언에서 확인한 함수와 위치에 적용한다. 런타임 경로의 결과를 정적으로 단정하지 않는다.",
+    "두 엔진은 검토한 원본 전용 행의 삽입을 지원한다. 대상 전용 행의 삭제는 외래 키 영향을 잠금 아래 검증한 MySQL에서만 지원한다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Java 정적 멤버 임포트와 여러 추출 결과값 복원",
-    "SQL JSON 함수의 실제 타입·위치 진단",
-    "저장 데이터 비교에서 한쪽에만 있는 행의 추가·삭제 검토"
+    "동작하는 상속 및 사용자 정의 Feign 계약",
+    "SQL 윈도 함수와 연쇄 JOIN 수정",
+    "OpenAPI YAML 및 파일 간 참조와 HTTP 요청 초안"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

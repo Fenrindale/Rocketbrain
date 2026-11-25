@@ -296,7 +296,7 @@ public final class SignatureInspector {
                 !(args.length == 9 && args[4].equals("methodInline")) &&
                 !(args.length == 8 && args[4].equals("typeStructure")) &&
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
-                !(args.length == 9 && args[4].equals("typeImport")) &&
+                !(args.length == 9 && Set.of("typeImport", "staticImport").contains(args[4])) &&
                 !(args.length == 5 && args[4].equals("check")) &&
                 !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
             throw new IllegalArgumentException("Use classpath-file, source-list, empty-provider-path and release.");
@@ -364,6 +364,10 @@ public final class SignatureInspector {
                     else if (args[4].equals("typeImport")) {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
                         report.put("typeImport",typeImport(unit,trees,Integer.parseInt(args[6]),Integer.parseInt(args[7]),args[8]));
+                    }
+                    else if (args[4].equals("staticImport")) {
+                        var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
+                        report.put("staticImport",StaticImportInspector.inspect(unit,trees,Integer.parseInt(args[6]),Integer.parseInt(args[7]),args[8]));
                     }
                     else if (args[4].equals("structural")) {
                         report.put("structural",new StructuralSearch(task).search(compiler,files,options,units,byUri,args));
