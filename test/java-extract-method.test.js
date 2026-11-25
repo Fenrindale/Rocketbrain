@@ -10,11 +10,12 @@ const {pathToFileURL}=require('node:url');
 const {test}=require('node:test');
 const {analyzeJavaSources}=require('../src/java/signature-compiler');
 const {buildMethodExtraction,verifyMethodExtraction}=require('../src/java/extract-method');
-const {extractMethodFixture}=require('./helpers/extract-method-fixture');
+const {extractMethodFixture,voidMethodFixture}=require('./helpers/extract-method-fixture');
+const {jdbcReadback}=require('./java-source-analysis-host');
 
 const config=process.env.ROCKETBRAIN_JAVA_TEST_CONFIG,run=promisify(execFile);
 
-test('javac attributes a generic multi-statement extraction and preserves checked exception identity and selected overload',{
+test('javac proves generic return and nested void extractions and preserves runtime behavior',{
   skip:!config,timeout:120000
 },async t=>{
   const {javaHome}=JSON.parse(await fs.readFile(config,'utf8'));
@@ -55,8 +56,32 @@ test('javac attributes a generic multi-statement extraction and preserves checke
   }
   const beforeRun=await execute(text),afterRun=await execute(draft.text);
   assert.equal(beforeRun,'+ok+zero+:same');assert.equal(afterRun,beforeRun);
+  const voidFixture=voidMethodFixture('fixture','Sample');
+  const voidSelection=snippet=>{
+    const start=voidFixture.text.indexOf(snippet);
+    assert.ok(start>=0);
+    return {start,end:start+snippet.length};
+  };
+  const name='recorded';
+  const originalVoid=await inspect(voidFixture.text,voidSelection(voidFixture.selected),name);
+  assert.equal(originalVoid.returnsValue,false);
+  assert.equal(originalVoid.statementCount,3);
+  assert.deepEqual(originalVoid.captures.map(value=>value.name),['value','failure']);
+  const voidDraft=buildMethodExtraction(voidFixture.text,originalVoid,name);
+  verifyMethodExtraction(originalVoid,await inspect(voidDraft.text,voidDraft,name));
+  assert.match(voidDraft.text,/this\.recorded\(value, failure\);/);
+  assert.match(voidDraft.text,/private void recorded\(java\.lang\.String value, java\.io\.IOException failure\) throws IOException/);
+  assert.match((await inspect(voidFixture.text,voidSelection(voidFixture.escaping),name)).error,/local value used outside/);
+  assert.match((await inspect(voidFixture.text,voidSelection(voidFixture.earlyReturn),name)).error,/nonlocal control flow/);
+  assert.match((await inspect(voidFixture.text,voidSelection(voidFixture.outsideLoop),name)).error,/nonlocal control flow/);
+  const voidBefore=await execute(voidFixture.text),voidAfter=await execute(voidDraft.text);
+  assert.equal(voidBefore,'before,one,ONE,after,before,after,before,two,same');
+  assert.equal(voidAfter,voidBefore);
+  const jdbc=await jdbcReadback();
   if(process.env.ROCKETBRAIN_METHOD_EXTRACTION_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_METHOD_EXTRACTION_RECEIPT,
     JSON.stringify({beforeRun,afterRun,statements:initial.statementCount,typeParameters:initial.typeNames,throwsTypes:initial.throwsTypes,
       captures:initial.captures.map(({name,type})=>({name,type})),bindings:initial.bindings.length,
-      capturedWriteRefused:true,nameConflictRefused:true,partialSelectionRefused:true},null,2)+'\n');
+      capturedWriteRefused:true,nameConflictRefused:true,partialSelectionRefused:true,...(jdbc&&{jdbc}),
+      voidExtraction:{voidBefore,voidAfter,statements:originalVoid.statementCount,localOutputRefused:true,
+        earlyReturnRefused:true,externalContinueRefused:true}},null,2)+'\n');
 });
