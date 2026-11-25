@@ -68,7 +68,7 @@ test('SQL mode is explicit and quotes/comments do not invent references or compl
 test('unknown function/table syntax and executable comments remain explicitly uncertain',()=>{
   for(const sql of ['SELECT custom_provider(id) FROM people','SELECT * FROM JSON_TABLE(\'{}\',\'$\' COLUMNS(x int PATH \'$.x\')) jt','SELECT 1 /*! UNION SELECT 2 */','UPDATE people SET name=\'x\'']){const m=analyzeSql(sql,catalog);assert.equal(m.state,'unknown',JSON.stringify(m));assert.equal(m.validityVerified,false);assert.equal(m.executedSql,false);}
   for(const sql of ["SELECT name COLLATE utf8mb4_bin FROM people","SELECT BINARY name FROM people","SELECT JSON_VALUE(name,'$.x' RETURNING CHAR) FROM people","SELECT 'a'||'b'","SELECT name & id FROM people"]){const m=analyzeSql(sql,catalog);assert.equal(m.state,'unknown',JSON.stringify(m));assert.equal(m.diagnostics.length,0);}
-  const namedWindow=analyzeSql('SELECT COUNT(*) OVER w AS total FROM people WINDOW w AS (PARTITION BY id)',catalog);assert.equal(namedWindow.state,'unknown');assert.equal(namedWindow.diagnostics.length,0);
+  const unprovedWindow=analyzeSql('SELECT SUM(id) OVER (ORDER BY id GROUPS 1 PRECEDING) FROM people',catalog);assert.equal(unprovedWindow.state,'unknown');assert.equal(unprovedWindow.diagnostics.length,0);
   assert.equal(analyzeSql('SELECT DISTINCTROW name FROM people',catalog).state,'known');
 });
 test('statement ranges preserve original offsets and honor SQL-mode quote interpretation',()=>{

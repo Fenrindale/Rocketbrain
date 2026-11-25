@@ -78,6 +78,7 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
   const joinFixCommand='rocketbrain.sql.applyJoinQuickFix';
   const missingCommand='rocketbrain.sql.designMissingObject';
   const joinIdentity=()=>JSON.stringify(database.liveCatalogIdentity());
+  const nameIdentity=catalog=>JSON.stringify([joinIdentity(),catalog?.database,catalog?.revision,catalog?.cachedMetadata?.id]);
   const projected=(document,offset)=>sqlAnalysis?.virtualActive(document)||sqlAnalysis?.scriptContextAt?.(document,offset);
   function objectAction(document,offset) {
     const catalog=database.liveCatalogSnapshot();
@@ -98,12 +99,14 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
     command('rocketbrain.sql.format',formatEditor),
     command('rocketbrain.sql.insertTemplate',chooseTemplate),
     vscode.commands.registerCommand(fixCommand,async frame=>{
-      if(disposed||!vscode.workspace.isTrusted)return;
+      if(disposed||!vscode.workspace.isTrusted||!Number.isSafeInteger(frame?.offset))return false;
       const document=vscode.workspace.textDocuments.find(item=>item.uri.toString()===frame?.uri);
       const catalog=database.catalogSnapshot();
-      if(!document||document.isClosed||projected(document,frame.offset)||document.version!==frame.version||catalog?.revision!==frame.revision)return;
-      const fix=sqlQuickFixes(document.getText(),frame.offset,catalog).find(item=>item.replacement===frame.replacement);
-      if(!fix)return;
+      if(!document||document.isClosed||isProfileConsole(document)||projected(document,frame.offset)||
+          document.version!==frame.version||nameIdentity(catalog)!==frame.identity)return false;
+      const fix=sqlQuickFixes(document.getText(),frame.offset,catalog).find(item=>item.replacement===frame.replacement&&
+        item.start===frame.start&&item.end===frame.end);
+      if(!fix)return false;
       const change=new vscode.WorkspaceEdit();
       change.replace(document.uri,new vscode.Range(document.positionAt(fix.start),document.positionAt(fix.end)),fix.replacement);
       return vscode.workspace.applyEdit(change);
@@ -133,12 +136,13 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
     vscode.languages.registerCodeActionsProvider({language:'sql'},
       {async provideCodeActions(document,range,_context,cancellation){
         const offset=document.offsetAt(range.start);
-        if(disposed||!vscode.workspace.isTrusted||projected(document,offset))return [];
+        if(disposed||!vscode.workspace.isTrusted||isProfileConsole(document)||projected(document,offset))return [];
         const catalog=database.catalogSnapshot();
+        const identity=nameIdentity(catalog);
         const nameActions=sqlQuickFixes(document.getText(),offset,catalog).map(fix=>{
           const action=new vscode.CodeAction('Use '+fix.replacement,vscode.CodeActionKind.QuickFix);
           action.command={command:fixCommand,title:action.title,arguments:[{
-            uri:document.uri.toString(),version:document.version,revision:catalog.revision,offset,replacement:fix.replacement
+            uri:document.uri.toString(),version:document.version,identity,offset,start:fix.start,end:fix.end,replacement:fix.replacement
           }]};
           return action;
         });

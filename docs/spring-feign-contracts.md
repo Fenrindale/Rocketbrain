@@ -1,0 +1,9 @@
+# Inherited and runtime OpenFeign contracts
+
+Open **Rocketbrain: Spring Endpoints** to find an outbound method and jump to its declaration. Inherited routes point to the parent method, with the selected client's prefix and the declaring interface identified. The source resolver supports a single chain of workspace interfaces with unambiguous parameter types and literal Spring MVC mappings. It follows explicit imports, tracks overrides and leaves ambiguous, generic, and unavailable parent declarations unresolved.
+
+For custom contracts or prefixes computed at startup, run **Rocketbrain: Prepare Local JVM Observer** in a trusted workspace. Set `feignContractTrace` to `true` in the generated observer configuration, add the displayed JVM arguments, and restart the application with an independent JDK 25 or later. Connect using **Rocketbrain: Connect Local JVM Observer** and open **Rocketbrain: Inspect OpenFeign Runtime Contracts**.
+
+The runtime view shows the Contract implementation, declaring method, verb, and path template returned to the actual proxy factory. For a supported hard-coded target it includes the resolved base path. This captures proxy construction before request interceptors or argument expansion. The observer keeps up to 32 distinct contracts and 64 methods per contract. It omits the target scheme and authority, query values, headers, body data, and invocation arguments.
+
+Runtime verification uses Spring Boot 4.1.2, Spring Cloud OpenFeign 5.0.4, and OpenFeign 13.6.1. The observer checks the exact factory class bytes. Other builds and custom target implementations can produce unavailable metadata. [Spring Cloud 2025.1.4 release](https://spring.io/blog/2026/10/23/spring-cloud-2025-1-4-has-been-released/)

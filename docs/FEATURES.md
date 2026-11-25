@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.85.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.86.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 117 |
-| 부분 구현 | 85 |
+| 구현 | 119 |
+| 부분 구현 | 83 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **79.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **79.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.85에서는 Java 메서드 추출에서 여러 지역 결과값을 원래 범위로 돌려준다. 정적 멤버 임포트를 검토한다. SQL JSON 함수의 반환 타입과 인수 오류를 분석하고, 한쪽 데이터셋에만 있는 행의 변경을 검토한다. 상태가 바뀐 항목은 2개이고 가중 점수는 170.5점에서 171.5점으로 바뀌었다.
+v0.86에서는 실행 중인 Spring에서 Feign의 상속 및 사용자 정의 계약을 따라간다. SQL 윈도 진단과 여러 JOIN의 복합 외래 키 수정을 추가한다. OpenAPI YAML 및 로컬 파일 참조에서 실제 HTTP 요청을 구성한다. 상태가 바뀐 항목은 2개이고 가중 점수는 171.5점에서 172.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -85,7 +85,7 @@ v0.85에서는 Java 메서드 추출에서 여러 지역 결과값을 원래 범
 | IDEA-062 | IntelliJ IDEA | Persistence 트리·엔티티 관계도 | 구현 |
 | IDEA-063 | IntelliJ IDEA | Hibernate 디버거·SQL 바인딩·N+1 | 부분 구현 |
 | IDEA-064 | IntelliJ IDEA | Spring Security 런타임 진단 | 부분 구현 |
-| IDEA-065 | IntelliJ IDEA | MVC·WebFlux·Feign 엔드포인트 탐색 | 부분 구현 |
+| IDEA-065 | IntelliJ IDEA | MVC·WebFlux·Feign 엔드포인트 탐색 | 구현 |
 | IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 부분 구현 |
 | IDEA-067 | IntelliJ IDEA | Micronaut 개발 | 부분 구현 |
 | IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 부분 구현 |
@@ -176,7 +176,7 @@ v0.85에서는 Java 메서드 추출에서 여러 지역 결과값을 원래 범
 | DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 구현 |
 | DG-034 | DataGrip | 실시간·범위별 정적 검사 | 부분 구현 |
 | DG-035 | DataGrip | 위험한 UPDATE/DELETE 경고 | 구현 |
-| DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 부분 구현 |
+| DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 구현 |
 | DG-037 | DataGrip | 테이블·열·alias 의미적 Rename | 부분 구현 |
 | DG-038 | DataGrip | 의미적 Find Usages·영향 추적 | 부분 구현 |
 | DG-039 | DataGrip | SQL 참조→정의·DDL·빠른 설명 | 구현 |

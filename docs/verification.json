@@ -1,22 +1,22 @@
 {
-  "version": "0.85.0",
-  "verifiedAt": "2026-11-25T21:14:35.282Z",
+  "version": "0.86.0",
+  "verifiedAt": "2026-11-25T21:20:24.026Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.85.0.vsix",
-    "sha256": "7759894311e97cd0824690e74c49a26d9294f106c10cb1fac60052f4b269b971",
-    "bytes": 3635781,
+    "name": "rocketbrain-0.86.0.vsix",
+    "sha256": "7c528448aaba5370927911633648c8aaad43370749ec01ed1936b73afcae4fde",
+    "bytes": 3653264,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 2083,
-    "inputVectorSha256": "2fe77b159915cc234360372ba5cea110f42208c4f27022fff82479ef72a62403",
+    "frozenPublicInputs": 2104,
+    "inputVectorSha256": "8c8a4e94d83d2c4b2013f64419e8c4429f79abdfb9619eb7f9387436894efe54",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1747,
-    "pass": 1623,
+    "tests": 1760,
+    "pass": 1636,
     "fail": 0,
     "cancelled": 0,
     "skipped": 124,
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaMultipleOutputs",
+          "group": "feignContractTrace",
           "checks": 1
         },
         {
-          "group": "javaStaticImports",
+          "group": "sqlWindowChecks",
           "checks": 1
         },
         {
-          "group": "sqlJsonChecks",
+          "group": "sqlContextFixes",
           "checks": 1
         },
         {
-          "group": "datasetOneSided",
+          "group": "openApiYamlReferences",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaMultipleOutputs",
+          "group": "feignContractTrace",
           "checks": 1
         },
         {
-          "group": "javaStaticImports",
+          "group": "sqlWindowChecks",
           "checks": 1
         },
         {
-          "group": "sqlJsonChecks",
+          "group": "sqlContextFixes",
           "checks": 1
         },
         {
-          "group": "datasetOneSided",
+          "group": "openApiYamlReferences",
           "checks": 1
         }
       ],
@@ -85,76 +85,76 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-011": {
-      "scope": "두 실제 Spring 환경의 설치판에서 Math와 StrictMath 제안, Math의 정수·실수 오버로드, Integer 필드와 직접 지정한 프로젝트 필드를 확인했다. 기존 임포트와 디스크를 보존하고 Undo로 되돌렸다.",
+    "IDEA-065": {
+      "scope": "두 설치판에서 상속한 소스 범위 두 개, 프록시 두 개, 라우트 네 개를 실제 Spring 및 JDBC로 검증했다. 비활성 기본값과 사용자 정의 우선순위를 구분한다.",
       "runtimeGroups": [
-        "javaStaticImports"
+        "feignContractTrace"
       ]
     },
-    "IDEA-026": {
-      "scope": "설치판에서 final String과 수정 가능한 int를 검증한 Java record로 되돌리고 원래 범위의 선언을 복원했다. 컴파일 타임 상수와 경계를 벗어나는 제어는 거부했다. 실제 JDK 실행의 결과와 하나의 Undo를 확인했다.",
+    "IDEA-103": {
+      "scope": "설치판에서 YAML과 파일 간 JSON 참조의 정확한 위치, 원격·저장하지 않은 참조 거부, 고친 참조 재분석, 실제 Spring JDBC 응답을 확인했다.",
       "runtimeGroups": [
-        "javaMultipleOutputs"
+        "openApiYamlReferences"
       ]
     },
     "DG-034": {
-      "scope": "두 DB에서 각각 네 표현식의 타입과 여덟 인수·경로 문제를 실제 서버 결과와 대조했다. MySQL 오류와 MariaDB 경고를 구분하고 설치판에서 수정 후 진단이 달라지는 것을 확인했다.",
+      "scope": "실제 두 DB의 다섯 반환 타입과 오류 사례를 대조했다. 설치된 편집기에서 윈도 상속 위치 탐색과 수정 후 진단 변경을 확인했다.",
       "runtimeGroups": [
-        "sqlJsonChecks"
+        "sqlWindowChecks"
       ]
     },
-    "DG-075": {
-      "scope": "두 DB에서 대상 삽입, 중복 키 충돌의 전체 롤백, 원본 보존을 확인했다. MySQL에서 외래 키가 있는 삭제를 거부했고 MariaDB에서는 삭제를 제안하지 않는다.",
+    "DG-036": {
+      "scope": "두 DB에서 두 스키마의 복합 JOIN 선택지와 제거된 제약·늦은 별칭·문서 변경 거부를 확인했다. 중첩 및 스키마 명시 이름의 수정을 검증했다.",
       "runtimeGroups": [
-        "datasetOneSided"
+        "sqlContextFixes"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 455,
+    "sourceCorrespondences": 459,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 117,
-      "partial": 85,
+      "implemented": 119,
+      "partial": 83,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 171.5,
-    "previousWeightedPoints": 170.5,
+    "weightedPoints": 172.5,
+    "previousWeightedPoints": 171.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 79.4,
+    "referencePercent": 79.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-011",
+        "id": "IDEA-065",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "IDEA-026",
+        "id": "DG-036",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "여러 출력은 선택 안에서 초기화한 비상수 지역 값에 한정하고 최대 4개다. 생성 코드는 Java record를 사용한다.",
-    "정적 임포트는 확인한 한 멤버 이름을 삽입한다. 추천을 사용할 수 없으면 사용자가 선언 타입을 지정하고 Javac으로 검증한다.",
-    "JSON 진단은 각 방언에서 확인한 함수와 위치에 적용한다. 런타임 경로의 결과를 정적으로 단정하지 않는다.",
-    "두 엔진은 검토한 원본 전용 행의 삽입을 지원한다. 대상 전용 행의 삭제는 외래 키 영향을 잠금 아래 검증한 MySQL에서만 지원한다.",
+    "Feign 실행 관찰은 소유한 개발 실행에 적용한다. 임의 동적 경로와 Kotlin DSL 전반은 이번 범위 밖이다.",
+    "윈도 함수는 확인한 이름·상속·프레임·인수 범위에서 두 엔진의 오류를 구분한다.",
+    "JOIN 수정은 현재 문장 범위의 실제 메타데이터와 외래 키에 근거한다.",
+    "OpenAPI 참조는 신뢰한 작업 공간의 저장된 로컬 YAML·JSON 파일로 제한한다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "동작하는 상속 및 사용자 정의 Feign 계약",
-    "SQL 윈도 함수와 연쇄 JOIN 수정",
-    "OpenAPI YAML 및 파일 간 참조와 HTTP 요청 초안"
+    "Java 파일 일괄 정리와 비트 연산의 SQL 진단",
+    "생성 열 인덱스의 검토형 배포",
+    "OpenAPI 기반 Java 클라이언트 생성"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

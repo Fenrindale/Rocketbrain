@@ -45,3 +45,20 @@ test('does not overwrite a user predicate or accept split, unrelated, or obsolet
   assert.deepEqual(await candidates(source,async()=>({tables,edges:[{...edge,parts:[{...edge.parts[0],ordinal:2}]}]})),[]);
   assert.deepEqual(await candidates(source,async()=>{throw Error('missing metadata');}),[]);
 });
+
+test('a chained gap can bind an explicitly qualified base table and excludes edges to future aliases',async()=>{
+  const rows=[...tables,...['bridge','later'].map(name=>({schema:'second',name,kind:'table',columns:['id','tenant','parent'].map(column)}))];
+  const root={schema:'fixture',table:'parents'}, bridge={schema:'second',table:'bridge'}, later={schema:'second',table:'later'};
+  const constraint=(name,child,parent)=>({...edge,name,child,parent});
+  const observed=[constraint('from_child',bridge,edge.child),constraint('from_root',bridge,root),constraint('from_future',later,bridge)];
+  const source='SELECT 1; SELECT c.id FROM children c JOIN parents p ON p.id=c.parent '+
+    'LEFT OUTER JOIN second.bridge b ON| JOIN second.later q ON q.parent=b.id WHERE c.id=5;';
+  const fix=await candidates(source,async request=>{
+    assert.deepEqual(request.endpoints,[edge.child,root,bridge,later]);
+    return {tables:rows,edges:observed};
+  });
+  assert.deepEqual(fix.map(item=>item.title),['Complete JOIN using from_child (c → b)','Complete JOIN using from_root (p → b)']);
+  assert.ok(fix.every(item=>item.start===source.indexOf('|')));
+  assert.deepEqual(await candidates(source.replace('p.id=c.parent','q.id=c.parent'),async()=>({tables:rows,edges:observed})),[]);
+  assert.deepEqual(await candidates('USE second; '+source,async()=>({tables:rows,edges:observed})),[]);
+});

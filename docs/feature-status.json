@@ -1,5 +1,5 @@
 {
-  "version": "0.85.0",
+  "version": "0.86.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 117,
-    "partial": 85,
+    "implemented": 119,
+    "partial": 83,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 79.4,
+    "percent": 79.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-011",
-    "IDEA-026",
+    "IDEA-065",
+    "IDEA-103",
     "DG-034",
-    "DG-075"
+    "DG-036"
   ],
   "expandedFeatures": [
-    "IDEA-011",
-    "IDEA-026",
+    "IDEA-065",
+    "IDEA-103",
     "DG-034",
-    "DG-075"
+    "DG-036"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -362,8 +362,8 @@
       "verification": {
         "state": "v0.85-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.85.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -801,8 +801,8 @@
       "verification": {
         "state": "v0.85-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.85.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2001,26 +2001,23 @@
       "category": "Spring·영속성",
       "feature": "MVC·WebFlux·Feign 엔드포인트 탐색",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "Spring MVC의 HTTP 매핑과 표준 Java WebFlux 함수형 리터럴 경로 및 Spring MVC 스타일 Feign 클라이언트 선언을 구분해 원문 위치를 연다. 워크스페이스 심볼 탐색과 기존 Actuator 관찰을 제공한다.",
-      "remaining": [
-        "임의 동적 경로, Kotlin DSL과 사용자·상속 Feign 계약이 남아 있다."
-      ],
+      "scope": "MVC, 함수형 Java WebFlux, Feign 라우트를 탐색한다. 소스 위치와 런타임 관찰로 상속·재정의 및 사용자 정의 Feign 계약에서 선택한 실제 HTTP 호출을 확인한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.63-installed-coverage",
+        "state": "v0.86-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.63.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "MySQL과 MariaDB의 실제 Spring MVC·WebFlux에서 경로 세 개와 Feign 호출 두 개가 일치했다. 잘못된 메서드와 Accept는 404이며 계산 경로는 소스에서 미해결로 남았다.",
+        "testedScope": "두 설치판에서 상속한 소스 범위 두 개, 프록시 두 개, 라우트 네 개를 실제 Spring 및 JDBC로 검증했다. 비활성 기본값과 사용자 정의 우선순위를 구분한다.",
         "publicEvidence": [
-          "src/spring/endpoint-contracts.js",
-          "test/spring-endpoint-contracts-host.js",
-          "docs/spring-endpoint-navigation.md"
+          "docs/spring-feign-contracts.md",
+          "test/spring-feign-contract-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3125,24 +3122,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "OpenAPI 3.0·3.1 JSON의 작업·매개변수·로컬 참조와 진단을 표시한다. 선택한 작업에서 검토할 HTTP 요청 템플릿을 생성한다.",
+      "scope": "OpenAPI 3.0·3.1 YAML·JSON 소스의 작업·매개변수·로컬 파일 간 참조와 진단을 표시한다. 선택 작업에서 검토할 HTTP 요청을 생성한다.",
       "remaining": [
-        "YAML, 외부 참조, 복합 스키마와 대상 언어 SDK 생성이 남는다."
+        "복합 스키마와 대상 언어 SDK 생성이 남아 있다."
       ],
       "verification": {
-        "state": "v0.30-installed-coverage",
+        "state": "v0.86-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.30.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring 엔드포인트의 OpenAPI 작업에서 요청을 만든 뒤 두 DB를 사용하는 런타임에서 응답을 확인했다. 로컬 참조와 중복·순환 진단도 검증했다.",
+        "testedScope": "설치판에서 YAML과 파일 간 JSON 참조의 정확한 위치, 원격·저장하지 않은 참조 거부, 고친 참조 재분석, 실제 Spring JDBC 응답을 확인했다.",
         "publicEvidence": [
           "src/http/openapi.js",
-          "src/http/openapi-vscode.js",
-          "test/openapi.test.js",
-          "test/http-client-host.js"
+          "test/openapi-yaml-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4651,22 +4646,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "SQL의 정적 구문과 콜레이션 진단에 JSON 함수·경로의 타입과 오류 위치를 추가한다. 리터럴의 잘못된 구문과 관찰할 수 없는 동적 경로를 구분한다.",
+      "scope": "방언별 SQL 구문, 콜레이션, JSON 진단에 윈도 이름·선언 탐색과 프레임·타입·인수 검사를 더했다.",
       "remaining": [
-        "윈도·비트 연산, 일반 암시 변환, 복합 문법의 전체 범위는 남아 있다."
+        "비트 연산, 일반 암시 변환, 복합 문법의 전체 범위가 남아 있다."
       ],
       "verification": {
-        "state": "v0.85-installed-coverage",
+        "state": "v0.86-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 각각 네 표현식의 타입과 여덟 인수·경로 문제를 실제 서버 결과와 대조했다. MySQL 오류와 MariaDB 경고를 구분하고 설치판에서 수정 후 진단이 달라지는 것을 확인했다.",
+        "testedScope": "실제 두 DB의 다섯 반환 타입과 오류 사례를 대조했다. 설치된 편집기에서 윈도 상속 위치 탐색과 수정 후 진단 변경을 확인했다.",
         "publicEvidence": [
-          "test/sql-json-checks-host.js",
-          "src/db/sql-analysis.js"
+          "src/db/sql-window-expressions.js",
+          "test/sql-window-checks-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4708,26 +4703,23 @@
       "category": "SQL 의미 분석·편집",
       "feature": "schema-aware quick-fix·의도 동작",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "실제 복합 FK를 확인해 JOIN 조건을 제안한다. 현재 문장에서 확인한 누락 테이블과 기존 테이블의 누락 열을 실제 메타데이터와 대조해 검토형 테이블 디자이너를 연다.",
-      "remaining": [
-        "복합 JOIN, 다중 문맥과 지원하지 않는 SQL 구문의 일반 교정이 남는다."
-      ],
+      "scope": "실제 외래 키로 제거된 JOIN 조건 후보를 제안하며 단일·연쇄 JOIN, 복합 키, 확인한 교차 스키마를 처리한다. 문맥에 확인된 테이블과 열의 쓰기 전 변경을 검토하며, 현재 범위의 별칭과 명시적 스키마 오타를 교정한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.75-installed-coverage",
+        "state": "v0.86-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.75.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 설치 환경에서 두 번째 문장의 누락 테이블과 DECIMAL 열을 찾아 실제 디자이너에 연결했다. 타입 명시와 새 DDL 검토, 정확한 값과 기존 행 보존, 외부 생성 충돌 및 오래된 문서 후보 거부를 확인했다.",
+        "testedScope": "두 DB에서 두 스키마의 복합 JOIN 선택지와 제거된 제약·늦은 별칭·문서 변경 거부를 확인했다. 중첩 및 스키마 명시 이름의 수정을 검증했다.",
         "publicEvidence": [
-          "src/db/sql-quick-fixes.js",
           "src/db/sql-editing-vscode.js",
-          "test/sql-missing-object-host.js"
+          "test/sql-context-fix-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5910,8 +5902,8 @@
       "verification": {
         "state": "v0.85-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.85.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6552,8 +6544,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "7759894311e97cd0824690e74c49a26d9294f106c10cb1fac60052f4b269b971",
-    "sourceManifestSha256": "2fe77b159915cc234360372ba5cea110f42208c4f27022fff82479ef72a62403",
+    "vsixSha256": "7c528448aaba5370927911633648c8aaad43370749ec01ed1936b73afcae4fde",
+    "sourceManifestSha256": "8c8a4e94d83d2c4b2013f64419e8c4429f79abdfb9619eb7f9387436894efe54",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6567,20 +6559,20 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-011",
+      "id": "IDEA-065",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-026",
+      "id": "DG-036",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1747,
-    "pass": 1623,
+    "tests": 1760,
+    "pass": 1636,
     "fail": 0,
     "cancelled": 0,
     "skipped": 124,

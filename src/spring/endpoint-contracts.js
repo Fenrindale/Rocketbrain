@@ -249,33 +249,132 @@ function mappingPaths(item) {
   return paths[0];
 }
 
-function scanFeign(type, client, file, publish) {
+function feignClient(type, client) {
   const base = Object.hasOwn(client.attributes,'path') ? literalPath(client.attributes.path) : '';
   const reason = base === null ? 'Feign client path is computed or unresolved.'
     : annotation(type.annotations,'RequestMapping') ? 'Type-level RequestMapping is unsupported on a Feign client.'
       : Object.hasOwn(client.attributes,'configuration') ? 'Feign custom contract configuration needs runtime evidence.'
         : null;
-  if (reason || type.superTypes.length) publish('feign',type,null,client,{state:'unresolved',reason:reason || 'Inherited Feign contracts require cross-file resolution.'});
+  return {base,reason};
+}
+
+function feignMethod(method,file) {
+  if (method.modifiers.some(value=>['default','static','private'].includes(value))) return null;
+  const declarations = method.annotations.filter(item=>MAPPINGS.has(item.name));
+  if (!declarations.length) return null;
+  const [mapping] = declarations, verb = MAPPINGS.get(mapping.name), attr = mapping.attributes.method;
+  let methods = [verb === 'REQUEST' ? 'GET' : verb];
+  if (verb === 'REQUEST' && attr) {
+    const array = attr[0]?.text === '{' && attr.at(-1)?.text === '}';
+    const values = array ? attr.slice(1,-1) : attr;
+    if (values.length) methods = splitTop(values).map(value=>httpConstant(value,REQUEST_METHOD,file));
+  }
+  const paths = mappingPaths(mapping);
+  if (declarations.length !== 1 || methods.length !== 1 || !methods[0] || paths?.length !== 1) {
+    return {mapping,state:'unresolved',reason:'Feign requires one supported HTTP method and one literal method path.'};
+  }
+  return {mapping,path:paths[0],methods,
+    constrained:['consumes','produces','headers','params'].some(key=>Object.hasOwn(mapping.attributes,key))};
+}
+
+function scanFeign(type, client, file, publish) {
+  const {base,reason}=feignClient(type,client);
+  if (reason || type.superTypes.length) publish('feign',type,null,client,{state:'unresolved',
+    reason:reason || 'Inherited Feign contracts require cross-file resolution.'});
   if (reason) return;
   for (const method of type.methods) {
-    const declarations = method.annotations.filter(item => MAPPINGS.has(item.name));
-    if (!declarations.length) continue;
-    const [mapping] = declarations, declared = MAPPINGS.get(mapping.name);
-    const attr = mapping.attributes.method;
-    let methods = [declared === 'REQUEST' ? 'GET' : declared];
-    if (declared === 'REQUEST' && attr) {
-      const array = attr[0]?.text === '{' && attr.at(-1)?.text === '}';
-      const values = array ? attr.slice(1,-1) : attr;
-      if (values.length) methods = splitTop(values).map(value => httpConstant(value,REQUEST_METHOD,file));
-    }
-    const paths = mappingPaths(mapping);
-    if (declarations.length !== 1 || methods.length !== 1 || !methods[0] || paths?.length !== 1) {
-      publish('feign',type,method,mapping,{state:'unresolved',reason:'Feign requires one supported HTTP method and one literal method path.'});
-      continue;
-    }
-    publish('feign',type,method,mapping,{path:combinePath(absolutePath(base).replace(/\/$/,''),paths[0]),methods,
-      constrained:['consumes','produces','headers','params'].some(key => Object.hasOwn(mapping.attributes,key))});
+    const route=feignMethod(method,file);
+    if (!route) continue;
+    const {mapping,path,...details}=route;
+    publish('feign',type,method,mapping,{...details,...(route.state!=='unresolved'?{
+      path:combinePath(absolutePath(base).replace(/\/$/,''),path)
+    }:{})});
   }
+}
+
+const PRIMITIVES=new Set(['boolean','byte','short','char','int','long','float','double']);
+const IDENTIFIER=/^[\p{L}_$][\p{L}\p{N}_$]*$/u;
+function sourceMethodKey(method,file,tokens,offsets) {
+  const start=offsets.get(method.start)+1,end=matching(tokens,start);
+  if(tokens[start]?.text!=='('||end<0||(end-start>1?splitTop(tokens.slice(start+1,end)).length:0)!==method.parameters.length)return null;
+  const argumentTypes=method.parameters.map(({type})=>{
+    const raw=type.raw.replace(/(?:\[\]|\.\.\.)$/,'');
+    const array=raw!==type.raw;
+    const name=PRIMITIVES.has(raw)?raw:raw.includes('.')?raw:
+      (Object.hasOwn(file.imports,raw)?file.imports[raw]:type.name.startsWith('java.lang.')?type.name:null);
+    return name?.split('.').every(part=>IDENTIFIER.test(part))?name+(array?'[]':''):null;
+  });
+  return argumentTypes.includes(null)?null:method.name+'('+argumentTypes.join(',')+')';
+}
+
+function interfaceRecord(type,file,tokens,offsets) {
+  const name=offsets.get(type.start);
+  const header=tokens.slice(name+1,tokens.findIndex((token,index)=>index>name&&token.text==='{'));
+  const inheritance=header.findIndex(token=>token.text==='extends');
+  const permits=header.findIndex(token=>token.text==='permits');
+  const parentTokens=inheritance>=0?header.slice(inheritance+1,permits<0?header.length:permits):[];
+  const parent=parentTokens.map(token=>token.text).join('');
+  const plainParent=parent?parent.split('.').every(part=>IDENTIFIER.test(part)):true;
+  const client=annotation(type.annotations,'FeignClient');
+  return {fqn:type.fqn,name:type.name,uri:file.uri,packageName:file.packageName,imports:file.imports,wildcards:file.wildcards,
+    parent:plainParent?parent:null,hasParents:type.superTypes.length>0,unsupported:header.some(token=>token.text==='<')||
+      !!annotation(type.annotations,'RequestMapping')||!plainParent,
+    client:client?{...feignClient(type,client),range:rangeAt(file.text,client.start,client.end)}:null,
+    methods:type.methods.filter(method=>!method.modifiers.some(value=>['static','private'].includes(value))).map(method=>{
+      const route=feignMethod(method,file);
+      return {key:sourceMethodKey(method,file,tokens,offsets),name:method.name,requiresRoute:!method.modifiers.includes('default'),route:route?{path:route.path,methods:route.methods,
+        constrained:route.constrained,state:route.state,reason:route.reason,range:rangeAt(file.text,route.mapping.start,route.mapping.end)}:null};
+    })};
+}
+
+function feignParent(record,index) {
+  const raw=record.parent;
+  if (!raw) return null;
+  if (raw.includes('.')) return index.get(raw);
+  if (Object.hasOwn(record.imports,raw)) return index.get(record.imports[raw]);
+  const local=(record.packageName?record.packageName+'.':'')+raw;
+  if (index.has(local)) return index.get(local);
+  if (record.wildcards.length===1) return index.get(record.wildcards[0]+'.'+raw);
+  return null;
+}
+
+function inheritedFeignContracts(interfaces) {
+  const index=new Map(), replacements=new Set(), inherited=[];
+  for (const record of interfaces) index.set(record.fqn,index.has(record.fqn)?null:record);
+  for (const child of interfaces) {
+    if (!child.client||child.client.reason||!child.hasParents||child.unsupported||index.get(child.fqn)!==child||inherited.length>=2000) continue;
+    const seen=new Set([child.fqn]),methods=new Set();
+    let current=child,chain=[],safe=true;
+    while (current.hasParents && safe) {
+      const parent=feignParent(current,index);
+      if (!parent||parent.unsupported||seen.has(parent.fqn)||chain.length>=12) {safe=false;break;}
+      seen.add(parent.fqn);
+      chain.push(parent);
+      current=parent;
+    }
+    if (!safe || [child,...chain].some(record=>record.methods.some(method=>!method.key)||
+      new Set(record.methods.map(method=>method.key)).size!==record.methods.length)) continue;
+    for (const method of child.methods) {
+      methods.add(method.key);
+      if (method.requiresRoute&&!method.route) safe=false;
+    }
+    const additions=[];
+    for (const parent of chain) for (const method of parent.methods) {
+      if (methods.has(method.key)) continue;
+      methods.add(method.key);
+      const route=method.route;
+      if (!route) {if(method.requiresRoute)safe=false;continue;}
+      const state=route.state||'declared',path=state==='declared'?combinePath(absolutePath(child.client.base).replace(/\/$/,''),route.path):null;
+      const verbs=route.methods||[];
+      additions.push({kind:'feign',state,name:state==='declared'?verbs.join('|')+' '+path:'Unresolved Feign contract',
+        path,methods:verbs,constrained:!!route.constrained,reason:route.reason,method:method.name,containerName:child.name,
+        clientType:child.fqn,declaringType:parent.fqn,inherited:true,uri:parent.uri,range:route.range});
+    }
+    if(!safe||inherited.length+additions.length>2000)continue;
+    replacements.add(child.uri+'\0'+child.name);
+    inherited.push(...additions);
+  }
+  return {replacements,inherited};
 }
 
 function returnExpression(tokens, nameIndex) {
@@ -297,14 +396,14 @@ function returnExpression(tokens, nameIndex) {
   return expr;
 }
 
-function parseEndpointContracts(text, uri = '') {
-  if (!/\b(?:RouterFunction|FeignClient)\b/.test(text) || text.length > 1024 * 1024) return [];
+function endpointContractFile(text, uri = '', includeInterfaces = false) {
+  const result = [], interfaces = [];
+  if (text.length > 1024 * 1024 || !/\b(?:RouterFunction|FeignClient)\b/.test(text)&&!(includeInterfaces&&/\binterface\b/.test(text))) return {items:result,interfaces};
   const lexical = lexJava(text);
-  if (lexical.issues.length || lexical.tokens.length > 64000) return [];
+  if (lexical.issues.length || lexical.tokens.length > 64000) return {items:result,interfaces};
   const file = parseJavaTokens({text,uri},lexical), tokens = lexical.tokens;
   file.staticImports = staticImports(tokens);
   const offsets = new Map(tokens.map((token,index) => [token.start,index]));
-  const result = [];
   function publish(kind,type,method,span,details) {
     if (result.length >= 500) return;
     const {path = null,methods = [],state = 'declared',reason,constrained = false} = details;
@@ -316,6 +415,7 @@ function parseEndpointContracts(text, uri = '') {
   for (const type of file.types) {
     const client = annotation(type.annotations,'FeignClient');
     if (client && type.kind === 'interface') scanFeign(type,client,file,publish);
+    if (includeInterfaces && type.kind === 'interface') interfaces.push(interfaceRecord(type,file,tokens,offsets));
     for (const method of type.methods) {
       if (!annotation(method.annotations,'Bean') || method.type.name !== KNOWN.RouterFunction ||
           (method.type.raw.startsWith('RouterFunction') && file.types.some(item => item.name === 'RouterFunction'))) continue;
@@ -323,7 +423,9 @@ function parseEndpointContracts(text, uri = '') {
       scanFunctional(type,{...file,localNames},method,returnExpression(tokens,offsets.get(method.start)),publish);
     }
   }
-  return result;
+  return {items:result,interfaces};
 }
 
-module.exports = { parseEndpointContracts, mappingPaths };
+function parseEndpointContracts(text,uri) { return endpointContractFile(text,uri).items; }
+
+module.exports = { parseEndpointContracts, endpointContractFile, inheritedFeignContracts, mappingPaths };

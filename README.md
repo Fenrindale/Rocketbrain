@@ -189,7 +189,7 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 GET {{host}}/actuator/health
 ```
 
-응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI JSON**은 OpenAPI 3.0·3.1 문서의 작업과 로컬 참조를 살핍니다. **Create HTTP Request from OpenAPI JSON**으로 편집할 요청 초안을 만들고, 환경과 필요한 매개변수를 채운 뒤 실행합니다.
+응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI Description**은 OpenAPI 3.0·3.1 JSON과 YAML에서 작업을 확인합니다. 신뢰한 작업 공간에서 상대 경로로 연결한 JSON·YAML 경로 항목, 매개변수, 요청 본문과 단순 스키마 참조를 읽습니다. **Create HTTP Request from OpenAPI**로 요청 초안을 만들고, 환경과 매개변수를 채운 뒤 실행합니다. [OpenAPI 설명 상대 참조](https://spec.openapis.org/oas/v3.1.1.html#relative-references-in-api-description-uris)
 
 `GRAPHQL` 본문은 GraphQL 문서나 `query`, `variables`, `operationName`을 담은 JSON입니다. **Send HTTP Request**로 실행하면 HTTP 상태와 GraphQL 오류 수를 확인할 수 있습니다. **Inspect GraphQL Endpoint Schema**는 선택한 엔드포인트에서 인트로스펙션을 요청합니다.
 
@@ -303,7 +303,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Format SQL**은 현재 문서나 선택한 SQL에서 절의 줄 배치와 들여쓰기를 정리합니다. **Insert SQL Template**은 활성 카탈로그의 테이블·열을 넣으며, 알 수 없는 이름과 모호한 열에는 확인한 빠른 수정을 제공합니다.
 - 비어 있는 SQL 절에서 카탈로그 기준 필드 목록을 완성합니다. SELECT에는 현재 범위의 열, INSERT에는 자동 생성 열을 제외한 쓰기 열, GROUP BY에는 SELECT에서 확인한 직접 참조 열을 제안합니다.
 - 편집기는 바깥쪽 `WHERE`가 없는 `UPDATE`와 `DELETE`를 표시합니다. 쓰기 콘솔과 스크립트 실행은 이 문장이 대상 행 전체에 미칠 수 있는 영향을 검토하고 승인한 뒤 진행합니다.
-- 활성 MySQL/MariaDB 연결의 SQL 편집기에서 두 실테이블을 지정한 `JOIN`의 대상이나 비어 있는 `ON`에 커서를 놓습니다. **Complete JOIN using …** 빠른 수정은 실제 FK의 모든 열을 순서대로 삽입합니다. 선택 뒤 소스나 관계가 바뀌면 다시 선택합니다.
+- 활성 MySQL/MariaDB 연결의 SQL 편집기에서 `JOIN`의 대상이나 비어 있는 `ON`에 커서를 놓습니다. **Complete JOIN using …**은 앞서 참조한 테이블과의 실제 FK를 확인한 뒤 복합 키 열을 순서대로 삽입합니다. 여러 관계가 있으면 별칭과 관계 이름을 보고 선택합니다. 이름 빠른 수정도 현재 문장과 중첩 쿼리의 범위를 따릅니다.
 - 활성 스키마의 SELECT에서 해석되지 않는 테이블명이나 대상이 분명한 누락 열에 커서를 놓습니다. **Design Unresolved Table** 또는 **Design Column**에서 확인된 이름으로 테이블 디자이너를 엽니다. 열을 추가할 때는 필요한 타입을 지정합니다. 실제 스키마는 SQL 검토와 적용을 거쳐서 변경합니다.
 - **Review SQL Script**는 독립된 `DELIMITER` 줄 사이에 있는 `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE TRIGGER`의 `BEGIN … END` 블록을 한 문장으로 검토합니다. 실행은 쓰기 콘솔에서 DDL의 암시적 커밋을 승인한 뒤 진행합니다. `DELIMITER ;`로 돌아오면 일반 문장에 바인딩 값을 사용할 수 있습니다. 저장 프로그램 본문의 동적 SQL, 세션 제어와 매개변수 바인딩은 지원 범위 밖입니다.
 - **Run SQL Script**에서 유휴 자동 커밋 콘솔에 하나의 `BEGIN … COMMIT` 또는 `BEGIN … ROLLBACK` 블록을 검토해 실행할 수 있습니다. 같은 스키마의 InnoDB 기본 테이블, 직접 행 변경, 단일 테이블 열 조회와 이름이 지정된 세이브포인트를 지원합니다. 쓰기 커밋은 별도 승인을 받습니다. 문장이 실패하거나 실행이 멈추면 확장이 시작한 트랜잭션의 롤백을 확인하고, 응답을 잃으면 결과를 미확정으로 표시합니다.
@@ -393,3 +393,5 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 For mutual TLS, select **Verify CA and server identity** in the connection editor, then choose **PEM certificate and encrypted key** or **PKCS#12 identity**. Set the server DNS name and its CA independently from the client files. An encrypted PEM needs the matching certificate and key. A PKCS#12 file needs exactly one private-key identity and a certificate chain, plus an independent JDK 25 or newer configured through **rocketbrain.java.javaHome**. Rocketbrain asks for the client passphrase on each connection attempt and keeps it out of profile exports and Secret Storage. Portable exports preserve the identity type. Select the files again on the destination machine.
 
 The SQL editor analyzes common JSON calls against the current catalog. It checks argument counts and highlights malformed literal documents or paths in place. MySQL JSON arrows and engine-specific wildcard rules are interpreted using the selected dialect and observed version. Paths supplied by a parameter or column remain runtime-dependent.
+
+Named and inline SQL windows retain links to their definitions and partition or order columns. The editor checks known ROWS and RANGE frame boundaries, numeric or temporal order types and engine-specific call restrictions. Computed offsets and unsupported frame forms retain a server-validation note.

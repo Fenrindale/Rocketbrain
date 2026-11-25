@@ -40,13 +40,14 @@ public final class ObserverRuntime {
     private record Origin(String kind,String factoryId){}
     private static final class Frame {int depth=1;final String query,factoryId,origin;final long started=System.nanoTime();Frame(String query,String factoryId,String origin){this.query=query;this.factoryId=factoryId;this.origin=origin;}}
     static synchronized void start(Map<String,Object> config)throws Exception {
-        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
+        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace","feignContractTrace");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
         Path tokenPath=Path.of(requiredText(config,"tokenFile"));if(!tokenPath.isAbsolute()||!Files.isRegularFile(tokenPath,LinkOption.NOFOLLOW_LINKS)||Files.size(tokenPath)>256)throw new IllegalArgumentException("Invalid token file");
         String token=Files.readString(tokenPath,StandardCharsets.UTF_8).trim();if(!token.matches("[A-Za-z0-9_-]{32,128}"))throw new IllegalArgumentException("Invalid bearer token");expectedAuthorization=("Bearer "+token).getBytes(StandardCharsets.US_ASCII);
         queries=flag(config,"queries");validate=flag(config,"validate");consoleSelect=flag(config,"consoleSelect");PerformanceRuntime.configure(flag(config,"performance"));maxEvents=integer(config,"maxEvents",128,1,256);maxQueryChars=integer(config,"maxQueryChars",4096,64,16384);int port=integer(config,"port",0,0,65535);
         consoleFetchSnapshots=flag(config,"consoleFetchSnapshots")&&consoleSelect;
         SecurityTraceRuntime.configure(flag(config,"securityTrace"));
         ReactiveSecurityTrace.configure(flag(config,"securityReactiveTrace"));
+        FeignContractTrace.configure(flag(config,"feignContractTrace"));
         MethodSecurityTrace.configure(flag(config,"securityMethodTrace")&&SecurityTraceRuntime.enabled(),config.get("securityTraceRoles"));
         HttpServer next=HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"),port),8);
         executor=new ThreadPoolExecutor(2,2,0,TimeUnit.MILLISECONDS,new ArrayBlockingQueue<>(8),r->{Thread thread=new Thread(r,"Rocketbrain JPA observer");thread.setDaemon(true);return thread;},new ThreadPoolExecutor.AbortPolicy());
@@ -57,12 +58,13 @@ public final class ObserverRuntime {
         descriptor.put("consoleFetchSnapshotsEnabled",consoleFetchSnapshots);
         descriptor.put("securityTraceEnabled",SecurityTraceRuntime.enabled());
         descriptor.put("securityReactiveTraceEnabled",ReactiveSecurityTrace.enabled());
+        descriptor.put("feignContractTraceEnabled",FeignContractTrace.enabled());
         descriptor.put("securityMethodTraceEnabled",MethodSecurityTrace.enabled());
         if(config.containsKey("descriptorFile")){Path path=Path.of(requiredText(config,"descriptorFile"));if(!path.isAbsolute()||!Files.isDirectory(path.getParent(),LinkOption.NOFOLLOW_LINKS))throw new IllegalArgumentException("Invalid descriptor path");Files.writeString(path,Json.encode(descriptor),StandardCharsets.UTF_8,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);}
         Runtime.getRuntime().addShutdownHook(new Thread(ObserverRuntime::stop,"Rocketbrain observer shutdown"));
         System.out.println("ROCKETBRAIN_JPA_OBSERVER "+Json.encode(descriptor));
     }
-    static synchronized void stop(){if(server!=null){server.stop(0);server=null;}if(executor!=null){executor.shutdownNow();executor=null;}expectedAuthorization=null;PerformanceRuntime.configure(false);MethodSecurityTrace.configure(false,null);SecurityTraceRuntime.configure(false);ReactiveSecurityTrace.configure(false);}
+    static synchronized void stop(){if(server!=null){server.stop(0);server=null;}if(executor!=null){executor.shutdownNow();executor=null;}expectedAuthorization=null;PerformanceRuntime.configure(false);MethodSecurityTrace.configure(false,null);SecurityTraceRuntime.configure(false);ReactiveSecurityTrace.configure(false);FeignContractTrace.configure(false);}
     private static String requiredText(Map<String,Object> map,String key){Object value=map.get(key);if(!(value instanceof String text)||text.isBlank()||text.length()>8192)throw new IllegalArgumentException("Text option required");return text;}
     private static boolean flag(Map<String,Object> config,String key){Object value=config.get(key);if(value!=null&&!(value instanceof Boolean))throw new IllegalArgumentException("Boolean option required");return Boolean.TRUE.equals(value);}
     private static int integer(Map<String,Object> map,String key,int fallback,int min,int max){Object value=map.getOrDefault(key,(long)fallback);if(!(value instanceof Number number)||number.longValue()<min||number.longValue()>max)throw new IllegalArgumentException("Numeric option outside limits");return number.intValue();}
@@ -108,6 +110,10 @@ public final class ObserverRuntime {
         if(path.equals("/reactive-security-trace")){
             if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
             reply(exchange,200,ReactiveSecurityTrace.snapshot());return;
+        }
+        if(path.equals("/feign-contracts")){
+            if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
+            reply(exchange,200,FeignContractTrace.snapshot());return;
         }
         if(path.equals("/console/describe")||path.equals("/console/select")){
             if(!method.equals("POST")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}

@@ -39,5 +39,68 @@ test('reports missing parameters, cyclic or external references, and duplicate t
   assert.match(result.diagnostics[0].message,/placeholder/);
   assert.match(result.diagnostics[1].message,/same template/);
   assert.match(result.diagnostics[2].message,/local, acyclic/);
-  assert.match(result.diagnostics[3].message,/local, acyclic/);
+  assert.match(result.diagnostics[3].message,/acyclic OpenAPI reference/);
+});
+
+test('YAML path items and parameters keep the declaring file as their relative reference base',async()=>{
+  const text=[
+    'openapi: 3.1.1',
+    'info:',
+    '  title: Referenced fixture',
+    'paths:',
+    '  /items/{item}:',
+    "    $ref: './parts/operation.yaml#/paths/~1item'",
+    "  '/missing':",
+    "    $ref: './absent.yaml#'",
+    ''].join('\n');
+  const parts=[
+    'paths:',
+    '  /item:',
+    '    parameters:',
+    "      - $ref: '#/parameters/key'",
+    '    put:',
+    "      requestBody: { $ref: './types.json#/body' }",
+    "      responses: { '202': { description: Accepted } }",
+    'parameters:',
+    '  key:',
+    '    name: item',
+    '    in: path',
+    '    required: true',
+    "    schema: { $ref: './types.json#/types/item' }",
+    ''].join('\n');
+  const types=JSON.stringify({
+    types:{item:{type:['integer','null']},input:{type:'object',examples:[{enabled:true,quantity:3}]}},
+    body:{required:true,content:{'application/json':{schema:{$ref:'#/types/input'}}}}
+  });
+  const routes=new Map([
+    ['root/entry.yaml|./parts/operation.yaml',{id:'root/parts/operation.yaml',format:'yaml',text:parts}],
+    ['root/parts/operation.yaml|./types.json',{id:'root/parts/types.json',format:'json',text:types}]
+  ]);
+  const calls=[];
+  const report=analyzeOpenApi(text,{format:'yaml',sourceId:'root/entry.yaml',loadReference(reference,source) {
+    calls.push(source+'|'+reference);
+    return routes.get(calls.at(-1));
+  }});
+  assert.deepEqual(calls,[
+    'root/entry.yaml|./parts/operation.yaml','root/parts/operation.yaml|./types.json','root/entry.yaml|./absent.yaml'
+  ]);
+  assert.equal(report.operations[0].parameters[0].type,'integer | null');
+  assert.equal(report.diagnostics.length,1);
+  const {start,end}=report.diagnostics[0].range;
+  assert.equal(text.slice(start,end),"'/missing'");
+  const draft=requestTemplate(report.operations[0]);
+  const request=requestAt(draft,draft.indexOf('PUT'));
+  const prepared=await resolveRequest(request,{baseUrl:'https://example.test',path_item:'7'},()=>{});
+  assert.deepEqual(JSON.parse(prepared.body),{enabled:true,quantity:3});
+});
+
+test('YAML descriptions reject duplicate keys, aliases, unexpected tags, and unsafe integer rounding',()=>{
+  const entry='openapi: 3.1.1\ninfo: { title: Fixture }\npaths: {}\n';
+  for (const suffix of [
+    'paths: {}\n',
+    'x-a: &value [0, 1]\nx-b: *value\n',
+    'x-a: !other text\n',
+    'x-a: 9007199254740993\n',
+    'x-a: .inf\n'
+  ]) assert.throws(()=>analyzeOpenApi(entry+suffix,{format:'yaml'}),/exact JSON-compatible values/);
 });

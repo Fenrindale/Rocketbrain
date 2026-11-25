@@ -1,7 +1,7 @@
 'use strict';
 const { registerSemanticSpring } = require('../spring/vscode');
 const { registerRuntimeSpring } = require('../spring/runtime-vscode');
-const { parseEndpointContracts, mappingPaths } = require('../spring/endpoint-contracts');
+const { parseEndpointContracts, endpointContractFile, inheritedFeignContracts, mappingPaths } = require('../spring/endpoint-contracts');
 const { lexJava, splitTop } = require('../spring/java');
 const { yamlCompletionContext } = require('../spring/configuration-yaml');
 const { metadataProperties,metadataModule,workspaceMetadata,selectMetadata,declarationAt,metadataJavaSource } = require('../spring/configuration-metadata');
@@ -122,7 +122,7 @@ function sourceEndpoints(text, uri) {
 }
 
 function endpointDescription(item) {
-  return [ENDPOINT_KINDS[item.kind],item.containerName+'.'+item.method,item.reason || (item.constrained ? 'Additional request conditions' : '')].filter(Boolean).join(' · ');
+  return [ENDPOINT_KINDS[item.kind],item.containerName+'.'+item.method,item.declaringType&&'Inherited from '+item.declaringType,item.reason || (item.constrained ? 'Additional request conditions' : '')].filter(Boolean).join(' · ');
 }
 
 function yamlPrefix(text,line){return yamlCompletionContext(text,line)?.prefix||'';}
@@ -187,29 +187,50 @@ function registerSpringFeatures(vscode, context, output, { verifiedLocalPid } = 
   }
   async function endpoints(token) {
     if (!enabled()) return [];
-    const uris = await vscode.workspace.findFiles('**/*.java', '**/{node_modules,.git,.idea,target,build}/**', 2000);
-    const result = [];
+    const uris = await vscode.workspace.findFiles('**/*.java', '**/{node_modules,.git,.idea,target,build}/**', 2000, token);
+    const result = [], byWorkspace = new Map();
+    function collect(uri, sheet) {
+      result.push(...sheet.items);
+      const scope = vscode.workspace.getWorkspaceFolder(uri)?.uri.toString();
+      if (!scope || !sheet.interfaces.length) return;
+      if (!byWorkspace.has(scope)) byWorkspace.set(scope,[]);
+      byWorkspace.get(scope).push(...sheet.interfaces);
+    }
+    function scan(text, uri) {
+      const contracts=endpointContractFile(text,uri,true);
+      return {items:[...parseSpringEndpoints(text,uri,true).map(item=>({kind:'mvc',state:'declared',...item})),
+        ...contracts.items],interfaces:contracts.interfaces};
+    }
     for (const uri of uris) {
       if (token?.isCancellationRequested) return [];
       try {
         const uriString = uri.toString();
         const open = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uriString);
-        let text;
-        if (open) text = open.getText();
-        else {
-          const stat = await vscode.workspace.fs.stat(uri);
-          if (stat.size > 1024 * 1024) continue;
-          const key = stat.mtime+'|'+stat.size;
-          const previous = cache.get(uriString);
-          if (previous?.key === key) { result.push(...previous.items); continue; }
-          text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
-          const items = sourceEndpoints(text, uriString);
-          cache.set(uriString, {key,items}); result.push(...items); continue;
+        if (open) {
+          const text=open.getText();
+          if (text.length<=1024*1024) collect(uri,scan(text,uriString));
+          continue;
         }
-        if (text.length <= 1024 * 1024) result.push(...sourceEndpoints(text, uriString));
-      } catch (error) { output.appendLine(`Spring endpoint scan: ${error.message}`); }
+        const stat = await vscode.workspace.fs.stat(uri);
+        if (stat.size>1024*1024) continue;
+        const key = stat.mtime+'|'+stat.size, previous=cache.get(uriString);
+        if (previous?.key === key) { collect(uri,previous); continue; }
+        const bytes=await vscode.workspace.fs.readFile(uri);
+        if(bytes.byteLength>1024*1024)continue;
+        const sheet=scan(Buffer.from(bytes).toString('utf8'),uriString);
+        if(cache.size>=2000&&!cache.has(uriString))cache.delete(cache.keys().next().value);
+        cache.set(uriString,{key,...sheet});
+        collect(uri,sheet);
+      } catch (error) { output.appendLine('Spring endpoint scan: '+error.message); }
     }
-    return result;
+    const resolved=new Set(), inherited=[];
+    for (const records of byWorkspace.values()) {
+      const group=inheritedFeignContracts(records);
+      for(const key of group.replacements)resolved.add(key);
+      inherited.push(...group.inherited);
+    }
+    return [...result.filter(item=>!(item.kind==='feign'&&item.reason==='Inherited Feign contracts require cross-file resolution.'&&
+      resolved.has(item.uri+'\0'+item.containerName))),...inherited];
   }
   const selector = [{ scheme: 'file', pattern: '**/application*.properties' }, { scheme: 'file', pattern: '**/application*.yml' }, { scheme: 'file', pattern: '**/application*.yaml' }];
   subscriptions.push(vscode.languages.registerDefinitionProvider(selector,{provideDefinition:propertyDefinition}));
@@ -256,7 +277,7 @@ function registerSpringFeatures(vscode, context, output, { verifiedLocalPid } = 
     let item;
     if (endpoint) {
       item = items.find(candidate => candidate.uri === endpoint.uri && candidate.kind === endpoint.kind &&
-        candidate.path === endpoint.path && candidate.method === endpoint.method &&
+        candidate.path === endpoint.path && candidate.method === endpoint.method && candidate.clientType === endpoint.clientType &&
         candidate.range.start.line === endpoint.range?.start?.line && candidate.range.start.character === endpoint.range?.start?.character);
     } else {
       const selected = await vscode.window.showQuickPick(items.map(item => ({label:item.name,description:endpointDescription(item),detail:vscode.workspace.asRelativePath(vscode.Uri.parse(item.uri)),endpoint:item})),
