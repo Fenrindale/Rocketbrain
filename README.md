@@ -222,6 +222,8 @@ Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후�
 
 **Find JVM & Spring Usages**는 현재 파일, 해당 워크스페이스 폴더 또는 전체 워크스페이스에서 사용처를 찾습니다. Java와 Kotlin의 의미 기반 참조, Spring XML의 Bean 클래스, 정적 설정 플레이스홀더를 골라 정확한 소스 위치로 이동합니다. [사용처 검색 범위](docs/java-symbol-navigation.md#find-usages)
 
+**File Structure**로 현재 Java·Kotlin 파일의 타입, 함수, 필드를 검색하고 중첩 선언이나 원하는 오버로드로 이동합니다. VS Code Outline에도 같은 소스 위치 검사를 적용합니다. [파일 구조 탐색](docs/java-symbol-navigation.md#file-structure)
+
 Java·Kotlin의 **Format Document**와 **Format Selection**은 상위 폴더와 현재 폴더의 `.editorconfig`를 적용합니다. **Preview Java Formatting**과 **Preview Kotlin Formatting**으로 변경 내용을 검토할 수 있습니다. Kotlin 포맷은 여러 줄 문자열 내용을 보존하며, LF·CRLF 변환은 문서 전체에 적용합니다. [Java·Kotlin 포맷 설정](docs/java-formatting.md)
 
 **Extract Java Local Variable**, **Extract Java Field**, **Extract Java Constant**에서 새 이름과 변경 내용을 먼저 검토할 수 있습니다. 지역 변수와 필드는 `return` 식 전체 또는 지역 변수의 초기화 식을 선택합니다. 필드를 추출하면 현재 메서드에서 값을 계산해 `private` 필드에 대입합니다. 상수 추출은 컴파일 타임 상수식을 `private static final` 필드로 옮깁니다. [Java 변수·필드·상수 추출](docs/java-extract-constant.md)

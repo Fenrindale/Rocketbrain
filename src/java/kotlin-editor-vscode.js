@@ -101,6 +101,9 @@ function registerKotlinEditor(context,vscode,java) {
             protocol2Code:value=>vscode.Uri.parse(value)},
           synchronize:{fileEvents:record.watcher},markdown:{isTrusted:false},
           middleware:{
+            provideDocumentSymbols(document,token,next) {
+              return java.structure.outline(document,token,next);
+            },
             provideDocumentFormattingEdits(document,options,token,next) {
               return formatting.native(document,undefined,options,token,()=>next(document,options,token));
             },
@@ -161,6 +164,20 @@ function registerKotlinEditor(context,vscode,java) {
     }});
   subscriptions.push(formatting);
 
+  async function documentSymbols(document,token) {
+    trusted();
+    const record=active,root=projectOf(document);
+    if (!record?.client?.isRunning()||!root||path.relative(record.launch.root,root)||token?.isCancellationRequested) {
+      throw fail('Start Kotlin editing for the current Gradle project.');
+    }
+    const symbols=await record.client.sendRequest('textDocument/documentSymbol',{
+      textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)}
+    },token);
+    trusted();
+    if (active!==record) throw fail('The Kotlin language server changed during file structure lookup.');
+    return symbols;
+  }
+
   async function sourceRequest(method,document,position,context,cancellation) {
     trusted();
     const current=active,root=projectOf(document);
@@ -206,7 +223,7 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,definition,references,formatting,getState:()=>({...state}),dispose() {
+  return {start,stop,definition,references,formatting,documentSymbols,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;
