@@ -979,6 +979,24 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.java.workbench.exportSharedRun",
+        "title": "Export Shared Java Run",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.workbench.importSharedRun",
+        "title": "Import Shared Java Run",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.workbench.startRunGroup",
+        "title": "Run Java Configuration Group",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.workbench.run",
         "title": "Run Java Configuration",
         "category": "Rocketbrain"
