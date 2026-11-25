@@ -38,7 +38,8 @@ exports.run = async (vscode = require('vscode')) => {
       details[group]={...evidence,jdbc:await jdbcReadback()};
       mark(group,'completed');
     } catch(error) {
-      failures.push({group,message:String(error.message||error).slice(0,1400)});
+      failures.push({group,message:String(error.message||error).slice(0,1400),
+        location:String(error.stack||'').split(/\r?\n/).find(line=>/test[\\/].+-host\.js:\d+/.test(line))?.trim()});
       mark(group,'failed');
     }
   }

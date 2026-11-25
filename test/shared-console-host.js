@@ -85,7 +85,10 @@ async function runSharedConsoleChecks(api, vscode, checks) {
 
     await vscode.window.showTextDocument(source);
     await vscode.commands.executeCommand('rocketbrain.beginTransaction');
-    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    const sourceTab = vscode.window.tabGroups.all.flatMap(group => group.tabs)
+      .find(tab => tab.input?.uri?.toString() === source.uri.toString());
+    assert.ok(sourceTab);
+    assert.equal(await vscode.window.tabGroups.close(sourceTab), true);
     for (let n = 0; n < 30 && api.sessions().find(item => item.id === id).openEditors > 1; n++) {
       await new Promise(resolve => setTimeout(resolve, 30));
     }

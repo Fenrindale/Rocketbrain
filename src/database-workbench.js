@@ -51,17 +51,20 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   status.command = 'rocketbrain.sessionStatus'; status.show();
   const currentDocument = () => vscode.window.activeTextEditor?.document;
   const existingBinding = () => bindings.get(currentDocument()?.uri.toString());
+  const openEditorUris = () => new Set(vscode.window.tabGroups.all.flatMap(group =>
+    group.tabs.map(tab => tab.input?.uri?.toString()).filter(Boolean)));
   function consoleSessions() {
     if (!state.mysql) return [];
     const sessions = new Map();
-    for (const binding of bindings.values()) {
+    const open = openEditorUris();
+    for (const [uri, binding] of bindings) {
       let session = sessions.get(binding.id);
       if (!session) {
         session = { ...state.db.getSessionState(binding.id), editorCount: 0, openEditors: 0 };
         sessions.set(binding.id, session);
       }
       session.editorCount++;
-      if (!binding.documentClosed) session.openEditors++;
+      if (open.has(uri)) session.openEditors++;
     }
     return [...sessions.values()].map(session => ({ ...session, editorClosed: session.openEditors === 0 }));
   }

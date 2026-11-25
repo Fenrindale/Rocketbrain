@@ -46,7 +46,8 @@ async function runFunctionDeploymentChecks(api, vscode, checks) {
     await actor.query('CREATE FUNCTION ' + name + "(i BIGINT) RETURNS BIGINT DETERMINISTIC NO SQL SQL SECURITY INVOKER COMMENT 'Owned sample' RETURN i + 1");
     await api.connectMysql(config);
     const observed = await api.objectSources.open({ ...target, schema: config.database });
-    assert.match(observed.document.getText(), /RETURN i \+ 1/);
+    const source = await vscode.workspace.openTextDocument(vscode.Uri.parse(observed.documentUri));
+    assert.match(source.getText(), /RETURN i \+ 1/);
     assert.ok((await api.listSchemaObjects()).objects.some(object => object.kind === 'function' && object.name === name));
     const model = await author.openObject(target);
     assert.equal(model.security, 'INVOKER');

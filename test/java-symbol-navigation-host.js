@@ -101,7 +101,6 @@ async function runJavaSymbolNavigationChecks(api,vscode,checks) {
       }
     } finally {
       await Promise.all([...files.values()].map(file=>fs.rm(file,{force:true})));
-      await fs.rmdir(root);
     }
   }
 }
