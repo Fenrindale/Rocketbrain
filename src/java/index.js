@@ -100,7 +100,7 @@ function registerJavaFeatures(context, vscode) {
     dispose() {
       if (!disposing) {
         disposed = true;
-        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
+        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.micronaut?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
       }
       return disposing;
     }
@@ -141,6 +141,7 @@ function registerJavaFeatures(context, vscode) {
   api.groovy=require('./groovy-vscode').registerGroovyWorkbench(vscode,api);
   api.quarkus=require('./quarkus-vscode').registerQuarkusWorkbench(vscode,api);
   api.jakarta=require('./jakarta-vscode').registerJakartaWorkbench(vscode,api);
+  api.micronaut=require('./micronaut-vscode').registerMicronautWorkbench(vscode,api);
   async function installEngine() {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before installing and starting the Java engine.');
     if (installing) throw new Error('Java engine installation is already running.');

@@ -80,6 +80,12 @@ pnpm run package
 
 **Debug Jakarta WAR on Tomcat**은 Rocketbrain Java 디버거로 관리 중인 로컬 Tomcat JVM에 연결합니다. 배포에는 선택한 WAR의 별도 임시 복사본과 루프백 포트를 사용합니다. 이 흐름은 로컬 Tomcat 11의 Jakarta Servlet·JSP WAR를 지원합니다.
 
+### Micronaut Maven
+
+Micronaut 5 Maven 플랫폼 부모를 선언한 JAR 모듈을 **Java Projects**로 가져옵니다. **Inspect Micronaut Application**에서 타입이 지정된 설정 키, 환경별 설정 파일, HTTP 경로와 생성자 연결의 소스를 엽니다. `application*.properties`에서 키 완성과 선언 이동을 사용하고, 단일 문서 YAML의 스칼라 키에서 선언으로 이동합니다.
+
+**Run Micronaut Tests**는 Maven 테스트를 실행합니다. **Build and Run Micronaut**는 선택한 환경으로 실행 가능 JAR를 패키징하고 루프백 주소를 표시합니다. **Stop Micronaut Application**으로 실행 중인 JVM을 종료합니다. 소스 변경을 반영하려면 다시 빌드하고 실행합니다.
+
 ### Java CI 품질 게이트
 
 VSIX의 `extension/dist/java-quality-gate.js`를 추출하거나 소스의 `scripts/java-quality-gate.js`를 실행합니다. Node.js 20 이상과 Git이 있는 CI에서 대상 저장소와 기준선 커밋을 로컬로 준비합니다.

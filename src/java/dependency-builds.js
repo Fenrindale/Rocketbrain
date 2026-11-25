@@ -55,6 +55,8 @@ function pomFacts(file) {
   }
   return {
     file, root: path.dirname(file.path), gav: gav(project, one(project, 'parent')),
+    parent: one(project,'parent') ? gav(one(project,'parent')) : null,
+    finalName: literal(one(project,'build'),'finalName'),
     packaging: literal(project, 'packaging') || 'jar',
     modules: children(one(project, 'modules'), 'module')
       .filter(module => !module.children.length).map(module => module.text.trim()),

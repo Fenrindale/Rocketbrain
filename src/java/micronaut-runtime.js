@@ -1,0 +1,169 @@
+'use strict';
+
+const fs = require('node:fs');
+const fsp = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const crypto = require('node:crypto');
+const net = require('node:net');
+const { spawn } = require('node:child_process');
+const { independentJavaExecutable } = require('./debug-runtime');
+const { micronautMavenProject,PART } = require('./micronaut-model');
+const { cancelled,fail } = require('./workbench-model');
+
+const ARCHIVE_LIMIT=256*1024*1024;
+const delay=milliseconds => new Promise(resolve => setTimeout(resolve,milliseconds));
+
+async function packagedJar(project) {
+  const {jarName}=micronautMavenProject(project), target=path.join(project.root,'target');
+  const file=path.join(target,jarName);
+  if (!fs.existsSync(file)) throw fail('Package the Micronaut Maven application to create target/'+jarName+'.');
+  const real=await fsp.realpath(file), stat=await fsp.lstat(file,{bigint:true});
+  if (path.relative(real,file) || !stat.isFile() || stat.isSymbolicLink() || stat.size<4 || stat.size>ARCHIVE_LIMIT) {
+    throw fail('Choose a regular physical Micronaut JAR up to 256 MiB under the selected module target folder.');
+  }
+  return {file:real,artifact:jarName,size:Number(stat.size)};
+}
+
+async function stagedJar(project,base) {
+  const artifact=await packagedJar(project), staged=path.join(base,artifact.artifact);
+  const original=await fsp.stat(artifact.file,{bigint:true});
+  await fsp.copyFile(artifact.file,staged,fs.constants.COPYFILE_EXCL);
+  const after=await fsp.lstat(artifact.file,{bigint:true}), copy=await fsp.lstat(staged,{bigint:true});
+  if (['dev','ino','size','mtimeNs','ctimeNs'].some(key => original[key]!==after[key]) ||
+      after.size!==BigInt(artifact.size) || copy.size!==after.size || path.relative(artifact.file,await fsp.realpath(artifact.file))) {
+    throw fail('The packaged Micronaut JAR changed during staging. Package it and run again.');
+  }
+  const hash=crypto.createHash('sha256');
+  let zipHeader;
+  for await (const bytes of fs.createReadStream(staged)) {
+    if (!zipHeader) zipHeader=bytes.subarray(0,4);
+    hash.update(bytes);
+  }
+  if (zipHeader?.length!==4 || zipHeader.readUInt32BE()!==0x504b0304) throw fail('Micronaut requires an executable Maven JAR archive.');
+  return {artifact:artifact.artifact,staged,sha256:hash.digest('hex')};
+}
+
+function reachable(port) {
+  return new Promise(resolve => {
+    const socket=net.createConnection({host:'127.0.0.1',port});
+    const finish=open => {socket.destroy();resolve(open);};
+    socket.once('connect',() => finish(true));
+    socket.once('error',() => finish(false));
+    socket.setTimeout(550,() => finish(false));
+  });
+}
+
+async function awaitExit(session,milliseconds) {
+  let timeout;
+  try {
+    return await Promise.race([session.done.then(() => true),new Promise(resolve => {timeout=setTimeout(() => resolve(false),milliseconds);})]);
+  } finally {clearTimeout(timeout);}
+}
+
+async function removeOwned(session) {
+  if (!session.staging) return;
+  const real=await fsp.realpath(session.staging);
+  const stat=await fsp.lstat(real,{bigint:true});
+  if (path.relative(real,session.staging) || path.relative(path.dirname(real),session.parent) ||
+      !path.basename(real).startsWith('rb-micronaut-') || stat.dev!==session.identity.dev || stat.ino!==session.identity.ino) {
+    throw fail('Micronaut staging directory ownership changed before cleanup.');
+  }
+  await fsp.rm(real,{recursive:true,force:true,maxRetries:8,retryDelay:250});
+  session.staging=undefined;
+}
+
+function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
+  let active, disposed=false;
+
+  function release(session) {
+    if (session.release) return session.release;
+    session.stopping=true;
+    session.release=(async () => {
+      try {await session.prepare;} catch { /* The originating run reports the startup error. */ }
+      if (session.child && !session.exited) {
+        session.child.kill('SIGTERM');
+        if (!await awaitExit(session,6000)) {
+          session.child.kill('SIGKILL');
+          if (!await awaitExit(session,8000)) throw fail('The owned Micronaut JVM did not stop.');
+        }
+      }
+      if (session.port && await reachable(session.port)) throw fail('The owned Micronaut HTTP listener did not close.');
+      await removeOwned(session);
+      if (active===session) active=undefined;
+      return {state:'stopped'};
+    })().catch(error => {session.release=undefined;throw error;});
+    return session.release;
+  }
+
+  async function processFor(session,{project,javaHome,environment,cancellation}) {
+    const java=independentJavaExecutable(javaHome && path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
+    session.parent=await fsp.realpath(os.tmpdir());
+    session.staging=await fsp.mkdtemp(path.join(session.parent,'rb-micronaut-'));
+    session.identity=await fsp.lstat(session.staging,{bigint:true});
+    const {artifact,staged,sha256}=await stagedJar(project,session.staging);
+    if (disposed || session.stopping || cancelled(cancellation)) throw fail('Micronaut startup was cancelled.');
+    const env={...process.env};
+    for (const name of ['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','MICRONAUT_ENVIRONMENTS']) delete env[name];
+    const args=['-Dfile.encoding=UTF-8','-Dmicronaut.server.host=127.0.0.1','-Dmicronaut.server.port=-1',
+      '-Dmicronaut.env.deduction=false','-Dmicronaut.environments='+environment,'-jar',staged];
+    const child=spawn(java,args,{cwd:project.root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
+    session.child=child;
+    session.done=new Promise(resolve => child.once('close',() => {session.exited=true;resolve();}));
+    child.once('error',error => {session.error=error;});
+    const listen=stream => {
+      let tail='';
+      stream.setEncoding('utf8').on('data',chunk => {
+        log(chunk);
+        tail=(tail+chunk).slice(-8192);
+        const found=/Startup completed[^\n]*Server Running:\s+http:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})(?:[\/\s\x1B]|$)/i.exec(tail);
+        if (found && Number(found[1])>0 && Number(found[1])<=65535) session.port=Number(found[1]);
+      });
+    };
+    listen(child.stdout);
+    listen(child.stderr);
+    void session.done.then(() => {if (session.result) void release(session).catch(error => log(error.message+'\n'));});
+    return {artifact,sha256};
+  }
+
+  async function start(options = {}) {
+    const {project,allowProjectExecution,workspaceTrusted,environment='dev',cancellation}=options;
+    if (disposed || workspaceTrusted!==true || allowProjectExecution!==true) {
+      throw fail('Explicitly start the Micronaut application from a trusted workspace.');
+    }
+    if (typeof environment!=='string' || !PART.test(environment)) throw fail('Use a literal Micronaut environment name.');
+    if (active) throw fail('Stop the current owned Micronaut application first.');
+    if (cancelled(cancellation)) throw fail('Micronaut startup was cancelled.');
+    const session={id:crypto.randomUUID(),stopping:false,exited:false};
+    active=session;
+    session.prepare=processFor(session,{...options,environment});
+    const subscription=cancellation?.onCancellationRequested?.(() => {void release(session).catch(()=>{});});
+    try {
+      const artifact=await session.prepare;
+      const deadline=Date.now()+startupMs;
+      while (Date.now()<deadline) {
+        if (session.stopping || disposed || cancelled(cancellation)) throw fail('Micronaut startup was cancelled.');
+        if (session.error || session.exited) throw fail('The Micronaut application exited before readiness. Check its output and executable Maven package.');
+        if (session.port && await reachable(session.port) && !session.exited && !session.stopping && !cancelled(cancellation)) {
+          session.result={state:'running',runId:session.id,baseUrl:'http://127.0.0.1:'+session.port,environment,
+            projectUri:project.uri,...artifact};
+          return {...session.result};
+        }
+        await delay(160);
+      }
+      throw fail('The Micronaut HTTP server did not report a ready loopback listener. Check its console logging.');
+    } catch (error) {
+      await release(session);
+      throw error;
+    } finally {subscription?.dispose();}
+  }
+
+  function stop() {return active ? release(active) : Promise.resolve({state:'stopped'});}
+  function getState() {
+    if (!active) return {state:'stopped'};
+    return active.result && !active.stopping ? {...active.result} : {state:active.stopping ? 'stopping' : 'starting',runId:active.id};
+  }
+  return {start,stop,getState,async dispose(){disposed=true;await stop();}};
+}
+
+module.exports = { createMicronautRuntime,packagedJar };
