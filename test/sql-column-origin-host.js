@@ -114,6 +114,8 @@ async function runSqlColumnOriginChecks(api, vscode, checks) {
       return response.json();
     }
   });
+  if (Array.isArray(checks)) checks.push("The installed SQL origin commands resolved the exact physical column from live view metadata.");
+  return checks.sqlColumnOrigin;
 }
 
 module.exports = { runSqlColumnOriginChecks, verifyColumnOrigin };
