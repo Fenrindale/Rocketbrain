@@ -16,6 +16,8 @@ An independent VS Code workbench for Java/Spring and MySQL/MariaDB. Support is d
 | DB·SQL | 연결 프로필·TLS·SSH, 독립·공유 콘솔 세션과 트랜잭션, SQL 작성·실행·분석, 결과 그리드 편집·가져오기, 테이블 설계·객체 원문 편집, 스키마 비교·복구 | 동시에 여러 활성 연결, 모든 SQL 문법·객체 작성 형식·타입 변환, 서버 간 원자적 DDL은 완성되지 않았습니다. |
 | VS Code 통합 | 기본 편집기·탐색·검색·Undo, 프로젝트/DB 트리, 분석·결과 화면 | 원본 IDE의 모든 화면과 작업별 사용성·대규모 성능 동등성을 뜻하지 않습니다. |
 
+**Search Everywhere**는 파일, 워크스페이스 기호, 명령, 설정 키와 로컬 Git 브랜치·커밋을 함께 검색합니다. `#`, `>`, `@`, `%`는 각각 기호, 명령, 설정, Git으로 좁히고 `$`는 활성 MySQL·MariaDB 스키마의 객체를 검색합니다. Git 결과는 선택한 리비전을 읽기 전용으로 보여줍니다. 설정 검색에는 키와 공개 설정 설명을 사용합니다.
+
 설치된 JetBrains 제품의 엔진·코드·복사한 화면 자산·내장 JBR을 사용하거나 배포하지 않습니다. 별도 JetBrains 구독이나 다른 Marketplace 확장을 요구하지 않습니다. 사용하는 공개 구성요소의 조건과 고지문은 [NOTICE](https://github.com/Fenrindale/Rocketbrain/blob/main/NOTICE.txt) 및 [third-party/licenses](https://github.com/Fenrindale/Rocketbrain/tree/main/third-party/licenses)에 보존합니다.
 
 ## 빌드와 설치
