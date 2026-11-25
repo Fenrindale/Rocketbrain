@@ -137,6 +137,8 @@ async function runTriggerDeploymentChecks(api, vscode, checks) {
       return response.json();
     }
   });
+  if (Array.isArray(checks)) checks.push('The installed trigger source editor reviewed, applied and restored a trigger in its original execution order.');
+  return checks.triggerDeployment;
 }
 
 module.exports = { runTriggerDeploymentChecks, verifyTriggerDeployment };
