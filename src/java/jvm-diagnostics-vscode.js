@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { createJvmDiagnostics } = require('./jvm-diagnostics');
+const { showHeapAnalysis } = require('./hprof-vscode');
 const { packageName } = require('./workbench-model');
 
 const COMMANDS = {
@@ -9,7 +10,8 @@ const COMMANDS = {
   inspectRecording: 'rocketbrain.java.inspectJvmRecording',
   threads: 'rocketbrain.java.captureJvmThreads',
   inspectThreads: 'rocketbrain.java.inspectJvmThreads',
-  heap: 'rocketbrain.java.inspectJvmHeapHistogram'
+  heap: 'rocketbrain.java.inspectJvmHeapHistogram',
+  heapDump: 'rocketbrain.java.inspectJvmHeapDump'
 };
 const EXCLUDE = '**/{.git,.gradle,node_modules,target,build,bin,dist}/**';
 
@@ -248,7 +250,15 @@ function registerJvmDiagnostics(context,vscode,{java}) {
     return report;
   }
 
-  const handlers = { record,inspectRecording,threads,inspectThreads,heap };
+  async function heapDump() {
+    const input=await chooseInput(['hprof'],'HotSpot Heap Dump');
+    if(!input)return;
+    const analysis=await progress('Analyze JVM Heap Dump',signal=>engine().inspectHeapDump(input,{signal}));
+    await showHeapAnalysis(vscode,analysis,show);
+    return analysis.metrics;
+  }
+
+  const handlers = { record,inspectRecording,threads,inspectThreads,heap,heapDump };
   const commands = Object.entries(handlers).map(([key,handler]) => vscode.commands.registerCommand(COMMANDS[key],async () => {
     try { trusted(); return await handler(); }
     catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain JVM: ' + error.message); return null; }
@@ -261,6 +271,7 @@ function registerJvmDiagnostics(context,vscode,{java}) {
     captureThreads:(target,options) => engine().captureThreads(target,options),
     inspectThreads:(input,options) => engine().inspectThreads(input,options),
     histogram:(target,options) => engine().histogram(target,options),
+    inspectHeapDump:(input,options) => engine().inspectHeapDump(input,options),
     dispose() {
       if (disposal) return disposal;
       for (const controller of pending.keys()) controller.abort();

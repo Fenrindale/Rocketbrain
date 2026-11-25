@@ -5,6 +5,8 @@ const { constants } = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { spawn } = require('node:child_process');
+const { LIMITS:HPROF_LIMITS } = require('./hprof-format');
+const { analyzeHprof } = require('./hprof-graph');
 const {
   parseJvmList, summarizeProfile, parseThreadSnapshot, parseThreadLocks, parseHeapHistogram
 } = require('./jvm-diagnostics-model');
@@ -342,6 +344,31 @@ function createJvmDiagnostics({ javaHome, storagePath, trusted = () => {} }) {
       { format:'json',snapshot:parseThreadSnapshot(raw) } : { format:'locks',locks:parseThreadLocks(raw) };
   }
 
+  async function inspectHeapDump(file,{signal}={}) {
+    allowed(signal);
+    if(typeof file!=='string'||path.extname(file).toLowerCase()!=='.hprof')throw Error('Choose a local HotSpot .hprof file.');
+    const before=await boundedFile(file,HPROF_LIMITS.bytes),descriptor=await fs.open(file,'r');
+    const same=stat=>stat.isFile()&&stat.dev===before.dev&&stat.ino===before.ino&&stat.size===before.size&&
+      stat.mtimeMs===before.mtimeMs&&stat.ctimeMs===before.ctimeMs;
+    let bytes;
+    try {
+      if(!same(await descriptor.stat()))throw Error('The heap dump changed before it could be opened.');
+      bytes=Buffer.allocUnsafe(before.size);
+      let offset=0;
+      while(offset<bytes.length){
+        allowed(signal);
+        const {bytesRead}=await descriptor.read(bytes,offset,Math.min(1024*1024,bytes.length-offset),offset);
+        if(!bytesRead)throw Error('The heap dump changed while reading it.');
+        offset+=bytesRead;
+      }
+      if(!same(await descriptor.stat())||!same(await physical(file,'isFile')))throw Error('The heap dump changed while reading it.');
+    }finally{await descriptor.close();}
+    allowed(signal);
+    const result=await analyzeHprof(bytes,{signal});
+    allowed(signal);
+    return result;
+  }
+
   async function captureThreads(target, { output, format = 'json', signal } = {}) {
     await destination(output, format === 'json' ? '.json' : '.txt');
     if (!['json','locks'].includes(format)) throw Error('Choose structured JSON or a platform lock dump.');
@@ -433,7 +460,7 @@ function createJvmDiagnostics({ javaHome, storagePath, trusted = () => {} }) {
     }
   }
 
-  return { list,select,profile,inspectJfr,captureThreads,inspectThreads,histogram };
+  return { list,select,profile,inspectJfr,captureThreads,inspectThreads,histogram,inspectHeapDump };
 }
 
 module.exports = { createJvmDiagnostics };

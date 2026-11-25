@@ -212,7 +212,7 @@ function keysetAfter(order, columns, anchor) {
   return { sql: alternatives.length ? '(' + alternatives.join(' OR ') + ')' : '0 = 1', parameters };
 }
 /** Compile only catalog-backed identifiers and explicitly typed bound values. */
-function browseQuery(definition, input = {}, schema, related = false, collations = {}, cursor, reverse = false, dialect) {
+function browseQuery(definition, input = {}, schema, related = false, collations = {}, cursor, reverse = false, dialect, readLimit) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose table paging, sorting and filter options.');
   if (Object.keys(input).some(key => !['page', 'pageSize', 'maxRows', 'sort', 'filters', 'sessionId'].includes(key))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Unsupported table browsing option.');
   const page = input.page ?? 0, pageSize = input.pageSize ?? input.maxRows ?? 200;
@@ -291,7 +291,7 @@ function browseQuery(definition, input = {}, schema, related = false, collations
   const selected = definition.columns.map(column => quote(column.name)).concat(hidden.map(item => keyExpression(item) + ' AS ' + quote(item.cursorAlias)));
   const sql = 'SELECT ' + selected.join(',') + ' FROM ' + quote(schema) + '.' + quote(definition.name)
     + (where.length ? ' WHERE ' + where.join(' AND ') : '') + (orderBy.length ? ' ORDER BY ' + orderBy.join(',') : '')
-    + ' LIMIT ' + (pageSize + 1) + (cursor ? '' : ' OFFSET ' + (page * pageSize));
+    + ' LIMIT ' + (readLimit ?? pageSize + 1) + (cursor ? '' : ' OFFSET ' + (page * pageSize));
   return { sql, parameters, page, pageSize, order, ...(cursor && { seekOrder, cursorColumns: hidden.map(item => item.cursorAlias) }), query: { page, pageSize, sort, filters }, pageable: pk.length > 0,
     consistency: pk.length ? 'Offset pages use explicit ordering plus primary-key tiebreakers. Concurrent inserts, deletes or sort-value changes may move rows between pages; no cross-page snapshot is implied.' : 'No primary key is visible. Only the first page is available; tied rows have no stable cross-page order.' };
 }
@@ -536,32 +536,95 @@ class TableEditor {
     const modelId = randomUUID(), rowIds = result.rows.map(() => randomUUID());
     this._prune();
     const model = { modelId, sessionId: session.id, connectionId: session.connectionId, definition, fingerprint: fingerprint(definition),
-      rows: new Map(rowIds.map((id, index) => [id, [...result.rows[index]]])), maxRows, browseQuery: browsing.query, created: Date.now(), canEdit: !reason };
+      rows: new Map(rowIds.map((id, index) => [id, [...result.rows[index]]])), maxRows, browseQuery: structuredClone(browsing.query),
+      collations, completePage: !result.truncated, created: Date.now(), canEdit: !reason };
     this.models.set(modelId, model);
     this._prune();
     result.state = this.db._state(session);
-    result.edit = { modelId, table: name, ...(related ? { schema } : {}), columns: definition.columns, rowIds, canEdit: !reason, reason,
+    result.edit = { modelId, table: name, ...(related ? { schema } : {}), columns: structuredClone(definition.columns), rowIds, canEdit: !reason, reason,
       query: browsing.query, hasMorePossible: hasNext === true, insertable: !reason && !definition.columns.some(column => column.required && !column.insertable),
       concurrency: 'Primary-key locking read plus exact original visible-row comparison; a server-side delete/reinsert ABA without a version column cannot be detected.' };
     result.browse = { ...browsing.query, order: browsing.order, sortOptions: sortOptions(definition.columns, collations), hasNext, hasPrevious: browsing.page > 0, pageable: browsing.pageable, sql: browsing.sql, consistency: browsing.consistency, totalRows: null };
     return result;
   }
-  reviewChangeSet({ sessionId = 'default', modelId, updates = [], deletes = [], inserts = [] } = {}) {
+  _editableModel(session, modelId) {
     this._prune();
-    const session = this.db._session(sessionId), model = this.models.get(modelId);
-    if (!model || model.sessionId !== sessionId || model.connectionId !== session.connectionId) throw fail('ROCKETBRAIN_GRID_STALE', 'This table snapshot expired or its session changed. Refresh the table.');
+    const model = this.models.get(modelId);
+    if (!model || model.sessionId !== session.id || model.connectionId !== session.connectionId) throw fail('ROCKETBRAIN_GRID_STALE', 'This table snapshot expired or its session changed. Refresh the table.');
     const restriction = tableProtection(this.db._writeProtection, this.db._options.database, model.definition.name);
     if (restriction) throw protectionError(restriction);
     if (!model.canEdit) throw fail('ROCKETBRAIN_GRID_READ_ONLY', 'This table is structurally read-only.');
     if (session.readOnly) throw fail('ROCKETBRAIN_READ_ONLY', 'Enable read/write mode explicitly before reviewing table changes.');
+    return model;
+  }
+  stagePaste({ sessionId, modelId, parsed, draft, acrossPages, anchorRowId, anchorColumn, nullToken }) {
+    const { planPaste, mergePasteDraft } = require('./grid-bulk');
+    const session = this.db._session(sessionId);
+    return this.db._enqueue(session, async () => {
+      const model = this._editableModel(session, modelId);
+      const rowIds = [...model.rows.keys()], anchor = rowIds.indexOf(anchorRowId);
+      const count = anchor + parsed.rows.length;
+      const draftRows = new Set([...draft.updates.map(update => update?.rowId), ...draft.deletes]);
+      const extra = new Map([...(model.pasteRows ?? [])].filter(([id]) => draftRows.has(id)));
+      const definition = model.definition;
+      const columnModel = { canEdit: true, columns: definition.columns, rowIds };
+      let range;
+      if (acrossPages && anchor >= 0 && count > rowIds.length) {
+        const query = model.browseQuery, lastPage = query.page + Math.floor((count - 1) / query.pageSize);
+        if (!model.completePage || rowIds.length !== query.pageSize || lastPage > MAX_PAGE) {
+          throw fail('ROCKETBRAIN_GRID_BULK', 'The selected paste does not fit the observed result pages.');
+        }
+        if (!session.connected || session.outcomeUnknown || session.needsReconnect) {
+          throw fail('ROCKETBRAIN_GRID_STALE', 'Reconnect before capturing additional paste rows.');
+        }
+        const current = await this.definition(definition.name);
+        if (fingerprint(current) !== model.fingerprint) throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The table definition changed. Refresh the table before staging this paste.');
+        const plan = browseQuery(current, query, this.db._options.database, false, model.collations, undefined, false, undefined, count);
+        const result = await this._read(session, plan.sql, plan.parameters, count);
+        if (result.truncated || !session.connected || this._editableModel(session, modelId) !== model ||
+            !equalRows(result.columns, current.columns.map(column => column.name)) ||
+            [...model.rows.values()].some((row, index) => !result.rows[index] || !equalRows(row, result.rows[index]))) {
+          throw fail('ROCKETBRAIN_GRID_STALE', 'The current page no longer matches the captured rows. Refresh the table before staging this paste.');
+        }
+        if (result.rows.length !== count) throw fail('ROCKETBRAIN_GRID_BULK', 'There are too few matching rows on following pages for this paste.');
+        const keyIndices = current.columns.flatMap((column, index) => column.primaryKey ? [index] : []);
+        const key = row => JSON.stringify(keyIndices.map(index => row[index]));
+        const known = new Map([...extra].map(([id, row]) => [key(row), { id, row }]));
+        const present = new Set([...model.rows.values()].map(key));
+        for (const row of result.rows.slice(rowIds.length)) {
+          const primaryKey = key(row), previous = known.get(primaryKey);
+          if (present.has(primaryKey) || previous && !equalRows(row, previous.row)) {
+            throw fail('ROCKETBRAIN_GRID_STALE', 'A staged row no longer matches the observed row at its primary key. Refresh the table before staging this paste.');
+          }
+          present.add(primaryKey);
+          const id = previous?.id || randomUUID();
+          extra.set(id, row);
+          rowIds.push(id);
+        }
+        const offset = query.page * query.pageSize;
+        range = { firstRow: offset + anchor + 1, lastRow: offset + count, firstPage: query.page + 1, lastPage: lastPage + 1,
+          outsidePage: count - query.pageSize };
+      }
+      const pasted = planPaste(columnModel, parsed, { anchorRowId, anchorColumn, nullToken });
+      const changes = mergePasteDraft(draft, pasted);
+      if (extra.size > MAX_CHANGES || Buffer.byteLength(JSON.stringify([...extra.values()])) > 4 * 1024 * 1024) {
+        throw fail('ROCKETBRAIN_GRID_BULK', 'Captured paste rows exceed the snapshot budget. Apply or discard the current draft before staging another paste.');
+      }
+      this._compileChanges(model, changes, extra);
+      model.pasteRows = extra;
+      return { ...changes, range };
+    });
+  }
+  _compileChanges(model, { updates, deletes, inserts }, extra = model.pasteRows) {
     if (![updates, deletes, inserts].every(Array.isArray) || updates.length + deletes.length + inserts.length < 1 || updates.length + deletes.length + inserts.length > MAX_CHANGES) throw fail('ROCKETBRAIN_GRID_CHANGESET', 'Review between 1 and 500 row changes at a time.');
     const columns = new Map(model.definition.columns.map(column => [column.name, column]));
     const pk = model.definition.columns.filter(column => column.primaryKey), index = name => model.definition.columns.findIndex(column => column.name === name);
     const target = quote(this.db._options.database) + '.' + quote(model.definition.name), seen = new Set(), operations = [];
     let changedCells = 0, changedBytes = 0;
     const original = rowId => {
-      if (typeof rowId !== 'string' || seen.has(rowId) || !model.rows.has(rowId)) throw fail('ROCKETBRAIN_GRID_ROW', 'An edited row is missing, duplicated or outside this table snapshot.');
-      seen.add(rowId); return model.rows.get(rowId);
+      const row = model.rows.get(rowId) ?? extra?.get(rowId);
+      if (typeof rowId !== 'string' || seen.has(rowId) || !row) throw fail('ROCKETBRAIN_GRID_ROW', 'An edited row is missing, duplicated or outside this table snapshot.');
+      seen.add(rowId); return row;
     };
     const valuesFor = (values, inserting) => {
       if (!values || typeof values !== 'object' || Array.isArray(values)) throw fail('ROCKETBRAIN_GRID_CHANGESET', 'Each row change needs named column values.');
@@ -593,6 +656,11 @@ class TableEditor {
       operations.push({ type: 'insert', values: retainedValues(values),
         sql: 'INSERT INTO ' + target + ' (' + values.map(value => quote(value.column.name)).join(',') + ') VALUES (' + values.map(() => '?').join(',') + ')', parameters: values.map(value => value.parameter) });
     }
+    return operations;
+  }
+  reviewChangeSet({ sessionId = 'default', modelId, updates = [], deletes = [], inserts = [] } = {}) {
+    const session = this.db._session(sessionId), model = this._editableModel(session, modelId);
+    const operations = this._compileChanges(model, { updates, deletes, inserts });
     const reviewId = randomUUID();
     for (const [id, review] of this.reviews) if (review.modelId === modelId) this.reviews.delete(id);
     this.reviews.set(reviewId, { reviewId, model, modelId, sessionId, operations, created: Date.now() });
@@ -609,6 +677,9 @@ class TableEditor {
         throw fail('ROCKETBRAIN_GRID_STALE', 'Review the current table edits before saving them.');
       }
       const { model, operations } = review;
+      if (operations.some(operation => operation.rowId && !model.rows.has(operation.rowId))) {
+        throw fail('ROCKETBRAIN_GRID_BULK', 'A multi-page review stays in this editor. Apply it here or discard the draft.');
+      }
       const server = await this.db._sqlRelatedServer(session);
       const definition = await this.definition(model.definition.name);
       if (fingerprint(definition) !== model.fingerprint || this.reviews.get(reviewId) !== review) {

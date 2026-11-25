@@ -36,6 +36,26 @@ function planPaste(model,parsed,{anchorRowId,anchorColumn,nullToken}={}){
   const columns=model.columns.slice(column,column+parsed.width);if(columns.some(c=>!c.editable||c.primaryKey||c.generated||c.autoIncrement))throw fail('A paste rectangle cannot include primary-key, generated or other read-only columns.');
   return validateSize({updates:parsed.rows.map((values,index)=>({rowId:model.rowIds[row+index],values:Object.fromEntries(values.map((value,i)=>[columns[i].name,cellInput(value,parsed.quoted[index][i],columns[i],nullToken)]))})),inserts:[],deletes:[]});
 }
+function mergePasteDraft(draft, paste) {
+  if (!draft || !['updates', 'deletes', 'inserts'].every(name => Array.isArray(draft[name]))) {
+    throw fail('The current local draft could not be read. Open the paste form again.');
+  }
+  validateSize(draft);
+  const updates = new Map(draft.updates.map(update => [update?.rowId, update?.values]));
+  const deletes = new Set(draft.deletes);
+  if (updates.size !== draft.updates.length || deletes.size !== draft.deletes.length) {
+    throw fail('The current local draft contains a duplicate row.');
+  }
+  for (const { rowId, values } of paste.updates) {
+    const current = updates.get(rowId);
+    if (deletes.has(rowId) || current && Object.keys(values).some(name => Object.hasOwn(current, name))) {
+      throw fail('The paste overlaps a staged cell or a row marked for deletion. The existing draft was preserved.');
+    }
+    updates.set(rowId, { ...current, ...values });
+  }
+  return validateSize({ updates: [...updates].map(([rowId, values]) => ({ rowId, values })),
+    inserts: draft.inserts, deletes: draft.deletes });
+}
 function planImport(model,parsed,{mapping,nullToken}={}){
   ready(model);if(model.insertable===false)throw fail('This table has a required column that cannot be inserted safely.');
   if(mapping===undefined&&parsed.headers){if(parsed.headers.some(name=>!model.columns.some(c=>c.name===name&&c.insertable)))throw fail('Map or explicitly ignore unknown or protected source headers before importing.');mapping=parsed.headers.map((name,source)=>({source,target:name}));}
@@ -51,4 +71,4 @@ function planDuplicate(model,result,rowId){
   const values=Object.create(null);for(let i=0;i<model.columns.length;i++){const column=model.columns[i];if(!column.insertable||column.primaryKey||column.generated||column.autoIncrement)continue;const value=result.rows[index][i],cell=value===null?{kind:'null'}:{kind:'value',text:String(value)};typedCell(cell,column);values[column.name]=cell;}
   return {...validateSize({updates:[],inserts:[{values}],deletes:[]}),requiredColumns:model.columns.filter(c=>c.required&&!Object.hasOwn(values,c.name)).map(c=>c.name)};
 }
-module.exports={parseDelimited,planPaste,planImport,planDuplicate,LIMITS};
+module.exports={parseDelimited,planPaste,mergePasteDraft,planImport,planDuplicate,LIMITS};

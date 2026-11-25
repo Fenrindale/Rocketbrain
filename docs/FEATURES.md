@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.78.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.79.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 103 |
-| 부분 구현 | 99 |
+| 구현 | 106 |
+| 부분 구현 | 96 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **76.2%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **76.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.78에서는 JDT 라이브러리의 디컴파일 소스와 연결된 실제 Java 원본을 전환한다. MariaDB 패키지 공개 함수·프로시저를 검토해 호출한다. 관찰한 DB 역할의 연결과 실제 객체 권한을 읽는다. 상태가 바뀐 항목은 1개이고 가중 점수는 164점에서 164.5점으로 바뀌었다.
+v0.79에서는 실제 HotSpot 덤프의 객체와 유지 경로를 분석한다. 가상 뷰와 가상 열 정의를 연결별로 저장하고 복원한다. 여러 페이지의 관찰된 행을 하나의 검토형 그리드 변경으로 붙여넣는다. 상태가 바뀐 항목은 3개이고 가중 점수는 164.5점에서 166점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -108,7 +108,7 @@ v0.78에서는 JDT 라이브러리의 디컴파일 소스와 연결된 실제 Ja
 | IDEA-085 | IntelliJ IDEA | 테스트 결과·실패 diff·재실행 | 부분 구현 |
 | IDEA-086 | IntelliJ IDEA | 코드 커버리지·분기·테스트별 커버 | 부분 구현 |
 | IDEA-087 | IntelliJ IDEA | CPU·할당·JFR 프로파일 | 구현 |
-| IDEA-088 | IntelliJ IDEA | 힙 덤프·메모리 누수 분석 | 부분 구현 |
+| IDEA-088 | IntelliJ IDEA | 힙 덤프·메모리 누수 분석 | 구현 |
 | IDEA-089 | IntelliJ IDEA | 스레드·가상 스레드·덤프 분석 | 구현 |
 | IDEA-090 | IntelliJ IDEA | Git 변경·부분 stage·blame·기록 | VS Code 재사용 |
 | IDEA-091 | IntelliJ IDEA | Changelist·작업 컨텍스트 | 구현 |
@@ -166,7 +166,7 @@ v0.78에서는 JDT 라이브러리의 디컴파일 소스와 연결된 실제 Ja
 | DG-023 | DataGrip | DDL·object source 보기 | 구현 |
 | DG-024 | DataGrip | 루틴·인덱스·트리거·MariaDB package | 부분 구현 |
 | DG-025 | DataGrip | 실제 FK 없는 관계 정의 | 구현 |
-| DG-026 | DataGrip | virtual view·virtual column | 부분 구현 |
+| DG-026 | DataGrip | virtual view·virtual column | 구현 |
 | DG-027 | DataGrip | schema-aware 이름·열 완성 | 부분 구현 |
 | DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 구현 |
 | DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 구현 |
@@ -204,7 +204,7 @@ v0.78에서는 JDT 라이브러리의 디컴파일 소스와 연결된 실제 Ja
 | DG-061 | DataGrip | WHERE·column filter·검색·저장 filter | 구현 |
 | DG-062 | DataGrip | 셀 직접 편집·저장·충돌 확인 | 구현 |
 | DG-063 | DataGrip | pending DML 미리보기·변경 되돌리기 | 구현 |
-| DG-064 | DataGrip | 행 추가·삭제·복제·일괄 붙여넣기 | 부분 구현 |
+| DG-064 | DataGrip | 행 추가·삭제·복제·일괄 붙여넣기 | 구현 |
 | DG-065 | DataGrip | NULL·긴 text·JSON·binary 값 편집 | 구현 |
 | DG-066 | DataGrip | FK 따라 관련 행으로 이동 | 구현 |
 | DG-067 | DataGrip | record·tree·text·transpose 보기 | 구현 |

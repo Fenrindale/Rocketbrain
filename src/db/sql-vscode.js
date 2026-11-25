@@ -3,12 +3,15 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {fileURLToPath}=require('node:url');
 const { inspectDmlScope } = require('./sql-dml-scope');
 const { isProfileConsole } = require('./profile-console-files');
+const { createOverlayStore, overlayScope, buildOverlay } = require('./virtual-schema-overlays');
+const overlaySourceScheme='rocketbrain-virtual-schema-source';
 
-function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output,joinCatalog,joinLogicalRelationships,objectDefinition}={}) {
+function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output,joinCatalog,joinLogicalRelationships,objectDefinition,liveCatalogIdentity}={}) {
   const collection=vscode.languages.createDiagnosticCollection('rocketbrain-sql');
   const events=new vscode.EventEmitter(),subscriptions=[collection,events];
   let metadata=catalogSnapshot?.()||null,epoch=0,request=0,disposed=false;
   const cache=new Map(),preparedRenames=new Map(),projectPlans=new Map(),ddlPreviews=new Map();let projectGeneration=0,lastProjectReport=null;
+  const overlays=context.workspaceState&&createOverlayStore(context.workspaceState,()=>!disposed&&vscode.workspace.isTrusted);
   const resolutionScopes=require('./sql-resolution-scopes');
   const scopeCache=new Map();
   const navigationCache=new Map();
@@ -24,8 +27,10 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     const rule=resolutionScopes.selectScope(folder.uri.fsPath,document.uri.fsPath,rules);
     return rule&&{folder:folder.uri.fsPath,rule};
   }
-  const virtualActive=document=>vscode.workspace.isTrusted&&
-    (ddlPreviews.has(document.uri.toString())||Boolean(configuredScope(document)));
+  const analysisOnly=document=>Boolean(document&&(document.uri.scheme===overlaySourceScheme||
+    ddlPreviews.get(document.uri.toString())?.type==='overlay'));
+  const virtualActive=document=>analysisOnly(document)||ddlPreviews.has(document.uri.toString())||
+    vscode.workspace.isTrusted&&Boolean(configuredScope(document));
   function dmlDiagnostics(document, text, parts, sqlMode) {
     return parts.slice(0, 100).flatMap(part => {
       let scope;
@@ -45,7 +50,19 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     if(disposed||!config().get('enabled',true)||document.languageId!=='sql')return {state:'disabled',statements:[]};
     if(isProfileConsole(document)||require('./federated-select').isFederatedDocument(document)){collection.delete(document.uri);return {state:'disabled',statements:[]};}
     const key=document.uri.toString(),previous=cache.get(key);
+    if(document.uri.scheme===overlaySourceScheme){
+      collection.delete(document.uri);
+      return {state:'unknown',reason:'virtual-schema-source',virtualPreview:true,statements:[],executedSql:false};
+    }
     let preview=vscode.workspace.isTrusted?ddlPreviews.get(key):null;
+    if(ddlPreviews.get(key)?.type==='overlay'&&(!preview||!overlayCurrent(preview))){
+      const diagnostic=new vscode.Diagnostic(new vscode.Range(0,0,0,0),
+        'Reapply this saved virtual schema to the editor or exit the preview. The catalog or saved definition changed.',
+        vscode.DiagnosticSeverity.Information);
+      diagnostic.code='sql.virtual.overlay.stale';diagnostic.source='Rocketbrain SQL (saved virtual schema)';
+      collection.set(document.uri,[diagnostic]);
+      return {state:'unknown',reason:'virtual-schema-stale',virtualPreview:true,statements:[],executedSql:false};
+    }
     const configured=preview?null:configuredScope(document);
     if(configured){
       try{preview=resolutionScopes.loadScope(configured.folder,configured.rule,scopeCache);}
@@ -58,7 +75,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
         return {state:'unknown',reason:'configured-catalog-unavailable',virtualPreview:true,statements:[],executedSql:false};
       }
     }
-    const seed=preview?.type==='local'?preview.model:metadata;
+    const seed=preview?.model??metadata;
     if(previous?.version===document.version&&previous.epoch===epoch&&previous.preview===preview)return previous.value;
     const text=document.getText(),opts=options();
     let statements=[];
@@ -81,6 +98,14 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     });
     const cached = preview?.type === 'local' ? undefined : metadata?.cachedMetadata;
     const diagnostics=dmlDiagnostics(document, text, statements, opts.sqlMode);
+    if(preview?.type==='overlay'){
+      const diagnostic=new vscode.Diagnostic(new vscode.Range(0,0,0,0),
+        'Using saved virtual schema '+preview.report.label+'. This editor is for SQL analysis.',
+        vscode.DiagnosticSeverity.Information);
+      diagnostic.source='Rocketbrain SQL (saved virtual schema)';
+      diagnostic.code='sql.virtual.overlay.active';
+      diagnostics.push(diagnostic);
+    }
     if (cached) {
       const diagnostic = new vscode.Diagnostic(new vscode.Range(0, 0, 0, 0),
         'Using cached ' + cached.database + ' metadata captured ' + cached.capturedAt + '. Live schema and query validity are unverified.',
@@ -104,7 +129,8 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     const states=statements.map(s=>s.model.state),value={state:states.includes('invalid')?'invalid':states.includes('unknown')||contextChanged||parts.length>100||split?.unknown.length?'unknown':'known',contextMayChange:contextChanged,unknown:split?.unknown||[],catalogObservedAt:metadata?.loadedAt||null,catalogVisibility:metadata?.visibility||'not-observed',validityVerified:false,executedSql:false,statements};
     if(virtual)Object.assign(value,{state:virtual.state,contextMayChange:virtual.contextMayChange,
       unknown:virtual.unknown,catalogObservedAt:seed.loadedAt||null,catalogVisibility:seed.visibility,
-      virtualPreview:true,ddlChanges:virtual.changes,...(preview.configuredScope?{configuredScope:preview.configuredScope}:{})});
+      virtualPreview:true,ddlChanges:virtual.changes,...(preview.configuredScope?{configuredScope:preview.configuredScope}:{}),
+      ...(preview.type==='overlay'&&{virtualSchema:structuredClone(preview.report)})});
     if (cached) Object.assign(value, { state: 'unknown', cachedMetadata: structuredClone(cached) });
     cache.set(key,{version:document.version,epoch,preview,value});return value;
   }
@@ -415,6 +441,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     if(disposed||!vscode.workspace.isTrusted)throw Error('Trust the workspace before previewing a SQL schema.');
     if(!document||document.isClosed||document.languageId!=='sql')throw Error('Open a SQL editor.');
     if(!config().get('enabled',true))throw Error('Enable SQL analysis before previewing a schema.');
+    if(analysisOnly(document))throw Error('Exit the saved virtual schema preview before opening another DDL preview.');
     const uri=document.uri.toString();
     const version=document.version;
     let preview;
@@ -456,6 +483,69 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     if(!document.isClosed)analyzeDocument(document);
     return true;
   }
+  function overlayContext(){
+    if(disposed||!vscode.workspace.isTrusted||!overlays)throw Error('Trust the workspace before using its saved virtual schemas.');
+    const identity=liveCatalogIdentity?.(), observed=metadata, generation=epoch;
+    const scope=overlayScope(identity,observed);
+    const assertCurrent=()=>{
+      const current=liveCatalogIdentity?.();
+      if(disposed||!vscode.workspace.isTrusted||metadata!==observed||epoch!==generation||
+          !current||current.epoch!==identity.epoch||overlayScope(current,observed)!==scope){
+        throw Error('The live database catalog changed. Review the virtual schema again.');
+      }
+    };
+    return {scope,observed,assertCurrent};
+  }
+  function overlayCurrent(preview){
+    try{
+      preview.assertCurrent();
+      return overlays.read(preview.scope,preview.report.id).revision===preview.report.revision;
+    }catch{return false;}
+  }
+  function overlayDocument(document){
+    if(!document||document.isClosed||document.languageId!=='sql'||isProfileConsole(document)||
+        require('./federated-select').isFederatedDocument(document))throw Error('Open a SQL editor for the active database.');
+    if(!config().get('enabled',true))throw Error('Enable SQL analysis before using a saved virtual schema.');
+  }
+  const listOverlays=()=>overlays.list(overlayContext().scope);
+  const readOverlay=id=>overlays.read(overlayContext().scope,id);
+  async function saveOverlay(value){
+    const {scope,observed,assertCurrent}=overlayContext();
+    const {changes,externalInputs}=await buildOverlay(value,observed,{loadForeign:joinCatalog,assertCurrent});
+    const saved=await overlays.save(scope,value,assertCurrent);
+    reanalyze();
+    return {...saved,changes,externalInputs,executedSql:false};
+  }
+  async function removeOverlay(id,revision){
+    const {scope,assertCurrent}=overlayContext();
+    const removed=await overlays.remove(scope,id,revision,assertCurrent);
+    reanalyze();
+    return removed;
+  }
+  async function useOverlay(document,id){
+    overlayDocument(document);
+    const {scope,observed,assertCurrent}=overlayContext(), version=document.version, uri=document.uri.toString();
+    if(document.uri.scheme===overlaySourceScheme)throw Error('Apply a saved virtual schema to a query editor.');
+    const value=overlays.read(scope,id);
+    const {model,changes,externalInputs}=await buildOverlay(value,observed,{loadForeign:joinCatalog,assertCurrent});
+    if(document.isClosed||document.version!==version||overlays.read(scope,id).revision!==value.revision)
+      throw Error('The SQL editor or virtual schema changed. Reapply the virtual schema.');
+    if(ddlPreviews.size>=24&&!ddlPreviews.has(uri))throw Error('Close a SQL preview before opening another.');
+    ddlPreviews.set(uri,{type:'overlay',model,scope,assertCurrent,report:{id,label:value.label,revision:value.revision,changes,externalInputs}});
+    cache.delete(uri);
+    preparedRenames.delete(uri);
+    return analyzeDocument(document);
+  }
+  const virtualSchemas={list:listOverlays,read:readOverlay,save:saveOverlay,remove:removeOverlay,use:useOverlay};
+  if(overlays)subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(overlaySourceScheme,{
+    provideTextDocumentContent(uri){
+      const match=/^\/([0-9a-f-]+)\/overlay\.sql$/u.exec(uri.path);
+      if(match){
+        try{return readOverlay(match[1]).source+'\n';}catch{/* A saved definition needs its matching live scope. */}
+      }
+      return '-- The saved virtual schema is unavailable for the current database.\n';
+    }
+  }));
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {provideCompletionItems(document,position){const scope=locate(document,position);if(!scope)return [];return engine().completionsAt(scope.model,scope.offset).map(value=>{const item=new vscode.CompletionItem(value.label,value.kind==='column'?vscode.CompletionItemKind.Field:vscode.CompletionItemKind.Struct);item.detail=metadata?.cachedMetadata&&!virtualActive(document)?'Cached metadata · '+value.detail:value.detail;item.insertText=value.insertText||value.label;return item;});}},'.'));
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {
     async provideCompletionItems(document,position,token) {
@@ -519,6 +609,48 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     return report;
   });
   command('rocketbrain.sql.clearDdlPreview',()=>clearDdlPreview(vscode.window.activeTextEditor?.document));
+  command('rocketbrain.sql.manageVirtualSchemas',async()=>{
+    const editor=vscode.window.activeTextEditor;
+    const selectedContext=overlayContext();
+    const saved=overlays.list(selectedContext.scope);
+    const choices=[
+      {label:'Save Selected SQL as a Virtual Schema',create:true},
+      ...saved.map(item=>({label:item.label,description:'Saved virtual schema',item}))
+    ];
+    const selected=await vscode.window.showQuickPick(choices,{title:'Manage Saved Virtual Schemas'});
+    if(!selected)return;
+    if(selected.create){
+      overlayDocument(editor?.document);
+      const source=editor.document.getText(editor.selection);
+      if(!source.trim())throw Error('Select the SQL definitions for this virtual schema.');
+      const label=await vscode.window.showInputBox({title:'Virtual Schema Name'});
+      selectedContext.assertCurrent();
+      if(label!==undefined)return saveOverlay({label,source});
+      return;
+    }
+    const actions=['Apply to Current SQL Editor','Open Saved Definitions','Replace with Selected SQL','Remove Saved Virtual Schema'];
+    const action=await vscode.window.showQuickPick(actions,{title:selected.item.label});
+    selectedContext.assertCurrent();
+    if(action===actions[0]){
+      const report=await useOverlay(editor?.document,selected.item.id);
+      vscode.window.setStatusBarMessage('Saved virtual schema · '+selected.item.label,10000);
+      return report;
+    }
+    if(action===actions[1]){
+      const uri=vscode.Uri.from({scheme:overlaySourceScheme,path:'/'+selected.item.id+'/overlay.sql'});
+      const document=await vscode.workspace.openTextDocument(uri);
+      return vscode.window.showTextDocument(document,{preview:false});
+    }
+    if(action===actions[2]){
+      overlayDocument(editor?.document);
+      return saveOverlay({...selected.item,source:editor.document.getText(editor.selection)});
+    }
+    if(action===actions[3]&&await vscode.window.showWarningMessage('Remove saved virtual schema '+selected.item.label+'?',
+        {modal:true},'Remove')==='Remove'){
+      selectedContext.assertCurrent();
+      return removeOverlay(selected.item.id,selected.item.revision);
+    }
+  });
   command('rocketbrain.sql.findReferences',async()=>{
     const editor=vscode.window.activeTextEditor;
     if(!editor||!['sql','java'].includes(editor.document.languageId))throw new Error('Open SQL or a configured Java source file.');
@@ -540,6 +672,6 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   command('rocketbrain.sql.analyze',async()=>{const document=vscode.window.activeTextEditor?.document;if(!document||document.languageId!=='sql')throw new Error('Open a SQL document first.');if(!virtualActive(document)&&!metadata?.cachedMetadata)await refreshMetadata();const report=analyzeDocument(document);output?.appendLine('SQL source analysis: '+report.state+'; '+report.statements.length+' statements. No user query was executed.');return report;});
   if(vscode.workspace.onDidChangeWorkspaceFolders)subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{projectGeneration++;projectPlans.clear();lastProjectReport=null;}));
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.project')){projectGeneration++;projectPlans.clear();lastProjectReport=null;}}));
-  return {analyzeDocument,refreshMetadata,useDdlPreview,clearDdlPreview,virtualActive,prepareRename,renameDocument,findCatalogReferences,catalogTargetAt,planCatalogRename,validateCatalogRename,catalogRenameEdit,projectSnapshot:()=>lastProjectReport?structuredClone(lastProjectReport):null,invalidate,onDidChange:events.event,snapshot:()=>metadata?{database:metadata.database,dialect:metadata.dialect,loadedAt:metadata.loadedAt}:null,dispose(){disposed=true;scopeCache.clear();ddlPreviews.clear();preparedRenames.clear();projectPlans.clear();invalidate();for(const sub of subscriptions)sub.dispose();}};
+  return {analyzeDocument,refreshMetadata,useDdlPreview,clearDdlPreview,virtualActive,analysisOnly,virtualSchemas,prepareRename,renameDocument,findCatalogReferences,catalogTargetAt,planCatalogRename,validateCatalogRename,catalogRenameEdit,projectSnapshot:()=>lastProjectReport?structuredClone(lastProjectReport):null,invalidate,onDidChange:events.event,snapshot:()=>metadata?{database:metadata.database,dialect:metadata.dialect,loadedAt:metadata.loadedAt}:null,dispose(){disposed=true;scopeCache.clear();ddlPreviews.clear();preparedRenames.clear();projectPlans.clear();invalidate();for(const sub of subscriptions)sub.dispose();}};
 }
 module.exports={registerSQLAnalysis};
