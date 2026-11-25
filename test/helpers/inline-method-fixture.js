@@ -1,0 +1,9 @@
+'use strict';
+
+function inlineFixture(namespace,name,{spring=false}={}) {
+  const call='score(take(1), take(2), take(3))';
+  const source=`package ${namespace};\n\n${spring?'import org.springframework.stereotype.Component;\n\n@Component\n':''}public class ${name} {\n    private int trace;\n\n    private int take(int digit) {\n        trace = trace * 10 + digit;\n        return digit;\n    }\n\n    private static int score(int first, int second, int ignored) {\n        return second * 10 + first + first;\n    }\n\n    private static int score(String value) {\n        return value.length();\n    }\n\n    private int instanceOnly(int value) { return value; }\n    private static synchronized int locked(int value) { return value; }\n    private static byte narrow() { return 5; }\n    private static String combine(String value) { return value + ""; }\n    private static int mutate(int value) { return value = 9; }\n\n    int run() {\n        int rbInlineArgument1 = 0;\n        return ${call};\n    }\n\n    int local() {\n        var result = ${call};\n        return result;\n    }\n\n    int nested() { return 1 + ${call}; }\n    int multiple() { int before = take(8), value = score(take(4), take(5), take(6)); return before + value; }\n    int other() { return score("other"); }\n    int instance() { return instanceOnly(7); }\n    int guarded() { return locked(9); }\n    int writes() { return mutate(5); }\n    byte byteValue() { return narrow(); }\n    String text() { return combine("interned"); }\n\n    public static void main(String[] arguments) {\n        var fixture = new ${name}();\n        int result = fixture.run();\n        int localResult = new ${name}().local();\n        System.out.print(result + ":" + fixture.trace + ":" + fixture.other() + ":" + fixture.byteValue() + ":" + (fixture.text() == "interned") + ":" + localResult);\n    }\n}\n`;
+  return {source,call,expectedOutput:'22:123:5:5:false:22'};
+}
+
+module.exports={inlineFixture};

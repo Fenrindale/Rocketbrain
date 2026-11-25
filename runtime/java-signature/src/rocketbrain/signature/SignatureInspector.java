@@ -274,6 +274,7 @@ public final class SignatureInspector {
                 !(args.length == 6 && args[4].equals("conversion")) &&
                 !(args.length == 9 && args[4].equals("constant")) &&
                 !(args.length == 9 && args[4].equals("extraction")) &&
+                !(args.length == 9 && args[4].equals("methodInline")) &&
                 !(args.length == 5 && args[4].equals("check")) &&
                 !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
             throw new IllegalArgumentException("Use classpath-file, source-list, empty-provider-path and release.");
@@ -323,6 +324,11 @@ public final class SignatureInspector {
                     else if (args[4].equals("extraction")) {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
                         report.put("extraction",new ExtractionInspector(task,unit,byUri.get(args[5]).text).inspect(args[6],Integer.parseInt(args[7]),args[8]));
+                    }
+                    else if (args[4].equals("methodInline")) {
+                        var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
+                        report.put("methodInline",new InlineMethodInspector(task,unit,byUri.get(args[5]).text)
+                            .inspect(Integer.parseInt(args[6]),Integer.parseInt(args[7]),Integer.parseInt(args[8])));
                     }
                     else if (args[4].equals("structural")) {
                         report.put("structural",new StructuralSearch(task).search(compiler,files,options,units,byUri,args));

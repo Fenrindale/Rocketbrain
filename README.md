@@ -229,6 +229,8 @@ Java·Kotlin의 **Format Document**와 **Format Selection**은 상위 폴더와 
 
 **Extract Java Local Variable**, **Extract Java Field**, **Extract Java Constant**에서 새 이름과 변경 내용을 먼저 검토할 수 있습니다. 지역 변수와 필드는 `return` 식 전체 또는 지역 변수의 초기화 식을 선택합니다. 필드를 추출하면 현재 메서드에서 값을 계산해 `private` 필드에 대입합니다. 상수 추출은 컴파일 타임 상수식을 `private static final` 필드로 옮깁니다. [Java 변수·필드·상수 추출](docs/java-extract-constant.md)
 
+**Inline Java Method Call**은 선택한 Java 호출을 메서드 본문 식으로 바꿉니다. 인자는 호출 순서대로 한 번씩 계산하며 적용 전에 변경 내용을 검토할 수 있습니다. [Java 메서드 호출 인라인](docs/java-inline-method.md)
+
 | 명령 | 지원 범위 | 추가 분석이 필요한 범위 |
 |---|---|---|
 | **Move Java Class File / Move Java Class Across Projects** | 같은 소스 루트의 클래스 이동. Gradle 복합 조건과 Maven 리액터의 부모·중첩 BOM·속성 프로필을 분석한다. 기본 로컬 Maven 저장소의 외부 부모·BOM도 좌표와 SHA-256을 검증해 가시성 계산에 포함한다 | 사용자 지정 저장소 배치, 원격 확인, SNAPSHOT·복합 외부 POM, 전이 의존성 중재, 의존 관계 자동 변경 |

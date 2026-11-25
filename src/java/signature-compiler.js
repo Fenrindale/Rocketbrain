@@ -49,6 +49,11 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
     inspection.offset>=0&&validIdentifier(inspection.name)&&sources.some(item=>item.uri===inspection.uri&&inspection.offset+inspection.name.length<=item.text.length)){
     query.push('extraction',inspection.uri,inspection.extractionKind,String(inspection.offset),inspection.name);
   }
+  else if(inspection.kind==='methodInline'&&Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&inspection.start>=0&&
+    inspection.end>=inspection.start&&inspection.end-inspection.start<=32768&&Number.isInteger(inspection.argumentCount)&&
+    inspection.argumentCount>=-1&&inspection.argumentCount<=16&&sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)){
+    query.push('methodInline',inspection.uri,String(inspection.start),String(inspection.end),String(inspection.argumentCount));
+  }
   else if(inspection.kind==='dataflow'&&Number.isSafeInteger(inspection.offset)&&inspection.offset>=0&&
     sources.some(item=>item.uri===inspection.uri&&inspection.offset<item.text.length))query.push('dataflow',inspection.uri,String(inspection.offset));
   else if(inspection.kind==='structural'&&(inspection.uri===undefined||sources.some(item=>item.uri===inspection.uri))){
