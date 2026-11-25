@@ -7,6 +7,7 @@ const { validateQuery, validateReadQuery, parameters } = require('./sql-policy')
 const { operationOf, outcomeOf } = require('./activity-log');
 const { readMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
+const { geometryType, preserveGeometry, captureGeometry } = require('./result-map');
 const { TableEditor } = require('./grid');
 const { SchemaRenamer } = require('./schema-rename');
 const { SchemaRecovery } = require('./schema-recovery');
@@ -345,8 +346,9 @@ class MysqlService {
       };
       try {
         // Binary-protocol binding avoids SQL_MODE-dependent value escaping.
-        const query = values.length ? session.connection.execute({ sql, values, rowsAsArray: true })
-          : session.connection.query({ sql, rowsAsArray: true });
+        const options = { sql, rowsAsArray: true, typeCast: preserveGeometry };
+        const query = values.length ? session.connection.execute({ ...options, values })
+          : session.connection.query(options);
         if (activity) {
           try { reportOutcome = this._reportActivity?.(session, activity); } catch { /* Recording is independent of the query. */ }
         }
@@ -369,13 +371,27 @@ class MysqlService {
           }
           if (result.rows.length >= maxRows) { truncate('The row limit was reached. This console connection was closed; reconnect before running more SQL.'); return; }
           let normalized;
-          try { normalized = row.map(cellValue); }
+          const cells = {};
+          try {
+            normalized = row.map((value, column) => {
+              const geometry = result.fields[column]?.type === geometryType ? captureGeometry(value) : undefined;
+              if (!geometry) return cellValue(value);
+              cells[column] = geometry.observation;
+              return geometry.display;
+            });
+          }
           catch { this._lose(session, fail('ROCKETBRAIN_RESULT_INVALID', 'A result cell could not be represented.'), mayWrite); return; }
-          const rowBytes = Buffer.byteLength(JSON.stringify(normalized), 'utf8');
+          const spatial = Object.keys(cells).length ? { row: result.rows.length, cells } : undefined;
+          const rowBytes = Buffer.byteLength(JSON.stringify(normalized), 'utf8') +
+            (spatial ? Buffer.byteLength(JSON.stringify(spatial), 'utf8') : 0);
           if (bytes + rowBytes > MAX_RESULT_BYTES) {
             if (!result.rows.length) this._lose(session, fail('ROCKETBRAIN_RESULT_LIMIT', 'One result row exceeds the 4 MiB preview limit.'), mayWrite);
             else truncate('The 4 MiB result limit was reached. This console connection was closed; reconnect before running more SQL.');
             return;
+          }
+          if (spatial) {
+            result.spatial ||= [];
+            result.spatial.push(spatial);
           }
           bytes += rowBytes; result.rows.push(normalized);
         });

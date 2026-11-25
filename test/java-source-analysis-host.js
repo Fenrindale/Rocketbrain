@@ -114,4 +114,4 @@ async function runJavaSourceAnalysisChecks(api,vscode,checks) {
   }
 }
 
-module.exports = { runJavaSourceAnalysisChecks };
+module.exports = { runJavaSourceAnalysisChecks, importedSpring, jdbcReadback };

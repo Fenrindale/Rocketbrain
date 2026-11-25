@@ -415,6 +415,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
     exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination),
     analyzeResult: (id, options) => results.analyzeSnapshot(id, options),
+    mapResult: (id, column, revision) => structuredClone(results.mapSnapshot(id, column, revision)),
     compareDatasets: (targetId, sourceId, mapping) => results.compareDatasets(targetId,sourceId,mapping),
     stageDatasetComparison: (id, input) => results.stageDatasetComparison(id,input),
     savedResultLayout: id => results.savedLayout(id),
@@ -567,6 +568,32 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     },
     selectedSql,
     savedQueryTarget,
+    async querySqlNotebook(sql, { connectionEpoch, signal, assertSource } = {}) {
+      const { db, epoch } = state;
+      const check = () => {
+        if (signal?.aborted) throw Error('SQL notebook execution was cancelled.');
+        if (connectionEpoch !== epoch || !databaseGuard(db, epoch)()) {
+          throw Error('The active database changed. Run the notebook cell again.');
+        }
+        assertSource?.();
+      };
+      const id = 'notebook-' + (++sequence);
+      return withSession(id, async () => {
+        check();
+        const cancel = () => { void db.cancel(id).catch(() => {}); };
+        try {
+          await db.openSession(id, { readOnly:true });
+          signal?.addEventListener('abort', cancel, { once:true });
+          check();
+          const result = await db.query(sql, { sessionId:id, maxRows:128, timeoutMs:5000 });
+          check();
+          return result;
+        } finally {
+          signal?.removeEventListener('abort', cancel);
+          await db.closeSession(id);
+        }
+      });
+    },
     async openSavedQuery(sql, destination, { beforeRun } = {}) {
       if (!vscode.workspace.isTrusted || state.disposed || state.switching) throw new Error('Open a trusted workspace before using saved queries.');
       if (destination && destination.connectionEpoch !== state.epoch) throw new Error('The active database changed. Choose the saved query destination again.');

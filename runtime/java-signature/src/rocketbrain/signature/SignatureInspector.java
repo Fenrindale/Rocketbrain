@@ -270,7 +270,9 @@ public final class SignatureInspector {
 
     public static void main(String[] args) throws Exception {
         if (args.length != 4 && !(args.length == 5 && args[4].equals("diagram")) &&
-                !(args.length == 7 && args[4].equals("dataflow"))) {
+                !(args.length == 7 && args[4].equals("dataflow")) &&
+                !(args.length == 5 && args[4].equals("check")) &&
+                !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
             throw new IllegalArgumentException("Use classpath-file, source-list, empty-provider-path and release.");
         }
         String classpath = Files.readString(Path.of(args[0]), StandardCharsets.UTF_8);
@@ -305,7 +307,10 @@ public final class SignatureInspector {
                     "classGenerationEnabled",false,"errors",problems);
                 if (problems.isEmpty()) {
                     if (args[4].equals("diagram")) report.put("declarations",diagrams(units,trees,types));
-                    else report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
+                    else if (args[4].equals("dataflow")) report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
+                    else if (args[4].equals("structural")) {
+                        report.put("structural",new StructuralSearch(task).search(compiler,files,options,units,byUri,args));
+                    }
                 }
                 System.out.print(json(report));
                 return;

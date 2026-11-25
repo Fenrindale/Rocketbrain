@@ -4,12 +4,14 @@
   let history = [], currentId = null, editingCell = null, requestSequence = 0;
   const drafts = new Map(), browseForms = new Map(),bulkForms=new Map(), layouts = new Map();
   const charts = new Map();
+  const maps = new Map();
   const comparisons = new Map();
   const statementChoices = new Map();
-  const viewModes = ['grid', 'record', 'tree', 'text', 'transpose', 'chart', 'compare'];
+  const viewModes = ['grid', 'record', 'tree', 'text', 'transpose', 'chart', 'compare', 'map'];
   const editableModes = new Set(['grid', 'record']);
   let insertExport;
   let chartObserver;
+  let mapObserver;
   const savedLayouts = new Map(vscode.getState?.()?.layouts || []);
   for (const [id, item] of vscode.getState?.()?.drafts || []) drafts.set(id, { ...item, updates: new Map(item.updates), deletes: new Set(item.deletes) });
   const $ = id => document.getElementById(id);
@@ -959,14 +961,298 @@
     if (report.rows.length) renderComparisonTable(form, allowStage);
   }
 
+  function mapView(record) {
+    const revision = record.chart.revision;
+    let view = maps.get(record.id);
+    if (view?.revision !== revision) {
+      const prior = view?.column;
+      view = { revision, column: record.mapColumns.includes(prior) ? prior : record.mapColumns[0] };
+      maps.set(record.id, view);
+    }
+    return view;
+  }
+
+  function requestMap(record, column) {
+    const view = { revision: record.chart.revision, column, pending: ++requestSequence };
+    maps.set(record.id, view);
+    vscode.postMessage({ type: 'mapResult', id: record.id, revision: view.revision, column, requestId: view.pending });
+  }
+
+  function mapButton(label, action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.onclick = action;
+    return button;
+  }
+
+  function mapSelect(parent, name, values, selected, change) {
+    const label = document.createElement('label'), select = document.createElement('select');
+    label.append(name, select);
+    options(select, values, selected);
+    select.onchange = () => change(select.value);
+    parent.append(label);
+    return select;
+  }
+
+  function mapFit(extent, canvas, geographic) {
+    const [west, south, east, north] = extent;
+    const minimum = geographic ? 0.06 : 0.0001;
+    const scale = Math.min((canvas.clientWidth - 52) / Math.max(east - west, minimum),
+      (canvas.clientHeight - 46) / Math.max(north - south, minimum));
+    return { x: (west + east) / 2, y: (south + north) / 2, scale: Math.max(1e-12, scale) };
+  }
+
+  function mapStep(span) {
+    const power = 10 ** Math.floor(Math.log10(span));
+    return power * ([1, 2, 5, 10].find(factor => factor * power >= span) || 10);
+  }
+
+  const mapLongitude = x => x - 360 * Math.floor((x + 180) / 360);
+
+  function renderMapCanvas(canvas, features, land, frame, selected, geographic) {
+    const width = canvas.clientWidth, height = canvas.clientHeight, ratio = window.devicePixelRatio || 1;
+    if (width < 60 || height < 60) return [];
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return [];
+    ctx.scale(ratio, ratio);
+    const colors = getComputedStyle(document.body);
+    const color = (name, fallback) => colors.getPropertyValue('--vscode-' + name).trim() || fallback;
+    const x = value => width / 2 + (value - frame.x) * frame.scale;
+    const y = value => height / 2 - (value - frame.y) * frame.scale;
+    const centerOffset = center => 360 * Math.round((frame.x - center) / 360);
+    const offsets = center => {
+      const offset = centerOffset(center);
+      return geographic ? [offset - 360, offset, offset + 360] : [0];
+    };
+    const left = geographic ? Math.max(0, x(frame.x - 180)) : 0;
+    const right = geographic ? Math.min(width, x(frame.x + 180)) : width;
+    const top = geographic ? Math.max(0, y(90)) : 0;
+    const bottom = geographic ? Math.min(height, y(-90)) : height;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, top, right - left, bottom - top);
+    ctx.clip();
+    function path(rings, offset, closed) {
+      const result = new Path2D();
+      for (const points of rings) {
+        for (const [index, [longitude, latitude]] of points.entries()) {
+          const drawX = x(longitude + offset), drawY = y(latitude);
+          if (index === 0) result.moveTo(drawX, drawY);
+          else result.lineTo(drawX, drawY);
+        }
+        if (closed) result.closePath();
+      }
+      return result;
+    }
+    if (geographic) {
+      ctx.fillStyle = color('editorWidget-background', '#eaf2f8');
+      ctx.fillRect(left, top, right - left, bottom - top);
+      ctx.fillStyle = color('descriptionForeground', '#708e9f');
+      ctx.strokeStyle = color('descriptionForeground', '#84909b');
+      ctx.lineWidth = 0.75;
+      for (const offset of offsets(0)) for (const polygon of land) {
+        const coastline = path(polygon, offset, true);
+        ctx.globalAlpha = 0.43;
+        ctx.fill(coastline, 'evenodd');
+        ctx.globalAlpha = 0.78;
+        ctx.stroke(coastline);
+      }
+      ctx.globalAlpha = 1;
+    }
+    const gridStep = mapStep(Math.max(width, height) / (frame.scale * 8));
+    const dx = width / frame.scale / 2, dy = height / frame.scale / 2;
+    ctx.strokeStyle = color('panel-border', '#57616a');
+    ctx.fillStyle = color('descriptionForeground', '#aeb8c0');
+    ctx.font = '10px sans-serif';
+    function tick(value, horizontal) {
+      if (!geographic) return Number(value.toPrecision(5)).toString();
+      const coord = horizontal ? mapLongitude(value) : value;
+      const number = Number(Math.abs(coord).toFixed(5));
+      return number === 0 ? '0°' : number + '°' + (horizontal ? coord < 0 ? 'W' : 'E' : coord < 0 ? 'S' : 'N');
+    }
+    const grid = (center, halfSpan, horizontal) => {
+      const first = Math.ceil((center - halfSpan) / gridStep) * gridStep;
+      for (let index = 0; index < 16; index++) {
+        const value = first + index * gridStep;
+        if (value > center + halfSpan) break;
+        if (geographic && !horizontal && Math.abs(value) > 90) continue;
+        const pixel = horizontal ? x(value) : y(value);
+        ctx.beginPath();
+        ctx.moveTo(horizontal ? pixel : 0, horizontal ? 0 : pixel);
+        ctx.lineTo(horizontal ? pixel : width, horizontal ? height : pixel);
+        ctx.stroke();
+        ctx.fillText(tick(value, horizontal), horizontal ? pixel + 5 : left + 6,
+          horizontal ? top + 14 : Math.max(top + 10, pixel - 4));
+      }
+    };
+    grid(frame.x, dx, true);
+    grid(frame.y, dy, false);
+    const hit = [];
+    for (const feature of features) for (const part of feature.parts) {
+      const first = part.rings?.[0][0] ?? part.points[0];
+      const isSelected = feature.row === selected;
+      ctx.strokeStyle = ctx.fillStyle = isSelected ? color('charts-orange', '#f59c42') : color('charts-blue', '#3794ff');
+      ctx.lineWidth = isSelected ? 3 : 1.65;
+      for (const offset of offsets(first[0])) {
+        let shape;
+        if (part.type === 'point') {
+          shape = new Path2D();
+          shape.arc(x(first[0] + offset), y(first[1]), isSelected ? 6 : 4, 0, Math.PI * 2);
+          ctx.fill(shape);
+        } else {
+          shape = path(part.rings ?? [part.points], offset, part.type === 'polygon');
+          if (part.type === 'polygon') {
+            ctx.globalAlpha = 0.27;
+            ctx.fill(shape, 'evenodd');
+            ctx.globalAlpha = 1;
+          }
+          ctx.stroke(shape);
+        }
+        hit.push({ shape, row: feature.row, filled: part.type !== 'line' });
+      }
+    }
+    const ratioAtCenter = geographic ? 111.32 * Math.cos(frame.y * Math.PI / 180) : 1;
+    if (ratioAtCenter > 0.01) {
+      const distance = mapStep(Math.min(95, (right - left) * 0.16) * ratioAtCenter / frame.scale / 2);
+      const bar = distance * frame.scale / ratioAtCenter;
+      ctx.strokeStyle = ctx.fillStyle = color('foreground', '#eee');
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(right - 14 - bar, bottom - 14);
+      ctx.lineTo(right - 14, bottom - 14);
+      ctx.stroke();
+      ctx.textAlign = 'right';
+      ctx.fillText((geographic ? '≈ ' : '') + Number(distance.toPrecision(5)) + (geographic ? ' km' : ' units'),
+        right - 14, bottom - 20);
+    }
+    ctx.restore();
+    ctx.lineWidth = 10;
+    return hit.map(item => ({ row: item.row, contains(px, py) {
+      return px >= left && px <= right && py >= top && py <= bottom &&
+        (item.filled && ctx.isPointInPath(item.shape, px * ratio, py * ratio, 'evenodd') ||
+          ctx.isPointInStroke(item.shape, px * ratio, py * ratio));
+    } }));
+  }
+
+  function renderMap(record, layout, busy) {
+    const view = mapView(record);
+    const panel = document.createElement('section'), controls = document.createElement('div'), status = document.createElement('div');
+    panel.className = 'result-map-panel';
+    panel.setAttribute('aria-label', 'Captured result map');
+    controls.className = 'map-controls';
+    status.className = 'map-status';
+    status.setAttribute('role', 'status');
+    panel.append(controls, status);
+    $('grid').append(panel);
+    mapSelect(controls, 'Geometry column', record.mapColumns.map(index => ({
+      value: String(index), label: record.result.columns[index] + ' · column ' + (index + 1)
+    })), String(view.column), value => { requestMap(record, Number(value)); render(); }).disabled = busy;
+    if (busy) { status.textContent = 'Finish the current result action before viewing its map.'; return; }
+    if (!view.map) {
+      if (!view.pending && !view.error) requestMap(record, view.column);
+      status.textContent = view.error || 'Reading captured geometries…';
+      return;
+    }
+    const { groups, land, mappedRows, rows, outsideLimit, omitted, partial } = view.map;
+    status.textContent = [mappedRows + ' of ' + rows + ' captured rows mapped', ...(partial ? ['partial result'] : []),
+      ...omitted.map(({ reason, count }) => count + ' ' + reason), ...(outsideLimit ? [outsideLimit + ' beyond map row limit'] : [])].join(' · ');
+    if (!groups.length) return;
+    const group = groups.find(item => item.kind === view.kind) || groups[0], geographic = group.kind === 'geographic';
+    view.kind = group.kind;
+    if (groups.length > 1) mapSelect(controls, 'Coordinates', groups.map(({ kind }) => ({
+      value: kind, label: kind === 'geographic' ? 'Geographic' : 'Cartesian SRID 0'
+    })), view.kind, value => { view.kind = value; view.frame = undefined; view.selected = undefined; render(); });
+    const featureLabel = feature => 'Row ' + rowNumber(record.result, feature.row) + ' · ' + feature.family + ' · SRID ' + feature.srid;
+    const selected = () => group.features.find(item => item.row === view.selected);
+    if (!selected()) view.selected = group.features[0].row;
+    const rowPicker = mapSelect(controls, 'Feature', group.features.map(item => ({ value: String(item.row), label: featureLabel(item) })),
+      String(view.selected), value => { view.selected = Number(value); draw(); });
+    const canvas = document.createElement('canvas'), note = document.createElement('div');
+    canvas.className = 'result-map-canvas';
+    canvas.tabIndex = 0;
+    canvas.setAttribute('aria-label', 'Geometry map. Use arrow keys to pan, plus and minus to zoom, or Home to fit captured rows.');
+    note.className = 'map-status';
+    note.textContent = geographic ? 'Longitude/latitude · EPSG:4326 and reprojected 3857 · Made with Natural Earth' : 'Cartesian XY · SRID 0';
+    panel.append(canvas, note);
+    let hits = [], drag;
+    function draw() {
+      if (canvas.clientWidth < 60 || canvas.clientHeight < 60) return;
+      view.frame ||= mapFit(group.extent, canvas, geographic);
+      hits = renderMapCanvas(canvas, group.features, land, view.frame, view.selected, geographic);
+    }
+    function fit(extent = group.extent) { view.frame = mapFit(extent, canvas, geographic); draw(); }
+    function zoom(multiplier) {
+      if (!view.frame) return;
+      const minimum = geographic ? Math.min(0.5, mapFit([-180, -90, 180, 90], canvas, true).scale) : 1e-12;
+      view.frame.scale = Math.max(minimum, Math.min(1e7, view.frame.scale * multiplier));
+      draw();
+    }
+    function pan(dx, dy) {
+      if (!view.frame) return;
+      const limit = geographic ? 90 : 2e12;
+      view.frame.x += dx / view.frame.scale;
+      view.frame.y = Math.max(-limit, Math.min(limit, view.frame.y + dy / view.frame.scale));
+      if (geographic) view.frame.x = mapLongitude(view.frame.x);
+      else view.frame.x = Math.max(-limit, Math.min(limit, view.frame.x));
+      draw();
+    }
+    controls.append(mapButton('Fit Rows', () => fit()), mapButton('Zoom In', () => zoom(1.5)),
+      mapButton('Zoom Out', () => zoom(1 / 1.5)), mapButton('Open Record', () => {
+        layout.row = view.selected;
+        layout.mode = 'record';
+        persist();
+        render();
+      }));
+    if (geographic) controls.append(mapButton('World', () => fit([-180, -90, 180, 90])));
+    canvas.addEventListener('keydown', event => {
+      const actions = { ArrowLeft: () => pan(-42, 0), ArrowRight: () => pan(42, 0), ArrowUp: () => pan(0, 42),
+        ArrowDown: () => pan(0, -42), Home: () => fit(), '+': () => zoom(1.5), '=': () => zoom(1.5),
+        '-': () => zoom(1 / 1.5) };
+      if (actions[event.key]) { event.preventDefault(); actions[event.key](); }
+    });
+    canvas.addEventListener('wheel', event => {
+      event.preventDefault();
+      zoom(event.deltaY < 0 ? 1.25 : 0.8);
+    }, { passive: false });
+    canvas.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      canvas.setPointerCapture(event.pointerId);
+      drag = { x: event.clientX, y: event.clientY, moved: false };
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (!drag) return;
+      const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 3) return;
+      drag = { x: event.clientX, y: event.clientY, moved: true };
+      pan(-dx, dy);
+    });
+    canvas.addEventListener('pointercancel', () => { drag = undefined; });
+    canvas.addEventListener('pointerup', event => {
+      if (drag && !drag.moved) {
+        const { left, top } = canvas.getBoundingClientRect();
+        const feature = hits.findLast(item => item.contains(event.clientX - left, event.clientY - top));
+        if (feature) { view.selected = feature.row; rowPicker.value = String(feature.row); draw(); }
+      }
+      drag = undefined;
+    });
+    draw();
+    mapObserver = new ResizeObserver(draw);
+    mapObserver.observe(canvas);
+  }
+
   function renderResultLayout(record, layout, rows, { busy, needsDraftView }) {
     const result = record.result, order = columnOrder(layout);
     const visible = order.filter(index => !layout.hidden.has(index));
-    if ((needsDraftView && !editableModes.has(layout.mode)) || !result.columns.length) layout.mode = 'grid';
+    if ((needsDraftView && !editableModes.has(layout.mode)) || !result.columns.length ||
+        layout.mode === 'map' && !record.mapColumns?.length) layout.mode = 'grid';
     const selector = $('result-view');
     selector.value = layout.mode;
     selector.disabled = busy || !result.columns.length;
-    for (const option of selector.options) option.disabled = needsDraftView && !editableModes.has(option.value);
+    for (const option of selector.options) option.disabled = needsDraftView && !editableModes.has(option.value) ||
+      option.value === 'map' && !record.mapColumns?.length;
     selector.title = needsDraftView ? 'Apply or discard drafts before using snapshot views.' : '';
     $('result-layout').hidden = !result.columns.length;
     $('result-row-navigation').hidden = layout.mode !== 'record' || !rows.length;
@@ -1058,6 +1344,8 @@
     }));
     chartObserver?.disconnect();
     chartObserver = undefined;
+    mapObserver?.disconnect();
+    mapObserver = undefined;
     $('grid').replaceChildren();
     $('chart-tools').hidden = true;
     $('compare-tools').hidden = true;
@@ -1103,6 +1391,7 @@
       $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('bulk-panel').hidden = true;
       if (layout.mode === 'chart') renderChart(active, busy);
       else if (layout.mode === 'compare') renderCompare(active, busy);
+      else if (layout.mode === 'map') renderMap(active, layout, busy);
       else renderSnapshot(result, layout, columns);
     }
     $('export-format').options[3].disabled = !result.fields?.length;
@@ -1144,6 +1433,16 @@
       }
       return;
     }
+    if (event.data?.type === 'resultMap') {
+      const { id, revision, requestId, map, error } = event.data, view = maps.get(id);
+      if (view?.revision === revision && view.pending === requestId) {
+        view.pending = undefined;
+        view.map = map;
+        view.error = error;
+        if (current()?.id === id) render();
+      }
+      return;
+    }
     if (event.data?.type !== 'results' || !Array.isArray(event.data.history)) return;
     const previous = history.at(-1)?.id, keepEditor = editingCell || current()?.result?.edit && !current().readOnly; history = event.data.history;
     if (editingCell && history.find(record => record.id === editingCell.id)?.result?.edit?.modelId !== editingCell.modelId) { editingCell = null; $('cell-editor').hidden = true; }
@@ -1153,6 +1452,7 @@
     for(const id of bulkForms.keys())if(!history.some(record=>record.id===id))bulkForms.delete(id);
     for (const id of layouts.keys()) if (!history.some(record => record.id === id)) layouts.delete(id);
     for (const id of charts.keys()) if (!history.some(record => record.id === id)) charts.delete(id);
+    for (const id of maps.keys()) if (!history.some(record => record.id === id)) maps.delete(id);
     for (const id of comparisons.keys()) if (!history.some(record => record.id === id)) comparisons.delete(id);
     for (const id of statementChoices.keys()) if (!history.some(record => record.id === id)) statementChoices.delete(id);
     for(const record of history){

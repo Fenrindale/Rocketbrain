@@ -47,6 +47,7 @@ pnpm run package
 10. **Record JVM Profile**, **Capture JVM Threads**, **Inspect JVM Heap Histogram**에서 로컬 JVM을 직접 선택합니다. 저장한 JFR과 스레드 스냅샷도 다시 열 수 있습니다. 일부 Windows JDK에서 JFR이 빈 파일을 보고하면, 대상 JVM을 쓰기 가능한 ASCII 경로의 JFR 저장소로 시작한 뒤 다시 녹화합니다.
 11. **Run Java Inspection Profile**은 선택한 Java 소스 범위와 검사별 심각도를 VS Code Problems에 적용합니다. **Find Duplicate Java Code**는 정확한 토큰 일치 또는 리터럴을 무시한 후보를 표시하고 원본 범위를 엽니다. 사용자 프로필은 `rocketbrain.java.inspectionProfiles`에 저장합니다.
 12. **Show Java Class Diagram**은 Javac가 확인한 상속·구현·중첩 타입 관계와 소스 링크를 표시하고 Mermaid로 내보냅니다. **Trace Java Local Value**는 직선형 메서드에서 지역값의 정의와 사용 범위를 연결합니다. 구조 편집, 분기 병합, 객체의 공유 참조와 메서드 간 흐름은 지원 범위 밖입니다.
+13. **Search or Replace Java Structure**는 Java 파일이나 프로젝트에서 Javac AST 패턴을 찾습니다. `$name$`으로 식을 캡처하고 타입 제약을 지정합니다. 치환할 결과를 선택해 변경 내역을 검토하면 적용 전에 Javac로 새 소스를 검사합니다.
 
 ### HTTP 요청과 OpenAPI
 
@@ -114,10 +115,13 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - 기존 엔티티 관계 검토에서 명시적으로 매핑한 `@EmbeddedId`와 기본 키 외 고유 키를 사용하는 FK도 물리 열과 대조합니다.
 - `@EmbeddedId`의 명시적 `@AttributeOverride`와 `@AttributeOverrides`를 물리 열에 맞춰 해석합니다. 단일 PK 부모의 FK가 자식의 복합 키 중 한 멤버를 구성하면 `@MapsId("멤버")`를 검토할 수 있습니다. 자식 연관 필드가 공유 키를 쓰고, 나머지 로컬 키 열의 매핑을 유지합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
+- **Open Database Object Source**는 연결 계정에 보이는 스키마와 객체의 `SHOW CREATE` 원문을 읽기 전용 SQL 문서로 엽니다. DB 트리에서 바로 열거나 현재 객체의 원문을 새로 고칠 수 있습니다.
+- **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
 - Grid와 Record에서 같은 변경 초안을 편집하고 검토합니다. 테이블별 열 배치는 같은 연결·스키마에서 다시 열 때 복원됩니다. 읽기 전용 테이블 행의 **Related Rows**는 물리 FK의 모든 키 값을 바인딩해 별도 결과를 엽니다.
 - **Chart** 보기에서 캡처한 결과 페이지의 막대·선 그래프와 정확한 그룹 합계·평균을 확인합니다. 셀 편집기는 줄바꿈 종류, JSON 원문, Hex·Base64와 SQL NULL을 구분합니다.
+- **Map** 보기에서 캡처한 결과의 공간 열을 선택해 지도와 원본 행을 탐색합니다. 지리 좌표와 SRID 0 평면 좌표를 별도 보기로 표시합니다.
 - **Compare**에서 두 캡처 결과의 키와 비교 열을 매핑합니다. 변경된 일치 행을 선택해 대상 그리드의 초안에 넣고 SQL 검토와 트랜잭션으로 적용합니다.
 - **Capture Table Copy Source**에서 메모리, 임시 스트리밍 또는 **Stream and Save for Resume**을 선택합니다. 스트리밍은 InnoDB 기본 키 순서의 읽기 스냅샷을 최대 100만 행·1 GiB까지 암호화합니다. 재개를 선택한 스냅샷은 작업 공간에 최대 24시간 두고 키는 VS Code Secret Storage에 저장합니다. **Copy Captured Rows**에서 대상을 다시 검토하고 새 트랜잭션에 스테이징한 뒤 **Finish Table Copy**에서 커밋 또는 롤백합니다. 커밋 결과가 불확실한 스냅샷은 재사용이 잠깁니다.
 - **Verify Table Copy Destination**은 새 미확정 커밋 기록의 검토된 대상에서 최대 128개 기본 키와 매핑된 값을 읽기 전용으로 대조합니다. 표본의 현재 상태를 보고하며 재실행 잠금은 유지됩니다.

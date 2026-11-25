@@ -1,5 +1,5 @@
 {
-  "version": "0.40.0",
+  "version": "0.41.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 41,
-    "partial": 110,
-    "not-implemented": 46,
+    "implemented": 45,
+    "partial": 109,
+    "not-implemented": 43,
     "host-provided": 13,
     "unverified": 4,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 50.5,
+    "percent": 52.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-061",
-    "DG-056",
-    "DG-057",
-    "DG-073"
+    "IDEA-021",
+    "DG-023",
+    "DG-058",
+    "DG-077"
   ],
   "expandedFeatures": [
-    "IDEA-061",
-    "DG-056",
-    "DG-057",
-    "DG-073"
+    "IDEA-021",
+    "DG-023",
+    "DG-058",
+    "DG-077"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -667,25 +667,27 @@
       "category": "탐색·구조 분석",
       "feature": "구조 검색·치환",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "타입/AST 기반 구조 검색·치환 엔진이 없다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "프로젝트·파일 범위에서 Javac AST 식과 문장을 패턴으로 검색한다. 타입 제약과 이름 있는 캡처를 적용하고, 선택한 결과의 치환을 컴파일 검사와 미리보기 뒤 한 번에 편집기에 적용한다.",
       "remaining": [
-        "패턴·타입 제약·변경 미리보기·안전한 치환이 필요하다."
+        "임의 선언 패턴, JPMS, 모든 제네릭 치환과 바이너리 호출자는 별도 범위다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.41-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "두 Spring 프로젝트에서 타입이 맞는 패턴을 프로젝트 3곳·개별 파일 1곳에서 찾았다. 두 파일 치환과 빌드, 호환되지 않는 치환, 평가 동작이 바뀌는 캡처, 원본 변경의 거부를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "runtime/java-signature/src/rocketbrain/signature/StructuralSearch.java",
+          "src/java/structural-search.js",
+          "src/java/source-analysis-vscode.js",
+          "test/java-structural-search-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1925,8 +1927,8 @@
       "verification": {
         "state": "v0.40-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.40.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4330,26 +4332,26 @@
       "category": "메타데이터·탐색",
       "feature": "DDL·object source 보기",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "테이블·열·인덱스/FK 등 구조 메타데이터 일부를 수집한다.",
+      "scope": "보이는 스키마와 객체를 탐색해 실제 SHOW CREATE 원문을 읽기 전용 SQL 문서로 연다. DB 트리에서 바로 열고 갱신할 수 있으며, 연결 전환 시 이전 문서는 무효화한다.",
       "remaining": [
-        "DDL 원문·object source 전용 보기와 소스 탐색이 없다."
+        "원문은 연결 계정에 보이는 객체와 SHOW CREATE 권한 범위다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.41-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "testedScope": "MySQL 객체 7종과 MariaDB 10종에서 서버 원문과 열린 문서를 대조했다. 교차 스키마, SELECT 전용 계정의 뷰 원문 거부, 트리 열기와 새로 고침을 확인했다.",
         "publicEvidence": [
-          "src/database-workbench.js",
-          "src/db/mysql.js",
-          "src/db/metadata.js"
+          "src/db/object-source.js",
+          "src/db/object-source-vscode.js",
+          "test/object-source-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5372,8 +5374,8 @@
       "verification": {
         "state": "v0.40-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.40.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5403,8 +5405,8 @@
       "verification": {
         "state": "v0.40-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.40.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5423,25 +5425,27 @@
       "category": "쿼리 실행·세션",
       "feature": "편집기 안 결과·SQL notebook 대안",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "SQL editor inline result/SQL notebook을 구현하지 않았다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "VS Code SQL 노트북 안에 Markdown과 독립 SQL 셀을 구성한다. 읽기 전용 실행 결과를 셀에 표시하고, 고정한 결과만 .rbsql 파일에 저장해 연결 없이 다시 볼 수 있다.",
       "remaining": [
-        "셀/문장별 실행·결과 고정·공유 문서 모델이 필요하다."
+        "노트북은 SQL 셀마다 읽기 전용 단일 문장을 실행하고 제한된 표를 표시한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.41-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 MySQL과 MariaDB에서 셀 순서, 쓰기 거부와 이후 실행 중단을 확인했다. 고정한 결과 하나만 파일에 저장하고 연결 없이 공유 사본을 열어 복원했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/sql-notebook.js",
+          "src/db/sql-notebook-vscode.js",
+          "src/database-workbench.js",
+          "test/sql-notebook-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5915,8 +5919,8 @@
       "verification": {
         "state": "v0.40-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.40.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6029,25 +6033,28 @@
       "category": "데이터 시각화",
       "feature": "지리 데이터 지도 보기",
       "priority": "P3",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "지리 데이터 지도 보기 도구가 없다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "MySQL과 MariaDB의 공간 결과 열을 캡처한 뒤 지도에 표시한다. 지리 좌표와 평면 좌표를 분리하고 도형과 결과 행을 연결한다.",
       "remaining": [
-        "공간 형식 해석·좌표계·지도 렌더링이 필요하다."
+        "2차원 SRID 0, 4326, 3857을 지원하고 기타 좌표계는 미표시 이유를 알려 준다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.41-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "두 서버의 캡처에서 지리 도형 3행·평면 도형 1행과 표시 제외 2행을 대조했다. 축 순서, 재투영, 다각형 내부 구멍, 연결 종료 후 지도 유지도 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/result-map.js",
+          "src/db/result-map-land.json",
+          "src/results.js",
+          "src/ui/results.js",
+          "test/result-map-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6618,27 +6625,48 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "dfd2b6e26877cf52e7066d32a5bea83a3a8a967df94deba8c0e3e482752d7b07",
-    "sourceManifestSha256": "f908bdecd7a35cb244005bab2ce1629b4849cb88c61a6cfa1d440948958aa2dc",
+    "vsixSha256": "fad1440d78495662f033ea3a466170dea7b6181d5c0be7b96dc3ad17c40a61ce",
+    "sourceManifestSha256": "351f64d5ec35f3d5ec8d72eae35a76fb7ae46078c5deda7429a93f73c273b4af",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 3
+        "featureGroups": 4
       },
       {
         "engine": "mariadb",
-        "featureGroups": 3
+        "featureGroups": 4
       }
     ]
   },
-  "stateChanges": [],
+  "stateChanges": [
+    {
+      "id": "IDEA-021",
+      "before": "not-implemented",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-023",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-058",
+      "before": "not-implemented",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-077",
+      "before": "not-implemented",
+      "after": "implemented"
+    }
+  ],
   "offline": {
-    "node": "v24.22.1",
-    "tests": 1258,
-    "pass": 1205,
+    "node": "v24.22.3",
+    "tests": 1271,
+    "pass": 1217,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 53,
+    "skipped": 54,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

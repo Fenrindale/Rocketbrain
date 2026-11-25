@@ -1,15 +1,18 @@
 'use strict';
 
 const fs = require('node:fs/promises');
+const { lstatSync,readFileSync,realpathSync } = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { analyzeJavaSources } = require('./signature-compiler');
 const { inside, local } = require('./workbench-model');
 const { classDiagram,mermaidDiagram,dataFlow } = require('./source-analysis-model');
 const { diagramHtml } = require('./source-diagram-view');
+const { structuralQuery,parseCaptureConstraints,reviewedStructuralMatches,structuralEdits } = require('./structural-search');
 
 const COMMANDS = Object.freeze({
-  diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow'
+  diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow',
+  structural:'rocketbrain.java.structuralSearch'
 });
 const EXCLUDE = '**/{.git,.gradle,.metadata,node_modules,build,target,out,bin,dist}/**';
 const MAX_UNITS = 240;
@@ -32,7 +35,7 @@ async function fileContent(uri) {
 function registerJavaSourceAnalysis(context,vscode,{java}) {
   const owned = (context.storageUri || context.globalStorageUri).fsPath;
   const storagePath = path.join(owned,'java-source-analysis');
-  const snapshotByReport = new WeakMap(), active = new Set(), panels = new Set();
+  const snapshotByReport = new WeakMap(), structuralReports = new WeakMap(), active = new Set(), panels = new Set();
   let disposed = false, stopping;
 
   function assertReady(cancellation) {
@@ -93,17 +96,17 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   async function classSources(project,cancellation) {
     const production = project.sourceRoots.filter(root => !root.unavailable &&
       !/(?:^|[\\/])src[\\/](?:test|testFixtures|integrationTest)[\\/]/i.test(root.path));
-    if (!production.length) throw Error('Import a production Java source root for the class diagram.');
+    if (!production.length) throw Error('Import a production Java source root for analysis.');
     const root = vscode.Uri.parse(project.uri);
     const candidates = await vscode.workspace.findFiles(new vscode.RelativePattern(root,'**/*.java'),EXCLUDE,MAX_UNITS + 1,cancellation);
-    if (candidates.length > MAX_UNITS) throw Error('Class diagrams support at most 240 Java files per imported project.');
+    if (candidates.length > MAX_UNITS) throw Error('Compiler analysis supports at most 240 Java files per imported project.');
     const sources = [];
     let total = 0;
     for (const uri of candidates) {
       if (!localFile(uri) || !production.some(root => inside(root.path,uri.fsPath))) continue;
-      if (path.basename(uri.fsPath) === 'module-info.java') throw Error('Class diagrams currently inspect named declarations in classpath projects.');
+      if (path.basename(uri.fsPath) === 'module-info.java') throw Error('This analysis currently supports Java classpath projects.');
       const file = await snapshot(uri,cancellation);
-      if ((total += file.bytes) > 8 * 1024 * 1024) throw Error('Class diagram source inputs exceed 8 MiB.');
+      if ((total += file.bytes) > 8 * 1024 * 1024) throw Error('Java analysis source inputs exceed 8 MiB.');
       sources.push(file);
     }
     return sources;
@@ -117,13 +120,17 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       javaHome:state.javaHome,classpath,release:Number(compliance || 25),storagePath,cancellation,
       sources:sources.map(({uri,text}) => ({uri,text})),manifestLimit:256*1024,inspection
     });
-    if (report.errors.length) throw Error('Resolve Java compiler errors before analysis: ' + report.errors[0].message);
+    if (report.errors.length) {
+      const prefix = inspection.kind === 'check' ? 'The replacement would fail Java compiler analysis: ' :
+        'Resolve Java compiler errors before analysis: ';
+      throw Error(prefix + report.errors[0].message);
+    }
     for (const source of sources) {
       const saved = await snapshot(vscode.Uri.parse(source.uri),cancellation);
       if (saved.sha !== source.sha) throw Error('Java source changed during analysis. Run it again.');
     }
     assertReady(cancellation);
-    return report;
+    return { ...report,classpathEntries:classpath };
   }
 
   async function diagram({ projectUri,uri,cancellation } = {}) {
@@ -154,6 +161,72 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     const result = dataFlow(compiled,source,offset);
     snapshotByReport.set(result,new Map([[source.uri,source.sha]]));
     return result;
+  }
+
+  async function structuralSearch({ projectUri,uri,fileOnly = false,cancellation,...input } = {}) {
+    const query = structuralQuery(input);
+    if (fileOnly && !localFile(uri)) throw Error('Open a local Java source to search this file.');
+    const state = await projects(cancellation);
+    const project = findProject(state.projects,uri,projectUri);
+    const sources = (await classSources(project,cancellation)).sort((a,b) => a.uri.localeCompare(b.uri));
+    const scoped = fileOnly ? sources.find(source => !path.relative(vscode.Uri.parse(source.uri).fsPath,uri.fsPath)) : null;
+    if (fileOnly && !scoped) throw Error('Select a saved Java file in the production source roots.');
+    const compiler = await compile(state,project,sources,{...query,kind:'structural',...(scoped && { uri:scoped.uri })},cancellation);
+    const result = reviewedStructuralMatches(compiler.structural,sources);
+    const report = { ...result,project:project.name,projectUri:project.uri,sourceFiles:scoped ? 1 : sources.length,
+      replacementRequested:query.replacement !== undefined };
+    structuralReports.set(report,{ state,project,sources,matches:structuredClone(result.matches),compiler });
+    snapshotByReport.set(report,new Map(sources.map(source => [source.uri,source.sha])));
+    return report;
+  }
+
+  async function prepareStructuralReplacement(report, ids, { cancellation } = {}) {
+    assertReady(cancellation);
+    const review = structuralReports.get(report);
+    if (!review) throw Error('Run Java structural search before reviewing replacements.');
+    const { state,project,sources,matches,compiler } = review;
+    const original = new Map(sources.map(source => [source.uri,source.sha]));
+    async function checkSources(token) {
+      const live = await classSources(project,token);
+      if (live.length !== original.size || live.some(source => original.get(source.uri) !== source.sha)) {
+        throw Error('A Java source or project source membership changed after structural search.');
+      }
+      compiler.validateClasspath();
+    }
+    const edits = structuralEdits(matches,ids,sources);
+    const dependencies = sources.filter(source => !Object.hasOwn(edits.changes,source.uri));
+    function assertDependenciesCurrent() {
+      const open = vscode.workspace.textDocuments.filter(document => !document.isClosed && localFile(document.uri));
+      const normalize = text => text.replace(/\r\n/g,'\n');
+      for (const source of dependencies) {
+        const uri = vscode.Uri.parse(source.uri), file = uri.fsPath, stat = lstatSync(file);
+        const document = open.find(candidate => !path.relative(candidate.uri.fsPath,file));
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== source.bytes || path.relative(file,realpathSync(file)) ||
+            signatures(readFileSync(file)) !== source.sha ||
+            document && (document.isDirty || normalize(document.getText()) !== normalize(source.text))) {
+          throw Error('A Java dependency source changed after structural search. Search again.');
+        }
+      }
+    }
+    await checkSources(cancellation);
+    const verified = await compile(state,project,edits.sources,{kind:'check'},cancellation);
+    if (verified.classpathFingerprint !== compiler.classpathFingerprint) {
+      throw Error('Java classpath changed after structural search. Search again.');
+    }
+    return java.refactoring.previewWorkspaceEdit({changes:edits.changes},{
+      kind:'refactor.replace.structure',title:'Java Structural Replacement',cancellation,
+      warnings:['Javac checked the selected edits together. Review the behavioral changes in the diff.'],
+      validate:async token => {
+        await checkSources(token);
+        const liveClasspath = await classpaths(project,token);
+        if (liveClasspath.length !== verified.classpathEntries.length ||
+            liveClasspath.some((entry,index) => entry !== verified.classpathEntries[index])) {
+          throw Error('Java classpath entries changed after structural replacement review.');
+        }
+        verified.validateClasspath();
+      },
+      preApply:() => { verified.validateClasspath(); assertDependenciesCurrent(); }
+    });
   }
 
   const range = value => new vscode.Range(value.start.line,value.start.character,value.end.line,value.end.character);
@@ -286,13 +359,73 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     return report;
   }
 
-  const commands = Object.entries({diagram:showProjectDiagram,flow:showTrace}).map(([kind,run]) =>
+  async function showStructuralSearch() {
+    const state = await operation('Find Java Projects',projects);
+    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    const scopes = state.projects.flatMap(project => {
+      const item = {label:project.name,description:'Production sources',projectUri:project.uri};
+      if (!localFile(activeUri) || !project.sourceRoots.some(root => !root.unavailable && inside(root.path,activeUri.fsPath))) return [item];
+      return [item,{...item,description:'Current file',uri:activeUri,fileOnly:true}];
+    });
+    if (!scopes.length) throw Error('Import a Java classpath project before structural search.');
+    const scope = await vscode.window.showQuickPick(scopes,{title:'Java Structural Search · Scope'});
+    if (!scope) return;
+    const choice = await vscode.window.showQuickPick([
+      {label:'Expression',description:'An invocation, operator or other Java expression',mode:'expression'},
+      {label:'Statement',description:'A return, expression statement, conditional or other supported statement',mode:'statement'}
+    ],{title:'Java Structural Search · Template'});
+    if (!choice) return;
+    const pattern = await vscode.window.showInputBox({title:'Search Template',prompt:'Use $name$ to capture a Java expression.',
+      placeHolder:choice.mode === 'expression' ? 'Math.min($value$, 0)' : 'return $value$;'});
+    if (pattern === undefined) return;
+    const types = await vscode.window.showInputBox({title:'Capture Types',prompt:'Optional. Use name=Type or name<:Type, separated by commas.',
+      placeHolder:'value=int, text<:java.lang.CharSequence'});
+    if (types === undefined) return;
+    const replacement = await vscode.window.showInputBox({title:'Replacement Template',prompt:'Leave blank to search without replacement.'});
+    if (replacement === undefined) return;
+    const report = await operation('Match Java Structures',cancellation => structuralSearch({
+      ...scope,mode:choice.mode,pattern,replacement:replacement.trim() ? replacement : undefined,
+      constraints:parseCaptureConstraints(types),cancellation
+    }));
+    if (!report.matches.length) {
+      await vscode.window.showInformationMessage('No Java structures matched the template.');
+      return report;
+    }
+    const label = report.matches.length + (report.truncated ? '+' : '') + ' Java Structural Matches';
+    const resultItem = match => ({
+      label:match.snippet.replace(/\s+/g,' '),
+      description:vscode.workspace.asRelativePath(vscode.Uri.parse(match.uri)) + ':' + (match.range.start.line + 1),
+      detail:match.blocked || match.captures.map(capture => '$' + capture.name + '$ · ' + capture.type).join(', '),
+      match
+    });
+    const replaceable = report.matches.filter(match => match.replacement !== undefined);
+    const actions = [{label:'Go to Match',action:'reveal'}];
+    if (replaceable.length) actions.push({label:'Review Selected Replacements',description:replaceable.length + ' available',action:'replace'});
+    const action = await vscode.window.showQuickPick(actions,{title:label});
+    if (!action) return report;
+    if (action.action === 'replace') {
+      const chosen = await vscode.window.showQuickPick(replaceable.map(resultItem),{title:label,canPickMany:true});
+      if (chosen?.length) {
+        const plan = await operation('Check Java Structural Replacements',cancellation =>
+          prepareStructuralReplacement(report,chosen.map(item => item.match.id),{cancellation}));
+        await java.refactoring.review(plan);
+      }
+    } else {
+      const item = await vscode.window.showQuickPick(report.matches.map(resultItem),{title:label,matchOnDescription:true});
+      if (item) await reveal(report,item.match);
+    }
+    return report;
+  }
+
+  const commands = Object.entries({diagram:showProjectDiagram,flow:showTrace,structural:showStructuralSearch}).map(([kind,run]) =>
     vscode.commands.registerCommand(COMMANDS[kind],async () => {
       try { assertReady(); return await run(); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message); return null; }
     }));
   return {
     diagram:options => managed(() => diagram(options)),trace:options => managed(() => trace(options)),
+    structuralSearch:options => managed(() => structuralSearch(options)),
+    prepareStructuralReplacement:(report,ids,options) => managed(() => prepareStructuralReplacement(report,ids,options)),
     reveal,showDiagram,exportMermaid,
     dispose() {
       if (stopping) return stopping;

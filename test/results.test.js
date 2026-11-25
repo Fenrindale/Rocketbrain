@@ -447,6 +447,50 @@ test('actual result Webview renders database values as text and routes history/c
     assert.equal(exported.truncated, true);
   });
 
+  await t.test('captured map draws an offline basemap, separates SRIDs and opens the selected captured row', async () => {
+    const fields = [{ type: 253 }, { type: 255 }];
+    const rows = [['east coast', '{"x":127,"y":37}'], ['north coast', '{"x":129,"y":41}'],
+      ['local grid', '{"x":12,"y":8}'], ['unmapped', null]];
+    const spatial = [
+      { row: 0, cells: { 1: { srid: 4326, node: { type: 1, coordinates: [127, 37] } } } },
+      { row: 1, cells: { 1: { srid: 4326, node: { type: 1, coordinates: [129, 41] } } } },
+      { row: 2, cells: { 1: { srid: 0, node: { type: 1, coordinates: [12, 8] } } } }
+    ];
+    const id = host.begin('SELECT label, geom FROM samples', 'DB');
+    host.finish(id, { columns: ['label', 'geom <map>'], fields, rows, spatial, rowCount: rows.length, durationMs: 1 });
+    await page.locator('#result-view').selectOption('map');
+    const canvas = page.locator('.result-map-canvas');
+    await canvas.waitFor();
+    assert.match(await page.locator('.map-status').first().textContent(), /3 of 4 captured rows mapped.*1 SQL NULL/);
+    assert.ok(await canvas.evaluate(surface => surface.getContext('2d').getImageData(0, 0, surface.width, surface.height).data.some(value => value > 0)));
+    assert.equal(await page.getByLabel('Feature').locator('option').count(), 2);
+    await page.getByRole('button', { name: 'World', exact: true }).click();
+    await canvas.focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Home');
+    const marker = await canvas.evaluate(surface => {
+      const width = surface.clientWidth, height = surface.clientHeight;
+      const scale = Math.min((width - 52) / 2, (height - 46) / 4);
+      return { x: width / 2 + scale, y: height / 2 - 2 * scale };
+    });
+    await canvas.click({ position: marker });
+    assert.equal(await page.getByLabel('Feature').inputValue(), '1');
+    await page.getByRole('button', { name: 'Open Record' }).click();
+    assert.match(await page.locator('#result-row-status').textContent(), /Row 2 · 2 of 4 captured/);
+    assert.match(await page.locator('#grid').textContent(), /north coast/);
+    await page.locator('#result-view').selectOption('map');
+    await page.getByLabel('Coordinates').selectOption('cartesian');
+    assert.equal(await page.getByLabel('Feature').locator('option').count(), 1);
+    assert.equal(await page.getByRole('button', { name: 'World', exact: true }).count(), 0);
+    await page.getByRole('button', { name: 'Open Record' }).click();
+    assert.match(await page.locator('#grid').textContent(), /local grid/);
+    const record = host.history.find(result => result.id === id);
+    assert.throws(() => host.mapSnapshot(id, 1, record.chart.revision - 1), /current captured result/);
+    host.editState(id, { hasDraft: true });
+    assert.throws(() => host.mapSnapshot(id, 1), /apply or discard drafts/);
+    host.editState(id, { hasDraft: false });
+  });
+
   await t.test('typed editors stage original line endings, exact JSON text and binary bytes as one ordinary draft', async () => {
     const columns = [
       { name: 'body', type: 'longtext', kind: 'text', editable: true, nullable: true },

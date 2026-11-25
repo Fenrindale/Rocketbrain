@@ -5,6 +5,7 @@ const { createResultExport } = require('./db/result-export');
 const { createResultLayouts, resultTableKey } = require('./db/result-layouts');
 const { createResultFilters, filterName } = require('./db/result-filters');
 const { analyzeResult, numericColumns } = require('./db/result-analysis');
+const { mapResult, mapColumns } = require('./db/result-map');
 const { compareDatasets: compareCaptures, selectUpdates } = require('./db/dataset-comparison');
 const tabActions = new Set(['closeResult', 'renameResult', 'setResultPin']);
 function resultName(value) {
@@ -32,7 +33,7 @@ class ResultsView {
     const script = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.js'));
     const style = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.css'));
     view.webview.html = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${style}"><title>Query Results</title></head><body>
-<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option><option value="compare">Compare</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option></select><button id="export" disabled>Export CSV</button><button id="pin-result" aria-pressed="false" disabled>Pin Result</button><button id="rename-result" disabled>Rename Result</button><button id="close-result">Close Result</button></header>
+<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option><option value="compare">Compare</option><option value="map" disabled>Map</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option></select><button id="export" disabled>Export CSV</button><button id="pin-result" aria-pressed="false" disabled>Pin Result</button><button id="rename-result" disabled>Rename Result</button><button id="close-result">Close Result</button></header>
 <nav id="tabs" aria-label="Query result history"></nav>
 <section id="script-result-sets" aria-label="Captured statement results" hidden><label>Statement result <select id="script-result-selection"></select></label><button id="open-script-statement" type="button">Open Captured Statement</button></section>
 <div id="message" role="status" aria-live="polite">Run SQL from the editor with Ctrl+Enter.</div>
@@ -103,6 +104,11 @@ class ResultsView {
       } else if (msg.type === 'analyzeResult') {
         const response = { type: 'resultAnalysis', id: record.id, revision: msg.revision, requestId: msg.requestId };
         try { response.analysis = this.analyzeSnapshot(record.id, msg.options, msg.revision); }
+        catch (error) { response.error = error.message || String(error); }
+        await view.webview.postMessage(response);
+      } else if (msg.type === 'mapResult') {
+        const response = { type: 'resultMap', id: record.id, revision: msg.revision, requestId: msg.requestId };
+        try { response.map = this.mapSnapshot(record.id, msg.column, msg.revision); }
         catch (error) { response.error = error.message || String(error); }
         await view.webview.postMessage(response);
       } else if (msg.type === 'compareDatasets') {
@@ -190,6 +196,13 @@ class ResultsView {
     }
     return analyzeResult(record.result, options);
   }
+  mapSnapshot(id, column, revision) {
+    const record = this.history.find(item => item.id === id);
+    if (!this.exportable(record) || (revision !== undefined && record.chart?.revision !== revision)) {
+      throw Error('Choose the current captured result and apply or discard drafts before opening its map.');
+    }
+    return mapResult(record.result, column);
+  }
   compareDatasets(targetId, sourceId, mapping, revisions = {}) {
     const target = this.history.find(record => record.id === targetId);
     const source = this.history.find(record => record.id === sourceId);
@@ -267,6 +280,7 @@ class ResultsView {
       record.error = error;
       record.sessionState = sessionState || result?.state;
       record.chart = result?.columns?.length ? { revision: ++this.resultSequence, numeric: numericColumns(result) } : undefined;
+      record.mapColumns = mapColumns(result);
       this.send();
     }
   }
@@ -277,6 +291,8 @@ class ResultsView {
   send() {
     if (!this.view) return;
     const history = this.history.map(record => {
+      const { spatial, ...result } = record.result || {};
+      if (spatial) record = { ...record, result };
       const key = this.layoutKey(record);
       return key ? { ...record, tableLayout: { columns: this.layouts.read(key) || [] },
         ...(record.result.browse && { filterPresets: this.filters.list(key, record.result.edit.columns) }) } : record;

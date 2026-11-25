@@ -50,6 +50,29 @@
 .result-chart-canvas { display: block; width: 100%; height: clamp(125px, 34vh, 260px); }
 .chart-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
 .chart-data .null { color: var(--vscode-descriptionForeground); font-style: italic; }
+.result-map-panel { padding: 9px 14px 14px; }
+.map-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 10px; }
+.map-controls label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.map-controls select {
+  max-width: min(38vw, 260px);
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  padding: 4px;
+  font: inherit;
+}
+.map-status { padding: 4px 0; color: var(--vscode-descriptionForeground); font-size: 11px; overflow-wrap: anywhere; }
+.result-map-canvas {
+  display: block;
+  width: 100%;
+  height: clamp(150px, 43vh, 430px);
+  border: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-background);
+  cursor: grab;
+  touch-action: none;
+}
+.result-map-canvas:active { cursor: grabbing; }
+.result-map-canvas:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
 #compare-tools { padding: 8px 14px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 12px; }
 .compare-top, .compare-pair, .compare-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .compare-top label, .compare-pair label { display: inline-flex; align-items: center; gap: 4px; }

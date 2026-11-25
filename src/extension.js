@@ -54,8 +54,9 @@ async function activate(context) {
   const dbAdmin=require('./db/database-admin-vscode').registerDatabaseAdmin(context,vscode,{database});
   context.subscriptions.push(dbAdmin);
   const lazyCatalog=require('./db/lazy-catalog-vscode').registerLazyCatalog(context,vscode,{database});
+  const objectSources = require('./db/object-source-vscode').registerObjectSources(vscode, { database });
   const explainPlans=require('./db/explain-plan-vscode').registerExplainPlans(context,vscode,{database});
-  context.subscriptions.push(lazyCatalog,explainPlans);
+  context.subscriptions.push(lazyCatalog,objectSources,explainPlans);
   const tableTransfer=require('./db/table-transfer-vscode').registerTableTransfer(context,vscode,{database});
   activeTableTransfer=tableTransfer;
   context.subscriptions.push(tableTransfer);
@@ -106,6 +107,8 @@ async function activate(context) {
   activeSchemaRename=schemaRename;context.subscriptions.push(schemaRename);
   const sqlScripts=require('./db/sql-script-vscode').registerSqlScripts(context,vscode,{database});
   activeSqlScripts=sqlScripts;context.subscriptions.push(sqlScripts);
+  const sqlNotebook = require('./db/sql-notebook-vscode').registerSqlNotebook(vscode, { database });
+  context.subscriptions.push(sqlNotebook);
   const schemaComparison=require('./db/schema-diff-vscode').registerSchemaComparison(context,vscode,{
     capture:options=>database.captureSchemaSnapshot(options),
     prepare:request=>database.previewSchemaMigration(request),
@@ -129,7 +132,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, openApi, jpa, jpaScaffold, analysis, sqlAnalysis,sqlEditing,schemaRename,sqlScripts,schemaComparison,streamImports,tableTransfer,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,dbAdmin,lazyCatalog,explainPlans,springProjects };
+  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, openApi, jpa, jpaScaffold, analysis, sqlAnalysis,sqlEditing,schemaRename,sqlScripts,sqlNotebook,schemaComparison,streamImports,tableTransfer,schemaPrograms,schemaCoordinator,schemaDiagrams,schemaDdlExport,dbConnections,dbAuthoring,dbSessionTools,dbAdmin,lazyCatalog,objectSources,explainPlans,springProjects };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

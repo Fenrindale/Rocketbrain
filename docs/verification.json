@@ -1,25 +1,25 @@
 {
-  "version": "0.40.0",
-  "verifiedAt": "2026-11-25T06:49:13.099Z",
+  "version": "0.41.0",
+  "verifiedAt": "2026-11-25T07:45:24.769Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.40.0.vsix",
-    "bytes": 1820031,
-    "sha256": "dfd2b6e26877cf52e7066d32a5bea83a3a8a967df94deba8c0e3e482752d7b07",
+    "name": "rocketbrain-0.41.0.vsix",
+    "bytes": 1857236,
+    "sha256": "fad1440d78495662f033ea3a466170dea7b6181d5c0be7b96dc3ad17c40a61ce",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1193,
-    "inputVectorSha256": "f908bdecd7a35cb244005bab2ce1629b4849cb88c61a6cfa1d440948958aa2dc",
+    "frozenPublicInputs": 1210,
+    "inputVectorSha256": "351f64d5ec35f3d5ec8d72eae35a76fb7ae46078c5deda7429a93f73c273b4af",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
-    "node": "v24.22.1",
-    "tests": 1258,
-    "pass": 1205,
+    "node": "v24.22.3",
+    "tests": 1271,
+    "pass": 1217,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 53,
+    "skipped": 54,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,18 +29,22 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 3,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "explain",
+          "group": "notebook",
           "checks": 1
         },
         {
-          "group": "relationships",
+          "group": "objects",
           "checks": 1
         },
         {
-          "group": "stream",
+          "group": "map",
+          "checks": 1
+        },
+        {
+          "group": "structure",
           "checks": 1
         }
       ],
@@ -55,18 +59,22 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 3,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "explain",
+          "group": "notebook",
           "checks": 1
         },
         {
-          "group": "relationships",
+          "group": "objects",
           "checks": 1
         },
         {
-          "group": "stream",
+          "group": "map",
+          "checks": 1
+        },
+        {
+          "group": "structure",
           "checks": 1
         }
       ],
@@ -77,63 +85,85 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-061": {
-      "scope": "실제 Spring 환경 두 곳에서 단일·복수 속성 재정의와 파생 식별자 매핑을 편집하고 Hibernate 양방향 조회, 소유 측 쓰기와 롤백을 확인했다.",
+    "IDEA-021": {
+      "scope": "두 Spring 프로젝트에서 타입이 맞는 패턴을 프로젝트 3곳·개별 파일 1곳에서 찾았다. 두 파일 치환과 빌드, 호환되지 않는 치환, 평가 동작이 바뀌는 캡처, 원본 변경의 거부를 확인했다.",
       "runtimeGroups": [
-        "relationships"
+        "structure"
       ]
     },
-    "DG-056": {
-      "scope": "양쪽 실서버에서 저장한 두 시리즈를 별도 VS Code 프로필에서 열고 선택과 제외를 각각 승인 또는 건너뛰었다. 순서나 후보 근거가 맞지 않으면 거부했다.",
+    "DG-023": {
+      "scope": "MySQL 객체 7종과 MariaDB 10종에서 서버 원문과 열린 문서를 대조했다. 교차 스키마, SELECT 전용 계정의 뷰 원문 거부, 트리 열기와 새로 고침을 확인했다.",
       "runtimeGroups": [
-        "explain"
+        "objects"
       ]
     },
-    "DG-057": {
-      "scope": "MySQL TREE와 MariaDB JSON 표본을 저장하고 연결이 없는 별도 프로필에서 원본을 열었다. 재승인 후 캡처와 원문 표본이 유지됐다.",
+    "DG-058": {
+      "scope": "실제 MySQL과 MariaDB에서 셀 순서, 쓰기 거부와 이후 실행 중단을 확인했다. 고정한 결과 하나만 파일에 저장하고 연결 없이 공유 사본을 열어 복원했다.",
       "runtimeGroups": [
-        "explain"
+        "notebook"
       ]
     },
-    "DG-073": {
-      "scope": "MySQL과 MariaDB 양방향으로 144개 키를 9배치 대조하고 취소·완료 기록의 재시작 복원을 확인했다. 두 서버의 검증용 트랜잭션에서 조건부 SQL의 쓰기와 거부를 확인한 후 롤백했다.",
+    "DG-077": {
+      "scope": "두 서버의 캡처에서 지리 도형 3행·평면 도형 1행과 표시 제외 2행을 대조했다. 축 순서, 재투영, 다각형 내부 구멍, 연결 종료 후 지도 유지도 확인했다.",
       "runtimeGroups": [
-        "stream"
+        "map"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 209,
+    "sourceCorrespondences": 215,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 41,
-      "partial": 110,
-      "not-implemented": 46,
+      "implemented": 45,
+      "partial": 109,
+      "not-implemented": 43,
       "host-provided": 13,
       "unverified": 4,
       "platform-limited": 2
     },
-    "weightedPoints": 109,
+    "weightedPoints": 112.5,
     "previousWeightedPoints": 109,
-    "targetWeightedPoints": 108,
-    "referencePercent": 50.5,
+    "targetWeightedPoints": 216,
+    "referencePercent": 52.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
-    "stateChanges": []
+    "stateChanges": [
+      {
+        "id": "IDEA-021",
+        "before": "not-implemented",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-023",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-058",
+        "before": "not-implemented",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-077",
+        "before": "not-implemented",
+        "after": "implemented"
+      }
+    ]
   },
   "limits": [
-    "다른 프로필의 검토를 열 때는 같은 순서의 저장된 두 측정 시리즈가 필요하다. 현재 캡처의 후보와 대조한 뒤 승인한 항목만 반영한다.",
-    "파생 키 검토는 단일 열 기본 키를 참조하는 FK가 자식의 명시적 EmbeddedId 멤버 하나에 대응하는 조합을 지원한다.",
-    "전송 진행 기록에는 행 값이나 키 값이 포함되지 않는다. 재검사는 새 읽기 스냅샷에서 시작한다. 복구 SQL은 확인한 키의 조회와 조건부 쓰기 템플릿으로 제공한다."
+    "Java 구조 치환은 저장된 소스와 클래스 경로, 지원하는 식과 문장 패턴에 적용한다. 확인한 원본이 바뀌거나 컴파일 검증이 실패하면 적용을 중단한다.",
+    "SQL 노트북은 활성 MySQL 또는 MariaDB에서 셀마다 하나의 읽기 전용 문장을 실행한다. 결과를 고정한 셀에서만 표시 데이터가 공유 파일에 들어간다.",
+    "공간 지도는 캡처한 결과의 2차원 SRID 0, 4326, 3857을 표시한다. 다른 좌표계와 해석할 수 없는 공간값의 수를 표시한다.",
+    "현행 정의가 정확한 JetBrains 창 배치를 요구하는 IDEA-001과 DG-095는 일반 확장 구조에서 점수를 얻을 수 없다. 다른 모든 행이 충족되면 현재 산식의 상한은 214/216점이다."
   ],
   "next": [
-    "실행 계획 비교의 승인 요약 내보내기와 수집 환경 출처 비교",
-    "복합 부모 키 전체와 중첩·상속 키를 사용하는 JPA 파생 식별자 매핑",
-    "백그라운드 전송 대조의 작업 관리와 일관된 스냅샷을 전제로 한 재개 검증"
+    "Java 인터페이스 추출과 상속 계층의 멤버 이동",
+    "Spring Bean 의존 그래프와 Actuator Health 진단",
+    "데이터베이스 로컬 소켓 연결과 위험한 UPDATE·DELETE의 실행 전 검토"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

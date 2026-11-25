@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.40.0",
+  "version": "0.41.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -29,7 +29,8 @@
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
     "onView:rocketbrain.javaProjects",
-    "onView:rocketbrain.connections"
+    "onView:rocketbrain.connections",
+    "onNotebook:rocketbrain-sql-notebook"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -39,6 +40,9 @@
     "virtualWorkspaces": false
   },
   "contributes": {
+    "notebooks": [
+      { "type": "rocketbrain-sql-notebook", "displayName": "Rocketbrain SQL Notebook", "selector": [{ "filenamePattern": "*.rbsql" }] }
+    ],
     "languages": [
       {
         "id": "rocketbrain-http",
@@ -47,6 +51,12 @@
       }
     ],
     "commands": [
+      { "command": "rocketbrain.sqlNotebook.create", "title": "New SQL Notebook", "category": "Rocketbrain" },
+      { "command": "rocketbrain.sqlNotebook.pinResult", "title": "Pin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
+      { "command": "rocketbrain.sqlNotebook.unpinResult", "title": "Unpin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
+      { "command": "rocketbrain.java.structuralSearch", "title": "Search or Replace Java Structure", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.db.refreshObjectSource", "title": "Refresh Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && resourceScheme == rocketbrain-object-source" },
       { "command": "rocketbrain.java.move", "title": "Move Java Class File", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.moveCrossProject", "title": "Move Java Class Across Projects", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.moveMember", "title": "Move Java Static Member", "category": "Rocketbrain" },
@@ -747,6 +757,10 @@
       }
     ],
     "menus": {
+      "notebook/cell/title": [
+        { "command": "rocketbrain.sqlNotebook.pinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" },
+        { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }
+      ],
       "editor/context": [
         {
           "command": "rocketbrain.java.generateMembers",
@@ -880,6 +894,11 @@
       ],
       "editor/title": [
         {
+          "command": "rocketbrain.db.refreshObjectSource",
+          "when": "resourceScheme == rocketbrain-object-source && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
           "command": "rocketbrain.http.run",
           "when": "resourceLangId == rocketbrain-http && isWorkspaceTrusted",
           "group": "navigation"
@@ -926,6 +945,11 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "rocketbrain.db.openObjectSource",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "schema"
+        },
         {
           "command": "rocketbrain.jpa.generateEntity",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",

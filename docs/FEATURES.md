@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.40.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.41.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 41 |
-| 부분 구현 | 110 |
-| 미구현 | 46 |
+| 구현 | 45 |
+| 부분 구현 | 109 |
+| 미구현 | 43 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 4 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **50.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **52.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.40에서는 다른 프로필의 실행 계획 검토 재승인, 기존 JPA 엔티티의 EmbeddedId 속성 재정의와 파생 키, 전송 대조 진행 이력과 복구 SQL 검토를 검증했다. 상태가 바뀐 항목은 0개이고 가중 점수는 109점으로 유지됐다.
+v0.41에서는 Java의 구조 검색·치환, DB 객체 원문 보기, SQL 노트북과 공간 데이터 지도를 새 정상 작업 흐름에서 검증했다. 상태가 바뀐 항목은 4개이고 가중 점수는 109점에서 112.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ v0.40에서는 다른 프로필의 실행 계획 검토 재승인, 기존 JPA �
 | IDEA-018 | IntelliJ IDEA | 타입·상속 계층 | 구현 |
 | IDEA-019 | IntelliJ IDEA | Structure·현재 파일 기호 | VS Code 재사용 |
 | IDEA-020 | IntelliJ IDEA | 정적 Data Flow to/from Here | 부분 구현 |
-| IDEA-021 | IntelliJ IDEA | 구조 검색·치환 | 미구현 |
+| IDEA-021 | IntelliJ IDEA | 구조 검색·치환 | 구현 |
 | IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 부분 구현 |
 | IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 부분 구현 |
 | IDEA-024 | IntelliJ IDEA | 기호·패키지 이름 변경 | 부분 구현 |
@@ -163,7 +163,7 @@ v0.40에서는 다른 프로필의 실행 계획 검토 재승인, 기존 JPA �
 | DG-020 | DataGrip | 이름 우선·지연 상세 로딩 | 구현 |
 | DG-021 | DataGrip | 시스템 schema minicatalog | 구현 |
 | DG-022 | DataGrip | 객체 이름·DDL·파일 검색 | 부분 구현 |
-| DG-023 | DataGrip | DDL·object source 보기 | 부분 구현 |
+| DG-023 | DataGrip | DDL·object source 보기 | 구현 |
 | DG-024 | DataGrip | 루틴·인덱스·트리거·MariaDB package | 부분 구현 |
 | DG-025 | DataGrip | 실제 FK 없는 관계 정의 | 구현 |
 | DG-026 | DataGrip | virtual view·virtual column | 부분 구현 |
@@ -198,7 +198,7 @@ v0.40에서는 다른 프로필의 실행 계획 검토 재승인, 기존 JPA �
 | DG-055 | DataGrip | EXPLAIN 원본·tree/table | 구현 |
 | DG-056 | DataGrip | 시각 실행 계획·cost graph | 구현 |
 | DG-057 | DataGrip | EXPLAIN ANALYZE 실제 실행 통계 | 구현 |
-| DG-058 | DataGrip | 편집기 안 결과·SQL notebook 대안 | 미구현 |
+| DG-058 | DataGrip | 편집기 안 결과·SQL notebook 대안 | 구현 |
 | DG-059 | DataGrip | 페이지 이동·row limit·지연 조회 | 부분 구현 |
 | DG-060 | DataGrip | 서버 정렬·다중 column 정렬 | 부분 구현 |
 | DG-061 | DataGrip | WHERE·column filter·검색·저장 filter | 구현 |
@@ -217,7 +217,7 @@ v0.40에서는 다른 프로필의 실행 계획 검토 재승인, 기존 JPA �
 | DG-074 | DataGrip | native dump·restore 도구 통합 | 미구현 |
 | DG-075 | DataGrip | table·result dataset 비교·sync | 부분 구현 |
 | DG-076 | DataGrip | 그리드 결과 차트·집계 | 구현 |
-| DG-077 | DataGrip | 지리 데이터 지도 보기 | 미구현 |
+| DG-077 | DataGrip | 지리 데이터 지도 보기 | 구현 |
 | DG-078 | DataGrip | table create/alter 시각 designer | 부분 구현 |
 | DG-079 | DataGrip | PK·FK·index·제약조건 편집 | 부분 구현 |
 | DG-080 | DataGrip | 사용자·역할·권한 관리 | 부분 구현 |
