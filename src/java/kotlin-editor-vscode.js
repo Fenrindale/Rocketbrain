@@ -3,6 +3,8 @@
 const path = require('node:path');
 const { kotlinEditorLaunch,hasGradleFiles,kotlinProtocolUri } = require('./kotlin-editor-runtime');
 const { inside,workspacePath,workspaceRoots,fail } = require('./workbench-model');
+const {registerSourceFormatting} = require('./format-vscode');
+const {kotlinFormatterOptions,buildKotlinFormatEdits} = require('./kotlin-format-edits');
 
 const COMMANDS={start:'rocketbrain.kotlinEditor.start',stop:'rocketbrain.kotlinEditor.stop',output:'rocketbrain.kotlinEditor.output'};
 
@@ -98,7 +100,15 @@ function registerKotlinEditor(context,vscode,java) {
           uriConverters:{code2Protocol:uri=>uri.scheme==='file' && !uri.authority ? kotlinProtocolUri(uri.fsPath) : uri.toString(),
             protocol2Code:value=>vscode.Uri.parse(value)},
           synchronize:{fileEvents:record.watcher},markdown:{isTrusted:false},
-          middleware:{workspace:{handleApplyEdit:() => ({applied:false,failureReason:'Apply Kotlin editor changes through the VS Code action that initiated them.'})}},
+          middleware:{
+            provideDocumentFormattingEdits(document,options,token,next) {
+              return formatting.native(document,undefined,options,token,()=>next(document,options,token));
+            },
+            provideDocumentRangeFormattingEdits(document,range,options,token,next) {
+              return formatting.native(document,range,options,token,()=>next(document,range,options,token));
+            },
+            workspace:{handleApplyEdit:() => ({applied:false,failureReason:'Apply Kotlin editor changes through the VS Code action that initiated them.'})}
+          },
           errorHandler:{error:()=>({action:ErrorAction.Shutdown}),closed:()=>{
             if (active===record && !record.stopping) {
               active=undefined;
@@ -133,6 +143,23 @@ function registerKotlinEditor(context,vscode,java) {
   }
 
   function stop() {suspended=true;return serial(stopNow);}
+
+  const formatting=registerSourceFormatting(vscode,{language:'kotlin',name:'Kotlin',commandId:'rocketbrain.kotlinEditor.previewFormatting',
+    start:document=>start({document}),refactoring:java.refactoring,output,buildEdits:buildKotlinFormatEdits,engineOptions:kotlinFormatterOptions,
+    request:async (method,params,cancellation,document) => {
+      trusted();
+      const record=active,root=projectOf(document);
+      if (!record||!root||state.state!=='running'||path.relative(record.launch.root,root)||cancellation?.isCancellationRequested) {
+        throw fail('Start Kotlin editing for the current Gradle project.');
+      }
+      const capability=params.range?'documentRangeFormattingProvider':'documentFormattingProvider';
+      if (!record.client.initializeResult?.capabilities?.[capability]) throw fail('The Kotlin provider does not support this formatting mode.');
+      const edits=await record.client.sendRequest(method,{...params,textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)}},...(cancellation?[cancellation]:[]));
+      trusted();
+      if (active!==record) throw fail('The Kotlin formatter server changed during formatting.');
+      return edits;
+    }});
+  subscriptions.push(formatting);
 
   async function sourceRequest(method,document,position,context,cancellation) {
     trusted();
@@ -179,7 +206,7 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,definition,references,getState:()=>({...state}),dispose() {
+  return {start,stop,definition,references,formatting,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;

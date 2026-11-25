@@ -1,25 +1,25 @@
 {
-  "version": "0.66.0",
-  "verifiedAt": "2026-11-25T16:03:45.927Z",
+  "version": "0.67.0",
+  "verifiedAt": "2026-11-25T16:07:37.725Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.66.0.vsix",
-    "sha256": "9a37d24bb20383fe5cbb89d4659d12d0aca6bb9725f81261990e6efa63eb8697",
-    "bytes": 3326699,
+    "name": "rocketbrain-0.67.0.vsix",
+    "sha256": "8cd5a901beed37f85ec5262853b8f102702274577a13030827d8103ea25e925b",
+    "bytes": 3340278,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1801,
-    "inputVectorSha256": "3321b3983e382ceb1b9c2ea2858341b8066ca9b2cbab38d70712d56d7773a375",
+    "frozenPublicInputs": 1813,
+    "inputVectorSha256": "fc1b8d8b8a31c3255a26bdd04fce995dc7b536c195f6a4c97f872258d0e23f71",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1570,
-    "pass": 1476,
+    "tests": 1578,
+    "pass": 1483,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 94,
+    "skipped": 95,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaFormatting",
+          "group": "kotlinFormatting",
           "checks": 1
         },
         {
-          "group": "springWiring",
+          "group": "fetchSnapshot",
           "checks": 1
         },
         {
-          "group": "profileCopy",
+          "group": "crossSchemaLogical",
           "checks": 1
         },
         {
-          "group": "sqlRelatedRows",
+          "group": "datasetSync",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaFormatting",
+          "group": "kotlinFormatting",
           "checks": 1
         },
         {
-          "group": "springWiring",
+          "group": "fetchSnapshot",
           "checks": 1
         },
         {
-          "group": "profileCopy",
+          "group": "crossSchemaLogical",
           "checks": 1
         },
         {
-          "group": "sqlRelatedRows",
+          "group": "datasetSync",
           "checks": 1
         }
       ],
@@ -86,69 +86,74 @@
   ],
   "newlyVerified": {
     "IDEA-010": {
-      "scope": "설치한 VSIX로 두 Spring 프로젝트에서 설정 파일 두 개, 2칸 공백과 논리 2칸·탭 4칸, 선택 영역 경계와 LF 보존, 문서 CRLF와 Undo, 원본 디스크 보존 및 설정 변경 거부를 확인했다.",
+      "scope": "두 DB가 연결된 Spring 워크스페이스에서 Kotlin 전체·선택 포맷, 설정 파일 두 개, 공백 2칸과 탭 4칸, 원문 리터럴, CRLF 및 Undo·Redo, 변경 설정의 검토 거부를 확인했다. 기존 Java 검증이 동일 포맷 수명주기를 확인했다.",
       "runtimeGroups": [
-        "javaFormatting"
+        "kotlinFormatting"
       ]
     },
-    "IDEA-053": {
-      "scope": "두 Spring DB에서 기존 모호성을 재현하고 후보 두 개를 각각 컴파일했다. 설치판 Code Action 두 개와 diff, 오래된 검토 거부, 적용한 Java 텍스트를 통한 실제 Bean 선택을 확인했다.",
+    "IDEA-060": {
+      "scope": "두 실제 DB의 Hibernate 7.4.13에서 정의로 이동하고 단일 준비 SELECT와 롤백을 확인했다. nullable 연관과 빈 컬렉션을 구분하고 16개 하위 항목 미리보기, 최대 루트 및 물리 행 한도, 콜백·다형 로드의 실행 전 거부를 검증했다.",
       "runtimeGroups": [
-        "springWiring"
-      ]
-    },
-    "DG-015": {
-      "scope": "두 실제 서버에서 같은 주소의 독립 접속, 새 프로필 자격 증명, 자격 증명 없는 v5 교환 파일, 이름 변경·건너뛰기, 오래된 가져오기 거부와 활성 연결 보존을 확인했다.",
-      "runtimeGroups": [
-        "profileCopy"
+        "fetchSnapshot"
       ]
     },
     "DG-066": {
-      "scope": "두 DB에서 별칭과 중복 열 표시명, 와일드카드, 교차 스키마 복합 BIGINT·바이너리 FK를 검증했다. 모호한 투영 다섯 사례, 변경된 SQL·원본 행·스키마는 이동을 거부했다.",
+      "scope": "두 DB의 설치판에서 교차 스키마 복합 키로 SQL 결과와 양방향 그리드를 열고 원위치로 복귀했다. 프로필 격리와 재접속, PK·열 타입과 오래된 검토 거부, 관계 제거 및 서버에 FK가 추가되지 않음을 확인했다.",
       "runtimeGroups": [
-        "sqlRelatedRows"
+        "crossSchemaLogical"
+      ]
+    },
+    "DG-075": {
+      "scope": "두 실제 서버에서 53비트보다 큰 무부호 기본 키, 고정 소수와 NULL을 정확히 대조했다. 동시 수정은 세 변경을 전부 롤백했고 새 검토와 커밋 후 반복 비교에서 세 행 모두 일치했다.",
+      "runtimeGroups": [
+        "datasetSync"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 381,
+    "sourceCorrespondences": 384,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 82,
-      "partial": 119,
+      "implemented": 84,
+      "partial": 117,
       "not-implemented": 0,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 154.5,
-    "previousWeightedPoints": 154,
+    "weightedPoints": 155.5,
+    "previousWeightedPoints": 154.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 71.5,
+    "referencePercent": 72,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "DG-015",
+        "id": "IDEA-010",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-066",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "이번 포맷 지원은 JDT 기반 Java에 적용한다. Kotlin EditorConfig는 다음 설치 검증 대상이다.",
-    "주입 빠른 수정은 활성 후보를 확인한 로컬 클래스의 모호한 단일 Bean 주입에 적용한다. 임의 동적 등록과 외부 후보의 정적 결정은 남아 있다.",
-    "SQL 결과의 관련 행은 원본을 확인한 단일 테이블 투영에서 연다. 불명확한 조인 투영과 교차 스키마 논리 관계가 남아 있다.",
+    "Kotlin 선택 포맷은 완전한 구문을 포함한 줄에 적용한다. Java와 Kotlin은 텍스트와 줄바꿈을 별도 Undo·Redo 단계로 적용한다.",
+    "엔티티 콘솔 조회는 Hibernate 7.4의 직접 필드 매핑 연관관계 한 개를 대상으로 한다.",
+    "데이터셋의 한쪽 행 삽입과 삭제에는 필터 없는 완전한 캡처와 정확한 기본 키가 필요하다. 전체 데이터베이스의 스트리밍 동기화가 남아 있다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Kotlin 문서·선택 포맷의 중첩 EditorConfig와 실제 Gradle 실행",
-    "Hibernate 엔티티 관계 fetch join의 읽기 전용 결과",
-    "교차 스키마 논리 관계와 데이터셋의 삽입·삭제·수정 동기화"
+    "Java·Kotlin 파일 구조와 실제 Outline 탐색",
+    "로컬 디버거가 연결한 Spring의 적용 설정값·출처 조사",
+    "서버 간 저장 프로그램 비교와 앱 재시작 후 SQL 콘솔 초안 복원"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

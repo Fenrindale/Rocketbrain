@@ -1068,6 +1068,8 @@ class MysqlService {
     return result;
   }
   relatedRowsCatalog(request) { return this._relationshipCatalog(readRelatedCatalog, request); }
+  crossLogicalEndpoint(request) { return this._relationshipCatalog(require('./cross-schema-logical').visibleEndpoint, request); }
+  inspectCrossLogical(request) { return this._relationshipCatalog(require('./cross-schema-logical').inspectCrossLogical, request); }
   canFollowSqlResult(sessionId, connectionId) {
     const session = this._sessions.get(sessionId);
     return Boolean(session && session.connectionId === connectionId && session.connected && !session.closed &&
@@ -1078,6 +1080,11 @@ class MysqlService {
     const { sourceServer } = require('./sql-related-source');
     return sourceServer(sql => this._stream(session, sql, [], { maxRows: 2, timeoutMs: 3000 }, false,
       { category: 'metadata', operation: 'SELECT' }));
+  }
+  async matchesRelatedRoute(sessionId, server) {
+    const session = this._session(sessionId);
+    return this._enqueue(session, async () => session.readOnly && session.autocommit && !session.inTransaction && session.connected &&
+      await this._sqlRelatedServer(session) === server);
   }
   async captureSqlRowSource(sql, result, sessionId) {
     if (!result.rows.length || !this.canFollowSqlResult(sessionId, result.state?.connectionId)) return null;

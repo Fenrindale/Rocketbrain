@@ -8,6 +8,7 @@ const { inspectDmlScope } = require('./db/sql-dml-scope');
 const { completeSql } = require('./db/completion');
 const { TableEditor } = require('./table-editor');
 const { relatedRowsFromObservation } = require('./db/related-rows');
+const { crossLogicalKey } = require('./db/cross-schema-logical');
 const { keyParameters } = require('./db/sql-related-source');
 const { randomUUID } = require('node:crypto');
 const { logicalKey, scopeKey, logicalEdges } = require('./db/schema-erd');
@@ -466,16 +467,22 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     await state.db.closeSession(id);
     for (const [key, binding] of bindings) if (binding.id === id) bindings.delete(key);
   }
-  function savedLogicalRelationships(database) {
+  function savedLogicalRelationships(database, collection = logicalKey) {
     const scope = scopeKey({ database }, state.profile);
-    const saved = scope && context.workspaceState.get(logicalKey, []);
+    const saved = scope && context.workspaceState.get(collection, []);
     return Array.isArray(saved) && saved.length <= 24 ? saved.find(record => record?.identity === scope)?.value : undefined;
   }
   async function relatedChoices(snapshot) {
     await snapshot.recheck?.();
     const records = savedLogicalRelationships(snapshot.schema);
     const logical = records?.length ? logicalEdges(await snapshot.db.metadata(), records) : [];
-    const catalog = await snapshot.db.relatedRowsCatalog({ schema: snapshot.schema, table: snapshot.table, logical });
+    const crossLogical = savedLogicalRelationships(state.profile?.database, crossLogicalKey) || [];
+    const catalog = await snapshot.db.relatedRowsCatalog({ schema: snapshot.schema, table: snapshot.table, logical, crossLogical });
+    const crossServer = catalog.edges.find(edge => edge.sourceServer)?.sourceServer;
+    if (crossServer && (snapshot.server ? snapshot.server !== crossServer
+      : !await snapshot.db.matchesRelatedRoute(snapshot.sessionId, crossServer))) {
+      catalog.edges = catalog.edges.filter(edge => !edge.sourceServer);
+    }
     snapshot.validate();
     return relatedRowsFromObservation(catalog, snapshot.columns, snapshot.values, snapshot.definitions);
   }
@@ -512,7 +519,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   async function inspectRelatedRows(id, selection) {
     const snapshot = relatedSnapshot(id, selection);
     return withSession(snapshot.sessionId, async () => {
-      return (await relatedChoices(snapshot)).map(({ filters, keys, ...match }) => match);
+      return (await relatedChoices(snapshot)).map(({ filters, keys, sourceServer, ...match }) => match);
     });
   }
   async function openRelatedRows(id, selection, key) {
@@ -533,7 +540,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
         snapshot.validate();
         opened = await tableEditor.open({ table:match.table, sessionId:binding.id,
           sql:document.getText(), filters:match.filters,
-          relation: { schema: match.schema, keys: match.keys, sourceServer: snapshot.server,
+          relation: { schema: match.schema, keys: match.keys, sourceServer: snapshot.server || match.sourceServer,
             origin: { id, modelId: selection.modelId, rowId: selection.rowId } } });
       } catch (error) {
         if (bindings.get(document.uri.toString()) === binding && snapshot.db === state.db) {
@@ -1029,6 +1036,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     },
     relationshipTargetCatalog: request => inspectRelationshipCatalog(request, 'relationshipTargetCatalog'),
     relationshipJoinCatalog: request => inspectRelationshipCatalog(request, 'relationshipJoinCatalog'),
+    crossLogicalEndpoint: request => inspectRelationshipCatalog(request, 'crossLogicalEndpoint'),
+    inspectCrossLogical: request => inspectRelationshipCatalog(request, 'inspectCrossLogical'),
     joinCompletionCatalog: request => inspectRelationshipCatalog(request, 'joinCompletionCatalog'),
     joinLogicalRelationships(catalog) {
       if (!state.mysql || state.offlineMetadata || !vscode.workspace.isTrusted || catalog?.database !== state.profile?.database) return [];

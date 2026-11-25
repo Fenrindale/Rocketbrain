@@ -1,5 +1,5 @@
 {
-  "version": "0.66.0",
+  "version": "0.67.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 82,
-    "partial": 119,
+    "implemented": 84,
+    "partial": 117,
     "not-implemented": 0,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 71.5,
+    "percent": 72,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
     "IDEA-010",
-    "IDEA-053",
-    "DG-015",
-    "DG-066"
+    "IDEA-060",
+    "DG-066",
+    "DG-075"
   ],
   "expandedFeatures": [
     "IDEA-010",
-    "IDEA-053",
-    "DG-015",
-    "DG-066"
+    "IDEA-060",
+    "DG-066",
+    "DG-075"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -331,26 +331,25 @@
       "category": "작업 공간·편집기",
       "feature": "코드 포맷·EditorConfig",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT Java Format Document·Format Selection과 검토 화면이 중첩 EditorConfig의 들여쓰기 방식·폭·탭 폭을 적용한다. 전체 문서는 텍스트와 줄바꿈을 별도 Undo·Redo 단계로 적용한다.",
-      "remaining": [
-        "Kotlin 등 다른 언어의 중첩 설정과 포맷이 남아 있다."
-      ],
+      "scope": "Java·Kotlin의 문서·선택 영역 포맷에 중첩 EditorConfig를 적용한다. 들여쓰기와 탭 폭을 구분하고 리터럴을 보존한다. 줄바꿈은 전체 문서에 적용하며 Undo·Redo에서 편집 단계와 구분한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.66-installed-coverage",
+        "state": "v0.67-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "설치한 VSIX로 두 Spring 프로젝트에서 설정 파일 두 개, 2칸 공백과 논리 2칸·탭 4칸, 선택 영역 경계와 LF 보존, 문서 CRLF와 Undo, 원본 디스크 보존 및 설정 변경 거부를 확인했다.",
+        "testedScope": "두 DB가 연결된 Spring 워크스페이스에서 Kotlin 전체·선택 포맷, 설정 파일 두 개, 공백 2칸과 탭 4칸, 원문 리터럴, CRLF 및 Undo·Redo, 변경 설정의 검토 거부를 확인했다. 기존 Java 검증이 동일 포맷 수명주기를 확인했다.",
         "publicEvidence": [
           "src/java/format-vscode.js",
+          "src/java/kotlin-format-edits.js",
           "src/java/refactoring.js",
-          "test/java-formatting-host.js"
+          "test/kotlin-formatting-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1678,8 +1677,8 @@
       "verification": {
         "state": "v0.66-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.66.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1890,23 +1889,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "읽기 전용 Hibernate JPQL/HQL 스칼라 콘솔에서 비재귀 CTE·집합 연산·파생 관계를 검토해 실행한다. 소스 투영 열과 파라미터의 확인된 타입과 선언 위치를 연다.",
+      "scope": "Hibernate JPQL/HQL 콘솔이 검토한 스칼라 쿼리와 단일 직접 INNER·LEFT JOIN FETCH를 읽기 전용으로 실행한다. 결과의 엔티티와 연관 필드를 펼치고 매핑 선언을 연다.",
       "remaining": [
-        "엔티티 fetch join·전체 엔티티 반환, 재귀·lateral 관계와 컬렉션 매개변수·다른 provider가 남아 있다."
+        "다중 경로·다중 연관 fetch, 일반 엔티티 투영, 컬렉션 매개변수와 다른 provider 실행이 남아 있다."
       ],
       "verification": {
-        "state": "v0.65-installed-coverage",
+        "state": "v0.67-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.65.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 Spring DB의 Hibernate 7.4.13에서 그래프 쿼리 일곱 개를 같은 read-only 트랜잭션 정책으로 실행했다. 다섯 거부 사례의 SQL 준비 카운터는 증가하지 않았고 CTE 별칭으로 이동했다.",
+        "testedScope": "두 실제 DB의 Hibernate 7.4.13에서 정의로 이동하고 단일 준비 SELECT와 롤백을 확인했다. nullable 연관과 빈 컬렉션을 구분하고 16개 하위 항목 미리보기, 최대 루트 및 물리 행 한도, 콜백·다형 로드의 실행 전 거부를 검증했다.",
         "publicEvidence": [
-          "src/jpa/query-graph.js",
-          "runtime/jpa-observer/src/rocketbrain/observer/ConsoleSelectShape.java",
-          "test/hql-console-graph-host.js"
+          "runtime/jpa-observer/src/rocketbrain/observer/ConsoleFetchSnapshot.java",
+          "src/jpa/vscode.js",
+          "test/jpql-fetch-snapshot-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4133,8 +4132,8 @@
       "verification": {
         "state": "v0.66-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.66.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5694,26 +5693,24 @@
       "category": "데이터 그리드",
       "feature": "FK 따라 관련 행으로 이동",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "지원되는 단일 원본 SQL 결과에서 실제 FK를 따라 스키마를 넘나든다. 드라이버 원본 열 정보와 현재 행을 확인하고 읽기 전용 관련 결과에서 출발 행으로 복귀한다.",
-      "remaining": [
-        "모호한 조인·집계 투영과 교차 스키마 논리 관계가 남아 있다."
-      ],
+      "scope": "캡처한 테이블·SQL 행에서 검증된 복합 물리·논리 관계를 양방향으로 따라간다. 여러 스키마에서 검토한 논리 관계를 같은 프로필에 저장하고 읽기 전용 탐색 뒤 출발 행으로 돌아간다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.66-installed-coverage",
+        "state": "v0.67-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 별칭과 중복 열 표시명, 와일드카드, 교차 스키마 복합 BIGINT·바이너리 FK를 검증했다. 모호한 투영 다섯 사례, 변경된 SQL·원본 행·스키마는 이동을 거부했다.",
+        "testedScope": "두 DB의 설치판에서 교차 스키마 복합 키로 SQL 결과와 양방향 그리드를 열고 원위치로 복귀했다. 프로필 격리와 재접속, PK·열 타입과 오래된 검토 거부, 관계 제거 및 서버에 FK가 추가되지 않음을 확인했다.",
         "publicEvidence": [
-          "src/db/related-rows.js",
-          "src/table-editor.js",
-          "test/sql-related-source-host.js"
+          "src/db/cross-schema-logical.js",
+          "src/db/schema-erd-vscode.js",
+          "test/cross-schema-logical-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5987,24 +5984,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "열·복합 키를 명시적으로 매핑한 캡처를 비교한다. 선택한 대응 행의 차이를 기존 테이블 편집의 검토 가능한 초안으로 만든다.",
+      "scope": "완전한 테이블 데이터셋에서 비교한 행의 삽입·수정·삭제를 한 검토 SQL 초안으로 만들고 명시적 커밋으로 적용한다. 필터한 SQL 결과는 한쪽 행 변경에서 제외한다.",
       "remaining": [
-        "전체 서버 데이터 비교, 한쪽 행의 삽입·삭제와 반복 가능한 작업을 확장한다."
+        "전체 서버 또는 대용량 스트리밍 데이터셋 대조와 반복 작업 저장이 남아 있다."
       ],
       "verification": {
-        "state": "v0.31-installed-coverage",
+        "state": "v0.67-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.31.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 두 엔진에서 원본과 대상의 정밀 숫자·바이너리·NULL을 대조했다. 병행 수정은 차단하고 재검토 후 수정과 커밋을 확인했다.",
+        "testedScope": "두 실제 서버에서 53비트보다 큰 무부호 기본 키, 고정 소수와 NULL을 정확히 대조했다. 동시 수정은 세 변경을 전부 롤백했고 새 검토와 커밋 후 반복 비교에서 세 행 모두 일치했다.",
         "publicEvidence": [
           "src/db/dataset-comparison.js",
           "src/table-editor.js",
-          "src/ui/results.js",
-          "test/db-datasets-v31-host.js"
+          "test/dataset-sync-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6645,8 +6641,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "9a37d24bb20383fe5cbb89d4659d12d0aca6bb9725f81261990e6efa63eb8697",
-    "sourceManifestSha256": "3321b3983e382ceb1b9c2ea2858341b8066ca9b2cbab38d70712d56d7773a375",
+    "vsixSha256": "8cd5a901beed37f85ec5262853b8f102702274577a13030827d8103ea25e925b",
+    "sourceManifestSha256": "fc1b8d8b8a31c3255a26bdd04fce995dc7b536c195f6a4c97f872258d0e23f71",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6660,18 +6656,23 @@
   },
   "stateChanges": [
     {
-      "id": "DG-015",
+      "id": "IDEA-010",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-066",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1570,
-    "pass": 1476,
+    "tests": 1578,
+    "pass": 1483,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 94,
+    "skipped": 95,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

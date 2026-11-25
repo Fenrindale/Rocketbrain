@@ -222,7 +222,7 @@ Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후�
 
 **Find JVM & Spring Usages**는 현재 파일, 해당 워크스페이스 폴더 또는 전체 워크스페이스에서 사용처를 찾습니다. Java와 Kotlin의 의미 기반 참조, Spring XML의 Bean 클래스, 정적 설정 플레이스홀더를 골라 정확한 소스 위치로 이동합니다. [사용처 검색 범위](docs/java-symbol-navigation.md#find-usages)
 
-Java **Format Document**와 **Format Selection**은 상위 폴더와 현재 폴더의 `.editorconfig`를 적용합니다. **Preview Java Formatting**으로 선택 영역 또는 문서 전체의 변경을 확인한 뒤 적용할 수 있습니다. LF·CRLF 변환은 문서 전체에만 적용됩니다. [Java 포맷 설정](docs/java-formatting.md)
+Java·Kotlin의 **Format Document**와 **Format Selection**은 상위 폴더와 현재 폴더의 `.editorconfig`를 적용합니다. **Preview Java Formatting**과 **Preview Kotlin Formatting**으로 변경 내용을 검토할 수 있습니다. Kotlin 포맷은 여러 줄 문자열 내용을 보존하며, LF·CRLF 변환은 문서 전체에 적용합니다. [Java·Kotlin 포맷 설정](docs/java-formatting.md)
 
 **Extract Java Local Variable**, **Extract Java Field**, **Extract Java Constant**에서 새 이름과 변경 내용을 먼저 검토할 수 있습니다. 지역 변수와 필드는 `return` 식 전체 또는 지역 변수의 초기화 식을 선택합니다. 필드를 추출하면 현재 메서드에서 값을 계산해 `private` 필드에 대입합니다. 상수 추출은 컴파일 타임 상수식을 `private static final` 필드로 옮깁니다. [Java 변수·필드·상수 추출](docs/java-extract-constant.md)
 
@@ -309,7 +309,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - Grid와 Record에서 같은 변경 초안을 편집하고 검토합니다. 테이블별 열 배치는 같은 연결·스키마에서 다시 열 때 복원됩니다. 읽기 전용 테이블 행의 **Related Rows**는 물리 FK의 모든 키 값을 바인딩해 별도 결과를 엽니다.
 - **Chart** 보기에서 캡처한 결과 페이지의 막대·선 그래프와 정확한 그룹 합계·평균을 확인합니다. 셀 편집기는 줄바꿈 종류, JSON 원문, Hex·Base64와 SQL NULL을 구분합니다.
 - **Map** 보기에서 캡처한 결과의 공간 열을 선택해 지도와 원본 행을 탐색합니다. 지리 좌표와 SRID 0 평면 좌표를 별도 보기로 표시합니다.
-- **Compare**에서 두 캡처 결과의 키와 비교 열을 매핑합니다. 변경된 일치 행을 선택해 대상 그리드의 초안에 넣고 SQL 검토와 트랜잭션으로 적용합니다.
+- **Compare**에서 두 캡처 결과의 키와 비교 열을 매핑합니다. 일치 행의 변경을 선택해 그리드 초안에 넣습니다. 두 테이블을 필터 없이 전부 캡처했고 동일 타입의 정수 기본 키를 매핑했다면 한쪽에만 있는 행을 삽입 또는 삭제로 선택할 수 있습니다. 각 변경은 SQL 검토를 거쳐 적용하고 커밋합니다.
 - **Capture Table Copy Source**에서 메모리, 임시 스트리밍 또는 **Stream and Save for Resume**을 선택합니다. 스트리밍은 InnoDB 기본 키 순서의 읽기 스냅샷을 최대 100만 행·1 GiB까지 암호화합니다. 재개를 선택한 스냅샷은 작업 공간에 최대 24시간 두고 키는 VS Code Secret Storage에 저장합니다. **Copy Captured Rows**에서 대상을 다시 검토하고 새 트랜잭션에 스테이징한 뒤 **Finish Table Copy**에서 커밋 또는 롤백합니다. 커밋 결과가 불확실한 스냅샷은 재사용이 잠깁니다.
 - **Verify Table Copy Destination**은 새 미확정 커밋 기록의 검토된 대상에서 최대 128개 기본 키와 매핑된 값을 읽기 전용으로 대조합니다. 표본의 현재 상태를 보고하며 재실행 잠금은 유지됩니다.
 - **Show Table Copy Verification History**에서는 최근 점검의 시각·대조 건수·결과를 확인할 수 있습니다. 원본 키나 행 값은 점검 이력에 저장하지 않습니다.

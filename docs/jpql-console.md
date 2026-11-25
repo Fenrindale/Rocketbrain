@@ -8,7 +8,19 @@ The console supports explicit scalar projections, standard joins, grouping, aggr
 
 With Hibernate 7.4, the console also supports nonrecursive CTEs, uncorrelated derived relations in `FROM`, and scalar `UNION`, `INTERSECT` and `EXCEPT` operands. Each set operand must return the same Java scalar types in the same order. Give each CTE or derived output a unique `AS` alias. The source index uses an observed Hibernate profile to type these fields in indexed Java and ORM XML queries and navigate to their declarations. Source findings remain conditional on the profile.
 
-Entity projections, custom functions, collection bindings, recursive CTEs, lateral relations, set operations inside predicate subqueries, and native or modifying SQL are outside this execution scope. The separate semantic validator can analyze some of those forms without executing SQL.
+General entity projections, custom functions, collection bindings, recursive CTEs, lateral relations, set operations inside predicate subqueries, and native or modifying SQL are outside the scalar execution scope. The separate semantic validator can analyze some of those forms without executing SQL.
+
+## Review one fetched association
+
+Set `consoleFetchSnapshots` to `true` alongside `consoleSelect` to enable managed fetch snapshots. This setting is off by default. Select one managed root alias and one direct `INNER JOIN FETCH` or `LEFT JOIN FETCH` association. This query uses a left fetch join.
+
+```hql
+select o from Owner o left join fetch o.items where o.id >= :first order by o.id
+```
+
+The review identifies the loaded association path. Results show the root's typed fields and a nested preview of the fetched association. A null to-one association and an empty collection have distinct displays. The snapshot reads only initialized field-mapped state. It uses ordinary Hibernate hydration with standard, concrete entity mappings and skips polymorphic loads, large object fields, custom property access, converters, load callbacks, and extra eager fetch mappings. A second SQL statement is refused by the JDBC gate.
+
+Each fetch snapshot is limited to 25 roots, 16 displayed children per root and 512 joined JDBC rows. The view marks preview limits. An oversized joined result is rejected in full so a partially loaded relationship is never displayed as complete.
 
 The execution path accepts only standard MySQL and MariaDB Hibernate dialects with an ordinary non-tenant connection pool. Each run uses an isolated Hibernate session on a leased connection, starts a database-enforced read-only transaction, permits one reviewed prepared SELECT, and rolls back before returning results. It caps results at 100 rows and 16 columns, with a three-second JDBC statement timeout. Execution uses the selected application’s trusted Hibernate mappings and database privileges. Use a development application and account appropriate for the data being read.
 

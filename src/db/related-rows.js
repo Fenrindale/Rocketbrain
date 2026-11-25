@@ -1,6 +1,7 @@
 'use strict';
 
 const { columnKind } = require('./grid');
+const { visibleCrossEdges } = require('./cross-schema-logical');
 
 const supportedKeys = new Set(['integer', 'decimal', 'float', 'datetime', 'text', 'binary']);
 const maxRelations = 32;
@@ -45,7 +46,7 @@ async function observeTable(query, endpoint) {
   return new Map(observed.rows.map(([, , name, type, charset, collation]) => [name, { type, charset, collation }]));
 }
 
-async function readRelatedCatalog(query, _activeDatabase, { schema, table, logical = [] }) {
+async function readRelatedCatalog(query, _activeDatabase, { schema, table, logical = [], crossLogical = [] }) {
   if (![schema, table].every(validName)) throw Error('Choose a saved table preview for related-row navigation.');
   const origin = { schema, table }, source = endpointKey(origin);
   const limit = maxRelations * maxParts + 1;
@@ -55,7 +56,8 @@ async function readRelatedCatalog(query, _activeDatabase, { schema, table, logic
     '(REFERENCED_TABLE_SCHEMA = ? AND REFERENCED_TABLE_NAME = ?)) ' +
     'ORDER BY TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION LIMIT ' + limit, [schema, table, schema, table]);
   if (physical.truncated || physical.rows.length >= limit) throw Error('Too many related tables are visible for this preview.');
-  const edges = [...edgeFromPhysical(physical.rows, origin), ...edgeFromLogical(logical, origin)];
+  const edges = [...edgeFromPhysical(physical.rows, origin), ...edgeFromLogical(logical, origin),
+    ...await visibleCrossEdges(query, origin, crossLogical)];
   if (edges.length > maxRelations) throw Error('Too many related tables are visible for this preview.');
   const tables = new Map([[source, await observeTable(query, origin)]]);
   for (const edge of edges) {
@@ -109,7 +111,8 @@ function relatedRowsFromObservation(catalog, names, row, definitions) {
     if (new Set(filters.map(filter => filter.column)).size !== filters.length) return;
     const key = JSON.stringify([catalog.source, endpointKey(target), direction, edge.kind, edge.id, bindings]);
     const label = target.schema + '.' + target.table + ' · ' + edge.name;
-    matches.push({ key, label, ...target, direction, kind: edge.kind, columns: bindings.map(([from,,,to]) => [from,to]), filters, keys });
+    matches.push({ key, label, ...target, direction, kind: edge.kind, columns: bindings.map(([from,,,to]) => [from,to]), filters, keys,
+      ...(edge.sourceServer && { sourceServer: edge.sourceServer }) });
   }
   for (const edge of catalog.edges) {
     if (endpointKey(edge.child) === catalog.source) relation(edge, 'referenced');

@@ -4,6 +4,7 @@ const { randomBytes, randomUUID } = require('node:crypto');
 const { tableInventory, buildDiagram, defaultLayout, normalizeLayout, parseLayout, maxLayoutBytes,
   digest, scopeKey, maxLogical, logicalRelation, logicalEdges, logicalKey } = require('./schema-erd');
 const { diagramHtml } = require('./schema-erd-view');
+const { crossLogicalKey, maxCrossLogical, maxPairs, compatibleColumns, sameMapping, readSaved } = require('./cross-schema-logical');
 
 const layoutsKey = 'rocketbrain.schemaDiagram.layouts.v1';
 const maxSavedScopes = 24;
@@ -28,6 +29,7 @@ function parseDiagramPng(value) {
 function registerSchemaDiagrams(context, vscode, { database }) {
   let frame, panel, epoch, generation = 0, disposed = false, pending, refreshing = false;
   const subscriptions = [];
+  const crossReviews = new Map();
 
   function trusted() {
     if (disposed || !vscode.workspace.isTrusted) throw new Error('Open a trusted workspace to use the schema diagram.');
@@ -226,13 +228,131 @@ function registerSchemaDiagrams(context, vscode, { database }) {
     return saveRelations(token, current.records.filter(record => record?.id !== id));
   }
 
+  function crossScope() {
+    trusted();
+    if (!vscode.workspace.workspaceFile && !vscode.workspace.workspaceFolders?.length) throw Error('Open a workspace before saving relationships.');
+    const catalog = database.liveCatalogSnapshot();
+    const profileScope = catalog && scopeKey(catalog, database.activeConnectionProfile());
+    if (!profileScope) throw Error('Connect with a saved MySQL or MariaDB profile to manage cross-schema relationships.');
+    const record = getRecord(crossLogicalKey, profileScope);
+    if (record && (!Array.isArray(record.value) || record.value.length > maxCrossLogical || !record.value.every(readSaved))) {
+      throw Error('The saved cross-schema relationship collection has an unsupported format.');
+    }
+    return { profileScope, generation, revision: record?.revision, records: record?.value || [] };
+  }
+
+  function activeCross(scope) {
+    const latest = crossScope();
+    if (scope.generation !== latest.generation || scope.profileScope !== latest.profileScope || scope.revision !== latest.revision) {
+      throw Error('The connection or saved relationships changed. Review the cross-schema mapping again.');
+    }
+    return latest;
+  }
+
+  function listCrossRelations() {
+    const scope = crossScope();
+    return { revision: scope.revision, relations: scope.records.map(({ id, name, child, parent, pairs }) =>
+      structuredClone({ id, name, child, parent, pairs })) };
+  }
+
+  async function prepareCrossRelation(input) {
+    const scope = crossScope();
+    if (scope.records.length >= maxCrossLogical) throw Error('Remove an unused cross-schema relationship before reaching 16.');
+    const draft = await database.inspectCrossLogical(structuredClone(input));
+    activeCross(scope);
+    if (scope.records.some(item => item.server === draft.server && sameMapping(item, draft))) throw Error('The same logical mapping is already saved.');
+    const token = randomUUID(), expiresAt = Date.now() + 120000;
+    while (crossReviews.size >= 8) crossReviews.delete(crossReviews.keys().next().value);
+    crossReviews.set(token, { scope, draft, expiresAt });
+    const { name, child, parent, pairs } = draft;
+    return { token, expiresAt, relation: structuredClone({ name, child, parent, pairs }), changesDatabase: false };
+  }
+
+  async function saveCrossRelation(token) {
+    const review = crossReviews.get(token);
+    if (!review || review.expiresAt <= Date.now()) throw Error('The cross-schema relationship review expired. Prepare it again.');
+    crossReviews.delete(token);
+    const scope = activeCross(review.scope);
+    const { name, child, parent, pairs } = review.draft;
+    const latest = await database.inspectCrossLogical({ name, child, parent, pairs });
+    activeCross(scope);
+    if (JSON.stringify(latest) !== JSON.stringify(review.draft)) throw Error('A physical table definition or database account changed after review.');
+    const record = { id: randomUUID(), ...latest };
+    const revision = await store(crossLogicalKey, scope.profileScope, [...scope.records, record], scope.revision);
+    return { revision, relation: structuredClone({ id: record.id, name, child, parent, pairs }), changesDatabase: false };
+  }
+
+  async function removeCrossRelation(id, revision) {
+    const scope = crossScope();
+    if (scope.revision !== revision || !scope.records.some(record => record.id === id)) throw Error('The saved mapping changed. Open the list again.');
+    const next = scope.records.filter(record => record.id !== id);
+    await store(crossLogicalKey, scope.profileScope, next.length ? next : undefined, revision);
+    return { removed: true, changesDatabase: false };
+  }
+
+  async function manageCrossRelations() {
+    const scope = crossScope();
+    const pick = (options, title) => vscode.window.showQuickPick(options, { title, ignoreFocusOut: true });
+    const qualify = ({ schema, table }) => schema + '.' + table;
+    const selected = await pick([{ label: 'Add Cross-Schema Relationship' }, ...scope.records.map(record => ({
+      label: 'Remove ' + record.name, description: qualify(record.child) + ' → ' + qualify(record.parent), id: record.id
+    }))], 'Cross-Schema Logical Relationships');
+    if (!selected) return;
+    activeCross(scope);
+    if (selected.id) {
+      const confirmed = await vscode.window.showWarningMessage('Remove this saved workspace mapping?', { modal: true }, 'Remove Relationship');
+      if (confirmed === 'Remove Relationship') { activeCross(scope); return removeCrossRelation(selected.id, scope.revision); }
+      return;
+    }
+    const { schemas } = await database.crossLogicalEndpoint({});
+    if (schemas.length < 2) throw Error('Two visible application schemas are needed for this relationship.');
+    async function chooseEndpoint(role, excluded) {
+      const schema = await pick(schemas.filter(item => item !== excluded), 'Choose ' + role + ' schema');
+      if (!schema) return;
+      activeCross(scope);
+      const { tables } = await database.crossLogicalEndpoint({ schema });
+      const table = await pick(tables, 'Choose ' + role + ' table');
+      if (!table) return;
+      activeCross(scope);
+      return database.crossLogicalEndpoint({ schema, table });
+    }
+    const child = await chooseEndpoint('child');
+    if (!child) return;
+    const parent = await chooseEndpoint('parent', child.schema);
+    if (!parent) return;
+    if (parent.primary.length > maxPairs) throw Error('Choose a parent with at most eight primary-key columns.');
+    const pairs = [];
+    for (const target of parent.primary) {
+      const typed = parent.columns.find(column => column.name === target);
+      const options = child.columns.filter(column => compatibleColumns(column, typed) && !pairs.some(pair => pair.child === column.name))
+        .map(column => ({ label: column.name, description: column.type }));
+      if (!options.length) throw Error('No compatible child column is visible for ' + target + '.');
+      const from = await pick(options, 'Map to ' + qualify(parent) + '.' + target);
+      if (!from) return;
+      activeCross(scope);
+      pairs.push({ child: from.label, parent: target });
+    }
+    const name = await vscode.window.showInputBox({ title: 'Name Cross-Schema Relationship', ignoreFocusOut: true });
+    if (name === undefined) return;
+    activeCross(scope);
+    const review = await prepareCrossRelation({ name: name.trim(), child: { schema: child.schema, table: child.table },
+      parent: { schema: parent.schema, table: parent.table }, pairs });
+    const confirmed = await vscode.window.showWarningMessage('Save ' + review.relation.name + ' in this workspace?', {
+      modal: true, detail: pairs.map(pair => qualify(child) + '.' + pair.child + ' → ' + qualify(parent) + '.' + pair.parent).join('\n')
+    }, 'Save Logical Relationship');
+    if (confirmed === 'Save Logical Relationship') return saveCrossRelation(review.token);
+    crossReviews.delete(review.token);
+  }
+
   async function chooseRelation(current) {
     const pick = (choices, title) => vscode.window.showQuickPick(choices, { title, ignoreFocusOut: true });
-    const actions = [{ label: 'Add Logical Relationship', add: true }, ...current.records.map(record => ({
+    const actions = [{ label: 'Add Logical Relationship', add: true },
+      { label: 'Manage Cross-Schema Logical Relationships', cross: true }, ...current.records.map(record => ({
       label: 'Remove ' + record.name, description: record.child + ' → ' + record.parent, id: record.id
     }))];
     const action = await pick(actions, 'Logical Relationships');
     if (!action) return;
+    if (action.cross) return manageCrossRelations();
     if (action.id) {
       const accepted = await vscode.window.showWarningMessage('Remove this workspace relationship?', { modal: true }, 'Remove Relationship');
       if (accepted === 'Remove Relationship') await removeRelation(current.token, action.id);
@@ -292,6 +412,7 @@ function registerSchemaDiagrams(context, vscode, { database }) {
   subscriptions.push(database.onDidChangeDatabase(event => {
     epoch = event.epoch;
     generation++;
+    crossReviews.clear();
     frame = undefined;
     if (!refreshing) post({ type: 'stale', text: 'The connection or catalog changed. Reopen Schema Diagram.' });
   }));
@@ -299,15 +420,24 @@ function registerSchemaDiagrams(context, vscode, { database }) {
     try { return await openDiagram({ focus: item?.table?.name, allowPrompt: true }); }
     catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Diagram: ' + error.message); }
   }));
+  subscriptions.push(vscode.commands.registerCommand('rocketbrain.schema.logicalAcrossSchemas', async () => {
+    try { return await exclusive(manageCrossRelations); }
+    catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Relationships: ' + error.message); }
+  }));
 
   return { openDiagram, saveLayout: (token, layout) => exclusive(() => saveLayout(token, layout)), layoutDocument, importLayout,
     addRelation: (token, input) => exclusive(() => addRelation(token, input)),
     removeRelation: (token, id) => exclusive(() => removeRelation(token, id)),
+    listCrossRelations,
+    prepareCrossRelation: input => exclusive(() => prepareCrossRelation(input)),
+    saveCrossRelation: token => exclusive(() => saveCrossRelation(token)),
+    removeCrossRelation: (id, revision) => exclusive(() => removeCrossRelation(id, revision)),
     async dispose() {
       if (disposed) return;
       disposed = true;
       for (const subscription of subscriptions) subscription.dispose();
       panel?.dispose();
+      crossReviews.clear();
       await pending?.catch(() => {});
     } };
 }

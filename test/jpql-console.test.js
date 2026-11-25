@@ -99,3 +99,42 @@ test('JPQL grid escapes query, aliases and data in a static webview',()=>{
   assert.match(html,/default-src 'none'/);
   assert.doesNotMatch(html,/<script|<literal>|<syntax>|<selection>/);
 });
+
+test('managed fetch preview validates nested typed rows and distinguishes an empty collection from a null association',async()=>{
+  const fetchSnapshot={rootType:'fixture.Person',targetType:'fixture.Dog',association:'dogs',path:'fixture.Person.dogs',
+    toMany:true,maxRoots:25,maxChildren:16,columns:[{alias:'name',javaType:'java.lang.String'},{alias:'trained',javaType:'java.lang.Boolean'}]};
+  const fetched={...result,rows:[['1'],['2']],rowCount:2,fetchSnapshot:{...fetchSnapshot,joinedRows:2,linked:[
+    {state:'loaded',rows:[['<dog>',false]],hasMore:false},
+    {state:'loaded',rows:[],hasMore:false}
+  ]}};
+  let response=fetched;
+  const host=http.createServer((req,res)=>{
+    req.resume();
+    res.setHeader('Content-Type','application/json');
+    res.end(JSON.stringify(req.url==='/console/describe'?{...description,fetchSnapshot}:response));
+  });
+  await new Promise(resolve=>host.listen(0,'127.0.0.1',resolve));
+  const client=new ObserverClient({url:'http://127.0.0.1:'+host.address().port,token:'d'.repeat(48)});
+  const query='select p from Person p left join fetch p.dogs where p.id >= :floor';
+  try{
+    assert.deepEqual((await client.describeSelect(query,FACTORY)).fetchSnapshot,fetchSnapshot);
+    const run=()=>client.select(query,FACTORY,{':floor':'1'},2);
+    const validated=await run();
+    assert.deepEqual(validated.fetchSnapshot,fetched.fetchSnapshot);
+    const html=htmlForResult(validated,query);
+    assert.match(html,/&lt;dog&gt;/);
+    assert.match(html,/<td>false<\/td>/);
+    assert.match(html,/<em>Empty collection<\/em>/);
+    assert.doesNotMatch(html,/<dog>|<em>NULL<\/em>/);
+    response={...fetched,fetchSnapshot:{...fetched.fetchSnapshot,toMany:false,linked:[fetched.fetchSnapshot.linked[0],
+      {state:'null',rows:[],hasMore:false}]}};
+    const nullable=await run();
+    assert.match(htmlForResult(nullable,query),/<em>NULL<\/em>/);
+    assert.doesNotMatch(htmlForResult(nullable,query),/Empty collection/);
+    for(const linked of [ [{state:'loaded',rows:[['dog','false']],hasMore:false},response.fetchSnapshot.linked[1]],
+      [{state:'null',rows:[['dog',false]],hasMore:false},response.fetchSnapshot.linked[1]] ]){
+      response={...response,fetchSnapshot:{...response.fetchSnapshot,linked}};
+      await assert.rejects(run,error=>error.code==='INVALID_SCHEMA');
+    }
+  }finally{client.dispose();await new Promise(resolve=>host.close(resolve));}
+});

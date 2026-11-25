@@ -178,4 +178,4 @@ async function runSqlRelatedSourceChecks(api, vscode, checks) {
   return result;
 }
 
-module.exports = { runSqlRelatedSourceChecks, verifySqlRelatedSourceBackend };
+module.exports = { runSqlRelatedSourceChecks, verifySqlRelatedSourceBackend, withFixture };

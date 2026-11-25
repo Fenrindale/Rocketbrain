@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.66.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.67.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 82 |
-| 부분 구현 | 119 |
+| 구현 | 84 |
+| 부분 구현 | 117 |
 | 미구현 | 0 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **71.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **72%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.66에서는 Java 중첩 EditorConfig, Spring 주입 후보 빠른 수정, 연결 프로필 복제·가져오기, SQL 결과의 FK 이동을 설치판에서 검증했다. 상태가 바뀐 항목은 1개이고 가중 점수는 154점에서 154.5점으로 바뀌었다.
+v0.67에서는 Kotlin 포맷과 EditorConfig, Hibernate 연관 엔티티 조회, 교차 스키마 논리 관계, 데이터셋 삽입·수정·삭제 동기화를 검증했다. 상태가 바뀐 항목은 2개이고 가중 점수는 154.5점에서 155.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -30,7 +30,7 @@ v0.66에서는 Java 중첩 EditorConfig, Spring 주입 후보 빠른 수정, 연
 | IDEA-007 | IntelliJ IDEA | 문맥·타입 기반 코드 완성 | 부분 구현 |
 | IDEA-008 | IntelliJ IDEA | 파라미터 정보·빠른 문서 | 부분 구현 |
 | IDEA-009 | IntelliJ IDEA | Live Templates·Postfix 완성 | 구현 |
-| IDEA-010 | IntelliJ IDEA | 코드 포맷·EditorConfig | 부분 구현 |
+| IDEA-010 | IntelliJ IDEA | 코드 포맷·EditorConfig | 구현 |
 | IDEA-011 | IntelliJ IDEA | 자동 import·사용하지 않는 import 정리 | 부분 구현 |
 | IDEA-012 | IntelliJ IDEA | 인레이 힌트·의미 강조 | 부분 구현 |
 | IDEA-013 | IntelliJ IDEA | 로컬 변경 이력·삭제 복구 | VS Code 재사용 |
@@ -206,7 +206,7 @@ v0.66에서는 Java 중첩 EditorConfig, Spring 주입 후보 빠른 수정, 연
 | DG-063 | DataGrip | pending DML 미리보기·변경 되돌리기 | 구현 |
 | DG-064 | DataGrip | 행 추가·삭제·복제·일괄 붙여넣기 | 부분 구현 |
 | DG-065 | DataGrip | NULL·긴 text·JSON·binary 값 편집 | 구현 |
-| DG-066 | DataGrip | FK 따라 관련 행으로 이동 | 부분 구현 |
+| DG-066 | DataGrip | FK 따라 관련 행으로 이동 | 구현 |
 | DG-067 | DataGrip | record·tree·text·transpose 보기 | 구현 |
 | DG-068 | DataGrip | 컬럼 고정·숨김·순서·폭 조절 | 구현 |
 | DG-069 | DataGrip | CSV/TSV·clipboard 내보내기 | 구현 |

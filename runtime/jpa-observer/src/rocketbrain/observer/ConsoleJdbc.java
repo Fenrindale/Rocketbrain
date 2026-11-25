@@ -27,6 +27,8 @@ final class ConsoleJdbc {
     private ConsoleJdbc() {}
 
     static Map<String,Object> select(Object factory,ConsoleQuery.Prepared prepared,List<ConsoleQuery.Bound> bindings,int limit) throws Throwable {
+        boolean fetch=prepared.fetch()!=null;
+        if(fetch && limit>ConsoleFetchSnapshot.MAX_ROOTS)throw new ConsoleQuery.Refusal("fetch_root_limit");
         Object options = invoke(factory,"getSessionFactoryOptions");
         if (!Boolean.FALSE.equals(invoke(options,"isMultiTenancyEnabled"))) throw new ConsoleQuery.Refusal("unsupported_factory_scope");
         Object jdbc = invoke(factory,"getJdbcServices");
@@ -35,6 +37,7 @@ final class ConsoleJdbc {
             throw new ConsoleQuery.Refusal("unsupported_database");
         Object access = invoke(jdbc,"getBootstrapJdbcConnectionAccess");
         Connection connection = (Connection)invoke(access,"obtainConnection");
+        Gate gate = new Gate(connection,fetch);
         List<?> selected;
         boolean touched = false, disposable = false;
         try {
@@ -47,7 +50,6 @@ final class ConsoleJdbc {
                 begin.setQueryTimeout(TIMEOUT_SECONDS);
                 begin.execute("START TRANSACTION READ ONLY");
             }
-            Gate gate = new Gate(connection);
             Object builder = invoke(factory,"withOptions");
             invoke(builder,"connection",gate.view());
             invoke(builder,"noStatementInspector");
@@ -80,7 +82,7 @@ final class ConsoleJdbc {
                 else connection.close();
             }
         }
-        return ConsoleQuery.rows(prepared,selected,limit);
+        return fetch?ConsoleFetchSnapshot.rows(prepared.fetch(),selected,limit,gate.joinedRows):ConsoleQuery.rows(prepared,selected,limit);
     }
 
     private static Object enumValue(ClassLoader loader,String type,String value) throws ReflectiveOperationException {
@@ -94,8 +96,10 @@ final class ConsoleJdbc {
 
     private static final class Gate {
         private final Connection connection;
+        private final boolean fetch;
         private boolean prepared, executed;
-        Gate(Connection connection) { this.connection = connection; }
+        private int joinedRows;
+        Gate(Connection connection,boolean fetch) { this.connection = connection; this.fetch=fetch; }
 
         Connection view() {
             return (Connection)Proxy.newProxyInstance(Connection.class.getClassLoader(),new Class<?>[]{Connection.class},
@@ -115,6 +119,7 @@ final class ConsoleJdbc {
         }
 
         private PreparedStatement statement(PreparedStatement nativeStatement) {
+            ResultSet[] presented=new ResultSet[1];
             return (PreparedStatement)Proxy.newProxyInstance(PreparedStatement.class.getClassLoader(),new Class<?>[]{PreparedStatement.class},
                 (proxy,method,args)-> {
                     String name = method.getName();
@@ -124,14 +129,36 @@ final class ConsoleJdbc {
                         nativeStatement.setQueryTimeout(TIMEOUT_SECONDS);
                         return null;
                     }
+                    if(fetch && name.equals("setMaxRows")) return null;
+                    if(fetch && name.equals("getResultSet")) return presented[0];
                     if (name.equals("executeQuery")) {
                         if (executed || args!=null && args.length>0) throw new SQLFeatureNotSupportedException("Only one prepared SELECT is allowed");
                         nativeStatement.setQueryTimeout(TIMEOUT_SECONDS);
+                        if(fetch)nativeStatement.setMaxRows(ConsoleFetchSnapshot.MAX_JOINED_ROWS+1);
                         Object result = forward(nativeStatement,method,args);
                         executed = true;
-                        return result;
+                        if(!fetch)return result;
+                        presented[0]=countedRows((ResultSet)result,(PreparedStatement)proxy);
+                        return presented[0];
                     }
                     return forward(nativeStatement,method,args);
+                });
+        }
+
+        private ResultSet countedRows(ResultSet nativeRows,PreparedStatement statement) {
+            return (ResultSet)Proxy.newProxyInstance(ResultSet.class.getClassLoader(),new Class<?>[]{ResultSet.class},
+                (proxy,method,args)->{
+                    String name=method.getName();
+                    if(method.getDeclaringClass()==Object.class)return identity(proxy,name,args);
+                    if(name.equals("getStatement"))return statement;
+                    if(name.equals("next")){
+                        boolean more=(boolean)forward(nativeRows,method,args);
+                        if(more && ++joinedRows>ConsoleFetchSnapshot.MAX_JOINED_ROWS)throw new ConsoleQuery.Refusal("fetch_joined_row_limit");
+                        return more;
+                    }
+                    if(name.startsWith("get") || Set.of("findColumn","wasNull","close","isClosed").contains(name))
+                        return forward(nativeRows,method,args);
+                    throw new SQLFeatureNotSupportedException("Operation blocked by JPQL fetch snapshot");
                 });
         }
 

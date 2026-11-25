@@ -26,6 +26,12 @@ public final class ConsoleQueryTest {
         blocked("select p1.id from projects p1 for update",true,"rendered_sql_not_allowed");
         blocked("select p1.id from projects p1 /* comment */",true,"rendered_sql_not_allowed");
         blocked("select p.id from Person p where p.name = 'example'",false,"unsupported_select_shape");
+        blocked("select o from Person o join fetch o.department",false,"fetch_snapshot_disabled");
+        var fetch=ConsoleQuery.inspect("select distinct o from Person as o left outer join fetch o.department where o.id = :one",false,true).fetch();
+        if(!fetch.kind().equals("LEFT") || !fetch.attribute().equals("department"))throw new AssertionError("Expected exact FETCH path");
+        refusal(()->ConsoleQuery.inspect("select o from Person o join fetch o.department d",false,true),"unsupported_fetch_shape");
+        refusal(()->ConsoleQuery.inspect("select o from Person o join fetch o.department.name",false,true),"unsupported_fetch_shape");
+        refusal(()->ConsoleQuery.inspect("select o from Person o join fetch o.department where o.id in (select p.id from Person p)",false,true),"unsupported_fetch_shape");
 
         var parameter = new ConsoleQuery.Parameter("floor",null,"java.lang.Long");
         var query = new ConsoleQuery.Prepared("select count(p.id) from Person p",List.of(COLUMN),List.of(parameter),Map.of());

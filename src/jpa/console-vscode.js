@@ -10,6 +10,15 @@ const ERROR_NAMES = {
   unsupported_provider_query_graph:'The running Hibernate version could not describe every SELECT branch.',
   set_projection_mismatch:'Every set-operation arm must project the same scalar types in the same order.',
   named_projection_required:'Give each result of a CTE or derived relation an explicit, unique alias.',
+  fetch_snapshot_disabled:'Enable consoleFetchSnapshots in the observer configuration and reconnect to capture FETCH JOIN results.',
+  unsupported_fetch_shape:'Select one entity alias and fetch one immediate managed association with INNER or LEFT JOIN FETCH.',
+  unsupported_fetch_provider:'Managed fetch snapshots require the supported Hibernate 7.4 runtime.',
+  unsupported_fetch_mapping:'The selected entity or association uses mappings outside the supported field snapshot scope.',
+  custom_fetch_lifecycle:'The selected managed types or provider use load callbacks outside the fetch snapshot scope.',
+  additional_eager_fetch:'The mapped entity requests another eager association outside the reviewed fetch path.',
+  fetch_not_initialized:'Hibernate did not return an initialized value for the exact requested field.',
+  fetch_root_limit:'Use at most 25 root rows for a fetch snapshot.',
+  fetch_joined_row_limit:'The fetch join exceeded the 512 joined-row limit. Narrow its filter.',
   scalar_projection_required:'Select scalar attributes or scalar aggregates explicitly.',
   unsupported_parameter_type:'Use scalar parameters whose types Hibernate can infer.',
   invalid_parameter_value:'A parameter does not match its Hibernate type.',
@@ -26,9 +35,20 @@ const escape = value => String(value).replace(/[&<>"'\u0000-\u0008\u000b\u000c\u
 
 function htmlForResult(result,query) {
   const nonce=crypto.randomBytes(18).toString('base64');
-  const headings=result.columns.map(({alias,javaType},index)=>'<th scope="col"><span>'+escape(alias||'Column '+(index+1))+'</span><small>'+escape(javaType)+'</small></th>').join('');
-  const body=result.rows.map(row=>'<tr>'+row.map(value=>value===null?'<td><em>NULL</em></td>':'<td>'+escape(value)+'</td>').join('')+'</tr>').join('');
+  const headings=columns=>columns.map(({alias,javaType},index)=>'<th scope="col"><span>'+escape(alias||'Column '+(index+1))+'</span><small>'+escape(javaType)+'</small></th>').join('');
+  const cells=row=>row.map(value=>value===null?'<td><em>NULL</em></td>':'<td>'+escape(value)+'</td>').join('');
+  const fetch=result.fetchSnapshot;
+  function association(item){
+    if(item.state==='null')return '<td><em>NULL</em></td>';
+    if(!item.rows.length)return '<td><em>Empty collection</em></td>';
+    const note=fetch.toMany?item.rows.length+' loaded record'+(item.rows.length===1?'':'s')+(item.hasMore?' · preview limited':''):'Loaded record';
+    return '<td><details><summary>'+note+'</summary><table aria-label="Fetched association"><thead><tr>'+headings(fetch.columns)+
+      '</tr></thead><tbody>'+item.rows.map(row=>'<tr>'+cells(row)+'</tr>').join('')+'</tbody></table></details></td>';
+  }
+  const body=result.rows.map((row,index)=>'<tr>'+cells(row)+(fetch?association(fetch.linked[index]):'')+'</tr>').join('');
+  const columns=headings(result.columns)+(fetch?'<th scope="col"><span>'+escape(fetch.association)+'</span><small>'+escape(fetch.targetType+(fetch.toMany?'[]':''))+'</small></th>':'');
   const size=result.rowCount+' row'+(result.rowCount===1?'':'s')+(result.hasMore?' · more rows available':'');
+  const scope=fetch?' · '+fetch.rootType+' · '+fetch.joinedRows+' joined rows':'';
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'"><title>JPQL Results</title>
   <style nonce="${nonce}">
@@ -38,9 +58,9 @@ function htmlForResult(result,query) {
   details{margin:.75rem 0} pre,td{white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--vscode-editor-font-family)}
   table{border-collapse:collapse;min-width:100%} th{text-align:left;background:var(--vscode-editorWidget-background)}
   th,td{border:1px solid var(--vscode-panel-border);padding:.5rem .65rem;vertical-align:top} th small{display:block}
-  </style></head><body><header><h1>JPQL Results</h1><p>${escape(result.factoryId)} · ${escape(size)} · read-only transaction rolled back</p></header>
+  </style></head><body><header><h1>JPQL Results</h1><p>${escape(result.factoryId)} · ${escape(size+scope)} · read-only transaction rolled back</p></header>
   <details><summary>JPQL selection</summary><pre>${escape(query)}</pre></details>
-  <div class="scroll"><table aria-label="JPQL selection results"><thead><tr>${headings}</tr></thead><tbody>${body}</tbody></table></div>
+  <div class="scroll"><table aria-label="JPQL selection results"><thead><tr>${columns}</tr></thead><tbody>${body}</tbody></table></div>
   ${result.rows.length?'':'<p>The selection returned no rows.</p>'}</body></html>`;
 }
 
@@ -99,7 +119,8 @@ function registerJpaConsole(vscode,{source,target,command}) {
     connection.assertCurrent();
     const description=executable(await connection.client.describeSelect(query,factoryId));
     connection.assertCurrent();
-    let values=input?.values, limit=input?.limit??100;
+    const fetch=description.fetchSnapshot;
+    let values=input?.values, limit=input?.limit??(fetch?fetch.maxRoots:100);
     if (!input) {
       values=Object.create(null);
       for (const parameter of description.parameters) {
@@ -113,16 +134,18 @@ function registerJpaConsole(vscode,{source,target,command}) {
         if (value===undefined) return;
         values[parameter.key]=value;
       }
-      const rows=await vscode.window.showQuickPick(['25','50','100'],{title:'Maximum result rows'});
+      const rows=await vscode.window.showQuickPick(fetch?['5','10','25']:['25','50','100'],{title:fetch?'Maximum root snapshots':'Maximum result rows'});
       if (rows===undefined) return;
       limit=Number(rows);
       const accepted=await vscode.window.showWarningMessage('Run this JPQL selection in '+factoryId+'?',{modal:true,
-        detail:'Up to '+limit+' rows in a read-only MySQL or MariaDB transaction. The selected application mapping and provider configuration apply.\n\n'+query},'Run SELECT');
+        detail:'Up to '+limit+' rows in a read-only MySQL or MariaDB transaction. The selected application mapping and provider configuration apply.'+
+          (fetch?'\nFetch snapshot: '+fetch.path+'. Only initialized managed fields are shown.':'')+'\n\n'+query},'Run SELECT');
       if (accepted!=='Run SELECT') return;
       if (editor.document.version!==version) throw new ObserverError('STALE','The editor query changed during review. Run again.');
     }
     connection.assertCurrent();
     const result=executable(await connection.client.select(query,factoryId,values,limit));
+    if(result.fetchSnapshot?.path!==fetch?.path)throw new ObserverError('STALE','The fetched association changed after review. Describe the selection again.');
     return show(result,query,connection);
   }
   command('rocketbrain.jpa.console.open',open);
