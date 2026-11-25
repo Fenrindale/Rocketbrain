@@ -80,7 +80,7 @@ test('reviewed rebuild copies ordinary inputs and rejects changing a column betw
   assert.throws(() => recovery.makePlan(previous, replaced, { tables: [source.name] }), /between stored input and generated output/u);
 });
 
-test('an index containing a generated part cannot satisfy the child foreign-key index requirement', () => {
+test('a trailing generated part preserves the exact ordinary foreign-key index prefix', () => {
   const { current, draft } = editable();
   const column = (name, ordinal) => ({ name, ordinal, prefixLength: null, collation: 'A' });
   draft.columns.push(field('parent_id', 'none', '', { type: 'INT' }), field('computed', 'stored', 'id * 2'));
@@ -88,8 +88,34 @@ test('an index containing a generated part cannot satisfy the child foreign-key 
     columns: [column('parent_id', 1), column('computed', 2)] });
   draft.foreignKeys.push({ name: 'fk_parent', referencedSchema: current.database, referencedTable: draft.name,
     onUpdate: 'RESTRICT', onDelete: 'RESTRICT', columns: [{ name: 'parent_id', referencedColumn: 'id' }] });
-  assert.throws(() => designer.tableFromDraft(draft, current), /separate child index on ordinary columns/);
-  draft.indexes.push({ name: 'idx_ordinary', unique: false, primaryKey: false, type: 'BTREE', comment: '',
-    columns: [column('parent_id', 1)] });
-  assert.match(D.render(designer.tableFromDraft(draft, current), current), /KEY `idx_ordinary` \(`parent_id`\)/u);
+  assert.match(D.render(designer.tableFromDraft(draft, current), current), /KEY \x60idx_composite\x60 \(\x60parent_id\x60,\s*\x60computed\x60\)/u);
+  draft.indexes[1].columns.reverse();
+  assert.throws(() => designer.tableFromDraft(draft, current), /index beginning with the foreign-key columns/u);
+});
+
+test('stored FK participation and its ordinary source inputs follow different engine action rules',()=>{
+  for(const dialect of ['mysql','mariadb']){
+    const {current,draft}=editable(dialect);
+    draft.columns.push(field('code','none','',{type:'INT'}), field('computed','stored','code * 2',{type:'INT'}));
+    const column=name=>({name,ordinal:1,prefixLength:null,collation:'A'});
+    draft.indexes.push({name:'idx_calc',unique:false,primaryKey:false,type:'BTREE',comment:'',columns:[column('computed')]});
+    const fk={name:'fk_computed',referencedSchema:current.database,referencedTable:draft.name,
+      onUpdate:'RESTRICT',onDelete:'CASCADE',columns:[{name:'computed',referencedColumn:'id'}]};
+    draft.foreignKeys.push(fk);
+    assert.match(D.render(designer.tableFromDraft(draft,current),current),/FOREIGN KEY \(\x60computed\x60\).*ON DELETE CASCADE ON UPDATE RESTRICT/u);
+    fk.onUpdate='CASCADE';
+    assert.throws(()=>designer.tableFromDraft(draft,current),/Stored generated foreign-key columns require restrictive updates/u);
+    fk.onUpdate='RESTRICT';
+    draft.columns.at(-1).generationMode='virtual';
+    assert.throws(()=>designer.tableFromDraft(draft,current),/stored generated child columns/u);
+    draft.columns.at(-1).generationMode='stored';
+    draft.indexes[1].columns.unshift(column('code'));
+    fk.columns[0].name='code';
+    if(dialect==='mariadb')assert.ok(designer.tableFromDraft(draft,current));
+    else assert.throws(()=>designer.tableFromDraft(draft,current),/child input used by a stored generated column/u);
+    fk.onDelete='RESTRICT';
+    assert.ok(designer.tableFromDraft(draft,current));
+    fk.referencedSchema='unreviewed';
+    assert.throws(()=>designer.tableFromDraft(draft,current),/parent in the active schema/u);
+  }
 });

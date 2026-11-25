@@ -446,3 +446,5 @@ Use **Review Database Account Lock or Unlock** for an exact MySQL or MariaDB acc
 **Review MariaDB Package Call** supports matching public Oracle-mode function signatures with scalar OUT and IN OUT parameters. Review the typed inputs, invocation and stored sources together. The dedicated read-only session captures the return value and output parameters in separate results, then rolls back.
 
 A reviewed scalar function replacement can preserve direct EXECUTE grants issued by its owner to named login accounts. The SQL review shows the grants to restore. Stop callers and external schema or grant changes during the non-atomic operation. The retained original supports recovery after an interrupted grant replay.
+
+The table designer supports stored generated child columns in reviewed composite foreign keys with restrictive updates. It also accepts an ascending BTREE index that starts with ordinary foreign-key columns and ends with a generated column. Preview checks the selected engine's action rules. Rebuilding copies the input columns and verifies the newly generated values before publishing.
