@@ -41,8 +41,8 @@ async function runTestNgInvocationChecks(api, vscode, checks) {
     const current = () => api.javaTesting.snapshot().tests.filter(item => item.className === qualified && item.framework === 'testng');
     const owner = discovery.tests.find(item => item.className === qualified && item.framework === 'testng' && !item.methodName);
     assert.ok(owner && current().some(item => item.kind === 'container' && item.methodName === 'duplicate'));
-    const run = (item, jvmArgs = []) => api.javaTesting.run({ includeIds: [item.nativeId], jvmArgs, build: false });
-    const full = await run(owner);
+    const run = (item, jvmArgs = [], build = false) => api.javaTesting.run({ includeIds: [item.nativeId], jvmArgs, build });
+    const full = await run(owner, [], true);
     const { duplicate, retry } = assertObservedInvocations(await observed(full.projects[0]));
     const find = id => current().find(item => item.id === id);
     assert.ok(find(duplicate.id)?.rerunnable && find(retry.id)?.rerunnable);
