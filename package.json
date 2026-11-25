@@ -59,6 +59,8 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.java.traceStream", "title": "Trace Java Stream Values", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java && editorHasSelection" },
+      { "command": "rocketbrain.java.navigateStreamStage", "title": "Go to Java Stream Stage", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-java-stream" },
       { "command": "rocketbrain.db.newDataExtractor", "title": "Create Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.exportWithExtractor", "title": "Export with Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.newFederatedSelect", "title": "New Federated SELECT", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
