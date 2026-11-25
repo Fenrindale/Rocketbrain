@@ -1,0 +1,38 @@
+name: Docker workbench runtime
+
+on:
+  push:
+    branches: ['verify-docker-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-cli:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check Docker and Compose runtime
+        run: |
+          docker version
+          docker compose version
+      - name: Verify Docker workbench and registry inspection
+        env:
+          ROCKETBRAIN_DOCKER_FIXTURE: '1'
+        run: |
+          set -o pipefail
+          node --test test/docker-workbench.test.js
+          node scripts/test-docker-workbench.js | tee "${RUNNER_TEMP}/rocketbrain-docker.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-workbench-runtime
+          path: ${{ runner.temp }}/rocketbrain-docker.json
+          if-no-files-found: error
+          retention-days: 7

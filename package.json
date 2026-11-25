@@ -20,6 +20,7 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onView:rocketbrain.project",
+    "onView:rocketbrain.docker",
     "onView:rocketbrain.databases",
     "onView:rocketbrain.results",
     "onView:rocketbrain.analysis",
@@ -82,6 +83,12 @@
       { "command": "rocketbrain.sshWorkspace.upload", "title": "Review Local File Upload to SSH", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.compare", "title": "Compare Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.review", "title": "Review Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.select", "title": "Select Docker Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
+      { "command": "rocketbrain.docker.refresh", "title": "Refresh Docker Inventory", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(refresh)" },
+      { "command": "rocketbrain.docker.logs", "title": "Show Docker Logs", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.lifecycle", "title": "Manage Docker Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.compose", "title": "Inspect Compose Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.manifest", "title": "Inspect Registry Manifest", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
@@ -932,6 +939,10 @@
         {
           "id": "rocketbrain.sshWorkspace",
           "name": "SSH Workspace"
+        },
+        {
+          "id": "rocketbrain.docker",
+          "name": "Docker"
         }
       ],
       "rocketbrain-query-panel": [
@@ -989,6 +1000,8 @@
         { "command": "rocketbrain.coroutines.connect", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.coroutines.refresh", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.coroutines.disconnect", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "connection" },
+        { "command": "rocketbrain.docker.select", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "navigation@1" },
+        { "command": "rocketbrain.docker.refresh", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "navigation@2" },
         {
           "command": "rocketbrain.schema.exportDdl",
           "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1154,6 +1167,8 @@
       ],
       "view/item/context": [
         { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
+        { "command": "rocketbrain.docker.lifecycle", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
+        { "command": "rocketbrain.docker.logs", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
         {
           "command": "rocketbrain.db.openObjectSource",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
