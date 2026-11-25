@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rocketbrain-observed
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rocketbrain-other
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rocketbrain-reader
+  namespace: rocketbrain-observed
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rocketbrain-reader
+  namespace: rocketbrain-observed
+rules:
+  - apiGroups: [""]
+    resources: [pods, services]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rocketbrain-reader
+  namespace: rocketbrain-observed
+subjects:
+  - kind: ServiceAccount
+    name: rocketbrain-reader
+    namespace: rocketbrain-observed
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rocketbrain-reader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rocketbrain-namespace-reader
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rocketbrain-namespace-reader
+subjects:
+  - kind: ServiceAccount
+    name: rocketbrain-reader
+    namespace: rocketbrain-observed
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: rocketbrain-namespace-reader

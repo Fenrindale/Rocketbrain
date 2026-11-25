@@ -42,13 +42,14 @@
     "onView:rocketbrain.javaProjects",
     "onView:rocketbrain.kotlinCoroutines",
     "onView:rocketbrain.connections",
+    "onView:rocketbrain.kubernetes",
     "onNotebook:rocketbrain-sql-notebook",
     "onNotebook:rocketbrain-jupyter"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions"],
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
@@ -118,6 +119,11 @@
       { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
+      { "command": "rocketbrain.kubernetes.connect", "title": "Choose Kubernetes Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
+      { "command": "rocketbrain.kubernetes.refresh", "title": "Refresh Kubernetes Resources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(refresh)" },
+      { "command": "rocketbrain.kubernetes.namespace", "title": "Choose Kubernetes Namespace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kubernetes.podLogs", "title": "Open Kubernetes Pod Logs", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(output)" },
+      { "command": "rocketbrain.kubernetes.disconnect", "title": "Close Kubernetes Explorer Session", "category": "Rocketbrain", "icon": "$(debug-disconnect)" },
       { "command": "rocketbrain.jakarta.buildWar", "title": "Build Jakarta WAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.deploy", "title": "Deploy Jakarta WAR to Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.debug", "title": "Debug Jakarta WAR on Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -943,6 +949,11 @@
         {
           "id": "rocketbrain.docker",
           "name": "Docker"
+        },
+        {
+          "id": "rocketbrain.kubernetes",
+          "name": "Kubernetes",
+          "visibility": "collapsed"
         }
       ],
       "rocketbrain-query-panel": [
@@ -1002,6 +1013,9 @@
         { "command": "rocketbrain.coroutines.disconnect", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "connection" },
         { "command": "rocketbrain.docker.select", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.docker.refresh", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "navigation@2" },
+        { "command": "rocketbrain.kubernetes.connect", "when": "view == rocketbrain.kubernetes", "group": "navigation@1" },
+        { "command": "rocketbrain.kubernetes.refresh", "when": "view == rocketbrain.kubernetes", "group": "navigation@2" },
+        { "command": "rocketbrain.kubernetes.disconnect", "when": "view == rocketbrain.kubernetes", "group": "navigation@3" },
         {
           "command": "rocketbrain.schema.exportDdl",
           "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1169,6 +1183,7 @@
         { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
         { "command": "rocketbrain.docker.lifecycle", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.docker.logs", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
+        { "command": "rocketbrain.kubernetes.podLogs", "when": "view == rocketbrain.kubernetes && viewItem == rocketbrain-kube-pod", "group": "inline" },
         {
           "command": "rocketbrain.db.openObjectSource",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1492,6 +1507,14 @@
               "args": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
             }
           }
+        },
+        "rocketbrain.kubernetes.kubectlPath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to the local kubectl executable. An empty value searches PATH."
+        },
+        "rocketbrain.kubernetes.helmPath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to the local Helm executable. An empty value searches PATH."
         },
         "rocketbrain.jupyter.pythonPath": {
           "type": "string", "default": "", "scope": "machine-overridable",

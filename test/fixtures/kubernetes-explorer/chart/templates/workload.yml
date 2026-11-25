@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rocketbrain-workload
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rocketbrain-workload
+  template:
+    metadata:
+      labels:
+        app: rocketbrain-workload
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: main
+          image: docker.io/library/busybox:1.37.0@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+          command: [sh, -c, "echo rocketbrain-primary-log-ready; exec sleep 600"]
+        - name: sidecar
+          image: docker.io/library/busybox:1.37.0@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+          command: [sh, -c, "echo rocketbrain-sidecar-log-ready; exec sleep 600"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rocketbrain-service
+spec:
+  selector:
+    app: rocketbrain-workload
+  ports:
+    - port: 8080
+      targetPort: 8080
