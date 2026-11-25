@@ -38,7 +38,7 @@ class ResultsView {
 <header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option><option value="compare">Compare</option><option value="map" disabled>Map</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option><option value="extractor">Custom Extractor</option></select><button id="export" disabled>Export CSV</button><button id="pin-result" aria-pressed="false" disabled>Pin Result</button><button id="rename-result" disabled>Rename Result</button><button id="close-result">Close Result</button></header>
 <nav id="tabs" aria-label="Query result history"></nav>
 <button id="return-source-row" type="button" hidden>Back to Source Row</button>
-<section id="script-result-sets" aria-label="Captured statement results" hidden><label>Statement result <select id="script-result-selection"></select></label><button id="open-script-statement" type="button">Open Captured Statement</button></section>
+<section id="script-result-sets" aria-label="Captured results" hidden><label><span id="script-result-label">Statement result</span> <select id="script-result-selection"></select></label><button id="open-script-statement" type="button">Open Captured Statement</button></section>
 <div id="message" role="status" aria-live="polite">Run SQL from the editor with Ctrl+Enter.</div>
 <section id="result-layout" aria-label="Result view options" hidden><div id="result-row-navigation" hidden><button id="result-row-previous">Previous Row</button><span id="result-row-status" role="status"></span><button id="result-row-next">Next Row</button></div><button id="result-columns" aria-expanded="false">Columns</button></section>
 <section id="result-column-panel" aria-label="Result columns" hidden><div id="result-column-list"></div><button id="result-column-reset">Reset Columns</button></section>
@@ -85,7 +85,8 @@ class ResultsView {
         if (!Number.isInteger(msg.index) || !record.result.scriptStatements?.some(statement => statement.index === msg.index)) {
           throw Error('Choose a retained statement from this script run.');
         }
-        await v.commands.executeCommand('rocketbrain.sql.openScriptResult', { resultId: record.id, index: msg.index });
+        const command = record.result.captureKind === 'procedure' ? 'rocketbrain.db.openProcedureResult' : 'rocketbrain.sql.openScriptResult';
+        await v.commands.executeCommand(command, { resultId: record.id, index: msg.index });
       } else if (msg.type === 'saveFilterPreset') {
         if (typeof msg.modelId !== 'string' || !this.filterRecord(record.id, msg.modelId)) throw Error('Choose the current named table and its applied filters.');
         const name = await v.window.showInputBox({ title: 'Save the applied table filters', value: typeof msg.name === 'string' ? msg.name : '',
