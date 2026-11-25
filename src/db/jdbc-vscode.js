@@ -2,6 +2,7 @@
 
 const { randomUUID } = require('node:crypto');
 const { createJdbcProfiles } = require('./jdbc-profiles');
+const { maxLibraries } = require('./jdbc');
 
 const language = 'rocketbrain-jdbc';
 const scheme = 'rocketbrain-jdbc-output';
@@ -38,28 +39,70 @@ function registerJdbc(vscode, context) {
     });
   }
 
-  command('addDriver', async () => {
-    api.list();
+  async function driverDraft(title) {
     const [jar] = await vscode.window.showOpenDialog({ title: 'Select an Installed JDBC Driver JAR', filters: { JDBC: ['jar'] } }) || [];
     if (jar?.scheme !== 'file' || jar.authority) return;
-    const name = await vscode.window.showInputBox({ title: 'JDBC Profile Name' });
+    const name = await vscode.window.showInputBox({ title });
     if (name === undefined) return;
     const driverClass = await vscode.window.showInputBox({ title: 'Fully Qualified JDBC Driver Class',
       placeHolder: 'org.mariadb.jdbc.Driver' });
     if (driverClass === undefined) return;
-    const plan = await progress('Reviewing JDBC Driver JAR', signal => api.prepare({ name, jar: jar.fsPath, driverClass }, { signal }));
-    const approve = 'Approve Driver';
-    if (await vscode.window.showWarningMessage('Allow this JDBC driver to execute under your user account?',
-      { modal: true, detail: [plan.jar, plan.driverClass, 'SHA-256 ' + plan.sha256,
-        'Only use a driver you trust. The driver runs in a separate JVM with your account permissions and the supplied connection credentials.'].join('\n') }, approve) !== approve) return;
-    return api.save(plan.id, true);
+    const kind = await vscode.window.showQuickPick(['No additional JARs', 'Select additional libraries'], { title: 'Optional JDBC Libraries' });
+    if (!kind) return;
+    let libraries = [];
+    if (kind === 'Select additional libraries') {
+      const files = await vscode.window.showOpenDialog({ title: 'Select up to ' + maxLibraries + ' Local Library JARs',
+        canSelectMany: true, filters: { JAR: ['jar'] } });
+      if (!files?.length || files.some(item => item.scheme !== 'file' || item.authority)) return;
+      libraries = files.map(item => item.fsPath);
+    }
+    return { name, jar: jar.fsPath, driverClass, libraries };
+  }
+
+  async function approve(plan) {
+    const action = 'Approve Exact JARs';
+    const identity = [plan, ...plan.libraries].map((item, index) =>
+      (index ? 'Library ' + index : 'Driver') + ' · ' + item.jar + '\nSHA-256 ' + item.sha256);
+    return await vscode.window.showWarningMessage('Allow these JDBC artifacts to execute under your account?',
+      { modal: true, detail: [plan.driverClass, 'Classpath SHA-256 ' + plan.classpathFingerprint,
+        ...identity, 'Use artifacts you trust. The JVM uses your account permissions and the credentials you supply.'].join('\n\n') }, action) === action;
+  }
+
+  async function manageVersions(profile) {
+    const picked = await vscode.window.showQuickPick([{ label: 'Add Driver Version', add: true }, ...profile.versions.map(item => ({
+      item, label: item.name, description: (item.id === profile.selectedVersion ? 'Selected · ' : '') + item.libraries.length + ' libraries · ' + item.classpathFingerprint.slice(0, 12),
+      detail: item.jar
+    }))], { title: profile.name + ' · Driver Versions' });
+    if (!picked) return;
+    if (picked.add) {
+      const draft = await driverDraft('Driver Version Name');
+      if (!draft) return;
+      const plan = await progress('Reviewing JDBC Version and Libraries', signal => api.prepareVersion(profile.id, draft, { signal }));
+      if (await approve(plan)) return api.saveVersion(plan.id, true);
+      return;
+    }
+    if (picked.item.id === profile.selectedVersion) return;
+    const action = await vscode.window.showQuickPick(['Select version', 'Remove version approval'], { title: picked.label });
+    if (action === 'Select version') return api.selectVersion(profile.id, picked.item.id);
+    if (action === 'Remove version approval' && await vscode.window.showWarningMessage('Remove approval for ' + picked.label + '?',
+      { modal: true }, 'Remove Version') === 'Remove Version') return api.removeVersion(profile.id, picked.item.id);
+  }
+
+  command('addDriver', async () => {
+    api.list();
+    const draft = await driverDraft('JDBC Profile Name');
+    if (!draft) return;
+    const plan = await progress('Reviewing JDBC Driver JARs', signal => api.prepare(draft, { signal }));
+    if (await approve(plan)) return api.save(plan.id, true);
   });
   command('profiles', async () => {
     const items = api.list();
     if (!items.length) throw Error('Add and approve a JDBC driver first.');
-    const picked = await vscode.window.showQuickPick(items.map(item => ({ item, label: item.name, description: item.driverClass })), { title: 'Approved JDBC Profiles' });
+    const picked = await vscode.window.showQuickPick(items.map(item => ({ item, label: item.name,
+      description: item.versions.find(entry => entry.id === item.selectedVersion).name + ' · ' + item.driverClass })), { title: 'Approved JDBC Profiles' });
     if (!picked) return;
-    const choice = await vscode.window.showQuickPick(['Open connection', 'Remove approval'], { title: picked.label });
+    const choice = await vscode.window.showQuickPick(['Open connection', 'Manage driver versions', 'Remove approval'], { title: picked.label });
+    if (choice === 'Manage driver versions') return manageVersions(picked.item);
     if (choice === 'Remove approval') {
       if (await vscode.window.showWarningMessage('Remove JDBC approval for ' + picked.label + '?', { modal: true }, 'Remove Approval') === 'Remove Approval') {
         await api.remove(picked.item.id);

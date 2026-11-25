@@ -34,10 +34,16 @@ function registerJavaFeatures(context, vscode) {
     if (!config.get('serverPath') || !config.get('javaHome')) { update('configuration-required', 'Set rocketbrain.java.serverPath to an extracted official JDT LS distribution and rocketbrain.java.javaHome to an independent JDK 25+.'); return { ...state }; }
     try {
       const storage = context.storageUri || context.globalStorageUri;
-      const launch = resolveLaunch({ serverPath: config.get('serverPath'), javaHome: config.get('javaHome'), debugBundlePath: config.get('debugBundlePath'), storagePath: path.join(storage.fsPath, 'java'), cacheContext: { projectJdks: config.get('projectJdks', []), gradleHome: config.get('gradleHome', ''), gradleJavaHome: config.get('gradleJavaHome', '') } });
+      const gradleAnnotationProcessing = config.get('annotationProcessing.gradleEnabled',false) === true;
+      const launch = resolveLaunch({
+        serverPath:config.get('serverPath'),javaHome:config.get('javaHome'),debugBundlePath:config.get('debugBundlePath'),
+        storagePath:path.join(storage.fsPath,'java'),trustedWorkspace:vscode.workspace.isTrusted,
+        lombokJar:config.get('annotationProcessing.lombokJar',''),gradleAnnotationProcessing,
+        cacheContext:{projectJdks:config.get('projectJdks',[]),gradleHome:config.get('gradleHome',''),gradleJavaHome:config.get('gradleJavaHome','')}
+      });
       const extractInterfaceReplaceUsages = config.get('extractInterface.replaceUsages', false) === true;
       const settings = serverSettings(config.get('projectJdks', []), { gradleHome: config.get('gradleHome'),
-        gradleJavaHome: config.get('gradleJavaHome'),extractInterfaceReplaceUsages });
+        gradleJavaHome: config.get('gradleJavaHome'),extractInterfaceReplaceUsages,gradleAnnotationProcessing });
       const { LanguageClient, ErrorAction, CloseAction } = require('vscode-languageclient/node');
       const watcher = vscode.workspace.createFileSystemWatcher('**/{*.java,pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,gradle.properties}');
       subscriptions.push(watcher);
@@ -50,12 +56,15 @@ function registerJavaFeatures(context, vscode) {
         markdown: { isTrusted: false }
       });
       state = { ...state, serverPath: launch.serverPath, javaHome: launch.javaHome, debugBundlePath: launch.bundles[0], runtimeIdentity: launch.identity,
-        workspaceData: launch.data,extractInterfaceReplaceUsages };
+        workspaceData: launch.data,extractInterfaceReplaceUsages,annotationProcessing:launch.annotationProcessing };
       client = next; update('starting', 'Starting the independent Eclipse JDT Language Server.');
       next.onNotification('language/status', event => { if (event.type === 'Error') output.appendLine(`JDT LS: ${event.message}`); else output.appendLine(`JDT LS ${event.type}: ${event.message}`); });
       next.onNotification('language/progressReport', event => { status.tooltip = `Java: ${event.task || ''} ${event.subTask || ''}`; });
       await next.start();
       await next.sendNotification('workspace/didChangeConfiguration', { settings });
+      const processing = launch.annotationProcessing;
+      output.appendLine('Java editor annotation processing: Maven follows the POM, Gradle processor sync '+
+        (processing.gradle ? 'enabled' : 'disabled')+', Lombok editor agent '+(processing.lombok?.version || 'disabled')+'.');
       update('running', 'Eclipse JDT LS is connected. Java completion, diagnostics, navigation and rename use this engine. Spring endpoints/settings currently use Rocketbrain source analysis, not Spring LS.');
     } catch (error) {
       const failed = client; client = undefined;
@@ -169,7 +178,7 @@ function registerJavaFeatures(context, vscode) {
     else if (selected?.action === 'endpoints') await vscode.commands.executeCommand('rocketbrain.spring.endpoints');
   }));
   subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => { void api.start().catch(error => output.appendLine(error.message)); }));
-  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
+  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
   update('stopped', 'Java server is stopped.');
   void api.start().catch(error => output.appendLine(error.message));
   return api;

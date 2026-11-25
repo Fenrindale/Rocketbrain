@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.47.0",
+  "version": "0.48.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -59,6 +59,8 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.java.traceStream", "title": "Trace Java Stream Values", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java && editorHasSelection" },
+      { "command": "rocketbrain.java.navigateStreamStage", "title": "Go to Java Stream Stage", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-java-stream" },
       { "command": "rocketbrain.db.newDataExtractor", "title": "Create Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.exportWithExtractor", "title": "Export with Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.newFederatedSelect", "title": "New Federated SELECT", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1435,6 +1437,18 @@
           "default": "",
           "scope": "machine",
           "description": "Optional standalone JDK path for importing Gradle projects."
+        },
+        "rocketbrain.java.annotationProcessing.gradleEnabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Enable JDT editor annotation processing for Gradle projects in trusted workspaces. Gradle build tasks use the project's build configuration."
+        },
+        "rocketbrain.java.annotationProcessing.lombokJar": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional absolute path to the verified official Lombok 1.18.48 Java agent JAR for editor-generated symbols in trusted workspaces."
         },
         "rocketbrain.java.debugBundlePath": {
           "type": "string",

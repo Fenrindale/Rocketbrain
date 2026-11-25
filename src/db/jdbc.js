@@ -7,11 +7,13 @@ const { createHash } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
-const { inspectCompilerJar } = require('../java/signature-compiler');
+const { visitJar } = require('../java/signature-compiler');
 const { validateQuery } = require('./sql-policy');
 const source = require('./jdbc-worker-source.json');
 
 const jarLimit = 64 * 1024 * 1024;
+const bundleLimit = 128 * 1024 * 1024;
+const maxLibraries = 6;
 const outputLimit = 4 * 1024 * 1024;
 const protocol = 'RBJDBC1';
 const fail = (code, message) => Object.assign(Error(message), { code: 'ROCKETBRAIN_JDBC_' + code });
@@ -47,17 +49,34 @@ async function driverCopy(file, destination, signal) {
 async function scratch(action) {
   const folder = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rocketbrain-jdbc-'));
   const driver = path.join(folder, 'driver.jar'), worker = path.join(folder, 'DriverWorker.java');
-  try { return await action({ folder, driver, worker }); }
+  const libraries = Array.from({ length: maxLibraries }, (_, index) => path.join(folder, 'library-' + index + '.jar'));
+  try { return await action({ folder, driver, worker, libraries }); }
   finally {
-    for (const file of [worker, driver]) await fs.unlink(file).catch(cause => { if (cause.code !== 'ENOENT') throw cause; });
+    for (const file of [worker, driver, ...libraries]) await fs.unlink(file).catch(cause => { if (cause.code !== 'ENOENT') throw cause; });
     await fs.rmdir(folder);
   }
 }
 
-async function inspect(file, destination, signal) {
+async function inspect(file, destination, signal, knownClasses) {
   const copied = await driverCopy(file, destination, signal);
-  await inspectCompilerJar(destination).catch(() => { throw fail('JAR', 'The selected JDBC artifact is not a supported regular JAR.'); });
-  return copied;
+  const classes = new Set();
+  await visitJar(destination, async (entry, read) => {
+    if (signal?.aborted) throw fail('CANCELLED', 'JDBC driver approval cancelled.');
+    if (/^META-INF\/MANIFEST\.MF$/i.test(entry.fileName)) {
+      if (entry.uncompressedSize > 65536) throw fail('JAR', 'The JDBC archive manifest exceeds 64 KiB.');
+      await read();
+    }
+    const logicalClass = entry.fileName.replace(/^META-INF\/versions\/\d+\//, '');
+    if (!logicalClass.endsWith('.class') || logicalClass === 'module-info.class') return;
+    if (knownClasses.has(logicalClass)) throw fail('JAR', 'The selected JDBC JARs contain duplicate class definitions.');
+    classes.add(logicalClass);
+    if (knownClasses.size + classes.size > 60000) throw fail('JAR', 'The JDBC classpath exceeds 60,000 class definitions.');
+  }).catch(cause => {
+    if (cause.code?.startsWith('ROCKETBRAIN_JDBC_')) throw cause;
+    throw fail('JAR', 'The selected JDBC artifact is not a supported regular JAR.');
+  });
+  for (const entry of classes) knownClasses.add(entry);
+  return { ...copied, classes };
 }
 
 function driverClass(value) {
@@ -65,12 +84,37 @@ function driverClass(value) {
   return value;
 }
 
-async function examineJdbcDriver(file, driver, signal) {
+function classpathFingerprint(driver, artifacts) {
+  return createHash('sha256').update(JSON.stringify([driver, ...artifacts.map(item => item.sha256)])).digest('hex');
+}
+
+async function inspectClasspath(file, driver, requested, scratchFiles, signal) {
+  if (!Array.isArray(requested) || requested.length > maxLibraries) throw fail('JAR', 'Choose at most six explicit JDBC library JARs.');
+  const input = [file, ...requested], output = [scratchFiles.driver, ...scratchFiles.libraries];
+  const artifacts = [], paths = new Set(), hashes = new Set(), knownClasses = new Set();
+  let bytes = 0;
+  for (let index = 0; index < input.length; index++) {
+    if (!localPath(input[index])) throw fail('JAR', 'Choose a local JDBC driver or library JAR.');
+    let jar;
+    try { jar = await fs.realpath(input[index]); }
+    catch { throw fail('JAR', 'A selected JDBC JAR is unavailable.'); }
+    const key = process.platform === 'win32' ? jar.toLowerCase() : jar;
+    if (paths.has(key)) throw fail('JAR', 'Choose each JDBC JAR only once.');
+    paths.add(key);
+    const { sha256, size, classes } = await inspect(jar, output[index], signal, knownClasses);
+    if (hashes.has(sha256) || (bytes += size) > bundleLimit) throw fail('JAR', 'The approved JDBC artifacts must be distinct and below 128 MiB combined.');
+    hashes.add(sha256);
+    if (index === 0 && !classes.has(driver.replaceAll('.', '/') + '.class')) throw fail('CLASS', 'The selected JDBC driver class is missing from the primary JAR.');
+    artifacts.push({ jar, sha256, size });
+  }
+  return artifacts;
+}
+
+async function examineJdbcDriver(file, driver, signal, libraries = []) {
   driverClass(driver);
-  if (!localPath(file)) throw fail('JAR', 'Choose a local JDBC driver JAR.');
-  const jar = await fs.realpath(file);
-  const details = await scratch(async ({ driver: destination }) => inspect(jar, destination, signal));
-  return { jar, driverClass: driver, ...details };
+  const artifacts = await scratch(paths => inspectClasspath(file, driver, libraries, paths, signal));
+  const [primary, ...additional] = artifacts;
+  return { ...primary, driverClass: driver, libraries: additional, classpathFingerprint: classpathFingerprint(driver, artifacts) };
 }
 
 async function javaExecutable(home) {
@@ -113,6 +157,7 @@ function response(output, operation) {
       if (fields[0] === 'RB001') throw fail('LIMIT', 'The JDBC result has a column or value above the supported limit.');
       if (fields[0] === 'RB002') throw fail('JAR', 'The JDBC driver bytes changed after approval.');
       if (fields[0] === 'RB003') throw fail('READ_ONLY', 'The JDBC driver did not accept a read-only connection.');
+      if (fields[0] === 'RB004') throw fail('CLASS', 'The approved JDBC driver class must be loaded from its primary JAR.');
       if (fields[0] === 'JDBC0') throw fail('DRIVER', 'The JDBC driver could not be initialized. Check its class and separate dependencies.');
       throw fail('SERVER', 'The JDBC operation failed (SQLSTATE ' + fields[0] + ').');
     }
@@ -187,12 +232,17 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
   const names = [object.catalog ?? '', object.schema ?? '', object.name ?? ''];
   if (names.some(name => !text(name, 1024)) || operation === 'describe' && !names[2]) throw fail('OBJECT', 'Choose an observed JDBC table or view.');
   const java = await javaExecutable(javaHome);
-  return scratch(async ({ folder, driver: destination, worker }) => {
-    const observed = await inspect(profile.jar, destination, signal);
-    if (observed.sha256 !== profile.sha256) throw fail('JAR', 'The JDBC JAR bytes changed. Review the new driver before launching it.');
-    await fs.writeFile(worker, source, { flag: 'wx', mode: 0o600 });
-    return execute(java, operation, folder, [profile.sha256, driver, auth.url, auth.user, auth.password, operation, sql, ...names, maxRows], signal);
+  const approved = [profile, ...(Array.isArray(profile.libraries) ? profile.libraries : [])];
+  return scratch(async paths => {
+    const observed = await inspectClasspath(profile.jar, driver, approved.slice(1).map(item => item.jar), paths, signal);
+    if (observed.some((item, index) => item.sha256 !== approved[index].sha256) ||
+        profile.classpathFingerprint && classpathFingerprint(driver, observed) !== profile.classpathFingerprint) {
+      throw fail('JAR', 'The JDBC JAR bytes changed. Review the driver version before launching it.');
+    }
+    await fs.writeFile(paths.worker, source, { flag: 'wx', mode: 0o600 });
+    return execute(java, operation, paths.folder, [profile.sha256, driver, auth.url, auth.user, auth.password, operation, sql, ...names,
+      maxRows, approved.length - 1, ...approved.slice(1).map(item => item.sha256)], signal);
   });
 }
 
-module.exports = { examineJdbcDriver, runJdbc, credentials };
+module.exports = { examineJdbcDriver, runJdbc, credentials, classpathFingerprint, maxLibraries };

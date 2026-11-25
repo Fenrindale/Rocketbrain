@@ -53,6 +53,7 @@ pnpm run package
 16. **Pull Up Java Members**와 **Push Down Java Members**는 같은 패키지에서 직접 상속하는 클래스 사이의 메서드·상수 이동을 미리 봅니다. Javac가 전후 참조를 비교하고 선언 충돌이나 다른 오버로드로의 연결을 감지하면 적용을 차단합니다.
 17. **Manage Git Changelists**에서 변경 파일을 이름 있는 작업 목록에 배정합니다. 목록에 편집 위치와 실행 구성 선택을 기록해 복원할 수 있습니다. 복원 후 실행 구성은 VS Code의 Run and Debug에서 시작할 수 있습니다.
 18. **Convert Java Lambda, Anonymous Class or Loop**에서 지역 SAM 변수와 지원하는 배열 합산 루프의 변환을 검토합니다. 적용 전에 Javac로 참조 연결을 확인합니다.
+19. **Trace Java Stream Values**에서 `Stream.of` 또는 `List.of(...).stream()`부터 `toList()`까지 선택합니다. 독립 JDK에서 `filter`, `map`, `flatMap`, `limit`의 실제 값 흐름을 실행하고 **Go to Java Stream Stage**로 원본 단계에 이동합니다.
 
 **Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다. 필터 순서·매처·권한 목록은 앱의 보안 구성에서 확인합니다.
 
@@ -107,6 +108,12 @@ Java 프로젝트 가져오기와 빌드는 프로젝트 코드를 실행할 수
 - Java 메서드 선언 또는 호출 이름에 커서를 두고 **Add Java Method Breakpoint**를 실행합니다. JDT가 선택한 오버로드나 상속 메서드의 실제 선언에 중단점을 추가합니다. 작업 공간의 저장된 소스에서 각 메서드 선언을 별도 줄에 둡니다.
 - 디버그 세션에서 일반 중단점을 검증한 줄에 커서를 두고 **Add Java Inline Breakpoints**를 실행합니다. 디버거가 반환한 위치 중 멈출 람다를 선택합니다.
 - 멈춘 세션의 **변수**에서 객체의 필드를 펼칩니다. 필드 메뉴에서 읽기, 쓰기 또는 읽기·쓰기에 중단점을 설정합니다.
+
+### Java 어노테이션 처리와 Lombok
+
+Maven에서 `maven-compiler-plugin`의 `annotationProcessorPaths`에 프로세서를 선언하고, 편집 중에도 처리하려면 `m2e.apt.activation`을 `jdt_apt`로 설정합니다. Gradle에서는 `annotationProcessor` 의존성을 선언하고 사용자 설정 `rocketbrain.java.annotationProcessing.gradleEnabled`를 켜면 가져올 때 JDT가 해당 프로세서 구성을 동기화합니다. 이미 프로젝트가 관리하는 Eclipse APT 설정은 프로젝트 파일에서 관리합니다.
+
+Lombok이 생성하는 멤버를 편집기에서 사용하려면 사용자 설정 `rocketbrain.java.annotationProcessing.lombokJar`에 [공식 Lombok 1.18.48 JAR](https://repo.maven.apache.org/maven2/org/projectlombok/lombok/1.18.48/lombok-1.18.48.jar)의 절대 경로를 지정합니다. 신뢰한 작업 공간에서 확장이 SHA-256을 확인하고 별도 JDT 저장소에 준비합니다. 빌드에서도 Lombok 버전과 프로세서 의존성을 선언합니다. Lombok getter를 MapStruct에서 참조하는 예제는 `lombok-mapstruct-binding`을 함께 사용합니다.
 
 ## 검토하는 Java 리팩터링
 

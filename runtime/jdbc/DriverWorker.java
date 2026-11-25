@@ -21,10 +21,12 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.Base64;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.jar.JarFile;
@@ -38,40 +40,72 @@ class DriverWorker {
     private static boolean cancelled = false;
 
     static final class DriverLoader extends SecureClassLoader implements AutoCloseable {
-        private final URL source;
-        private final JarFile archive;
+        private record Archive(URL source, JarFile file) { }
+        private final List<Archive> archives = new ArrayList<>();
 
-        DriverLoader(Path path) throws Exception {
+        DriverLoader(List<Path> paths) throws Exception {
             super(ClassLoader.getPlatformClassLoader());
-            source = path.toUri().toURL();
-            archive = new JarFile(path.toFile(), true, JarFile.OPEN_READ, Runtime.version());
+            try {
+                for (Path path : paths) archives.add(new Archive(path.toUri().toURL(),
+                    new JarFile(path.toFile(), true, JarFile.OPEN_READ, Runtime.version())));
+            } catch (Exception failure) {
+                close();
+                throw failure;
+            }
+        }
+
+        boolean declaresDriver(String name) {
+            return archives.getFirst().file().getJarEntry(name.replace('.', '/') + ".class") != null;
         }
 
         @Override protected Class<?> findClass(String name) throws ClassNotFoundException {
-            var entry = archive.getJarEntry(name.replace('.', '/') + ".class");
-            if (entry == null || entry.getSize() > 16L * 1024 * 1024) throw new ClassNotFoundException(name);
-            try (var stream = archive.getInputStream(entry)) {
-                byte[] bytes = stream.readNBytes(16 * 1024 * 1024 + 1);
-                if (bytes.length != entry.getSize()) throw new ClassNotFoundException(name);
-                return defineClass(name, bytes, 0, bytes.length, new CodeSource(source, entry.getCodeSigners()));
-            } catch (java.io.IOException error) { throw new ClassNotFoundException(name, error); }
+            for (Archive archive : archives) {
+                var entry = archive.file().getJarEntry(name.replace('.', '/') + ".class");
+                if (entry == null) continue;
+                if (entry.getSize() > 16L * 1024 * 1024) throw new ClassNotFoundException(name);
+                try (var stream = archive.file().getInputStream(entry)) {
+                    byte[] bytes = stream.readNBytes(16 * 1024 * 1024 + 1);
+                    if (bytes.length != entry.getSize()) throw new ClassNotFoundException(name);
+                    return defineClass(name, bytes, 0, bytes.length, new CodeSource(archive.source(), entry.getCodeSigners()));
+                } catch (java.io.IOException error) { throw new ClassNotFoundException(name, error); }
+            }
+            throw new ClassNotFoundException(name);
         }
 
-        @Override protected URL findResource(String name) {
-            var entry = archive.getJarEntry(name);
+        private URL resource(Archive archive, String name) {
+            var entry = archive.file().getJarEntry(name);
             if (entry == null) return null;
             try {
                 String entryPath = new URI(null, null, "/" + entry.getRealName(), null).getRawPath();
-                return URI.create("jar:" + source.toExternalForm() + "!" + entryPath).toURL();
+                return URI.create("jar:" + archive.source().toExternalForm() + "!" + entryPath).toURL();
             } catch (Exception ignored) { return null; }
         }
 
-        @Override protected Enumeration<URL> findResources(String name) {
-            URL location = findResource(name);
-            return location == null ? Collections.emptyEnumeration() : Collections.enumeration(java.util.List.of(location));
+        @Override protected URL findResource(String name) {
+            for (Archive archive : archives) {
+                URL found = resource(archive, name);
+                if (found != null) return found;
+            }
+            return null;
         }
 
-        @Override public void close() throws java.io.IOException { archive.close(); }
+        @Override protected Enumeration<URL> findResources(String name) {
+            List<URL> found = new ArrayList<>();
+            for (Archive archive : archives) {
+                URL location = resource(archive, name);
+                if (location != null) found.add(location);
+            }
+            return Collections.enumeration(found);
+        }
+
+        @Override public void close() throws java.io.IOException {
+            java.io.IOException failure = null;
+            for (Archive archive : archives) {
+                try { archive.file().close(); }
+                catch (java.io.IOException error) { failure = error; }
+            }
+            if (failure != null) throw failure;
+        }
     }
 
     static void emit(String tag, String... fields) throws Exception {
@@ -249,14 +283,26 @@ class DriverWorker {
             if (!PROTOCOL.equals(in.readLine())) throw new Exception("Protocol mismatch");
             String sha = input(in), className = input(in), url = input(in), user = input(in), password = input(in);
             String operation = input(in), sql = input(in), catalog = input(in), schema = input(in), object = input(in);
-            int maxRows = Integer.parseInt(input(in));
+            int maxRows = Integer.parseInt(input(in)), count = Integer.parseInt(input(in));
             if (maxRows < 1 || maxRows > 500) throw new Exception("Invalid row limit");
+            if (count < 0 || count > 6) throw new Exception("Dependency count invalid");
+            List<String> hashes = new ArrayList<>();
+            for (int i = 0; i < count; i++) hashes.add(input(in));
             observeCancel(in);
             Path jar = Path.of("driver.jar").toAbsolutePath();
             verifyJar(jar, sha);
-            try (var loader = new DriverLoader(jar)) {
+            List<Path> artifacts = new ArrayList<>();
+            artifacts.add(jar);
+            for (int i = 0; i < count; i++) {
+                Path library = Path.of("library-" + i + ".jar").toAbsolutePath();
+                verifyJar(library, hashes.get(i));
+                artifacts.add(library);
+            }
+            try (var loader = new DriverLoader(artifacts)) {
+                if (!loader.declaresDriver(className)) throw new SQLException("Driver class is not in primary JAR", "RB004");
                 Thread.currentThread().setContextClassLoader(loader);
-                Class<? extends Driver> type = Class.forName(className, true, loader).asSubclass(Driver.class);
+                Class<? extends Driver> type = Class.forName(className, false, loader).asSubclass(Driver.class);
+                if (type.getClassLoader() != loader) throw new SQLException("Driver class ownership", "RB004");
                 Driver driver = type.getConstructor().newInstance();
                 var properties = new Properties();
                 properties.setProperty("user", user);

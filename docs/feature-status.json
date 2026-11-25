@@ -1,5 +1,5 @@
 {
-  "version": "0.47.0",
+  "version": "0.48.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 61,
-    "partial": 108,
-    "not-implemented": 31,
+    "implemented": 63,
+    "partial": 109,
+    "not-implemented": 29,
     "host-provided": 13,
-    "unverified": 1,
+    "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 59.3,
+    "percent": 60.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-064",
-    "IDEA-104",
-    "DG-004"
+    "IDEA-050",
+    "IDEA-082",
+    "DG-005"
   ],
   "expandedFeatures": [
-    "IDEA-064",
-    "IDEA-104",
-    "DG-004"
+    "IDEA-050",
+    "IDEA-082",
+    "DG-005"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1585,23 +1585,27 @@
       "category": "JVM 언어·프로젝트",
       "feature": "어노테이션 프로세서·Lombok 생성 코드",
       "priority": "P0",
-      "status": "unverified",
-      "label": "지원 미확인",
-      "delivery": "owned-client-and-jdt",
-      "scope": "JDT·빌드 import가 생성 코드를 처리할 수 있으나 별도 검증이 없다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "독립 JDT에서 검증한 Lombok 에이전트와 Maven·Gradle 프로젝트의 어노테이션 처리 계약을 연결한다. 생성된 메서드와 타입의 완성, 소스 위치와 증분 재생성을 확인한다.",
       "remaining": [
-        "Lombok/프로세서 설정·생성 멤버·소스 이동의 실전 검증이 필요하다."
+        "다른 Lombok 버전, 사용자 정의 프로세서와 추가 빌드 도구 지원을 넓힌다."
       ],
       "verification": {
-        "state": "source-audit-unverified-processor-behavior",
+        "state": "v0.48-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 새 작업 트리는 관찰된 JDT 설정을 표시한다. 어노테이션 프로세서·Lombok 생성 멤버/소스 이동은 새 검증 대상이 아니므로 기존 미검증 판정과 남은 범위를 그대로 유지한다.",
-        "publicEvidence": [],
+        "testedScope": "두 실제 Spring 작업 공간에서 Maven과 Gradle에 Lombok·MapStruct를 적용했다. 생성된 심볼의 완성·정의, 잘못된 getter 진단과 올바른 getter로 바꾼 뒤 다시 생성한 결과를 확인했다.",
+        "publicEvidence": [
+          "src/java/annotation-processing.js",
+          "src/java/runtime.js",
+          "test/java-annotation-processing-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -2020,8 +2024,8 @@
       "verification": {
         "state": "v0.47-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.47.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2543,25 +2547,26 @@
       "category": "디버깅",
       "feature": "Java Stream 값 변환 시각화",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Java Stream 변환 단계·값 전용 시각화가 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "선택한 리터럴 입력의 순차 Java Stream을 독립 JDK에서 실행하고 filter·map·flatMap·limit 단계의 값과 원본 범위를 표시한다.",
       "remaining": [
-        "파이프라인 단계 추적·중간값·lazy 평가 UI가 필요하다."
+        "기존 JVM의 정지 프레임, 일반 입력과 참조, 병렬 스트림과 추가 터미널 연산을 지원한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.48-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "두 실제 Spring 작업 공간의 선택한 식에서 단계별 값과 최종 값 20·21·40, 단락 평가, 원본 단계로 이동 및 바뀐 원본 거부를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/stream-trace.js",
+          "src/java/stream-trace-vscode.js",
+          "test/java-stream-trace-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3211,8 +3216,8 @@
       "verification": {
         "state": "v0.47-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.47.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3809,8 +3814,8 @@
       "verification": {
         "state": "v0.47-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.47.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3829,25 +3834,27 @@
       "category": "연결·드라이버",
       "feature": "드라이버 버전 교체·추가 라이브러리",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "사용자 드라이버 버전·추가 라이브러리 관리가 없다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "JDBC 프로필별로 드라이버 버전과 추가 JAR를 해시로 승인한다. 버전 전환과 롤백을 같은 프로필에서 하고 JVM은 승인한 JAR만 로드한다.",
       "remaining": [
-        "버전 교체·회귀·추가 라이브러리 수명주기가 필요하다."
+        "원격 중앙 설정과 드라이버 버전의 자동 업데이트는 별도 지원이 필요하다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.48-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "두 실제 DB에서 Connector/J 3.5.7과 3.5.10으로 동일 DB에 연결해 버전 전환과 복귀를 확인했다. 변경된 JAR, 중복 클래스, 암묵적으로 참조한 라이브러리와 전환 후의 이전 인증 세션을 거부했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "runtime/jdbc/DriverWorker.java",
+          "src/db/jdbc-profiles.js",
+          "src/db/jdbc-vscode.js",
+          "test/jdbc-versions-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6648,8 +6655,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "47e2868721cd26e935f3c460c5f7729d37c6fec919a49f3a1d7fd1ff5ab4e567",
-    "sourceManifestSha256": "7c021f21c70713ea3c6bb7ef11fe5cae84c4b94a3b4b38e012aa76a89a5b7df4",
+    "vsixSha256": "45ac8bb6e1715aa64c2e0e18266df3746625e81533acfeab91d37d183a21a3a7",
+    "sourceManifestSha256": "2fd76556b7913cd49132d81515e632bf6a788f8bc173fd49848fdadc80405514",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6663,28 +6670,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-064",
+      "id": "IDEA-050",
+      "before": "unverified",
+      "after": "implemented"
+    },
+    {
+      "id": "IDEA-082",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-104",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-004",
+      "id": "DG-005",
       "before": "not-implemented",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1343,
-    "pass": 1282,
+    "tests": 1350,
+    "pass": 1288,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 61,
+    "skipped": 62,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

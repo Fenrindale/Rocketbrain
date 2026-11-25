@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.47.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.48.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 61 |
-| 부분 구현 | 108 |
-| 미구현 | 31 |
+| 구현 | 63 |
+| 부분 구현 | 109 |
+| 미구현 | 29 |
 | VS Code 재사용 | 13 |
-| 지원 미확인 | 1 |
+| 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **59.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **60.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.47에서는 gRPC 네 가지 호출 방식, 사용자 지정 JDBC 드라이버, Spring Security 런타임 진단을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 126점에서 128점으로 바뀌었다.
+v0.48에서는 Maven·Gradle 어노테이션 처리, JDBC 드라이버 버전 관리, Java Stream 값 추적을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 128점에서 130.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -70,7 +70,7 @@ v0.47에서는 gRPC 네 가지 호출 방식, 사용자 지정 JDBC 드라이버
 | IDEA-047 | IntelliJ IDEA | Groovy·Spock·콘솔 | 미구현 |
 | IDEA-048 | IntelliJ IDEA | 외부 라이브러리 소스·바이트코드 디컴파일 | 부분 구현 |
 | IDEA-049 | IntelliJ IDEA | Scratch·JShell 실험 코드 | 구현 |
-| IDEA-050 | IntelliJ IDEA | 어노테이션 프로세서·Lombok 생성 코드 | 지원 미확인 |
+| IDEA-050 | IntelliJ IDEA | 어노테이션 프로세서·Lombok 생성 코드 | 구현 |
 | IDEA-051 | IntelliJ IDEA | Spring Initializr 프로젝트 생성 | 부분 구현 |
 | IDEA-052 | IntelliJ IDEA | 기존 프로젝트 starter 편집 | 부분 구현 |
 | IDEA-053 | IntelliJ IDEA | Bean·Autowiring 분석·빠른 수정 | 부분 구현 |
@@ -102,7 +102,7 @@ v0.47에서는 gRPC 네 가지 호출 방식, 사용자 지정 JDBC 드라이버
 | IDEA-079 | IntelliJ IDEA | Smart Step·라이브러리 필터·비동기 스택 | 부분 구현 |
 | IDEA-080 | IntelliJ IDEA | 표현식 평가·Watch·변수 수정·프레임 | 부분 구현 |
 | IDEA-081 | IntelliJ IDEA | HotSwap·변경 클래스 재적용 | 구현 |
-| IDEA-082 | IntelliJ IDEA | Java Stream 값 변환 시각화 | 미구현 |
+| IDEA-082 | IntelliJ IDEA | Java Stream 값 변환 시각화 | 부분 구현 |
 | IDEA-083 | IntelliJ IDEA | Kotlin 코루틴 상태·생성 스택 | 미구현 |
 | IDEA-084 | IntelliJ IDEA | JUnit·TestNG 발견·실행·디버그 | 부분 구현 |
 | IDEA-085 | IntelliJ IDEA | 테스트 결과·실패 diff·재실행 | 부분 구현 |
@@ -145,7 +145,7 @@ v0.47에서는 gRPC 네 가지 호출 방식, 사용자 지정 JDBC 드라이버
 | DG-002 | DataGrip | MariaDB 전용 지원 | 부분 구현 |
 | DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 미구현 |
 | DG-004 | DataGrip | 사용자 JDBC JAR·드라이버 클래스 추가 | 구현 |
-| DG-005 | DataGrip | 드라이버 버전 교체·추가 라이브러리 | 미구현 |
+| DG-005 | DataGrip | 드라이버 버전 교체·추가 라이브러리 | 구현 |
 | DG-006 | DataGrip | 사용자·비밀번호·무인증 모드 | 부분 구현 |
 | DG-007 | DataGrip | 비밀정보 저장·저장하지 않기 | 부분 구현 |
 | DG-008 | DataGrip | TLS CA·호스트 검증 | 부분 구현 |

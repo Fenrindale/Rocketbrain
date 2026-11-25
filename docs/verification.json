@@ -1,25 +1,25 @@
 {
-  "version": "0.47.0",
-  "verifiedAt": "2026-11-25T09:26:15.478Z",
+  "version": "0.48.0",
+  "verifiedAt": "2026-11-25T09:39:21.879Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.47.0.vsix",
-    "bytes": 2173109,
-    "sha256": "47e2868721cd26e935f3c460c5f7729d37c6fec919a49f3a1d7fd1ff5ab4e567",
+    "name": "rocketbrain-0.48.0.vsix",
+    "bytes": 2182951,
+    "sha256": "45ac8bb6e1715aa64c2e0e18266df3746625e81533acfeab91d37d183a21a3a7",
     "files": 16
   },
   "source": {
-    "frozenPublicInputs": 1323,
-    "inputVectorSha256": "7c021f21c70713ea3c6bb7ef11fe5cae84c4b94a3b4b38e012aa76a89a5b7df4",
+    "frozenPublicInputs": 1341,
+    "inputVectorSha256": "2fd76556b7913cd49132d81515e632bf6a788f8bc173fd49848fdadc80405514",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1343,
-    "pass": 1282,
+    "tests": 1350,
+    "pass": 1288,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 61,
+    "skipped": 62,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,15 +32,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "grpc",
+          "group": "annotation",
           "checks": 1
         },
         {
-          "group": "jdbc",
+          "group": "jdbcVersions",
           "checks": 1
         },
         {
-          "group": "security",
+          "group": "streamTrace",
           "checks": 1
         }
       ],
@@ -58,15 +58,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "grpc",
+          "group": "annotation",
           "checks": 1
         },
         {
-          "group": "jdbc",
+          "group": "jdbcVersions",
           "checks": 1
         },
         {
-          "group": "security",
+          "group": "streamTrace",
           "checks": 1
         }
       ],
@@ -77,74 +77,74 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-064": {
-      "scope": "두 실제 Spring Security 앱에서 HTTP 401·403·200, 역할별 Actuator 접근, 실제 JDBC 읽기, 두 필터 체인 빈과 세 감사 유형, 연결 종료를 확인했다.",
+    "IDEA-050": {
+      "scope": "두 실제 Spring 작업 공간에서 Maven과 Gradle에 Lombok·MapStruct를 적용했다. 생성된 심볼의 완성·정의, 잘못된 getter 진단과 올바른 getter로 바꾼 뒤 다시 생성한 결과를 확인했다.",
       "runtimeGroups": [
-        "security"
+        "annotation"
       ]
     },
-    "IDEA-104": {
-      "scope": "두 설치형 환경에서 인증된 루프백 gRPC 서버에 네 가지 호출을 보내고 정밀한 int64와 작업 공간 밖 정의 거부를 확인했다. GraphQL·WebSocket 이전 검증도 유지한다.",
+    "IDEA-082": {
+      "scope": "두 실제 Spring 작업 공간의 선택한 식에서 단계별 값과 최종 값 20·21·40, 단락 평가, 원본 단계로 이동 및 바뀐 원본 거부를 확인했다.",
       "runtimeGroups": [
-        "grpc"
+        "streamTrace"
       ]
     },
-    "DG-004": {
-      "scope": "Oracle Connector/J 9.7.0과 MariaDB Connector/J 3.5.10을 실제 서버에서 사용했다. 정밀 데이터, 읽기 취소와 변경된 JAR 및 쓰기 거부를 각각 확인했다.",
+    "DG-005": {
+      "scope": "두 실제 DB에서 Connector/J 3.5.7과 3.5.10으로 동일 DB에 연결해 버전 전환과 복귀를 확인했다. 변경된 JAR, 중복 클래스, 암묵적으로 참조한 라이브러리와 전환 후의 이전 인증 세션을 거부했다.",
       "runtimeGroups": [
-        "jdbc"
+        "jdbcVersions"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 257,
+    "sourceCorrespondences": 260,
     "sourceConfidence": "inferred",
     "archiveEntries": 16,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 61,
-      "partial": 108,
-      "not-implemented": 31,
+      "implemented": 63,
+      "partial": 109,
+      "not-implemented": 29,
       "host-provided": 13,
-      "unverified": 1,
+      "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 128,
-    "previousWeightedPoints": 126,
+    "weightedPoints": 130.5,
+    "previousWeightedPoints": 128,
     "targetWeightedPoints": 216,
-    "referencePercent": 59.3,
+    "referencePercent": 60.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-064",
+        "id": "IDEA-050",
+        "before": "unverified",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-082",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-104",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-004",
+        "id": "DG-005",
         "before": "not-implemented",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "gRPC는 작업 공간의 자체 포함 Protocol Buffer 정의를 사용한다. 서버 리플렉션과 GraphQL 구독은 추가 범위다.",
-    "지정한 JDBC JAR는 사용자 계정 권한의 독립 JVM에서 실행된다. 프로필이 승인한 단일 JAR와 클래스만 연결에 사용한다.",
-    "Spring Security 진단은 앱이 공개한 Actuator 빈과 감사 기록을 조회한다. 매처 순서와 전체 권한 목록은 미확인이다.",
+    "Lombok 에이전트는 검증한 버전과 SHA-256을 사용한다. Gradle 프로세서 동기화는 설정에서 켠다.",
+    "JDBC 추가 라이브러리는 프로필에서 명시적으로 승인한 파일을 사용한다. 각 파일의 해시를 실행 전에 확인한다.",
+    "Stream 추적은 리터럴 입력과 지정한 순차 변환·toList()를 대상으로 한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Maven·Gradle 어노테이션 처리, Lombok과 MapStruct 생성 심볼",
-    "사용자 JDBC 드라이버 버전 전환과 추가 라이브러리 격리",
-    "실행한 Java Stream의 단계별 값 추적"
+    "PostgreSQL 카탈로그와 전용 SQL 실행",
+    "WebDAV 파일 비교·충돌 검토와 조건부 배포",
+    "혼합 Java·Kotlin 프로젝트와 IDE의 로컬 MCP 도구"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

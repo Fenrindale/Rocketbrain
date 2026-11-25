@@ -40,6 +40,7 @@ async function fileContent(uri) {
 function registerJavaSourceAnalysis(context,vscode,{java}) {
   const owned = (context.storageUri || context.globalStorageUri).fsPath;
   const storagePath = path.join(owned,'java-source-analysis');
+  const streamTrace = require('./stream-trace-vscode').registerStreamTrace(vscode,java);
   const snapshotByReport = new WeakMap(), structuralReports = new WeakMap(), active = new Set(), panels = new Set();
   let disposed = false, stopping;
 
@@ -448,10 +449,12 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     inspectMemberHierarchy:options => managed(() => hierarchy.inspect(options)),
     prepareMemberHierarchyMove:(report,options) => managed(() => hierarchy.prepare(report,options)),
     prepareConversion:options => managed(() => conversion.prepare(options)),
+    streamTrace,
     reveal,showDiagram,exportMermaid,
     dispose() {
       if (stopping) return stopping;
       disposed = true;
+      streamTrace.dispose();
       for (const entry of [...panels,...commands]) entry.dispose();
       stopping = Promise.allSettled(active).then(() => {});
       return stopping;
