@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('node:path');
 const { openDuckDb } = require('./duckdb-cli');
 
 const keywords = ['ASOF JOIN', 'EXCLUDE', 'FROM', 'GROUP BY ALL', 'LIMIT', 'ORDER BY ALL', 'PIVOT', 'QUALIFY',
@@ -31,9 +32,10 @@ small{display:block;color:var(--vscode-descriptionForeground);font-weight:normal
 
 function registerDuckDb(context, vscode) {
   let selected, generation = 0, panel;
+  let extensionChange = false;
   const operations = new Set();
-  const command = (id, action) => context.subscriptions.push(vscode.commands.registerCommand('rocketbrain.duckdb.' + id, async () => {
-    try { return await action(); }
+  const command = (id, action) => context.subscriptions.push(vscode.commands.registerCommand('rocketbrain.duckdb.' + id, async (...args) => {
+    try { return await action(...args); }
     catch (error) {
       if (error.code !== 'ROCKETBRAIN_DUCKDB_CANCELLED') await vscode.window.showErrorMessage('Rocketbrain DuckDB: ' + error.message);
     }
@@ -65,7 +67,9 @@ function registerDuckDb(context, vscode) {
     const expected = generation;
     const op = abortable(options.signal);
     try {
-      const result = await openDuckDb(client, database, { signal: op.controller.signal });
+      const extensionDirectory = context.storageUri?.scheme === 'file' ?
+        path.join(context.storageUri.fsPath, 'duckdb-extensions') : undefined;
+      const result = await openDuckDb(client, database, { signal: op.controller.signal, extensionDirectory });
       trusted();
       if (generation !== expected || op.controller.signal.aborted) throw Error('The selected DuckDB file changed. Choose it again.');
       selected = result;
@@ -78,18 +82,27 @@ function registerDuckDb(context, vscode) {
     trusted();
     const database = selected;
     if (!database) throw Error('Open a DuckDB database file first.');
+    if (extensionChange || method === 'manageExtension' && operations.size) {
+      throw Error('Wait for the active DuckDB operation to finish.');
+    }
     if (operations.size >= 2) throw Error('Wait for the active DuckDB operations to finish.');
     const op = abortable(options.signal);
+    if (method === 'manageExtension') extensionChange = true;
     try {
       const result = await database[method](...args, { ...options, signal: op.controller.signal });
       if (database !== selected || !vscode.workspace.isTrusted) throw Error('The selected DuckDB file changed. Run the operation again.');
       return result;
-    } finally { op.release(); }
+    } finally {
+      if (method === 'manageExtension') extensionChange = false;
+      op.release();
+    }
   }
 
   const api = { open, close, source: () => selected && vscode.workspace.isTrusted ? { ...selected.source } : null,
     catalog: opts => use('catalog', [], opts), describe: (object, opts) => use('describe', [object], opts),
-    functions: (search, opts) => use('functions', [search], opts), query: (sql, opts) => use('query', [sql], opts) };
+    functions: (search, opts) => use('functions', [search], opts), query: (sql, opts) => use('query', [sql], opts),
+    previewFile: (file, opts) => use('previewFile', [file], opts), extensions: opts => use('extensions', [], opts),
+    manageExtension: (name, action, opts) => use('manageExtension', [name, action], opts) };
 
   function progress(title, action) {
     return vscode.window.withProgress({ title, location: vscode.ProgressLocation.Notification, cancellable: true },
@@ -138,6 +151,46 @@ function registerDuckDb(context, vscode) {
     show('DuckDB Query Results', result.rows.length + ' rows' + (result.truncated ? ' · row limit reached' : '') +
       (result.clippedCells ? ' · ' + result.clippedCells + ' values shortened' : ''), result.columns, result.rows);
     return result;
+  });
+  command('previewFile', async (chosen) => {
+    trusted();
+    if (!api.source()) throw Error('Open a DuckDB database file first.');
+    const [file] = chosen ? [chosen] : await vscode.window.showOpenDialog({ title: 'Preview One Local DuckDB Data File',
+      openLabel: 'Preview read-only', filters: { 'CSV and Parquet': ['csv', 'parquet'] } }) || [];
+    if (file?.scheme !== 'file') return;
+    const result = await progress('Reading DuckDB Data File', options => api.previewFile(file.fsPath, options));
+    const status = result.rows.length + ' rows' + (result.truncated ? ' · sample limit reached' : '') +
+      (result.clippedCells ? ' · ' + result.clippedCells + ' values shortened' : '');
+    show(result.name, status, result.columns, result.rows);
+    return result;
+  });
+  command('extensions', async () => {
+    const observed = await progress('Reading DuckDB Extension Inventory', api.extensions);
+    show('DuckDB Extensions', observed.length + ' extension entries', ['Name', 'Installed', 'Loaded', 'Version', 'Mode', 'Description'],
+      observed.map(row => [row.name, row.installed, row.loaded, row.version, row.mode, row.description]));
+    return observed;
+  });
+  command('manageExtension', async () => {
+    const observed = await progress('Reading DuckDB Extension Inventory', api.extensions);
+    const choice = await vscode.window.showQuickPick(observed.filter(item => item.managed).map(item => ({
+      label: item.name, description: item.loaded ? 'Enabled' : item.installed ? 'Installed' : 'Available', item
+    })), { title: 'Manage Workspace DuckDB Extension' });
+    if (!choice) return;
+    const { item } = choice;
+    const actions = item.loaded ? ['disable', 'update'] : item.installed ? ['enable', 'update', 'remove'] : ['install'];
+    const selectedAction = await vscode.window.showQuickPick(actions.map(action => ({ label: action[0].toUpperCase() + action.slice(1), action })),
+      { title: 'Manage DuckDB ' + item.name });
+    if (!selectedAction) return;
+    const { action, label } = selectedAction;
+    if (['install', 'update', 'remove'].includes(action)) {
+      const detail = action === 'remove' ? 'Remove the verified extension file from this workspace.' :
+        'Download an official signed extension for the selected DuckDB version and platform. It stays in this workspace.';
+      if (await vscode.window.showInformationMessage(label + ' DuckDB ' + item.name + '?', { modal: true, detail }, label) !== label) return;
+    }
+    const changed = await progress('Applying DuckDB Extension Action', options => api.manageExtension(item.name, action, options));
+    await vscode.window.showInformationMessage('DuckDB ' + item.name + ' · ' +
+      (changed.loaded ? 'enabled' : changed.installed ? 'installed' : 'removed'));
+    return changed;
   });
   command('browse', async () => {
     const { objects, truncated } = await progress('Reading DuckDB Catalog', api.catalog);

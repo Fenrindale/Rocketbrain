@@ -273,7 +273,8 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 
 **Track SQL Console as Draft**로 보관을 시작하면 편집 중인 SQL과 선택 영역이 로컬에 갱신됩니다. 닫거나 재시작한 뒤 **Restore SQL Draft**에서 오프라인으로 이어서 편집합니다. [SQL 콘솔 초안 복원](docs/sql-draft-recovery.md)
 
-- **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. 외부 파일 접근과 쓰기는 차단하며 결과는 표본으로 표시합니다.
+- **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. **Preview Local CSV or Parquet with DuckDB**는 직접 선택한 파일 하나의 열 타입과 행 표본을 별도 읽기 작업으로 표시합니다. 일반 쿼리의 외부 파일 접근과 쓰기는 차단합니다. **Inspect DuckDB Extensions**는 현재 바이너리의 설치·로드 상태와 버전을 보여 줍니다.
+- **Manage Workspace DuckDB Extension**에서 공식 `tpch`·`tpcds` 확장의 설치·업데이트·사용·제거를 관리합니다. 다운받은 파일은 DuckDB로 서명과 실행 호환성을 확인한 뒤 워크스페이스 전용 저장소에 둡니다. 활성화한 확장은 현재 DB 접속에 적용되며, 사용자 SQL의 외부 파일 접근 차단은 유지합니다.
 - **Add JDBC Driver**에서 별도 JDK와 공급사 JAR를 사용합니다. 드라이버 클래스와 SHA-256을 검토해 승인하고, **Manage JDBC Profiles**로 연결한 뒤 카탈로그와 읽기 쿼리를 사용할 수 있습니다. [사용자 지정 JDBC 드라이버 문서](docs/jdbc-drivers.md)
 - 연결 프로필에는 TCP, Unix 도메인 소켓, Windows 명명된 파이프 중 실행 환경과 맞는 전송을 선택합니다. 공유 프로필에는 비밀번호와 로컬 경로를 담지 않으며, 가져온 로컬 연결의 주소는 해당 컴퓨터에서 입력합니다.
 - **Save Database Metadata for Offline Use**로 카탈로그의 테이블·뷰와 열을 작업 공간에 저장합니다. 연결을 끊고 **Open Cached Database Metadata**를 선택하면 캡처 시각과 함께 SQL 완성에 사용합니다. 같은 연결로 돌아오면 현재 구조를 확인하고 바뀐 캡처를 무효화합니다.
