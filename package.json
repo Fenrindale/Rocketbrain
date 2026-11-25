@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.76.0",
+  "version": "0.77.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -731,6 +731,7 @@
       { "command": "rocketbrain.editor.quickDocumentation", "title": "Quick Code Documentation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
       { "command": "rocketbrain.editor.callSignatures", "title": "Show Call Signatures", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
       { "command": "rocketbrain.editor.configureCodeHints", "title": "Configure Code Hints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
+      { "command": "rocketbrain.java.configureNullChecks", "title": "Configure Java Null Checks", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && workspaceFolderCount > 0" },
       { "command": "rocketbrain.editor.inspectSemanticToken", "title": "Inspect Semantic Token", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
       {
         "command": "rocketbrain.java.pullUpMembers",
@@ -2099,6 +2100,19 @@
           "default": false,
           "scope": "machine",
           "description": "Enable JDT editor annotation processing for Gradle projects in trusted workspaces. Gradle build tasks use the project's build configuration."
+        },
+        "rocketbrain.java.nullChecks": {
+          "type": "object",
+          "scope": "window",
+          "default": { "profile": "disabled" },
+          "additionalProperties": false,
+          "properties": {
+            "profile": { "type": "string", "enum": ["disabled", "jspecify", "eclipse", "spring", "jetbrains", "custom"], "default": "disabled" },
+            "nullable": { "type": "string", "description": "Fully qualified nullable annotation for the custom profile." },
+            "nonnull": { "type": "string", "description": "Fully qualified non-null annotation for the custom profile." },
+            "nonnullByDefault": { "type": "string", "description": "Optional fully qualified default non-null annotation for the custom profile." }
+          },
+          "description": "Enable Eclipse JDT Java null diagnostics when the chosen annotations are present in the imported project."
         },
         "rocketbrain.java.annotationProcessing.lombokJar": {
           "type": "string",

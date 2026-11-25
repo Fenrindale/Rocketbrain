@@ -217,6 +217,8 @@ Java 프로젝트 가져오기와 빌드는 프로젝트 코드를 실행할 수
 
 Maven에서 `maven-compiler-plugin`의 `annotationProcessorPaths`에 프로세서를 선언하고, 편집 중에도 처리하려면 `m2e.apt.activation`을 `jdt_apt`로 설정합니다. Gradle에서는 `annotationProcessor` 의존성을 선언하고 사용자 설정 `rocketbrain.java.annotationProcessing.gradleEnabled`를 켜면 가져올 때 JDT가 해당 프로세서 구성을 동기화합니다. 이미 프로젝트가 관리하는 Eclipse APT 설정은 프로젝트 파일에서 관리합니다.
 
+신뢰한 작업 공간에서 **Rocketbrain: Configure Java Null Checks**를 실행해 프로젝트에 있는 JSpecify, Eclipse, Spring, JetBrains 또는 사용자 정의 애너테이션을 선택할 수 있습니다. 설정은 `rocketbrain.java.nullChecks`에 저장되고, 가져온 Java 프로젝트에서 해당 애너테이션을 찾으면 JDT가 Problems 패널에 null 진단을 표시합니다. JDT는 선택한 검사 설정을 Eclipse 프로젝트 환경 설정에도 반영할 수 있습니다. 닫히지 않은 리소스는 JDT의 컴파일러 진단으로 확인할 수 있습니다. Kotlin Gradle 프로젝트의 nullable 호출은 독립 Kotlin 언어 서버가 진단합니다.
+
 Lombok이 생성하는 멤버를 편집기에서 사용하려면 사용자 설정 `rocketbrain.java.annotationProcessing.lombokJar`에 [공식 Lombok 1.18.48 JAR](https://repo.maven.apache.org/maven2/org/projectlombok/lombok/1.18.48/lombok-1.18.48.jar)의 절대 경로를 지정합니다. 신뢰한 작업 공간에서 확장이 SHA-256을 확인하고 별도 JDT 저장소에 준비합니다. 빌드에서도 Lombok 버전과 프로세서 의존성을 선언합니다. Lombok getter를 MapStruct에서 참조하는 예제는 `lombok-mapstruct-binding`을 함께 사용합니다.
 
 ### TestNG 호출 선택과 재시도
@@ -261,6 +263,8 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 
 SQL 편집기에서 **Ctrl+K Ctrl+Shift+J**(macOS **Cmd+K Cmd+Shift+J**) 또는 **Focus Query Results**로 결과 탭에 포커스를 옮깁니다. 좌우 방향키와 Home/End로 탭을 찾고 Enter 또는 Space로 선택합니다. 결과에서 같은 단축키 또는 **Focus Query Editor**로 원래 열린 SQL 편집기에 돌아갑니다. Ctrl+Enter(macOS Cmd+Enter)는 SQL, JPQL, 연결된 DuckDB·JDBC의 언어별 실행 명령을 사용합니다.
 
+**Sort and Filter**에서 JSON 열의 경로와 값 종류를 지정해 서버에서 정렬합니다. JSON 정수는 서버가 관찰한 20자리 이내 정수, 텍스트는 256바이트 이내 UTF-8 바이트 순서, 불리언은 false/true 순서입니다. 누락·JSON NULL·타입 불일치·길이 초과는 SQL NULL 그룹으로 정렬합니다. InnoDB 읽기 스냅샷에서도 NULL 위치, 서버에서 확인한 텍스트 collation, 기본 키 동률 해소를 적용해 전후 페이지와 연속 스크롤을 탐색합니다.
+
 MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 읽기 전용으로 잠그거나 보호할 `schema.table`을 줄마다 지정합니다. 보호 설정을 바꾸려면 해당 프로필의 연결을 끊고 다시 연결합니다. 보호된 테이블의 결과 그리드는 조회용으로 열립니다. 테이블 보호가 설정된 프로필에서 테이블과 뷰를 조회하는 SQL은 읽기 전용 콘솔에서 실행합니다. 쓰기는 대상 InnoDB 테이블 하나의 트리거와 연쇄 변경 위험을 확인한 경우에 허용됩니다. 저장 함수의 실행 권한과 외부 클라이언트의 쓰기에는 서버 계정과 트랜잭션 권한이 적용됩니다.
 
 보호 설정이 적용된 쓰기는 같은 InnoDB 트랜잭션에서 대상 테이블과 보호 테이블로 연쇄 변경을 전달할 수 있는 의존성의 메타데이터 잠금을 유지합니다. 자동 커밋 모드에서 쓰기 검증을 위해 자동으로 시작한 트랜잭션은 쓰기마다 끝납니다. 사용자가 시작한 트랜잭션과 수동 커밋 모드에서는 **Commit** 또는 **Roll Back**까지 잠금이 유지됩니다.
@@ -294,6 +298,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 활성 MySQL/MariaDB 연결의 SQL 편집기에서 두 실테이블을 지정한 `JOIN`의 대상이나 비어 있는 `ON`에 커서를 놓습니다. **Complete JOIN using …** 빠른 수정은 실제 FK의 모든 열을 순서대로 삽입합니다. 선택 뒤 소스나 관계가 바뀌면 다시 선택합니다.
 - 활성 스키마의 SELECT에서 해석되지 않는 테이블명이나 대상이 분명한 누락 열에 커서를 놓습니다. **Design Unresolved Table** 또는 **Design Column**에서 확인된 이름으로 테이블 디자이너를 엽니다. 열을 추가할 때는 필요한 타입을 지정합니다. 실제 스키마는 SQL 검토와 적용을 거쳐서 변경합니다.
 - **Review SQL Script**는 독립된 `DELIMITER` 줄 사이에 있는 `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE TRIGGER`의 `BEGIN … END` 블록을 한 문장으로 검토합니다. 실행은 쓰기 콘솔에서 DDL의 암시적 커밋을 승인한 뒤 진행합니다. `DELIMITER ;`로 돌아오면 일반 문장에 바인딩 값을 사용할 수 있습니다. 저장 프로그램 본문의 동적 SQL, 세션 제어와 매개변수 바인딩은 지원 범위 밖입니다.
+- **Run SQL Script**에서 유휴 자동 커밋 콘솔에 하나의 `BEGIN … COMMIT` 또는 `BEGIN … ROLLBACK` 블록을 검토해 실행할 수 있습니다. 같은 스키마의 InnoDB 기본 테이블, 직접 행 변경, 단일 테이블 열 조회와 이름이 지정된 세이브포인트를 지원합니다. 쓰기 커밋은 별도 승인을 받습니다. 문장이 실패하거나 실행이 멈추면 확장이 시작한 트랜잭션의 롤백을 확인하고, 응답을 잃으면 결과를 미확정으로 표시합니다.
 - 읽기 전용 스크립트에서는 현재 스키마의 검증된 `CALL procedure(:input)`을 다른 조회와 함께 실행합니다. 보이는 프로시저의 본문과 IN 매개변수를 다시 확인합니다. 지원 범위는 같은 스키마의 기본 테이블을 읽는 단순 `SELECT`입니다. 스크립트 결과에서 각 결과 집합을 다시 열 수 있습니다.
 - `DELIMITER`가 있는 SQL 파일에서 **Run Selected SQL or Current Statement**를 실행하면 서버의 SQL 모드로 커서 아래 문장이나 선택한 전체 복합 문장의 범위를 구합니다. 복합 DDL 검토에는 그 문장 하나가 표시됩니다.
 - SQL 편집기는 단일 테이블 INSERT 열 목록, UPDATE의 SET, UPDATE·DELETE의 WHERE에서 관찰한 열 이름과 서버 타입을 제안합니다. 스키마를 명시하면 그 테이블을 확인합니다. 자동 증가·생성 열은 쓰기 제안에서 제외합니다.

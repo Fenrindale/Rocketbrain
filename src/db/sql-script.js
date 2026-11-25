@@ -3,6 +3,7 @@
 const crypto=require('node:crypto');
 const {validateQuery,tokenize}=require('./sql-policy');
 const {delimiterDirective,compoundCreation}=require('./sql-format-script');
+const {transactionControl,reviewTransactionBlock}=require('./sql-script-transaction');
 const LIMITS={sqlBytes:128*1024,statements:100,parameters:2000,parameterNames:1000,parameterBytes:1024*1024,parameterValueBytes:128*1024,reviewLifetimeMs:120000,reviews:16,resultBytes:4*1024*1024,totalTimeoutMs:120000};
 const fail=(code,message,extra={})=>Object.assign(new Error(message),{code,...extra});
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
@@ -70,7 +71,7 @@ function scriptCall(sql, sqlMode) {
 }
 
 /** A client script splitter, not a complete SQL parser. Every part is also policy checked. */
-function analyzeScript(sql,{sqlMode,readOnly=true,allowCalls=false}={}){
+function analyzeScript(sql,{sqlMode,readOnly=true,allowCalls=false,allowTransactions=false}={}){
   const modes=normalizeMode(sqlMode),backslash=!modes.includes('NO_BACKSLASH_ESCAPES'),ansi=modes.includes('ANSI_QUOTES');
   if(typeof sql!=='string'||!sql.trim()||sql.includes('\0')||Buffer.byteLength(sql)>LIMITS.sqlBytes)throw fail('ROCKETBRAIN_SCRIPT_INPUT','Enter a script of at most128KiB without NUL.');
   const statements=[],parameters=[];let start=0,hasCode=false,quote='',quoteStart=0,lineComment=false,blockComment=false,blockStart=0;
@@ -81,7 +82,8 @@ function analyzeScript(sql,{sqlMode,readOnly=true,allowCalls=false}={}){
       const source=sql.slice(start,end);let policySql=source;
       for(const parameter of parameters.filter(p=>p.start>=start&&p.end<=end).reverse())policySql=policySql.slice(0,parameter.start-start)+'?'+policySql.slice(parameter.end-start);
       const policy=delimiter === ';'
-        ? (allowCalls && scriptCall(policySql,modes)) || validateQuery(policySql,{readOnly,sqlMode:modes})
+        ? (allowTransactions && transactionControl(policySql,modes)) ||
+          (allowCalls && scriptCall(policySql,modes)) || validateQuery(policySql,{readOnly,sqlMode:modes})
         : programPolicy(policySql,modes,readOnly);
       statements.push({...policy,index:statements.length,start,end,sql:source});
     }
@@ -142,7 +144,9 @@ function analyzeScript(sql,{sqlMode,readOnly=true,allowCalls=false}={}){
   const parameterStyle=styles.values().next().value||'none',definitions=new Map();let index=0;
   for(const parameter of parameters){parameter.key=parameterStyle==='named'?parameter.name:String(++index);if(!definitions.has(parameter.key))definitions.set(parameter.key,parameterStyle==='named'?{key:parameter.key,kind:'named',name:parameter.name,occurrences:0}:{key:parameter.key,kind:'positional',index:index-1,occurrences:0});definitions.get(parameter.key).occurrences++;}
   if(definitions.size>LIMITS.parameterNames)throw fail('ROCKETBRAIN_SCRIPT_LIMIT','Scripts are limited to1000 distinct parameters.');
-  return {sql,sqlMode:modes,statements,parameters,parameterDefinitions:[...definitions.values()],parameterStyle,hasWrites:statements.some(s=>s.mayWrite),requiresImplicitCommitApproval:statements.some(s=>s.ddl),atomic:false};
+  const transactionBlock=reviewTransactionBlock(statements,readOnly);
+  return {sql,sqlMode:modes,statements,parameters,parameterDefinitions:[...definitions.values()],parameterStyle,
+    hasWrites:statements.some(s=>s.mayWrite),requiresImplicitCommitApproval:statements.some(s=>s.ddl),transactionBlock,atomic:false};
 }
 function plainData(value,label){
   if(!value||typeof value!=='object'||Array.isArray(value)||![Object.prototype,null].includes(Object.getPrototypeOf(value)))throw fail('ROCKETBRAIN_SCRIPT_PARAMETER',label+' must be a plain object.');
@@ -199,9 +203,10 @@ function publicScript(script){
   const unboundedDml = script.statements.flatMap(statement => statement.unboundedDml
     ? [{ index:statement.index, command:statement.unboundedDml.command, hasLimit:statement.unboundedDml.hasLimit }] : []);
   return {parameterStyle:script.parameterStyle,parameterDefinitions:structuredClone(script.parameterDefinitions),
-    statements:script.statements.map(({index,start,end,sql,first,mayWrite,ddl,program,call})=>({index,start,end,sql,first,mayWrite,ddl,
-      ...(program && {program}),...(call && {call})})),
+    statements:script.statements.map(({index,start,end,sql,first,mayWrite,ddl,program,call,transaction})=>({index,start,end,sql,first,mayWrite,ddl,
+      ...(program && {program}),...(call && {call}),...(transaction && {transaction})})),
     statementCount:script.statements.length,hasWrites:script.hasWrites,requiresImplicitCommitApproval:script.requiresImplicitCommitApproval,
+    ...(script.transactionBlock && {transactionBlock:script.transactionBlock}),
     unboundedDml,sqlMode:[...script.sqlMode],atomic:false,executedSql:false};
 }
 module.exports={analyzeScript,bindScript,typedParameter,publicScript,normalizeMode,digest,LIMITS,fail};

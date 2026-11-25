@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.76.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.77.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 100 |
-| 부분 구현 | 102 |
+| 구현 | 102 |
+| 부분 구현 | 100 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **75.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **75.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.76에서는 Java·Kotlin 편집기에 제공되는 실제 힌트와 의미 정보를 설정한다. SQL 편집기와 결과 탭을 키보드로 오가고 조건과 실제 대상에 맞춘 DML 사용처를 확인한다. Spring Boot 실행 구성에서 프로필과 설정 값의 공급 경로를 선택한다. 상태가 바뀐 항목은 2개이고 가중 점수는 162점에서 163점으로 바뀌었다.
+v0.77에서는 Java와 Kotlin의 실제 null 진단을 편집기에서 확인한다. 결과 그리드는 타입이 지정된 JSON 값으로 서버에서 정렬하고 앞뒤 페이지를 이동한다. SQL 배치는 검토된 트랜잭션과 세이브포인트를 실행한다. 상태가 바뀐 항목은 2개이고 가중 점수는 163점에서 164점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -56,7 +56,7 @@ v0.76에서는 Java·Kotlin 편집기에 제공되는 실제 힌트와 의미 �
 | IDEA-033 | IntelliJ IDEA | 리팩터링 미리보기·충돌·일괄 undo | 부분 구현 |
 | IDEA-034 | IntelliJ IDEA | 람다·익명 클래스·루프 변환 | 부분 구현 |
 | IDEA-035 | IntelliJ IDEA | 생성자·접근자·equals·delegate 생성 | 구현 |
-| IDEA-036 | IntelliJ IDEA | 실시간 Java/Kotlin 오류·null 검사 | 부분 구현 |
+| IDEA-036 | IntelliJ IDEA | 실시간 Java/Kotlin 오류·null 검사 | 구현 |
 | IDEA-037 | IntelliJ IDEA | Intention·Quick Fix·코드 정리 | 부분 구현 |
 | IDEA-038 | IntelliJ IDEA | 프로젝트 검사·스코프·심각도 프로필 | 구현 |
 | IDEA-039 | IntelliJ IDEA | 중복 코드 감지 | 구현 |
@@ -200,7 +200,7 @@ v0.76에서는 Java·Kotlin 편집기에 제공되는 실제 힌트와 의미 �
 | DG-057 | DataGrip | EXPLAIN ANALYZE 실제 실행 통계 | 구현 |
 | DG-058 | DataGrip | 편집기 안 결과·SQL notebook 대안 | 구현 |
 | DG-059 | DataGrip | 페이지 이동·row limit·지연 조회 | 구현 |
-| DG-060 | DataGrip | 서버 정렬·다중 column 정렬 | 부분 구현 |
+| DG-060 | DataGrip | 서버 정렬·다중 column 정렬 | 구현 |
 | DG-061 | DataGrip | WHERE·column filter·검색·저장 filter | 구현 |
 | DG-062 | DataGrip | 셀 직접 편집·저장·충돌 확인 | 구현 |
 | DG-063 | DataGrip | pending DML 미리보기·변경 되돌리기 | 구현 |

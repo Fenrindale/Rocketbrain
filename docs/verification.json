@@ -1,25 +1,25 @@
 {
-  "version": "0.76.0",
-  "verifiedAt": "2026-11-25T18:51:36.176Z",
+  "version": "0.77.0",
+  "verifiedAt": "2026-11-25T18:58:16.656Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.76.0.vsix",
-    "sha256": "ea304308aac2e5b935cd67a16153a7f926979ea9ad9ae55bf0a0bd2d4c4fdf86",
-    "bytes": 3516986,
+    "name": "rocketbrain-0.77.0.vsix",
+    "sha256": "5b56c8c439d2be475510313ff4762429ac0ee8602657af515501fdb25a25ce1a",
+    "bytes": 3524806,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1963,
-    "inputVectorSha256": "cbb2ec06d8f3ab5de4fd59ddb32f6aa8f46ce7a83c98975aaa23173645e0488e",
+    "frozenPublicInputs": 1975,
+    "inputVectorSha256": "348d9eb1a5bfde0182b8c1c072854e08cab40f3b12d6c8f990d3c65689630010",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1671,
-    "pass": 1561,
+    "tests": 1681,
+    "pass": 1569,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 110,
+    "skipped": 112,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,22 +29,18 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 4,
+      "groupCount": 3,
       "groups": [
         {
-          "group": "javaCodeHints",
+          "group": "nullChecks",
           "checks": 1
         },
         {
-          "group": "sqlNavigation",
+          "group": "gridJsonSort",
           "checks": 1
         },
         {
-          "group": "joinedDmlImpact",
-          "checks": 1
-        },
-        {
-          "group": "springLaunchSettings",
+          "group": "reviewedTransactions",
           "checks": 1
         }
       ],
@@ -59,22 +55,18 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 4,
+      "groupCount": 3,
       "groups": [
         {
-          "group": "javaCodeHints",
+          "group": "nullChecks",
           "checks": 1
         },
         {
-          "group": "sqlNavigation",
+          "group": "gridJsonSort",
           "checks": 1
         },
         {
-          "group": "joinedDmlImpact",
-          "checks": 1
-        },
-        {
-          "group": "springLaunchSettings",
+          "group": "reviewedTransactions",
           "checks": 1
         }
       ],
@@ -85,85 +77,69 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-012": {
-      "scope": "설치판에서 실제 Java와 Kotlin의 전체·리터럴·타입·끄기 설정과 토큰을 확인했다. 힌트 호출 중 원본 코드가 바뀌지 않았다.",
+    "IDEA-036": {
+      "scope": "가져온 실제 Spring Java 프로젝트에서 null 역참조, 반환 계약, 자원 누수 진단의 위치를 검증했다. 실제 Kotlin 프로젝트의 UNSAFE_CALL을 확인했다. 저장 전 수정과 실행 취소에서 두 진단이 갱신됐다.",
       "runtimeGroups": [
-        "javaCodeHints"
+        "nullChecks"
       ]
     },
-    "IDEA-073": {
-      "scope": "두 실제 JDBC 환경에서 세 경로로 같은 Boot 프로필을 실행했다. Spring이 보고한 공급 경로와 프로세스 종료를 확인했고, 실제 JVM 옵션 경로에서 DAP 중단점 이후 계속 실행했다.",
+    "DG-045": {
+      "scope": "두 실제 DB에서 쓰기 커밋 승인, 세이브포인트 복구, 읽기 전용 트랜잭션, 중복 키 실패 후 롤백, 변경된 테이블 거부와 원래 거래 보존을 확인했다.",
       "runtimeGroups": [
-        "springLaunchSettings"
+        "reviewedTransactions"
       ]
     },
-    "DG-038": {
-      "scope": "두 실제 DB와 Spring에서 JOIN 쓰기의 물리적 열과 별칭, 원래 소스 범위, INSERT SELECT의 입력 열을 확인했다. 설치판의 사용처 탐색은 SQL을 실행하지 않았다.",
+    "DG-060": {
+      "scope": "두 실제 DB에서 29행을 JSON 정수·불리언·텍스트 기준으로 각각 10페이지씩 양방향 탐색했다. 큰 정수, UTF-8 바이트와 후행 공백, NULL, 혼합 collation, 기본 키 동률 해소와 숨긴 커서 열을 확인했다.",
       "runtimeGroups": [
-        "joinedDmlImpact"
-      ]
-    },
-    "DG-096": {
-      "scope": "두 DB의 SQL 편집기에서 선택 실행과 커서 위치 문장을 실행하고 정확한 결과에서 원래 편집기·선택·커서를 복원했다. Chromium에서 탭 키보드와 접근성 상태도 확인했다.",
-      "runtimeGroups": [
-        "sqlNavigation"
+        "gridJsonSort"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 423,
+    "sourceCorrespondences": 427,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
-  "nativePayloadEquivalence": {
-    "files": 21,
-    "testedArchiveSha256": "bbe395cebb8791f904fc2daea256d1b188b556775ca64abcba7b63ee19fa611f",
-    "testedInputVectorSha256": "d88ceb15fdb575bcd5786bc362d75640d456869a25bb9b68c42061911eb70557",
-    "onlySourceChanges": [
-      "test/sql-joined-dml-impact-host.js",
-      "test/sql-navigation-host.js"
-    ]
-  },
   "progress": {
     "counts": {
-      "implemented": 100,
-      "partial": 102,
+      "implemented": 102,
+      "partial": 100,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 163,
-    "previousWeightedPoints": 162,
+    "weightedPoints": 164,
+    "previousWeightedPoints": 163,
     "targetWeightedPoints": 216,
-    "referencePercent": 75.5,
+    "referencePercent": 75.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-012",
+        "id": "IDEA-036",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-096",
+        "id": "DG-060",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java는 고정된 JDT, Kotlin은 고정된 Kotlin 언어 서버가 돌려주는 힌트와 의미 토큰을 사용한다.",
-    "원래 SQL 편집기가 열린 결과를 대상으로 한다. 쿼리 실행과 결과 이동은 별도 명령이다.",
-    "SQL 영향 분석은 관찰한 카탈로그와 지원하는 명시적 JOIN·INSERT SELECT 구조를 대상으로 한다.",
-    "Spring 실행 변수 값은 비밀 저장소에 보관한다. 일반 서비스 조합과 공유 구성은 다음 범위다.",
+    "Java 애너테이션은 가져온 프로젝트 클래스패스와 독립 JDT가 관찰하는 계약을 사용한다. Kotlin 진단은 현재 가져온 Kotlin 프로젝트와 언어 서버의 범위다.",
+    "그리드의 JSON 정수는 20자리, 문자열은 UTF-8 256바이트 한도를 사용한다. 누락·타입이 다른 값 등은 명시된 NULL 위치에 정렬한다.",
+    "트랜잭션 스크립트는 유휴 자동 커밋 콘솔과 확인한 같은 스키마의 InnoDB 기본 테이블을 사용한다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Java 사용자 정의 null 애너테이션과 Kotlin의 실제 nullable 진단",
-    "중첩 JSON 스칼라 정렬과 키셋 페이지 탐색",
-    "명시적 SQL 트랜잭션·세이브포인트·실패 롤백"
+    "디컴파일된 라이브러리 소스와 원본 연결·분리 및 디버깅",
+    "MariaDB Oracle/SQL 모드 패키지 공개 함수와 프로시저",
+    "여러 단계의 DB 역할 상속과 권한 출처"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

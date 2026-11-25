@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
+const {resolveNullChecks}=require('./null-checks');
 const crypto = require('node:crypto');
 const { resolveDebugBundle } = require('./debug-runtime');
 const { stageLombokAgent } = require('./annotation-processing');
@@ -79,6 +80,7 @@ function serverSettings(projectJdks = [], options = {}) {
     annotationProcessing: {enabled:options.gradleAnnotationProcessing === true} };
   if (options.gradleHome) gradle.home = absoluteDirectory(options.gradleHome, 'rocketbrain.java.gradleHome');
   if (options.gradleJavaHome) gradle.java = { home: absoluteDirectory(options.gradleJavaHome, 'rocketbrain.java.gradleJavaHome') };
+  const {profile,...nullAnalysis}=resolveNullChecks(options.nullChecks);
   return {
     java: {
       // Initial trusted import remains enabled; later build-file changes require
@@ -89,6 +91,7 @@ function serverSettings(projectJdks = [], options = {}) {
       completion: { enabled: true },
       signatureHelp: { enabled: true },
       inlayHints: { parameterNames: { enabled: 'all' }, variableTypes: { enabled: true }, parameterTypes: { enabled: true } },
+      compile: { nullAnalysis },
       referencesCodeLens: { enabled: true },
       implementationsCodeLens: { enabled: true },
       format: { enabled: true },

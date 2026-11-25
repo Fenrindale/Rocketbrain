@@ -1,5 +1,7 @@
 'use strict';
 
+const { jsonScalarSort } = require('./grid-json-sort');
+
 const QUOTE = String.fromCharCode(96);
 const quote = name => QUOTE + name.replaceAll(QUOTE, QUOTE + QUOTE) + QUOTE;
 const safeCollation = value => typeof value === 'string' && /^[A-Za-z0-9_]{1,64}$/.test(value);
@@ -19,17 +21,19 @@ function sortMode(column) {
   if (column.kind === 'text' || column.kind === 'datetime' || numeric.has(column.kind)) return 'plain';
 }
 
-function sortOptions(columns, collations) {
+function sortOptions(columns, collations, snapshot = false) {
   return {
     columns: columns.flatMap(column => {
       const mode = sortMode(column);
-      if (!mode) return [];
+      if (!mode || snapshot && mode === 'bytes') return [];
       const charset = column.kind === 'text' && safeCollation(column.charset) ? column.charset : undefined;
       const reference = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(column.name) ? column.name : quote(column.name);
       const expression = mode === 'json' ? 'JSON_TEXT(' + reference + ')' : mode === 'bytes' ? 'BYTE_PREFIX(' + reference + ')' : undefined;
-      return [{ name: column.name, ...(charset && { charset }), ...(expression && { expression }) }];
+      return [{ name: column.name, ...(charset && { charset }), ...(expression && !snapshot && { expression }),
+        ...(mode === 'json' && { jsonScalar: true }) }];
     }),
-    collations
+    collations,
+    ...(snapshot && { snapshot: true })
   };
 }
 
@@ -40,7 +44,7 @@ async function observeSortCollations(columns, read) {
   const sql = 'SELECT COLLATION_NAME,CHARACTER_SET_NAME FROM information_schema.COLLATIONS WHERE CHARACTER_SET_NAME IN (' +
     charsets.map(() => '?').join(',') + ') ORDER BY CHARACTER_SET_NAME,COLLATION_NAME LIMIT ' + (maxCollations + 1);
   let rows;
-  try { rows = await read(sql, charsets); }
+  try { rows = await read(sql, charsets, maxCollations + 1); }
   catch { return compatible; }
   // An incomplete observation is never treated as a complete list of compatible collations.
   if (!Array.isArray(rows) || rows.length > maxCollations) return compatible;
@@ -136,21 +140,26 @@ function compileExpression(expression, columns, anchor) {
 function compileGridSort(columns, rules, collations = {}) {
   if (!Array.isArray(rules) || rules.length > 8) throw error('Use at most 8 sort columns.');
   const catalog = new Map(columns.map(column => [column.name, column]));
-  const seen = new Set(), plain = new Set(), references = new Set(), order = [], fragments = [];
+  const seen = new Set(), plain = new Set(), references = new Set(), order = [], fragments = [], keys = [];
   for (const item of rules) {
     const column = catalog.get(item?.column);
     const mode = column && sortMode(column);
     if (!mode || seen.has(column.name) || !['asc', 'desc'].includes(item.direction) ||
-        Object.keys(item).some(key => !['column', 'direction', 'nulls', 'collation', 'expression'].includes(key)) ||
+        Object.keys(item).some(key => !['column', 'direction', 'nulls', 'collation', 'expression', 'jsonPath', 'jsonType'].includes(key)) ||
         (item.nulls !== undefined && !['first', 'last'].includes(item.nulls))) {
       throw error('Select distinct supported sort columns, a direction and an optional NULL placement.');
     }
     seen.add(column.name);
     references.add(column.name);
-    const expression = item.expression;
-    if (expression === undefined && mode !== 'plain') throw expressionError();
-    const key = expression === undefined
-      ? typed(column.kind, quote(column.name), column.charset, column.collation)
+    const { expression, jsonPath, jsonType } = item;
+    const json = jsonPath !== undefined || jsonType !== undefined;
+    if (json && (mode !== 'json' || expression !== undefined || item.collation !== undefined)) {
+      throw error('A typed JSON path applies to one JSON column without a second expression or collation.');
+    }
+    if (!json && expression === undefined && mode !== 'plain') throw expressionError();
+    const name = quote(column.name);
+    const key = json ? jsonScalarSort(name, jsonPath, jsonType) : expression === undefined
+      ? typed(column.kind, name, column.charset, column.collation)
       : compileExpression(expression, catalog, column.name);
     for (const name of key.references || []) references.add(name);
     const collation = item.collation;
@@ -159,23 +168,28 @@ function compileGridSort(columns, rules, collations = {}) {
     const sql = collation === undefined ? key.sql : '(' + key.sql + ' COLLATE ' + collation + ')';
     if (item.nulls !== undefined) fragments.push('(' + sql + ' IS NULL) ' + (item.nulls === 'first' ? 'DESC' : 'ASC'));
     fragments.push(sql + ' ' + item.direction.toUpperCase());
-    order.push({
+    const rule = {
       column: column.name,
       direction: item.direction,
       ...(item.nulls !== undefined && { nulls: item.nulls }),
       ...(collation !== undefined && { collation }),
-      ...(expression !== undefined && { expression: expression.trim() })
-    });
-    if (expression === undefined && collation === undefined) plain.add(column.name);
+      ...(expression !== undefined && { expression: expression.trim() }),
+      ...(json && { jsonPath, jsonType })
+    };
+    order.push(rule);
+    keys.push({ ...rule, sql, cursorKind: key.cursorKind });
+    if (!json && expression === undefined && collation === undefined) plain.add(column.name);
   }
   const sort = [...order];
   for (const column of columns) {
     if (!column.primaryKey || plain.has(column.name)) continue;
     references.add(column.name);
-    order.push({ column: column.name, direction: 'asc' });
-    fragments.push(quote(column.name) + ' ASC');
+    const rule = { column: column.name, direction: 'asc' }, sql = quote(column.name);
+    order.push(rule);
+    keys.push({ ...rule, sql });
+    fragments.push(sql + ' ASC');
   }
-  return { sort, order, fragments, references: [...references].map(name => catalog.get(name)) };
+  return { sort, order, fragments, keys, references: [...references].map(name => catalog.get(name)) };
 }
 
 module.exports = { compileGridSort, observeSortCollations, sortOptions };

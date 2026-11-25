@@ -1,5 +1,5 @@
 {
-  "version": "0.76.0",
+  "version": "0.77.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 100,
-    "partial": 102,
+    "implemented": 102,
+    "partial": 100,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 75.5,
+    "percent": 75.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-012",
-    "IDEA-073",
-    "DG-038",
-    "DG-096"
+    "IDEA-036",
+    "DG-045",
+    "DG-060"
   ],
   "expandedFeatures": [
-    "IDEA-012",
-    "IDEA-073",
-    "DG-038",
-    "DG-096"
+    "IDEA-036",
+    "DG-045",
+    "DG-060"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -392,8 +390,8 @@
       "verification": {
         "state": "v0.76-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.76.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1140,27 +1138,24 @@
       "category": "검사·품질·보안",
       "feature": "실시간 Java/Kotlin 오류·null 검사",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT Java 타입 오류와 자체 Spring/JPA 진단을 실제 편집기에서 확인했다.",
-      "remaining": [
-        "Kotlin·정밀 nullability·자원 누수 등의 진단 범위는 남는다."
-      ],
+      "scope": "JDT의 기본·사용자 정의 null 애너테이션 프로필과 자원 누수 진단을 설정한다. Kotlin 언어 서버의 실시간 nullable 호출 진단을 편집기에서 확인한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.77-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "testedScope": "가져온 실제 Spring Java 프로젝트에서 null 역참조, 반환 계약, 자원 누수 진단의 위치를 검증했다. 실제 Kotlin 프로젝트의 UNSAFE_CALL을 확인했다. 저장 전 수정과 실행 취소에서 두 진단이 갱신됐다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/null-checks.js",
+          "src/java/null-checks-vscode.js",
+          "test/null-checks-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2256,8 +2251,8 @@
       "verification": {
         "state": "v0.76-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.76.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4821,8 +4816,8 @@
       "verification": {
         "state": "v0.76-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.76.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5027,23 +5022,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "일반 스크립트의 SELECT 사이에서 실제 정의를 검토한 읽기 전용 IN CALL을 같은 세션에서 실행한다. 캡처한 결과 집합은 쿼리 재실행 없이 별도 그리드로 열 수 있다.",
+      "scope": "읽기 전용 IN CALL을 캡처하고, 명시적인 BEGIN·COMMIT·ROLLBACK과 이름 있는 세이브포인트를 검토해 실행한다. 실패하면 소유한 트랜잭션을 롤백하고 상태를 확인한다.",
       "remaining": [
-        "일반 트랜잭션 제어와 OUT·INOUT, 안전한 읽기 범위를 벗어난 루틴의 실행 계약이 남아 있다."
+        "검토 배치의 OUT·INOUT과 일반 루틴 실행, 복합·동적 배치의 트랜잭션은 남는다."
       ],
       "verification": {
-        "state": "v0.71-installed-coverage",
+        "state": "v0.77-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.71.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 SQL 자료형과 53비트 한계 밖의 값을 보존하고 같은 물리 세션에서 두 CALL 결과를 따로 열었다. 검토 후 변경된 루틴 정의를 거절했다.",
+        "testedScope": "두 실제 DB에서 쓰기 커밋 승인, 세이브포인트 복구, 읽기 전용 트랜잭션, 중복 키 실패 후 롤백, 변경된 테이블 거부와 원래 거래 보존을 확인했다.",
         "publicEvidence": [
-          "src/db/sql-script.js",
-          "src/db/routine-call.js",
-          "test/sql-script-call-host.js"
+          "src/db/sql-script-transaction.js",
+          "src/db/sql-script-vscode.js",
+          "src/db/mysql.js",
+          "test/sql-script-transaction-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5476,27 +5472,25 @@
       "category": "데이터 그리드",
       "feature": "서버 정렬·다중 column 정렬",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "서버 정렬에 여러 열과 NULL 위치, 서버에서 관찰한 문자 정렬 규칙, 형식이 확인된 숫자·텍스트 표현식과 접두사 바이트 정렬을 사용할 수 있다. 규칙을 프리셋으로 저장한다.",
-      "remaining": [
-        "임의 SQL 표현식, 전체 JSON 구조·공간 값 정렬, 고급 규칙으로 키셋 페이지를 탐색하는 기능이 남아 있다."
-      ],
+      "scope": "서버 정렬·다중 열 규칙을 적용한다. 정수·불리언·텍스트 JSON 스칼라 경로, NULL 위치, 문자 정렬 규칙 및 기본 키로 보통 탐색과 InnoDB 키셋을 정렬한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.59-installed-coverage",
+        "state": "v0.77-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.59.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 Spring DB에서 혼합 방향 다중 정렬과 정확한 PK 순서, 강제 NULL 위치, 호환 collation, JSON·바이너리 접두사, 프리셋 재사용과 열 정의 변경 뒤 거부를 확인했다. 일반 InnoDB 스냅샷 탭도 확인했다.",
+        "testedScope": "두 실제 DB에서 29행을 JSON 정수·불리언·텍스트 기준으로 각각 10페이지씩 양방향 탐색했다. 큰 정수, UTF-8 바이트와 후행 공백, NULL, 혼합 collation, 기본 키 동률 해소와 숨긴 커서 열을 확인했다.",
         "publicEvidence": [
+          "src/db/grid-json-sort.js",
           "src/db/grid-sort.js",
-          "src/db/grid.js",
-          "src/db/result-sorts.js",
-          "test/grid-sort-host.js"
+          "test/grid-json-sort-host.js",
+          "test/grid-json-sort-ui.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6590,8 +6584,8 @@
       "verification": {
         "state": "v0.76-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.76.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6608,38 +6602,38 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "ea304308aac2e5b935cd67a16153a7f926979ea9ad9ae55bf0a0bd2d4c4fdf86",
-    "sourceManifestSha256": "cbb2ec06d8f3ab5de4fd59ddb32f6aa8f46ce7a83c98975aaa23173645e0488e",
+    "vsixSha256": "5b56c8c439d2be475510313ff4762429ac0ee8602657af515501fdb25a25ce1a",
+    "sourceManifestSha256": "348d9eb1a5bfde0182b8c1c072854e08cab40f3b12d6c8f990d3c65689630010",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 4
+        "featureGroups": 3
       },
       {
         "engine": "mariadb",
-        "featureGroups": 4
+        "featureGroups": 3
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-012",
+      "id": "IDEA-036",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-096",
+      "id": "DG-060",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1671,
-    "pass": 1561,
+    "tests": 1681,
+    "pass": 1569,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 110,
+    "skipped": 112,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

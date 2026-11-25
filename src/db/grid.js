@@ -1,6 +1,7 @@
 'use strict';
 const { createHash, randomUUID } = require('node:crypto');
 const { compileGridSort, observeSortCollations, sortOptions } = require('./grid-sort');
+const { jsonCursorBound } = require('./grid-json-sort');
 const { protectionError, tableProtection } = require('./write-protection');
 const QUOTE = String.fromCharCode(96);
 const quote = name => QUOTE + name.replaceAll(QUOTE, QUOTE + QUOTE) + QUOTE;
@@ -148,21 +149,42 @@ function keysetValue(column, value, cast) {
   }
   return { sql: '?', parameter: column.kind === 'float' ? Number(parameter) : parameter };
 }
-const keyExpression = ({ column, cursorAlias, cursorCast }) => cursorAlias ? 'CAST(' + quote(column) + ' AS ' + cursorCast + ')' : quote(column);
+const keyExpression = ({ sql, cursorCast }) => cursorCast ? 'CAST(' + sql + ' AS ' + cursorCast + ')' : sql;
+const nullableOrder = ({ nulls, direction }) => nulls === 'first' || nulls === undefined && direction === 'asc';
+function keysetFragments(item) {
+  const sql = keyExpression(item);
+  return [
+    ...(item.nulls === undefined ? [] : ['(' + sql + ' IS NULL) ' + (nullableOrder(item) ? 'DESC' : 'ASC')]),
+    sql + ' ' + item.direction.toUpperCase()
+  ];
+}
+function invertDirection(item) {
+  return { ...item, direction: item.direction === 'asc' ? 'desc' : 'asc',
+    ...(item.nulls !== undefined && { nulls: item.nulls === 'first' ? 'last' : 'first' }) };
+}
 
 function keysetOrder(order, columns, dialect) {
   const names = new Set([...columns.keys()].map(name => name.toLowerCase()));
   let index = 0;
   return order.map(item => {
-    const type = choiceType.exec(columns.get(item.column).type)?.[1].toLowerCase();
-    if (!type) return item;
-    if (!['mysql', 'mariadb'].includes(dialect)) throw fail('ROCKETBRAIN_GRID_QUERY', 'Observe the database engine before sorting ENUM or SET keys.');
+    const type = !item.collation && choiceType.exec(columns.get(item.column).type)?.[1].toLowerCase();
+    if (!type && !item.cursorKind) return item;
+    if (!['mysql', 'mariadb'].includes(dialect)) {
+      throw fail('ROCKETBRAIN_GRID_QUERY', 'Observe the database engine before sorting ENUM or SET keys or JSON scalar paths.');
+    }
     let cursorAlias;
     do { cursorAlias = '__rb_grid_seek_' + index++; } while (names.has(cursorAlias));
     names.add(cursorAlias);
-    // Preserve the native SET order, including the high bit. Direct casts avoid floating-point coercion by arithmetic.
-    return { ...item, cursorAlias, cursorCast: type === 'set' && dialect === 'mysql' ? 'SIGNED' : 'UNSIGNED' };
+    // Native MySQL SET order is signed. A direct cast preserves all bits and avoids arithmetic coercion.
+    const cursorCast = type ? (type === 'set' && dialect === 'mysql' ? 'SIGNED' : 'UNSIGNED') : undefined;
+    return { ...item, cursorAlias, cursorCast };
   });
+}
+
+function continuationValue(column, item, value) {
+  if (item.cursorKind) return jsonCursorBound(value, item.cursorKind);
+  if (item.collation) return { sql: '?', parameter: typedCell(String(value), column).parameter };
+  return keysetValue(column, value, item.cursorCast);
 }
 
 function keysetAfter(order, columns, anchor) {
@@ -170,17 +192,18 @@ function keysetAfter(order, columns, anchor) {
   const alternatives = [], parameters = [], prefix = [], previous = [];
   for (const [index, item] of order.entries()) {
     const { column, direction } = item, name = keyExpression(item), value = anchor[index];
+    const nullsFirst = nullableOrder(item);
     if (value === null) {
-      if (direction === 'asc') {
+      if (nullsFirst) {
         alternatives.push('(' + [...prefix, name + ' IS NOT NULL'].join(' AND ') + ')');
         parameters.push(...previous);
       }
       prefix.push(name + ' IS NULL');
       continue;
     }
-    const bound = keysetValue(columns.get(column), value, item.cursorCast);
-    const condition = direction === 'asc' ? name + ' > ' + bound.sql
-      : '(' + name + ' < ' + bound.sql + ' OR ' + name + ' IS NULL)';
+    const bound = continuationValue(columns.get(column), item, value);
+    const comparison = name + (direction === 'asc' ? ' > ' : ' < ') + bound.sql;
+    const condition = nullsFirst ? comparison : '(' + comparison + ' OR ' + name + ' IS NULL)';
     alternatives.push('(' + [...prefix, condition].join(' AND ') + ')');
     parameters.push(...previous, bound.parameter);
     prefix.push(name + ' <=> ' + bound.sql);
@@ -199,12 +222,11 @@ function browseQuery(definition, input = {}, schema, related = false, collations
   const pk = definition.columns.filter(column => column.primaryKey), parameters = [], where = [], filters = [];
   if (page && !pk.length) throw fail('ROCKETBRAIN_GRID_QUERY', 'A primary key is required for stable page navigation.');
   if (!Array.isArray(input.sort || []) || (input.sort || []).length > 8 || !Array.isArray(input.filters || []) || (input.filters || []).length > 20) throw fail('ROCKETBRAIN_GRID_QUERY', 'Use at most 8 sort columns and 20 filters.');
-  const { sort, order, fragments } = compileGridSort(definition.columns, input.sort || [], collations);
-  if (cursor && (!pk.length || order.some(({ column, nulls, expression, collation }) => {
-    const { kind } = columns.get(column);
-    return nulls !== undefined || expression !== undefined || collation !== undefined ||
-      ['json', 'unsupported'].includes(kind);
-  }))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose a primary-key table and default-ordered scalar columns for keyset browsing.');
+  const { sort, order, fragments, keys } = compileGridSort(definition.columns, input.sort || [], collations);
+  if (cursor && (!pk.length || keys.some(({ column, expression, cursorKind }) =>
+    expression !== undefined || !cursorKind && ['json', 'unsupported'].includes(columns.get(column).kind)))) {
+    throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose a primary-key table and scalar columns or typed JSON paths for keyset browsing.');
+  }
   const operators = { eq: '=', ne: '<>', lt: '<', lte: '<=', gt: '>', gte: '>=' };
   let conditions = 0, groups = 0;
   function buildFilter(item, depth) {
@@ -257,14 +279,14 @@ function browseQuery(definition, input = {}, schema, related = false, collations
     filters.push(compiled.filter);
   }
   if (Buffer.byteLength(JSON.stringify(filters), 'utf8') > 65536) throw fail('ROCKETBRAIN_GRID_QUERY', 'Combined table filters exceed 64 KiB.');
-  const seekOrder = cursor ? keysetOrder(order, columns, dialect) : order;
-  const scanOrder = reverse ? seekOrder.map(item => ({ ...item, direction: item.direction === 'asc' ? 'desc' : 'asc' })) : seekOrder;
+  const seekOrder = cursor ? keysetOrder(keys, columns, dialect) : order;
+  const scanOrder = reverse ? seekOrder.map(invertDirection) : seekOrder;
   if (cursor?.length) {
     const seek = keysetAfter(scanOrder, columns, cursor);
     where.push(seek.sql);
     parameters.push(...seek.parameters);
   }
-  const orderBy = cursor ? scanOrder.map(item => keyExpression(item) + ' ' + item.direction.toUpperCase()) : fragments;
+  const orderBy = cursor ? scanOrder.flatMap(keysetFragments) : fragments;
   const hidden = seekOrder.filter(item => item.cursorAlias);
   const selected = definition.columns.map(column => quote(column.name)).concat(hidden.map(item => keyExpression(item) + ' AS ' + quote(item.cursorAlias)));
   const sql = 'SELECT ' + selected.join(',') + ' FROM ' + quote(schema) + '.' + quote(definition.name)
@@ -299,6 +321,8 @@ class TableEditor {
       const version = engine.rows[0]?.[0];
       if (typeof version !== 'string' || !/^\d+\.\d+/u.test(version)) throw fail('ROCKETBRAIN_GRID_QUERY', 'The database engine for the read snapshot could not be observed.');
       browser.dialect = /mariadb/i.test(version) ? 'mariadb' : 'mysql';
+      browser.collations = await this.db._enqueue(session, () => observeSortCollations(definition.columns,
+        async (sql, values, limit) => (await this._read(session, sql, values, limit)).rows));
       const result = await this.readKeysetPage(id, { ...options, page: 0 });
       if (fingerprint(definition) !== fingerprint(await this.definition(name, schema))) {
         throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The table changed while opening its read snapshot.');
@@ -324,7 +348,7 @@ class TableEditor {
           (page !== 0 && Math.abs(page - from) > 1)) {
         throw fail('ROCKETBRAIN_GRID_QUERY', 'Move through the snapshot one page at a time.');
       }
-      const first = browseQuery(definition, { ...options, page: 0 }, schema, false, {}, [], false, browser.dialect);
+      const first = browseQuery(definition, { ...options, page: 0 }, schema, false, browser.collations, [], false, browser.dialect);
       const signature = JSON.stringify(first.query);
       let cursor=[], reverse=false;
       if ((page > 0 || adjacentTo !== undefined) && signature !== browser.signature) {
@@ -336,7 +360,7 @@ class TableEditor {
         else if (anchor.hasNext) cursor = anchor.last;
         else throw fail('ROCKETBRAIN_GRID_QUERY', 'The current snapshot has no next page.');
       }
-      const plan = cursor.length ? browseQuery(definition, first.query, schema, false, {}, cursor, reverse, browser.dialect) : first;
+      const plan = cursor.length ? browseQuery(definition, first.query, schema, false, browser.collations, cursor, reverse, browser.dialect) : first;
       const result = await this._read(session, plan.sql, plan.parameters, plan.pageSize + 1);
       if (result.truncated || !session.inTransaction || !session.connected || this.keysetBrowsers.get(id) !== browser) {
         throw fail('ROCKETBRAIN_GRID_STALE', 'The table snapshot ended or the page exceeded the byte limit. Open a fresh snapshot.');
@@ -367,7 +391,8 @@ class TableEditor {
       const reason = 'This read-only page belongs to an InnoDB consistent snapshot.';
       result.state = this.db._state(session);
       result.browse = { ...query, order: plan.order, hasNext, hasPrevious,
-        pageable: true, sql: plan.sql, consistency: reason, totalRows: null, keyset: true };
+        pageable: true, sql: plan.sql, consistency: reason, totalRows: null, keyset: true,
+        sortOptions: sortOptions(definition.columns, browser.collations, true) };
       result.edit = { modelId: randomUUID(), table: browser.name, query, columns: definition.columns, canEdit: false, reason,
         rowIds: result.rows.map(() => randomUUID()), hasMorePossible: hasNext, insertable: false };
       return result;
