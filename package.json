@@ -1436,6 +1436,18 @@
           "scope": "machine",
           "description": "Optional standalone JDK path for importing Gradle projects."
         },
+        "rocketbrain.java.annotationProcessing.gradleEnabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Enable JDT editor annotation processing for Gradle projects in trusted workspaces. Gradle build tasks use the project's build configuration."
+        },
+        "rocketbrain.java.annotationProcessing.lombokJar": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional absolute path to the verified official Lombok 1.18.48 Java agent JAR for editor-generated symbols in trusted workspaces."
+        },
         "rocketbrain.java.debugBundlePath": {
           "type": "string",
           "default": "",

@@ -108,6 +108,12 @@ Java 프로젝트 가져오기와 빌드는 프로젝트 코드를 실행할 수
 - 디버그 세션에서 일반 중단점을 검증한 줄에 커서를 두고 **Add Java Inline Breakpoints**를 실행합니다. 디버거가 반환한 위치 중 멈출 람다를 선택합니다.
 - 멈춘 세션의 **변수**에서 객체의 필드를 펼칩니다. 필드 메뉴에서 읽기, 쓰기 또는 읽기·쓰기에 중단점을 설정합니다.
 
+### Java 어노테이션 처리와 Lombok
+
+Maven에서 `maven-compiler-plugin`의 `annotationProcessorPaths`에 프로세서를 선언하고, 편집 중에도 처리하려면 `m2e.apt.activation`을 `jdt_apt`로 설정합니다. Gradle에서는 `annotationProcessor` 의존성을 선언하고 사용자 설정 `rocketbrain.java.annotationProcessing.gradleEnabled`를 켜면 가져올 때 JDT가 해당 프로세서 구성을 동기화합니다. 이미 프로젝트가 관리하는 Eclipse APT 설정은 프로젝트 파일에서 관리합니다.
+
+Lombok이 생성하는 멤버를 편집기에서 사용하려면 사용자 설정 `rocketbrain.java.annotationProcessing.lombokJar`에 [공식 Lombok 1.18.48 JAR](https://repo.maven.apache.org/maven2/org/projectlombok/lombok/1.18.48/lombok-1.18.48.jar)의 절대 경로를 지정합니다. 신뢰한 작업 공간에서 확장이 SHA-256을 확인하고 별도 JDT 저장소에 준비합니다. 빌드에서도 Lombok 버전과 프로세서 의존성을 선언합니다. Lombok getter를 MapStruct에서 참조하는 예제는 `lombok-mapstruct-binding`을 함께 사용합니다.
+
 ## 검토하는 Java 리팩터링
 
 Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후와 파일 작업을 검토한 뒤 적용합니다. 텍스트 편집과 클래스 이동에는 VS Code Undo를 사용합니다. Safe Delete로 지운 파일은 **Restore Deleted Java File**에서 복원합니다. 검토 뒤 원본·참조·리소스가 바뀌면 다시 검토해야 합니다.

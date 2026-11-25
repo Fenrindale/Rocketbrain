@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { resolveDebugBundles } = require('./debug-runtime');
+const { stageLombokAgent } = require('./annotation-processing');
 
 function absoluteDirectory(value, label) {
   if (typeof value !== 'string' || !value.trim() || !path.isAbsolute(value)) throw new Error(`${label} must be an explicit absolute directory.`);
@@ -29,6 +30,11 @@ function resolveLaunch(options) {
   const template = path.join(serverPath, configName);
   if (!fs.existsSync(path.join(template, 'config.ini'))) throw new Error(`JDT LS configuration ${configName} is missing.`);
   if (!path.isAbsolute(options.storagePath || '')) throw new Error('Java storagePath must be absolute.');
+  const gradleAnnotationProcessing = options.gradleAnnotationProcessing === true;
+  if ((options.lombokJar || gradleAnnotationProcessing) && options.trustedWorkspace !== true) {
+    throw new Error('Trust the workspace before enabling Java editor annotation processing.');
+  }
+  const lombok = stageLombokAgent(options.lombokJar,options.storagePath);
   const bundles = resolveDebugBundles(options.debugBundlePath, serverPath);
   const fileHash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
   const core = fs.readdirSync(plugins).filter(name => /^org\.eclipse\.jdt\.ls\.core_.*\.jar$/.test(name));
@@ -41,7 +47,8 @@ function resolveLaunch(options) {
     launcher: { name: launchers[0], sha256: fileHash(path.join(plugins, launchers[0])) },
     core: core.map(name => ({ name, sha256: fileHash(path.join(plugins, name)) })),
     bundles: bundles.map(file => ({ path: file, sha256: fileHash(file) })),
-    gradleUserHome: process.env.GRADLE_USER_HOME || '', importRuntime: options.cacheContext || null
+    gradleUserHome: process.env.GRADLE_USER_HOME || '', importRuntime: options.cacheContext || null,
+    processors: {gradle:gradleAnnotationProcessing,lombok:lombok?.sha256 || null}
   })).digest('hex').slice(0, 20);
   const configuration = path.join(options.storagePath, 'configuration', identity);
   const data = path.join(options.storagePath, 'workspaces', identity);
@@ -53,9 +60,10 @@ function resolveLaunch(options) {
   for (const key of ['CLIENT_PORT', 'CLIENT_HOST', 'CLIENT_PIPE', 'SERVER_PORT', 'SERVER_HOST']) delete env[key];
   return {
     command,
-    args: ['-Declipse.application=org.eclipse.jdt.ls.core.id1', '-Dosgi.bundles.defaultStartLevel=4', '-Declipse.product=org.eclipse.jdt.ls.core.product', '-Dlog.level=WARNING', '-Xmx1G', '--add-modules=ALL-SYSTEM', '--add-opens', 'java.base/java.util=ALL-UNNAMED', '--add-opens', 'java.base/java.lang=ALL-UNNAMED', '-jar', path.join(plugins, launchers[0]), '-configuration', configuration, '-data', data],
+    args: ['-Declipse.application=org.eclipse.jdt.ls.core.id1', '-Dosgi.bundles.defaultStartLevel=4', '-Declipse.product=org.eclipse.jdt.ls.core.product', '-Dlog.level=WARNING', '-Xmx1G', '--add-modules=ALL-SYSTEM', '--add-opens', 'java.base/java.util=ALL-UNNAMED', '--add-opens', 'java.base/java.lang=ALL-UNNAMED', ...(lombok ? ['-javaagent:'+lombok.file] : []), '-jar', path.join(plugins, launchers[0]), '-configuration', configuration, '-data', data],
     options: { cwd: serverPath, env, windowsHide: true },
-    javaHome, serverPath, configuration, data, identity, bundles
+    javaHome, serverPath, configuration, data, identity, bundles,
+    annotationProcessing: {gradle:gradleAnnotationProcessing,maven:'project',lombok:lombok && {version:lombok.version,sha256:lombok.sha256}}
   };
 }
 
@@ -66,7 +74,8 @@ function serverSettings(projectJdks = [], options = {}) {
     return { name: runtime.name, path: absoluteDirectory(runtime.path, 'Project JDK'), default: Boolean(runtime.default) };
   });
   if (runtimes.filter(runtime => runtime.default).length > 1) throw new Error('Only one project JDK can be the default.');
-  const gradle = { enabled: true, wrapper: { enabled: true } };
+  const gradle = { enabled: true, wrapper: { enabled: true },
+    annotationProcessing: {enabled:options.gradleAnnotationProcessing === true} };
   if (options.gradleHome) gradle.home = absoluteDirectory(options.gradleHome, 'rocketbrain.java.gradleHome');
   if (options.gradleJavaHome) gradle.java = { home: absoluteDirectory(options.gradleJavaHome, 'rocketbrain.java.gradleJavaHome') };
   return {
