@@ -94,7 +94,7 @@ function createWebDavDeployment({ fetcher=fetch, isTrusted=()=>true }={}) {
   }
 
   async function remote(profile, relative, signal) {
-    const response = await send(profile,relative,'GET',{signal});
+    const response = await send(profile,relative,'GET',{signal,headers:{'Cache-Control':'no-cache'}});
     if (response.status === 404) { await response.body?.cancel();return null; }
     if (response.status !== 200) { await response.body?.cancel();throw Error('WebDAV could not read the path (HTTP '+response.status+').'); }
     const bytes = await remoteBytes(response);
