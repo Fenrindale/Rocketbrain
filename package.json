@@ -632,6 +632,12 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.results.compareSnapshots",
+        "title": "Compare Saved Query Results",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.results.removeSnapshot",
         "title": "Remove Saved Query Result",
         "category": "Rocketbrain",
