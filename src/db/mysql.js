@@ -19,6 +19,7 @@ const { SchemaApplier } = require('./schema-apply');
 const scriptEngine=require('./sql-script');
 const { inferScriptParameters } = require('./parameter-inference');
 const routineCall = require('./routine-call');
+const routinePackage = require('./routine-package');
 const { contextOf: objectSourceContext } = require('./object-source');
 const { collectRoutineResults, maxBytes: maxRoutineResultBytes } = require('./routine-call-stream');
 const {randomUUID}=require('node:crypto');
@@ -367,6 +368,13 @@ class MysqlService {
   async listProcedureCalls(options) {
     const query = (sql, values) => this._metadataQuery(sql, values);
     return routineCall.listProcedures(query, await objectSourceContext(query), options);
+  }
+  async listProcedurePackages(options) {
+    const query = (sql, values) => this._metadataQuery(sql, values);
+    return routinePackage.listPackages(query, await objectSourceContext(query), options);
+  }
+  inspectProcedurePackage(target, options) {
+    return this._withRoutineSession(async (_session, query) => routinePackage.inspectPackage(query, await objectSourceContext(query), target), options);
   }
   async _withRoutineSession(action, { write = false, guard = () => true, signal } = {}) {
     if (write && this._writeProtection) {

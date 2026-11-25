@@ -214,6 +214,7 @@
       { "command": "rocketbrain.spring.runtimeSecurity", "title": "Inspect Spring Security Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewProcedureCall", "title": "Review Stored Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.db.reviewPackageCall", "title": "Review MariaDB Package Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.cacheMetadata", "title": "Save Database Metadata for Offline Use", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.openCachedMetadata", "title": "Open Cached Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && !rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.closeCachedMetadata", "title": "Close Cached Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.offlineMetadataActive" },

@@ -5,6 +5,7 @@ const { bindProcedure, fail } = require('./routine-call');
 
 const scheme = 'rocketbrain-procedure-review';
 const reviewLifetime = 120000;
+const routineLabel = object => [object.package, object.name].filter(Boolean).join('.');
 
 function registerRoutineCalls(vscode, { database }) {
   const drafts = new Map(), reviews = new Map(), captures = new Map();
@@ -37,6 +38,22 @@ function registerRoutineCalls(vscode, { database }) {
       return { id, ...structuredClone(procedure), connectionEpoch: epoch, callBlocked };
     });
   }
+  async function listPackages(options) {
+    requireTrusted();
+    return database.withDatabaseAdmin(async ({ db, guard, epoch }) => {
+      const page = await db.listProcedurePackages(options);
+      if (!guard()) throw fail('STALE', 'The database changed while listing packages.');
+      return { ...page, connectionEpoch: epoch };
+    });
+  }
+  async function inspectPackage(target) {
+    requireTrusted();
+    return database.withDatabaseAdmin(async ({ db, guard, epoch }) => {
+      const loaded = await db.inspectProcedurePackage(target, { guard });
+      if (!guard()) throw fail('STALE', 'The database changed while inspecting the package.');
+      return { ...structuredClone(loaded), connectionEpoch: epoch };
+    });
+  }
   function prepare(id, inputs) {
     const draft = current(drafts, id);
     const { kinds } = bindProcedure(draft.procedure.parameters, inputs);
@@ -55,6 +72,8 @@ function registerRoutineCalls(vscode, { database }) {
     let inputIndex = 0;
     const parameters = procedure.parameters.map(item => '-- ' + item.mode + ' ' + JSON.stringify(item.name) + ' ' +
       JSON.stringify(item.type) + (item.mode === 'OUT' ? ' · output only' : ' · ' + kinds[inputIndex++] + ' input kept private'));
+    const definitions = procedure.packageSources ? procedure.packageSources.flatMap(({ kind, settings, source }) =>
+      ['', '-- Package ' + kind.toLowerCase() + ' · ' + JSON.stringify(settings), source]) : ['', procedure.source];
     return ['-- Rocketbrain stored procedure review', '-- Account: ' + JSON.stringify(procedure.account),
       '-- Active role: ' + JSON.stringify(procedure.role), '-- Definition fingerprint: ' + procedure.fingerprint,
       '-- Database: ' + JSON.stringify(procedure.object.schema),
@@ -62,13 +81,14 @@ function registerRoutineCalls(vscode, { database }) {
       '-- This approved call can change persistent data and can commit work within its own connection.',
       '-- The server enforces EXECUTE and routine privileges, including its SQL SECURITY mode.',
       ...(procedure.dialect === 'mariadb' ? ['-- MariaDB compares the definition before and after the call. Concurrent DDL can still change the routine.'] : []),
-      '', procedure.source].join('\n');
+      ...(procedure.packageSources ? ['-- The package may run initialization code on this connection before the member.'] : []),
+      ...definitions].join('\n');
   }
   async function run(id, { approved, signal, maxRows, timeoutMs } = {}) {
     const review = current(reviews, id);
     if (approved !== true) throw fail('APPROVAL', 'Approve the exact stored procedure review before running it.');
     reviews.delete(id);
-    const sql = review.procedure.sql, label = database.source() + ' · ' + review.procedure.object.name;
+    const sql = review.procedure.sql, label = database.source() + ' · ' + routineLabel(review.procedure.object);
     const resultId = database.scriptResultBegin(sql, label, { readOnly: false });
     try {
       const report = await database.withDatabaseAdmin(({ db, epoch, guard }) => {
@@ -113,25 +133,38 @@ function registerRoutineCalls(vscode, { database }) {
     await database.activateResult(id);
     return { resultId: id, index, ...(isOutput && { outputParameters: true }), executedSql: false };
   }
-  async function chooseProcedure() {
-    const prefix = await vscode.window.showInputBox({ title: 'Find a Stored Procedure', prompt: 'Optional name prefix in the connected database' });
+  async function chooseCatalog(packageMode) {
+    const title = packageMode ? 'MariaDB Package' : 'Stored Procedure';
+    const prefix = await vscode.window.showInputBox({ title: 'Find a ' + title, prompt: 'Optional name prefix in the connected database' });
     if (prefix === undefined) return;
     let after, epoch;
     do {
       const page = await database.withDatabaseAdmin(async ({ db, guard, epoch: observed }) => {
         if (epoch !== undefined && epoch !== observed) throw fail('STALE', 'The connected database changed. Start the search again.');
         epoch = observed;
-        const value = await db.listProcedureCalls({ prefix, after });
+        const value = packageMode ? await db.listProcedurePackages({ prefix, after }) : await db.listProcedureCalls({ prefix, after });
         if (!guard()) throw fail('STALE', 'The connected database changed. Start the search again.');
         return value;
       });
       const items = page.items.map(item => ({ label: item.name, description: item.schema, item }));
       if (page.next) items.push({ label: 'Next page…', next: true });
-      if (!items.length) { await vscode.window.showInformationMessage('No matching procedure is visible to this account.'); return; }
-      const selected = await vscode.window.showQuickPick(items, { title: 'Choose a Stored Procedure to Review' });
+      if (!items.length) { await vscode.window.showInformationMessage('No matching ' + title.toLowerCase() + ' is visible to this account.'); return; }
+      const selected = await vscode.window.showQuickPick(items, { title: 'Choose a ' + title + ' to Review' });
       if (!selected?.next) return selected?.item && { item: selected.item, epoch };
       after = page.next;
     } while (after);
+  }
+  async function choosePackageProcedure() {
+    const selected = await chooseCatalog(true);
+    if (!selected) return;
+    const details = await inspectPackage(selected.item);
+    if (selected.epoch !== details.connectionEpoch) throw fail('STALE', 'The database changed during package selection.');
+    const procedures = details.members.filter(member => member.supported).map(member => ({ label: member.name, member,
+      description: member.parameters.map(parameter => parameter.mode + ' ' + parameter.type).join(', ') }));
+    if (!procedures.length) { await vscode.window.showInformationMessage('This package has no public procedure with a supported, matching scalar signature.'); return; }
+    const choice = await vscode.window.showQuickPick(procedures, { title: 'Choose a Public Package Procedure' });
+    if (choice) return { epoch: details.connectionEpoch, item: { schema: details.object.schema, package: details.object.name,
+      kind: 'package-procedure', name: choice.member.name } };
   }
   async function inputValues(parameters) {
     const values = [];
@@ -150,9 +183,10 @@ function registerRoutineCalls(vscode, { database }) {
     }
     return values;
   }
-  async function command(target) {
+  async function command(target, packageMode = false) {
     requireTrusted();
-    const picked = target?.kind === 'procedure' ? { item: target } : await chooseProcedure();
+    const kind = packageMode ? 'package-procedure' : 'procedure';
+    const picked = target?.kind === kind ? { item: target } : packageMode ? await choosePackageProcedure() : await chooseCatalog(false);
     if (!picked) return;
     const draft = await inspect(picked.item);
     if (picked.epoch !== undefined && picked.epoch !== draft.connectionEpoch) { drafts.delete(draft.id); throw fail('STALE', 'The database changed during selection.'); }
@@ -171,7 +205,7 @@ function registerRoutineCalls(vscode, { database }) {
       if (document.isClosed || normalize(document.getText()) !== normalize(documentText(review.uri))) {
         throw fail('STALE', 'The procedure review document changed. Open a new review before running.');
       }
-      const report = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Calling ' + draft.object.name, cancellable: true }, async (_, token) => {
+      const report = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Calling ' + routineLabel(draft.object), cancellable: true }, async (_, token) => {
         const controller = new AbortController();
         if (token.isCancellationRequested) controller.abort();
         const listener = token.onCancellationRequested(() => controller.abort());
@@ -185,16 +219,20 @@ function registerRoutineCalls(vscode, { database }) {
       if (review) reviews.delete(review.id);
     }
   }
+  function registerReviewCommand(id, packageMode) {
+    return vscode.commands.registerCommand(id, async target => {
+      try { return await command(target, packageMode); }
+      catch (error) { if (!disposed) await vscode.window.showErrorMessage(error.message); }
+    });
+  }
   const subscriptions = [
     vscode.workspace.registerTextDocumentContentProvider(scheme, { provideTextDocumentContent: documentText }),
     vscode.workspace.onDidCloseTextDocument(document => { if (document.uri.scheme === scheme) reviews.delete(document.uri.path.split('/')[1]); }),
-    vscode.commands.registerCommand('rocketbrain.db.reviewProcedureCall', async target => {
-      try { return await command(target); }
-      catch (error) { if (!disposed) await vscode.window.showErrorMessage(error.message); }
-    }),
+    registerReviewCommand('rocketbrain.db.reviewProcedureCall', false),
+    registerReviewCommand('rocketbrain.db.reviewPackageCall', true),
     vscode.commands.registerCommand('rocketbrain.db.openProcedureResult', openResult)
   ];
-  return { inspect, prepare, run, openResult, dispose() {
+  return { inspect, listPackages, inspectPackage, prepare, run, openResult, dispose() {
     disposed = true;
     for (const subscription of subscriptions) subscription.dispose();
     drafts.clear(); reviews.clear(); captures.clear();

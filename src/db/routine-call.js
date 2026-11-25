@@ -5,6 +5,7 @@ const { identifier } = require('./schema-rename');
 const { loadSource, listNames } = require('./object-source');
 const { typedParameter, LIMITS } = require('./sql-script');
 const { typeKind } = require('./parameter-inference');
+const { inspectPackage } = require('./routine-package');
 
 const maxParameters = 32;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -14,6 +15,9 @@ const fail = (code, message) => Object.assign(Error(message), { code: 'ROCKETBRA
 function targetOf(target, database) {
   const schema = identifier(target?.schema ?? database, { table: true });
   const name = identifier(target?.name);
+  if (schema === database && target?.kind === 'package-procedure') {
+    return { schema, name: identifier(name, { table: true }), kind: target.kind, package: identifier(target.package, { table: true }) };
+  }
   if (schema !== database || target?.kind !== 'procedure') throw fail('TARGET', 'Choose a standalone procedure in the connected database.');
   return { schema, name, kind: 'procedure' };
 }
@@ -32,7 +36,18 @@ async function observeProcedure(query, context, target) {
     throw fail('ACCOUNT', 'The physical server and acting database account could not be confirmed.');
   }
   if (context.dialect === 'mariadb' && accounts[0][7].split(',').includes('ORACLE')) {
-    throw fail('MODE', 'Use standard SQL mode and a standalone procedure for a reviewed call.');
+    throw fail('MODE', 'Use a standard SQL mode for a reviewed procedure call.');
+  }
+  if (object.kind === 'package-procedure') {
+    const { spec, body, members } = await inspectPackage(query, context, { schema: object.schema, name: object.package, kind: 'package' });
+    const member = members.find(member => member.name === object.name && member.kind === 'procedure' && member.supported);
+    if (!member) throw fail('PACKAGE_TARGET', 'Choose an unambiguous public procedure with matching scalar signatures in the specification and body.');
+    const packageSources = [{ kind: 'Specification', source: spec.source, settings: spec.settings },
+      { kind: 'Body', source: body.source, settings: body.settings }];
+    const fingerprint = digest([object, context.dialect, context.version, ids[0][1], accounts[0], packageSources, member.parameters]);
+    const callee = [object.schema, object.package, object.name].map(quote).join('.');
+    return { object, fingerprint, account: accounts[0][0], role: accounts[0][1], dialect: context.dialect,
+      version: context.version, packageSources, parameters: member.parameters, sql: callSql(callee, fingerprint, member.parameters) };
   }
   const definition = await loadSource(query, context, object);
   if (context.dialect === 'mariadb' && String(definition.settings.sql_mode || '').split(',').includes('ORACLE')) {
@@ -53,9 +68,13 @@ async function observeProcedure(query, context, target) {
   const fingerprint = digest([object, context.dialect, context.version, ids[0][1], accounts[0], definition.source, definition.settings, rows]);
   // On MariaDB a two-part CALL can resolve a package member. The session already pins the exact database.
   const callee = context.dialect === 'mariadb' ? quote(object.name) : quote(object.schema) + '.' + quote(object.name);
-  const sql = 'CALL ' + callee + '(' + parameters.map(parameter => parameter.mode === 'IN' ? '?' : variable(fingerprint, parameter)).join(', ') + ')';
+  const sql = callSql(callee, fingerprint, parameters);
   return { object, fingerprint, account: accounts[0][0], role: accounts[0][1], dialect: context.dialect,
     version: context.version, source: definition.source, settings: definition.settings, parameters, sql };
+}
+
+function callSql(callee, fingerprint, parameters) {
+  return 'CALL ' + callee + '(' + parameters.map(parameter => parameter.mode === 'IN' ? '?' : variable(fingerprint, parameter)).join(', ') + ')';
 }
 
 function bindProcedure(parameters, inputs) {
