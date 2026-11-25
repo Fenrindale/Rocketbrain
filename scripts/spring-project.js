@@ -185,12 +185,16 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     ...(debugPort ? ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:' + debugPort] : []), '-cp', classpath, 'fixture.boot.FixtureApplication'];
   const dbOptions={namedPipe:process.env.ROCKETBRAIN_FIXTURE_NAMED_PIPE==='1',
     eventScheduler:process.env.ROCKETBRAIN_ENABLE_EVENT_DEPLOYMENT_FIXTURE==='1'};
-  if (process.env.ROCKETBRAIN_ENABLE_DB_CLIENT_IDENTITY_FIXTURE === '1') {
-    clientCertificates = await require('./connection-security-fixture').certificates({protectedIdentity:true,ssh:false});
+
+  const clientIdentity = process.env.ROCKETBRAIN_ENABLE_DB_CLIENT_IDENTITY_FIXTURE === '1';
+  const sshAgent = process.env.ROCKETBRAIN_ENABLE_DB_SSH_AGENT_FIXTURE === '1';
+  if (clientIdentity || sshAgent) {
+    clientCertificates = await require('./connection-security-fixture').certificates({ protectedIdentity: clientIdentity, ssh: sshAgent });
     dbOptions.tls = clientCertificates.server;
   }
   db=engine==='mysql'?await startMysqlFixture(dbOptions):await startMariaFixture(dbOptions);
-  const clientIdentityFixturePath = clientCertificates && await require('../test/helpers/client-identity-fixture')
+  const sshAgentFixturePath = sshAgent && clientCertificates.folder;
+  const clientIdentityFixturePath = clientIdentity && await require('../test/helpers/client-identity-fixture')
     .prepareClientIdentityFixture(db,clientCertificates,path.join(folder,'client-identity.json'));
   const url = engine === 'mysql' ? 'jdbc:mysql://127.0.0.1:' + db.config.port + '/' + db.config.database + '?allowPublicKeyRetrieval=true&sslMode=DISABLED'
     : 'jdbc:mariadb://127.0.0.1:' + db.config.port + '/' + db.config.database;
@@ -234,7 +238,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     const configPath = path.join(folder, 'runtime.json');
     const observerConnection=observer?JSON.parse(await fsp.readFile(observerDescriptorFile,'utf8')):null;
     const config = { runtimeUrl, baseUrl, appURL: baseUrl, projectPath: PROJECT, sourcePaths: [path.join(PROJECT, 'src', 'main', 'java')],
-      port, dbEngine: engine, dbConfigPath: db.configPath, ...(clientIdentityFixturePath&&{clientIdentityFixturePath}), processId: child.pid, javaProcessId: child.pid, debugPort: debugPort || null,naming,
+      port, dbEngine: engine, dbConfigPath: db.configPath, ...(clientIdentityFixturePath&&{clientIdentityFixturePath}), ...(sshAgentFixturePath&&{sshAgentFixturePath}), processId: child.pid, javaProcessId: child.pid, debugPort: debugPort || null,naming,
       ...(observer?{observerUrl:observerConnection.baseUrl,observerTokenFile}:{}),
       ...(endpointProbePort?{endpointProbeUrl:'http://127.0.0.1:'+endpointProbePort}:{}),
       namingStrategy:naming==='opaque'?{physical:'fixture.boot.OpaquePhysicalNamingStrategy'}:naming==='custom'?{physical:'fixture.boot.FixturePhysicalNamingStrategy',implicit:'fixture.boot.FixtureImplicitNamingStrategy'}:null,
