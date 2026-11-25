@@ -163,7 +163,8 @@ async function runSqlFormatScriptChecks(api, vscode, checks) {
       editor.selection = new vscode.Selection(0, 0, 0, 0);
       editor.options = { tabSize: 2, insertSpaces: true };
       const version = document.version;
-      const edits = await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', document.uri, { tabSize: 2, insertSpaces: true });
+      const edits = (await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', document.uri,
+        { tabSize: 2, insertSpaces: true })) ?? [];
       const expectedText = formattingResult(document, edits);
       let settle;
       const synchronized = new Promise(resolve => { settle = resolve; });
