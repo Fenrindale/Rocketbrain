@@ -54,15 +54,25 @@ function parseStatus(bytes) {
   return { changes: [...byPath.values()], omitted };
 }
 
-async function gitRead(cwd, args) {
+function invokeGit(cwd, args, input) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^GIT_/i.test(name)));
   env.GIT_OPTIONAL_LOCKS = '0';
   env.GIT_TERMINAL_PROMPT = '0';
   env.LC_ALL = 'C';
+  const platform = process.platform === 'win32' ? ['-c', 'core.longpaths=true'] : [];
+  const processRun = run('git', ['--no-optional-locks', '--literal-pathspecs', '-c', 'core.fsmonitor=false',
+    '-c', 'core.untrackedCache=false', ...platform, ...args],
+    { cwd, env, windowsHide:true, encoding:'buffer', timeout:10000, maxBuffer:4 * 1024 * 1024 });
+  if (input !== undefined) {
+    processRun.child.stdin.on('error', () => {});
+    processRun.child.stdin.end(input);
+  }
+  return processRun;
+}
+
+async function gitRead(cwd, args) {
   try {
-    const platform = process.platform === 'win32' ? ['-c', 'core.longpaths=true'] : [];
-    const { stdout } = await run('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', ...platform, ...args],
-      { cwd, env, windowsHide: true, encoding: 'buffer', timeout: 10000, maxBuffer: 4 * 1024 * 1024 });
+    const { stdout } = await invokeGit(cwd,args);
     return stdout;
   } catch (error) {
     if (error.code === 'ENOENT') throw Error('Install Git on the extension host PATH to use changelists.');
@@ -91,4 +101,4 @@ async function observeChanges(repo) {
   return parseStatus(await gitRead(repo.root, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignore-submodules=all', '--renames']));
 }
 
-module.exports = { gitRead, inspectRepository, observeChanges, parseStatus, supportedPath, inside, maxChanges };
+module.exports = { gitRead, invokeGit, inspectRepository, observeChanges, parseStatus, supportedPath, inside, maxChanges };

@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.94.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.95.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 139 |
-| 부분 구현 | 63 |
+| 구현 | 141 |
+| 부분 구현 | 61 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **84.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **85%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.94에서는 Java 메서드 간 인자와 반환값을 추적한다. HTTP 요청에 URL·JSON 파생값을 쓰고 응답 조건을 조합한다. MySQL 9에서 VECTOR와 SQL NULL을 읽고, MariaDB 패키지 함수의 반환값과 OUT 값을 함께 확인한다. 상태가 바뀐 항목은 2개이고 가중 점수는 181.5점에서 182.5점으로 바뀌었다.
+v0.95에서는 Git 변경의 일부를 이름으로 보관하고 다른 브랜치에 적용한다. CSV·TSV의 UTF-16 인코딩과 가져오기 중복키 선택을 추가하고, 함수 교체·복구 중 직접 EXECUTE 권한을 보존한다. 상태가 바뀐 항목은 2개이고 가중 점수는 182.5점에서 183.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -112,7 +112,7 @@ v0.94에서는 Java 메서드 간 인자와 반환값을 추적한다. HTTP 요�
 | IDEA-089 | IntelliJ IDEA | 스레드·가상 스레드·덤프 분석 | 구현 |
 | IDEA-090 | IntelliJ IDEA | Git 변경·부분 stage·blame·기록 | VS Code 재사용 |
 | IDEA-091 | IntelliJ IDEA | Changelist·작업 컨텍스트 | 구현 |
-| IDEA-092 | IntelliJ IDEA | Shelf·Stash·선택 변경 보관 | 부분 구현 |
+| IDEA-092 | IntelliJ IDEA | Shelf·Stash·선택 변경 보관 | 구현 |
 | IDEA-093 | IntelliJ IDEA | Branch·Rebase·Merge 충돌 해결 | VS Code 재사용 |
 | IDEA-094 | IntelliJ IDEA | Git Worktree·작업별 프로젝트 설정 | 구현 |
 | IDEA-095 | IntelliJ IDEA | GitHub PR·GitLab MR 리뷰 | 부분 구현 |
@@ -212,7 +212,7 @@ v0.94에서는 Java 메서드 간 인자와 반환값을 추적한다. HTTP 요�
 | DG-069 | DataGrip | CSV/TSV·clipboard 내보내기 | 구현 |
 | DG-070 | DataGrip | INSERT/JSON/Excel 등 출력 형식 | 구현 |
 | DG-071 | DataGrip | 사용자 data extractor 스크립트 | 구현 |
-| DG-072 | DataGrip | CSV/Excel import·column/type mapping | 부분 구현 |
+| DG-072 | DataGrip | CSV/Excel import·column/type mapping | 구현 |
 | DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 구현 |
 | DG-074 | DataGrip | native dump·restore 도구 통합 | 구현 |
 | DG-075 | DataGrip | table·result dataset 비교·sync | 구현 |

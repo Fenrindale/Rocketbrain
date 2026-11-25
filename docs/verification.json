@@ -1,25 +1,25 @@
 {
-  "version": "0.94.0",
-  "verifiedAt": "2026-11-25T23:25:07.288Z",
+  "version": "0.95.0",
+  "verifiedAt": "2026-11-25T23:35:20.517Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.94.0.vsix",
-    "sha256": "65b0e6174b2d0fc395c2770bb84ff183d04de84c1014c68d4468df37a07f66cc",
-    "bytes": 3739799,
+    "name": "rocketbrain-0.95.0.vsix",
+    "sha256": "58ac4a531ffff068c12715e79f854146d8943989373b9bf4960aad606d113e40",
+    "bytes": 3752675,
     "files": 22
   },
   "source": {
-    "frozenPublicInputs": 2223,
-    "inputVectorSha256": "c060593986b1cd2ee9a6d9aec9d67d1bd2f62cb3493f7bc0594563d7abbcde0c",
+    "frozenPublicInputs": 2239,
+    "inputVectorSha256": "75777335d92b0f011920d03f5f3f931b0116cd07b46a14fee3be00f9a39c38cb",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1854,
-    "pass": 1708,
+    "tests": 1863,
+    "pass": 1716,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 146,
+    "skipped": 147,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaCallFlow",
+          "group": "utf16DelimitedImport",
           "checks": 1
         },
         {
-          "group": "mysqlNativeVector",
+          "group": "importDuplicates",
           "checks": 1
         },
         {
-          "group": "packageFunctionOutput",
+          "group": "functionGrantDeployment",
           "checks": 1
         },
         {
-          "group": "httpResponseChecks",
+          "group": "gitShelf",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaCallFlow",
+          "group": "utf16DelimitedImport",
           "checks": 1
         },
         {
-          "group": "mysqlNativeVector",
+          "group": "importDuplicates",
           "checks": 1
         },
         {
-          "group": "packageFunctionOutput",
+          "group": "functionGrantDeployment",
           "checks": 1
         },
         {
-          "group": "httpResponseChecks",
+          "group": "gitShelf",
           "checks": 1
         }
       ],
@@ -84,96 +84,70 @@
       }
     }
   ],
-  "additionalInstalledRuntimes": [
-    {
-      "engine": "mysql",
-      "database": {
-        "version": "9.7.4",
-        "product": "MySQL Community Server - GPL"
-      },
-      "groups": [
-        "mysqlNativeVector"
-      ],
-      "artifactSha256": "65b0e6174b2d0fc395c2770bb84ff183d04de84c1014c68d4468df37a07f66cc",
-      "sourceManifestSha256": "c060593986b1cd2ee9a6d9aec9d67d1bd2f62cb3493f7bc0594563d7abbcde0c"
-    }
-  ],
   "newlyVerified": {
-    "IDEA-020": {
-      "scope": "실제 Spring 프로젝트에서 같은 메서드의 오버로드를 구분하고, 소스 이동·호출자 분리·null 경로·오래된 탐색과 재귀 거부를 설치판에서 확인했다.",
+    "IDEA-092": {
+      "scope": "실제 Git 워크트리에서 두 변경 조각을 옮겼다. 양쪽 인덱스와 미선택 변경을 보존하고 충돌 후 보관본 유지와 재적용을 확인했다.",
       "runtimeGroups": [
-        "javaCallFlow"
+        "gitShelf"
       ]
     },
-    "IDEA-102": {
-      "scope": "두 실제 Spring JDBC 응답에서 URL 경로 파생값을 보내고, 통과한 검사 4개 및 비교 실패·미확정 2개를 분리했다.",
+    "DG-072": {
+      "scope": "두 DB에서 UTF-16 TSV·CSV 1,201행씩을 검증했다. 또 205행 표본에서 202행 삽입과 3행 중복을 확인하고, 오류·취소에서 전체 롤백, 명시적 커밋 전 다른 세션에서 비가시성을 검증했다.",
       "runtimeGroups": [
-        "httpResponseChecks"
+        "utf16DelimitedImport",
+        "importDuplicates"
       ]
     },
-    "DG-001": {
-      "scope": "MySQL 8.4.13과 9.7.4에서 실제 정상·오류 연결, utf8mb4, +05:30 TIMESTAMP의 6자리 소수초, DECIMAL·unsigned BIGINT를 검증했다. MySQL 9의 VECTOR 통신과 텍스트·바인딩 조회에서 SQL NULL 보존도 확인했다.",
+    "DG-081": {
+      "scope": "실제 두 DB 설치판에서 권한을 명시해 컴파일·교체·복원했고 이전 호출 경로를 유지했다. 적용 전후 다른 세션의 권한 변경을 거부했다.",
       "runtimeGroups": [
-        "mysqlNativeVector"
-      ]
-    },
-    "DG-002": {
-      "scope": "MariaDB 11.4.8에서 실제 스칼라 함수 반환과 IN OUT 소수, OUT BIGINT·NULL을 검증했다. MySQL에서는 일반 OUT 프로시저가 계속 동작했다.",
-      "runtimeGroups": [
-        "packageFunctionOutput"
-      ]
-    },
-    "DG-024": {
-      "scope": "실제 Oracle 모드 공개 함수와 서명을 탐색하고 정밀 반환·OUT 값을 보존했다. 비공개 함수와 쓰기 시도, 오래된 본문·검토 재사용을 거부했으며 MySQL의 일반 루틴을 비교했다.",
-      "runtimeGroups": [
-        "packageFunctionOutput"
+        "functionGrantDeployment"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 486,
+    "sourceCorrespondences": 491,
     "sourceConfidence": "inferred",
     "archiveEntries": 22,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 139,
-      "partial": 63,
+      "implemented": 141,
+      "partial": 61,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 182.5,
-    "previousWeightedPoints": 181.5,
+    "weightedPoints": 183.5,
+    "previousWeightedPoints": 182.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 84.5,
+    "referencePercent": 85,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "DG-001",
+        "id": "IDEA-092",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-024",
+        "id": "DG-072",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java 값 흐름의 이번 범위는 컴파일러가 정확하게 결정한 직접 호출이다. 일반 명령문 분기·디스패치·객체 힙은 추가 범위다.",
-    "HTTP 검사는 선언형 연산과 요청별 파생값을 지원한다. 외부 인증 자동 협상, 바이너리 파일 및 세션 쿠키 정책은 남는다.",
-    "MySQL 9 검증은 실제 9.7.4 서버의 기본 연결과 조회를 포함한다. 벡터 쓰기와 인덱스는 별도다.",
-    "패키지 함수 호출은 MariaDB Oracle 모드의 확인 가능한 스칼라 형태를 지원한다.",
+    "Git Shelf는 추적 중인 UTF-8 텍스트의 승인한 미스테이징 변경을 다룬다.",
+    "가져오기는 BOM이 있는 UTF-16의 바이트 순서를 확인한다. 중복 건너뛰기는 서버가 확인한 기본 키·고유 키 오류에만 적용하며 나머지 문장 오류는 전체를 롤백한다.",
+    "함수 권한 보존은 확인 가능한 직접 EXECUTE 권한을 다룬다. 역할·와일드카드·다른 주체가 위임한 권한은 범위 밖이다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Git 변경 조각 보관·복구와 대량 가져오기 중복 처리",
-    "UTF-16 CSV·TSV 가져오기와 MariaDB·MySQL 함수 권한 보존"
+    "Java와 Gradle의 실제 의존 그래프 분석",
+    "문서의 SQL 모드 전환과 생성 열을 포함한 복합 외래 키"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
