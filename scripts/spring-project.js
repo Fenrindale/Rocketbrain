@@ -273,6 +273,9 @@ async function main() {
       const passwordRotationConfig = process.env.ROCKETBRAIN_ENABLE_PASSWORD_ROTATION_FIXTURE === '1'
         ? await require('../test/helpers/database-password-rotation-fixture').preparePasswordRotationFixture(fixture)
         : undefined;
+      const passwordFreeFixture = process.env.ROCKETBRAIN_ENABLE_PASSWORD_FREE_FIXTURE === '1'
+        ? await require('../test/helpers/database-password-free-fixture').preparePasswordFreeFixture(fixture)
+        : undefined;
       const dbMcpEnvironment = process.env.ROCKETBRAIN_ENABLE_DB_MCP_FIXTURE === '1'
         ? await require('../test/helpers/db-mcp-fixture').prepareDbMcpFixture(fixture)
         : {};
@@ -283,6 +286,7 @@ async function main() {
           ...(fixture.db.pipeName ? { ROCKETBRAIN_TEST_MYSQL_PIPE: fixture.db.pipeName } : {}),
           ...(adminConfig ? { ROCKETBRAIN_DBADMIN_TEST_CONFIG: adminConfig } : {}), ...dbMcpEnvironment,
           ...(passwordRotationConfig ? { ROCKETBRAIN_PASSWORD_ROTATION_CONFIG:passwordRotationConfig } : {}),
+          ...(passwordFreeFixture ? { ROCKETBRAIN_PASSWORD_FREE_CONFIG: passwordFreeFixture } : {}),
           ...(fixture.db.crossConfigPath ? { ROCKETBRAIN_SCHEMA_CROSS_CONFIG: fixture.db.crossConfigPath } : {}) } });
         child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
       });

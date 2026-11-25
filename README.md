@@ -18,6 +18,8 @@ An independent VS Code workbench for Java/Spring and MySQL/MariaDB. Support is d
 
 **Search Everywhere**는 파일, 워크스페이스 기호, 명령, 설정 키와 로컬 Git 브랜치·커밋을 함께 검색합니다. `#`, `>`, `@`, `%`는 각각 기호, 명령, 설정, Git으로 좁히고 `$`는 활성 MySQL·MariaDB 스키마의 객체를 검색합니다. Git 결과는 선택한 리비전을 읽기 전용으로 보여줍니다. 설정 검색에는 키와 공개 설정 설명을 사용합니다.
 
+**Java Projects**에서 관찰된 main·test·생성 소스와 각각의 빌드 출력 위치를 봅니다. 다른 프로젝트의 출력으로 확인된 의존성 항목을 열면 그 프로젝트로 이동합니다.
+
 설치된 JetBrains 제품의 엔진·코드·복사한 화면 자산·내장 JBR을 사용하거나 배포하지 않습니다. 별도 JetBrains 구독이나 다른 Marketplace 확장을 요구하지 않습니다. 사용하는 공개 구성요소의 조건과 고지문은 [NOTICE](https://github.com/Fenrindale/Rocketbrain/blob/main/NOTICE.txt) 및 [third-party/licenses](https://github.com/Fenrindale/Rocketbrain/tree/main/third-party/licenses)에 보존합니다.
 
 ## 빌드와 설치
@@ -400,6 +402,8 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 
 프로젝트 자체 코드의 배포 라이선스는 아직 선택되지 않아 `package.json`의 **UNLICENSED**를 유지합니다. 저장소의 공개 설정만으로 별도의 사용·재배포 라이선스가 부여되지는 않습니다. 외부 구성요소에는 각 구성요소의 라이선스가 적용됩니다.
 
+MySQL·MariaDB 연결 편집기에서 **Verify CA and server identity**와 **JKS CA truststore**를 선택하면 독립 JDK 25 이상으로 로컬 JKS의 유효한 CA 인증서 항목을 읽습니다. DNS 이름을 계속 검증하며, 상호 TLS를 쓰면 클라이언트 인증서와 키를 별도로 설정합니다. JKS 암호는 연결할 때 입력하고, 공유 프로필에는 신뢰 저장소 종류만 보존합니다.
+
 For mutual TLS, select **Verify CA and server identity** in the connection editor, then choose **PEM certificate and encrypted key** or **PKCS#12 identity**. Set the server DNS name and its CA independently from the client files. An encrypted PEM needs the matching certificate and key. A PKCS#12 file needs exactly one private-key identity and a certificate chain, plus an independent JDK 25 or newer configured through **rocketbrain.java.javaHome**. Rocketbrain asks for the client passphrase on each connection attempt and keeps it out of profile exports and Secret Storage. Portable exports preserve the identity type. Select the files again on the destination machine.
 
 The SQL editor analyzes common JSON calls against the current catalog. It checks argument counts and highlights malformed literal documents or paths in place. MySQL JSON arrows and engine-specific wildcard rules are interpreted using the selected dialect and observed version. Paths supplied by a parameter or column remain runtime-dependent.
@@ -417,3 +421,5 @@ Use **Review Database Password Rotation** to review an exact existing account on
 The supported path covers unlocked, unexpired accounts with one password method. Already authenticated sessions stay connected. Update clients that use the rotated account before opening another session.
 
 For supported MySQL and MariaDB joined mutations, SQL completion resolves SET targets, value and filter columns, and explicit DELETE target aliases using the visible catalog. Qualify a shared column by its exact alias. Suggestions for assignment targets omit generated and auto-increment columns and keep read columns available. Completion only inspects metadata. The server checks statement validity and write permissions when you run the SQL.
+
+For a named MySQL or MariaDB profile, choose **No password** only when the server already allows that database user to connect without a password. Verify and save the profile to remove any previously saved password. Rocketbrain checks which account the server authenticated, and a portable export retains the mode without credentials. TLS and SSH settings still apply.

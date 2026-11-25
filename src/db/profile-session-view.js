@@ -37,7 +37,8 @@ function createProfileTree(vscode, { changes, listProfiles, activeProfile, listS
       node.description = [selected?.id === profile.id ? 'Active catalog' : '', ownSessions.length ?
         ownSessions.filter(session => session.connected).length + '/' + ownSessions.length + ' connected' : '',
       profile.database, transportLabel(profile.transport) || profile.host, profile.tls.mode === 'verify' ? 'TLS' : '',
-      profile.ssh ? 'SSH' : '', profile.auth ? 'IAM' : ''].filter(Boolean).join(' · ');
+      profile.ssh ? 'SSH' : '', profile.auth?.kind === 'aws-rds-iam' ? 'IAM' : '',
+      profile.auth?.kind === 'password-free' ? 'No password' : ''].filter(Boolean).join(' · ');
       node.tooltip = [profile.name, profile.group, profile.color, profile.user + ' @ ' +
         (transportLabel(profile.transport) || profile.host + ':' + profile.port) + '/' + profile.database,
       profile.transport && !profile.transport.address ? 'Edit the local address before connecting.' : ''].filter(Boolean).join('\n');

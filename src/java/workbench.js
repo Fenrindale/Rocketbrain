@@ -2,12 +2,14 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{pathToFileURL}=require('node:url');
 const M=require('./workbench-model'),{BuildTasks,nativeTaskRunner}=require('./workbench-tasks'),{independentJavaExecutable}=require('./debug-runtime');
 const {registerMixedJvmWorkbench}=require('./mixed-jvm-vscode');
+const { observedOutput } = require('./workbench-source-layout');
 const Spring=require('./spring-launch');
 const {chooseSpringLaunch}=require('./spring-launch-vscode');
 const {registerSharedRuns}=require('./shared-run-vscode');
+const {createRuntimeReview}=require('./module-runtimes-vscode');
 const IMPORT_BUDGET_MS=180000;
 const CONFIG_KEY='rocketbrain.java.workbench.configurations.v18',SECRET_PREFIX='rocketbrain.java.workbench.environment.',RUN_MARKER=Spring.marker,SPRING_SECRET_PREFIX='rocketbrain.java.workbench.spring.';
-const COMMANDS=['refresh','resync','build','tasks','runTask','configureRun','configureSpringRun','run','debug','startRunGroup','stop','deleteRunConfiguration','exportSharedRun','importSharedRun','openSource'].map(n=>'rocketbrain.java.workbench.'+n);
+const COMMANDS=['refresh','resync','build','tasks','runTask','configureRun','configureSpringRun','run','debug','startRunGroup','stop','deleteRunConfiguration','exportSharedRun','importSharedRun','reviewRuntimes','changeRuntime','revealProjectDependency','revealBuildOutput','openSource'].map(n=>'rocketbrain.java.workbench.'+n);
 const ALLOWED=new Set(['java.project.getAll','java.project.getSettings','java.project.getClasspaths','java.project.changeImportedProjects','vscode.java.resolveMainClass']);
 function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let disposed=false,generation=0,launchGeneration=0,refreshing=new Map(),busy=false,snapshot={format:'RocketbrainJavaWorkbench',formatVersion:1,projects:[],limits:M.LIMITS},nodes=new Map();const active=new Map(),pendingStarts=new Map(),operations=new Set(),changed=new vscode.EventEmitter(),subscriptions=[changed];
  const trusted=()=>{if(disposed||!vscode.workspace.isTrusted)throw M.fail('Trust the local workspace before using Java project tools.');};
@@ -18,9 +20,37 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
 
  async function request(name,args,cancellation,operation){for(;;){try{return await requestOnce(name,args,cancellation,operation);}catch(error){if(operation?.kind!=='explicit-project-configuration'||name!=='java.project.getSettings'||error?.code!==-32001||!/^Path must include project and resource name: \/[^/\r\n]{1,255}$/.test(error.message||''))throw error;await new Promise(resolve=>setTimeout(resolve,200));}}}
  const configurations=()=>{const values=context.workspaceState.get(CONFIG_KEY,[]);if(!Array.isArray(values)||values.length>M.LIMITS.configurations)throw M.fail('Saved Java run configurations exceed their supported bound.');return values.filter(v=>v?.format==='RocketbrainJavaRunConfiguration'&&v.formatVersion===1&&typeof v.id==='string');};
+ const runtimeReview=createRuntimeReview(vscode,{trusted,java,ensureProject,request,config,save:saveRunConfiguration,
+   getConfiguration:id=>configurations().find(item=>item.id===id)});
  function project(value){let real;try{real=fs.realpathSync(M.local(value));}catch{}const found=snapshot.projects.find(p=>p.id===value||p.uri===value||p.root===value||real&&path.relative(p.root,real)==='');if(!found)throw M.fail('Choose a currently observed Java project. Refresh the Java Projects view first.');if(M.workspacePath(found.root,roots())!==found.root)throw M.fail('The project path changed after observation.');return found;}
- function node(kind,value,children=[]){const record={...value,kind,children};nodes.set(record.id,record);return record;}
- function rebuild(){nodes=new Map();const result=[];for(const p of snapshot.projects){const sources=p.sourceRoots.map(s=>node('source',{...s,projectId:p.id},s.packages.map(pkg=>node('package',{...pkg,projectId:p.id},pkg.files.map(f=>node('file',{...f,projectId:p.id}))))));const libraries=p.libraries.map(l=>node('library',{...l,projectId:p.id}));const taskNodes=tasks.list(p).map(t=>node('task',{...t,projectId:p.id}));const runs=configurations().filter(c=>c.projectUri===p.uri).map(c=>node('configuration',{...publicConfiguration(c),projectId:p.id}));result.push(node('project',p,[node('group',{id:p.id+':sources',name:'Source roots'},sources),node('group',{id:p.id+':libraries',name:'Dependencies · '+libraries.length},libraries),node('group',{id:p.id+':tasks',name:'Build tasks · '+taskNodes.length},taskNodes),node('group',{id:p.id+':runs',name:'Run configurations · '+runs.length},runs)]));}return result;}
+ function node(kind, value, children = []) {
+  const record = { ...value, kind, children };
+  nodes.set(record.id, record);
+  for (const child of children) child.parentId = record.id;
+  return record;
+ }
+ function rebuild() {
+  nodes = new Map();
+  return snapshot.projects.map(project => {
+   const { id: projectId } = project;
+   const sources = project.sourceRoots.map(source => node('source', { ...source, projectId },
+    source.packages.map(pkg => node('package', { ...pkg, projectId },
+     pkg.files.map(file => node('file', { ...file, projectId }))))));
+   const outputs = project.outputRoots.map(item => node('output', { ...item, projectId,
+    id: M.id('output', [projectId, item.path]), name: path.relative(project.root, item.path) || '.' }));
+   const libraries = project.libraries.map(library => node('library', { ...library, pathKind: library.kind, projectId }));
+   const taskNodes = tasks.list(project).map(task => node('task', { ...task, projectId }));
+   const runs = configurations().filter(config => config.projectUri === project.uri)
+    .map(config => node('configuration', { ...publicConfiguration(config), projectId }));
+   return node('project', project, [
+    node('group', { id: projectId + ':sources', name: 'Source roots' }, sources),
+    node('group', { id: projectId + ':outputs', name: 'Build outputs' }, outputs),
+    node('group', { id: projectId + ':libraries', name: 'Dependencies · ' + libraries.length }, libraries),
+    node('group', { id: projectId + ':tasks', name: 'Build tasks · ' + taskNodes.length }, taskNodes),
+    node('group', { id: projectId + ':runs', name: 'Run configurations · ' + runs.length }, runs)
+   ]);
+  });
+ }
  let configWrites=Promise.resolve();
  const serialConfigWrite=action=>{
   const result=configWrites.then(action);
@@ -50,7 +80,48 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
   return Spring.restoreSpringLaunch(value.springBoot,values);
  }
  let treeRoots=[];const refreshTree=()=>{treeRoots=rebuild();changed.fire(undefined);};
- const provider={onDidChangeTreeData:changed.event,getChildren:element=>element?nodes.get(element.id)?.children||[]:treeRoots,getTreeItem(element){const n=nodes.get(element.id);if(!n)throw M.fail('This Java tree item expired.');const label=n.kind==='project'?n.name:n.kind==='source'?n.name||n.path:n.kind==='configuration'?n.name:n.name;const item=new vscode.TreeItem(label,n.children.length?vscode.TreeItemCollapsibleState.Collapsed:vscode.TreeItemCollapsibleState.None);item.id=n.id;item.contextValue={project:'rocketbrainJavaProject',source:'rocketbrainJavaSourceRoot',package:'rocketbrainJavaPackage',file:'rocketbrainJavaFile',library:'rocketbrainJavaLibrary',task:'rocketbrainJavaBuildTask',configuration:'rocketbrainJavaRunConfiguration'}[n.kind]||'rocketbrainJavaGroup';item.description=n.kind==='project'?[n.tool,n.compliance&&'Java '+n.compliance,n.languages?.includes('kotlin')&&'Kotlin',n.languages?.includes('groovy')&&'Groovy'].filter(Boolean).join(' · '):n.kind==='task'?n.group:n.kind==='configuration'?(n.springBoot?'Spring Boot · ':'')+n.mainClass:n.kind==='source'&&n.unavailable?'Unavailable source path':n.kind==='library'?n.kind==='modulepath'?'Module path':n.unavailable?'Unavailable metadata':'Library':undefined;item.tooltip=n.path||n.uri||n.description||n.mainClass||n.name;if(n.kind==='file'){item.resourceUri=vscode.Uri.parse(n.uri);item.command={command:COMMANDS.at(-1),title:'Open Java source',arguments:[n.id]};}return item;}};
+ const contexts = { project: 'rocketbrainJavaProject', source: 'rocketbrainJavaSourceRoot', package: 'rocketbrainJavaPackage',
+  file: 'rocketbrainJavaFile', library: 'rocketbrainJavaLibrary', output: 'rocketbrainJavaBuildOutput', task: 'rocketbrainJavaBuildTask',
+  configuration: 'rocketbrainJavaRunConfiguration' };
+ const provider = {
+  onDidChangeTreeData: changed.event,
+  getChildren: item => item ? nodes.get(item.id)?.children || [] : treeRoots,
+  getParent: item => nodes.get(nodes.get(item.id)?.parentId),
+  getTreeItem(element) {
+   const item = nodes.get(element.id);
+   if (!item) throw M.fail('This Java tree item expired.');
+   const result = new vscode.TreeItem(item.name || item.path, item.children.length
+    ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+   result.id = item.id;
+   result.contextValue = contexts[item.kind] || 'rocketbrainJavaGroup';
+   result.tooltip = item.path || item.uri || item.description || item.mainClass || item.name;
+   if (item.kind === 'project') result.description = [item.tool, item.compliance && 'Java ' + item.compliance,
+    item.languages?.includes('kotlin') && 'Kotlin', item.languages?.includes('groovy') && 'Groovy'].filter(Boolean).join(' · ');
+   if (item.kind === 'task') result.description = item.group;
+   if (item.kind === 'configuration') result.description = (item.springBoot ? 'Spring Boot · ' : '') + item.mainClass;
+   if (item.kind === 'source') {
+    result.description = item.unavailable ? 'Unavailable source path' :
+     [item.scope !== 'unspecified' && item.scope, item.generated && 'generated'].filter(Boolean).join(' · ');
+    if (item.outputPath) result.tooltip = item.path + '\nBuild output · ' + item.outputPath;
+   }
+   if (item.kind === 'library') {
+    result.description = item.projectDependency ? 'Project · ' + item.projectDependency.name :
+     item.unavailable ? 'Unavailable metadata' : item.pathKind === 'modulepath' ? 'Module path' : 'Library';
+    if (item.projectDependency) result.command = { command: 'rocketbrain.java.workbench.revealProjectDependency',
+     title: 'Reveal Dependent Java Project', arguments: [item.id] };
+   }
+   if (item.kind === 'output') {
+    result.description = [item.default && 'default', ...item.scopes, !item.exists && 'not built'].filter(Boolean).join(' · ');
+    if (item.exists) result.command = { command: 'rocketbrain.java.workbench.revealBuildOutput',
+     title: 'Reveal Java Build Output', arguments: [item.id] };
+   }
+   if (item.kind === 'file') {
+    result.resourceUri = vscode.Uri.parse(item.uri);
+    result.command = { command: COMMANDS.at(-1), title: 'Open Java source', arguments: [item.id] };
+   }
+   return result;
+  }
+ };
  const tree=vscode.window.createTreeView('rocketbrain.javaProjects',{treeDataProvider:provider,showCollapseAll:true});subscriptions.push(tree);
  async function refresh(options={},operation){trusted();const key=operation||null;if(refreshing.has(key))return refreshing.get(key);const ticket=generation,pending=(async()=>{const next=await M.collectProjects({request:(name,args,cancellation)=>request(name,args,cancellation,operation),folders:vscode.workspace.workspaceFolders||[],cancellation:options.cancellation});trusted();if(ticket!==generation)throw M.fail('Workspace folders changed during Java project refresh.');snapshot=next;refreshTree();return getSnapshot();})().finally(()=>refreshing.delete(key));refreshing.set(key,pending);return pending;}
 
@@ -201,12 +272,67 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
   },
   save:saveRunConfiguration
  });
- async function configureRun(arg,forSpring=false){const p=await chooseProject(arg);if(!p)return;const mains=await mainClasses({projectUri:p.uri}),main=await vscode.window.showQuickPick(mains.map(m=>({label:m.mainClass,description:m.projectName,main:m})),{title:'Java Projects · Main class'});if(!main)return;const name=await vscode.window.showInputBox({title:'Run configuration name',value:main.main.mainClass.split('.').at(-1)});if(name===undefined)return;const args=await vscode.window.showInputBox({title:'Program arguments',prompt:'Optional arguments; quotes keep spaces inside one argument',value:''});if(args===undefined)return;const choices=[...new Set([p.jdk,java.getState().javaHome,...(config().get('projectJdks',[])||[]).map(j=>j.path)].filter(Boolean))],jdk=await vscode.window.showQuickPick(choices.map(value=>({label:path.basename(value),description:value,value})),{title:'Independent JDK for this run'});if(!jdk)return;const before=await vscode.window.showQuickPick([{label:'JDT incremental build',id:null},...tasks.list(p).map(t=>({label:t.name,description:t.tool,id:t.id}))],{title:'Prelaunch build'});if(!before)return;const env={};for(let i=0;i<M.LIMITS.environment;i++){const key=await vscode.window.showInputBox({title:'Environment variable (optional)',prompt:'Leave empty to save; values are stored in VS Code Secret Storage',value:''});if(key===undefined)return;if(!key)break;const value=await vscode.window.showInputBox({title:'Value for '+key,password:true});if(value===undefined)return;env[key]=value;}const springBoot=forSpring?await chooseSpringLaunch(vscode.window,trusted):undefined;if(forSpring&&!springBoot)return;return saveRunConfiguration({projectUri:p.uri,name,mainClass:main.main.mainClass,projectName:main.main.projectName,args:M.splitArguments(args),javaHome:jdk.value,prelaunchTaskId:before.id,env,springBoot});}
- const handlers={refresh:()=>refresh(),resync:async a=>{const p=await chooseProject(a);return p&&resyncProject({projectUri:p.uri,allowProjectExecution:true});},tasks:async a=>{const p=await chooseProject(a);return p&&discoverTasks({projectUri:p.uri,allowProjectExecution:true});},runTask:async a=>{const p=await chooseProject(a);if(!p)return;let list=tasks.list(p);if(!list.length)list=await discoverTasks({projectUri:p.uri,allowProjectExecution:true});const chosen=await vscode.window.showQuickPick(list.map(t=>({label:t.name,description:t.group,task:t})),{title:'Run build task'});return chosen&&runTask({projectUri:p.uri,taskId:chosen.task.id,allowProjectExecution:true});},build:async a=>{const p=await chooseProject(a);if(!p)return;if(p.tool==='java')return java.buildWorkspace();let list=tasks.list(p);if(!list.length)list=await discoverTasks({projectUri:p.uri,allowProjectExecution:true});const target=list.find(t=>t.name===(p.tool==='maven'?'compile':':classes')||p.tool==='gradle'&&t.name==='classes');if(!target)throw M.fail('Select the appropriate build task for this project.');return runTask({projectUri:p.uri,taskId:target.id,allowProjectExecution:true});},configureRun,configureSpringRun:a=>configureRun(a,true),exportSharedRun:async a=>sharedRuns.exportCommand(await chooseConfiguration(a)),importSharedRun:()=>sharedRuns.importCommand(),startRunGroup:chooseRunGroup,run:async a=>{const configurationId=await chooseConfiguration(a);return configurationId&&start({configurationId,debug:false});},debug:async a=>{const configurationId=await chooseConfiguration(a);return configurationId&&start({configurationId,debug:true});},stop:()=>stop(),deleteRunConfiguration:async a=>{const id=await chooseConfiguration(a);return id&&deleteRunConfiguration(id);},openSource:async a=>{trusted();const n=nodes.get(typeof a==='string'?a:a?.id);if(n?.kind!=='file')throw M.fail('Choose a current Java source file.');M.workspacePath(n.path,roots(),{directory:false});return vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.parse(n.uri)));}};
+ async function configureRun(arg,forSpring=false) {
+  const p=await chooseProject(arg);
+  if(!p)return;
+  const mains=await mainClasses({projectUri:p.uri});
+  const picked=await vscode.window.showQuickPick(mains.map(main=>({label:main.mainClass,description:main.projectName,main})),{title:'Java Projects · Main class'});
+  if(!picked)return;
+  const name=await vscode.window.showInputBox({title:'Run configuration name',value:picked.main.mainClass.split('.').at(-1)});
+  if(name===undefined)return;
+  const args=await vscode.window.showInputBox({title:'Program arguments',prompt:'Use quotes to keep spaces inside one argument',value:''});
+  if(args===undefined)return;
+  const jdk=await runtimeReview.choose(p);
+  if(!jdk)return;
+  const before=await vscode.window.showQuickPick([{label:'JDT incremental build',id:null},...tasks.list(p).map(t=>({label:t.name,description:t.tool,id:t.id}))],{title:'Prelaunch build'});
+  if(!before)return;
+  const env={};
+  for(let i=0;i<M.LIMITS.environment;i++){
+   const key=await vscode.window.showInputBox({title:'Environment variable (optional)',prompt:'Leave empty to save. Values go into VS Code Secret Storage.',value:''});
+   if(key===undefined)return;
+   if(!key)break;
+   const value=await vscode.window.showInputBox({title:'Value for '+key,password:true});
+   if(value===undefined)return;
+   env[key]=value;
+  }
+  const springBoot=forSpring?await chooseSpringLaunch(vscode.window,trusted):undefined;
+  if(forSpring&&!springBoot)return;
+  return saveRunConfiguration({projectUri:p.uri,name,mainClass:picked.main.mainClass,projectName:picked.main.projectName,args:M.splitArguments(args),
+   vmArgs:jdk.vmArgs,javaHome:jdk.choice.home,prelaunchTaskId:before.id,env,springBoot},()=>runtimeReview.verify(jdk.report,jdk.choice.home,jdk.enablePreview));
+ }
+ async function changeRuntime(arg) {
+  const configurationId=await chooseConfiguration(arg);
+  if(!configurationId)return;
+  const saved=configurations().find(item=>item.id===configurationId);
+  if(!saved)throw M.fail('Choose a saved Java run configuration.');
+  const selected=await runtimeReview.choose(await ensureProject(saved.projectUri));
+  return selected&&runtimeReview.apply(selected.report,{configurationId,home:selected.choice.home,enablePreview:selected.enablePreview});
+ }
+ async function revealProjectDependency(value) {
+  trusted();
+  const item = nodes.get(typeof value === 'string' ? value : value?.id);
+  if (!item?.projectDependency) throw M.fail('Choose a current Java project dependency.');
+  const target = project(item.projectDependency.id);
+  if (!observedOutput(item.projectDependency.output, target.root)) throw M.fail('The Java project output changed. Refresh the Java Projects view.');
+  await tree.reveal(nodes.get(target.id), { select: true, focus: true, expand: 1 });
+  return { projectId: target.id, projectName: target.name };
+ }
+ async function revealBuildOutput(value) {
+  trusted();
+  const item = nodes.get(typeof value === 'string' ? value : value?.id);
+  if (item?.kind !== 'output') throw M.fail('Choose a current Java build output.');
+  const target = project(item.projectId);
+  if (!observedOutput(item.path, target.root)?.exists) throw M.fail('Build the Java project and refresh the Java Projects view first.');
+  await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(item.path));
+  return { path: item.path };
+ }
+ const handlers={revealProjectDependency,revealBuildOutput,refresh:()=>refresh(),resync:async a=>{const p=await chooseProject(a);return p&&resyncProject({projectUri:p.uri,allowProjectExecution:true});},tasks:async a=>{const p=await chooseProject(a);return p&&discoverTasks({projectUri:p.uri,allowProjectExecution:true});},runTask:async a=>{const p=await chooseProject(a);if(!p)return;let list=tasks.list(p);if(!list.length)list=await discoverTasks({projectUri:p.uri,allowProjectExecution:true});const chosen=await vscode.window.showQuickPick(list.map(t=>({label:t.name,description:t.group,task:t})),{title:'Run build task'});return chosen&&runTask({projectUri:p.uri,taskId:chosen.task.id,allowProjectExecution:true});},build:async a=>{const p=await chooseProject(a);if(!p)return;if(p.tool==='java')return java.buildWorkspace();let list=tasks.list(p);if(!list.length)list=await discoverTasks({projectUri:p.uri,allowProjectExecution:true});const target=list.find(t=>t.name===(p.tool==='maven'?'compile':':classes')||p.tool==='gradle'&&t.name==='classes');if(!target)throw M.fail('Select the appropriate build task for this project.');return runTask({projectUri:p.uri,taskId:target.id,allowProjectExecution:true});},configureRun,configureSpringRun:a=>configureRun(a,true),exportSharedRun:async a=>sharedRuns.exportCommand(await chooseConfiguration(a)),importSharedRun:()=>sharedRuns.importCommand(),startRunGroup:chooseRunGroup,run:async a=>{const configurationId=await chooseConfiguration(a);return configurationId&&start({configurationId,debug:false});},debug:async a=>{const configurationId=await chooseConfiguration(a);return configurationId&&start({configurationId,debug:true});},stop:()=>stop(),deleteRunConfiguration:async a=>{const id=await chooseConfiguration(a);return id&&deleteRunConfiguration(id);},openSource:async a=>{trusted();const n=nodes.get(typeof a==='string'?a:a?.id);if(n?.kind!=='file')throw M.fail('Choose a current Java source file.');M.workspacePath(n.path,roots(),{directory:false});return vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.parse(n.uri)));}};
+ handlers.reviewRuntimes=async arg=>{const p=await chooseProject(arg);return p&&runtimeReview.show(p);};
+ handlers.changeRuntime=changeRuntime;
  for(const [name,handler]of Object.entries(handlers))subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.workbench.'+name,arg=>track(async()=>{try{trusted();return await handler(arg);}catch(error){output.appendLine('Java Projects: '+error.message);await vscode.window.showErrorMessage('Rocketbrain Java Projects: '+error.message);return null;}})));
  if(vscode.workspace.onDidChangeWorkspaceFolders)subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{generation++;sharedRuns.clear();snapshot={...snapshot,projects:[]};tasks.catalog.clear();refreshTree();void stop().catch(()=>{});}));
  const mixed=registerMixedJvmWorkbench(vscode,{trusted,java,ensureProject,getProjects:()=>snapshot.projects,
    refreshProjects:()=>refresh(),discoverTasks,runTask,track});
  subscriptions.push(mixed);
- refreshTree();let disposing;return{mixedJvm:{buildAndIndex:options=>track(()=>mixed.buildAndIndex(options)),definition:options=>track(()=>mixed.definition(options)),run:options=>track(()=>mixed.run(options))},refresh:options=>track(()=>refresh(options)),getSnapshot,mainClasses,resyncProject:options=>track(()=>resyncProject(options)),discoverTasks:options=>track(()=>discoverTasks(options)),runTask:options=>track(()=>runTask(options)),saveRunConfiguration:options=>track(()=>saveRunConfiguration(options)),exportSharedRun:options=>track(()=>sharedRuns.exportSharedRun(options)),reviewSharedRun:options=>track(()=>sharedRuns.reviewSharedRun(options)),applySharedRun:options=>track(()=>sharedRuns.applySharedRun(options)),listRunConfigurations:()=>structuredClone(configurations().map(publicConfiguration)),deleteRunConfiguration:id=>track(()=>deleteRunConfiguration(id)),start:options=>track(()=>start(options)),startRunGroup:options=>track(()=>startRunGroup(options)),stop:options=>track(()=>stop(options)),getTreeChildren:id=>structuredClone(id?nodes.get(id)?.children||[]:treeRoots),async dispose(){if(disposing)return disposing;disposed=true;generation++;sharedRuns.clear();disposing=(async()=>{await stop();await tasks.dispose();await Promise.allSettled([...operations]);for(const s of subscriptions)s.dispose();})();return disposing;}};}
+ refreshTree();let disposing;return{mixedJvm:{buildAndIndex:options=>track(()=>mixed.buildAndIndex(options)),definition:options=>track(()=>mixed.definition(options)),run:options=>track(()=>mixed.run(options))},refresh:options=>track(()=>refresh(options)),getSnapshot,mainClasses,resyncProject:options=>track(()=>resyncProject(options)),discoverTasks:options=>track(()=>discoverTasks(options)),runTask:options=>track(()=>runTask(options)),saveRunConfiguration:options=>track(()=>saveRunConfiguration(options)),reviewModuleRuntimes:options=>track(()=>runtimeReview.inspect(options)),applyRuntimeChoice:(report,options)=>track(()=>runtimeReview.apply(report,options)),exportSharedRun:options=>track(()=>sharedRuns.exportSharedRun(options)),reviewSharedRun:options=>track(()=>sharedRuns.reviewSharedRun(options)),applySharedRun:options=>track(()=>sharedRuns.applySharedRun(options)),listRunConfigurations:()=>structuredClone(configurations().map(publicConfiguration)),deleteRunConfiguration:id=>track(()=>deleteRunConfiguration(id)),start:options=>track(()=>start(options)),startRunGroup:options=>track(()=>startRunGroup(options)),stop:options=>track(()=>stop(options)),getTreeChildren:id=>structuredClone(id?nodes.get(id)?.children||[]:treeRoots),async dispose(){if(disposing)return disposing;disposed=true;generation++;sharedRuns.clear();disposing=(async()=>{await stop();await tasks.dispose();await Promise.allSettled([...operations]);for(const s of subscriptions)s.dispose();})();return disposing;}};}
 module.exports={registerJavaWorkbench,CONFIG_KEY,SECRET_PREFIX,RUN_MARKER,COMMANDS,IMPORT_BUDGET_MS};

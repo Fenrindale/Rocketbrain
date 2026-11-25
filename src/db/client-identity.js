@@ -2,7 +2,7 @@
 
 const fs = require('node:fs/promises'), { constants } = require('node:fs'), path = require('node:path');
 const os = require('node:os'), { spawn } = require('node:child_process');
-const { createPrivateKey, randomBytes } = require('node:crypto');
+const { createPrivateKey, randomBytes, X509Certificate } = require('node:crypto');
 const { javaExecutable } = require('./jdbc');
 const worker = require('./pkcs12-worker-source.json');
 
@@ -51,32 +51,45 @@ function clientPassphrase(value, required) {
   return value;
 }
 
-function extract(java, directory, bytes, passphrase, signal) {
-  if (signal?.aborted) throw fail('Reading the client identity was canceled.');
+function jksPassphrase(value, required) {
+  if (value === undefined || value === '') {
+    if (required) throw fail('Enter the JKS truststore passphrase for this connection attempt.');
+    return undefined;
+  }
+  if (typeof value !== 'string' || Buffer.byteLength(value) > 16384 || value.includes('\0')) throw fail('Use a JKS truststore passphrase under 16 KiB.');
+  if (!required) throw fail('Choose a JKS server truststore to use this passphrase.');
+  return value;
+}
+
+function extract(java, directory, bytes, passphrase, signal, mode) {
+  const jks = mode === 'jks-trust';
+  const subject = jks ? 'JKS truststore' : 'PKCS#12 client identity';
+  const cancellation = 'Reading the ' + subject + ' was canceled.';
+  if (signal?.aborted) throw fail(cancellation);
   const secret = Buffer.from(passphrase, 'utf8');
   const header = Buffer.alloc(8);
   header.writeUInt32BE(secret.length); header.writeUInt32BE(bytes.length, 4);
   const allowed = new Set(['SYSTEMROOT','WINDIR','TEMP','TMP','TMPDIR','LANG','LC_ALL']);
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toUpperCase())));
   const child = spawn(java.executable, ['-Xmx96m','-XX:ActiveProcessorCount=2','-Duser.home=.','-Djava.io.tmpdir=.',
-    '--class-path','.','--source','25','ClientIdentity.java'], {
+    '--class-path','.','--source','25','ClientIdentity.java',...(jks ? [mode] : [])], {
     cwd: directory, windowsHide: true, shell: false, env, stdio: ['pipe','pipe','ignore']
   });
   return new Promise((resolve,reject) => {
     const chunks = [];
     let size = 0, problem;
     const stop = message => { problem ||= fail(message); child.kill('SIGKILL'); };
-    const cancel = () => stop('Reading the client identity was canceled.');
-    const timer = setTimeout(() => stop('Reading the PKCS#12 client identity timed out.'), 12000);
+    const cancel = () => stop(cancellation);
+    const timer = setTimeout(() => stop('Reading the ' + subject + ' timed out.'), 12000);
     signal?.addEventListener('abort', cancel, { once: true });
     if (signal?.aborted) cancel();
     child.stdout.on('data', chunk => {
       size += chunk.length;
-      if (size > limit) { chunk.fill(0); stop('The PKCS#12 identity exceeds the supported certificate-chain size.'); }
+      if (size > limit) { chunk.fill(0); stop('The ' + subject + ' exceeds the supported certificate data size.'); }
       else chunks.push(chunk);
     });
     child.stdin.on('error', () => {});
-    child.once('error', () => { problem ||= fail('The independent Java client-identity reader could not start.'); });
+    child.once('error', () => { problem ||= fail('The independent Java ' + subject + ' reader could not start.'); });
     child.once('close', code => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', cancel);
@@ -85,7 +98,8 @@ function extract(java, directory, bytes, passphrase, signal) {
       for (const chunk of chunks) chunk.fill(0);
       if (problem || code !== 0) {
         output.fill(0);
-        reject(problem || fail('Open a PKCS#12 file containing one private key and its certificate chain. Check the passphrase.'));
+        reject(problem || fail(jks ? 'Open a JKS truststore containing only valid CA certificate entries. Check its passphrase.'
+          : 'Open a PKCS#12 file containing one private key and its certificate chain. Check the passphrase.'));
       } else resolve(output);
     });
     child.stdin.write(header);
@@ -94,26 +108,30 @@ function extract(java, directory, bytes, passphrase, signal) {
   });
 }
 
-function identityFromOutput(output) {
+function frames(output, maximum) {
   let offset = 0;
-  const take = () => {
-    if (offset + 4 > output.length) throw Error('short output');
+  const parts = [];
+  while (offset < output.length) {
+    if (parts.length === maximum || offset + 4 > output.length) throw Error('invalid certificate record count');
     const size = output.readUInt32BE(offset);
     offset += 4;
     if (!size || size > 131072 || offset + size > output.length) throw Error('invalid certificate or key');
-    return output.subarray(offset, offset += size);
-  };
+    parts.push(output.subarray(offset, offset += size));
+  }
+  return parts;
+}
+
+function certificatePem(der) {
+  return '-----BEGIN CERTIFICATE-----\n' + der.toString('base64').match(/.{1,64}/g).join('\n') + '\n-----END CERTIFICATE-----\n';
+}
+
+function identityFromOutput(output) {
   try {
-    const algorithm = take().toString('ascii');
-    if (!['RSA','EC','Ed25519','Ed448'].includes(algorithm)) throw Error('unsupported private-key algorithm');
-    const key = createPrivateKey({key:take(),type:'pkcs8',format:'der'});
-    let cert = '';
-    for (let count = 0; offset < output.length; count++) {
-      if (count >= 8) throw Error('chain size');
-      const der = take();
-      cert += '-----BEGIN CERTIFICATE-----\n' + der.toString('base64').match(/.{1,64}/g).join('\n') + '\n-----END CERTIFICATE-----\n';
-    }
-    if (!cert) throw Error('empty client chain');
+    const [kind, privateKey, ...chain] = frames(output, 10);
+    const algorithm = kind?.toString('ascii');
+    if (!['RSA','EC','Ed25519','Ed448'].includes(algorithm) || !privateKey || !chain.length) throw Error('unsupported private-key algorithm or chain');
+    const key = createPrivateKey({key:privateKey,type:'pkcs8',format:'der'});
+    const cert = chain.map(certificatePem).join('');
     // mysql2 accepts encrypted PEM. Keep only a per-attempt key wrapper in its connection options.
     const passphrase = randomBytes(32).toString('base64url');
     return { cert, key:key.export({format:'pem',type:'pkcs8',cipher:'aes-256-cbc',passphrase}), passphrase };
@@ -121,14 +139,26 @@ function identityFromOutput(output) {
   finally { output.fill(0); }
 }
 
-async function readPkcs12Identity(file, passphrase, javaHome, signal) {
-  const java = await javaExecutable(javaHome,'PKCS#12 client identities');
+function trustFromOutput(output) {
+  try {
+    const certs = frames(output, 16);
+    if (!certs.length || certs.some(der => !new X509Certificate(der).ca)) throw Error('expected only CA certificates');
+    const ca = certs.map(certificatePem).join('');
+    if (Buffer.byteLength(ca) > limit) throw Error('CA bundle too large');
+    return ca;
+  } catch { throw fail('The JKS truststore returned invalid or excessive CA certificate data.'); }
+  finally { output.fill(0); }
+}
+
+async function readKeyStore(file, passphrase, javaHome, signal, mode) {
+  const java = await javaExecutable(javaHome, mode === 'jks-trust' ? 'JKS server truststores' : 'PKCS#12 client identities');
   const bytes = await readMaterial(file);
   let directory;
   try {
-    directory = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()),'rocketbrain-pkcs12-'));
+    directory = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()),'rocketbrain-keystore-'));
     await fs.writeFile(path.join(directory,'ClientIdentity.java'),worker,{flag:'wx',mode:0o600});
-    return identityFromOutput(await extract(java,directory,bytes,passphrase,signal));
+    const output = await extract(java,directory,bytes,passphrase,signal,mode);
+    return mode === 'jks-trust' ? trustFromOutput(output) : identityFromOutput(output);
   } finally {
     bytes.fill(0);
     if (directory) {
@@ -138,4 +168,12 @@ async function readPkcs12Identity(file, passphrase, javaHome, signal) {
   }
 }
 
-module.exports = { readClientPem, readPkcs12Identity, clientPassphrase };
+function readPkcs12Identity(file, passphrase, javaHome, signal) {
+  return readKeyStore(file, passphrase, javaHome, signal, 'pkcs12');
+}
+
+function readJksTrustStore(file, passphrase, javaHome, signal) {
+  return readKeyStore(file, passphrase, javaHome, signal, 'jks-trust');
+}
+
+module.exports = { readClientPem, readPkcs12Identity, clientPassphrase, readJksTrustStore, jksPassphrase };

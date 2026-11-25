@@ -72,8 +72,9 @@ function resolveLaunch(options) {
 function serverSettings(projectJdks = [], options = {}) {
   if (!Array.isArray(projectJdks)) throw new Error('rocketbrain.java.projectJdks must be an array.');
   const runtimes = projectJdks.map(runtime => {
-    if (!runtime || !/^JavaSE-\d+$/.test(runtime.name || '') || !path.isAbsolute(runtime.path || '')) throw new Error('Each project JDK requires a JavaSE-N name and an absolute path.');
-    return { name: runtime.name, path: absoluteDirectory(runtime.path, 'Project JDK'), default: Boolean(runtime.default) };
+    if (!runtime || !/^JavaSE-(?:1\.8|\d+)$/.test(runtime.name || '') || !path.isAbsolute(runtime.path || '')) throw new Error('Each project JDK requires a JavaSE-N name and an absolute path. Use JavaSE-1.8 for Java 8.');
+    const name = runtime.name === 'JavaSE-8' ? 'JavaSE-1.8' : runtime.name;
+    return { name, path: absoluteDirectory(runtime.path, 'Project JDK'), default: Boolean(runtime.default) };
   });
   if (runtimes.filter(runtime => runtime.default).length > 1) throw new Error('Only one project JDK can be the default.');
   const gradle = { enabled: true, wrapper: { enabled: true },

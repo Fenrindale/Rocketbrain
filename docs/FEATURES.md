@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.90.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.91.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,21 +8,21 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 127 |
-| 부분 구현 | 75 |
+| 구현 | 131 |
+| 부분 구현 | 71 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **81.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **82.6%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.90에서는 미완성 Java 값을 예상 타입으로 완성하고, 파일·Java 기호·명령·설정·Git과 활성 DB를 검색한다. SQL 조인 변경문의 열·대상을 완성하고 한 SSH agent 키를 선택한다. 상태가 바뀐 항목은 2개이고 가중 점수는 175.5점에서 176.5점으로 바뀌었다.
+v0.91에서는 실제 클래스 파일과 JVM을 대조해 실행 환경을 선택한다. Maven·Gradle의 소스와 빌드 출력, 프로젝트 의존성을 탐색한다. JKS 서버 신뢰와 선택한 계정의 무암호 연결을 추가했다. 상태가 바뀐 항목은 4개이고 가중 점수는 176.5점에서 178.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
 | IDEA-001 | IntelliJ IDEA | IDE 전체 배치·도킹·네이티브 화면 | 호스트 구조 제약 |
-| IDEA-002 | IntelliJ IDEA | 프로젝트·패키지·모듈 탐색 | 부분 구현 |
+| IDEA-002 | IntelliJ IDEA | 프로젝트·패키지·모듈 탐색 | 구현 |
 | IDEA-003 | IntelliJ IDEA | Search Everywhere 통합 검색 | 구현 |
 | IDEA-004 | IntelliJ IDEA | 최근 파일·편집 위치·뒤로/앞으로 | VS Code 재사용 |
 | IDEA-005 | IntelliJ IDEA | 다중 커서·열 선택·일괄 편집 | VS Code 재사용 |
@@ -62,7 +62,7 @@ v0.90에서는 미완성 Java 값을 예상 타입으로 완성하고, 파일·J
 | IDEA-039 | IntelliJ IDEA | 중복 코드 감지 | 구현 |
 | IDEA-040 | IntelliJ IDEA | 의존성 취약점·취약 API 사용 분석 | 부분 구현 |
 | IDEA-041 | IntelliJ IDEA | Qodana·CI 품질 게이트 연결 | 구현 |
-| IDEA-042 | IntelliJ IDEA | Java 버전·JDK·언어 수준 | 부분 구현 |
+| IDEA-042 | IntelliJ IDEA | Java 버전·JDK·언어 수준 | 구현 |
 | IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 부분 구현 |
 | IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 부분 구현 |
 | IDEA-045 | IntelliJ IDEA | Kotlin Multiplatform·Compose 개발 | 부분 구현 |
@@ -146,10 +146,10 @@ v0.90에서는 미완성 Java 값을 예상 타입으로 완성하고, 파일·J
 | DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 부분 구현 |
 | DG-004 | DataGrip | 사용자 JDBC JAR·드라이버 클래스 추가 | 구현 |
 | DG-005 | DataGrip | 드라이버 버전 교체·추가 라이브러리 | 구현 |
-| DG-006 | DataGrip | 사용자·비밀번호·무인증 모드 | 부분 구현 |
+| DG-006 | DataGrip | 사용자·비밀번호·무인증 모드 | 구현 |
 | DG-007 | DataGrip | 비밀정보 저장·저장하지 않기 | 부분 구현 |
 | DG-008 | DataGrip | TLS CA·호스트 검증 | 부분 구현 |
-| DG-009 | DataGrip | 클라이언트 인증서·truststore | 부분 구현 |
+| DG-009 | DataGrip | 클라이언트 인증서·truststore | 구현 |
 | DG-010 | DataGrip | SSH 터널·키·agent 인증 | 부분 구현 |
 | DG-011 | DataGrip | Unix socket·Windows named pipe | 구현 |
 | DG-012 | DataGrip | 클라우드 DB 접속·토큰 인증 범위 | 부분 구현 |

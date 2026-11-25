@@ -128,7 +128,12 @@ class MysqlService {
     this._initialization = this._sessionLifecycle ? initializationStatements(this._sessionLifecycle.initialSql) : [];
     this._writeProtection = normalizeWriteProtection(config.writeProtection);
     const security = require('./connection-security').connectionSecurity(config);Object.assign(this._options,security.options);this._connectionCleanup=security.dispose;
-    if (config.auth !== undefined) {
+    if (config.auth?.kind === 'password-free') {
+      if (Object.keys(config.auth).length !== 1 || this._options.password) {
+        throw fail('ROCKETBRAIN_PASSWORD_FREE_ACCOUNT', 'Password-free authentication takes only an explicit database user.');
+      }
+      this._passwordFreeUser = this._options.user;
+    } else if (config.auth !== undefined) {
       const auth = normalizeRdsIam(config.auth);
       const { host, user, port = 3306 } = config;
       validateRdsIamRoute({ ...config, auth }, config.ssl);
@@ -309,6 +314,14 @@ class MysqlService {
       } catch (error) { this._lose(session, connectionError(error)); }
     });
     try {
+      if (this._passwordFreeUser) {
+        const [row] = await this._control(session, 'SELECT CURRENT_USER()');
+        const account = row?.[0];
+        if (typeof account !== 'string' || account.lastIndexOf('@') < 0 ||
+            account.slice(0, account.lastIndexOf('@')) !== this._passwordFreeUser) {
+          throw fail('ROCKETBRAIN_PASSWORD_FREE_ACCOUNT', 'The server authenticated a different account. Check the selected database user.');
+        }
+      }
       await this._control(session, 'SET SESSION TRANSACTION ' + (session.readOnly ? 'READ ONLY' : 'READ WRITE'));
       if (this._sessionLifecycle) {
         session.lifecycle = { lastUserActivity: performance.now(), initializedStatements: 0, keepAliveChecks: 0,

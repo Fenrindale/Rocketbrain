@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.90.0",
+  "version": "0.91.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -1009,6 +1009,8 @@
         "title": "Add Java Run Configuration",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.java.workbench.reviewRuntimes", "title": "Review Java Runtime Compatibility", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.workbench.changeRuntime", "title": "Change Saved Java Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
         "command": "rocketbrain.java.workbench.exportSharedRun",
         "title": "Export Shared Java Run",
@@ -1051,6 +1053,16 @@
       {
         "command": "rocketbrain.java.workbench.openSource",
         "title": "Open Java Source",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.revealProjectDependency",
+        "title": "Reveal Dependent Java Project",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.revealBuildOutput",
+        "title": "Reveal Java Build Output",
         "category": "Rocketbrain"
       },
       {
@@ -1589,6 +1601,8 @@
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
           "group": "launch"
         },
+        { "command": "rocketbrain.java.workbench.reviewRuntimes", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject && isWorkspaceTrusted", "group": "launch" },
+        { "command": "rocketbrain.java.workbench.changeRuntime", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaRunConfiguration && isWorkspaceTrusted", "group": "configuration" },
         {
           "command": "rocketbrain.java.workbench.runTask",
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaBuildTask",
@@ -2278,7 +2292,7 @@
             ],
             "additionalProperties": false
           },
-          "description": "Project execution environments, e.g. name JavaSE-21 with a standalone JDK path."
+          "description": "Project execution environments such as JavaSE-1.8, JavaSE-17 or JavaSE-21 with standalone JDK paths."
         },
         "rocketbrain.spring.enabled": {
           "type": "boolean",
