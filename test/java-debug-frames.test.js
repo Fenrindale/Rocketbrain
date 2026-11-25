@@ -7,10 +7,12 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
 const { createFrameRestart } = require('../src/java/debug-frames');
+const { createLocalValueInspection } = require('../src/java/debug-local-values');
+const { DEBUG_BUILD } = require('../src/java/debug-runtime');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { DapClient } = require('./java-debug-dap');
-const { frameFixture, exerciseFrameRestart } = require('./helpers/java-frame-fixture');
+const { frameFixture, exerciseFrameRestart, exerciseLocalValues } = require('./helpers/java-frame-fixture');
 
 const configPath = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
 
@@ -100,9 +102,21 @@ test('actual JDT DAP restarts a chosen caller frame in the same JVM and replays 
     await dap.request('configurationDone');
     await starting;
     const first = await dap.event('stopped', 0, 18000);
-    const state = { state: 'stopped', threadId: first.threadId, stopVersion: 0, capabilities };
-    const session = { type: 'rocketbrain-java', id: 'frame-fixture', customRequest: (...args) => dap.request(...args) };
-    const service = createFrameRestart({ debug: { activeDebugSession: session } }, { getState: () => state, ensureTrusted() {} });
+    const state = { state: 'stopped', threadId: first.threadId, stopVersion: 0, capabilities, debugBuild: launch.debugBuild };
+    const requests = [];
+    const session = { type: 'rocketbrain-java', id: 'frame-fixture', customRequest: (...args) => { requests.push(args[0]); return dap.request(...args); } };
+    const vscode = { debug: { activeDebugSession: session } };
+    const context = { getState: () => state, ensureTrusted() {} };
+    const service = createFrameRestart(vscode, context);
+    const values = createLocalValueInspection(vscode, context);
+    const inspected = launch.debugBuild === DEBUG_BUILD ? await exerciseLocalValues(values, fixture, session) : undefined;
+    if (inspected) {
+      assert.deepEqual([...new Set(requests)], ['stackTrace', 'rocketbrain/readJavaValues']);
+      const { stackFrames } = await session.customRequest('stackTrace', { threadId: first.threadId, startFrame: 0, levels: 1 });
+      await assert.rejects(session.customRequest('rocketbrain/readJavaValues', { action: 'string', frameId: stackFrames[0].id, name: 'beyondLimit' }), /256 Ki/);
+      await assert.rejects(session.customRequest('rocketbrain/readJavaValues', { action: 'page', frameId: stackFrames[0].id,
+        name: 'samples', start: 0, count: 101 }), /up to 100/);
+    } else await assert.rejects(values.inspect(), /Update the Rocketbrain Java engine/);
     const frame = async stop => (await dap.request('stackTrace', { threadId: stop.threadId, startFrame: 0, levels: 1 })).stackFrames[0];
     const proceed = async resume => {
       const index = dap.events.length;
@@ -113,12 +127,17 @@ test('actual JDT DAP restarts a chosen caller frame in the same JVM and replays 
       return stopped;
     };
     const outcome = await exerciseFrameRestart({ fixture, service, session, first, proceed, frame });
+    if (inspected) await assert.rejects(values.read(inspected.review, 'message'), /different position/);
     const index = dap.events.length;
     await session.customRequest('continue', { threadId: outcome.stopped.threadId });
     await dap.event('terminated', index, 18000);
     const output = dap.events.filter(message => message.event === 'output').map(message => message.body.output).join('');
     assert.match(output, /FRAME_ATTEMPT:1\s+FRAME_ATTEMPT:2\s+FRAME_RESULT:42:2/);
     proof = { debugBuild: launch.debugBuild, ...outcome.proof, sideEffectsBeforeRestartPreserved: true, finalResult: 42 };
+    if (inspected) {
+      assert.match(output, /FRAME_INSPECTION_CALLS:0/);
+      proof.localValues = { ...inspected.proof, noTargetMethodCalls: true, staleValueRefused: true };
+    }
   } finally {
     await dap?.close();
     await lsp.close();

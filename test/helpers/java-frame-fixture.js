@@ -8,6 +8,7 @@ function frameFixture(packageName = 'dev.rocketbrain.frames', name = 'RestartFra
     'package ' + packageName + ';',
     'public final class ' + name + ' {',
     '    private static int attempts;',
+    '    private static int inspectionCalls;',
     '    static int retry(int input) {',
     '        attempts += 1; // FRAME_ENTRY',
     '        System.out.println("FRAME_ATTEMPT:" + attempts);',
@@ -17,11 +18,24 @@ function frameFixture(packageName = 'dev.rocketbrain.frames', name = 'RestartFra
     '        int[] samples = new int[1201];',
     '        for (int i = 0; i < samples.length; i++) samples[i] = i * 3;',
     '        String message = "sample-\\n\\u03a9-txt ".repeat(1000) + "|FULL_END|";',
-    '        return input * 2 + samples[0] + (message.isEmpty() ? 1 : 0); // FRAME_GATE',
+    '        String beyondLimit = "x".repeat(262145);',
+    '        java.util.List<Object> entries = new java.util.ArrayList<>();',
+    '        for (int i = 0; i < 301; i++) entries.add("entry-" + i);',
+    '        entries.set(299, new ObservedValue());',
+    '        entries.set(300, null);',
+    '        java.util.List<Object> subclass = new UnsupportedList();',
+    '        return input * 2 + samples[0] + (message.isEmpty() || beyondLimit.isEmpty() || entries.isEmpty() || !subclass.isEmpty() ? 1 : 0); // FRAME_GATE',
+    '    }',
+    '    static final class ObservedValue {',
+    '        @Override public String toString() { inspectionCalls++; return "UNEXPECTED"; }',
+    '    }',
+    '    static final class UnsupportedList extends java.util.ArrayList<Object> {',
+    '        @Override public Object[] toArray() { inspectionCalls++; return super.toArray(); }',
     '    }',
     '    public static void main(String[] args) {',
     '        int result = retry(21);',
     '        System.out.println("FRAME_RESULT:" + result + ":" + attempts);',
+    '        System.out.println("FRAME_INSPECTION_CALLS:" + inspectionCalls);',
     '    }',
     '}',
     ''
@@ -59,4 +73,31 @@ async function exerciseFrameRestart({ fixture, service, session, first, proceed,
     sameThread: true, callerReviewed: true, staleReviewRefused: true, gateRevisited: true } };
 }
 
-module.exports = { frameFixture, exerciseFrameRestart };
+async function exerciseLocalValues(service, fixture, session) {
+  const review = await service.inspect(session);
+  assert.match(review.frame, /\.leaf\(int\)$/);
+  const entry = name => review.values.find(value => value.name === name);
+  assert.deepEqual(entry('samples'), { name: 'samples', kind: 'array', length: 1201, complete: true });
+  assert.deepEqual(entry('entries'), { name: 'entries', kind: 'arrayList', length: 301, complete: true });
+  assert.equal(entry('subclass'), undefined);
+  const tail = await service.read(review, 'samples', { start: 1198 });
+  assert.deepEqual(tail.rows.map(({ index, display }) => [index, display]), [[1198, '3594'], [1199, '3597'], [1200, '3600']]);
+  const middle = await service.read(review, 'samples', { start: 410 });
+  assert.equal(middle.rows.length, 100);
+  assert.equal(middle.rows[0].display, '1230');
+  assert.equal(middle.rows.at(-1).display, '1527');
+  const list = await service.read(review, 'entries', { start: 298 });
+  assert.deepEqual(list.rows.map(({ index, display }) => [index, display]), [[298, 'entry-298'], [299, undefined], [300, 'null']]);
+  assert.match(list.rows[1].type, /\$ObservedValue$/);
+  const message = await service.read(review, 'message');
+  assert.equal(message.text, fixture.fullString);
+  assert.equal(entry('beyondLimit')?.complete, false);
+  await assert.rejects(service.read(review, 'beyondLimit'), /256 Ki/);
+  await assert.rejects(service.read(review, 'samples', { start: 1300 }), /in-range/);
+  await assert.rejects(service.read({ ...review }, 'message'), /current Java inspection/);
+  return { review, proof: { totalArrayElements: tail.length, totalListElements: list.length, boundedMiddleRows: middle.rows.length,
+    tailVerified: true, objectTypeOnly: true, unsupportedSubclassExcluded: true, longStringUnits: message.length,
+    exactUnicodeAndNewlines: true, oversizedStringRefused: true } };
+}
+
+module.exports = { frameFixture, exerciseFrameRestart, exerciseLocalValues };
