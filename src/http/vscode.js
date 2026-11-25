@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { requestAt,resolveRequest,sendRequest } = require('./client');
 const { readWorkspaceBodyFile } = require('./body-file');
+const { HttpCookieJars } = require('./cookie-jar');
 const { websocketWorkbench } = require('./websocket');
 
 async function readProto(folder,value) {
@@ -39,6 +40,7 @@ function registerHttpTools(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain HTTP');
   const transcript = vscode.window.createOutputChannel('Rocketbrain WebSocket');
   const running = new Set();
+  const cookies = new HttpCookieJars();
   let disposed=false, selectedSession, pendingRender, renderTimer;
   const connections=websocketWorkbench(session=>{
     if (disposed || selectedSession!==session.id) return;
@@ -128,7 +130,8 @@ function registerHttpTools(context, vscode) {
         return { environment:chosen.name,webSocket };
       }
       if (ready.method==='GRPC') return { environment:chosen.name,...await require('./grpc').sendGrpc(ready,proto,{signal:bounded}) };
-      const response=await sendRequest(ready,{signal:bounded});
+      const cookieSession=ready.cookieJar&&cookies.session(key,chosen.name,ready.cookieJar,ready.url);
+      const response=await sendRequest(ready,{signal:bounded,cookieSession});
       return { environment:chosen.name,...response };
     } finally {
       running.delete(controller);
@@ -217,6 +220,7 @@ function registerHttpTools(context, vscode) {
       output.appendLine(kind+' · '+state);
     }
     output.appendLine('HTTP '+response.status+' · '+response.durationMs+' ms · '+response.environment);
+    if (response.cookies) output.appendLine('Cookie jar '+response.cookies.name+' · sent '+response.cookies.sent+' · held '+response.cookies.retained);
     if (response.assertions.length) {
       output.appendLine(passed+' / '+response.assertions.length+' assertions passed');
       for (const item of response.assertions) output.appendLine((item.passed?'PASS ':'FAIL ')+item.kind+(item.name?' '+item.name:''));
@@ -239,6 +243,7 @@ function registerHttpTools(context, vscode) {
     disposed=true;
     for (const controller of running) controller.abort();
     connections.dispose();
+    cookies.dispose();
     clearTimeout(renderTimer);
     for (const subscription of subscriptions) subscription.dispose();
     output.dispose();

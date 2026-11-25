@@ -6,6 +6,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.SpringVersion;
@@ -27,6 +30,28 @@ public class ProbeController {
     public Map<String,Object> uploadDigest(@RequestBody byte[] bytes) throws NoSuchAlgorithmException {
         return Map.of("length", bytes.length, "sha256", HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)),
                 "people", testingState().get("people"));
+    }
+    @PostMapping("/probe/session/start")
+    public ResponseEntity<Map<String,Object>> startSession() {
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE,
+                "rb_session=fixture-cookie-marker; Path=/probe/session; HttpOnly",
+                "rb_secondary=fixture-sibling-cookie; Path=/probe/session; HttpOnly")
+                .body(Map.of("started", true));
+    }
+    @GetMapping("/probe/session/state")
+    public ResponseEntity<Map<String,Object>> sessionState(@CookieValue(name="rb_session", defaultValue="") String session,
+            @CookieValue(name="rb_secondary", defaultValue="") String secondary) {
+        if (!session.equals("fixture-cookie-marker") || !secondary.equals("fixture-sibling-cookie")) {
+            return ResponseEntity.status(401).body(Map.of("authenticated", false));
+        }
+        return ResponseEntity.ok(Map.of("people", testingState().get("people"), "echo", session));
+    }
+    @PostMapping("/probe/session/end")
+    public ResponseEntity<Map<String,Object>> endSession() {
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE,
+                "rb_session=; Max-Age=0; Path=/probe/session; HttpOnly",
+                "rb_secondary=; Max-Age=0; Path=/probe/session; HttpOnly")
+                .body(Map.of("ended", true));
     }
     @GetMapping("/probe") public Map<String,Object> probe() {
         Map<String,Object> result = service.probe();
