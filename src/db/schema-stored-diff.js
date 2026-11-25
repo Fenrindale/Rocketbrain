@@ -3,6 +3,7 @@
 const { createHash } = require('node:crypto');
 const { identifier } = require('./schema-rename');
 const { loadSource, listNames } = require('./object-source');
+const { asciiFold, paired, definition } = require('./schema-diff-options');
 
 const kinds = ['procedure', 'function', 'trigger', 'event'];
 const maxObjects = 100;
@@ -132,29 +133,44 @@ async function captureStored(query, server) {
   return normalizeStored({ formatVersion: 1, scope: 'account-visible', ...before, objects }, server, { verifyFingerprint: false });
 }
 
-function compareStored(current, desired, sameDialect) {
+function compareStored(current, desired, sameDialect, policy) {
   if (!current || !desired) return { state: 'not-compared', differences: [], matchedExact: 0, semanticEquivalenceCompared: false,
     reason: 'Capture the stored-object inventory on both sides to compare it.' };
-  const from = new Map(current.objects.map(object => [id(object), object])), to = new Map(desired.objects.map(object => [id(object), object]));
+  const fold = policy?.identifierCase === 'ascii-insensitive';
+  const key = fold ? object => id({ kind: object.kind, name: asciiFold(object.name) }) : id;
   const differences = [];
-  let matchedExact = 0;
-  for (const key of [...new Set([...from.keys(), ...to.keys()])].sort()) {
-    const before = from.get(key) || null, after = to.get(key) || null;
-    const { kind, name } = before || after;
+  let matchedExact = 0, matchedByOptions = 0;
+  const normalized = object => ({ ...object, definition: definition(object, object.definition, policy).source });
+  for (const item of paired(current.objects, desired.objects, key)) {
+    const [before = null] = item.current, [after = null] = item.desired;
+    const { kind, name } = after || before;
     let state, aspects = [];
+    if (item.current.length > 1 || item.desired.length > 1) {
+      state = 'ambiguous-identifier-case';
+      differences.push({ id: hash(['stored-case-collision', item.id]).slice(0, 24), kind, name, state, aspects,
+        before: null, after: null, currentNames: item.current.map(value => value.name),
+        desiredNames: item.desired.map(value => value.name), selectable: false });
+      continue;
+    }
     if (!before || !after) {
       const unseen = before ? desired : current;
       state = unseen.coverage[kind] === 'loaded' ? (before ? 'seen-current-only' : 'seen-desired-only') : 'inventory-unavailable';
     } else if (before.state !== 'observed' || after.state !== 'observed') state = 'definition-unavailable';
     else {
-      aspects = ['definition', 'settings', 'trigger'].filter(aspect => !same(before[aspect], after[aspect]));
-      if (!aspects.length && sameDialect) { matchedExact++; continue; }
+      const rawAspects = ['definition', 'settings', 'trigger'].filter(aspect => !same(before[aspect], after[aspect]));
+      const from = policy ? normalized(before) : before, to = policy ? normalized(after) : after;
+      aspects = rawAspects.filter(aspect => !same(from[aspect], to[aspect]));
+      if (!aspects.length && sameDialect) {
+        if (rawAspects.length || before.name !== after.name) matchedByOptions++;
+        else matchedExact++;
+        continue;
+      }
       state = aspects.length ? 'changed-source-or-context' : 'same-text-cross-dialect';
     }
     differences.push({ id: hash(['stored-object', kind, name]).slice(0, 24), kind, name, state, aspects, before, after, selectable: false });
   }
   return { state: 'account-visible-comparison', current: current.coverage, desired: desired.coverage,
-    differences, matchedExact, semanticEquivalenceCompared: false, note: difference };
+    differences, matchedExact, ...(policy && { matchedByOptions }), semanticEquivalenceCompared: false, note: difference };
 }
 
 module.exports = { normalizeStored, captureStored, compareStored };

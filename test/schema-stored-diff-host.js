@@ -191,4 +191,4 @@ async function runStoredSchemaDiffChecks(api, vscode, checks) {
   return result;
 }
 
-module.exports = { verifyStoredSchemaComparison, runStoredSchemaDiffChecks };
+module.exports = { owned, verifyStoredSchemaComparison, runStoredSchemaDiffChecks };

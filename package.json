@@ -766,6 +766,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.schema.compareSnapshotWithOptions",
+        "title": "Compare Schema Snapshot with Options",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected"
+      },
+      {
+        "command": "rocketbrain.schema.openComparedDefinition",
+        "title": "Open Compared Table or View DDL",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.schema.saveSnapshotWithStoredObjects",
         "title": "Save Schema Snapshot with Stored Objects",
         "category": "Rocketbrain",
