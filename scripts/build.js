@@ -5,6 +5,8 @@ const path = require('node:path');
 async function build() {
   const jdbcWorker = fs.readFileSync(path.join(__dirname, '../runtime/jdbc/DriverWorker.java'), 'utf8');
   fs.writeFileSync(path.join(__dirname, '../src/db/jdbc-worker-source.json'), JSON.stringify(jdbcWorker));
+  const clientIdentity = fs.readFileSync(path.join(__dirname, '../runtime/db-tls/ClientIdentity.java'), 'utf8');
+  fs.writeFileSync(path.join(__dirname, '../src/db/pkcs12-worker-source.json'), JSON.stringify(clientIdentity));
   const mixedClasses = fs.readFileSync(path.join(__dirname, '../runtime/java-mixed/MixedClassInspector.java'), 'utf8');
   fs.writeFileSync(path.join(__dirname, '../src/java/mixed-jvm-classfile-source.json'), JSON.stringify(mixedClasses));
   const groovyConsole = fs.readFileSync(path.join(__dirname, '../runtime/groovy/GroovyConsoleWorker.java'), 'utf8');

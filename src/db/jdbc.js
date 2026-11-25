@@ -118,8 +118,8 @@ async function examineJdbcDriver(file, driver, signal, libraries = []) {
   return { ...primary, driverClass: driver, libraries: additional, classpathFingerprint: classpathFingerprint(driver, artifacts) };
 }
 
-async function javaExecutable(home) {
-  if (!localPath(home)) throw fail('JAVA', 'Configure the independent Rocketbrain Java JDK before using a JDBC driver.');
+async function javaExecutable(home, purpose = 'JDBC') {
+  if (!localPath(home)) throw fail('JAVA', 'Configure an independent Rocketbrain Java JDK for ' + purpose + '.');
   try {
     const root = await fs.realpath(home);
     const descriptor = path.join(root, 'release');
@@ -133,7 +133,7 @@ async function javaExecutable(home) {
       if (!(await fs.stat(path.join(root, 'bin', name + (process.platform === 'win32' ? '.exe' : '')))).isFile()) throw Error('JDK is incomplete');
     }
     return { root, executable: path.join(root, 'bin', process.platform === 'win32' ? 'java.exe' : 'java') };
-  } catch { throw fail('JAVA', 'Use a complete independent JDK 25 or newer for JDBC.'); }
+  } catch { throw fail('JAVA', 'Use a complete independent JDK 25 or newer for ' + purpose + '.'); }
 }
 
 function credentials(value) {
@@ -252,4 +252,4 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
   });
 }
 
-module.exports = { examineJdbcDriver, runJdbc, credentials, classpathFingerprint, maxLibraries };
+module.exports = { examineJdbcDriver, runJdbc, credentials, classpathFingerprint, maxLibraries, javaExecutable };

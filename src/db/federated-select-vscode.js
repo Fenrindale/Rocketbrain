@@ -3,6 +3,8 @@
 const { randomUUID } = require('node:crypto');
 const { parseFederatedSelect, isFederatedDocument, templateHeader } = require('./federated-select');
 
+const { promptProfileCredentials } = require('./connection-profiles-vscode');
+
 const scheme = 'rocketbrain-federated-result';
 const newQuery = 'rocketbrain.db.newFederatedSelect';
 const runQuery = 'rocketbrain.db.runFederatedSelect';
@@ -22,10 +24,9 @@ function registerFederatedSelect(vscode, connections) {
     const chosen = await vscode.window.showQuickPick(candidates.map(record => ({ label: record.profile.name,
       description: record.profile.database, record })), { title: 'Choose database profile for ' + source, ignoreFocusOut: true });
     if (!chosen) return null;
-    const { id, revision, hasSavedPassword } = chosen.record;
-    if (hasSavedPassword) return { id, revision };
-    const password = await vscode.window.showInputBox({ title: chosen.record.profile.name, prompt: 'Database password', password: true, ignoreFocusOut: true });
-    return password === undefined ? null : { id, revision, password };
+    const { id, revision } = chosen.record;
+    const credentials = await promptProfileCredentials(vscode,chosen.record);
+    return credentials ? { id, revision, ...credentials } : null;
   }
 
   async function run(request) {

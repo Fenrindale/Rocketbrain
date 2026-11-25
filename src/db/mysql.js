@@ -1417,7 +1417,7 @@ class MysqlService {
     }
     this._sessions.clear(); this._options.password = '';
     this._editor.models.clear(); this._editor.reviews.clear();
-    }finally{this._options.password='';if(this._options.ssl?.key)this._options.ssl.key='';await this._connectionCleanup();}
+    }finally{this._options.password='';if(this._options.ssl?.key)this._options.ssl.key='';if(this._options.ssl?.passphrase)this._options.ssl.passphrase='';await this._connectionCleanup();}
   }
 }
 

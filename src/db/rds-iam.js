@@ -42,7 +42,7 @@ function validateRdsIamRoute({ host, user, transport, ssh, port = 3306, auth }, 
   if (!validEndpoint(host, auth.region) || !Number.isInteger(port) || port < 1 || port > 65535 ||
       typeof user !== 'string' || !dbUsername.test(user)) throw fail('Use the actual AWS RDS instance or cluster endpoint, region, port and database user.');
   if (transport || ssh || !ssl || ssl.rejectUnauthorized === false || ssl.verifyIdentity === false ||
-      ssl.serverName && ssl.serverName !== host || ssl.cert || ssl.key) {
+      ssl.serverName && ssl.serverName !== host || ssl.cert || ssl.key || ssl.pfx || ssl.passphrase) {
     throw fail('AWS RDS IAM requires direct TCP with verified TLS for the exact database endpoint.');
   }
 }
