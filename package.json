@@ -1213,6 +1213,11 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.schema.reviewViewCheckOption",
+        "title": "Review View CHECK OPTION",
+        "category": "Rocketbrain"
+      },
+      {
         "command": "rocketbrain.schema.deployObjectSource",
         "title": "Deploy Reviewed Database Object Source",
         "category": "Rocketbrain"
