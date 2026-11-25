@@ -81,6 +81,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 Spring Boot 설정 파일에서 현재 모듈의 생성 메타데이터로 설정 키를 완성하고 Java 선언을 엽니다. 여러 YAML 문서와 프로필별 출처를 지원합니다. [Spring 설정 메타데이터](docs/spring-configuration-metadata.md)
 
+**Configure Spring Boot Run**에서 프로필과 설정별 전달 출처를 정한 뒤 Java Projects의 Run·Debug로 실행합니다. [Spring Boot 실행 설정](docs/spring-boot-run-configurations.md)
+
 **Inspect Spring Security Filter Trace**는 관찰을 켠 로컬 앱에서 요청별 매처 순서, 선택된 체인, 실제 실행에 들어간 필터와 관찰된 인가 결과를 표시합니다. 메서드 추적을 켜면 호출 전·후 판단과 실제 역할 비교 근거도 확인할 수 있습니다. [Spring Security 추적 설정](docs/spring-security-filter-trace.md)
 
 ### Quarkus Maven
@@ -257,6 +259,8 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 
 ## DB 사용
 
+SQL 편집기에서 **Ctrl+K Ctrl+Shift+J**(macOS **Cmd+K Cmd+Shift+J**) 또는 **Focus Query Results**로 결과 탭에 포커스를 옮깁니다. 좌우 방향키와 Home/End로 탭을 찾고 Enter 또는 Space로 선택합니다. 결과에서 같은 단축키 또는 **Focus Query Editor**로 원래 열린 SQL 편집기에 돌아갑니다. Ctrl+Enter(macOS Cmd+Enter)는 SQL, JPQL, 연결된 DuckDB·JDBC의 언어별 실행 명령을 사용합니다.
+
 MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 읽기 전용으로 잠그거나 보호할 `schema.table`을 줄마다 지정합니다. 보호 설정을 바꾸려면 해당 프로필의 연결을 끊고 다시 연결합니다. 보호된 테이블의 결과 그리드는 조회용으로 열립니다. 테이블 보호가 설정된 프로필에서 테이블과 뷰를 조회하는 SQL은 읽기 전용 콘솔에서 실행합니다. 쓰기는 대상 InnoDB 테이블 하나의 트리거와 연쇄 변경 위험을 확인한 경우에 허용됩니다. 저장 함수의 실행 권한과 외부 클라이언트의 쓰기에는 서버 계정과 트랜잭션 권한이 적용됩니다.
 
 보호 설정이 적용된 쓰기는 같은 InnoDB 트랜잭션에서 대상 테이블과 보호 테이블로 연쇄 변경을 전달할 수 있는 의존성의 메타데이터 잠금을 유지합니다. 자동 커밋 모드에서 쓰기 검증을 위해 자동으로 시작한 트랜잭션은 쓰기마다 끝납니다. 사용자가 시작한 트랜잭션과 수동 커밋 모드에서는 **Commit** 또는 **Roll Back**까지 잠금이 유지됩니다.
@@ -293,6 +297,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 읽기 전용 스크립트에서는 현재 스키마의 검증된 `CALL procedure(:input)`을 다른 조회와 함께 실행합니다. 보이는 프로시저의 본문과 IN 매개변수를 다시 확인합니다. 지원 범위는 같은 스키마의 기본 테이블을 읽는 단순 `SELECT`입니다. 스크립트 결과에서 각 결과 집합을 다시 열 수 있습니다.
 - `DELIMITER`가 있는 SQL 파일에서 **Run Selected SQL or Current Statement**를 실행하면 서버의 SQL 모드로 커서 아래 문장이나 선택한 전체 복합 문장의 범위를 구합니다. 복합 DDL 검토에는 그 문장 하나가 표시됩니다.
 - SQL 편집기는 단일 테이블 INSERT 열 목록, UPDATE의 SET, UPDATE·DELETE의 WHERE에서 관찰한 열 이름과 서버 타입을 제안합니다. 스키마를 명시하면 그 테이블을 확인합니다. 자동 증가·생성 열은 쓰기 제안에서 제외합니다.
+- **Find SQL Catalog References**는 열 목록이 있는 `INSERT … SELECT`의 입력과 대상, 실제 테이블을 조인한 UPDATE의 SET과 읽기 표현식, 여러 별칭을 대상으로 한 DELETE를 구분합니다. 사용처를 찾을 때 원래 쓰기 문장은 실행하지 않습니다.
 - **Preview SQL with a Virtual Schema**는 로컬 UTF-8 DDL 파일 또는 관찰한 DB 카탈로그를 바탕으로 현재 SQL 문서의 테이블·뷰와 열 변경을 순서대로 분석합니다. 편집기의 완성·진단에만 반영합니다. 파일을 수정한 뒤에는 다시 선택해 캡처하고, **Exit Virtual SQL Schema Preview**로 종료합니다.
 - **Edit Embedded SQL or JSON**은 Java 문자열·텍스트 블록, MyBatis의 정적 SQL 또는 SQL 안의 JSON을 해당 언어 편집기로 엽니다. SQL 편집에서는 연결한 DB의 열 완성과 정의 이동을 사용할 수 있습니다. **Review and Apply Embedded Source Edit**에서 원본 범위의 diff를 확인하고 적용합니다.
 - **Create Native Database Dump**와 **Review and Restore Native Dump**에서 설치한 MySQL 또는 MariaDB 클라이언트를 선택합니다. 로컬 연결의 InnoDB 테이블을 내보내고, 검토한 백업 파일을 원본과 다른 빈 스키마에 복원합니다. 함께 참조하는 FK 테이블은 같은 백업에 포함합니다.

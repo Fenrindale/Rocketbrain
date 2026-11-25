@@ -88,6 +88,7 @@ function serverSettings(projectJdks = [], options = {}) {
       autobuild: { enabled: true },
       completion: { enabled: true },
       signatureHelp: { enabled: true },
+      inlayHints: { parameterNames: { enabled: 'all' }, variableTypes: { enabled: true }, parameterTypes: { enabled: true } },
       referencesCodeLens: { enabled: true },
       implementationsCodeLens: { enabled: true },
       format: { enabled: true },

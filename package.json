@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.75.0",
+  "version": "0.76.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -343,6 +343,18 @@
         "title": "Run Selected SQL or Current Statement",
         "category": "Rocketbrain",
         "icon": "$(play)"
+      },
+      {
+        "command": "rocketbrain.focusQueryResults",
+        "title": "Focus Query Results",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.focusQueryEditor",
+        "title": "Focus Query Editor",
+        "category": "Rocketbrain",
+        "icon": "$(go-to-file)",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.refresh",
@@ -718,6 +730,8 @@
       { "command": "rocketbrain.editor.shrinkSelection", "title": "Shrink Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.quickDocumentation", "title": "Quick Code Documentation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
       { "command": "rocketbrain.editor.callSignatures", "title": "Show Call Signatures", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
+      { "command": "rocketbrain.editor.configureCodeHints", "title": "Configure Code Hints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
+      { "command": "rocketbrain.editor.inspectSemanticToken", "title": "Inspect Semantic Token", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
       {
         "command": "rocketbrain.java.pullUpMembers",
         "title": "Pull Up Java Members",
@@ -928,6 +942,11 @@
       {
         "command": "rocketbrain.java.workbench.runTask",
         "title": "Run Build Task",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.configureSpringRun",
+        "title": "Configure Spring Boot Run",
         "category": "Rocketbrain"
       },
       {
@@ -1234,6 +1253,7 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.focusQueryEditor", "when": "view == rocketbrain.results && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.select", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.refresh", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@2" },
         { "command": "rocketbrain.schemaCatalog.restore", "when": "view == rocketbrain.schemaCatalog", "group": "catalog" },
@@ -1477,6 +1497,11 @@
           "group": "project"
         },
         {
+          "command": "rocketbrain.java.workbench.configureSpringRun",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
+          "group": "2_run@1"
+        },
+        {
           "command": "rocketbrain.java.workbench.configureRun",
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
           "group": "launch"
@@ -1568,6 +1593,10 @@
         "when": "editorTextFocus && editorLangId == sql"
       },
       { "command": "rocketbrain.jpa.console.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jpql && isWorkspaceTrusted" },
+      { "command": "rocketbrain.duckdb.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == duckdb-sql && rocketbrain.duckdbConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.jdbc.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jdbc && rocketbrain.jdbcConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.focusQueryResults", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "editorTextFocus && editorLangId == sql && !suggestWidgetVisible" },
+      { "command": "rocketbrain.focusQueryEditor", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "!editorTextFocus && (focusedView == rocketbrain.results || webviewId == rocketbrain.results) && isWorkspaceTrusted" },
       {
         "command": "rocketbrain.searchEverywhere",
         "key": "ctrl+shift+a",
@@ -1950,6 +1979,24 @@
           "default": "",
           "scope": "machine",
           "description": "Absolute path to a standalone JDK 25 or later for the language server. Do not use an IDE's embedded runtime."
+        },
+        "rocketbrain.editor.javaHints": {
+          "type": "object", "scope": "resource", "default": { "parameters": "literals", "types": true },
+          "additionalProperties": false,
+          "description": "Java parameter names and JDT-inferred variable and lambda parameter types.",
+          "properties": {
+            "parameters": { "type": "string", "enum": ["none", "literals", "all"] },
+            "types": { "type": "boolean" }
+          }
+        },
+        "rocketbrain.editor.kotlinHints": {
+          "type": "object", "scope": "resource", "default": { "parameters": "literals", "types": true },
+          "additionalProperties": false,
+          "description": "Kotlin parameter names and inferred types from the configured language server.",
+          "properties": {
+            "parameters": { "type": "string", "enum": ["none", "literals", "all"] },
+            "types": { "type": "boolean" }
+          }
         },
         "rocketbrain.java.fileTemplates": {
           "type": "array",

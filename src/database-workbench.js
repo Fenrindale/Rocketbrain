@@ -55,6 +55,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     editAction: (id, message) => tableEditor.handle(id, message),
     relatedAction: chooseRelatedRows,
     relatedReturn: returnToRelatedSource,
+    focusQueryEditor,
     datasetAction: (id, input) => tableEditor.stageDatasetChanges(id, input),
     resultClosed: id => { relatedSources.delete(id); tableEditor.forget(id); }
   });
@@ -69,6 +70,17 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const allBindings = () => [...bindings.values(), ...profileBindings.values()];
   const openEditorUris = () => new Set(vscode.window.tabGroups.all.flatMap(group =>
     group.tabs.map(tab => tab.input?.uri?.toString()).filter(Boolean)));
+  async function focusQueryEditor({ uri, viewColumn }) {
+    if (state.disposed || !vscode.workspace.isTrusted) throw Error('Open a trusted workspace to return to the query editor.');
+    const groups = vscode.window.tabGroups.all;
+    const locations = groups.filter(group => group.tabs.some(tab => tab.input?.uri?.toString() === uri));
+    const document = vscode.workspace.textDocuments.find(candidate => candidate.uri.toString() === uri);
+    if (!locations.length || !document || document.isClosed || document.languageId !== 'sql' || isVirtualSqlPreview(document)) {
+      throw Error('The source SQL editor is no longer open.');
+    }
+    const group = locations.find(location => location.viewColumn === viewColumn) ?? locations[0];
+    await vscode.window.showTextDocument(document, { viewColumn: group.viewColumn, preserveFocus: false });
+  }
   function consoleSessions() {
     const sessions = new Map();
     const open = openEditorUris();
@@ -707,7 +719,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
           throw Error('The SQL source changed after review. Run it again.');
         }
       }
-      id = results.begin(sql, source, { readOnly: session?.readOnly ?? true, sessionId: binding.id });
+      id = results.begin(sql, source, { readOnly: session?.readOnly ?? true, sessionId: binding.id,
+        ...(document?.languageId === 'sql' && { queryEditor: { uri: document.uri.toString(),
+          viewColumn: editor?.document === document ? editor.viewColumn : undefined } }) });
       const result = await db.query(sql, { sessionId: binding.id, maxRows: 500, timeoutMs: 5000, allowUnboundedDml });
       if (historyTarget && session?.readOnly && document && !document.isClosed && document.version === documentVersion) {
         let sqlSource;
@@ -743,6 +757,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
   });
   command('rocketbrain.openSharedConsole', () => openSharedConsole(currentDocument()));
+  command('rocketbrain.focusQueryResults', () => results.focus());
+  command('rocketbrain.focusQueryEditor', () => results.returnToQuery());
   command('rocketbrain.runQuery', async () => {
     const editor = vscode.window.activeTextEditor;
     if (sqlDrafts.isRecovered(editor?.document)) {

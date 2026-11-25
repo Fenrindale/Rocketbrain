@@ -86,7 +86,7 @@ async function startConfigurationFixture(config,override=false){
   }catch(error){await close();throw error;}
 }
 
-module.exports={project,metadata,javaSource,yamlSource,propsSource,probeValue,buildConfigurationFixture,startConfigurationFixture};
+module.exports={runtime,project,metadata,javaSource,yamlSource,propsSource,probeValue,buildConfigurationFixture,startConfigurationFixture};
 if(require.main===module)buildConfigurationFixture().then(value=>console.log(JSON.stringify(value)),error=>{
   console.error(error.message);process.exitCode=1;
 });

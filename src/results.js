@@ -16,11 +16,16 @@ function resultName(value) {
   return value.trim();
 }
 class ResultsView {
-  constructor(vscode, context, { editAction, relatedAction, relatedReturn, datasetAction, resultClosed } = {}) {
+  constructor(vscode, context, { editAction, relatedAction, relatedReturn, datasetAction, resultClosed, focusQueryEditor } = {}) {
     this.vscode = vscode; this.context = context; this.history = []; this.view = null; this.sequence = 0;
     this.editAction = editAction; this.relatedAction = relatedAction; this.relatedReturn = relatedReturn; this.resultClosed = resultClosed;
     this.datasetAction = datasetAction;
     this.comparisons = new WeakMap();
+    this.queryEditors = new WeakMap();
+    this.focusQueryEditor = focusQueryEditor;
+    this.selectedResultId = undefined;
+    this.viewReady = false;
+    this.focusRequested = false;
     this.resultSequence = 0;
     this.layouts = createResultLayouts(context.workspaceState);
     this.filters = createResultFilters(context.workspaceState);
@@ -29,14 +34,15 @@ class ResultsView {
   }
   resolveWebviewView(view) {
     this.view = view;
+    this.viewReady = false;
     const v = this.vscode, root = v.Uri.joinPath(this.context.extensionUri, 'dist');
     view.webview.options = { enableScripts: true, localResourceRoots: [root] };
     const nonce = crypto.randomBytes(18).toString('base64');
     const script = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.js'));
     const style = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.css'));
     view.webview.html = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${style}"><title>Query Results</title></head><body>
-<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option><option value="compare">Compare</option><option value="map" disabled>Map</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option><option value="extractor">Custom Extractor</option></select><button id="export" disabled>Export CSV</button><button id="pin-result" aria-pressed="false" disabled>Pin Result</button><button id="rename-result" disabled>Rename Result</button><button id="close-result">Close Result</button></header>
-<nav id="tabs" aria-label="Query result history"></nav>
+<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option><option value="compare">Compare</option><option value="map" disabled>Map</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option><option value="extractor">Custom Extractor</option></select><button id="export" disabled>Export CSV</button><button id="pin-result" aria-pressed="false" disabled>Pin Result</button><button id="rename-result" disabled>Rename Result</button><button id="close-result">Close Result</button><button id="focus-query-editor" hidden>Focus Query Editor</button></header>
+<nav id="tabs" role="tablist" aria-label="Query result history" tabindex="-1"></nav><section id="result-content" role="tabpanel" tabindex="0">
 <button id="return-source-row" type="button" hidden>Back to Source Row</button>
 <section id="script-result-sets" aria-label="Captured results" hidden><label><span id="script-result-label">Statement result</span> <select id="script-result-selection"></select></label><button id="open-script-statement" type="button">Open Captured Statement</button></section>
 <div id="message" role="status" aria-live="polite">Run SQL from the editor with Ctrl+Enter.</div>
@@ -51,11 +57,27 @@ class ResultsView {
 <section id="bulk-panel" aria-label="Bulk table changes" hidden><form id="bulk-form"><strong id="bulk-title">Paste cells</strong><label id="bulk-format-label">Format <select id="bulk-delimiter"><option value="tab">TSV (tabs)</option><option value="comma">CSV (commas)</option></select></label><label id="bulk-header-label"><input type="checkbox" id="bulk-header" checked>First row contains column headers</label><div id="bulk-anchor"><label>Start row <select id="bulk-row"></select></label><label>Start column <select id="bulk-column"></select></label></div><div id="xlsx-options" hidden><label>Worksheet <select id="xlsx-sheet" aria-label="XLSX worksheet"></select></label><label>Formulas <select id="xlsx-formulas"><option value="reject">Reject formula cells</option><option value="cached">Use stored cached results (may be stale)</option></select></label><label>Absent or blank cells <select id="xlsx-blanks"><option value="empty">Empty text</option><option value="null">SQL NULL</option></select></label><p>Formulas are never evaluated. Only stored values are imported. Explicit empty strings stay text. Numeric XML values retain their stored precision; formatting is not imported. Date styles convert with the workbook date system; fractions truncate to microseconds and hidden nonzero time is retained.</p></div><label id="bulk-text-label" for="bulk-text">Text data</label><textarea id="bulk-text" rows="6" spellcheck="false" placeholder="Paste CSV or TSV text here"></textarea><label id="bulk-null-label"><input id="bulk-null-enabled" type="checkbox">Use an unquoted token for SQL NULL</label><input id="bulk-null-token" value="\\N" aria-label="SQL NULL token" maxlength="100"><div id="bulk-mapping"></div><div id="bulk-summary" role="status"></div><button id="bulk-inspect" type="button">Inspect Input and Map Columns</button><button id="bulk-stage" type="submit">Stage Bulk Changes</button><button id="bulk-cancel" type="button">Close</button></form></section>
 <section id="chart-tools" aria-label="Captured result analysis" hidden><label>Plot <select id="chart-shape"><option value="bar">Columns</option><option value="line">Line</option></select></label><label>Category <select id="chart-category"></select></label><label>Aggregate <select id="chart-operation"><option value="count">Count rows</option><option value="nonnull">Count non-NULL values</option><option value="values">Numeric values (one point per row)</option><option value="sum">Sum</option><option value="average">Average</option><option value="min">Minimum</option><option value="max">Maximum</option></select></label><label>Measure <select id="chart-measure"></select></label><button id="chart-export" disabled>Export Chart Data</button><div id="chart-status" role="status"></div></section>
 <section id="compare-tools" aria-label="Compare captured results" hidden><div class="compare-top"><label>Source result <select id="compare-source"></select></label><button id="compare-add" type="button">Add Column Pair</button><button id="compare-run" type="button">Compare Captured Rows</button><button id="compare-stage" type="button" disabled>Stage Selected Updates</button></div><div id="compare-mappings"></div><div id="compare-status" role="status"></div></section>
-<div id="grid" tabindex="0" aria-label="Database query results"></div><footer id="status">Ready</footer><script nonce="${nonce}" src="${script}"></script></body></html>`;
+<div id="grid" tabindex="0" aria-label="Database query results"></div></section><footer id="status">Ready</footer><script nonce="${nonce}" src="${script}"></script></body></html>`;
     this.context.subscriptions.push(view.webview.onDidReceiveMessage(async msg => {
       try {
       if (!msg || typeof msg.type !== 'string' || Buffer.byteLength(JSON.stringify(msg), 'utf8') > 1100000) return;
-      if (msg.type === 'ready') { this.send(); return; }
+      if (msg.type === 'ready') {
+        if (this.view !== view) return;
+        this.viewReady = true;
+        this.send();
+        await this.postFocus();
+        return;
+      }
+      if (msg.type === 'focusQueryEditor') {
+        if (this.view === view && Number.isSafeInteger(msg.id)) await this.returnToQuery(msg.id);
+        return;
+      }
+      if (msg.type === 'selectResult') {
+        if (this.view === view && this.history.some(item => item.id === msg.id && !item.closing)) {
+          this.selectedResultId = msg.id;
+        }
+        return;
+      }
       const record = this.history.find(h => h.id === msg.id);
       if (!record || (!record.result && !tabActions.has(msg.type))) return;
       if (msg.type === 'closeResult') {
@@ -164,11 +186,36 @@ class ResultsView {
       }
       } catch (error) {if(['chooseImportFile','chooseXlsxFile'].includes(msg?.type))this.editState(msg.id,{editError:error.message||String(error),editResponseId:msg.requestId});v.window.showErrorMessage(`Rocketbrain: ${error instanceof Error ? error.message : String(error)}`); }
     }));
-    view.onDidDispose(() => { this.view = null; });
+    view.onDidDispose(() => {
+      if (this.view !== view) return;
+      this.view = null;
+      this.viewReady = false;
+      this.focusRequested = false;
+    });
     this.send();
   }
   async show() { await this.vscode.commands.executeCommand('rocketbrain.results.focus'); this.view?.show(true); }
-  begin(sql, source, { readOnly = true, sessionId, tableLayoutConnection, table, scriptCapture, relatedOrigin } = {}) {
+  async postFocus() {
+    if (!this.focusRequested || !this.viewReady || !this.view) return;
+    this.focusRequested = false;
+    await this.view.webview.postMessage({ type: 'focusResults' });
+  }
+  async focus() {
+    this.focusRequested = true;
+    await this.vscode.commands.executeCommand('rocketbrain.results.focus');
+    this.view?.show(false);
+    await this.postFocus();
+  }
+  activeResult() {
+    return this.history.find(record => record.id === this.selectedResultId && !record.closing)
+      ?? this.history.findLast(record => !record.closing);
+  }
+  async returnToQuery(id = this.activeResult()?.id) {
+    const record = this.history.find(item => item.id === id && !item.closing);
+    const editor = record && this.queryEditors.get(record);
+    if (editor) return this.focusQueryEditor?.(editor);
+  }
+  begin(sql, source, { readOnly = true, sessionId, tableLayoutConnection, table, scriptCapture, relatedOrigin, queryEditor } = {}) {
     while (this.history.length >= 8) {
       const removable = this.history.findIndex(record => record.id !== relatedOrigin?.id && !record.closing && !record.tabPinned && !this.protectedResult(record));
       if (removable < 0) throw new Error('All eight result tabs are pinned or contain active work. Unpin or close a result before opening another.');
@@ -177,9 +224,14 @@ class ResultsView {
     const record = { id: ++this.sequence, sql: sql.slice(0, 4000), source, state: 'running', readOnly, sessionId };
     if (scriptCapture) record.scriptCapture = scriptCapture;
     if (relatedOrigin) record.relatedOrigin = relatedOrigin;
+    if (queryEditor) this.queryEditors.set(record, queryEditor);
     const key = resultTableKey(tableLayoutConnection, table);
     if (key) this.layoutKeys.set(record, { key, table });
-    this.history.push(record); this.send(); return record.id;
+    const active = this.activeResult();
+    this.history.push(record);
+    this.selectedResultId = active?.result?.edit && !active.readOnly ? active.id : record.id;
+    this.send();
+    return record.id;
   }
   protectedResult(record) { return Boolean(record.state === 'running' || record.editBusy || record.hasDraft || record.review || record.result?.edit && !record.readOnly || record.sessionState?.outcomeUnknown); }
   setResultTab(id, { name, pinned } = {}) {
@@ -198,8 +250,11 @@ class ResultsView {
       record.scriptCapture.index===index&&record.scriptCapture.resultSet===resultSet)?.id;
   }
   activateResult(id, selection) {
-    if (this.hasResult(id)) return this.view?.webview.postMessage({ type: 'activateResult', id,
-      ...(selection ? { modelId: selection.modelId, rowId: selection.rowId } : {}) });
+    if (this.history.some(record => record.id === id && !record.closing)) {
+      this.selectedResultId = id;
+      return this.view?.webview.postMessage({ type: 'activateResult', id,
+        ...(selection ? { modelId: selection.modelId, rowId: selection.rowId } : {}) });
+    }
   }
   exportable(record) {
     return Boolean(record?.state === 'done' && record.result?.columns.length && this.history.includes(record) && !record.closing &&
@@ -334,13 +389,14 @@ class ResultsView {
     if (!this.view) return;
     const history = this.history.map(record => {
       const { spatial, ...result } = record.result || {};
-      if (spatial) record = { ...record, result };
+      const hasQueryEditor = this.queryEditors.has(record);
+      if (spatial || hasQueryEditor) record = { ...record, ...(spatial && { result }), ...(hasQueryEditor && { hasQueryEditor }) };
       const key = this.layoutKey(record);
       return key ? { ...record, tableLayout: { columns: this.layouts.read(key) || [] },
         ...(record.result.browse && { filterPresets: this.filters.list(key, record.result.edit.columns) }),
         ...(record.result.browse?.sortOptions && { sortPresets: this.sorts.list(key, record.result.edit.columns, record.result.browse.sortOptions) }) } : record;
     });
-    this.view.webview.postMessage({ type: 'results', history });
+    this.view.webview.postMessage({ type: 'results', history, selectedResultId: this.activeResult()?.id });
   }
 }
 module.exports = { ResultsView };

@@ -1,5 +1,5 @@
 {
-  "version": "0.75.0",
+  "version": "0.76.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 98,
-    "partial": 104,
+    "implemented": 100,
+    "partial": 102,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 75,
+    "percent": 75.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-014",
-    "IDEA-051",
-    "DG-014",
-    "DG-036"
+    "IDEA-012",
+    "IDEA-073",
+    "DG-038",
+    "DG-096"
   ],
   "expandedFeatures": [
-    "IDEA-014",
-    "IDEA-051",
-    "DG-014",
-    "DG-036"
+    "IDEA-012",
+    "IDEA-073",
+    "DG-038",
+    "DG-096"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -384,27 +384,24 @@
       "category": "작업 공간·편집기",
       "feature": "인레이 힌트·의미 강조",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT 의미 정보와 VS Code 언어 표시를 사용한다.",
-      "remaining": [
-        "원본 수준의 인레이 종류·매개변수 힌트 설정·언어별 실기 비교가 남는다."
-      ],
+      "scope": "Java·Kotlin 언어 서버의 인레이를 타입, 전체 매개변수, 리터럴 매개변수 또는 끄기로 설정한다. 현재 토큰에서 의미 타입과 수정자를 확인한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.76-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "testedScope": "설치판에서 실제 Java와 Kotlin의 전체·리터럴·타입·끄기 설정과 토큰을 확인했다. 힌트 호출 중 원본 코드가 바뀌지 않았다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/code-hints-vscode.js",
+          "src/java/code-hints.js",
+          "test/code-hints-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -452,8 +449,8 @@
       "verification": {
         "state": "v0.75-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.75.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1604,8 +1601,8 @@
       "verification": {
         "state": "v0.75-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.75.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2252,21 +2249,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "관찰된 main을 선택해 인수·비밀 환경·선택적 사전 작업을 가진 실행 구성을 저장한다. 기존 독립 DAP의 관리 Run/Debug와 해당 작업/세션만 중지하는 Stop을 연결한다.",
+      "scope": "관찰한 Java main과 사전 작업에 Spring Boot 프로필을 더하고 환경 변수, JVM 옵션, 프로그램 인수에서 속성을 설정한다. 값을 비밀 저장소에 분리해 저장한다.",
       "remaining": [
-        "실행 구성30·인수64·환경64 등 한도와 관찰된 main/작업 카탈로그에 한정한다.",
-        "일반 서비스 사전 작업·여러 실행의 조정·모든 공유/배포 환경은 남는다."
+        "범용 서비스 사전 작업, 여러 실행 조정과 실행 구성 공유가 남는다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.76-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 사전 build, 저장 구성, 비밀 환경 보관, 관리 Run/Debug·중단점·접속·소유 Stop을 확인한다.",
-        "publicEvidence": [],
+        "testedScope": "두 실제 JDBC 환경에서 세 경로로 같은 Boot 프로필을 실행했다. Spring이 보고한 공급 경로와 프로세스 종료를 확인했고, 실제 JVM 옵션 경로에서 DAP 중단점 이후 계속 실행했다.",
+        "publicEvidence": [
+          "src/java/spring-launch.js",
+          "src/java/spring-launch-vscode.js",
+          "test/spring-launch-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -4083,8 +4083,8 @@
       "verification": {
         "state": "v0.75-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.75.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4757,8 +4757,8 @@
       "verification": {
         "state": "v0.75-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.75.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4814,25 +4814,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "선택 SQL·Java 소스 폴더의 정적 SQL 위치와 단일 테이블 INSERT·UPDATE·DELETE의 열 읽기·쓰기를 구분한다.",
+      "scope": "관찰한 카탈로그를 기준으로 조회와 단일 테이블 변경에 이어 명시적 JOIN UPDATE, DELETE 대상·USING, INSERT SELECT의 읽기·쓰기 위치를 찾는다.",
       "remaining": [
-        "다중 테이블 쓰기, INSERT SELECT, 런타임으로 만들어진 SQL과 완전한 의존성 그래프가 남아 있다."
+        "임의 구문의 다중 범위와 런타임 SQL, 일반 교차 스키마 의존 그래프는 분석 범위 밖이다."
       ],
       "verification": {
-        "state": "v0.61-installed-coverage",
+        "state": "v0.76-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.61.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring과 MySQL·MariaDB에서 JDBC 텍스트 블록·정적 문자열 결합을 실행하고 SQL·Java 사용처의 원본 위치를 검증했다. 교차 스키마 쓰기는 후속 읽기와 롤백으로 확인했다.",
+        "testedScope": "두 실제 DB와 Spring에서 JOIN 쓰기의 물리적 열과 별칭, 원래 소스 범위, INSERT SELECT의 입력 열을 확인했다. 설치판의 사용처 탐색은 SQL을 실행하지 않았다.",
         "publicEvidence": [
-          "src/db/java-sql-usages.js",
-          "src/db/sql-usage-sources.js",
           "src/db/sql-dml-usages.js",
-          "test/sql-java-usages-host.js",
-          "test/sql-dml-usages-host.js"
+          "src/db/sql-project.js",
+          "test/sql-joined-dml-impact-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6584,34 +6582,34 @@
       "category": "화면·조작",
       "feature": "SQL 단축키·명령·결과 panel 이동",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "SQL 실행·세션/트랜잭션·결과 명령과 일부 키맵을 제공한다.",
-      "remaining": [
-        "전체 키맵 충돌·포커스 이동·접근성/언어별 context 동등성이 남는다."
-      ],
+      "scope": "언어와 편집 컨텍스트에 맞춰 실행 키를 연결하고, 결과 탭의 접근 가능한 키보드 선택과 원래 SQL 편집기로 돌아가는 명령을 제공한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.76-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "testedScope": "두 DB의 SQL 편집기에서 선택 실행과 커서 위치 문장을 실행하고 정확한 결과에서 원래 편집기·선택·커서를 복원했다. Chromium에서 탭 키보드와 접근성 상태도 확인했다.",
         "publicEvidence": [
           "src/database-workbench.js",
-          "src/db/mysql.js",
-          "src/db/metadata.js"
+          "src/results.js",
+          "src/ui/results.js",
+          "test/results.test.js",
+          "test/sql-navigation-host.js"
         ],
         "originalProductParityVerified": false
       }
     }
   ],
   "localVerification": {
-    "vsixSha256": "7d0ea5975afcb47b3e860992de244269aed849350527805890e7254ffd8a5dc6",
-    "sourceManifestSha256": "91b2c6cffdf9b9a5bb9c2337174db2a8c839a15c1a9bb1672074315c892cef93",
+    "vsixSha256": "ea304308aac2e5b935cd67a16153a7f926979ea9ad9ae55bf0a0bd2d4c4fdf86",
+    "sourceManifestSha256": "cbb2ec06d8f3ab5de4fd59ddb32f6aa8f46ce7a83c98975aaa23173645e0488e",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6625,28 +6623,23 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-014",
+      "id": "IDEA-012",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-051",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-014",
+      "id": "DG-096",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1659,
-    "pass": 1551,
+    "tests": 1671,
+    "pass": 1561,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 108,
+    "skipped": 110,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

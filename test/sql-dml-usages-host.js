@@ -19,7 +19,7 @@ function examples(local, remote, table) {
     updated: 'UPDATE '+qualified(remote,table)+' AS d SET d.score = d.score + ? WHERE d.id = ?',
     deleted: 'DELETE FROM '+qualified(remote,table)+' WHERE score = ? AND id = ?',
     local: 'INSERT INTO '+qualified(local,table)+' (id,score,note) VALUES (12,99,\'score is literal\')',
-    unsupported: 'UPDATE '+qualified(remote,table)+' a JOIN '+qualified(local,table)+' b ON a.id=b.id SET a.score=b.score'
+    unsupported: 'UPDATE '+qualified(remote,table)+' a JOIN '+qualified(local,table)+' b ON a.id=b.id SET a.score=@runtime_score'
   };
 }
 

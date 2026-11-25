@@ -56,6 +56,9 @@ function registerJavaFeatures(context, vscode) {
         initializationOptions: { bundles: launch.bundles, workspaceFolders: (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.toString()), settings, extendedClientCapabilities: { progressReportProvider: true, classFileContentsSupport: true, overrideMethodsPromptSupport: false, hashCodeEqualsPromptSupport: false, advancedOrganizeImportsSupport: false,advancedExtractRefactoringSupport:false } },
         synchronize: { fileEvents: watcher },
         middleware: {
+          provideInlayHints(document,range,token,next) {
+            return api.codeHints?.available(document)?[]:next(document,range,token);
+          },
           provideDocumentSymbols(document,token,next) {
             return api.structure.outline(document,token,next);
           },
@@ -96,6 +99,7 @@ function registerJavaFeatures(context, vscode) {
       output.appendLine('Java editor annotation processing: Maven follows the POM, Gradle processor sync '+
         (processing.gradle ? 'enabled' : 'disabled')+', Lombok editor agent '+(processing.lombok?.version || 'disabled')+'.');
       update('running', 'Eclipse JDT LS is connected. Java completion, diagnostics, navigation and rename use this engine. Spring endpoints/settings currently use Rocketbrain source analysis, not Spring LS.');
+      api.codeHints?.refresh();
     } catch (error) {
       const failed = client; client = undefined;
       if (failed) await failed.stop(1000).catch(() => {});
@@ -246,6 +250,17 @@ function registerJavaFeatures(context, vscode) {
     }
   });
   subscriptions.push(api.codeInformation);
+  api.codeHints=require('./code-hints-vscode').registerCodeHints(vscode,{
+    output,
+    readJava:async (document,range,token)=>{
+      const server=client;
+      if(!server?.isRunning()||!vscode.workspace.isTrusted||token.isCancellationRequested)return [];
+      const response=await server.sendRequest('textDocument/inlayHint',{textDocument:{uri:document.uri.toString()},range},token);
+      return client===server?response:[];
+    },
+    readKotlin:(document,range,token)=>api.kotlinEditor.inlayHints(document,range,token)
+  });
+  subscriptions.push(api.codeHints);
   api.coroutines=require('./kotlin-coroutines-vscode').registerKotlinCoroutines(vscode,api);
   async function installEngine() {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before installing and starting the Java engine.');

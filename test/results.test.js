@@ -271,9 +271,9 @@ test('actual result Webview renders database values as text and routes history/c
     assert.equal(await page.locator('#grid table').count(), 0);
     assert.equal(await page.locator('#copy').isDisabled(), true);
     assert.equal(await page.locator('#export').isDisabled(), true);
-    await page.getByRole('button', { name: `Result ${firstId}`, exact: true }).click();
+    await page.getByRole('tab', { name: `Result ${firstId}`, exact: true }).click();
     assert.equal(await page.locator('tbody td.null').textContent(), 'NULL');
-    assert.equal(await page.getByRole('button', { name: `Result ${firstId}`, exact: true }).getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.getByRole('tab', { name: `Result ${firstId}`, exact: true }).getAttribute('aria-selected'), 'true');
     assert.equal(await page.locator('#copy').isDisabled(), false);
   });
 
@@ -282,11 +282,11 @@ test('actual result Webview renders database values as text and routes history/c
   await t.test('running and empty results have distinct states; refreshing a running result preserves a deliberately selected older tab', async () => {
     assert.match(await page.locator('#message').textContent(), /Running query/);
     assert.equal(await page.locator('#copy').isDisabled(), true);
-    await page.getByRole('button', { name: `Result ${firstId}`, exact: true }).click();
+    await page.getByRole('tab', { name: `Result ${firstId}`, exact: true }).click();
     host.finish(thirdId, { columns: ['empty'], rows: [], rowCount: 0, truncated: false, durationMs: 0.1 });
     await lastPost;
-    assert.equal(await page.getByRole('button', { name: `Result ${firstId}`, exact: true }).getAttribute('aria-pressed'), 'true');
-    await page.getByRole('button', { name: `Result ${thirdId}`, exact: true }).click();
+    assert.equal(await page.getByRole('tab', { name: `Result ${firstId}`, exact: true }).getAttribute('aria-selected'), 'true');
+    await page.getByRole('tab', { name: `Result ${thirdId}`, exact: true }).click();
     assert.equal(await page.locator('#message').textContent(), 'Query completed. No rows returned.');
     assert.equal(await page.locator('thead th').nth(1).textContent(), 'empty');
     assert.equal(await page.locator('tbody tr').count(), 0);
@@ -318,7 +318,7 @@ test('actual result Webview renders database values as text and routes history/c
     }
     await lastPost;
     assert.equal(await page.locator('#tabs button').count(), 8);
-    assert.equal(await page.getByRole('button', { name: `Result ${firstId}`, exact: true }).count(), 0);
+    assert.equal(await page.getByRole('tab', { name: `Result ${firstId}`, exact: true }).count(), 0);
   });
 
   await t.test('Grid and Record send only the captured row identity when following a foreign key', async () => {
@@ -425,7 +425,7 @@ test('actual result Webview renders database values as text and routes history/c
     host.editState(id, { readOnly: true });
     await lastPost;
     await page.locator('#close-result').click();
-    await page.getByRole('button', { name: `Result ${id}`, exact: true }).waitFor({ state: 'detached' });
+    await page.getByRole('tab', { name: `Result ${id}`, exact: true }).waitFor({ state: 'detached' });
 
     const reopened = host.begin('SELECT * FROM records', 'fixture, renamed connection', { tableLayoutConnection: connection, table });
     const reordered = ['extra', 'note', 'id', 'label'];
@@ -575,7 +575,7 @@ test('actual result Webview renders database values as text and routes history/c
       edit: { modelId: 'compare-model', table: 'example', canEdit: true, rowIds: ['left-a', 'left-b'],
         columns: [{ name: 'id', kind: 'integer', type: 'int', primaryKey: true }, { name: 'label', kind: 'text', type: 'varchar(60)', editable: true, nullable: true }] } });
     await lastPost;
-    await page.getByRole('button', { name: `Result ${target}`, exact: true }).click();
+    await page.getByRole('tab', { name: `Result ${target}`, exact: true }).click();
     await page.locator('#result-view').selectOption('compare');
     await page.locator('#compare-source').selectOption(String(source));
     await page.getByRole('button', { name: 'Add Column Pair' }).click();
@@ -601,20 +601,20 @@ test('actual result Webview renders database values as text and routes history/c
     host.finish(id, { columns: ['Statement'], rows: [[1], [2]], rowCount: 2, durationMs: 1,
       scriptStatements: [{ index: 0, label: 'Statement 1 · SELECT 1' }, { index: 1, label: 'Statement 2 · SELECT 2' }] });
     await lastPost;
-    await page.getByRole('button', { name: `Result ${id}`, exact: true }).click();
+    await page.getByRole('tab', { name: `Result ${id}`, exact: true }).click();
     await page.getByRole('button', { name: 'Rename Result' }).click();
-    await page.getByRole('button', { name: 'Quarterly results', exact: true }).waitFor();
+    await page.getByRole('tab', { name: 'Quarterly results', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Pin Result' }).click();
-    await page.getByRole('button', { name: 'Quarterly results (pinned)', exact: true }).waitFor();
+    await page.getByRole('tab', { name: 'Quarterly results (pinned)', exact: true }).waitFor();
     await page.locator('#script-result-selection').selectOption('1');
     await page.getByRole('button', { name: 'Open Captured Statement' }).click();
     await page.waitForFunction(() => window.__completed.some(message => message.type === 'openScriptStatement'));
     assert.deepEqual(statementSelection, { command: 'rocketbrain.sql.openScriptResult', resultId: id, index: 1 });
     await page.getByRole('button', { name: 'Close Result' }).click();
     await page.waitForFunction(id => window.__completed.some(message => message.type === 'closeResult' && message.id === id), id);
-    assert.ok(await page.getByRole('button', { name: 'Quarterly results (pinned)', exact: true }).isVisible());
+    assert.ok(await page.getByRole('tab', { name: 'Quarterly results (pinned)', exact: true }).isVisible());
     await page.getByRole('button', { name: 'Unpin Result' }).click();
-    await page.getByRole('button', { name: 'Quarterly results', exact: true }).waitFor();
+    await page.getByRole('tab', { name: 'Quarterly results', exact: true }).waitFor();
   });
 
   await t.test('stored procedure result chooser opens output parameters through the procedure route', async () => {
@@ -623,7 +623,7 @@ test('actual result Webview renders database values as text and routes history/c
       procedureOutputAvailable: true, scriptStatements: [{ index: 0, label: 'Result set 1 · 1 row(s)' },
         { index: 1, label: 'Output parameters · 1' }] });
     await lastPost;
-    await page.getByRole('button', { name: `Result ${id}`, exact: true }).click();
+    await page.getByRole('tab', { name: `Result ${id}`, exact: true }).click();
     const selector = page.getByRole('combobox', { name: 'Procedure results' });
     assert.deepEqual(await selector.locator('option').allTextContents(), ['Result set 1 · 1 row(s)', 'Output parameters · 1']);
     await selector.selectOption('1');
@@ -643,7 +643,7 @@ test('actual result Webview renders database values as text and routes history/c
       browse: { ...query, pageable: true, hasPrevious: false, hasNext: false },
       edit: { table, modelId: 'filters-model', rowIds: ['r'], columns, query } });
     await lastPost;
-    await page.getByRole('button', { name: `Result ${id}`, exact: true }).click();
+    await page.getByRole('tab', { name: `Result ${id}`, exact: true }).click();
     await page.getByRole('button', { name: 'Sort and Filter' }).click();
     await page.getByRole('button', { name: 'Add Filter Group' }).click();
     await page.getByRole('textbox', { name: 'Filter value 1.1', exact: true }).fill('1');
@@ -669,4 +669,95 @@ test('actual result Webview renders database values as text and routes history/c
 
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(unexpectedRequests, []);
+});
+
+test('query result tabs support manual keyboard activation and route focus to the selected origin', { skip: runtime.skip, timeout: 30000 }, async t => {
+  const browser = await runtime.chromium.launch({ executablePath: runtime.executablePath, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('https://rocketbrain.test/assets/*', route => {
+    const asset = path.posix.basename(new URL(route.request().url()).pathname);
+    return route.fulfill({ contentType: asset.endsWith('.js') ? 'application/javascript' : 'text/css',
+      body: fs.readFileSync(path.join(__dirname, '../src/ui', asset), 'utf8') });
+  });
+  let receive, writes = Promise.resolve();
+  const sources = [];
+  const v = { Uri: { joinPath: (...parts) => path.posix.join(...parts) },
+    commands: { async executeCommand(command) { assert.equal(command, 'rocketbrain.results.focus'); } },
+    window: { showErrorMessage: message => errors.push(message) } };
+  const host = new ResultsView(v, { extensionUri: '/virtual', subscriptions: [], workspaceState: { get() {} } },
+    { focusQueryEditor: target => { sources.push(target); } });
+  const fakeView = { onDidDispose() {}, show(preserveFocus) { assert.equal(preserveFocus, false); },
+    webview: { cspSource: 'https://rocketbrain.test',
+      asWebviewUri: uri => 'https://rocketbrain.test/assets/' + path.posix.basename(uri),
+      postMessage(data) {
+        writes = writes.then(() => page.evaluate(payload => window.dispatchEvent(new MessageEvent('message', { data: payload })), data));
+        return writes;
+      },
+      onDidReceiveMessage(handler) { receive = handler; return { dispose() {} }; }
+    }
+  };
+  host.resolveWebviewView(fakeView);
+  await writes;
+  await page.exposeFunction('__keyboardHost', message => receive(message));
+  await page.evaluate(() => {
+    window.__focusReturns = 0;
+    window.__selectedResult = undefined;
+    window.acquireVsCodeApi = () => ({ postMessage: async message => {
+      await window.__keyboardHost(message);
+      if (message.type === 'focusQueryEditor') window.__focusReturns++;
+      if (message.type === 'selectResult') window.__selectedResult = message.id;
+    } });
+  });
+  await page.setContent(fakeView.webview.html);
+  const first = host.begin('SELECT 1', 'MySQL', { queryEditor: { uri: 'file:/first.sql', viewColumn: 1 } });
+  host.finish(first, { columns: ['n'], rows: [[1]], rowCount: 1 });
+  const last = host.begin('SELECT 2', 'MariaDB', { queryEditor: { uri: 'file:/last.sql', viewColumn: 2 } });
+  host.finish(last, { columns: ['n'], rows: [[2]], rowCount: 1 });
+  const tabs = page.getByRole('tab');
+  await tabs.nth(1).waitFor();
+  await host.focus();
+  assert.equal(await page.locator(':focus').getAttribute('id'), 'query-result-' + last);
+  assert.equal(await tabs.nth(1).getAttribute('aria-selected'), 'true');
+  await page.keyboard.press('Home');
+  assert.equal(await page.locator(':focus').getAttribute('id'), 'query-result-' + first);
+  assert.equal(await tabs.nth(0).getAttribute('aria-selected'), 'false');
+  host.send();
+  await writes;
+  assert.equal(await page.locator(':focus').getAttribute('id'), 'query-result-' + first);
+  await page.keyboard.press('Space');
+  assert.equal(await tabs.nth(0).getAttribute('aria-selected'), 'true');
+  assert.equal(await page.getByRole('tabpanel', { name: 'Result ' + first }).getAttribute('id'), 'result-content');
+  await page.waitForFunction(id => window.__selectedResult === id, first);
+  await host.returnToQuery();
+  await page.locator('#focus-query-editor').click();
+  await page.waitForFunction(() => window.__focusReturns === 1);
+  assert.deepEqual(sources, [{ uri: 'file:/first.sql', viewColumn: 1 }, { uri: 'file:/first.sql', viewColumn: 1 }]);
+  await tabs.nth(0).focus();
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await page.locator(':focus').getAttribute('id'), 'query-result-' + last);
+  await page.keyboard.press('Enter');
+  assert.equal(await tabs.nth(1).getAttribute('aria-selected'), 'true');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.locator(':focus').getAttribute('role'), 'tabpanel');
+  assert.deepEqual(errors, []);
+});
+
+test('the selected result can return to its query while the result view reloads', async () => {
+  const sources = [];
+  const view = new ResultsView({}, { workspaceState: { get() {} } }, {
+    focusQueryEditor: source => sources.push(source)
+  });
+  const first = { uri: 'file:/first.sql', viewColumn: 1 };
+  const second = { uri: 'file:/second.sql', viewColumn: 2 };
+  const firstId = view.begin('SELECT 1', 'MySQL', { queryEditor: first });
+  const secondId = view.begin('SELECT 2', 'MariaDB', { queryEditor: second });
+  await view.returnToQuery();
+  await view.activateResult(firstId);
+  await view.returnToQuery();
+  await view.activateResult(secondId);
+  await view.returnToQuery();
+  assert.deepEqual(sources, [second, first, second]);
 });
