@@ -47,7 +47,7 @@
   }
   function send(type, payload = {}) {
     const record = current(); if (!record) return;
-    if (['copy', 'export', 'closeResult', 'openRelatedRows', 'setResultPin', 'renameResult', 'openScriptStatement', 'saveFilterPreset', 'removeFilterPreset'].includes(type)) {
+    if (['copy', 'export', 'closeResult', 'openRelatedRows', 'returnToRelatedSource', 'setResultPin', 'renameResult', 'openScriptStatement', 'saveFilterPreset', 'removeFilterPreset'].includes(type)) {
       vscode.postMessage({ type, id: record.id, ...payload }); return;
     }
     const item = draft(record);
@@ -554,7 +554,7 @@
         draft(record).pendingRequestId) return;
     const open = document.createElement('button');
     open.textContent = compact ? '↗' : 'Related Rows';
-    open.title = 'Follow a foreign key from this row';
+    open.title = 'Follow a foreign key or saved logical relationship from this row';
     open.setAttribute('aria-label', 'Open related rows for row ' + row.number);
     open.onclick = () => send('openRelatedRows', { modelId:model.modelId, rowId:row.id });
     target.append(open);
@@ -1303,6 +1303,7 @@
     const body = table.createTBody();
     for (const [rowIndex, row] of rows.entries()) {
       const tr = body.insertRow();
+      tr.dataset.resultRowIndex = rowIndex;
       tr.onpointerdown = tr.onfocusin = () => { layout.row = rowIndex; };
       if (row.deleted) tr.className = 'deleted';
       if (row.inserted) tr.classList.add('inserted');
@@ -1334,6 +1335,11 @@
   function render() {
     const active = current();
     if (active) currentId = active.id;
+    const origin = active?.relatedOrigin;
+    const source = origin && history.find(record => record.id === origin.id && record.result?.edit?.modelId === origin.modelId &&
+      record.result.edit.rowIds.includes(origin.rowId));
+    $('return-source-row').hidden = !source;
+    $('return-source-row').disabled = Boolean(editingCell || active?.editBusy || source?.editBusy);
     $('tabs').replaceChildren(...history.map(record => {
       const button = document.createElement('button'), label = record.tabName || `Result ${record.id}`;
       button.textContent = label + (record.state === 'running' ? ' …' : record.state === 'error' ? ' !' : '');
@@ -1406,10 +1412,17 @@
   }
   window.addEventListener('message', event => {
     if (event.data?.type === 'activateResult') {
-      const id = event.data.id;
-      if ((!editingCell || editingCell.id === id) && history.some(record => record.id === id)) {
+      const { id, rowId, modelId } = event.data;
+      const record = history.find(item => item.id === id);
+      if ((!editingCell || editingCell.id === id) && record) {
+        let row;
+        if (rowId && record.result?.edit?.modelId === modelId) {
+          row = record.result.edit.rowIds.indexOf(rowId);
+          if (row >= 0) resultLayout(record).row = row;
+        }
         currentId = id;
         render();
+        if (row >= 0) $('grid').querySelector('[data-result-row-index="' + row + '"]')?.scrollIntoView?.({ block: 'nearest' });
       }
       return;
     }
@@ -1654,6 +1667,7 @@
     saveColumnLayout(record, layout, true);
   });
   $('close-result').onclick = () => send('closeResult');
+  $('return-source-row').onclick = () => send('returnToRelatedSource');
   $('pin-result').onclick = () => send('setResultPin', { pinned: !current()?.tabPinned });
   $('rename-result').onclick = () => send('renameResult');
   $('script-result-selection').onchange = () => {

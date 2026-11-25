@@ -31,20 +31,22 @@ class TableEditor {
     const context = this.contexts.get(id); this.contexts.delete(id);
     if (context?.modelId) { try { context.db.releaseTableSnapshot({ sessionId: context.sessionId, modelId: context.modelId }); } catch { /* Disposed connection. */ } }
   }
-  async open({ table, sessionId, sql, filters = [] }) {
+  async open({ table, sessionId, sql, filters = [], relation }) {
     const current = this.connection();
     if (!current.mysql || !this.trusted()) throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');
     const session = current.db.getSessionState(sessionId);
-    const id = this.results.begin(sql, `${current.label} · ${sessionId} · ${table}`, {
-      sessionId, readOnly: session.readOnly, tableLayoutConnection: current.tableLayoutConnection, table
+    const label = relation ? `${relation.schema}.${table}` : table;
+    const id = this.results.begin(sql, `${current.label} · ${sessionId} · ${label}`, {
+      sessionId, readOnly: session.readOnly, tableLayoutConnection: relation ? undefined : current.tableLayoutConnection,
+      table, relatedOrigin: relation?.origin
     });
-    const context = { db: current.db, epoch: current.epoch, sessionId, table, query: { page: 0, pageSize: 200, sort: [], filters } };
+    const context = { db: current.db, epoch: current.epoch, sessionId, table, relation, query: { page: 0, pageSize: 200, sort: [], filters } };
     this.contexts.set(id, context);
     for (const key of this.contexts.keys()) if (!this.results.history.some(record => record.id === key)) this.forget(key);
     try {
       await this.withSession(sessionId, async () => {
         this._context(id);
-        const result = await context.db.previewTable(table, { sessionId, ...context.query });
+        const result = await this._preview(context, context.query);
         context.query = result.edit?.query || context.query;
         this._retain(context, result); this.results.finish(id, result);
         if (filters.length && result.browse?.sql) this.results.editState(id, { sql: result.browse.sql });
@@ -72,10 +74,18 @@ class TableEditor {
     };
     validate();
     return { db:context.db, sessionId:context.sessionId, table:context.table,
-      columns:[...result.columns], values:[...result.rows[index]], validate };
+      schema:context.relation?.schema ?? context.db._options?.database,
+      columns:[...result.columns], definitions:result.edit.columns, values:[...result.rows[index]], validate };
+  }
+
+  _preview(context, query) {
+    const options = { sessionId: context.sessionId, ...query };
+    return context.relation ? context.db.previewRelatedTable({ schema: context.relation.schema, table: context.table,
+      keys: context.relation.keys }, options)
+      : context.db.previewTable(context.table, options);
   }
   async _load(id, context, message, query = context.query) {
-    const result = await context.db.previewTable(context.table, { sessionId: context.sessionId, ...query });
+    const result = await this._preview(context, query);
     context.query = result.edit?.query || query;
     this._retain(context, result);
     this.results.finish(id, result);
@@ -124,6 +134,9 @@ class TableEditor {
       }
       if (message.type === 'invalidateReview') { if (!record.editBusy) this.results.editState(id, { review: undefined }); return; }
       if (!['enableEdit', 'reviewChanges', 'applyChanges', 'commitChanges', 'rollbackChanges', 'reloadTable', 'browseTable', 'restoreBrowsing','inspectBulk','inspectXlsx','inspectXlsxSheet','prepareBulk'].includes(message.type)) return;
+      if (context.relation && !['reloadTable', 'browseTable', 'restoreBrowsing'].includes(message.type)) {
+        throw new Error('Related table previews are read-only.');
+      }
       if (record.editBusy) throw new Error('Wait for this table operation to finish.');
       locked = true;
       this.results.editState(id, { editBusy: true, editError: undefined, editMessage: undefined,bulkDraft:undefined });

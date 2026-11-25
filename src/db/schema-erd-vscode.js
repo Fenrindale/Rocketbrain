@@ -2,11 +2,10 @@
 
 const { randomBytes, randomUUID } = require('node:crypto');
 const { tableInventory, buildDiagram, defaultLayout, normalizeLayout, parseLayout, maxLayoutBytes,
-  digest, scopeKey, maxLogical, logicalRelation, logicalEdges } = require('./schema-erd');
+  digest, scopeKey, maxLogical, logicalRelation, logicalEdges, logicalKey } = require('./schema-erd');
 const { diagramHtml } = require('./schema-erd-view');
 
 const layoutsKey = 'rocketbrain.schemaDiagram.layouts.v1';
-const logicalKey = 'rocketbrain.schemaDiagram.logical.v1';
 const maxSavedScopes = 24;
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const pngEnd = Buffer.from([0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);

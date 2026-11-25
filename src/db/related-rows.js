@@ -2,64 +2,120 @@
 
 const { columnKind } = require('./grid');
 
-const supportedKeys = new Set(['integer', 'decimal', 'float', 'datetime', 'text']);
-const maxRelations = 200;
+const supportedKeys = new Set(['integer', 'decimal', 'float', 'datetime', 'text', 'binary']);
+const maxRelations = 32;
+const maxParts = 16;
+const maxColumns = 512;
+const endpointKey = ({ schema, table }) => JSON.stringify([schema, table]);
+const validName = name => typeof name === 'string' && name.length > 0 && name.length <= 64 && !name.includes('\0');
 
-function relatedRows(catalog, sourceName, names, row) {
-  if (!['tables', 'columns', 'foreignKeys'].every(area => catalog?.coverage?.[area] === 'loaded')) {
-    throw Error('Refresh the active schema with visible foreign keys before following a relation.');
+function edgeFromPhysical(rows, origin) {
+  const all = new Map(), source = endpointKey(origin);
+  for (const [schema, table, name, column, ordinal, foreignSchema, foreignTable, foreignColumn] of rows) {
+    if (![schema, table, name, column, foreignSchema, foreignTable, foreignColumn].every(validName)) continue;
+    const child = { schema, table }, parent = { schema: foreignSchema, table: foreignTable };
+    if (endpointKey(child) !== source && endpointKey(parent) !== source) continue;
+    const key = JSON.stringify([schema, table, name]);
+    if (!all.has(key)) all.set(key, { id: name, name, child, parent, parts: [], kind: 'physical' });
+    const edge = all.get(key);
+    if (endpointKey(edge.parent) !== endpointKey(parent)) throw Error('The visible foreign key changed during discovery.');
+    edge.parts.push({ column, foreignColumn, ordinal: Number(ordinal) });
   }
-  const tables = new Map(catalog.tables.filter(table => table.kind === 'table').map(table => [table.name, table]));
-  const source = tables.get(sourceName);
-  if (!source || !Array.isArray(row) || row.length !== names.length || new Set(names).size !== names.length) {
+  return [...all.values()];
+}
+
+function edgeFromLogical(records, origin) {
+  return records.filter(edge => edge.child === origin.table || edge.parent === origin.table).map(edge => ({
+    id: edge.id, name: edge.name, kind: 'logical', child: { schema: origin.schema, table: edge.child },
+    parent: { schema: origin.schema, table: edge.parent }, parts: edge.pairs.map(({ child, parent }, index) =>
+      ({ column: child, foreignColumn: parent, ordinal: index + 1 }))
+  }));
+}
+
+async function observeTable(query, endpoint) {
+  const values = [endpoint.schema, endpoint.table];
+  const { rows } = await query('SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE, ENGINE FROM information_schema.TABLES ' +
+    'WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? LIMIT 2', values);
+  if (rows.length !== 1 || rows[0][0] !== endpoint.schema || rows[0][1] !== endpoint.table || rows[0][2] !== 'BASE TABLE' ||
+      String(rows[0][3]).toUpperCase() !== 'INNODB') return null;
+  const observed = await query('SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, CHARACTER_SET_NAME, COLLATION_NAME ' +
+    'FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION LIMIT ' + (maxColumns + 1), values);
+  if (observed.truncated || observed.rows.length > maxColumns || observed.rows.some(([schema, table]) =>
+    schema !== endpoint.schema || table !== endpoint.table)) return null;
+  return new Map(observed.rows.map(([, , name, type, charset, collation]) => [name, { type, charset, collation }]));
+}
+
+async function readRelatedCatalog(query, _activeDatabase, { schema, table, logical = [] }) {
+  if (![schema, table].every(validName)) throw Error('Choose a saved table preview for related-row navigation.');
+  const origin = { schema, table }, source = endpointKey(origin);
+  const limit = maxRelations * maxParts + 1;
+  const physical = await query('SELECT TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, ORDINAL_POSITION, ' +
+    'REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE ' +
+    'WHERE REFERENCED_TABLE_NAME IS NOT NULL AND ((TABLE_SCHEMA = ? AND TABLE_NAME = ?) OR ' +
+    '(REFERENCED_TABLE_SCHEMA = ? AND REFERENCED_TABLE_NAME = ?)) ' +
+    'ORDER BY TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION LIMIT ' + limit, [schema, table, schema, table]);
+  if (physical.truncated || physical.rows.length >= limit) throw Error('Too many related tables are visible for this preview.');
+  const edges = [...edgeFromPhysical(physical.rows, origin), ...edgeFromLogical(logical, origin)];
+  if (edges.length > maxRelations) throw Error('Too many related tables are visible for this preview.');
+  const tables = new Map([[source, await observeTable(query, origin)]]);
+  for (const edge of edges) {
+    for (const endpoint of [edge.child, edge.parent]) {
+      const key = endpointKey(endpoint);
+      if (!tables.has(key)) tables.set(key, await observeTable(query, endpoint));
+    }
+  }
+  return { source, edges, tables };
+}
+
+function compatible(left, right, kind, logical) {
+  if (!right || columnKind(right.type) !== kind || !supportedKeys.has(kind)) return false;
+  if (kind === 'text') return left.charset === right.charset && left.collation === right.collation;
+  if (kind === 'binary') return /^(?:var)?binary\(\d+\)$/i.test(left.type) && left.type.toLowerCase() === right.type.toLowerCase();
+  return !logical || left.type.toLowerCase() === right.type.toLowerCase();
+}
+
+function relatedRows(catalog, names, row, definitions) {
+  const sourceColumns = catalog.tables.get(catalog.source);
+  if (!sourceColumns || !Array.isArray(row) || row.length !== names.length || new Set(names).size !== names.length) {
     throw Error('Choose a row from a current base-table preview.');
   }
   const cells = new Map(names.map((column, index) => [column, row[index]]));
-  const sourceColumns = new Map(source.columns.map(column => [column.name, column]));
+  const captured = definitions && new Map(definitions.map(column => [column.name, column]));
   const matches = [];
-
-  function relation(from, to, fk, direction) {
+  function relation(edge, direction) {
     const inbound = direction === 'referencing';
-    const target = inbound ? from : to;
-    if (!Array.isArray(fk.columns) || !fk.columns.length || fk.columns.length > 16) return;
-    const path = [...fk.columns].sort((left, right) => left.ordinal - right.ordinal);
-    const targetColumns = new Map(target.columns.map(column => [column.name, column]));
-    const filters = [];
-    const bindings = [];
+    const target = inbound ? edge.child : edge.parent;
+    const targetColumns = catalog.tables.get(endpointKey(target));
+    if (!targetColumns || !edge.parts.length || edge.parts.length > maxParts) return;
+    const path = [...edge.parts].sort((left, right) => left.ordinal - right.ordinal);
+    const filters = [], bindings = [], keys = [];
     for (const [index, part] of path.entries()) {
       if (part.ordinal !== index + 1) return;
-      const sourceColumn = inbound ? part.referencedColumn : part.name;
-      const targetColumn = inbound ? part.name : part.referencedColumn;
-      const left = sourceColumns.get(sourceColumn);
-      const right = targetColumns.get(targetColumn);
-      const value = cells.get(sourceColumn);
+      const from = inbound ? part.foreignColumn : part.column;
+      const to = inbound ? part.column : part.foreignColumn;
+      const left = sourceColumns.get(from), right = targetColumns.get(to), value = cells.get(from);
       const kind = left && columnKind(left.type);
-      // SQL foreign key matching with any NULL component denotes no relation.
-      if (value == null || !right || !supportedKeys.has(kind) || kind !== columnKind(right.type) ||
+      const old = captured?.get(from);
+      if (captured && (!old || old.type !== left?.type || old.charset !== left?.charset || old.collation !== left?.collation)) return;
+      if (value == null || !left || !compatible(left, right, kind, edge.kind === 'logical') ||
           (typeof value !== 'string' && !(typeof value === 'number' && Number.isFinite(value))) ||
           (kind === 'integer' && typeof value === 'number' && !Number.isSafeInteger(value))) return;
       const text = String(value);
-      if (Buffer.byteLength(text) > 4096) return;
-      filters.push({ column: targetColumn, operator: 'eq', value: { kind: 'value', text } });
-      bindings.push([sourceColumn, left.type, targetColumn, right.type]);
+      if (Buffer.byteLength(text) > 4096 || kind === 'binary' && !/^0x(?:[\da-f]{2})*$/i.test(text)) return;
+      filters.push({ column: to, operator: 'eq', value: { kind: 'value', text } });
+      bindings.push([from, left.type, left.collation, to, right.type, right.collation]);
+      keys.push({ name: to, ...right });
     }
     if (new Set(filters.map(filter => filter.column)).size !== filters.length) return;
-    const key = JSON.stringify([catalog.database, source.name, target.name, direction, fk.name, bindings]);
-    const label = target.name + ' · ' + fk.name;
-    matches.push({ key, label, table: target.name, direction, columns: bindings.map(([a,,b]) => [a,b]), filters });
-    if (matches.length > maxRelations) throw Error('Too many related tables are visible for this preview.');
+    const key = JSON.stringify([catalog.source, endpointKey(target), direction, edge.kind, edge.id, bindings]);
+    const label = target.schema + '.' + target.table + ' · ' + edge.name;
+    matches.push({ key, label, ...target, direction, kind: edge.kind, columns: bindings.map(([from,,,to]) => [from,to]), filters, keys });
   }
-
-  for (const from of tables.values()) {
-    for (const fk of from.foreignKeys || []) {
-      if (fk.referencedSchema !== catalog.database) continue;
-      const to = tables.get(fk.referencedTable);
-      if (!to) continue;
-      if (from === source) relation(from, to, fk, 'referenced');
-      if (to === source) relation(from, to, fk, 'referencing');
-    }
+  for (const edge of catalog.edges) {
+    if (endpointKey(edge.child) === catalog.source) relation(edge, 'referenced');
+    if (endpointKey(edge.parent) === catalog.source) relation(edge, 'referencing');
   }
-  return matches.sort((left,right) => left.label.localeCompare(right.label) || left.direction.localeCompare(right.direction));
+  return matches.sort((left, right) => left.label.localeCompare(right.label) || left.direction.localeCompare(right.direction));
 }
 
-module.exports = { relatedRows };
+module.exports = { readRelatedCatalog, relatedRows };

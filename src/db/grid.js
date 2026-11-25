@@ -118,7 +118,7 @@ function equalRows(left, right) {
 }
 const MAX_PAGE = 2000;
 /** Compile only catalog-backed identifiers and explicitly typed bound values. */
-function browseQuery(definition, input = {}, schema) {
+function browseQuery(definition, input = {}, schema, related = false) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose table paging, sorting and filter options.');
   if (Object.keys(input).some(key => !['page', 'pageSize', 'maxRows', 'sort', 'filters', 'sessionId'].includes(key))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Unsupported table browsing option.');
   const page = input.page ?? 0, pageSize = input.pageSize ?? input.maxRows ?? 200;
@@ -155,7 +155,8 @@ function browseQuery(definition, input = {}, schema) {
       const negate = operator === 'isNotNull' || operator === 'ne';
       return { sql: name + (negate ? ' IS NOT NULL' : ' IS NULL'), filter: { column: column.name, operator: negate ? 'isNotNull' : 'isNull' } };
     }
-    if (isNull || ['json', 'binary', 'unsupported'].includes(column.kind)) throw fail('ROCKETBRAIN_GRID_QUERY', 'This filter requires a supported non-NULL scalar value. JSON and binary values support only NULL filters.');
+    const binaryRelation = related && operator === 'eq' && column.kind === 'binary' && /^(?:var)?binary\(\d+\)$/i.test(column.type);
+    if (isNull || ['json', 'unsupported'].includes(column.kind) || column.kind === 'binary' && !binaryRelation) throw fail('ROCKETBRAIN_GRID_QUERY', 'This filter requires a supported non-NULL scalar value.');
     const value = typeof item.value === 'string' ? { kind: 'value', text: item.value } : item.value;
     if (!value || value.kind !== 'value' || typeof value.text !== 'string' || Buffer.byteLength(value.text, 'utf8') > 8192) throw fail('ROCKETBRAIN_GRID_QUERY', 'A filter requires at most 8 KiB of explicit text.');
     const typed = typedCell(value, column);
@@ -164,7 +165,20 @@ function browseQuery(definition, input = {}, schema) {
       if (column.kind !== 'text') throw fail('ROCKETBRAIN_GRID_QUERY', 'Text matching requires a text column.');
       const literal = typed.parameter.replace(/[=%_]/g, character => '=' + character);
       sql = name + " LIKE ? ESCAPE '='"; parameters.push((operator !== 'startsWith' ? '%' : '') + literal + (operator !== 'endsWith' ? '%' : ''));
-    } else { sql = name + ' ' + operators[operator] + ' ?'; parameters.push(typed.parameter); }
+    } else {
+      let binding = '?', parameter = typed.parameter;
+      if (related && operator === 'eq') {
+        if (column.kind === 'integer') binding = /\bunsigned\b/i.test(column.type) ? 'CAST(? AS UNSIGNED)' : 'CAST(? AS SIGNED)';
+        if (column.kind === 'decimal') {
+          const spec = /^decimal\((\d{1,2}),(\d{1,2})\)/i.exec(column.type);
+          if (!spec) throw fail('ROCKETBRAIN_GRID_QUERY', 'This relationship requires observed decimal precision.');
+          binding = `CAST(? AS DECIMAL(${spec[1]},${spec[2]}))`;
+        }
+        if (column.kind === 'float') parameter = Number(parameter);
+      }
+      sql = name + ' ' + operators[operator] + ' ' + binding;
+      parameters.push(parameter);
+    }
     return { sql, filter: { column: column.name, operator, value: { kind: 'value', text: value.text } } };
   }
   for (const item of input.filters || []) {
@@ -219,9 +233,8 @@ class TableEditor {
     }
     while (this.reviews.size > 40) this.reviews.delete(this.reviews.keys().next().value);
   }
-  async definition(name) {
+  async definition(name, schema = this.db._options.database) {
     if (typeof name !== 'string' || !name || name.includes('\0') || name.length > 64) throw fail('ROCKETBRAIN_GRID_TABLE', 'Select a table from the current database metadata.');
-    const schema = this.db._options.database;
     const read = async (sql, values) => (await this.db._metadataQuery(sql, values)).rows;
     const rows = await read('SELECT TABLE_NAME,TABLE_TYPE,ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME=?', [schema, name]);
     if (rows.length !== 1 || rows[0][0] !== name) throw fail('ROCKETBRAIN_GRID_TABLE', 'The selected table no longer exists in the current database metadata.');
@@ -258,6 +271,14 @@ class TableEditor {
     const session = this.db._session(sessionId);
     return this.db._enqueue(session, () => this._preview(session, name, options));
   }
+  previewRelatedTable(target, options = {}) {
+    if (!target || typeof target.schema !== 'string' || !target.schema || target.schema.length > 64 || target.schema.includes('\0') ||
+        !Array.isArray(target.keys) || !target.keys.length || target.keys.length > 16) {
+      throw fail('ROCKETBRAIN_GRID_TABLE', 'Choose a verified related table.');
+    }
+    const session = this.db._session(options.sessionId ?? 'default');
+    return this.db._enqueue(session, () => this._preview(session, target.table, options, undefined, target));
+  }
   async _read(session, sql, values = [], maxRows = 500) {
     try {
       const result = await this.db._stream(session, sql, values, { maxRows, timeoutMs: 10000 }, !/^\s*SELECT\b/.test(sql));
@@ -268,19 +289,29 @@ class TableEditor {
       error.state = this.db._state(session); throw error;
     }
   }
-  async _preview(session, name, options, definition) {
+  async _preview(session, name, options, definition, related) {
     await this.db._ensureConnection(session);
-    definition ||= await this.definition(name);
+    const schema = related?.schema ?? this.db._options.database;
+    definition ||= await this.definition(name, schema);
+    if (related && (!session.readOnly || !session.autocommit || session.inTransaction || definition.kind !== 'BASE TABLE' ||
+        String(definition.engine).toUpperCase() !== 'INNODB')) {
+      throw fail('ROCKETBRAIN_GRID_READ_ONLY', 'Use a read-only console to browse an observed related InnoDB table.');
+    }
+    if (related?.keys?.some(key => !definition.columns.some(column => column.name === key.name && column.type === key.type &&
+      column.charset === key.charset && column.collation === key.collation))) {
+      throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The related key columns changed. Follow the relation again.');
+    }
     const pk = definition.columns.filter(column => column.primaryKey);
     let reason = '';
-    if (definition.kind !== 'BASE TABLE') reason = 'Views and arbitrary SQL results are read-only.';
+    if (related) reason = 'Related rows are opened in a read-only preview.';
+    else if (definition.kind !== 'BASE TABLE') reason = 'Views and arbitrary SQL results are read-only.';
     else if (String(definition.engine).toUpperCase() !== 'INNODB') reason = 'Editing currently requires an InnoDB table for transactional rollback.';
     else if (!pk.length) reason = 'A primary key is required to identify edited rows safely.';
     else if (pk.some(column => column.kind === 'unsupported')) reason = 'A primary-key type is not supported by this editor.';
     else if (!definition.triggerVisibility) reason = 'Trigger metadata visibility could not be verified for this account; editing is disabled.';
     else if (definition.triggers.length) reason = 'Tables with triggers are read-only until their transactional side effects can be verified.';
     if (!definition.columns.length) throw fail('ROCKETBRAIN_GRID_TABLE', 'The table has no visible columns.');
-    const browsing = browseQuery(definition, options, this.db._options.database), maxRows = browsing.pageSize;
+    const browsing = browseQuery(definition, options, schema, Boolean(related)), maxRows = browsing.pageSize;
     const result = await this._read(session, browsing.sql, browsing.parameters, maxRows + 1);
     const hasNext = result.truncated ? null : result.rows.length > maxRows;
     if (result.rows.length > maxRows) result.rows = result.rows.slice(0, maxRows);
@@ -292,7 +323,7 @@ class TableEditor {
     this.models.set(modelId, model);
     this._prune();
     result.state = this.db._state(session);
-    result.edit = { modelId, table: name, columns: definition.columns, rowIds, canEdit: !reason, reason,
+    result.edit = { modelId, table: name, ...(related ? { schema } : {}), columns: definition.columns, rowIds, canEdit: !reason, reason,
       query: browsing.query, hasMorePossible: hasNext === true, insertable: !reason && !definition.columns.some(column => column.required && !column.insertable),
       concurrency: 'Primary-key locking read plus exact original visible-row comparison; a server-side delete/reinsert ABA without a version column cannot be detected.' };
     result.browse = { ...browsing.query, order: browsing.order, hasNext, hasPrevious: browsing.page > 0, pageable: browsing.pageable, sql: browsing.sql, consistency: browsing.consistency, totalRows: null };

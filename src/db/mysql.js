@@ -6,6 +6,7 @@ const { performance } = require('node:perf_hooks');
 const { validateQuery, validateReadQuery, parameters } = require('./sql-policy');
 const { operationOf, outcomeOf } = require('./activity-log');
 const { readMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
+const { readRelatedCatalog } = require('./related-rows');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
 const { localDriverOptions } = require('./local-transport');
 const { geometryType, preserveGeometry, captureGeometry } = require('./result-map');
@@ -660,7 +661,9 @@ class MysqlService {
   relationshipJoinCatalog(request) {
     return this._relationshipCatalog(readRelationshipJoinCatalog, request);
   }
+  relatedRowsCatalog(request) { return this._relationshipCatalog(readRelatedCatalog, request); }
   previewTable(name, options) { return this._editor.previewTable(name, options); }
+  previewRelatedTable(target, options) { return this._editor.previewRelatedTable(target, options); }
   retainTableSnapshot(binding) { return this._editor.retainTableSnapshot(binding); }
   releaseTableSnapshot(binding) { return this._editor.releaseTableSnapshot(binding); }
   reviewChangeSet(changes) { return this._editor.reviewChangeSet(changes); }
