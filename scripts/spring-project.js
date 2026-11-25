@@ -255,8 +255,9 @@ async function main() {
       if (!args.length) throw new Error('Pass Node arguments after --.');
       const allowPrincipalCreation = process.env.ROCKETBRAIN_ENABLE_DBPRINCIPAL_FIXTURE === '1';
       const allowRoleInheritance = process.env.ROCKETBRAIN_ENABLE_ROLE_INHERITANCE_FIXTURE === '1';
-      const adminConfig = allowPrincipalCreation || allowRoleInheritance || process.env.ROCKETBRAIN_ENABLE_DBADMIN_FIXTURE === '1'
-        ? await require('../test/helpers/database-admin-fixture').prepareDatabaseAdminFixture(fixture, { allowPrincipalCreation, allowRoleInheritance })
+      const allowRoleMembership = process.env.ROCKETBRAIN_ENABLE_ROLE_MEMBERSHIP_FIXTURE === '1';
+      const adminConfig = allowPrincipalCreation || allowRoleInheritance || allowRoleMembership || process.env.ROCKETBRAIN_ENABLE_DBADMIN_FIXTURE === '1'
+        ? await require('../test/helpers/database-admin-fixture').prepareDatabaseAdminFixture(fixture, { allowPrincipalCreation, allowRoleInheritance, allowRoleMembership })
         : undefined;
       const dbMcpEnvironment = process.env.ROCKETBRAIN_ENABLE_DB_MCP_FIXTURE === '1'
         ? await require('../test/helpers/db-mcp-fixture').prepareDbMcpFixture(fixture)
