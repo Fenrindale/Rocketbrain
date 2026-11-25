@@ -241,6 +241,7 @@
       { "command": "rocketbrain.db.openCachedMetadata", "title": "Open Cached Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && !rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.closeCachedMetadata", "title": "Close Cached Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.db.removeCachedMetadata", "title": "Remove Saved Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.inspectSequence", "title": "Inspect MariaDB Sequence", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.refreshObjectSource", "title": "Refresh Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && resourceScheme == rocketbrain-object-source" },
       { "command": "rocketbrain.java.move", "title": "Move Java Class File", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.moveCrossProject", "title": "Move Java Class Across Projects", "category": "Rocketbrain" },
@@ -1499,6 +1500,11 @@
         {
           "command": "rocketbrain.db.refreshObjectSource",
           "when": "resourceScheme == rocketbrain-object-source && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.db.inspectSequence",
+          "when": "resourceScheme == rocketbrain-object-source && resourceFilename =~ /[.]sequence[.]sql$/ && rocketbrain.mysqlConnected && isWorkspaceTrusted",
           "group": "navigation"
         },
         {

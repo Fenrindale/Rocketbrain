@@ -2,6 +2,7 @@
 
 const { randomUUID } = require('node:crypto');
 const { contextOf, listNames, loadSource } = require('./object-source');
+const { inspectSequence, sequenceDetailsText } = require('./sequence-details');
 const { searchDatabaseText, textHash } = require('./unified-search');
 const { sourceTokens, sourceRange } = require('./sql-analysis');
 const { ddlDefinitionLocation } = require('./sql-ddl-location');
@@ -58,22 +59,22 @@ function registerObjectSources(vscode, { database, captureFileUsages }) {
     changed.fire(previous.uri);
   }
 
-  async function retainDocument(value, epoch, frame, exact, assertActive = () => {}) {
+  async function retainDocument(value, epoch, frame, exact, assertActive = () => {}, presentation = 'source') {
     check(frame);
     assertActive();
     const identity = JSON.stringify(value.object);
-    const existing = [...documents.values()].find(item => item.epoch === epoch && item.identity === identity &&
+    const existing = [...documents.values()].find(item => item.epoch === epoch && item.identity === identity && item.presentation === presentation &&
       (!exact || item.source === value.source));
     if (existing && existing.source !== value.source) {
       existing.source = value.source;
       changed.fire(existing.uri);
     }
     const filename = [value.object.schema, value.object.name, value.object.kind].join('.').replace(/[\\/:]/g, '_');
-    const uri = existing?.uri || vscode.Uri.from({ scheme, path: '/' + randomUUID() + '/' + filename + '.sql' });
+    const uri = existing?.uri || vscode.Uri.from({ scheme, path: '/' + randomUUID() + '/' + filename + (presentation === 'source' ? '.sql' : '.txt') });
     const key = uri.toString();
     if (!existing) {
       while (documents.size >= maxDocuments) forget(documents.keys().next().value);
-      documents.set(key, { object: { ...value.object }, identity, uri, epoch, source: value.source });
+      documents.set(key, { object: { ...value.object }, identity, uri, epoch, presentation, source: value.source });
     }
     const document = await vscode.workspace.openTextDocument(uri);
     check(frame);
@@ -122,7 +123,22 @@ function registerObjectSources(vscode, { database, captureFileUsages }) {
   async function refresh(uri = vscode.window.activeTextEditor?.document.uri) {
     const current = uri?.scheme === scheme && documents.get(uri.toString());
     if (!current) throw Error('Open the database object source before refreshing it.');
-    return open(current.object);
+    return current.presentation === 'sequence' ? openSequenceDetails(current.object) : open(current.object);
+  }
+
+  async function openSequenceDetails(object, frame = generation) {
+    const { value, epoch } = await inspect((query, context) => inspectSequence(query, context, object), frame);
+    const text = sequenceDetailsText(value);
+    const document = await retainDocument({ ...value, source: text }, epoch, frame, false, undefined, 'sequence');
+    await vscode.window.showTextDocument(document, { preview: false });
+    check(frame);
+    return { ...value, text, documentUri: document.uri.toString() };
+  }
+
+  function describeSequence(uri = vscode.window.activeTextEditor?.document.uri) {
+    const current = uri?.scheme === scheme && documents.get(uri.toString());
+    if (current?.object.kind !== 'sequence') throw Error('Open a native MariaDB sequence source before inspecting its details.');
+    return openSequenceDetails(current.object);
   }
 
   async function choosePage(load, frame, title, initialChoices = []) {
@@ -251,7 +267,8 @@ function registerObjectSources(vscode, { database, captureFileUsages }) {
     command('rocketbrain.db.openObjectSource', browse),
     command('rocketbrain.db.inspectViewImpact', browseImpact),
     command('rocketbrain.db.findCatalogUsages', browseCatalogUsages),
-    command('rocketbrain.db.refreshObjectSource', refresh)
+    command('rocketbrain.db.refreshObjectSource', refresh),
+    command('rocketbrain.db.inspectSequence', describeSequence)
   ];
 
   return {
@@ -262,6 +279,7 @@ function registerObjectSources(vscode, { database, captureFileUsages }) {
     catalogUsages: { inspect: catalogUsages.capture, open: catalogUsages.open },
     definition,
     columnOrigin,
+    openSequenceDetails,
     search(options, assertActive = () => {}) {
       return inspect((query, context) => searchDatabaseText(query, context, options, assertActive), generation, assertActive)
         .then(({ value }) => value);
