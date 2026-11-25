@@ -18,7 +18,7 @@ async function runCurrentSqlStatementChecks(api,vscode,checks) {
   assert.equal(config.host,'127.0.0.1');
   assert.equal(config.database,'rocketbrain_fixture');
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
-  assert.equal(workspace,await fs.realpath(process.env.ROCKETBRAIN_JAVA_TEST_WORKSPACE));
+  assert.equal(path.relative(workspace,await fs.realpath(process.env.ROCKETBRAIN_JAVA_TEST_WORKSPACE)),'');
   const name = 'rb_stmt_cursor_' + randomBytes(4).toString('hex');
   const actor = await mysql.createConnection(config);
   const source = path.join(workspace,name+'.sql');
