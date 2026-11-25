@@ -134,19 +134,26 @@ function registerKotlinEditor(context,vscode,java) {
 
   function stop() {suspended=true;return serial(stopNow);}
 
-  async function definition(document,position,cancellation) {
+  async function sourceRequest(method,document,position,context,cancellation) {
     trusted();
     const current=active,root=projectOf(document);
     if (!current||!root||state.state!=='running'||path.relative(current.launch.root,root)||cancellation?.isCancellationRequested) {
       throw fail('Start Kotlin editing for the current Gradle project.');
     }
-    const locations=await current.client.sendRequest('textDocument/definition',{
-      textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)},position
+    if (method==='textDocument/references' && !current.client.initializeResult?.capabilities?.referencesProvider) {
+      throw fail('The connected Kotlin language server does not offer semantic references.');
+    }
+    const locations=await current.client.sendRequest(method,{
+      textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)},position,...(context?{context}:{})
     },...(cancellation?[cancellation]:[]));
     trusted();
     if (active!==current) throw fail('The Kotlin language server changed during navigation.');
     return locations;
   }
+
+  const definition=(document,position,cancellation)=>sourceRequest('textDocument/definition',document,position,null,cancellation);
+  const references=(document,position,includeDeclaration,cancellation)=>sourceRequest('textDocument/references',
+    document,position,{includeDeclaration:Boolean(includeDeclaration)},cancellation);
 
   function automatic(document) {
     if (disposed || suspended || !vscode.workspace.isTrusted || !vscode.workspace.getConfiguration('rocketbrain.kotlinEditor').get('serverHome')) return;
@@ -172,7 +179,7 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,definition,getState:()=>({...state}),dispose() {
+  return {start,stop,definition,references,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;

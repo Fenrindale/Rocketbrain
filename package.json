@@ -235,6 +235,7 @@
       { "command": "rocketbrain.java.callHierarchy", "title": "Explore Java Call Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.typeHierarchy", "title": "Explore Java Type Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.navigateSymbol", "title": "Go to Code Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && (editorLangId == java || editorLangId == kotlin)" },
+      { "command": "rocketbrain.java.findUsages", "title": "Find JVM & Spring Usages", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin || resourceExtname =~ /^\\.(xml|properties|ya?ml)$/i)" },
       { "command": "rocketbrain.java.goToSuperMethod", "title": "Go to Java Super Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.insertLiveTemplate", "title": "Insert Java Live Template", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.generateMembers", "title": "Generate Java Members", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
@@ -1090,6 +1091,11 @@
         {
           "command": "rocketbrain.java.navigateSymbol",
           "when": "isWorkspaceTrusted && (editorLangId == java || editorLangId == kotlin)",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.java.findUsages",
+          "when": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin || resourceExtname =~ /^\\.(xml|properties|ya?ml)$/i)",
           "group": "navigation"
         }
       ],

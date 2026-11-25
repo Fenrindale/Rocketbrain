@@ -131,7 +131,7 @@ function registerJavaFeatures(context, vscode) {
   };
   api.navigationLocations=async(kind,position,cancellation)=>{
     const methods={declaration:'textDocument/definition',type:'textDocument/typeDefinition',
-      implementation:'textDocument/implementation',super:'java/findLinks'};
+      implementation:'textDocument/implementation',super:'java/findLinks',references:'textDocument/references'};
     if(!Object.hasOwn(methods,kind))throw Error('Choose a supported Java navigation relation.');
     await api.start();
     if(!vscode.workspace.isTrusted||!client||state.state!=='running'||cancellation?.isCancellationRequested){

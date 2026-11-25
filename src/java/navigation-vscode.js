@@ -2,13 +2,15 @@
 
 const { workspaceDependencyGraph, localUri, check } = require('./dependency-workspace');
 const { createSymbolNavigation } = require('./navigation-symbols');
+const { createUsageSearch } = require('./usage-vscode');
 
 const COMMANDS = Object.freeze({
   graph: 'rocketbrain.java.dependencyGraph',
   call: 'rocketbrain.java.callHierarchy',
   type: 'rocketbrain.java.typeHierarchy',
   symbols: 'rocketbrain.java.navigateSymbol',
-  super: 'rocketbrain.java.goToSuperMethod'
+  super: 'rocketbrain.java.goToSuperMethod',
+  usages: 'rocketbrain.java.findUsages'
 });
 const HIERARCHY = {
   call: {
@@ -280,26 +282,29 @@ function registerJavaNavigation(_context, vscode, { java }) {
         check(vscode);
         return await operation();
       } catch (error) {
-        await vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message);
+        void vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message);
         return null;
       }
     });
   }
   const symbols = createSymbolNavigation(vscode,java,progress);
+  const usages = createUsageSearch(vscode,java,progress);
   const subscriptions = [
     register(COMMANDS.graph, showDependencies),
     register(COMMANDS.call, () => chooseHierarchy('call')),
     register(COMMANDS.type, () => chooseHierarchy('type')),
     register(COMMANDS.symbols, () => symbols.choose()),
-    register(COMMANDS.super, () => symbols.choose('super'))
+    register(COMMANDS.super, () => symbols.choose('super')),
+    register(COMMANDS.usages, () => usages.choose())
   ];
   return {
     analyzeDependencies, inspectHierarchy: inspect, openSource, showHierarchyTree,
-    inspectSymbol: symbols.inspect, revealSymbol: symbols.reveal,
+    inspectSymbol: symbols.inspect, revealSymbol: symbols.reveal,findUsages:usages.inspect,revealUsage:usages.reveal,
     dispose() {
       if (disposed) return;
       disposed = true;
       symbols.dispose();
+      usages.dispose();
       for (const subscription of subscriptions) subscription.dispose();
     }
   };

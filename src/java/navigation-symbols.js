@@ -177,4 +177,4 @@ function createSymbolNavigation(vscode, java, progress) {
   return {inspect,reveal,choose,dispose(){disposed=true;}};
 }
 
-module.exports = { createSymbolNavigation };
+module.exports = { createSymbolNavigation,destination,localEvidence,requestLocations,samePoint,validPoint };
