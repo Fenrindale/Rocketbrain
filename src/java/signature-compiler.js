@@ -50,6 +50,11 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
     sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)){
     query.push('expectedCompletion',inspection.uri,String(inspection.start),String(inspection.end),inspection.stage);
   }
+  else if(inspection.kind==='springQualifier'&&Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&
+    inspection.start>=0&&inspection.end>inspection.start&&inspection.end-inspection.start<=160&&
+    sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)){
+    query.push('springQualifier',inspection.uri,String(inspection.start),String(inspection.end));
+  }
   else if(inspection.kind==='constant'&&Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&inspection.start>=0&&
     inspection.end>inspection.start&&inspection.end-inspection.start<=4096&&sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)&&
     (inspection.name===undefined||validIdentifier(inspection.name)))query.push('constant',inspection.uri,String(inspection.start),String(inspection.end),inspection.name||'');

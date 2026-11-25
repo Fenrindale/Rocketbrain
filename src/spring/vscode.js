@@ -105,12 +105,26 @@ function registerSemanticSpring(vscode, context, output) {
   const watcher = vscode.workspace.createFileSystemWatcher('**/*.{java,properties,yml,yaml}');
   subscriptions.push(watcher, watcher.onDidChange(invalidate), watcher.onDidCreate(invalidate), watcher.onDidDelete(invalidate));
   const refresh = async () => { invalidate(); return analyze(); };
+  async function qualifierInputs(projectUri) {
+    const folder=vscode.Uri.parse(projectUri), current=await analyze();
+    const inputs=analysisInputs.get(current);
+    if (!inputs||current.truncated||!enabled()||dirty||current.revision!==revision||
+        folder.scheme!=='file'||!vscode.workspace.getWorkspaceFolder(folder)) return null;
+    const scopedProperties=inputs.properties.filter(file=>{
+      const absolute=vscode.Uri.parse(file.uri);
+      const relative=path.relative(folder.fsPath,absolute.fsPath);
+      return absolute.scheme==='file'&&relative!==''&&relative!=='..'&&!relative.startsWith('..'+path.sep)&&
+        !path.isAbsolute(relative)&&!/(?:^|[\\/])src[\\/](?:test|testFixtures|integrationTest)[\\/]/iu.test(relative);
+    });
+    return {scopedProperties,options:structuredClone(inputs.options),
+      valid:()=>!disposed&&enabled()&&!dirty&&model===current&&revision===current.revision};
+  }
   const beanGraph = registerBeanGraph(vscode,{analyze,refresh,enabled,revision:() => revision,
     matchesSource:(model,uri,text) => graphSourceHashes.get(model)?.get(uri) === digest(text)});
   const autowiring=registerAutowiringFix(vscode,{analyze,refresh,enabled,inputsFor:model=>analysisInputs.get(model),output});
   subscriptions.push(beanGraph,autowiring);
   invalidate();
-  return { analyze, snapshot: () => model, definitions, refresh, beanGraph,autowiring,
+  return { analyze, snapshot: () => model, definitions, refresh, beanGraph,autowiring,qualifierInputs,
     dispose() { disposed = true; clearTimeout(timer); for (const item of subscriptions) item.dispose(); } };
 }
 

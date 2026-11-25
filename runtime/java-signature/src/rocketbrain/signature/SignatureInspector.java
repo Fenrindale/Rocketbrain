@@ -299,6 +299,7 @@ public final class SignatureInspector {
                 !(args.length == 9 && args[4].equals("extraction")) &&
                 !(args.length == 10 && args[4].equals("methodInline")) &&
                 !(args.length == 9 && args[4].equals("expectedCompletion")) &&
+                !(args.length == 8 && args[4].equals("springQualifier")) &&
                 !(args.length == 8 && args[4].equals("typeStructure")) &&
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
                 !(args.length == 7 && args[4].equals("cleanup")) &&
@@ -366,6 +367,11 @@ public final class SignatureInspector {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
                         report.put("expectedCompletion",new ExpectedCompletion(task,unit)
                             .inspect(Integer.parseInt(args[6]),Integer.parseInt(args[7]),args[8].equals("plan")));
+                    }
+                    else if (args[4].equals("springQualifier")) {
+                        var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
+                        report.put("springQualifier",new SpringQualifierInspector(task)
+                            .inspect(units,unit,Integer.parseInt(args[6]),Integer.parseInt(args[7])));
                     }
                     else if (args[4].equals("typeStructure")) {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
