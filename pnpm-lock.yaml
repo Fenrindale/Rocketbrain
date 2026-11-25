@@ -8,9 +8,18 @@ importers:
 
   .:
     dependencies:
+      '@grpc/grpc-js':
+        specifier: 1.14.7
+        version: 1.14.7
+      '@grpc/proto-loader':
+        specifier: 0.8.1
+        version: 0.8.1
       mysql2:
         specifier: 3.24.6
         version: 3.24.6(@types/node@26.6.6)
+      protobufjs:
+        specifier: 7.6.6
+        version: 7.6.6
       saxes:
         specifier: 6.0.0
         version: 6.0.0
@@ -29,10 +38,10 @@ importers:
     devDependencies:
       '@vscode/test-electron':
         specifier: 2.5.2
-        version: 2.5.2(supports-color@7.2.0)
+        version: 2.5.2
       '@vscode/vsce':
         specifier: 3.6.2
-        version: 3.6.2(supports-color@7.2.0)
+        version: 3.6.2
       esbuild:
         specifier: 0.25.11
         version: 0.25.11
@@ -263,9 +272,21 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@grpc/grpc-js@1.14.7':
+    resolution: {integrity: sha512-W4W/fcBMGRVtG6dW2c7cw2mnpS3hvbBd+oQXjh2iYFTZDk1JJmcNqkM5KSaPubQpamlUUurrlb7G1s9NJeERmQ==}
+    engines: {node: '>=12.10.0'}
+
+  '@grpc/proto-loader@0.8.1':
+    resolution: {integrity: sha512-wtF6h+DY6M3YaDBPAmvuuA6jV8Sif9MjtOI5euKFWRgCDl5PeDpPsHR9u2l6St5ceY8AZgoNDww5+HvEsXFsGg==}
+    engines: {node: '>=6'}
+    hasBin: true
+
   '@isaacs/cliui@9.0.0':
     resolution: {integrity: sha512-AokJm4tuBHillT+FpMtxQ60n8ObyXBatq7jD2/JA9dxbDDokKQm8KMht5ibGzLVU9IJDIKK4TPKgMHEYMn3lMg==}
     engines: {node: '>=18'}
+
+  '@js-sdsl/ordered-map@4.4.2':
+    resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -278,6 +299,33 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
+
+  '@protobufjs/aspromise@1.1.2':
+    resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
+
+  '@protobufjs/base64@1.1.2':
+    resolution: {integrity: sha512-AZkcAA5vnN/v4PDqKyMR5lx7hZttPDgClv83E//FMNhR2TMcLUhfRUBHCmSl0oi9zMgDDqRUJkSxO3wm85+XLg==}
+
+  '@protobufjs/codegen@2.0.5':
+    resolution: {integrity: sha512-zgXFLzW3Ap33e6d0Wlj4MGIm6Ce8O89n/apUaGNB/jx+hw+ruWEp7EwGUshdLKVRCxZW12fp9r40E1mQrf/34g==}
+
+  '@protobufjs/eventemitter@1.1.1':
+    resolution: {integrity: sha512-vW1GmwMZNnL+gMRaovlh9yZX74kc+TTU3FObkkurpMaRtBfLP3ldjS9KQWlwZgraRE0+dheEEoAxdzcJQ8eXZg==}
+
+  '@protobufjs/fetch@1.1.1':
+    resolution: {integrity: sha512-GpptLrs57adMSuHi3VNj0mAF8dwh36LMaYF6XyJ6JMWlVsc+t42tm1HSEDmOs3A8fC9yyeisgLhsTVQokOZ0zw==}
+
+  '@protobufjs/float@1.0.2':
+    resolution: {integrity: sha512-Ddb+kVXlXst9d+R9PfTIxh1EdNkgoRe5tOX6t01f1lYWOvJnSPDBlG241QLzcyPdoNTsblLUdujGSE4RzrTZGQ==}
+
+  '@protobufjs/path@1.1.2':
+    resolution: {integrity: sha512-6JOcJ5Tm08dOHAbdR3GrvP+yUUfkjG5ePsHYczMFLq3ZmMkAD98cDgcT2iA1lJ9NVwFd4tH/iSSoe44YWkltEA==}
+
+  '@protobufjs/pool@1.1.0':
+    resolution: {integrity: sha512-0kELaGSIDBKvcgS4zkjz1PeddatrjYcmMWOlAuAPwAeccUrPHdUqo/J6LiymHHEiJT5NrF1UVwxY14f+fy4WQw==}
+
+  '@protobufjs/utf8@1.1.2':
+    resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
 
   '@secretlint/config-creator@10.2.2':
     resolution: {integrity: sha512-BynOBe7Hn3LJjb3CqCHZjeNB09s/vgf0baBaHVw67w7gHF0d25c3ZsZ5+vv8TgwSchRdUCRrbbcq5i2B1fJ2QQ==}
@@ -549,6 +597,10 @@ packages:
     resolution: {integrity: sha512-ywqV+5MmyL4E7ybXgKys4DugZbX0FC6LnwrhjuykIjnK9k8OQacQ7axGKnjDXWNhns0xot3bZI5h55H8yo9cJg==}
     engines: {node: '>=6'}
 
+  cliui@8.0.1:
+    resolution: {integrity: sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==}
+    engines: {node: '>=12'}
+
   cockatiel@3.2.1:
     resolution: {integrity: sha512-gfrHV6ZPkquExvMh9IOkKsBzNDk6sDuZ6DdBGUBkvFnTCqCxzpuq48RySgP0AnaqQkw2zynOFj9yly6T1Q2G5Q==}
     engines: {node: '>=16'}
@@ -699,6 +751,10 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  escalade@3.2.0:
+    resolution: {integrity: sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==}
+    engines: {node: '>=6'}
+
   expand-template@2.0.3:
     resolution: {integrity: sha512-XYfuKMvj4O35f/pOXLObndIRvyQ+/+6AhODh+OKWj9S9498pHHn/IMszH+gt0fBCRWMNfk1ZSp5x3AifmnI2vg==}
     engines: {node: '>=6'}
@@ -743,6 +799,10 @@ packages:
 
   generate-function@2.3.1:
     resolution: {integrity: sha512-eeB5GfMNeevm/GRYq20ShmsaGcmI81kIX2K9XQx5miC8KdHaC6Jm0qQ8ZNeGOi7wYB8OsdxKs+Y2oVuTFuVwKQ==}
+
+  get-caller-file@2.0.5:
+    resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
+    engines: {node: 6.* || 8.* || >= 10.*}
 
   get-east-asian-width@1.7.0:
     resolution: {integrity: sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==}
@@ -964,6 +1024,9 @@ packages:
 
   linkify-it@5.0.2:
     resolution: {integrity: sha512-ONTm2jCMAVZjgQa/Fy1kScXsuOoF5NPTsoFBdE1KVIZ2vAh/r9+Bqo+0jINCBYnavTPQZz38QzFTme79ENoN3Q==}
+
+  lodash.camelcase@4.3.0:
+    resolution: {integrity: sha512-TwuEnCnxbc3rAvhf/LbG7tJUDzhqXyFnv3dtzLOPgCG/hODL7WFnsbwktkD7yUV0RrreP/l1PALq/YSg6VvjlA==}
 
   lodash.includes@4.3.0:
     resolution: {integrity: sha512-W3Bx6mdkRTGtlJISOvVD/lbqjTlPPUDTMnlXZFnVwi9NKJ6tiAk6LVdlhZMm17VZisqhKcgzpO5Wz91PCt5b0w==}
@@ -1195,6 +1258,10 @@ packages:
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
 
+  protobufjs@7.6.6:
+    resolution: {integrity: sha512-dYDWdjSl5RNb7SgPxGQcRU+GtvP7s2fpkrY0r432PcOIaZ0/rBcxEZnQN67iJhFuQiVw754JDoPruPCNdGsbjg==}
+    engines: {node: '>=12.0.0'}
+
   proxy-agent-negotiate@1.1.0:
     resolution: {integrity: sha512-N8IBcM3UgCVzz2L2Lqv8DVntDnnC8/hiV4nEDUPkqq72TPUgYWjQc+bdZlBPZK9LzPAvOY//gAt0S0DApoOXWQ==}
     engines: {node: '>= 20'}
@@ -1239,6 +1306,10 @@ packages:
   readable-stream@3.6.2:
     resolution: {integrity: sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==}
     engines: {node: '>= 6'}
+
+  require-directory@2.1.1:
+    resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
+    engines: {node: '>=0.10.0'}
 
   require-from-string@2.0.2:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
@@ -1518,6 +1589,10 @@ packages:
     engines: {node: '>= 8'}
     hasBin: true
 
+  wrap-ansi@7.0.0:
+    resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
+    engines: {node: '>=10'}
+
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
@@ -1548,8 +1623,20 @@ packages:
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
 
+  y18n@5.0.8:
+    resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
+    engines: {node: '>=10'}
+
   yallist@4.0.0:
     resolution: {integrity: sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A==}
+
+  yargs-parser@21.1.1:
+    resolution: {integrity: sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw==}
+    engines: {node: '>=12'}
+
+  yargs@17.7.3:
+    resolution: {integrity: sha512-GZtjxm/J/4TSxuL3FNYjCmLktBTnIw/rVmKSIyKeYAZpmJB2ig9VauCC5xsa82GNKVKDAqpOn3KVzNt0zmrU0g==}
+    engines: {node: '>=12'}
 
   yauzl@2.10.0:
     resolution: {integrity: sha512-p4a9I6X6nu6IhoGmBqAcbJy1mlC4j27vEPZX9F4L4/vZT3Lyq1VkFHw/V/PUcB9Buo+DG3iHkT0x3Qya58zc3g==}
@@ -1573,23 +1660,23 @@ snapshots:
     dependencies:
       tslib: 2.9.1
 
-  '@azure/core-auth@1.11.0(supports-color@7.2.0)':
+  '@azure/core-auth@1.11.0':
     dependencies:
       '@azure/abort-controller': 2.2.0
-      '@azure/core-util': 1.14.0(supports-color@7.2.0)
+      '@azure/core-util': 1.14.0
       tslib: 2.9.1
     transitivePeerDependencies:
       - kerberos
       - supports-color
 
-  '@azure/core-client@1.11.2(supports-color@7.2.0)':
+  '@azure/core-client@1.11.2':
     dependencies:
       '@azure/abort-controller': 2.2.0
-      '@azure/core-auth': 1.11.0(supports-color@7.2.0)
-      '@azure/core-rest-pipeline': 1.25.1(supports-color@7.2.0)
+      '@azure/core-auth': 1.11.0
+      '@azure/core-rest-pipeline': 1.25.1
       '@azure/core-tracing': 1.4.0
-      '@azure/core-util': 1.14.0(supports-color@7.2.0)
-      '@azure/logger': 1.4.0(supports-color@7.2.0)
+      '@azure/core-util': 1.14.0
+      '@azure/logger': 1.4.0
       tslib: 2.9.1
     transitivePeerDependencies:
       - kerberos
@@ -1597,14 +1684,14 @@ snapshots:
 
   '@azure/core-process@1.0.0': {}
 
-  '@azure/core-rest-pipeline@1.25.1(supports-color@7.2.0)':
+  '@azure/core-rest-pipeline@1.25.1':
     dependencies:
       '@azure/abort-controller': 2.2.0
-      '@azure/core-auth': 1.11.0(supports-color@7.2.0)
+      '@azure/core-auth': 1.11.0
       '@azure/core-tracing': 1.4.0
-      '@azure/core-util': 1.14.0(supports-color@7.2.0)
-      '@azure/logger': 1.4.0(supports-color@7.2.0)
-      '@typespec/ts-http-runtime': 0.3.10(supports-color@7.2.0)
+      '@azure/core-util': 1.14.0
+      '@azure/logger': 1.4.0
+      '@typespec/ts-http-runtime': 0.3.10
       tslib: 2.9.1
     transitivePeerDependencies:
       - kerberos
@@ -1614,25 +1701,25 @@ snapshots:
     dependencies:
       tslib: 2.9.1
 
-  '@azure/core-util@1.14.0(supports-color@7.2.0)':
+  '@azure/core-util@1.14.0':
     dependencies:
       '@azure/abort-controller': 2.2.0
-      '@typespec/ts-http-runtime': 0.3.10(supports-color@7.2.0)
+      '@typespec/ts-http-runtime': 0.3.10
       tslib: 2.9.1
     transitivePeerDependencies:
       - kerberos
       - supports-color
 
-  '@azure/identity@4.14.1(supports-color@7.2.0)':
+  '@azure/identity@4.14.1':
     dependencies:
       '@azure/abort-controller': 2.2.0
-      '@azure/core-auth': 1.11.0(supports-color@7.2.0)
-      '@azure/core-client': 1.11.2(supports-color@7.2.0)
+      '@azure/core-auth': 1.11.0
+      '@azure/core-client': 1.11.2
       '@azure/core-process': 1.0.0
-      '@azure/core-rest-pipeline': 1.25.1(supports-color@7.2.0)
+      '@azure/core-rest-pipeline': 1.25.1
       '@azure/core-tracing': 1.4.0
-      '@azure/core-util': 1.14.0(supports-color@7.2.0)
-      '@azure/logger': 1.4.0(supports-color@7.2.0)
+      '@azure/core-util': 1.14.0
+      '@azure/logger': 1.4.0
       '@azure/msal-browser': 5.29.0
       '@azure/msal-node': 7.2.1
       open: 11.0.4
@@ -1641,9 +1728,9 @@ snapshots:
       - kerberos
       - supports-color
 
-  '@azure/logger@1.4.0(supports-color@7.2.0)':
+  '@azure/logger@1.4.0':
     dependencies:
-      '@typespec/ts-http-runtime': 0.3.10(supports-color@7.2.0)
+      '@typespec/ts-http-runtime': 0.3.10
       tslib: 2.9.1
     transitivePeerDependencies:
       - kerberos
@@ -1746,7 +1833,21 @@ snapshots:
   '@esbuild/win32-x64@0.25.11':
     optional: true
 
+  '@grpc/grpc-js@1.14.7':
+    dependencies:
+      '@grpc/proto-loader': 0.8.1
+      '@js-sdsl/ordered-map': 4.4.2
+
+  '@grpc/proto-loader@0.8.1':
+    dependencies:
+      lodash.camelcase: 4.3.0
+      long: 5.3.2
+      protobufjs: 7.6.6
+      yargs: 17.7.3
+
   '@isaacs/cliui@9.0.0': {}
+
+  '@js-sdsl/ordered-map@4.4.2': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
@@ -1760,39 +1861,59 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.3
 
+  '@protobufjs/aspromise@1.1.2': {}
+
+  '@protobufjs/base64@1.1.2': {}
+
+  '@protobufjs/codegen@2.0.5': {}
+
+  '@protobufjs/eventemitter@1.1.1': {}
+
+  '@protobufjs/fetch@1.1.1':
+    dependencies:
+      '@protobufjs/aspromise': 1.1.2
+
+  '@protobufjs/float@1.0.2': {}
+
+  '@protobufjs/path@1.1.2': {}
+
+  '@protobufjs/pool@1.1.0': {}
+
+  '@protobufjs/utf8@1.1.2': {}
+
   '@secretlint/config-creator@10.2.2':
     dependencies:
       '@secretlint/types': 10.2.2
 
-  '@secretlint/config-loader@10.2.2(supports-color@7.2.0)':
+  '@secretlint/config-loader@10.2.2':
     dependencies:
       '@secretlint/profiler': 10.2.2
       '@secretlint/resolver': 10.2.2
       '@secretlint/types': 10.2.2
       ajv: 8.20.0
-      debug: 4.4.3(supports-color@7.2.0)
-      rc-config-loader: 4.1.4(supports-color@7.2.0)
+      debug: 4.4.3
+      rc-config-loader: 4.1.4
     transitivePeerDependencies:
       - supports-color
 
-  '@secretlint/core@10.2.2(supports-color@7.2.0)':
+  '@secretlint/core@10.2.2':
     dependencies:
       '@secretlint/profiler': 10.2.2
       '@secretlint/types': 10.2.2
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       structured-source: 4.0.0
     transitivePeerDependencies:
       - supports-color
 
-  '@secretlint/formatter@10.2.2(supports-color@7.2.0)':
+  '@secretlint/formatter@10.2.2':
     dependencies:
       '@secretlint/resolver': 10.2.2
       '@secretlint/types': 10.2.2
-      '@textlint/linter-formatter': 15.8.0(supports-color@7.2.0)
+      '@textlint/linter-formatter': 15.8.0
       '@textlint/module-interop': 15.8.0
       '@textlint/types': 15.8.0
       chalk: 5.6.2
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       pluralize: 8.0.0
       strip-ansi: 7.2.0
       table: 6.10.1
@@ -1800,15 +1921,15 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@secretlint/node@10.2.2(supports-color@7.2.0)':
+  '@secretlint/node@10.2.2':
     dependencies:
-      '@secretlint/config-loader': 10.2.2(supports-color@7.2.0)
-      '@secretlint/core': 10.2.2(supports-color@7.2.0)
-      '@secretlint/formatter': 10.2.2(supports-color@7.2.0)
+      '@secretlint/config-loader': 10.2.2
+      '@secretlint/core': 10.2.2
+      '@secretlint/formatter': 10.2.2
       '@secretlint/profiler': 10.2.2
       '@secretlint/source-creator': 10.2.2
       '@secretlint/types': 10.2.2
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       p-map: 7.1.1
     transitivePeerDependencies:
       - supports-color
@@ -1838,14 +1959,14 @@ snapshots:
 
   '@textlint/ast-node-types@15.8.0': {}
 
-  '@textlint/linter-formatter@15.8.0(supports-color@7.2.0)':
+  '@textlint/linter-formatter@15.8.0':
     dependencies:
       '@azu/format-text': 1.0.2
       '@azu/style-format': 1.0.1
       '@textlint/module-interop': 15.8.0
       '@textlint/resolver': 15.8.0
       '@textlint/types': 15.8.0
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       js-yaml: 4.3.2
       lodash: 4.18.1
       pluralize: 2.0.0
@@ -1872,19 +1993,19 @@ snapshots:
 
   '@types/sarif@2.1.7': {}
 
-  '@typespec/ts-http-runtime@0.3.10(supports-color@7.2.0)':
+  '@typespec/ts-http-runtime@0.3.10':
     dependencies:
-      http-proxy-agent: 9.1.0(supports-color@7.2.0)
-      https-proxy-agent: 9.1.0(supports-color@7.2.0)
+      http-proxy-agent: 9.1.0
+      https-proxy-agent: 9.1.0
       tslib: 2.9.1
     transitivePeerDependencies:
       - kerberos
       - supports-color
 
-  '@vscode/test-electron@2.5.2(supports-color@7.2.0)':
+  '@vscode/test-electron@2.5.2':
     dependencies:
-      http-proxy-agent: 7.0.2(supports-color@7.2.0)
-      https-proxy-agent: 7.0.6(supports-color@7.2.0)
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
       jszip: 3.10.2
       ora: 8.2.0
       semver: 7.8.6
@@ -1930,10 +2051,10 @@ snapshots:
       '@vscode/vsce-sign-win32-arm64': 2.0.6
       '@vscode/vsce-sign-win32-x64': 2.0.6
 
-  '@vscode/vsce@3.6.2(supports-color@7.2.0)':
+  '@vscode/vsce@3.6.2':
     dependencies:
-      '@azure/identity': 4.14.1(supports-color@7.2.0)
-      '@secretlint/node': 10.2.2(supports-color@7.2.0)
+      '@azure/identity': 4.14.1
+      '@secretlint/node': 10.2.2
       '@secretlint/secretlint-formatter-sarif': 10.2.2
       '@secretlint/secretlint-rule-no-dotenv': 10.2.2
       '@secretlint/secretlint-rule-preset-recommend': 10.2.2
@@ -1953,7 +2074,7 @@ snapshots:
       minimatch: 3.1.5
       parse-semver: 1.1.1
       read: 1.0.7
-      secretlint: 10.2.2(supports-color@7.2.0)
+      secretlint: 10.2.2
       semver: 7.8.6
       tmp: 0.2.7
       typed-rest-client: 1.8.11
@@ -2112,6 +2233,12 @@ snapshots:
 
   cli-spinners@2.9.2: {}
 
+  cliui@8.0.1:
+    dependencies:
+      string-width: 4.2.3
+      strip-ansi: 6.0.1
+      wrap-ansi: 7.0.0
+
   cockatiel@3.2.1: {}
 
   color-convert@2.0.1:
@@ -2152,11 +2279,9 @@ snapshots:
 
   css-what@6.2.2: {}
 
-  debug@4.4.3(supports-color@7.2.0):
+  debug@4.4.3:
     dependencies:
       ms: 2.1.3
-    optionalDependencies:
-      supports-color: 7.2.0
 
   decompress-response@6.0.0:
     dependencies:
@@ -2278,6 +2403,8 @@ snapshots:
       '@esbuild/win32-ia32': 0.25.11
       '@esbuild/win32-x64': 0.25.11
 
+  escalade@3.2.0: {}
+
   expand-template@2.0.3:
     optional: true
 
@@ -2332,6 +2459,8 @@ snapshots:
   generate-function@2.3.1:
     dependencies:
       is-property: 1.0.2
+
+  get-caller-file@2.0.5: {}
 
   get-east-asian-width@1.7.0: {}
 
@@ -2411,33 +2540,33 @@ snapshots:
       domutils: 3.2.2
       entities: 7.0.1
 
-  http-proxy-agent@7.0.2(supports-color@7.2.0):
+  http-proxy-agent@7.0.2:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy-agent@9.1.0(supports-color@7.2.0):
+  http-proxy-agent@9.1.0:
     dependencies:
       agent-base: 9.0.0
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       proxy-agent-negotiate: 1.1.0
     transitivePeerDependencies:
       - kerberos
       - supports-color
 
-  https-proxy-agent@7.0.6(supports-color@7.2.0):
+  https-proxy-agent@7.0.6:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
 
-  https-proxy-agent@9.1.0(supports-color@7.2.0):
+  https-proxy-agent@9.1.0:
     dependencies:
       agent-base: 9.0.0
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       proxy-agent-negotiate: 1.1.0
     transitivePeerDependencies:
       - kerberos
@@ -2573,6 +2702,8 @@ snapshots:
   linkify-it@5.0.2:
     dependencies:
       uc.micro: 2.1.0
+
+  lodash.camelcase@4.3.0: {}
 
   lodash.includes@4.3.0: {}
 
@@ -2804,6 +2935,20 @@ snapshots:
 
   process-nextick-args@2.0.1: {}
 
+  protobufjs@7.6.6:
+    dependencies:
+      '@protobufjs/aspromise': 1.1.2
+      '@protobufjs/base64': 1.1.2
+      '@protobufjs/codegen': 2.0.5
+      '@protobufjs/eventemitter': 1.1.1
+      '@protobufjs/fetch': 1.1.1
+      '@protobufjs/float': 1.0.2
+      '@protobufjs/path': 1.1.2
+      '@protobufjs/pool': 1.1.0
+      '@protobufjs/utf8': 1.1.2
+      '@types/node': 26.6.6
+      long: 5.3.2
+
   proxy-agent-negotiate@1.1.0: {}
 
   pump@3.0.4:
@@ -2821,9 +2966,9 @@ snapshots:
 
   queue-microtask@1.2.3: {}
 
-  rc-config-loader@4.1.4(supports-color@7.2.0):
+  rc-config-loader@4.1.4:
     dependencies:
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       js-yaml: 4.3.2
       json5: 2.2.3
       require-from-string: 2.0.2
@@ -2867,6 +3012,8 @@ snapshots:
       util-deprecate: 1.0.2
     optional: true
 
+  require-directory@2.1.1: {}
+
   require-from-string@2.0.2: {}
 
   restore-cursor@5.1.0:
@@ -2894,13 +3041,13 @@ snapshots:
     dependencies:
       xmlchars: 2.2.0
 
-  secretlint@10.2.2(supports-color@7.2.0):
+  secretlint@10.2.2:
     dependencies:
       '@secretlint/config-creator': 10.2.2
-      '@secretlint/formatter': 10.2.2(supports-color@7.2.0)
-      '@secretlint/node': 10.2.2(supports-color@7.2.0)
+      '@secretlint/formatter': 10.2.2
+      '@secretlint/node': 10.2.2
       '@secretlint/profiler': 10.2.2
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       globby: 14.1.0
       read-pkg: 9.0.1
     transitivePeerDependencies:
@@ -3152,6 +3299,12 @@ snapshots:
     dependencies:
       isexe: 2.0.0
 
+  wrap-ansi@7.0.0:
+    dependencies:
+      ansi-styles: 4.3.0
+      string-width: 4.2.3
+      strip-ansi: 6.0.1
+
   wrappy@1.0.2:
     optional: true
 
@@ -3171,7 +3324,21 @@ snapshots:
 
   xmlchars@2.2.0: {}
 
+  y18n@5.0.8: {}
+
   yallist@4.0.0: {}
+
+  yargs-parser@21.1.1: {}
+
+  yargs@17.7.3:
+    dependencies:
+      cliui: 8.0.1
+      escalade: 3.2.0
+      get-caller-file: 2.0.5
+      require-directory: 2.1.1
+      string-width: 4.2.3
+      y18n: 5.0.8
+      yargs-parser: 21.1.1
 
   yauzl@2.10.0:
     dependencies:

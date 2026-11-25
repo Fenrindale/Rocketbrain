@@ -3,6 +3,8 @@ const esbuild = require('esbuild');
 const fs = require('node:fs');
 const path = require('node:path');
 async function build() {
+  const jdbcWorker = fs.readFileSync(path.join(__dirname, '../runtime/jdbc/DriverWorker.java'), 'utf8');
+  fs.writeFileSync(path.join(__dirname, '../src/db/jdbc-worker-source.json'), JSON.stringify(jdbcWorker));
   const sourceDir=path.join(__dirname,'../runtime/jpa-observer/src/rocketbrain/observer');
   const sources=Object.fromEntries(fs.readdirSync(sourceDir).filter(name=>name.endsWith('.java')).sort().map(name=>[name,fs.readFileSync(path.join(sourceDir,name),'utf8')]));
   fs.writeFileSync(path.join(__dirname,'../src/jpa/observer-sources.json'),JSON.stringify(sources));

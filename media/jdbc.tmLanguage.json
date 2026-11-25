@@ -1,0 +1,5 @@
+{
+  "name": "Rocketbrain JDBC SQL",
+  "scopeName": "source.rocketbrain-jdbc",
+  "patterns": [{ "include": "source.sql" }]
+}

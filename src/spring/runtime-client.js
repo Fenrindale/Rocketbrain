@@ -2,6 +2,7 @@
 const http = require('node:http');
 const https = require('node:https');
 const { healthPath, normalizeHealth } = require('./runtime-health');
+const { auditRequest,normalizeSecurityEvents,securityInventory } = require('./runtime-security');
 
 const ENDPOINTS = Object.freeze(['beans', 'conditions', 'configprops', 'env', 'mappings']);
 class RuntimeError extends Error { constructor(code, message, status) { super(message); this.name = 'SpringRuntimeError'; this.code = code; if (status) this.status = status; } }
@@ -49,6 +50,7 @@ function propertyPaths(value, redactor, prefix = '', depth = 0, result = []) {
 
 function normalizeEndpoint(endpoint, payload, redactor = text => text) {
   if (endpoint === 'health') return normalizeHealth(payload, redactor);
+  if (endpoint === 'auditevents') return normalizeSecurityEvents(payload,redactor);
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) || (endpoint === 'env' ? !Array.isArray(payload.propertySources) : !payload.contexts || typeof payload.contexts !== 'object' || Array.isArray(payload.contexts))) throw new RuntimeError('INVALID_SCHEMA', 'Unsupported Actuator response shape.');
   const contexts = Object.entries(object(payload?.contexts)).slice(0, 100);
   const text = value => safeText(value, redactor);
@@ -138,6 +140,27 @@ class ActuatorClient {
     try { suffix = healthPath(path); }
     catch (error) { throw new RuntimeError('INVALID_HEALTH_PATH', error.message); }
     return this.#request('health', suffix ? '/' + suffix : '');
+  }
+  async security(input) {
+    let choice;
+    try { choice=auditRequest(input); }
+    catch (error) { throw new RuntimeError('INVALID_AUDIT_FILTER',error.message); }
+    const sections=['beans','conditions','auditevents'];
+    const replies=await Promise.allSettled(sections.map(section=>this.#request(section,section==='auditevents'?choice.suffix:'')));
+    const endpoints={}, data={};
+    for (const [index,reply] of replies.entries()) {
+      const section=sections[index];
+      if (reply.status==='fulfilled') {
+        data[section]=reply.value;
+        endpoints[section]={state:'available'};
+      } else {
+        endpoints[section]={state:'unavailable',code:reply.reason.code ?? 'OBSERVATION_FAILED',status:reply.reason.status ?? null};
+      }
+    }
+    const available=Object.keys(data).length;
+    return {state:available===sections.length?'observed':available?'partial':'unavailable',endpoints,
+      ...securityInventory(data.beans ?? [],data.conditions ?? []),audit:data.auditevents ?? null,
+      selection:choice.selection,observedAt:new Date().toISOString()};
   }
   async refresh() {
     if (this.#disposed) throw new RuntimeError('DISPOSED', 'Runtime connection is closed.');

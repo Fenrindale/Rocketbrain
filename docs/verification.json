@@ -1,22 +1,22 @@
 {
-  "version": "0.46.0",
-  "verifiedAt": "2026-11-25T09:15:35.175Z",
+  "version": "0.47.0",
+  "verifiedAt": "2026-11-25T09:26:15.478Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.46.0.vsix",
-    "bytes": 1993074,
-    "sha256": "cf710eb26e8f59d5b81692fdf4426772acc894e165ac3750ba708750fedaa84b",
-    "files": 15
+    "name": "rocketbrain-0.47.0.vsix",
+    "bytes": 2173109,
+    "sha256": "47e2868721cd26e935f3c460c5f7729d37c6fec919a49f3a1d7fd1ff5ab4e567",
+    "files": 16
   },
   "source": {
-    "frozenPublicInputs": 1300,
-    "inputVectorSha256": "39f2f9989501e60c12bfacc547bc8dfa34e53cbdf1a324ca202df6c7c9fc7e33",
+    "frozenPublicInputs": 1323,
+    "inputVectorSha256": "7c021f21c70713ea3c6bb7ef11fe5cae84c4b94a3b4b38e012aa76a89a5b7df4",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1337,
-    "pass": 1276,
+    "tests": 1343,
+    "pass": 1282,
     "fail": 0,
     "cancelled": 0,
     "skipped": 61,
@@ -32,15 +32,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "quality",
+          "group": "grpc",
           "checks": 1
         },
         {
-          "group": "extraction",
+          "group": "jdbc",
           "checks": 1
         },
         {
-          "group": "federation",
+          "group": "security",
           "checks": 1
         }
       ],
@@ -58,15 +58,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "quality",
+          "group": "grpc",
           "checks": 1
         },
         {
-          "group": "extraction",
+          "group": "jdbc",
           "checks": 1
         },
         {
-          "group": "federation",
+          "group": "security",
           "checks": 1
         }
       ],
@@ -77,74 +77,74 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-041": {
-      "scope": "두 실제 Spring 작업 공간에서 별도 Git 커밋과 기준선을 만들고 새 문제·기존 문제·회복된 문제 한 건씩, CLI 종료 코드 및 원본 커밋의 읽기 전용 위치를 검증했다.",
+    "IDEA-064": {
+      "scope": "두 실제 Spring Security 앱에서 HTTP 401·403·200, 역할별 Actuator 접근, 실제 JDBC 읽기, 두 필터 체인 빈과 세 감사 유형, 연결 종료를 확인했다.",
       "runtimeGroups": [
-        "quality"
+        "security"
       ]
     },
-    "DG-071": {
-      "scope": "두 실제 DB의 캡처된 결과에서 BIGINT, DECIMAL, 바이너리, 한글, NULL과 정확한 합계를 같은 339바이트로 내보냈다. VS Code 미리보기와 전체 출력의 동일성을 검증했다.",
+    "IDEA-104": {
+      "scope": "두 설치형 환경에서 인증된 루프백 gRPC 서버에 네 가지 호출을 보내고 정밀한 int64와 작업 공간 밖 정의 거부를 확인했다. GraphQL·WebSocket 이전 검증도 유지한다.",
       "runtimeGroups": [
-        "extraction"
+        "grpc"
       ]
     },
-    "DG-092": {
-      "scope": "실제 MySQL과 MariaDB 사이에서 53비트를 넘는 키, 중복, NULL 및 바인딩된 필터에 따른 입력 수를 검증했다. 활성 연결 상태를 보존했다.",
+    "DG-004": {
+      "scope": "Oracle Connector/J 9.7.0과 MariaDB Connector/J 3.5.10을 실제 서버에서 사용했다. 정밀 데이터, 읽기 취소와 변경된 JAR 및 쓰기 거부를 각각 확인했다.",
       "runtimeGroups": [
-        "federation"
+        "jdbc"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 251,
+    "sourceCorrespondences": 257,
     "sourceConfidence": "inferred",
-    "archiveEntries": 15,
+    "archiveEntries": 16,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 59,
+      "implemented": 61,
       "partial": 108,
-      "not-implemented": 33,
+      "not-implemented": 31,
       "host-provided": 13,
       "unverified": 1,
       "platform-limited": 2
     },
-    "weightedPoints": 126,
-    "previousWeightedPoints": 123,
+    "weightedPoints": 128,
+    "previousWeightedPoints": 126,
     "targetWeightedPoints": 216,
-    "referencePercent": 58.3,
+    "referencePercent": 59.3,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-041",
+        "id": "IDEA-064",
         "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "IDEA-104",
+        "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-071",
-        "before": "not-implemented",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-092",
+        "id": "DG-004",
         "before": "not-implemented",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java 품질 게이트는 로컬 Git 커밋과 소유한 Java 검사 규칙을 대상으로 한다.",
-    "사용자 추출기는 캡처된 결과를 대상으로 한다. 더 큰 결과는 페이지·커서 범위를 지정할 수 있다.",
-    "서버 간 SELECT는 두 테이블 사이의 정수 등가 조인과 지원하는 필터를 사용한다. 서버끼리 하나의 읽기 시점을 보장하지 않는다.",
+    "gRPC는 작업 공간의 자체 포함 Protocol Buffer 정의를 사용한다. 서버 리플렉션과 GraphQL 구독은 추가 범위다.",
+    "지정한 JDBC JAR는 사용자 계정 권한의 독립 JVM에서 실행된다. 프로필이 승인한 단일 JAR와 클래스만 연결에 사용한다.",
+    "Spring Security 진단은 앱이 공개한 Actuator 빈과 감사 기록을 조회한다. 매처 순서와 전체 권한 목록은 미확인이다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "gRPC의 단항·스트리밍 요청 실행",
-    "사용자 지정 JDBC 드라이버와 Spring Security 런타임 진단",
-    "어노테이션 처리·Lombok 생성 심볼"
+    "Maven·Gradle 어노테이션 처리, Lombok과 MapStruct 생성 심볼",
+    "사용자 JDBC 드라이버 버전 전환과 추가 라이브러리 격리",
+    "실행한 Java Stream의 단계별 값 추적"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

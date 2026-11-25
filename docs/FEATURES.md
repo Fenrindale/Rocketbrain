@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.46.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.47.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 59 |
+| 구현 | 61 |
 | 부분 구현 | 108 |
-| 미구현 | 33 |
+| 미구현 | 31 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 1 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **58.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **59.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.46에서는 Git 커밋 기준 Java CI 품질 게이트, 사용자 데이터 추출, 서버 간 SELECT를 독립 구현하고 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 123점에서 126점으로 바뀌었다.
+v0.47에서는 gRPC 네 가지 호출 방식, 사용자 지정 JDBC 드라이버, Spring Security 런타임 진단을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 126점에서 128점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -84,7 +84,7 @@ v0.46에서는 Git 커밋 기준 Java CI 품질 게이트, 사용자 데이터 �
 | IDEA-061 | IntelliJ IDEA | DB 스키마→JPA 엔티티·매핑 생성 | 구현 |
 | IDEA-062 | IntelliJ IDEA | Persistence 트리·엔티티 관계도 | 부분 구현 |
 | IDEA-063 | IntelliJ IDEA | Hibernate 디버거·SQL 바인딩·N+1 | 부분 구현 |
-| IDEA-064 | IntelliJ IDEA | Spring Security 런타임 진단 | 미구현 |
+| IDEA-064 | IntelliJ IDEA | Spring Security 런타임 진단 | 부분 구현 |
 | IDEA-065 | IntelliJ IDEA | MVC·WebFlux·Feign 엔드포인트 탐색 | 부분 구현 |
 | IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 미구현 |
 | IDEA-067 | IntelliJ IDEA | Micronaut 개발 | 미구현 |
@@ -124,7 +124,7 @@ v0.46에서는 Git 커밋 기준 Java CI 품질 게이트, 사용자 데이터 �
 | IDEA-101 | IntelliJ IDEA | 내장 터미널·셸·세션 | VS Code 재사용 |
 | IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 부분 구현 |
 | IDEA-103 | IntelliJ IDEA | OpenAPI·Swagger 편집·미리보기·코드 생성 | 부분 구현 |
-| IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 부분 구현 |
+| IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 구현 |
 | IDEA-105 | IntelliJ IDEA | IDE 안의 DB 연결·SQL·데이터 편집 | 부분 구현 |
 | IDEA-106 | IntelliJ IDEA | JavaScript·TypeScript·Node/브라우저 디버그 | VS Code 재사용 |
 | IDEA-107 | IntelliJ IDEA | React·Angular·Vue 프레임워크 | 미구현 |
@@ -144,7 +144,7 @@ v0.46에서는 Git 커밋 기준 Java CI 품질 게이트, 사용자 데이터 �
 | DG-001 | DataGrip | MySQL 데이터 소스 생성·연결 검사 | 부분 구현 |
 | DG-002 | DataGrip | MariaDB 전용 지원 | 부분 구현 |
 | DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 미구현 |
-| DG-004 | DataGrip | 사용자 JDBC JAR·드라이버 클래스 추가 | 미구현 |
+| DG-004 | DataGrip | 사용자 JDBC JAR·드라이버 클래스 추가 | 구현 |
 | DG-005 | DataGrip | 드라이버 버전 교체·추가 라이브러리 | 미구현 |
 | DG-006 | DataGrip | 사용자·비밀번호·무인증 모드 | 부분 구현 |
 | DG-007 | DataGrip | 비밀정보 저장·저장하지 않기 | 부분 구현 |

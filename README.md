@@ -54,6 +54,8 @@ pnpm run package
 17. **Manage Git Changelists**에서 변경 파일을 이름 있는 작업 목록에 배정합니다. 목록에 편집 위치와 실행 구성 선택을 기록해 복원할 수 있습니다. 복원 후 실행 구성은 VS Code의 Run and Debug에서 시작할 수 있습니다.
 18. **Convert Java Lambda, Anonymous Class or Loop**에서 지역 SAM 변수와 지원하는 배열 합산 루프의 변환을 검토합니다. 적용 전에 Javac로 참조 연결을 확인합니다.
 
+**Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다. 필터 순서·매처·권한 목록은 앱의 보안 구성에서 확인합니다.
+
 ### Java CI 품질 게이트
 
 VSIX의 `extension/dist/java-quality-gate.js`를 추출하거나 소스의 `scripts/java-quality-gate.js`를 실행합니다. Node.js 20 이상과 Git이 있는 CI에서 대상 저장소와 기준선 커밋을 로컬로 준비합니다.
@@ -70,6 +72,8 @@ node /path/to/java-quality-gate.js --repo . --revision "$COMMIT_SHA" \
 ### HTTP, GraphQL, WebSocket 요청과 OpenAPI
 
 `.http` 파일에서 요청에 커서를 두고 **Send HTTP Request**를 실행합니다. `###`로 여러 요청을 구분하고, `@name = value` 또는 `rocketbrain.http.environments`에서 변수를 정의합니다. **Set HTTP Environment Secret**으로 저장한 값은 헤더나 본문에서 `{{secret.name}}`으로 참조합니다.
+
+gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 기준 `Proto: api/service.proto` 헤더를 사용합니다. 단일 요청은 JSON 객체, 클라이언트 스트림은 객체 배열을 입력합니다. 단항, 서버 스트림, 클라이언트 스트림, 양방향 스트림의 결과를 출력 창에서 확인할 수 있습니다. 현재는 자체 포함 `.proto` 파일을 사용합니다.
 
 ```http
 @host = http://127.0.0.1:8080
@@ -131,6 +135,7 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
 
 - **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. 외부 파일 접근과 쓰기는 차단하며 결과는 표본으로 표시합니다.
+- **Add JDBC Driver**에서 별도 JDK와 공급사 JAR를 사용합니다. 드라이버 클래스와 SHA-256을 검토해 승인하고, **Manage JDBC Profiles**로 연결한 뒤 카탈로그와 읽기 쿼리를 사용할 수 있습니다. [사용자 지정 JDBC 드라이버 문서](docs/jdbc-drivers.md)
 - 연결 프로필에는 TCP, Unix 도메인 소켓, Windows 명명된 파이프 중 실행 환경과 맞는 전송을 선택합니다. 공유 프로필에는 비밀번호와 로컬 경로를 담지 않으며, 가져온 로컬 연결의 주소는 해당 컴퓨터에서 입력합니다.
 - **Save Database Metadata for Offline Use**로 카탈로그의 테이블·뷰와 열을 작업 공간에 저장합니다. 연결을 끊고 **Open Cached Database Metadata**를 선택하면 캡처 시각과 함께 SQL 완성에 사용합니다. 같은 연결로 돌아오면 현재 구조를 확인하고 바뀐 캡처를 무효화합니다.
 - **New Federated SELECT**에서 `source1`과 `source2`의 테이블을 참조하고 **Run Federated SELECT**에서 저장한 연결을 하나씩 선택합니다. 정수 키의 INNER 또는 LEFT JOIN을 지원합니다. 결과에서 출처별 투영 열, 서버에 전송한 필터와 가져온 행 수를 볼 수 있습니다. 각 서버는 별도의 읽기 시점을 사용합니다.
