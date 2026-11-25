@@ -980,6 +980,12 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.java.gradleAdvisories",
+        "title": "Audit Gradle Dependencies with OSV",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.workbench.refresh",
         "title": "Refresh Java Projects",
         "category": "Rocketbrain",
