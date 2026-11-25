@@ -48,16 +48,17 @@ async function readJoinCatalog(query, _activeDatabase, { endpoints, includeEdges
   const parameters = [...visible.values()].flatMap(({ schema, table }) => [schema, table]);
   const objects = await rows('SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES WHERE ' + graphFilter +
     ' ORDER BY TABLE_SCHEMA,TABLE_NAME', parameters, maxTables * 2);
-  const columns = await rows('SELECT TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,CHARACTER_SET_NAME,COLLATION_NAME ' +
+  const columns = await rows('SELECT TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,CHARACTER_SET_NAME,COLLATION_NAME,EXTRA ' +
     'FROM information_schema.COLUMNS WHERE ' + graphFilter + ' ORDER BY TABLE_SCHEMA,TABLE_NAME,ORDINAL_POSITION', parameters, maxRows);
   const tables = new Map();
   for (const [schema, table, type] of objects) {
     const key = endpointKey({ schema, table });
     if (visible.has(key) && ['BASE TABLE', 'VIEW'].includes(type)) tables.set(key, { schema, name: table, kind: type === 'VIEW' ? 'view' : 'table', columns: [] });
   }
-  for (const [schema, table, name, type, nullable, charset, collation] of columns) {
+  for (const [schema, table, name, type, nullable, charset, collation, extra] of columns) {
     if (!validName(name) || typeof type !== 'string') continue;
-    tables.get(endpointKey({ schema, table }))?.columns.push({ name, type, nullable: nullable === 'YES', charset, collation });
+    tables.get(endpointKey({ schema, table }))?.columns.push({ name, type, nullable: nullable === 'YES', charset, collation,
+      ...(typeof extra === 'string' && { extra }) });
   }
   return { tables: [...tables.values()].filter(table => table.columns.length), edges: [...edges.values()] };
 }

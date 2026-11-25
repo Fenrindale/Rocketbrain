@@ -464,13 +464,15 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
         epoch === generation && snapshot === metadata && vscode.workspace.isTrusted && config().get('enabled', true) && !virtualActive(document);
       const candidates = [
         ...require('./sql-field-lists').sqlFieldLists(text, offset, snapshot, observed),
+        ...await require('./sql-dml-completion').scopedDmlColumns(text, offset, snapshot, observed, joinCatalog, current),
         ...await require('./foreign-key-joins').scopedForeignKeyJoins(text, offset, snapshot,
           { ...observed, readLogical: joinLogicalRelationships }, joinCatalog, current)
       ];
       if (!current()) return [];
       return candidates.map(candidate=>{
-        const item=new vscode.CompletionItem(candidate.label, candidate.kind
-          ? vscode.CompletionItemKind.Snippet : vscode.CompletionItemKind.Reference);
+        const kind = candidate.kind === 'column' ? vscode.CompletionItemKind.Field :
+          candidate.kind ? vscode.CompletionItemKind.Snippet : vscode.CompletionItemKind.Reference;
+        const item=new vscode.CompletionItem(candidate.label,kind);
         item.detail=candidate.detail;
         item.insertText=candidate.insertText;
         item.range=new vscode.Range(document.positionAt(candidate.start),document.positionAt(candidate.end));
