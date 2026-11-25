@@ -82,11 +82,11 @@ class ResultsView {
           } });
         if (name !== undefined) this.setResultTab(record.id, { name });
       } else if (msg.type === 'openScriptStatement') {
-        if (!Number.isInteger(msg.index) || !record.result.scriptStatements?.some(statement => statement.index === msg.index)) {
+        if (!Number.isInteger(msg.index) || !record.result.scriptStatements?.some(statement => statement.index===msg.index&&statement.resultSet===msg.resultSet)) {
           throw Error('Choose a retained statement from this script run.');
         }
         const command = record.result.captureKind === 'procedure' ? 'rocketbrain.db.openProcedureResult' : 'rocketbrain.sql.openScriptResult';
-        await v.commands.executeCommand(command, { resultId: record.id, index: msg.index });
+        await v.commands.executeCommand(command, { resultId:record.id,index:msg.index,...(msg.resultSet!==undefined&&{resultSet:msg.resultSet}) });
       } else if (msg.type === 'saveFilterPreset') {
         if (typeof msg.modelId !== 'string' || !this.filterRecord(record.id, msg.modelId)) throw Error('Choose the current named table and its applied filters.');
         const name = await v.window.showInputBox({ title: 'Save the applied table filters', value: typeof msg.name === 'string' ? msg.name : '',
@@ -193,8 +193,9 @@ class ResultsView {
     return { id, name: record.tabName, pinned: record.tabPinned === true };
   }
   hasResult(id) { return this.history.some(record => record.id === id); }
-  findStatement(resultId, index) {
-    return this.history.find(record => !record.closing && record.scriptCapture?.resultId === resultId && record.scriptCapture.index === index)?.id;
+  findStatement(resultId,index,resultSet) {
+    return this.history.find(record=>!record.closing&&record.scriptCapture?.resultId===resultId&&
+      record.scriptCapture.index===index&&record.scriptCapture.resultSet===resultSet)?.id;
   }
   activateResult(id, selection) {
     if (this.hasResult(id)) return this.view?.webview.postMessage({ type: 'activateResult', id,

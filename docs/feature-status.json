@@ -1,5 +1,5 @@
 {
-  "version": "0.70.0",
+  "version": "0.71.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -43,16 +43,16 @@
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-019",
-    "IDEA-060",
-    "DG-082",
-    "DG-094"
+    "IDEA-034",
+    "IDEA-064",
+    "DG-045",
+    "DG-080"
   ],
   "expandedFeatures": [
-    "IDEA-019",
-    "IDEA-060",
-    "DG-082",
-    "DG-094"
+    "IDEA-034",
+    "IDEA-064",
+    "DG-045",
+    "DG-080"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -604,8 +604,8 @@
       "verification": {
         "state": "v0.70-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.70.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1096,24 +1096,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "플랫폼 SAM 지역 변수에서 람다와 익명 클래스를 양방향으로 변환하고 배열 합산 인덱스 루프를 향상 for로 변환한다. Javac로 전후 컴파일과 참조를 대조하고 검토한 diff를 적용한다.",
+      "scope": "플랫폼과 사용자 정의 SAM 지역 변수의 람다·익명 클래스 양방향 변환과 배열 합산 루프 변환을 검토한다. 사용자 정의 제네릭 상속, 캡처 및 정확한 오버로드를 javac로 비교한다.",
       "remaining": [
-        "사용자 정의 SAM, 캡처·오버로드가 복합적인 식과 일반 루프는 해석 범위를 넓혀야 한다."
+        "일반 루프와 지역 변수 바깥의 참조·객체 정체성 계약이 남아 있다."
       ],
       "verification": {
-        "state": "v0.44-installed-coverage",
+        "state": "v0.71-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.44.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring 작업 공간 두 곳에서 JDT와 Javac로 세 가지 변환을 검증했다. 객체 동일성을 비교하는 예제와 배열을 변경하는 루프 및 오래된 검토를 거부하고 각 변경 뒤 Spring 빌드를 확인했다.",
+        "testedScope": "두 Spring 환경에서 직접 정의한 제네릭 SAM의 상속 타입을 해결했다. 두 캡처 선언 및 String·Object 오버로드를 보존하고 상태 보유 계약과 식별 동작을 거절했다. 버퍼 적용과 Undo를 확인했다.",
         "publicEvidence": [
-          "runtime/java-signature/src/rocketbrain/signature/ConversionInspector.java",
-          "src/java/java-conversion-vscode.js",
           "src/java/java-conversion.js",
-          "test/java-conversion-host.js"
+          "runtime/java-signature/src/rocketbrain/signature/ConversionInspector.java",
+          "test/java-custom-sam-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1888,8 +1887,8 @@
       "verification": {
         "state": "v0.70-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.70.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2001,24 +2000,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "연결된 Spring 앱의 Actuator에서 Security 필터 체인 빈과 인증 성공·실패, 인가 거부 감사 이벤트를 조회한다. 이름과 이벤트 유형을 선택하고 원본 감사 데이터는 결과에 저장하지 않는다.",
+      "scope": "Actuator의 빈과 감사 이벤트 및 명시적으로 활성화한 Servlet 관찰기의 실제 체인 선택 순서, 필터 실행과 인가 결과를 보여 준다. 관찰기는 요청 값과 사용자 신원을 보관하지 않는다.",
       "remaining": [
-        "매처 실행 순서, 전체 권한과 요청별 필터 추적은 별도 근거가 필요하다."
+        "선언과 실제 권한 출처의 연결, 메서드 보안 및 WebFlux 체인 검증이 남아 있다."
       ],
       "verification": {
-        "state": "v0.47-installed-coverage",
+        "state": "v0.71-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.47.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 Spring Security 앱에서 HTTP 401·403·200, 역할별 Actuator 접근, 실제 JDBC 읽기, 두 필터 체인 빈과 세 감사 유형, 연결 종료를 확인했다.",
+        "testedScope": "두 실제 Spring Security 앱에서 401·401·403·200·200 응답, 최초 매칭 체인과 실행 필터, 조기 종료, 32개 이력, 기본 비활성화와 연결 종료 시 닫기를 확인했다.",
         "publicEvidence": [
-          "src/spring/runtime-security.js",
-          "src/spring/runtime-security-vscode.js",
-          "test/spring-security-host.js",
-          "test/helpers/spring-security-fixture.js"
+          "src/spring/security-trace.js",
+          "runtime/jpa-observer/src/rocketbrain/observer/SecurityTraceRuntime.java",
+          "test/spring-security-trace-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5038,23 +5036,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "스크립트의 DELIMITER 실행에 더해 전용 명령에 IN 전용 프로시저 호출 검토와 여러 결과 그리드를 제공한다.",
+      "scope": "일반 스크립트의 SELECT 사이에서 실제 정의를 검토한 읽기 전용 IN CALL을 같은 세션에서 실행한다. 캡처한 결과 집합은 쿼리 재실행 없이 별도 그리드로 열 수 있다.",
       "remaining": [
-        "일반 스크립트 사이의 CALL과 임의 트랜잭션 제어는 남아 있다."
+        "일반 트랜잭션 제어와 OUT·INOUT, 안전한 읽기 범위를 벗어난 루틴의 실행 계약이 남아 있다."
       ],
       "verification": {
-        "state": "v0.61-installed-coverage",
+        "state": "v0.71-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.61.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 두 서버에서 동일 호출 검토가 한 번만 적용되고 이미 캡처한 결과를 다시 열 때 호출을 반복하지 않음을 확인했다.",
+        "testedScope": "두 DB에서 SQL 자료형과 53비트 한계 밖의 값을 보존하고 같은 물리 세션에서 두 CALL 결과를 따로 열었다. 검토 후 변경된 루틴 정의를 거절했다.",
         "publicEvidence": [
           "src/db/sql-script.js",
           "src/db/routine-call.js",
-          "test/routine-call-host.js"
+          "test/sql-script-call-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6122,25 +6120,24 @@
       "priority": "P2",
       "status": "partial",
       "label": "부분 구현",
-      "delivery": "none",
-      "scope": "계정이 관찰 가능한 직접 권한과 역할을 탐색하고 단일 테이블의 직접 SELECT 부여·회수를 검토한다. 변경 전후를 재확인한다.",
+      "delivery": "rocketbrain",
+      "scope": "계정과 역할의 정확한 대상을 확인한 뒤 생성하고 직접 권한 및 역할을 탐색한다. 지정 테이블의 SELECT 부여·회수를 검토할 수 있다.",
       "remaining": [
-        "계정·역할 작성, 모든 권한 종류와 중첩 역할의 실제 유효 권한 계산이 남는다."
+        "중첩 역할의 유효 권한, 그 외 권한 변경, 계정과 역할 변경·삭제가 남아 있다."
       ],
       "verification": {
-        "state": "v0.32-installed-coverage",
+        "state": "v0.71-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.32.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 엔진의 테스트 계정에서 부여 전후와 회수 후 SELECT 권한을 독립 접속으로 확인했다. 오래된 계획과 미승인 변경은 거부했고 역할은 유지됐다.",
+        "testedScope": "두 DB에 직접 만든 계정으로 인용 문자와 Unicode가 포함된 암호를 사용해 로그인했다. 별도 객체 권한이 없음을 확인하고 엔진별 역할 식별, 검토 재사용 거부, 보호 프로필 거부와 변경 후 실제 Spring 읽기를 확인했다.",
         "publicEvidence": [
-          "src/db/database-admin-metadata.js",
-          "src/db/database-table-grant.js",
+          "src/db/database-principal-create.js",
           "src/db/database-admin-vscode.js",
-          "test/database-admin-host.js"
+          "test/database-principal-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6189,8 +6186,8 @@
       "verification": {
         "state": "v0.70-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.70.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6554,8 +6551,8 @@
       "verification": {
         "state": "v0.70-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.70.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6629,8 +6626,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "d025699964ff9a1bf02788ccd99b3cfeeaa0ba2167cba92d0262f988741c26bc",
-    "sourceManifestSha256": "83b93010ad3dc04fa057d84522028aa0931510f56271c03be0e89393a64a9c56",
+    "vsixSha256": "fe88b0b47113693742d1447463fbd43c7021d58b55def1becbbb1f485e99d3d0",
+    "sourceManifestSha256": "4a7f129e94038631ed1f2676bb0e748f02d1504a30830b921cefc48dc5d65752",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6642,22 +6639,11 @@
       }
     ]
   },
-  "stateChanges": [
-    {
-      "id": "IDEA-019",
-      "before": "host-provided",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-082",
-      "before": "partial",
-      "after": "implemented"
-    }
-  ],
+  "stateChanges": [],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1610,
-    "pass": 1511,
+    "tests": 1620,
+    "pass": 1521,
     "fail": 0,
     "cancelled": 0,
     "skipped": 99,

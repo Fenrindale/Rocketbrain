@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.70.0",
+  "version": "0.71.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -214,6 +214,7 @@
       { "command": "rocketbrain.spring.runtimeSecurity", "title": "Inspect Spring Security Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeProperty", "title": "Inspect Spring Property Value and Origin", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.debugProperty", "title": "Inspect Spring Property in Active Debug Target", "category": "Rocketbrain", "icon": "$(search)", "enablement": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java" },
+      { "command": "rocketbrain.spring.securityTrace", "title": "Inspect Spring Security Filter Trace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewProcedureCall", "title": "Review Stored Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewPackageCall", "title": "Review MariaDB Package Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -294,6 +295,7 @@
       { "command": "rocketbrain.db.systemCatalog", "title": "Browse Database System Catalog", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.inspectAccess", "title": "Inspect Database Account Access", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.reviewTableGrant", "title": "Review Table SELECT Grant or Revoke", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.reviewCreatePrincipal", "title": "Review Database Account or Role Creation", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.insertTemplate", "title": "Insert SQL Template", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.data.captureTransferSource", "title": "Capture Table Copy Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.data.transfer", "title": "Copy Captured Rows", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -580,12 +582,12 @@
       },
       {
         "command": "rocketbrain.jpa.observer.prepare",
-        "title": "Prepare Independent JPA Observer Agent",
+        "title": "Prepare Local JVM Observer",
         "category": "Rocketbrain"
       },
       {
         "command": "rocketbrain.jpa.observer.connect",
-        "title": "Connect JPA Provider Observer",
+        "title": "Connect Local JVM Observer",
         "category": "Rocketbrain"
       },
       {

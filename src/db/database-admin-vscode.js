@@ -3,6 +3,7 @@
 const { randomUUID } = require('node:crypto');
 const metadata = require('./database-admin-metadata');
 const grants = require('./database-table-grant');
+const principals = require('./database-principal-create');
 
 function registerDatabaseAdmin(context, vscode, { database }) {
   const documents = new Map(), reviews = new Map(), subscriptions = [];
@@ -33,16 +34,40 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     map.set(id, value);
   };
 
+  function retainReview(type, lease, ticket, plan) {
+    trusted();
+    if (ticket !== generation || !lease.guard()) throw new Error('The connection changed while preparing the review.');
+    const reviewId = randomUUID(), expiresAt = Date.now() + 2 * 60 * 1000;
+    append(reviews, reviewId, { type, plan, db: lease.db, epoch: lease.epoch, generation: ticket, expiresAt });
+    return { reviewId, expiresAt };
+  }
+
+  function reviewed(type, id) {
+    trusted();
+    const saved = reviews.get(id);
+    if (!saved || saved.type !== type || saved.expiresAt <= Date.now() || generation !== saved.generation) {
+      throw new Error('The review expired or the administrator connection changed.');
+    }
+    return saved;
+  }
+
+  function consumeReview(type, id, action) {
+    const saved = reviewed(type, id);
+    return database.withDatabaseAdmin(async lease => {
+      if (saved.db !== lease.db || saved.epoch !== lease.epoch || reviewed(type, id) !== saved) {
+        throw new Error('The review belongs to an inactive connection.');
+      }
+      reviews.delete(id);
+      return action(guarded(lease, saved.generation), saved.plan);
+    }, { write: true });
+  }
+
   async function prepareTableGrant(input) {
     trusted();
     const ticket = generation;
     return database.withDatabaseAdmin(async lease => {
       const plan = await grants.previewTableGrant(guarded(lease, ticket), input);
-      trusted();
-      if (ticket !== generation || !lease.guard()) throw new Error('The connection changed while preparing the privilege review.');
-      const reviewId = randomUUID(), expiresAt = Date.now() + 2 * 60 * 1000;
-      append(reviews, reviewId, { plan, db: lease.db, epoch: lease.epoch, generation: ticket, expiresAt });
-      return { reviewId, expiresAt, sql: plan.sql, table: plan.target.table, action: plan.target.action,
+      return { ...retainReview('table-grant', lease, ticket, plan), sql: plan.sql, table: plan.target.table, action: plan.target.action,
         account: { ...plan.target.account }, database: plan.before.identity.database, previous: [...plan.before.privileges],
         expected: [...plan.expected], directScope: 'table', automaticRetry: false };
     });
@@ -51,15 +76,25 @@ function registerDatabaseAdmin(context, vscode, { database }) {
   async function applyTableGrant({ reviewId, approved } = {}) {
     trusted();
     if (approved !== true) throw new Error('Approve the single reviewed table privilege change.');
-    const saved = reviews.get(reviewId);
-    if (!saved || saved.expiresAt <= Date.now() || generation !== saved.generation) throw new Error('The privilege review expired or the connection changed.');
+    return consumeReview('table-grant', reviewId, grants.applyTableGrant);
+  }
+
+  async function preparePrincipal(input) {
+    trusted();
+    const ticket = generation;
     return database.withDatabaseAdmin(async lease => {
-      if (saved.db !== lease.db || saved.epoch !== lease.epoch || reviews.get(reviewId) !== saved) {
-        throw new Error('The privilege review belongs to an inactive or already used connection.');
-      }
-      reviews.delete(reviewId);
-      return grants.applyTableGrant(guarded(lease, saved.generation), saved.plan);
-    }, { write: true });
+      const plan = await principals.plan(guarded(lease, ticket), input);
+      const { dialect, version, currentUser } = plan.identity;
+      return { ...retainReview('principal-create', lease, ticket, plan), target: { ...plan.target },
+        server: { dialect, version, account: currentUser }, sql: plan.sql, roleAdministrator: plan.roleAdministrator,
+        automaticRetry: false, credentialsIncluded: false };
+    });
+  }
+
+  async function applyPrincipal({ reviewId, approved, password } = {}) {
+    trusted();
+    if (approved !== true) throw new Error('Approve the single reviewed account or role creation.');
+    return consumeReview('principal-create', reviewId, (lease, plan) => principals.apply(lease, plan, password));
   }
 
   const api = {
@@ -79,6 +114,9 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     inspectAccess: account => inspect(async read => metadata.inspectAccess(read, await metadata.readContext(read), account)),
     prepareTableGrant,
     applyTableGrant,
+    preparePrincipal,
+    applyPrincipal,
+    openPrincipalReview,
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -182,7 +220,50 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     return result;
   }
 
-  for (const [name, command] of [['systemCatalog', browseSystem], ['inspectAccess', inspectAccount], ['reviewTableGrant', editGrant]]) {
+  async function openPrincipalReview(reviewId) {
+    const { plan } = reviewed('principal-create', reviewId);
+    const { target, identity } = plan;
+    return show(['# Create database ' + target.kind, '',
+      'Connected server: ' + text(identity.hostname) + ':' + text(identity.port) + ' · ' + text(identity.version),
+      'Executing account: ' + text(identity.currentUser), 'Target: ' + text(describeAccount(target)), '',
+      'The server applies creation immediately. It will refuse an authorization identifier that already exists.',
+      'No explicit object privileges are added.',
+      ...(plan.roleAdministrator ? ['MariaDB role administrator: ' + text(plan.roleAdministrator)] : []),
+      ...(target.kind === 'account' ? ['The password is supplied separately at Apply.'] : []),
+      '', '```sql', plan.sql + ';', '```'].join('\n'), 'principal-review.md', reviewId);
+  }
+
+  async function createPrincipal() {
+    const ticket = generation;
+    const selected = await vscode.window.showQuickPick([
+      { label: 'Create login account', kind: 'account' }, { label: 'Create role', kind: 'role' }
+    ], { title: 'Review Database Account or Role Creation' });
+    if (!selected) return;
+    const user = await vscode.window.showInputBox({ title: 'New ' + selected.kind + ' name', ignoreFocusOut: true });
+    if (user === undefined) return;
+    const host = selected.kind === 'account'
+      ? await vscode.window.showInputBox({ title: 'Exact account host', prompt: 'Enter an IP address or DNS name', ignoreFocusOut: true }) : undefined;
+    if (selected.kind === 'account' && host === undefined) return;
+    if (ticket !== generation) throw new Error('The administrator connection changed. Start the review again.');
+    const review = await preparePrincipal({ kind: selected.kind, user, ...(host !== undefined && { host }) });
+    try {
+      await openPrincipalReview(review.reviewId);
+      const confirm = 'Create Reviewed ' + (selected.kind === 'account' ? 'Account' : 'Role');
+      const approved = await vscode.window.showWarningMessage('Create this reviewed database ' + selected.kind + '?', { modal: true }, confirm);
+      if (approved !== confirm) return;
+      reviewed('principal-create', review.reviewId);
+      const password = selected.kind === 'account' ? await vscode.window.showInputBox({ title: 'Password for the new database account',
+        password: true, ignoreFocusOut: true, validateInput: principals.passwordProblem }) : undefined;
+      if (selected.kind === 'account' && password === undefined) return;
+      const result = await applyPrincipal({ reviewId: review.reviewId, approved: true, password });
+      if (result.state === 'verified') void vscode.window.showInformationMessage('Database ' + selected.kind + ' creation verified.');
+      else void vscode.window.showWarningMessage('Database ' + selected.kind + ' creation ' + result.state + '. Inspect account metadata before making another review.');
+      return result;
+    } finally { reviews.delete(review.reviewId); }
+  }
+
+  for (const [name, command] of [['systemCatalog', browseSystem], ['inspectAccess', inspectAccount], ['reviewTableGrant', editGrant],
+    ['reviewCreatePrincipal', createPrincipal]]) {
     subscriptions.push(vscode.commands.registerCommand('rocketbrain.db.' + name, async () => {
       try { trusted(); return await command(); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Database: ' + error.message); }

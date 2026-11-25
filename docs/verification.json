@@ -1,22 +1,22 @@
 {
-  "version": "0.70.0",
-  "verifiedAt": "2026-11-25T16:45:39.292Z",
+  "version": "0.71.0",
+  "verifiedAt": "2026-11-25T17:10:13.129Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.70.0.vsix",
-    "sha256": "d025699964ff9a1bf02788ccd99b3cfeeaa0ba2167cba92d0262f988741c26bc",
-    "bytes": 3391287,
+    "name": "rocketbrain-0.71.0.vsix",
+    "sha256": "fe88b0b47113693742d1447463fbd43c7021d58b55def1becbbb1f485e99d3d0",
+    "bytes": 3403507,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1867,
-    "inputVectorSha256": "83b93010ad3dc04fa057d84522028aa0931510f56271c03be0e89393a64a9c56",
+    "frozenPublicInputs": 1883,
+    "inputVectorSha256": "4a7f129e94038631ed1f2676bb0e748f02d1504a30830b921cefc48dc5d65752",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1610,
-    "pass": 1511,
+    "tests": 1620,
+    "pass": 1521,
     "fail": 0,
     "cancelled": 0,
     "skipped": 99,
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaInherited",
+          "group": "javaCustomSam",
           "checks": 1
         },
         {
-          "group": "jpaMultiFetch",
+          "group": "springSecurityTrace",
           "checks": 1
         },
         {
-          "group": "schemaOptions",
+          "group": "sqlScriptCall",
           "checks": 1
         },
         {
-          "group": "sqlDraftHistory",
+          "group": "databasePrincipal",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaInherited",
+          "group": "javaCustomSam",
           "checks": 1
         },
         {
-          "group": "jpaMultiFetch",
+          "group": "springSecurityTrace",
           "checks": 1
         },
         {
-          "group": "schemaOptions",
+          "group": "sqlScriptCall",
           "checks": 1
         },
         {
-          "group": "sqlDraftHistory",
+          "group": "databasePrincipal",
           "checks": 1
         }
       ],
@@ -85,34 +85,34 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-019": {
-      "scope": "두 Spring 환경에서 제네릭 상속 멤버와 복합 필드 위치, 바이너리 항목, 이름 있는 중첩·지역 타입과 익명 타입 두 개, 변경 선언 거부를 실제 버퍼에서 확인했다.",
+    "IDEA-034": {
+      "scope": "두 Spring 환경에서 직접 정의한 제네릭 SAM의 상속 타입을 해결했다. 두 캡처 선언 및 String·Object 오버로드를 보존하고 상태 보유 계약과 식별 동작을 거절했다. 버퍼 적용과 Undo를 확인했다.",
       "runtimeGroups": [
-        "javaInherited"
+        "javaCustomSam"
       ]
     },
-    "IDEA-060": {
-      "scope": "두 실제 DB에서 nullable to-one 두 개와 Bag의 중복을 보존했다. 두 Set의 물리 조인 일곱 행, 512행 초과 거부, 반복·중첩·병렬 Bag의 실행 전 거부, 읽기 전용 롤백을 확인했다.",
+    "IDEA-064": {
+      "scope": "두 실제 Spring Security 앱에서 401·401·403·200·200 응답, 최초 매칭 체인과 실행 필터, 조기 종료, 32개 이력, 기본 비활성화와 연결 종료 시 닫기를 확인했다.",
       "runtimeGroups": [
-        "jpaMultiFetch"
+        "springSecurityTrace"
       ]
     },
-    "DG-082": {
-      "scope": "각 엔진의 별개 서버 두 대에서 정확·대소문자 접기와 DEFINER 옵션을 조합했다. 본문 문자열·SQL SECURITY와 원본 스냅샷 지문을 보존하고 DDL 권한과 라이브 변경이 발생하지 않음을 확인했다.",
+    "DG-045": {
+      "scope": "두 DB에서 SQL 자료형과 53비트 한계 밖의 값을 보존하고 같은 물리 세션에서 두 CALL 결과를 따로 열었다. 검토 후 변경된 루틴 정의를 거절했다.",
       "runtimeGroups": [
-        "schemaOptions"
+        "sqlScriptCall"
       ]
     },
-    "DG-094": {
-      "scope": "두 DB에서 별도 VS Code 프로세스의 체크포인트 두 개, 읽기 전용 diff, CRLF와 선택 영역, 원본 유지, 변경 후 오래된 검토 거부를 확인했다.",
+    "DG-080": {
+      "scope": "두 DB에 직접 만든 계정으로 인용 문자와 Unicode가 포함된 암호를 사용해 로그인했다. 별도 객체 권한이 없음을 확인하고 엔진별 역할 식별, 검토 재사용 거부, 보호 프로필 거부와 변경 후 실제 Spring 읽기를 확인했다.",
       "runtimeGroups": [
-        "sqlDraftHistory"
+        "databasePrincipal"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 399,
+    "sourceCorrespondences": 403,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
@@ -127,34 +127,23 @@
       "platform-limited": 2
     },
     "weightedPoints": 157,
-    "previousWeightedPoints": 156.5,
+    "previousWeightedPoints": 157,
     "targetWeightedPoints": 216,
     "referencePercent": 72.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
-    "stateChanges": [
-      {
-        "id": "IDEA-019",
-        "before": "host-provided",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-082",
-        "before": "partial",
-        "after": "implemented"
-      }
-    ]
+    "stateChanges": []
   },
   "limits": [
-    "Java 상속·익명 타입 탐색은 가져온 프로젝트의 의미 분석을 사용한다. 바이너리 선언에서 확인할 수 있는 소스가 없으면 목록에 표시한다.",
-    "Hibernate는 검토한 직접 연관 경로 세 개까지 실행한다. 두 컬렉션은 표준 Set과 정확한 키를 확인한 경우에 허용한다.",
-    "스키마 비교 옵션은 이름과 DEFINER를 비교에 반영한다. 이 옵션으로 만든 비교는 마이그레이션 승인을 부여하지 않는다.",
-    "SQL 초안은 명시 저장한 버전의 텍스트를 복원한다. 라이브 결과와 변경 검토의 복원이 남아 있다.",
+    "Java 변환은 캡처와 오버로드의 실제 바인딩을 보존할 수 있는 지역 변수의 람다와 익명 클래스를 지원한다.",
+    "Spring Security 추적은 설정으로 켠 Servlet 체인의 요청별 선택과 필터 실행을 보여 준다. 값과 신원은 저장하지 않는다.",
+    "스크립트 CALL은 검토한 같은 스키마의 읽기 전용 IN 프로시저를 대상으로 한다.",
+    "계정 생성은 기본 객체 권한을 부여하지 않는다. 역할 작성의 계정 표현과 기본 관리 권한은 엔진별 동작을 따른다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "사용자 정의 함수형 인터페이스의 람다·익명 클래스 변환",
-    "실제 요청의 Spring Security 필터 체인과 실행 순서",
-    "읽기 전용 스크립트의 CALL과 캡처한 결과 재열기, DB 계정·역할 생성 검토"
+    "Java의 여러 문장 Extract Method와 Spring Maven BOM 기반 의존성 추가",
+    "실제 DB 결과 그리드의 별도 프로세스 복원과 읽기 전용 그리드 연속 스크롤",
+    "언어별 의미적 선택 확대·축소와 로컬 DuckDB 데이터 파일 탐색"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -1,0 +1,73 @@
+'use strict';
+
+const { observeProcedure }=require('./routine-call');
+const { shownBody }=require('./schema-programs');
+const { parseProgram,walk }=require('./schema-trigger-ast');
+const { sourceTokens }=require('./sql-analysis');
+const { fail }=require('./sql-script');
+
+const invalid=message=>fail('ROCKETBRAIN_SCRIPT_CALL',message);
+
+function withoutProjectionAliases(body,sqlMode) {
+  const tokens=sourceTokens(body,{sqlMode:sqlMode.split(',').filter(Boolean)});
+  const boundaries=new Set([',',';','FROM','INTO','WHERE']);
+  const aliases=[];
+  let projection=false;
+  for(let index=0;index<tokens.length;index++) {
+    const token=tokens[index];
+    if(token.close!==undefined){index=token.close;continue;}
+    const word=token.kind==='word'?token.upper:token.kind==='symbol'?token.value:'';
+    if(word==='SELECT')projection=true;
+    if(word!==','&&boundaries.has(word))projection=false;
+    if(!projection||word!=='AS')continue;
+    const next=tokens[index+1],tail=tokens[index+2];
+    if(['word','identifier'].includes(next?.kind)&&(!tail||boundaries.has(tail.upper||tail.value))) {
+      aliases.push({start:token.start,end:next.end});
+      index++;
+    }
+  }
+  let masked=body;
+  for(const {start,end} of aliases.reverse())masked=masked.slice(0,start)+body.slice(start,end).replace(/[^\r\n]/g,' ')+masked.slice(end);
+  return masked;
+}
+
+async function reviewScriptCall(statement,context,query) {
+  const {schema,procedure,inputs}=statement.call;
+  if(schema!==undefined && schema!==context.database)throw invalid('Use a reviewed procedure from the active schema.');
+  const observed=await observeProcedure(query,context,{schema:context.database,name:procedure,kind:'procedure'});
+  if(observed.parameters.length!==inputs||observed.parameters.some(parameter=>parameter.mode!=='IN')) {
+    throw invalid('Script CALL supports a complete named IN-only parameter signature.');
+  }
+  if(statement.valueKinds && observed.parameters.some((parameter,index)=>
+    statement.valueKinds[index]!=='null' && statement.valueKinds[index]!==parameter.kind)) {
+    throw invalid('Script CALL input types must match the procedure signature or use SQL NULL.');
+  }
+  const sqlMode=observed.settings.sql_mode || '';
+  let program;
+  try{
+    const body=shownBody(observed.source,context.database,procedure,sqlMode);
+    program=parseProgram(withoutProjectionAliases(body,sqlMode),context.database,undefined,{kind:'procedure',sqlMode,
+      parameters:observed.parameters,allowRows:true,allowDynamic:false});
+  }catch{
+    throw invalid('Script CALL requires a visible body with supported plain read-only SELECT statements.');
+  }
+  let selects=0;
+  walk(program.statements,node=>{
+    if(node.kind==='block')return;
+    if(node.kind!=='select'||node.into.length)throw invalid('Script CALL requires a body made of SELECT statements that return results.');
+    selects++;
+  });
+  if(!selects||selects>8||program.writeTargets.length||program.calls.length||program.readTargets.length>8) {
+    throw invalid('Use a procedure with one to eight ordinary SELECT statements and no nested calls.');
+  }
+  for(const target of program.readTargets){
+    if(target.schema!==context.database)throw invalid('Script CALL cannot read a table from another schema.');
+    const {rows}=await query('SELECT TABLE_TYPE FROM information_schema.TABLES WHERE BINARY TABLE_SCHEMA=BINARY ? AND BINARY TABLE_NAME=BINARY ?',
+      [target.schema,target.table]);
+    if(rows.length!==1||rows[0][0]!=='BASE TABLE')throw invalid('Script CALL requires readable base tables.');
+  }
+  return {sql:observed.sql,fingerprint:observed.fingerprint,parameters:observed.parameters.map(({ordinal,name,kind,type})=>({ordinal,name,kind,type})),
+    resultSets:selects};
+}
+
+module.exports={reviewScriptCall};

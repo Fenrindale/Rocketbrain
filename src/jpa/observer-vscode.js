@@ -4,17 +4,19 @@ const {ObserverClient,ObserverError,emptySnapshot} = require('./observer-client'
 const {validateRuntimeUrl} = require('../spring/runtime-client');
 const {summarizePerformance} = require('./fetch-performance');
 const {registerJpaConsole} = require('./console-vscode');
+const {registerSecurityTrace} = require('../spring/security-trace-vscode');
 
 function registerObserver(context,vscode,output,{source}) {
   const events = new vscode.EventEmitter(), subscriptions=[events];
-  let current=emptySnapshot(), client, generation=0, snapshotRequest=0, validationRequest=0, disposed=false, consoleView;
+  let current=emptySnapshot(), client, generation=0, snapshotRequest=0, validationRequest=0, disposed=false, consoleView,securityView;
   const snapshot=()=>structuredClone(current);
   const performance=()=>summarizePerformance(current.performance);
   const emit=()=>{if(!disposed)events.fire(snapshot());};
-  function disconnect(){generation++;snapshotRequest++;client?.dispose();consoleView?.clear();client=undefined;current=emptySnapshot();emit();return snapshot();}
+  function clearViews(){consoleView?.clear();securityView?.close();}
+  function disconnect(){generation++;snapshotRequest++;client?.dispose();clearViews();client=undefined;current=emptySnapshot();emit();return snapshot();}
   function trusted(){if(disposed)throw new ObserverError('DISPOSED','Observer is closed.');if(!vscode.workspace.isTrusted){disconnect();throw new ObserverError('UNTRUSTED','Trust the workspace before connecting to a provider observer.');}}
   async function inputs(){
-    const url=await vscode.window.showInputBox({title:'Connect JPA provider observer',prompt:'Use the loopback URL from your explicitly enabled Java agent',value:current.baseUrl||'http://127.0.0.1:8081',ignoreFocusOut:true});
+    const url=await vscode.window.showInputBox({title:'Connect Local JVM Observer',prompt:'Use the loopback URL from your explicitly enabled Java agent',value:current.baseUrl||'http://127.0.0.1:8081',ignoreFocusOut:true});
     if(url===undefined)return;
     const canonical=validateRuntimeUrl(url).url.toString();
     const workspace=(vscode.workspace.workspaceFolders||[]).map(f=>f.uri.toString()).join('|');
@@ -26,7 +28,7 @@ function registerObserver(context,vscode,output,{source}) {
   }
   async function connect(options){
     trusted();const input=options||await inputs();if(!input)return snapshot();trusted();
-    const candidate=new ObserverClient(input),epoch=++generation,request=++snapshotRequest;client?.dispose();consoleView?.clear();client=candidate;
+    const candidate=new ObserverClient(input),epoch=++generation,request=++snapshotRequest;client?.dispose();clearViews();client=candidate;
     current={...emptySnapshot(),state:'connecting',baseUrl:validateRuntimeUrl(input.url).url.toString()};emit();
     try{
       const observed=await candidate.refresh();if(disposed||epoch!==generation||request!==snapshotRequest)return snapshot();trusted();
@@ -118,6 +120,11 @@ function registerObserver(context,vscode,output,{source}) {
   }
   const command=(name,action)=>subscriptions.push(vscode.commands.registerCommand(name,async(...args)=>{try{return await action(...args);}catch(error){output.appendLine('JPA observer: '+error.message);await vscode.window.showErrorMessage(error.message);}}));
   consoleView=registerJpaConsole(vscode,{source,target:consoleConnection,command});
+  securityView=registerSecurityTrace(vscode,{command,target(){
+    trusted();if(!client)throw new ObserverError('NOT_CONNECTED','Connect to a local JVM observer first.');
+    const candidate=client,epoch=generation;
+    return {client:candidate,assertCurrent(){trusted();if(epoch!==generation||client!==candidate)throw new ObserverError('STALE','The observer changed during the Spring Security inspection.');}};
+  }});
   command('rocketbrain.jpa.observer.connect',()=>connect());command('rocketbrain.jpa.observer.refresh',refresh);command('rocketbrain.jpa.observer.disconnect',disconnect);command('rocketbrain.jpa.observer.validate',validateSelection);
   command('rocketbrain.jpa.observer.inspect',async()=>{const report={snapshot:snapshot(),comparison:await compareSource()};const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(report,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return report;});
   command('rocketbrain.jpa.observer.inspectPerformance',inspectPerformance);

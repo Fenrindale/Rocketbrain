@@ -135,33 +135,48 @@ function registerSqlScripts(context,vscode,{database}={}) {
         documentUri:b.documentUri,allowImplicitCommit,allowUnboundedDml,cancellation:abort.signal});
       retainRun(summaryId,{source,report});
       const rows=report.statements.map(statement=>[statement.index+1,statement.status,statement.result?.rowCount??0,statement.result?.affectedRows??0,statement.durationMs??0,statement.error?.message||(statement.result?.resultOmitted?'Result omitted: script result limit reached.':'')]);
-      const scriptStatements = report.statements.flatMap(statement =>
-        statement.result && !statement.result.resultOmitted ? [{ index: statement.index,
-          label: 'Statement ' + (statement.index + 1) + ' · ' + statement.sql.replace(/\s+/g, ' ').slice(0, 88) }] : []);
+      const scriptStatements = report.statements.flatMap(capturedStatements);
       const summary={columns:['Statement','Status','Rows','Affected','Milliseconds','Error'],rows,rowCount:rows.length,affectedRows:report.statements.reduce((sum,s)=>sum+(s.result?.affectedRows||0),0),durationMs:report.durationMs,truncated:false,state:report.stateAfter,scriptStatements};
       database.scriptResultFinish(summaryId,summary,undefined,report.stateAfter);
       return {resultId:summaryId,...structuredClone(report)};
     }catch(error){database.scriptResultFinish(summaryId,undefined,error.message,error.state);throw error;}
     finally{external?.dispose();controllers.delete(abort);}
   }
-  async function openStatement(resultId,index){
+  function capturedStatements(statement) {
+    if(!statement.result||statement.result.resultOmitted)return [];
+    const label='Statement '+(statement.index+1)+' · ';
+    if(Array.isArray(statement.result.resultSets))return statement.result.resultSets.map((_set,resultSet)=>({
+      index:statement.index,resultSet,label:label+'CALL result '+(resultSet+1)
+    }));
+    return [{index:statement.index,label:label+statement.sql.replace(/\s+/g,' ').slice(0,88)}];
+  }
+  async function openStatement(resultId,index,resultSet){
     if (closed) throw new Error('SQL scripts are closed.');
-    if (!Number.isInteger(resultId) || !Number.isInteger(index) || index < 0) throw Error('Choose a retained statement result.');
-    const existing = database.scriptStatementResult?.(resultId, index);
+    if (!Number.isInteger(resultId) || !Number.isInteger(index) || index < 0 ||
+        resultSet!==undefined&&(!Number.isInteger(resultSet)||resultSet<0||resultSet>=8)) throw Error('Choose a retained statement result.');
+    let existing=database.scriptStatementResult?.(resultId,index,resultSet);
+    if(!existing&&resultSet===undefined) {
+      const firstSet=database.scriptStatementResult?.(resultId,index,0);
+      if(firstSet){existing=firstSet;resultSet=0;}
+    }
     if (existing) {
       await database.showResults();
       await database.activateResult?.(existing);
-      return { resultId: existing, executedSql: false, index };
+      return { resultId:existing,executedSql:false,index,...(resultSet!==undefined&&{resultSet}) };
     }
     const cached = runs.get(resultId), statement = cached?.report.statements[index];
     if (!statement?.result || statement.result.resultOmitted) throw Error('This statement has no retained result to display.');
-    const id = database.scriptResultBegin(statement.sql, cached.source + ' · cached statement ' + (index + 1), {
-      readOnly: true, sessionId: cached.report.sessionId, scriptCapture: { resultId, index }
+    const multiple=Array.isArray(statement.result.resultSets), retained=multiple?statement.result.resultSets[resultSet??0]:statement.result;
+    if(!retained||!multiple&&resultSet!==undefined)throw Error('Choose a retained result set from this statement.');
+    const capture={resultId,index,...(multiple&&{resultSet:resultSet??0})};
+    const label=multiple?' · result '+(capture.resultSet+1):'';
+    const id = database.scriptResultBegin(statement.sql, cached.source + ' · cached statement ' + (index + 1) + label, {
+      readOnly: true, sessionId: cached.report.sessionId, scriptCapture:capture
     });
-    database.scriptResultFinish(id, structuredClone(statement.result), undefined, statement.stateAfter);
+    database.scriptResultFinish(id,structuredClone(retained),undefined,statement.stateAfter);
     await database.showResults();
     await database.activateResult?.(id);
-    return { resultId: id, executedSql: false, index };
+    return {resultId:id,executedSql:false,index,...(multiple&&{resultSet:capture.resultSet})};
   }
   function reviewText(review){
     const b=review.backend;
@@ -173,6 +188,7 @@ function registerSqlScripts(context,vscode,{database}={}) {
       ...(review.preset ? ['-- Saved parameter preset ' + review.preset.name] : []),
       ...(b.requiresImplicitCommitApproval?['-- Schema changes can implicitly commit earlier work and cannot be rolled back as a group.']:[]),
       ...b.statements.filter(statement=>statement.program).map(statement=>'-- Statement '+(statement.index+1)+' creates a '+statement.program.toLowerCase()+'.'),
+      ...b.statements.filter(statement=>statement.call).map(statement=>'-- Statement '+(statement.index+1)+' calls the reviewed read-only '+statement.call.procedure+' procedure.'),
       ...(b.unboundedDml || []).map(({ index, command, hasLimit }) => '-- Statement ' + (index + 1) + ' uses ' +
         command + ' without an outer WHERE clause.' + (hasLimit ? ' A LIMIT is present.' : ' It can affect every target row.')),
       ...b.parameterDefinitions.map(p=>'-- Parameter '+(p.name||p.key)+': '+p.valueKind+' (value kept private)'),'',review.sql].join('\n');
@@ -284,9 +300,9 @@ function registerSqlScripts(context,vscode,{database}={}) {
     }catch(error){if(!closed)await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}
   }
   subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runScript',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.reviewScript',()=>command(true)),vscode.commands.registerCommand('rocketbrain.sql.runWithParameters',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.openScriptResult',async selection=>{
-    if (selection !== undefined) return api.openStatement(selection?.resultId, selection?.index);
-    const choices=[];for(const [id,cached]of runs)for(const statement of cached.report.statements)if(statement.result&&!statement.result.resultOmitted)choices.push({label:'Run '+id+' · statement '+(statement.index+1),description:statement.sql.slice(0,90),id,index:statement.index});
-    const selected=await vscode.window.showQuickPick(choices,{title:'Open retained statement result · no SQL rerun'});if(selected)return api.openStatement(selected.id,selected.index);
+    if (selection !== undefined) return api.openStatement(selection?.resultId,selection?.index,selection?.resultSet);
+    const choices=[];for(const [id,cached]of runs)for(const statement of cached.report.statements)for(const result of capturedStatements(statement))choices.push({...result,label:'Run '+id+' · '+result.label,id});
+    const selected=await vscode.window.showQuickPick(choices,{title:'Open retained statement result · no SQL rerun'});if(selected)return api.openStatement(selected.id,selected.index,selected.resultSet);
   }));
   subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runClientStatement', current=>command(false,current ?? {})));
   const tracked=fn=>(...args)=>{const work=fn(...args);operations.add(work);void work.finally(()=>operations.delete(work)).catch(()=>{});return work;};

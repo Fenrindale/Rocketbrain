@@ -19,6 +19,7 @@ const { SchemaApplier } = require('./schema-apply');
 const scriptEngine=require('./sql-script');
 const { inferScriptParameters } = require('./parameter-inference');
 const routineCall = require('./routine-call');
+const { reviewScriptCall } = require('./sql-script-call');
 const routinePackage = require('./routine-package');
 const { contextOf: objectSourceContext } = require('./object-source');
 const { collectRoutineResults, maxBytes: maxRoutineResultBytes } = require('./routine-call-stream');
@@ -403,11 +404,24 @@ class MysqlService {
       throw fail('ROCKETBRAIN_SCRIPT_STALE', 'The database account or parameter column metadata changed. Review the selected preset again.');
     }
   }
+  async _reviewScriptCalls(session, script, context) {
+    const calls=script.statements.filter(statement=>statement.call);
+    const observed=new Map();
+    if(!calls.length)return observed;
+    if(!session.readOnly||script.hasWrites||calls.length>8) {
+      throw fail('ROCKETBRAIN_SCRIPT_CALL','Use a read-only script with up to eight reviewed CALL statements.');
+    }
+    const query=(sql,values=[])=>this._stream(session,sql,values,{maxRows:35,timeoutMs:5000},false,
+      {category:'metadata',operation:operationOf(sql)});
+    for(const statement of calls) observed.set(statement.index,await reviewScriptCall(statement,context,query));
+    return observed;
+  }
   async describeScript(sql,{sessionId='default',inspectParameters=false}={}){
     const session=this._session(sessionId);
     return this._enqueue(session,async()=>{
-      const context=await this._scriptContext(session),script=scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly});
+      const context=await this._scriptContext(session),script=scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly,allowCalls:true});
       await this._protectScript(session, script, context);
+      await this._reviewScriptCalls(session,script,context);
       let parameterContext = {};
       if (inspectParameters) {
         try { parameterContext = await this._observeParameterContext(session, script, context); }
@@ -420,14 +434,15 @@ class MysqlService {
     const session=this._session(options.sessionId),bounded=limits(options),totalTimeoutMs=options.totalTimeoutMs??30000;
     if(!Number.isInteger(totalTimeoutMs)||totalTimeoutMs<100||totalTimeoutMs>scriptEngine.LIMITS.totalTimeoutMs)throw fail('ROCKETBRAIN_SCRIPT_LIMIT','Script timeout must be100ms to120000ms.');
     return this._enqueue(session,async()=>{
-      const context=await this._scriptContext(session),script=scriptEngine.bindScript(scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly}),options.parameters);
+      const context=await this._scriptContext(session),script=scriptEngine.bindScript(scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly,allowCalls:true}),options.parameters);
       await this._protectScript(session, script, context);
+      const calls=await this._reviewScriptCalls(session,script,context);
       const presetContext = options.presetContext ? { ...options.presetContext } : undefined;
       if (presetContext) await this._checkPresetContext(session, script, context, presetContext);
       if(script.requiresImplicitCommitApproval&&session.inTransaction)throw fail('ROCKETBRAIN_SCRIPT_TRANSACTION','Commit or roll back the existing transaction before reviewing a DDL script.');
       for(const [id,review]of this._scriptReviews)if(Date.now()>review.expiresAt)this._scriptReviews.delete(id);
       while(this._scriptReviews.size>=scriptEngine.LIMITS.reviews)this._scriptReviews.delete(this._scriptReviews.keys().next().value);
-      const reviewId=randomUUID(),state=this._state(session),review={reviewId,script,context,state,session,sessionId:session.id,cancellationVersion:session.cancellationVersion,expiresAt:Date.now()+scriptEngine.LIMITS.reviewLifetimeMs,bounded,totalTimeoutMs,presetContext};
+      const reviewId=randomUUID(),state=this._state(session),review={reviewId,script,context,state,session,sessionId:session.id,cancellationVersion:session.cancellationVersion,expiresAt:Date.now()+scriptEngine.LIMITS.reviewLifetimeMs,bounded,totalTimeoutMs,presetContext,calls};
       this._scriptReviews.set(reviewId,review);
       return structuredClone({...scriptEngine.publicScript(script),...context,reviewId,sessionId:session.id,readOnly:state.readOnly,autocommit:state.autocommit,expiresAt:review.expiresAt,scriptHash:scriptEngine.digest(sql),state,stopOnError:true,autoRetried:false,warnings:[...(script.requiresImplicitCommitApproval?['DDL may implicitly commit earlier statements in this script. It is not transactionally undoable.']:[]),'Preflight checks boundaries, execution policy and parameter types; it does not prove all statements are valid on this server.','A script is not an atomic transaction; completed statements are never retried automatically.']});
     });
@@ -521,7 +536,7 @@ class MysqlService {
       }
     }, { guard, signal, write: true });
   }
-  _executeProcedure(session, sql, values, { maxRows, timeoutMs }) {
+  _executeProcedure(session, sql, values, { maxRows, timeoutMs, mayWrite = true }) {
     return new Promise((resolve, reject) => {
       if (!session.connected) { reject(routineCall.fail('SESSION', 'The procedure connection was lost.')); return; }
       let finished = false, reportOutcome;
@@ -533,9 +548,9 @@ class MysqlService {
         try { reportOutcome?.(outcomeOf(error && (error.code || true), false)); } catch { /* Activity is independent. */ }
         if (error) reject(safeError(error)); else resolve(result);
       };
-      const active = { mayWrite: true, abort: finish };
+      const active = { mayWrite, abort: finish };
       session.active = active;
-      const stop = error => this._lose(session, error, true);
+      const stop = error => this._lose(session, error, mayWrite);
       const timer = setTimeout(() => stop(routineCall.fail('TIMEOUT', 'The procedure exceeded its time limit and its connection was closed.')), timeoutMs);
       try {
         try { reportOutcome = this._reportActivity?.(session, { category: 'procedure', operation: 'CALL' }); } catch { /* Activity is independent. */ }
@@ -572,6 +587,15 @@ class MysqlService {
       const stateKeys=['readOnly','autocommit','inTransaction','transactionState','connectionId','needsReconnect','outcomeUnknown'];
       if(review.session!==session||session.cancellationVersion!==review.cancellationVersion||stateKeys.some(key=>state[key]!==review.state[key])||JSON.stringify(context)!==JSON.stringify(review.context))throw fail('ROCKETBRAIN_SCRIPT_STALE','The console connection, transaction mode or SQL mode changed after script review. Review again.');
       await this._protectScript(session, review.script, context);
+      const actualCalls=await this._reviewScriptCalls(session,review.script,context);
+      for(const [index,observed] of actualCalls) {
+        if(observed.fingerprint!==review.calls.get(index)?.fingerprint) {
+          throw fail('ROCKETBRAIN_SCRIPT_STALE','The server procedure changed after script review. Review the script again.');
+        }
+      }
+      if(cancelled()||session.cancellationVersion!==review.cancellationVersion||Date.now()>review.expiresAt) {
+        throw fail('ROCKETBRAIN_SCRIPT_STALE','The script review changed before execution. Review again.');
+      }
       if (review.presetContext) {
         await this._checkPresetContext(session, review.script, context, review.presetContext);
         if (cancelled() || session.cancellationVersion !== review.cancellationVersion || Date.now() > review.expiresAt) {
@@ -593,14 +617,31 @@ class MysqlService {
           if(session.closed||session.needsReconnect||!session.connected){resultState='stopped';stopReason='connection-unavailable';break;}
           if(elapsed>=review.totalTimeoutMs){resultState='stopped';stopReason='script-time-limit';break;}
           entry.stateBefore=this._state(session);const statementStart=performance.now();let result,error;
-          try{result=await this._stream(session,statement.preparedSql,statement.values,{maxRows:review.bounded.maxRows,timeoutMs:Math.max(1,Math.floor(Math.min(review.bounded.timeoutMs,review.totalTimeoutMs-elapsed)))},statement.mayWrite,{category:'script',operation:statement.first,sqlMode:context.sqlMode});}catch(failure){error=failure;}
+          try{
+            const bounded={maxRows:review.bounded.maxRows,timeoutMs:Math.max(1,Math.floor(Math.min(review.bounded.timeoutMs,review.totalTimeoutMs-elapsed)))};
+            const call=actualCalls.get(statement.index);
+            if(call) {
+              const next=await this._reviewScriptCalls(session,{statements:[statement],hasWrites:false},context);
+              if(next.get(statement.index)?.fingerprint!==call.fingerprint)throw fail('ROCKETBRAIN_SCRIPT_STALE','The procedure changed before CALL.');
+              if(cancelled()||session.cancellationVersion!==review.cancellationVersion)throw fail('ROCKETBRAIN_CANCELLED','The script was cancelled before CALL.');
+              const report=await this._executeProcedure(session,call.sql,statement.values,{...bounded,mayWrite:false});
+              this._observe(session,report);
+              const after=await this._reviewScriptCalls(session,{statements:[statement],hasWrites:false},context);
+              if(after.get(statement.index)?.fingerprint!==call.fingerprint||report.resultSets.length!==call.resultSets) {
+                throw fail('ROCKETBRAIN_SCRIPT_STALE','The procedure definition or results changed during CALL.');
+              }
+              result={columns:[],fields:[],rows:[],rowCount:report.totalRows,affectedRows:report.affectedRows,
+                durationMs:report.durationMs,truncated:false,warningCount:report.warningCount,resultSets:report.resultSets};
+            } else result=await this._stream(session,statement.preparedSql,statement.values,bounded,statement.mayWrite,
+              {category:'script',operation:statement.first,sqlMode:context.sqlMode});
+          }catch(failure){error=failure;}
           if(session.connected)try{await this._refreshState(session);}catch(failure){if(statement.mayWrite)session.outcomeUnknown=true;if(!error)error=fail('ROCKETBRAIN_STATE_UNAVAILABLE','The statement finished but its transaction state could not be confirmed.',{queryCompleted:Boolean(result)});}
           if(statement.mayWrite)this._editor.invalidate(session.id);
           entry.durationMs=Math.round((performance.now()-statementStart)*100)/100;entry.stateAfter=this._state(session);
           if(error){entry.status='failed';entry.error={code:error.code||'MYSQL_ERROR',message:error.message,queryCompleted:Boolean(error.queryCompleted),outcomeUnknown:Boolean(session.outcomeUnknown)};failed++;resultState=cancelled()||error.code==='ROCKETBRAIN_CANCELLED'?'cancelled':'failed';stopReason=entry.error.code;try{onStatement?.(structuredClone(entry));}catch{}break;}
           entry.status='completed';completed++;result.state=entry.stateAfter;
           const size=Buffer.byteLength(JSON.stringify(result));
-          if(bytes+size>scriptEngine.LIMITS.resultBytes){entry.result={...result,rows:[],fields:[],columns:[],resultOmitted:true,warning:'The script aggregate result limit was reached; this fully drained statement was not retained.'};resultState='stopped';stopReason='script-result-limit';}
+          if(bytes+size>scriptEngine.LIMITS.resultBytes){entry.result={...result,rows:[],fields:[],columns:[],resultSets:undefined,resultOmitted:true,warning:'The script aggregate result limit was reached; this fully drained statement was not retained.'};resultState='stopped';stopReason='script-result-limit';}
           else{entry.result=result;bytes+=size;}
           try{onStatement?.(structuredClone(entry));}catch{}
           if(stopReason)break;

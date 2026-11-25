@@ -4,7 +4,8 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const { spawn,execFile }=require('node:child_process');
 const { promisify }=require('node:util');
-const { randomUUID }=require('node:crypto');
+const { randomUUID,randomBytes }=require('node:crypto');
+const { pathToFileURL }=require('node:url');
 const { setTimeout:delay }=require('node:timers/promises');
 
 const run=promisify(execFile);
@@ -37,8 +38,8 @@ async function buildSpringSecurityFixture() {
   return jar;
 }
 
-async function startSpringSecurityFixture(config) {
-  const {java}=await javaRuntime();
+async function startSpringSecurityFixture(config,{trace=false}={}) {
+  const {home,java}=await javaRuntime();
   const selected=process.env.ROCKETBRAIN_SPRING_SECURITY_JAR ?? jar;
   await fs.access(selected);
   const db=JSON.parse(await fs.readFile(config.dbConfigPath,'utf8'));
@@ -56,7 +57,25 @@ async function startSpringSecurityFixture(config) {
     RB_SECURITY_OPERATOR:operator.name,RB_SECURITY_OPERATOR_PASSWORD:operator.password,
     RB_SECURITY_REVIEWER:reviewer.name,RB_SECURITY_REVIEWER_PASSWORD:reviewer.password,
     RB_SECURITY_VIEWER:viewer.name,RB_SECURITY_VIEWER_PASSWORD:viewer.password};
-  const child=spawn(java,['-jar',selected],{env,windowsHide:true,stdio:['ignore','pipe','pipe']});
+  let traceFiles,agentArgs=[];
+  async function discardTraceFiles(){
+    if(!traceFiles)return;
+    for(const file of [traceFiles.tokenFile,traceFiles.descriptorFile,traceFiles.configFile])await fs.rm(file,{force:true});
+    await fs.rmdir(traceFiles.directory);
+  }
+  if(trace){
+    const output=path.join(root,'test-output');
+    const {jarPath}=await require('../../scripts/jpa-observer-build').buildObserver({target:path.join(output,'spring-security-observer'),javaHome:home});
+    const directory=await fs.mkdtemp(path.join(output,'spring-security-trace-'));
+    const token=randomBytes(32).toString('hex'),tokenFile=path.join(directory,'token'),descriptorFile=path.join(directory,'connection.json'),configFile=path.join(directory,'observer.json');
+    traceFiles={directory,token,tokenFile,descriptorFile,configFile};
+    try{
+      await fs.writeFile(tokenFile,token,{flag:'wx',mode:0o600});
+      await fs.writeFile(configFile,JSON.stringify({tokenFile,descriptorFile,securityTrace:true}),{flag:'wx',mode:0o600});
+      agentArgs=['--add-modules=jdk.httpserver','-javaagent:'+jarPath+'=config='+pathToFileURL(configFile).href];
+    }catch(error){await discardTraceFiles();throw error;}
+  }
+  const child=spawn(java,[...agentArgs,'-jar',selected],{env,windowsHide:true,stdio:['ignore','pipe','pipe']});
   let port,ended=false;
   const exited=new Promise(resolve=>{
     child.once('error',()=>{ended=true;resolve();});
@@ -68,10 +87,8 @@ async function startSpringSecurityFixture(config) {
     port=Number(/RocketbrainSecurityFixture listening on ([0-9]+)/.exec(output)?.[1]) || port;
   });
   child.stderr.resume();
-  async function close() {
-    if (!ended) child.kill();
-    await exited;
-  }
+  let stopping;
+  function close() {return stopping??=(async()=>{if(!ended)child.kill();await exited;await discardTraceFiles();})();}
   try {
     const expires=Date.now()+45000;
     while (!ended && Date.now()<expires) {
@@ -79,7 +96,10 @@ async function startSpringSecurityFixture(config) {
         const baseUrl='http://127.0.0.1:'+port;
         const response=await fetch(baseUrl+'/ready',{signal:AbortSignal.timeout(1000)}).catch(()=>null);
         if (response?.ok && (await response.json()).ready===true) {
-          return {baseUrl,operator,reviewer,viewer,auth,close};
+          const descriptor=traceFiles?JSON.parse(await fs.readFile(traceFiles.descriptorFile,'utf8')):null;
+          if(descriptor&&descriptor.securityTraceEnabled!==true)throw Error('Spring Security tracing was not enabled.');
+          return {baseUrl,operator,reviewer,viewer,auth,close,
+            ...(descriptor?{observer:{url:descriptor.baseUrl,token:traceFiles.token,processId:descriptor.processId}}:{})};
         }
       }
       await delay(120);

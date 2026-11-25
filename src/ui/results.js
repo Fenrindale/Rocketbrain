@@ -7,6 +7,7 @@
   const maps = new Map();
   const comparisons = new Map();
   const statementChoices = new Map();
+  const statementKey = entry => entry.resultSet===undefined?String(entry.index):entry.index+'|'+entry.resultSet;
   const viewModes = ['grid', 'record', 'tree', 'text', 'transpose', 'chart', 'compare', 'map'];
   const editableModes = new Set(['grid', 'record']);
   let insertExport;
@@ -1452,8 +1453,8 @@
       $('script-result-label').textContent = outputs ? 'Procedure results' : procedure ? 'Procedure result set' : 'Statement result';
       $('open-script-statement').textContent = outputs ? 'Open Result' : procedure ? 'Open Result Set' : 'Open Captured Statement';
       const prior = statementChoices.get(active.id);
-      const selected = captured.some(item => item.index === prior) ? prior : captured[0].index;
-      options(statement, captured.map(item => ({ value: String(item.index), label: item.label })), String(selected));
+      const selected = captured.some(item=>statementKey(item)===prior)?prior:statementKey(captured[0]);
+      options(statement,captured.map(item=>({value:statementKey(item),label:item.label})),selected);
     }
     $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('browse-tools').hidden = $('bulk-panel').hidden = true;
     if (!active) { editingCell = null; $('cell-editor').hidden = true; $('source').textContent = 'No result selected'; $('message').textContent = 'Run SQL from the editor with Ctrl+Enter.'; $('status').textContent = 'Ready'; return; }
@@ -1754,9 +1755,12 @@
   $('pin-result').onclick = () => send('setResultPin', { pinned: !current()?.tabPinned });
   $('rename-result').onclick = () => send('renameResult');
   $('script-result-selection').onchange = () => {
-    if (current()) statementChoices.set(current().id, Number($('script-result-selection').value));
+    if (current()) statementChoices.set(current().id,$('script-result-selection').value);
   };
-  $('open-script-statement').onclick = () => send('openScriptStatement', { index: Number($('script-result-selection').value) });
+  $('open-script-statement').onclick = () => {
+    const [index,resultSet]=$('script-result-selection').value.split('|').map(Number);
+    send('openScriptStatement',{index,...(resultSet!==undefined&&{resultSet})});
+  };
   function browse(page, size) { const record = current(), query = record?.result?.edit?.query; if (query) send('browseTable', { query: { ...query, page, pageSize: size ?? query.pageSize } }); }
   $('page-previous').onclick = () => browse(current().result.browse.page - 1);
   $('page-next').onclick = () => browse(current().result.browse.page + 1);
