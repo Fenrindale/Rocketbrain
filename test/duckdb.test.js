@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const path = require('node:path');
 const { openDuckDb } = require('../src/db/duckdb-cli');
 const { render } = require('../src/db/duckdb-vscode');
 const { fixture, verifyDuckDb, verifyFilePreviews, verifyExtensionCycle } = require('./duckdb-fixture');
@@ -42,7 +43,9 @@ test('native DuckDB previews a selected external CSV and typed Parquet without w
 test('native DuckDB verifies a signed extension through installation, loading, update, disable and removal',
   { skip: !process.env.ROCKETBRAIN_DUCKDB_TEST_BIN || process.env.ROCKETBRAIN_DUCKDB_EXTENSION_TEST !== '1' }, async () => {
     const result = await fixture(process.env.ROCKETBRAIN_DUCKDB_TEST_BIN, async file => {
-      const local=await openDuckDb(file.binary,file.database,{extensionDirectory:file.extensionDirectory});
+      const extensionDirectory=process.platform==='win32' && file.extensionDirectory.length < 214 ?
+        path.join(file.extensionDirectory,'nested-storage-'.padEnd(217-file.extensionDirectory.length,'x')) : file.extensionDirectory;
+      const local=await openDuckDb(file.binary,file.database,{extensionDirectory});
       return verifyExtensionCycle(local,file);
     });
     assert.equal(result.fileUnchanged,true);

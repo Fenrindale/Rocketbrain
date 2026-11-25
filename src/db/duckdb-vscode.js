@@ -68,7 +68,7 @@ function registerDuckDb(context, vscode) {
     const op = abortable(options.signal);
     try {
       const extensionDirectory = context.storageUri?.scheme === 'file' ?
-        path.join(context.storageUri.fsPath, 'duckdb-extensions') : undefined;
+        path.join(context.storageUri.fsPath, 'duckdb') : undefined;
       const result = await openDuckDb(client, database, { signal: op.controller.signal, extensionDirectory });
       trusted();
       if (generation !== expected || op.controller.signal.aborted) throw Error('The selected DuckDB file changed. Choose it again.');

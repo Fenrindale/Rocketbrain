@@ -147,11 +147,12 @@ async function openDuckDb(clientPath, databasePath, options = {}) {
   const engine = async (sql, opts) => {
     await checkClient();
     const before = await fileStamp(database);
-    const load = extensions.load();
-    const args = ['-batch', '-bail', '-no-init', '-readonly'];
-    if (!load) args.push('-safe');
-    const statement = load ? load + ' SET enable_external_access=false; SET lock_configuration=true;\n' + sql : sql;
-    const rows = await readRows(client, [...args, '-json', database], statement, opts);
+    const rows = await extensions.withLoad(load => {
+      const args = ['-batch', '-bail', '-no-init', '-readonly'];
+      if (!load) args.push('-safe');
+      const statement = load ? load + ' SET enable_external_access=false; SET lock_configuration=true;\n' + sql : sql;
+      return readRows(client, [...args, '-json', database], statement, opts);
+    });
     if (before !== await fileStamp(database)) throw fail('CHANGED', 'The DuckDB database changed during this inspection. Refresh the query or catalog.');
     return rows;
   };

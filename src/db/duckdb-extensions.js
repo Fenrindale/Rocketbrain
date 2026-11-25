@@ -2,7 +2,9 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { createWriteStream } = require('node:fs');
+const os = require('node:os');
+const { createHash, randomBytes } = require('node:crypto');
+const { createWriteStream, constants } = require('node:fs');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 
@@ -11,6 +13,7 @@ const repository = 'https://extensions.duckdb.org';
 const maxDownload = 40 * 1024 * 1024;
 const memoryArgs = ['-batch', '-bail', '-no-init', '-json', ':memory:'];
 const noAutomaticExtensions = 'SET autoload_known_extensions=false; SET autoinstall_known_extensions=false;';
+const maxBinaryBytes = 128 * 1024 * 1024;
 
 function sqlPath(file) {
   if (/[\x00-\x1f]/.test(file)) throw Error('Choose a local path without control characters.');
@@ -47,6 +50,29 @@ async function download(file, url, signal) {
     { signal: cancellation });
 }
 
+async function temporaryWorkspace(work) {
+  const root = await fs.realpath(os.tmpdir());
+  const directory = await fs.mkdtemp(path.join(root, 'rocketbrain-duckdb-'));
+  try { return await work(directory); }
+  finally {
+    if (await fs.realpath(directory) === directory && path.dirname(directory) === root) {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  }
+}
+
+async function useNativeBinary(file, use) {
+  const name = path.basename(file);
+  const checked = await checkedFile(path.dirname(file), name);
+  if (!checked || (await fs.stat(checked)).size > maxBinaryBytes) throw Error('The verified workspace DuckDB extension is unavailable.');
+  if (process.platform !== 'win32' || file.length < 200) return use(file);
+  return temporaryWorkspace(async directory => {
+    const shortPath = path.join(directory, name);
+    await fs.copyFile(checked, shortPath, constants.COPYFILE_EXCL);
+    return use(shortPath);
+  });
+}
+
 function createExtensionManager({ directory, version, read }) {
   let platform;
   let active;
@@ -64,7 +90,8 @@ function createExtensionManager({ directory, version, read }) {
     await fs.mkdir(directory, { recursive: true, mode: 0o700 });
     const root = await fs.realpath(directory);
     if (/^\\\\/.test(root)) throw Error('DuckDB extension storage must be local.');
-    const expected = path.join(root, 'v' + version + '-' + platform);
+    const bucket = createHash('sha256').update(version + ':' + platform).digest('hex').slice(0, 16);
+    const expected = path.join(root, bucket);
     await fs.mkdir(expected, { mode: 0o700 }).catch(error => { if (error.code !== 'EEXIST') throw error; });
     if (await fs.realpath(expected) !== expected) throw Error('Unexpected DuckDB extension directory.');
     return expected;
@@ -87,8 +114,7 @@ function createExtensionManager({ directory, version, read }) {
   }
 
   async function install(name, installedAt, options) {
-    const workspace = await fs.mkdtemp(path.join(installedAt, 'stage-'));
-    try {
+    return temporaryWorkspace(async workspace => {
       const archive = path.join(workspace, binary(name) + '.gz');
       await download(archive, `${repository}/v${version}/${platform}/${binary(name)}.gz`, options?.signal);
       const [verified] = await read(memoryArgs, `${noAutomaticExtensions}
@@ -98,15 +124,20 @@ function createExtensionManager({ directory, version, read }) {
       if (verified?.loaded !== true || path.resolve(verified.install_path ?? '') !== path.join(stagedParent, binary(name)) ||
           await fs.realpath(stagedParent) !== stagedParent) throw Error('DuckDB did not verify the official extension in staging.');
       const source = await checkedFile(stagedParent, binary(name));
-      if (!source) throw Error('DuckDB did not produce an installed extension.');
-      await checkedFile(installedAt, binary(name));
-      options?.signal?.throwIfAborted();
-      await fs.rename(source, path.join(installedAt, binary(name)));
-    } finally {
-      if (await fs.realpath(workspace) === workspace && path.dirname(workspace) === installedAt) {
-        await fs.rm(workspace, { recursive: true, force: true });
+      if (!source || (await fs.stat(source)).size > maxBinaryBytes) throw Error('DuckDB did not produce an extension within the installation bound.');
+      const pending = path.join(installedAt, 'new-' + randomBytes(5).toString('hex'));
+      await fs.copyFile(source, pending, constants.COPYFILE_EXCL);
+      let published = false;
+      try {
+        await checkedFile(installedAt, binary(name));
+        options?.signal?.throwIfAborted();
+        await fs.rename(pending, path.join(installedAt, binary(name)));
+        published = true;
       }
-    }
+      finally {
+        if (!published) await fs.unlink(pending);
+      }
+    });
   }
 
   async function manage(name, action, options) {
@@ -124,7 +155,8 @@ function createExtensionManager({ directory, version, read }) {
         await install(name, destination, options);
         return managed(native, true);
       } else if (action === 'enable' && file) {
-        await read(memoryArgs, `${noAutomaticExtensions} LOAD ${sqlPath(file)}; SELECT 1 AS verified`, options);
+        await useNativeBinary(file, nativeFile =>
+          read(memoryArgs, `${noAutomaticExtensions} LOAD ${sqlPath(nativeFile)}; SELECT 1 AS verified`, options));
         options?.signal?.throwIfAborted();
         active = { name, file };
       } else if (action === 'disable' && active?.name === name) {
@@ -139,7 +171,9 @@ function createExtensionManager({ directory, version, read }) {
     } finally { changing = false; }
   }
 
-  return { inventory, manage, load: () => active ? `${noAutomaticExtensions} LOAD ${sqlPath(active.file)};` : '' };
+  const withLoad = use => active ? useNativeBinary(active.file, file =>
+    use(`${noAutomaticExtensions} LOAD ${sqlPath(file)};`)) : use('');
+  return { inventory, manage, withLoad };
 }
 
 module.exports = { createExtensionManager };
