@@ -46,7 +46,8 @@ function voidMethodFixture(pkg,name,{spring=false}={}) {
     '                break;',
     '            }'
   ].join('\n');
-  const escaping='String retained = value;\n        log.add(retained);';
+  const escaping='final String retained = "constant";\n        log.add(retained);';
+  const outputs='final String clean = value.trim();\n        int length = clean.length();';
   const earlyReturn='if (value.isEmpty()) return;\n        log.add(value);';
   const text=[
     'package '+pkg+';',
@@ -71,6 +72,11 @@ function voidMethodFixture(pkg,name,{spring=false}={}) {
     '    public void early(String value) {',
     '        '+earlyReturn,
     '    }',
+    '    public String collect(String value) {',
+    '        '+outputs,
+    '        length++;',
+    '        return clean + ":" + length;',
+    '    }',
     '    public static void main(String[] args) throws IOException {',
     '        '+name+' sample = new '+name+'();',
     '        sample.append("one", null);',
@@ -79,11 +85,11 @@ function voidMethodFixture(pkg,name,{spring=false}={}) {
     '        try { sample.append("two", failure); } catch (IOException seen) {',
     '            sample.log.add(seen == failure ? "same" : "wrong");',
     '        }',
-    '        System.out.print(String.join(",", sample.log));',
+    '        System.out.print(String.join(",", sample.log) + "|" + sample.collect(" pair "));',
     '    }',
     '}',''
   ].join('\n');
-  return {text,selected,escaping,earlyReturn,outsideLoop};
+  return {text,selected,escaping,earlyReturn,outsideLoop,outputs};
 }
 
 module.exports={extractMethodFixture,voidMethodFixture};
