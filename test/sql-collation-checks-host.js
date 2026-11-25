@@ -60,13 +60,15 @@ async function verifySqlCollationChecks(runtime, adapter) {
     const boundary = await adapter.open('SELECT 1; SET NAMES latin1; ' + direct);
     assert.deepEqual(adapter.inspect(boundary), []);
     await adapter.assertVirtualDisabled?.(originalDocument);
+    await adapter.assertLiveEditorChange?.(originalDocument);
     await adapter.disconnect();
     assert.deepEqual(adapter.inspect(originalDocument), []);
     await adapter.assertDiagnostics?.(originalDocument, []);
     assert.deepEqual(await adapter.probe(), spring);
     return { liveNames: lease.collations, serverParity: cases.length, ranges: true, boundNestedColumn: true, characterCast: true,
       operatorConflict: true, vendorCollations: true, legacyAliasPreserved: true,
-      priorContextChangeAndDisconnectClear: true, userQueryExecutedByChecker: false, spring };
+      priorContextChangeAndDisconnectClear: true, nativeLiveEditorChange: Boolean(adapter.assertLiveEditorChange),
+      userQueryExecutedByChecker: false, spring };
   } finally {
     try { await actor.query('DROP TABLE IF EXISTS ' + table); }
     finally { await actor.end(); }
@@ -90,6 +92,15 @@ async function runSqlCollationChecks(api, vscode, checks) {
       await api.sqlAnalysis.useDdlPreview(document);
       assert.deepEqual(api.sqlCollations.inspect(document), []);
       assert.equal(api.sqlAnalysis.clearDdlPreview(document), true);
+    },
+    async assertLiveEditorChange(document) {
+      const diagnostics = () => vscode.languages.getDiagnostics(document.uri).filter(item => String(item.code).startsWith('sql.collation.'));
+      assert.equal(diagnostics().length, 1);
+      const start = document.getText().indexOf('latin1_swedish_ci'), edit = new vscode.WorkspaceEdit();
+      const range = new vscode.Range(document.positionAt(start), document.positionAt(start + 'latin1_swedish_ci'.length));
+      edit.replace(document.uri, range, 'utf8mb4_general_ci');
+      assert.equal(await vscode.workspace.applyEdit(edit), true);
+      assert.deepEqual(diagnostics(), []);
     },
     async probe() {
       const response = await fetch(runtime.baseUrl + '/probe/testing-state', {signal:AbortSignal.timeout(5000)});
