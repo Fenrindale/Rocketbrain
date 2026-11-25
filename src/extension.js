@@ -78,6 +78,7 @@ async function activate(context) {
   context.subscriptions.push(changelists);
   const codeReview = require('./vcs/code-review-vscode').registerCodeReview(context,vscode);
   context.subscriptions.push(codeReview);
+  const kubernetes = require('./infra/kubernetes-vscode').registerKubernetesExplorer(context, vscode);
   const java = registerJavaFeatures(context, vscode);
   const javaFx = require('./java/javafx-vscode').registerJavaFx(vscode, { java });
   java.fx = javaFx;
@@ -154,7 +155,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists, codeReview, federation };
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists, codeReview, kubernetes, federation };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

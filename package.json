@@ -36,13 +36,14 @@
     "workspaceContains:**/build.gradle.kts",
     "onView:rocketbrain.javaProjects",
     "onView:rocketbrain.connections",
+    "onView:rocketbrain.kubernetes",
     "onNotebook:rocketbrain-sql-notebook",
     "onNotebook:rocketbrain-jupyter"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path"],
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
@@ -83,6 +84,11 @@
       { "command": "rocketbrain.python.debug", "title": "Debug Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
       { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
+      { "command": "rocketbrain.kubernetes.connect", "title": "Choose Kubernetes Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
+      { "command": "rocketbrain.kubernetes.refresh", "title": "Refresh Kubernetes Resources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(refresh)" },
+      { "command": "rocketbrain.kubernetes.namespace", "title": "Choose Kubernetes Namespace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kubernetes.podLogs", "title": "Open Kubernetes Pod Logs", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(output)" },
+      { "command": "rocketbrain.kubernetes.disconnect", "title": "Close Kubernetes Explorer Session", "category": "Rocketbrain", "icon": "$(debug-disconnect)" },
       { "command": "rocketbrain.jakarta.buildWar", "title": "Build Jakarta WAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.deploy", "title": "Deploy Jakarta WAR to Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.debug", "title": "Debug Jakarta WAR on Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -881,6 +887,11 @@
         {
           "id": "rocketbrain.connections",
           "name": "Database Connections"
+        },
+        {
+          "id": "rocketbrain.kubernetes",
+          "name": "Kubernetes",
+          "visibility": "collapsed"
         }
       ],
       "rocketbrain-query-panel": [
@@ -927,6 +938,9 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.kubernetes.connect", "when": "view == rocketbrain.kubernetes", "group": "navigation@1" },
+        { "command": "rocketbrain.kubernetes.refresh", "when": "view == rocketbrain.kubernetes", "group": "navigation@2" },
+        { "command": "rocketbrain.kubernetes.disconnect", "when": "view == rocketbrain.kubernetes", "group": "navigation@3" },
         {
           "command": "rocketbrain.schema.exportDdl",
           "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1091,6 +1105,7 @@
         }
       ],
       "view/item/context": [
+        { "command": "rocketbrain.kubernetes.podLogs", "when": "view == rocketbrain.kubernetes && viewItem == rocketbrain-kube-pod", "group": "inline" },
         {
           "command": "rocketbrain.db.openObjectSource",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1376,6 +1391,14 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.kubernetes.kubectlPath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to the local kubectl executable. An empty value searches PATH."
+        },
+        "rocketbrain.kubernetes.helmPath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to the local Helm executable. An empty value searches PATH."
+        },
         "rocketbrain.jupyter.pythonPath": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Absolute path to local Python with jupyter_client and ipykernel for explicit notebook execution."
