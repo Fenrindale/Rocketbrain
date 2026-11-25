@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {fileURLToPath}=require('node:url');
 const { inspectDmlScope } = require('./sql-dml-scope');
 
-function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output}={}) {
+function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output,joinCatalog,joinLogicalRelationships}={}) {
   const collection=vscode.languages.createDiagnosticCollection('rocketbrain-sql');
   const events=new vscode.EventEmitter(),subscriptions=[collection,events];
   let metadata=catalogSnapshot?.()||null,epoch=0,request=0,disposed=false;
@@ -303,13 +303,18 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {provideCompletionItems(document,position){const scope=locate(document,position);if(!scope)return [];return engine().completionsAt(scope.model,scope.offset).map(value=>{const item=new vscode.CompletionItem(value.label,value.kind==='column'?vscode.CompletionItemKind.Field:vscode.CompletionItemKind.Struct);item.detail=metadata?.cachedMetadata&&!virtualActive(document)?'Cached metadata · '+value.detail:value.detail;item.insertText=value.insertText||value.label;return item;});}},'.'));
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {
-    provideCompletionItems(document,position) {
+    async provideCompletionItems(document,position,token) {
       if(disposed||!vscode.workspace.isTrusted||!config().get('enabled',true)||!metadata||virtualActive(document)||require('./federated-select').isFederatedDocument(document))return [];
       const text = document.getText(), offset = document.offsetAt(position), observed = options();
+      const snapshot = metadata, version = document.version, generation = epoch;
+      const current = () => !disposed && !token?.isCancellationRequested && !document.isClosed && document.version === version &&
+        epoch === generation && snapshot === metadata && vscode.workspace.isTrusted && config().get('enabled', true) && !virtualActive(document);
       const candidates = [
-        ...require('./sql-field-lists').sqlFieldLists(text, offset, metadata, observed),
-        ...require('./foreign-key-joins').foreignKeyJoins(text, offset, metadata, observed)
+        ...require('./sql-field-lists').sqlFieldLists(text, offset, snapshot, observed),
+        ...await require('./foreign-key-joins').scopedForeignKeyJoins(text, offset, snapshot,
+          { ...observed, readLogical: joinLogicalRelationships }, joinCatalog, current)
       ];
+      if (!current()) return [];
       return candidates.map(candidate=>{
         const item=new vscode.CompletionItem(candidate.label, candidate.kind
           ? vscode.CompletionItemKind.Snippet : vscode.CompletionItemKind.Reference);
@@ -319,7 +324,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
         return item;
       });
     }
-  },' '));
+  },' ','.'));
   subscriptions.push(vscode.languages.registerDefinitionProvider({language:'sql'}, {provideDefinition(document,position){const scope=locate(document,position);if(!scope)return [];return engine().definitionsAt(scope.model,scope.offset).map(value=>new vscode.Location(document.uri,new vscode.Range(document.positionAt(scope.start+value.start),document.positionAt(scope.start+value.end))));}}));
   subscriptions.push(vscode.languages.registerHoverProvider({language:'sql'}, {provideHover(document,position){const scope=locate(document,position);if(!scope)return;const value=engine().hoverAt(scope.model,scope.offset);if(!value)return;const markdown=new vscode.MarkdownString();markdown.appendText(value);if(metadata?.cachedMetadata&&!virtualActive(document))markdown.appendText('\nCached metadata captured '+metadata.cachedMetadata.capturedAt);return new vscode.Hover(markdown);}}));
   if(vscode.languages.registerRenameProvider)subscriptions.push(vscode.languages.registerRenameProvider({language:'sql'},{prepareRename,provideRenameEdits:renameDocument}));

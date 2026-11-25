@@ -8,6 +8,7 @@ const { operationOf, outcomeOf } = require('./activity-log');
 const { readMetadata, attachCheckMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
 const { readCatalogRefresh } = require('./catalog-refresh');
 const { readRelatedCatalog } = require('./related-rows');
+const { readJoinCatalog } = require('./join-catalog');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
 const { localDriverOptions } = require('./local-transport');
 const { geometryType, preserveGeometry, captureGeometry } = require('./result-map');
@@ -843,6 +844,7 @@ class MysqlService {
     return result;
   }
   relatedRowsCatalog(request) { return this._relationshipCatalog(readRelatedCatalog, request); }
+  joinCompletionCatalog(request) { return this._relationshipCatalog(readJoinCatalog, request); }
   previewTable(name, options) { return this._editor.previewTable(name, options); }
   openKeysetBrowser(name, options) { return this._editor.openKeysetBrowser(name, options); }
   readKeysetPage(id, options) { return this._editor.readKeysetPage(id, options); }

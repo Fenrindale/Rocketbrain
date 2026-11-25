@@ -322,10 +322,13 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const editor = await vscode.window.showTextDocument(document, { preview: false });
     await bind(document); return editor;
   }
-  async function relatedChoices(snapshot) {
-    const scope = scopeKey({ database: snapshot.schema }, state.profile);
+  function savedLogicalRelationships(database) {
+    const scope = scopeKey({ database }, state.profile);
     const saved = scope && context.workspaceState.get(logicalKey, []);
-    const records = Array.isArray(saved) && saved.length <= 24 ? saved.find(record => record?.identity === scope)?.value : undefined;
+    return Array.isArray(saved) && saved.length <= 24 ? saved.find(record => record?.identity === scope)?.value : undefined;
+  }
+  async function relatedChoices(snapshot) {
+    const records = savedLogicalRelationships(snapshot.schema);
     const logical = records?.length ? logicalEdges(await snapshot.db.metadata(), records) : [];
     const catalog = await snapshot.db.relatedRowsCatalog({ schema: snapshot.schema, table: snapshot.table, logical });
     snapshot.validate();
@@ -804,6 +807,12 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     },
     relationshipTargetCatalog: request => inspectRelationshipCatalog(request, 'relationshipTargetCatalog'),
     relationshipJoinCatalog: request => inspectRelationshipCatalog(request, 'relationshipJoinCatalog'),
+    joinCompletionCatalog: request => inspectRelationshipCatalog(request, 'joinCompletionCatalog'),
+    joinLogicalRelationships(catalog) {
+      if (!state.mysql || state.offlineMetadata || !vscode.workspace.isTrusted || catalog?.database !== state.profile?.database) return [];
+      const records = savedLogicalRelationships(catalog.database);
+      return records?.length ? logicalEdges(catalog, records) : [];
+    },
     sessionState: () => state.mysql && existingBinding() ? state.db.getSessionState(existingBinding().id) : null,
     sessions: () => state.mysql ? [...bindings.values()].map(binding => ({ ...state.db.getSessionState(binding.id), editorClosed: Boolean(binding.documentClosed) })) : [],
     async inspectConsoleIsolation(document = currentDocument()) {
