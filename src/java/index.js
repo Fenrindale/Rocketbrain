@@ -100,7 +100,7 @@ function registerJavaFeatures(context, vscode) {
     dispose() {
       if (!disposing) {
         disposed = true;
-        disposing = serial(async()=>{await api.workbench?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
+        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
       }
       return disposing;
     }
@@ -138,6 +138,7 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(api.move,api.memberMove,api.changeSignature,api.safeDelete);
   api.workbench=require('./workbench').registerJavaWorkbench(context,vscode,api,output);
   subscriptions.push(api.workbench);
+  api.groovy=require('./groovy-vscode').registerGroovyWorkbench(context,vscode,api);
   async function installEngine() {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before installing and starting the Java engine.');
     if (installing) throw new Error('Java engine installation is already running.');
