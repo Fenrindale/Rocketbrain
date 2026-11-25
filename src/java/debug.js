@@ -5,6 +5,7 @@ const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
 const { createExceptionControls } = require('./debug-exceptions');
 const { createSmartStep, mergeStepFilters } = require('./debug-step');
+const { createFrameRestart } = require('./debug-frames');
 const { createDebugProcessDiscovery, processId } = require('./debug-processes');
 const DEBUG_TYPE = 'rocketbrain-java';
 const PROCESS_SELECTION = '__rocketbrainJavaProcessSelection';
@@ -66,6 +67,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     hasSessions: () => [...sessions.values()].some(info => info.state !== 'terminated')
   });
   const smartStep = createSmartStep(vscode, { getState: id => sessions.get(id), ensureTrusted });
+  const frames = createFrameRestart(vscode, { getState: id => sessions.get(id), ensureTrusted });
   async function resolve(folder, value, token) {
     ensureTrusted();
     const config = { ...value, type: DEBUG_TYPE, name: value.name || 'Rocketbrain Java', request: value.request || 'launch' };
@@ -188,6 +190,7 @@ function registerJavaDebugger(vscode, api, output, request) {
   }),
   breakpointCommand('rocketbrain.java.configureExceptionBreakpoints', () => exceptions.edit()),
   breakpointCommand('rocketbrain.java.smartStepInto', () => smartStep.choose()),
+  breakpointCommand('rocketbrain.java.restartStackFrame', () => frames.choose()),
   breakpointCommand('rocketbrain.java.attachProcess', async () => {
     const candidates = await vscode.window.withProgress({
       location: vscode.ProgressLocation.Notification, title: 'Finding local Java debug processes', cancellable: true
@@ -210,7 +213,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     })),{title:'Add Java Inline Breakpoints',canPickMany:true});
     if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
-  return { breakpoints, exceptions, smartStep, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
+  return { breakpoints, exceptions, smartStep, frames, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
     getState(sessionId) {
       const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id);
       return info ? { state: info.state, threadId: info.threadId, stopVersion: info.stopVersion, resuming: info.resuming,

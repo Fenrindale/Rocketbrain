@@ -1,0 +1,5 @@
+# Java stack frames
+
+Pause a Rocketbrain Java debug session at a breakpoint. Run **Rocketbrain: Restart Java Stack Frame** and choose a method from the paused thread. The debugger drops the selected frame and its more recent frames, then stops upon entering the selected method again. Side effects that already happened, such as field updates or finalised I/O, remain. [Java debug adapter handler](https://github.com/microsoft/java-debug/blob/5c7562ade22977b15f76f46d13c098e82cc58ced/com.microsoft.java.debug.core/src/main/java/com/microsoft/java/debug/core/adapter/handler/RestartFrameHandler.java)
+
+The picker offers up to 32 frames with callers and invalidates its selection when the debuggee resumes or stops at a different location. The active JVM must support JDI frame popping. The adapter rejects the bottom frame and stack paths that cross native frames. [JDI `ThreadReference.popFrames`](https://docs.oracle.com/en/java/javase/25/docs/api/jdk.jdi/com/sun/jdi/ThreadReference.html#popFrames(com.sun.jdi.StackFrame))
