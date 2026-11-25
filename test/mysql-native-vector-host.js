@@ -9,6 +9,9 @@ const { owned } = require('./schema-stored-diff-host');
 const decimal = '9007199254740993.125000';
 const largeInteger = '18446744073709551615';
 const orderedVector = '[1.5,-2.25,0.125]';
+const utf8mb4 = '한글 🎯 café';
+const zonedTimestamp = '2025-01-15 23:59:58.123456';
+const expectedEpoch = '1736965798.123456';
 const expectedSpring = { people: 2, departments: 1, rolledBackNames: 0 };
 
 async function verifyMySqlNativeVector(adapter) {
@@ -28,9 +31,12 @@ async function verifyMySqlNativeVector(adapter) {
     await spring();
     const valueType = hasVector ? 'VECTOR(3)' : 'VARBINARY(12)';
     await actor.query('CREATE TABLE ' + table + ' (id INT PRIMARY KEY, value ' + valueType +
-      ', exact_number DECIMAL(25,6), big_number BIGINT UNSIGNED) ENGINE=InnoDB');
+      ', exact_number DECIMAL(25,6), big_number BIGINT UNSIGNED, label VARCHAR(64) CHARACTER SET utf8mb4,' +
+      ' observed_at TIMESTAMP(6)) ENGINE=InnoDB');
+    await actor.query("SET SESSION time_zone = '+05:30'");
     await actor.execute('INSERT INTO ' + table + ' VALUES (1,' + (hasVector ? 'STRING_TO_VECTOR(?)' : '?') +
-      ',?,?),(2,NULL,NULL,NULL)', [hasVector ? orderedVector : Buffer.from('001122', 'hex'), decimal, largeInteger]);
+      ',?,?,?,?),(2,NULL,NULL,NULL,NULL,NULL)', [hasVector ? orderedVector : Buffer.from('001122', 'hex'),
+      decimal, largeInteger, utf8mb4, zonedTimestamp]);
     await adapter.connect(config);
     connected = true;
     await adapter.profileTest?.(config, version);
@@ -44,10 +50,11 @@ async function verifyMySqlNativeVector(adapter) {
     assert.equal(typeof context.rows[0][1], 'string');
     assert.equal(context.rows[0][2], config.database);
 
-    const select = 'SELECT id,value,exact_number,big_number FROM ' + table;
+    const select = 'SELECT id,value,exact_number,big_number,label,CAST(UNIX_TIMESTAMP(observed_at) AS CHAR) FROM ' + table;
     const ordinary = await adapter.select(select + ' ORDER BY id');
     const prepared = await adapter.select(select + ' WHERE id >= ' + adapter.placeholder + ' ORDER BY id', true);
-    const expected = [[1, hasVector ? orderedVector : '0x001122', decimal, largeInteger], [2, null, null, null]];
+    const expected = [[1, hasVector ? orderedVector : '0x001122', decimal, largeInteger, utf8mb4, expectedEpoch],
+      [2, null, null, null, null, null]];
     for (const result of [ordinary, prepared]) {
       assert.equal(result.truncated, false);
       assert.deepEqual(result.rows, expected);
@@ -62,7 +69,8 @@ async function verifyMySqlNativeVector(adapter) {
     return {
       engine: runtime.dbEngine, serverVersion: version, mysql9NativeVector: hasVector, vectorProtocolType: hasVector ? 242 : null,
       orderedFloat32Verified: hasVector, unchangedBinaryFallback: !hasVector, textProtocolSqlNull: true,
-      preparedProtocolSqlNull: true, exactDecimalAndUnsignedBigInt: true, catalogType: column.type.toLowerCase(),
+      preparedProtocolSqlNull: true, exactDecimalAndUnsignedBigInt: true, utf8mb4AndZonedTimestamp: true,
+      catalogType: column.type.toLowerCase(), wrongPasswordRefused: Boolean(adapter.profileTest),
       sqlModeObserved: true, springJdbcUnchanged: true, nativeResultCapture: Boolean(adapter.profileTest)
     };
   } finally {
@@ -93,11 +101,13 @@ async function runMysqlNativeVectorChecks(api, vscode, checks) {
     catalog: () => api.catalogSnapshot(),
     async profileTest(config, version) {
       const { host, port, user, password, database } = config;
-      const report = await api.dbConnections.test({ profile: { name: 'Owned MySQL compatibility check', host, port, user, database,
-        tls: { mode: 'disabled' } }, password });
+      const profile = { name: 'Owned MySQL compatibility check', host, port, user, database, tls: { mode: 'disabled' } };
+      const report = await api.dbConnections.test({ profile, password });
       assert.equal(report.connected, true);
       assert.equal(report.serverVersion, version);
       assert.equal(report.database, database);
+      await assert.rejects(api.dbConnections.test({ profile, password: randomBytes(32).toString('hex') }),
+        error => error?.code === 'ER_ACCESS_DENIED_ERROR' || /access denied/i.test(error?.message ?? ''));
     },
     async select(sql, prepared) {
       const document = await vscode.workspace.openTextDocument({ language: 'sql', content: sql + ';' });
@@ -117,7 +127,7 @@ async function runMysqlNativeVectorChecks(api, vscode, checks) {
       }
     }
   });
-  checks.push('The installed profile and result capture verified the live server version, SQL mode, exact typed output and SQL NULL.');
+  checks.push('The installed profile accepted the real credentials, rejected a wrong password and verified SQL mode, utf8mb4, time zone, exact numeric output and SQL NULL.');
   if (result.mysql9NativeVector) checks.push('Native MySQL 9 VECTOR columns kept ordered float32 data in direct and prepared queries, and NULL remained null.');
   return result;
 }
