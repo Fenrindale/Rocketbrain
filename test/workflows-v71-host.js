@@ -11,7 +11,7 @@ exports.run = async (vscode = require('vscode')) => {
   const engine=process.env.ROCKETBRAIN_TEST_MYSQL_ENGINE;
   assert.ok(['mysql','mariadb'].includes(engine));
   const prefix=process.env.ROCKETBRAIN_TEST_REPORT_PREFIX || 'v0.71';
-  assert.match(prefix,/^v0\.69(?:-[a-z0-9-]+)?$/);
+  assert.match(prefix,/^v0\.71(?:-[a-z0-9-]+)?$/);
   const log=path.resolve(__dirname,'../test-output',`${prefix}-native-${engine}-progress.jsonl`);
   const mark=(group,state)=>fs.appendFileSync(log,JSON.stringify({group,state,time:new Date().toISOString()})+'\n');
   const api=await extension.activate();
