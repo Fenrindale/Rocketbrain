@@ -53,16 +53,23 @@ async function runKotlinFormattingChecks(api,vscode,checks) {
     assert.ok(rangePlan.documents[0].after.endsWith(original.slice(hard.rangeEnd)));
     const nativeRange=await vscode.commands.executeCommand('vscode.executeFormatRangeProvider',hardDoc.uri,range,options);
     assert.equal(editedText(original,nativeRange),rangePlan.documents[0].after);
-    const undo=async()=>{
-      await vscode.window.showTextDocument(hardDoc,{preview:false});
+    const undo=async stage=>{
+      await vscode.window.showTextDocument(hardDoc,{preview:false,preserveFocus:false});
+      await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+      assert.equal(vscode.window.activeTextEditor?.document,hardDoc);
       await vscode.commands.executeCommand('undo');
-      await until(()=>hardDoc.getText()===original,10000);
+      try { await until(()=>hardDoc.getText()===original,10000); }
+      catch {
+        const observed=hardDoc.getText();
+        throw Error(`Undo after ${stage} did not restore the original Kotlin buffer (EOL ${hardDoc.eol}, dirty ${hardDoc.isDirty}, `+
+          `length ${observed.length}/${original.length}, text apart from line endings ${observed.replace(/\r\n/g,'\n')===original}).`);
+      }
       assert.equal(hardDoc.eol,vscode.EndOfLine.LF);
       assert.equal(hardDoc.isDirty,false);
     };
     assert.equal((await api.java.refactoring.apply(rangePlan.id)).state,'applied');
     assert.equal(hardDoc.eol,vscode.EndOfLine.LF);
-    await undo();
+    await undo('reviewed range');
     const full=await service.prepare({document:hardDoc,options});
     assert.equal(full.formatting.configurationSources.length,2);
     assert.equal(full.formatting.endOfLine,'crlf');
@@ -75,11 +82,11 @@ async function runKotlinFormattingChecks(api,vscode,checks) {
     assert.equal(hardDoc.getText(),full.documents[0].after);
     assert.equal(hardDoc.eol,vscode.EndOfLine.CRLF);
     assert.equal(await fs.readFile(hardDoc.uri.fsPath,'utf8'),original);
-    await undo();
+    await undo('reviewed document');
     shell.selection=new vscode.Selection(0,0,0,0);
     await vscode.commands.executeCommand('editor.action.formatDocument');
     await until(()=>hardDoc.getText()===full.documents[0].after,12000);
-    await undo();
+    await undo('native document formatter');
     const stale=await service.prepare({document:hardDoc,options});
     await fs.writeFile(nestedConfig,savedNested.replace('tab_width=4','tab_width=8'));
     await assert.rejects(api.java.refactoring.apply(stale.id),/\.editorconfig files changed/);
