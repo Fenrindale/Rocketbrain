@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.91.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.92.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 131 |
-| 부분 구현 | 71 |
+| 구현 | 134 |
+| 부분 구현 | 68 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **82.6%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **83.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.91에서는 실제 클래스 파일과 JVM을 대조해 실행 환경을 선택한다. Maven·Gradle의 소스와 빌드 출력, 프로젝트 의존성을 탐색한다. JKS 서버 신뢰와 선택한 계정의 무암호 연결을 추가했다. 상태가 바뀐 항목은 4개이고 가중 점수는 176.5점에서 178.5점으로 바뀌었다.
+v0.92에서는 Java 클래스 다이어그램에서 타입과 멤버 관계를 탐색한다. Swagger 2에서 Spring MVC 서버 코드를 생성한다. Strict OOXML 통합 문서를 스트리밍으로 적재하고, 변경된 DB 서버 인증서를 검토해 재연결한다. 상태가 바뀐 항목은 3개이고 가중 점수는 178.5점에서 180점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -42,7 +42,7 @@ v0.91에서는 실제 클래스 파일과 JVM을 대조해 실행 환경을 선�
 | IDEA-019 | IntelliJ IDEA | Structure·현재 파일 기호 | 구현 |
 | IDEA-020 | IntelliJ IDEA | 정적 Data Flow to/from Here | 부분 구현 |
 | IDEA-021 | IntelliJ IDEA | 구조 검색·치환 | 구현 |
-| IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 부분 구현 |
+| IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 구현 |
 | IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 부분 구현 |
 | IDEA-024 | IntelliJ IDEA | 기호·패키지 이름 변경 | 부분 구현 |
 | IDEA-025 | IntelliJ IDEA | 변수·상수·필드 추출 | 구현 |
@@ -123,7 +123,7 @@ v0.91에서는 실제 클래스 파일과 JVM을 대조해 실행 환경을 선�
 | IDEA-100 | IntelliJ IDEA | Kubernetes·Helm·클러스터 탐색 | 부분 구현 |
 | IDEA-101 | IntelliJ IDEA | 내장 터미널·셸·세션 | VS Code 재사용 |
 | IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 부분 구현 |
-| IDEA-103 | IntelliJ IDEA | OpenAPI·Swagger 편집·미리보기·코드 생성 | 부분 구현 |
+| IDEA-103 | IntelliJ IDEA | OpenAPI·Swagger 편집·미리보기·코드 생성 | 구현 |
 | IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 구현 |
 | IDEA-105 | IntelliJ IDEA | IDE 안의 DB 연결·SQL·데이터 편집 | 부분 구현 |
 | IDEA-106 | IntelliJ IDEA | JavaScript·TypeScript·Node/브라우저 디버그 | VS Code 재사용 |
@@ -148,7 +148,7 @@ v0.91에서는 실제 클래스 파일과 JVM을 대조해 실행 환경을 선�
 | DG-005 | DataGrip | 드라이버 버전 교체·추가 라이브러리 | 구현 |
 | DG-006 | DataGrip | 사용자·비밀번호·무인증 모드 | 구현 |
 | DG-007 | DataGrip | 비밀정보 저장·저장하지 않기 | 부분 구현 |
-| DG-008 | DataGrip | TLS CA·호스트 검증 | 부분 구현 |
+| DG-008 | DataGrip | TLS CA·호스트 검증 | 구현 |
 | DG-009 | DataGrip | 클라이언트 인증서·truststore | 구현 |
 | DG-010 | DataGrip | SSH 터널·키·agent 인증 | 부분 구현 |
 | DG-011 | DataGrip | Unix socket·Windows named pipe | 구현 |

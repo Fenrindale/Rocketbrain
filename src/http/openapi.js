@@ -1,6 +1,7 @@
 'use strict';
 
 const {schemaDescriptions}=require('./openapi-schema-shapes');
+const { legacyParameterLists, jsonMedia, swaggerBasePath, swaggerServers } = require('./openapi-swagger');
 
 const methods=['get','head','post','put','patch','delete','options'];
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
@@ -125,7 +126,7 @@ function referenceResolver(document,sourceId,bytes,loadReference) {
   return resolve;
 }
 
-function params(resolve,frame,inputs) {
+function params(resolve,frame,inputs,legacy=false) {
   if (inputs===undefined) return [];
   if (!Array.isArray(inputs)||inputs.length>40) throw Error('This entry has more than 40 parameters or an invalid parameter list.');
   const names=new Set();
@@ -138,7 +139,7 @@ function params(resolve,frame,inputs) {
     if (names.has(key)) throw Error('This parameter is duplicated.');
     names.add(key);
     if (item.in==='path'&&item.required!==true) throw Error('Path parameters require required:true.');
-    const schema=object(item.schema)?resolve(item.schema,itemFrame,{schema:true}).value:undefined;
+    const schema=legacy?item:object(item.schema)?resolve(item.schema,itemFrame,{schema:true}).value:undefined;
     const type=typeof schema?.type==='string'?schema.type:Array.isArray(schema?.type)&&
       schema.type.length<=8&&schema.type.every(value=>typeof value==='string')?schema.type.join(' | '):'unspecified';
     return {key,name:item.name,in:item.in,required:item.required===true,type,
@@ -156,8 +157,10 @@ function serverUrls(input) {
 
 function analyzeOpenApi(text,{format='json',sourceId='entry',loadReference}={}) {
   const {value:document,ranges}=parseDescription(text,format);
-  if (!object(document)||!/^3\.[01]\.\d+$/.test(document.openapi)||!object(document.info)||!object(document.paths)) {
-    throw Error('Use an OpenAPI 3.0 or 3.1 description with info and paths.');
+  const legacy=document?.swagger==='2.0'&&!owns(document,'openapi');
+  if (!object(document)||!legacy&&(!/^3\.[01]\.\d+$/.test(document.openapi)||owns(document,'swagger'))||
+      !object(document.info)||!object(document.paths)) {
+    throw Error('Use a Swagger 2.0 or OpenAPI 3.0 or 3.1 description with info and paths.');
   }
   const resolve=referenceResolver(document,sourceId,Buffer.byteLength(text),loadReference);
   const describe=schemaDescriptions(resolve);
@@ -190,15 +193,16 @@ function analyzeOpenApi(text,{format='json',sourceId='entry',loadReference}={}) 
         if (!object(entry)||!object(entry.responses)) throw Error('An operation requires a responses mapping.');
         const id=typeof entry.operationId==='string'?entry.operationId.slice(0,120):null;
         if (id && ids.has(id)) throw Error('The operationId is duplicated.');
-        const parameters=new Map(params(resolve,frame,pathItem.parameters).map(item=>[item.key,item]));
-        for (const item of params(resolve,frame,entry.parameters)) parameters.set(item.key,item);
+        const swagger=legacy?legacyParameterLists(resolve,frame,pathItem.parameters,entry.parameters,entry.consumes??document.consumes):null;
+        const parameters=new Map(params(resolve,frame,legacy?swagger.pathParameters:pathItem.parameters,legacy).map(item=>[item.key,item]));
+        for (const item of params(resolve,frame,legacy?swagger.operationParameters:entry.parameters,legacy)) parameters.set(item.key,item);
         const pathParams=[...path.matchAll(/\{([^{}]+)\}/g)].map(match=>match[1]);
         if (/[{}]/.test(path.replace(/\{[^{}]+\}/g,'')) ||
             pathParams.some(name=>!parameters.has('path:'+name)) ||
             [...parameters.values()].some(item=>item.in==='path'&&!pathParams.includes(item.name))) {
           throw Error('Every path placeholder must have the corresponding required parameter.');
         }
-        const request=entry.requestBody===undefined?null:resolve(entry.requestBody,frame);
+        const request=legacy?swagger.request:entry.requestBody===undefined?null:resolve(entry.requestBody,frame);
         const body=request?.value;
         const jsonBody=body?.content?.['application/json'];
         let example=jsonBody?.example;
@@ -212,19 +216,21 @@ function analyzeOpenApi(text,{format='json',sourceId='entry',loadReference}={}) 
             }
           } catch (error) { diagnose(path,error.message,method); }
         }
-        const statuses=Object.keys(entry.responses).filter(key=>/^[1-5](?:\d\d|XX)$/.test(key)||key==='default');
+        const statusPattern=legacy?/^[1-5]\d\d$/:/^[1-5](?:\d\d|XX)$/;
+        const statuses=Object.keys(entry.responses).filter(key=>statusPattern.test(key)||key==='default');
         if (!statuses.length) throw Error('The operation must declare at least one response status.');
-        const responseBodies=[];
+        const responseBodies=[], swaggerJson=legacy&&jsonMedia(entry.produces??document.produces);
         for (const status of statuses.slice(0,12)) {
           try {
             const response=resolve(entry.responses[status],frame);
-            const schema=response.value.content?.['application/json']?.schema;
+            const schema=legacy?(swaggerJson?response.value.schema:undefined):response.value.content?.['application/json']?.schema;
             if (schema!==undefined) responseBodies.push({status,schema:describe(schema,response.frame)});
           } catch (error) { diagnose(path,error.message,method); }
         }
         operations.push({key:method.toUpperCase()+' '+path,method:method.toUpperCase(),path,id,
           summary:typeof entry.summary==='string'?entry.summary.slice(0,180):'',
-          parameters:[...parameters.values()],statuses,servers:serverUrls(entry.servers ?? pathItem.servers ?? document.servers),
+          parameters:[...parameters.values()],statuses,servers:legacy?swaggerServers(document,entry):serverUrls(entry.servers ?? pathItem.servers ?? document.servers),
+          ...(legacy&&{basePath:swaggerBasePath(document)}),
           requestBody:body?{required:body.required===true,json:object(jsonBody),example,...(requestSchema&&{schema:requestSchema})}:null,
           ...(responseBodies.length&&{responseBodies}),
           security:(entry.security ?? document.security)?.length>0 });
@@ -237,7 +243,7 @@ function analyzeOpenApi(text,{format='json',sourceId='entry',loadReference}={}) 
     }
   }
   const title=typeof document.info.title==='string'?document.info.title.trim().slice(0,120):'OpenAPI';
-  return {version:document.openapi,title,operations,diagnostics};
+  return {version:legacy?document.swagger:document.openapi,title,operations,diagnostics};
 }
 
 function requestTemplate(operation, baseVariable='baseUrl') {

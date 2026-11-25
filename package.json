@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.91.0",
+  "version": "0.92.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -333,6 +333,7 @@
       { "command": "rocketbrain.openapi.inspect", "title": "Inspect OpenAPI Description", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
       { "command": "rocketbrain.openapi.createRequest", "title": "Create HTTP Request from OpenAPI", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
       { "command": "rocketbrain.openapi.createJavaClient", "title": "Create Java Client from OpenAPI", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
+      { "command": "rocketbrain.openapi.createSpringServer", "title": "Create Spring MVC Controller from OpenAPI", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
       { "command": "rocketbrain.schema.diagram", "title": "Open Schema Diagram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.schema.logicalAcrossSchemas", "title": "Manage Cross-Schema Logical Relationships", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.schema.exportDdl", "title": "Save Schema DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -1132,6 +1133,12 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.connections.reviewTlsTrust",
+        "title": "Review Database TLS Trust and Reconnect",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.connections.test",
         "title": "Test Database Connection",
         "category": "Rocketbrain"
@@ -1647,6 +1654,11 @@
           "command": "rocketbrain.connections.closeSession",
           "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionSession && isWorkspaceTrusted",
           "group": "connection@3"
+        },
+        {
+          "command": "rocketbrain.connections.reviewTlsTrust",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile && isWorkspaceTrusted",
+          "group": "navigation@6"
         },
         {
           "command": "rocketbrain.connections.test",

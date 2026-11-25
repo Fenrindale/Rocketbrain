@@ -1,5 +1,5 @@
 {
-  "version": "0.91.0",
+  "version": "0.92.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 131,
-    "partial": 71,
+    "implemented": 134,
+    "partial": 68,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 82.6,
+    "percent": 83.3,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-002",
-    "IDEA-042",
-    "DG-006",
-    "DG-009"
+    "IDEA-022",
+    "IDEA-103",
+    "DG-008",
+    "DG-072"
   ],
   "expandedFeatures": [
-    "IDEA-002",
-    "IDEA-042",
-    "DG-006",
-    "DG-009"
+    "IDEA-022",
+    "IDEA-103",
+    "DG-008",
+    "DG-072"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -101,8 +101,8 @@
       "verification": {
         "state": "v0.91-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.91.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -666,27 +666,23 @@
       "category": "탐색·구조 분석",
       "feature": "소스 연동 UML 클래스 다이어그램",
       "priority": "P2",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "실제 Java 컴파일러 소스 모델에서 상속·구현·중첩 관계 다이어그램을 열고 타입·멤버 원본으로 이동한다. 초점, 확대, 외부 타입 표시와 Mermaid 내보내기를 지원한다.",
-      "remaining": [
-        "다이어그램을 통한 원본 구조 편집, 임의 연관관계와 프로젝트 간 전체 모델을 확장한다."
-      ],
+      "scope": "선택한 패키지의 상속·구현·의존·필드 연관 관계와 원본 소스 위치를 다이어그램과 Mermaid로 제공한다. 소스 변경 이후 다시 계산한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.33-installed-coverage",
+        "state": "v0.92-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.33.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring 프로젝트의 타입·상속·구현과 중첩 선언을 읽고 네이티브 패널에서 원본을 열었다. Mermaid 저장과 기존 파일 보존을 확인했다.",
+        "testedScope": "설치판에서 Spring JdbcTemplate 메서드 관계와 필드 연관을 표현하고 다른 Date 타입으로 바꾼 뒤 오래된 탐색을 거부하고 재계산해 소스를 열었다.",
         "publicEvidence": [
-          "src/java/source-analysis-model.js",
-          "src/java/source-analysis-vscode.js",
           "src/java/source-diagram-view.js",
-          "test/java-source-analysis-host.js"
+          "test/java-diagram-relationships-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1313,8 +1309,8 @@
       "verification": {
         "state": "v0.91-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.91.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3109,25 +3105,23 @@
       "category": "웹·API·데이터 도구",
       "feature": "OpenAPI·Swagger 편집·미리보기·코드 생성",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "OpenAPI 3.0·3.1 YAML·JSON의 로컬 참조, HTTP 요청, Java 클라이언트와 복합 스키마의 미리보기를 지원한다. 중첩 및 재귀 구조, allOf·oneOf·anyOf, null 예제를 구별한다.",
-      "remaining": [
-        "Swagger 2 처리와 서버 스텁 생성, 추가 대상 언어 생성이 남아 있다."
-      ],
+      "scope": "Swagger 2 및 OpenAPI 3.0·3.1 계약을 분석해 편집 진단·작업 미리보기·요청 초안·Java 클라이언트·Spring MVC 서버 스텁을 제공한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.88-installed-coverage",
+        "state": "v0.92-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.88.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring 응답의 중첩 자료와 복합 스키마 템플릿을 설치판에서 대조했다. 모델의 합성·재귀·null 예제가 정확하게 열리는 것을 확인했다.",
+        "testedScope": "Swagger 2에서 생성한 정확한 Spring 컨트롤러를 실제 Spring MVC에서 컴파일·실행했다. 기본 경로, 요청 필수 헤더의 400 응답과 JSON 입력, 실제 JDBC 조회를 검증했다.",
         "publicEvidence": [
-          "src/http/openapi-schema-shapes.js",
-          "test/openapi-schemas-host.js"
+          "src/http/openapi.js",
+          "test/swagger-spring-server-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3812,8 +3806,8 @@
       "verification": {
         "state": "v0.91-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.91.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3857,24 +3851,24 @@
       "category": "연결·드라이버",
       "feature": "TLS CA·호스트 검증",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "CA와 인증서 DNS 이름 검증을 유지하는 TLS 설정을 연결 폼에서 관리한다. 숫자 주소는 인증서의 DNS 이름을 별도로 지정하며 검증 우회는 허용하지 않는다.",
-      "remaining": [
-        "TLS1.2이상·PEM2MiB 한도다. 만료/회전·모든 사설 체인/플랫폼 조합은 별도 검증이 남는다.",
-        "실제 TLS 보안 전송 시험과 네이티브 연결 폼의 일반 접속 시험을 구분한다."
-      ],
+      "scope": "MySQL·MariaDB의 서버 TLS 호스트와 실측 인증서 유효성을 검증하고, CA·인증서가 바뀌면 새 검토 후 해당 피어로 재연결한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.92-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 MySQL/MariaDB의 제품 드라이버 SQL에서 올바른 CA/DNS와 잘못된 CA/DNS 거부를 확인한다. 네이티브 profile helper 자체의 TLS/SSH 접속은 미시험이다.",
-        "publicEvidence": [],
+        "testedScope": "실제 만료 인증서, 틀린 호스트와 CA를 거부했다. 동일 경로 CA 교체를 검토한 후 바뀐 신뢰 파일·다른 정상 피어·승인 재사용을 거부하고 승인한 피어에 재연결했다.",
+        "publicEvidence": [
+          "src/db/server-tls-trust.js",
+          "test/server-tls-trust-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -3892,8 +3886,8 @@
       "verification": {
         "state": "v0.91-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.91.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5770,33 +5764,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 CSV/TSV·XLSX의500행 삽입 초안에 더해 로컬 CSV/TSV·선택 XLSX 시트를 순차로 읽어 열 매핑·타입·파일·스키마를 검토하고 전용 InnoDB 거래에서 배치 삽입한다. 읽기·메타데이터·행큐·배치 한도로 버퍼를 제한하며, 완료 뒤 사용자가 Commit/Roll Back을 선택한다. 오류·취소·대기 만료는 확인된 전체 배치를 롤백하고 커밋 응답 유실은 미확정으로 표시한다.",
+      "scope": "CSV·TSV 및 일반과 Strict XLSX의 시트·열 매핑과 명시적 타입을 선택해 트랜잭션 스트리밍 가져오기를 수행한다.",
       "remaining": [
-        "파일1GiB·ZIP 해제 선언4GiB·시트2GiB·100만 행·200열, 메타데이터 부분별8MiB/20만XML노드·공유문자열2만 개·100시트·1024항목 한도다. 행큐4096행/2MiB·셀128KiB·행1MiB·배치100행/1MiB·읽기16KiB, 검토10분·실행30분·문장15초·완료 후5분 자동 롤백으로 제한한다. 전체 프로세스RSS나 DB로그/잠금 메모리를 보장하지 않는다.",
-        "XLS·strict OOXML·병합/복잡한 시트 메타데이터·다른 문자 인코딩·병렬 입력·중단 위치 재개는 남는다. 저장된 숫자 정밀도와 기존1900/1904 날짜·NULL/빈 텍스트·명시적 수식 캐시 정책을 유지하되 수식 계산·캐시 최신성·이미 반올림된 숫자 복원은 제공하지 않는다."
+        "중복키 처리 정책 선택, 추가 텍스트 인코딩과 레거시 Excel 파일 형식이 남는다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.92-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 기존 입력 한도를 넘는 실제 소유 CSV/TSV·XLSX 파일과 실제 Spring/양DB에서 행·배치 수, 저장 값·NULL/수식 정책, 검토 중 무실행, 커밋 전 외부 비가시성, 명시적 커밋/전체 롤백, 오류·취소·오래된 파일/스키마·기존 거래 차단과 메모리 한도를 검사한다. 제어한 파일 선택/화면과 네이티브 적용 API의 검증 범위를 구분한다.",
+        "testedScope": "두 DB에서 Strict XLSX에 포함된 1,201행을 13배치로 실행했다. 고정소수점·큰 정수·시각·문자열·NULL을 비교하고, 승인 전 가시성·명시적 취소·200행 처리 후 롤백·변경 원본 거부를 검증했다.",
         "publicEvidence": [
           "src/db/import-stream-source.js",
-          "src/db/import-stream.js",
-          "src/db/import-stream-vscode.js",
-          "src/db/grid-xlsx.js",
-          "src/table-editor.js",
-          "src/results.js",
-          "src/ui/results.js",
-          "src/database-workbench.js",
-          "test/import-stream-vscode.test.js",
-          "test/import-stream.integration.test.js",
-          "test/import-stream-source.test.js",
-          "test/stream-import-host.js"
+          "test/strict-xlsx-import-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6522,8 +6505,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "d10e3af7e72ce47e512df1f6717e03efb48afec8cf44e9aa904741cd1f3f36ef",
-    "sourceManifestSha256": "df84ebd5bf35b8e332b9f28033f69340583101ccbe1efe8d61b23cc83c0eb679",
+    "vsixSha256": "a6160fbeff39f65f3544d45068986e8c2f0175de781ce377ea18b432831ecd08",
+    "sourceManifestSha256": "407677c62554f7d65171ee3815e55361dae65335bdc3987f36c4951cad46eb45",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6537,33 +6520,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-002",
+      "id": "IDEA-022",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-042",
+      "id": "IDEA-103",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-006",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-009",
+      "id": "DG-008",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1817,
-    "pass": 1679,
+    "tests": 1828,
+    "pass": 1687,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 138,
+    "skipped": 141,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

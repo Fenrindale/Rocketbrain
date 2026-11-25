@@ -222,6 +222,23 @@ function registerConnectionProfiles(context,vscode,{database}){
   });
  });
  command('rocketbrain.connections.test',async value=>{trusted();const r=await choose(value);if(!r)return;const credentials=await pass(r);if(!credentials)return;const result=await manager.test({profile:r.profile,...credentials});await vscode.window.showInformationMessage('Verified '+result.database+' · '+result.serverVersion+(result.tls?' · TLS':'')+(result.transport?' · '+transportLabel(result.transport):''));return result;});
+ command('rocketbrain.connections.reviewTlsTrust',async value=>{
+  trusted();const row=await choose(value);if(!row)return;
+  const credentials=await pass(row);if(!credentials)return;
+  const request={id:row.id,revision:row.revision,...credentials};
+  const review=await manager.reviewTlsTrust(request);
+  const describe=evidence=>['DNS name '+evidence.hostname,'Server SHA-256 '+evidence.leafSha256,
+   'Issuer SHA-256 '+(evidence.issuerSha256||'unavailable'),'Loaded CA SHA-256 '+(evidence.caMaterialSha256||'system trust'),
+   'Valid from '+evidence.notBefore,'Expires '+evidence.notAfter,evidence.protocol].join('\n');
+  const detail=[review.previous?'Last saved observation\n'+describe(review.previous):'No earlier verified TLS observation is saved.',
+   'Verified now\n'+describe(review.current),review.hasBaseline?(review.changes.length?
+    'Changed '+review.changes.join(', '):'No changes observed.'):'This reconnect will record the first verified observation.'].join('\n\n');
+  const approval='Reconnect With This TLS Identity';
+  if(await vscode.window.showInformationMessage('Review TLS trust for '+review.profile,{modal:true,detail},approval)!==approval)return;
+  const result=await manager.reconnectReviewedTlsTrust({...request,reviewId:review.reviewId,approved:true});
+  if(!result.observationSaved)void vscode.window.showWarningMessage('Connected with reviewed TLS. The new observation could not be saved.');
+  return result;
+ });
  command('rocketbrain.connections.disconnect',()=>manager.disconnect());
  command('rocketbrain.connections.selectSchema',async value=>{trusted();const r=await choose(value);if(!r)return;const credentials=await pass(r);if(!credentials)return;const schemas=await manager.schemas({id:r.id,...credentials}),database=await vscode.window.showQuickPick(schemas,{title:'Select schema for this connection'});if(database)return manager.connect({id:r.id,...credentials,database});});
  command('rocketbrain.connections.remove',async value=>{trusted();const r=await choose(value);if(!r)return;if(await vscode.window.showWarningMessage('Remove '+r.profile.name+' and its saved password? An active connection will be disconnected.',{modal:true},'Remove connection')!=='Remove connection')return;return manager.remove({id:r.id,expectedRevision:r.revision,disconnect:true});});

@@ -66,7 +66,7 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 9. **Insert Java Live Template**과 `rocketbrain.java.liveTemplates`에서 Java 스니펫을 사용합니다. **Generate Java Members**에서 선택한 필드의 생성자·접근자·`equals`와 `hashCode` 또는 위임 메서드를 미리 보고 적용합니다.
 10. **Record JVM Profile**, **Capture JVM Threads**, **Inspect JVM Heap Histogram**에서 로컬 JVM을 직접 선택합니다. 저장한 JFR과 스레드 스냅샷도 다시 열 수 있습니다. 일부 Windows JDK에서 JFR이 빈 파일을 보고하면, 대상 JVM을 쓰기 가능한 ASCII 경로의 JFR 저장소로 시작한 뒤 다시 녹화합니다. **Inspect JVM Heap Dump**는 로컬 HotSpot HPROF에서 객체와 수명 유지 경로를 탐색합니다. [JVM 힙 덤프 분석](docs/java-heap-dump.md)
 11. **Run Java Inspection Profile**은 선택한 Java 소스 범위와 검사별 심각도를 VS Code Problems에 적용합니다. **Find Duplicate Java Code**는 정확한 토큰 일치 또는 리터럴을 무시한 후보를 표시하고 원본 범위를 엽니다. 사용자 프로필은 `rocketbrain.java.inspectionProfiles`에 저장합니다.
-12. **Show Java Class Diagram**은 Javac가 확인한 상속·구현·중첩 타입 관계와 소스 링크를 표시하고 Mermaid로 내보냅니다. **Trace Java Local Value**는 직선형 메서드에서 지역값의 정의와 사용 범위를 연결합니다. 구조 편집, 분기 병합, 객체의 공유 참조와 메서드 간 흐름은 지원 범위 밖입니다.
+12. **Show Java Class Diagram**은 Javac가 확인한 상속·구현·중첩 타입, 필드 연관, 메서드 의존 관계를 표시합니다. **Relationship source links**에서 타입이나 호출 위치를 열고, 소스를 저장한 뒤 **Refresh**로 관계를 갱신할 수 있습니다. 현재 관계 필터를 Mermaid로 내보낼 수 있습니다. **Trace Java Local Value**는 직선형 메서드에서 지역값의 정의와 사용 범위를 연결합니다.
 13. **Search or Replace Java Structure**는 Java 파일이나 프로젝트에서 Javac AST 패턴을 찾습니다. `$name$`으로 식을 캡처하고 타입 제약을 지정합니다. 치환할 결과를 선택해 변경 내역을 검토하면 적용 전에 Javac로 새 소스를 검사합니다.
 14. **Extract Java Interface**는 선택한 Java 클래스의 메서드로 같은 패키지에 인터페이스를 만듭니다. `rocketbrain.java.extractInterface.replaceUsages`를 켜면 호환되는 사용처 변경도 검토할 수 있습니다. 새 파일과 기존 소스 변경을 컴파일 검사와 diff에서 확인합니다.
 15. **Show Spring Bean Dependency Graph**는 선택된 주입, 모호한 후보, 지연 조회를 구분합니다. 선택한 Bean의 의존 관계와 순환, 선언·주입 소스를 탐색합니다. **Open Spring Actuator Health**는 연결한 실행 앱이 공개한 상태, 그룹과 구성 요소를 확인합니다.
@@ -193,9 +193,11 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 GET {{host}}/actuator/health
 ```
 
-응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI Description**은 OpenAPI 3.0·3.1 JSON과 YAML에서 작업을 확인합니다. 신뢰한 작업 공간에서 상대 경로로 연결한 JSON·YAML 경로 항목, 매개변수, 요청 본문과 단순 스키마 참조를 읽습니다. **Create HTTP Request from OpenAPI**로 요청 초안을 만들고, 환경과 매개변수를 채운 뒤 실행합니다. [OpenAPI 설명 상대 참조](https://spec.openapis.org/oas/v3.1.1.html#relative-references-in-api-description-uris)
+응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI Description**은 Swagger 2.0과 OpenAPI 3.0·3.1의 JSON·YAML 작업을 읽습니다. 신뢰한 작업 공간에서 상대 경로로 연결한 경로 항목, 매개변수, 요청 본문과 스키마를 확인합니다. **Create HTTP Request from OpenAPI**로 요청 초안을 만들고, 환경과 매개변수를 채운 뒤 실행합니다. [OpenAPI 설명 상대 참조](https://spec.openapis.org/oas/v3.1.1.html#relative-references-in-api-description-uris)
 
 **Create Java Client from OpenAPI**로 선택한 작업을 Java 11 이상에서 쓸 수 있는 편집 가능한 클라이언트로 생성합니다. 기본 직렬화의 경로·쿼리·헤더·쿠키 값과 JSON 요청 본문을 지원합니다. 호출자가 서비스 주소와 인증 헤더를 전달하고, 응답은 상태·헤더와 원본 바이트를 제공합니다.
+
+**Create Spring MVC Controller from OpenAPI**는 단순 경로와 스칼라 매개변수, JSON 본문을 연결하는 컨트롤러와 `Handler` 인터페이스를 편집 가능한 Java 문서로 생성합니다. 애플리케이션에서 `Handler`를 구현합니다. Swagger 2.0의 `basePath`를 반영하며, 문서가 별도 인증을 요구하는 작업은 생성 전에 표시합니다.
 
 OpenAPI 작업 미리보기는 JSON 요청·응답의 중첩 필드, 필수 항목, 배열, 재귀 참조 및 `allOf`·`oneOf`·`anyOf` 구조를 표시합니다. 서로 호환되는 객체 `allOf`는 필드를 합쳐 볼 수 있습니다. HTTP 초안은 문서에 명시된 본문 예제를 사용합니다.
 
@@ -357,6 +359,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - SQL 표현식에서는 현재 범위의 별칭과 열을 약어로 찾을 수 있습니다. 예를 들어 `p.dn`으로 `p.display_name`을 완성합니다. 활성 MySQL·MariaDB의 버전과 SQL 모드에 맞는 내장 함수 템플릿을 삽입하고 괄호 안의 현재 인수를 표시합니다. 지원하는 구문은 [MySQL 함수 참조](https://dev.mysql.com/doc/refman/8.4/en/built-in-function-reference.html)와 [MariaDB 함수 참조](https://mariadb.com/docs/server/reference/sql-functions/function-and-operator-reference)를 따릅니다.
 - 일반 SQL 편집기에서 스크립트에 선언한 열과 InnoDB 보조 인덱스의 변화를 뒤 문장의 자동 완성과 진단에 반영합니다. 열 추가·이름 변경·삭제와 단순 인덱스 추가·이름 변경·삭제를 지원합니다. 모델을 적용할 때 DB에 DDL을 보내지 않습니다. SQL 모드 변경이나 모델링 범위 밖의 문장이 나타나면 이후 문장의 이름 추론을 중단합니다. [MySQL ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html), [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
+- **Review and Stream a Large Data Import**에서 일반 XLSX와 Strict OOXML XLSX의 워크시트를 선택해 가져옵니다. 검토 문서에 형식을 표시하고 공유 문자열, 저장된 숫자 정밀도, 날짜, NULL과 빈 텍스트를 읽습니다. 선택한 열을 검토하고, 수식은 명시적으로 선택한 저장 결과를 사용합니다. 전송 후 같은 트랜잭션에서 커밋하거나 롤백합니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
 - **Open Consistent Table Snapshot**은 기본 키가 있는 InnoDB 테이블을 별도 읽기 전용 트랜잭션에서 엽니다. 다음·이전 페이지는 정렬 값과 기본 키를 기준으로 서버에서 읽습니다. 탭을 닫으면 스냅샷 연결이 해제됩니다.
 - 이 결과 그리드에서 **Continuous scroll**을 켜면 위·아래로 이동할 때 인접 페이지를 읽습니다. 최근 페이지를 최대 4개, 합계 1,000행과 4 MiB 범위로 보관하며 단일 페이지는 기존 결과 한도를 따릅니다. 복사와 내보내기는 현재 보관한 행을 사용합니다. `ENUM`은 서버 멤버 순서로, `SET`은 각 엔진의 64비트 정렬 순서로 비교하며 셀에는 원래 값이 표시됩니다.
@@ -423,3 +426,5 @@ The supported path covers unlocked, unexpired accounts with one password method.
 For supported MySQL and MariaDB joined mutations, SQL completion resolves SET targets, value and filter columns, and explicit DELETE target aliases using the visible catalog. Qualify a shared column by its exact alias. Suggestions for assignment targets omit generated and auto-increment columns and keep read columns available. Completion only inspects metadata. The server checks statement validity and write permissions when you run the SQL.
 
 For a named MySQL or MariaDB profile, choose **No password** only when the server already allows that database user to connect without a password. Verify and save the profile to remove any previously saved password. Rocketbrain checks which account the server authenticated, and a portable export retains the mode without credentials. TLS and SSH settings still apply.
+
+Use **Review Database TLS Trust and Reconnect** on a saved MySQL or MariaDB profile with verified TLS. Compare the last saved TLS observation with the current certificate, issuer, expiry and loaded CA material. Approve to reconnect with that exact observed certificate. A changed certificate or CA file requires a fresh review.
