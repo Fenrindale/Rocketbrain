@@ -5,6 +5,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { inspectionProfiles,inspectionProfile } = require('./inspection-profiles');
 const { inspectSources } = require('./inspection-analysis');
+const { registerQualityReport } = require('./quality-gate-vscode');
 const { inside } = require('./workbench-model');
 
 const COMMANDS = Object.freeze({
@@ -38,6 +39,7 @@ async function readSource(uri) {
 }
 
 function registerJavaInspections(_context,vscode) {
+  const quality=registerQualityReport(vscode);
   const diagnostics = vscode.languages.createDiagnosticCollection('rocketbrain-java-inspections');
   const active = new Set();
   const compiledReports = new WeakMap();
@@ -280,10 +282,11 @@ function registerJavaInspections(_context,vscode) {
     })
   ];
   return {
-    scan:schedule,reveal,clear,
+    scan:schedule,reveal,clear,quality,
     dispose() {
       if (disposal) return disposal;
       disposed = true;
+      quality.dispose();
       for (const item of [...commands,...listeners]) item.dispose();
       diagnostics.dispose();
       disposal = Promise.allSettled(active).then(() => {});

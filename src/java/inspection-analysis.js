@@ -70,14 +70,17 @@ function suppressions(source,tokens,range) {
   return (rule,line) => ignoredFile.has(rule) || ignoredLines.get(line)?.has(rule);
 }
 
-function javaIssues(file,profile,tokens,pairs,range) {
+function javaIssues(file,profile,tokens,pairs,range,includeAnchors) {
   const { text,uri } = file;
   const suppressed = suppressions(text,tokens,range), issues = [], imports = new Set();
-  function report(id, start, end) {
+  function report(id, first, last) {
     const severity = profile.rules[id];
-    const selection = range(start,end);
+    const selection = range(tokens[first].start,tokens[last].end);
     if (severity !== 'off' && !suppressed(id,selection.start.line)) {
-      issues.push({ id,uri,severity,message:RULES[id].label,range:selection });
+      const issue={ id,uri,severity,message:RULES[id].label,range:selection };
+      if (includeAnchors) issue.anchor=[first-Math.max(0,first-6),last-first+1,
+        ...tokens.slice(Math.max(0,first-6),last+7).map(token=>[token.kind,token.text])];
+      issues.push(issue);
     }
   }
   for (const [index,token] of tokens.entries()) {
@@ -89,7 +92,7 @@ function javaIssues(file,profile,tokens,pairs,range) {
       const between = tokens.slice(index + 1,last);
       if (last === tokens.length || !between.length || between.some(item => item.kind !== 'id' && !['.','*'].includes(item.text))) continue;
       const identity = between.map(item => item.text).join(' ');
-      if (imports.has(identity)) report('duplicateImport',token.start,tokens[last].end);
+      if (imports.has(identity)) report('duplicateImport',index,last);
       imports.add(identity);
     } else if (token.text === 'catch' || token.text === 'finally') {
       const isCatch = token.text === 'catch';
@@ -97,12 +100,12 @@ function javaIssues(file,profile,tokens,pairs,range) {
       const open = tokens[after + 1], close = tokens[after + 2];
       if ((!isCatch || next?.text === '(') && open?.text === '{' && close?.text === '}' &&
           !text.slice(open.end,close.start).trim()) {
-        report(isCatch ? 'emptyCatch' : 'emptyFinally',token.start,close.end);
+        report(isCatch ? 'emptyCatch' : 'emptyFinally',index,after+2);
       }
     } else if (token.text === 'if' && next?.text === '(') {
       const close = pairs.get(index + 1), tail = tokens[close + 1];
       if (tail?.text === ';' && !text.slice(tokens[close].end,tail.start).trim()) {
-        report('emptyIf',token.start,tail.end);
+        report('emptyIf',index,close+1);
       }
     }
   }
@@ -209,7 +212,7 @@ function span(left,a,right,b,maximum) {
   return { completed,compared:length + 1 };
 }
 
-function inspectSources(files,profile,{ duplicates = true } = {}) {
+function inspectSources(files,profile,{ duplicates = true,includeAnchors=false } = {}) {
   const findings = [], bodies = [], skipped = [];
   let tokenCount = 0, oversizedMethods = 0;
   for (const file of files) {
@@ -218,7 +221,7 @@ function inspectSources(files,profile,{ duplicates = true } = {}) {
     tokenCount += tokens.length;
     if (tokenCount > MAX_TOKENS) throw Error('Java inspection exceeds the token limit. Choose a narrower profile.');
     const range = positions(file.text);
-    findings.push(...javaIssues(file,profile,tokens,pairs,range));
+    for (const finding of javaIssues(file,profile,tokens,pairs,range,includeAnchors)) findings.push(finding);
     if (duplicates) {
       const item = javaBodies(file,tokens,pairs,range);
       oversizedMethods += item.oversized;

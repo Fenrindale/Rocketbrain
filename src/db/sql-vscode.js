@@ -41,6 +41,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   function analyzeDocument(document){
     if(disposed||!config().get('enabled',true)||document.languageId!=='sql')return {state:'disabled',statements:[]};
+    if(require('./federated-select').isFederatedDocument(document)){collection.delete(document.uri);return {state:'disabled',statements:[]};}
     const key=document.uri.toString(),previous=cache.get(key);
     let preview=vscode.workspace.isTrusted?ddlPreviews.get(key):null;
     const configured=preview?null:configuredScope(document);
@@ -303,7 +304,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {provideCompletionItems(document,position){const scope=locate(document,position);if(!scope)return [];return engine().completionsAt(scope.model,scope.offset).map(value=>{const item=new vscode.CompletionItem(value.label,value.kind==='column'?vscode.CompletionItemKind.Field:vscode.CompletionItemKind.Struct);item.detail=metadata?.cachedMetadata&&!virtualActive(document)?'Cached metadata · '+value.detail:value.detail;item.insertText=value.insertText||value.label;return item;});}},'.'));
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {
     provideCompletionItems(document,position) {
-      if(disposed||!vscode.workspace.isTrusted||!config().get('enabled',true)||!metadata||virtualActive(document))return [];
+      if(disposed||!vscode.workspace.isTrusted||!config().get('enabled',true)||!metadata||virtualActive(document)||require('./federated-select').isFederatedDocument(document))return [];
       const text = document.getText(), offset = document.offsetAt(position), observed = options();
       const candidates = [
         ...require('./sql-field-lists').sqlFieldLists(text, offset, metadata, observed),

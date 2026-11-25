@@ -76,6 +76,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     catch (error) { const message = error instanceof Error ? error.message : String(error); output.appendLine(message); await vscode.window.showErrorMessage(`Rocketbrain: ${message}`); }
     finally { updateStatus(); }
   }));
+  const dataExtractors = require('./db/data-extractor-vscode').registerDataExtractors(context, vscode, command, results);
   async function verifySavedMetadata(db, id, catalog, current) {
     try {
       if (!id || !current() || !metadataCache.has(id)) return;
@@ -345,6 +346,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   }
   async function runSql(sql, document = currentDocument(), { connectionEpoch, connectionKey, saved = false, userQuery = false, beforeRun } = {}) {
     if (!sql.trim()) return;
+    if (userQuery && require('./db/federated-select').isFederatedDocument(document)) throw Error('Use Run Federated SELECT to choose both source profiles.');
     if (state.offlineMetadata) throw Error('Connect to run SQL, or close cached metadata to use the SQLite demo.');
     const documentVersion = document?.version;
     if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
@@ -574,6 +576,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     queryDemo: sql => state.mysql ? Promise.reject(new Error('Demo checks require the demo connection.')) : state.db.query(sql),
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
     exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination),
+    dataExtractors,
     analyzeResult: (id, options) => results.analyzeSnapshot(id, options),
     mapResult: (id, column, revision) => structuredClone(results.mapSnapshot(id, column, revision)),
     compareDatasets: (targetId, sourceId, mapping) => results.compareDatasets(targetId,sourceId,mapping),

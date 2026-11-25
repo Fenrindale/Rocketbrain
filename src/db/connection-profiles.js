@@ -71,6 +71,42 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal);else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal);trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
   connect(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const effective=clone(record.profile);if(input.database!==undefined)effective.database=text(input.database,'schema',64);const pass=await credentials(effective,input.password);let prepared,transferred=false;try{prepared=await prepare(effective,pass,signal);guard(ticket);await connect(prepared.config);transferred=true;guard(ticket);return{connected:true,profile:clone(effective),credentialSaved:record.rememberPassword};}finally{if(!transferred)await prepared?.dispose();}});},
   schemas(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const pass=await credentials(record.profile,input.password),result=await verify(record.profile,pass,signal,true);guard(ticket);return result.schemas;});},
+  federatedSelect(request) {
+   const input = clone(request);
+   return run(async (ticket, signal) => {
+    const { parseFederatedSelect, executeFederatedSelect } = require('./federated-select');
+    const query = parseFederatedSelect(input.sql);
+    if (!Array.isArray(input.sources) || input.sources.length !== 2 || input.sources[0]?.id === input.sources[1]?.id) throw fail('Choose two distinct saved database profiles.');
+    const chosen = input.sources.map(source => {
+     const record = records.get(source?.id);
+     if (!record || record.revision !== source.revision) throw fail('A selected profile changed. Choose both sources again.');
+     return { record, password: source.password };
+    });
+    const opened = [];
+    try {
+     for (const { record, password } of chosen) {
+      const pass = await credentials(record.profile, password);
+      const resource = await prepare(record.profile, pass, signal);
+      const item = { resource };
+      opened.push(item);
+      item.service = createService(resource.config);
+     }
+     guard(ticket);
+     const result = await executeFederatedSelect(query, opened.map(({ service }) => ({
+      catalog: () => service.metadata(),
+      read: (sql, values, maxRows) => service.query(sql, { values, maxRows, timeoutMs: 10000 })
+     })));
+     guard(ticket);
+     return result;
+    } finally {
+     const released = await Promise.allSettled(opened.map(async ({ service, resource }) => {
+      try { await service?.dispose(); }
+      finally { await resource.dispose(); }
+     }));
+     if (released.some(state => state.status === 'rejected')) throw fail('A federated connection did not close cleanly. Open a fresh review before retrying.');
+    }
+   });
+  },
   disconnect(){return run(async()=>{await disconnect();return{disconnected:true};});},
   remove(request){const input=clone(request);return run(async(ticket)=>{const record=records.get(input.id);if(!record)throw fail('The connection profile no longer exists.');if(input.expectedRevision!==record.revision)throw fail('This profile edit is stale. Reopen it.');if(getActiveProfile()?.id===input.id){if(input.disconnect!==true)throw fail('Disconnect the active profile before removing it.');await disconnect();}guard(ticket);const next=new Map(records);next.delete(input.id);await persist(next,[{id:input.id,value:undefined}]);return{removed:true};});},
   exportProfiles(){
