@@ -345,6 +345,18 @@
         "icon": "$(play)"
       },
       {
+        "command": "rocketbrain.focusQueryResults",
+        "title": "Focus Query Results",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.focusQueryEditor",
+        "title": "Focus Query Editor",
+        "category": "Rocketbrain",
+        "icon": "$(go-to-file)",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.refresh",
         "title": "Refresh Workspace and Schema",
         "category": "Rocketbrain",
@@ -1234,6 +1246,7 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.focusQueryEditor", "when": "view == rocketbrain.results && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.select", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.refresh", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@2" },
         { "command": "rocketbrain.schemaCatalog.restore", "when": "view == rocketbrain.schemaCatalog", "group": "catalog" },
@@ -1568,6 +1581,10 @@
         "when": "editorTextFocus && editorLangId == sql"
       },
       { "command": "rocketbrain.jpa.console.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jpql && isWorkspaceTrusted" },
+      { "command": "rocketbrain.duckdb.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == duckdb-sql && rocketbrain.duckdbConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.jdbc.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jdbc && rocketbrain.jdbcConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.focusQueryResults", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "editorTextFocus && editorLangId == sql && !suggestWidgetVisible" },
+      { "command": "rocketbrain.focusQueryEditor", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "!editorTextFocus && (focusedView == rocketbrain.results || webviewId == rocketbrain.results) && isWorkspaceTrusted" },
       {
         "command": "rocketbrain.searchEverywhere",
         "key": "ctrl+shift+a",

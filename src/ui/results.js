@@ -1426,6 +1426,55 @@
     $('insert-export').hidden = blocked;
   }
 
+  function resultTabs() {
+    return [...$('tabs').querySelectorAll('button[role="tab"]:not(:disabled)')];
+  }
+  function focusResultTab(button) {
+    for (const tab of resultTabs()) tab.tabIndex = tab === button ? 0 : -1;
+    (button || $('tabs')).focus();
+  }
+  function renderResultTabs(active) {
+    const list = $('tabs'), panel = $('result-content'), previous = document.activeElement;
+    const restore = list.contains(previous) && previous !== list;
+    const focused = restore ? previous.id : undefined;
+    list.replaceChildren(...history.map(record => {
+      const button = document.createElement('button'), label = record.tabName || 'Result ' + record.id;
+      const selected = record.id === currentId;
+      button.id = 'query-result-' + record.id;
+      button.textContent = label + (record.state === 'running' ? ' …' : record.state === 'error' ? ' !' : '');
+      button.className = selected ? 'active' : '';
+      button.title = record.sql;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-selected', String(selected));
+      button.setAttribute('aria-controls', panel.id);
+      button.tabIndex = selected ? 0 : -1;
+      if (record.tabPinned) { button.classList.add('retained'); button.setAttribute('aria-label', label + ' (pinned)'); }
+      button.disabled = Boolean(editingCell && record.id !== editingCell.id);
+      button.onclick = () => {
+        currentId = record.id;
+        render();
+        focusResultTab($(button.id));
+      };
+      return button;
+    }));
+    if (active) {
+      panel.setAttribute('aria-labelledby', 'query-result-' + active.id);
+      panel.removeAttribute('aria-label');
+    } else {
+      panel.removeAttribute('aria-labelledby');
+      panel.setAttribute('aria-label', 'Query result');
+    }
+    $('focus-query-editor').hidden = !active?.hasQueryEditor;
+    if (restore) {
+      const tabs = resultTabs();
+      focusResultTab(tabs.find(button => button.id === focused) || tabs.find(button => button.tabIndex === 0));
+    }
+  }
+  function returnToQuery() {
+    const record = current();
+    if (record?.hasQueryEditor) vscode.postMessage({ type: 'focusQueryEditor', id: record.id });
+  }
+
   function render() {
     const active = current();
     const grid = $('grid'), windowId = active?.result?.browse?.window?.id;
@@ -1440,14 +1489,7 @@
     });
     $('return-source-row').hidden = !source;
     $('return-source-row').disabled = Boolean(editingCell || active?.editBusy || source?.editBusy);
-    $('tabs').replaceChildren(...history.map(record => {
-      const button = document.createElement('button'), label = record.tabName || `Result ${record.id}`;
-      button.textContent = label + (record.state === 'running' ? ' …' : record.state === 'error' ? ' !' : '');
-      button.className = record.id === currentId ? 'active' : ''; button.title = record.sql; button.setAttribute('aria-pressed', String(record.id === currentId));
-      if (record.tabPinned) { button.classList.add('retained'); button.setAttribute('aria-label', label + ' (pinned)'); }
-      button.disabled = Boolean(editingCell && record.id !== editingCell.id);
-      button.onclick = () => { currentId = record.id; render(); }; return button;
-    }));
+    renderResultTabs(active);
     chartObserver?.disconnect();
     chartObserver = undefined;
     mapObserver?.disconnect();
@@ -1547,6 +1589,15 @@
     send('scrollTable', { direction, modelId: record.result.edit.modelId });
   }
   window.addEventListener('message', event => {
+    if (event.data?.type === 'focusResults') {
+      if (editingCell && !$('cell-editor').hidden) $('cell-value').focus();
+      else focusResultTab(resultTabs().find(button => button.getAttribute('aria-selected') === 'true'));
+      return;
+    }
+    if (event.data?.type === 'returnToQuery') {
+      returnToQuery();
+      return;
+    }
     if (event.data?.type === 'activateResult') {
       const { id, rowId, modelId } = event.data;
       const record = history.find(item => item.id === id);
@@ -1804,6 +1855,24 @@
     saveColumnLayout(record, layout, true);
   });
   $('close-result').onclick = () => send('closeResult');
+  $('focus-query-editor').onclick = returnToQuery;
+  $('tabs').addEventListener('keydown', event => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const tabs = resultTabs(), index = tabs.indexOf(event.target);
+    if (index < 0) return;
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
+      event.key === 'ArrowRight' ? (index + 1) % tabs.length :
+      event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : undefined;
+    if (next === undefined) return;
+    event.preventDefault();
+    focusResultTab(tabs[next]);
+  });
+  $('tabs').addEventListener('focusout', event => {
+    if ($('tabs').contains(event.relatedTarget)) return;
+    for (const button of resultTabs()) {
+      button.tabIndex = button.getAttribute('aria-selected') === 'true' ? 0 : -1;
+    }
+  });
   $('return-source-row').onclick = () => send('returnToRelatedSource');
   $('pin-result').onclick = () => send('setResultPin', { pinned: !current()?.tabPinned });
   $('rename-result').onclick = () => send('renameResult');
