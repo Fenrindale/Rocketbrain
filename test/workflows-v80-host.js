@@ -13,13 +13,13 @@ exports.run = async (vscode = require('vscode')) => {
   const prefix=process.env.ROCKETBRAIN_TEST_REPORT_PREFIX || 'v0.80';
   assert.match(prefix,/^v0\.80(?:-[a-z0-9-]+)?$/);
   const log=path.resolve(__dirname,'../test-output',`${prefix}-native-${engine}-progress.jsonl`);
-  const mark=(group,state)=>fs.appendFileSync(log,JSON.stringify({group,state,time:new Date().toISOString()})+'\n');
+  const mark=(group,state,details={})=>fs.appendFileSync(log,JSON.stringify({group,state,time:new Date().toISOString(),...details})+'\n');
   const api=await extension.activate();
   const checks=[],details={},failures=[];
   const groups={
     javaTestHistory:()=>require('./java-test-history-host').runJavaTestHistoryChecks(api,vscode,checks),
-    sqlColumnOrigin:()=>require('./sql-column-origin-host').runSqlColumnOriginChecks(api,vscode,checks),
-    sharedRunGroups:()=>require('./java-shared-runs-host').runSharedRunChecks(api,vscode,checks)
+    sharedRunGroups:()=>require('./java-shared-runs-host').runSharedRunChecks(api,vscode,checks),
+    sqlColumnOrigin:()=>require('./sql-column-origin-host').runSqlColumnOriginChecks(api,vscode,checks)
   };
   const names=process.env.ROCKETBRAIN_V80_ONLY?.split(',') || Object.keys(groups);
   assert.ok(names.length && names.every(name=>Object.hasOwn(groups,name)) && new Set(names).size===names.length);
@@ -31,9 +31,10 @@ exports.run = async (vscode = require('vscode')) => {
       details[group]={...evidence,jdbc:await jdbcReadback()};
       mark(group,'completed');
     } catch(error) {
-      failures.push({group,message:String(error.message||error).slice(0,1400),
-        location:String(error.stack||'').split(/\r?\n/).find(line=>/test[\\/].+-host\.js:\d+/.test(line))?.trim()});
-      mark(group,'failed');
+      const failure={message:String(error.message||error).slice(0,1400),
+        location:String(error.stack||'').split(/\r?\n/).find(line=>/test[\\/].+-host\.js:\d+/.test(line))?.trim()};
+      failures.push({group,...failure});
+      mark(group,'failed',failure);
     }
   }
   const report=path.resolve(__dirname,'../test-output',`${prefix}-native-${engine}${failures.length?'-failed':''}.json`);
