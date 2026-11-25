@@ -108,6 +108,12 @@ Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를
 
 **Open SSH Workspace**로 연결하면 **SSH Workspace** 트리에서 일반 파일과 디렉터리를 탐색하고 원격 파일을 편집기에서 읽을 수 있습니다. 기존 텍스트 파일을 교체하려면 파일의 **Review Local File Upload to SSH**에서 로컬 파일을 선택하고 VS Code 차이를 검토합니다. 검토 이후 원격 파일이나 로컬 파일이 바뀌면 다시 검토합니다. 파일 읽기와 교체는 2 MiB까지 지원합니다.
 
+### Kotlin JVM 편집
+
+[MIT 라이선스의 standalone ktlsp 1.4.0-rc1](https://codeberg.org/winlogon/ktlsp/releases/tag/v1.4.0-rc1)을 압축 해제한 `server` 디렉터리를 `rocketbrain.kotlinEditor.serverHome`에 지정합니다. 독립 JDK 21 이상과 Gradle 프로젝트를 사용합니다. 로컬 `.kt` 파일을 열면 값과 멤버 자동 완성, 타입 표시, 선언 이동 및 컴파일 진단을 사용할 수 있습니다. **Stop Kotlin Language Support**로 세션을 종료하고 **Show Kotlin Language Server Output**에서 서버 출력을 확인합니다.
+
+검증한 릴리스 ZIP의 SHA-256은 `27d33f2879d12076174741488721896098e8494f5d906f99ef1c85d6159d42b7`입니다. Windows에서는 Unicode 프로젝트 경로의 진단을 위해 임시 호환 JAR를 생성합니다. 실행 전 서버와 컴파일러 JAR의 SHA-256을 확인합니다.
+
 ### Java CI 품질 게이트
 
 VSIX의 `extension/dist/java-quality-gate.js`를 추출하거나 소스의 `scripts/java-quality-gate.js`를 실행합니다. Node.js 20 이상과 Git이 있는 CI에서 대상 저장소와 기준선 커밋을 로컬로 준비합니다.

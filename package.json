@@ -80,6 +80,9 @@
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
+      { "command": "rocketbrain.kotlinEditor.start", "title": "Start Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlinEditor.stop", "title": "Stop Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlinEditor.output", "title": "Show Kotlin Language Server Output", "category": "Rocketbrain" },
       { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
@@ -1914,6 +1917,18 @@
           "default": "",
           "scope": "machine-overridable",
           "description": "Optional Apache Maven home for explicit Java project tasks. Maven is not bundled."
+        },
+        "rocketbrain.kotlinEditor.serverHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute server directory of the standalone open-source ktlsp 1.4.0-rc1 release."
+        },
+        "rocketbrain.kotlinEditor.gradleUserHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional Gradle user home for Kotlin language server classpath resolution."
         },
         "rocketbrain.java.jakarta.tomcatHome": {
           "type": "string",
