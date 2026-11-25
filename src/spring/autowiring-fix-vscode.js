@@ -85,16 +85,21 @@ function registerAutowiringFix(vscode,{analyze,refresh,inputsFor,enabled,output}
   subscriptions.push(vscode.languages.registerCodeActionsProvider({scheme:'file',language:'java'},{
     async provideCodeActions(document,selection,context,token){
       if (!enabled() || !vscode.workspace.isTrusted || !vscode.workspace.getWorkspaceFolder(document.uri)) return [];
-      const diagnostics=context.diagnostics.filter(item=>item.code===FIX_CODE && item.source===SOURCE && item.range.intersection(selection));
-      if (!diagnostics.length) return [];
       const version=document.version, model=await analyze();
       if (token.isCancellationRequested || document.version!==version || !vscode.workspace.isTrusted || disposed) return [];
       const uri=document.uri.toString(), input=inputsFor(model)?.java.find(file=>file.uri===uri);
       if (!input || input.text!==document.getText()) return [];
+      const diagnostics=model.diagnostics.filter(item=>item.uri===uri&&item.code===FIX_CODE&&range(item.range).intersection(selection));
+      if(!diagnostics.length)return [];
       const actions=[];
       for (const injection of model.injections.filter(item=>item.uri===uri)) {
-        const diagnostic=diagnostics.find(item=>item.range.isEqual(range(injection.range)));
-        if (!diagnostic) continue;
+        const sourceRange=range(injection.range);
+        const finding=diagnostics.find(item=>range(item.range).isEqual(sourceRange));
+        if (!finding) continue;
+        const diagnostic=context.diagnostics.find(item=>item.code===FIX_CODE&&item.source===SOURCE&&item.range.isEqual(sourceRange)) ||
+          new vscode.Diagnostic(sourceRange,finding.message,vscode.DiagnosticSeverity.Warning);
+        diagnostic.code=FIX_CODE;
+        diagnostic.source=SOURCE;
         for (const choice of candidateChoices(model,injection)) {
           const title='Qualify '+injection.name+' with '+choice.beanName+(choice.qualifier===choice.beanName?'':' ('+choice.qualifier+')');
           const action=new vscode.CodeAction(title,vscode.CodeActionKind.QuickFix);

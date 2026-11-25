@@ -133,6 +133,7 @@ async function runSpringAutowiringFixChecks(api,vscode,checks){
   const owned=await readConfig(), backend=await verifyBackend(owned);
   const spring=api.java.spring, settings=vscode.workspace.getConfiguration('rocketbrain.spring');
   const originalScope=settings.inspect('basePackages')?.workspaceValue;
+  const originalRoots=settings.inspect('configurationRoots')?.workspaceValue;
   const scope=vscode.ConfigurationTarget.Workspace;
   async function copiedDocument(name){
     const original=await fs.realpath(path.join(owned.config.projectPath,...DIRECTORY,name));
@@ -156,6 +157,8 @@ async function runSpringAutowiringFixChecks(api,vscode,checks){
   };
   try{
     await settings.update('basePackages',[PACKAGE],scope);
+    const resourceRoot=path.resolve(path.dirname(target.uri.fsPath),'../../../resources');
+    await settings.update('configurationRoots',[resourceRoot],scope);
     async function getAction(){
       const model=await spring.refresh(), injection=selectedWiring(model);
       const range=new vscode.Range(injection.range.start.line,injection.range.start.character,injection.range.end.line,injection.range.end.character);
@@ -167,7 +170,9 @@ async function runSpringAutowiringFixChecks(api,vscode,checks){
         qualified=(actions||[]).filter(item=>item.command?.command===PREVIEW);
         if(!qualified.length)await new Promise(resolve=>setTimeout(resolve,100));
       }
-      assert.equal(qualified.length,2,'Both local ambiguity fixes should be offered');
+      assert.equal(qualified.length,2,'Both local ambiguity fixes should be offered. '+JSON.stringify({
+        incomplete:model.incomplete,truncated:model.truncated,eligible:candidateChoices(model,injection).length
+      }));
       const exact=qualified.find(item=>item.command.arguments[0].qualifier==='directMode');
       assert.ok(exact);
       assert.equal(exact.edit,undefined);
@@ -199,6 +204,7 @@ async function runSpringAutowiringFixChecks(api,vscode,checks){
     if(target.getText()!==original)await replace(target,original);
     if(counterpart.getText()!==originalBeans)await replace(counterpart,originalBeans);
     await settings.update('basePackages',originalScope,scope);
+    await settings.update('configurationRoots',originalRoots,scope);
     await spring.refresh();
   }
 }

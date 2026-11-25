@@ -104,6 +104,7 @@ test('the Quick Fix opens a read-only diff and applies only after explicit revie
   const disposable=()=>({dispose(){}});
   const document={uri:uri(URI),version:1,languageId:'java',getText:()=>input.java[0].text,positionAt:offset=>offset};
   const vscode={Range,FileType:{SymbolicLink:64},Uri:{parse:uri,from:item=>uri(item.scheme+':'+item.path)},
+    DiagnosticSeverity:{Warning:1},Diagnostic:class{constructor(range,message,severity){Object.assign(this,{range,message,severity});}},
     CodeActionKind:{QuickFix:'quickfix'},CodeAction:class{constructor(title,kind){Object.assign(this,{title,kind});}},
     WorkspaceEdit:class{insert(file,offset,text){Object.assign(this,{file,offset,text});}},
     workspace:{isTrusted:true,getWorkspaceFolder:()=>({}),fs:{stat:async()=>({type:1})},openTextDocument:async()=>document,
@@ -124,6 +125,10 @@ test('the Quick Fix opens a read-only diff and applies only after explicit revie
     const actions=await codeProvider.provideCodeActions(document,range,{diagnostics:[{source:'Rocketbrain Spring (local model)',code:'spring.bean.ambiguous',range}]},{});
     assert.equal(actions.length,2);
     assert.ok(actions.every(action=>!action.edit&&action.command.command===PREVIEW));
+    const direct=await codeProvider.provideCodeActions(document,range,{diagnostics:[]},{});
+    assert.deepEqual(direct.map(action=>action.command),actions.map(action=>action.command));
+    assert.ok(direct.every(action=>action.diagnostics[0]?.code==='spring.bean.ambiguous'));
+    assert.deepEqual(await codeProvider.provideCodeActions(document,new Range(0,0,0,0),{diagnostics:[]},{}),[]);
     const [request]=actions[0].command.arguments;
     accepted=undefined; await registrations.get(PREVIEW)(request);
     assert.equal(updates,0);
