@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /** Calls injected into Hibernate; every hook fails closed without changing application exceptions. */
 public final class ObserverRuntime {
-    public static final String VERSION="0.11.0";
+    public static final String VERSION="0.12.0";
     private static volatile HttpServer server;private static volatile ThreadPoolExecutor executor;
     private static byte[] expectedAuthorization;private static boolean queries,validate,consoleSelect,consoleFetchSnapshots;private static int maxEvents=128,maxQueryChars=4096;
     private static final ArrayDeque<Map<String,Object>> events=new ArrayDeque<>();private static final List<String> warnings=new ArrayList<>(),instrumented=new ArrayList<>();
@@ -69,6 +69,7 @@ public final class ObserverRuntime {
     }
     private static synchronized String registerFactory(Object factory){if(factory==null)return null;factories.removeIf(f->f.value.get()==null);for(Factory entry:factories)if(entry.value.get()==factory)return entry.id;if(factories.size()>=4){warning("Factory limit reached");return null;}String id="factory-"+ids.incrementAndGet();factories.add(new Factory(id,new WeakReference<>(factory)));return id;}
     public static void factorySeen(Object factory){try{registerFactory(factory);}catch(Throwable ignored){}}
+    public static synchronized void factoryClosed(Object factory){try{factories.removeIf(entry->entry.value.get()==factory);}catch(Throwable ignored){}}
     private static Method publicMethod(Class<?> type,String name)throws NoSuchMethodException {
         if(Modifier.isPublic(type.getModifiers())){try{Method method=type.getMethod(name);if(Modifier.isPublic(method.getDeclaringClass().getModifiers()))return method;}catch(NoSuchMethodException ignored){}}
         for(Class<?> parent:type.getInterfaces())try{return publicMethod(parent,name);}catch(NoSuchMethodException ignored){}

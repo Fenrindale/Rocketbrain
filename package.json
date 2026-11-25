@@ -470,6 +470,7 @@
         "title": "JPA: Navigate to Entity",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.jpa.relationshipDiagram", "title": "JPA: Show Entity Relationship Diagram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
         "command": "rocketbrain.jpa.refresh",
         "title": "JPA: Refresh Analysis",

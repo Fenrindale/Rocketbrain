@@ -1,0 +1,9 @@
+# JPA relationship diagram
+
+Open **JPA: Show Entity Relationship Diagram** from the Command Palette or the **JPA Relationships** item in the Analysis view. Choose **Scope** to switch between workspace source declarations and a connected Hibernate factory. The diagram selects a factory automatically when only one factory is visible or the active entity matches exactly one of several factories. If multiple factories manage the same active entity, choose the factory to inspect.
+
+The diagram shows direct JPA associations and entity inheritance. A selected card shows persistent attributes, the reported table, and mapped relationship paths. Dashed arrows mark confirmed inverse associations and dotted arrows mark inheritance. Use **Open mapping** to navigate to a uniquely matching local declaration. Hibernate metamodel membership and source navigation are separate observations. [Jakarta Persistence collection metamodel](https://jakarta.ee/specifications/persistence/3.2/apidocs/jakarta.persistence/jakarta/persistence/metamodel/pluralattribute)
+
+Drag an entity card or use the move buttons to arrange it. Hide and restore nodes from the entity list, or use **Focus** to show one entity and immediate neighbors. Rocketbrain saves positions and hidden nodes per workspace and scope. **Reset layout** clears saved positions in the current scope. Unnamed factories use their managed entity set to identify saved layouts. If two observed factories lack a distinguishable name or entity set, their layouts last for the session. Layout actions change only the presentation.
+
+The canvas displays up to 64 entities and 192 relationships at a time. Unresolved relationships are listed alongside the owning entity when available. Use **Focus** to inspect entities outside the current view. The current Rocketbrain JPA Observer also detects compatible Hibernate factories on startup and observes collection targets and inheritance before the application runs a query.

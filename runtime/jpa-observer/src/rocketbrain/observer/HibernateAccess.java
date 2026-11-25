@@ -33,6 +33,8 @@ public final class HibernateAccess {
         if (factory == null || Boolean.TRUE.equals(optional(factory, "isClosed"))) {
             result.put("state", "unknown"); diagnostics.add(diagnostic("factory.unavailable", "No open captured Hibernate factory is available.", null)); return result;
         }
+        String factoryName = string(optional(optional(factory, "getSessionFactoryOptions"), "getSessionFactoryName"));
+        if (factoryName != null && factoryName.matches("[A-Za-z0-9_.$ -]{1,128}")) result.put("factoryName", factoryName);
         Object statistics = optional(factory, "getStatistics");
         boolean statisticsEnabled = Boolean.TRUE.equals(optional(statistics, "isStatisticsEnabled"));
         result.put("statistics", map("enabled", statisticsEnabled,
@@ -155,6 +157,9 @@ public final class HibernateAccess {
         String fqn = javaClass instanceof Class<?> value ? value.getName() : null;
         Map<String, Object> entity = map("name", name, "javaType", fqn);
         entity.put("abstract", javaClass instanceof Class<?> value && Modifier.isAbstract(value.getModifiers()));
+        Object supertype = optional(type, "getSupertype"), parentKind = optional(supertype, "getPersistenceType");
+        if (parentKind instanceof Enum<?> parent && parent.name().equals("ENTITY") && optional(supertype, "getJavaType") instanceof Class<?> inherited)
+            entity.put("superEntityJavaType", inherited.getName());
         List<Map<String, Object>> attributes = new ArrayList<>(), physical = new ArrayList<>();
         entity.put("attributes", attributes); entity.put("physicalMappings", physical);
         List<Object> attrs = values(optional(type, "getAttributes"), Math.min(remaining[0], ATTRIBUTE_LIMIT) + 1);
@@ -180,6 +185,16 @@ public final class HibernateAccess {
             attributes.add(item);
             Object attributeMapping = optional(persister, "findAttributeMapping", property);
             if (attributeMapping == null) attributeMapping = optional(persister, "findSubPart", property);
+            if (Boolean.TRUE.equals(item.get("association"))) {
+                Object targetType = Boolean.TRUE.equals(item.get("collection")) ? optional(optional(attribute, "getElementType"), "getJavaType") : attrType;
+                if (targetType instanceof Class<?> target) item.put("targetEntityJavaType", target.getName());
+                Object declaringType = optional(optional(attribute, "getDeclaringType"), "getJavaType");
+                if (declaringType instanceof Class<?> declaring) item.put("declaredIn", declaring.getName());
+                Object collection = optional(attributeMapping, "getCollectionDescriptor"), inverse = optional(collection, "isInverse");
+                if (inverse instanceof Boolean value) item.put("inverse", value);
+                String mappedBy = string(optional(collection, "getMappedByProperty"));
+                if (mappedBy != null && !mappedBy.isEmpty()) item.put("mappedBy", mappedBy);
+            }
             if (attributeMapping != null) physical(attributeMapping, property, physical, 0, new IdentityHashMap<>());
         }
         // TABLE_PER_CLASS may reuse an inherited AttributeMapping whose declaring
