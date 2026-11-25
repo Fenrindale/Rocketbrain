@@ -19,8 +19,8 @@ test('keeps semicolons, CRLF, text quoting and statement boundaries exact',()=>{
   const sample="SELECT 1 FROM fixture WHERE value = 'it''s;''';\r\n-- second statement\r\nUPDATE fixture SET value = 'new' WHERE id = 1;\r\n";
   const after=formatSql(sample,{indent:'\t'});
   assert.equal(after,"SELECT 1\r\nFROM fixture\r\nWHERE value = 'it''s;''';\r\n-- second statement\r\nUPDATE fixture\r\nSET value = 'new'\r\nWHERE id = 1;\r\n");
-  assert.throws(()=>formatSql("DELIMITER $$\nCREATE PROCEDURE f() SELECT 'x'$$"),/DELIMITER/);
-  assert.throws(()=>formatSql('SELECT (1 FROM fixture'),/parentheses|lexical structure/);
+  assert.equal(formatSql("DELIMITER $$\nCREATE PROCEDURE f() SELECT 'x'$$"),"DELIMITER $$\nCREATE PROCEDURE f() SELECT 'x'$$");
+  assert.throws(()=>formatSql('SELECT (1 FROM fixture'),/parenthes(?:is|es)|lexical structure/);
 });
 
 test('SQL templates replace context with quoted snippet literals and preserve editable placeholders',()=>{

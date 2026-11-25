@@ -26,7 +26,7 @@ function lex(text,options,unknown,nonCode){
       if(!closed)unknown('Unclosed quoted token.',start);if(!identifier)nonCode.push({start,end:i});tokens.push({kind:identifier?'identifier':'string',value,start,end:i,quoted:identifier});
     }else if(/[\p{L}_$]/u.test(c)){i++;while(i<text.length&&/[\p{L}\p{N}_$]/u.test(text[i]))i++;const value=text.slice(start,i);tokens.push({kind:'word',value,upper:value.toUpperCase(),start,end:i});}
     else if(/\d/.test(c)||c==='.'&&/\d/.test(text[i+1]||'')){const match=/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/.exec(text.slice(i));i+=match[0].length;tokens.push({kind:'number',value:match[0],start,end:i});}
-    else if(c==='@'||c==='?'||c===':'){i++;while(i<text.length&&/[\p{L}\p{N}_$.@]/u.test(text[i]))i++;tokens.push({kind:'parameter',value:text.slice(start,i),start,end:i});}
+    else if(c==='@'||c==='?'||c===':'&&!options.formatLayout){i++;while(i<text.length&&/[\p{L}\p{N}_$.@]/u.test(text[i]))i++;tokens.push({kind:'parameter',value:text.slice(start,i),start,end:i});}
     else{const op=['<=>','->>','!=','<>','>=','<=','||','&&',':=','->','<<','>>'].find(op=>text.startsWith(op,i));i+=op?op.length:1;tokens.push({kind:'symbol',value:op||c,upper:op||c,start,end:i});}
     if(tokens.length>=LIMITS.tokens){unknown('SQL token limit reached.',i);break;}
   }
@@ -210,11 +210,12 @@ function statementRanges(text,options={}){
   for(const t of tokens)if(t.kind==='symbol'&&t.value===';'){if(text.slice(start,t.end).trim())statements.push({start,end:t.end});start=t.end;}
   if(text.slice(start).trim())statements.push({start,end:text.length});return {statements,unknown};
 }
-function sourceTokens(text,options={}){
+function sourceLayout(text,options={}){
   if(typeof text!=='string'||Buffer.byteLength(text)>LIMITS.bytes||text.includes('\0'))throw Error('SQL source exceeds limits or contains NUL.');
-  const errors=[];
-  const tokens=lex(text,options,reason=>errors.push(reason),[]);
+  const errors=[],nonCode=[];
+  const tokens=lex(text,options,reason=>errors.push(reason),nonCode);
   if(errors.length)throw Error(errors[0]);
-  return tokens;
+  return {tokens,nonCode};
 }
-module.exports={analyzeSql,completionsAt,definitionsAt,hoverAt,statementRanges,sourceTokens,dbType,sourceRange,LIMITS};
+const sourceTokens=(text,options)=>sourceLayout(text,options).tokens;
+module.exports={analyzeSql,completionsAt,definitionsAt,hoverAt,statementRanges,sourceTokens,sourceLayout,dbType,sourceRange,LIMITS};

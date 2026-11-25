@@ -1,5 +1,5 @@
 {
-  "version": "0.50.0",
+  "version": "0.51.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 65,
-    "partial": 111,
-    "not-implemented": 25,
+    "implemented": 66,
+    "partial": 113,
+    "not-implemented": 22,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 61.8,
+    "percent": 62.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-043",
-    "IDEA-117",
-    "DG-003"
+    "IDEA-047",
+    "IDEA-095",
+    "IDEA-120",
+    "DG-040"
   ],
   "expandedFeatures": [
-    "IDEA-043",
-    "IDEA-117",
-    "DG-003"
+    "IDEA-047",
+    "IDEA-095",
+    "IDEA-120",
+    "DG-040"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1388,8 +1390,8 @@
       "verification": {
         "state": "v0.50-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.50.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1496,25 +1498,25 @@
       "category": "JVM 언어·프로젝트",
       "feature": "Groovy·Spock·콘솔",
       "priority": "P3",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Groovy·Spock·콘솔을 독립 연결하지 않았다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "Java Projects에서 Groovy 소스를 탐색하고 Gradle의 Spock 사례를 실행한다. 독립 Groovy 콘솔에서 변수를 유지·초기화하고 스크립트의 구문 오류를 파일에 표시한다.",
       "remaining": [
-        "동적 Groovy 분석·Spock 테스트 발견·콘솔이 필요하다."
+        "Groovy 선언의 일반 정적 완성·리팩터링과 프로젝트 클래스 경로 콘솔이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.51-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "Gradle 9.1과 Groovy 4.0.28에서 Java·Groovy를 함께 컴파일하고 Spock 2.4 테스트 3개, 실제 동적 호출, 구문 오류 위치, 이전 변수 유지·초기화를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/groovy-vscode.js",
+          "test/groovy-spock-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2943,25 +2945,26 @@
       "category": "VCS·리뷰",
       "feature": "GitHub PR·GitLab MR 리뷰",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Rocketbrain 자체 GitHub PR·GitLab MR 리뷰 통합이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "GitHub PR과 GitLab MR의 변경 파일, 패치, 주석, 관련 이슈 번호와 검사 상태를 읽는다. 확인한 커밋과 변경 줄에 로컬 초안을 저장한다.",
       "remaining": [
-        "원격 리뷰·주석·검토 상태·diff 연결이 필요하다."
+        "리뷰 제출, 서버의 주석 변경, 모든 변경 파일 페이지와 대화 탐색이 필요하다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.51-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "인증을 검증하는 두 로컬 API에서 변경과 검사 결과를 표시하고, 패치 전용 편집기와 커밋에 묶인 로컬 초안을 확인했다. 실제 공개 GitHub API 읽기도 별도로 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/vcs/code-review.js",
+          "src/vcs/code-review-vscode.js",
+          "test/code-review-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3600,8 +3603,8 @@
       "verification": {
         "state": "v0.50-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.50.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3691,25 +3694,26 @@
       "category": "기타 JVM 프레임워크",
       "feature": "JavaFX·FXML·Scene Builder·패키징",
       "priority": "P3",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "JavaFX/FXML/Scene Builder 전용 통합이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "FXML Outline, 컨트롤러·필드·이벤트 정의 이동, 포함 파일과 스타일 리소스 탐색을 제공한다. Maven JavaFX 실행과 jlink 이미지 작업을 전용 작업에서 실행한다.",
       "remaining": [
-        "FXML 의미 분석·컨트롤러 연계·UI 제작/패키징이 필요하다."
+        "시각적 Scene Builder 기능, 일반 FXML 타입 완성 및 Gradle 이미지 작업이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.51-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "OpenJFX 25.0.2에서 컨트롤러 주입, 이벤트 호출, 포함 리소스 및 CSS의 로딩을 확인했고 실제 jlink 이미지를 생성해 실행했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/javafx-fxml.js",
+          "src/java/javafx-vscode.js",
+          "test/javafx-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3790,8 +3794,8 @@
       "verification": {
         "state": "v0.50-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.50.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4895,27 +4899,25 @@
       "category": "SQL 의미 분석·편집",
       "feature": "dialect별 SQL formatting",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
-      "delivery": "none",
-      "scope": "MySQL·MariaDB의 일반 쿼리와 데이터 변경문의 절·들여쓰기와 키워드 대소문자를 정리한다. 리터럴·주석·줄바꿈을 보존한다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "MySQL·MariaDB SQL 및 DELIMITER 저장 프로그램을 펼침·압축, 블록 들여쓰기, 키워드 대소문자 스타일로 포맷한다. 포맷 문서와 명령에서 같은 구문 분석을 사용한다.",
       "remaining": [
-        "저장 프로그램과 복합 DELIMITER 구문, 고급 스타일을 확장한다."
+        "MySQL·MariaDB에서 검증한 구문을 대상으로 한다. 실행 주석과 다른 저장 프로시저 방언은 별도 지원이 필요하다."
       ],
       "verification": {
-        "state": "v0.31-installed-coverage",
+        "state": "v0.51-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.31.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "세미콜론이 들어간 문자열을 포함하는 JOIN을 포맷하고 두 실제 DB에서 같은 결과를 확인했다.",
+        "testedScope": "두 실제 DB에서 원본과 두 포맷의 각 100개 문을 실행해 결과 일치와 재포맷 안정성을 확인했다. IF, CASE, WHILE, REPEAT, LOOP, 트리거·함수와 여러 DELIMITER 스타일을 포함했다.",
         "publicEvidence": [
-          "src/db/sql-format.js",
-          "src/db/sql-editing-vscode.js",
-          "test/sql-editing.test.js",
-          "test/sql-editing-host.js"
+          "docs/sql-formatting.md",
+          "test/sql-format-script-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6662,38 +6664,48 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "e0c0c4acbb5edd347856b5d0e8c41fdc43766a4d5852f9a7e289c3b9647a4af6",
-    "sourceManifestSha256": "9d00e93819baaeefc8d79f968436d17099774dbdd62d9d864d40854ded9ccdc1",
+    "vsixSha256": "a8cae5007fed645111f1cafb4459eedbde83bd79bed064fc5bf1c71aaaf94743",
+    "sourceManifestSha256": "92e36021b93da0c3928d919b3c1d8b16e81ce1bfac61c52f25956060fed3d1e0",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 3
+        "featureGroups": 4
       },
       {
         "engine": "mariadb",
-        "featureGroups": 3
+        "featureGroups": 4
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-043",
+      "id": "IDEA-047",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-117",
+      "id": "IDEA-095",
       "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "IDEA-120",
+      "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "DG-040",
+      "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1363,
-    "pass": 1299,
+    "tests": 1377,
+    "pass": 1311,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 64,
+    "skipped": 66,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

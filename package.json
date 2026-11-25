@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.50.0",
+  "version": "0.51.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -25,6 +25,7 @@
     "onView:rocketbrain.analysis",
     "onLanguage:java",
     "onLanguage:kotlin",
+    "onLanguage:groovy",
     "onLanguage:duckdb-sql",
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
@@ -54,16 +55,27 @@
       },
       { "id": "duckdb-sql", "aliases": ["DuckDB SQL"], "extensions": [".duckdb.sql"] },
       { "id": "rocketbrain-jdbc", "aliases": ["Rocketbrain JDBC SQL"], "extensions": [".jdbc.sql"] },
-      { "id": "kotlin", "aliases": ["Kotlin"], "extensions": [".kt"] }
+      { "id": "kotlin", "aliases": ["Kotlin"], "extensions": [".kt"] },
+      { "id": "groovy", "aliases": ["Groovy"], "extensions": [".groovy"] }
     ],
     "grammars": [
       { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" },
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
+      { "command": "rocketbrain.groovy.runScript", "title": "Run Groovy Script", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
+      { "command": "rocketbrain.groovy.runTests", "title": "Run Groovy and Spock Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.review.open", "title": "Open GitHub or GitLab Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.review.patch", "title": "Open Changed Review File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
+      { "command": "rocketbrain.review.draft", "title": "Add Local Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
+      { "command": "rocketbrain.review.discardDraft", "title": "Discard Local Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
+      { "command": "rocketbrain.review.token", "title": "Set Repository Review Token", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.traceStream", "title": "Trace Java Stream Values", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java && editorHasSelection" },
       { "command": "rocketbrain.java.navigateStreamStage", "title": "Go to Java Stream Stage", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-java-stream" },
       { "command": "rocketbrain.deploy.reviewWebDav", "title": "Review WebDAV Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -634,6 +646,12 @@
         "command": "rocketbrain.schema.recoverDistributed",
         "title": "Inspect and Recover Multi-Server Schema Rebuild",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.javafx.build",
+        "title": "Run or Package JavaFX Application",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.java.workbench.refresh",
@@ -1353,6 +1371,18 @@
             }
           }
         },
+        "rocketbrain.sql.formatting.style": {
+          "type": "string",
+          "enum": ["expanded", "compact"],
+          "default": "expanded",
+          "description": "Choose whether ordinary SQL clauses wrap onto new lines or use compact spacing. Stored-program block indentation follows the SQL editor settings."
+        },
+        "rocketbrain.sql.formatting.keywordCase": {
+          "type": "string",
+          "enum": ["preserve", "upper", "lower"],
+          "default": "preserve",
+          "description": "Change the case of recognized statement, clause and stored-program block keywords. Identifier and literal spelling stays exact."
+        },
         "rocketbrain.sql.templates": {
           "type": "array",
           "default": [],
@@ -1369,6 +1399,9 @@
             }
           }
         },
+        "rocketbrain.codeReview.provider": { "type": "string", "enum": ["github", "gitlab"], "default": "github", "scope": "resource", "description": "Repository host for the code-review workbench." },
+        "rocketbrain.codeReview.repository": { "type": "string", "default": "", "scope": "resource", "description": "GitHub owner/repository or GitLab group/project path." },
+        "rocketbrain.codeReview.endpoint": { "type": "string", "default": "", "scope": "resource", "description": "Optional API base URL for the selected provider." },
         "rocketbrain.deploy.webdav.url": { "type": "string", "default": "", "scope": "resource", "description": "WebDAV endpoint directory URL." },
         "rocketbrain.deploy.webdav.user": { "type": "string", "default": "", "scope": "resource", "description": "WebDAV Basic authentication username." },
         "rocketbrain.deploy.webdav.localDirectory": { "type": "string", "default": "", "scope": "resource", "description": "Workspace-relative root for deployment files." },
@@ -1456,6 +1489,12 @@
           "default": "",
           "scope": "machine",
           "description": "Optional standalone JDK path for importing Gradle projects."
+        },
+        "rocketbrain.java.groovyConsoleJar": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional absolute path to the verified official Apache Groovy 4.0.28 core JAR. The default uses the matching JAR in the configured Gradle home."
         },
         "rocketbrain.java.annotationProcessing.gradleEnabled": {
           "type": "boolean",

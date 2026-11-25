@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.50.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.51.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 65 |
-| 부분 구현 | 111 |
-| 미구현 | 25 |
+| 구현 | 66 |
+| 부분 구현 | 113 |
+| 미구현 | 22 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **61.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **62.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.50에서는 로컬 IDE MCP, 혼합 Java·Kotlin 프로젝트 탐색, 인증된 MongoDB 읽기를 검증했다. 상태가 바뀐 항목은 2개이고 가중 점수는 132점에서 133.5점으로 바뀌었다.
+v0.51에서는 Groovy·Spock 실행, GitHub·GitLab 리뷰, JavaFX FXML 탐색과 런타임 이미지, 저장 프로그램 SQL 포맷을 검증했다. 상태가 바뀐 항목은 4개이고 가중 점수는 133.5점에서 135.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -67,7 +67,7 @@ v0.50에서는 로컬 IDE MCP, 혼합 Java·Kotlin 프로젝트 탐색, 인증�
 | IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 미구현 |
 | IDEA-045 | IntelliJ IDEA | Kotlin Multiplatform·Compose 개발 | 미구현 |
 | IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 미구현 |
-| IDEA-047 | IntelliJ IDEA | Groovy·Spock·콘솔 | 미구현 |
+| IDEA-047 | IntelliJ IDEA | Groovy·Spock·콘솔 | 부분 구현 |
 | IDEA-048 | IntelliJ IDEA | 외부 라이브러리 소스·바이트코드 디컴파일 | 부분 구현 |
 | IDEA-049 | IntelliJ IDEA | Scratch·JShell 실험 코드 | 구현 |
 | IDEA-050 | IntelliJ IDEA | 어노테이션 프로세서·Lombok 생성 코드 | 구현 |
@@ -115,7 +115,7 @@ v0.50에서는 로컬 IDE MCP, 혼합 Java·Kotlin 프로젝트 탐색, 인증�
 | IDEA-092 | IntelliJ IDEA | Shelf·Stash·선택 변경 보관 | 부분 구현 |
 | IDEA-093 | IntelliJ IDEA | Branch·Rebase·Merge 충돌 해결 | VS Code 재사용 |
 | IDEA-094 | IntelliJ IDEA | Git Worktree·작업별 프로젝트 설정 | 부분 구현 |
-| IDEA-095 | IntelliJ IDEA | GitHub PR·GitLab MR 리뷰 | 미구현 |
+| IDEA-095 | IntelliJ IDEA | GitHub PR·GitLab MR 리뷰 | 부분 구현 |
 | IDEA-096 | IntelliJ IDEA | SSH 원격 개발 | 미구현 |
 | IDEA-097 | IntelliJ IDEA | WSL 실행·개발 | 미구현 |
 | IDEA-098 | IntelliJ IDEA | Dev Container 환경 | 미구현 |
@@ -140,7 +140,7 @@ v0.50에서는 로컬 IDE MCP, 혼합 Java·Kotlin 프로젝트 탐색, 인증�
 | IDEA-117 | IntelliJ IDEA | IDE 기능을 MCP 도구로 제공 | 구현 |
 | IDEA-118 | IntelliJ IDEA | 프로젝트 신뢰·제한 모드 | 구현 |
 | IDEA-119 | IntelliJ IDEA | 문자열 안 SQL/정규식/HTML 언어 주입 | 부분 구현 |
-| IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 미구현 |
+| IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 부분 구현 |
 | DG-001 | DataGrip | MySQL 데이터 소스 생성·연결 검사 | 부분 구현 |
 | DG-002 | DataGrip | MariaDB 전용 지원 | 부분 구현 |
 | DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 부분 구현 |
@@ -180,7 +180,7 @@ v0.50에서는 로컬 IDE MCP, 혼합 Java·Kotlin 프로젝트 탐색, 인증�
 | DG-037 | DataGrip | 테이블·열·alias 의미적 Rename | 부분 구현 |
 | DG-038 | DataGrip | 의미적 Find Usages·영향 추적 | 부분 구현 |
 | DG-039 | DataGrip | SQL 참조→정의·DDL·빠른 설명 | 부분 구현 |
-| DG-040 | DataGrip | dialect별 SQL formatting | 부분 구현 |
+| DG-040 | DataGrip | dialect별 SQL formatting | 구현 |
 | DG-041 | DataGrip | live template·snippet·문맥 변수 | 구현 |
 | DG-042 | DataGrip | 문자열 안 SQL/JSON 언어 주입 | 구현 |
 | DG-043 | DataGrip | 쿼리 parameter 입력·재사용 | 부분 구현 |
