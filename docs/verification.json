@@ -1,22 +1,22 @@
 {
   "version": "0.52.0",
-  "verifiedAt": "2026-11-25T11:10:15.442Z",
+  "verifiedAt": "2026-11-25T11:26:15.866Z",
   "fullProductParityVerified": false,
   "artifact": {
     "name": "rocketbrain-0.52.0.vsix",
     "bytes": 3024764,
-    "sha256": "b2aa49d4352ec514ebd8ab187162671a02dc9f3af5219855f196e578ce8ecf7b",
+    "sha256": "9fa53f590107c87048b590bc85c758ff680da146f051a09ab406fff8c92a3095",
     "files": 17
   },
   "source": {
     "frozenPublicInputs": 1444,
-    "inputVectorSha256": "7e8ec8b65c79749e74ecb270e8995e60d7ba7b05d457b5d26656097eaa541434",
+    "inputVectorSha256": "268397f5db0853aadb17ec0d702a6e91c122baa91929ef0e41634084ab88a192",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1387,
-    "pass": 1320,
+    "tests": 1388,
+    "pass": 1321,
     "fail": 0,
     "cancelled": 0,
     "skipped": 67,
