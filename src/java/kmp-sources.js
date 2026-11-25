@@ -6,6 +6,7 @@ const { createHash } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { lexJava,rangeAt } = require('../spring/java');
 const { inside,fail,cancelled } = require('./workbench-model');
+const { fileKey } = require('./dependency-builds');
 const { regular,safeDirectory,buildSnapshot } = require('./kmp-gradle');
 
 const TYPED_SCALARS=new Set(['Any','Unit','Nothing','Boolean','Byte','Short','Int','Long','Float','Double','Char','String',
@@ -100,14 +101,14 @@ function snapshotKmpSources(model,module,targetNames,cancellation) {
         const file=path.join(directory,entry.name);
         if (entry.isDirectory()) walk(file,sourceSet,depth+1);
         else if (entry.isFile() && file.endsWith('.kt')) {
-          const existing=files.get(file);
+          const key=fileKey(file), existing=files.get(key);
           if (existing) {existing.sets.add(sourceSet);continue;}
           if (files.size>=240) throw fail('Inspect at most 240 Kotlin source files.');
           const bytes=regular(file,model.root,512*1024);
           totalSize+=bytes.length;
           if (totalSize>8*1024*1024) throw fail('Kotlin sources exceed their analysis byte limit.');
           const text=normal(decode.decode(bytes));
-          files.set(file,{file,uri:pathToFileURL(file).href,text,sets:new Set([sourceSet]),
+          files.set(key,{file,uri:pathToFileURL(file).href,text,sets:new Set([sourceSet]),
             sha256:createHash('sha256').update(bytes).digest('hex')});
         }
       }
@@ -131,7 +132,7 @@ function indexesFor(model,module,targetNames,snapshot) {
     if (source.sets.size!==1) continue;
     const [set]=source.sets;
     const declarations=shadowed ? [] : kotlinDeclarations(source.text).map(item => ({...item,file:source.file,uri:source.uri,set}));
-    files.set(source.file,{...source,declarations});
+    files.set(fileKey(source.file),{...source,declarations});
   }
   function key(item) {return item.file+'#'+item.range.start.line+':'+item.range.start.character;}
   function relate(from,to,target) {
@@ -161,7 +162,7 @@ function indexesFor(model,module,targetNames,snapshot) {
 
 function definitionForKmp(index,{file,text,position}={},cancellation) {
   if (!index || typeof file!=='string' || !inside(index.model.root,file) || !position || typeof text!=='string') return [];
-  const source=index.files.get(file);
+  const source=index.files.get(fileKey(file));
   const selected=source?.declarations.find(item => item.range.start.line===position.line &&
     position.character>=item.range.start.character && position.character<item.range.end.character);
   if (!selected) return [];

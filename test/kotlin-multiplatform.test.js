@@ -86,6 +86,12 @@ test('real Kotlin 2.4.21 Gradle model, JVM and JavaScript tasks, and scoped expe
   const position={line:3,character:12};
   const links=definitionForKmp(compiled.index,{file:expected,text:text.replace(/\r?\n/g,'\r\n'),position});
   assert.deepEqual(links.map(link => [link.sourceSet,link.range.start.line]),[['jsMain',3],['jvmMain',4]]);
+  if (process.platform==='win32') {
+    const editorPath=expected.replace(/^([A-Z]):/i,(_drive,letter)=>letter.toLowerCase()+':').replace('Platform.kt','platform.kt');
+    assert.notEqual(editorPath,expected);
+    const actuals=definitionForKmp(compiled.index,{file:editorPath,text,position});
+    assert.deepEqual(actuals,links);
+  }
   const property=definitionForKmp(compiled.index,{file:expected,text,position:{line:2,character:13}});
   assert.deepEqual(property.map(link => [link.name,link.sourceSet]),[['platformLabel','jsMain'],['platformLabel','jvmMain']]);
   const actual=fileURLToPath(links[1].uri), actualText=await fs.readFile(actual,'utf8');

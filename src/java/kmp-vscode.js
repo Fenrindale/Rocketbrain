@@ -6,6 +6,7 @@ const { nativeTaskRunner } = require('./workbench-tasks');
 const { projectForRoot,loadKmpModel } = require('./kmp-gradle');
 const { runKmpTasks } = require('./kmp-workbench');
 const { definitionForKmp } = require('./kmp-sources');
+const { fileKey } = require('./dependency-builds');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 
 const COMMANDS={inspect:'rocketbrain.kotlin.multiplatform.inspect',compile:'rocketbrain.kotlin.multiplatform.compile',
@@ -101,7 +102,8 @@ function registerKmpWorkbench(vscode,java) {
     trusted(cancellation);
     if (!document || document.uri.scheme!=='file' || document.uri.authority || !document.uri.fsPath.endsWith('.kt')) return [];
     const file=workspacePath(document.uri.fsPath,roots(),{directory:false});
-    const matches=[...indexes.values()].filter(index => index.files.has(file));
+    const key=fileKey(file);
+    const matches=[...indexes.values()].filter(index => index.files.has(key));
     if (matches.length!==1) return [];
     const results=definitionForKmp(matches[0],{file,text:document.getText(),position},cancellation);
     return results.map(item => {
