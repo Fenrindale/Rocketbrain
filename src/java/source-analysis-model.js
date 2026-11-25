@@ -169,8 +169,8 @@ function dataFlow(report,source,offset) {
 }
 
 const VALUE_EVENTS = new Set(['parameter','definition','read','assignment','return','literal','argument','call-result',
-  'choice','true-value','false-value']);
-const WRAPPERS = new Set(['argument','true-value','false-value','choice']);
+  'choice','true-value','false-value','condition','branch','branch-merge','return-merge','narrowed']);
+const WRAPPERS = new Set(['argument','true-value','false-value','choice','branch','branch-merge','return-merge','narrowed']);
 
 function callFlow(report,source,sources,offset) {
   const block=report?.callFlow;
@@ -196,7 +196,8 @@ function callFlow(report,source,sources,offset) {
       inputs:[...event.inputs],...address(event)};
   });
   const local=events.filter(event=>event.uri===source.uri&&event.frame===block.originFrame&&event.method===plain(block.method,350));
-  const atCursor=(entries)=>entries.sort((a,b)=>a.end-a.start-(b.end-b.start)||Number(WRAPPERS.has(a.kind))-Number(WRAPPERS.has(b.kind)))[0];
+  const atCursor=entries=>entries.sort((a,b)=>Number(WRAPPERS.has(a.kind))-Number(WRAPPERS.has(b.kind))||
+    a.end-a.start-(b.end-b.start)||a.id-b.id)[0];
   const origin=atCursor(local.filter(item=>item.start<=offset&&offset<item.end))||atCursor(local.filter(item=>item.end===offset));
   if (!origin) throw Error('Place the cursor on a traced Java value, parameter, call or return keyword.');
   const contexts=block.contexts.map((location,index)=>({id:'caller-'+index,start:location?.start,...address(location)}));

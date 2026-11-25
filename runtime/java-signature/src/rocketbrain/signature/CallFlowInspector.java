@@ -3,6 +3,7 @@ package rocketbrain.signature;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.lang.model.element.ElementKind;
@@ -38,6 +39,7 @@ final class CallFlowInspector {
     private final SourcePositions positions;
     private final Map<String,Source> sources;
     private final List<Flow.Event> events = new ArrayList<>();
+    private final Map<Integer,Object> facts = new HashMap<>();
     private final Deque<ExecutableElement> stack = new ArrayDeque<>();
     private Caller selectedCaller;
     private int selectedFrame = 0;
@@ -81,14 +83,14 @@ final class CallFlowInspector {
         if (stack.size() >= 5 || frame > 48) throw refuse("Java call flow exceeds its call depth or frame limit.");
         stack.addLast(method);
         try {
-            Flow flow = new Flow(route.getCompilationUnit(),trees,sources.get(uri(route)).text,events,key(method),frame,this::invoke);
+            Flow flow = new Flow(route.getCompilationUnit(),trees,sources.get(uri(route)).text,events,facts,key(method),frame,this::invoke);
             return flow.trace(route,args);
         } finally {
             stack.removeLast();
         }
     }
 
-    private List<Integer> invoke(Flow caller, TreePath route, MethodInvocationTree call) {
+    private Flow.Value invoke(Flow caller, TreePath route, MethodInvocationTree call) {
         if (!(trees.getElement(route) instanceof ExecutableElement target) || !simpleResult(target) ||
             !direct(route,stack.getLast(),target)) {
             throw refuse("Trace a direct Java call with known dispatch and primitive or String parameters and return value.");
@@ -101,8 +103,9 @@ final class CallFlowInspector {
         List<Integer> arguments = new ArrayList<>();
         for (int index = 0; index < call.getArguments().size(); index++) {
             var actual = call.getArguments().get(index);
-            List<Integer> inputs = caller.expression(new TreePath(route,actual));
-            arguments.add(caller.add("argument","Argument " + (index + 1),caller.start(actual),caller.end(actual),inputs));
+            Flow.Value input = caller.expression(new TreePath(route,actual));
+            arguments.add(caller.valueEvent("argument","Argument " + (index + 1),caller.start(actual),caller.end(actual),
+                caller.controlled(input.inputs()),input.fact()));
         }
         int frame = frames++;
         if (caller.frame == 0 && selectedCaller != null && selectedCaller.uri().equals(uri(route)) &&
@@ -110,7 +113,9 @@ final class CallFlowInspector {
         int returned = execute(body,target,arguments,frame);
         if (returned < 0) throw refuse("The direct call has no modeled Java value return.");
         var select = call.getMethodSelect();
-        return List.of(caller.add("call-result",key(target),caller.start(select),caller.end(select),List.of(returned)));
+        Object fact=FlowFacts.stored(target.getReturnType(),caller.fact(returned));
+        return new Flow.Value(List.of(caller.valueEvent("call-result",key(target),caller.start(select),caller.end(select),
+            caller.controlled(List.of(returned)),fact)),fact);
     }
 
     private Incoming incoming(List<CompilationUnitTree> units, ExecutableElement target) {
@@ -163,7 +168,7 @@ final class CallFlowInspector {
             }
             if (!(trees.getElement(root) instanceof ExecutableElement entry)) throw refuse("No modeled Java method was found.");
             execute(root,entry,List.of(),frames++);
-            if (selectedFrame < 0) throw refuse("The selected caller is outside the supported straight-line Java flow.");
+            if (selectedFrame < 0) throw refuse("The selected call is unreachable in the modeled caller path.");
             return object("uri",uri(selected),"originFrame",selectedFrame,"method",key(target),
                 "contexts",incoming.callers().stream().map(Caller::output).toList(),"omittedContexts",incoming.omitted(),
                 "events",events.stream().map(event -> event.output(true)).toList());
