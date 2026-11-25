@@ -7,7 +7,7 @@ const { inside,workspacePath,workspaceRoots,fail } = require('./workbench-model'
 const COMMANDS={start:'rocketbrain.kotlinEditor.start',stop:'rocketbrain.kotlinEditor.stop',output:'rocketbrain.kotlinEditor.output'};
 
 function registerKotlinEditor(context,vscode,java) {
-  const output=vscode.window.createOutputChannel('Rocketbrain Kotlin Editor');
+  const output=vscode.window.createOutputChannel('Rocketbrain Kotlin Editor',{log:true});
   const subscriptions=[output];
   let state={state:'stopped'}, active, closing, disposed=false, suspended=false, pending=Promise.resolve();
 
