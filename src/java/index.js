@@ -100,7 +100,7 @@ function registerJavaFeatures(context, vscode) {
     dispose() {
       if (!disposing) {
         disposed = true;
-        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.micronaut?.dispose();await api.scala?.dispose();await api.kotlinMultiplatform?.dispose();await api.kotlinEditor?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
+        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.micronaut?.dispose();await api.scala?.dispose();await api.kotlinMultiplatform?.dispose();await api.kotlinEditor?.dispose();await api.coroutines?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
       }
       return disposing;
     }
@@ -145,6 +145,7 @@ function registerJavaFeatures(context, vscode) {
   api.scala=require('./scala-vscode').registerScalaWorkbench(context,vscode,api);
   api.kotlinMultiplatform=require('./kmp-vscode').registerKmpWorkbench(vscode,api);
   api.kotlinEditor=require('./kotlin-editor-vscode').registerKotlinEditor(context,vscode,api);
+  api.coroutines=require('./kotlin-coroutines-vscode').registerKotlinCoroutines(vscode,api);
   async function installEngine() {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before installing and starting the Java engine.');
     if (installing) throw new Error('Java engine installation is already running.');

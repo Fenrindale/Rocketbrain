@@ -120,6 +120,12 @@ Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를
 
 **Review Local ACP Agent Replies**는 한 응답을 텍스트로 열거나 두 응답을 VS Code 차이 보기에서 비교합니다. 실행 중에는 진행 알림에서 세션을 취소할 수 있습니다.
 
+### Kotlin 코루틴 상태와 생성 스택
+
+**Prepare Kotlin Coroutine Probe**에서 프로젝트와 같은 버전의 `kotlinx-coroutines-debug-1.11.0.jar`를 선택하고, 복사한 `vmArgs`로 로컬 개발 JVM을 실행합니다. 앱의 일반 JVM 클래스패스에 Kotlin 코루틴 라이브러리와 디버그 라이브러리가 있어야 합니다. 실행 후 **Kotlin Coroutines**의 **Connect Local Probe**에서 `coroutine-probe.json`을 열고 스냅샷을 새로 고칩니다.
+
+코루틴을 펼치면 생성 스택과 마지막 관찰 스택이 표시됩니다. 실행 중인 코루틴의 마지막 관찰 스택은 재개 지점일 수 있습니다. 로컬 소스와 일치하는 스택 프레임을 선택하면 해당 줄을 엽니다. 이 기능은 가동 중인 JVM에 시작 옵션으로 연결한 개발 프로브의 스냅샷을 읽습니다.
+
 ### Java CI 품질 게이트
 
 VSIX의 `extension/dist/java-quality-gate.js`를 추출하거나 소스의 `scripts/java-quality-gate.js`를 실행합니다. Node.js 20 이상과 Git이 있는 CI에서 대상 저장소와 기준선 커밋을 로컬로 준비합니다.

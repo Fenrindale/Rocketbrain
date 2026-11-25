@@ -39,6 +39,7 @@
     "workspaceContains:**/build.gradle.kts",
     "workspaceContains:**/build.sbt",
     "onView:rocketbrain.javaProjects",
+    "onView:rocketbrain.kotlinCoroutines",
     "onView:rocketbrain.connections",
     "onNotebook:rocketbrain-sql-notebook",
     "onNotebook:rocketbrain-jupyter"
@@ -87,6 +88,11 @@
       { "command": "rocketbrain.kotlinEditor.start", "title": "Start Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.stop", "title": "Stop Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.output", "title": "Show Kotlin Language Server Output", "category": "Rocketbrain" },
+      { "command": "rocketbrain.coroutines.prepare", "title": "Prepare Kotlin Coroutine Probe", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.connect", "title": "Connect Local Kotlin Coroutine Probe", "category": "Rocketbrain", "icon": "$(plug)", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.refresh", "title": "Refresh Kotlin Coroutine Snapshot", "category": "Rocketbrain", "icon": "$(refresh)", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.disconnect", "title": "Disconnect Kotlin Coroutine Probe", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.openFrame", "title": "Open Kotlin Coroutine Frame", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
@@ -916,6 +922,10 @@
           "name": "Java Projects"
         },
         {
+          "id": "rocketbrain.kotlinCoroutines",
+          "name": "Kotlin Coroutines"
+        },
+        {
           "id": "rocketbrain.connections",
           "name": "Database Connections"
         },
@@ -933,6 +943,11 @@
       ]
     },
     "viewsWelcome": [
+      {
+        "view": "rocketbrain.kotlinCoroutines",
+        "contents": "[Prepare JVM Probe](command:rocketbrain.coroutines.prepare)\n[Connect Local Probe](command:rocketbrain.coroutines.connect)",
+        "when": "isWorkspaceTrusted"
+      },
       {
         "view": "rocketbrain.databases",
         "contents": "Explore a local sample or connect your database.\n[Open SQL Console](command:rocketbrain.openConsole)\n[Connect MySQL / MariaDB](command:rocketbrain.connectMysql)"
@@ -971,6 +986,9 @@
         { "command": "rocketbrain.sshWorkspace.attach", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.sshWorkspace.refresh", "when": "view == rocketbrain.sshWorkspace", "group": "navigation@2" },
         { "command": "rocketbrain.sshWorkspace.close", "when": "view == rocketbrain.sshWorkspace", "group": "setup@1" },
+        { "command": "rocketbrain.coroutines.connect", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "navigation" },
+        { "command": "rocketbrain.coroutines.refresh", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "navigation" },
+        { "command": "rocketbrain.coroutines.disconnect", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "connection" },
         {
           "command": "rocketbrain.schema.exportDdl",
           "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
