@@ -11,14 +11,29 @@ permissions:
 jobs:
   wsl1:
     runs-on: windows-2025
-    timeout-minutes: 12
+    timeout-minutes: 24
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verify owned WSL 1 distribution and local workspace mapping
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install locked build dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build and check the candidate VSIX
         shell: pwsh
-        run: ./scripts/test-wsl-runtime.ps1
+        run: |
+          node --test test/wsl-workspace.test.js
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/package.js
+      - name: Verify the packaged workbench against real WSL 1
+        shell: pwsh
+        run: ./scripts/test-wsl-runtime.ps1 -VerifyWorkbench
       - uses: actions/upload-artifact@v4
         with:
           name: rocketbrain-wsl-runtime
