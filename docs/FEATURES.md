@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.88.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.89.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 123 |
-| 부분 구현 | 79 |
+| 구현 | 125 |
+| 부분 구현 | 77 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **80.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **81.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.88에서는 Java 문자열의 정규식·HTML 조각을 편집한다. OpenAPI의 복합 스키마를 실제 응답과 비교한다. 두 DB에서 함수 인덱스 또는 생성 열 인덱스와 예약 이벤트를 검토한다. 상태가 바뀐 항목은 2개이고 가중 점수는 173.5점에서 174.5점으로 바뀌었다.
+v0.89에서는 Java private 인스턴스 호출을 평가 순서를 보존하며 인라인하고, 저장 쿼리와 비교 묶음을 열며, 기존 DB 계정의 암호를 검토한 뒤 교체한다. 상태가 바뀐 항목은 2개이고 가중 점수는 174.5점에서 175.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -47,7 +47,7 @@ v0.88에서는 Java 문자열의 정규식·HTML 조각을 편집한다. OpenAPI
 | IDEA-024 | IntelliJ IDEA | 기호·패키지 이름 변경 | 부분 구현 |
 | IDEA-025 | IntelliJ IDEA | 변수·상수·필드 추출 | 구현 |
 | IDEA-026 | IntelliJ IDEA | 메서드 추출 | 구현 |
-| IDEA-027 | IntelliJ IDEA | 변수·메서드 인라인 | 부분 구현 |
+| IDEA-027 | IntelliJ IDEA | 변수·메서드 인라인 | 구현 |
 | IDEA-028 | IntelliJ IDEA | 클래스·멤버 이동 | 부분 구현 |
 | IDEA-029 | IntelliJ IDEA | Change Signature·파라미터 전파 | 부분 구현 |
 | IDEA-030 | IntelliJ IDEA | Safe Delete | 부분 구현 |
@@ -215,7 +215,7 @@ v0.88에서는 Java 문자열의 정규식·HTML 조각을 편집한다. OpenAPI
 | DG-072 | DataGrip | CSV/Excel import·column/type mapping | 부분 구현 |
 | DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 구현 |
 | DG-074 | DataGrip | native dump·restore 도구 통합 | 구현 |
-| DG-075 | DataGrip | table·result dataset 비교·sync | 부분 구현 |
+| DG-075 | DataGrip | table·result dataset 비교·sync | 구현 |
 | DG-076 | DataGrip | 그리드 결과 차트·집계 | 구현 |
 | DG-077 | DataGrip | 지리 데이터 지도 보기 | 구현 |
 | DG-078 | DataGrip | table create/alter 시각 designer | 부분 구현 |

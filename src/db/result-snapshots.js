@@ -1,6 +1,7 @@
 'use strict';
 
 const { randomUUID }=require('node:crypto');
+const { registerSavedResultComparison } = require('./saved-result-compare');
 
 const prefix='rocketbrain.resultSnapshot.v1.';
 const limits={rows:500,columns:256,bytes:1024*1024,snapshots:12,totalBytes:8*1024*1024};
@@ -18,6 +19,28 @@ function normalizeFields(columns,fields) {
   });
 }
 
+function captureCoverage(result, truncated) {
+  if (!result.browse) return { kind: 'query-capture', truncated };
+  const { page, filters, hasNext, hasPrevious } = result.browse;
+  return { kind: 'table-page', truncated,
+    ...(Number.isSafeInteger(page) && page >= 0 && page < 1000000 && { page: page + 1 }),
+    filtered: Array.isArray(filters) && filters.length > 0,
+    hasPrevious: hasPrevious === true,
+    hasNext: typeof hasNext === 'boolean' ? hasNext : null
+  };
+}
+
+function restoredCoverage(value, truncated) {
+  if (value === undefined) return undefined;
+  if (value?.truncated !== truncated) return null;
+  if (value.kind === 'query-capture') return { kind: value.kind, truncated };
+  if (value.kind !== 'table-page' || typeof value.filtered !== 'boolean' || typeof value.hasPrevious !== 'boolean' ||
+      ![null, true, false].includes(value.hasNext) ||
+      value.page !== undefined && (!Number.isSafeInteger(value.page) || value.page < 1 || value.page > 1000000)) return null;
+  return { kind: value.kind, truncated, ...(value.page !== undefined && { page: value.page }),
+    filtered: value.filtered, hasPrevious: value.hasPrevious, hasNext: value.hasNext };
+}
+
 function captureRows(result) {
   const {columns,rows}=result||{};
   if(!Array.isArray(columns)||!columns.length||columns.length>limits.columns||!columns.every(fitsColumn)||
@@ -26,20 +49,24 @@ function captureRows(result) {
     if(!Array.isArray(row)||row.length!==columns.length||!row.every(scalar))throw Error('The result contains an unsupported cell representation.');
     return row.map(value=>Object.is(value,-0)?['-0']:value);
   });
-  return {columns:[...columns],fields:normalizeFields(columns,result.fields),rows:encoded,truncated:result.truncated===true||result.browse?.hasNext===true};
+  const truncated = result.truncated === true || result.browse?.hasNext === true;
+  return {columns:[...columns],fields:normalizeFields(columns,result.fields),rows:encoded,truncated,
+    coverage: captureCoverage(result, truncated)};
 }
 
 function restoredRows(value) {
   if(!value||!Array.isArray(value.columns)||!value.columns.length||value.columns.length>limits.columns||
       !value.columns.every(fitsColumn)||!Array.isArray(value.rows)||value.rows.length>limits.rows||typeof value.truncated!=='boolean')return null;
   const {columns}=value;
+  const coverage = restoredCoverage(value.coverage, value.truncated);
+  if (coverage === null) return null;
   const rows=[];
   for(const row of value.rows) {
     if(!Array.isArray(row)||row.length!==columns.length||!row.every(cell=>scalar(cell)||isNegativeZero(cell)))return null;
     rows.push(row.map(cell=>isNegativeZero(cell)?-0:cell));
   }
   return {columns:[...columns],fields:normalizeFields(columns,value.fields),rows,rowCount:rows.length,truncated:value.truncated,
-    durationMs:0,affectedRows:0,offlineCapture:true};
+    durationMs:0,affectedRows:0,offlineCapture:true,...(coverage && { captureCoverage: coverage })};
 }
 
 function createResultSnapshotStore(state,allowed) {
@@ -55,7 +82,7 @@ function createResultSnapshotStore(state,allowed) {
     if(typeof id!=='string'||!idPattern.test(id))return null;
     const saved=state.get(storedKey(id));
     if(!saved||saved.id!==id||typeof saved.title!=='string'||saved.title!==forTitle(saved.title)||
-      !Number.isSafeInteger(saved.capturedAt)||saved.capturedAt<0)return null;
+      !Number.isSafeInteger(saved.capturedAt)||saved.capturedAt<0||saved.capturedAt>8.64e15)return null;
     const size=Buffer.byteLength(JSON.stringify(saved));
     if(size>limits.bytes)return null;
     const result=restoredRows(saved.payload);
@@ -123,10 +150,10 @@ function registerResultSnapshots(context,vscode,results,command) {
     await results.activateResult(recordId);
     return {id,recordId,readOnly:true,executedSql:false};
   }
-  async function choose(title) {
-    const items=store.list().map(snapshot=>({label:snapshot.title,
+  async function choose(title, exceptId) {
+    const items=store.list().filter(snapshot=>snapshot.id!==exceptId).map(snapshot=>({label:snapshot.title,
       description:new Date(snapshot.capturedAt).toLocaleString(),detail:snapshot.rows+' rows · '+snapshot.columns+' columns',snapshot}));
-    if(!items.length)throw Error('There are no saved results in this workspace.');
+    if(!items.length)throw Error(exceptId ? 'Save a second result to compare two captures.' : 'There are no saved results in this workspace.');
     return (await vscode.window.showQuickPick(items,{title}))?.snapshot;
   }
   command('rocketbrain.results.saveSnapshot',async()=>{
@@ -148,7 +175,8 @@ function registerResultSnapshots(context,vscode,results,command) {
       await store.remove(item.id);
     }
   });
-  return {candidates,save,open,list:store.list,remove:store.remove};
+  const comparison = registerSavedResultComparison(context, vscode, store, choose, command);
+  return {candidates,save,open,list:store.list,remove:store.remove,comparison};
 }
 
 module.exports={createResultSnapshotStore,registerResultSnapshots};

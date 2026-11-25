@@ -1,25 +1,25 @@
 {
-  "version": "0.88.0",
-  "verifiedAt": "2026-11-25T21:39:54.874Z",
+  "version": "0.89.0",
+  "verifiedAt": "2026-11-25T21:49:11.510Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.88.0.vsix",
-    "sha256": "1b6c19d39ce27a3fb5d5fedb03a83b81b8a2e4660d8a29259f03570f143a60d4",
-    "bytes": 3678085,
+    "name": "rocketbrain-0.89.0.vsix",
+    "sha256": "a2cd7b308f8599648f51244f3151fc0ee22343d75dd6c5c923e8ddbbe9cf7124",
+    "bytes": 3687208,
     "files": 22
   },
   "source": {
-    "frozenPublicInputs": 2133,
-    "inputVectorSha256": "c60c74479b5acebae16b6b2e0a50432ea7639c0d02d3e10b97fd8a2457532e87",
+    "frozenPublicInputs": 2147,
+    "inputVectorSha256": "bbe74657640a8ea4a59db045367f50181c3a948db48708ff43836d74b3ed7daa",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1780,
-    "pass": 1652,
+    "tests": 1790,
+    "pass": 1659,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 128,
+    "skipped": 131,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaEmbeddedLanguages",
+          "group": "javaInstanceInline",
           "checks": 1
         },
         {
-          "group": "openApiSchemas",
+          "group": "passwordRotation",
           "checks": 1
         },
         {
-          "group": "functionalIndexes",
+          "group": "savedResultComparison",
           "checks": 1
         },
         {
-          "group": "eventDeployment",
+          "group": "datasetBatch",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaEmbeddedLanguages",
+          "group": "javaInstanceInline",
           "checks": 1
         },
         {
-          "group": "openApiSchemas",
+          "group": "passwordRotation",
           "checks": 1
         },
         {
-          "group": "functionalIndexes",
+          "group": "savedResultComparison",
           "checks": 1
         },
         {
-          "group": "eventDeployment",
+          "group": "datasetBatch",
           "checks": 1
         }
       ],
@@ -85,76 +85,70 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-103": {
-      "scope": "실제 Spring 응답의 중첩 자료와 복합 스키마 템플릿을 설치판에서 대조했다. 모델의 합성·재귀·null 예제가 정확하게 열리는 것을 확인했다.",
+    "IDEA-027": {
+      "scope": "실제 두 Spring JDK 설치판에서 암시적·명시적 this와 생성한 수신자의 결과를 대조했다. 네 실행 출력, 인수의 부작용 순서, 무효화 검사와 한 번의 Undo를 확인했다.",
       "runtimeGroups": [
-        "openApiSchemas"
+        "javaInstanceInline"
       ]
     },
-    "IDEA-119": {
-      "scope": "두 설치판에서 regex 진단 위치, HTML 완성과 양쪽 태그 이름 변경, 소스 미리보기·Undo, text block 공백 보존 및 실제 JDBC 출력의 HTML을 확인했다.",
+    "DG-075": {
+      "scope": "두 설치판에서 정확한 복합 키·NULL·타입과 중복 별칭·키 처리, 500행 캡처 한도, 양쪽 분류를 확인했다. 테이블 묶음에서 취소와 스키마 변경 후 부분 결과, 원본 행 보존을 검증했다.",
       "runtimeGroups": [
-        "javaEmbeddedLanguages"
+        "savedResultComparison",
+        "datasetBatch"
       ]
     },
-    "DG-079": {
-      "scope": "MySQL 함수 키의 생성·재열기·재구성 및 원본 복구와 숨은 엔진 열을 복사하지 않는 것을 확인했다. MariaDB에서 해당 구문을 거부하고 생성 열 인덱스로 동일한 정밀 소수 조회를 확인했다.",
+    "DG-080": {
+      "scope": "두 DB 설치판에서 이전 암호의 새 연결 거부·새 암호 연결, 열린 세션·기본 역할·TLS 정책 보존과 바뀐 계정 거부를 확인했다.",
       "runtimeGroups": [
-        "functionalIndexes"
-      ]
-    },
-    "DG-081": {
-      "scope": "두 설치판에서 선택한 실제 이벤트의 예약 시각, DEFINER·SQL 모드·시간대와 비활성 상태를 보존했다. 새 연결에서 복원과 외부 변경 후 복원 거부를 확인했다.",
-      "runtimeGroups": [
-        "eventDeployment"
+        "passwordRotation"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 467,
+    "sourceCorrespondences": 470,
     "sourceConfidence": "inferred",
     "archiveEntries": 22,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 123,
-      "partial": 79,
+      "implemented": 125,
+      "partial": 77,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 174.5,
-    "previousWeightedPoints": 173.5,
+    "weightedPoints": 175.5,
+    "previousWeightedPoints": 174.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 80.8,
+    "referencePercent": 81.3,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-119",
+        "id": "IDEA-027",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-079",
+        "id": "DG-075",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "문자열 제어는 확인한 Java 정규식 호출과 명시된 HTML text block에서 작동한다.",
-    "OpenAPI 복합 스키마는 안전하게 합칠 수 있는 제약과 로컬 참조를 사용한다. Swagger 2와 서버 생성은 남는다.",
-    "MySQL은 확인한 결정적 숫자 표현식 키를 사용한다. MariaDB는 이름 있는 생성 열을 인덱싱한다.",
-    "예약 이벤트는 비활성 상태이고 현재 계정이 소유한 제한된 단일 스키마 변경문만 편집한다.",
+    "인스턴스 메서드는 바인딩을 확인한 같은 클래스의 private 호출에 적용한다. null 가능성과 처리할 수 없는 본문은 거부한다.",
+    "저장 결과 비교는 캡처한 행의 읽기 전용 보고서다. 비교 묶음은 각 테이블 쌍에서 별도 스냅샷을 사용한다. 데이터 변경은 개별 비교의 승인 흐름에서 검토한다.",
+    "새 DB 암호를 적용하려면 계정 상태와 검증된 전송을 확인해야 한다. 복합 인증 방식과 일부 권한 정책은 다른 범위다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Java 인스턴스 메서드 인라인",
-    "저장된 SQL 결과와 테이블 비교 묶음",
-    "기존 DB 계정의 검토형 암호 교체"
+    "미완성 Java 식의 예상 타입으로 값 완성",
+    "검색에서 Git·설정·실제 DB 객체 탐색",
+    "조인 SQL 변경문 자동완성, 선택한 SSH agent 키 연결"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -189,4 +189,4 @@ function apply(lease, reviewed) {
   });
 }
 
-module.exports = { availableRoles, plan, apply, request, sqlFor, expectedRoles };
+module.exports = { availableRoles, plan, apply, request, sqlFor, expectedRoles, explicitRoles, loginDefaults };

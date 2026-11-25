@@ -35,23 +35,23 @@ function createMethodInline(vscode,{
         throw Error('The Java source or its runtime changed. Review the method call again.');
       }
     }
-    const analyze=(input,offsets,argumentCount,token,options)=>compile(state,project,
+    const analyze=(input,offsets,argumentCount,token,options,receiverKind)=>compile(state,project,
       sources.map(file=>file.uri===current.uri?{...file,text:input}:file),
-      {kind:'methodInline',uri:current.uri,...offsets,argumentCount},token,options);
+      {kind:'methodInline',uri:current.uri,...offsets,argumentCount,receiverKind},token,options);
     checkAnchor(cancellation);
     const initial=await analyze(text,{start,end},-1,cancellation);
     const proof=initial.methodInline,draft=buildInlineDraft(text,proof);
     checkAnchor(cancellation);
     const compiled=await analyze(draft.after,{start:draft.start,end:draft.end},proof.arguments.length,cancellation,
-      {errorTitle:'The Java inline edit would fail compiler analysis: '});
+      {errorTitle:'The Java inline edit would fail compiler analysis: '},proof.receiver.kind);
     if (compiled.classpathFingerprint!==initial.classpathFingerprint) throw Error('The Java classpath changed during inline analysis.');
     verifyInlineDraft(proof,draft,compiled.methodInline);
     checkAnchor(cancellation);
     const reviewed=await java.refactoring.previewWorkspaceEdit({documentChanges:[{
       textDocument:{uri:current.uri,version},edits:[draft.edit]
     }]},{title:TITLE+' · '+proof.method,kind:kind.value,anchorDocument:document,cancellation,
-      warnings:[proof.arguments.length?'Each argument is evaluated once in its original order. The method declaration stays available.':
-        'The method declaration stays available.'],
+      warnings:[...(proof.receiver.kind==='new'?['The constructed receiver is evaluated once before the call arguments.']:[]),
+        ...(proof.arguments.length?['Each argument is evaluated once in its original order.']:[]),'The method declaration stays available.'],
       validate:async token=>{
         checkAnchor(token);
         const live=await classSources(project,token);
@@ -63,7 +63,8 @@ function createMethodInline(vscode,{
         compiled.validateClasspath();
       },preApply:token=>{checkAnchor(token);compiled.validateClasspath();assertUnchangedSourceSnapshots(sources);}});
     return {...reviewed,inline:{method:proof.method,owner:proof.owner,returnType:proof.type,arguments:proof.arguments.length,
-      parameterReferences:proof.references.length,selectedCalls:1}};
+      parameterReferences:proof.references.filter(reference=>reference.index!==undefined).length,selectedCalls:1,
+      ...(proof.receiver.kind==='static'?{}:{receiverKind:proof.receiver.kind,fieldReads:proof.references.filter(reference=>reference.field).length})}};
   }
 
   let disposed=false;
@@ -80,10 +81,12 @@ function createMethodInline(vscode,{
       if (!anchor) return [];
       const selection=document.getText(anchor).trim();
       const start=document.offsetAt(anchor.start), previous=document.getText().slice(Math.max(0,start-320),start);
-      if (!/(?:\breturn|=)\s*(?:\(\s*)*$/.test(previous)) return [];
       const simple=/^[$\p{ID_Start}][$\p{ID_Continue}]*$/u.test(selection);
       const follows=simple?document.lineAt(anchor.end.line).text.slice(anchor.end.character):'';
-      if (!(simple&&/^\s*\(/.test(follows))&&!/^[$\p{ID_Start}][$\p{ID_Continue}]*\s*\([\s\S]*\)$/u.test(selection)) return [];
+      if (simple) {
+        if (!/(?:\breturn|=)\s*(?:\(\s*)*(?:this\s*\.\s*)*$/.test(previous)||!/^\s*\(/.test(follows)) return [];
+      } else if (!/(?:\breturn|=)\s*(?:\(\s*)*$/.test(previous) ||
+        !/^(?:(?:this\s*\.|new\s+[\s\S]+\.)\s*)?[$\p{ID_Start}][$\p{ID_Continue}]*\s*\([\s\S]*\)$/u.test(selection)) return [];
       const action=new vscode.CodeAction(TITLE,kind);
       action.command={command:COMMAND,title:TITLE,arguments:[editorAnchor(document,anchor)]};
       return [action];

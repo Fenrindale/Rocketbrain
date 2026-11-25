@@ -293,7 +293,7 @@ public final class SignatureInspector {
                 !(args.length == 6 && args[4].equals("conversion")) &&
                 !(args.length == 9 && args[4].equals("constant")) &&
                 !(args.length == 9 && args[4].equals("extraction")) &&
-                !(args.length == 9 && args[4].equals("methodInline")) &&
+                !(args.length == 10 && args[4].equals("methodInline")) &&
                 !(args.length == 8 && args[4].equals("typeStructure")) &&
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
                 !(args.length == 7 && args[4].equals("cleanup")) &&
@@ -355,7 +355,7 @@ public final class SignatureInspector {
                     else if (args[4].equals("methodInline")) {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
                         report.put("methodInline",new InlineMethodInspector(task,unit,byUri.get(args[5]).text)
-                            .inspect(Integer.parseInt(args[6]),Integer.parseInt(args[7]),Integer.parseInt(args[8])));
+                            .inspect(Integer.parseInt(args[6]),Integer.parseInt(args[7]),Integer.parseInt(args[8]),args[9]));
                     }
                     else if (args[4].equals("typeStructure")) {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();

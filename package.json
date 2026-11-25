@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.88.0",
+  "version": "0.89.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -95,6 +95,9 @@
       { "command": "rocketbrain.replayDatasetWorkflow", "title": "Replay Saved Dataset Comparison", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.stageDatasetWorkflow", "title": "Stage Dataset Comparison Changes", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.removeDatasetWorkflow", "title": "Remove Saved Dataset Comparison", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.createDatasetBatch", "title": "Save Dataset Comparison Batch", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.replayDatasetBatch", "title": "Replay Dataset Comparison Batch", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.removeDatasetBatch", "title": "Remove Dataset Comparison Batch", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.attach", "title": "Open SSH Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
       { "command": "rocketbrain.sshWorkspace.refresh", "title": "Refresh SSH Files", "category": "Rocketbrain", "icon": "$(refresh)" },
@@ -315,6 +318,7 @@
       { "command": "rocketbrain.db.reviewRoleMembership", "title": "Review Database Role Membership", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.reviewTableGrant", "title": "Review Table SELECT Grant or Revoke", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.reviewCreatePrincipal", "title": "Review Database Account or Role Creation", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.reviewPasswordRotation", "title": "Review Database Password Rotation", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.insertTemplate", "title": "Insert SQL Template", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.data.captureTransferSource", "title": "Capture Table Copy Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.data.transfer", "title": "Copy Captured Rows", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -627,6 +631,12 @@
       {
         "command": "rocketbrain.results.openSnapshot",
         "title": "Open Saved Query Result",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.results.compareSnapshots",
+        "title": "Compare Saved Query Results",
         "category": "Rocketbrain",
         "enablement": "isWorkspaceTrusted"
       },

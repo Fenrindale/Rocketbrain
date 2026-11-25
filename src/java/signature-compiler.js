@@ -53,8 +53,9 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   }
   else if(inspection.kind==='methodInline'&&Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&inspection.start>=0&&
     inspection.end>=inspection.start&&inspection.end-inspection.start<=32768&&Number.isInteger(inspection.argumentCount)&&
-    inspection.argumentCount>=-1&&inspection.argumentCount<=16&&sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)){
-    query.push('methodInline',inspection.uri,String(inspection.start),String(inspection.end),String(inspection.argumentCount));
+    inspection.argumentCount>=-1&&inspection.argumentCount<=16&&['static','this','new'].includes(inspection.receiverKind??'static')&&
+    sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)){
+    query.push('methodInline',inspection.uri,String(inspection.start),String(inspection.end),String(inspection.argumentCount),inspection.receiverKind??'static');
   }
   else if(inspection.kind==='methodExtract'&&Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&
     inspection.start>=0&&inspection.end>inspection.start&&inspection.end-inspection.start<=32768&&validIdentifier(inspection.name)&&

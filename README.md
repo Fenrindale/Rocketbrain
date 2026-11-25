@@ -361,7 +361,9 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Chart** 보기에서 캡처한 결과 페이지의 막대·선 그래프와 정확한 그룹 합계·평균을 확인합니다. 셀 편집기는 줄바꿈 종류, JSON 원문, Hex·Base64와 SQL NULL을 구분합니다.
 - **Map** 보기에서 캡처한 결과의 공간 열을 선택해 지도와 원본 행을 탐색합니다. 지리 좌표와 SRID 0 평면 좌표를 별도 보기로 표시합니다.
 - **Compare**에서 두 캡처 결과의 키와 비교 열을 매핑합니다. 일치 행의 변경을 선택해 그리드 초안에 넣습니다. 두 테이블을 필터 없이 전부 캡처했고 동일 타입의 정수 기본 키를 매핑했다면 한쪽에만 있는 행을 삽입 또는 삭제로 선택할 수 있습니다. 각 변경은 SQL 검토를 거쳐 적용하고 커밋합니다.
+- **Compare Saved Query Results**에서 워크스페이스에 저장한 두 쿼리 결과를 선택합니다. 연결이나 결과 탭 없이 비교할 수 있으며 복합 키는 저장된 열의 위치와 타입으로 지정합니다. 같은 이름으로 고유하게 매핑되는 비교 열이 있는 경우 함께 대조하며, 중복 별칭 및 나머지 열은 보고서에 표시합니다. 읽기 전용 보고서에는 각 캡처 시각과 잘림 여부, 비교 키, 값이 다른 행과 한쪽 캡처에만 있는 행이 표시됩니다.
 - **Save Table Dataset Comparison**으로 활성 연결의 InnoDB 테이블 두 개와 비교 열을 워크스페이스에 저장합니다. **Replay Saved Dataset Comparison**은 같은 읽기 전용 스냅샷에서 정수 기본 키 순서로 테이블당 최대 50,000행을 대조합니다. 보고서에 정확한 집계와 최대 100개 차이 표본을 표시합니다. **Stage Dataset Comparison Changes**는 현재 편집 페이지에서 원래 값과 일치하는 기존 행의 변경을 SQL 검토 초안에 넣습니다.
+- **Save Dataset Batch**로 저장한 대조 2~16개를 묶고 **Replay Dataset Batch**에서 한 번에 실행합니다. 테이블 쌍별 읽기 전용 스냅샷과 집계, 완료·실패·취소 상태를 보고서에서 확인할 수 있습니다. 데이터 변경 초안은 개별 대조 보고서에서 검토합니다.
 - 저장된 연결 프로필을 원본으로 선택하면 별도 MySQL 또는 MariaDB 서버의 InnoDB 테이블도 비교할 수 있습니다. 각 서버의 읽기 전용 스냅샷은 독립적으로 시작되며 보고서에 두 읽기 시작 시각이 표시됩니다. 정수와 DECIMAL의 정밀도 및 부호, VARCHAR의 폭·문자 집합·콜레이션, 바이너리 열의 폭을 확인합니다. 원본 프로필이나 테이블 정의가 바뀌면 재생 시 매핑을 다시 선택해야 합니다.
 - 대상의 모든 열을 정확히 매핑한 저장 비교에서는 MySQL과 MariaDB에 원본 전용 행을 삽입 제안으로 넣을 수 있습니다. 삽입은 기본 키를 포함한 전체 열에 쓰기 권한이 필요합니다. MySQL의 대상 전용 행은 현재 편집 페이지의 전체 값이 비교 당시와 일치하고 대상 테이블에 참조하는 외래 키가 없으면 삭제 제안에 넣을 수 있습니다. 삭제에는 전역 외래 키 사전 조회 권한이 필요합니다.
 - **Capture Table Copy Source**에서 메모리, 임시 스트리밍 또는 **Stream and Save for Resume**을 선택합니다. 스트리밍은 InnoDB 기본 키 순서의 읽기 스냅샷을 최대 100만 행·1 GiB까지 암호화합니다. 재개를 선택한 스냅샷은 작업 공간에 최대 24시간 두고 키는 VS Code Secret Storage에 저장합니다. **Copy Captured Rows**에서 대상을 다시 검토하고 새 트랜잭션에 스테이징한 뒤 **Finish Table Copy**에서 커밋 또는 롤백합니다. 커밋 결과가 불확실한 스냅샷은 재사용이 잠깁니다.
@@ -406,3 +408,7 @@ For bitwise SQL, the editor separates numeric operands from MySQL binary-string 
 Use **Open Database Source for Editing** to open a disabled scheduled event owned by the current account. Edit its body and choose **Review Database Object Source** to see the exact ALTER statement and observed schedule. Apply the review to save the body while the event stays disabled. **Restore Retained Database Object Source** verifies the live event and target definitions before restoring the retained body, including after reconnecting.
 
 Event edits support bounded INSERT, UPDATE with WHERE, and DELETE with WHERE against observed same-schema InnoDB targets. The editor reads catalog metadata for review and retains the original source in the database authoring journal on apply.
+
+Use **Review Database Password Rotation** to review an exact existing account on the active MySQL or MariaDB server. The command checks the password plugin, account state and visible role metadata. Connect through a local socket, direct numeric loopback address, or verified TLS. Enter and confirm the new credential in the masked prompts after approval. Reviews and Rocketbrain activity history omit the credential and the server-side comparison tag.
+
+The supported path covers unlocked, unexpired accounts with one password method. Already authenticated sessions stay connected. Update clients that use the rotated account before opening another session.

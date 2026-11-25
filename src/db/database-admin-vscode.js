@@ -5,6 +5,7 @@ const metadata = require('./database-admin-metadata');
 const grants = require('./database-table-grant');
 const principals = require('./database-principal-create');
 const roleMembership = require('./database-role-membership');
+const rotation = require('./database-password-rotation');
 
 function registerDatabaseAdmin(context, vscode, { database }) {
   const documents = new Map(), reviews = new Map(), subscriptions = [];
@@ -97,6 +98,26 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     if (approved !== true) throw new Error('Approve the single reviewed account or role creation.');
     return consumeReview('principal-create', reviewId, (lease, plan) => principals.apply(lease, plan, password));
   }
+  async function preparePasswordRotation(input) {
+    trusted();
+    const ticket = generation;
+    return database.withDatabaseAdmin(async lease => {
+      const plan = await rotation.plan(guarded(lease, ticket), input);
+      const { dialect, version, currentUser } = plan.identity;
+      return { ...retainReview('password-rotation', lease, ticket, plan), target: { ...plan.target },
+        server: { dialect, version, account: currentUser }, plugin: plan.before.plugin, sql: plan.sql,
+        roleCount: plan.before.roles.length, automaticRetry: false, credentialsIncluded: false };
+    });
+  }
+
+  async function applyPasswordRotation({ reviewId, approved, password } = {}) {
+    trusted();
+    if (approved !== true) throw new Error('Approve the exact reviewed password rotation.');
+    const invalid = principals.passwordProblem(password);
+    if (invalid) throw new Error(invalid);
+    return consumeReview('password-rotation', reviewId, (lease, plan) => rotation.apply(lease, plan, password));
+  }
+
   function listRoleMembershipOptions() {
     trusted();
     const ticket = generation;
@@ -144,6 +165,9 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     preparePrincipal,
     applyPrincipal,
     openPrincipalReview,
+    preparePasswordRotation,
+    applyPasswordRotation,
+    openPasswordRotationReview,
     listRoleMembershipOptions,
     prepareRoleMembership,
     applyRoleMembership,
@@ -383,8 +407,49 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     } finally { reviews.delete(review.reviewId); }
   }
 
+  async function openPasswordRotationReview(reviewId) {
+    const { plan } = reviewed('password-rotation', reviewId);
+    const { target, identity, before } = plan;
+    return show(['# Rotate database account password', '',
+      'Connected server ' + text(identity.hostname) + ':' + text(identity.port) + ' · ' + text(identity.version),
+      'Executing account ' + text(identity.currentUser),
+      'Target account ' + text(describeAccount(target)), 'Password plugin ' + text(before.plugin), '',
+      'The new password is entered after approval. Fresh sessions use the new credential after a verified change.',
+      'Existing connections are not disconnected by this operation. Update clients that use the account.',
+      'Observed direct role assignments ' + before.roles.length + ' · default roles ' + before.defaults.length,
+      '', '```sql', plan.sql + ';', '```'].join('\n'), 'password-rotation.md', reviewId);
+  }
+
+  async function rotatePassword() {
+    const ticket = generation, accounts = await api.listAccounts();
+    if (accounts.visibility === 'unavailable' || !accounts.entries.length) throw new Error('No account metadata is visible for password rotation.');
+    const selected = await vscode.window.showQuickPick(accounts.entries.filter(item => item.kind !== 'role' && item.host)
+      .map(({ user, host }) => ({ label: describeAccount({ user, host }), account: { user, host } })),
+    { title: 'Choose a Database Account to Rotate' });
+    if (!selected) return;
+    if (ticket !== generation) throw new Error('The administrator connection changed. Start the review again.');
+    const review = await preparePasswordRotation(selected.account);
+    try {
+      await openPasswordRotationReview(review.reviewId);
+      const confirm = 'Rotate Reviewed Account';
+      if (await vscode.window.showWarningMessage('Rotate the password for ' + describeAccount(review.target) + '?',
+        { modal: true }, confirm) !== confirm) return;
+      reviewed('password-rotation', review.reviewId);
+      const input = { password: true, ignoreFocusOut: true, validateInput: principals.passwordProblem };
+      const password = await vscode.window.showInputBox({ ...input, title: 'New Account Password' });
+      if (password === undefined) return;
+      const repeated = await vscode.window.showInputBox({ ...input, title: 'Confirm New Account Password' });
+      if (repeated === undefined) return;
+      if (password !== repeated) throw new Error('The new passwords do not match. No change was submitted.');
+      const result = await applyPasswordRotation({ reviewId: review.reviewId, approved: true, password });
+      if (result.state === 'verified') await vscode.window.showInformationMessage('The database password change was verified.');
+      else await vscode.window.showWarningMessage('Database password rotation ' + result.state + '. Inspect the account before making another review.');
+      return result;
+    } finally { reviews.delete(review.reviewId); }
+  }
+
   for (const [name, command] of [['systemCatalog', browseSystem], ['inspectAccess', inspectAccount], ['inspectRoleInheritance', inspectRoles], ['reviewRoleMembership', editRoleMembership], ['reviewTableGrant', editGrant],
-    ['reviewCreatePrincipal', createPrincipal]]) {
+    ['reviewCreatePrincipal', createPrincipal], ['reviewPasswordRotation', rotatePassword]]) {
     subscriptions.push(vscode.commands.registerCommand('rocketbrain.db.' + name, async () => {
       try { trusted(); return await command(); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Database: ' + error.message); }

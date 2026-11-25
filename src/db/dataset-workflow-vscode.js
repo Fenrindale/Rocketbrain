@@ -1,38 +1,96 @@
 'use strict';
 
 const { createDatasetWorkflows, limits } = require('./dataset-workflow');
+const { createDatasetBatches } = require('./dataset-workflow-batches');
 
 function registerDatasetWorkflows(context, vscode, command, options) {
   const scheme = 'rocketbrain-dataset-workflow';
   const workflows = createDatasetWorkflows(context.workspaceState, options.withConnection, options.profileSource);
-  let visible;
+  const batches = createDatasetBatches(context.workspaceState, workflows);
+  let visible, visibleBatch, comparing = false;
   const list = () => {
     if (!vscode.workspace.isTrusted) throw Error('Trust this workspace before opening saved dataset comparisons.');
     return workflows.list();
   };
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(scheme, {
     provideTextDocumentContent(uri) {
-      if (!vscode.workspace.isTrusted || visible?.uri.toString() !== uri.toString()) return 'Replay this saved comparison to see the current report.';
-      return visible.text;
+      if (vscode.workspace.isTrusted) {
+        const target = uri.toString();
+        if (visible?.uri.toString() === target) return visible.text;
+        if (visibleBatch?.uri.toString() === target) return visibleBatch.text;
+      }
+      return 'Replay this saved comparison to see the current report.';
     }
   }));
+
+  async function compare(action) {
+    list();
+    if (comparing) throw Error('Wait for the current dataset comparison to finish.');
+    comparing = true;
+    try { return await action(); }
+    finally { comparing = false; }
+  }
 
   const storedItem = async placeHolder => (await vscode.window.showQuickPick(list().map(item => ({
     label: item.name, description: `${item.source} → ${item.target}${item.sourceProfile ? ' · separate server' : ''}`, item
   })), { placeHolder }))?.item;
 
   async function replay(id, { cancellation, onProgress } = {}) {
-    const report = await workflows.replay(id, { cancellation, onProgress });
-    const uri = vscode.Uri.from({ scheme, path: `/${report.id}/Dataset comparison.json` });
-    const timing = report.snapshots ? { workflowName: report.workflowName, snapshotScope: report.snapshotScope, snapshots: report.snapshots }
-      : { snapshotStartedAt: report.snapshotStartedAt };
-    visible = { uri, report, text: JSON.stringify({ ...timing, comparisonCompletedAt: report.created,
-      source: report.source, destination: report.target,
-      summary: report.summary, oneSided: report.oneSided, omittedDifferences: report.omitted, sample: report.sample }, null, 2) + '\n' };
-    const document = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(document, { preview: false });
-    return { ...structuredClone(report), uri: uri.toString() };
+    return compare(async () => {
+      const report = await workflows.replay(id, { cancellation, onProgress });
+      const uri = vscode.Uri.from({ scheme, path: `/${report.id}/Dataset comparison.json` });
+      const timing = report.snapshots ? { workflowName: report.workflowName, snapshotScope: report.snapshotScope, snapshots: report.snapshots }
+        : { snapshotStartedAt: report.snapshotStartedAt };
+      visible = { uri, report, text: JSON.stringify({ ...timing, comparisonCompletedAt: report.created,
+        source: report.source, destination: report.target,
+        summary: report.summary, oneSided: report.oneSided, omittedDifferences: report.omitted, sample: report.sample }, null, 2) + '\n' };
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, { preview: false });
+      return { ...structuredClone(report), uri: uri.toString() };
+    });
   }
+
+  const listBatches = () => { list(); return batches.list(); };
+  const saveBatch = (name, ids) => { list(); return batches.save(name, ids); };
+  const removeBatch = id => { list(); return batches.remove(id); };
+  const pickBatch = async placeHolder => (await vscode.window.showQuickPick(listBatches().map(item => ({
+    label: item.name, description: item.workflows.length + ' comparisons', item
+  })), { placeHolder }))?.item;
+
+  async function replayBatch(id, { cancellation, onProgress } = {}) {
+    return compare(async () => {
+      visible = undefined;
+      const report = await batches.replay(id, { cancellation, onProgress });
+      const uri = vscode.Uri.from({ scheme, path: `/${report.id}/Dataset batch report.json` });
+      visibleBatch = { uri, text: JSON.stringify(report, null, 2) + '\n' };
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, { preview: false });
+      return { ...structuredClone(report), uri: uri.toString() };
+    });
+  }
+
+  command('rocketbrain.createDatasetBatch', async () => {
+    const selected = await vscode.window.showQuickPick(list().map(item => ({
+      label: item.name, description: `${item.source} → ${item.target}`, id: item.id
+    })), { canPickMany: true, placeHolder: 'Choose saved comparisons to run in one batch' });
+    if (!selected?.length) return;
+    const name = await vscode.window.showInputBox({ title: 'Save Dataset Batch', prompt: 'Name this collection of saved comparisons' });
+    if (name === undefined) return;
+    return saveBatch(name, selected.map(item => item.id));
+  });
+
+  command('rocketbrain.replayDatasetBatch', async id => {
+    id ||= (await pickBatch('Choose a saved dataset batch'))?.id;
+    if (!id) return;
+    return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Compare dataset batch', cancellable: true },
+      (progress, cancellation) => replayBatch(id, { cancellation, onProgress: ({ index, total, name, comparedKeys }) =>
+        progress.report({ message: `${index}/${total} · ${name} · ${comparedKeys} primary keys compared` }) }));
+  });
+
+  command('rocketbrain.removeDatasetBatch', async () => {
+    const selected = await pickBatch('Choose a dataset batch to remove');
+    if (selected) return removeBatch(selected.id);
+  });
 
   command('rocketbrain.createDatasetWorkflow', async () => {
     const names = options.tableNames();
@@ -83,6 +141,7 @@ function registerDatasetWorkflows(context, vscode, command, options) {
     if (selected) await workflows.remove(selected.id);
   });
   async function stage(reportId, recordId, indices, selection) {
+    if (comparing) throw Error('Wait for the current dataset comparison to finish.');
     return options.stage(recordId, async (target, assertCurrent) => workflows.reconcile(reportId, target, indices, assertCurrent, selection));
   }
   command('rocketbrain.stageDatasetWorkflow', async () => {
@@ -108,6 +167,7 @@ function registerDatasetWorkflows(context, vscode, command, options) {
 
   const remove = id => { list(); return workflows.remove(id); };
   return { list, inspect: workflows.inspect, save: workflows.save, remove, replay, stage,
+    batches: { list: listBatches, save: saveBatch, remove: removeBatch, replay: replayBatch },
     sourceProfiles: workflows.sourceProfiles, sourceTableNames: workflows.sourceTableNames };
 }
 

@@ -119,4 +119,4 @@ function apply(lease, reviewed, password) {
   });
 }
 
-module.exports = { plan, apply, passwordProblem };
+module.exports = { plan, apply, passwordProblem, passwordLiteral, principal };
