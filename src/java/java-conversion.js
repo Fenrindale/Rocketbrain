@@ -6,15 +6,18 @@ const { positionAt } = require('../spring/java');
 const ACTIONS = Object.freeze({
   lambda:{title:'Convert to anonymous class creation',result:'anonymous'},
   anonymous:{title:'Convert to lambda expression',result:'lambda'},
-  indexed:{title:"Convert to enhanced 'for' loop",result:'enhanced'}
+  indexed:{title:"Convert to enhanced 'for' loop",result:'enhanced'},
+  'indexed-elements':{title:"Review Conversion to Enhanced 'for' Loop",result:'enhanced-elements'}
 });
 const SAME_FUNCTION_FIELDS = ['sam','type','parameters','body','bindings','captures','callTargets'];
 const SAME_LOOP_FIELDS = ['array','arrayType','accumulator','accumulatorType'];
+const SAME_ELEMENT_FIELDS = ['carrier','carrierType','iteration','item','itemType','finalItem','retainedBody'];
 
 function conversionAt(sites,offset) {
-  const candidates = sites.filter(site => Object.hasOwn(ACTIONS,site.kind) && site.cursorStart <= offset && offset < site.end);
+  const candidates = sites.filter(site => Object.hasOwn(ACTIONS,site.kind) &&
+    site.cursorStart <= offset && offset < (site.cursorEnd ?? site.end));
   if (candidates.length !== 1) {
-    throw Error('Select a nonescaping functional-interface initializer or an indexed primitive-array summation loop.');
+    throw Error('Select a nonescaping functional-interface initializer or the header of a supported indexed array or immutable List loop.');
   }
   return candidates[0];
 }
@@ -22,6 +25,13 @@ function conversionAt(sites,offset) {
 function positionMatches(position,text,offset) {
   const expected = positionAt(text,offset);
   return position?.line === expected.line && position?.character === expected.character;
+}
+
+function indexedElementAction(site,text,uri) {
+  return {
+    title:ACTIONS[site.kind].title,kind:'refactor',
+    edit:{changes:{[uri]:[{range:{start:positionAt(text,site.start),end:positionAt(text,site.end)},newText:site.newText}]}}
+  };
 }
 
 function reviewConversionEdit(action,{text,site,version,belongsToSource}) {
@@ -43,7 +53,9 @@ function reviewConversionEdit(action,{text,site,version,belongsToSource}) {
   if (!replacement || replacement.annotationId !== undefined || !positionMatches(replacement.range?.start,text,site.start) ||
       !positionMatches(replacement.range?.end,text,site.end) || typeof replacement.newText !== 'string' ||
       !replacement.newText.length || replacement.newText.length > 64 * 1024 ||
-      /\/\/|\/\*|\\u+[a-f\d]{4}/i.test(text.slice(site.start,site.end) + replacement.newText)) {
+      /\\u+[a-f\d]{4}/i.test(text.slice(site.start,site.end) + replacement.newText) ||
+      (site.kind === 'indexed-elements' ? replacement.newText !== site.newText :
+        /\/\/|\/\*/.test(text.slice(site.start,site.end) + replacement.newText))) {
     throw Error('The Java conversion must replace the exact selected syntax and preserve its source comments.');
   }
   return {replacement, text:editedText(text,[replacement])};
@@ -52,14 +64,16 @@ function reviewConversionEdit(action,{text,site,version,belongsToSource}) {
 function verifyConversion(before,sites,newLength) {
   const start = before.start, end = start + newLength;
   const next = sites.find(site => site.start === start && site.end === end && site.kind === ACTIONS[before.kind].result);
-  const fields = before.kind === 'indexed' ? SAME_LOOP_FIELDS : SAME_FUNCTION_FIELDS;
+  const fields = before.kind === 'indexed-elements' ? SAME_ELEMENT_FIELDS :
+    before.kind === 'indexed' ? SAME_LOOP_FIELDS : SAME_FUNCTION_FIELDS;
   if (!next || fields.some(field => JSON.stringify(next[field]) !== JSON.stringify(before[field]))) {
     throw Error('Javac could not confirm the selected conversion preserves its checked Java behavior.');
   }
   const result = {from:before.kind,to:next.kind,checkedBindings:next.bindings?.length || fields.length};
-  if (before.kind !== 'indexed') Object.assign(result,{functionalType:next.type,sam:next.sam,
+  if (before.kind === 'indexed-elements') Object.assign(result,{iteration:next.iteration,carrier:next.carrier,item:next.item,itemType:next.itemType});
+  else if (before.kind !== 'indexed') Object.assign(result,{functionalType:next.type,sam:next.sam,
     captures:next.captures || [],callTargets:next.callTargets || []});
   return result;
 }
 
-module.exports = { ACTIONS,conversionAt,reviewConversionEdit,verifyConversion };
+module.exports = { ACTIONS,conversionAt,indexedElementAction,reviewConversionEdit,verifyConversion };

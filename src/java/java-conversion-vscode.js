@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('node:path');
-const { ACTIONS,conversionAt,reviewConversionEdit,verifyConversion } = require('./java-conversion');
+const { ACTIONS,conversionAt,indexedElementAction,reviewConversionEdit,verifyConversion } = require('./java-conversion');
 
 function createJavaConversion(vscode,{
   java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
@@ -42,10 +42,15 @@ function createJavaConversion(vscode,{
     }
 
     checkAnchor();
-    const actionPosition = document.positionAt(site.actionOffset);
-    const action = await java.refactoring.resolveAction(document,new vscode.Range(actionPosition,actionPosition),{
-      title:ACTIONS[site.kind].title,kind:'refactor',only:['refactor'],cancellation
-    });
+    let action;
+    if (site.kind === 'indexed-elements') {
+      action = indexedElementAction(site,current.text,current.uri);
+    } else {
+      const actionPosition = document.positionAt(site.actionOffset);
+      action = await java.refactoring.resolveAction(document,new vscode.Range(actionPosition,actionPosition),{
+        title:ACTIONS[site.kind].title,kind:'refactor',only:['refactor'],cancellation
+      });
+    }
     const reviewed = reviewConversionEdit(action,{
       text:current.text,site,version,
       belongsToSource:value => {
