@@ -90,4 +90,4 @@ async function observeChanges(repo) {
   return parseStatus(await gitRead(repo.root, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignore-submodules=all', '--renames']));
 }
 
-module.exports = { inspectRepository, observeChanges, parseStatus, supportedPath, inside, maxChanges };
+module.exports = { gitRead, inspectRepository, observeChanges, parseStatus, supportedPath, inside, maxChanges };

@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.80.0",
+  "version": "0.81.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -89,6 +89,10 @@
       { "command": "rocketbrain.java.inspectLocalValue", "title": "Inspect Java Local Value", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.attachProcess", "title": "Attach to Local Java Process", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.openTableSnapshot", "title": "Open Consistent Table Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.createDatasetWorkflow", "title": "Save Table Dataset Comparison", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.replayDatasetWorkflow", "title": "Replay Saved Dataset Comparison", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.stageDatasetWorkflow", "title": "Stage Dataset Comparison Changes", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.removeDatasetWorkflow", "title": "Remove Saved Dataset Comparison", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.attach", "title": "Open SSH Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
       { "command": "rocketbrain.sshWorkspace.refresh", "title": "Refresh SSH Files", "category": "Rocketbrain", "icon": "$(refresh)" },
@@ -377,6 +381,12 @@
         "title": "Search Everywhere",
         "category": "Rocketbrain",
         "icon": "$(search)"
+      },
+      {
+        "command": "rocketbrain.gitWorktree.context",
+        "title": "Manage Git Worktree Context",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && workspaceFolderCount > 0"
       },
       {
         "command": "rocketbrain.recentFiles",

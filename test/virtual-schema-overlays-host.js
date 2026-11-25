@@ -121,6 +121,8 @@ async function runVirtualSchemaOverlayChecks(api, vscode, checks) {
       return response.json();
     }
   });
+  if (Array.isArray(checks)) checks.push("The installed saved virtual schema flow kept the overlay local and confirmed the physical catalog was unchanged.");
+  return checks.savedVirtualSchemas;
 }
 
 module.exports = { runVirtualSchemaOverlayChecks, verifySavedVirtualSchemas };

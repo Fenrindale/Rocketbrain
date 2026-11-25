@@ -11,11 +11,11 @@ const streamLimits = Object.freeze({
 const fail = (message, code = 'ROCKETBRAIN_TABLE_TRANSFER') => Object.assign(new Error(message), { code });
 const quote = (name, table = false) => '`' + identifier(name, { table }).replaceAll('`', '``') + '`';
 
-function boundedProjection(columns, field) {
+function boundedProjection(columns, field, wireRowBytes = streamLimits.wireRowBytes) {
   const counts = columns.map(column => 'COALESCE(OCTET_LENGTH(' + field(column.name) + '), 0)');
   const sizes = columns.map((column, index) => counts[index] + ' > ' +
     (column.kind === 'binary' ? Math.floor((streamLimits.cellBytes - 2) / 2) : streamLimits.cellBytes));
-  const exceeds = '(' + [...sizes, '(' + counts.join(' + ') + ') > ' + streamLimits.wireRowBytes].join(' OR ') + ')';
+  const exceeds = '(' + [...sizes, '(' + counts.join(' + ') + ') > ' + wireRowBytes].join(' OR ') + ')';
   let flag = '__rb_source_overflow';
   while (columns.some(column => column.name.toLowerCase() === flag)) flag += '_';
   const value = column => /^bit(?:\(|$)/i.test(column.type) ? 'CAST(CAST(' + field(column.name) + ' AS UNSIGNED) AS CHAR)' : field(column.name);

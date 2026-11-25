@@ -69,6 +69,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 16. **Inspect Spring Property Value and Origin**으로 지정한 키의 실제 값과 출처 우선순위를 확인합니다. Windows에서 확인된 PID로 Java 디버거를 연결했다면 디버그 도구 모음에서 같은 Spring 프로세스의 설정을 조회할 수 있습니다. [Spring 설정값과 출처 조회](docs/spring-property-origin.md)
 16. **Pull Up Java Members**와 **Push Down Java Members**는 같은 패키지에서 직접 상속하는 클래스 사이의 메서드·상수 이동을 미리 봅니다. Javac가 전후 참조를 비교하고 선언 충돌이나 다른 오버로드로의 연결을 감지하면 적용을 차단합니다.
 17. **Manage Git Changelists**에서 변경 파일을 이름 있는 작업 목록에 배정합니다. 목록에 편집 위치와 실행 구성 선택을 기록해 복원할 수 있습니다. 복원 후 실행 구성은 VS Code의 Run and Debug에서 시작할 수 있습니다.
+
+**Manage Git Worktree Context**에서 worktree별 Java 프로젝트, Spring Actuator 주소와 DB 프로필을 저장하고 그 문맥에서 작업합니다. [Git worktree별 프로젝트 문맥](docs/git-worktree-context.md)
    **Open GitHub or GitLab Review**는 `rocketbrain.codeReview`에 지정한 프로젝트의 열린 검토를 불러옵니다. 변경 패치와 댓글, 연결 이슈 번호와 CI 상태를 볼 수 있으며 **Add Local Review Draft**로 새 줄에 연결한 초안을 작업 공간에 저장합니다.
 18. **Convert Java Lambda, Anonymous Class or Loop**에서 플랫폼 또는 프로젝트에 선언된 단일 추상 메서드 인터페이스를 구현하는 지역 변수와 배열 합산 루프의 변환을 검토합니다. 적용 전에 Javac로 캡처한 지역 값과 호출 오버로드의 바인딩을 확인합니다. [Java 변환](docs/java-conversions.md)
 19. **Trace Java Stream Values**에서 `Stream.of` 또는 `List.of(...).stream()`부터 `toList()`까지 선택합니다. 독립 JDK에서 `filter`, `map`, `flatMap`, `limit`의 실제 값 흐름을 실행하고 **Go to Java Stream Stage**로 원본 단계에 이동합니다.
@@ -335,6 +337,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Review Database Account or Role Creation**에서 대상 서버, 실행 계정, 새 로그인 계정의 정확한 호스트 또는 역할을 확인하고 한 번만 적용합니다. 암호는 확정 후 마스킹 입력창에서 받으며 Rocketbrain 검토 문서나 결과에 저장하지 않습니다. MariaDB는 생성한 역할의 관리자를 실행 계정으로 지정합니다. 서버에 계정 생성 권한과 좁은 계정 카탈로그 조회 권한이 필요합니다.
 - **Open Database Object Source**는 연결 계정에 보이는 스키마와 객체의 `SHOW CREATE` 원문을 읽기 전용 SQL 문서로 엽니다. DB 트리에서 바로 열거나 현재 객체의 원문을 새로 고칠 수 있습니다.
 - **Go to Database Column Origin**은 SQL 편집기에서 선택한 열의 CTE·파생 테이블 별칭과 연결 계정으로 확인한 뷰 정의를 따라 원본 테이블의 열 선언을 엽니다. **Explain Database Column Origin**에서 경로와 열 타입을 확인할 수 있습니다. 원본을 찾을 수 있는 단일 열 전달을 지원하며, 계산 결과·재귀·집합 연산이나 확인할 수 없는 뷰에서 추적을 중단합니다. 일반 **Go to Definition**은 편집기 안의 별칭 정의로 계속 이동합니다.
+- **Open Database Source for Editing**의 트리거 편집은 MySQL 8.4와 MariaDB 11.4에서 현재 계정이 정의한 InnoDB 테이블의 BEFORE INSERT·UPDATE 트리거를 지원합니다. NEW 열에 대한 대입과 조건문을 빈 복제 테이블에서 컴파일한 뒤, 검토한 DROP·CREATE를 테이블 쓰기 잠금 아래 실행합니다. 연결이 끊기면 두 DDL 사이에 작업이 멈출 수 있으므로 적용과 복원 중에는 쓰기와 외부 스키마 변경을 중지합니다. 저장된 원문·생성 문맥·실행 순서를 재연결 후 확인해 복원할 수 있습니다.
 - **Open Database Source for Editing**에서는 기존의 결정적 `NO SQL` 스칼라 함수 중 숫자형 매개변수와 단일 `RETURN` 식을 편집할 수 있습니다. 원래 시그니처·소유자·보안·권한을 비교하고 검증용 객체를 컴파일한 뒤 실제 교체 SQL을 검토합니다. 앱 스키마의 의존 정의를 읽을 수 없거나 다른 객체의 참조·동적 SQL이 관찰되면 교체를 막습니다. `DROP`과 `CREATE` 사이에는 함수가 잠시 없어지므로 호출과 외부 스키마 변경을 중지해야 합니다. 보관된 원본은 검증된 상태에서 복원할 수 있습니다.
 - **Review MariaDB Package Call**은 MariaDB 11.4 이상의 현재 DB에서 SQL/PSM과 Oracle 모드로 저장된 패키지의 명세·본문 및 공개 멤버를 찾습니다. 공개 프로시저는 스칼라 IN·OUT·INOUT을, 공개 함수는 스칼라 입력과 반환 타입을 검토하고 승인 후 전용 세션에서 한 번 실행합니다. 함수는 서버 읽기 전용 트랜잭션에서 한 값을 반환한 뒤 롤백합니다. 명세·본문 변경은 호출 전후 검사하며, 결과와 출력 매개변수는 별도 그리드에 보관합니다. 패키지 호출 시 서버가 초기화 코드를 실행할 수 있습니다. 오버로드, 기본값이 있는 매개변수와 복합 타입은 검토 대상에서 제외합니다.
 - **Review Stored Procedure Call**은 현재 DB에서 정의가 보이는 독립 프로시저를 찾아 계정, 실제 정의와 `IN`·`OUT`·`INOUT` 파라미터를 검토합니다. 확인 후 별도 연결에서 한 번만 실행하며, 결과 집합과 출력 파라미터를 각각 읽기 전용 그리드로 열 수 있습니다. 최대 32개 파라미터와 결과 집합 8개까지 처리합니다. DB 권한은 서버가 적용하며, 쓰기 보호 프로필은 호출을 거부합니다. MariaDB에서는 호출 전후 정의를 비교합니다. 호출 중 다른 세션이 정의를 바꿀 수 있고, 프로시저가 직접 커밋한 변경은 돌이킬 수 없습니다.
@@ -349,6 +352,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Chart** 보기에서 캡처한 결과 페이지의 막대·선 그래프와 정확한 그룹 합계·평균을 확인합니다. 셀 편집기는 줄바꿈 종류, JSON 원문, Hex·Base64와 SQL NULL을 구분합니다.
 - **Map** 보기에서 캡처한 결과의 공간 열을 선택해 지도와 원본 행을 탐색합니다. 지리 좌표와 SRID 0 평면 좌표를 별도 보기로 표시합니다.
 - **Compare**에서 두 캡처 결과의 키와 비교 열을 매핑합니다. 일치 행의 변경을 선택해 그리드 초안에 넣습니다. 두 테이블을 필터 없이 전부 캡처했고 동일 타입의 정수 기본 키를 매핑했다면 한쪽에만 있는 행을 삽입 또는 삭제로 선택할 수 있습니다. 각 변경은 SQL 검토를 거쳐 적용하고 커밋합니다.
+- **Save Table Dataset Comparison**으로 활성 연결의 InnoDB 테이블 두 개와 비교 열을 워크스페이스에 저장합니다. **Replay Saved Dataset Comparison**은 같은 읽기 전용 스냅샷에서 정수 기본 키 순서로 테이블당 최대 50,000행을 대조합니다. 보고서에 정확한 집계와 최대 100개 차이 표본을 표시합니다. **Stage Dataset Comparison Changes**는 현재 편집 페이지에서 원래 값과 일치하는 기존 행의 변경을 SQL 검토 초안에 넣습니다.
 - **Capture Table Copy Source**에서 메모리, 임시 스트리밍 또는 **Stream and Save for Resume**을 선택합니다. 스트리밍은 InnoDB 기본 키 순서의 읽기 스냅샷을 최대 100만 행·1 GiB까지 암호화합니다. 재개를 선택한 스냅샷은 작업 공간에 최대 24시간 두고 키는 VS Code Secret Storage에 저장합니다. **Copy Captured Rows**에서 대상을 다시 검토하고 새 트랜잭션에 스테이징한 뒤 **Finish Table Copy**에서 커밋 또는 롤백합니다. 커밋 결과가 불확실한 스냅샷은 재사용이 잠깁니다.
 - **Verify Table Copy Destination**은 새 미확정 커밋 기록의 검토된 대상에서 최대 128개 기본 키와 매핑된 값을 읽기 전용으로 대조합니다. 표본의 현재 상태를 보고하며 재실행 잠금은 유지됩니다.
 - **Show Table Copy Verification History**에서는 최근 점검의 시각·대조 건수·결과를 확인할 수 있습니다. 원본 키나 행 값은 점검 이력에 저장하지 않습니다.

@@ -1,25 +1,25 @@
 {
-  "version": "0.80.0",
-  "verifiedAt": "2026-11-25T19:56:53.594Z",
+  "version": "0.81.0",
+  "verifiedAt": "2026-11-25T20:03:59.786Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.80.0.vsix",
-    "sha256": "3be933c6ae84ac4f13f7550dc5048344dd9c0e4108f7612de33227f48d8d0051",
-    "bytes": 3562917,
+    "name": "rocketbrain-0.81.0.vsix",
+    "sha256": "14bc45ad1531fce2b9ab1a676bcb15b953427fecd3d6b283f347bced141213e0",
+    "bytes": 3581985,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 2011,
-    "inputVectorSha256": "026e0754118cee1924b4e23ff9b4b7f893c5f87ed39deaba8efc93350b76c753",
+    "frozenPublicInputs": 2026,
+    "inputVectorSha256": "4518588b840811b0aef0f78a13e9c457f7cf24e02040495278dadfc824988032",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1704,
-    "pass": 1589,
+    "tests": 1709,
+    "pass": 1593,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 115,
+    "skipped": 116,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,15 +32,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "javaTestHistory",
+          "group": "gitWorktreeContext",
           "checks": 1
         },
         {
-          "group": "sqlColumnOrigin",
+          "group": "triggerDeployment",
           "checks": 1
         },
         {
-          "group": "sharedRunGroups",
+          "group": "datasetWorkflow",
           "checks": 1
         }
       ],
@@ -58,15 +58,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "javaTestHistory",
+          "group": "gitWorktreeContext",
           "checks": 1
         },
         {
-          "group": "sqlColumnOrigin",
+          "group": "triggerDeployment",
           "checks": 1
         },
         {
-          "group": "sharedRunGroups",
+          "group": "datasetWorkflow",
           "checks": 1
         }
       ],
@@ -77,74 +77,64 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-073": {
-      "scope": "설치판에서 민감한 로컬 값이 없는 공유 명세를 검토하고 다른 값을 넣었다. 가져오기만으로 실행되지 않음을 확인했고, 실제 DB를 쓰는 두 Spring 실행을 시작하고 각각 중지했다.",
+    "IDEA-094": {
+      "scope": "설치판에서 두 실제 Git Worktree와 각각의 Java 프로젝트를 해석했다. Spring Actuator 응답을 읽고 각 DB 프로필로 두 SQL 세션을 열었다. 기존 활성 연결을 보존하고 변경된 문맥과 프로필을 거부했다.",
       "runtimeGroups": [
-        "sharedRunGroups"
+        "gitWorktreeContext"
       ]
     },
-    "IDEA-085": {
-      "scope": "설치판에서 Jupiter 및 TestNG의 실행 기록과 실패 diff를 열었다. 고유한 TestNG 데이터 공급자 호출 한 건을 다시 선택해 성공을 확인했다.",
+    "DG-075": {
+      "scope": "두 DB에서 1,555개의 키와 정확한 DECIMAL·NULL 값, 동시 변경에도 유지되는 스냅샷을 확인했다. 저장 후 다시 열었고 대상 행의 커밋과 롤백, 외부 변경이 발생한 행의 거부를 확인했다.",
       "runtimeGroups": [
-        "javaTestHistory"
+        "datasetWorkflow"
       ]
     },
-    "DG-039": {
-      "scope": "두 실제 엔진에서 두 단계 교차 스키마 뷰와 중첩 별칭을 통과해 물리 열에 도달했다. 바뀐 뷰 정의, 식과 집합 연산은 원본으로 표시하지 않았다.",
+    "DG-081": {
+      "scope": "실제 두 DB에서 BEFORE INSERT·UPDATE 결과를 대조하고 쓰기 잠금과 실행 순서, 원문을 변경하는 시점의 연결 끊김 이후 복원을 확인했다.",
       "runtimeGroups": [
-        "sqlColumnOrigin"
+        "triggerDeployment"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 438,
+    "sourceCorrespondences": 443,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 109,
-      "partial": 93,
+      "implemented": 110,
+      "partial": 92,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 167.5,
-    "previousWeightedPoints": 166,
+    "weightedPoints": 168,
+    "previousWeightedPoints": 167.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 77.5,
+    "referencePercent": 77.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-073",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-085",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-039",
+        "id": "IDEA-094",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "테스트 기록은 지원하는 JUnit·TestNG 선택자에 한정한다. 고유하게 재현할 수 없는 TestNG 호출은 개별 재실행을 만들지 않는다.",
-    "SQL 원본 열 탐색은 연결에서 관찰 가능한 단일 통과 열과 비재귀 SELECT를 지원한다. 복합 표현식이나 합집합은 원본으로 단정하지 않는다.",
-    "실행 구성의 실제 인수·환경·Spring 설정값은 각 작업 공간에서 입력한다. 묶음은 2–4개의 확인된 구성을 순서대로 시작한다.",
+    "Worktree 운영은 Git과 VS Code를 사용한다. 적용할 문맥은 검토한 물리 Worktree와 저장 프로필 변경 번호에 연결된다.",
+    "트리거 원문과 순서는 확인된 BEFORE INSERT·UPDATE 예제로 검사했다. 배포에 쓰기 중단을 승인해야 하며, 끊어진 뒤 원문을 복원할 수 있다.",
+    "저장 비교는 현재 서버의 InnoDB, 호환되는 정수 기본 키와 열에 한정한다. 이번 설치판은 대상에 이미 있는 행의 편집을 검토한다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Git Worktree별 Java·Spring·DB 문맥 전환",
-    "MySQL·MariaDB 트리거 원본 검토와 복원",
-    "대량 키 기반 테이블 비교를 저장하고 변경을 검토하는 흐름"
+    "실제 WebFlux와 Spring Security 필터 경로 관찰",
+    "DB 방언별 함수 완성과 저장 프로시저 출력 검토",
+    "MySQL·MariaDB 역할 부여와 위임 옵션 적용"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
