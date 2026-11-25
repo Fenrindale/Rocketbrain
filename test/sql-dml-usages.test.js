@@ -70,7 +70,34 @@ test('project usages preserve DML roles and statement offsets while the existing
   assert.deepEqual(referencesInDocument(analyzeProjectDocument(prior,catalog,opts),request,opts),[]);
 });
 
-test('joined, dynamic, unsupported, duplicate and unproved mutation forms never emit physical references', () => {
+test('joined UPDATE and DELETE bind each physical target independently and INSERT SELECT keeps read and write roles', () => {
+  const secondary={...catalog.tables[0],name:'backup'};
+  const live={...catalog,tables:[...catalog.tables,secondary]};
+  const update='UPDATE people p JOIN backup b ON b.id=p.id SET p.score=b.score+1, b.peer=p.id WHERE p.id>1';
+  const found=analyzeDmlUsage(update,live,opts);
+  assert.equal(found.state,'known');
+  assert.deepEqual(found.targets.map(item=>item.table),['people','backup']);
+  assert.deepEqual(found.references.filter(ref=>ref.kind==='column'&&ref.usage==='write').map(ref=>[
+    update.slice(ref.start,ref.end),ref.physicalColumn.table
+  ]),[['score','people'],['peer','backup']]);
+  assert.ok(found.references.some(ref=>ref.usage==='read'&&ref.physicalColumn?.table==='backup'&&ref.name==='score'));
+  for (const text of ['DELETE p,b FROM people p JOIN backup b ON p.id=b.id WHERE p.score>1',
+    'DELETE FROM p.*,b USING people p JOIN backup b ON p.id=b.id WHERE b.score>1']) {
+    const removed=analyzeDmlUsage(text,live,opts);
+    assert.equal(removed.state,'known',text);
+    assert.deepEqual(removed.references.filter(ref=>ref.kind==='table'&&ref.usage==='write').map(ref=>[
+      text.slice(ref.start,ref.end),ref.catalog.table
+    ]),[['p','people'],['b','backup']]);
+  }
+  const copy='INSERT INTO backup(id,score) SELECT p.id,p.score FROM people p WHERE p.peer>1';
+  const report=analyzeDmlUsage(copy,live,opts);
+  assert.equal(report.state,'known');
+  assert.deepEqual(report.references.filter(ref=>ref.kind==='table').map(ref=>[ref.catalog.table,ref.usage]),
+    [['backup','write'],['people','read']]);
+  assert.ok(report.references.some(ref=>ref.kind==='column'&&ref.usage==='read'&&ref.physicalColumn.table==='people'));
+});
+
+test('unobserved, dynamic, unsupported, duplicate and unproved mutation forms never emit physical references', () => {
   for(const source of [
     'UPDATE people p JOIN remote.people y SET p.score = y.score',
     'UPDATE people p, remote.people y SET p.score = y.score',
@@ -83,7 +110,7 @@ test('joined, dynamic, unsupported, duplicate and unproved mutation forms never 
     'INSERT INTO people VALUES (1,2,3)',
     'INSERT INTO people(id,score) VALUES (1)',
     'INSERT INTO people(id,id) VALUES (1,2)',
-    'INSERT INTO people(id,score) SELECT id,score FROM people',
+    'INSERT INTO people(id,score) SELECT id FROM people',
     'INSERT INTO people(id) VALUES (1) ON DUPLICATE KEY UPDATE score = 2',
     'DELETE p FROM people p JOIN remote.people y ON p.id=y.id',
     'DELETE FROM people USING people JOIN remote.people ON people.id=remote.people.id',

@@ -295,6 +295,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 읽기 전용 스크립트에서는 현재 스키마의 검증된 `CALL procedure(:input)`을 다른 조회와 함께 실행합니다. 보이는 프로시저의 본문과 IN 매개변수를 다시 확인합니다. 지원 범위는 같은 스키마의 기본 테이블을 읽는 단순 `SELECT`입니다. 스크립트 결과에서 각 결과 집합을 다시 열 수 있습니다.
 - `DELIMITER`가 있는 SQL 파일에서 **Run Selected SQL or Current Statement**를 실행하면 서버의 SQL 모드로 커서 아래 문장이나 선택한 전체 복합 문장의 범위를 구합니다. 복합 DDL 검토에는 그 문장 하나가 표시됩니다.
 - SQL 편집기는 단일 테이블 INSERT 열 목록, UPDATE의 SET, UPDATE·DELETE의 WHERE에서 관찰한 열 이름과 서버 타입을 제안합니다. 스키마를 명시하면 그 테이블을 확인합니다. 자동 증가·생성 열은 쓰기 제안에서 제외합니다.
+- **Find SQL Catalog References**는 열 목록이 있는 `INSERT … SELECT`의 입력과 대상, 실제 테이블을 조인한 UPDATE의 SET과 읽기 표현식, 여러 별칭을 대상으로 한 DELETE를 구분합니다. 사용처를 찾을 때 원래 쓰기 문장은 실행하지 않습니다.
 - **Preview SQL with a Virtual Schema**는 로컬 UTF-8 DDL 파일 또는 관찰한 DB 카탈로그를 바탕으로 현재 SQL 문서의 테이블·뷰와 열 변경을 순서대로 분석합니다. 편집기의 완성·진단에만 반영합니다. 파일을 수정한 뒤에는 다시 선택해 캡처하고, **Exit Virtual SQL Schema Preview**로 종료합니다.
 - **Edit Embedded SQL or JSON**은 Java 문자열·텍스트 블록, MyBatis의 정적 SQL 또는 SQL 안의 JSON을 해당 언어 편집기로 엽니다. SQL 편집에서는 연결한 DB의 열 완성과 정의 이동을 사용할 수 있습니다. **Review and Apply Embedded Source Edit**에서 원본 범위의 diff를 확인하고 적용합니다.
 - **Create Native Database Dump**와 **Review and Restore Native Dump**에서 설치한 MySQL 또는 MariaDB 클라이언트를 선택합니다. 로컬 연결의 InnoDB 테이블을 내보내고, 검토한 백업 파일을 원본과 다른 빈 스키마에 복원합니다. 함께 참조하는 FK 테이블은 같은 백업에 포함합니다.
