@@ -31,6 +31,7 @@ function publicPath(name) {
   if (/^test\/fixtures\/javafx-app\/src\/main\/resources\/views\/(?:panel|extra)\.fxml$/.test(name)) return true;
   if (name === 'test/fixtures/java/quarkus/src/main/resources/templates/greeting.html') return true;
   if (name === 'test/fixtures/java/jakarta-war/src/main/webapp/page.jsp') return true;
+  if (/^test\/fixtures\/vue-workbench\/(?:index\.html|vite\.config\.mjs|src\/(?:App\.vue|CountBadge\.vue|main\.ts))$/.test(name)) return true;
   if (/^test\/fixtures\/java\/groovy-spock\/(?:scripts|src\/(?:main|test)\/groovy\/groovyfixture)\/[A-Za-z]+\.groovy$/.test(name)) return true;
   if (/^test\/.+\.(?:js|cjs|java|kt|json|xml|properties|sql|gradle|txt|css|ya?ml)$/.test(name)) return true;
   if (/^test\/fixtures\/[^\0]+\/src\/(?:main|test)\/resources\/META-INF\/services\/[A-Za-z_$][\w.$]*$/.test(name)) return true;

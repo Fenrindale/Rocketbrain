@@ -1,0 +1,15 @@
+{
+  "name": "rocketbrain-vue-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "vue": "3.5.46"
+  },
+  "devDependencies": {
+    "@vue/compiler-sfc": "3.5.46",
+    "@vitejs/plugin-vue": "6.0.11",
+    "typescript": "5.9.3",
+    "vite": "8.3.8",
+    "vue-tsc": "3.3.14"
+  }
+}

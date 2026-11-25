@@ -135,6 +135,7 @@ async function activate(context) {
   const jupyter = require('./python/jupyter-vscode').registerJupyter(vscode);
   context.subscriptions.push(jupyter);
   const python = require('./python/python-vscode').registerPython(vscode);
+  const vue = require('./web/vue-vscode').registerVueWorkbench(context, vscode);
   context.subscriptions.push(python);
   const schemaComparison=require('./db/schema-diff-vscode').registerSchemaComparison(context,vscode,{
     capture:options=>database.captureSchemaSnapshot(options),
@@ -159,7 +160,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, federation };
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, federation };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

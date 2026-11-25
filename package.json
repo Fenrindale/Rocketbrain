@@ -29,6 +29,7 @@
     "onLanguage:groovy",
     "onLanguage:python",
     "onLanguage:scala",
+    "onLanguage:vue",
     "onLanguage:duckdb-sql",
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
@@ -45,7 +46,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path"],
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
@@ -65,6 +66,7 @@
       { "id": "duckdb-sql", "aliases": ["DuckDB SQL"], "extensions": [".duckdb.sql"] },
       { "id": "rocketbrain-jdbc", "aliases": ["Rocketbrain JDBC SQL"], "extensions": [".jdbc.sql"] },
       { "id": "kotlin", "aliases": ["Kotlin"], "extensions": [".kt"] },
+      { "id": "vue", "aliases": ["Vue"], "extensions": [".vue"] },
       { "id": "groovy", "aliases": ["Groovy"], "extensions": [".groovy"] }
     ],
     "grammars": [
@@ -96,6 +98,9 @@
       { "command": "rocketbrain.python.select", "title": "Select Python Interpreter", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.run", "title": "Run Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
       { "command": "rocketbrain.python.debug", "title": "Debug Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
+      { "command": "rocketbrain.vue.checkProject", "title": "Check Vue Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.vue.startDevServer", "title": "Start Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
       { "command": "rocketbrain.jakarta.buildWar", "title": "Build Jakarta WAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1451,6 +1456,14 @@
         "rocketbrain.localCodeModel.model": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Model name exposed by the configured local chat server."
+        },
+        "rocketbrain.vue.nodePath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to Node.js for workspace-local Vue tools. An empty value uses Node.js from PATH."
+        },
+        "rocketbrain.vue.enableDefinitions": {
+          "type": "boolean", "default": false, "scope": "resource",
+          "description": "Load the installed Vue compiler and TypeScript in an independent Node process when finding Vue template definitions in this trusted workspace."
         },
         "rocketbrain.sql.analysis.resolutionScopes": {
           "type": "array",
