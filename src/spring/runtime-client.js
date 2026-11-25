@@ -3,6 +3,7 @@ const http = require('node:http');
 const https = require('node:https');
 const { healthPath, normalizeHealth } = require('./runtime-health');
 const { auditRequest,normalizeSecurityEvents,securityInventory } = require('./runtime-security');
+const { propertyPath, readProcessId, readProperty } = require('./runtime-property');
 
 const ENDPOINTS = Object.freeze(['beans', 'conditions', 'configprops', 'env', 'mappings']);
 class RuntimeError extends Error { constructor(code, message, status) { super(message); this.name = 'SpringRuntimeError'; this.code = code; if (status) this.status = status; } }
@@ -100,9 +101,10 @@ class ActuatorClient {
     this.#snapshot = emptySnapshot(); this.#snapshot.baseUrl = this.#target.url.toString().replace(/\/$/, '');
   }
   snapshot() { return structuredClone(this.#snapshot); }
-  async #request(endpoint, suffix = '') {
+  async #request(endpoint, suffix = '', project, maximum = this.#options.maxResponseBytes) {
     if (this.#disposed) throw new RuntimeError('DISPOSED', 'Runtime connection is closed.');
     const target = this.#target, url = target.url;
+    const limit = Math.min(this.#options.maxResponseBytes, maximum);
     return new Promise((resolve, reject) => {
       let finished = false, bytes = 0, chunks = [], timer;
       const fail = error => { if (finished) return; finished = true; clearTimeout(timer); this.#requests.delete(request); reject(error); };
@@ -115,8 +117,8 @@ class ActuatorClient {
         if (status !== 200 && !(endpoint === 'health' && status >= 500 && status < 600)) { response.destroy(); fail(new RuntimeError(status === 401 || status === 403 ? 'AUTH_REQUIRED' : status === 404 ? 'NOT_EXPOSED' : 'HTTP_ERROR', `Actuator ${endpoint} returned HTTP ${status}.`, status)); return; }
         if (response.headers['content-encoding'] && response.headers['content-encoding'] !== 'identity') { response.destroy(); fail(new RuntimeError('ENCODING_UNSUPPORTED', 'Compressed Actuator responses are not accepted.')); return; }
         const declared = Number(response.headers['content-length']);
-        if (Number.isFinite(declared) && declared > this.#options.maxResponseBytes) { response.destroy(); fail(new RuntimeError('RESPONSE_TOO_LARGE', 'Actuator response exceeds the configured limit.')); return; }
-        response.on('data', chunk => { bytes += chunk.length; if (bytes > this.#options.maxResponseBytes) { fail(new RuntimeError('RESPONSE_TOO_LARGE', 'Actuator response exceeds the configured limit.')); response.destroy(); request.destroy(); } else chunks.push(chunk); });
+        if (Number.isFinite(declared) && declared > limit) { response.destroy(); fail(new RuntimeError('RESPONSE_TOO_LARGE', 'Actuator response exceeds the configured limit.')); return; }
+        response.on('data', chunk => { bytes += chunk.length; if (bytes > limit) { fail(new RuntimeError('RESPONSE_TOO_LARGE', 'Actuator response exceeds the configured limit.')); response.destroy(); request.destroy(); } else chunks.push(chunk); });
         response.on('aborted', () => fail(new RuntimeError('RESPONSE_ABORTED', 'Actuator response ended before completion.')));
         response.on('error', () => fail(new RuntimeError('RESPONSE_ERROR', 'Actuator response could not be read.')));
         response.on('end', () => {
@@ -124,7 +126,8 @@ class ActuatorClient {
           const healthStatus = endpoint === 'health' ? status : undefined;
           let json; try { json = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { fail(new RuntimeError('INVALID_JSON', 'Actuator did not return a valid JSON response.', healthStatus)); return; }
           chunks = [];
-          let normalized; try { normalized = normalizeEndpoint(endpoint, json, secretRedactor(this.#authorization)); } catch { fail(new RuntimeError('INVALID_SCHEMA', 'Actuator JSON could not be normalized.', healthStatus)); return; }
+          const redact = secretRedactor(this.#authorization);
+          let normalized; try { normalized = project ? project(json, redact) : normalizeEndpoint(endpoint, json, redact); } catch { fail(new RuntimeError('INVALID_SCHEMA', 'Actuator JSON could not be normalized.', healthStatus)); return; }
           finished = true; clearTimeout(timer); this.#requests.delete(request);
           resolve(endpoint === 'health' ? { ...normalized, httpStatus: status } : normalized);
         });
@@ -140,6 +143,23 @@ class ActuatorClient {
     try { suffix = healthPath(path); }
     catch (error) { throw new RuntimeError('INVALID_HEALTH_PATH', error.message); }
     return this.#request('health', suffix ? '/' + suffix : '');
+  }
+  async property(key, { verifiedPid, assertCurrent = () => {} } = {}) {
+    let suffix;
+    try { suffix = propertyPath(key); }
+    catch (error) { throw new RuntimeError('INVALID_PROPERTY_KEY', error.message); }
+    const responseLimit = 64 * 1024;
+    const verify = async () => {
+      assertCurrent();
+      if (verifiedPid === undefined) return;
+      const observed = await this.#request('info', '', readProcessId, responseLimit);
+      assertCurrent();
+      if (observed !== verifiedPid || !observed) throw new RuntimeError('DEBUG_PROCESS_MISMATCH', 'The Actuator process identity does not match the verified local Java debug target.');
+    };
+    await verify();
+    const report = await this.#request('env', suffix, readProperty, responseLimit);
+    await verify();
+    return { key: secretRedactor(this.#authorization)(key), ...report, observedAt: new Date().toISOString(), debugProcessVerified: verifiedPid !== undefined };
   }
   async security(input) {
     let choice;

@@ -5,6 +5,7 @@ const { registerSpringFeatures } = require('./spring');
 const { registerJavaDebugger } = require('./debug');
 const { ACTIONS,namedAction,editorAnchor } = require('./extraction-actions');
 const { registerJavaFormatting } = require('./format-vscode');
+const { registerFileStructure } = require('./file-structure-vscode');
 
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
@@ -13,7 +14,7 @@ function registerJavaFeatures(context, vscode) {
   let client, debuggerController, disposing, disposed = false, configuring = false, installing = false, pending = Promise.resolve();
   let state = { state: 'stopped', message: 'Java server is stopped.' };
   const subscriptions = [output, status];
-  const spring = registerSpringFeatures(vscode, context, output);
+  const spring = registerSpringFeatures(vscode, context, output, { verifiedLocalPid: session => debuggerController?.verifiedLocalPid(session) });
   subscriptions.push(spring);
   function update(next, message) {
     state = { ...state, state: next, message };
@@ -55,6 +56,9 @@ function registerJavaFeatures(context, vscode) {
         initializationOptions: { bundles: launch.bundles, workspaceFolders: (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.toString()), settings, extendedClientCapabilities: { progressReportProvider: true, classFileContentsSupport: true, overrideMethodsPromptSupport: false, hashCodeEqualsPromptSupport: false, advancedOrganizeImportsSupport: false,advancedExtractRefactoringSupport:false } },
         synchronize: { fileEvents: watcher },
         middleware: {
+          provideDocumentSymbols(document,token,next) {
+            return api.structure.outline(document,token,next);
+          },
           provideDocumentFormattingEdits(document,options,token,next) {
             return api.formatting.native(document,undefined,options,token,()=>next(document,options,token));
           },
@@ -203,6 +207,14 @@ function registerJavaFeatures(context, vscode) {
   api.scala=require('./scala-vscode').registerScalaWorkbench(context,vscode,api);
   api.kotlinMultiplatform=require('./kmp-vscode').registerKmpWorkbench(vscode,api);
   api.kotlinEditor=require('./kotlin-editor-vscode').registerKotlinEditor(context,vscode,api);
+  api.structure=registerFileStructure(vscode,{java:api,output,readJava:async (document,token)=>{
+    const server=client;
+    if (!server?.isRunning()||!vscode.workspace.isTrusted) throw Error('The Java language server is getting ready.');
+    const symbols=await server.sendRequest('textDocument/documentSymbol',{textDocument:{uri:document.uri.toString()}},token);
+    if (client!==server||!vscode.workspace.isTrusted) throw Error('The Java language server changed during file structure lookup.');
+    return symbols;
+  }});
+  subscriptions.push(api.structure);
   api.coroutines=require('./kotlin-coroutines-vscode').registerKotlinCoroutines(vscode,api);
   async function installEngine() {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before installing and starting the Java engine.');

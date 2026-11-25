@@ -1,0 +1,9 @@
+# Spring property values and origins
+
+Connect Rocketbrain to your running loopback Spring Boot Actuator application. Run **Inspect Spring Property Value and Origin** and approve the exact key and endpoint shown in the review. The temporary editor tab displays the effective scalar value, the source Spring chose, and the reported origins in precedence order. Only the effective value is displayed.
+
+To inspect the debugged application, use Rocketbrain’s **Attach to Local Java Process** action on Windows and choose the application's verified PID. Use **Inspect Spring Property in Active Debug Target** from the debug toolbar or Command Palette. The connected Actuator application's `/info` response must expose its PID through Spring Boot's process info contributor. Rocketbrain checks that it matches the attached target before and after reading the property. If the debugger suspends all threads, resume the application for a fresh observation. A displayed observation is dated and closes when the debug target changes or ends.
+
+Your application's endpoint exposure, authentication and sanitization apply. If Spring masks a value, the tab shows **Value redacted**. For authorized local development, Spring Boot supports granting selected roles access to unsanitized values. Rocketbrain queries a single property and discards lower-priority values. Runtime summaries continue to show only property keys. [Spring Boot Actuator endpoints and sanitization](https://docs.spring.io/spring-boot/reference/actuator/endpoints.html#actuator.endpoints.sanitization)
+
+Only properties reported by the active Spring `Environment` are covered. An origin can be unavailable for a programmatically added source. The panel shows origins as reported text. [Spring Boot single property endpoint](https://docs.spring.io/spring-boot/api/rest/actuator/env.html#actuator.env.retrieving-single-property)

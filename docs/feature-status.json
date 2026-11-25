@@ -1,5 +1,5 @@
 {
-  "version": "0.67.0",
+  "version": "0.68.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 84,
-    "partial": 117,
+    "implemented": 85,
+    "partial": 116,
     "not-implemented": 0,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 72,
+    "percent": 72.2,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-010",
-    "IDEA-060",
-    "DG-066",
-    "DG-075"
+    "IDEA-019",
+    "IDEA-058",
+    "DG-082",
+    "DG-094"
   ],
   "expandedFeatures": [
-    "IDEA-010",
-    "IDEA-060",
-    "DG-066",
-    "DG-075"
+    "IDEA-019",
+    "IDEA-058",
+    "DG-082",
+    "DG-094"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -339,8 +339,8 @@
       "verification": {
         "state": "v0.67-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.67.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -599,25 +599,23 @@
       "status": "host-provided",
       "label": "VS Code 재사용",
       "delivery": "vscode-core",
-      "scope": "VS Code Outline/기호 UI와 언어 서버 구조 정보 연결을 재사용한다. UI 전달에서 관찰한 제한은 별도로 표시한다.",
+      "scope": "JDT와 Kotlin의 현재 소스 선언을 검증해 VS Code Outline과 File Structure에서 탐색한다. 타입·함수·필드 필터와 중첩·오버로드로 정확한 선언을 선택한다.",
       "remaining": [
-        "대형 파일과 언어별 구조 필터 동등성은 남는다.",
-        "현재 검증에서 document-symbol UI provider의 undefined 반환과 DocumentSymbol 범위 변환 오류가 관찰됐다. 해당 UI 상태의 정확한 기호와 upstream 원인·복구는 미확인이다. Outline 전체의 무경고 동작을 검증 완료로 보지 않는다."
+        "상속 멤버와 익명·람다 선언의 별도 그룹 탐색이 남아 있다."
       ],
       "verification": {
-        "state": "host-baseline-with-observed-ui-provider-limitation",
+        "state": "v0.68-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.22.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): VS Code Outline 재사용 판정을 유지한다. 보존한 MariaDB UI 경로에서 30초 동안 UI provider 폴링112회가 undefined였고 'selectionRange must be contained in fullRange' 오류가 관찰됐고 원래 작업 호출은0회였다. 당시 raw 요청·좌표를 수집하지 않아 정확한 기호·URI/버전·upstream 원인은 미확인이다. 별도 paired trace에서는 합성 unsaved 전체 문서 reset 뒤 Base 라벨이 이전 순서를 유지해 생산 계열 guard가1회 올바르게 거부했으며, 당시 UI undefined는 재현되지 않았다. 별도 초기 focus 실험의9개 positive·18개 editor Undo/Redo는 부분 결과이고 후속 negative의 닫힌 문서 handle 문제로 그 실험의 전체 통과를 주장하지 않는다. 추가 DEDE MariaDB 집중 실행에서는 49번째 changeSignature.info 준비의 genericv21/GenericChild.java UI 경로에서 30초 동안 undefined 폴링112회(전체 DocumentSymbol UI 명령131회)가 관찰됐다. 최초 기호 barrier에서 중단되어 class 출력 표본과 원래 API 호출은 각각0회였고 raw trace가 없어 정확한 원인은 미확인이다. 이 두 UI 폴링 수는 raw protocol 요청 수가 아니다. DEDE의 MySQL 집중16그룹과 v20 준비 경로의9개 positive·negative 통과는 별도 부분 결과이며 MariaDB 전체 native 통과를 뜻하지 않는다. 별도 v21 시험 준비 검토에서 안정 소스와 원래 API 구간의 계열 응답은 일치했지만, 그 API 구간 밖 비동기 요청614·946의 범위 표본은 관찰 소스와 일관되게 대응시키지 못해 upstream 원인·서버 AST 버전이 미확인으로 남는다. 이 관찰로 Outline 수정·Undo 단독 결함·최신 도착 응답 전체의 정확성·무경고 전체 지원을 확정하지 않는다.",
+        "testedScope": "두 설치 환경에서 Java 필드 190개, 중첩 레코드, 두 오버로드, 현재 메서드와 저장 전 갱신을 확인했다. Kotlin은 companion·백틱 이름·오버로드를 확인했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/file-structure.js",
+          "src/java/file-structure-vscode.js",
+          "test/file-structure-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1824,27 +1822,24 @@
       "category": "Spring·영속성",
       "feature": "Spring 디버거의 실제 설정값·출처",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "Java 디버거로 실제 Spring entity/watch를 검사하고 Actuator 설정 key를 본다.",
-      "remaining": [
-        "설정값·origin 수집과 속성별 출처 디버거 UI는 제공하지 않는다."
-      ],
+      "scope": "사용자가 선택한 Spring Boot 환경 키의 유효 값, 적용 출처와 우선순위를 읽는다. 로컬 Java 디버거는 실제 PID가 같은 Actuator에서만 조회한다. 마스킹과 세션 수명주기를 반영한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.68-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "testedScope": "두 실제 Spring DB에서 환경 변수가 패키지 기본값을 덮어쓴 결과와 출처 두 곳을 확인했다. 설치판으로 동일 PID Java 연결, 가려진 값, 잘못된 PID 거부, 런타임 분리와 디버거 해제 시 화면 닫힘을 확인했다.",
         "publicEvidence": [
-          "src/spring/model.js",
-          "src/spring/vscode.js",
-          "src/spring/runtime-client.js",
-          "src/analysis-tree.js"
+          "src/spring/runtime-property.js",
+          "src/spring/runtime-property-vscode.js",
+          "test/spring-property-origin-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1896,8 +1891,8 @@
       "verification": {
         "state": "v0.67-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.67.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5701,8 +5696,8 @@
       "verification": {
         "state": "v0.67-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.67.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5991,8 +5986,8 @@
       "verification": {
         "state": "v0.67-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.67.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6192,26 +6187,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "선택한 두 연결의 현재 메타데이터 snapshot을 새로 읽어 정규화하고 테이블·열·인덱스·FK·CHECK·partition·옵션을 비교한다. view는 원문 정의 차이를 표시한다. 구조 차이와 비교하지 못한 영역을 분리하고 계정 가시성·비원자적 수집 경계를 드러낸다.",
+      "scope": "서버 스냅샷에서 테이블·뷰와 보이는 프로시저·함수·트리거·이벤트를 비교한다. 원문 및 생성 문맥의 읽기 전용 diff를 열고 가려진 정의와 비교 가능한 차이를 표시한다.",
       "remaining": [
-        "snapshot당100객체·테이블당500열/인덱스와FK각200개·JSON8MiB·차이5000개 범위다. routine·trigger·권한·행 데이터 diff와 외부 의존성은 없다. view의 의미 동등성과 전체 서버 동기화·모든 dialect 조합은 남으며 보이지 않는 정의를 같음 또는 부재로 단정하지 않는다."
+        "권한과 행 데이터, 소유자·이름 대소문자 무시 옵션, 가려진 정의의 의미 비교가 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.68-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 Spring 프로젝트와 MySQL/MariaDB의 별도 소유 테이블에서 새 구조 snapshot과 canonical 차이를 비교한다. 객체 순서·속성·미지원 범위를 검사하고 실제 VS Code 구조 비교 진입점과 snapshot 상태 표시를 확인한다.",
+        "testedScope": "각 엔진에서 별개의 실제 두 서버의 저장 객체 일곱 개를 대조했다. 본문과 생성 문맥, 트리거 순서, 이벤트 시간대, EXECUTE 전용 계정의 가려진 정의를 확인했다. 변조한 스냅샷과 저장 DDL 적용을 거부했다.",
         "publicEvidence": [
-          "src/db/schema-diff.js",
+          "src/db/schema-stored-diff.js",
           "src/db/schema-diff-vscode.js",
-          "test/schema-diff.test.js",
-          "test/schema-diff-vscode.test.js",
-          "test/schema-diff.integration.test.js",
-          "test/schema-diff-host.js"
+          "test/schema-stored-diff-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6560,22 +6552,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "최근 파일과 콘솔 세션을 편집기 닫기 후에도 유지한다.",
+      "scope": "명시적으로 추적한 미실행 SQL과 선택 영역을 워크스페이스 로컬에 체크포인트로 보관한다. 별도 VS Code 프로세스에서 오프라인으로 복원해 계속 편집할 수 있다.",
       "remaining": [
-        "앱 재시작·미실행 SQL·결과/편집 context 복원의 전체 동등성이 남는다."
+        "여러 버전의 타임라인과 결과·그리드 초안 맥락을 연결한 복원이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.68-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
+        "testedScope": "각 실제 Spring DB에서 VS Code를 닫기 전에 미저장 CRLF SQL을 보관하고 별도 호스트 PID에서 텍스트와 역방향 선택을 그대로 복원했다. 오프라인 실행은 거부했고 연결한 콘솔에 복사해 실제 결과를 확인했다.",
         "publicEvidence": [
-          "src/navigation.js",
-          "src/extension.js"
+          "src/db/console-drafts.js",
+          "src/database-workbench.js",
+          "test/console-drafts-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6641,38 +6634,33 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "8cd5a901beed37f85ec5262853b8f102702274577a13030827d8103ea25e925b",
-    "sourceManifestSha256": "fc1b8d8b8a31c3255a26bdd04fce995dc7b536c195f6a4c97f872258d0e23f71",
+    "vsixSha256": "d64ad570e70f3804a4f2a831bcf2aa678ae944d2a4a1d94552e043bcc4f49640",
+    "sourceManifestSha256": "09076a7f25138c496f68548d585c0ba1e32ad82d1941ef0424c24d8381020e05",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 4
+        "featureGroups": 5
       },
       {
         "engine": "mariadb",
-        "featureGroups": 4
+        "featureGroups": 5
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-010",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-066",
+      "id": "IDEA-058",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1578,
-    "pass": 1483,
+    "tests": 1589,
+    "pass": 1492,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 95,
+    "skipped": 97,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

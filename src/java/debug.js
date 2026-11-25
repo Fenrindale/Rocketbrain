@@ -1,5 +1,6 @@
 'use strict';
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { independentJavaExecutable, argumentString } = require('./debug-runtime');
 const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
@@ -10,18 +11,28 @@ const { createLocalValueInspection } = require('./debug-local-values');
 const { createDebugProcessDiscovery, processId } = require('./debug-processes');
 const DEBUG_TYPE = 'rocketbrain-java';
 const PROCESS_SELECTION = '__rocketbrainJavaProcessSelection';
+const VERIFIED_ATTACH = '__rocketbrainVerifiedAttach';
 const resumeCommands = new Set(['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue', 'restart',
   'restartFrame', 'goto', 'terminate', 'disconnect']);
 
 function registerJavaDebugger(vscode, api, output, request) {
-  const sessions = new Map(); let disposed = false;
+  const sessions = new Map(), pendingAttaches = new Map(); let disposed = false;
   function record(session) {
-    if (!sessions.has(session.id)) sessions.set(session.id, { session, state: 'starting', stopVersion: 0, buildVersion: 0, appliedVersion: 0, hcrEvents: [] });
+    if (!sessions.has(session.id)) {
+      const config = session.configuration;
+      const pending = pendingAttaches.get(config?.[VERIFIED_ATTACH]);
+      if (pending) pendingAttaches.delete(config[VERIFIED_ATTACH]);
+      const verifiedPid = pending && pending.expires > Date.now() && config.hostName === pending.hostName && config.port === pending.port ? pending.pid : undefined;
+      sessions.set(session.id, { session, verifiedPid, state: 'starting', stopVersion: 0, buildVersion: 0, appliedVersion: 0, hcrEvents: [] });
+    }
     return sessions.get(session.id);
   }
   function observe(session, message) {
     const info = sessions.get(session.id); if (!info) return;
     if (message.type === 'response' && message.command === 'initialize' && message.success) info.capabilities = message.body;
+    if (message.type === 'response' && message.command === 'attach') {
+      info.attached = message.success === true;
+    }
     if (message.type === 'response' && info.resuming !== undefined && info.resuming === message.request_seq) {
       if (message.success && info.state === 'stopped') info.state = 'running';
       info.resuming = undefined;
@@ -73,6 +84,7 @@ function registerJavaDebugger(vscode, api, output, request) {
   async function resolve(folder, value, token) {
     ensureTrusted();
     const config = { ...value, type: DEBUG_TYPE, name: value.name || 'Rocketbrain Java', request: value.request || 'launch' };
+    delete config[VERIFIED_ATTACH];
     if (token?.isCancellationRequested) return undefined;
     const stepFilters = mergeStepFilters(vscode.workspace.getConfiguration?.('rocketbrain.java', folder?.uri).get('stepFilters'), value.stepFilters);
     if (Object.keys(stepFilters).length || value.stepFilters) config.stepFilters = stepFilters;
@@ -88,6 +100,12 @@ function registerJavaDebugger(vscode, api, output, request) {
         config.port = selected.port;
         delete config.processId;
         delete config[PROCESS_SELECTION];
+        const now = Date.now();
+        for (const [key, pending] of pendingAttaches) if (pending.expires <= now) pendingAttaches.delete(key);
+        if (pendingAttaches.size >= 64) pendingAttaches.delete(pendingAttaches.keys().next().value);
+        const key = randomUUID();
+        pendingAttaches.set(key, { ...selected, expires: now + 60000 });
+        config[VERIFIED_ATTACH] = key;
       }
       config.hostName = config.hostName || '127.0.0.1'; config.port = config.port === undefined ? 5005 : Number(config.port);
       if (typeof config.hostName !== 'string' || !config.hostName.trim() || !Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Attach requires a hostName and TCP port from 1 to 65535.');
@@ -218,6 +236,10 @@ function registerJavaDebugger(vscode, api, output, request) {
     if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
   return { breakpoints, exceptions, smartStep, frames, localValues, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
+    verifiedLocalPid(session) {
+      const info = session && sessions.get(session.id);
+      return info?.attached && info.state !== 'terminated' ? info.verifiedPid : undefined;
+    },
     getState(sessionId) {
       const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id);
       return info ? { state: info.state, threadId: info.threadId, stopVersion: info.stopVersion, resuming: info.resuming,
@@ -225,7 +247,7 @@ function registerJavaDebugger(vscode, api, output, request) {
         lastHcrResult: info.lastHcrResult } : undefined;
     },
     async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); },
-    dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
+    dispose() { disposed = true; pendingAttaches.clear(); void this.stopSessions(); for (const item of disposables) item.dispose(); } };
 }
 
 module.exports = { DEBUG_TYPE, registerJavaDebugger };

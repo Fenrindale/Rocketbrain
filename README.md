@@ -66,6 +66,7 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 13. **Search or Replace Java Structure**는 Java 파일이나 프로젝트에서 Javac AST 패턴을 찾습니다. `$name$`으로 식을 캡처하고 타입 제약을 지정합니다. 치환할 결과를 선택해 변경 내역을 검토하면 적용 전에 Javac로 새 소스를 검사합니다.
 14. **Extract Java Interface**는 선택한 Java 클래스의 메서드로 같은 패키지에 인터페이스를 만듭니다. `rocketbrain.java.extractInterface.replaceUsages`를 켜면 호환되는 사용처 변경도 검토할 수 있습니다. 새 파일과 기존 소스 변경을 컴파일 검사와 diff에서 확인합니다.
 15. **Show Spring Bean Dependency Graph**는 선택된 주입, 모호한 후보, 지연 조회를 구분합니다. 선택한 Bean의 의존 관계와 순환, 선언·주입 소스를 탐색합니다. **Open Spring Actuator Health**는 연결한 실행 앱이 공개한 상태, 그룹과 구성 요소를 확인합니다.
+16. **Inspect Spring Property Value and Origin**으로 지정한 키의 실제 값과 출처 우선순위를 확인합니다. Windows에서 확인된 PID로 Java 디버거를 연결했다면 디버그 도구 모음에서 같은 Spring 프로세스의 설정을 조회할 수 있습니다. [Spring 설정값과 출처 조회](docs/spring-property-origin.md)
 16. **Pull Up Java Members**와 **Push Down Java Members**는 같은 패키지에서 직접 상속하는 클래스 사이의 메서드·상수 이동을 미리 봅니다. Javac가 전후 참조를 비교하고 선언 충돌이나 다른 오버로드로의 연결을 감지하면 적용을 차단합니다.
 17. **Manage Git Changelists**에서 변경 파일을 이름 있는 작업 목록에 배정합니다. 목록에 편집 위치와 실행 구성 선택을 기록해 복원할 수 있습니다. 복원 후 실행 구성은 VS Code의 Run and Debug에서 시작할 수 있습니다.
    **Open GitHub or GitLab Review**는 `rocketbrain.codeReview`에 지정한 프로젝트의 열린 검토를 불러옵니다. 변경 패치와 댓글, 연결 이슈 번호와 CI 상태를 볼 수 있으며 **Add Local Review Draft**로 새 줄에 연결한 초안을 작업 공간에 저장합니다.
@@ -222,6 +223,8 @@ Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후�
 
 **Find JVM & Spring Usages**는 현재 파일, 해당 워크스페이스 폴더 또는 전체 워크스페이스에서 사용처를 찾습니다. Java와 Kotlin의 의미 기반 참조, Spring XML의 Bean 클래스, 정적 설정 플레이스홀더를 골라 정확한 소스 위치로 이동합니다. [사용처 검색 범위](docs/java-symbol-navigation.md#find-usages)
 
+**File Structure**로 현재 Java·Kotlin 파일의 타입, 함수, 필드를 검색하고 중첩 선언이나 원하는 오버로드로 이동합니다. VS Code Outline에도 같은 소스 위치 검사를 적용합니다. [파일 구조 탐색](docs/java-symbol-navigation.md#file-structure)
+
 Java·Kotlin의 **Format Document**와 **Format Selection**은 상위 폴더와 현재 폴더의 `.editorconfig`를 적용합니다. **Preview Java Formatting**과 **Preview Kotlin Formatting**으로 변경 내용을 검토할 수 있습니다. Kotlin 포맷은 여러 줄 문자열 내용을 보존하며, LF·CRLF 변환은 문서 전체에 적용합니다. [Java·Kotlin 포맷 설정](docs/java-formatting.md)
 
 **Extract Java Local Variable**, **Extract Java Field**, **Extract Java Constant**에서 새 이름과 변경 내용을 먼저 검토할 수 있습니다. 지역 변수와 필드는 `return` 식 전체 또는 지역 변수의 초기화 식을 선택합니다. 필드를 추출하면 현재 메서드에서 값을 계산해 `private` 필드에 대입합니다. 상수 추출은 컴파일 타임 상수식을 `private static final` 필드로 옮깁니다. [Java 변수·필드·상수 추출](docs/java-extract-constant.md)
@@ -260,7 +263,9 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 
 **Open SQL Console**은 읽기 전용 전용 세션을 엽니다. 기존 SQL 편집기에서 **Open Shared SQL Console**을 실행하면 같은 서버 연결과 트랜잭션을 사용하는 새 편집기가 열립니다. 두 편집기에서 쓰기 모드, 커밋과 롤백이 공유됩니다. 편집기를 닫아도 트랜잭션은 남습니다. **Manage Console Sessions**에서 연결된 편집기 수를 확인하고 공유 세션을 한 번에 종료합니다.
 
-연결 트리에서 **Open Dedicated Profile SQL Console**을 선택하면 활성 카탈로그를 바꾸지 않고 선택한 프로필로 SQL을 실행할 수 있습니다. 전용 편집기에는 대상 프로필과 스키마가 표시됩니다. 읽기 전용으로 시작하며, 쿼리 실행·쓰기 모드·커밋·롤백·세션 격리를 제공합니다. 트리 카탈로그·스키마 편집·검토 스크립트·EXPLAIN은 활성 DB에서 사용합니다. 전용 콘솔의 SQL은 이 창의 메모리에 저장되므로 보존할 원문은 로컬 파일에 복사하세요.
+연결 트리에서 **Open Dedicated Profile SQL Console**을 선택하면 활성 카탈로그를 바꾸지 않고 선택한 프로필로 SQL을 실행할 수 있습니다. 전용 편집기에는 대상 프로필과 스키마가 표시됩니다. 읽기 전용으로 시작하며, 쿼리 실행·쓰기 모드·커밋·롤백·세션 격리를 제공합니다. 트리 카탈로그·스키마 편집·검토 스크립트·EXPLAIN은 활성 DB에서 사용합니다.
+
+**Track SQL Console as Draft**로 보관을 시작하면 편집 중인 SQL과 선택 영역이 로컬에 갱신됩니다. 닫거나 재시작한 뒤 **Restore SQL Draft**에서 오프라인으로 이어서 편집합니다. [SQL 콘솔 초안 복원](docs/sql-draft-recovery.md)
 
 - **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. 외부 파일 접근과 쓰기는 차단하며 결과는 표본으로 표시합니다.
 - **Add JDBC Driver**에서 별도 JDK와 공급사 JAR를 사용합니다. 드라이버 클래스와 SHA-256을 검토해 승인하고, **Manage JDBC Profiles**로 연결한 뒤 카탈로그와 읽기 쿼리를 사용할 수 있습니다. [사용자 지정 JDBC 드라이버 문서](docs/jdbc-drivers.md)
@@ -320,6 +325,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 호환되는 `BIT(64)`, `YEAR`, 같은 레이블의 `ENUM`·`SET`, 같은 길이의 고정 `BINARY`도 테이블 복사에서 검증합니다.
 - **Open Schema Diagram**에서 실제 FK와 저장 연결의 워크스페이스 가상 FK를 탐색합니다. 노드 위치를 저장하거나 JSON으로 교환하고 PNG로 내보낼 수 있습니다.
 - **Save Schema DDL**에서 InnoDB 테이블, 외래 키, 지원하는 뷰, SQL/PSM 프로시저, 결정적 숫자 함수, 트리거의 복원 순서를 검토하고 Git으로 추적할 SQL 파일을 저장합니다. 선택 모드에서는 대상 테이블에 연결된 트리거와 호출하는 프로시저를 포함합니다. 확인할 수 없는 본문, 동적 SQL, 교차 스키마 참조, 순서를 확인할 수 없는 트리거는 생략 이유를 표시합니다. 저장 직전에 서버 정의를 다시 비교합니다. 파일에는 행 데이터, 권한, 이벤트, 시퀀스와 패키지를 포함하지 않습니다. 복원할 때는 동일한 이름과 기본 콜레이션의 빈 스키마와 원래 DEFINER 계정을 준비하고 호환되는 UTF-8 MySQL·MariaDB 클라이언트에서 파일을 검토한 뒤 실행합니다.
+- **Save Schema Snapshot with Stored Objects**로 프로시저, 함수, 트리거, 이벤트의 관찰 가능한 원문과 생성 설정을 스냅샷에 저장합니다. 다른 연결에서 **Compare Current Database with Schema Snapshot**을 실행해 같은 이름·종류의 원문과 설정을 비교하고 **Open Stored Object Diff**에서 나란히 엽니다. 보이지 않는 원문과 한쪽 계정에만 보이는 객체는 미확정으로 표시합니다. 비교 결과는 검토용이며 저장 객체 배포나 SQL 의미 동등성을 판단하는 데 사용하지 않습니다.
 
 테이블 설계와 기존 뷰·프로시저 원문 편집은 검토·명시적 적용 흐름을 제공합니다. 서버 검증에는 DDL 권한이 필요할 수 있습니다. MySQL/MariaDB DDL과 객체 교체에는 비원자적인 단계가 있으므로 표시된 범위·복구 조건·미완료 트랜잭션을 확인하세요. 모호한 결과를 자동 재실행하지 않습니다.
 

@@ -1,25 +1,25 @@
 {
-  "version": "0.67.0",
-  "verifiedAt": "2026-11-25T16:07:37.725Z",
+  "version": "0.68.0",
+  "verifiedAt": "2026-11-25T16:28:42.574Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.67.0.vsix",
-    "sha256": "8cd5a901beed37f85ec5262853b8f102702274577a13030827d8103ea25e925b",
-    "bytes": 3340278,
+    "name": "rocketbrain-0.68.0.vsix",
+    "sha256": "d64ad570e70f3804a4f2a831bcf2aa678ae944d2a4a1d94552e043bcc4f49640",
+    "bytes": 3357696,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1813,
-    "inputVectorSha256": "fc1b8d8b8a31c3255a26bdd04fce995dc7b536c195f6a4c97f872258d0e23f71",
+    "frozenPublicInputs": 1832,
+    "inputVectorSha256": "09076a7f25138c496f68548d585c0ba1e32ad82d1941ef0424c24d8381020e05",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1578,
-    "pass": 1483,
+    "tests": 1589,
+    "pass": 1492,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 95,
+    "skipped": 97,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,22 +29,26 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "kotlinFormatting",
+          "group": "javaStructure",
           "checks": 1
         },
         {
-          "group": "fetchSnapshot",
+          "group": "kotlinStructure",
           "checks": 1
         },
         {
-          "group": "crossSchemaLogical",
+          "group": "springProperty",
           "checks": 1
         },
         {
-          "group": "datasetSync",
+          "group": "storedSchemaDiff",
+          "checks": 1
+        },
+        {
+          "group": "sqlDraftRecovery",
           "checks": 1
         }
       ],
@@ -59,22 +63,26 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "kotlinFormatting",
+          "group": "javaStructure",
           "checks": 1
         },
         {
-          "group": "fetchSnapshot",
+          "group": "kotlinStructure",
           "checks": 1
         },
         {
-          "group": "crossSchemaLogical",
+          "group": "springProperty",
           "checks": 1
         },
         {
-          "group": "datasetSync",
+          "group": "storedSchemaDiff",
+          "checks": 1
+        },
+        {
+          "group": "sqlDraftRecovery",
           "checks": 1
         }
       ],
@@ -85,75 +93,72 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-010": {
-      "scope": "두 DB가 연결된 Spring 워크스페이스에서 Kotlin 전체·선택 포맷, 설정 파일 두 개, 공백 2칸과 탭 4칸, 원문 리터럴, CRLF 및 Undo·Redo, 변경 설정의 검토 거부를 확인했다. 기존 Java 검증이 동일 포맷 수명주기를 확인했다.",
+    "IDEA-019": {
+      "scope": "두 설치 환경에서 Java 필드 190개, 중첩 레코드, 두 오버로드, 현재 메서드와 저장 전 갱신을 확인했다. Kotlin은 companion·백틱 이름·오버로드를 확인했다.",
       "runtimeGroups": [
-        "kotlinFormatting"
+        "javaStructure",
+        "kotlinStructure"
       ]
     },
-    "IDEA-060": {
-      "scope": "두 실제 DB의 Hibernate 7.4.13에서 정의로 이동하고 단일 준비 SELECT와 롤백을 확인했다. nullable 연관과 빈 컬렉션을 구분하고 16개 하위 항목 미리보기, 최대 루트 및 물리 행 한도, 콜백·다형 로드의 실행 전 거부를 검증했다.",
+    "IDEA-058": {
+      "scope": "두 실제 Spring DB에서 환경 변수가 패키지 기본값을 덮어쓴 결과와 출처 두 곳을 확인했다. 설치판으로 동일 PID Java 연결, 가려진 값, 잘못된 PID 거부, 런타임 분리와 디버거 해제 시 화면 닫힘을 확인했다.",
       "runtimeGroups": [
-        "fetchSnapshot"
+        "springProperty"
       ]
     },
-    "DG-066": {
-      "scope": "두 DB의 설치판에서 교차 스키마 복합 키로 SQL 결과와 양방향 그리드를 열고 원위치로 복귀했다. 프로필 격리와 재접속, PK·열 타입과 오래된 검토 거부, 관계 제거 및 서버에 FK가 추가되지 않음을 확인했다.",
+    "DG-082": {
+      "scope": "각 엔진에서 별개의 실제 두 서버의 저장 객체 일곱 개를 대조했다. 본문과 생성 문맥, 트리거 순서, 이벤트 시간대, EXECUTE 전용 계정의 가려진 정의를 확인했다. 변조한 스냅샷과 저장 DDL 적용을 거부했다.",
       "runtimeGroups": [
-        "crossSchemaLogical"
+        "storedSchemaDiff"
       ]
     },
-    "DG-075": {
-      "scope": "두 실제 서버에서 53비트보다 큰 무부호 기본 키, 고정 소수와 NULL을 정확히 대조했다. 동시 수정은 세 변경을 전부 롤백했고 새 검토와 커밋 후 반복 비교에서 세 행 모두 일치했다.",
+    "DG-094": {
+      "scope": "각 실제 Spring DB에서 VS Code를 닫기 전에 미저장 CRLF SQL을 보관하고 별도 호스트 PID에서 텍스트와 역방향 선택을 그대로 복원했다. 오프라인 실행은 거부했고 연결한 콘솔에 복사해 실제 결과를 확인했다.",
       "runtimeGroups": [
-        "datasetSync"
+        "sqlDraftRecovery"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 384,
+    "sourceCorrespondences": 390,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 84,
-      "partial": 117,
+      "implemented": 85,
+      "partial": 116,
       "not-implemented": 0,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 155.5,
-    "previousWeightedPoints": 154.5,
+    "weightedPoints": 156,
+    "previousWeightedPoints": 155.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 72,
+    "referencePercent": 72.2,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-010",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-066",
+        "id": "IDEA-058",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Kotlin 선택 포맷은 완전한 구문을 포함한 줄에 적용한다. Java와 Kotlin은 텍스트와 줄바꿈을 별도 Undo·Redo 단계로 적용한다.",
-    "엔티티 콘솔 조회는 Hibernate 7.4의 직접 필드 매핑 연관관계 한 개를 대상으로 한다.",
-    "데이터셋의 한쪽 행 삽입과 삭제에는 필터 없는 완전한 캡처와 정확한 기본 키가 필요하다. 전체 데이터베이스의 스트리밍 동기화가 남아 있다.",
+    "파일 구조는 현재 문서에서 소스 위치를 확인한 선언을 표시한다. 상속 멤버와 익명 선언 탐색은 남아 있다.",
+    "Spring 설정 조회는 선택한 키 단위로 진행하고 서버의 값 마스킹을 존중한다. 디버거는 실제 PID를 확인한 로컬 Windows 세션에서 지원한다.",
+    "저장 객체 비교는 보이는 원문과 생성 문맥을 읽는다. 권한·행 데이터 비교와 SQL 적용은 별도 기능이다.",
+    "복원하는 SQL 초안은 사용자 선택으로 보관한 원문과 선택 영역을 재개한다. 결과 그리드와 서버 트랜잭션은 별도 수명주기를 사용한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Java·Kotlin 파일 구조와 실제 Outline 탐색",
-    "로컬 디버거가 연결한 Spring의 적용 설정값·출처 조사",
-    "서버 간 저장 프로그램 비교와 앱 재시작 후 SQL 콘솔 초안 복원"
+    "실제 컴파일러가 선택한 Java 메서드 호출 인라인",
+    "Persistence Unit의 엔티티 관계 다이어그램과 배치 편집",
+    "FK 검증 기반 SQL JOIN 빠른 수정과 생성 열 테이블 디자이너"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.67.0",
+  "version": "0.68.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -212,6 +212,8 @@
       { "command": "rocketbrain.spring.beanGraph", "title": "Show Spring Bean Dependency Graph", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeHealth", "title": "Open Spring Actuator Health", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeSecurity", "title": "Inspect Spring Security Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.runtimeProperty", "title": "Inspect Spring Property Value and Origin", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.debugProperty", "title": "Inspect Spring Property in Active Debug Target", "category": "Rocketbrain", "icon": "$(search)", "enablement": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewProcedureCall", "title": "Review Stored Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewPackageCall", "title": "Review MariaDB Package Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -236,6 +238,7 @@
       { "command": "rocketbrain.java.typeHierarchy", "title": "Explore Java Type Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.navigateSymbol", "title": "Go to Code Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.findUsages", "title": "Find JVM & Spring Usages", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin || resourceExtname =~ /^\\.(xml|properties|ya?ml)$/i)" },
+      { "command": "rocketbrain.java.fileStructure", "title": "File Structure", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.previewFormatting", "title": "Preview Java Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == java" },
       { "command": "rocketbrain.kotlinEditor.previewFormatting", "title": "Preview Kotlin Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.java.goToSuperMethod", "title": "Go to Java Super Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
@@ -545,6 +548,30 @@
         "enablement": "isWorkspaceTrusted && (rocketbrain.mysqlConnected || rocketbrain.profileConsole) && editorLangId == sql"
       },
       {
+        "command": "rocketbrain.sqlDraft.track",
+        "title": "Track SQL Console as Draft",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && editorLangId == sql"
+      },
+      {
+        "command": "rocketbrain.sqlDraft.open",
+        "title": "Restore SQL Draft",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.sqlDraft.checkpoint",
+        "title": "Save SQL Draft Checkpoint",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && editorLangId == sql"
+      },
+      {
+        "command": "rocketbrain.sqlDraft.remove",
+        "title": "Remove SQL Draft",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.prepare",
         "title": "Prepare Independent JPA Observer Agent",
         "category": "Rocketbrain"
@@ -729,6 +756,18 @@
         "command": "rocketbrain.schema.compareSnapshot",
         "title": "Compare Current Database with Schema Snapshot",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.saveSnapshotWithStoredObjects",
+        "title": "Save Schema Snapshot with Stored Objects",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected"
+      },
+      {
+        "command": "rocketbrain.schema.openStoredObjectDiff",
+        "title": "Open Stored Object Diff",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.schema.validateMigration",
@@ -1072,6 +1111,9 @@
       }
     ],
     "menus": {
+      "debug/toolBar": [
+        { "command": "rocketbrain.spring.debugProperty", "when": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java", "group": "navigation@40" }
+      ],
       "notebook/cell/title": [
         { "command": "rocketbrain.sqlNotebook.pinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" },
         { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }
@@ -1105,6 +1147,11 @@
         {
           "command": "rocketbrain.java.findUsages",
           "when": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin || resourceExtname =~ /^\\.(xml|properties|ya?ml)$/i)",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.java.fileStructure",
+          "when": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)",
           "group": "navigation"
         }
       ],

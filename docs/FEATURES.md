@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.67.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.68.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 84 |
-| 부분 구현 | 117 |
+| 구현 | 85 |
+| 부분 구현 | 116 |
 | 미구현 | 0 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **72%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **72.2%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.67에서는 Kotlin 포맷과 EditorConfig, Hibernate 연관 엔티티 조회, 교차 스키마 논리 관계, 데이터셋 삽입·수정·삭제 동기화를 검증했다. 상태가 바뀐 항목은 2개이고 가중 점수는 154.5점에서 155.5점으로 바뀌었다.
+v0.68에서는 Java·Kotlin 파일 구조, Spring 실제 설정값과 출처, 서버 간 저장 객체 비교와 재시작 후 SQL 초안 복원을 검증했다. 상태가 바뀐 항목은 1개이고 가중 점수는 155.5점에서 156점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -78,7 +78,7 @@ v0.67에서는 Kotlin 포맷과 EditorConfig, Hibernate 연관 엔티티 조회,
 | IDEA-055 | IntelliJ IDEA | Application Context·분석용 프로필 | 부분 구현 |
 | IDEA-056 | IntelliJ IDEA | Boot properties·YAML 메타데이터 | 부분 구현 |
 | IDEA-057 | IntelliJ IDEA | Actuator 런타임 Bean·Health·Mappings | 구현 |
-| IDEA-058 | IntelliJ IDEA | Spring 디버거의 실제 설정값·출처 | 부분 구현 |
+| IDEA-058 | IntelliJ IDEA | Spring 디버거의 실제 설정값·출처 | 구현 |
 | IDEA-059 | IntelliJ IDEA | Spring Data 파생 메서드·쿼리 | 부분 구현 |
 | IDEA-060 | IntelliJ IDEA | JPQL/HQL 작성·JPA Console | 부분 구현 |
 | IDEA-061 | IntelliJ IDEA | DB 스키마→JPA 엔티티·매핑 생성 | 구현 |
