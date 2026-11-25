@@ -22,10 +22,10 @@ final class ConsoleQuery {
     static final int MAX_PARAMETERS = 16, MAX_COLUMNS = 16, MAX_ROWS = 100, MAX_QUERY = 4096;
     private static final Set<String> FUNCTIONS = Set.of("count","sum","avg","min","max","lower","upper","length","character_length",
         "char_length","abs","coalesce","nullif","concat","substring","round","floor","ceil","ceiling","mod");
-    private static final Set<String> GROUPS = Set.of("in","exists","select","where","on","and","or","not","having","from","over");
+    private static final Set<String> GROUPS = Set.of("in","exists","select","where","on","and","or","not","having","from","by","all","any","some");
     private static final Set<String> BLOCKED = Set.of("insert","update","delete","merge","truncate","drop","alter","create","set","replace",
         "call","execute","grant","revoke","handler","lock","unlock","share","into","outfile","dumpfile","procedure","do","function","sql",
-        "fetch","new","with","recursive","union","except","intersect","lateral","window","returning","limit","offset","over");
+        "fetch","new","recursive","lateral","window","returning","limit","offset","over","materialized","search","cycle");
     private static final Pattern TOKEN = Pattern.compile(
         "[ \\t\\r\\n]+|[A-Za-z_][A-Za-z0-9_]*|[0-9]+(?:\\.[0-9]+)?|[(),.?>:=<!+*/%-]|`[A-Za-z_][A-Za-z0-9_]*`");
     private static final Set<String> SAFE_TYPES = Set.of(
@@ -47,8 +47,14 @@ final class ConsoleQuery {
     }
 
     static Prepared describe(Object factory,String text) {
-        inspect(text,false);
-        Map<String,Object> semantic = HibernateAccess.analyze(factory,text);
+        ConsoleSelectShape shape=inspect(text,false);
+        Map<String,Object> semantic;
+        try {
+            Object statement=HibernateAccess.translate(factory,text);
+            semantic=HibernateAccess.describeStatement(statement);
+            if (shape.advanced()) ConsoleSqmShape.assertCompatible(statement);
+        } catch(Refusal rejected) { throw rejected; }
+        catch(Throwable failure) { throw new Refusal("provider_validation_failed"); }
         if (!"known".equals(semantic.get("state"))) throw new Refusal("provider_validation_failed");
         if (!"select".equals(semantic.get("statementKind"))) throw new Refusal("select_required");
         List<Map<String,Object>> columns = descriptors(semantic.get("selectionTypes"),MAX_COLUMNS);
@@ -136,7 +142,7 @@ final class ConsoleQuery {
         };
     }
 
-    static void inspect(String text,boolean sql) {
+    static ConsoleSelectShape inspect(String text,boolean sql) {
         int limit = sql ? 16384 : MAX_QUERY;
         String refusal = sql ? "rendered_sql_not_allowed" : "unsupported_select_shape";
         if (text==null || text.length()>limit || text.contains("--") || text.contains("/*") || text.contains("*/"))
@@ -151,23 +157,23 @@ final class ConsoleQuery {
             if (!token.isBlank()) tokens.add(token.toLowerCase(Locale.ROOT));
             if (tokens.size()>1024) throw new Refusal(refusal);
         }
-        if (end!=text.length() || tokens.size()<4 || !tokens.getFirst().equals("select") || !tokens.contains("from"))
-            throw new Refusal(refusal);
-        int depth = 0;
+        if (end!=text.length() || tokens.size()<4) throw new Refusal(refusal);
+        ConsoleSelectShape shape=ConsoleSelectShape.parse(tokens,sql,refusal);
         for(int i=0;i<tokens.size();i++) {
             String token=tokens.get(i);
             boolean named = i>0 && tokens.get(i-1).equals(":");
             if (token.startsWith("`") && !sql || token.equals(":") && sql ||
                 !named && BLOCKED.contains(token) && !(sql && token.equals("limit"))) throw new Refusal(refusal);
-            if (token.equals("(") && ++depth>12 || token.equals(")") && --depth<0) throw new Refusal(refusal);
             if (i+1<tokens.size() && tokens.get(i+1).equals("(") &&
                 (Character.isLetter(token.charAt(0)) || token.startsWith("_") || token.startsWith("`"))) {
-                if (!GROUPS.contains(token) && !FUNCTIONS.contains(token) || i>0 && tokens.get(i-1).equals("."))
+                if (!shape.structuralParenthesis(i+1) && (!GROUPS.contains(token) && !FUNCTIONS.contains(token) || i>0 && tokens.get(i-1).equals(".")))
                     throw new Refusal(refusal);
             }
         }
-        if (depth!=0) throw new Refusal(refusal);
+        return shape;
     }
+
+    static boolean safeType(String type) { return type!=null && SAFE_TYPES.contains(type); }
 
     static Map<String,Object> rows(Prepared prepared,List<?> values,int maximum) {
         List<List<Object>> rows = new ArrayList<>();

@@ -5,6 +5,7 @@ const {openTunnel}=require('./connection-tunnel');
 const { normalizeLocalTransport, transportKey } = require('./local-transport');
 const { normalizeRdsIam, validateRdsIamRoute } = require('./rds-iam');
 const { normalizeWriteProtection } = require('./write-protection');
+const { sessionLifecycle } = require('./session-lifecycle');
 const savedFailures=new WeakMap();
 const persistedProfileOnFailure=error=>savedFailures.get(error)||null;
 const KEY='rocketbrain.database.profiles.v1',SCOPE='rocketbrain.database.secretScope.v1',MAX=32;
@@ -14,7 +15,7 @@ function text(value,label,max,optional=false){if(optional&&(value===undefined||v
 function port(value,otherwise){value=value??otherwise;if(!Number.isInteger(value)||value<1||value>65535)throw fail('Ports must be integers from 1 to 65535.');return value;}
 function localPath(value,label,optional=true){if(optional&&!value)return'';const result=text(value,label,4096);if(!path.isAbsolute(result)||/^\\\\/.test(result))throw fail('Select a local absolute '+label+' path.');return result;}
 function normalizeProfile(value,{allowUnconfigured=false}={}){
- exact(value,['id','name','group','color','host','port','user','database','tls','ssh','transport','auth','writeProtection']);
+ exact(value,['id','name','group','color','host','port','user','database','tls','ssh','transport','auth','writeProtection','sessionLifecycle']);
  const id=value.id||crypto.randomUUID();if(!/^[a-f0-9-]{36}$/i.test(id))throw fail('The profile identity is invalid.');
  const transport=normalizeLocalTransport(value.transport,{allowUnconfigured});
  let route;
@@ -38,6 +39,8 @@ function normalizeProfile(value,{allowUnconfigured=false}={}){
  }
  const writeProtection=normalizeWriteProtection(value.writeProtection);
  if(writeProtection)p.writeProtection=writeProtection;
+ const lifecycle=sessionLifecycle(value.sessionLifecycle);
+ if(lifecycle)p.sessionLifecycle=lifecycle;
  return p;
 }
 function password(value){if(value===undefined)return undefined;if(typeof value!=='string'||Buffer.byteLength(value)>16384||value.includes('\0'))throw fail('Use a database password under 16 KiB.');return value;}
@@ -73,7 +76,8 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   if(profile.auth&&(!profile.auth.source||!profile.tls.caPath))throw fail('Select the local AWS credential source and RDS CA bundle before connecting.');
   const route=profile.transport?{transport:profile.transport}:{host:profile.host,port:profile.port};
   const config={...route,user:profile.user,database:profile.database,password:pass,readOnly:true,
-   ...(profile.auth?{auth:profile.auth}:{}),...(profile.writeProtection?{writeProtection:profile.writeProtection}:{})};
+   ...(profile.auth?{auth:profile.auth}:{}),...(profile.writeProtection?{writeProtection:profile.writeProtection}:{}),
+   ...(profile.sessionLifecycle && {sessionLifecycle:profile.sessionLifecycle})};
   if(profile.tls.mode==='verify'){config.ssl={rejectUnauthorized:true,verifyIdentity:true,serverName:profile.tls.serverName};for(const [field,file]of [['ca',profile.tls.caPath],['cert',profile.tls.certPath],['key',profile.tls.keyPath]])if(file)config.ssl[field]=await readPem(file);connectionSecurity(config);}
   const observedRoute=profile.transport?{transport:{kind:profile.transport.kind}}:route;
   const info={id:profile.id,name:profile.name,group:profile.group,color:profile.color,...observedRoute,database:profile.database,tls:profile.tls.mode==='verify',ssh:Boolean(profile.ssh),
@@ -89,7 +93,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   list,
   onDidChange(listener){events.on('change',listener);return{dispose(){events.off('change',listener);}};},
   test(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),pass=await credentials(p,input.password),result=await verify(p,pass,signal,true);guard(ticket);return result;});},
-  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);requireClosedProfileConsoles(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection))throw fail('Disconnect this profile before changing its write protection.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&p.auth)throw fail('RDS IAM profiles use temporary tokens without saving a database password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal);else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal);trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
+  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);requireClosedProfileConsoles(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&(JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection)||JSON.stringify(previous.profile.sessionLifecycle)!==JSON.stringify(p.sessionLifecycle)))throw fail('Disconnect this profile before changing its write protection or session lifecycle.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&p.auth)throw fail('RDS IAM profiles use temporary tokens without saving a database password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal);else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal);trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
   connect(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const effective=clone(record.profile);if(input.database!==undefined)effective.database=text(input.database,'schema',64);const pass=await credentials(effective,input.password);let prepared,transferred=false;try{prepared=await prepare(effective,pass,signal);guard(ticket);await connect(prepared.config);transferred=true;guard(ticket);return{connected:true,profile:clone(effective),credentialSaved:record.rememberPassword};}finally{if(!transferred)await prepared?.dispose();}});},
   openDedicatedConsole(request) {
    const input = clone(request);
@@ -158,16 +162,17 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     if(p.auth)p.auth={kind:p.auth.kind,region:p.auth.region};
     return p;
    });
-   const version=profiles.some(p=>p.writeProtection)?4:profiles.some(p=>p.auth)?3:profiles.some(p=>p.transport)?2:1;
+   const version=profiles.some(p=>p.sessionLifecycle)?5:profiles.some(p=>p.writeProtection)?4:profiles.some(p=>p.auth)?3:profiles.some(p=>p.transport)?2:1;
    return{format:'RocketbrainConnectionProfiles',version,credentialsIncluded:false,profiles};
   },
   importProfiles(request){
    const input=clone(request);
    return run(async()=>{
     exact(input,['format','version','credentialsIncluded','profiles']);
-    if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3,4].includes(input.version)||input.credentialsIncluded!==false||!Array.isArray(input.profiles)||input.profiles.length+records.size>MAX||Buffer.byteLength(JSON.stringify(input))>256*1024)throw fail('Use a credential-free profile export of at most 32 profiles and 256 KiB.');
+    if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3,4,5].includes(input.version)||input.credentialsIncluded!==false||!Array.isArray(input.profiles)||input.profiles.length+records.size>MAX||Buffer.byteLength(JSON.stringify(input))>256*1024)throw fail('Use a credential-free profile export of at most 32 profiles and 256 KiB.');
     const normalized=input.profiles.map(value=>{
-     if(value?.writeProtection!==undefined&&input.version!==4)throw fail('Write protection requires the current profile export format.');
+     if(value?.writeProtection!==undefined&&input.version<4)throw fail('Write protection requires the current profile export format.');
+     if(value?.sessionLifecycle!==undefined&&input.version!==5)throw fail('Session lifecycle settings require profile format 5.');
      if(value?.ssh)throw fail('Re-enter verified SSH host/key paths locally before importing an SSH profile.');
      if(value?.transport&&(input.version===1||Object.hasOwn(value.transport,'address')))throw fail('Re-enter local socket paths and pipe names in the connection editor after importing.');
      if(value?.auth){

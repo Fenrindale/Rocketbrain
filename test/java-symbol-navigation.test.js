@@ -119,6 +119,9 @@ test('real JDT resolves Java declarations, attributed types, exact overload impl
     const owners = implementations.map(item => path.basename(fileURLToPath(resources(item)),'.java')).sort();
     assert.ok(owners.includes('FirstRenderer')&&owners.includes('SecondRenderer'),JSON.stringify(owners));
     assert.ok(implementations.every(item => span(item).start.line === 3),JSON.stringify(implementations));
+    const referenced = await lsp.request('textDocument/references',{...at('Renderer','render(int value)',2),context:{includeDeclaration:false}});
+    assert.deepEqual(referenced.filter(item => !path.relative(fileURLToPath(resources(item)),file('Navigator')))
+      .map(item => span(item).start.line),[4]);
     const superLink = await lsp.request('java/findLinks',{type:'superImplementation',position:at('FirstRenderer','render(int value)',2)});
     assert.equal(superLink.length,1);
     assert.equal(superLink[0].displayName,'navfixture.BaseRenderer.render');
@@ -132,7 +135,7 @@ test('real JDT resolves Java declarations, attributed types, exact overload impl
     const {start,end} = span(library);
     assert.equal(start.line,end.line);
     assert.equal(jdkSource.split(/\r?\n/)[start.line].slice(start.character,end.character),'toHexString');
-    proof={jdt:'1.63.0',declaration:true,typeDeclaration:true,implementationOwners:owners,sameNameOverloadExcluded:true,
+    proof={jdt:'1.63.0',declaration:true,typeDeclaration:true,implementationOwners:owners,sameNameOverloadExcluded:true,exactReferenceLines:[5],
       nearestSuper:true,noSuperHandled:true,jdkSourceOpened:true};
   } finally { await lsp.close(); }
   const bin = name => path.join(javaHome,'bin',name+(process.platform==='win32'?'.exe':''));
@@ -171,8 +174,10 @@ test('real Kotlin analysis follows distinct same-name extension declarations by 
     const started = await lsp.request('initialize',{processId:process.pid,rootUri,rootPath:project,
       workspaceFolders:[{uri:rootUri,name:'Kotlin navigation'}],capabilities:{workspace:{configuration:true,workspaceFolders:true},textDocument:{definition:{linkSupport:true}}}},90000);
     assert.ok(started.capabilities.definitionProvider);
+    assert.ok(started.capabilities.referencesProvider,'The pinned Kotlin server advertises exact references.');
     lsp.notify('initialized',{});
-    lsp.notify('textDocument/didOpen',{textDocument:{uri:sourceUri,languageId:'kotlin',version:1,text:source}});
+    for (const [filename,text] of Object.entries(sources)) lsp.notify('textDocument/didOpen',{textDocument:{
+      uri:kotlinProtocolUri(path.join(directory,filename)),languageId:'kotlin',version:1,text}});
     for (const [receiver,target] of [['invoice','InvoiceExtension.kt'],['value','StringExtension.kt']]) {
       const params = {textDocument:{uri:sourceUri},position:positionOf(source,receiver+'.ticketLabel()',receiver.length+3)};
       const locations = await until(async () => {
@@ -183,10 +188,16 @@ test('real Kotlin analysis follows distinct same-name extension declarations by 
       const [location] = locations;
       assert.equal(path.relative(fileURLToPath(resources(location)),path.join(directory,target)),'');
       assert.equal(span(location).start.line,2);
+      const references = await lsp.request('textDocument/references',{textDocument:{uri:kotlinProtocolUri(path.join(directory,target))},
+        position:positionOf(sources[target],'ticketLabel',3),context:{includeDeclaration:false}},45000);
+      const uses = references.filter(reference => !path.relative(fileURLToPath(resources(reference)),fileURLToPath(sourceUri)));
+      assert.deepEqual(uses.map(reference => span(reference).start.line),[receiver==='invoice'?2:3],JSON.stringify(references));
+      const {start,end} = span(uses[0]);
+      assert.equal(source.split('\n')[start.line].slice(start.character,end.character),'ticketLabel');
       proof[receiver]=target;
     }
   } finally { try { await lsp.close(); } finally { await launch.dispose(); } }
   if (process.env.ROCKETBRAIN_KOTLIN_NAVIGATION_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_KOTLIN_NAVIGATION_RECEIPT,
     JSON.stringify({server:launch.serverVersion,compiler:launch.compilerVersion,gradleCompiled:true,
-      sameNameReceiverOverloads:proof,sourceDeclarations:true},null,2)+'\n');
+      sameNameReceiverOverloads:proof,sourceDeclarations:true,exactReferenceLines:[3,4]},null,2)+'\n');
 });

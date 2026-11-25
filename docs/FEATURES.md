@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.64.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.65.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 78 |
-| 부분 구현 | 123 |
+| 구현 | 81 |
+| 부분 구현 | 120 |
 | 미구현 | 0 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **70.6%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **71.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.64에서는 Java 변수·필드 추출 이름 지정, Hibernate JPQL 콘솔, 다중 프로필 전용 세션과 MariaDB 패키지 검사·호출을 검증했다. 상태가 바뀐 항목은 2개이고 가중 점수는 151.5점에서 152.5점으로 바뀌었다.
+v0.65에서는 Java·Kotlin·Spring 사용처, Hibernate CTE·집합 연산·파생 관계, 연결 초기화와 유휴 만료, 루틴·트리거 DDL 내보내기를 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 152.5점에서 154점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -36,7 +36,7 @@ v0.64에서는 Java 변수·필드 추출 이름 지정, Hibernate JPQL 콘솔, 
 | IDEA-013 | IntelliJ IDEA | 로컬 변경 이력·삭제 복구 | VS Code 재사용 |
 | IDEA-014 | IntelliJ IDEA | 새 파일 템플릿 | 부분 구현 |
 | IDEA-015 | IntelliJ IDEA | 선언·타입·구현·상위 메서드 이동 | 구현 |
-| IDEA-016 | IntelliJ IDEA | Find Usages·참조 탐색 | 부분 구현 |
+| IDEA-016 | IntelliJ IDEA | Find Usages·참조 탐색 | 구현 |
 | IDEA-017 | IntelliJ IDEA | 호출 계층 | 구현 |
 | IDEA-018 | IntelliJ IDEA | 타입·상속 계층 | 구현 |
 | IDEA-019 | IntelliJ IDEA | Structure·현재 파일 기호 | VS Code 재사용 |
@@ -153,7 +153,7 @@ v0.64에서는 Java 변수·필드 추출 이름 지정, Hibernate JPQL 콘솔, 
 | DG-010 | DataGrip | SSH 터널·키·agent 인증 | 부분 구현 |
 | DG-011 | DataGrip | Unix socket·Windows named pipe | 구현 |
 | DG-012 | DataGrip | 클라우드 DB 접속·토큰 인증 범위 | 부분 구현 |
-| DG-013 | DataGrip | 초기 SQL·keep-alive·idle timeout | 부분 구현 |
+| DG-013 | DataGrip | 초기 SQL·keep-alive·idle timeout | 구현 |
 | DG-014 | DataGrip | 연결 그룹·환경 색상 | 부분 구현 |
 | DG-015 | DataGrip | 연결 복제·가져오기·공유 | 부분 구현 |
 | DG-016 | DataGrip | 연결·테이블 읽기 전용 보호 | 구현 |
@@ -225,7 +225,7 @@ v0.64에서는 Java 변수·필드 추출 이름 지정, Hibernate JPQL 콘솔, 
 | DG-082 | DataGrip | 서로 다른 서버 schema/object 구조 diff | 부분 구현 |
 | DG-083 | DataGrip | 선택 변경의 migration DDL 생성·검토·실행 | 부분 구현 |
 | DG-084 | DataGrip | DDL 파일을 가상 DB 의미 모델로 사용 | 구현 |
-| DG-085 | DataGrip | DB schema→정렬된 DDL 파일·VCS | 부분 구현 |
+| DG-085 | DataGrip | DB schema→정렬된 DDL 파일·VCS | 구현 |
 | DG-086 | DataGrip | live schema ERD 생성·관계 탐색 | 구현 |
 | DG-087 | DataGrip | diagram 출력·레이아웃 보존 | 구현 |
 | DG-088 | DataGrip | SQL 파일 Git·diff·변경 검토 | VS Code 재사용 |

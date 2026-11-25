@@ -1,25 +1,25 @@
 {
-  "version": "0.64.0",
-  "verifiedAt": "2026-11-25T15:17:40.812Z",
+  "version": "0.65.0",
+  "verifiedAt": "2026-11-25T15:21:37.983Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.64.0.vsix",
-    "sha256": "d3f22ebd48818fa6cb0ccec3095e8a342c32ab81172de39fb9eb23e219b054e3",
-    "bytes": 3290484,
+    "name": "rocketbrain-0.65.0.vsix",
+    "sha256": "6f4546ebde2e3904cc998f62215d8f72f4f256fdaf923f9428a7ebbad953586e",
+    "bytes": 3310985,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1764,
-    "inputVectorSha256": "6d088d3cc7731b01095304097a86b3682065df48449c324c5877e888c2dd2b58",
+    "frozenPublicInputs": 1780,
+    "inputVectorSha256": "05f609ce6fa4f209bab9726300be7521fe96c8ae7c92c9a21e4ffc92157e5197",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1546,
-    "pass": 1454,
+    "tests": 1555,
+    "pass": 1462,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 92,
+    "skipped": 93,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,22 +29,26 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "namedExtraction",
+          "group": "javaUsages",
           "checks": 1
         },
         {
-          "group": "jpqlConsole",
+          "group": "kotlinUsages",
           "checks": 1
         },
         {
-          "group": "dedicatedConsole",
+          "group": "hqlGraphs",
           "checks": 1
         },
         {
-          "group": "routinePackage",
+          "group": "sessionLifecycle",
+          "checks": 1
+        },
+        {
+          "group": "schemaExport",
           "checks": 1
         }
       ],
@@ -59,22 +63,26 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "namedExtraction",
+          "group": "javaUsages",
           "checks": 1
         },
         {
-          "group": "jpqlConsole",
+          "group": "kotlinUsages",
           "checks": 1
         },
         {
-          "group": "dedicatedConsole",
+          "group": "hqlGraphs",
           "checks": 1
         },
         {
-          "group": "routinePackage",
+          "group": "sessionLifecycle",
+          "checks": 1
+        },
+        {
+          "group": "schemaExport",
           "checks": 1
         }
       ],
@@ -85,74 +93,81 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-025": {
-      "scope": "두 Spring DB 설치 환경에서 실제 JDT 지역 변수·필드 선언, 이름 충돌과 오래된 계획 차단, 사용처 2·3개, 한 버퍼 편집·Undo·디스크 보존을 확인했다. 기존 상수 흐름은 컴파일러 회귀 검사에 포함했다.",
+    "IDEA-016": {
+      "scope": "두 Spring DB 설치 환경에서 Java 오버로드 참조 두 곳과 파일 범위, Spring XML과 Java의 양방향 클래스 사용처, 설정 키 사용처 두 곳, Kotlin 수신 타입별 동명 참조 및 변경 거부를 확인했다.",
       "runtimeGroups": [
-        "namedExtraction"
+        "javaUsages",
+        "kotlinUsages"
       ]
     },
     "IDEA-060": {
-      "scope": "실제 Spring·Hibernate 7.4.13과 두 DB의 설치판에서 정확한 Long·NULL, 이름·위치 바인딩, 집계와 행 한도, 7개 거부 사례와 읽기 전용 쓰기 차단을 확인했다.",
+      "scope": "두 실제 Spring DB의 Hibernate 7.4.13에서 그래프 쿼리 일곱 개를 같은 read-only 트랜잭션 정책으로 실행했다. 다섯 거부 사례의 SQL 준비 카운터는 증가하지 않았고 CTE 별칭으로 이동했다.",
       "runtimeGroups": [
-        "jpqlConsole"
+        "hqlGraphs"
       ]
     },
-    "DG-024": {
-      "scope": "MariaDB 설치본에서 두 원문과 두 공개 멤버, 승인된 프로시저의 정확한 출력·결과 세트, 변경 거부 및 그리드 재개방을 확인했다. MySQL은 패키지 경로를 차단하고 기존 typed 출력 호출을 유지했다.",
+    "DG-013": {
+      "scope": "실제 두 DB의 설치판에서 초기화 네 문장, 상태 유지, 유휴 종료, 활성 트랜잭션 보존과 롤백, 서버 세션 종료 및 별도 물리 재접속, 잘못된 초기화 거부를 확인했다.",
       "runtimeGroups": [
-        "routinePackage"
+        "sessionLifecycle"
       ]
     },
-    "DG-047": {
-      "scope": "두 실제 DB의 설치판에서 같은 이름의 두 스키마 테이블과 별도 연결을 구분했다. 카탈로그 연결 해제 뒤 전용 트랜잭션을 유지했고 권한 보호·롤백·종료된 세션의 재사용 거부를 확인했다.",
+    "DG-085": {
+      "scope": "실제 두 DB에서 12개 DDL 단계를 검토 파일 그대로 빈 스키마에 복원했다. 루틴과 트리거 각 세 개의 정의·순서·소유자와 문자 설정, 변경 객체의 실제 Git diff, 지원 밖 객체 네 개의 생략을 확인했다.",
       "runtimeGroups": [
-        "dedicatedConsole"
+        "schemaExport"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 370,
+    "sourceCorrespondences": 375,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 78,
-      "partial": 123,
+      "implemented": 81,
+      "partial": 120,
       "not-implemented": 0,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 152.5,
-    "previousWeightedPoints": 151.5,
+    "weightedPoints": 154,
+    "previousWeightedPoints": 152.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 70.6,
+    "referencePercent": 71.3,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-025",
+        "id": "IDEA-016",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-047",
+        "id": "DG-013",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-085",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java 이름 지정은 확인된 JDT 지역 변수·필드 추출의 단일 위치에 적용한다. 기존 JDT 작업은 기본 검토 흐름으로 연다.",
-    "전용 SQL 콘솔은 프로필에 연결된 단일 SQL 실행과 트랜잭션을 제공한다. 카탈로그·검토 스크립트와 EXPLAIN에는 활성 연결을 사용한다.",
+    "Spring 사용처는 확인된 XML class와 설정 키를 연결하며 임의 동적 등록과 Java↔Kotlin 교차 언어 바인딩은 지원 범위 밖이다.",
+    "Hibernate 그래프 실행은 검토된 스칼라 SELECT를 대상으로 한다. 재귀·lateral 및 엔티티 fetch join 결과가 남아 있다.",
+    "DDL은 의존성을 확인한 단일 스키마 객체를 내보낸다. 외부·동적 객체 참조는 생략 항목으로 표시한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Hibernate 콘솔의 CTE·집합 연산·파생 관계와 소스 타입 검사",
-    "Java·Kotlin·Spring 사용처 검색과 저장 프로필 세션 수명주기",
-    "루틴·트리거를 포함한 의존 순서 스키마 DDL 내보내기"
+    "Java·Kotlin 포맷과 중첩 EditorConfig, Spring 주입 후보 퀵픽스",
+    "DB 프로필 복제와 가져오기 충돌 처리",
+    "캡처한 SQL 결과에서 FK 관련 행 탐색"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -7,6 +7,9 @@ const LANGUAGE = 'rocketbrain-jpql';
 const ERROR_NAMES = {
   unsupported_select_shape:'Use one SELECT with scalar columns and supported JPQL expressions. Use parameters for string or date values.',
   provider_validation_failed:'The running Hibernate factory could not validate this JPQL selection.',
+  unsupported_provider_query_graph:'The running Hibernate version could not describe every SELECT branch.',
+  set_projection_mismatch:'Every set-operation arm must project the same scalar types in the same order.',
+  named_projection_required:'Give each result of a CTE or derived relation an explicit, unique alias.',
   scalar_projection_required:'Select scalar attributes or scalar aggregates explicitly.',
   unsupported_parameter_type:'Use scalar parameters whose types Hibernate can infer.',
   invalid_parameter_value:'A parameter does not match its Hibernate type.',
@@ -76,7 +79,7 @@ function registerJpaConsole(vscode,{source,target,command}) {
     if (query===null) {
       const model=await source();
       const extracted=model.queries.filter(item=>item.text && !item.symbolicParameters?.length &&
-        /^\s*select\s/i.test(item.text)).slice(0,40).map(item=>({label:item.text.slice(0,120),query:item.text}));
+        /^\s*(?:select\b|with\b|\()/i.test(item.text)).slice(0,40).map(item=>({label:item.text.slice(0,120),query:item.text}));
       const choice=await vscode.window.showQuickPick([{label:'Open a blank JPQL console',query:''},...extracted],{title:'JPQL console · workspace source'});
       if (!choice) return;
       query=choice.query;

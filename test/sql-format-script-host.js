@@ -196,4 +196,4 @@ async function runSqlFormatScriptChecks(api, vscode, checks) {
   }
 }
 
-module.exports = { runSqlFormatScriptChecks, verifySqlFormatScript };
+module.exports = { runSqlFormatScriptChecks, verifySqlFormatScript, queryWithNativeClient };

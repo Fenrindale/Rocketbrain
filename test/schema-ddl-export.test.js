@@ -27,6 +27,15 @@ function snapshot(objects, { server = state, scope = { kind: 'database', tables:
     database: server.database, server, scope, coverage, tables: objects }, { verifyFingerprint: false });
 }
 
+const creation = { sqlMode: 'NO_BACKSLASH_ESCAPES', charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci', databaseCollation: 'utf8mb4_unicode_ci' };
+const dep = (kind, name, schema = 'fixture') => ({ schema, kind, name });
+const proc = (name, dependencies = []) => ({ kind: 'procedure', name, dependencies, context: creation,
+  sql: 'CREATE PROCEDURE `' + name + '`() BEGIN INSERT INTO aa_child VALUES (1); END' });
+const trigger = (name, actionOrder, dependencies = []) => ({ kind: 'trigger', name, actionOrder, table: 'aa_child',
+  event: 'INSERT', timing: 'AFTER', context: creation, dependencies: [dep('table', 'aa_child'), ...dependencies],
+  sql: 'CREATE TRIGGER `' + name + '` AFTER INSERT ON aa_child FOR EACH ROW BEGIN CALL relay(); END' });
+const include = (base, candidates, omitted = []) => ({ ...base, ddlPrograms: { candidates, omitted, observation: 'fixture-observation' } });
+
 test('DDL is stable, ordered and preserves column/default/view source text', () => {
   const left = buildDdlExport(snapshot([leaf, relay, child, parent(13)]));
   const right = buildDdlExport(snapshot([parent(1337), child, relay, leaf]));
@@ -71,6 +80,34 @@ test('missing, cross-schema, unavailable and mismatched dependencies are labeled
   assert.match(report.sql, /Foreign key metadata does not match/);
   assert.match(report.sql, /Unavailable metadata definitions/);
   assert.doesNotMatch(report.sql, /^USE /m);
+});
+
+test('stored procedures and trigger action order follow proved dependency edges', () => {
+  const base = snapshot([child, parent()]);
+  const wrap = name => dep('procedure', name);
+  const programs = [trigger('aaa_second', 2, [wrap('relay')]), proc('relay', [wrap('writer')]),
+    trigger('zzz_first', 1, [wrap('relay')]), proc('writer', [dep('relation', 'aa_child')])];
+  const report = buildDdlExport(include(base, programs));
+  assert.deepEqual(report.statements.slice(3).map(row => row.name), ['writer', 'relay', 'zzz_first', 'aaa_second']);
+  assert.match(report.sql, /SET SESSION character_set_client='utf8mb4';/);
+  assert.match(report.sql, /SET SESSION collation_connection='utf8mb4_unicode_ci';/);
+  assert.match(report.sql, /DELIMITER \$\$\nCREATE PROCEDURE `writer`\(\) BEGIN INSERT INTO aa_child VALUES \(1\); END\n\$\$\nDELIMITER ;/);
+  assert.match(report.sql, /collation_connection=@__rb_saved_collation/);
+  assert.notEqual(report.sourceIdentity, buildDdlExport(base).sourceIdentity);
+});
+
+test('program cycles, external relations and incomplete trigger order never enter executable exports', () => {
+  const base = snapshot([child, parent()]);
+  const results = buildDdlExport(include(base, [proc('cycle_a', [dep('procedure', 'cycle_b')]),
+    proc('cycle_b', [dep('procedure', 'cycle_a')]), proc('external', [dep('relation', 'other', 'different_db')]),
+    trigger('known_sibling', 2)], [
+    { ...trigger('hidden_first', 1), reason: 'The stored definition is not visible.' }
+  ]));
+  assert.equal(results.state, 'partial');
+  assert.deepEqual(results.statements.map(row => row.kind), ['table', 'table', 'foreignKey']);
+  assert.deepEqual(results.omitted.map(row => row.name), ['cycle_a', 'cycle_b', 'external', 'hidden_first', 'known_sibling']);
+  assert.doesNotMatch(results.sql, /^CREATE (PROCEDURE|TRIGGER)/m);
+  assert.match(results.sql, /unavailable sibling or incomplete action order/);
 });
 
 test('DDL preview reuses exact bytes at save and refuses changed dependencies or connection', async () => {

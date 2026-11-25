@@ -15,8 +15,8 @@ test('the JPQL console inspects rendered SELECTs and bounds typed JDBC inputs',{
   const target=await fs.promises.mkdtemp(path.resolve('test-output/.observer-console-policy-'));
   const root=path.resolve('runtime/jpa-observer');
   try{
-    run('javac',['--release','25','-d',target,path.join(root,'src/rocketbrain/observer/HibernateAccess.java'),
-      path.join(root,'src/rocketbrain/observer/ConsoleQuery.java'),path.join(root,'test/rocketbrain/observer/ConsoleQueryTest.java')]);
+    const classes=['HibernateAccess','ConsoleQuery','ConsoleSelectShape','ConsoleSqmShape'].map(name=>path.join(root,'src/rocketbrain/observer',name+'.java'));
+    run('javac',['--release','25','-d',target,...classes,path.join(root,'test/rocketbrain/observer/ConsoleQueryTest.java')]);
     run('java',['-cp',target,'rocketbrain.observer.ConsoleQueryTest']);
   }finally{await fs.promises.rm(target,{recursive:true,force:true});}
 });

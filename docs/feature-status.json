@@ -1,5 +1,5 @@
 {
-  "version": "0.64.0",
+  "version": "0.65.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 78,
-    "partial": 123,
+    "implemented": 81,
+    "partial": 120,
     "not-implemented": 0,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 70.6,
+    "percent": 71.3,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-025",
+    "IDEA-016",
     "IDEA-060",
-    "DG-024",
-    "DG-047"
+    "DG-013",
+    "DG-085"
   ],
   "expandedFeatures": [
-    "IDEA-025",
+    "IDEA-016",
     "IDEA-060",
-    "DG-024",
-    "DG-047"
+    "DG-013",
+    "DG-085"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -512,27 +512,24 @@
       "category": "탐색·구조 분석",
       "feature": "Find Usages·참조 탐색",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT Java 참조 탐색을 전달한다.",
-      "remaining": [
-        "Java/XML/설정/Kotlin을 아우르는 전 범위 사용처·검색 스코프 검증이 남는다."
-      ],
+      "scope": "현재 파일·작업 폴더·전체 워크스페이스 범위의 JDT 및 Kotlin 컴파일러 참조를 찾고 확인된 Spring XML 클래스·설정 키 링크의 정확한 원문 범위를 연다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.65-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "testedScope": "두 Spring DB 설치 환경에서 Java 오버로드 참조 두 곳과 파일 범위, Spring XML과 Java의 양방향 클래스 사용처, 설정 키 사용처 두 곳, Kotlin 수신 타입별 동명 참조 및 변경 거부를 확인했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/usage-vscode.js",
+          "src/java/usage-spring.js",
+          "test/java-usage-search-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -797,8 +794,8 @@
       "verification": {
         "state": "v0.64-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.64.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1895,24 +1892,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Hibernate JPQL SELECT에서 provider가 추론한 이름·위치 파라미터 타입과 쿼리를 검토하고 읽기 전용 트랜잭션에서 스칼라 결과를 연다. 행·크기·타임아웃을 제한하고 롤백한다.",
+      "scope": "읽기 전용 Hibernate JPQL/HQL 스칼라 콘솔에서 비재귀 CTE·집합 연산·파생 관계를 검토해 실행한다. 소스 투영 열과 파라미터의 확인된 타입과 선언 위치를 연다.",
       "remaining": [
-        "CTE·집합 연산·파생 루트, 엔티티 반환·복합 타입 및 다른 provider의 콘솔 분석이 남아 있다."
+        "엔티티 fetch join·전체 엔티티 반환, 재귀·lateral 관계와 컬렉션 매개변수·다른 provider가 남아 있다."
       ],
       "verification": {
-        "state": "v0.64-installed-coverage",
+        "state": "v0.65-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring·Hibernate 7.4.13과 두 DB의 설치판에서 정확한 Long·NULL, 이름·위치 바인딩, 집계와 행 한도, 7개 거부 사례와 읽기 전용 쓰기 차단을 확인했다.",
+        "testedScope": "두 실제 Spring DB의 Hibernate 7.4.13에서 그래프 쿼리 일곱 개를 같은 read-only 트랜잭션 정책으로 실행했다. 다섯 거부 사례의 SQL 준비 카운터는 증가하지 않았고 CTE 별칭으로 이동했다.",
         "publicEvidence": [
-          "src/jpa/console-vscode.js",
-          "runtime/jpa-observer/src/rocketbrain/observer/ConsoleQuery.java",
-          "test/jpql-console-host.js",
-          "docs/jpql-console.md"
+          "src/jpa/query-graph.js",
+          "runtime/jpa-observer/src/rocketbrain/observer/ConsoleSelectShape.java",
+          "test/hql-console-graph-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4077,26 +4073,24 @@
       "category": "연결·드라이버",
       "feature": "초기 SQL·keep-alive·idle timeout",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "명시적 세션·시간/결과 제한과 재연결을 제공한다.",
-      "remaining": [
-        "초기 SQL·keep-alive·idle timeout의 사용자 설정/실기 검증이 남는다."
-      ],
+      "scope": "저장 프로필에서 제한된 SET SESSION 초기 SQL과 keep-alive·idle timeout을 지정한다. 새 물리 연결마다 초기화를 한 번 하고 자동 커밋 유휴 세션을 안전하게 종료한다. 명시 재접속으로 다시 초기화한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.65-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "testedScope": "실제 두 DB의 설치판에서 초기화 네 문장, 상태 유지, 유휴 종료, 활성 트랜잭션 보존과 롤백, 서버 세션 종료 및 별도 물리 재접속, 잘못된 초기화 거부를 확인했다.",
         "publicEvidence": [
-          "src/database-workbench.js",
+          "src/db/session-lifecycle.js",
           "src/db/mysql.js",
-          "src/db/metadata.js"
+          "test/session-lifecycle-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4413,8 +4407,8 @@
       "verification": {
         "state": "v0.64-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.64.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5121,8 +5115,8 @@
       "verification": {
         "state": "v0.64-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.64.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6298,27 +6292,24 @@
       "category": "오프라인 schema·버전 관리",
       "feature": "DB schema→정렬된 DDL 파일·VCS",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "접근 가능한 MySQL·MariaDB 테이블과 지원 뷰를 읽어 테이블·FK·의존 뷰 순서의 재현 가능한 SQL 파일을 저장한다. 변하는 카운터를 정규화하며 저장 전 정의를 다시 읽는다.",
-      "remaining": [
-        "루틴·트리거, 외부 참조, 복잡한 뷰와 전체 SQL 문법의 내보내기를 확장한다."
-      ],
+      "scope": "지원되는 테이블·FK·뷰와 저장 프로시저·스칼라 함수·트리거를 의존 순서의 검토 SQL로 저장한다. 객체의 생성 문맥과 실행 순서를 보존하고 보이는 의존성에 변경이 생기면 저장을 거부한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.29-installed-coverage",
+        "state": "v0.65-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.29.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "최종 설치본에서 실제 두 엔진의 SQL 파일을 대조하고 FK·의존 뷰 순서를 확인했다. 테스트용 재생성의 열 문자셋·정렬 규칙과 FK 동작을 대조했으며 바뀐 정의의 저장을 거부했다.",
+        "testedScope": "실제 두 DB에서 12개 DDL 단계를 검토 파일 그대로 빈 스키마에 복원했다. 루틴과 트리거 각 세 개의 정의·순서·소유자와 문자 설정, 변경 객체의 실제 Git diff, 지원 밖 객체 네 개의 생략을 확인했다.",
         "publicEvidence": [
+          "src/db/schema-ddl-programs.js",
           "src/db/schema-ddl-export.js",
-          "src/db/schema-ddl-export-vscode.js",
-          "test/schema-ddl-export.test.js",
-          "test/schema-ddl-export-host.js"
+          "test/schema-ddl-programs-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6654,38 +6645,43 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "d3f22ebd48818fa6cb0ccec3095e8a342c32ab81172de39fb9eb23e219b054e3",
-    "sourceManifestSha256": "6d088d3cc7731b01095304097a86b3682065df48449c324c5877e888c2dd2b58",
+    "vsixSha256": "6f4546ebde2e3904cc998f62215d8f72f4f256fdaf923f9428a7ebbad953586e",
+    "sourceManifestSha256": "05f609ce6fa4f209bab9726300be7521fe96c8ae7c92c9a21e4ffc92157e5197",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 4
+        "featureGroups": 5
       },
       {
         "engine": "mariadb",
-        "featureGroups": 4
+        "featureGroups": 5
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-025",
+      "id": "IDEA-016",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-047",
+      "id": "DG-013",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-085",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1546,
-    "pass": 1454,
+    "tests": 1555,
+    "pass": 1462,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 92,
+    "skipped": 93,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

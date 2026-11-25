@@ -10,6 +10,15 @@ public final class ConsoleQueryTest {
         ConsoleQuery.inspect("select p.id from Person p where p.id >= :floor order by p.id",false);
         ConsoleQuery.inspect("select count(p1.id) from projects p1 where p1.id >= ? limit ?",true);
         ConsoleQuery.inspect("select p1.id from projects p1 where p1.id in (select p2.id from projects p2)",true);
+        ConsoleQuery.inspect("with numbered as (select p.id as id from Person p) select n.id from numbered n",false);
+        ConsoleQuery.inspect("with numbered(id) as (select p.id from projects p) select n.id from numbered n",true);
+        ConsoleQuery.inspect("select n.id from (select p.id from projects p) n(id) limit ?",true);
+        ConsoleQuery.inspect("(select p.id from projects p) except (select p.id from archived p) limit ?",true);
+        blocked("with numbered as (select n.id as id from numbered n) select n.id from numbered n",false,"unsupported_select_shape");
+        blocked("with recursive numbered as (select p.id as id from Person p) select n.id from numbered n",false,"unsupported_select_shape");
+        blocked("select p.id from Person p union select p.id from Person p for update",false,"unsupported_select_shape");
+        blocked("select q.id from projects q union select database() from archived",true,"rendered_sql_not_allowed");
+        blocked("select p.id from projects p where p.id in (select p.id from archived p union select p.id from archived p)",false,"unsupported_select_shape");
         blocked("select database() from projects",true,"rendered_sql_not_allowed");
         blocked("select `database`() from projects",true,"rendered_sql_not_allowed");
         blocked("select _unverified(p1.id) from projects p1",true,"rendered_sql_not_allowed");

@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /** Calls injected into Hibernate; every hook fails closed without changing application exceptions. */
 public final class ObserverRuntime {
-    public static final String VERSION="0.9.0";
+    public static final String VERSION="0.10.0";
     private static volatile HttpServer server;private static volatile ThreadPoolExecutor executor;
     private static byte[] expectedAuthorization;private static boolean queries,validate,consoleSelect;private static int maxEvents=128,maxQueryChars=4096;
     private static final ArrayDeque<Map<String,Object>> events=new ArrayDeque<>();private static final List<String> warnings=new ArrayList<>(),instrumented=new ArrayList<>();

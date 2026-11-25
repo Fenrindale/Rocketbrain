@@ -24,10 +24,11 @@ function registerSchemaDdlExport(context, vscode, { database }) {
     if (generation !== ticket) throw new Error('The connection or catalog changed. Prepare the DDL export again.');
   }
 
-  async function prepare({ tables } = {}) {
+  async function prepare({ tables, includeStored = tables === undefined } = {}) {
     return exclusive(async () => {
       const ticket = generation;
-      const options = tables === undefined ? {} : { tables: structuredClone(tables) };
+      if (typeof includeStored !== 'boolean') throw new Error('Choose whether to include visible stored-program definitions.');
+      const options = { ...(tables === undefined ? {} : { tables: structuredClone(tables) }), includeStored };
       const captured = await database.captureSchemaSnapshot(options);
       checkGeneration(ticket);
       const report = buildDdlExport(captured), id = randomUUID();
@@ -63,13 +64,13 @@ function registerSchemaDdlExport(context, vscode, { database }) {
   }
 
   async function chooseScope(item) {
-    if (item?.table?.name) return { tables: [item.table.name] };
+    if (item?.table?.name) return { tables: [item.table.name], includeStored: true };
     const catalog = database.catalogSnapshot();
     if (!catalog) throw new Error('Connect to MySQL or MariaDB before exporting DDL.');
     const ticket = generation;
     const choices = [
-      { label: 'All Visible Tables and Views', all: true },
-      { label: 'Choose Tables and Views', all: false }
+      { label: 'All Visible Schema Definitions', description: 'Tables, views, supported routines and triggers', all: true },
+      { label: 'Choose Tables and Views', description: 'Include attached triggers and their supported routine dependencies', all: false }
     ];
     const selection = await vscode.window.showQuickPick(choices, { title: 'Choose Schema DDL Export Scope' });
     if (!selection) return;
@@ -80,7 +81,7 @@ function registerSchemaDdlExport(context, vscode, { database }) {
       { title: 'Select Objects and Their Required Dependencies', canPickMany: true });
     if (!selected?.length) return;
     checkGeneration(ticket);
-    return { tables: selected.map(item => item.label) };
+    return { tables: selected.map(item => item.label), includeStored: true };
   }
 
   async function command(item) {
