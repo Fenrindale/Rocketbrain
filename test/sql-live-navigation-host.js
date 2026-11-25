@@ -129,8 +129,11 @@ async function runSqlLiveDefinitionChecks(api, vscode, checks) {
         if (item.label === 'remote column' || item.label === 'Spring column') {
           const hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider', found.doc.uri, found.position);
           const values = hovers.flatMap(hover => hover.contents.map(value => typeof value === 'string' ? value : value.value)).join('\n');
-          assert.ok(values.includes(item.object.schema + '.' + item.object.name + '.' + item.anchor));
-          assert.match(values, /DDL was read from the current account/);
+          const escaped = text => new vscode.MarkdownString().appendText(text).value;
+          const qualified = [item.object.schema, item.object.name, item.anchor].join('.');
+          assert.ok(values.includes(escaped(qualified)), item.label + ' Quick Info must include ' + qualified + '. Received: ' + values.slice(0, 700));
+          assert.ok(values.includes(escaped('DDL was read from the current account')),
+            item.label + ' Quick Info must confirm observed DDL. Received: ' + values.slice(0, 700));
         }
       }
       const cte = await definitions('WITH t(person_key) AS (SELECT p.id FROM rb_spring_person p) SELECT t.person_|key FROM t');
