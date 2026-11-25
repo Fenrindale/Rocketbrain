@@ -40,7 +40,7 @@ async function runCurrentSqlStatementChecks(api,vscode,checks) {
     const cached = await api.sqlScripts.openStatement(query.resultId,0);
     assert.equal(cached.executedSql,false);
     const result = api.results().find(item=>item.id===cached.resultId);
-    assert.deepEqual(result.result.rows,[[23]]);
+    assert.deepEqual(result.result.rows.map(row=>row.map(String)),[['23']]);
     sessionId = result.sessionId ?? api.results().find(item=>item.id===query.resultId).sessionId;
     assert.ok(sessionId);
     await api.configureConsoleSession(sessionId,{readOnly:false});
