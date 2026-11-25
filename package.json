@@ -23,6 +23,7 @@
     "onView:rocketbrain.databases",
     "onView:rocketbrain.results",
     "onView:rocketbrain.analysis",
+    "onView:rocketbrain.sshWorkspace",
     "onLanguage:java",
     "onLanguage:kotlin",
     "onLanguage:groovy",
@@ -72,6 +73,10 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.sshWorkspace.attach", "title": "Open SSH Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
+      { "command": "rocketbrain.sshWorkspace.refresh", "title": "Refresh SSH Files", "category": "Rocketbrain", "icon": "$(refresh)" },
+      { "command": "rocketbrain.sshWorkspace.upload", "title": "Review Local File Upload to SSH", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
@@ -902,6 +907,10 @@
         {
           "id": "rocketbrain.connections",
           "name": "Database Connections"
+        },
+        {
+          "id": "rocketbrain.sshWorkspace",
+          "name": "SSH Workspace"
         }
       ],
       "rocketbrain-query-panel": [
@@ -948,6 +957,9 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.sshWorkspace.attach", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "navigation@1" },
+        { "command": "rocketbrain.sshWorkspace.refresh", "when": "view == rocketbrain.sshWorkspace", "group": "navigation@2" },
+        { "command": "rocketbrain.sshWorkspace.close", "when": "view == rocketbrain.sshWorkspace", "group": "setup@1" },
         {
           "command": "rocketbrain.schema.exportDdl",
           "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1112,6 +1124,7 @@
         }
       ],
       "view/item/context": [
+        { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
         {
           "command": "rocketbrain.db.openObjectSource",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1397,6 +1410,28 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.sshWorkspace.profiles": {
+          "type": "array",
+          "scope": "machine",
+          "default": [],
+          "description": "Trusted SSH workspaces configured in user settings. Remote files require OpenSSH and a Python 3.8+ launcher on the host.",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "required": ["id", "host", "user", "root", "knownHostsPath"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,30}$" },
+              "host": { "type": "string" },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 22 },
+              "user": { "type": "string" },
+              "root": { "type": "string", "description": "Existing absolute directory on the remote host." },
+              "knownHostsPath": { "type": "string", "description": "Absolute local path to the verified OpenSSH known_hosts file." },
+              "privateKeyPath": { "type": "string", "description": "Absolute local key path. Omit to use OpenSSH agent or default identities." },
+              "python": { "enum": ["python3", "python", "py -3"], "default": "python3" }
+            }
+          }
+        },
         "rocketbrain.jupyter.pythonPath": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Absolute path to local Python with jupyter_client and ipykernel for explicit notebook execution."
