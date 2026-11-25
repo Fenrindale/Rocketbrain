@@ -35,7 +35,7 @@ async function fixtureState() {
   return { runtime, config, restricted: restricted.admin, schemas: [config.database, 'rocketbrain_related'] };
 }
 
-async function withFixtures(parent, test) {
+async function withFixtures(parent, test, { nativeWorkspace = false } = {}) {
   const fixture = await fixtureState();
   const root = await fs.mkdtemp(path.join(await fs.realpath(parent), 'rb-unified-sql-'));
   const db = await mysql.createConnection(fixture.config);
@@ -89,7 +89,11 @@ async function withFixtures(parent, test) {
     finally {
       await db.end();
       for (const file of files) await fs.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
-      await fs.rmdir(root);
+      try { await fs.rmdir(root); }
+      catch (error) {
+        // The Windows extension host may keep watching the empty fixture folder until it exits.
+        if (!nativeWorkspace || error.code !== 'EBUSY') throw error;
+      }
     }
   }
 }
@@ -200,7 +204,7 @@ async function runUnifiedSearchChecks(api, vscode, checks) {
           tab.input?.uri?.scheme === 'rocketbrain-object-source' && tab.input.uri.path.includes(fixture.tag));
       if (tabs.length) await vscode.window.tabGroups.close(tabs);
     }
-  });
+  }, { nativeWorkspace: true });
 }
 
 if (require.main === module) verifyHeadlessUnifiedSearch().then(result => console.log(JSON.stringify(result)))
