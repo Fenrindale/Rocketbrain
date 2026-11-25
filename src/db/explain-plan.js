@@ -225,4 +225,4 @@ function comparePlans(left, right, decisions) {
     counts: Object.fromEntries(['same', 'changed', 'removed', 'added'].map(state => [state, rows.filter(row => row.state === state).length])) };
 }
 
-module.exports = { MAX_PLAN_BYTES, explainSql, measuredSql, validatePlanQuery, normalizePlan, comparePlans, comparablePlans };
+module.exports = { MAX_PLAN_BYTES, explainSql, measuredSql, validatePlanQuery, normalizePlan, comparePlans, comparablePlans, parseExact };

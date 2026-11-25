@@ -136,7 +136,8 @@ GRANT USAGE ON SCHEMA pilot TO rb_fixture;
 GRANT SELECT ON ALL TABLES IN SCHEMA pilot TO rb_fixture;
 GRANT INSERT ON pilot.guard_write TO rb_fixture;
 GRANT EXECUTE ON FUNCTION pilot.test_guard() TO rb_fixture;`);
-    return { route, auth, folder, version, close, query: sql => client(route.database, auth.user, auth.password, sql) };
+    return { route, auth, folder, version, close, query: sql => client(route.database, auth.user, auth.password, sql),
+      ownerQuery: sql => client(route.database, 'rb_fixture_admin', adminPassword, sql) };
   } catch (cause) {
     await close();
     throw Error(String(cause.message).replaceAll(password, '[redacted]').replaceAll(adminPassword, '[redacted]'));

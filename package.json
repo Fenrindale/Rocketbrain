@@ -218,6 +218,9 @@
       { "command": "rocketbrain.jdbc.profiles", "title": "Manage JDBC Profiles", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jdbc.newQuery", "title": "New JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.jdbc.run", "title": "Run JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected && editorLangId == rocketbrain-jdbc", "icon": "$(play)" },
+      { "command": "rocketbrain.jdbc.estimatePostgreSqlPlan", "title": "Estimate PostgreSQL Query Plan", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans && editorLangId == rocketbrain-jdbc", "icon": "$(graph)" },
+      { "command": "rocketbrain.jdbc.openPostgreSqlPlanJson", "title": "Open Original PostgreSQL Plan JSON", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
+      { "command": "rocketbrain.jdbc.comparePostgreSqlPlans", "title": "Compare PostgreSQL Estimated Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
       { "command": "rocketbrain.jdbc.browse", "title": "Browse JDBC Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.jdbc.close", "title": "Close JDBC Connection", "category": "Rocketbrain", "enablement": "rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.sqlNotebook.create", "title": "New SQL Notebook", "category": "Rocketbrain" },
@@ -1495,6 +1498,11 @@
         {
           "command": "rocketbrain.jdbc.run",
           "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.jdbcConnected && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.jdbc.estimatePostgreSqlPlan",
+          "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.postgreSqlPlans && isWorkspaceTrusted",
           "group": "navigation"
         },
         {

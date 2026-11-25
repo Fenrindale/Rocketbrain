@@ -14,6 +14,10 @@ Choose **PostgreSQL** when adding a JDBC driver and select the official [pgJDBC 
 
 The catalog shows visible tables, views and materialized views in the selected schema and reports exact column metadata. The query editor supports one PostgreSQL read statement, including dollar-quoted literals, nested comments, casts and JSON operators. Before executing it, Rocketbrain checks the server's `transaction_read_only` setting. Database permissions still govern schema access and functions.
 
+From the JDBC editor, run **Estimate PostgreSQL Query Plan** for a statement such as `SELECT id, amount FROM events WHERE id = 42`. Use one ordinary table in the approved schema, simple unquoted column names or `*`, and an optional equality on a built-in smallint, integer or bigint column. The workflow requires PostgreSQL 14 or newer. It shows the operator tree, cost units, row estimates and filters from the server's JSON. **Open Original PostgreSQL Plan JSON** opens the exact response and **Compare PostgreSQL Estimated Plans** compares two captures of the same statement and relation. Up to eight captures live in the active connection and expire when it closes.
+
+The planner runs in a verified read-only transaction and captures estimates only. Use an owned, trusted server and schema with a dedicated SELECT account. The capture checks visible heap metadata and holds an access-share lock. It refuses observed views, inheritance, row-security policies, check constraints, expression statistics and custom or expression indexes. Coordinate concurrent schema changes with the schema owner.
+
 pgJDBC uses the [BSD 2-Clause license](https://jdbc.postgresql.org/license/). Install it separately. The VS Code extension bundles neither the driver nor PostgreSQL server binaries.
 
 ## Runtime bounds
