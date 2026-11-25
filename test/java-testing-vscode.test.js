@@ -6,7 +6,7 @@ function host(backend){
   class Event{listeners=new Set();event=callback=>{this.listeners.add(callback);return{dispose:()=>this.listeners.delete(callback)};};fire(value){for(const fn of this.listeners)fn(value);}}
   class Collection extends Map{add(item){this.set(item.id,item);}replace(items){this.clear();for(const item of items)this.add(item);}forEach(callback){for(const item of this.values())callback(item);}}
   const uri=value=>({scheme:'file',fsPath:value,toString:()=>pathToFileURL(value).href});
-  const controller={items:new Collection(),createTestItem:(id,label,value)=>({id,label,uri:value,children:new Collection()}),createRunProfile:(name,kind,handler)=>{handlers.set(kind,handler);const profile={dispose(){}};profiles.set(name,profile);return profile;},createTestRun:()=>{const data={events:[],coverage:[],ended:false,enqueued:item=>data.events.push(['queued',item.id]),started:item=>data.events.push(['started',item.id]),passed:item=>data.events.push(['passed',item.id]),failed:(item,message)=>data.events.push(['failed',item.id,message]),errored:(item,message)=>data.events.push(['error',item.id,message]),skipped:item=>data.events.push(['skipped',item.id]),appendOutput(){},addCoverage:value=>data.coverage.push(value),end:()=>{data.ended=true;}};runs.push(data);return data;},dispose(){}};
+  const controller={items:new Collection(),createTestItem:(id,label,value)=>({id,label,uri:value,children:new Collection()}),createRunProfile:(name,kind,handler)=>{handlers.set(kind,handler);const profile={dispose(){}};profiles.set(name,profile);return profile;},createTestRun:()=>{const data={events:[],coverage:[],output:[],ended:false,enqueued:item=>data.events.push(['queued',item.id]),started:item=>data.events.push(['started',item.id]),passed:item=>data.events.push(['passed',item.id]),failed:(item,message)=>data.events.push(['failed',item.id,message]),errored:(item,message)=>data.events.push(['error',item.id,message]),skipped:item=>data.events.push(['skipped',item.id]),appendOutput:text=>data.output.push(text),addCoverage:value=>data.coverage.push(value),end:()=>{data.ended=true;}};runs.push(data);return data;},dispose(){}};
   const vscode={tests:{createTestController:()=>controller},TestRunProfileKind:{Run:1,Coverage:3},TestRunRequest:class{constructor(include,exclude){this.include=include;this.exclude=exclude;}},CancellationTokenSource:class{constructor(){const event=new Event();this.token={isCancellationRequested:false,onCancellationRequested:event.event};this.cancel=()=>{this.token.isCancellationRequested=true;event.fire();};}dispose(){}},Uri:{file:uri,parse:value=>uri(fileURLToPath(value))},Range:class{constructor(...args){this.args=args;}},Position:class{constructor(line,character){this.line=line;this.character=character;}},Location:class{constructor(value,range){this.uri=value;this.range=range;}},TestMessage:class{constructor(message){this.message=message;}static diff(message,expected,actual){return {message,expected,actual};}},FileCoverage:class{constructor(value,lines,branches,methods,includesTests){Object.assign(this,{uri:value,lines,branches,methods,includesTests});}},StatementCoverage:class{constructor(executed,location){Object.assign(this,{executed,location});}},DeclarationCoverage:class{constructor(name,executed,location){Object.assign(this,{name,executed,location});}},window:{createOutputChannel:()=>({appendLine(){},dispose(){}}),showErrorMessage:async()=>{}},commands:{registerCommand:()=>({dispose(){}})},workspace:{isTrusted:true,workspaceFolders:[{uri:uri(workspace)}],textDocuments:[],getWorkspaceFolder:()=>({uri:uri(workspace)}),getConfiguration:()=>({get:(key,fallback)=>fallback})}};
   for(const name of ['onDidChangeTextDocument','onDidCreateFiles','onDidDeleteFiles','onDidRenameFiles','onDidChangeWorkspaceFolders','onDidChangeConfiguration']){events[name]=new Event();vscode.workspace[name]=events[name].event;}
   events.disk=new Event();vscode.workspace.createFileSystemWatcher=()=>({onDidChange:events.disk.event,onDidCreate:()=>({dispose(){}}),onDidDelete:()=>({dispose(){}}),dispose(){}});
@@ -24,6 +24,28 @@ test('native test failures retain expected/actual and rerun only failed unique I
   let lastSelection,fail=true;
   const h=host({discoverTests:async()=>({state:'completed',tests:testData}),runTests:async(config,options)=>{lastSelection=options.selectors;options.onEvent({type:'finished',state:fail?'failed':'passed',test:testData[2],error:fail?{message:'difference',expected:'expected',actual:'actual'}:undefined});return{state:'completed',summary:{failed:fail?1:0}};}});
   try{await h.api.discover({projects:[h.project],build:false});await h.api.run({build:false});assert.equal(h.runs[0].events.find(e=>e[0]==='failed')[2].expected,'expected');fail=false;await h.api.rerunFailed({build:false});assert.deepEqual(lastSelection,[{kind:'uniqueId',value:'simple'}]);assert.equal((await h.api.rerunFailed()).state,'no-failures');}finally{await h.api.dispose();}
+});
+test('native TestNG keeps the retry pending until one terminal outcome and reruns that invocation',async()=>{
+  let failing=true,selected;
+  const data=testData[2];
+  const h=host({discoverTests:async()=>({state:'completed',tests:testData}),runTests:async(config,options)=>{
+    selected=options.selectors;
+    options.onEvent({type:'started',test:data,attempt:1});
+    options.onEvent({type:'retry',test:data,attempt:1});
+    options.onEvent({type:'started',test:data,attempt:2});
+    options.onEvent({type:'finished',test:data,attempt:2,state:failing?'failed':'passed'});
+    return {state:'completed',summary:{testsFound:1,testAttempts:2,retriesScheduled:1}};
+  }});
+  try{
+    await h.api.discover({projects:[{...h.project,framework:'testng'}],build:false});
+    await h.api.run({build:false});
+    assert.deepEqual(h.runs[0].events.map(event=>event[0]),['queued','started','failed']);
+    assert.match(h.runs[0].output.join(''),/after attempt 1/);
+    failing=false;
+    await h.api.rerunFailed({build:false});
+    assert.deepEqual(selected,[{kind:'uniqueId',value:'simple'}]);
+    assert.deepEqual(h.runs[1].events.map(event=>event[0]),['queued','started','passed']);
+  }finally{await h.api.dispose();}
 });
 test('native coverage uses run aggregates and line/declaration details, suppressing changed-source mapping',async()=>{
   let mutate=false,h;

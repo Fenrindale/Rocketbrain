@@ -210,6 +210,10 @@ Maven에서 `maven-compiler-plugin`의 `annotationProcessorPaths`에 프로세�
 
 Lombok이 생성하는 멤버를 편집기에서 사용하려면 사용자 설정 `rocketbrain.java.annotationProcessing.lombokJar`에 [공식 Lombok 1.18.48 JAR](https://repo.maven.apache.org/maven2/org/projectlombok/lombok/1.18.48/lombok-1.18.48.jar)의 절대 경로를 지정합니다. 신뢰한 작업 공간에서 확장이 SHA-256을 확인하고 별도 JDT 저장소에 준비합니다. 빌드에서도 Lombok 버전과 프로세서 의존성을 선언합니다. Lombok getter를 MapStruct에서 참조하는 예제는 `lombok-mapstruct-binding`을 함께 사용합니다.
 
+### TestNG 호출 선택과 재시도
+
+TestNG 데이터 공급자의 동일한 스칼라 값도 관찰된 행 위치로 구분해 테스트 탐색기에서 다시 실행할 수 있습니다. 재시도가 있는 호출은 하나의 테스트로 표시되며, 다시 실행할 때는 첫 시도부터 현재 재시도 정책을 따릅니다. [TestNG 호출 선택](docs/testng-invocations.md)
+
 ## 검토하는 Java 리팩터링
 
 Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후와 파일 작업을 검토한 뒤 적용합니다. 텍스트 편집과 클래스 이동에는 VS Code Undo를 사용합니다. Safe Delete로 지운 파일은 **Restore Deleted Java File**에서 복원합니다. 검토 뒤 원본·참조·리소스가 바뀌면 다시 검토해야 합니다.
