@@ -6,11 +6,12 @@ const path = require('node:path');
 const { importedSpring,jdbcReadback } = require('./java-source-analysis-host');
 const { copyMixedProject,mixedFile,EXPECTED } = require('./helpers/mixed-jvm-fixture');
 
-async function runMixedJvmChecks(api,vscode,checks) {
+async function runMixedJvmChecks(api,vscode,checks,checkpoint=()=>{}) {
   const service = api.java.workbench.mixedJvm;
   assert.ok(service?.buildAndIndex && service?.definition && service?.run);
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   await importedSpring(api,workspace);
+  checkpoint('spring-imported');
   const commands = await vscode.commands.getCommands(true);
   for (const id of ['rocketbrain.java.mixed.build','rocketbrain.java.mixed.definition','rocketbrain.java.mixed.run']) {
     assert.ok(commands.includes(id));
@@ -21,6 +22,7 @@ async function runMixedJvmChecks(api,vscode,checks) {
   try {
     await copyMixedProject(fixture,'gradle');
     const view = await api.java.workbench.resyncProject({projectUri,allowProjectExecution:true});
+    checkpoint('mixed-project-imported');
     const project = view.projects.find(item => !path.relative(item.root,fixture));
     assert.deepEqual(project.languages,['java','kotlin']);
     const roots = project.sourceRoots.flatMap(root => root.packages);
@@ -34,6 +36,7 @@ async function runMixedJvmChecks(api,vscode,checks) {
     await vscode.window.showTextDocument(java,{preview:false});
     await assert.rejects(service.buildAndIndex({projectUri}),/before executing project code/);
     const built = await vscode.commands.executeCommand('rocketbrain.java.mixed.build');
+    checkpoint('mixed-build-command-returned');
     assert.ok(built?.classes >= 3);
     assert.deepEqual(built.languages,['java','kotlin']);
 
@@ -52,6 +55,7 @@ async function runMixedJvmChecks(api,vscode,checks) {
       const definitions = await vscode.commands.executeCommand('vscode.executeDefinitionProvider',selected.uri,position);
       assert.ok(definitions.some(item => (item.targetUri || item.uri)?.toString() === target.uri.toString()));
       references.push({from:proof.source,to:proof.target,kind:proof.kind,descriptor:proof.descriptor});
+      checkpoint('definition-'+references.length);
     }
 
     const javaEditor = await vscode.window.showTextDocument(java,{preview:false});
@@ -60,6 +64,7 @@ async function runMixedJvmChecks(api,vscode,checks) {
     const target = await vscode.commands.executeCommand('rocketbrain.java.mixed.definition');
     assert.equal(target.document.uri.toString(),kotlin.uri.toString());
     assert.equal(target.document.getText(target.selection),'transform');
+    checkpoint('definition-command-returned');
 
     const helper = mixedFile(fixture,'JavaHelper.java'), original = await fs.readFile(helper,'utf8');
     await fs.appendFile(helper,'// edited after index\n');
@@ -68,6 +73,7 @@ async function runMixedJvmChecks(api,vscode,checks) {
         /source, build or output files changed/);
     } finally { await fs.writeFile(helper,original); }
     const result = await service.run({projectUri,allowProjectExecution:true});
+    checkpoint('run-task-returned');
     assert.equal(result.state,'succeeded');
     assert.match(result.task,/(^|:)run$/);
     const jdbc = await jdbcReadback();

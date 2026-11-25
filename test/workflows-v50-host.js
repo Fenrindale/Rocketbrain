@@ -12,11 +12,13 @@ exports.run=async(vscode=require('vscode'))=>{
   assert.ok(['mysql','mariadb'].includes(engine));
   const prefix=process.env.ROCKETBRAIN_TEST_REPORT_PREFIX || 'v0.50';
   assert.match(prefix,/^v0\.50(?:-[a-z0-9-]+)?$/);
+  const progress=path.resolve(__dirname,'../test-output',prefix+'-native-'+engine+'-progress.jsonl');
+  const checkpoint=(group,step)=>fs.appendFileSync(progress,JSON.stringify({group,step,time:new Date().toISOString()})+'\n');
   const api=await extension.activate(),checks=[],details={};
   const suites={
     mcp:()=>require('./ide-mcp-host').runIdeMcpChecks(api,vscode,checks),
     async kotlin() {
-      try { return await require('./mixed-jvm-host').runMixedJvmChecks(api,vscode,checks); }
+      try { return await require('./mixed-jvm-host').runMixedJvmChecks(api,vscode,checks,step=>checkpoint('kotlin',step)); }
       finally { await api.java.stop(); }
     },
     async mongo() {
@@ -31,8 +33,10 @@ exports.run=async(vscode=require('vscode'))=>{
   assert.ok(selected.length && new Set(selected).size===selected.length);
   for (const name of selected) {
     assert.ok(Object.hasOwn(suites,name),name);
+    checkpoint(name,'started');
     console.log('Running Rocketbrain v0.50 workflow '+name);
     details[name]=await suites[name]();
+    checkpoint(name,'completed');
   }
   const report=path.resolve(__dirname,'../test-output',prefix+'-native-'+engine+'.json');
   const receipt={version:extension.packageJSON.version,extensionPath:extension.extensionPath,
