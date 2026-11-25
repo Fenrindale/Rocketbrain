@@ -155,6 +155,37 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const resultSnapshots=require('./db/result-snapshots').registerResultSnapshots(context,vscode,results,command);
   const gridReviewRecovery=require('./db/table-edit-recovery').registerGridReviewRecovery(context,vscode,tableEditor,results,command);
   const dataExtractors = require('./db/data-extractor-vscode').registerDataExtractors(context, vscode, command, results);
+  const datasetWorkflows = require('./db/dataset-workflow-vscode').registerDatasetWorkflows(context, vscode, command, {
+    tableNames: () => { assertExclusiveReady(); return state.schema.filter(item => item.kind === 'table').map(item => item.name); },
+    async withConnection(action) {
+      assertExclusiveReady();
+      if (state.offlineMetadata) throw Error('Use the live catalog before replaying a saved comparison.');
+      const { db, epoch } = state, key = 'dataset-workflow';
+      state.running.add(key); updateStatus();
+      try { return await action({ db, guard: databaseGuard(db, epoch) }); }
+      finally { state.running.delete(key); updateStatus(); }
+    },
+    openTargets: name => results.history.filter(record => tableEditor.contexts.get(record.id)?.db === state.db &&
+      results.exportable(record) && !record.readOnly && record.result.edit?.canEdit && record.result.edit.table === name)
+      .map(record => ({ id: record.id, label: record.label })),
+    async stage(id, reconcile) {
+      const record = results.history.find(item => item.id === id);
+      const target = record?.result, table = tableEditor.contexts.get(id), epoch = state.epoch;
+      const assertCurrent = db => {
+        if (!databaseGuard(db, epoch)() || table?.db !== db || tableEditor.contexts.get(id) !== table ||
+            !results.history.includes(record) || record.result !== target || record.state !== 'done' || record.closing ||
+            record.readOnly || record.hasDraft || record.review || record.sessionState?.outcomeUnknown) {
+          throw Error('Open the destination in the current editable table grid before staging.');
+        }
+      };
+      if (record?.editBusy) throw Error('Wait for the current table operation.');
+      assertCurrent(state.db);
+      const { changes, assertFresh } = await reconcile(target, assertCurrent);
+      await tableEditor.stageDatasetChanges(id, { changes, assertFresh, modelId: target.edit.modelId, draftRevision: record.draftRevision || 0,
+        editMessage: 'The selected existing rows are staged from the saved comparison. Review SQL, Apply, then Commit or Roll Back.' });
+      await results.show();
+    }
+  });
   async function verifySavedMetadata(db, id, catalog, current) {
     try {
       if (!id || !current() || !metadataCache.has(id)) return;
@@ -1024,6 +1055,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     mapResult: (id, column, revision) => structuredClone(results.mapSnapshot(id, column, revision)),
     compareDatasets: (targetId, sourceId, mapping) => results.compareDatasets(targetId,sourceId,mapping),
     stageDatasetComparison: (id, input) => results.stageDatasetComparison(id,input),
+    datasetWorkflows,
     savedResultLayout: id => results.savedLayout(id),
     saveResultLayout: (id, modelId, columns) => results.saveLayout(id, modelId, columns),
     inspectRelatedRows, openRelatedRows, returnToRelatedSource,
