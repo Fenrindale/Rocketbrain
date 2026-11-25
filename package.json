@@ -687,6 +687,7 @@
       { "command": "rocketbrain.java.extractVariable", "title": "Extract Java Local Variable", "category": "Rocketbrain", "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.extractField", "title": "Extract Java Field", "category": "Rocketbrain", "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.inlineMethod", "title": "Inline Java Method Call", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.extractMethod", "title": "Extract Java Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       {
         "command": "rocketbrain.java.pullUpMembers",
         "title": "Pull Up Java Members",

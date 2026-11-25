@@ -15,6 +15,7 @@ const { createJavaConversion } = require('./java-conversion-vscode');
 const { createConstantExtraction } = require('./extract-constant-vscode');
 const { createValueExtraction } = require('./extract-value-vscode');
 const { createMethodInline } = require('./inline-method-vscode');
+const { createMethodExtraction } = require('./extract-method-vscode');
 const { createTypedFileStructure } = require('./typed-file-structure');
 
 const COMMANDS = Object.freeze({
@@ -448,6 +449,9 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const inline = createMethodInline(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
   });
+  const methodExtraction = createMethodExtraction(vscode,{
+    java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
+  });
   const typedStructure = createTypedFileStructure(vscode,{
     java,assertReady,projects,findProject,classSources,compile,snapshot,assertUnchangedSourceSnapshots
   });
@@ -480,6 +484,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     inspectValueExtraction:options => managed(() => values.inspect(options)),
     prepareValueExtraction:(report,options) => managed(() => values.prepare(report,options)),
     prepareInlineMethod:options => managed(() => inline.prepare(options)),
+    prepareMethodExtraction:options => managed(() => methodExtraction.prepare(options)),
     streamTrace,
     reveal,showDiagram,exportMermaid,
     dispose() {
@@ -488,6 +493,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       streamTrace.dispose();
       constantPreparation.dispose();
       inline.dispose();
+      methodExtraction.dispose();
       structureRegistration.dispose();
       for (const entry of [...panels,...commands]) entry.dispose();
       stopping = Promise.allSettled(active).then(() => {});
