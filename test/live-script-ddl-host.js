@@ -28,7 +28,7 @@ async function verifyLiveScriptDdl(runtime, adapter) {
     `SELECT p.id FROM ${table} p`, added, `SELECT p.amount FROM ${table} p`, renamed,
     `SELECT p.cost FROM ${table} AS p FORCE INDEX (ix_cost)`, `UPDATE ${table} SET cost=15 WHERE id=1`,
     created, `SELECT p.label FROM ${table} p USE INDEX (ix_label)`, dropIndex, dropped,
-    `SELECT p.cost FROM ${table} p`, "SET SESSION sql_mode='ANSI_QUOTES'", `SELECT p.id FROM ${table} p`
+    `SELECT p.cost FROM ${table} p`, "SET SESSION sql_mode=CONCAT('ANSI','_QUOTES')", `SELECT p.id FROM ${table} p`
   ].join(';\n') + ';';
   const inspect = async () => {
     const [columns] = await actor.execute('SELECT COLUMN_NAME name, COLUMN_TYPE type FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? ORDER BY ORDINAL_POSITION', [table]);

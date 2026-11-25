@@ -1,6 +1,9 @@
 'use strict';
 
-const { workspaceDependencyGraph, localUri, check } = require('./dependency-workspace');
+const { lstatSync,readFileSync,realpathSync } = require('node:fs');
+const path=require('node:path');
+const {createHash}=require('node:crypto');
+const { workspaceDependencyGraph, verifyDependencyLink, localUri, check } = require('./dependency-workspace');
 const { createSymbolNavigation } = require('./navigation-symbols');
 const { createUsageSearch } = require('./usage-vscode');
 
@@ -115,12 +118,13 @@ async function inspectHierarchy(vscode, java, { kind, uri, position: cursor, can
   return { kind, roots, total: items.length };
 }
 
-function registerJavaNavigation(_context, vscode, { java }) {
+function registerJavaNavigation(context, vscode, { java }) {
   let disposed = false;
   const inspect = options => inspectHierarchy(vscode, java, options);
-  const analyzeDependencies = options => workspaceDependencyGraph(vscode, java, options);
+  const storagePath=(context.storageUri||context.globalStorageUri)?.fsPath;
+  const analyzeDependencies=options=>workspaceDependencyGraph(vscode,java,{...options,storagePath});
 
-  async function openSource(reference, { allowClassFile = false } = {}) {
+  async function openSource(reference, { allowClassFile = false, expectedHash } = {}) {
     check(vscode);
     const uri = vscode.Uri.parse(reference.uri);
     if (!(localUri(uri) && vscode.workspace.getWorkspaceFolder(uri)) && !(allowClassFile && uri.scheme === 'jdt')) {
@@ -130,7 +134,45 @@ function registerJavaNavigation(_context, vscode, { java }) {
     const selected = reference.range;
     const selection = selected ? doc.validateRange(new vscode.Range(
       selected.start.line, selected.start.character, selected.end.line, selected.end.character)) : undefined;
-    await vscode.window.showTextDocument(doc, { selection, preview: true, preserveFocus: false });
+    if(expectedHash) {
+      check(vscode);
+      const file=uri.fsPath,stat=lstatSync(file);
+      if(doc.isDirty||!stat.isFile()||stat.isSymbolicLink()||stat.size>512*1024||path.relative(file,realpathSync(file))) {
+        throw Error('The reviewed dependency source changed. Inspect dependencies again.');
+      }
+      const saved=readFileSync(file);
+      if(createHash('sha256').update(saved).digest('hex')!==expectedHash||
+          doc.getText().replace(/\r\n/g,'\n')!==saved.toString('utf8').replace(/^\uFEFF/,'').replace(/\r\n/g,'\n')) {
+        throw Error('The reviewed dependency source changed. Inspect dependencies again.');
+      }
+      if(selection&&(selection.start.line!==selected.start.line||selection.start.character!==selected.start.character||
+          selection.end.line!==selected.end.line||selection.end.character!==selected.end.character)) {
+        throw Error('The reviewed dependency source range changed. Inspect dependencies again.');
+      }
+    }
+    return vscode.window.showTextDocument(doc, { selection, preview: true, preserveFocus: false });
+  }
+
+  async function revealDependency(report,reference,{cancellation}={}) {
+    const verified=await verifyDependencyLink(vscode,java,report,reference,cancellation);
+    if(!verified.hash)throw Error('The reviewed dependency source is unavailable in this project directory.');
+    return openSource(verified.reference,{expectedHash:verified.hash});
+  }
+
+  const followDependency=(report,reference)=>report.attribution?
+    progress('Verify Java Dependency Link',cancellation=>revealDependency(report,reference,{cancellation})):
+    openSource(reference);
+
+  async function edgeEvidence(report,edge,title) {
+    const option=reference=>({label:reference.symbol,description:reference.kind,
+      detail:reference.uri&&vscode.Uri.parse(reference.uri).fsPath,reference});
+    const choices=[
+      ...edge.evidence.flatMap(reference=>[option(reference),...(reference.target?[option(reference.target)]:[])]),
+      ...(edge.buildDeclarations||[]).map(option),
+      ...(edge.observedBuildOutputs||[]).map(output=>({label:output,description:'Observed imported project output'}))
+    ];
+    const link=await vscode.window.showQuickPick(choices,{title,matchOnDescription:true});
+    if(link?.reference) await followDependency(report,link.reference);
   }
 
   function progress(title, work) {
@@ -216,11 +258,17 @@ function registerJavaNavigation(_context, vscode, { java }) {
       choices.push({ label: report.compiledOutputs.length + ' compiled output directories',
         description: 'Compiled references describe class files on disk.' });
     }
+    if(report.attribution) {
+      const value=report.attribution;
+      choices.unshift({label:'Javac source packet · '+value.state,description:value.sourceFiles+' source files · '+value.archiveCount+' observed archives',
+        detail:value.state==='attributed'?value.references+' bindings · '+value.omitted+' omitted at the report limit':
+          'The separate build declaration layers remain available.'});
+    }
     const item = await vscode.window.showQuickPick(choices, { title: 'Java Dependencies · Inspection Details' });
-    if (item?.reference) await openSource(item.reference);
+    if (item?.reference) await followDependency(report,item.reference);
   }
 
-  async function browseLayer(layer) {
+  async function browseLayer(report,layer) {
     const nodes = new Map(layer.nodes.map(node => [node.id, node]));
     const cycleChoices = layer.cycles.map(cycle => ({
       label: cycle.members.map(id => nodes.get(id).label).join(' ↔ '), description: 'Cycle group', cycle
@@ -240,9 +288,14 @@ function registerJavaNavigation(_context, vscode, { java }) {
     const labelEdge = edge => nodes.get(edge.from).label + ' → ' + nodes.get(edge.to).label;
     if (chosen.cycle) {
       const pick = await vscode.window.showQuickPick(chosen.cycle.witness.map(edge => ({
-        label: labelEdge(edge), description: edge.evidence.kind, reference: edge.evidence
+        label: labelEdge(edge), description: edge.evidence.kind, reference: edge.evidence,edge
       })), { title: 'Cycle · Source Links' });
-      if (pick) await openSource(pick.reference);
+      if(pick?.reference.target) {
+        const whole=layer.edges.find(item=>item.from===pick.edge.from&&item.to===pick.edge.to);
+        await edgeEvidence(report,whole,labelEdge(pick.edge));
+      } else if(pick) {
+        await followDependency(report,pick.reference);
+      }
       return;
     }
     const matches = layer.edges.filter(edge => edge.from === chosen.node.id || edge.to === chosen.node.id);
@@ -251,27 +304,30 @@ function registerJavaNavigation(_context, vscode, { java }) {
       ...matches.map(edge => ({ label: labelEdge(edge), description: edge.references + ' references', edge }))
     ], { title: layer.name + ' · ' + chosen.node.label });
     if (!pick) return;
-    if (pick.reference) await openSource(pick.reference);
-    else {
-      const link = await vscode.window.showQuickPick(pick.edge.evidence.map(reference => ({
-        label: reference.symbol, description: reference.kind,
-        detail: reference.uri && vscode.Uri.parse(reference.uri).fsPath, reference
-      })), { title: labelEdge(pick.edge) });
-      if (link) await openSource(link.reference);
-    }
+    if(pick.reference)await followDependency(report,pick.reference);
+    else await edgeEvidence(report,pick.edge,labelEdge(pick.edge));
   }
 
   async function showDependencies() {
+    const scoped=(vscode.workspace.workspaceFolders||[]).filter(folder=>localUri(folder.uri)).map(folder=>({
+      label:'Javac attributed references · '+folder.name,description:'Compare source bindings with build declarations',
+      attributeSources:true,scopeUri:folder.uri
+    }));
     const selected = await vscode.window.showQuickPick([
       { label: 'Saved source and build declarations', includeCompiled: false },
-      { label: 'Include compiled package references', description: 'Inspect built class files with the configured JDK', includeCompiled: true }
+      { label: 'Include compiled package references', description: 'Inspect built class files with the configured JDK', includeCompiled: true },
+      ...scoped,
+      {label:'Javac references in a project folder…',browse:true,attributeSources:true}
     ], { title: 'Java Dependencies' });
     if (!selected) return;
+    const scopeUri=selected.browse?(await vscode.window.showOpenDialog({canSelectFiles:false,canSelectFolders:true,
+      canSelectMany:false,title:'Select a Java Project Directory'}))?.[0]:selected.scopeUri;
+    if(selected.browse&&!scopeUri)return;
     const report = await progress('Java Dependencies', cancellation =>
-      analyzeDependencies({ includeCompiled: selected.includeCompiled, cancellation }));
+      analyzeDependencies({ includeCompiled:selected.includeCompiled,attributeSources:selected.attributeSources,scopeUri,cancellation }));
     const choice = await vscode.window.showQuickPick(graphChoices(report), { title: 'Java Dependencies' });
     if (choice?.notes) await snapshotNotes(report);
-    if (choice?.layer) await browseLayer(choice.layer);
+    if (choice?.layer) await browseLayer(report,choice.layer);
     return report;
   }
 
@@ -298,7 +354,7 @@ function registerJavaNavigation(_context, vscode, { java }) {
     register(COMMANDS.usages, () => usages.choose())
   ];
   return {
-    analyzeDependencies, inspectHierarchy: inspect, openSource, showHierarchyTree,
+    analyzeDependencies,revealDependency,inspectHierarchy: inspect, openSource, showHierarchyTree,
     inspectSymbol: symbols.inspect, revealSymbol: symbols.reveal,findUsages:usages.inspect,revealUsage:usages.reveal,
     dispose() {
       if (disposed) return;

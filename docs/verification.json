@@ -1,25 +1,25 @@
 {
-  "version": "0.95.0",
-  "verifiedAt": "2026-11-25T23:35:20.517Z",
+  "version": "0.96.0",
+  "verifiedAt": "2026-11-25T23:45:03.453Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.95.0.vsix",
-    "sha256": "58ac4a531ffff068c12715e79f854146d8943989373b9bf4960aad606d113e40",
-    "bytes": 3752675,
+    "name": "rocketbrain-0.96.0.vsix",
+    "sha256": "20457e85ff35b6cab45d8f328bee4b53d40b5ce25b3c30212d8d0081cfd04811",
+    "bytes": 3763619,
     "files": 22
   },
   "source": {
-    "frozenPublicInputs": 2239,
-    "inputVectorSha256": "75777335d92b0f011920d03f5f3f931b0116cd07b46a14fee3be00f9a39c38cb",
+    "frozenPublicInputs": 2253,
+    "inputVectorSha256": "11f993f7a6b275f05397a97dad918797dd6701e331de7e7bbe625dcd882b1ac5",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1863,
-    "pass": 1716,
+    "tests": 1873,
+    "pass": 1724,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 147,
+    "skipped": 149,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "utf16DelimitedImport",
+          "group": "javaAttributedDependencies",
           "checks": 1
         },
         {
-          "group": "importDuplicates",
+          "group": "gradleAdvisories",
           "checks": 1
         },
         {
-          "group": "functionGrantDeployment",
+          "group": "sqlDocumentModes",
           "checks": 1
         },
         {
-          "group": "gitShelf",
+          "group": "generatedCompositeForeignKey",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "utf16DelimitedImport",
+          "group": "javaAttributedDependencies",
           "checks": 1
         },
         {
-          "group": "importDuplicates",
+          "group": "gradleAdvisories",
           "checks": 1
         },
         {
-          "group": "functionGrantDeployment",
+          "group": "sqlDocumentModes",
           "checks": 1
         },
         {
-          "group": "gitShelf",
+          "group": "generatedCompositeForeignKey",
           "checks": 1
         }
       ],
@@ -85,69 +85,75 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-092": {
-      "scope": "실제 Git 워크트리에서 두 변경 조각을 옮겼다. 양쪽 인덱스와 미선택 변경을 보존하고 충돌 후 보관본 유지와 재적용을 확인했다.",
+    "IDEA-023": {
+      "scope": "두 모듈의 실제 소스·선언 순환을 검증했다. 정확한 pick(int)과 Maven 선언을 열고 소스 수정 후 소스 순환만 사라짐을 확인했다.",
       "runtimeGroups": [
-        "gitShelf"
+        "javaAttributedDependencies"
       ]
     },
-    "DG-072": {
-      "scope": "두 DB에서 UTF-16 TSV·CSV 1,201행씩을 검증했다. 또 205행 표본에서 202행 삽입과 3행 중복을 확인하고, 오류·취소에서 전체 롤백, 명시적 커밋 전 다른 세션에서 비가시성을 검증했다.",
+    "IDEA-040": {
+      "scope": "실제 Spring Gradle runtimeClasspath의 88개 패키지를 확인했다. 설치판에서 선택한 공개 좌표 두 개만 OSV에 조회하고 읽기 전용 보고서를 열었다.",
       "runtimeGroups": [
-        "utf16DelimitedImport",
-        "importDuplicates"
+        "gradleAdvisories"
       ]
     },
-    "DG-081": {
-      "scope": "실제 두 DB 설치판에서 권한을 명시해 컴파일·교체·복원했고 이전 호출 경로를 유지했다. 적용 전후 다른 세션의 권한 변경을 거부했다.",
+    "DG-031": {
+      "scope": "두 DB에서 실제 여섯 문장의 세 모드 변경을 대조했다. ANSI_QUOTES의 역슬래시 포함 식별자, NO_BACKSLASH_ESCAPES, 기본 모드 복귀 및 미확정 계산을 검증했다.",
       "runtimeGroups": [
-        "functionGrantDeployment"
+        "sqlDocumentModes"
+      ]
+    },
+    "DG-078": {
+      "scope": "생성 자식 키와 뒤쪽 생성 인덱스 열을 포함한 실제 복합 FK를 MySQL·MariaDB에서 생성·변경·복구했다. 고아 행 차단, CASCADE·SET NULL 및 각 엔진의 제한을 검증했다.",
+      "runtimeGroups": [
+        "generatedCompositeForeignKey"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 491,
+    "sourceCorrespondences": 494,
     "sourceConfidence": "inferred",
     "archiveEntries": 22,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 141,
-      "partial": 61,
+      "implemented": 143,
+      "partial": 59,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 183.5,
-    "previousWeightedPoints": 182.5,
+    "weightedPoints": 184.5,
+    "previousWeightedPoints": 183.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 85,
+    "referencePercent": 85.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-092",
+        "id": "IDEA-023",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-072",
+        "id": "DG-078",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Git Shelf는 추적 중인 UTF-8 텍스트의 승인한 미스테이징 변경을 다룬다.",
-    "가져오기는 BOM이 있는 UTF-16의 바이트 순서를 확인한다. 중복 건너뛰기는 서버가 확인한 기본 키·고유 키 오류에만 적용하며 나머지 문장 오류는 전체를 롤백한다.",
-    "함수 권한 보존은 확인 가능한 직접 EXECUTE 권한을 다룬다. 역할·와일드카드·다른 주체가 위임한 권한은 범위 밖이다.",
+    "Java 컴파일러 의존 그래프는 관찰한 로컬 프로덕션 소스와 검증한 클래스패스에 한한다. 빌드 순환과 소스 순환은 각각 표시한다.",
+    "Gradle 감사에서는 선택한 공개 패키지 이름·버전을 OSV로 보내며 사용 지점에서의 취약성 판단은 별도다.",
+    "SQL 모드 전환은 정확히 해석한 리터럴 문장에 적용한다. 실행 결과가 필요한 설정은 이후 문법 판단을 미확정으로 둔다.",
+    "생성 열 외래 키는 검토한 동일 스키마 구성과 DB별 허용 동작을 다룬다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Java와 Gradle의 실제 의존 그래프 분석",
-    "문서의 SQL 모드 전환과 생성 열을 포함한 복합 외래 키"
+    "Java 분기별 값 흐름과 Kotlin 코루틴 부모·자식",
+    "교차 스키마 루틴·파일 참조와 MariaDB 버전별 시퀀스"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

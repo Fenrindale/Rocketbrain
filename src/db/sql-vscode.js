@@ -36,7 +36,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   function dmlDiagnostics(document, text, parts, sqlMode) {
     return parts.slice(0, 100).flatMap(part => {
       let scope;
-      try { scope = inspectDmlScope(text.slice(part.start, part.end), sqlMode); }
+      try { scope = inspectDmlScope(text.slice(part.start, part.end), part.sqlMode??sqlMode); }
       catch { return []; }
       if (!scope || scope.hasWhere) return [];
       const range = new vscode.Range(document.positionAt(part.start + scope.start), document.positionAt(part.start + scope.end));
@@ -87,8 +87,9 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
       collection.set(document.uri, dmlDiagnostics(document, text, parts, undefined));
       return { state:'not-connected', statements:[] };
     }
-    const split=preview?null:engine().statementRanges(text,opts);
     const ddlModel=require('./ddl-model');
+    const observeLocalModes=vscode.workspace.isTrusted&&ddlModel.scriptCatalogSupported(seed);
+    const split=preview?null:engine().statementRanges(text,{...opts,documentSqlModes:observeLocalModes});
     const virtual=preview?ddlModel.analyzeDdlScript(text,seed):null;
     const automatic=!preview&&vscode.workspace.isTrusted?ddlModel.analyzeLiveDdlScript(text,seed,split):null;
     const parts=split?.statements||[];
@@ -102,6 +103,12 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     });
     const cached = preview?.type === 'local' ? undefined : metadata?.cachedMetadata;
     const diagnostics=dmlDiagnostics(document, text, statements.filter(statement=>!statement.contextUncertain), opts.sqlMode);
+    for(const transition of automatic?.modeTransitions||[]){
+      const item=new vscode.Diagnostic(new vscode.Range(document.positionAt(transition.start),document.positionAt(transition.end)),
+        'Later statements are analyzed with the declared document SQL mode. This does not change an open console session.',
+        vscode.DiagnosticSeverity.Information);
+      item.code='sql.script.sessionMode';item.source='Rocketbrain SQL (script mode)';diagnostics.push(item);
+    }
     if(preview?.type==='overlay'){
       const diagnostic=new vscode.Diagnostic(new vscode.Range(0,0,0,0),
         'Using saved virtual schema '+preview.report.label+'. This editor is for SQL analysis.',
@@ -148,7 +155,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
       virtualPreview:true,ddlChanges:virtual.changes,...(preview.configuredScope?{configuredScope:preview.configuredScope}:{}),
       ...(preview.type==='overlay'&&{virtualSchema:structuredClone(preview.report)})});
     if(automatic)Object.assign(value,{state:automatic.state,contextMayChange:automatic.contextMayChange,
-      scriptCatalog:true,unknown:automatic.unknown,ddlChanges:automatic.changes});
+      scriptCatalog:true,unknown:automatic.unknown,ddlChanges:automatic.changes,sqlModeTransitions:automatic.modeTransitions});
     if (cached) Object.assign(value, { state: 'unknown', cachedMetadata: structuredClone(cached) });
     cache.set(key,{version:document.version,epoch,preview,trusted,value});return value;
   }
@@ -659,9 +666,11 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {
     async provideCompletionItems(document,position,token) {
       if(disposed||!vscode.workspace.isTrusted||!config().get('enabled',true)||!metadata||isProfileConsole(document)||virtualActive(document)||require('./federated-select').isFederatedDocument(document))return [];
-      const text = document.getText(), offset = document.offsetAt(position), observed = options();
       const scope=locate(document,position), shadow=scope?.scriptCatalog;
       if (scope?.contextUncertain || scope?.priorContextChange&&!shadow) return [];
+      const projected=Boolean(scope?.sqlMode&&shadow);
+      const text=projected?scope.model.text:document.getText(), offset=projected?scope.offset:document.offsetAt(position);
+      const observed={...options(),...(projected&&{sqlMode:scope.sqlMode})};
       const snapshot = metadata, version = document.version, generation = epoch;
       const current = () => !disposed && !token?.isCancellationRequested && !document.isClosed && document.version === version &&
         epoch === generation && snapshot === metadata && vscode.workspace.isTrusted && config().get('enabled', true) && !virtualActive(document);
@@ -675,7 +684,9 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
       if (!current()) return [];
       const indexes=shadow?require('./ddl-script-indexes').indexHintCompletions(scope.model.text,scope.offset,shadow)
         .map(candidate=>({...candidate,start:scope.start+candidate.start,end:scope.start+candidate.end})):[];
-      return [...fields, ...mutations, ...joins, ...indexes].map(candidate=>{
+      const candidates=[...fields,...mutations,...joins].map(candidate=>projected
+        ? {...candidate,start:candidate.start+scope.start,end:candidate.end+scope.start} : candidate);
+      return [...candidates, ...indexes].map(candidate=>{
         const kind = candidate.kind === 'column' ? vscode.CompletionItemKind.Field :
           candidate.kind && candidate.kind !== 'table' ? vscode.CompletionItemKind.Snippet : vscode.CompletionItemKind.Reference;
         const item=new vscode.CompletionItem(candidate.label,kind);

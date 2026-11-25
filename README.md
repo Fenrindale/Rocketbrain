@@ -53,6 +53,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 **Audit Maven Dependencies with OSV**는 선택한 Maven 모듈의 실제 의존성 트리를 해석합니다. OSV로 전송할 패키지 이름·버전을 직접 선택하면 직접·전이 의존 경로와 조회 시각, 등록된 권고 ID를 보고서에 표시합니다. [OSV API](https://google.github.io/osv.dev/post-v1-querybatch/)
 
+**Audit Gradle Dependencies with OSV**에서 신뢰한 모듈과 Java 컴파일·런타임·테스트 런타임 구성 중 하나를 선택합니다. Gradle이 실제로 선택한 버전과 직접·전이 경로를 보고, 전송할 패키지 이름·버전을 개별 선택합니다. 해결하지 못한 의존 관계의 수는 별도로 표시합니다.
+
 `.ipynb`는 **Rocketbrain Jupyter Notebook**에서 열 수 있습니다. `jupyter_client`와 `ipykernel`이 설치된 Python 실행 파일을 `rocketbrain.jupyter.pythonPath`에 지정하면 셀을 실행하고 커널 세션을 유지할 수 있습니다. 셀 소스, 출력과 Markdown 첨부 파일은 노트북에 저장됩니다. [Jupyter 파일 형식](https://nbformat.readthedocs.io/en/v5.10.0/format_description.html)
 
 **Docker** 보기에서 시스템 Docker CLI가 제공하는 컨텍스트를 선택해 컨테이너·이미지·Compose 프로젝트를 탐색할 수 있습니다. 컨테이너 로그와 승인된 시작·중지·재시작, 레지스트리 매니페스트 조회를 제공합니다. [Docker 워크벤치](docs/docker.md)
@@ -366,7 +368,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - SQL 표현식에서는 현재 범위의 별칭과 열을 약어로 찾을 수 있습니다. 예를 들어 `p.dn`으로 `p.display_name`을 완성합니다. 활성 MySQL·MariaDB의 버전과 SQL 모드에 맞는 내장 함수 템플릿을 삽입하고 괄호 안의 현재 인수를 표시합니다. 지원하는 구문은 [MySQL 함수 참조](https://dev.mysql.com/doc/refman/8.4/en/built-in-function-reference.html)와 [MariaDB 함수 참조](https://mariadb.com/docs/server/reference/sql-functions/function-and-operator-reference)를 따릅니다.
-- 일반 SQL 편집기에서 스크립트에 선언한 열과 InnoDB 보조 인덱스의 변화를 뒤 문장의 자동 완성과 진단에 반영합니다. 열 추가·이름 변경·삭제와 단순 인덱스 추가·이름 변경·삭제를 지원합니다. 모델을 적용할 때 DB에 DDL을 보내지 않습니다. SQL 모드 변경이나 모델링 범위 밖의 문장이 나타나면 이후 문장의 이름 추론을 중단합니다. [MySQL ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html), [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
+- 일반 SQL 편집기에서 스크립트에 선언한 열과 InnoDB 보조 인덱스의 변화를 뒤 문장의 자동 완성과 진단에 반영합니다. 열 추가·이름 변경·삭제와 단순 인덱스 추가·이름 변경·삭제를 지원합니다. 모델을 적용할 때 DB에 DDL을 보내지 않습니다. 관찰된 카탈로그에서는 고정 리터럴 SET SESSION·SET LOCAL sql_mode 선언을 따라 뒤 문장의 따옴표와 백슬래시를 해석합니다. 이 분석은 콘솔 설정을 변경하지 않습니다. 계산된 모드나 모델링 범위 밖 문장부터 이름 추론을 중단합니다. [MySQL ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html), [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
 - **Review and Stream a Large Data Import**에서 일반 XLSX와 Strict OOXML XLSX의 워크시트를 선택해 가져옵니다. 검토 문서에 형식을 표시하고 공유 문자열, 저장된 숫자 정밀도, 날짜, NULL과 빈 텍스트를 읽습니다. 선택한 열을 검토하고, 수식은 명시적으로 선택한 저장 결과를 사용합니다. 전송 후 같은 트랜잭션에서 커밋하거나 롤백합니다.
 - 같은 흐름에서 UTF-8과 BOM이 있는 UTF-16LE·UTF-16BE CSV·TSV를 가져옵니다. 검토 문서에서 인코딩을 확인할 수 있으며, 잘못된 바이트나 검토 이후 바뀐 원본은 가져올 수 없습니다.
 - InnoDB 가져오기에서 기본 키나 고유 키가 충돌하면 전체를 롤백하거나, 충돌한 행만 건너뛸 수 있습니다. 검토 문서에 선택을 표시하고, 실행 보고서에 삽입과 중복 건너뛰기 건수를 따로 기록합니다. 삽입에 성공한 행은 명시적으로 커밋할 때까지 다른 세션에서 보이지 않습니다.
@@ -444,3 +446,5 @@ Use **Review Database Account Lock or Unlock** for an exact MySQL or MariaDB acc
 **Review MariaDB Package Call** supports matching public Oracle-mode function signatures with scalar OUT and IN OUT parameters. Review the typed inputs, invocation and stored sources together. The dedicated read-only session captures the return value and output parameters in separate results, then rolls back.
 
 A reviewed scalar function replacement can preserve direct EXECUTE grants issued by its owner to named login accounts. The SQL review shows the grants to restore. Stop callers and external schema or grant changes during the non-atomic operation. The retained original supports recovery after an interrupted grant replay.
+
+The table designer supports stored generated child columns in reviewed composite foreign keys with restrictive updates. It also accepts an ascending BTREE index that starts with ordinary foreign-key columns and ends with a generated column. Preview checks the selected engine's action rules. Rebuilding copies the input columns and verifies the newly generated values before publishing.

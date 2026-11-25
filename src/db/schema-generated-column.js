@@ -63,14 +63,18 @@ function parsed(expression, available) {
   }
   const sql = arithmetic(0, 0);
   if (at !== tokens.length || !references.size) throw fail('Use a fully resolved numeric expression with at least one base column.');
-  return sql;
+  return { expression: sql, references };
 }
 
-function numericExpression(expression, columns) {
+function withColumns(expression, columns) {
   return parsed(expression, new Map(columns.map(column => [column.name.toLowerCase(), column])));
 }
 
-function definition(column, columns) {
+function numericExpression(expression, columns) {
+  return withColumns(expression, columns).expression;
+}
+
+function described(column, columns) {
   const generation = mode(column);
   if (!generation) return null;
   if (!numberType.test(column.type) || column.nullable !== true || column.defaultValue !== null ||
@@ -79,14 +83,23 @@ function definition(column, columns) {
   }
   const at = columns.indexOf(column);
   if (at < 0) throw fail('The generated column must belong to the reviewed table.');
-  return { generation, expression: numericExpression(column.generationExpression, columns.slice(0, at)) };
+  return { generation, ...withColumns(column.generationExpression, columns.slice(0, at)) };
 }
 
-function validate(table) {
-  const generated = new Set();
-  for (const column of table.columns) if (definition(column, table.columns)) generated.add(column.name);
-  const indexedGeneration = index => index.columns.some(column => generated.has(column.name));
-  const indexed = table.indexes.filter(indexedGeneration);
+function definition(column, columns) {
+  const value = described(column, columns);
+  return value && { generation: value.generation, expression: value.expression };
+}
+
+function validate(table, { dialect } = {}) {
+  const generated = new Map(), storedInputs = new Set();
+  for (const column of table.columns) {
+    const value = described(column, table.columns);
+    if (!value) continue;
+    generated.set(column.name, value.generation);
+    if (value.generation === 'stored') for (const input of value.references) storedInputs.add(input);
+  }
+  const indexed = table.indexes.filter(index => index.columns.some(column => generated.has(column.name)));
   for (const index of indexed) {
     if (index.type !== 'BTREE' || index.unique || index.primaryKey ||
         index.columns.some(column => column.prefixLength != null || ![null, 'A'].includes(column.collation))) {
@@ -94,16 +107,21 @@ function validate(table) {
     }
   }
   for (const key of table.foreignKeys) {
-    if (key.columns.some(column => generated.has(column.name) ||
-        key.referencedTable === table.name && generated.has(column.referencedColumn))) {
-      throw fail('Foreign keys on generated columns require a separate review profile.');
+    const modes = key.columns.map(column => generated.get(column.name));
+    if (key.referencedTable === table.name && key.columns.some(column => generated.has(column.referencedColumn))) {
+      throw fail('The reviewed foreign-key parent must use ordinary columns.');
     }
-    if (indexed.length && !table.indexes.some(index => index.type === 'BTREE' && !indexedGeneration(index) &&
-        key.columns.every((column, i) => index.columns[i]?.name === column.name && !index.columns[i]?.prefixLength))) {
-      throw fail('Give each foreign key a separate child index on ordinary columns.');
+    if (modes.includes('virtual')) throw fail('Use stored generated child columns for a reviewed foreign key.');
+    const updatesChild = key.onUpdate === 'CASCADE' || key.onUpdate === 'SET NULL' || key.onDelete === 'SET NULL';
+    if (modes.includes('stored') && updatesChild) {
+      throw fail('Stored generated foreign-key columns require restrictive updates and restrictive or cascading deletes.');
+    }
+    if (key.columns.some(column => storedInputs.has(column.name)) &&
+        (updatesChild || (dialect !== 'mariadb' && key.onDelete === 'CASCADE'))) {
+      throw fail('The foreign-key action is unsupported for a child input used by a stored generated column on this server.');
     }
   }
-  return generated;
+  return new Set(generated.keys());
 }
 
 function clause(value, dialect) {

@@ -112,7 +112,8 @@ async function auditMavenPackages(tree, keys, { fetcher = fetch, signal } = {}) 
     }
   }
   return { project: tree.project, provider: 'OSV', checkedAt: new Date().toISOString(),
-    skipped: tree.packages.length - report.length, packages: report };
+    skipped: tree.packages.length - report.length, packages: report,
+    ...(tree.buildTool==='gradle'&&{buildTool:tree.buildTool,configuration:tree.configuration,unresolved:tree.unresolved}) };
 }
 
 module.exports = { parseMavenDependencyTree, auditMavenPackages, maxTreeBytes, maxSelection };

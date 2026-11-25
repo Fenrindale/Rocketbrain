@@ -1,5 +1,5 @@
 {
-  "version": "0.95.0",
+  "version": "0.96.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 141,
-    "partial": 61,
+    "implemented": 143,
+    "partial": 59,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 85,
+    "percent": 85.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-092",
-    "DG-072",
-    "DG-081"
+    "IDEA-023",
+    "IDEA-040",
+    "DG-031",
+    "DG-078"
   ],
   "expandedFeatures": [
-    "IDEA-092",
-    "DG-072",
-    "DG-081"
+    "IDEA-023",
+    "IDEA-040",
+    "DG-031",
+    "DG-078"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -687,28 +689,23 @@
       "category": "탐색·구조 분석",
       "feature": "모듈·패키지 의존성과 순환 분석",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "Java 패키지 import, 컴파일된 클래스 참조, Maven·Gradle·JPMS 선언을 각각 분석한다. 각 층에서 방향성 있는 의존 관계와 순환 경로, 확인 가능한 소스 위치를 탐색한다.",
-      "remaining": [
-        "동적 빌드 설정, 전체 패키지 참조, 외부 바이너리와 Maven 프로필 전반의 의미 분석을 확장한다."
-      ],
+      "scope": "다중 모듈의 Javac 소스 의존과 관찰한 빌드 의존을 각각 표시하고, 타입 사용·정의·빌드 선언으로 이동한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.29-installed-coverage",
+        "state": "v0.96-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.29.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring 소스와 컴파일 결과에서 각각 2개 연결의 패키지 순환을 확인했다. 도구 검사에서 JPMS 클래스 파일과 Maven·Gradle 선언을 별도로 확인했다.",
+        "testedScope": "두 모듈의 실제 소스·선언 순환을 검증했다. 정확한 pick(int)과 Maven 선언을 열고 소스 수정 후 소스 순환만 사라짐을 확인했다.",
         "publicEvidence": [
-          "src/java/dependency-builds.js",
-          "src/java/dependency-graph.js",
-          "src/java/dependency-workspace.js",
-          "test/java-dependency-graph.test.js",
-          "test/java-navigation-host.js"
+          "docs/java-attributed-dependencies.md",
+          "test/java-attributed-dependencies-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1237,23 +1234,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Maven의 실제 의존성 트리에서 사용자가 선택한 이름과 버전의 OSV 권고를 확인하고, 직접·전이 경로와 검사 시각을 보고서로 연다.",
+      "scope": "Maven과 Gradle의 실제 직접·전이 버전 의존 경로를 읽고 선택한 패키지의 OSV 권고를 비교한다.",
       "remaining": [
-        "Gradle 의존성, 실제 Java 취약 API 호출 경로와 수정 제안이 남아 있다."
+        "Java 코드의 실제 호출 사용 여부와 수정 제안이 남는다."
       ],
       "verification": {
-        "state": "v0.52-installed-coverage",
+        "state": "v0.96-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.52.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Maven 3.9.11과 Dependency Plugin 3.11.0에서 직접·전이 Log4j 의존성을 해석하고 실제 OSV 권고 ID를 에디터에서 확인했다.",
+        "testedScope": "실제 Spring Gradle runtimeClasspath의 88개 패키지를 확인했다. 설치판에서 선택한 공개 좌표 두 개만 OSV에 조회하고 읽기 전용 보고서를 열었다.",
         "publicEvidence": [
-          "src/java/dependency-advisories.js",
-          "src/java/dependency-advisories-vscode.js",
-          "test/dependency-advisories-host.js"
+          "src/java/gradle-advisory-graph.js",
+          "test/gradle-advisories-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2781,8 +2777,8 @@
       "verification": {
         "state": "v0.95-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.95.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4513,25 +4509,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "MySQL8.4/MariaDB11.4의 bounded SELECT 문법·scope·타입 family와 SQL-mode 민감 lexer를 소유하며 양DB에서 검사했다.",
+      "scope": "문서의 리터럴 SQL 모드 전환을 SELECT·DML의 어휘·완성·진단에 반영한다.",
       "remaining": [
-        "두 dialect 전체 문법·함수·collation·mode·window/JSON·nonSELECT 문맥과 서버실행유효성의 완전한 판정은 남는다."
+        "엔진·버전별 RETURNING과 임의 모드 변경 등 추가 문법·컨텍스트를 확장한다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.96-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
+        "testedScope": "두 DB에서 실제 여섯 문장의 세 모드 변경을 대조했다. ANSI_QUOTES의 역슬래시 포함 식별자, NO_BACKSLASH_ESCAPES, 기본 모드 복귀 및 미확정 계산을 검증했다.",
         "publicEvidence": [
-          "src/db/sql-analysis.js",
-          "src/db/sql-policy.js",
-          "test/sql-v08-runtime.test.js",
-          "src/db/sql-vscode.js",
-          "test/sql-analysis-host.js"
+          "src/db/sql-document-modes.js",
+          "test/sql-document-modes-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5744,8 +5737,8 @@
       "verification": {
         "state": "v0.95-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.95.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5920,25 +5913,23 @@
       "category": "스키마·DDL",
       "feature": "table create/alter 시각 designer",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "테이블 디자이너에서 일반 숫자 열을 참조하는 가상·저장 생성 열과 일반·복합 BTREE 인덱스를 검토한다. 재구성은 입력 값을 복사한 뒤 생성 값을 실제 서버에서 비교한다.",
-      "remaining": [
-        "생성 표현식·외래 키의 일반 조합, 함수 인덱스 및 특수 저장 구조가 남아 있다."
-      ],
+      "scope": "테이블 디자이너에서 타입·콜레이션·기본값·생성 열과 복합 외래 키를 검토하여 생성·재구성하고 원본을 복구한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.87-installed-coverage",
+        "state": "v0.96-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.87.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 두 DB에서 가상·저장 생성 열의 수정 후 인덱스 유지, NULL·정밀 소수와 복합 인덱스, 재구성 전후 및 복구 DDL을 확인했다.",
+        "testedScope": "생성 자식 키와 뒤쪽 생성 인덱스 열을 포함한 실제 복합 FK를 MySQL·MariaDB에서 생성·변경·복구했다. 고아 행 차단, CASCADE·SET NULL 및 각 엔진의 제한을 검증했다.",
         "publicEvidence": [
-          "test/generated-index-host.js",
-          "src/db/schema-designer.js"
+          "src/db/schema-designer-ddl.js",
+          "test/generated-composite-foreign-key-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6013,8 +6004,8 @@
       "verification": {
         "state": "v0.95-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.95.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6477,8 +6468,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "58ac4a531ffff068c12715e79f854146d8943989373b9bf4960aad606d113e40",
-    "sourceManifestSha256": "75777335d92b0f011920d03f5f3f931b0116cd07b46a14fee3be00f9a39c38cb",
+    "vsixSha256": "20457e85ff35b6cab45d8f328bee4b53d40b5ce25b3c30212d8d0081cfd04811",
+    "sourceManifestSha256": "11f993f7a6b275f05397a97dad918797dd6701e331de7e7bbe625dcd882b1ac5",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6492,23 +6483,23 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-092",
+      "id": "IDEA-023",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-072",
+      "id": "DG-078",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1863,
-    "pass": 1716,
+    "tests": 1873,
+    "pass": 1724,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 147,
+    "skipped": 149,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

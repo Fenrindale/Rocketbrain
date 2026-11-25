@@ -1,11 +1,13 @@
 'use strict';
 
 const fs = require('node:fs/promises');
+const { createHash } = require('node:crypto');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const { buildDescriptors, fileKey, below } = require('./dependency-builds');
 const { analyzeDependencyGraph, parseJdeps } = require('./dependency-graph');
+const { observeAttributedSources } = require('./dependency-attribution');
 
 const SOURCE_LIMIT = 500;
 const DESCRIPTOR_LIMIT = 100;
@@ -13,6 +15,10 @@ const EXCLUDE = '**/{.git,.idea,.metadata,.gradle,node_modules,target,build,out,
 const BUILDS = '**/{pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts}';
 const MAX_TOOL_OUTPUT = 4 * 1024 * 1024;
 const LOCAL_CLASS_LIMIT = 15000;
+const reviews=new WeakMap();
+const digest=value=>createHash('sha256').update(value).digest('hex');
+const utf8=new TextDecoder('utf-8',{fatal:true});
+const linkKey=({uri,range})=>JSON.stringify([uri,range?.start?.line,range?.start?.character,range?.end?.line,range?.end?.character]);
 
 function localUri(uri) {
   return uri?.scheme === 'file' && !uri.authority && !uri.query && !uri.fragment && path.isAbsolute(uri.fsPath);
@@ -45,8 +51,9 @@ function builtSet(projectRoot, directory) {
   return null;
 }
 
-async function boundedDocuments(vscode, matcher, folders, limit, maxBytes, cancellation) {
-  const uris = await vscode.workspace.findFiles(matcher, EXCLUDE, limit + 1, cancellation);
+async function boundedDocuments(vscode, matcher, folders, limit, maxBytes, cancellation, scope) {
+  const pattern=scope?new vscode.RelativePattern(scope,matcher):matcher;
+  const uris = await vscode.workspace.findFiles(pattern, EXCLUDE, limit + 1, cancellation);
   const local = uris.filter(uri => localUri(uri) && folders.some(folder => below(folder.uri.fsPath, uri.fsPath)));
   if (uris.length > limit) throw Error('Java dependency analysis found more than ' + limit + ' matching workspace files.');
   const open = new Map(vscode.workspace.textDocuments.filter(document => document.isDirty && localUri(document.uri))
@@ -61,8 +68,11 @@ async function boundedDocuments(vscode, matcher, folders, limit, maxBytes, cance
       const buffer = await fs.readFile(uri.fsPath);
       if (buffer.length > maxBytes) throw Error('A Java dependency input grew beyond its byte limit.');
       if ((total += buffer.length) > 18 * 1024 * 1024) throw Error('Java dependency source inputs exceed 18 MiB.');
-      const text = buffer.toString('utf8').replace(/^\uFEFF/, '');
-      rows.push({ path: uri.fsPath, uri: uri.toString(), text, dirty: open.has(fileKey(uri.fsPath)) });
+      let text,invalidUtf8=false;
+      try { text=utf8.decode(buffer); }
+      catch { text=buffer.toString('utf8').replace(/^\uFEFF/,'');invalidUtf8=true; }
+      rows.push({path:uri.fsPath,uri:uri.toString(),text,dirty:open.has(fileKey(uri.fsPath)),invalidUtf8,
+        ...(scope&&{hash:digest(buffer)})});
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
@@ -93,14 +103,16 @@ function composeProjects(folders, declared, imported) {
   return [...directories.values()].sort((a, b) => b.root.length - a.root.length || a.root.localeCompare(b.root));
 }
 
-function assignFiles(files, projects) {
+function assignFiles(files, projects, {packet=false}={}) {
   return files.flatMap(file => {
     const project = projects.find(project => below(project.root, file.path));
     if (!project) return [];
     const relative = path.relative(project.root, file.path);
     const observed = project.imported?.sourceRoots?.filter(source => !source.unavailable && below(source.path, file.path))
       .sort((a, b) => b.path.length - a.path.length)[0];
-    const chosen = sourceSet(observed ? path.relative(project.root, observed.path) : relative);
+    const chosen=packet
+      ? observed?.generated?'generated':(['main','test'].includes(observed?.scope)?observed.scope:sourceSet(relative))
+      : sourceSet(observed ? path.relative(project.root, observed.path) : relative);
     return [{ ...file, projectId: project.id, projectLabel: project.label, sourceSet: chosen }];
   });
 }
@@ -249,17 +261,70 @@ async function observeBytecode(projects, javaHome, cancellation) {
   return { bytecode, outputs: inspected, issues };
 }
 
-async function workspaceDependencyGraph(vscode, java, { includeCompiled = false, cancellation } = {}) {
-  check(vscode, cancellation);
-  const folders = (vscode.workspace.workspaceFolders || []).filter(folder => localUri(folder.uri));
-  if (!folders.length) throw Error('Open a local Java workspace to view dependencies.');
-  const [descriptors, sourceFiles] = await Promise.all([
-    boundedDocuments(vscode, BUILDS, folders, DESCRIPTOR_LIMIT, 256 * 1024, cancellation),
-    boundedDocuments(vscode, '**/*.java', folders, SOURCE_LIMIT, 512 * 1024, cancellation)
+async function scanInputs(vscode,folders,cancellation,scope) {
+  return Promise.all([
+    boundedDocuments(vscode,BUILDS,folders,DESCRIPTOR_LIMIT,256*1024,cancellation,scope),
+    boundedDocuments(vscode,'**/*.java',folders,SOURCE_LIMIT,512*1024,cancellation,scope)
   ]);
+}
+
+const importedIn=(java,scope)=>(java.workbench?.getSnapshot().projects||[])
+  .filter(project=>!scope||below(scope.fsPath,project.root));
+const importedFingerprint=projects=>digest(JSON.stringify(projects.map(({id,libraries,sourceRoots})=>
+  [id,(libraries||[]).map(({kind,path,projectDependency})=>[kind,path,projectDependency]),
+    (sourceRoots||[]).map(({path,scope,generated})=>[path,scope,generated])]).sort((a,b)=>a[0].localeCompare(b[0]))));
+const javaHomeOf=(vscode,java)=>java.getState().javaHome||vscode.workspace.getConfiguration('rocketbrain.java').get('javaHome');
+
+async function attributionScope(vscode,requested,folders) {
+  const scope=typeof requested==='string'?vscode.Uri.parse(requested,true):requested|| (folders.length===1?folders[0].uri:null);
+  if(!localUri(scope)||!folders.some(folder=>below(folder.uri.fsPath,scope.fsPath))) {
+    throw Error('Choose one physical project directory inside the open Java workspace.');
+  }
+  await physical(scope.fsPath,'isDirectory');
+  return scope;
+}
+
+function dependencyLinks(report) {
+  const links=new Map();
+  const add=link=>{if(link?.uri)links.set(linkKey(link),structuredClone(link));};
+  for(const layer of report.layers) {
+    for(const node of layer.nodes)if(!node.external)add(node);
+    for(const edge of layer.edges) {
+      for(const evidence of edge.evidence){add(evidence);add(evidence.target);}
+      for(const declaration of edge.buildDeclarations||[])add(declaration);
+    }
+  }
+  for(const note of report.issues)if(!note.directory)add(note);
+  return links;
+}
+
+async function verifyDependencyLink(vscode,java,report,reference,cancellation) {
+  check(vscode,cancellation);
+  const review=reviews.get(report),link=review?.links.get(linkKey(reference||{}));
+  if(!link)throw Error('Choose a source link from the current scoped Java dependency report.');
+  if(!vscode.workspace.getWorkspaceFolder(review.scope)||javaHomeOf(vscode,java)!==review.javaHome||
+      importedFingerprint(importedIn(java,review.scope))!==review.imported) {
+    throw Error('The reviewed Java dependency scope or compiler inputs changed. Inspect dependencies again.');
+  }
+  const inputs=(await scanInputs(vscode,[{uri:review.scope}],cancellation,review.scope)).flat();
+  if(inputs.length!==review.inputs.size||inputs.some(row=>row.dirty||review.inputs.get(row.uri)!==row.hash)) {
+    throw Error('A reviewed Java source or build descriptor changed. Inspect dependencies again.');
+  }
+  check(vscode,cancellation);
+  review.compiler?.validateClasspath();
+  return {reference:link,hash:review.inputs.get(link.uri)};
+}
+
+async function workspaceDependencyGraph(vscode, java, { includeCompiled = false, attributeSources=false, scopeUri, storagePath, cancellation } = {}) {
+  check(vscode, cancellation);
+  let folders = (vscode.workspace.workspaceFolders || []).filter(folder => localUri(folder.uri));
+  if (!folders.length) throw Error('Open a local Java workspace to view dependencies.');
+  const scope=attributeSources?await attributionScope(vscode,scopeUri,folders):null;
+  if(scope)folders=[{uri:scope,name:path.basename(scope.fsPath)}];
+  const [descriptors,sourceFiles]=await scanInputs(vscode,folders,cancellation,scope);
   const cleanFiles = sourceFiles.filter(file => !file.dirty);
   const build = buildDescriptors(descriptors.filter(file => !file.dirty));
-  const imported = java.workbench?.getSnapshot().projects || [];
+  const imported=importedIn(java,scope);
   const projects = composeProjects(folders, build.descriptors, imported);
   const files = assignFiles(cleanFiles, projects);
   const buildEdges = build.links.map(({ fromRoot: from, toRoot: to, ...evidence }) => ({ from, to, evidence }));
@@ -270,7 +335,21 @@ async function workspaceDependencyGraph(vscode, java, { includeCompiled = false,
     : { bytecode: [], outputs: [] };
   check(vscode, cancellation);
   const report = analyzeDependencyGraph({ files, projects, buildEdges, bytecode: observed.bytecode, issues: [...issues, ...(observed.issues || [])] });
-  return { ...report, compiledOutputs: observed.outputs, observedProjects: imported.length, includeCompiled };
+  const result={...report,compiledOutputs:observed.outputs,observedProjects:imported.length,includeCompiled};
+  if(scope) {
+    const javaHome=javaHomeOf(vscode,java), packet=assignFiles(sourceFiles,projects,{packet:true});
+    const unresolvedBuild=descriptors.some(file=>file.dirty||file.invalidUtf8);
+    const attribution=unresolvedBuild?{
+      summary:{state:'unsaved-descriptor',sourceFiles:0,archiveCount:0,buildExecuted:false},layers:[],
+      notes:[{message:'Save the build descriptors as valid UTF-8 before comparing their dependency edges.'}]
+    }:await observeAttributedSources({files:packet,projects,buildEdges,javaHome,storagePath,cancellation});
+    result.attribution=attribution.summary;
+    result.layers.push(...attribution.layers);
+    result.issues.push(...attribution.notes);
+    reviews.set(result,{scope,javaHome,compiler:attribution.compiler,imported:importedFingerprint(imported),
+      inputs:new Map([...descriptors,...sourceFiles].map(file=>[file.uri,file.hash])),links:dependencyLinks(result)});
+  }
+  return result;
 }
 
-module.exports = { workspaceDependencyGraph, observeBytecode, compiledOutputs, localUri, check };
+module.exports = {workspaceDependencyGraph,verifyDependencyLink,observeBytecode,compiledOutputs,localUri,check};

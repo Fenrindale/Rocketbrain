@@ -343,7 +343,7 @@ public final class SignatureInspector {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy").contains(args[4])) &&
+        if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy","attributedDependencies").contains(args[4])) &&
                 !(args.length == 7 && args[4].equals("dataflow")) &&
                 !(args.length == 9 && args[4].equals("callFlow")) &&
                 !(args.length == 6 && args[4].equals("conversion")) &&
@@ -392,6 +392,9 @@ public final class SignatureInspector {
                     "classGenerationEnabled",false,"errors",problems);
                 if (problems.isEmpty()) {
                     if (args[4].equals("diagram")) report.put("declarations",diagrams(units,trees,types));
+                    else if (args[4].equals("attributedDependencies")) {
+                        report.put("attributedDependencies",new AttributedDependencies(trees,byUri.keySet()).inspect(units));
+                    }
                     else if (args[4].equals("hierarchy")) report.put("hierarchy",new HierarchyInspector(task).inspect(units,byUri));
                     else if (args[4].equals("dataflow")) report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
                     else if (args[4].equals("callFlow")) {

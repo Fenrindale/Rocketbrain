@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.95.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.96.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 141 |
-| 부분 구현 | 61 |
+| 구현 | 143 |
+| 부분 구현 | 59 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **85%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **85.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.95에서는 Git 변경의 일부를 이름으로 보관하고 다른 브랜치에 적용한다. CSV·TSV의 UTF-16 인코딩과 가져오기 중복키 선택을 추가하고, 함수 교체·복구 중 직접 EXECUTE 권한을 보존한다. 상태가 바뀐 항목은 2개이고 가중 점수는 182.5점에서 183.5점으로 바뀌었다.
+v0.96에서는 Javac 소스와 Maven·Gradle 선언을 구분해 의존 경로와 순환을 탐색한다. Gradle 실제 클래스패스의 OSV 조회, SQL 문서 내 모드 전환, 생성 열 복합 외래 키 검토를 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 183.5점에서 184.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -43,7 +43,7 @@ v0.95에서는 Git 변경의 일부를 이름으로 보관하고 다른 브랜�
 | IDEA-020 | IntelliJ IDEA | 정적 Data Flow to/from Here | 부분 구현 |
 | IDEA-021 | IntelliJ IDEA | 구조 검색·치환 | 구현 |
 | IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 구현 |
-| IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 부분 구현 |
+| IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 구현 |
 | IDEA-024 | IntelliJ IDEA | 기호·패키지 이름 변경 | 부분 구현 |
 | IDEA-025 | IntelliJ IDEA | 변수·상수·필드 추출 | 구현 |
 | IDEA-026 | IntelliJ IDEA | 메서드 추출 | 구현 |
@@ -218,7 +218,7 @@ v0.95에서는 Git 변경의 일부를 이름으로 보관하고 다른 브랜�
 | DG-075 | DataGrip | table·result dataset 비교·sync | 구현 |
 | DG-076 | DataGrip | 그리드 결과 차트·집계 | 구현 |
 | DG-077 | DataGrip | 지리 데이터 지도 보기 | 구현 |
-| DG-078 | DataGrip | table create/alter 시각 designer | 부분 구현 |
+| DG-078 | DataGrip | table create/alter 시각 designer | 구현 |
 | DG-079 | DataGrip | PK·FK·index·제약조건 편집 | 구현 |
 | DG-080 | DataGrip | 사용자·역할·권한 관리 | 구현 |
 | DG-081 | DataGrip | routine·view source 수정·deploy | 부분 구현 |
