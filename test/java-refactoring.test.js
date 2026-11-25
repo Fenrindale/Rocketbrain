@@ -26,3 +26,17 @@ test('a first file changed while opening a second file cannot pass a multi-file 
  h.action.edit.changes[uri.toString()]=h.action.edit.changes[h.document.uri.toString()];h.vscode.workspace.openTextDocument=async value=>{if(value.fsPath===file){if(change){h.document.text+='// changed';h.document.version++;}return second;}return h.document;};
  try{const plan=await h.api.preview(h.document,h.range);change=true;await assert.rejects(h.api.apply(plan.id),/changed/);}finally{await h.api.dispose();}
 });
+test('a Java formatting review applies explicit EOL changes with the existing text edit group',async()=>{
+ const h=fixture(),uri=h.document.uri.toString(),edit={documentChanges:[{textDocument:{uri,version:h.document.version},edits:[]}]};
+ h.vscode.EndOfLine={LF:1,CRLF:2};
+ h.vscode.TextEdit.setEndOfLine=newEol=>({newEol});
+ let applied;
+ h.vscode.workspace.applyEdit=async change=>{applied=change;return true;};
+ try{
+  await assert.rejects(h.api.previewWorkspaceEdit(edit,{anchorDocument:h.document,formattingEndOfLine:'crlf'}),/one reviewed Java formatting document/);
+  const plan=await h.api.previewWorkspaceEdit(edit,{kind:'source.format.java',anchorDocument:h.document,formattingEndOfLine:'crlf'});
+  assert.equal(plan.documents[0].after,h.document.text.replace(/\n/g,'\r\n'));
+  assert.equal((await h.api.apply(plan.id)).state,'applied');
+  assert.deepEqual(applied.entries[0][1],[{newEol:2}]);
+ }finally{await h.api.dispose();}
+});
