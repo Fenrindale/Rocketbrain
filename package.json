@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.43.0",
+  "version": "0.44.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -52,6 +52,10 @@
     ],
     "commands": [
       { "command": "rocketbrain.vcs.changelists", "title": "Manage Git Changelists", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sql.editEmbedded", "title": "Edit Embedded SQL or JSON", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == xml || editorLangId == sql)" },
+      { "command": "rocketbrain.sql.applyEmbedded", "title": "Review and Apply Embedded Source Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == untitled && (editorLangId == sql || editorLangId == json)" },
+      { "command": "rocketbrain.db.nativeDump", "title": "Create Native Database Dump", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.db.nativeRestore", "title": "Review and Restore Native Dump", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.sqlNotebook.create", "title": "New SQL Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.sqlNotebook.pinResult", "title": "Pin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
       { "command": "rocketbrain.sqlNotebook.unpinResult", "title": "Unpin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
@@ -449,6 +453,12 @@
       {
         "command": "rocketbrain.java.pushDownMembers",
         "title": "Push Down Java Members",
+        "category": "Rocketbrain",
+        "enablement": "editorLangId == java && isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.convertStructure",
+        "title": "Convert Java Lambda, Anonymous Class or Loop",
         "category": "Rocketbrain",
         "enablement": "editorLangId == java && isWorkspaceTrusted"
       },

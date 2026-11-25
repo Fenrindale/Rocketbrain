@@ -5,6 +5,7 @@ const {nested:parseNested}=require('./mapping');
 const NS = new Set(['https://jakarta.ee/xml/ns/persistence/orm', 'http://xmlns.jcp.org/xml/ns/persistence/orm', 'http://java.sun.com/xml/ns/persistence/orm']);
 const XMLNS = 'http://www.w3.org/2000/xmlns/';
 const XSI = 'http://www.w3.org/2001/XMLSchema-instance';
+const mapperDoctype = /^<!DOCTYPE\s+mapper\s+PUBLIC\s+(["'])-\/\/mybatis\.org\/\/DTD Mapper 3\.0\/\/EN\1\s+(["'])https?:\/\/mybatis\.org\/dtd\/mybatis-3-mapper\.dtd\2\s*>/;
 const namePattern = /^[A-Za-z_][\w.-]*(?::[A-Za-z_][\w.-]*)?$/;
 const persistenceNames=new Set('Entity Embeddable MappedSuperclass Table Column Id EmbeddedId Embedded Basic Transient Version GeneratedValue Access Inheritance DiscriminatorColumn DiscriminatorValue ManyToOne OneToOne OneToMany ManyToMany JoinColumn JoinColumns JoinTable CollectionTable ElementCollection AttributeOverride AttributeOverrides AssociationOverride AssociationOverrides Convert Converts Converter IdClass SecondaryTable SecondaryTables PrimaryKeyJoinColumn PrimaryKeyJoinColumns Enumerated Temporal Lob NamedQuery NamedQueries NamedNativeQuery NamedNativeQueries OrderBy OrderColumn MapKey MapKeyColumn MapKeyJoinColumn MapKeyJoinColumns MapsId'.split(' '));
 const jpa = (annotation,file) => /^(?:jakarta|javax)\.persistence\./.test(annotation.name || '') || persistenceNames.has(annotation.shortName)&&!file?.imports?.[annotation.shortName]&&file?.wildcards?.some(namespace=>['jakarta.persistence','javax.persistence'].includes(namespace))&&annotation.name===(file.packageName?file.packageName+'.':'')+annotation.shortName;
@@ -29,23 +30,30 @@ function decoded(raw, offset = 0) {
   return { text, map, ends };
 }
 
-/** Bounded local XML reader. No DTD, entity expansion, schema lookup or I/O. */
-function parseXml(file) {
+/** Bounded local XML reader. The known mapper declaration is inert. */
+function parseXml(file, { mapper = false } = {}) {
   const text = file.text; if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 1024 * 1024) throw new Error('ORM XML exceeds the one MiB file limit.');
   for(const char of text){const point=char.codePointAt(0);if(!(point===9||point===10||point===13||point>=32&&point<=0xd7ff||point>=0xe000&&point<=0xfffd||point>=0x10000&&point<=0x10ffff))throw new Error('Invalid literal XML character.');}
-  const roots = [], stack = []; let cursor = 0, nodes = 0;
+  const roots = [], stack = []; let cursor = 0, nodes = 0, sawDoctype = false;
   while (cursor < text.length) {
     if (text[cursor] !== '<') {
       let end = text.indexOf('<', cursor); if (end < 0) end = text.length;
       if(text.slice(cursor,end).includes(']]>'))throw new Error('CDATA closing delimiter outside CDATA.');
       const value = decoded(text.slice(cursor, end), cursor);
+      if (mapper) Object.assign(value, { kind: 'text', start: cursor, end });
       if (stack.length) stack.at(-1).parts.push(value); else if (value.text.replace(/^\uFEFF/, '').trim()) throw new Error('Text outside the XML root.');
       cursor = end; continue;
     }
     if (text.startsWith('<!--', cursor)) { const end = text.indexOf('-->', cursor + 4); if (end < 0 || text.slice(cursor + 4, end).includes('--')) throw new Error('Malformed XML comment.'); cursor = end + 3; continue; }
-    if (text.startsWith('<![CDATA[', cursor)) { const end = text.indexOf(']]>', cursor + 9); if (end < 0 || !stack.length) throw new Error('Malformed XML CDATA.'); const value = text.slice(cursor + 9, end); stack.at(-1).parts.push({ text: value, map: Array.from({length:value.length},(_,i)=>cursor+9+i), ends: Array.from({ length: value.length }, (_, i) => cursor + 10 + i) }); cursor = end + 3; continue; }
+    if (text.startsWith('<![CDATA[', cursor)) { const end = text.indexOf(']]>', cursor + 9); if (end < 0 || !stack.length) throw new Error('Malformed XML CDATA.'); const value = text.slice(cursor + 9, end); const part = { text: value, map: Array.from({length:value.length},(_,i)=>cursor+9+i), ends: Array.from({ length: value.length }, (_, i) => cursor + 10 + i) }; if (mapper) Object.assign(part, { kind: 'cdata', start: cursor + 9, end }); stack.at(-1).parts.push(part); cursor = end + 3; continue; }
     if (text.startsWith('<?', cursor)) { const end = text.indexOf('?>', cursor + 2); if (end < 0 || !/^<\?xml\s/.test(text.slice(cursor)) || roots.length || stack.length || text.slice(0, cursor).replace(/^\uFEFF/, '').trim()) throw new Error('XML processing instructions are not supported.'); cursor = end + 2; continue; }
-    if (text.startsWith('<!', cursor)) throw new Error('DTD and XML declarations are not supported; no external content is loaded.');
+    if (text.startsWith('<!', cursor)) {
+      const declaration = mapper && !sawDoctype && !roots.length && !stack.length && mapperDoctype.exec(text.slice(cursor));
+      if (!declaration) throw new Error('This XML declaration is unsupported; no external content is loaded.');
+      sawDoctype = true;
+      cursor += declaration[0].length;
+      continue;
+    }
     const start = cursor; let end = cursor + 1, quote;
     for (; end < text.length; end++) { const c = text[end]; if (quote) { if (c === quote) quote = undefined; } else if (c === '"' || c === "'") quote = c; else if (c === '>') break; }
     if (end === text.length) throw new Error('Unterminated XML tag.');
@@ -67,7 +75,8 @@ function parseXml(file) {
     const namespaces = { ...(stack.at(-1)?.namespaces || {}) };
     for (const [key, value] of Object.entries(attrs)) if (key === 'xmlns') namespaces[''] = value; else if (key.startsWith('xmlns:')) namespaces[key.slice(6)] = value;
     const [prefix, local] = match[1].includes(':') ? match[1].split(':') : ['', match[1]];
-    const namespace = namespaces[prefix]; if (!namespace || !NS.has(namespace)) throw new Error('ORM elements must use a supported persistence XML namespace.');
+    const namespace = namespaces[prefix];
+    if (mapper ? Boolean(prefix || namespace) : !namespace || !NS.has(namespace)) throw new Error(mapper ? 'Use an unqualified MyBatis mapper.' : 'ORM elements must use a supported persistence XML namespace.');
     for (const key of rawAttrs) if (key.includes(':') && !key.startsWith('xmlns:')) { const ns = namespaces[key.split(':')[0]]; if (!ns || ns !== XSI && ns !== XMLNS) throw new Error('Foreign XML attribute namespaces are unsupported.'); }
     const node = { name: local, qualifiedName: match[1], namespace, attrs, namespaces, children: [], parts: [], start, end: end + 1 };
     if (++nodes > 20000 || stack.length >= 48) throw new Error('ORM XML nesting or element limit exceeded.');
@@ -75,7 +84,8 @@ function parseXml(file) {
     if (!selfClosing) stack.push(node); cursor = end + 1;
   }
   if (stack.length || roots.length !== 1) throw new Error('ORM XML must have exactly one balanced root element.');
-  const root = roots[0]; if (root.name !== 'entity-mappings' || !/^(?:2\.[0-2]|3\.[0-2])$/.test(root.attrs.version || '')) throw new Error('Unsupported ORM XML root/version.');
+  const root = roots[0];
+  if (mapper ? root.name !== 'mapper' || !root.attrs.namespace : root.name !== 'entity-mappings' || !/^(?:2\.[0-2]|3\.[0-2])$/.test(root.attrs.version || '')) throw new Error(mapper ? 'Open a MyBatis XML mapper with a namespace.' : 'Unsupported ORM XML root/version.');
   return root;
 }
 
