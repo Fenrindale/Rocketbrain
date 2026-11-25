@@ -25,7 +25,8 @@ function registerJupyter(vscode) {
     if (folder?.uri.scheme !== 'file') throw Error('Open a local workspace to start a notebook kernel.');
     const roots = workspaceRoots([folder]);
     const directory = uri.scheme === 'untitled' ? roots[0] : path.dirname(workspacePath(uri.toString(), roots, { directory: false }));
-    const python = vscode.workspace.getConfiguration('rocketbrain.jupyter', folder.uri).get('pythonPath');
+    const python = vscode.workspace.getConfiguration('rocketbrain.jupyter', folder.uri).get('pythonPath') ||
+      vscode.workspace.getConfiguration('rocketbrain.python', folder.uri).get('path');
     return { python, directory };
   }
 

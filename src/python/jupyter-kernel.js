@@ -1,25 +1,16 @@
 'use strict';
 
 const fs = require('node:fs');
-const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const source = require('./jupyter-bridge-source.json');
+const { localPython, pythonEnvironment } = require('./local-python');
 
 function openJupyterKernel({ python, directory }) {
-  if (typeof python !== 'string' || !path.isAbsolute(python) || /^[\\/]{2}/.test(python)) {
-    throw Error('Configure the absolute path to a local Python interpreter with jupyter_client and ipykernel.');
-  }
-  const executable = fs.realpathSync(python);
-  if (!fs.statSync(executable).isFile() || /^[\\/]{2}/.test(executable) || !fs.statSync(directory).isDirectory()) {
-    throw Error('Choose an installed local Python executable and a local notebook directory.');
-  }
-  const environment = { ...process.env };
-  for (const key of Object.keys(environment)) {
-    if (/^(?:PYTHONPATH|PYTHONHOME|JUPYTER_PATH|IPYTHONDIR|JUPYTER_CONFIG_DIR)$/i.test(key)) delete environment[key];
-  }
+  const executable = localPython(python);
+  if (!fs.statSync(directory).isDirectory()) throw Error('Choose a local notebook directory.');
   const worker = spawn(executable, ['-I', '-u', '-c', source, directory], {
-    cwd: directory, env: environment, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']
+    cwd: directory, env: pythonEnvironment(), windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']
   });
   let running = null;
   let buffer = Buffer.alloc(0);
