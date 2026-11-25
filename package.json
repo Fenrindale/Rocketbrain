@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.48.0",
+  "version": "0.49.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -61,6 +61,10 @@
     "commands": [
       { "command": "rocketbrain.java.traceStream", "title": "Trace Java Stream Values", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java && editorHasSelection" },
       { "command": "rocketbrain.java.navigateStreamStage", "title": "Go to Java Stream Stage", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-java-stream" },
+      { "command": "rocketbrain.deploy.reviewWebDav", "title": "Review WebDAV Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.deploy.compareWebDav", "title": "Compare WebDAV Deployment File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-webdav-review" },
+      { "command": "rocketbrain.deploy.applyWebDav", "title": "Upload Reviewed WebDAV Files", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-webdav-review" },
+      { "command": "rocketbrain.deploy.saveWebDavPassword", "title": "Set WebDAV Password", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.newDataExtractor", "title": "Create Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.exportWithExtractor", "title": "Export with Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.newFederatedSelect", "title": "New Federated SELECT", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1355,6 +1359,11 @@
             }
           }
         },
+        "rocketbrain.deploy.webdav.url": { "type": "string", "default": "", "scope": "resource", "description": "WebDAV endpoint directory URL." },
+        "rocketbrain.deploy.webdav.user": { "type": "string", "default": "", "scope": "resource", "description": "WebDAV Basic authentication username." },
+        "rocketbrain.deploy.webdav.localDirectory": { "type": "string", "default": "", "scope": "resource", "description": "Workspace-relative root for deployment files." },
+        "rocketbrain.deploy.webdav.remoteDirectory": { "type": "string", "default": "", "scope": "resource", "description": "Existing folder below the WebDAV endpoint." },
+        "rocketbrain.deploy.webdav.exclusions": { "type": "array", "items": { "type": "string" }, "default": [], "scope": "resource", "description": "Relative path patterns to skip when comparing deployment files." },
         "rocketbrain.http.environments": {
           "type": "object",
           "scope": "resource",

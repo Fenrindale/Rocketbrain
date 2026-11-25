@@ -23,11 +23,22 @@ function registerNativeDumpCommands(vscode, command, nativeDumps) {
   }
 
   command('rocketbrain.db.nativeDump', async () => {
-    const { database, dialect, tables, connectionEpoch } = await nativeDumps.listTables();
+    const { database, dialect, tables, objects: candidates, connectionEpoch } = await nativeDumps.listTables();
     if (!tables.length) throw Error('No supported InnoDB base tables are visible in this database.');
     const selected = await vscode.window.showQuickPick(tables, { title: 'Choose Tables from ' + database,
       placeHolder: 'Include all referenced tables in ' + database + ' (up to ' + maxTables + ')', canPickMany: true });
     if (!selected?.length) return;
+    let objects = [];
+    if (candidates.length) {
+      const mode = await vscode.window.showQuickPick(['Selected tables only', 'Add schema objects'], { title: 'Native Backup Scope' });
+      if (!mode) return;
+      if (mode === 'Add schema objects') {
+        const choices = await vscode.window.showQuickPick(candidates.map(item => ({ label: item.name, description: item.kind, item })),
+          { title: 'Choose Objects from ' + database, placeHolder: 'Include every referenced view and procedure, and each matching trigger group', canPickMany: true });
+        if (!choices?.length) return;
+        objects = choices.map(item => item.item);
+      }
+    }
     const tools = await toolDirectory();
     if (!tools) return;
     const folder = vscode.workspace.workspaceFolders?.find(item => item.uri.scheme === 'file');
@@ -35,8 +46,9 @@ function registerNativeDumpCommands(vscode, command, nativeDumps) {
       defaultUri: folder ? vscode.Uri.joinPath(folder.uri, database + '-backup.sql') : undefined });
     if (file?.scheme !== 'file') return;
     const report = await progress('Writing Native Database Backup', options =>
-      nativeDumps.dump({ tools, file: file.fsPath, tables: selected, connectionEpoch }, options));
-    await vscode.window.showInformationMessage('Saved ' + report.tables.length + ' tables in ' + report.bytes +
+      nativeDumps.dump({ tools, file: file.fsPath, tables: selected, connectionEpoch, objects }, options));
+    await vscode.window.showInformationMessage('Saved ' + report.tables.length + ' tables' +
+      (report.graph ? ' and ' + report.graph.objects.length + ' schema objects' : '') + ' in ' + report.bytes +
       ' bytes. SHA-256 ' + report.sha256 + '.' + (report.warnings ? ' The vendor tool reported a warning.' : ''));
     return report;
   });
@@ -52,13 +64,16 @@ function registerNativeDumpCommands(vscode, command, nativeDumps) {
     const destination = review.destinationDatabase + ' @ ' + review.destinationEndpoint;
     const approved = await vscode.window.showWarningMessage('Restore ' + review.tables.length + ' tables into ' + destination + '?',
       { modal: true, detail: ['Backup ' + review.file, 'Source schema ' + review.sourceDatabase,
-        'Tables ' + review.tables.join(', '), 'SHA-256 ' + review.sha256, 'Client version ' + review.clientVersion,
+        'Tables ' + review.tables.join(', '), ...(review.objects ? ['Objects ' + review.objects.map(item => item.kind + ' ' + item.name).join(', '),
+          'The reviewed objects retain their effective definer on the same server.'] : []),
+        'SHA-256 ' + review.sha256, 'Client version ' + review.clientVersion,
         'The destination must still be empty. Table creation commits immediately. Cancellation or an error may leave partial changes.'].join('\n') },
       'Restore into Empty Schema');
     if (approved !== 'Restore into Empty Schema') return;
     const report = await progress('Restoring into ' + destination, options => nativeDumps.restore({ reviewId: review.reviewId,
       destinationDatabase: review.destinationDatabase, allowWrite: true }, options));
-    await vscode.window.showInformationMessage('Restored ' + report.tables.length + ' tables into ' + report.database + '.' +
+    await vscode.window.showInformationMessage('Restored ' + report.tables.length + ' tables' +
+      (report.graphVerified ? ' and verified ' + report.objects.length + ' schema objects' : '') + ' into ' + report.database + '.' +
       (report.warnings ? ' The vendor tool reported a warning.' : ''));
     return report;
   });

@@ -3,6 +3,7 @@
 const { randomUUID } = require('node:crypto');
 const { createJdbcProfiles } = require('./jdbc-profiles');
 const { maxLibraries } = require('./jdbc');
+const { postgresqlRoute } = require('./postgresql-jdbc');
 
 const language = 'rocketbrain-jdbc';
 const scheme = 'rocketbrain-jdbc-output';
@@ -39,12 +40,12 @@ function registerJdbc(vscode, context) {
     });
   }
 
-  async function driverDraft(title) {
+  async function driverDraft(title, postgres) {
     const [jar] = await vscode.window.showOpenDialog({ title: 'Select an Installed JDBC Driver JAR', filters: { JDBC: ['jar'] } }) || [];
     if (jar?.scheme !== 'file' || jar.authority) return;
     const name = await vscode.window.showInputBox({ title });
     if (name === undefined) return;
-    const driverClass = await vscode.window.showInputBox({ title: 'Fully Qualified JDBC Driver Class',
+    const driverClass = postgres ? 'org.postgresql.Driver' : await vscode.window.showInputBox({ title: 'Fully Qualified JDBC Driver Class',
       placeHolder: 'org.mariadb.jdbc.Driver' });
     if (driverClass === undefined) return;
     const kind = await vscode.window.showQuickPick(['No additional JARs', 'Select additional libraries'], { title: 'Optional JDBC Libraries' });
@@ -57,6 +58,30 @@ function registerJdbc(vscode, context) {
       libraries = files.map(item => item.fsPath);
     }
     return { name, jar: jar.fsPath, driverClass, libraries };
+  }
+
+  async function choosePostgreSqlRoute() {
+    const host = await vscode.window.showInputBox({ title: 'PostgreSQL Host', value: '127.0.0.1' });
+    if (host === undefined) return;
+    const port = await vscode.window.showInputBox({ title: 'PostgreSQL Port', value: '5432' });
+    if (port === undefined) return;
+    const database = await vscode.window.showInputBox({ title: 'PostgreSQL Database', value: 'postgres' });
+    if (database === undefined) return;
+    const schema = await vscode.window.showInputBox({ title: 'PostgreSQL Schema', value: 'public' });
+    if (schema === undefined) return;
+    const loopback = 'Loopback TCP without TLS';
+    const verify = 'Verify TLS certificate and hostname';
+    const choice = await vscode.window.showQuickPick(['127.0.0.1', '::1'].includes(host.trim()) ? [verify, loopback] : [verify],
+      { title: 'PostgreSQL Transport' });
+    if (!choice) return;
+    let ca;
+    if (choice === verify) {
+      const [file] = await vscode.window.showOpenDialog({ title: 'Select PostgreSQL Root CA Certificate', filters: { PEM: ['pem', 'crt'] } }) || [];
+      if (file?.scheme !== 'file' || file.authority) return;
+      ca = file.fsPath;
+    }
+    return postgresqlRoute({ host: host.trim(), port: Number(port), database: database.trim(), schema: schema.trim(),
+      tls: choice === loopback ? 'loopback' : 'verify-full', ca });
   }
 
   async function approve(plan) {
@@ -75,7 +100,7 @@ function registerJdbc(vscode, context) {
     }))], { title: profile.name + ' · Driver Versions' });
     if (!picked) return;
     if (picked.add) {
-      const draft = await driverDraft('Driver Version Name');
+      const draft = await driverDraft('Driver Version Name', Boolean(profile.postgresql));
       if (!draft) return;
       const plan = await progress('Reviewing JDBC Version and Libraries', signal => api.prepareVersion(profile.id, draft, { signal }));
       if (await approve(plan)) return api.saveVersion(plan.id, true);
@@ -90,8 +115,14 @@ function registerJdbc(vscode, context) {
 
   command('addDriver', async () => {
     api.list();
-    const draft = await driverDraft('JDBC Profile Name');
+    const kind = await vscode.window.showQuickPick(['PostgreSQL', 'Other JDBC driver'], { title: 'Database Driver Kind' });
+    if (!kind) return;
+    const draft = await driverDraft('JDBC Profile Name', kind === 'PostgreSQL');
     if (!draft) return;
+    if (kind === 'PostgreSQL') {
+      draft.postgresql = await choosePostgreSqlRoute();
+      if (!draft.postgresql) return;
+    }
     const plan = await progress('Reviewing JDBC Driver JARs', signal => api.prepare(draft, { signal }));
     if (await approve(plan)) return api.save(plan.id, true);
   });
@@ -110,7 +141,7 @@ function registerJdbc(vscode, context) {
       return;
     }
     if (choice !== 'Open connection') return;
-    const url = await vscode.window.showInputBox({ title: 'JDBC Connection URL', password: true });
+    const url = picked.item.postgresql ? '' : await vscode.window.showInputBox({ title: 'JDBC Connection URL', password: true });
     if (url === undefined) return;
     const user = await vscode.window.showInputBox({ title: 'JDBC User Name' });
     if (user === undefined) return;

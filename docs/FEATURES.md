@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.48.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.49.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 63 |
-| 부분 구현 | 109 |
-| 미구현 | 29 |
+| 구현 | 64 |
+| 부분 구현 | 110 |
+| 미구현 | 27 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **60.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **61.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.48에서는 Maven·Gradle 어노테이션 처리, JDBC 드라이버 버전 관리, Java Stream 값 추적을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 128점에서 130.5점으로 바뀌었다.
+v0.49에서는 PostgreSQL 전용 JDBC, WebDAV 배포 검토, 뷰·루틴·트리거가 포함된 네이티브 복원을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 130.5점에서 132점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -131,7 +131,7 @@ v0.48에서는 Maven·Gradle 어노테이션 처리, JDBC 드라이버 버전 �
 | IDEA-108 | IntelliJ IDEA | HTML·CSS/SCSS·Emmet·Preview | VS Code 재사용 |
 | IDEA-109 | IntelliJ IDEA | Python 언어·환경·디버그 | 미구현 |
 | IDEA-110 | IntelliJ IDEA | Jupyter Notebook·커널·셀 디버그 | 미구현 |
-| IDEA-111 | IntelliJ IDEA | 원격 파일 배포·SFTP/FTPS/WebDAV | 미구현 |
+| IDEA-111 | IntelliJ IDEA | 원격 파일 배포·SFTP/FTPS/WebDAV | 부분 구현 |
 | IDEA-112 | IntelliJ IDEA | 설정·스타일·프로필 동기화 | VS Code 재사용 |
 | IDEA-113 | IntelliJ IDEA | IDE 키맵·동작 컨텍스트·테마 | 부분 구현 |
 | IDEA-114 | IntelliJ IDEA | 플러그인 설치·호환·갱신 | VS Code 재사용 |
@@ -143,7 +143,7 @@ v0.48에서는 Maven·Gradle 어노테이션 처리, JDBC 드라이버 버전 �
 | IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 미구현 |
 | DG-001 | DataGrip | MySQL 데이터 소스 생성·연결 검사 | 부분 구현 |
 | DG-002 | DataGrip | MariaDB 전용 지원 | 부분 구현 |
-| DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 미구현 |
+| DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 부분 구현 |
 | DG-004 | DataGrip | 사용자 JDBC JAR·드라이버 클래스 추가 | 구현 |
 | DG-005 | DataGrip | 드라이버 버전 교체·추가 라이브러리 | 구현 |
 | DG-006 | DataGrip | 사용자·비밀번호·무인증 모드 | 부분 구현 |
@@ -214,7 +214,7 @@ v0.48에서는 Maven·Gradle 어노테이션 처리, JDBC 드라이버 버전 �
 | DG-071 | DataGrip | 사용자 data extractor 스크립트 | 구현 |
 | DG-072 | DataGrip | CSV/Excel import·column/type mapping | 부분 구현 |
 | DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 구현 |
-| DG-074 | DataGrip | native dump·restore 도구 통합 | 부분 구현 |
+| DG-074 | DataGrip | native dump·restore 도구 통합 | 구현 |
 | DG-075 | DataGrip | table·result dataset 비교·sync | 부분 구현 |
 | DG-076 | DataGrip | 그리드 결과 차트·집계 | 구현 |
 | DG-077 | DataGrip | 지리 데이터 지도 보기 | 구현 |

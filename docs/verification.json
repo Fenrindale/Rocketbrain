@@ -1,25 +1,25 @@
 {
-  "version": "0.48.0",
-  "verifiedAt": "2026-11-25T09:39:21.879Z",
+  "version": "0.49.0",
+  "verifiedAt": "2026-11-25T09:55:57.337Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.48.0.vsix",
-    "bytes": 2182951,
-    "sha256": "45ac8bb6e1715aa64c2e0e18266df3746625e81533acfeab91d37d183a21a3a7",
+    "name": "rocketbrain-0.49.0.vsix",
+    "bytes": 2197417,
+    "sha256": "3fdb84d8abe7ef099697dd7f853d62a4d1dc26a1b9dc5a71d8b6dff37e7f9a7b",
     "files": 16
   },
   "source": {
-    "frozenPublicInputs": 1341,
-    "inputVectorSha256": "2fd76556b7913cd49132d81515e632bf6a788f8bc173fd49848fdadc80405514",
+    "frozenPublicInputs": 1354,
+    "inputVectorSha256": "4c1c3fb113469f24c6b30ee878a41de1e40b0493b3cf8198aa034640cacbe236",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1350,
-    "pass": 1288,
+    "tests": 1354,
+    "pass": 1291,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 62,
+    "skipped": 63,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,15 +32,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "annotation",
+          "group": "postgres",
           "checks": 1
         },
         {
-          "group": "jdbcVersions",
+          "group": "webdav",
           "checks": 1
         },
         {
-          "group": "streamTrace",
+          "group": "dumpGraph",
           "checks": 1
         }
       ],
@@ -58,15 +58,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "annotation",
+          "group": "postgres",
           "checks": 1
         },
         {
-          "group": "jdbcVersions",
+          "group": "webdav",
           "checks": 1
         },
         {
-          "group": "streamTrace",
+          "group": "dumpGraph",
           "checks": 1
         }
       ],
@@ -77,74 +77,74 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-050": {
-      "scope": "두 실제 Spring 작업 공간에서 Maven과 Gradle에 Lombok·MapStruct를 적용했다. 생성된 심볼의 완성·정의, 잘못된 getter 진단과 올바른 getter로 바꾼 뒤 다시 생성한 결과를 확인했다.",
+    "IDEA-111": {
+      "scope": "실제 루프백 WebDAV 서버에서 매핑, 제외, 에디터 diff, 유니코드 경로의 바이너리 업로드, 원격이 바뀐 뒤 HTTP 412 충돌을 확인했다.",
       "runtimeGroups": [
-        "annotation"
+        "webdav"
       ]
     },
-    "IDEA-082": {
-      "scope": "두 실제 Spring 작업 공간의 선택한 식에서 단계별 값과 최종 값 20·21·40, 단락 평가, 원본 단계로 이동 및 바뀐 원본 거부를 확인했다.",
+    "DG-003": {
+      "scope": "실제 PostgreSQL 17.12와 pgJDBC 42.7.14에서 BIGINT·NUMERIC·BYTEA·JSONB·배열, CTE·달러 인용·JSON 연산자, 서버 읽기 제약 및 활성 쿼리 취소를 확인했다.",
       "runtimeGroups": [
-        "streamTrace"
+        "postgres"
       ]
     },
-    "DG-005": {
-      "scope": "두 실제 DB에서 Connector/J 3.5.7과 3.5.10으로 동일 DB에 연결해 버전 전환과 복귀를 확인했다. 변경된 JAR, 중복 클래스, 암묵적으로 참조한 라이브러리와 전환 후의 이전 인증 세션을 거부했다.",
+    "DG-074": {
+      "scope": "두 실제 DB에서 일곱 객체를 복원하고 중첩 뷰와 함수 실행, 트리거 순서 및 프로시저 호출을 확인했다. 스키마를 넘는 참조와 다른 콜레이션을 거부했다.",
       "runtimeGroups": [
-        "jdbcVersions"
+        "dumpGraph"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 260,
+    "sourceCorrespondences": 264,
     "sourceConfidence": "inferred",
     "archiveEntries": 16,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 63,
-      "partial": 109,
-      "not-implemented": 29,
+      "implemented": 64,
+      "partial": 110,
+      "not-implemented": 27,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 130.5,
-    "previousWeightedPoints": 128,
+    "weightedPoints": 132,
+    "previousWeightedPoints": 130.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 60.4,
+    "referencePercent": 61.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-050",
-        "before": "unverified",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-082",
+        "id": "IDEA-111",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "DG-005",
+        "id": "DG-003",
         "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-074",
+        "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Lombok 에이전트는 검증한 버전과 SHA-256을 사용한다. Gradle 프로세서 동기화는 설정에서 켠다.",
-    "JDBC 추가 라이브러리는 프로필에서 명시적으로 승인한 파일을 사용한다. 각 파일의 해시를 실행 전에 확인한다.",
-    "Stream 추적은 리터럴 입력과 지정한 순차 변환·toList()를 대상으로 한다.",
+    "PostgreSQL은 사용자 승인 pgJDBC로 한 스키마를 연결·조회한다. 편집과 계획 분석은 추가 범위다.",
+    "WebDAV는 강한 ETag를 사용하는 기존 원격 폴더에 새 파일·변경 파일을 배포한다. SFTP와 FTPS는 별도 지원이 필요하다.",
+    "네이티브 객체 백업은 같은 서버의 다른 빈 스키마와 같은 유효 계정, 일치하는 스키마 기본값으로 복원한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "PostgreSQL 카탈로그와 전용 SQL 실행",
-    "WebDAV 파일 비교·충돌 검토와 조건부 배포",
-    "혼합 Java·Kotlin 프로젝트와 IDE의 로컬 MCP 도구"
+    "혼합 Java·Kotlin 빌드와 양방향 탐색",
+    "Rocketbrain 소스·SQL 분석 기능을 제공하는 로컬 MCP 서버",
+    "MongoDB 카탈로그와 형식 보존 읽기"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -9,6 +9,7 @@ const { Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const { visitJar } = require('../java/signature-compiler');
 const { validateQuery } = require('./sql-policy');
+const { postgresJdbcUrl, validatePostgreSqlQuery } = require('./postgresql-jdbc');
 const source = require('./jdbc-worker-source.json');
 
 const jarLimit = 64 * 1024 * 1024;
@@ -158,6 +159,7 @@ function response(output, operation) {
       if (fields[0] === 'RB002') throw fail('JAR', 'The JDBC driver bytes changed after approval.');
       if (fields[0] === 'RB003') throw fail('READ_ONLY', 'The JDBC driver did not accept a read-only connection.');
       if (fields[0] === 'RB004') throw fail('CLASS', 'The approved JDBC driver class must be loaded from its primary JAR.');
+      if (fields[0] === 'RB005') throw fail('CONNECTION', 'The connected PostgreSQL database or schema does not match the approved profile.');
       if (fields[0] === 'JDBC0') throw fail('DRIVER', 'The JDBC driver could not be initialized. Check its class and separate dependencies.');
       throw fail('SERVER', 'The JDBC operation failed (SQLSTATE ' + fields[0] + ').');
     }
@@ -227,8 +229,12 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
   if (!['catalog', 'describe', 'query'].includes(operation)) throw fail('OPERATION', 'Select a supported JDBC operation.');
   if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > 500) throw fail('LIMIT', 'Choose a JDBC result size between one and 500 rows.');
   if (!isHash(profile?.sha256)) throw fail('JAR', 'Review the JDBC driver and its exact SHA-256 before connecting.');
-  const driver = driverClass(profile.driverClass), auth = credentials(credential);
-  if (operation === 'query') validateQuery(sql, { readOnly: true, allowOptimizerHints: false });
+  const driver = driverClass(profile.driverClass);
+  const auth = credentials(profile.postgresql ? { ...credential, url: postgresJdbcUrl(profile.postgresql) } : credential);
+  if (operation === 'query') {
+    if (/^jdbc:postgresql:/i.test(auth.url)) validatePostgreSqlQuery(sql);
+    else validateQuery(sql, { readOnly: true, allowOptimizerHints: false });
+  }
   const names = [object.catalog ?? '', object.schema ?? '', object.name ?? ''];
   if (names.some(name => !text(name, 1024)) || operation === 'describe' && !names[2]) throw fail('OBJECT', 'Choose an observed JDBC table or view.');
   const java = await javaExecutable(javaHome);
@@ -241,7 +247,8 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
     }
     await fs.writeFile(paths.worker, source, { flag: 'wx', mode: 0o600 });
     return execute(java, operation, paths.folder, [profile.sha256, driver, auth.url, auth.user, auth.password, operation, sql, ...names,
-      maxRows, approved.length - 1, ...approved.slice(1).map(item => item.sha256)], signal);
+      maxRows, approved.length - 1, ...approved.slice(1).map(item => item.sha256),
+      profile.postgresql?.database || '', profile.postgresql?.schema || ''], signal);
   });
 }
 

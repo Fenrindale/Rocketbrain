@@ -1,5 +1,5 @@
 {
-  "version": "0.48.0",
+  "version": "0.49.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 63,
-    "partial": 109,
-    "not-implemented": 29,
+    "implemented": 64,
+    "partial": 110,
+    "not-implemented": 27,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 60.4,
+    "percent": 61.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-050",
-    "IDEA-082",
-    "DG-005"
+    "IDEA-111",
+    "DG-003",
+    "DG-074"
   ],
   "expandedFeatures": [
-    "IDEA-050",
-    "IDEA-082",
-    "DG-005"
+    "IDEA-111",
+    "DG-003",
+    "DG-074"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1595,8 +1595,8 @@
       "verification": {
         "state": "v0.48-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.48.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2557,8 +2557,8 @@
       "verification": {
         "state": "v0.48-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.48.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3413,25 +3413,26 @@
       "category": "설정·확장·AI",
       "feature": "원격 파일 배포·SFTP/FTPS/WebDAV",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "SFTP/FTPS/WebDAV 배포 도구가 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "작업 공간과 WebDAV 폴더를 매핑하고 제외 패턴을 적용한다. 파일별 diff를 검토한 후 조건부로 업로드하고 원격에서 정확한 바이트를 다시 읽는다.",
       "remaining": [
-        "원격 인증·매핑·변경 검토·동기화/배포가 필요하다."
+        "SFTP·FTPS, 원격 폴더 생성과 양방향 배포 감시가 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.49-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 루프백 WebDAV 서버에서 매핑, 제외, 에디터 diff, 유니코드 경로의 바이너리 업로드, 원격이 바뀐 뒤 HTTP 412 충돌을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/http/webdav-deploy.js",
+          "src/http/webdav-vscode.js",
+          "test/webdav-deploy-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3775,25 +3776,26 @@
       "category": "연결·드라이버",
       "feature": "다중 SQL·NoSQL DBMS 드라이버",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "MySQL/MariaDB 외 다중 DBMS/NoSQL 드라이버를 연결하지 않았다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "MySQL·MariaDB 연결에 더해 승인한 pgJDBC로 PostgreSQL 스키마, 테이블·뷰·물리화 뷰와 타입을 탐색한다. PostgreSQL SQL과 읽기 트랜잭션·취소를 제공한다.",
       "remaining": [
-        "DBMS별 메타데이터·dialect·인증·결과 형식 모델이 필요하다."
+        "PostgreSQL 편집·실행 계획, 다른 SQL DB와 문서형 DB의 전용 기능이 필요하다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.49-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 PostgreSQL 17.12와 pgJDBC 42.7.14에서 BIGINT·NUMERIC·BYTEA·JSONB·배열, CTE·달러 인용·JSON 연산자, 서버 읽기 제약 및 활성 쿼리 취소를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/postgresql-jdbc.js",
+          "runtime/jdbc/DriverWorker.java",
+          "test/postgresql-jdbc-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3844,8 +3846,8 @@
       "verification": {
         "state": "v0.48-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.48.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5966,27 +5968,27 @@
       "category": "가져오기·내보내기",
       "feature": "native dump·restore 도구 통합",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "설치된 MySQL·MariaDB 도구로 로컬 InnoDB 테이블의 구조와 데이터를 덤프한다. 파일의 체크섬과 대상 스키마를 검토하고 원본과 다른 빈 스키마에 복원한다.",
+      "scope": "네이티브 테이블과 데이터에 뷰, 정적 프로시저, 함수와 트리거를 함께 백업한다. 승인한 파일을 빈 스키마에 복원하고 객체 정의와 의존성을 검증한다.",
       "remaining": [
-        "루틴·트리거와 원격 연결 경로의 백업·복원이 필요하다."
+        "원격 백업, 교차 스키마 및 동적으로 해석되는 객체 본문은 추가 지원이 필요하다."
       ],
       "verification": {
-        "state": "v0.44-installed-coverage",
+        "state": "v0.49-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.44.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 DB에서 공급사 도구로 FK, BIGINT, DECIMAL, 바이너리, 줄바꿈이 포함된 텍스트를 복원했다. 변경된 파일, 덮어쓰기, 원본 데이터베이스, 비어 있지 않은 대상을 거부했다.",
+        "testedScope": "두 실제 DB에서 일곱 객체를 복원하고 중첩 뷰와 함수 실행, 트리거 순서 및 프로시저 호출을 확인했다. 스키마를 넘는 참조와 다른 콜레이션을 거부했다.",
         "publicEvidence": [
+          "docs/native-db-backups.md",
+          "src/db/native-dump-graph.js",
           "src/db/native-dump.js",
-          "src/db/native-dump-vscode.js",
-          "src/db/native-dump-process.js",
-          "test/native-dump-host.js"
+          "test/native-dump-graph-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6655,8 +6657,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "45ac8bb6e1715aa64c2e0e18266df3746625e81533acfeab91d37d183a21a3a7",
-    "sourceManifestSha256": "2fd76556b7913cd49132d81515e632bf6a788f8bc173fd49848fdadc80405514",
+    "vsixSha256": "3fdb84d8abe7ef099697dd7f853d62a4d1dc26a1b9dc5a71d8b6dff37e7f9a7b",
+    "sourceManifestSha256": "4c1c3fb113469f24c6b30ee878a41de1e40b0493b3cf8198aa034640cacbe236",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6670,28 +6672,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-050",
-      "before": "unverified",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-082",
+      "id": "IDEA-111",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "DG-005",
+      "id": "DG-003",
       "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "DG-074",
+      "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1350,
-    "pass": 1288,
+    "tests": 1354,
+    "pass": 1291,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 62,
+    "skipped": 63,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"
