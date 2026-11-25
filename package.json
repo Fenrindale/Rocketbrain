@@ -197,6 +197,7 @@
       { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.draft", "title": "Draft SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
+      { "command": "rocketbrain.localSqlAssistant.compareProposals", "title": "Compare Local SQL Proposals", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.measurePlan", "title": "Measure SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.comparePlans", "title": "Compare Captured SQL Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },

@@ -64,6 +64,7 @@ async function activate(context) {
   const objectSources = require('./db/object-source-vscode').registerObjectSources(vscode, { database });
   const explainPlans=require('./db/explain-plan-vscode').registerExplainPlans(context,vscode,{database});
   const localSqlAssistant = require('./db/local-sql-assistant-vscode').registerLocalSqlAssistant(context, vscode, database);
+  const sqlProposalReview = require('./db/sql-proposal-review-vscode').registerSqlProposalReview(context, vscode, database);
   context.subscriptions.push(lazyCatalog,objectSources,explainPlans);
   const tableTransfer=require('./db/table-transfer-vscode').registerTableTransfer(context,vscode,{database});
   activeTableTransfer=tableTransfer;
@@ -158,7 +159,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, localSqlAssistant, springProjects, changelists, codeReview, codeModel, sshWorkspace, federation };
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, federation };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

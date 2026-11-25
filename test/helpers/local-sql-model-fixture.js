@@ -15,7 +15,8 @@ async function freePort() {
   return port;
 }
 
-async function startLocalModel() {
+async function startLocalModel({ parallel = 1 } = {}) {
+  if (!Number.isInteger(parallel) || parallel < 1 || parallel > 3) throw Error('Use one to three fixture inference slots.');
   const executable = process.env.ROCKETBRAIN_LOCAL_MODEL_BIN;
   const weights = process.env.ROCKETBRAIN_LOCAL_MODEL_GGUF;
   if (!executable || !weights || !path.isAbsolute(executable) || !path.isAbsolute(weights) ||
@@ -27,7 +28,7 @@ async function startLocalModel() {
   const port = await freePort();
   const origin = 'http://127.0.0.1:' + port;
   const child = spawn(executable, ['--model', weights, '--alias', model, '--host', '127.0.0.1', '--port', String(port),
-    '--ctx-size', '4096', '--threads', '4', '--parallel', '1', '--gpu-layers', '0', '--no-webui', '--no-webui-mcp-proxy', '--log-disable'],
+    '--ctx-size', '4096', '--threads', '4', '--parallel', String(parallel), '--gpu-layers', '0', '--no-webui', '--no-webui-mcp-proxy', '--log-disable'],
   { cwd: path.dirname(executable), windowsHide: true, shell: false, stdio: 'ignore' });
   let stopped = false;
   const exited = new Promise(resolve => {
