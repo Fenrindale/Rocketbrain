@@ -137,7 +137,7 @@ async function activate(context) {
   context.subscriptions.push(analysis);
   sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase,
     joinCatalog:database.joinCompletionCatalog,joinLogicalRelationships:database.joinLogicalRelationships,
-    objectDefinition:objectSources.definition,liveCatalogIdentity:database.liveCatalogIdentity});
+    objectDefinition:objectSources.definition,objectColumnOrigin:objectSources.columnOrigin,liveCatalogIdentity:database.liveCatalogIdentity});
   context.subscriptions.push(sqlAnalysis);
   const sqlEditing=require('./db/sql-editing-vscode').registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner:dbAuthoring.openDesigner});
   context.subscriptions.push(sqlEditing);

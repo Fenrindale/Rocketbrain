@@ -111,4 +111,30 @@ function ddlDefinitionLocation(loaded, member, observedMode = []) {
   return undefined;
 }
 
-module.exports = { ddlDefinitionLocation };
+function storedViewSelect(loaded, options) {
+  if (loaded.object.kind !== 'view') return undefined;
+  const tokens = sourceTokens(loaded.source, options);
+  const nameIndex = header(tokens, loaded.object);
+  if (nameIndex === null) return undefined;
+  let at = nameIndex + 1, labels;
+  if (tokens[at]?.value === '(' && Number.isInteger(tokens[at].close)) {
+    const groups = parts(tokens, at + 1, tokens[at].close, token => token.kind === 'symbol' && token.value === ',');
+    if (!groups.every(([a, b]) => b === a + 1 && isName(tokens[a]))) return undefined;
+    labels = groups.map(([a]) => tokens[a].value);
+    if (new Set(labels.map(name => name.toLowerCase())).size !== labels.length) return undefined;
+    at = tokens[at].close + 1;
+  }
+  if (!keyword(tokens[at++], 'AS')) return undefined;
+  let end = tokens.length;
+  if (tokens[end - 1]?.value === ';') end--;
+  if (keyword(tokens[end - 1], 'OPTION') && keyword(tokens[end - 2], 'CHECK')) {
+    const mode = keyword(tokens[end - 3], 'CASCADED') || keyword(tokens[end - 3], 'LOCAL');
+    if (!keyword(tokens[end - (mode ? 4 : 3)], 'WITH')) return undefined;
+    end -= mode ? 4 : 3;
+  }
+  while (tokens[at]?.value === '(' && tokens[at].close === end - 1) { at++;end--; }
+  if (at >= end || !keyword(tokens[at], 'SELECT') && !keyword(tokens[at], 'WITH')) return undefined;
+  return { text: loaded.source.slice(tokens[at].start, tokens[end - 1].end), labels };
+}
+
+module.exports = { ddlDefinitionLocation, storedViewSelect };

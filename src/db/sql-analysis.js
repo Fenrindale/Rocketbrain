@@ -69,7 +69,9 @@ function analyzeSql(text,catalog=[],options={}){
     if(parts.length>3){unknown('Column paths with more than database/table/column components are not supported.',at.start);return UNKNOWN();}
     if(parts.length>1){const qualifier=parts.at(-2).value,relation=findRelation(scope,qualifier);if(!relation){if(uncertain||scope.partial||!catalogComplete)unknown('Column qualifier is unresolved in a partial scope.',at.start);else issue('sql.name.qualifier','Unknown relation alias '+qualifier+'.',parts.at(-2));return UNKNOWN();}
       if(parts.length<3||!relation.definition&&relation.requested&&nameEq(parts[0].value,relation.requested.schema))pendingSource(at,scope,[relation]);
-      if(parts.length===3&&(relation.kind!=='catalog'||relation.definition||!relation.catalog||!nameEq(parts[0].value,relation.catalog.database))){unknown('The database-qualified column does not prove an unaliased relation in the observed database.',parts[0].start);return UNKNOWN();}
+      // MySQL SHOW CREATE VIEW deparses stored aliases as schema.alias.column.
+      const canonicalAlias=options.mysqlShowCreateView===true&&model.dialect==='mysql';
+      if(parts.length===3&&(relation.kind!=='catalog'||relation.definition&&!canonicalAlias||!relation.catalog||!nameEq(parts[0].value,relation.catalog.database))){unknown('The database-qualified column does not prove a relation in the observed database.',parts[0].start);return UNKNOWN();}
       const columns=relation.columns.filter(c=>colEq(c.name,name));
       ref(parts.at(-2),'relation',qualifier,UNKNOWN(),relation.definition,{relationId:relation.id,scopeId:scope.id,physicalTable:relation.kind==='catalog'&&!relation.definition?relation.catalog:undefined});
       if(columns.length===1){const c=columns[0];ref(at,'column',name,c.type,c.definition,{relationId:relation.id,scopeId:scope.id,catalog:relation.catalog,physicalColumn:c.physicalColumn||c.catalog,...joinOrigin(c),renamePhysicalColumn:c.renamePhysicalColumn!==false,correlated:relation.scopeId!==scope.id});supported.add(relation.scopeId===scope.id?'column-binding':'correlated-subquery');return c.type;}
