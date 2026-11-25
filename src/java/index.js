@@ -55,7 +55,7 @@ function registerJavaFeatures(context, vscode) {
         errorHandler: { error: () => ({ action: ErrorAction.Continue }), closed: () => { if (!disposed) { client = undefined; update('error', 'Java server exited. Check Rocketbrain Java output, then restart.'); } return { action: CloseAction.DoNotRestart }; } },
         markdown: { isTrusted: false }
       });
-      state = { ...state, serverPath: launch.serverPath, javaHome: launch.javaHome, debugBundlePath: launch.bundles[0], runtimeIdentity: launch.identity,
+      state = { ...state, serverPath: launch.serverPath, javaHome: launch.javaHome, debugBundlePath: launch.bundles[0], debugBuild: launch.debugBuild, runtimeIdentity: launch.identity,
         workspaceData: launch.data,extractInterfaceReplaceUsages,annotationProcessing:launch.annotationProcessing };
       client = next; update('starting', 'Starting the independent Eclipse JDT Language Server.');
       next.onNotification('language/status', event => { if (event.type === 'Error') output.appendLine(`JDT LS: ${event.message}`); else output.appendLine(`JDT LS ${event.type}: ${event.message}`); });

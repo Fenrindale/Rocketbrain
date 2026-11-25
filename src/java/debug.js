@@ -3,6 +3,7 @@ const path = require('node:path');
 const { independentJavaExecutable, argumentString } = require('./debug-runtime');
 const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
+const { createExceptionControls } = require('./debug-exceptions');
 const DEBUG_TYPE = 'rocketbrain-java';
 
 function registerJavaDebugger(vscode, api, output, request) {
@@ -38,11 +39,19 @@ function registerJavaDebugger(vscode, api, output, request) {
     try { return await action(); }
     catch (error) { void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return undefined; }
   });
-  const run = async (command, ...args) => {
-    ensureTrusted(); await api.start();
+  function runReady(command, ...args) {
+    ensureTrusted();
     if (!api.getState().debugBundlePath) throw new Error('Install the Rocketbrain Java engine to configure its public Java debug bundle, or set rocketbrain.java.debugBundlePath.');
     return api.executeWorkspaceCommand(command, ...args);
+  }
+  const run = async (command, ...args) => {
+    ensureTrusted(); await api.start();
+    return runReady(command, ...args);
   };
+  const exceptions = createExceptionControls(vscode, {
+    run: runReady, ensureTrusted, engineState: () => api.getState(), output,
+    hasSessions: () => [...sessions.values()].some(info => info.state !== 'terminated')
+  });
   async function resolve(folder, value, token) {
     ensureTrusted();
     const config = { ...value, type: DEBUG_TYPE, name: value.name || 'Rocketbrain Java', request: value.request || 'launch' };
@@ -92,9 +101,9 @@ function registerJavaDebugger(vscode, api, output, request) {
   };
   const factory = { async createDebugAdapterDescriptor(session) {
     ensureTrusted();
-    const mode = vscode.workspace.getConfiguration?.('rocketbrain.java').get('hotCodeReplace', 'manual') || 'manual';
-    await run('vscode.java.updateDebugSettings', JSON.stringify({ hotCodeReplace: mode === 'never' ? 'never' : 'manual', logLevel: 'WARNING', javaHome: api.getState().javaHome }));
-    const port = await run('vscode.java.startDebugSession'); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Java engine returned an invalid debugger port.');
+    await api.start();
+    await exceptions.sync();
+    const port = await runReady('vscode.java.startDebugSession'); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Java engine returned an invalid debugger port.');
     record(session);
     return new vscode.DebugAdapterInlineImplementation(new JavaDebugAdapter(vscode, port, message => observe(session, message), output));
   } };
@@ -121,13 +130,14 @@ function registerJavaDebugger(vscode, api, output, request) {
     } catch (error) { info.lastHcrResult = { success: false, error: error.message }; throw error; }
     finally { info.reloading = false; }
   }
-  const disposables = [vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, provider), vscode.debug.registerDebugAdapterDescriptorFactory(DEBUG_TYPE, factory), vscode.debug.onDidStartDebugSession(session => { if (session.type === DEBUG_TYPE) record(session); }), vscode.debug.onDidTerminateDebugSession(session => sessions.delete(session.id)), vscode.commands.registerCommand('rocketbrain.java.hotCodeReplace', async sessionId => {
+  const disposables = [exceptions, vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, provider), vscode.debug.registerDebugAdapterDescriptorFactory(DEBUG_TYPE, factory), vscode.debug.onDidStartDebugSession(session => { if (session.type === DEBUG_TYPE) record(session); }), vscode.debug.onDidTerminateDebugSession(session => sessions.delete(session.id)), vscode.commands.registerCommand('rocketbrain.java.hotCodeReplace', async sessionId => {
     try { return await hotCodeReplace(typeof sessionId === 'string' ? sessionId : undefined); }
     catch (error) { output.appendLine(error.message); void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return { success: false, error: error.message }; }
   }), vscode.commands.registerCommand('rocketbrain.java.debug', async () => {
     try { ensureTrusted(); const uri = vscode.window.activeTextEditor?.document.uri || vscode.workspace.workspaceFolders?.[0]?.uri; return await vscode.debug.startDebugging(uri ? vscode.workspace.getWorkspaceFolder(uri) : undefined, { type: DEBUG_TYPE, name: 'Rocketbrain: Debug Java main', request: 'launch', mainClass: '${file}' }); }
     catch (error) { void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return false; }
   }),
+  breakpointCommand('rocketbrain.java.configureExceptionBreakpoints', () => exceptions.edit()),
   breakpointCommand('rocketbrain.java.addMethodBreakpoint',() => breakpoints.addMethod(activeSelection())),
   breakpointCommand('rocketbrain.java.addInlineBreakpoints',async () => {
     const report = await breakpoints.inspectInline(activeSelection());
@@ -136,7 +146,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     })),{title:'Add Java Inline Breakpoints',canPickMany:true});
     if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
-  return { breakpoints,hotCodeReplace, getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; }, async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); }, dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
+  return { breakpoints,exceptions,hotCodeReplace, getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; }, async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); }, dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
 }
 
 module.exports = { DEBUG_TYPE, registerJavaDebugger };

@@ -90,6 +90,7 @@
       { "command": "rocketbrain.docker.lifecycle", "title": "Manage Docker Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.compose", "title": "Inspect Compose Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.manifest", "title": "Inspect Registry Manifest", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.configureExceptionBreakpoints", "title": "Configure Java Exception Breakpoints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
@@ -1772,6 +1773,18 @@
           ],
           "default": "manual",
           "description": "Allow explicitly triggered Java Hot Code Replace; no automatic source edits or code replacement."
+        },
+        "rocketbrain.java.exceptionBreakpoints": {
+          "type": "object",
+          "default": {},
+          "scope": "window",
+          "additionalProperties": false,
+          "description": "Exception type and throw-site filters shared by Java debug sessions in this window. Use Caught or Uncaught in Run and Debug to enable the breakpoints.",
+          "properties": {
+            "exceptionTypes": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Exact Java binary names. Includes subtypes. An empty list matches all exception types." },
+            "allowClasses": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Throw-site class names or prefix/suffix wildcard patterns. Every listed pattern must match." },
+            "skipClasses": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Throw-site class names or prefix/suffix wildcard patterns to exclude." }
+          }
         },
         "rocketbrain.java.projectJdks": {
           "type": "array",
