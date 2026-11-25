@@ -130,6 +130,20 @@ async function verifySqlFormatScript(configPath, client, format) {
   }
 }
 
+function formattingResult(document, edits) {
+  const original = document.getText();
+  const replacements = edits.map(edit => ({
+    start: document.offsetAt(edit.range.start), end: document.offsetAt(edit.range.end), text: edit.newText
+  })).sort((a, b) => a.start - b.start || a.end - b.end);
+  let offset = 0, output = '';
+  for (const { start, end, text } of replacements) {
+    assert.ok(offset <= start && start <= end && end <= original.length, 'Overlapping or invalid SQL formatting edit ranges');
+    output += original.slice(offset, start) + text;
+    offset = end;
+  }
+  return output + original.slice(offset);
+}
+
 async function runSqlFormatScriptChecks(api, vscode, checks) {
   const client = process.env.ROCKETBRAIN_SQL_FORMAT_TEST_CLIENT;
   if (!client) throw Error('Supply ROCKETBRAIN_SQL_FORMAT_TEST_CLIENT for the disposable fixture engine.');
@@ -150,7 +164,7 @@ async function runSqlFormatScriptChecks(api, vscode, checks) {
       editor.options = { tabSize: 2, insertSpaces: true };
       const version = document.version;
       const edits = await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', document.uri, { tabSize: 2, insertSpaces: true });
-      assert.ok(edits.length <= 1, 'SQL formatter should return a single whole-document edit');
+      const expectedText = formattingResult(document, edits);
       let settle;
       const synchronized = new Promise(resolve => { settle = resolve; });
       const subscription = vscode.workspace.onDidChangeTextDocument(event => {
@@ -163,7 +177,7 @@ async function runSqlFormatScriptChecks(api, vscode, checks) {
         if (changed) {
           assert.ok(document.version > version || await synchronized, 'The SQL editor did not observe its formatting edit');
           const canonicalEol = text => text.replaceAll('\r\n', '\n');
-          assert.equal(canonicalEol(document.getText()), canonicalEol(edits[0].newText),
+          assert.equal(canonicalEol(document.getText()), canonicalEol(expectedText),
             'SQL formatting command must apply the provider text');
         }
         return document.getText();
