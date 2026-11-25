@@ -1,5 +1,6 @@
-param([Parameter(Mandatory=$true)][string]$Folder)
+param([Parameter(Mandatory=$true)][string]$Folder, [string]$ServerName='rb-db.local')
 $ErrorActionPreference = 'Stop'
+if ($ServerName -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.\-]{0,252}$') { throw 'Use an explicit DNS name for the owned test certificate.' }
 $target = (Resolve-Path -LiteralPath $Folder).Path
 if (-not (Test-Path -LiteralPath (Join-Path $target 'owner.json'))) { throw 'Certificate fixture ownership marker is missing.' }
 $hash = [System.Security.Cryptography.HashAlgorithmName]::SHA256
@@ -29,7 +30,7 @@ function New-Leaf([string]$Name,[string]$Usage,$Authority) {
 }
 $ca=New-Authority 'Rocketbrain-v18-Owned-Test-CA'
 $wrong=New-Authority 'Rocketbrain-v18-Untrusted-Test-CA'
-$server=New-Leaf 'rb-db.local' '1.3.6.1.5.5.7.3.1' $ca
+$server=New-Leaf $ServerName '1.3.6.1.5.5.7.3.1' $ca
 $client=New-Leaf 'rb-client' '1.3.6.1.5.5.7.3.2' $ca
 foreach($entry in @(@{Name='ca';Value=$ca},@{Name='wrong-ca';Value=$wrong},@{Name='server';Value=$server},@{Name='client';Value=$client})) {
   [IO.File]::WriteAllText((Join-Path $target ($entry.Name+'.pem')),$entry.Value.Certificate.ExportCertificatePem())
