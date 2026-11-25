@@ -4,6 +4,28 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
+async function registeredCommands(vscode) {
+  const expected = ['inspect', 'start', 'exec', 'status', 'stop'].map(name => 'rocketbrain.devcontainer.' + name);
+  const commands = new Set(await vscode.commands.getCommands(true));
+  for (const name of expected) assert.ok(commands.has(name), name);
+  return expected;
+}
+
+async function runDevContainerAvailabilityChecks(api, vscode, checks) {
+  const folders = vscode.workspace.workspaceFolders || [];
+  assert.equal(folders.length, 1, 'Open a single disposable local workspace.');
+  const root = folders[0].uri.fsPath;
+  const service = api.devContainers;
+  const commands = await registeredCommands(vscode);
+  const status = await vscode.commands.executeCommand('rocketbrain.devcontainer.status');
+  assert.deepEqual(status, { state: 'none' });
+  assert.deepEqual(await vscode.commands.executeCommand('rocketbrain.devcontainer.stop'), { state: 'none' });
+  await assert.rejects(service.start(root), /Review the Dev Container configuration/);
+  await assert.rejects(service.execute(root, ['cat', 'fixture.txt']), /Start the managed Dev Container/);
+  checks.push('Verified the installed VS Code Dev Container commands, empty session status, and review and session requirements without contacting Docker.');
+  return { commands, emptyStatus: status.state, emptyStop: true, requiresReview: true, requiresRunningSession: true };
+}
+
 // The caller opens a disposable workspace with one of the Dev Container fixtures
 // and provisions a real local Docker service and the locked CLI.
 async function runDevContainerChecks(api, vscode, checks) {
@@ -22,8 +44,7 @@ async function runDevContainerChecks(api, vscode, checks) {
   ].filter(([, value]) => value).map(([key, value]) => ({ key, value, previous: config.inspect(key)?.globalValue }));
   try {
     for (const { key, value } of overrides) await config.update(key, value, target);
-    const commands = await vscode.commands.getCommands(true);
-    for (const name of ['inspect', 'start', 'exec', 'status', 'stop']) assert.ok(commands.includes('rocketbrain.devcontainer.' + name));
+    await registeredCommands(vscode);
     const before = await vscode.commands.executeCommand(`rocketbrain.devcontainer.status`);
     assert.equal(before?.state, 'none');
     const plan = await vscode.commands.executeCommand(`rocketbrain.devcontainer.inspect`);
@@ -48,4 +69,4 @@ async function runDevContainerChecks(api, vscode, checks) {
   }
 }
 
-module.exports = { runDevContainerChecks };
+module.exports = { runDevContainerAvailabilityChecks, runDevContainerChecks };
