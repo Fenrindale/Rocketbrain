@@ -380,6 +380,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     finally { state.candidates.delete(next); }
   }
   async function bind(document) {
+    assertNotEventDraft(document);
     if(exclusiveDatabaseWork())throw new Error('Finish the schema operation or pending import transaction before using a console.');
     if (!document || document.languageId !== 'sql') throw new Error('Open a SQL editor first.');
     if (sqlDrafts.isRecovered(document)) throw Error('Open the active database console to run SQL from an offline draft.');
@@ -777,7 +778,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     } finally { state.running.delete(binding.id); updateStatus(); }
     return id;
   }
+  function assertNotEventDraft(document) {
+    if (require('./db/object-editor-vscode').isEventSourceDraft(document)) throw Error('Use Review Database Object Source to edit a scheduled event.');
+  }
   function assertRunnable(document) {
+    assertNotEventDraft(document);
     if (analysisOnlySql(document)) throw Error('Exit the saved virtual schema preview before running SQL from this editor.');
   }
   function selectedSql(editor, { allowProfile = false } = {}) {

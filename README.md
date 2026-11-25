@@ -402,3 +402,7 @@ The SQL editor analyzes common JSON calls against the current catalog. It checks
 Named and inline SQL windows retain links to their definitions and partition or order columns. The editor checks known ROWS and RANGE frame boundaries, numeric or temporal order types and engine-specific call restrictions. Computed offsets and unsupported frame forms retain a server-validation note.
 
 For bitwise SQL, the editor separates numeric operands from MySQL binary-string operations. It uses observed fixed BINARY widths and marks conflicting lengths or literal conversions that can discard data. Widths and conversions that depend on stored row values stay unresolved until execution.
+
+Use **Open Database Source for Editing** to open a disabled scheduled event owned by the current account. Edit its body and choose **Review Database Object Source** to see the exact ALTER statement and observed schedule. Apply the review to save the body while the event stays disabled. **Restore Retained Database Object Source** verifies the live event and target definitions before restoring the retained body, including after reconnecting.
+
+Event edits support bounded INSERT, UPDATE with WHERE, and DELETE with WHERE against observed same-schema InnoDB targets. The editor reads catalog metadata for review and retains the original source in the database authoring journal on apply.
