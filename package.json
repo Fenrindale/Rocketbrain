@@ -253,6 +253,7 @@
       { "command": "rocketbrain.java.captureJvmThreads", "title": "Capture JVM Threads", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.inspectJvmThreads", "title": "Inspect JVM Thread Snapshot", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.inspectJvmHeapHistogram", "title": "Inspect JVM Heap Histogram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.inspectJvmHeapDump", "title": "Inspect JVM Heap Dump", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.setTransactionIsolation", "title": "Set SQL Session Isolation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && (rocketbrain.mysqlConnected || rocketbrain.profileConsole)" },
       { "command": "rocketbrain.sql.saveQuery", "title": "Save SQL Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
