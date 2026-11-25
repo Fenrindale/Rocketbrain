@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.42.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.43.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 49 |
-| 부분 구현 | 107 |
-| 미구현 | 42 |
+| 구현 | 54 |
+| 부분 구현 | 104 |
+| 미구현 | 41 |
 | VS Code 재사용 | 13 |
-| 지원 미확인 | 3 |
+| 지원 미확인 | 2 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **53.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **55.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.42에서는 Java 인터페이스 추출, Spring Bean 그래프·Actuator Health, DB 로컬 전송과 위험 SQL 실행 검토를 구현했다. 상태가 바뀐 항목은 5개이고 가중 점수는 112.5점에서 115.5점으로 바뀌었다.
+v0.43에서는 Java 상속 계층 멤버 이동, 오프라인 DB 메타데이터, SQL 필드 목록 완성과 Git 작업 목록을 검증했다. Windows·Linux 로컬 DB 전송 검증도 합산했다. 상태가 바뀐 항목은 5개이고 가중 점수는 115.5점에서 119점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -52,7 +52,7 @@ v0.42에서는 Java 인터페이스 추출, Spring Bean 그래프·Actuator Heal
 | IDEA-029 | IntelliJ IDEA | Change Signature·파라미터 전파 | 부분 구현 |
 | IDEA-030 | IntelliJ IDEA | Safe Delete | 부분 구현 |
 | IDEA-031 | IntelliJ IDEA | 인터페이스 추출 | 구현 |
-| IDEA-032 | IntelliJ IDEA | 멤버 Pull Up·Push Down | 지원 미확인 |
+| IDEA-032 | IntelliJ IDEA | 멤버 Pull Up·Push Down | 구현 |
 | IDEA-033 | IntelliJ IDEA | 리팩터링 미리보기·충돌·일괄 undo | 부분 구현 |
 | IDEA-034 | IntelliJ IDEA | 람다·익명 클래스·루프 변환 | 지원 미확인 |
 | IDEA-035 | IntelliJ IDEA | 생성자·접근자·equals·delegate 생성 | 구현 |
@@ -111,7 +111,7 @@ v0.42에서는 Java 인터페이스 추출, Spring Bean 그래프·Actuator Heal
 | IDEA-088 | IntelliJ IDEA | 힙 덤프·메모리 누수 분석 | 부분 구현 |
 | IDEA-089 | IntelliJ IDEA | 스레드·가상 스레드·덤프 분석 | 구현 |
 | IDEA-090 | IntelliJ IDEA | Git 변경·부분 stage·blame·기록 | VS Code 재사용 |
-| IDEA-091 | IntelliJ IDEA | Changelist·작업 컨텍스트 | 미구현 |
+| IDEA-091 | IntelliJ IDEA | Changelist·작업 컨텍스트 | 구현 |
 | IDEA-092 | IntelliJ IDEA | Shelf·Stash·선택 변경 보관 | 부분 구현 |
 | IDEA-093 | IntelliJ IDEA | Branch·Rebase·Merge 충돌 해결 | VS Code 재사용 |
 | IDEA-094 | IntelliJ IDEA | Git Worktree·작업별 프로젝트 설정 | 부분 구현 |
@@ -151,14 +151,14 @@ v0.42에서는 Java 인터페이스 추출, Spring Bean 그래프·Actuator Heal
 | DG-008 | DataGrip | TLS CA·호스트 검증 | 부분 구현 |
 | DG-009 | DataGrip | 클라이언트 인증서·truststore | 부분 구현 |
 | DG-010 | DataGrip | SSH 터널·키·agent 인증 | 부분 구현 |
-| DG-011 | DataGrip | Unix socket·Windows named pipe | 부분 구현 |
+| DG-011 | DataGrip | Unix socket·Windows named pipe | 구현 |
 | DG-012 | DataGrip | 클라우드 DB 접속·토큰 인증 범위 | 미구현 |
 | DG-013 | DataGrip | 초기 SQL·keep-alive·idle timeout | 부분 구현 |
 | DG-014 | DataGrip | 연결 그룹·환경 색상 | 부분 구현 |
 | DG-015 | DataGrip | 연결 복제·가져오기·공유 | 부분 구현 |
 | DG-016 | DataGrip | 연결·테이블 읽기 전용 보호 | 부분 구현 |
 | DG-017 | DataGrip | introspection 대상 schema 선택 | 부분 구현 |
-| DG-018 | DataGrip | 로컬 메타데이터 cache·오프라인 재사용 | 부분 구현 |
+| DG-018 | DataGrip | 로컬 메타데이터 cache·오프라인 재사용 | 구현 |
 | DG-019 | DataGrip | 전체·증분·객체별 refresh | 부분 구현 |
 | DG-020 | DataGrip | 이름 우선·지연 상세 로딩 | 구현 |
 | DG-021 | DataGrip | 시스템 schema minicatalog | 구현 |
@@ -169,7 +169,7 @@ v0.42에서는 Java 인터페이스 추출, Spring Bean 그래프·Actuator Heal
 | DG-026 | DataGrip | virtual view·virtual column | 부분 구현 |
 | DG-027 | DataGrip | schema-aware 이름·열 완성 | 부분 구현 |
 | DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 부분 구현 |
-| DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 부분 구현 |
+| DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 구현 |
 | DG-030 | DataGrip | alias·약어·함수 구문 완성 | 부분 구현 |
 | DG-031 | DataGrip | MySQL/MariaDB dialect별 구문·키워드 | 부분 구현 |
 | DG-032 | DataGrip | 파일·폴더별 SQL resolution scope | 구현 |

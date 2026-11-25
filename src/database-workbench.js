@@ -9,12 +9,25 @@ const { completeSql } = require('./db/completion');
 const { TableEditor } = require('./table-editor');
 const { relatedRows } = require('./db/related-rows');
 const { tableLayoutConnectionKey } = require('./db/result-layouts');
+const { createMetadataCache, observeCatalogIdentity } = require('./db/metadata-cache');
 const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
 
 async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree, isVirtualSqlPreview = () => false) {
   const activityLog = require('./db/activity-log-vscode').registerSqlActivity(context, vscode);
   const output = vscode.window.createOutputChannel('Rocketbrain');
   const state = { db: new DatabaseService(), schema: [], metadata:null, profile:null, tableLayoutConnection:undefined, label: 'Offline demo', mysql: false, running: new Set(), connecting: new Set(), switching: false, disposed: false, candidates: new Set(), epoch: 0 };
+  const metadataCache = createMetadataCache(context.workspaceState, { isTrusted: () => vscode.workspace.isTrusted && !state.disposed });
+  const cacheScheme = 'rocketbrain-offline-db-metadata';
+  const analysisMetadata = () => (vscode.workspace.isTrusted ? state.offlineMetadata?.catalog : undefined) || state.metadata;
+  const offlineDocumentsChanged = new vscode.EventEmitter();
+  context.subscriptions.push(offlineDocumentsChanged);
+  function refreshOfflineDocuments(id) {
+    for (const document of vscode.workspace.textDocuments) {
+      if (document.uri.scheme === cacheScheme && document.uri.path.split('/')[1] === id) {
+        offlineDocumentsChanged.fire(document.uri);
+      }
+    }
+  }
   const bindings = new Map();
   const schemaMigrations = new Map();
   const schemaRebuilds=new Map(),streamManagers=new Map(),streamReviews=new Map(),streamTransactions=new Map();
@@ -48,10 +61,14 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const binding = existingBinding();
     const session = state.mysql && binding ? state.db.getSessionState(binding.id) : null;
     const mode = streamTransactions.size ? 'import waiting for Commit or Roll Back' : session ? session.needsReconnect ? 'disconnected · reconnect required' : `${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}${session.inTransaction ? ' · transaction active' : ''}${session.transactionIsolation ? ' · ' + session.transactionIsolation.toLowerCase() : ''}` : state.mysql ? 'new console · read only' : 'SQLite demo';
-    status.text = `${state.running.size ? '$(sync~spin)' : '$(database)'} Rocketbrain · ${binding?.id || state.label} · ${mode}`;
-    status.command=streamTransactions.size?'rocketbrain.import.stream':'rocketbrain.sessionStatus';
-    status.tooltip = `${state.label}\n${mode}\n${streamTransactions.size?'Click to Commit or Roll Back the pending streamed import.':'Each SQL editor uses its own database session. Click for session details.'}`;
+    const cached = state.offlineMetadata?.provenance;
+    status.text = cached ? '$(database) Rocketbrain · ' + cached.database + ' · cached metadata' :
+      `${state.running.size ? '$(sync~spin)' : '$(database)'} Rocketbrain · ${binding?.id || state.label} · ${mode}`;
+    status.command=streamTransactions.size?'rocketbrain.import.stream':cached?'rocketbrain.db.openCachedMetadata':'rocketbrain.sessionStatus';
+    status.tooltip = cached ? 'Offline analysis · captured ' + cached.capturedAt + '\nConnect to use live SQL.' :
+      `${state.label}\n${mode}\n${streamTransactions.size?'Click to Commit or Roll Back the pending streamed import.':'Each SQL editor uses its own database session. Click for session details.'}`;
     void vscode.commands.executeCommand('setContext', 'rocketbrain.mysqlConnected', state.mysql);
+    void vscode.commands.executeCommand('setContext', 'rocketbrain.offlineMetadataActive', Boolean(cached));
     void vscode.commands.executeCommand('setContext', 'rocketbrain.sqlRunning', state.running.size > 0);
   }
   const command = (id, action) => context.subscriptions.push(vscode.commands.registerCommand(id, async (...args) => {
@@ -59,13 +76,101 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     catch (error) { const message = error instanceof Error ? error.message : String(error); output.appendLine(message); await vscode.window.showErrorMessage(`Rocketbrain: ${message}`); }
     finally { updateStatus(); }
   }));
+  async function verifySavedMetadata(db, id, catalog, current) {
+    try {
+      if (!id || !current() || !metadataCache.has(id)) return;
+      const identity = await observeCatalogIdentity(db, catalog);
+      const outcome = await metadataCache.revalidate(id, identity, catalog, current);
+      if (outcome === 'matched' || outcome === 'invalidated') refreshOfflineDocuments(id);
+    } catch { output.appendLine('The saved metadata could not be checked against the live connection.'); }
+  }
+  async function captureOfflineMetadata() {
+    assertExclusiveReady();
+    const { db, epoch, tableLayoutConnection } = state;
+    const current = databaseGuard(db, epoch);
+    const catalog = await db.metadata();
+    const identity = await observeCatalogIdentity(db, catalog);
+    const saved = await metadataCache.capture(tableLayoutConnection, identity, catalog, current);
+    refreshOfflineDocuments(saved.id);
+    return saved;
+  }
+  function publishOfflineSelection(value) {
+    state.offlineMetadata = value;
+    connectionEvents.fire({ epoch: state.epoch, mysql: false, metadata: analysisMetadata() });
+    updateStatus();
+  }
+  function openOfflineMetadata(id, fingerprint) {
+    if (state.mysql || state.switching || state.running.size) throw Error('Disconnect the database and finish any running query before opening offline metadata.');
+    const value = metadataCache.open(id, fingerprint);
+    publishOfflineSelection(value);
+    return value.provenance;
+  }
+  function closeOfflineMetadata() {
+    if (!state.offlineMetadata) return false;
+    publishOfflineSelection(undefined);
+    return true;
+  }
+  async function removeOfflineMetadata(id, fingerprint) {
+    await metadataCache.remove(id, fingerprint);
+    if (state.offlineMetadata?.provenance.id === id) closeOfflineMetadata();
+    refreshOfflineDocuments(id);
+  }
+  async function pickOfflineMetadata(title) {
+    const choices = metadataCache.list().map(item => {
+      const age = Math.max(0, Math.floor((Date.now() - Date.parse(item.capturedAt)) / 3600000));
+      return { label: item.database, description: item.dialect + ' ' + item.serverVersion + ' · captured ' + item.capturedAt,
+        detail: item.tables + ' tables · ' + item.views + ' views · connection ' + item.id.slice(0, 10) +
+          (age ? ' · ' + age + ' h old' : ' · less than 1 h old'), item };
+    });
+    if (!choices.length) throw Error('Save metadata from a live database connection first.');
+    return (await vscode.window.showQuickPick(choices, { title }))?.item;
+  }
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(cacheScheme, {
+    onDidChange: offlineDocumentsChanged.event,
+    provideTextDocumentContent(uri) {
+      try {
+        const [, id, fingerprint] = uri.path.split('/');
+        const { catalog, provenance } = metadataCache.open(id, fingerprint);
+        return ['Cached database metadata', provenance.database + ' · ' + provenance.dialect + ' ' + provenance.serverVersion,
+          'Captured at ' + provenance.capturedAt, 'Last matched live at ' + provenance.checkedAt,
+          'Offline reference for the observed account. Live schema and query validity are unverified.',
+          ...[...catalog.tables, ...catalog.views].flatMap(object => ['', object.kind + ' ' + JSON.stringify(object.name),
+            ...object.columns.map(column => '  ' + JSON.stringify(column.name) + '  ' + column.type +
+              (column.nullable ? '  NULL' : '  NOT NULL') + (column.primaryKey ? '  PK' : ''))])].join('\n');
+      } catch { return 'This saved metadata snapshot is unavailable.'; }
+    }
+  }));
+  command('rocketbrain.db.cacheMetadata', async () => {
+    const saved = await captureOfflineMetadata();
+    await vscode.window.showInformationMessage('Saved offline database metadata for ' + saved.database + '.');
+    return saved;
+  });
+  command('rocketbrain.db.openCachedMetadata', async () => {
+    const item = await pickOfflineMetadata('Open Cached Database Metadata');
+    if (!item) return;
+    const opened = openOfflineMetadata(item.id, item.fingerprint);
+    const uri = vscode.Uri.from({ scheme: cacheScheme, path: '/' + item.id + '/' + item.fingerprint + '/catalog.txt' });
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri), { preview: true });
+    return opened;
+  });
+  command('rocketbrain.db.closeCachedMetadata', closeOfflineMetadata);
+  command('rocketbrain.db.removeCachedMetadata', async () => {
+    const item = await pickOfflineMetadata('Remove Saved Database Metadata');
+    if (!item || await vscode.window.showWarningMessage('Remove saved metadata for ' + item.database + '?',
+      { modal: true }, 'Remove Saved Metadata') !== 'Remove Saved Metadata') return;
+    await removeOfflineMetadata(item.id, item.fingerprint);
+  });
   async function refreshSchema() {
     if(exclusiveDatabaseWork())throw new Error('Finish the schema operation or pending import transaction before refreshing metadata.');
     if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before reading database metadata.');
     const { epoch, db } = state;
     const metadata=state.mysql?await db.metadata():null;
     const schema = metadata?[...metadata.tables,...metadata.views]:await db.schema();
-    if (epoch === state.epoch && !state.disposed) { state.schema = schema;state.metadata=metadata;schemaTree.refresh();connectionEvents.fire({epoch:state.epoch,mysql:state.mysql,metadata}); }
+    if (epoch === state.epoch && !state.disposed) {
+      state.schema = schema; state.metadata = metadata; schemaTree.refresh();
+      connectionEvents.fire({ epoch: state.epoch, mysql: state.mysql, metadata: analysisMetadata() });
+      if (metadata) await verifySavedMetadata(db, state.tableLayoutConnection, metadata, databaseGuard(db, epoch));
+    }
   }
   const connectionError=message=>Object.assign(new Error(message),{code:'ROCKETBRAIN_CONNECTION_CONTEXT'});
   function pendingTableDraft(){return results.history.some(record=>tableEditor.contexts.has(record.id)&&(record.hasDraft||record.review||record.bulkDraft||record.editBusy));}
@@ -91,6 +196,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       const previous = state.db;
       state.epoch++; state.db = next; state.schema = knownSchema; state.metadata=metadata;state.label = label; state.mysql = mysql;state.profile=profile;
       state.tableLayoutConnection = tableLayoutConnection;
+      state.offlineMetadata = undefined;
       connectionEvents.fire({ epoch: state.epoch, label: state.label, mysql,metadata });
       bindings.clear();schemaMigrations.clear();schemaRebuilds.clear();streamReviews.clear();streamTransactions.clear(); schemaTree.refresh(); updateStatus();
       await closeDatabaseResources(previous);
@@ -110,6 +216,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       const endpoint = require('./db/local-transport').transportLabel(config.transport) || config.host;
       await switchDatabase(next, profile ? profile.name+' · '+config.database : `${config.database} @ ${endpoint}`,
         true, schema, expectedEpoch, metadata, profile, layoutConnection);
+      await verifySavedMetadata(next, layoutConnection, metadata, databaseGuard(next, expectedEpoch + 1));
     }
     catch (error) { if (state.db !== next) await next.dispose(); throw error; }
     finally { state.candidates.delete(next); }
@@ -222,6 +329,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   }
   async function runSql(sql, document = currentDocument(), { connectionEpoch, connectionKey, saved = false, userQuery = false, beforeRun } = {}) {
     if (!sql.trim()) return;
+    if (state.offlineMetadata) throw Error('Connect to run SQL, or close cached metadata to use the SQLite demo.');
     const documentVersion = document?.version;
     if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
     if (connectionEpoch !== undefined && (connectionEpoch !== state.epoch ||
@@ -230,6 +338,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     }
     const binding = await bind(document);
     assertBinding(document, binding);
+    if (state.offlineMetadata) throw Error('The database switched to offline metadata. Connect before running SQL.');
     const db = state.db;
     if (state.running.has(binding.id)) throw new Error('This console already has a running query.');
     const session = state.mysql ? db.getSessionState(binding.id) : null;
@@ -276,6 +385,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     return editor.selection.isEmpty ? statementAt(editor.document.getText(), editor.document.offsetAt(editor.selection.active), { dialect: state.mysql ? 'mysql' : 'sqlite' }) : editor.document.getText(editor.selection);
   }
   command('rocketbrain.openConsole', async () => {
+    if (state.offlineMetadata) {
+      return openSql('-- Offline SQL editing · ' + state.offlineMetadata.provenance.database + '\n-- Connect to run SQL.\n');
+    }
     await refreshSchema();
     const name = state.schema[0]?.name;
     const sql = state.mysql ? `-- ${state.label}\n-- This editor owns an independent read-only session.\n-- Use Change Console Mode to enable writes; transactions are explicit.\n${name ? `SELECT * FROM \`${name.replace(/`/g, '``')}\` LIMIT 100;` : 'SELECT VERSION() AS server_version;'}` : '-- Offline sample · SQLite\nSELECT * FROM projects;\n\n-- Select SQL or place the cursor in a statement, then press Ctrl+Enter.\n';
@@ -287,6 +399,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     return runSql(selectedSql(editor), editor.document,{userQuery:true});
   });
   command('rocketbrain.openTable', async name => {
+    if (state.offlineMetadata) throw Error('Connect to preview table rows while using cached metadata.');
     if (typeof name !== 'string' || !state.schema.some(table => table.name === name)) return;
     const quoted = state.mysql ? '`' + name.replace(/`/g, '``') + '`' : '"' + name.replace(/"/g, '""') + '"';
     const sql = `SELECT * FROM ${quoted} LIMIT ${state.mysql ? 200 : 100};`; const editor = await openSql(sql);
@@ -317,6 +430,12 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if (choice === 'Start New Session') await state.db.reconnect(id);
   }));
   command('rocketbrain.sessionStatus', async () => {
+    if (state.offlineMetadata) {
+      const { database, capturedAt, checkedAt } = state.offlineMetadata.provenance;
+      output.appendLine('Offline metadata · ' + database + ' · captured ' + capturedAt + ' · last matched ' + checkedAt);
+      output.show(true);
+      return;
+    }
     const binding = existingBinding();
     const session = state.mysql && binding ? state.db.getSessionState(binding.id) : null;
     output.appendLine(JSON.stringify({ source: state.label, console: binding?.id, ...(session || { readOnly: true, engine: state.mysql ? 'MySQL/MariaDB — open a console' : 'SQLite demo' }) }, null, 2));
@@ -398,7 +517,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     vscode.workspace.onDidChangeWorkspaceFolders(() => project.refresh()),
     vscode.workspace.onDidCreateFiles(() => project.refresh()), vscode.workspace.onDidDeleteFiles(() => project.refresh()), vscode.workspace.onDidRenameFiles(() => project.refresh()),
     vscode.languages.registerCompletionItemProvider('sql', { provideCompletionItems(document, position) {
-      if(state.mysql||isVirtualSqlPreview(document))return [];
+      if(state.mysql||state.offlineMetadata||isVirtualSqlPreview(document))return [];
       // Suggestions use the current statement and metadata; nested SQL name binding remains a later phase.
       const text = document.getText(), offset = document.offsetAt(position);
       const sql = statementAt(text, offset, { dialect: state.mysql ? 'mysql' : 'sqlite' });
@@ -430,7 +549,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     ...require('./db/authoring-facade').authoringFacade({state,assertReady:assertExclusiveReady,pendingDraft:pendingTableDraft,isTrusted:()=>vscode.workspace.isTrusted,sessions:()=>[...bindings.values()].map(binding=>state.db.getSessionState(binding.id)),updateStatus,refresh:refreshAfterSchemaAttempt}),
     dispose:disposeDatabase,disconnectMysql:useDemo,activityLog,activeConnectionProfile:()=>state.profile?structuredClone(state.profile):null,
     schema: () => structuredClone(state.schema),
-    catalogSnapshot:()=>state.metadata?structuredClone(state.metadata):null,
+    catalogSnapshot:()=>analysisMetadata()?structuredClone(analysisMetadata()):null,
+    cachedMetadata: {
+      list: metadataCache.list, capture: captureOfflineMetadata, open: openOfflineMetadata,
+      close: closeOfflineMetadata, remove: removeOfflineMetadata
+    },
     queryDemo: sql => state.mysql ? Promise.reject(new Error('Demo checks require the demo connection.')) : state.db.query(sql),
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
     exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination),

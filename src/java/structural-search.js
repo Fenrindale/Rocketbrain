@@ -91,4 +91,4 @@ function structuralEdits(matches, ids, sources) {
   return { changes, sources:sources.map(source => ({ ...source, text:after.get(source.uri) ?? source.text })) };
 }
 
-module.exports = { structuralQuery, parseCaptureConstraints, reviewedStructuralMatches, structuralEdits };
+module.exports = { structuralQuery, parseCaptureConstraints, sourcePosition, reviewedStructuralMatches, structuralEdits };

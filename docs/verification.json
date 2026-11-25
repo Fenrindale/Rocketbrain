@@ -1,25 +1,25 @@
 {
-  "version": "0.42.0",
-  "verifiedAt": "2026-11-25T08:03:02.316Z",
+  "version": "0.43.0",
+  "verifiedAt": "2026-11-25T08:32:50.896Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.42.0.vsix",
-    "bytes": 1881195,
-    "sha256": "c1105d8890a5530488e49db976361512d1c7b6fea3d4d79c68c4b74cf01be89f",
+    "name": "rocketbrain-0.43.0.vsix",
+    "bytes": 1901672,
+    "sha256": "845a093c5741599fac211f0702e38c78e6253f2c256c23531f0c419d18369c98",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1234,
-    "inputVectorSha256": "310c21ad17df11f3069d0176d1424040fa7c12a4f9a5c318999334558ad40179",
+    "frozenPublicInputs": 1251,
+    "inputVectorSha256": "cc050eeec65c7ecb7e09ef4d3e9e6124602d297d1d3208bc33795f7703839f2c",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1295,
-    "pass": 1239,
+    "tests": 1308,
+    "pass": 1250,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 56,
+    "skipped": 58,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,7 +32,11 @@
       "groupCount": 5,
       "groups": [
         {
-          "group": "extract",
+          "group": "fieldLists",
+          "checks": 1
+        },
+        {
+          "group": "hierarchy",
           "checks": 1
         },
         {
@@ -40,15 +44,11 @@
           "checks": 1
         },
         {
-          "group": "dml",
+          "group": "cache",
           "checks": 1
         },
         {
-          "group": "springGraph",
-          "checks": 1
-        },
-        {
-          "group": "actuatorHealth",
+          "group": "changelists",
           "checks": 1
         }
       ],
@@ -66,7 +66,11 @@
       "groupCount": 5,
       "groups": [
         {
-          "group": "extract",
+          "group": "fieldLists",
+          "checks": 1
+        },
+        {
+          "group": "hierarchy",
           "checks": 1
         },
         {
@@ -74,15 +78,11 @@
           "checks": 1
         },
         {
-          "group": "dml",
+          "group": "cache",
           "checks": 1
         },
         {
-          "group": "springGraph",
-          "checks": 1
-        },
-        {
-          "group": "actuatorHealth",
+          "group": "changelists",
           "checks": 1
         }
       ],
@@ -93,97 +93,112 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-031": {
-      "scope": "두 실제 Spring 픽스처에서 제네릭 경계를 보존하고 호환되는 호출부만 전환했다. 동명 파일 충돌 거부, 새 파일 저장, 기존 버퍼의 수동 저장과 빌드를 확인했다.",
+    "IDEA-032": {
+      "scope": "두 실제 Spring 픽스처에서 메서드·상수를 양방향으로 옮겼다. 호출부와 형제 클래스 유지, 문서 주석, 변경 원본 거부와 새 빌드를 확인했다.",
       "runtimeGroups": [
-        "extract"
+        "hierarchy"
       ]
     },
-    "IDEA-054": {
-      "scope": "실제 Spring 프로젝트의 의존 관계와 런타임 읽기, 명시적 순환과 모호한 후보, 소스 이동을 검증했다.",
+    "IDEA-091": {
+      "scope": "두 Spring 작업 공간에 만든 별도 Git 저장소에서 같은 이름의 파일 구분, 목록 이동, 편집 위치와 실행 구성 선택 복원을 확인했다. 누락 파일과 변경된 선택 위치를 알렸고 Git 인덱스와 HEAD를 보존했다.",
       "runtimeGroups": [
-        "springGraph"
-      ]
-    },
-    "IDEA-057": {
-      "scope": "두 Spring 앱에서 Health 상태, readiness·liveness, DB 구성 요소와 재조회·오래된 화면 정리를 확인했다.",
-      "runtimeGroups": [
-        "actuatorHealth"
+        "changelists"
       ]
     },
     "DG-011": {
-      "scope": "두 실제 서버의 Windows 명명된 파이프에 저장 프로필로 연결했다. Spring 테이블을 직접 TCP 결과와 대조하고 공유 시 주소와 비밀번호 생략을 확인했다.",
+      "scope": "두 실제 서버에서 Windows 파이프를 재확인했다. 같은 드라이버의 Linux CI에서 TCP를 끄고 실제 MySQL·MariaDB 소켓과 바인딩 조회를 검증했다.",
       "runtimeGroups": [
         "transport"
       ]
     },
-    "DG-035": {
-      "scope": "두 엔진에서 편집기 경고와 사전 차단, 승인한 2행 변경과 수동 트랜잭션 롤백을 확인했다.",
+    "DG-018": {
+      "scope": "MySQL·MariaDB 실제 카탈로그 저장 후 VS Code 재시작과 연결 없는 완성을 확인했다. 같은 연결의 일치 후 실제 ALTER TABLE이 이전 캐시를 무효화했다.",
       "runtimeGroups": [
-        "dml"
+        "cache"
+      ]
+    },
+    "DG-029": {
+      "scope": "두 실제 서버에서 VS Code 제안으로 SELECT 4열, INSERT 2열, GROUP BY 1열을 채웠다. 완성한 세 쿼리를 실행한 후 삽입을 롤백했다.",
+      "runtimeGroups": [
+        "fieldLists"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 225,
+    "sourceCorrespondences": 232,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
   },
+  "unixTransport": {
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45573055748",
+    "head": "cbd643ae09604fc2ed33ac6d9daf1327fd87eb85",
+    "unchangedInputs": [
+      ".github/workflows/unix-db-transport.yml",
+      "scripts/test-unix-db-transport.js",
+      "src/db/local-transport.js",
+      "src/db/mysql.js",
+      "src/db/connection-profiles.js",
+      "src/db/connection-security.js",
+      "src/db/result-layouts.js",
+      "src/db/metadata.js",
+      "src/db/sql-policy.js",
+      "pnpm-lock.yaml"
+    ]
+  },
   "progress": {
     "counts": {
-      "implemented": 49,
-      "partial": 107,
-      "not-implemented": 42,
+      "implemented": 54,
+      "partial": 104,
+      "not-implemented": 41,
       "host-provided": 13,
-      "unverified": 3,
+      "unverified": 2,
       "platform-limited": 2
     },
-    "weightedPoints": 115.5,
-    "previousWeightedPoints": 112.5,
+    "weightedPoints": 119,
+    "previousWeightedPoints": 115.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 53.5,
+    "referencePercent": 55.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-031",
+        "id": "IDEA-032",
         "before": "unverified",
         "after": "implemented"
       },
       {
-        "id": "IDEA-054",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-057",
-        "before": "partial",
+        "id": "IDEA-091",
+        "before": "not-implemented",
         "after": "implemented"
       },
       {
         "id": "DG-011",
-        "before": "not-implemented",
-        "after": "partial"
+        "before": "partial",
+        "after": "implemented"
       },
       {
-        "id": "DG-035",
+        "id": "DG-018",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-029",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "인터페이스 추출은 명시적으로 고른 메서드와 지원되는 Java 소스에 적용한다. 파일 충돌과 컴파일 실패를 차단한다.",
-    "Bean 그래프는 분석한 소스의 후보와 선택된 주입을 구분한다. Actuator Health는 선택한 실행 앱이 공개하는 상태만 표시한다.",
-    "Windows 파이프는 실제 두 엔진에서 검증했다. Unix 소켓의 프로필과 전송 경로가 있으며 실제 Unix 서버 시험이 남아 있다.",
-    "위험 SQL 검토는 바깥쪽 WHERE가 없는 UPDATE·DELETE를 맡는다. 조건의 유효성과 영향 행 수는 서버 집계 없이 단정하지 않는다.",
+    "Java 멤버 이동은 같은 패키지의 직접 상속 관계와 검토한 메서드·상수를 대상으로 한다.",
+    "메타데이터 기록은 보이는 구조를 저장한다. 오프라인 표시에는 캡처 시각이 있으며 실행은 연결을 필요로 한다.",
+    "SQL 필드 목록은 확인한 카탈로그와 지원하는 빈 SELECT·INSERT·GROUP BY 위치를 대상으로 한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "상속 계층의 Java 멤버 올리기·내리기와 코드 변환",
-    "오프라인 DB 메타데이터 재사용과 Unix 소켓 실서버 검증",
-    "DuckDB의 독립 연결·카탈로그·쿼리 흐름"
+    "Java 람다·익명 클래스·루프 변환과 검토된 컴파일",
+    "MySQL·MariaDB 네이티브 덤프와 복원",
+    "누락된 SQL·JSON 문자열 언어 주입과 개발 환경 지원"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

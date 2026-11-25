@@ -29,3 +29,26 @@ test('SQL metadata reads require trust and recheck it after awaiting the server'
   let release;const h=host('SELECT 1',()=>new Promise(resolve=>{release=resolve;}));
   try{h.vscode.workspace.isTrusted=false;await assert.rejects(()=>h.api.refreshMetadata(),/Trust/);assert.equal(h.calls(),0);h.vscode.workspace.isTrusted=true;const work=h.api.refreshMetadata();h.vscode.workspace.isTrusted=false;release(catalog);await assert.rejects(()=>work,/changed/);}finally{h.api.dispose();}
 });
+
+test('explicitly selected cached metadata can resolve columns but cannot establish live validity or rename authority', () => {
+  const source = 'SELECT p.id, p.missing FROM people p;', h = host(source);
+  const provenance = { database: 'app', capturedAt: '2026-11-25T07:20:00.000Z' };
+  try {
+    h.connection.fire({ mysql: false, metadata: { ...catalog, coverage: {}, complete: false,
+      visibility: 'cached-current-account', cachedMetadata: provenance } });
+    const report = h.api.analyzeDocument(h.doc);
+    assert.equal(report.state, 'unknown');
+    assert.equal(report.validityVerified, false);
+    assert.equal(report.executedSql, false);
+    assert.deepEqual(report.cachedMetadata, provenance);
+    assert.equal(h.calls(), 0);
+    assert.ok(h.diagnostics().some(d => d.code === 'sql.catalog.cached' && d.message.includes(provenance.capturedAt)));
+    assert.ok(h.diagnostics().every(d => d.severity === h.vscode.DiagnosticSeverity.Information));
+    const position = h.doc.positionAt(source.indexOf('p.id') + 2);
+    assert.match(h.providers.hover.provideHover(h.doc, position).contents[0].value, /Cached metadata captured/);
+    assert.throws(() => h.api.prepareRename(h.doc, position), /refresh live metadata/);
+    h.connection.fire({ mysql: true, metadata: catalog });
+    assert.equal(h.api.analyzeDocument(h.doc).state, 'invalid');
+    assert.ok(!h.diagnostics().some(d => d.code === 'sql.catalog.cached'));
+  } finally { h.api.dispose(); }
+});
