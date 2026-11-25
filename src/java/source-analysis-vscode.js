@@ -11,11 +11,13 @@ const { diagramHtml } = require('./source-diagram-view');
 const { structuralQuery,parseCaptureConstraints,reviewedStructuralMatches,structuralEdits } = require('./structural-search');
 const { createInterfaceExtraction } = require('./extract-interface-vscode');
 const { createMemberHierarchy } = require('./member-hierarchy-vscode');
+const { createJavaConversion } = require('./java-conversion-vscode');
 
 const COMMANDS = Object.freeze({
   diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow',
   structural:'rocketbrain.java.structuralSearch', extractInterface:'rocketbrain.java.extractInterface',
-  pullUp:'rocketbrain.java.pullUpMembers', pushDown:'rocketbrain.java.pushDownMembers'
+  pullUp:'rocketbrain.java.pullUpMembers', pushDown:'rocketbrain.java.pushDownMembers',
+  convert:'rocketbrain.java.convertStructure'
 });
 const EXCLUDE = '**/{.git,.gradle,.metadata,node_modules,build,target,out,bin,dist}/**';
 const MAX_UNITS = 240;
@@ -428,8 +430,11 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const hierarchy = createMemberHierarchy(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
   });
+  const conversion = createJavaConversion(vscode,{
+    java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
+  });
   const commands = Object.entries({diagram:showProjectDiagram,flow:showTrace,structural:showStructuralSearch,
-    extractInterface:extraction.run,pullUp:hierarchy.pullUp,pushDown:hierarchy.pushDown}).map(([kind,run]) =>
+    extractInterface:extraction.run,pullUp:hierarchy.pullUp,pushDown:hierarchy.pushDown,convert:conversion.run}).map(([kind,run]) =>
     vscode.commands.registerCommand(COMMANDS[kind],async () => {
       try { assertReady(); return await run(); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message); return null; }
@@ -442,6 +447,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     prepareInterfaceExtraction:(report,options) => managed(() => extraction.prepare(report,options)),
     inspectMemberHierarchy:options => managed(() => hierarchy.inspect(options)),
     prepareMemberHierarchyMove:(report,options) => managed(() => hierarchy.prepare(report,options)),
+    prepareConversion:options => managed(() => conversion.prepare(options)),
     reveal,showDiagram,exportMermaid,
     dispose() {
       if (stopping) return stopping;

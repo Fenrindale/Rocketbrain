@@ -1,25 +1,25 @@
 {
-  "version": "0.43.0",
-  "verifiedAt": "2026-11-25T08:32:50.896Z",
+  "version": "0.44.0",
+  "verifiedAt": "2026-11-25T08:52:15.821Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.43.0.vsix",
-    "bytes": 1901672,
-    "sha256": "845a093c5741599fac211f0702e38c78e6253f2c256c23531f0c419d18369c98",
+    "name": "rocketbrain-0.44.0.vsix",
+    "bytes": 1919515,
+    "sha256": "64ddc41fbcbd677105c08dbb0609ef084ea87a35bf6017bb90ac8ed9262773a8",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1251,
-    "inputVectorSha256": "cc050eeec65c7ecb7e09ef4d3e9e6124602d297d1d3208bc33795f7703839f2c",
+    "frozenPublicInputs": 1267,
+    "inputVectorSha256": "d6572f4e99a6cffe27e52f10ccf9d74f561bc74493bc6dcc4be6b8aba9619d17",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1308,
-    "pass": 1250,
+    "tests": 1321,
+    "pass": 1262,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 58,
+    "skipped": 59,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,26 +29,18 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 5,
+      "groupCount": 3,
       "groups": [
         {
-          "group": "fieldLists",
+          "group": "conversion",
           "checks": 1
         },
         {
-          "group": "hierarchy",
+          "group": "embedded",
           "checks": 1
         },
         {
-          "group": "transport",
-          "checks": 1
-        },
-        {
-          "group": "cache",
-          "checks": 1
-        },
-        {
-          "group": "changelists",
+          "group": "dump",
           "checks": 1
         }
       ],
@@ -63,26 +55,18 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 5,
+      "groupCount": 3,
       "groups": [
         {
-          "group": "fieldLists",
+          "group": "conversion",
           "checks": 1
         },
         {
-          "group": "hierarchy",
+          "group": "embedded",
           "checks": 1
         },
         {
-          "group": "transport",
-          "checks": 1
-        },
-        {
-          "group": "cache",
-          "checks": 1
-        },
-        {
-          "group": "changelists",
+          "group": "dump",
           "checks": 1
         }
       ],
@@ -93,40 +77,28 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-032": {
-      "scope": "두 실제 Spring 픽스처에서 메서드·상수를 양방향으로 옮겼다. 호출부와 형제 클래스 유지, 문서 주석, 변경 원본 거부와 새 빌드를 확인했다.",
+    "IDEA-034": {
+      "scope": "실제 Spring 작업 공간 두 곳에서 JDT와 Javac로 세 가지 변환을 검증했다. 객체 동일성을 비교하는 예제와 배열을 변경하는 루프 및 오래된 검토를 거부하고 각 변경 뒤 Spring 빌드를 확인했다.",
       "runtimeGroups": [
-        "hierarchy"
+        "conversion"
       ]
     },
-    "IDEA-091": {
-      "scope": "두 Spring 작업 공간에 만든 별도 Git 저장소에서 같은 이름의 파일 구분, 목록 이동, 편집 위치와 실행 구성 선택 복원을 확인했다. 누락 파일과 변경된 선택 위치를 알렸고 Git 인덱스와 HEAD를 보존했다.",
+    "DG-042": {
+      "scope": "두 DB의 실제 Spring 작업 공간에서 원본 범위, SQL 완성·정의, 오래된 검토 거부를 검증했다. 반영한 SQL을 Spring JDBC와 MyBatis로 실행했고, 따옴표와 역슬래시를 포함한 JSON을 실제 서버에서 읽었다.",
       "runtimeGroups": [
-        "changelists"
+        "embedded"
       ]
     },
-    "DG-011": {
-      "scope": "두 실제 서버에서 Windows 파이프를 재확인했다. 같은 드라이버의 Linux CI에서 TCP를 끄고 실제 MySQL·MariaDB 소켓과 바인딩 조회를 검증했다.",
+    "DG-074": {
+      "scope": "두 실제 DB에서 공급사 도구로 FK, BIGINT, DECIMAL, 바이너리, 줄바꿈이 포함된 텍스트를 복원했다. 변경된 파일, 덮어쓰기, 원본 데이터베이스, 비어 있지 않은 대상을 거부했다.",
       "runtimeGroups": [
-        "transport"
-      ]
-    },
-    "DG-018": {
-      "scope": "MySQL·MariaDB 실제 카탈로그 저장 후 VS Code 재시작과 연결 없는 완성을 확인했다. 같은 연결의 일치 후 실제 ALTER TABLE이 이전 캐시를 무효화했다.",
-      "runtimeGroups": [
-        "cache"
-      ]
-    },
-    "DG-029": {
-      "scope": "두 실제 서버에서 VS Code 제안으로 SELECT 4열, INSERT 2열, GROUP BY 1열을 채웠다. 완성한 세 쿼리를 실행한 후 삽입을 롤백했다.",
-      "runtimeGroups": [
-        "fieldLists"
+        "dump"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 232,
+    "sourceCorrespondences": 239,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
@@ -149,56 +121,46 @@
   },
   "progress": {
     "counts": {
-      "implemented": 54,
-      "partial": 104,
-      "not-implemented": 41,
+      "implemented": 55,
+      "partial": 106,
+      "not-implemented": 39,
       "host-provided": 13,
-      "unverified": 2,
+      "unverified": 1,
       "platform-limited": 2
     },
-    "weightedPoints": 119,
-    "previousWeightedPoints": 115.5,
+    "weightedPoints": 121,
+    "previousWeightedPoints": 119,
     "targetWeightedPoints": 216,
-    "referencePercent": 55.1,
+    "referencePercent": 56,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-032",
+        "id": "IDEA-034",
         "before": "unverified",
-        "after": "implemented"
+        "after": "partial"
       },
       {
-        "id": "IDEA-091",
+        "id": "DG-042",
         "before": "not-implemented",
         "after": "implemented"
       },
       {
-        "id": "DG-011",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-018",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-029",
-        "before": "partial",
-        "after": "implemented"
+        "id": "DG-074",
+        "before": "not-implemented",
+        "after": "partial"
       }
     ]
   },
   "limits": [
-    "Java 멤버 이동은 같은 패키지의 직접 상속 관계와 검토한 메서드·상수를 대상으로 한다.",
-    "메타데이터 기록은 보이는 구조를 저장한다. 오프라인 표시에는 캡처 시각이 있으며 실행은 연결을 필요로 한다.",
-    "SQL 필드 목록은 확인한 카탈로그와 지원하는 빈 SELECT·INSERT·GROUP BY 위치를 대상으로 한다.",
+    "Java 변환은 소유권과 참조를 확인할 수 있는 플랫폼 SAM 지역 변수와 배열 합산 루프를 대상으로 한다.",
+    "네이티브 덤프는 직접 연결된 로컬 InnoDB 테이블을 원본과 다른 빈 스키마에 복원한다. 루틴과 트리거는 별도 지원이 필요하다.",
+    "정적 MyBatis SQL을 편집한다. 동적 태그와 매퍼 파라미터는 원본 컨텍스트에서 처리해야 한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Java 람다·익명 클래스·루프 변환과 검토된 컴파일",
-    "MySQL·MariaDB 네이티브 덤프와 복원",
-    "누락된 SQL·JSON 문자열 언어 주입과 개발 환경 지원"
+    "메서드 오버로드·필드·행 내부 Java 중단점",
+    "DuckDB 방언과 로컬 카탈로그·함수 탐색",
+    "GraphQL과 WebSocket 요청·응답 작업 흐름"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -271,6 +271,7 @@ public final class SignatureInspector {
     public static void main(String[] args) throws Exception {
         if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy").contains(args[4])) &&
                 !(args.length == 7 && args[4].equals("dataflow")) &&
+                !(args.length == 6 && args[4].equals("conversion")) &&
                 !(args.length == 5 && args[4].equals("check")) &&
                 !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
             throw new IllegalArgumentException("Use classpath-file, source-list, empty-provider-path and release.");
@@ -309,6 +310,10 @@ public final class SignatureInspector {
                     if (args[4].equals("diagram")) report.put("declarations",diagrams(units,trees,types));
                     else if (args[4].equals("hierarchy")) report.put("hierarchy",new HierarchyInspector(task).inspect(units,byUri));
                     else if (args[4].equals("dataflow")) report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
+                    else if (args[4].equals("conversion")) {
+                        var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
+                        report.put("conversions",new ConversionInspector(task,unit,byUri.get(args[5]).text).inspect());
+                    }
                     else if (args[4].equals("structural")) {
                         report.put("structural",new StructuralSearch(task).search(compiler,files,options,units,byUri,args));
                     }

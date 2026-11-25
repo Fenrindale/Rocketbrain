@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.43.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.44.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 54 |
-| 부분 구현 | 104 |
-| 미구현 | 41 |
+| 구현 | 55 |
+| 부분 구현 | 106 |
+| 미구현 | 39 |
 | VS Code 재사용 | 13 |
-| 지원 미확인 | 2 |
+| 지원 미확인 | 1 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **55.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **56%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.43에서는 Java 상속 계층 멤버 이동, 오프라인 DB 메타데이터, SQL 필드 목록 완성과 Git 작업 목록을 검증했다. Windows·Linux 로컬 DB 전송 검증도 합산했다. 상태가 바뀐 항목은 5개이고 가중 점수는 115.5점에서 119점으로 바뀌었다.
+v0.44에서는 Java 구문 변환, 문자열 속 SQL·JSON 편집, MySQL·MariaDB 네이티브 백업·복원을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 119점에서 121점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -54,7 +54,7 @@ v0.43에서는 Java 상속 계층 멤버 이동, 오프라인 DB 메타데이터
 | IDEA-031 | IntelliJ IDEA | 인터페이스 추출 | 구현 |
 | IDEA-032 | IntelliJ IDEA | 멤버 Pull Up·Push Down | 구현 |
 | IDEA-033 | IntelliJ IDEA | 리팩터링 미리보기·충돌·일괄 undo | 부분 구현 |
-| IDEA-034 | IntelliJ IDEA | 람다·익명 클래스·루프 변환 | 지원 미확인 |
+| IDEA-034 | IntelliJ IDEA | 람다·익명 클래스·루프 변환 | 부분 구현 |
 | IDEA-035 | IntelliJ IDEA | 생성자·접근자·equals·delegate 생성 | 구현 |
 | IDEA-036 | IntelliJ IDEA | 실시간 Java/Kotlin 오류·null 검사 | 부분 구현 |
 | IDEA-037 | IntelliJ IDEA | Intention·Quick Fix·코드 정리 | 부분 구현 |
@@ -182,7 +182,7 @@ v0.43에서는 Java 상속 계층 멤버 이동, 오프라인 DB 메타데이터
 | DG-039 | DataGrip | SQL 참조→정의·DDL·빠른 설명 | 부분 구현 |
 | DG-040 | DataGrip | dialect별 SQL formatting | 부분 구현 |
 | DG-041 | DataGrip | live template·snippet·문맥 변수 | 구현 |
-| DG-042 | DataGrip | 문자열 안 SQL/JSON 언어 주입 | 미구현 |
+| DG-042 | DataGrip | 문자열 안 SQL/JSON 언어 주입 | 구현 |
 | DG-043 | DataGrip | 쿼리 parameter 입력·재사용 | 부분 구현 |
 | DG-044 | DataGrip | 현재 문장·선택 SQL 실행 | 부분 구현 |
 | DG-045 | DataGrip | 전체 스크립트·batch·오류 처리 | 부분 구현 |
@@ -214,7 +214,7 @@ v0.43에서는 Java 상속 계층 멤버 이동, 오프라인 DB 메타데이터
 | DG-071 | DataGrip | 사용자 data extractor 스크립트 | 미구현 |
 | DG-072 | DataGrip | CSV/Excel import·column/type mapping | 부분 구현 |
 | DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 구현 |
-| DG-074 | DataGrip | native dump·restore 도구 통합 | 미구현 |
+| DG-074 | DataGrip | native dump·restore 도구 통합 | 부분 구현 |
 | DG-075 | DataGrip | table·result dataset 비교·sync | 부분 구현 |
 | DG-076 | DataGrip | 그리드 결과 차트·집계 | 구현 |
 | DG-077 | DataGrip | 지리 데이터 지도 보기 | 구현 |

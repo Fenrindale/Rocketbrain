@@ -50,7 +50,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   function reconcileStreamTransactions(){let removed=false;for(const [id,saved]of streamTransactions){if(!streamManagers.get(saved.db)?.hasPendingTransaction(id)){streamTransactions.delete(id);removed=true;}}if(removed&&!streamTransactions.size)state.running.delete('stream-import');}
   const exclusiveDatabaseWork=()=>{
     reconcileStreamTransactions();
-    return ['schema-migration','stream-import','table-transfer','database-admin'].some(key=>state.running.has(key));
+    return ['schema-migration','stream-import','table-transfer','database-admin','native-dump'].some(key=>state.running.has(key));
   };
   const databaseGuard=(db,epoch)=>()=>vscode.workspace.isTrusted&&!state.disposed&&!state.switching&&state.db===db&&state.epoch===epoch;
   function assertExclusiveReady(){reconcileStreamTransactions();if(!vscode.workspace.isTrusted||!state.mysql||state.disposed||state.switching)throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');if(state.running.size||state.connecting.size)throw new Error('Finish the current database operation or pending import transaction first.');}
@@ -160,6 +160,22 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       { modal: true }, 'Remove Saved Metadata') !== 'Remove Saved Metadata') return;
     await removeOfflineMetadata(item.id, item.fingerprint);
   });
+  const nativeDumps = require('./db/native-dump').createNativeDumps(context.workspaceState, async (action, { write = false } = {}) => {
+    assertExclusiveReady();
+    if (write && (pendingTableDraft() || [...bindings.values()].some(binding => {
+      const session = state.db.getSessionState(binding.id);
+      return session.inTransaction || session.outcomeUnknown;
+    }))) throw Error('Finish pending drafts and transactions before restoring a native database backup.');
+    const { db, epoch } = state, key = 'native-dump';
+    state.running.add(key); updateStatus();
+    try { return await action({ db, epoch, guard: databaseGuard(db, epoch) }); }
+    finally {
+      state.running.delete(key);
+      updateStatus();
+      if (write) await refreshAfterSchemaAttempt(db, epoch);
+    }
+  });
+  require('./db/native-dump-vscode').registerNativeDumpCommands(vscode, command, nativeDumps);
   async function refreshSchema() {
     if(exclusiveDatabaseWork())throw new Error('Finish the schema operation or pending import transaction before refreshing metadata.');
     if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before reading database metadata.');
@@ -554,6 +570,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       list: metadataCache.list, capture: captureOfflineMetadata, open: openOfflineMetadata,
       close: closeOfflineMetadata, remove: removeOfflineMetadata
     },
+    nativeDumps,
     queryDemo: sql => state.mysql ? Promise.reject(new Error('Demo checks require the demo connection.')) : state.db.query(sql),
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
     exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination),

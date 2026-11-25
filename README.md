@@ -52,6 +52,7 @@ pnpm run package
 15. **Show Spring Bean Dependency Graph**는 선택된 주입, 모호한 후보, 지연 조회를 구분합니다. 선택한 Bean의 의존 관계와 순환, 선언·주입 소스를 탐색합니다. **Open Spring Actuator Health**는 연결한 실행 앱이 공개한 상태, 그룹과 구성 요소를 확인합니다.
 16. **Pull Up Java Members**와 **Push Down Java Members**는 같은 패키지에서 직접 상속하는 클래스 사이의 메서드·상수 이동을 미리 봅니다. Javac가 전후 참조를 비교하고 선언 충돌이나 다른 오버로드로의 연결을 감지하면 적용을 차단합니다.
 17. **Manage Git Changelists**에서 변경 파일을 이름 있는 작업 목록에 배정합니다. 목록에 편집 위치와 실행 구성 선택을 기록해 복원할 수 있습니다. 복원 후 실행 구성은 VS Code의 Run and Debug에서 시작할 수 있습니다.
+18. **Convert Java Lambda, Anonymous Class or Loop**에서 지역 SAM 변수와 지원하는 배열 합산 루프의 변환을 검토합니다. 적용 전에 Javac로 참조 연결을 확인합니다.
 
 ### HTTP 요청과 OpenAPI
 
@@ -105,6 +106,8 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - 비어 있는 SQL 절에서 카탈로그 기준 필드 목록을 완성합니다. SELECT에는 현재 범위의 열, INSERT에는 자동 생성 열을 제외한 쓰기 열, GROUP BY에는 SELECT에서 확인한 직접 참조 열을 제안합니다.
 - 편집기는 바깥쪽 `WHERE`가 없는 `UPDATE`와 `DELETE`를 표시합니다. 쓰기 콘솔과 스크립트 실행은 이 문장이 대상 행 전체에 미칠 수 있는 영향을 검토하고 승인한 뒤 진행합니다.
 - **Preview SQL with a Virtual Schema**는 로컬 UTF-8 DDL 파일 또는 관찰한 DB 카탈로그를 바탕으로 현재 SQL 문서의 테이블·뷰와 열 변경을 순서대로 분석합니다. 편집기의 완성·진단에만 반영합니다. 파일을 수정한 뒤에는 다시 선택해 캡처하고, **Exit Virtual SQL Schema Preview**로 종료합니다.
+- **Edit Embedded SQL or JSON**은 Java 문자열·텍스트 블록, MyBatis의 정적 SQL 또는 SQL 안의 JSON을 해당 언어 편집기로 엽니다. SQL 편집에서는 연결한 DB의 열 완성과 정의 이동을 사용할 수 있습니다. **Review and Apply Embedded Source Edit**에서 원본 범위의 diff를 확인하고 적용합니다.
+- **Create Native Database Dump**와 **Review and Restore Native Dump**에서 설치한 MySQL 또는 MariaDB 클라이언트를 선택합니다. 로컬 연결의 InnoDB 테이블을 내보내고, 검토한 백업 파일을 원본과 다른 빈 스키마에 복원합니다. 함께 참조하는 FK 테이블은 같은 백업에 포함합니다.
 - `rocketbrain.sql.analysis.resolutionScopes`에서 `source`에 작업 공간 내 파일 또는 `queries/` 같은 폴더를 지정하고, `ddl`의 상대 경로와 `database`, `dialect`를 설정할 수 있습니다. 더 구체적인 경로가 우선하며 로컬 카탈로그를 읽을 수 없으면 진단을 표시합니다.
 - **Visualize SQL Execution Plan**은 선택한 읽기 쿼리의 계획을 트리와 표, 서버 원본 JSON으로 표시합니다. MySQL은 서버의 TREE 원문도 표시합니다. 서버에서 반환한 행 추정치와 비용을 보존합니다.
 - **Measure SQL Execution Plan**은 승인한 읽기 쿼리를 별도 읽기 전용 세션으로 실행해 서버가 보고한 행, 반복 횟수, 시간을 표시합니다. **Compare Captured SQL Plans**는 같은 연결과 캡처 모드의 열린 계획을 나란히 보여줍니다.
