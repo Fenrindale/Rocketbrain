@@ -3,7 +3,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {
-  listFileTemplates, validIdentifier, checkPackage, writeTemplateFile, contained, physicalDirectory
+  listFileTemplates, listCopyrightProfiles, matchesFileScope, templateVariableError,
+  validIdentifier, checkPackage, writeTemplateFile, contained, physicalDirectory
 } = require('./file-templates');
 const { runJavaScratch } = require('./scratch-engine');
 
@@ -36,8 +37,8 @@ async function directoryExists(directory) {
 
 async function sourceRoots(vscode, java) {
   const roots = (vscode.workspace.workspaceFolders || []).filter(folder => localUri(folder.uri));
-  const candidates = [];
-  async function add(workspace, directory, create = false) {
+  const candidates = [], imported=java.workbench?.getSnapshot().projects||[];
+  async function add(workspace, directory, create = false, tool = 'java') {
     if (candidates.some(candidate => !path.relative(candidate.path, directory))) return;
     if (!contained(workspace.uri.fsPath, directory)) return;
     try {
@@ -47,33 +48,42 @@ async function sourceRoots(vscode, java) {
       // Unavailable paths in a project tree cannot be selected for writing.
       return;
     }
-    candidates.push({ workspace, path: directory, source: sourceKind(directory), create });
+    candidates.push({ workspace, path: directory, source: sourceKind(directory), create, tool });
   }
   function workspaceFor(directory) {
     return roots.filter(folder => contained(folder.uri.fsPath, directory))
       .sort((a, b) => b.uri.fsPath.length - a.uri.fsPath.length)[0];
   }
-  for (const project of java.workbench?.getSnapshot().projects || []) {
+  for (const project of imported) {
     for (const source of project.sourceRoots) {
       const workspace = source.path && path.isAbsolute(source.path) && workspaceFor(source.path);
-      if (workspace && !source.unavailable) await add(workspace, source.path);
+      if (workspace && !source.unavailable) await add(workspace, source.path,false,project.tool);
     }
   }
   const descriptors = await vscode.workspace.findFiles(BUILD_FILES, SOURCE_SEARCH_EXCLUDE, 120);
+  const builds=new Map();
+  for (const uri of descriptors.filter(localUri)) {
+    const directory=path.dirname(uri.fsPath),tool=path.basename(uri.fsPath)==='pom.xml'?'maven':'gradle';
+    const tools=builds.get(directory)||new Set();
+    tools.add(tool);
+    builds.set(directory,tools);
+  }
   const projects = new Set([
     ...roots.map(folder => folder.uri.fsPath),
-    ...descriptors.filter(localUri).map(uri => path.dirname(uri.fsPath))
+    ...builds.keys()
   ]);
   for (const project of projects) {
     const workspace = workspaceFor(project);
     if (!workspace) continue;
+    const known=imported.find(candidate=>!path.relative(candidate.root,project)),observed=builds.get(project);
+    const tool=known?.tool??(observed?.size===1?[...observed][0]:observed?.size?'unknown':'java');
     const main = path.join(project, 'src', 'main', 'java');
     const test = path.join(project, 'src', 'test', 'java');
     try {
       const hasMain = await directoryExists(main), hasTest = await directoryExists(test);
       if (hasMain || hasTest) {
-        await add(workspace, main, !hasMain);
-        await add(workspace, test, !hasTest);
+        await add(workspace, main, !hasMain,tool);
+        await add(workspace, test, !hasTest,tool);
       }
     } catch {
       // The other modules in a multi-root workspace remain selectable.
@@ -85,10 +95,6 @@ async function sourceRoots(vscode, java) {
     }
   }
   return candidates.sort((a, b) => a.path.localeCompare(b.path));
-}
-
-function templateNameAllowed(template, source) {
-  return template.source === 'any' || template.source === source.source;
 }
 
 function defaultPackage(vscode, source, contextUri) {
@@ -112,22 +118,29 @@ function registerJavaUtilities(context, vscode, { java }) {
     if (!vscode.workspace.isTrusted || disposed) throw Error('Trust the workspace before creating Java files or running scratch code.');
   }
 
-  function templates(source) {
+  function choicesFor(source) {
     const settings = vscode.workspace.getConfiguration('rocketbrain.java', vscode.Uri.file(source.path));
-    return listFileTemplates(settings.get('fileTemplates', []))
-      .filter(template => templateNameAllowed(template, source));
+    const available=item=>matchesFileScope(item,source.source,source.tool);
+    const profiles=listCopyrightProfiles(settings.get('copyrightProfiles',[])).filter(available);
+    return {templates:listFileTemplates(settings.get('fileTemplates',[])).filter(available),profiles,
+      defaultProfile:profiles.find(profile=>profile.name===settings.get('defaultCopyrightProfile',''))};
   }
 
-  async function createFile({ sourceRoot, templateName, name, packageName = '' }) {
+  async function createFile({ sourceRoot, templateName, name, packageName = '', variables, copyrightProfile }, expected) {
     trusted();
     if (typeof sourceRoot !== 'string' || !path.isAbsolute(sourceRoot)) throw Error('Choose a local Java source root.');
     const source = (await sourceRoots(vscode, java)).find(candidate => !path.relative(candidate.path, sourceRoot));
     if (!source) throw Error('Choose a current Java source root in the open workspace.');
-    const template = templates(source).find(template => template.name === templateName);
+    const {templates,profiles,defaultProfile}=choicesFor(source);
+    const template = templates.find(template => template.name === templateName);
     if (!template) throw Error('Choose an available template for the selected source root.');
+    const profile=copyrightProfile===undefined?defaultProfile:profiles.find(item=>item.name===copyrightProfile);
+    if(copyrightProfile!==undefined&&copyrightProfile!==null&&!profile)throw Error('Choose a copyright profile available for this project and source root.');
+    if(expected&&(JSON.stringify(expected.template)!==JSON.stringify(template)||JSON.stringify(expected.profile)!==JSON.stringify(profile)||
+        expected.tool!==source.tool||expected.kind!==source.source))throw Error('The Java template, profile or source root changed. Select them again.');
     const result = await writeTemplateFile({
       workspaceRoot: source.workspace.uri.fsPath, sourceRoot: source.path, template, name, packageName,
-      createSourceRoot: source.create,
+      variables,copyrightProfile:profile,createSourceRoot: source.create,
       assertTrusted: () => {
         trusted();
         if (!vscode.workspace.workspaceFolders?.some(folder => localUri(folder.uri) &&
@@ -144,7 +157,7 @@ function registerJavaUtilities(context, vscode, { java }) {
     });
     const uri = vscode.Uri.file(result.path);
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
-    return { ...result, uri };
+    return { ...result, uri, projectTool:source.tool,copyrightProfile:profile?.name??null };
   }
 
   async function createInteractive(contextUri) {
@@ -153,13 +166,15 @@ function registerJavaUtilities(context, vscode, { java }) {
     const active = localUri(contextUri) ? contextUri : vscode.window.activeTextEditor?.document.uri;
     const choices = sources.map(source => ({
       label: path.relative(source.workspace.uri.fsPath, source.path) || source.workspace.name,
-      description: source.create ? 'Create ' + source.source + ' source directory' : source.workspace.name,
+      description: [source.tool==='java'?'Java':source.tool==='maven'?'Maven':source.tool==='gradle'?'Gradle':'Build tool unconfirmed',
+        source.create?'Create '+source.source+' source directory':source.workspace.name].join(' · '),
       picked: localUri(active) && contained(source.path, active.fsPath), source
     }));
     choices.sort((a, b) => Number(b.picked) - Number(a.picked));
     const target = await vscode.window.showQuickPick(choices, { title: 'Java File Template · Source Root' });
     if (!target) return;
-    const choice = await vscode.window.showQuickPick(templates(target.source).map(template => ({
+    const {templates,profiles,defaultProfile}=choicesFor(target.source);
+    const choice = await vscode.window.showQuickPick(templates.map(template => ({
       label: template.name, template
     })), { title: 'Java File Template · Type' });
     if (!choice) return;
@@ -173,7 +188,24 @@ function registerJavaUtilities(context, vscode, { java }) {
       validateInput: value => { try { checkPackage(value); } catch (error) { return error.message; } }
     });
     if (packageName === undefined) return;
-    return createFile({ sourceRoot: target.source.path, templateName: choice.template.name, name, packageName });
+    let profile;
+    if(profiles.length) {
+      const items=[{label:'No copyright header'},...profiles.map(profile=>({label:profile.name,profile}))];
+      if(defaultProfile)items.sort((a,b)=>Number(b.profile===defaultProfile)-Number(a.profile===defaultProfile));
+      const selection=await vscode.window.showQuickPick(items,{title:'Java File Template · Copyright Profile'});
+      if(!selection)return;
+      profile=selection.profile;
+    }
+    const values=[];
+    for(const item of choice.template.variables??[]) {
+      const value=await vscode.window.showInputBox({title:'Java File Template · '+item.name,prompt:item.prompt,
+        value:item.default,validateInput:value=>templateVariableError(item.kind,value)});
+      if(value===undefined)return;
+      values.push([item.name,value]);
+    }
+    return createFile({sourceRoot:target.source.path,templateName:choice.template.name,name,packageName,
+      variables:Object.fromEntries(values),copyrightProfile:profile?.name??null},
+    {template:choice.template,profile,tool:target.source.tool,kind:target.source.source});
   }
 
   async function openScratch({ name } = {}) {

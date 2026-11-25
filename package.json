@@ -1955,7 +1955,7 @@
           "type": "array",
           "default": [],
           "scope": "resource",
-          "description": "Additional Java file templates. The template body accepts ${name}, ${package}, and ${packageDeclaration}.",
+          "description": "Java templates may target project tools and source kinds. Use ${name}, ${package}, ${packageDeclaration}, and declared ${variable.name} placeholders.",
           "items": {
             "type": "object",
             "required": ["name", "template"],
@@ -1963,9 +1963,49 @@
             "properties": {
               "name": { "type": "string" },
               "source": { "type": "string", "enum": ["main", "test", "any"], "default": "any" },
+              "buildTools": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "enum": ["maven", "gradle", "java"] } },
+              "variables": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "object",
+                  "required": ["name", "kind"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$" },
+                    "kind": { "type": "string", "enum": ["identifier", "string", "integer"] },
+                    "prompt": { "type": "string", "maxLength": 120 },
+                    "default": { "type": "string", "maxLength": 512 }
+                  }
+                }
+              },
               "template": { "type": "string" }
             }
           }
+        },
+        "rocketbrain.java.copyrightProfiles": {
+          "type": "array",
+          "scope": "resource",
+          "default": [],
+          "maxItems": 20,
+          "description": "Reusable notice text for generated Java files with optional Maven, Gradle and source-kind restrictions. The notice accepts ${year}, ${name} and ${package}.",
+          "items": {
+            "type": "object",
+            "required": ["name", "notice"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "maxLength": 80 },
+              "notice": { "type": "string", "maxLength": 4096 },
+              "source": { "type": "string", "enum": ["main", "test", "any"], "default": "any" },
+              "buildTools": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "enum": ["maven", "gradle", "java"] } }
+            }
+          }
+        },
+        "rocketbrain.java.defaultCopyrightProfile": {
+          "type": "string",
+          "scope": "resource",
+          "default": "",
+          "description": "Name of the preferred Java file copyright profile for compatible source roots."
         },
         "rocketbrain.java.liveTemplates": {
           "type": "array",

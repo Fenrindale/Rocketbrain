@@ -56,7 +56,7 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 **Select Python Interpreter**로 프로젝트 가상환경을 선택합니다. Python Outline과 구문 오류는 해당 인터프리터의 AST에서 얻습니다. **Run Python File**로 저장한 파일을 실행하고 `debugpy`가 설치된 환경에서 **Debug Python File**로 중단점·변수를 볼 수 있습니다. [debugpy](https://github.com/microsoft/debugpy)
 4. **Build Java Project / Choose Build Task**, 저장한 **Run / Debug / Stop** 구성을 사용합니다.
 5. **Create Spring Project**로 공식 Initializr 프로젝트를 생성하거나 **Edit Spring Starters**로 지원하는 의존성 변경을 검토합니다. [Maven BOM으로 관리하는 스타터](docs/spring-maven-bom-starters.md)도 직접 검토할 수 있습니다.
-6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. `rocketbrain.java.fileTemplates`에서 사용자 템플릿과 변수 `${name}`, `${package}`, `${packageDeclaration}`를 사용할 수 있습니다.
+6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. Maven·Gradle 및 main·test에 맞는 사용자 템플릿과 저작권 프로필을 선택하고 필요한 변수 값을 입력할 수 있습니다. [Java 파일 템플릿](docs/java-file-templates.md)
 7. **New JShell Scratch**로 저장할 코드를 만들고 **Run JShell Scratch**로 독립 JDK에서 실행합니다. 프로젝트 클래스가 필요하면 실행할 때 관찰된 로컬 클래스 경로를 선택합니다.
 8. **Explore Java Call Hierarchy**와 **Explore Java Type Hierarchy**에서 JDT가 확인한 호출과 상속·구현 관계를 이동합니다. **Inspect Java Dependencies**는 소스 import, 선언된 빌드·모듈과 빌드된 클래스의 의존성을 구분해 순환 경로를 보여줍니다.
 9. **Insert Java Live Template**과 `rocketbrain.java.liveTemplates`에서 Java 스니펫을 사용합니다. **Generate Java Members**에서 선택한 필드의 생성자·접근자·`equals`와 `hashCode` 또는 위임 메서드를 미리 보고 적용합니다.
