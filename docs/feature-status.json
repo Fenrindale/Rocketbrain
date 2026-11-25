@@ -1,5 +1,5 @@
 {
-  "version": "0.79.0",
+  "version": "0.80.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 106,
-    "partial": 96,
+    "implemented": 109,
+    "partial": 93,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 76.9,
+    "percent": 77.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-088",
-    "DG-026",
-    "DG-064"
+    "IDEA-073",
+    "IDEA-085",
+    "DG-039"
   ],
   "expandedFeatures": [
-    "IDEA-088",
-    "DG-026",
-    "DG-064"
+    "IDEA-073",
+    "IDEA-085",
+    "DG-039"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -2238,26 +2238,24 @@
       "category": "빌드·실행",
       "feature": "실행 구성·환경·사전 작업·공유",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "관찰한 Java main과 사전 작업에 Spring Boot 프로필을 더하고 환경 변수, JVM 옵션, 프로그램 인수에서 속성을 설정한다. 값을 비밀 저장소에 분리해 저장한다.",
-      "remaining": [
-        "범용 서비스 사전 작업, 여러 실행 조정과 실행 구성 공유가 남는다."
-      ],
+      "scope": "Java 시작 인수·VM 옵션·환경·작업 경로·사전 작업을 저장한다. 공유 명세를 검토하고 로컬 값을 채운 뒤 가져온다. 확인한 구성을 묶어 실행하며 개별 실행을 중지할 수 있다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.76-installed-coverage",
+        "state": "v0.80-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.76.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 JDBC 환경에서 세 경로로 같은 Boot 프로필을 실행했다. Spring이 보고한 공급 경로와 프로세스 종료를 확인했고, 실제 JVM 옵션 경로에서 DAP 중단점 이후 계속 실행했다.",
+        "testedScope": "설치판에서 민감한 로컬 값이 없는 공유 명세를 검토하고 다른 값을 넣었다. 가져오기만으로 실행되지 않음을 확인했고, 실제 DB를 쓰는 두 Spring 실행을 시작하고 각각 중지했다.",
         "publicEvidence": [
-          "src/java/spring-launch.js",
-          "src/java/spring-launch-vscode.js",
-          "test/spring-launch-host.js"
+          "src/java/shared-run.js",
+          "src/java/workbench.js",
+          "test/java-shared-runs-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2600,25 +2598,24 @@
       "category": "테스트·프로파일링",
       "feature": "테스트 결과·실패 diff·재실행",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "JUnit·TestNG의 결과·skip·실패 메시지와 JUnit assertion diff를 네이티브 Testing에 연결한다. TestNG의 단순 파라미터 중복 행은 관찰된 데이터 제공자 일정으로 재실행하고 재시도는 하나의 논리 호출에 묶는다.",
-      "remaining": [
-        "TestNG typed expected/actual diff, 복합 invocation 형태와 결과 영속 저장이 남아 있다."
-      ],
+      "scope": "Java 테스트 실행 기록에서 선택한 실패·출력·스택을 열고 구조화된 expected/actual을 VS Code diff로 비교한다. 저장한 호출을 신선한 테스트 탐색에 대조해 다시 실행한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.62-installed-coverage",
+        "state": "v0.80-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.62.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 양쪽 Spring DB의 VS Code에서 실패한 논리 호출 하나만 재실행하고 실제 RetryAnalyzer의 최종 실패를 확인했다.",
+        "testedScope": "설치판에서 Jupiter 및 TestNG의 실행 기록과 실패 diff를 열었다. 고유한 TestNG 데이터 공급자 호출 한 건을 다시 선택해 성공을 확인했다.",
         "publicEvidence": [
-          "src/java/testing/index.js",
-          "test/java-testng-invocations-host.js"
+          "src/java/testing-history.js",
+          "src/java/testing-history-vscode.js",
+          "test/java-test-history-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2700,8 +2697,8 @@
       "verification": {
         "state": "v0.79-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.79.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4435,8 +4432,8 @@
       "verification": {
         "state": "v0.79-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.79.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4829,26 +4826,24 @@
       "category": "SQL 의미 분석·편집",
       "feature": "SQL 참조→정의·DDL·빠른 설명",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "INSERT의 명시적 열, 단일 테이블 UPDATE·DELETE의 입력과 필터를 실제 대상 DDL의 선언과 연결한다. 빠른 정보에는 읽기·쓰기 역할과 관찰된 타입을 표시한다.",
-      "remaining": [
-        "복수 테이블과 일부 공급자별 절·동적 SQL은 해석 범위 밖이다."
-      ],
+      "scope": "일반 별칭 정의 탐색과 원본 열 탐색을 제공한다. CTE·파생표의 통과 열을 연결하고 확인 가능한 실제 뷰 정의에서 물리 DDL의 열과 설명을 연다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.61-installed-coverage",
+        "state": "v0.80-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.61.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 서버에서 동명 로컬·원격 테이블을 구분해 INSERT·UPDATE·DELETE의 열과 읽기·쓰기 역할을 확인하고 정확한 교차 스키마 DDL로 이동했다.",
+        "testedScope": "두 실제 엔진에서 두 단계 교차 스키마 뷰와 중첩 별칭을 통과해 물리 열에 도달했다. 바뀐 뷰 정의, 식과 집합 연산은 원본으로 표시하지 않았다.",
         "publicEvidence": [
-          "src/db/sql-dml-usages.js",
-          "src/db/sql-live-navigation.js",
-          "test/sql-dml-usages-host.js"
+          "src/db/sql-column-origin.js",
+          "src/db/sql-vscode.js",
+          "test/sql-column-origin-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5593,8 +5588,8 @@
       "verification": {
         "state": "v0.79-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.79.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6588,8 +6583,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "f4f6e519ae2704cb73579e006d63bdce82a15caf3b3626134c3444ff6ff8125f",
-    "sourceManifestSha256": "191c3e3a6faf26a6c79f1a98f6fa2e2c7a831f7518c088cb254f631fdf70fb7a",
+    "vsixSha256": "3be933c6ae84ac4f13f7550dc5048344dd9c0e4108f7612de33227f48d8d0051",
+    "sourceManifestSha256": "026e0754118cee1924b4e23ff9b4b7f893c5f87ed39deaba8efc93350b76c753",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6603,28 +6598,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-088",
+      "id": "IDEA-073",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-026",
+      "id": "IDEA-085",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-064",
+      "id": "DG-039",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1693,
-    "pass": 1579,
+    "tests": 1704,
+    "pass": 1589,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 114,
+    "skipped": 115,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.79.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.80.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 106 |
-| 부분 구현 | 96 |
+| 구현 | 109 |
+| 부분 구현 | 93 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **76.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **77.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.79에서는 실제 HotSpot 덤프의 객체와 유지 경로를 분석한다. 가상 뷰와 가상 열 정의를 연결별로 저장하고 복원한다. 여러 페이지의 관찰된 행을 하나의 검토형 그리드 변경으로 붙여넣는다. 상태가 바뀐 항목은 3개이고 가중 점수는 164.5점에서 166점으로 바뀌었다.
+v0.80에서는 Java 테스트 이력에서 실패 비교와 재실행을 연다. 일반 SQL 참조에서 실제 원본 열을 추적한다. 로컬 값과 분리한 Java 실행 구성을 가져오고 저장한 구성을 묶어 실행한다. 상태가 바뀐 항목은 3개이고 가중 점수는 166점에서 167.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -93,7 +93,7 @@ v0.79에서는 실제 HotSpot 덤프의 객체와 유지 경로를 분석한다.
 | IDEA-070 | IntelliJ IDEA | Gradle·Kotlin DSL·Task 탐색 | 부분 구현 |
 | IDEA-071 | IntelliJ IDEA | 모듈·혼합 빌드·프로젝트 인덱스 | 부분 구현 |
 | IDEA-072 | IntelliJ IDEA | 증분 빌드·빌드 도구 위임 | 부분 구현 |
-| IDEA-073 | IntelliJ IDEA | 실행 구성·환경·사전 작업·공유 | 부분 구현 |
+| IDEA-073 | IntelliJ IDEA | 실행 구성·환경·사전 작업·공유 | 구현 |
 | IDEA-074 | IntelliJ IDEA | 복수 서비스·Compound·실행 순서 | VS Code 재사용 |
 | IDEA-075 | IntelliJ IDEA | JVM 시작·프로세스/원격 연결 | 부분 구현 |
 | IDEA-076 | IntelliJ IDEA | 조건·적중 횟수·로그 중단점 | 구현 |
@@ -105,7 +105,7 @@ v0.79에서는 실제 HotSpot 덤프의 객체와 유지 경로를 분석한다.
 | IDEA-082 | IntelliJ IDEA | Java Stream 값 변환 시각화 | 부분 구현 |
 | IDEA-083 | IntelliJ IDEA | Kotlin 코루틴 상태·생성 스택 | 부분 구현 |
 | IDEA-084 | IntelliJ IDEA | JUnit·TestNG 발견·실행·디버그 | 부분 구현 |
-| IDEA-085 | IntelliJ IDEA | 테스트 결과·실패 diff·재실행 | 부분 구현 |
+| IDEA-085 | IntelliJ IDEA | 테스트 결과·실패 diff·재실행 | 구현 |
 | IDEA-086 | IntelliJ IDEA | 코드 커버리지·분기·테스트별 커버 | 부분 구현 |
 | IDEA-087 | IntelliJ IDEA | CPU·할당·JFR 프로파일 | 구현 |
 | IDEA-088 | IntelliJ IDEA | 힙 덤프·메모리 누수 분석 | 구현 |
@@ -179,7 +179,7 @@ v0.79에서는 실제 HotSpot 덤프의 객체와 유지 경로를 분석한다.
 | DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 부분 구현 |
 | DG-037 | DataGrip | 테이블·열·alias 의미적 Rename | 부분 구현 |
 | DG-038 | DataGrip | 의미적 Find Usages·영향 추적 | 부분 구현 |
-| DG-039 | DataGrip | SQL 참조→정의·DDL·빠른 설명 | 부분 구현 |
+| DG-039 | DataGrip | SQL 참조→정의·DDL·빠른 설명 | 구현 |
 | DG-040 | DataGrip | dialect별 SQL formatting | 구현 |
 | DG-041 | DataGrip | live template·snippet·문맥 변수 | 구현 |
 | DG-042 | DataGrip | 문자열 안 SQL/JSON 언어 주입 | 구현 |

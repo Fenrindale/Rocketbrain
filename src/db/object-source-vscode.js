@@ -98,6 +98,16 @@ function registerObjectSources(vscode, { database }) {
     if (document.getText() !== value.source) throw Error('The database definition changed. Resolve it again.');
     return new vscode.Location(document.uri, new vscode.Range(document.positionAt(anchor.start), document.positionAt(anchor.end)));
   }
+  async function columnOrigin(input, assertActive = () => {}) {
+    const frame = generation;
+    const { traceColumnOrigin, originExplanation } = require('./sql-column-origin');
+    const { value, epoch } = await inspect((query, context) => traceColumnOrigin(query, context, input, assertActive), frame, assertActive);
+    const { loaded, anchor, ...report } = value;
+    const document = await retainDocument(loaded, epoch, frame, true, assertActive);
+    if (document.getText() !== loaded.source) throw Error('The database definition changed. Resolve it again.');
+    const range = new vscode.Range(document.positionAt(anchor.start), document.positionAt(anchor.end));
+    return { ...report, quickExplanation: originExplanation(report), location: new vscode.Location(document.uri, range) };
+  }
 
   async function refresh(uri = vscode.window.activeTextEditor?.document.uri) {
     const current = uri?.scheme === scheme && documents.get(uri.toString());
@@ -174,6 +184,7 @@ function registerObjectSources(vscode, { database }) {
     listObjects: options => list(options),
     open,
     definition,
+    columnOrigin,
     search(options, assertActive = () => {}) {
       return inspect((query, context) => searchDatabaseText(query, context, options, assertActive), generation, assertActive)
         .then(({ value }) => value);

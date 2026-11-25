@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.79.0",
+  "version": "0.80.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -291,6 +291,8 @@
       { "command": "rocketbrain.java.traceDataFlow", "title": "Trace Java Local Value", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.previewDdl", "title": "Preview SQL with a Virtual Schema", "category": "Rocketbrain", "enablement": "editorLangId == sql && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.manageVirtualSchemas", "title": "Manage Saved Virtual Schemas", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.sql.goToColumnOrigin", "title": "Go to Database Column Origin", "category": "Rocketbrain", "enablement": "editorLangId == sql && isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.sql.explainColumnOrigin", "title": "Explain Database Column Origin", "category": "Rocketbrain", "enablement": "editorLangId == sql && isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.sql.clearDdlPreview", "title": "Exit Virtual SQL Schema Preview", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.java.inspectProject", "title": "Run Java Inspection Profile", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.findJavaDuplicates", "title": "Find Duplicate Java Code", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -689,6 +691,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.java.testing.history",
+        "title": "Open Java Test Run History",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.testing.clearHistory",
+        "title": "Clear Java Test Run History",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.testing.cancel",
         "title": "Cancel Java Tests",
         "category": "Rocketbrain"
@@ -963,6 +977,24 @@
         "command": "rocketbrain.java.workbench.configureRun",
         "title": "Add Java Run Configuration",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.workbench.exportSharedRun",
+        "title": "Export Shared Java Run",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.workbench.importSharedRun",
+        "title": "Import Shared Java Run",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.workbench.startRunGroup",
+        "title": "Run Java Configuration Group",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.java.workbench.run",
@@ -2356,6 +2388,12 @@
           "type": "string",
           "default": "",
           "description": "Path to the separately provisioned java-testing-runtime.json. Empty uses the extension storage installation."
+        },
+        "rocketbrain.java.testing.saveHistory": {
+          "type": "boolean",
+          "scope": "window",
+          "default": false,
+          "description": "Store recent completed Java test summaries, failure messages and comparison texts in the current workspace's local extension state."
         },
         "rocketbrain.java.testing.projects": {
           "type": "array",

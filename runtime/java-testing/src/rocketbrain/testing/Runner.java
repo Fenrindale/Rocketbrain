@@ -127,11 +127,47 @@ public final class Runner {
     static Map<String,Object> failure(Throwable error) {
         StringWriter stack=new StringWriter();error.printStackTrace(new PrintWriter(stack));
         Map<String,Object> result=map("className",error.getClass().getName(),"message",cut(error.getMessage(),16384),"stack",cut(stack.toString(),65536));
-        if(error instanceof AssertionFailedError assertion) {
-            if(assertion.isExpectedDefined())result.put("expected",cut(assertion.getExpected().getStringRepresentation(),16384));
-            if(assertion.isActualDefined())result.put("actual",cut(assertion.getActual().getStringRepresentation(),16384));
-        }
+        comparison(error,result);
         result.put("frames",java.util.Arrays.stream(error.getStackTrace()).limit(128).map(frame->map("className",frame.getClassName(),"methodName",frame.getMethodName(),"fileName",frame.getFileName(),"line",Math.max(0,frame.getLineNumber()-1))).toList());return result;
+    }
+    private static void comparison(Throwable error,Map<String,Object> result) {
+        if(error instanceof AssertionFailedError assertion&&assertion.isExpectedDefined()&&assertion.isActualDefined()) {
+            var expected=assertion.getExpected();var actual=assertion.getActual();
+            setComparison(result,"opentest4j",expected.getStringRepresentation(),actual.getStringRepresentation(),
+                expected.getType()==null?"null":expected.getType().getTypeName(),actual.getType()==null?"null":actual.getType().getTypeName());
+        } else if(error.getClass()==org.junit.ComparisonFailure.class) {
+            var failure=(org.junit.ComparisonFailure)error;
+            setStringComparison(result,"junit4",failure.getExpected(),failure.getActual());
+        } else if(error.getClass()==junit.framework.ComparisonFailure.class) {
+            var failure=(junit.framework.ComparisonFailure)error;
+            setStringComparison(result,"junit3",failure.getExpected(),failure.getActual());
+        } else if(error.getClass()==AssertionError.class) {
+            testNgTextComparison(error,result);
+        }
+    }
+    private static void setStringComparison(Map<String,Object> result,String kind,String expected,String actual) {
+        setComparison(result,kind,expected==null?"null":expected,actual==null?"null":actual,
+            expected==null?"null":"java.lang.String",actual==null?"null":"java.lang.String");
+    }
+    private static void setComparison(Map<String,Object> result,String kind,String expected,String actual,String expectedType,String actualType) {
+        if(expected==null||actual==null||expected.length()>16384||actual.length()>16384)return;
+        result.put("comparisonKind",kind);result.put("expected",expected);result.put("actual",actual);
+        if(expectedType!=null)result.put("expectedType",cut(expectedType,512));
+        if(actualType!=null)result.put("actualType",cut(actualType,512));
+    }
+    private static void testNgTextComparison(Throwable error,Map<String,Object> result) {
+        StackTraceElement[] frames=error.getStackTrace();
+        if(frames.length<2||!frames[0].getClassName().equals("org.testng.Assert")||!frames[0].getMethodName().equals("fail")||
+            !frames[1].getClassName().equals("org.testng.Assert")||!frames[1].getMethodName().equals("failNotEquals"))return;
+        String message=error.getMessage(),prefix="expected [",separator="] but found [";
+        if(message==null||message.length()>33000||!message.endsWith("]"))return;
+        int left=message.indexOf(prefix),middle=message.indexOf(separator);
+        if(left<0||left!=message.lastIndexOf(prefix)||middle<left+prefix.length()||middle!=message.lastIndexOf(separator)||
+            (left>0&&message.charAt(left-1)!=' '))return;
+        String expected=message.substring(left+prefix.length(),middle);
+        String actual=message.substring(middle+separator.length(),message.length()-1);
+        if(expected.indexOf('[')>=0||expected.indexOf(']')>=0||actual.indexOf('[')>=0||actual.indexOf(']')>=0)return;
+        setComparison(result,"testng-text",expected,actual,null,null);
     }
     static void saveCoverage() {
         if(settings==null||value("coverageFile").isEmpty()||!coverageSaved.compareAndSet(false,true))return;

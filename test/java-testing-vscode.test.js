@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path'),{pathToFileURL,fileURLToPath}=require('node:url');
 const {registerJavaTesting}=require('../src/java/testing-vscode');
-function host(backend){
+function host(backend,{workspaceState}={}){
   const workspace=path.resolve('test/fixtures/spring-boot-app'),runs=[],handlers=new Map(),profiles=new Map(),events={};
   class Event{listeners=new Set();event=callback=>{this.listeners.add(callback);return{dispose:()=>this.listeners.delete(callback)};};fire(value){for(const fn of this.listeners)fn(value);}}
   class Collection extends Map{add(item){this.set(item.id,item);}replace(items){this.clear();for(const item of items)this.add(item);}forEach(callback){for(const item of this.values())callback(item);}}
@@ -11,7 +11,12 @@ function host(backend){
   for(const name of ['onDidChangeTextDocument','onDidCreateFiles','onDidDeleteFiles','onDidRenameFiles','onDidChangeWorkspaceFolders','onDidChangeConfiguration']){events[name]=new Event();vscode.workspace[name]=events[name].event;}
   events.disk=new Event();vscode.workspace.createFileSystemWatcher=()=>({onDidChange:events.disk.event,onDidCreate:()=>({dispose(){}}),onDidDelete:()=>({dispose(){}}),dispose(){}});
   const project={id:'fixture',workspace,classPath:[process.execPath],javaHome:workspace,testClassPaths:[workspace],sourceRoots:[workspace],classDirectories:[workspace],runtimePath:'unused'};
-  const api=registerJavaTesting({globalStorageUri:uri(workspace)},vscode,{backend,java:{}});
+  if(workspaceState){
+    const configuration=vscode.workspace.getConfiguration;
+    vscode.workspace.getConfiguration=section=>section==='rocketbrain.java.testing'?
+      {get:(key,fallback)=>key==='saveHistory'?true:configuration().get(key,fallback)}:configuration(section);
+  }
+  const api=registerJavaTesting({globalStorageUri:uri(workspace),workspaceState},vscode,{backend,java:{}});
   return {api,project,vscode,runs,events,controller,handlers,profiles,uri};
 }
 const testData=[{id:'engine',label:'JUnit',kind:'container'},{id:'template',parentId:'engine',label:'parameterized',kind:'container'},{id:'simple',parentId:'engine',label:'simple',kind:'test'}];
@@ -24,6 +29,47 @@ test('native test failures retain expected/actual and rerun only failed unique I
   let lastSelection,fail=true;
   const h=host({discoverTests:async()=>({state:'completed',tests:testData}),runTests:async(config,options)=>{lastSelection=options.selectors;options.onEvent({type:'finished',state:fail?'failed':'passed',test:testData[2],error:fail?{message:'difference',expected:'expected',actual:'actual'}:undefined});return{state:'completed',summary:{failed:fail?1:0}};}});
   try{await h.api.discover({projects:[h.project],build:false});await h.api.run({build:false});assert.equal(h.runs[0].events.find(e=>e[0]==='failed')[2].expected,'expected');fail=false;await h.api.rerunFailed({build:false});assert.deepEqual(lastSelection,[{kind:'uniqueId',value:'simple'}]);assert.equal((await h.api.rerunFailed()).state,'no-failures');}finally{await h.api.dispose();}
+});
+test('saved failed TestNG child reruns from a new controller even when discovery only exposes its method',async()=>{
+  const state=new Map(),workspaceState={
+    get:(key,fallback)=>state.has(key)?structuredClone(state.get(key)):fallback,
+    async update(key,value){state.set(key,structuredClone(value));}
+  };
+  const method={id:'method-7',className:'fixture.Cases',methodName:'amount',methodParameterTypes:'int',label:'amount',kind:'container'};
+  const invocation={...method,id:'method-7/[invocation:safe:0]',parentId:method.id,kind:'test',rerunnable:true};
+  let fail=true,renamed=false,calls=0,lastSelection;
+  const backend={
+    async discoverTests(){return {state:'completed',tests:[renamed?{...method,methodName:'another'}:method]};},
+    async runTests(_config,options){
+      calls++;lastSelection=options.selectors;
+      options.onEvent({type:'finished',state:fail?'failed':'passed',test:invocation,
+        error:fail?{message:'review',expected:'seven',actual:'nine',comparisonKind:'opentest4j'}:undefined});
+      return {state:'completed',summary:{testsFound:1,testsFailed:fail?1:0,testsSucceeded:fail?0:1}};
+    }
+  };
+  const first=host(backend,{workspaceState});
+  let id;
+  try {
+    await first.api.discover({projects:[{...first.project,framework:'testng'}],build:false});
+    id=(await first.api.run({build:false})).historyId;
+    assert.ok(id);
+  }finally{await first.api.dispose();}
+  const second=host(backend,{workspaceState});
+  try {
+    fail=false;
+    const projects=[{...second.project,framework:'testng'}];
+    const state=second.api.history.list().find(run=>run.id===id);
+    assert.equal(state.failures[0].comparison.expected,'seven');
+    const tree=await second.api.discover({projects,build:false});
+    assert.ok(!tree.tests.some(item=>item.id===invocation.id));
+    await second.api.history.replay(id,0,{build:false});
+    assert.deepEqual(lastSelection,[{kind:'uniqueId',value:invocation.id}]);
+    assert.ok(second.runs[0].events.some(event=>event[0]==='passed'));
+    renamed=true;
+    await second.api.discover({projects,build:false});
+    await assert.rejects(second.api.history.replay(id,0,{build:false}),/no longer matches/);
+    assert.equal(calls,2);
+  }finally{await second.api.dispose();}
 });
 test('native TestNG keeps the retry pending until one terminal outcome and reruns that invocation',async()=>{
   let failing=true,selected;
