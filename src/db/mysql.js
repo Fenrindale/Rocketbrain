@@ -5,7 +5,8 @@ const {SchemaObjectEditor}=require('./object-editor');
 const { performance } = require('node:perf_hooks');
 const { validateQuery, validateReadQuery, parameters } = require('./sql-policy');
 const { operationOf, outcomeOf } = require('./activity-log');
-const { readMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
+const { readMetadata, attachCheckMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
+const { readCatalogRefresh } = require('./catalog-refresh');
 const { readRelatedCatalog } = require('./related-rows');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
 const { localDriverOptions } = require('./local-transport');
@@ -120,6 +121,7 @@ class MysqlService {
     this._reportActivity = reportActivity;
     this._sessions = new Map([['default', newSession('default', this._defaultReadOnly, this._options.database)]]);
     this._metadataSession = newSession(METADATA_ID, true, this._options.database);
+    this._catalogConnections = new WeakMap();
     this._disposed = false; this._revision = 0;
     this._editor = new TableEditor(this);
     this._schemaRenamer = new SchemaRenamer(this,{createSession:newSession});
@@ -653,12 +655,27 @@ class MysqlService {
   }
   async metadata() {
     this._assertOpen();
-    const catalog=await readMetadata((sql,values)=>this._metadataQuery(sql,values),this._options.database,++this._revision);
+    let connection;
+    const read = async (sql, values) => {
+      const result = await this._metadataQuery(sql, values);
+      const active = this._metadataSession.connection;
+      if (!active || connection && active !== connection) throw Error('The metadata session changed. Refresh the full catalog again.');
+      connection = active;
+      return result;
+    };
+    const catalog=await readMetadata(read,this._options.database,++this._revision, undefined, { exactScope: true });
     try {
-      const result=await this._metadataQuery('SELECT VERSION(), @@sql_mode, @@lower_case_table_names',[]);
+      const result=await read('SELECT VERSION(), @@sql_mode, @@lower_case_table_names',[]);
       const [version,mode,folding]=result.rows[0];
       catalog.serverVersion=String(version);catalog.dialect=/mariadb/i.test(version)?'mariadb':'mysql';catalog.sqlMode=String(mode).split(',').filter(Boolean);catalog.tableNameCaseSensitive=Number(folding)===0;catalog.semanticContextObserved=true;
     }catch{catalog.semanticContextObserved=false;catalog.warnings.push({area:'semanticContext',message:'Server SQL mode and identifier rules could not be observed.'});}
+    if (catalog.semanticContextObserved) {
+      await attachCheckMetadata(read, catalog);
+      if (connection && connection === this._metadataSession.connection) this._catalogConnections.set(catalog, connection);
+    }
+    if (connection && connection !== this._metadataSession.connection) {
+      throw Error('The metadata session changed. Refresh the full catalog again.');
+    }
     return catalog;
   }
   async _relationshipCatalog(read, request) {
@@ -678,6 +695,20 @@ class MysqlService {
   }
   relationshipJoinCatalog(request) {
     return this._relationshipCatalog(readRelationshipJoinCatalog, request);
+  }
+  async refreshCatalog(request) {
+    const connection = this._catalogConnections.get(request.before);
+    const assertCurrent = () => {
+      request.assertCurrent?.();
+      if (!connection || connection !== this._metadataSession.connection) {
+        throw Error('The metadata session changed. Refresh the full catalog first.');
+      }
+    };
+    assertCurrent();
+    const result = await this._relationshipCatalog(readCatalogRefresh, { ...request, assertCurrent });
+    assertCurrent();
+    this._catalogConnections.set(result.catalog, connection);
+    return result;
   }
   relatedRowsCatalog(request) { return this._relationshipCatalog(readRelatedCatalog, request); }
   previewTable(name, options) { return this._editor.previewTable(name, options); }

@@ -254,6 +254,8 @@
       { "command": "rocketbrain.jpa.reviewExistingRelationship", "title": "Review JPA Relationship Between Existing Entities", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.sql.activityLog", "title": "Show SQL Activity Log", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.browseObjectNames", "title": "Browse Database Object Names", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.refreshObjectMetadata", "title": "Refresh Selected Database Objects", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.refreshIncrementalMetadata", "title": "Refresh Changed Database Objects", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "icon": "$(sync)" },
       { "command": "rocketbrain.java.showClassDiagram", "title": "Show Java Class Diagram", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.traceDataFlow", "title": "Trace Java Local Value", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.previewDdl", "title": "Preview SQL with a Virtual Schema", "category": "Rocketbrain", "enablement": "editorLangId == sql && isWorkspaceTrusted" },
@@ -1014,6 +1016,7 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.db.refreshIncrementalMetadata", "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "navigation@2" },
         { "command": "rocketbrain.sshWorkspace.attach", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.sshWorkspace.refresh", "when": "view == rocketbrain.sshWorkspace", "group": "navigation@2" },
         { "command": "rocketbrain.sshWorkspace.close", "when": "view == rocketbrain.sshWorkspace", "group": "setup@1" },
@@ -1190,6 +1193,7 @@
         }
       ],
       "view/item/context": [
+        { "command": "rocketbrain.db.refreshObjectMetadata", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "schema" },
         { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
         { "command": "rocketbrain.docker.lifecycle", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.docker.logs", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },

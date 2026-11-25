@@ -5,9 +5,11 @@
  * An empty result means "visible to this account", never "globally absent".
  * Version-specific routine/trigger/index visibility is reported independently.
  */
-async function readMetadata(query, database, revision, onlyTable) {
+async function readMetadata(query, database, revision, onlyTable, { exactScope = false } = {}) {
   const warnings = [], coverage = {};
-  const target = column => onlyTable ? ' AND ' + column + ' = ?' : '';
+  const equality = column => exactScope ? 'CAST(' + column + ' AS BINARY) = CAST(? AS BINARY)' : column + ' = ?';
+  const target = column => onlyTable ? ' AND ' + equality(column) : '';
+  const joined = name => exactScope ? 'CAST(r.' + name + ' AS BINARY) = CAST(k.' + name + ' AS BINARY)' : 'r.' + name + ' = k.' + name;
   const values = onlyTable ? [database, onlyTable] : [database];
   const fetch = async (area, sql, optional = false) => {
     try { const result = await query(sql, values); coverage[area] = 'loaded'; return result.rows; }
@@ -17,21 +19,23 @@ async function readMetadata(query, database, revision, onlyTable) {
       warnings.push({ area, code: error.code || 'METADATA_ERROR', message: error.message }); return [];
     }
   };
-  const tableRows = await fetch('tables', 'SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?' + target('TABLE_NAME') + ' ORDER BY TABLE_NAME');
-  const columnRows = await fetch('columns', 'SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA, ORDINAL_POSITION, COLUMN_COMMENT, CHARACTER_SET_NAME, COLLATION_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ?' + target('TABLE_NAME') + ' ORDER BY TABLE_NAME, ORDINAL_POSITION');
+  const tableRows = await fetch('tables', 'SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_COLLATION, TABLE_COMMENT FROM information_schema.TABLES WHERE ' + equality('TABLE_SCHEMA') + target('TABLE_NAME') + ' ORDER BY TABLE_NAME');
+  const columnRows = await fetch('columns', 'SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA, ORDINAL_POSITION, COLUMN_COMMENT, CHARACTER_SET_NAME, COLLATION_NAME FROM information_schema.COLUMNS WHERE ' + equality('TABLE_SCHEMA') + target('TABLE_NAME') + ' ORDER BY TABLE_NAME, ORDINAL_POSITION');
   const objects = new Map(tableRows.map(([name, kind, engine, collation, comment]) => [name, { name, kind: kind === 'VIEW' ? 'view' : 'table', engine, collation, comment, columns: [], indexes: [], foreignKeys: [] }]));
   for (const [tableName, name, type, nullable, defaultValue, key, extra, ordinal, comment, charset, collation] of columnRows) {
     if (!objects.has(tableName)) objects.set(tableName, { name: tableName, kind: 'unknown', columns: [], indexes: [], foreignKeys: [] });
     objects.get(tableName).columns.push({ name, type, primaryKey: key === 'PRI', nullable: nullable === 'YES', defaultValue, extra, ordinal: Number(ordinal), comment, charset, collation });
   }
-  const indexRows = await fetch('indexes', 'SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME, SUB_PART, INDEX_TYPE, COLLATION FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ?' + target('TABLE_NAME') + ' ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX', true);
+  const indexRows = await fetch('indexes', 'SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME, SUB_PART, INDEX_TYPE, COLLATION FROM information_schema.STATISTICS WHERE ' + equality('TABLE_SCHEMA') + target('TABLE_NAME') + ' ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX', true);
   for (const [tableName, name, nonUnique, ordinal, column, prefixLength, type, collation] of indexRows) {
     const table = objects.get(tableName); if (!table) continue;
     let index = table.indexes.find(item => item.name === name);
     if (!index) table.indexes.push(index = { name, unique: Number(nonUnique) === 0, primaryKey: name === 'PRIMARY', type, columns: [] });
     index.columns.push({ name: column, ordinal: Number(ordinal), prefixLength, collation });
   }
-  const fkRows = await fetch('foreignKeys', 'SELECT k.TABLE_NAME, k.CONSTRAINT_NAME, k.COLUMN_NAME, k.ORDINAL_POSITION, k.REFERENCED_TABLE_SCHEMA, k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME, r.UPDATE_RULE, r.DELETE_RULE FROM information_schema.KEY_COLUMN_USAGE k LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA AND r.TABLE_NAME = k.TABLE_NAME AND r.CONSTRAINT_NAME = k.CONSTRAINT_NAME WHERE k.CONSTRAINT_SCHEMA = ?' + target('k.TABLE_NAME') + ' AND k.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION', true);
+  const fkRows = await fetch('foreignKeys', 'SELECT k.TABLE_NAME, k.CONSTRAINT_NAME, k.COLUMN_NAME, k.ORDINAL_POSITION, k.REFERENCED_TABLE_SCHEMA, k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME, r.UPDATE_RULE, r.DELETE_RULE FROM information_schema.KEY_COLUMN_USAGE k LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON ' +
+    ['CONSTRAINT_SCHEMA', 'TABLE_NAME', 'CONSTRAINT_NAME'].map(joined).join(' AND ') + ' WHERE ' + equality('k.CONSTRAINT_SCHEMA') +
+    target('k.TABLE_NAME') + ' AND k.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION', true);
   for (const [tableName, name, column, ordinal, referencedSchema, referencedTable, referencedColumn, onUpdate, onDelete] of fkRows) {
     const table = objects.get(tableName); if (!table) continue;
     let fk = table.foreignKeys.find(item => item.name === name);
@@ -48,6 +52,33 @@ async function readMetadata(query, database, revision, onlyTable) {
     triggers: triggerRows.map(([name, table, timing, event]) => ({ name, table, timing, event })),
     coverage, warnings, complete: Object.values(coverage).every(value => value === 'loaded'),
     limitations: ['Catalog visibility is limited by the current database account.', 'The separate catalog queries are not an atomic snapshot during concurrent DDL.', 'Expression indexes, routine bodies, generated expressions and cross-database objects are not loaded.', 'This catalog is not a semantic SQL binder or a schema migration engine.'] };
+}
+
+async function attachCheckMetadata(query, catalog, onlyTable) {
+  const maria = catalog.dialect === 'mariadb';
+  const table = maria ? 'TABLE_NAME' : 'tc.TABLE_NAME';
+  const checkSql = maria ?
+    'SELECT TABLE_NAME, CONSTRAINT_NAME, CHECK_CLAUSE, NULL FROM information_schema.CHECK_CONSTRAINTS WHERE CAST(CONSTRAINT_SCHEMA AS BINARY) = CAST(? AS BINARY)' :
+    'SELECT tc.TABLE_NAME, tc.CONSTRAINT_NAME, cc.CHECK_CLAUSE, tc.ENFORCED FROM information_schema.TABLE_CONSTRAINTS tc ' +
+    'JOIN information_schema.CHECK_CONSTRAINTS cc ON CAST(cc.CONSTRAINT_SCHEMA AS BINARY) = CAST(tc.CONSTRAINT_SCHEMA AS BINARY) ' +
+    'AND CAST(cc.CONSTRAINT_NAME AS BINARY) = CAST(tc.CONSTRAINT_NAME AS BINARY) ' +
+    "WHERE CAST(tc.TABLE_SCHEMA AS BINARY) = CAST(? AS BINARY) AND tc.CONSTRAINT_TYPE = 'CHECK'";
+  for (const object of [...catalog.tables, ...catalog.views]) object.checks = [];
+  const objects = new Map(catalog.tables.map(object => [object.name, object]));
+  try {
+    const values = onlyTable === undefined ? [catalog.database] : [catalog.database, onlyTable];
+    const { rows } = await query(checkSql + (onlyTable === undefined ? '' : ' AND CAST(' + table + ' AS BINARY) = CAST(? AS BINARY)') +
+      ' ORDER BY ' + table + ',' + (maria ? 'CONSTRAINT_NAME' : 'tc.CONSTRAINT_NAME'), values);
+    for (const [owner, name, expression, enforced] of rows) {
+      if (objects.has(owner)) objects.get(owner).checks.push({ name, expression, enforced: enforced == null ? null : enforced === 'YES' });
+    }
+    catalog.coverage.checks = 'loaded';
+  } catch {
+    catalog.coverage.checks = 'unavailable';
+    catalog.complete = false;
+    catalog.warnings.push({ area: 'checks', code: 'METADATA_ERROR', message: 'Check constraint metadata is unavailable.' });
+  }
+  return catalog;
 }
 
 const scopedName = name => typeof name === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(name);
@@ -114,4 +145,4 @@ async function readForeignKeyTargetCatalog(query, sourceDatabase, request = {}, 
   return { sourceDatabase, table, foreignKey, targetSchema, targetTable, sourceColumns, catalog };
 }
 
-module.exports = { readMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog, scopedName };
+module.exports = { readMetadata, attachCheckMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog, scopedName };
