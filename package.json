@@ -940,7 +940,7 @@
       },
       {
         "command": "rocketbrain.schema.openObjectSource",
-        "title": "Open View or Procedure Source",
+        "title": "Open Database Source for Editing",
         "category": "Rocketbrain"
       },
       {

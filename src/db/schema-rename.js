@@ -101,10 +101,10 @@ class SchemaRenamer{
     try{await this.db._ensureConnection(session);await this.db._control(session,'SET SESSION lock_wait_timeout=3');return await action(session);}
     finally{session.closed=true;this.db._lose(session,fail('ROCKETBRAIN_SCHEMA_SESSION_CLOSED','The owned schema inspection connection was closed.'));this.sessions.delete(session);}
   }
-  async _read(session,sql,values=[]){
+  async _read(session,sql,values=[],{includeColumns=false}={}){
     this._open();const result=await this.db._stream(session,sql,values,{maxRows:LIMITS.metadataRows,timeoutMs:LIMITS.queryTimeoutMs},false);
     if(result.truncated)throw fail('ROCKETBRAIN_SCHEMA_LIMIT','Schema metadata exceeds the supported inspection limit.');
-    if(session.connected)await this.db._refreshState(session);return result.rows;
+    if(session.connected)await this.db._refreshState(session);return includeColumns?result:result.rows;
   }
   async _identity(session){
     const rows=await this._read(session,'SELECT VERSION(),@@hostname,@@port,@@server_id,@@lower_case_table_names,@@sql_mode,CURRENT_USER(),DATABASE()');
