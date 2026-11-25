@@ -16,6 +16,7 @@ const ROUTE='/rocketbrain/coroutines';
 const DESCRIPTOR='coroutine-probe.json';
 const MAX_BODY=4*1024*1024;
 const STATES=new Set(['CREATED','RUNNING','SUSPENDED']);
+const relationships=new Set(['parent-observed','parent-outside-capture','no-parent-observed']);
 const UUID=/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/;
 const execute=promisify(execFile);
 
@@ -104,10 +105,27 @@ function readSnapshot(value,descriptor) {
       return {className:text(item.className),method:text(item.method),file:text(item.file),line:item.line};
     });
   }
-  const coroutines=value.coroutines.map(item => {
+  const coroutines=value.coroutines.map((item,ordinal) => {
     if (!item || !STATES.has(item.state)) throw fail('Unknown Kotlin coroutine state.');
-    return {name:text(item.name),state:item.state,creation:frames(item.creation),observed:frames(item.observed)};
+    const {jobRelationship,parentOrdinal}=item;
+    if (jobRelationship!==undefined && !relationships.has(jobRelationship) ||
+        jobRelationship==='parent-observed' && (!Number.isInteger(parentOrdinal) || parentOrdinal<0 ||
+          parentOrdinal>=value.coroutines.length || parentOrdinal===ordinal) ||
+        jobRelationship!=='parent-observed' && parentOrdinal!==undefined) {
+      throw fail('Invalid Kotlin coroutine job relationship.');
+    }
+    return {name:text(item.name),state:item.state,creation:frames(item.creation),observed:frames(item.observed),
+      ...(jobRelationship&&{jobRelationship}),...(parentOrdinal!==undefined&&{parentOrdinal})};
   });
+  for (const item of coroutines) {
+    let parent=item.parentOrdinal;
+    const visited=new Set();
+    while (parent!==undefined) {
+      if (visited.has(parent)) throw fail('Cyclic Kotlin coroutine job relationships.');
+      visited.add(parent);
+      parent=coroutines[parent].parentOrdinal;
+    }
+  }
   return {pid:value.pid,capturedAt:value.capturedAt,creationEnabled:value.creationEnabled,truncated:value.truncated,coroutines};
 }
 

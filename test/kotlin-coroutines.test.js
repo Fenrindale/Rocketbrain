@@ -19,6 +19,11 @@ test('coroutine snapshots bind to the selected launched process and validate sta
   assert.equal(readSnapshot(value,descriptor).coroutines[0].name,'safename');
   assert.throws(()=>readSnapshot({...value,pid:18},descriptor),/Unexpected snapshot/);
   assert.throws(()=>readSnapshot({...value,coroutines:[{name:'invalid',state:'OTHER',creation:[],observed:[]}]},descriptor),/Unknown Kotlin coroutine state/);
+  const entry=value.coroutines[0];
+  const child=parentOrdinal=>({...entry,jobRelationship:'parent-observed',parentOrdinal});
+  assert.throws(()=>readSnapshot({...value,coroutines:[child(0)]},descriptor),/job relationship/);
+  assert.throws(()=>readSnapshot({...value,coroutines:[child(1),child(0)]},descriptor),/Cyclic/);
+  assert.equal(readSnapshot({...value,coroutines:[entry,child(0)]},descriptor).coroutines[1].parentOrdinal,0);
 });
 
 test('independent Kotlin JVM startup probe reports named states and creation frames, authenticates and closes',{
@@ -53,12 +58,21 @@ test('independent Kotlin JVM startup probe reports named states and creation fra
     const suspended=model.coroutines.find(item=>item.name==='awaiting-invoice');
     assert.equal(active.state,'RUNNING');
     assert.equal(suspended.state,'SUSPENDED');
+    const rootOrdinal=model.coroutines.findIndex(item=>item.name==='fixture-root');
+    const branchOrdinal=model.coroutines.findIndex(item=>item.name==='fixture-branch');
+    assert.ok(rootOrdinal>=0&&branchOrdinal>=0);
+    assert.equal(suspended.parentOrdinal,rootOrdinal);
+    assert.equal(active.parentOrdinal,rootOrdinal);
+    assert.equal(model.coroutines[branchOrdinal].parentOrdinal,rootOrdinal);
+    assert.deepEqual(new Set(model.coroutines.filter(item=>item.name==='same-name').map(item=>item.parentOrdinal)),
+      new Set([rootOrdinal,branchOrdinal]));
     const testFrames=(item,creation,observed)=>{
       assert.ok(item.creation.some(frame=>frame.file==='Main.kt' && frame.line===creation && frame.className.startsWith('coroutinesfixture.')));
       assert.ok(item.observed.some(frame=>frame.file==='Main.kt' && frame.line===observed && frame.className.startsWith('coroutinesfixture.')));
       return {name:item.name,state:item.state,creation,observed};
     };
-    proof={version:prepared.version,coroutines:[testFrames(suspended,17,18),testFrames(active,20,20)],unauthenticatedRejected:true};
+    proof={version:prepared.version,coroutines:[testFrames(suspended,17,18),testFrames(active,20,20)],
+      unauthenticatedRejected:true,builtInJobHierarchy:true,sameNameBranchesDistinct:true};
   } finally {exitCode=await running.stop();}
   assert.equal(exitCode,0);
   await assert.rejects(fs.stat(prepared.descriptor),{code:'ENOENT'});

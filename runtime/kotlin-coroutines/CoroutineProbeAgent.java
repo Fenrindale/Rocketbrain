@@ -17,6 +17,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -130,17 +131,21 @@ public final class CoroutineProbeAgent {
         Class<?> nameType = Class.forName("kotlinx.coroutines.CoroutineName", true, application);
         Object nameKey = nameType.getField("Key").get(null);
         Method readContext = contextType.getMethod("get", keyType);
+        JobObservation jobs = JobObservation.create(application);
         var entries = new ArrayList<Map<String, Object>>();
         int count = Math.min(infos.size(), MAX_COROUTINES);
         for (int i = 0; i < count; i++) {
             Object info = infos.get(i);
             Class<?> type = info.getClass();
-            Object name = readContext.invoke(type.getMethod("getContext").invoke(info), nameKey);
+            Object context = type.getMethod("getContext").invoke(info);
+            Object name = readContext.invoke(context, nameKey);
             String label = name == null ? "Coroutine " + (i + 1) : String.valueOf(nameType.getMethod("getName").invoke(name));
-            entries.add(Map.of("name", clipped(label), "state", type.getMethod("getState").invoke(info).toString(),
+            entries.add(new LinkedHashMap<>(Map.of("name", clipped(label), "state", type.getMethod("getState").invoke(info).toString(),
                     "creation", frames((List<?>) type.getMethod("getCreationStackTrace").invoke(info)),
-                    "observed", frames((List<?>) type.getMethod("lastObservedStackTrace").invoke(info))));
+                    "observed", frames((List<?>) type.getMethod("lastObservedStackTrace").invoke(info)))));
+            if (jobs != null) jobs.observe(readContext.invoke(context, jobs.key()), i);
         }
+        if (jobs != null) jobs.addRelationships(entries);
         var result = new LinkedHashMap<String, Object>();
         result.put("format", "RocketbrainCoroutineSnapshot");
         result.put("version", 1);
@@ -151,6 +156,45 @@ public final class CoroutineProbeAgent {
         result.put("truncated", infos.size() > count);
         result.put("coroutines", entries);
         return result;
+    }
+
+    private record JobObservation(Object key, Method readParent, List<Object> byOrdinal,
+                                  Map<Object, Integer> ordinals) {
+        static JobObservation create(ClassLoader loader) {
+            try {
+                var job = Class.forName("kotlinx.coroutines.Job", false, loader);
+                var builtIn = Class.forName("kotlinx.coroutines.JobSupport", false, loader);
+                return new JobObservation(job.getField("Key").get(null), builtIn.getMethod("getParent"),
+                        new ArrayList<>(), new IdentityHashMap<>());
+            } catch (ReflectiveOperationException | LinkageError unavailable) {
+                return null;
+            }
+        }
+
+        void observe(Object job, int ordinal) {
+            byOrdinal.add(job);
+            if (job != null) ordinals.merge(job, ordinal, (first, second) -> -1);
+        }
+
+        void addRelationships(List<Map<String, Object>> entries) {
+            for (int i = 0; i < byOrdinal.size(); i++) {
+                Object job = byOrdinal.get(i);
+                if (job == null || ordinals.get(job) != i || !readParent.getDeclaringClass().isInstance(job)) continue;
+                try {
+                    // Read only the kotlinx implementation and correlate by object identity inside this capture.
+                    if (!job.getClass().getMethod("getParent").equals(readParent)) continue;
+                    Object parent = readParent.invoke(job);
+                    var entry = entries.get(i);
+                    if (parent == null) entry.put("jobRelationship", "no-parent-observed");
+                    else if (parent != job && ordinals.getOrDefault(parent, -1) >= 0) {
+                        entry.put("jobRelationship", "parent-observed");
+                        entry.put("parentOrdinal", ordinals.get(parent));
+                    } else if (parent != job) entry.put("jobRelationship", "parent-outside-capture");
+                } catch (ReflectiveOperationException | RuntimeException unavailable) {
+                    // The existing state and stack inspection remain available.
+                }
+            }
+        }
     }
 
     private static List<Map<String, Object>> frames(List<?> stack) {

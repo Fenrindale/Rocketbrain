@@ -16,6 +16,7 @@ function registerKotlinCoroutines(vscode,java) {
   const changed=new vscode.EventEmitter();
   let session,snapshot,prepared,epoch=0,disposed=false,pending=Promise.resolve();
   const subscriptions=[changed];
+  let childrenByParent=new Map();
 
   function trusted() {
     if (disposed || !vscode.workspace.isTrusted) throw fail('Trust this workspace to inspect a local Kotlin JVM.');
@@ -29,10 +30,15 @@ function registerKotlinCoroutines(vscode,java) {
 
   function getChildren(node) {
     if (!snapshot) return [];
-    if (!node) return snapshot.coroutines.map((_,ordinal)=>({kind:'coroutine',ordinal}));
+    if (!node) return snapshot.coroutines.flatMap((item,ordinal)=>item.parentOrdinal===undefined?[{kind:'coroutine',ordinal}]:[]);
     const coroutine=snapshot.coroutines[node.ordinal];
     if (!coroutine) return [];
-    if (node.kind==='coroutine') return Object.keys(KINDS).map(stack=>({kind:'stack',ordinal:node.ordinal,stack}));
+    if (node.kind==='coroutine') {
+      const children=Object.keys(KINDS).map(stack=>({kind:'stack',ordinal:node.ordinal,stack}));
+      if (childrenByParent.has(node.ordinal)) children.push({kind:'children',ordinal:node.ordinal});
+      return children;
+    }
+    if (node.kind==='children') return (childrenByParent.get(node.ordinal)||[]).map(ordinal=>({kind:'coroutine',ordinal}));
     if (node.kind==='stack' && KINDS[node.stack]) return coroutine[node.stack].map((_,frame)=>({kind:'frame',ordinal:node.ordinal,stack:node.stack,frame}));
     return [];
   }
@@ -43,6 +49,13 @@ function registerKotlinCoroutines(vscode,java) {
     if (node.kind==='coroutine') {
       const item=new vscode.TreeItem(coroutine.name||'Unnamed coroutine',vscode.TreeItemCollapsibleState.Collapsed);
       item.description=coroutine.state;
+      if (coroutine.jobRelationship==='parent-outside-capture') item.tooltip='Parent job is outside this capture.';
+      return item;
+    }
+    if (node.kind==='children') {
+      const count=childrenByParent.get(node.ordinal)?.length||0;
+      const item=new vscode.TreeItem('Observed child coroutines',count?vscode.TreeItemCollapsibleState.Expanded:vscode.TreeItemCollapsibleState.None);
+      item.description=String(count);
       return item;
     }
     const frames=coroutine[node.stack] || [];
@@ -69,6 +82,12 @@ function registerKotlinCoroutines(vscode,java) {
 
   function showSnapshot(next) {
     snapshot=next;
+    childrenByParent=new Map();
+    next?.coroutines.forEach(({parentOrdinal},ordinal)=>{
+      if (parentOrdinal===undefined) return;
+      if (!childrenByParent.has(parentOrdinal)) childrenByParent.set(parentOrdinal,[]);
+      childrenByParent.get(parentOrdinal).push(ordinal);
+    });
     tree.description=next ? 'PID '+next.pid+' · '+new Date(next.capturedAt).toLocaleTimeString() : undefined;
     tree.message=!next ? undefined : !next.coroutines.length ? 'No live coroutines in this snapshot.'
       : next.truncated ? 'Showing the first 100 coroutines.' : !next.creationEnabled ? 'Creation stacks are disabled in this JVM.' : undefined;
