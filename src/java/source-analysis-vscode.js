@@ -6,7 +6,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { analyzeJavaSources } = require('./signature-compiler');
 const { inside, local } = require('./workbench-model');
-const { classDiagram,mermaidDiagram,dataFlow,RELATION_MODES } = require('./source-analysis-model');
+const { classDiagram,mermaidDiagram,dataFlow,callFlow,RELATION_MODES } = require('./source-analysis-model');
 const { diagramHtml } = require('./source-diagram-view');
 const { structuralQuery,parseCaptureConstraints,reviewedStructuralMatches,structuralEdits } = require('./structural-search');
 const { createInterfaceExtraction } = require('./extract-interface-vscode');
@@ -23,7 +23,7 @@ const { createExpectedCompletion,COMMAND:expectedCompletionCommand } = require('
 const { registerQualifierCompletion } = require('./qualifier-completion-vscode');
 
 const COMMANDS = Object.freeze({
-  diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow',
+  diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow', callFlow:'rocketbrain.java.traceCallDataFlow',
   structural:'rocketbrain.java.structuralSearch', extractInterface:'rocketbrain.java.extractInterface',
   pullUp:'rocketbrain.java.pullUpMembers', pushDown:'rocketbrain.java.pushDownMembers',
   convert:'rocketbrain.java.convertStructure', extractConstant:'rocketbrain.java.extractConstant',
@@ -52,7 +52,8 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const owned = (context.storageUri || context.globalStorageUri).fsPath;
   const storagePath = path.join(owned,'java-source-analysis');
   const streamTrace = require('./stream-trace-vscode').registerStreamTrace(vscode,java);
-  const snapshotByReport = new WeakMap(), diagramReviews = new WeakMap(), structuralReports = new WeakMap(), active = new Set(), panels = new Set();
+  const snapshotByReport = new WeakMap(), diagramReviews = new WeakMap(), callReviews = new WeakMap();
+  const structuralReports = new WeakMap(), active = new Set(), panels = new Set();
   let disposed = false, stopping;
 
   function assertReady(cancellation) {
@@ -219,16 +220,19 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     });
   }
 
+  function flowOffset(source,position) {
+    const lines = source.text.split('\n');
+    if (position.line < 0 || position.line >= lines.length || position.character < 0 ||
+        position.character > lines[position.line].replace(/\r$/,'').length) throw Error('Choose a cursor within the saved Java source.');
+    return lines.slice(0,position.line).reduce((sum,line) => sum + line.length + 1,position.character);
+  }
+
   async function trace({ document,position,cancellation }) {
     if (!document || document.languageId !== 'java' || document.isClosed || !position) {
       throw Error('Place the cursor on a saved Java value to trace it.');
     }
     const version = document.version;
-    const source = await snapshot(document.uri,cancellation);
-    const lines = source.text.split('\n');
-    if (position.line < 0 || position.line >= lines.length || position.character < 0 ||
-        position.character > lines[position.line].replace(/\r$/,'').length) throw Error('Choose a cursor within the saved Java source.');
-    const offset = lines.slice(0,position.line).reduce((sum,line) => sum + line.length + 1,position.character);
+    const source = await snapshot(document.uri,cancellation),offset = flowOffset(source,position);
     const state = await projects(cancellation);
     const project = findProject(state.projects,document.uri);
     const compiled = await compile(state,project,[source],{kind:'dataflow',uri:source.uri,offset},cancellation);
@@ -236,6 +240,79 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     const result = dataFlow(compiled,source,offset);
     snapshotByReport.set(result,new Map([[source.uri,source.sha]]));
     return result;
+  }
+
+  async function compileCallFlow(state,project,sources,source,offset,cancellation,caller) {
+    const compiler=await compile(state,project,sources,{kind:'callFlow',uri:source.uri,offset,caller},cancellation);
+    const report=callFlow(compiler,source,sources,offset);
+    const hashes=new Map(sources.map(item=>[item.uri,item.sha]));
+    snapshotByReport.set(report,hashes);
+    callReviews.set(report,{state,project,sources,source,offset,compiler,hashes,
+      directions:new Map([report.origin,...report.inputs,...report.uses].map(event=>[event.id,structuredClone(event)])),
+      contexts:new Map(report.contexts.map(context=>[context.id,structuredClone(context)]))});
+    return report;
+  }
+
+  async function traceCalls({document,position,cancellation}={}) {
+    if (!document||document.languageId!=='java'||document.isClosed||!position) {
+      throw Error('Place the cursor on a saved Java value to trace direct calls.');
+    }
+    const version=document.version, state=await projects(cancellation), project=findProject(state.projects,document.uri);
+    const sources=(await classSources(project,cancellation)).sort((a,b)=>a.uri.localeCompare(b.uri));
+    const source=sources.find(item=>!path.relative(vscode.Uri.parse(item.uri).fsPath,document.uri.fsPath));
+    if (!source) throw Error('Select a saved Java file in the imported production source roots.');
+    const result=await compileCallFlow(state,project,sources,source,flowOffset(source,position),cancellation);
+    if (document.isClosed||document.version!==version) throw Error('The selected Java editor changed during tracing.');
+    return result;
+  }
+
+  function checkCallRuntime(review,cancellation) {
+    assertReady(cancellation);
+    const current=java.getState();
+    if (current.state!=='running'||current.runtimeIdentity!==review.state.runtimeIdentity) {
+      throw Error('The Java runtime changed. Trace the value again.');
+    }
+  }
+
+  async function checkCallSources(review,cancellation) {
+    checkCallRuntime(review,cancellation);
+    const current=java.workbench.getSnapshot().projects.find(item=>item.uri===review.project.uri);
+    if (!current||current.compliance!==review.project.compliance||!vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(current.uri))) {
+      throw Error('Java project settings changed. Trace the value again.');
+    }
+    const live=await classSources(current,cancellation);
+    if(live.length!==review.hashes.size||live.some(item=>review.hashes.get(item.uri)!==item.sha)) {
+      throw Error('Java sources changed. Trace the value again.');
+    }
+    const paths=await classpaths(current,cancellation), reviewed=review.compiler.classpathEntries;
+    if(paths.length!==reviewed.length||paths.some((item,index)=>item!==reviewed[index])) {
+      throw Error('The Java classpath changed. Trace the value again.');
+    }
+    review.compiler.validateClasspath();
+    return current;
+  }
+
+  async function selectCallContext(report,id,{cancellation}={}) {
+    const review=callReviews.get(report), caller=review?.contexts.get(id);
+    if (!caller) throw Error('Choose a direct caller from the current Java call flow.');
+    const project=await checkCallSources(review,cancellation);
+    const scoped=await compileCallFlow(review.state,project,review.sources,review.source,review.offset,cancellation,caller);
+    if (callReviews.get(scoped).compiler.classpathFingerprint!==review.compiler.classpathFingerprint) {
+      throw Error('The Java classpath changed. Trace the value again.');
+    }
+    checkCallRuntime(review,cancellation);
+    return scoped;
+  }
+
+  async function revealCallFlow(report,id,{cancellation}={}) {
+    const review=callReviews.get(report),event=review?.directions.get(id);
+    if (!event) throw Error('Choose a source link from the current Java call flow.');
+    await checkCallSources(review,cancellation);
+    return reveal(report,event,()=>{
+      checkCallRuntime(review,cancellation);
+      assertUnchangedSourceSnapshots(review.sources);
+      review.compiler.validateClasspath();
+    });
   }
 
   async function structuralSearch({ projectUri,uri,fileOnly = false,cancellation,...input } = {}) {
@@ -294,6 +371,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const range = value => new vscode.Range(value.start.line,value.start.character,value.end.line,value.end.character);
   async function reveal(report,item,preOpen) {
     assertReady();
+    if (callReviews.has(report)&&!preOpen) throw Error('Choose a source link from the current Java call flow.');
     const hashes = snapshotByReport.get(report), expected = hashes?.get(item?.uri);
     if (!expected) throw Error('Refresh Java analysis before opening a source link.');
     const uri = vscode.Uri.parse(item.uri);
@@ -431,6 +509,36 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     return report;
   }
 
+  async function showCallTrace() {
+    const editor=vscode.window.activeTextEditor;
+    let report=await operation('Trace Java Values Across Calls',cancellation=>
+      traceCalls({document:editor?.document,position:editor?.selection.active,cancellation}));
+    const sourceLabel=event=>vscode.workspace.asRelativePath(vscode.Uri.parse(event.uri))+':'+(event.range.start.line+1);
+    if (report.contexts.length) {
+      const rows=report.contexts.map(context=>({label:context.method,detail:sourceLabel(context),context}));
+      const activeContext=await vscode.window.showQuickPick([{label:'Within the selected method'},...rows],
+        {title:'Java Call Flow · Caller Context',placeHolder:report.omittedContexts?
+          report.omittedContexts+' direct call sites are outside this list.':'Choose a single caller to trace its arguments and return value'});
+      if (!activeContext) return report;
+      if (activeContext.context) report=await operation('Trace Selected Java Caller',cancellation=>
+        selectCallContext(report,activeContext.context.id,{cancellation}));
+    }
+    const direction=await vscode.window.showQuickPick([
+      {label:'To Here',description:report.inputs.length+' source events',events:report.inputs},
+      {label:'From Here',description:report.uses.length+' downstream events',events:report.uses}
+    ],{title:'Java Call Flow · '+report.origin.name});
+    if (!direction) return report;
+    if (!direction.events.length) {
+      void vscode.window.showInformationMessage('No linked Java values on this side of the selection.');
+      return report;
+    }
+    const item=await vscode.window.showQuickPick(direction.events.map(event=>({label:event.name,
+      description:event.kind+' · '+sourceLabel(event),detail:event.method,event})),
+      {title:direction.label+' · Java Call Flow',matchOnDescription:true,matchOnDetail:true});
+    if (item) await operation('Verify Java Call Source Link',cancellation=>revealCallFlow(report,item.event.id,{cancellation}));
+    return report;
+  }
+
   async function showStructuralSearch() {
     const state = await operation('Find Java Projects',projects);
     const activeUri = vscode.window.activeTextEditor?.document.uri;
@@ -536,7 +644,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     const report = await constant.inspect(options);
     return constant.prepare(report,{cancellation:options.cancellation});
   });
-  const commands = Object.entries({diagram:showProjectDiagram,flow:showTrace,structural:showStructuralSearch,
+  const commands = Object.entries({diagram:showProjectDiagram,flow:showTrace,callFlow:showCallTrace,structural:showStructuralSearch,
     extractInterface:extraction.run,pullUp:hierarchy.pullUp,pushDown:hierarchy.pushDown,convert:conversion.run,
     extractConstant:constant.run,extractVariable:anchor => values.run('local',anchor),extractField:anchor => values.run('field',anchor)}).map(([kind,run]) =>
     vscode.commands.registerCommand(COMMANDS[kind],async anchor => {
@@ -553,6 +661,9 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   }));
   return {
     diagram:options => managed(() => diagram(options)),trace:options => managed(() => trace(options)),
+    traceCalls:options=>managed(()=>traceCalls(options)),
+    selectCallContext:(report,id,options)=>managed(()=>selectCallContext(report,id,options)),
+    revealCallFlow:(report,id,options)=>managed(()=>revealCallFlow(report,id,options)),
     refreshDiagram:(report,options)=>managed(()=>refreshDiagram(report,options)),
     revealRelationship:(report,id,origin,options)=>managed(()=>revealRelationship(report,id,origin,options)),
     structuralSearch:options => managed(() => structuralSearch(options)),

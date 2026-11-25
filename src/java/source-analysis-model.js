@@ -165,6 +165,45 @@ function dataFlow(report,source,offset) {
   const origin = events.find(event => event.start <= offset && offset < event.end) ||
     events.find(event => event.end === offset);
   if (!origin) throw Error('Place the cursor on a traced parameter, assignment, literal, read or return keyword.');
+  return flowSlice(events,origin);
+}
+
+const VALUE_EVENTS = new Set(['parameter','definition','read','assignment','return','literal','argument','call-result',
+  'choice','true-value','false-value']);
+const WRAPPERS = new Set(['argument','true-value','false-value','choice']);
+
+function callFlow(report,source,sources,offset) {
+  const block=report?.callFlow;
+  if (block?.error) throw Error(plain(block.error,300));
+  if (block?.uri!==source.uri||!block.method||!Number.isSafeInteger(block.originFrame)||block.originFrame<0||block.originFrame>48||
+      !Array.isArray(block.events)||block.events.length>700||!Array.isArray(block.contexts)||block.contexts.length>32||
+      !Number.isSafeInteger(block.omittedContexts)||block.omittedContexts<0) throw Error('Invalid Java call flow report.');
+  const byUri=new Map(sources.map(item=>[item.uri,item]));
+  function address(item) {
+    const file=byUri.get(item?.uri);
+    if (!file||!Number.isSafeInteger(item.start)||!Number.isSafeInteger(item.end)||item.start<0||
+        item.end<=item.start||item.end>file.text.length||typeof item.method!=='string'||!item.method) {
+      throw Error('Invalid Java call flow source range.');
+    }
+    return {uri:item.uri,range:rangeAt(file.text,item.start,item.end),method:plain(item.method,350)};
+  }
+  const events=block.events.map((event,index)=>{
+    if (event?.id!==index||!VALUE_EVENTS.has(event.kind)||!Number.isSafeInteger(event.frame)||event.frame<0||event.frame>48||
+        !Array.isArray(event.inputs)||event.inputs.some(id=>!Number.isSafeInteger(id)||id<0||id>=index)) {
+      throw Error('Invalid Java call flow event.');
+    }
+    return {id:index,name:plain(event.name,350),kind:event.kind,frame:event.frame,start:event.start,end:event.end,
+      inputs:[...event.inputs],...address(event)};
+  });
+  const local=events.filter(event=>event.uri===source.uri&&event.frame===block.originFrame&&event.method===plain(block.method,350));
+  const atCursor=(entries)=>entries.sort((a,b)=>a.end-a.start-(b.end-b.start)||Number(WRAPPERS.has(a.kind))-Number(WRAPPERS.has(b.kind)))[0];
+  const origin=atCursor(local.filter(item=>item.start<=offset&&offset<item.end))||atCursor(local.filter(item=>item.end===offset));
+  if (!origin) throw Error('Place the cursor on a traced Java value, parameter, call or return keyword.');
+  const contexts=block.contexts.map((location,index)=>({id:'caller-'+index,start:location?.start,...address(location)}));
+  return {...flowSlice(events,origin),contexts,omittedContexts:block.omittedContexts};
+}
+
+function flowSlice(events,origin) {
   const useIndex = new Map();
   for (const event of events) for (const input of event.inputs) {
     if (!useIndex.has(input)) useIndex.set(input,[]);
@@ -187,4 +226,4 @@ function dataFlow(report,source,offset) {
   };
 }
 
-module.exports = { classDiagram,visibleClassLayout,mermaidDiagram,dataFlow,RELATION_MODES };
+module.exports = { classDiagram,visibleClassLayout,mermaidDiagram,dataFlow,callFlow,RELATION_MODES };
