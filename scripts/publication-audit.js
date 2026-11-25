@@ -29,6 +29,7 @@ function publicPath(name) {
   if (/^runtime\/.+\.java$/.test(name)) return true;
   if (name === 'runtime/jupyter/notebook_bridge.py') return true;
   if (name === 'runtime/python/source_inspector.py') return true;
+  if (name === 'test/fixtures/acp-peer.mjs') return true;
   if (name === 'test/fixtures/refactoring-v24-package/src/main/resources/fixture/packagev24/payload/nested/rows.csv') return true;
   if (/^test\/fixtures\/javafx-app\/src\/main\/resources\/views\/(?:panel|extra)\.fxml$/.test(name)) return true;
   if (name === 'test/fixtures/java/quarkus/src/main/resources/templates/greeting.html') return true;

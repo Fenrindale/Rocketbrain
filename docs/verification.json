@@ -1,25 +1,25 @@
 {
-  "version": "0.55.0",
-  "verifiedAt": "2026-11-25T12:16:47.088Z",
+  "version": "0.56.0",
+  "verifiedAt": "2026-11-25T12:26:14.498Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.55.0.vsix",
-    "sha256": "286d1f18703333ed50f4c5a4ed754502f144caf22056e48aa7308f59d9ef3797",
-    "bytes": 3112021,
+    "name": "rocketbrain-0.56.0.vsix",
+    "sha256": "46a441b466e91d064ee1fe09b618f2d0b88f1939609885681a969bc769b4a892",
+    "bytes": 3128921,
     "files": 18
   },
   "source": {
-    "frozenPublicInputs": 1564,
-    "inputVectorSha256": "7701b0e678c798584fffb093477a076444479ef2cc77889b332a9e8d9fda51cc",
+    "frozenPublicInputs": 1590,
+    "inputVectorSha256": "54a273510205988654f953c784182cdecc6cf18aa2d97b616c90ad92477b3aa2",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1428,
-    "pass": 1352,
+    "tests": 1435,
+    "pass": 1357,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 76,
+    "skipped": 78,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,22 +29,18 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 4,
+      "groupCount": 3,
       "groups": [
         {
-          "group": "ssh",
+          "group": "acp",
           "checks": 1
         },
         {
-          "group": "review",
+          "group": "docker",
           "checks": 1
         },
         {
-          "group": "vue",
-          "checks": 1
-        },
-        {
-          "group": "kotlin",
+          "group": "coroutines",
           "checks": 1
         }
       ],
@@ -59,22 +55,18 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 4,
+      "groupCount": 3,
       "groups": [
         {
-          "group": "ssh",
+          "group": "acp",
           "checks": 1
         },
         {
-          "group": "review",
+          "group": "docker",
           "checks": 1
         },
         {
-          "group": "vue",
-          "checks": 1
-        },
-        {
-          "group": "kotlin",
+          "group": "coroutines",
           "checks": 1
         }
       ],
@@ -85,86 +77,102 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-044": {
-      "scope": "ktlsp 1.4.0-rc1과 실제 Gradle 프로젝트에서 멤버 완성, String 타입 표시, 파일 간 이동 및 저장 전 잘못된 타입의 진단과 수정 후 해제를 확인했다.",
+    "IDEA-083": {
+      "scope": "Kotlin 2.4.21과 공식 kotlinx-coroutines-debug 1.11.0에서 실행 중과 일시 중단된 두 코루틴, 생성·관찰 프레임 및 연결 해제 뒤 JVM 유지와 소유 프로브 종료를 확인했다.",
       "runtimeGroups": [
-        "kotlin"
+        "coroutines"
       ]
     },
-    "IDEA-096": {
-      "scope": "실제 OpenSSH와 독립 Python의 인증된 시험 서버에서 편집기 파일 시스템, 차이 비교, 변경 뒤 거절 및 승인한 정확한 바이트 교체를 확인했다.",
+    "IDEA-099": {
+      "scope": "Ubuntu의 실제 Docker 28.0.4와 Compose 2.38.2에서 레지스트리 매니페스트, 컨테이너 수명주기 및 두 DB를 사용한 Spring Compose 복구를 확인했다. Windows VS Code에서는 설치형 트리와 명령을 확인했다.",
       "runtimeGroups": [
-        "ssh"
+        "docker"
       ]
     },
-    "IDEA-107": {
-      "scope": "Vue 3.5.46, TypeScript 5.9.3, vue-tsc 3.3.14, Vite 8.3.8에서 두 유형 오류의 소스 위치와 수정 후 통과, 선언 이동 및 실제 변환된 HTTP 응답을 확인했다.",
+    "IDEA-116": {
+      "scope": "공식 ACP SDK 2.12.0의 독립 프로세스 둘이 교대로 도착하는 요청에서 동시 실행, 텍스트 청크, 권한 거절, 결과 비교를 실제 프로토콜로 확인했다. 취소는 별도 실제 피어 시험에서 확인했다.",
       "runtimeGroups": [
-        "vue"
-      ]
-    },
-    "DG-091": {
-      "scope": "동시에 구동한 실제 Qwen 모델 제안 둘을 비교하고 승인 범위를 확인했다. 사용자가 검토한 SQL을 두 DB에서 수동 실행해 Spring 기준 결과와 비교했고, 취소는 단위 테스트로 확인했다.",
-      "runtimeGroups": [
-        "review"
+        "acp"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 320,
+    "sourceCorrespondences": 326,
     "sourceConfidence": "inferred",
     "archiveEntries": 18,
     "archiveConfidence": "observed"
   },
+  "nativePayloadEquivalence": {
+    "files": 18,
+    "testedArchiveSha256": "90d44ed425a03f878d1403870591810cc82f42aa5b6f215cf04049d6e0d808ff",
+    "testedInputVectorSha256": "1a693218e0b68a2b2d1f09d53735e454fc91e3a7e7dbca72af656dcef19ba4cd",
+    "onlySourceChanges": [
+      "test/docker-workbench-host.js"
+    ]
+  },
+  "hostedRuntime": {
+    "docker": {
+      "platform": "Ubuntu 24.04",
+      "runUrl": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45610037775",
+      "commit": "6eba6edc92a3e40a624cc0569c9911e4ebc77ff6",
+      "bothDatabaseEngines": [
+        "MySQL 8.4.13",
+        "MariaDB 11.4.8"
+      ],
+      "verifiedSourceFiles": [
+        "src/docker/workbench.js",
+        "src/docker/vscode.js",
+        "scripts/test-docker-spring-workbench.js"
+      ],
+      "artifactReportSha256": {
+        "mysql": "e9c9619ff29f0e47f0620c9bd922b4b7d74ed97520c5fde17dee82f4e9725a20",
+        "mariadb": "edb5b35543aced2f0206c86ed0bb5704a975ccbf33c49a5127d4f9a96712e90b"
+      }
+    }
+  },
   "progress": {
     "counts": {
       "implemented": 67,
-      "partial": 128,
-      "not-implemented": 6,
+      "partial": 131,
+      "not-implemented": 3,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 144,
-    "previousWeightedPoints": 142,
+    "weightedPoints": 145.5,
+    "previousWeightedPoints": 144,
     "targetWeightedPoints": 216,
-    "referencePercent": 66.7,
+    "referencePercent": 67.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-044",
+        "id": "IDEA-083",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-096",
+        "id": "IDEA-099",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-107",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-091",
+        "id": "IDEA-116",
         "before": "not-implemented",
         "after": "partial"
       }
     ]
   },
   "limits": [
-    "Kotlin 편집은 local Gradle JVM 프로젝트와 검증한 ktlsp 런타임을 사용한다.",
-    "Vue의 컴파일러 기반 탐색과 타입 진단을 지원한다. Angular와 React의 프레임워크 지능화는 남아 있다.",
-    "SSH는 신뢰한 원격 루트의 파일 읽기와 검토 기반 교체를 지원한다. 원격 Java 엔진과 디버깅은 별도 범위다.",
-    "SQL 제안은 명시한 로컬 모델과 읽기 쿼리를 지원한다. 외부 에이전트 실행과 DB 변경은 별도 범위다.",
+    "코루틴 스냅샷은 로컬 JVM을 시작할 때 연결한 프로브를 사용한다. 부모 작업 그래프와 디버거 프레임 전환이 남아 있다.",
+    "Docker는 선택한 컨텍스트의 컨테이너·이미지와 Compose 프로젝트를 보여 준다. 이미지 빌드·푸시, 복합 Compose 수정과 레지스트리 관리가 남아 있다.",
+    "ACP는 명시한 로컬 ACP v1 프로그램의 단일 요청과 응답 비교를 지원한다. 세션 복구와 작업 공간 전체 변경 검토는 다음 범위다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Kotlin 코루틴 상태와 생성 스택",
-    "Docker 컨텍스트와 Compose 수명주기, 레지스트리 조회",
-    "병렬 로컬 ACP 에이전트 응답 비교"
+    "Kubernetes 컨텍스트 및 Helm 읽기 전용 탐색",
+    "Dev Container 구성과 수명주기",
+    "WSL 배포판과 프로젝트 빌드 작업"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

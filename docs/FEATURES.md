@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.55.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.56.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -9,15 +9,15 @@
 | 판정 | 항목 수 |
 | --- | ---: |
 | 구현 | 67 |
-| 부분 구현 | 128 |
-| 미구현 | 6 |
+| 부분 구현 | 131 |
+| 미구현 | 3 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **66.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **67.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.55에서는 Kotlin JVM 편집, Vue 단일 파일 컴포넌트, SSH 원격 파일, 병렬 로컬 SQL 제안을 검증했다. 상태가 바뀐 항목은 4개이고 가중 점수는 142점에서 144점으로 바뀌었다.
+v0.56에서는 Kotlin 코루틴 상태·생성 스택, Docker Compose 관리, 병렬 ACP 응답 검토를 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 144점에서 145.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -103,7 +103,7 @@ v0.55에서는 Kotlin JVM 편집, Vue 단일 파일 컴포넌트, SSH 원격 파
 | IDEA-080 | IntelliJ IDEA | 표현식 평가·Watch·변수 수정·프레임 | 부분 구현 |
 | IDEA-081 | IntelliJ IDEA | HotSwap·변경 클래스 재적용 | 구현 |
 | IDEA-082 | IntelliJ IDEA | Java Stream 값 변환 시각화 | 부분 구현 |
-| IDEA-083 | IntelliJ IDEA | Kotlin 코루틴 상태·생성 스택 | 미구현 |
+| IDEA-083 | IntelliJ IDEA | Kotlin 코루틴 상태·생성 스택 | 부분 구현 |
 | IDEA-084 | IntelliJ IDEA | JUnit·TestNG 발견·실행·디버그 | 부분 구현 |
 | IDEA-085 | IntelliJ IDEA | 테스트 결과·실패 diff·재실행 | 부분 구현 |
 | IDEA-086 | IntelliJ IDEA | 코드 커버리지·분기·테스트별 커버 | 부분 구현 |
@@ -119,7 +119,7 @@ v0.55에서는 Kotlin JVM 편집, Vue 단일 파일 컴포넌트, SSH 원격 파
 | IDEA-096 | IntelliJ IDEA | SSH 원격 개발 | 부분 구현 |
 | IDEA-097 | IntelliJ IDEA | WSL 실행·개발 | 미구현 |
 | IDEA-098 | IntelliJ IDEA | Dev Container 환경 | 미구현 |
-| IDEA-099 | IntelliJ IDEA | Docker·Compose·Registry 관리 | 미구현 |
+| IDEA-099 | IntelliJ IDEA | Docker·Compose·Registry 관리 | 부분 구현 |
 | IDEA-100 | IntelliJ IDEA | Kubernetes·Helm·클러스터 탐색 | 미구현 |
 | IDEA-101 | IntelliJ IDEA | 내장 터미널·셸·세션 | VS Code 재사용 |
 | IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 부분 구현 |
@@ -136,7 +136,7 @@ v0.55에서는 Kotlin JVM 편집, Vue 단일 파일 컴포넌트, SSH 원격 파
 | IDEA-113 | IntelliJ IDEA | IDE 키맵·동작 컨텍스트·테마 | 부분 구현 |
 | IDEA-114 | IntelliJ IDEA | 플러그인 설치·호환·갱신 | VS Code 재사용 |
 | IDEA-115 | IntelliJ IDEA | AI 완성·채팅·프로젝트 문맥 | 부분 구현 |
-| IDEA-116 | IntelliJ IDEA | Air·ACP 에이전트·병렬 작업 | 미구현 |
+| IDEA-116 | IntelliJ IDEA | Air·ACP 에이전트·병렬 작업 | 부분 구현 |
 | IDEA-117 | IntelliJ IDEA | IDE 기능을 MCP 도구로 제공 | 구현 |
 | IDEA-118 | IntelliJ IDEA | 프로젝트 신뢰·제한 모드 | 구현 |
 | IDEA-119 | IntelliJ IDEA | 문자열 안 SQL/정규식/HTML 언어 주입 | 부분 구현 |

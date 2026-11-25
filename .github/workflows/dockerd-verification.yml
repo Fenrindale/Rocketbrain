@@ -1,0 +1,77 @@
+name: Docker workbench runtime
+
+on:
+  push:
+    branches: ['verify-docker-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-cli:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check Docker and Compose runtime
+        run: |
+          docker version
+          docker compose version
+      - name: Verify Docker workbench and registry inspection
+        env:
+          ROCKETBRAIN_DOCKER_FIXTURE: '1'
+        run: |
+          set -o pipefail
+          node --test test/docker-workbench.test.js
+          node scripts/test-docker-workbench.js | tee "${RUNNER_TEMP}/rocketbrain-docker.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-workbench-runtime
+          path: ${{ runner.temp }}/rocketbrain-docker.json
+          if-no-files-found: error
+          retention-days: 7
+
+  docker-spring:
+    name: Docker Compose Spring (${{ matrix.engine }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [mysql, mariadb]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582
+        with:
+          gradle-version: '9.1.0'
+      - name: Build the owned Spring application
+        run: gradle --no-daemon --project-dir test/fixtures/spring-boot-app bootJar
+      - name: Verify Spring and database through the Docker workbench
+        env:
+          ROCKETBRAIN_DOCKER_FIXTURE: '1'
+          ROCKETBRAIN_DOCKER_TEST_ENGINE: ${{ matrix.engine }}
+          ROCKETBRAIN_DOCKER_SPRING_JAR: test/fixtures/spring-boot-app/build/libs/rocketbrain-spring-jpa-fixture-0.9.0.jar
+        run: |
+          set -o pipefail
+          node scripts/test-docker-spring-workbench.js | tee "${RUNNER_TEMP}/rocketbrain-docker-spring.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-spring-${{ matrix.engine }}
+          path: ${{ runner.temp }}/rocketbrain-docker-spring.json
+          if-no-files-found: error
+          retention-days: 7
