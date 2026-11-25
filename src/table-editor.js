@@ -116,7 +116,7 @@ class TableEditor {
     if (context.keysetId) return context.db.readKeysetPage(context.keysetId, query);
     const options = { sessionId: context.sessionId, ...query };
     return context.relation ? context.db.previewRelatedTable({ schema: context.relation.schema, table: context.table,
-      keys: context.relation.keys }, options)
+      keys: context.relation.keys, sourceServer: context.relation.sourceServer }, options)
       : context.db.previewTable(context.table, options);
   }
   async _load(id, context, message, query = context.query) {

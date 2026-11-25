@@ -44,6 +44,18 @@ function normalizeProfile(value,{allowUnconfigured=false}={}){
  return p;
 }
 function password(value){if(value===undefined)return undefined;if(typeof value!=='string'||Buffer.byteLength(value)>16384||value.includes('\0'))throw fail('Use a database password under 16 KiB.');return value;}
+function profileNameKey({ group, name }) {
+ return JSON.stringify([group.normalize('NFC').toLowerCase(), name.normalize('NFC').toLowerCase()]);
+}
+function availableCopyName(profile, used) {
+ for (let number = 1; number <= MAX + 1; number++) {
+  const suffix = number === 1 ? ' (copy)' : ` (copy ${number})`;
+  const stem = profile.name.slice(0,120 - suffix.length).replace(/[\uD800-\uDBFF]$/u,'').trimEnd();
+  const name = stem + suffix;
+  if (!used.has(profileNameKey({ ...profile, name }))) return name;
+ }
+ throw fail('Choose a unique profile name.');
+}
 function sanitized(error){const safe=error?.code?.startsWith('ROCKETBRAIN_')?error:fail('The database connection could not be verified. Check the address, credentials, certificates and server availability.');const persisted=savedFailures.get(error);if(persisted)savedFailures.set(safe,persisted);return safe;}
 async function readPem(file){const actual=await fs.realpath(file),stat=await fs.stat(actual);if(!stat.isFile()||stat.size>2*1024*1024)throw fail('Certificate/key files must be regular files under 2 MiB.');return fs.readFile(actual,'utf8');}
 function createConnectionProfiles({state,secrets,connect,disconnect,getActiveProfile,isTrusted,createService,createTunnel=openTunnel,
@@ -55,6 +67,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
  const secretKey=id=>'rocketbrain.database.'+secretScope+'.'+id;
  const dto=record=>({id:record.profile.id,profile:clone(record.profile),revision:record.revision,hasSavedPassword:record.rememberPassword,verifiedAt:record.verifiedAt,observed:record.observed?clone(record.observed):null});
  const list=()=>[...records.values()].sort((a,b)=>a.profile.group.localeCompare(b.profile.group)||a.profile.name.localeCompare(b.profile.name)).map(dto);
+ const usedNames=()=>new Set([...records.values()].map(record => profileNameKey(record.profile)));
  function requireClosedProfileConsoles(id) {
   if(hasProfileConsole(id))throw fail('Close this profile’s dedicated SQL sessions before editing or removing it.');
  }
@@ -89,6 +102,26 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
  }
  async function verify(profile,pass,signal,schemas=false){let prepared,service;try{prepared=await prepare(profile,pass,signal);service=createService(prepared.config);const metadata=await service.metadata();const info=await service._metadataQuery('SELECT VERSION(), DATABASE(), CURRENT_USER()');const tls=await service._metadataQuery("SHOW SESSION STATUS LIKE 'Ssl_cipher'");const cipher=String(tls.rows[0]?.[1]||'');if(profile.tls.mode==='verify'&&!cipher)throw fail('The server did not confirm an encrypted TLS session.');const result={connected:true,database:metadata.database,serverVersion:String(info.rows[0]?.[0]||''),currentUser:String(info.rows[0]?.[2]||''),tables:metadata.tables.length,views:metadata.views.length,tls:profile.tls.mode==='verify',cipher:cipher||null,ssh:Boolean(profile.ssh),...(profile.transport&&{transport:{kind:profile.transport.kind}})};if(schemas){const available=await service._metadataQuery('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME LIMIT 200');result.schemas=available.rows.map(row=>String(row[0]));}return result;}finally{try{await service?.dispose();}finally{await prepared?.dispose();}}}
  async function persist(next,credentialChanges=[]){await state.update(SCOPE,secretScope);const before=[];try{for(const change of credentialChanges){const key=secretKey(change.id),old=await secrets.get(key);before.push({key,old});if(change.value===undefined)await secrets.delete(key);else await secrets.store(key,change.value);}await state.update(KEY,[...next.values()].map(value=>clone(value)));}catch(error){for(const saved of before.reverse())try{if(saved.old===undefined)await secrets.delete(saved.key);else await secrets.store(saved.key,saved.old);}catch{}throw fail('The profile or credential could not be saved. Previous profile metadata is retained.');}records.clear();for(const [id,value]of next)records.set(id,value);revision++;events.emit('change');}
+ function decodeProfiles(input) {
+  exact(input,['format','version','credentialsIncluded','profiles']);
+  if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3,4,5].includes(input.version)||input.credentialsIncluded!==false||
+     !Array.isArray(input.profiles)||input.profiles.length>MAX||Buffer.byteLength(JSON.stringify(input))>256*1024) {
+   throw fail('Use a credential-free profile export of at most 32 profiles and 256 KiB.');
+  }
+  return input.profiles.map(value=>{
+   if(value?.writeProtection!==undefined&&input.version<4)throw fail('Write protection requires the current profile export format.');
+   if(value?.sessionLifecycle!==undefined&&input.version!==5)throw fail('Session lifecycle settings require profile format 5.');
+   if(value?.ssh)throw fail('Re-enter verified SSH host/key paths locally before importing an SSH profile.');
+   if(value?.transport&&(input.version===1||Object.hasOwn(value.transport,'address')))throw fail('Re-enter local socket paths and pipe names in the connection editor after importing.');
+   if(value?.auth){
+    if(input.version<3)throw fail('RDS IAM profiles require the current export format.');
+    exact(value.auth,['kind','region']);
+    if(value.tls?.caPath||value.tls?.certPath||value.tls?.keyPath)throw fail('Select the RDS CA bundle locally after importing an IAM profile.');
+   }
+   return normalizeProfile({...value,id:crypto.randomUUID()},{allowUnconfigured:true});
+  });
+ }
+ const profileDigest = input => crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
  const api={
   list,
   onDidChange(listener){events.on('change',listener);return{dispose(){events.off('change',listener);}};},
@@ -111,6 +144,21 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
      guard(ticket);
      return opened;
     } finally { if (!transferred) await prepared.dispose(); }
+   });
+  },
+  duplicate(request) {
+   const input=clone(request);
+   return run(async ticket=>{
+    const source=records.get(input.id);
+    if(!source||input.revision!==source.revision)throw fail('The saved profile changed. Choose it again.');
+    if(records.size>=MAX)throw fail('At most 32 connection profiles are supported.');
+    const profile={...clone(source.profile),id:crypto.randomUUID(),name:availableCopyName(source.profile,usedNames())};
+    const record={profile,revision:1,rememberPassword:false,verifiedAt:null,observed:null};
+    const next=new Map(records);
+    next.set(profile.id,record);
+    guard(ticket);
+    await persist(next);
+    return dto(record);
    });
   },
   schemas(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const pass=await credentials(record.profile,input.password),result=await verify(record.profile,pass,signal,true);guard(ticket);return result.schemas;});},
@@ -165,26 +213,41 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    const version=profiles.some(p=>p.sessionLifecycle)?5:profiles.some(p=>p.writeProtection)?4:profiles.some(p=>p.auth)?3:profiles.some(p=>p.transport)?2:1;
    return{format:'RocketbrainConnectionProfiles',version,credentialsIncluded:false,profiles};
   },
-  importProfiles(request){
+  reviewProfileImport(request) {
+   trusted();
+   const input=clone(request), profiles=decodeProfiles(input), used=usedNames();
+   const rows=profiles.map(profile=>{
+    const key=profileNameKey(profile), conflicts=used.has(key);
+    used.add(key);
+    return { group:profile.group, name:profile.name, database:profile.database, conflicts };
+   });
+   return { revision, digest:profileDigest(input), rows, conflicts:rows.filter(item=>item.conflicts).length };
+  },
+  importProfiles(request, options){
    const input=clone(request);
-   return run(async()=>{
-    exact(input,['format','version','credentialsIncluded','profiles']);
-    if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3,4,5].includes(input.version)||input.credentialsIncluded!==false||!Array.isArray(input.profiles)||input.profiles.length+records.size>MAX||Buffer.byteLength(JSON.stringify(input))>256*1024)throw fail('Use a credential-free profile export of at most 32 profiles and 256 KiB.');
-    const normalized=input.profiles.map(value=>{
-     if(value?.writeProtection!==undefined&&input.version<4)throw fail('Write protection requires the current profile export format.');
-     if(value?.sessionLifecycle!==undefined&&input.version!==5)throw fail('Session lifecycle settings require profile format 5.');
-     if(value?.ssh)throw fail('Re-enter verified SSH host/key paths locally before importing an SSH profile.');
-     if(value?.transport&&(input.version===1||Object.hasOwn(value.transport,'address')))throw fail('Re-enter local socket paths and pipe names in the connection editor after importing.');
-     if(value?.auth){
-      if(input.version<3)throw fail('RDS IAM profiles require the current export format.');
-      exact(value.auth,['kind','region']);
-      if(value.tls?.caPath||value.tls?.certPath||value.tls?.keyPath)throw fail('Select the RDS CA bundle locally after importing an IAM profile.');
+   const approval=options && clone(options);
+   return run(async ticket=>{
+    const normalized=decodeProfiles(input),next=new Map(records),used=usedNames();
+    if(approval&&(!['rename','skip'].includes(approval.strategy)||approval.review?.revision!==ticket||approval.review?.digest!==profileDigest(input))) {
+     throw fail('The imported file or saved profiles changed. Review the import again.');
+    }
+    const reserved=new Set([...used,...normalized.map(profileNameKey)]);
+    let imported=0, skipped=0, renamed=0;
+    for(const profile of normalized) {
+     if(approval&&used.has(profileNameKey(profile))) {
+      if(approval.strategy==='skip') { skipped++; continue; }
+      profile.name=availableCopyName(profile,reserved);
+      renamed++;
      }
-     return normalizeProfile({...value,id:crypto.randomUUID()},{allowUnconfigured:true});
-    }),next=new Map(records);
-    for(const p of normalized)next.set(p.id,{profile:p,revision:1,rememberPassword:false,verifiedAt:null,observed:null});
-    await persist(next);
-    return{imported:normalized.length,connectionsAttempted:0};
+     used.add(profileNameKey(profile));
+     reserved.add(profileNameKey(profile));
+     next.set(profile.id,{profile,revision:1,rememberPassword:false,verifiedAt:null,observed:null});
+     imported++;
+    }
+    if(next.size>MAX)throw fail('At most 32 connection profiles are supported.');
+    guard(ticket);
+    if(imported)await persist(next);
+    return {imported,connectionsAttempted:0,...(approval&&{skipped,renamed})};
    });
   },
   async dispose(){if(disposed)return;disposed=true;revision++;for(const controller of controllers)controller.abort();await Promise.allSettled([...operations]);events.removeAllListeners();}

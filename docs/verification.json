@@ -1,25 +1,25 @@
 {
-  "version": "0.65.0",
-  "verifiedAt": "2026-11-25T15:21:37.983Z",
+  "version": "0.66.0",
+  "verifiedAt": "2026-11-25T16:03:45.927Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.65.0.vsix",
-    "sha256": "6f4546ebde2e3904cc998f62215d8f72f4f256fdaf923f9428a7ebbad953586e",
-    "bytes": 3310985,
+    "name": "rocketbrain-0.66.0.vsix",
+    "sha256": "9a37d24bb20383fe5cbb89d4659d12d0aca6bb9725f81261990e6efa63eb8697",
+    "bytes": 3326699,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1780,
-    "inputVectorSha256": "05f609ce6fa4f209bab9726300be7521fe96c8ae7c92c9a21e4ffc92157e5197",
+    "frozenPublicInputs": 1801,
+    "inputVectorSha256": "3321b3983e382ceb1b9c2ea2858341b8066ca9b2cbab38d70712d56d7773a375",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1555,
-    "pass": 1462,
+    "tests": 1570,
+    "pass": 1476,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 93,
+    "skipped": 94,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,26 +29,22 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 5,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "javaUsages",
+          "group": "javaFormatting",
           "checks": 1
         },
         {
-          "group": "kotlinUsages",
+          "group": "springWiring",
           "checks": 1
         },
         {
-          "group": "hqlGraphs",
+          "group": "profileCopy",
           "checks": 1
         },
         {
-          "group": "sessionLifecycle",
-          "checks": 1
-        },
-        {
-          "group": "schemaExport",
+          "group": "sqlRelatedRows",
           "checks": 1
         }
       ],
@@ -63,26 +59,22 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 5,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "javaUsages",
+          "group": "javaFormatting",
           "checks": 1
         },
         {
-          "group": "kotlinUsages",
+          "group": "springWiring",
           "checks": 1
         },
         {
-          "group": "hqlGraphs",
+          "group": "profileCopy",
           "checks": 1
         },
         {
-          "group": "sessionLifecycle",
-          "checks": 1
-        },
-        {
-          "group": "schemaExport",
+          "group": "sqlRelatedRows",
           "checks": 1
         }
       ],
@@ -93,81 +85,70 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-016": {
-      "scope": "두 Spring DB 설치 환경에서 Java 오버로드 참조 두 곳과 파일 범위, Spring XML과 Java의 양방향 클래스 사용처, 설정 키 사용처 두 곳, Kotlin 수신 타입별 동명 참조 및 변경 거부를 확인했다.",
+    "IDEA-010": {
+      "scope": "설치한 VSIX로 두 Spring 프로젝트에서 설정 파일 두 개, 2칸 공백과 논리 2칸·탭 4칸, 선택 영역 경계와 LF 보존, 문서 CRLF와 Undo, 원본 디스크 보존 및 설정 변경 거부를 확인했다.",
       "runtimeGroups": [
-        "javaUsages",
-        "kotlinUsages"
+        "javaFormatting"
       ]
     },
-    "IDEA-060": {
-      "scope": "두 실제 Spring DB의 Hibernate 7.4.13에서 그래프 쿼리 일곱 개를 같은 read-only 트랜잭션 정책으로 실행했다. 다섯 거부 사례의 SQL 준비 카운터는 증가하지 않았고 CTE 별칭으로 이동했다.",
+    "IDEA-053": {
+      "scope": "두 Spring DB에서 기존 모호성을 재현하고 후보 두 개를 각각 컴파일했다. 설치판 Code Action 두 개와 diff, 오래된 검토 거부, 적용한 Java 텍스트를 통한 실제 Bean 선택을 확인했다.",
       "runtimeGroups": [
-        "hqlGraphs"
+        "springWiring"
       ]
     },
-    "DG-013": {
-      "scope": "실제 두 DB의 설치판에서 초기화 네 문장, 상태 유지, 유휴 종료, 활성 트랜잭션 보존과 롤백, 서버 세션 종료 및 별도 물리 재접속, 잘못된 초기화 거부를 확인했다.",
+    "DG-015": {
+      "scope": "두 실제 서버에서 같은 주소의 독립 접속, 새 프로필 자격 증명, 자격 증명 없는 v5 교환 파일, 이름 변경·건너뛰기, 오래된 가져오기 거부와 활성 연결 보존을 확인했다.",
       "runtimeGroups": [
-        "sessionLifecycle"
+        "profileCopy"
       ]
     },
-    "DG-085": {
-      "scope": "실제 두 DB에서 12개 DDL 단계를 검토 파일 그대로 빈 스키마에 복원했다. 루틴과 트리거 각 세 개의 정의·순서·소유자와 문자 설정, 변경 객체의 실제 Git diff, 지원 밖 객체 네 개의 생략을 확인했다.",
+    "DG-066": {
+      "scope": "두 DB에서 별칭과 중복 열 표시명, 와일드카드, 교차 스키마 복합 BIGINT·바이너리 FK를 검증했다. 모호한 투영 다섯 사례, 변경된 SQL·원본 행·스키마는 이동을 거부했다.",
       "runtimeGroups": [
-        "schemaExport"
+        "sqlRelatedRows"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 375,
+    "sourceCorrespondences": 381,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 81,
-      "partial": 120,
+      "implemented": 82,
+      "partial": 119,
       "not-implemented": 0,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 154,
-    "previousWeightedPoints": 152.5,
+    "weightedPoints": 154.5,
+    "previousWeightedPoints": 154,
     "targetWeightedPoints": 216,
-    "referencePercent": 71.3,
+    "referencePercent": 71.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-016",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-013",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-085",
+        "id": "DG-015",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Spring 사용처는 확인된 XML class와 설정 키를 연결하며 임의 동적 등록과 Java↔Kotlin 교차 언어 바인딩은 지원 범위 밖이다.",
-    "Hibernate 그래프 실행은 검토된 스칼라 SELECT를 대상으로 한다. 재귀·lateral 및 엔티티 fetch join 결과가 남아 있다.",
-    "DDL은 의존성을 확인한 단일 스키마 객체를 내보낸다. 외부·동적 객체 참조는 생략 항목으로 표시한다.",
+    "이번 포맷 지원은 JDT 기반 Java에 적용한다. Kotlin EditorConfig는 다음 설치 검증 대상이다.",
+    "주입 빠른 수정은 활성 후보를 확인한 로컬 클래스의 모호한 단일 Bean 주입에 적용한다. 임의 동적 등록과 외부 후보의 정적 결정은 남아 있다.",
+    "SQL 결과의 관련 행은 원본을 확인한 단일 테이블 투영에서 연다. 불명확한 조인 투영과 교차 스키마 논리 관계가 남아 있다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Java·Kotlin 포맷과 중첩 EditorConfig, Spring 주입 후보 퀵픽스",
-    "DB 프로필 복제와 가져오기 충돌 처리",
-    "캡처한 SQL 결과에서 FK 관련 행 탐색"
+    "Kotlin 문서·선택 포맷의 중첩 EditorConfig와 실제 Gradle 실행",
+    "Hibernate 엔티티 관계 fetch join의 읽기 전용 결과",
+    "교차 스키마 논리 관계와 데이터셋의 삽입·삭제·수정 동기화"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

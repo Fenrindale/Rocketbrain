@@ -3,12 +3,13 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { analyzeSpring, definitionsAt } = require('./model');
 const { registerBeanGraph } = require('./bean-graph-vscode');
+const { registerAutowiringFix } = require('./autowiring-fix-vscode');
 
 function registerSemanticSpring(vscode, context, output) {
   const subscriptions = [], diagnosticCollection = vscode.languages.createDiagnosticCollection('rocketbrain-spring');
   subscriptions.push(diagnosticCollection);
   let model = null, dirty = true, pending = null, revision = 0, timer, disposed = false;
-  const graphSourceHashes = new WeakMap();
+  const graphSourceHashes = new WeakMap(), analysisInputs = new WeakMap();
   const digest = value => createHash('sha256').update(value).digest('hex');
   const configuration = () => vscode.workspace.getConfiguration('rocketbrain.spring');
   const enabled = () => configuration().get('enabled', true);
@@ -54,7 +55,9 @@ function registerSemanticSpring(vscode, context, output) {
       const roots = configuration().get('configurationRoots', []).filter(value => typeof value === 'string' && value.trim());
       const [java, properties] = await Promise.all([readFiles('**/*.java', 2000), readFiles('**/application*.{properties,yml,yaml}', 300, roots)]);
       const config = configuration(), truncated = java.issues.length || properties.issues.length;
-      const result = analyzeSpring(java.files, properties.files, { activeProfiles: config.get('activeProfiles', []), properties: config.get('properties', {}), basePackages: config.get('basePackages', []), closedWorld: !truncated && config.get('closedWorld', false), parameterNames: config.get('parameterNames', false) });
+      const options={ activeProfiles: config.get('activeProfiles', []), properties: config.get('properties', {}), basePackages: config.get('basePackages', []), closedWorld: !truncated && config.get('closedWorld', false), parameterNames: config.get('parameterNames', false) };
+      const result = analyzeSpring(java.files, properties.files,options);
+      analysisInputs.set(result,{java:java.files,properties:properties.files,options});
       result.issues.push(...[...java.issues, ...properties.issues].map(message => ({ message })));
       result.truncated = Boolean(truncated); result.revision = before;
       const graphSources = new Set([...result.beans,...result.injections].map(item => item.uri));
@@ -104,9 +107,10 @@ function registerSemanticSpring(vscode, context, output) {
   const refresh = async () => { invalidate(); return analyze(); };
   const beanGraph = registerBeanGraph(vscode,{analyze,refresh,enabled,revision:() => revision,
     matchesSource:(model,uri,text) => graphSourceHashes.get(model)?.get(uri) === digest(text)});
-  subscriptions.push(beanGraph);
+  const autowiring=registerAutowiringFix(vscode,{analyze,refresh,enabled,inputsFor:model=>analysisInputs.get(model),output});
+  subscriptions.push(beanGraph,autowiring);
   invalidate();
-  return { analyze, snapshot: () => model, definitions, refresh, beanGraph,
+  return { analyze, snapshot: () => model, definitions, refresh, beanGraph,autowiring,
     dispose() { disposed = true; clearTimeout(timer); for (const item of subscriptions) item.dispose(); } };
 }
 

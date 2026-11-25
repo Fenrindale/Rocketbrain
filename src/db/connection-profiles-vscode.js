@@ -77,6 +77,13 @@ function registerConnectionProfiles(context,vscode,{database}){
  async function openEditor(value){trusted();const saved=value?await choose(value):null;if(value&&!saved)throw Error('This connection profile no longer exists.');const id=randomUUID(),profile=saved?.profile||{id:randomUUID(),name:'My database',group:'',color:'none',host:'127.0.0.1',port:3306,user:'',database:'',tls:{mode:'disabled'},ssh:null},panel=vscode.window.createWebviewPanel('rocketbrain.connectionEditor',saved?'Edit '+profile.name:'New database connection',vscode.ViewColumn.Active,{enableScripts:true,retainContextWhenHidden:true,localResourceRoots:[]});panel.webview.html=connectionHtml(randomBytes(24).toString('hex'));editors.set(id,{panel,profile,revision:saved?.revision,hasSavedPassword:saved?.hasSavedPassword,busy:false});subscriptions.push(panel.onDidDispose(()=>editors.delete(id)),panel.webview.onDidReceiveMessage(message=>handle(id,message).catch(()=>{})));return{editorId:id,profile:structuredClone(profile)};}
  const command=(id,action)=>subscriptions.push(vscode.commands.registerCommand(id,async(...args)=>{try{return await action(...args);}catch(error){await vscode.window.showErrorMessage('Rocketbrain: '+error.message);}}));
  command('rocketbrain.connections.add',()=>openEditor());command('rocketbrain.connections.edit',value=>openEditor(value));command('rocketbrain.connections.refresh',()=>events.fire());
+ command('rocketbrain.connections.duplicate',async value=>{
+  trusted();
+  const selected=await choose(value);
+  if(!selected)return;
+  const copy=await manager.duplicate({id:selected.id,revision:selected.revision});
+  return openEditor(copy.id);
+ });
  command('rocketbrain.connections.connect',async value=>{trusted();const r=await choose(value);if(!r)return;const password=await pass(r);if(!r.hasSavedPassword&&password===undefined)return;return manager.connect({id:r.id,password});});
  command('rocketbrain.connections.openDedicatedConsole',async value=>{
   trusted();
@@ -91,7 +98,27 @@ function registerConnectionProfiles(context,vscode,{database}){
  command('rocketbrain.connections.selectSchema',async value=>{trusted();const r=await choose(value);if(!r)return;const password=await pass(r);if(!r.hasSavedPassword&&password===undefined)return;const schemas=await manager.schemas({id:r.id,password}),database=await vscode.window.showQuickPick(schemas,{title:'Select schema for this connection'});if(database)return manager.connect({id:r.id,password,database});});
  command('rocketbrain.connections.remove',async value=>{trusted();const r=await choose(value);if(!r)return;if(await vscode.window.showWarningMessage('Remove '+r.profile.name+' and its saved password? An active connection will be disconnected.',{modal:true},'Remove connection')!=='Remove connection')return;return manager.remove({id:r.id,expectedRevision:r.revision,disconnect:true});});
  command('rocketbrain.connections.export',async()=>{trusted();const content=manager.exportProfiles(),uri=await vscode.window.showSaveDialog({title:'Export credential-free profiles',filters:{JSON:['json']}});if(uri)await vscode.workspace.fs.writeFile(uri,Buffer.from(JSON.stringify(content,null,2)+'\n'));return{profiles:content.profiles.length,credentialsIncluded:false};});
- command('rocketbrain.connections.import',async()=>{trusted();const uris=await vscode.window.showOpenDialog({title:'Import credential-free profiles',canSelectMany:false,filters:{JSON:['json']}});if(!uris?.length)return;const buffer=await vscode.workspace.fs.readFile(uris[0]);if(buffer.byteLength>256*1024)throw Error('The profile file exceeds 256 KiB.');return manager.importProfiles(JSON.parse(Buffer.from(buffer).toString('utf8')));});
+ command('rocketbrain.connections.import',async()=>{
+  trusted();
+  const uris=await vscode.window.showOpenDialog({title:'Import credential-free profiles',canSelectMany:false,filters:{JSON:['json']}});
+  if(!uris?.length)return;
+  const buffer=await vscode.workspace.fs.readFile(uris[0]);
+  if(buffer.byteLength>256*1024)throw Error('The profile file exceeds 256 KiB.');
+  const content=JSON.parse(Buffer.from(buffer).toString('utf8')), review=manager.reviewProfileImport(content);
+  let strategy='rename';
+  if(review.conflicts){
+   const names=review.rows.filter(item=>item.conflicts).slice(0,8).map(item=>item.name).join(', ');
+   const chosen=await vscode.window.showQuickPick([
+    { label:'Import as copies', description:'Give each conflicting profile a unique name', strategy:'rename' },
+    { label:'Skip conflicting names', description:'Import the profiles with available names', strategy:'skip' }
+   ],{title:review.conflicts+' conflicting profile names',placeHolder:names});
+   if(!chosen)return;
+   strategy=chosen.strategy;
+  }
+  const result=await manager.importProfiles(content,{review,strategy});
+  void vscode.window.showInformationMessage(`${result.imported} imported · ${result.renamed} renamed · ${result.skipped} skipped`);
+  return result;
+ });
  subscriptions.push(manager.onDidChange(()=>events.fire()),database.onDidChangeDatabase(()=>events.fire()),vscode.window.registerTreeDataProvider('rocketbrain.connections',tree));
  const api={...manager,openEditor,handle,closeEditor(id){editors.get(id)?.panel.dispose();},editors:()=>[...editors.keys()],tree,async dispose(){if(closed)return;closed=true;for(const {panel}of editors.values())panel.dispose();editors.clear();await manager.dispose();for(const s of subscriptions)s.dispose();events.dispose();}};context.subscriptions.push(api);return api;
 }

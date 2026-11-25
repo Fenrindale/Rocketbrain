@@ -1,5 +1,5 @@
 {
-  "version": "0.65.0",
+  "version": "0.66.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 81,
-    "partial": 120,
+    "implemented": 82,
+    "partial": 119,
     "not-implemented": 0,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 71.3,
+    "percent": 71.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-016",
-    "IDEA-060",
-    "DG-013",
-    "DG-085"
+    "IDEA-010",
+    "IDEA-053",
+    "DG-015",
+    "DG-066"
   ],
   "expandedFeatures": [
-    "IDEA-016",
-    "IDEA-060",
-    "DG-013",
-    "DG-085"
+    "IDEA-010",
+    "IDEA-053",
+    "DG-015",
+    "DG-066"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -334,24 +334,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT Java format과 VS Code 포맷 설정을 사용한다.",
+      "scope": "JDT Java Format Document·Format Selection과 검토 화면이 중첩 EditorConfig의 들여쓰기 방식·폭·탭 폭을 적용한다. 전체 문서는 텍스트와 줄바꿈을 별도 Undo·Redo 단계로 적용한다.",
       "remaining": [
-        "EditorConfig 전체 연동·언어별 스타일 및 원본 formatter 동등성은 미검증이다."
+        "Kotlin 등 다른 언어의 중첩 설정과 포맷이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.66-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "testedScope": "설치한 VSIX로 두 Spring 프로젝트에서 설정 파일 두 개, 2칸 공백과 논리 2칸·탭 4칸, 선택 영역 경계와 LF 보존, 문서 CRLF와 Undo, 원본 디스크 보존 및 설정 변경 거부를 확인했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/format-vscode.js",
+          "src/java/refactoring.js",
+          "test/java-formatting-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -520,8 +519,8 @@
       "verification": {
         "state": "v0.65-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.65.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1672,24 +1671,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "한정된 Bean·Qualifier/Primary/Profile 진단과 소스 이동, 실제 Actuator 관찰이 있다.",
+      "scope": "모호한 Spring Bean 주입 진단에서 확인된 후보의 Qualifier를 선택한다. 빠른 수정은 실제 삽입 위치를 보여주고 모델과 소스가 달라진 검토의 적용을 막는다.",
       "remaining": [
-        "모든 조건·동적 등록의 정적 결정과 autowiring quick fix가 남는다."
+        "임의 동적 조건·등록과 외부 후보를 정적으로 결정하는 범위가 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.66-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "testedScope": "두 Spring DB에서 기존 모호성을 재현하고 후보 두 개를 각각 컴파일했다. 설치판 Code Action 두 개와 diff, 오래된 검토 거부, 적용한 Java 텍스트를 통한 실제 Bean 선택을 확인했다.",
         "publicEvidence": [
+          "src/spring/autowiring-fix-vscode.js",
           "src/spring/model.js",
-          "src/spring/vscode.js",
-          "src/spring/runtime-client.js",
-          "src/analysis-tree.js"
+          "test/spring-autowiring-fix-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1899,8 +1897,8 @@
       "verification": {
         "state": "v0.65-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.65.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4081,8 +4079,8 @@
       "verification": {
         "state": "v0.65-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.65.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4127,23 +4125,25 @@
       "category": "연결·드라이버",
       "feature": "연결 복제·가져오기·공유",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "비밀번호·인증서/SSH 비밀 경로를 제외한 프로필을 내보내고 새 ID로 가져온다. 가져온 설정은 다시 검증하며 자격 증명은 별도로 입력·보관한다.",
-      "remaining": [
-        "자동 비밀정보 공유·충돌 병합·일반 조직 배포/프로필 복제 UI의 전체 조합은 남는다."
-      ],
+      "scope": "연결 프로필을 별도 ID의 편집 화면으로 복제하고 이름 충돌을 검토해 건너뛰거나 새 이름으로 가져온다. 공유 파일은 접속·세션 설정을 보존하며 자격 증명은 별도로 입력한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.66-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 비밀정보 없는 교환과 새 식별자·stale 저장 보호·재입력 흐름을 확인한다.",
-        "publicEvidence": [],
+        "testedScope": "두 실제 서버에서 같은 주소의 독립 접속, 새 프로필 자격 증명, 자격 증명 없는 v5 교환 파일, 이름 변경·건너뛰기, 오래된 가져오기 거부와 활성 연결 보존을 확인했다.",
+        "publicEvidence": [
+          "src/db/connection-profiles.js",
+          "src/db/connection-profiles-vscode.js",
+          "test/connection-copy-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -5697,23 +5697,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Grid·Record에서 캡처한 행에서 물리 FK를 스키마 너머까지 따라가고, 저장한 논리 관계를 같은 스키마에서 양방향으로 따라간다. 관련 결과를 읽기 전용으로 열고 출발 행으로 돌아간다.",
+      "scope": "지원되는 단일 원본 SQL 결과에서 실제 FK를 따라 스키마를 넘나든다. 드라이버 원본 열 정보와 현재 행을 확인하고 읽기 전용 관련 결과에서 출발 행으로 복귀한다.",
       "remaining": [
-        "임의 SQL 결과의 원본 행 추적과 교차 스키마 논리 관계 등록이 남아 있다."
+        "모호한 조인·집계 투영과 교차 스키마 논리 관계가 남아 있다."
       ],
       "verification": {
-        "state": "v0.52-installed-coverage",
+        "state": "v0.66-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.52.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 서버에서 같은 이름의 테이블을 구분하고 복합 unsigned BIGINT·바이너리 값을 보존했다. 논리 관계 선택, 메타데이터 변경 거부와 원래 행으로 돌아가기를 확인했다.",
+        "testedScope": "두 DB에서 별칭과 중복 열 표시명, 와일드카드, 교차 스키마 복합 BIGINT·바이너리 FK를 검증했다. 모호한 투영 다섯 사례, 변경된 SQL·원본 행·스키마는 이동을 거부했다.",
         "publicEvidence": [
-          "docs/related-rows.md",
           "src/db/related-rows.js",
-          "test/db-related-scoped-host.js"
+          "src/table-editor.js",
+          "test/sql-related-source-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6300,8 +6300,8 @@
       "verification": {
         "state": "v0.65-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.65.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6645,43 +6645,33 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "6f4546ebde2e3904cc998f62215d8f72f4f256fdaf923f9428a7ebbad953586e",
-    "sourceManifestSha256": "05f609ce6fa4f209bab9726300be7521fe96c8ae7c92c9a21e4ffc92157e5197",
+    "vsixSha256": "9a37d24bb20383fe5cbb89d4659d12d0aca6bb9725f81261990e6efa63eb8697",
+    "sourceManifestSha256": "3321b3983e382ceb1b9c2ea2858341b8066ca9b2cbab38d70712d56d7773a375",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 5
+        "featureGroups": 4
       },
       {
         "engine": "mariadb",
-        "featureGroups": 5
+        "featureGroups": 4
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-016",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-013",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-085",
+      "id": "DG-015",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1555,
-    "pass": 1462,
+    "tests": 1570,
+    "pass": 1476,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 93,
+    "skipped": 94,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

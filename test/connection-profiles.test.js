@@ -66,3 +66,47 @@ test('changing a local endpoint never reuses the saved password for another rout
     assert.throws(() => normalizeProfile({ ...local, ...mixed }), /cannot be combined/);
   }
 });
+
+test('duplicate allocates independent identities and never reads or copies saved credentials', async t => {
+  const state = setup();
+  t.after(() => state.api.dispose());
+  const source = await state.api.save({ profile: base(), password: 'kept-at-source', rememberPassword: true });
+  const first = await state.api.duplicate({ id: source.id, revision: source.revision });
+  const second = await state.api.duplicate({ id: source.id, revision: source.revision });
+  assert.notEqual(first.id, source.id);
+  assert.notEqual(first.id, second.id);
+  assert.equal(first.profile.name, 'Local dev (copy)');
+  assert.equal(second.profile.name, 'Local dev (copy 2)');
+  assert.equal(first.verifiedAt, null);
+  assert.equal(first.hasSavedPassword, false);
+  assert.deepEqual([...state.secretValues.values()], ['kept-at-source']);
+  assert.equal(state.closed, 1);
+  await assert.rejects(state.api.duplicate({ id: source.id, revision: source.revision - 1 }), /profile changed/);
+  await state.api.connect({ id: first.id });
+  assert.equal(state.connected.password, '');
+});
+
+test('reviewed imports reserve original labels, support skip, and reject stale collision plans', async t => {
+  const state = setup();
+  t.after(() => state.api.dispose());
+  const original = await state.api.save({ profile: base(), password: 'never-shared', rememberPassword: true });
+  const output = state.api.exportProfiles();
+  const value = { ...output, profiles: [{ ...output.profiles[0], name: 'LOCAL DEV' },
+    { ...output.profiles[0], name: 'Local dev (copy)' }] };
+  const review = state.api.reviewProfileImport(value);
+  assert.equal(review.conflicts, 1);
+  const edited = { ...value, profiles: [value.profiles[0]] };
+  await assert.rejects(state.api.importProfiles(edited, { review, strategy: 'rename' }), /Review the import again/);
+  assert.deepEqual(await state.api.importProfiles(value, { review, strategy: 'rename' }),
+    { imported: 2, connectionsAttempted: 0, skipped: 0, renamed: 1 });
+  assert.ok(state.api.list().some(row => row.profile.name === 'Local dev (copy)'));
+  assert.ok(state.api.list().some(row => row.profile.name === 'LOCAL DEV (copy 2)'));
+  await assert.rejects(state.api.importProfiles(value, { review, strategy: 'skip' }), /Review the import again/);
+  const latest = state.api.reviewProfileImport(value);
+  assert.equal(latest.conflicts, 2);
+  assert.deepEqual(await state.api.importProfiles(value, { review: latest, strategy: 'skip' }),
+    { imported: 0, connectionsAttempted: 0, skipped: 2, renamed: 0 });
+  assert.equal(state.api.list().find(row => row.id === original.id).revision, original.revision);
+  assert.deepEqual([...state.secretValues.values()], ['never-shared']);
+  assert.equal(state.closed, 1);
+});

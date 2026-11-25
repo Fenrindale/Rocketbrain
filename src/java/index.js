@@ -4,6 +4,7 @@ const { resolveLaunch, serverSettings } = require('./runtime');
 const { registerSpringFeatures } = require('./spring');
 const { registerJavaDebugger } = require('./debug');
 const { ACTIONS,namedAction,editorAnchor } = require('./extraction-actions');
+const { registerJavaFormatting } = require('./format-vscode');
 
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
@@ -54,6 +55,12 @@ function registerJavaFeatures(context, vscode) {
         initializationOptions: { bundles: launch.bundles, workspaceFolders: (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.toString()), settings, extendedClientCapabilities: { progressReportProvider: true, classFileContentsSupport: true, overrideMethodsPromptSupport: false, hashCodeEqualsPromptSupport: false, advancedOrganizeImportsSupport: false,advancedExtractRefactoringSupport:false } },
         synchronize: { fileEvents: watcher },
         middleware: {
+          provideDocumentFormattingEdits(document,options,token,next) {
+            return api.formatting.native(document,undefined,options,token,()=>next(document,options,token));
+          },
+          provideDocumentRangeFormattingEdits(document,range,options,token,next) {
+            return api.formatting.native(document,range,options,token,()=>next(document,range,options,token));
+          },
           async provideCodeActions(document,range,context,token,provide) {
             const version = document.version;
             const actions = await provide(document,range,context,token);
@@ -149,6 +156,14 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(debuggerController, api.debug.asyncTrace);
   api.refactoring=require('./refactoring').registerJavaRefactoring(context,vscode,{request:refactoringRequest});
   subscriptions.push(api.refactoring);
+  api.formatting=registerJavaFormatting(vscode,{java:api,output,request:async (method,params,cancellation) => {
+    const server=client;
+    if (!server||state.state!=='running'||!vscode.workspace.isTrusted) throw Error('Start Java support in a trusted workspace before formatting.');
+    const edits=await server.sendRequest(method,params,...(cancellation?[cancellation]:[]));
+    if (client!==server||!vscode.workspace.isTrusted) throw Error('The Java formatter server changed during formatting.');
+    return edits;
+  }});
+  subscriptions.push(api.formatting);
   api.constantRefactoring=(params,cancellation)=>refactoringRequest('java/getRefactorEdit',{
     command:'extractConstant',context:params,options:{tabSize:4,insertSpaces:true},commandArguments:[]
   },cancellation);

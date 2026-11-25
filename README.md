@@ -222,6 +222,8 @@ Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후�
 
 **Find JVM & Spring Usages**는 현재 파일, 해당 워크스페이스 폴더 또는 전체 워크스페이스에서 사용처를 찾습니다. Java와 Kotlin의 의미 기반 참조, Spring XML의 Bean 클래스, 정적 설정 플레이스홀더를 골라 정확한 소스 위치로 이동합니다. [사용처 검색 범위](docs/java-symbol-navigation.md#find-usages)
 
+Java **Format Document**와 **Format Selection**은 상위 폴더와 현재 폴더의 `.editorconfig`를 적용합니다. **Preview Java Formatting**으로 선택 영역 또는 문서 전체의 변경을 확인한 뒤 적용할 수 있습니다. LF·CRLF 변환은 문서 전체에만 적용됩니다. [Java 포맷 설정](docs/java-formatting.md)
+
 **Extract Java Local Variable**, **Extract Java Field**, **Extract Java Constant**에서 새 이름과 변경 내용을 먼저 검토할 수 있습니다. 지역 변수와 필드는 `return` 식 전체 또는 지역 변수의 초기화 식을 선택합니다. 필드를 추출하면 현재 메서드에서 값을 계산해 `private` 필드에 대입합니다. 상수 추출은 컴파일 타임 상수식을 `private static final` 필드로 옮깁니다. [Java 변수·필드·상수 추출](docs/java-extract-constant.md)
 
 | 명령 | 지원 범위 | 추가 분석이 필요한 범위 |
@@ -251,6 +253,8 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 **Save SQL Parameter Preset**은 선택한 SQL의 typed parameter 값을 VS Code Secret Storage에 저장합니다. SQL 실행에서 저장값을 선택하면 연결과 서버 계정, SQL 원문, 파라미터 정의와 관찰한 열 타입이 일치하는지 확인하고 실행 전에 검토를 받습니다. 단일 테이블의 열과 파라미터를 비교하는 SELECT와 열을 명시한 INSERT에는 확인한 열 타입을 제안합니다. **Remove SQL Parameter Preset**에서 저장값을 삭제할 수 있습니다.
 
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
+
+**Duplicate Database Profile**은 기존 연결 설정을 새 이름으로 복사해 편집기를 엽니다. 복사본에는 새 프로필 ID가 부여되며 비밀번호가 필요한 연결은 별도로 입력합니다. 공유 파일을 가져올 때 같은 그룹에 이름이 겹치면 이름을 바꿔 가져오거나 해당 항목을 건너뜁니다.
 
 연결의 **Session lifecycle**에서 물리 연결마다 적용할 `SET SESSION` 초기 SQL을 지정합니다. 시간대·선택 SQL 엄격 모드·`sql_safe_updates`·`group_concat_max_len`을 지원합니다. Keep-alive는 유휴 세션의 상태를 읽습니다. Idle timeout은 실행 중인 문장과 트랜잭션이 없는 자동 커밋 세션을 종료합니다. **Reconnect Console Session**으로 새 연결을 열면 초기값을 다시 적용합니다.
 

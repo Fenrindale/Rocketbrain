@@ -58,7 +58,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   return {dispose(){if(prepareConstant===prepare)prepareConstant=undefined;}};
  }
  function removePlan(id){plans.delete(id);checkedPlans.delete(id);validators.delete(id);}
- async function previewWorkspaceEdit(workspaceEdit,{title='Java refactoring',kind='refactor',cancellation,anchorDocument,allowedResourceOperations=[],allowedResourceRenames=[],allowedServiceEdits=[],createJavaFile,guards=[],warnings=[],validate:extraValidate,preApply}={}){
+ async function previewWorkspaceEdit(workspaceEdit,{title='Java refactoring',kind='refactor',cancellation,anchorDocument,allowedResourceOperations=[],allowedResourceRenames=[],allowedServiceEdits=[],createJavaFile,guards=[],warnings=[],validate:extraValidate,preApply,formattingEndOfLine}={}){
   trusted();cancelled(cancellation);if(!workspaceEdit||typeof workspaceEdit!=='object'||Array.isArray(workspaceEdit))throw Error('The Java engine did not return a WorkspaceEdit.');if(Object.keys(workspaceEdit.changeAnnotations||{}).length)throw Error('Annotated refactoring conflicts require a separate review workflow.');
   if(!Array.isArray(warnings)||warnings.length>20||warnings.some(value=>typeof value!=='string'||value.length>1000||/[\u0000-\u0008\u000b-\u001f]/.test(value)))throw Error('Invalid refactoring review warnings.');const anchor=anchorDocument&&{document:anchorDocument,version:anchorDocument.version,text:anchorDocument.getText()};if(anchor){sourceUri(anchorDocument.uri);if(anchorDocument.isClosed)throw Error('The selected source document is closed.');}
   if(!Array.isArray(allowedResourceRenames)||allowedResourceRenames.length>30)throw Error('Invalid reviewed resource rename set.');
@@ -112,6 +112,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    resources.push({kind:'create',uri:creation.uri,parentRealPath});
   }
   if(!edits.size||edits.size+Number(Boolean(creation))>30||resources.length>30)throw Error('A Java refactoring must review between 1 and 30 files.');if(!Array.isArray(guards)||guards.length>2000)throw Error('Refactoring dependency review exceeds its file limit.');
+  if(formattingEndOfLine!==undefined&&(!['lf','crlf'].includes(formattingEndOfLine)||kind!=='source.format.java'||resources.length||edits.size!==1||!anchor||!edits.has(key(anchor.document.uri.fsPath))))throw Error('Line ending conversion requires one reviewed Java formatting document.');
   const documents=[],guardSnapshots=[];let size=0,count=0;
   function assertBinaryClosed(uri){if((vscode.workspace.textDocuments||[]).some(doc=>!doc.isClosed&&key(doc.uri.fsPath)===key(uri.fsPath)))throw Error('Close every text document for the reviewed binary resource before moving it.');}
   function captureBinary(uri,resource,changes){assertBinaryClosed(uri);if(changes.length)throw Error('Reviewed binary resources cannot receive text edits.');const identity=binaryIdentity(uri.fsPath),disk=fs.readFileSync(uri.fsPath);if(JSON.stringify(binaryIdentity(uri.fsPath))!==JSON.stringify(identity)||disk.length!==resource.bytes||hash(disk)!==resource.resourceSha256)throw Error('A reviewed binary resource identity or exact byte hash changed.');size+=disk.length;if(size>8*1024*1024)throw Error('Refactoring review exceeds its source or edit limit.');return {uri:uri.toString(),binary:true,bytes:disk.length,identity,diskHash:hash(disk),resourceSha256:resource.resourceSha256,before:null,after:null,edits:[],resourceOperation:resource.kind,newUri:resource.newUri};}
@@ -122,9 +123,10 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    const resource=resources.find(value=>key(vscode.Uri.parse(value.uri).fsPath)===id),service=servicePermissions.get(id);
    if(resource&&doc.isDirty)throw Error('Save the Java source before moving or deleting its file.');if(service&&doc.isDirty)throw Error('Save the service descriptor before applying Package Move.');
    if(resource?.resourceSha256){let decoded;try{decoded=new TextDecoder('utf-8',{fatal:true}).decode(disk);}catch{throw Error('Reviewed resource renames require plain UTF-8 text.');}if(changes.length||before!==decoded||hash(disk)!==resource.resourceSha256)throw Error('A reviewed resource buffer or exact byte hash changed.');}
-   const after=resource?.kind==='delete'?'':editedText(before,changes);
+   const edited=resource?.kind==='delete'?'':editedText(before,changes),eol=!guard&&formattingEndOfLine;
+   const after=eol?edited.replace(/\r?\n/g,eol==='crlf'?'\r\n':'\n'):edited;
    if(service&&(!disk.equals(Buffer.from(before))||hash(disk)!==service.beforeSha256||hash(after)!==service.afterSha256))throw Error('A service descriptor buffer or its exact reviewed edit changed.');
-   return {uri:uri.toString(),version:doc.version,hash:hash(before),diskHash:hash(disk),before,after,edits:changes,...(resource?{resourceOperation:resource.kind,newUri:resource.newUri,...(resource.resourceSha256?{resourceSha256:resource.resourceSha256}:{})}:{}),...(service?{serviceDescriptor:true}:{}),...(guard?{guard:true}:{})};
+   return {uri:uri.toString(),version:doc.version,hash:hash(before),diskHash:hash(disk),before,after,edits:changes,...(eol?{formattingEndOfLine:eol}:{}),...(resource?{resourceOperation:resource.kind,newUri:resource.newUri,...(resource.resourceSha256?{resourceSha256:resource.resourceSha256}:{})}:{}),...(service?{serviceDescriptor:true}:{}),...(guard?{guard:true}:{})};
   }
   for(const {uri,edits:changes}of edits.values()){cancelled(cancellation);const resource=resources.find(value=>value.uri===uri.toString());documents.push(resource?.binary?captureBinary(uri,resource,changes):await capture(uri,changes,false));}
   if(creation){size+=Buffer.byteLength(creation.after);if(size>8*1024*1024)throw Error('Refactoring review exceeds its source limit.');documents.push(creation);}
@@ -151,28 +153,66 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
  }
  async function validate(id,cancellation){trusted();cancelled(cancellation);const plan=plans.get(id);if(!plan||Date.now()>plan.expiresAt)throw Error('The Java refactoring review expired. Preview it again.');const custom=validators.get(id)?.validate;if(custom)await custom(cancellation);trusted();cancelled(cancellation);const checked=[];for(const saved of [...plan.documents,...plan.guardSnapshots]){if(saved.created)continue;const uri=sourceUri(saved.uri,{guard:!!saved.guard,resource:!!saved.resourceSha256||!!saved.serviceDescriptor}),doc=saved.binary?null:await vscode.workspace.openTextDocument(uri);checked.push({saved,doc,uri});cancelled(cancellation);}checkSnapshots(checked);checkResources(plan);checkedPlans.set(id,checked);return {state:'fresh',id,documents:plan.documents.length,resourceOperations:plan.resourceOperations.length};}
  function checkSnapshots(checked){trusted();for(const {saved,doc,uri}of checked){sourceUri(uri,{guard:!!saved.guard,resource:!!saved.resourceSha256||!!saved.serviceDescriptor});if(saved.binary){if((vscode.workspace.textDocuments||[]).some(value=>!value.isClosed&&key(value.uri.fsPath)===key(uri.fsPath))||JSON.stringify(binaryIdentity(uri.fsPath))!==JSON.stringify(saved.identity)||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash)throw Error('A reviewed binary resource or text buffer changed after review.');continue;}if(doc.isClosed||doc.version!==saved.version||hash(doc.getText())!==saved.hash||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash||((saved.resourceOperation||saved.serviceDescriptor)&&doc.isDirty))throw Error('A refactoring source file changed after review. Preview again.');}}
+ function runFinalGuard(id,cancellation) {
+  const guard=validators.get(id)?.preApply;
+  if(guard){const value=guard(cancellation);if(value?.then)throw Error('The final refactoring guard must be synchronous.');}
+  trusted();cancelled(cancellation);checkSnapshots(checkedPlans.get(id));checkResources(plans.get(id));
+ }
+ async function applyFormattingEndOfLine(id,file,cancellation) {
+  const {doc,uri}=checkedPlans.get(id).find(entry=>entry.saved.uri===file.uri);
+  const editor=await vscode.window.showTextDocument(doc,{preview:false,preserveFocus:false});
+  if(!plans.has(id) || editor.document!==doc) throw Error('The formatting review is no longer open.');
+  runFinalGuard(id,cancellation);
+  if(!file.edits.length) {
+   if(!await editor.edit(edit=>edit.setEndOfLine(doc.eol),{undoStopBefore:true,undoStopAfter:true})) return false;
+   if(!plans.has(id)) throw Error('The formatting review is no longer open.');
+   runFinalGuard(id,cancellation);
+  }
+  removePlan(id);
+  const version=doc.version;
+  if(file.edits.length) {
+   const changes=file.edits.map(change=>({range:new vscode.Range(change.range.start.line,change.range.start.character,
+    change.range.end.line,change.range.end.character),text:change.newText}));
+   if(!await editor.edit(edit=>{for(const change of changes)edit.replace(change.range,change.text);},
+    {undoStopBefore:true,undoStopAfter:true})) return false;
+   const expected=editedText(file.before,file.edits);
+   if(doc.isClosed||doc.version!==version+1||doc.getText()!==expected||!vscode.workspace.isTrusted||
+    cancellation?.isCancellationRequested||hash(fs.readFileSync(uri.fsPath))!==file.diskHash) {
+    throw Error('Text formatting was applied. The document changed before line-ending conversion. Review the document again.');
+   }
+  }
+  const eol=file.formattingEndOfLine==='crlf'?vscode.EndOfLine.CRLF:vscode.EndOfLine.LF;
+  // VS Code applies the EOL before undoStopBefore. The preceding call already closed the stack.
+  const converted=await editor.edit(edit=>edit.setEndOfLine(eol),{undoStopBefore:false,undoStopAfter:true});
+  if(!converted&&file.edits.length) throw Error('Text formatting was applied. Line-ending conversion failed. Review the document again.');
+  return converted;
+ }
  async function apply(id,cancellation){
   await validate(id,cancellation);
   const plan=plans.get(id),edit=new vscode.WorkspaceEdit();
-  checkSnapshots(checkedPlans.get(id));checkResources(plan);cancelled(cancellation);
-  for(const file of plan.documents){
-   if(!file.edits.length)continue;
-   edit.set(sourceUri(file.uri,{resource:!!file.serviceDescriptor}),file.edits.map(change=>new vscode.TextEdit(
-    new vscode.Range(change.range.start.line,change.range.start.character,change.range.end.line,change.range.end.character),change.newText)));
+  const formatting=plan.documents.find(file=>file.formattingEndOfLine);
+  let applied;
+  if(formatting) applied=await applyFormattingEndOfLine(id,formatting,cancellation);
+  else {
+   for(const file of plan.documents){
+    if(!file.edits.length)continue;
+    const changes=file.edits.map(change=>new vscode.TextEdit(
+     new vscode.Range(change.range.start.line,change.range.start.character,change.range.end.line,change.range.end.character),change.newText));
+    edit.set(sourceUri(file.uri,{resource:!!file.serviceDescriptor}),changes);
+   }
+   for(const operation of plan.resourceOperations){
+    if(operation.kind==='create'){
+     const contents=Buffer.from(plan.documents.find(file=>file.created&&file.uri===operation.uri).after);
+     edit.createFile(sourceUri(operation.uri,{destination:true}),{overwrite:false,ignoreIfExists:false,contents});
+    }else if(operation.kind==='rename'){
+     const resource=!!operation.resourceSha256||!!operation.serviceDescriptor;
+     edit.renameFile(sourceUri(operation.uri,{resource}),sourceUri(operation.newUri,{destination:true,resource}),{overwrite:false,ignoreIfExists:false});
+    }else edit.deleteFile(sourceUri(operation.uri),{recursive:false,ignoreIfNotExists:false});
+   }
+   runFinalGuard(id,cancellation);
+   removePlan(id);
+   applied=await vscode.workspace.applyEdit(edit);
   }
-  for(const operation of plan.resourceOperations){
-   if(operation.kind==='create'){
-    const contents=Buffer.from(plan.documents.find(file=>file.created&&file.uri===operation.uri).after);
-    edit.createFile(sourceUri(operation.uri,{destination:true}),{overwrite:false,ignoreIfExists:false,contents});
-   }else if(operation.kind==='rename'){
-    const resource=!!operation.resourceSha256||!!operation.serviceDescriptor;
-    edit.renameFile(sourceUri(operation.uri,{resource}),sourceUri(operation.newUri,{destination:true,resource}),{overwrite:false,ignoreIfExists:false});
-   }else edit.deleteFile(sourceUri(operation.uri),{recursive:false,ignoreIfNotExists:false});
-  }
-  const guard=validators.get(id)?.preApply;
-  if(guard){const value=guard(cancellation);if(value?.then)throw Error('The final refactoring guard must be synchronous.');}
-  trusted();cancelled(cancellation);checkSnapshots(checkedPlans.get(id));checkResources(plan);removePlan(id);
-  const applied=await vscode.workspace.applyEdit(edit);
   return {state:applied?'applied':'rejected',title:plan.title,files:plan.documents.map(file=>file.uri),warnings:[...plan.warnings],
    resourceOperations:structuredClone(plan.resourceOperations),savedToDisk:false,
    resourceOperationsSavedToDisk:plan.resourceOperations.length?(applied?true:'unknown'):false,atomicAcrossExternalWriters:false};
@@ -191,13 +231,14 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    return 'Move '+path.basename(file)+' → '+vscode.Uri.parse(value.newUri).fsPath+
     (value.binary?' (opaque binary, '+value.bytes+' bytes, SHA-256 '+value.resourceSha256+')':'');
   });
+  const action=plan.kind==='source.format.java'?'Apply Formatting':'Apply Refactoring';
   const choice=await vscode.window.showInformationMessage('Apply '+plan.title+' to '+plan.documents.length+' file(s)?'+
    (resources.length?'\n\n'+resources.join('\n'):'')+(plan.warnings.length?'\n\n'+plan.warnings.join('\n'):'')+
    '\n\nReview all diffs. File operations affect disk. Changes to existing source text remain unsaved. '+
    (plan.resourceOperations.some(value=>value.kind==='delete')?
     'Restore deleted Java files with Rocketbrain: Restore Deleted Java File during this session.':'Use normal Undo after applying.'),
-   {modal:true},'Apply Refactoring');
-  if(choice==='Apply Refactoring')return api.apply(plan.id);
+   {modal:true},action);
+  if(choice===action)return api.apply(plan.id);
   return {state:'cancelled',id:plan.id};
  }
  subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.refactor',async()=>{
