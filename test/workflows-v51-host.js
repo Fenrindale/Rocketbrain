@@ -22,17 +22,30 @@ exports.run = async (vscode = require('vscode')) => {
     javaFx: runJavaFxChecks, sqlFormat: runSqlFormatScriptChecks };
   const selected = process.env.ROCKETBRAIN_V51_ONLY?.split(',') || Object.keys(suites);
   assert.ok(selected.length && new Set(selected).size === selected.length);
+  assert.ok(selected.every(name => Object.hasOwn(suites, name)));
   const checkpoint = process.env.ROCKETBRAIN_V51_DRIVER_CHECKPOINT;
   const report = path.resolve(__dirname, '../test-output', prefix + '-native-' + engine + '.json');
+  const failures = [];
   try {
     for (const name of selected) {
-      assert.ok(Object.hasOwn(suites, name), name);
       if (checkpoint) fs.appendFileSync(checkpoint, name + ':started\n');
-      details[name] = await suites[name](api, vscode, checks);
-      if (checkpoint) fs.appendFileSync(checkpoint, name + ':passed\n');
+      const verified = [];
+      try {
+        details[name] = await suites[name](api, vscode, verified);
+        checks.push(...verified);
+        if (checkpoint) fs.appendFileSync(checkpoint, name + ':passed\n');
+      } catch (error) {
+        failures.push({ group: name, message: String(error.message || error).slice(0, 500) });
+        if (checkpoint) fs.appendFileSync(checkpoint, name + ':failed\n');
+      }
     }
     const receipt = { version: extension.packageJSON.version, extensionPath: extension.extensionPath,
-      vscode: vscode.version, engine, hostPid: process.pid, passed: selected.length, checks, details };
+      vscode: vscode.version, engine, hostPid: process.pid, passed: Object.keys(details).length, checks, details };
+    if (failures.length) {
+      const failedReport = report.replace(/\.json$/, '-failed.json');
+      fs.writeFileSync(failedReport, JSON.stringify({ ...receipt, failures }, null, 2) + '\n', { flag: 'wx' });
+      throw Error(failures.map(({ group, message }) => group + ': ' + message).join('\n'));
+    }
     fs.writeFileSync(report, JSON.stringify(receipt, null, 2) + '\n', { flag: 'wx' });
   } finally {
     await api.java.stop();

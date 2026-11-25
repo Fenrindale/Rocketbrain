@@ -5,6 +5,21 @@ const path = require('node:path');
 const { startGroovyConsole } = require('./groovy-console');
 const { workspaceRoots,workspacePath,inside,cancelled,fail } = require('./workbench-model');
 
+const maxScriptBytes = 64 * 1024;
+const editorText = text => text.replace(/\r\n?/g,'\n');
+
+async function readSavedScript(file) {
+  const input = await fs.open(file,'r');
+  try {
+    const stat = await input.stat();
+    if (!stat.isFile() || stat.size > maxScriptBytes) throw fail('Run a saved UTF-8 Groovy script no larger than 64 KiB.');
+    const bytes = Buffer.alloc(maxScriptBytes + 1);
+    const { bytesRead } = await input.read(bytes,0,bytes.length,0);
+    if (bytesRead !== stat.size) throw fail('The Groovy script changed while it was being read.');
+    return bytes.subarray(0,bytesRead);
+  } finally { await input.close(); }
+}
+
 const COMMANDS = Object.freeze({
   console:'rocketbrain.groovy.console', reset:'rocketbrain.groovy.resetConsole',
   selection:'rocketbrain.groovy.evaluateSelection', script:'rocketbrain.groovy.runScript',
@@ -87,9 +102,10 @@ function registerGroovyWorkbench(vscode,java) {
       throw fail('Open a saved local Groovy script before running it.');
     }
     const file = workspacePath(document.uri.fsPath,workspaceRoots(vscode.workspace.workspaceFolders),{directory:false});
-    const version=document.version, code=document.getText();
-    const stat=await fs.lstat(file);
-    if (stat.size > 64*1024 || await fs.readFile(file,'utf8') !== code) {
+    const version=document.version, text=document.getText();
+    const expected=await readSavedScript(file);
+    const code=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(expected);
+    if (editorText(code) !== editorText(text)) {
       throw fail('Run an exact saved UTF-8 Groovy script no larger than 64 KiB.');
     }
     if (document.isClosed || document.isDirty || document.version !== version || cancelled(cancellation)) {
@@ -97,10 +113,10 @@ function registerGroovyWorkbench(vscode,java) {
     }
     const worker=await openWorker(configuration(path.dirname(file)),epoch);
     try {
-      const saved=await fs.readFile(file,'utf8');
+      const saved=await readSavedScript(file);
       trusted();
       if (document.isClosed || document.isDirty || document.version !== version ||
-          saved !== code || cancelled(cancellation)) {
+          !saved.equals(expected) || cancelled(cancellation)) {
         throw fail('The Groovy script changed before execution.');
       }
       const receipt=await worker.evaluate(code,path.basename(file),{cancellation});
