@@ -23,7 +23,7 @@ test('database approval binds one numeric loopback route and exact named table/c
 });
 
 test('reads bounded ordinary approval JSON and rejects extra credential fields', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rb-mcp-scope-'));
+  const dir = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rb-mcp-scope-'));
   const file = path.join(dir, 'approve.json');
   try {
     await fs.writeFile(file, JSON.stringify(approval));
@@ -34,6 +34,24 @@ test('reads bounded ordinary approval JSON and rejects extra credential fields',
     await assert.rejects(() => approveDatabaseScope(file, 'fixture-only'), /32 KiB/);
     await assert.rejects(() => approveDatabaseScope('./relative.json', 'fixture-only'), /absolute local/);
   } finally { await fs.unlink(file); await fs.rmdir(dir); }
+});
+
+test('rejects an approval file reached through a linked directory', async () => {
+  const dir = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rb-mcp-scope-link-'));
+  const original = path.join(dir, 'original');
+  const alias = path.join(dir, 'alias');
+  const file = path.join(original, 'approve.json');
+  await fs.mkdir(original);
+  try {
+    await fs.writeFile(file, JSON.stringify(approval));
+    await fs.symlink(original, alias, 'junction');
+    await assert.rejects(() => approveDatabaseScope(path.join(alias, 'approve.json'), 'fixture-only'), /ordinary DB scope JSON/);
+  } finally {
+    await fs.unlink(alias).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    await fs.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    await fs.rmdir(original);
+    await fs.rmdir(dir);
+  }
 });
 
 test('direct grant audit excludes writable grants, role inheritance and grant-option delegation', () => {
