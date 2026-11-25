@@ -7,7 +7,7 @@ const { statementAt } = require('./sql');
 const { inspectDmlScope } = require('./db/sql-dml-scope');
 const { completeSql } = require('./db/completion');
 const { TableEditor } = require('./table-editor');
-const { relatedRows } = require('./db/related-rows');
+const { relatedRowsFromObservation } = require('./db/related-rows');
 const { logicalKey, scopeKey, logicalEdges } = require('./db/schema-erd');
 const { tableLayoutConnectionKey } = require('./db/result-layouts');
 const { createMetadataCache, observeCatalogIdentity } = require('./db/metadata-cache');
@@ -298,7 +298,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const logical = records?.length ? logicalEdges(await snapshot.db.metadata(), records) : [];
     const catalog = await snapshot.db.relatedRowsCatalog({ schema: snapshot.schema, table: snapshot.table, logical });
     snapshot.validate();
-    return relatedRows(catalog, snapshot.columns, snapshot.values, snapshot.definitions);
+    return relatedRowsFromObservation(catalog, snapshot.columns, snapshot.values, snapshot.definitions);
   }
   async function inspectRelatedRows(id, selection) {
     const snapshot = tableEditor.relatedSnapshot(id, selection);

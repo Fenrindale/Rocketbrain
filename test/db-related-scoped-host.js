@@ -135,7 +135,7 @@ async function runRelatedScopedChecks(api, vscode, checks) {
 
 async function verifyBackend() {
   const { MysqlService } = require('../src/db/mysql');
-  const { relatedRows } = require('../src/db/related-rows');
+  const { relatedRowsFromObservation: relatedRows } = require('../src/db/related-rows');
   const { logicalEdges } = require('../src/db/schema-erd');
   const result = await withFixture(async fixture => {
     const { config, local, definition } = fixture;

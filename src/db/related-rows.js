@@ -74,7 +74,7 @@ function compatible(left, right, kind, logical) {
   return !logical || left.type.toLowerCase() === right.type.toLowerCase();
 }
 
-function relatedRows(catalog, names, row, definitions) {
+function relatedRowsFromObservation(catalog, names, row, definitions) {
   const sourceColumns = catalog.tables.get(catalog.source);
   if (!sourceColumns || !Array.isArray(row) || row.length !== names.length || new Set(names).size !== names.length) {
     throw Error('Choose a row from a current base-table preview.');
@@ -118,4 +118,28 @@ function relatedRows(catalog, names, row, definitions) {
   return matches.sort((left, right) => left.label.localeCompare(right.label) || left.direction.localeCompare(right.direction));
 }
 
-module.exports = { readRelatedCatalog, relatedRows };
+function relatedRows(catalog, sourceName, names, row) {
+  if (!['tables', 'columns', 'foreignKeys'].every(area => catalog?.coverage?.[area] === 'loaded')) {
+    throw Error('Refresh the active schema with visible foreign keys before following a relation.');
+  }
+  const schema = catalog.database;
+  const available = catalog.tables.filter(table => table.kind === 'table');
+  const tables = new Map(available.map(({ name: table, columns }) => [
+    endpointKey({ schema, table }), new Map(columns.map(column => [column.name, column]))
+  ]));
+  const keys = available.flatMap(({ name, foreignKeys = [] }) => foreignKeys
+    .filter(fk => fk.referencedSchema === schema && Array.isArray(fk.columns))
+    .flatMap(fk => fk.columns.map(part => [schema, name, fk.name, part.name, part.ordinal,
+      schema, fk.referencedTable, part.referencedColumn])));
+  const origin = { schema, table: sourceName };
+  const matches = relatedRowsFromObservation({ source: endpointKey(origin), edges: edgeFromPhysical(keys, origin), tables }, names, row);
+  if (matches.length > 200) throw Error('Too many related tables are visible for this preview.');
+  return matches.map(({ key: observed, table, direction, columns, filters }) => {
+    const [,,,, foreignKey, bindings] = JSON.parse(observed);
+    const key = JSON.stringify([schema, sourceName, table, direction, foreignKey,
+      bindings.map(([from, left,, to, right]) => [from, left, to, right])]);
+    return { key, label: table + ' · ' + foreignKey, table, direction, columns, filters };
+  });
+}
+
+module.exports = { readRelatedCatalog, relatedRows, relatedRowsFromObservation };
