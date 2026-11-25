@@ -442,3 +442,5 @@ Use **Review Database TLS Trust and Reconnect** on a saved MySQL or MariaDB prof
 Use **Review Database Account Lock or Unlock** for an exact MySQL or MariaDB account. The review shows its current authentication and role policy and lists views, routines, triggers and events that name it as their definer. Rocketbrain requires observable server-wide inventory before applying. The lock controls fresh logins. Already authenticated sessions stay connected and stored objects keep their definers.
 
 **Review MariaDB Package Call** supports matching public Oracle-mode function signatures with scalar OUT and IN OUT parameters. Review the typed inputs, invocation and stored sources together. The dedicated read-only session captures the return value and output parameters in separate results, then rolls back.
+
+A reviewed scalar function replacement can preserve direct EXECUTE grants issued by its owner to named login accounts. The SQL review shows the grants to restore. Stop callers and external schema or grant changes during the non-atomic operation. The retained original supports recovery after an interrupted grant replay.
