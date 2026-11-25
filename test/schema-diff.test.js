@@ -6,6 +6,7 @@ test('snapshots fingerprint canonical definitions and reject tampering or malfor
  const a=fixture(),b=structuredClone(a);b.capturedAt='later';assert.equal(normalizeSnapshot(b).fingerprint,a.fingerprint);b.tables[0].columns[0].type='bigint';assert.throws(()=>normalizeSnapshot(b),/fingerprint/);
  const bad=structuredClone(a);bad.tables[0].indexes[0].columns[0].prefixLength='not-a-number';assert.throws(()=>normalizeSnapshot(bad,{verifyFingerprint:false}),/prefix/);
  bad.tables[0].indexes[0].columns[0].prefixLength=null;bad.server.port='bad';assert.throws(()=>normalizeSnapshot(bad,{verifyFingerprint:false}),/identity/);
+ const local=structuredClone(a);local.server.port=0;assert.equal(normalizeSnapshot(local,{verifyFingerprint:false}).server.port,'0');
 });
 test('additive nullable-column and nonunique index candidates require prerequisite selection',()=>{
  const current=fixture(),desired=addColumn(structuredClone(current));desired.tables[0].indexes.push({name:'note_index',unique:false,primaryKey:false,type:'BTREE',comment:'',columns:[{name:'note',ordinal:1,prefixLength:10,collation:'A'}]});const target=normalizeSnapshot(desired,{verifyFingerprint:false}),report=compareSnapshots(current,target);

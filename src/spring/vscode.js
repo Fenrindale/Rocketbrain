@@ -1,11 +1,15 @@
 'use strict';
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { analyzeSpring, definitionsAt } = require('./model');
+const { registerBeanGraph } = require('./bean-graph-vscode');
 
 function registerSemanticSpring(vscode, context, output) {
   const subscriptions = [], diagnosticCollection = vscode.languages.createDiagnosticCollection('rocketbrain-spring');
   subscriptions.push(diagnosticCollection);
   let model = null, dirty = true, pending = null, revision = 0, timer, disposed = false;
+  const graphSourceHashes = new WeakMap();
+  const digest = value => createHash('sha256').update(value).digest('hex');
   const configuration = () => vscode.workspace.getConfiguration('rocketbrain.spring');
   const enabled = () => configuration().get('enabled', true);
   const range = value => new vscode.Range(value.start.line, value.start.character, value.end.line, value.end.character);
@@ -53,6 +57,8 @@ function registerSemanticSpring(vscode, context, output) {
       const result = analyzeSpring(java.files, properties.files, { activeProfiles: config.get('activeProfiles', []), properties: config.get('properties', {}), basePackages: config.get('basePackages', []), closedWorld: !truncated && config.get('closedWorld', false), parameterNames: config.get('parameterNames', false) });
       result.issues.push(...[...java.issues, ...properties.issues].map(message => ({ message })));
       result.truncated = Boolean(truncated); result.revision = before;
+      const graphSources = new Set([...result.beans,...result.injections].map(item => item.uri));
+      graphSourceHashes.set(result,new Map(java.files.filter(file => graphSources.has(file.uri)).map(file => [file.uri,digest(file.text)])));
       if (!disposed) { model = result; publish(model); }
       if (revision !== before) dirty = true;
       return model;
@@ -95,8 +101,13 @@ function registerSemanticSpring(vscode, context, output) {
   subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => { if (event.document.languageId === 'java' || /application.*\.(?:properties|ya?ml)$/.test(event.document.uri.path)) invalidate(); }), vscode.workspace.onDidCreateFiles(invalidate), vscode.workspace.onDidDeleteFiles(invalidate), vscode.workspace.onDidRenameFiles(invalidate), vscode.workspace.onDidChangeWorkspaceFolders(invalidate), vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('rocketbrain.spring')) invalidate(); }));
   const watcher = vscode.workspace.createFileSystemWatcher('**/*.{java,properties,yml,yaml}');
   subscriptions.push(watcher, watcher.onDidChange(invalidate), watcher.onDidCreate(invalidate), watcher.onDidDelete(invalidate));
+  const refresh = async () => { invalidate(); return analyze(); };
+  const beanGraph = registerBeanGraph(vscode,{analyze,refresh,enabled,revision:() => revision,
+    matchesSource:(model,uri,text) => graphSourceHashes.get(model)?.get(uri) === digest(text)});
+  subscriptions.push(beanGraph);
   invalidate();
-  return { analyze, snapshot: () => model, definitions, refresh: async () => { invalidate(); return analyze(); }, dispose() { disposed = true; clearTimeout(timer); for (const item of subscriptions) item.dispose(); } };
+  return { analyze, snapshot: () => model, definitions, refresh, beanGraph,
+    dispose() { disposed = true; clearTimeout(timer); for (const item of subscriptions) item.dispose(); } };
 }
 
 module.exports = { registerSemanticSpring };

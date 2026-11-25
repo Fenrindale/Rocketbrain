@@ -7,11 +7,15 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 
 async function importedSpring(api,root) {
-  const deadline = Date.now() + 100000;
+  const deadline = Date.now() + 120000;
   while (Date.now() < deadline) {
-    const snapshot = await api.java.workbench.refresh();
-    const project = snapshot.projects.find(entry => !path.relative(entry.root,root));
-    if (project?.sourceRoots.length) return project;
+    try {
+      const snapshot = await api.java.workbench.refresh();
+      const project = snapshot.projects.find(entry => !path.relative(entry.root,root));
+      if (project?.sourceRoots.length) return project;
+    } catch (error) {
+      if (!error.message.startsWith('Java project metadata timed out.')) throw error;
+    }
     await new Promise(resolve => setTimeout(resolve,600));
   }
   throw Error('JDT did not import the Spring source analysis project.');

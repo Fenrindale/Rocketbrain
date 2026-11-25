@@ -81,6 +81,7 @@ function serverSettings(projectJdks = [], options = {}) {
       referencesCodeLens: { enabled: true },
       implementationsCodeLens: { enabled: true },
       format: { enabled: true },
+      refactoring: { extract: { interface: { replace:options.extractInterfaceReplaceUsages === true } } },
       errors: { incompleteClasspath: { severity: 'warning' } }
     }
   };

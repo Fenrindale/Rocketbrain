@@ -32,9 +32,12 @@ function registerSqlScripts(context,vscode,{database}={}) {
     const id=crypto.randomUUID(),review={id,...saved,backend:structuredClone(value),expiresAt:value.expiresAt||Date.now()+120000};bounded(reviews);reviews.set(id,review);descriptions.delete(descriptionId);
     return {id,...structuredClone(value),sourceVersion:saved.version,parameterValuesIncluded:false};
   }
-  async function run(id,{allowImplicitCommit=false,cancellation}={}){
+  async function run(id,{allowImplicitCommit=false,allowUnboundedDml=false,cancellation}={}){
     trusted();const review=reviews.get(id);if(!review||review.expiresAt<Date.now())throw new Error('The script review expired or was already consumed. Preview again.');assertFrame(review);
     if(review.backend.requiresImplicitCommitApproval&&!allowImplicitCommit)throw new Error('Review and explicitly acknowledge schema changes that can commit on the server.');
+    if (review.backend.unboundedDml?.length && !allowUnboundedDml) {
+      throw Error('Review and explicitly acknowledge the statements without an outer WHERE clause.');
+    }
     const b=review.backend,source=database.source(),summaryId=database.scriptResultBegin(review.sql,source+' · script',{readOnly:b.readOnly,sessionId:b.sessionId});
     // Reserve a result tab before execution: a full set of protected tabs must not
     // cause an executed batch to lose its visible outcome.
@@ -44,7 +47,8 @@ function registerSqlScripts(context,vscode,{database}={}) {
     else if(cancellation?.addEventListener){const stop=()=>abort.abort();cancellation.addEventListener('abort',stop,{once:true});external={dispose:()=>cancellation.removeEventListener('abort',stop)};}
     try{
       assertFrame(review);
-      const report=await database.runSqlScript({reviewId:b.reviewId,sessionId:b.sessionId,connectionEpoch:b.connectionEpoch,documentUri:b.documentUri,allowImplicitCommit,cancellation:abort.signal});
+      const report=await database.runSqlScript({reviewId:b.reviewId,sessionId:b.sessionId,connectionEpoch:b.connectionEpoch,
+        documentUri:b.documentUri,allowImplicitCommit,allowUnboundedDml,cancellation:abort.signal});
       retainRun(summaryId,{source,report});
       const rows=report.statements.map(statement=>[statement.index+1,statement.status,statement.result?.rowCount??0,statement.result?.affectedRows??0,statement.durationMs??0,statement.error?.message||(statement.result?.resultOmitted?'Result omitted: script result limit reached.':'')]);
       const scriptStatements = report.statements.flatMap(statement =>
@@ -83,6 +87,8 @@ function registerSqlScripts(context,vscode,{database}={}) {
       '-- This script is not one atomic transaction. Earlier successful changes can remain applied.',
       '-- Boundaries, mode, policy and bindings are checked; the server can still reject syntax, permissions or data.',
       ...(b.requiresImplicitCommitApproval?['-- Schema changes can implicitly commit earlier work and cannot be rolled back as a group.']:[]),
+      ...(b.unboundedDml || []).map(({ index, command, hasLimit }) => '-- Statement ' + (index + 1) + ' uses ' +
+        command + ' without an outer WHERE clause.' + (hasLimit ? ' A LIMIT is present.' : ' It can affect every target row.')),
       ...b.parameterDefinitions.map(p=>'-- Parameter '+(p.name||p.key)+': '+p.valueKind+' (value kept private)'),'',review.sql].join('\n');
   }
   subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-script-review',{provideTextDocumentContent(uri){const review=reviews.get(uri.path.split('/').filter(Boolean)[0]);return review?reviewText(review):'-- This script review expired.';}}));
@@ -107,10 +113,14 @@ function registerSqlScripts(context,vscode,{database}={}) {
       const description=await api.describe(editor.document,{range:editor.selection.isEmpty?undefined:editor.selection}),parameters=await values(description,editor.document);if(parameters===null)return;
       const plan=await api.preview(description.id,parameters),review=reviews.get(plan.id);
       if(!editor.document.isClosed&&description.parameterDefinitions.length){bounded(priorValues,20);priorValues.set(editor.document.uri.toString(),{signature:valueSignature(description,editor.document),values:structuredClone(parameters)});}
-      if(reviewOnly||plan.requiresImplicitCommitApproval){const doc=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-script-review:/'+plan.id+'/script.sql'));await vscode.window.showTextDocument(doc,{preview:false});
-        const accepted=await vscode.window.showWarningMessage(plan.requiresImplicitCommitApproval?'Run the reviewed script? Schema statements can commit earlier changes on the server.':'Run the reviewed script in its console? Earlier completed statements can remain applied if a later one fails.',{modal:true},'Run Script');if(accepted!=='Run Script')return;
+      const allowUnboundedDml = Boolean(plan.unboundedDml?.length);
+      if(reviewOnly||plan.requiresImplicitCommitApproval||allowUnboundedDml){const doc=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-script-review:/'+plan.id+'/script.sql'));await vscode.window.showTextDocument(doc,{preview:false});
+        const details = ['Earlier completed statements can remain applied if a later one fails.'];
+        if (plan.requiresImplicitCommitApproval) details.push('Schema statements can commit earlier changes on the server.');
+        if (allowUnboundedDml) details.push('The review contains UPDATE or DELETE statements without an outer WHERE clause.');
+        const accepted=await vscode.window.showWarningMessage('Run the reviewed script in its console?',{modal:true,detail:details.join('\n')},'Run Script');if(accepted!=='Run Script')return;
       }
-      const report=await api.run(plan.id,{allowImplicitCommit:plan.requiresImplicitCommitApproval===true});await database.showResults();
+      const report=await api.run(plan.id,{allowImplicitCommit:plan.requiresImplicitCommitApproval===true,allowUnboundedDml});await database.showResults();
       if(report.state!=='completed')await vscode.window.showWarningMessage('Script '+report.state+': '+report.completed+' completed, '+report.failed+' failed, '+report.notRun+' not run. Inspect the summary before retrying.');
       return {resultId:report.resultId,state:report.state,completed:report.completed,failed:report.failed,notRun:report.notRun};
     }catch(error){if(!closed)await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}

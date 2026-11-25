@@ -71,3 +71,62 @@ test('runtime enrichment preserves static unknowns and distinguishes runtime-onl
   assert.equal(comparison.beans[1].observation, 'not-observed'); assert.equal(model.beans[0].state, 'unknown');
   const runtimeOnly = compareRuntime({ beans: [] }, snapshot); assert.equal(runtimeOnly.beans[0].observation, 'runtime-only');
 });
+
+test('Actuator Health observes status, bounded contributor trees and advertised groups without retaining details', () => {
+  const detail = 'driver-connection-string-or-health-secret';
+  const value = normalizeEndpoint('health', { status: 'DOWN', groups: ['readiness', 'liveness', 'readiness'], components: {
+    db: { status: 'DOWN', components: { primary: { status: 'OUT_OF_SERVICE', details: { trace: detail } } } },
+    mistyped: { status: 503 },
+    ...Object.fromEntries(Array.from({ length: 300 }, (_, index) => ['contributor' + index, { status: 'UP' }]))
+  } });
+  assert.equal(value.status, 'DOWN');
+  assert.deepEqual(value.groups.map(group => group.segment), ['readiness', 'liveness']);
+  assert.equal(value.visibility, 'components');
+  assert.equal(value.components.length, 255);
+  assert.equal(value.components[0].components[0].status, 'OUT_OF_SERVICE');
+  assert.equal(value.limited, true);
+  assert.equal(value.detailsRetained, false);
+  assert.equal(JSON.stringify(value).includes(detail), false);
+  assert.equal(normalizeEndpoint('health', { status: 'UNKNOWN' }).visibility, 'status-only');
+  assert.equal(normalizeEndpoint('health', { status: 'UNKNOWN', components: {} }).visibility, 'components');
+  assert.throws(() => normalizeEndpoint('health', { status: 503 }), /aggregate status/);
+});
+
+test('Actuator Health treats JSON HTTP 503 as observed and refuses access, redirects and unsafe drill-down paths', async t => {
+  const token = 'health-private-token-0101', calls = [];
+  const url = await server(t, (request, response) => {
+    calls.push({ method: request.method, path: request.url });
+    assert.equal(request.headers.authorization, 'Bearer ' + token);
+    const path = request.url;
+    if (path.endsWith('/private')) { response.writeHead(403); response.end(token); return; }
+    if (path.endsWith('/moved')) { response.writeHead(302, { Location: '/other' }); response.end(); return; }
+    if (path.endsWith('/not-exposed')) { response.writeHead(404); response.end(); return; }
+    if (path.endsWith('/error-page')) { response.writeHead(503); response.end('{"status":503,"error":"Gateway trouble"}'); return; }
+    if (path.endsWith('/large')) { response.writeHead(200); response.end(' '.repeat(2048)); return; }
+    response.writeHead(path.endsWith('/readiness') ? 503 : 200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ status: path.endsWith('/readiness') ? 'OUT_OF_SERVICE' : 'UP', groups: ['readiness', token, '../wrong'],
+      components: { [token]: { status: 'UP', details: { jdbc: token } } } }));
+  });
+  const client = new ActuatorClient({ url, authorization: 'Bearer ' + token, maxResponseBytes: 1024 });
+  t.after(() => client.dispose());
+  const root = await client.health();
+  assert.equal(root.httpStatus, 200);
+  assert.equal(root.status, 'UP');
+  assert.deepEqual(root.groups.map(group => group.segment), ['readiness', null, null]);
+  assert.equal(JSON.stringify(root).includes(token), false);
+  assert.equal(root.components[0].segment, null);
+  const readiness = await client.health(['readiness']);
+  assert.equal(readiness.status, 'OUT_OF_SERVICE');
+  assert.equal(readiness.httpStatus, 503);
+  await assert.rejects(client.health(['private']), { code: 'AUTH_REQUIRED', status: 403 });
+  await assert.rejects(client.health(['moved']), { code: 'REDIRECT_BLOCKED', status: 302 });
+  await assert.rejects(client.health(['not-exposed']), { code: 'NOT_EXPOSED', status: 404 });
+  await assert.rejects(client.health(['error-page']), { code: 'INVALID_SCHEMA', status: 503 });
+  await assert.rejects(client.health(['large']), { code: 'RESPONSE_TOO_LARGE' });
+  const before = calls.length;
+  for (const path of [['../beans'], ['/env'], ['..'], ['a?query=b'], Array(9).fill('x'), new Array(1)]) {
+    await assert.rejects(client.health(path), { code: 'INVALID_HEALTH_PATH' });
+  }
+  assert.equal(calls.length, before);
+  assert.ok(calls.every(call => call.path.startsWith('/actuator/health') && call.method === 'GET'));
+});

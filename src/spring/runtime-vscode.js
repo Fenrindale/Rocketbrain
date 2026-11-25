@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
 const { ActuatorClient, RuntimeError, validateRuntimeUrl, compareRuntime, emptySnapshot } = require('./runtime-client');
+const { registerRuntimeHealth } = require('./runtime-health-vscode');
 
 function registerRuntimeSpring(vscode, context, output, { analyze }) {
   const subscriptions = [], events = new vscode.EventEmitter();
@@ -10,6 +11,8 @@ function registerRuntimeSpring(vscode, context, output, { analyze }) {
   const snapshot = () => structuredClone(current);
   const emit = () => { if (!disposed) events.fire(snapshot()); };
   const assertTrusted = () => { if (disposed) throw new RuntimeError('DISPOSED', 'Spring runtime observation is closed.'); if (!vscode.workspace.isTrusted) { disconnect(); throw new RuntimeError('UNTRUSTED_WORKSPACE', 'Trust the workspace before connecting to a Spring runtime.'); } };
+  const health = registerRuntimeHealth(vscode, { getClient: () => client, assertTrusted, onConnectionChange: events.event });
+  subscriptions.push(health);
   function disconnect() { generation++; client?.dispose(); client = null; current = emptySnapshot(); emit(); return snapshot(); }
 
   async function connectionInput() {
@@ -73,6 +76,7 @@ function registerRuntimeSpring(vscode, context, output, { analyze }) {
   command('rocketbrain.spring.connectRuntime', () => vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Connecting to Spring runtime' }, () => connect()));
   command('rocketbrain.spring.refreshRuntime', refresh);
   command('rocketbrain.spring.disconnectRuntime', disconnect);
+  command('rocketbrain.spring.runtimeHealth', health.open);
   command('rocketbrain.spring.compareRuntime', async () => {
     const comparison = await compare();
     vscode.window.showInformationMessage(`Spring comparison: ${comparison.summary.present} local Beans observed, ${comparison.summary.runtimeOnly} runtime-only, ${comparison.summary.notObserved} not observed.`);
@@ -85,7 +89,7 @@ function registerRuntimeSpring(vscode, context, output, { analyze }) {
     const selected = await vscode.window.showQuickPick(comparison.beans.map(bean => ({ label: bean.name, description: bean.observation, detail: bean.runtime.map(observed => `${observed.context} · ${observed.type}`).join('; '), bean })), { title: 'Spring Beans · observed runtime and separate local model', matchOnDescription: true, matchOnDetail: true });
     if (selected?.bean.source) { const source = selected.bean.source, range = source.range; await vscode.window.showTextDocument(vscode.Uri.parse(source.uri), { selection: new vscode.Range(range.start.line, range.start.character, range.end.line, range.end.character) }); }
   });
-  return { connect, refresh, snapshot, disconnect, compare, onDidChange: events.event, dispose() { disposed = true; disconnect(); for (const item of subscriptions) item.dispose(); } };
+  return { connect, refresh, snapshot, disconnect, compare, health, onDidChange: events.event, dispose() { disposed = true; disconnect(); for (const item of subscriptions) item.dispose(); } };
 }
 
 module.exports = { registerRuntimeSpring };

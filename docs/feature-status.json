@@ -1,5 +1,5 @@
 {
-  "version": "0.41.0",
+  "version": "0.42.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,31 @@
     }
   },
   "summary": {
-    "implemented": 45,
-    "partial": 109,
-    "not-implemented": 43,
+    "implemented": 49,
+    "partial": 107,
+    "not-implemented": 42,
     "host-provided": 13,
-    "unverified": 4,
+    "unverified": 3,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 52.1,
+    "percent": 53.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-021",
-    "DG-023",
-    "DG-058",
-    "DG-077"
+    "IDEA-031",
+    "IDEA-054",
+    "IDEA-057",
+    "DG-011",
+    "DG-035"
   ],
   "expandedFeatures": [
-    "IDEA-021",
-    "DG-023",
-    "DG-058",
-    "DG-077"
+    "IDEA-031",
+    "IDEA-054",
+    "IDEA-057",
+    "DG-011",
+    "DG-035"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -677,8 +679,8 @@
       "verification": {
         "state": "v0.41-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.41.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -997,27 +999,27 @@
       "category": "리팩터링·코드 생성",
       "feature": "인터페이스 추출",
       "priority": "P1",
-      "status": "unverified",
-      "label": "지원 미확인",
-      "delivery": "owned-client-and-jdt",
-      "scope": "인터페이스 추출의 전용 UI·적용 시험이 없다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "선택한 Java 메서드에서 인터페이스를 추출하고 호환 사용처를 검토한다. 컴파일과 diff 확인 후 새 인터페이스와 기존 소스를 한 작업으로 적용한다.",
       "remaining": [
-        "선택 멤버·제네릭·호출자 전환의 지원 확인이 필요하다."
+        "복합 모듈, 생성 소스, 바이너리 사용처의 대규모 프로젝트를 확장한다."
       ],
       "verification": {
-        "state": "unverified",
+        "state": "v0.42-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 본 행의 고급 기능은 개별 실행 검증되지 않았다. 기본 Java 엔진 연결을 완료 근거로 사용하지 않는다.",
+        "testedScope": "두 실제 Spring 픽스처에서 제네릭 경계를 보존하고 호환되는 호출부만 전환했다. 동명 파일 충돌 거부, 새 파일 저장, 기존 버퍼의 수동 저장과 빌드를 확인했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/extract-interface.js",
+          "src/java/extract-interface-vscode.js",
+          "src/java/refactoring.js",
+          "test/java-extract-interface-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1696,27 +1698,26 @@
       "category": "Spring·영속성",
       "feature": "Bean의 논리 구조·의존성 그래프",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "네이티브 분석 트리에 Bean·관찰 의존성을 표시한다.",
+      "scope": "Spring Bean 주입의 선택·후보·지연 관계를 탐색하고 해결된 관계의 순환 경로를 표시한다. 검색 결과의 소스로 이동한다.",
       "remaining": [
-        "시각적 의존 그래프·순환 경로·레이아웃 탐색이 남는다."
+        "관찰하지 못한 동적 등록과 외부 클래스 경로의 관계 완전성을 검증한다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.42-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "testedScope": "실제 Spring 프로젝트의 의존 관계와 런타임 읽기, 명시적 순환과 모호한 후보, 소스 이동을 검증했다.",
         "publicEvidence": [
-          "src/spring/model.js",
+          "src/spring/bean-graph.js",
           "src/spring/vscode.js",
-          "src/spring/runtime-client.js",
-          "src/analysis-tree.js"
+          "test/spring-bean-graph-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1793,27 +1794,27 @@
       "category": "Spring·영속성",
       "feature": "Actuator 런타임 Bean·Health·Mappings",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "실제 beans/conditions/configprops/env/mappings를 명시적 loopback 연결로 관찰한다.",
+      "scope": "실행 중인 Spring 앱의 Actuator Bean·Mappings와 Health를 조회한다. Health의 전체 상태, 노출 그룹과 구성 요소를 별도로 탐색한다.",
       "remaining": [
-        "Health 전용 UI·원격 앱·누락/lazy Bean의 부재 증명은 남는다."
+        "원격 앱 전송과 관찰하지 못한 Bean의 확인 범위를 넓힌다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.42-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "testedScope": "두 Spring 앱에서 Health 상태, readiness·liveness, DB 구성 요소와 재조회·오래된 화면 정리를 확인했다.",
         "publicEvidence": [
-          "src/spring/model.js",
-          "src/spring/vscode.js",
+          "src/spring/runtime-health.js",
+          "src/spring/runtime-health-vscode.js",
           "src/spring/runtime-client.js",
-          "src/analysis-tree.js"
+          "test/spring-actuator-health-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3986,25 +3987,27 @@
       "category": "연결·드라이버",
       "feature": "Unix socket·Windows named pipe",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Unix socket/Windows named pipe 연결 UI가 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "로컬 Unix 도메인 소켓과 Windows 명명된 파이프를 프로필에서 선택한다. 공유 파일에는 기기별 주소와 비밀번호를 담지 않는다.",
       "remaining": [
-        "각 transport와 권한·수명주기 검증이 필요하다."
+        "MySQL·MariaDB의 실제 Unix 소켓 검증을 마친다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.42-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "두 실제 서버의 Windows 명명된 파이프에 저장 프로필로 연결했다. Spring 테이블을 직접 TCP 결과와 대조하고 공유 시 주소와 비밀번호 생략을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/local-transport.js",
+          "src/db/connection-profiles-vscode.js",
+          "src/db/mysql.js",
+          "test/local-transport-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4342,8 +4345,8 @@
       "verification": {
         "state": "v0.41-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.41.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4707,26 +4710,27 @@
       "category": "SQL 의미 분석·편집",
       "feature": "위험한 UPDATE/DELETE 경고",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "read-only/write 모드·실행 정책과 grid 변경 검토를 제공한다.",
+      "scope": "바깥쪽 WHERE 없는 UPDATE·DELETE를 편집기에 표시한다. 단일 실행과 검토한 스크립트에서 승인하기 전 서버 전송을 막는다.",
       "remaining": [
-        "WHERE 없는 UPDATE/DELETE의 별도 위험도 진단·실행 정책이 남는다."
+        "항상 참인 조건이나 실제 영향 행 수는 별도 분석 범위다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.42-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
+        "testedScope": "두 엔진에서 편집기 경고와 사전 차단, 승인한 2행 변경과 수동 트랜잭션 롤백을 확인했다.",
         "publicEvidence": [
-          "src/db/completion.js",
-          "src/db/sql-policy.js",
-          "src/database-workbench.js"
+          "src/db/sql-dml-scope.js",
+          "src/db/sql-vscode.js",
+          "src/db/sql-script-vscode.js",
+          "test/sql-dml-scope-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5435,8 +5439,8 @@
       "verification": {
         "state": "v0.41-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.41.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6043,8 +6047,8 @@
       "verification": {
         "state": "v0.41-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.41.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6625,48 +6629,53 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "fad1440d78495662f033ea3a466170dea7b6181d5c0be7b96dc3ad17c40a61ce",
-    "sourceManifestSha256": "351f64d5ec35f3d5ec8d72eae35a76fb7ae46078c5deda7429a93f73c273b4af",
+    "vsixSha256": "c1105d8890a5530488e49db976361512d1c7b6fea3d4d79c68c4b74cf01be89f",
+    "sourceManifestSha256": "310c21ad17df11f3069d0176d1424040fa7c12a4f9a5c318999334558ad40179",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 4
+        "featureGroups": 5
       },
       {
         "engine": "mariadb",
-        "featureGroups": 4
+        "featureGroups": 5
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-021",
-      "before": "not-implemented",
+      "id": "IDEA-031",
+      "before": "unverified",
       "after": "implemented"
     },
     {
-      "id": "DG-023",
+      "id": "IDEA-054",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-058",
-      "before": "not-implemented",
+      "id": "IDEA-057",
+      "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-077",
+      "id": "DG-011",
       "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "DG-035",
+      "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1271,
-    "pass": 1217,
+    "tests": 1295,
+    "pass": 1239,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 54,
+    "skipped": 56,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

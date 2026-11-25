@@ -312,4 +312,4 @@ function analyzeDependencyGraph({ files, projects = [], buildEdges = [], bytecod
   };
 }
 
-module.exports = { analyzeDependencyGraph, javaFacts, parseJdeps, buildLayer };
+module.exports = { analyzeDependencyGraph, javaFacts, parseJdeps, buildLayer, findCycles };

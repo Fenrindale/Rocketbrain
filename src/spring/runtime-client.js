@@ -1,6 +1,7 @@
 'use strict';
 const http = require('node:http');
 const https = require('node:https');
+const { healthPath, normalizeHealth } = require('./runtime-health');
 
 const ENDPOINTS = Object.freeze(['beans', 'conditions', 'configprops', 'env', 'mappings']);
 class RuntimeError extends Error { constructor(code, message, status) { super(message); this.name = 'SpringRuntimeError'; this.code = code; if (status) this.status = status; } }
@@ -47,6 +48,7 @@ function propertyPaths(value, redactor, prefix = '', depth = 0, result = []) {
 }
 
 function normalizeEndpoint(endpoint, payload, redactor = text => text) {
+  if (endpoint === 'health') return normalizeHealth(payload, redactor);
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) || (endpoint === 'env' ? !Array.isArray(payload.propertySources) : !payload.contexts || typeof payload.contexts !== 'object' || Array.isArray(payload.contexts))) throw new RuntimeError('INVALID_SCHEMA', 'Unsupported Actuator response shape.');
   const contexts = Object.entries(object(payload?.contexts)).slice(0, 100);
   const text = value => safeText(value, redactor);
@@ -96,7 +98,7 @@ class ActuatorClient {
     this.#snapshot = emptySnapshot(); this.#snapshot.baseUrl = this.#target.url.toString().replace(/\/$/, '');
   }
   snapshot() { return structuredClone(this.#snapshot); }
-  async #request(endpoint) {
+  async #request(endpoint, suffix = '') {
     if (this.#disposed) throw new RuntimeError('DISPOSED', 'Runtime connection is closed.');
     const target = this.#target, url = target.url;
     return new Promise((resolve, reject) => {
@@ -105,10 +107,10 @@ class ActuatorClient {
       const headers = { Accept: 'application/vnd.spring-boot.actuator.v3+json, application/json', 'Accept-Encoding': 'identity', Host: url.host };
       if (this.#authorization) headers.Authorization = this.#authorization;
       const transport = url.protocol === 'https:' ? https : http;
-      const request = transport.request({ protocol: url.protocol, hostname: target.address, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: (url.pathname === '/' ? '' : url.pathname) + '/' + endpoint, method: 'GET', headers, agent: false, servername: target.hostname, rejectUnauthorized: true }, response => {
+      const request = transport.request({ protocol: url.protocol, hostname: target.address, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: (url.pathname === '/' ? '' : url.pathname) + '/' + endpoint + suffix, method: 'GET', headers, agent: false, servername: target.hostname, rejectUnauthorized: true }, response => {
         const status = response.statusCode;
         if (status >= 300 && status < 400) { response.destroy(); fail(new RuntimeError('REDIRECT_BLOCKED', 'Actuator redirects are not followed.', status)); return; }
-        if (status !== 200) { response.destroy(); fail(new RuntimeError(status === 401 || status === 403 ? 'AUTH_REQUIRED' : status === 404 ? 'NOT_EXPOSED' : 'HTTP_ERROR', `Actuator ${endpoint} returned HTTP ${status}.`, status)); return; }
+        if (status !== 200 && !(endpoint === 'health' && status >= 500 && status < 600)) { response.destroy(); fail(new RuntimeError(status === 401 || status === 403 ? 'AUTH_REQUIRED' : status === 404 ? 'NOT_EXPOSED' : 'HTTP_ERROR', `Actuator ${endpoint} returned HTTP ${status}.`, status)); return; }
         if (response.headers['content-encoding'] && response.headers['content-encoding'] !== 'identity') { response.destroy(); fail(new RuntimeError('ENCODING_UNSUPPORTED', 'Compressed Actuator responses are not accepted.')); return; }
         const declared = Number(response.headers['content-length']);
         if (Number.isFinite(declared) && declared > this.#options.maxResponseBytes) { response.destroy(); fail(new RuntimeError('RESPONSE_TOO_LARGE', 'Actuator response exceeds the configured limit.')); return; }
@@ -117,10 +119,12 @@ class ActuatorClient {
         response.on('error', () => fail(new RuntimeError('RESPONSE_ERROR', 'Actuator response could not be read.')));
         response.on('end', () => {
           if (finished) return;
-          let json; try { json = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { fail(new RuntimeError('INVALID_JSON', 'Actuator did not return a valid JSON response.')); return; }
+          const healthStatus = endpoint === 'health' ? status : undefined;
+          let json; try { json = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { fail(new RuntimeError('INVALID_JSON', 'Actuator did not return a valid JSON response.', healthStatus)); return; }
           chunks = [];
-          let normalized; try { normalized = normalizeEndpoint(endpoint, json, secretRedactor(this.#authorization)); } catch { fail(new RuntimeError('INVALID_SCHEMA', 'Actuator JSON could not be normalized.')); return; }
-          finished = true; clearTimeout(timer); this.#requests.delete(request); resolve(normalized);
+          let normalized; try { normalized = normalizeEndpoint(endpoint, json, secretRedactor(this.#authorization)); } catch { fail(new RuntimeError('INVALID_SCHEMA', 'Actuator JSON could not be normalized.', healthStatus)); return; }
+          finished = true; clearTimeout(timer); this.#requests.delete(request);
+          resolve(endpoint === 'health' ? { ...normalized, httpStatus: status } : normalized);
         });
       });
       this.#requests.add(request);
@@ -128,6 +132,12 @@ class ActuatorClient {
       request.on('error', error => fail(new RuntimeError(error.code === 'ECONNREFUSED' ? 'CONNECTION_REFUSED' : 'CONNECTION_ERROR', 'Could not connect to the loopback Actuator endpoint.')));
       request.end();
     });
+  }
+  async health(path = []) {
+    let suffix;
+    try { suffix = healthPath(path); }
+    catch (error) { throw new RuntimeError('INVALID_HEALTH_PATH', error.message); }
+    return this.#request('health', suffix ? '/' + suffix : '');
   }
   async refresh() {
     if (this.#disposed) throw new RuntimeError('DISPOSED', 'Runtime connection is closed.');

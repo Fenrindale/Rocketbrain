@@ -69,6 +69,19 @@ async function until(predicate) {
   assert.fail('Expected asynchronous operation did not start');
 }
 
+test('writable queries require approval when UPDATE or DELETE has no outer WHERE', async () => {
+  const server = fakeServer();
+  await withService(server, async service => {
+    await service.setReadOnly(false);
+    const update = 'UPDATE t SET x=(SELECT 1 FROM q WHERE q.id=1)';
+    await assert.rejects(service.query(update), { code:'ROCKETBRAIN_UNBOUNDED_DML' });
+    assert.ok(!server.connections.flatMap(connection => connection.calls).some(call => call.sql === update));
+    await service.query(update, { allowUnboundedDml:true });
+    await service.query('DELETE FROM t WHERE id=?', { values:[1] });
+    assert.ok(server.connections.flatMap(connection => connection.calls).some(call => call.sql === update));
+  });
+});
+
 test('policy accepts read CTEs, EXPLAIN, system variables, quoted names and literal semicolons', () => {
   for (const sql of [
     "SELECT t.id FROM tasks t WHERE t.name='O''Brien; DELETE';",
@@ -156,7 +169,7 @@ test('explicit begin/commit/rollback and autocommit use server status, mode chan
     assert.equal((await service.rollback()).inTransaction, false);
     await service.setReadOnly(false);
     assert.equal((await service.setAutocommit(false)).autocommit, false);
-    assert.equal((await service.query('UPDATE t SET x=1')).state.inTransaction, true);
+    assert.equal((await service.query('UPDATE t SET x=1', { allowUnboundedDml:true })).state.inTransaction, true);
     await assert.rejects(service.setAutocommit(true), /implicitly commit/);
     assert.equal((await service.commit()).inTransaction, false);
     assert.equal(service.getSessionState().autocommit, false);
@@ -201,7 +214,7 @@ test('bound values use binary execute, duplicate columns and precision-safe cell
     const request = server.connections[0].calls.find(call => call.protocol === 'execute');
     assert.deepEqual(request.values, [secret, '9007199254740993', null]); assert.ok(!request.sql.includes(secret));
     await service.setReadOnly(false);
-    const write = await service.query('UPDATE t SET x=?', { values: [1] });
+    const write = await service.query('UPDATE t SET x=?', { values: [1], allowUnboundedDml:true });
     assert.equal(write.affectedRows, 3); assert.equal(write.warningCount, 2); assert.equal(write.rowCount, 0);
   });
 });
@@ -222,7 +235,7 @@ test('fatal DML disconnect is never retried and requires explicit reconnect with
   const server = fakeServer([{ resolve: sql => sql.startsWith('UPDATE') ? { error: { code: 'PROTOCOL_CONNECTION_LOST', fatal: true } } : {} }, { rows: [[7]] }]);
   await withService(server, async service => {
     await service.setReadOnly(false);
-    await assert.rejects(service.query('UPDATE t SET x=1'), { code: 'PROTOCOL_CONNECTION_LOST' });
+    await assert.rejects(service.query('UPDATE t SET x=1', { allowUnboundedDml:true }), { code: 'PROTOCOL_CONNECTION_LOST' });
     assert.equal(service.getSessionState().outcomeUnknown, true);
     await assert.rejects(service.query('SELECT 7'), { code: 'ROCKETBRAIN_RECONNECT_REQUIRED' });
     assert.equal(server.connections.length, 1);
@@ -236,7 +249,7 @@ test('timeout of autocommit DML closes the session and marks its unknown outcome
   const server = fakeServer([{ resolve: sql => sql.startsWith('UPDATE') ? { hang: true } : {} }]);
   await withService(server, async service => {
     await service.setReadOnly(false);
-    await assert.rejects(service.query('UPDATE t SET x=1', { timeoutMs: 15 }), { code: 'ROCKETBRAIN_TIMEOUT' });
+    await assert.rejects(service.query('UPDATE t SET x=1', { timeoutMs: 15, allowUnboundedDml:true }), { code: 'ROCKETBRAIN_TIMEOUT' });
     assert.equal(service.getSessionState().outcomeUnknown, true);
     assert.equal(service.getSessionState().transactionState, 'unknown');
   });

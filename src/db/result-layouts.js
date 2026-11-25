@@ -1,6 +1,7 @@
 'use strict';
 
 const { createHash } = require('node:crypto');
+const { normalizeLocalTransport, transportKey } = require('./local-transport');
 
 const storageKey = 'rocketbrain.database.resultLayouts.v1';
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -10,6 +11,13 @@ const limit = { tables: 128, columns: 4096, bytes: 1024 * 1024 };
 function tableLayoutConnectionKey(config, profile) {
   if (isKey(profile?.connectionKey)) return profile.connectionKey;
   const route = profile || config;
+  if (config?.transport || route?.transport?.address) {
+    try {
+      const key = transportKey(normalizeLocalTransport(config?.transport || route.transport));
+      return key && typeof route.user === 'string' && typeof route.database === 'string' ?
+        digest([profile?.id || '', key, route.user, route.database]) : undefined;
+    } catch { return undefined; }
+  }
   if (!route || typeof route.host !== 'string' || typeof route.user !== 'string' || typeof route.database !== 'string') return undefined;
   const ssh = profile?.ssh;
   const tlsName = profile?.tls?.mode === 'verify' ? profile.tls.serverName : config?.ssl ? config.ssl.serverName || route.host : '';

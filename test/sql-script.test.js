@@ -64,6 +64,16 @@ function fakeServer({delay=0,wide=false}={}){
 const config={host:'127.0.0.1',user:'fixture',database:'fixture',password:'never-log'};
 async function fixture(options,action){const server=fakeServer(options),db=new MysqlService(config,server);try{await action(db,server);}finally{await db.dispose();}}
 const userCalls=server=>server.connections.flatMap(c=>c.calls).filter(c=>c.protocol!=='control'&&!c.sql.trim().startsWith('SELECT @@SESSION.sql_mode'));
+test('a reviewed script warns about each unfiltered write and waits for explicit approval before any SQL',()=>fixture({},async(db,server)=>{
+ await db.setReadOnly(false);
+ const plan=await db.previewScript('SELECT 1;UPDATE data SET name=:where LIMIT 5;DELETE FROM data WHERE id=9;',
+  {parameters:{where:{kind:'text',value:'reviewed'}}});
+ assert.deepEqual(plan.unboundedDml,[{index:1,command:'UPDATE',hasLimit:true}]);
+ await assert.rejects(db.runScript({reviewId:plan.reviewId}),{code:'ROCKETBRAIN_UNBOUNDED_DML'});
+ assert.equal(userCalls(server).length,0);
+ const result=await db.runScript({reviewId:plan.reviewId,allowUnboundedDml:true});
+ assert.equal(result.completed,3);
+}));
 test('a reviewed script uses binary values, immutable metadata and one-shot application',()=>fixture({},async(db,server)=>{
  const original={kind:'text',value:"'; DELETE FROM data; --"},plan=await db.previewScript('SELECT :value;SELECT :value',{parameters:{value:original}});assert.equal(plan.parameterDefinitions[0].occurrences,2);assert.equal(plan.executedSql,false);assert.equal(userCalls(server).length,0);
  original.value='changed';plan.state.readOnly=false;plan.sqlMode.push('ORACLE');plan.statements[0].sql='DELETE FROM data';

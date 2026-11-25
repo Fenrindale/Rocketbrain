@@ -35,7 +35,9 @@ function registerJavaFeatures(context, vscode) {
     try {
       const storage = context.storageUri || context.globalStorageUri;
       const launch = resolveLaunch({ serverPath: config.get('serverPath'), javaHome: config.get('javaHome'), debugBundlePath: config.get('debugBundlePath'), storagePath: path.join(storage.fsPath, 'java'), cacheContext: { projectJdks: config.get('projectJdks', []), gradleHome: config.get('gradleHome', ''), gradleJavaHome: config.get('gradleJavaHome', '') } });
-      const settings = serverSettings(config.get('projectJdks', []), { gradleHome: config.get('gradleHome'), gradleJavaHome: config.get('gradleJavaHome') });
+      const extractInterfaceReplaceUsages = config.get('extractInterface.replaceUsages', false) === true;
+      const settings = serverSettings(config.get('projectJdks', []), { gradleHome: config.get('gradleHome'),
+        gradleJavaHome: config.get('gradleJavaHome'),extractInterfaceReplaceUsages });
       const { LanguageClient, ErrorAction, CloseAction } = require('vscode-languageclient/node');
       const watcher = vscode.workspace.createFileSystemWatcher('**/{*.java,pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,gradle.properties}');
       subscriptions.push(watcher);
@@ -47,7 +49,8 @@ function registerJavaFeatures(context, vscode) {
         errorHandler: { error: () => ({ action: ErrorAction.Continue }), closed: () => { if (!disposed) { client = undefined; update('error', 'Java server exited. Check Rocketbrain Java output, then restart.'); } return { action: CloseAction.DoNotRestart }; } },
         markdown: { isTrusted: false }
       });
-      state = { ...state, serverPath: launch.serverPath, javaHome: launch.javaHome, debugBundlePath: launch.bundles[0], runtimeIdentity: launch.identity, workspaceData: launch.data };
+      state = { ...state, serverPath: launch.serverPath, javaHome: launch.javaHome, debugBundlePath: launch.bundles[0], runtimeIdentity: launch.identity,
+        workspaceData: launch.data,extractInterfaceReplaceUsages };
       client = next; update('starting', 'Starting the independent Eclipse JDT Language Server.');
       next.onNotification('language/status', event => { if (event.type === 'Error') output.appendLine(`JDT LS: ${event.message}`); else output.appendLine(`JDT LS ${event.type}: ${event.message}`); });
       next.onNotification('language/progressReport', event => { status.tooltip = `Java: ${event.task || ''} ${event.subTask || ''}`; });
@@ -103,6 +106,14 @@ function registerJavaFeatures(context, vscode) {
   };
   api.refactoring=require('./refactoring').registerJavaRefactoring(context,vscode,{request:refactoringRequest});
   subscriptions.push(api.refactoring);
+  api.interfaceRefactoring={
+    async members(params,cancellation){
+      await api.start();
+      if(!vscode.workspace.isTrusted||!client||state.state!=='running')throw Error('Start Java support in a trusted workspace to inspect interface members.');
+      return client.sendRequest('java/checkExtractInterfaceStatus',params,...(cancellation?[cancellation]:[]));
+    },
+    edit:(params,cancellation)=>refactoringRequest('java/getRefactorEdit',params,cancellation)
+  };
   const refactoringRuntime=()=>({javaHome:api.getState().javaHome,storagePath:(context.storageUri||context.globalStorageUri).fsPath});
   const synchronizeRefactoringFiles=async changes=>{
     if(!vscode.workspace.isTrusted||!Array.isArray(changes)||!changes.length||changes.length>2)throw Error('Invalid Java resource synchronization.');
@@ -158,7 +169,7 @@ function registerJavaFeatures(context, vscode) {
     else if (selected?.action === 'endpoints') await vscode.commands.executeCommand('rocketbrain.spring.endpoints');
   }));
   subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => { void api.start().catch(error => output.appendLine(error.message)); }));
-  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
+  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
   update('stopped', 'Java server is stopped.');
   void api.start().catch(error => output.appendLine(error.message));
   return api;

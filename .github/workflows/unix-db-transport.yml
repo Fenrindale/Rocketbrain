@@ -1,0 +1,52 @@
+name: Unix database transport
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/unix-db-transport.yml'
+      - 'scripts/test-unix-db-transport.js'
+      - 'src/db/local-transport.js'
+      - 'src/db/mysql.js'
+      - 'src/db/connection-*.js'
+      - 'src/db/result-layouts.js'
+      - 'pnpm-lock.yaml'
+  pull_request:
+    paths:
+      - '.github/workflows/unix-db-transport.yml'
+      - 'scripts/test-unix-db-transport.js'
+      - 'src/db/local-transport.js'
+      - 'src/db/mysql.js'
+      - 'src/db/connection-*.js'
+      - 'src/db/result-layouts.js'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  unix-socket:
+    name: Unix socket (${{ matrix.engine }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [mysql, mariadb]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify socket-only server through a saved Rocketbrain profile
+        env:
+          ROCKETBRAIN_UNIX_TEST_ENGINE: ${{ matrix.engine }}
+        run: node scripts/test-unix-db-transport.js

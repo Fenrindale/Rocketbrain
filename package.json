@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.41.0",
+  "version": "0.42.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -55,6 +55,8 @@
       { "command": "rocketbrain.sqlNotebook.pinResult", "title": "Pin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
       { "command": "rocketbrain.sqlNotebook.unpinResult", "title": "Unpin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
       { "command": "rocketbrain.java.structuralSearch", "title": "Search or Replace Java Structure", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.beanGraph", "title": "Show Spring Bean Dependency Graph", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.runtimeHealth", "title": "Open Spring Actuator Health", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.refreshObjectSource", "title": "Refresh Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && resourceScheme == rocketbrain-object-source" },
       { "command": "rocketbrain.java.move", "title": "Move Java Class File", "category": "Rocketbrain" },
@@ -426,6 +428,12 @@
         "command": "rocketbrain.java.refactor",
         "title": "Refactor Java Selection with Preview",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.extractInterface",
+        "title": "Extract Java Interface",
+        "category": "Rocketbrain",
+        "enablement": "editorLangId == java && isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.sql.findReferences",
@@ -1285,6 +1293,12 @@
           "type": "boolean",
           "default": true,
           "description": "Start Rocketbrain's directly connected Java language engine in trusted workspaces."
+        },
+        "rocketbrain.java.extractInterface.replaceUsages": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "description": "Include compatible Java usage type changes in the Extract Interface diff. Reloads the Java language server when changed."
         },
         "rocketbrain.java.serverPath": {
           "type": "string",

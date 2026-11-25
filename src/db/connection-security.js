@@ -5,6 +5,7 @@ function error(message){return Object.assign(new Error(message),{code:'ROCKETBRA
 function pem(value,kind){if(typeof value!=='string'||!value||Buffer.byteLength(value)>MAX_PEM||value.includes('\0'))throw error('Use a bounded PEM '+kind+'.');return value;}
 function dnsName(value){return typeof value==='string'&&value.length<=253&&!net.isIP(value)&&/^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(value)&&!value.includes('..');}
 function bindConnectionResource(config,{endpoint,dispose,profile}={}){
+ if(config?.transport!==undefined)throw error('Use a TCP connection for an SSH tunnel.');
  if(!config||typeof config!=='object'||!endpoint||endpoint.host!=='127.0.0.1'||!Number.isInteger(endpoint.port)||endpoint.port<1||endpoint.port>65535||typeof dispose!=='function')throw error('An owned loopback transport is required.');
  const bound={...config};let closed=false;resources.set(bound,{endpoint:{...endpoint},profile:profile?structuredClone(profile):null,dispose:async()=>{if(closed)return;closed=true;await dispose();},claimed:false});return bound;
 }

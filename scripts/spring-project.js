@@ -167,7 +167,8 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     ...observerArgs,
     ...(jfrRepository ? ['-XX:FlightRecorderOptions=repository='+jfrRepository] : []),
     ...(debugPort ? ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:' + debugPort] : []), '-cp', classpath, 'fixture.boot.FixtureApplication'];
-  db=engine==='mysql'?await startMysqlFixture():await startMariaFixture();
+  const dbOptions={namedPipe:process.env.ROCKETBRAIN_FIXTURE_NAMED_PIPE==='1'};
+  db=engine==='mysql'?await startMysqlFixture(dbOptions):await startMariaFixture(dbOptions);
   const url = engine === 'mysql' ? 'jdbc:mysql://127.0.0.1:' + db.config.port + '/' + db.config.database + '?allowPublicKeyRetrieval=true&sslMode=DISABLED'
     : 'jdbc:mariadb://127.0.0.1:' + db.config.port + '/' + db.config.database;
   let log = '', stopping, child;
@@ -239,6 +240,7 @@ async function main() {
         const child = spawn(process.execPath, args, { cwd: WORKSPACE, windowsHide: true, stdio: 'inherit', env: { ...process.env,
           ROCKETBRAIN_SPRING_RUNTIME_CONFIG: fixture.configPath, ROCKETBRAIN_SPRING_PROJECT_CONFIG: fixture.configPath, ROCKETBRAIN_JPA_RUNTIME: '1',
           ROCKETBRAIN_TEST_MYSQL_ENGINE: engine, ROCKETBRAIN_MYSQL_TEST_CONFIG: fixture.db.configPath, ROCKETBRAIN_TEST_MYSQL_CONFIG: fixture.db.configPath,
+          ...(fixture.db.pipeName ? { ROCKETBRAIN_TEST_MYSQL_PIPE: fixture.db.pipeName } : {}),
           ...(adminConfig ? { ROCKETBRAIN_DBADMIN_TEST_CONFIG: adminConfig } : {}),
           ...(fixture.db.crossConfigPath ? { ROCKETBRAIN_SCHEMA_CROSS_CONFIG: fixture.db.crossConfigPath } : {}) } });
         child.once('error', reject); child.once('exit', code => resolve(code ?? 1));

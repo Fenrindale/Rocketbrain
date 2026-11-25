@@ -12,3 +12,57 @@ test('TLS numeric addresses require a certificate DNS name and client keys are p
 test('trust loss and disposal stop profile operations',async()=>{const s=setup();s.trusted=false;await assert.rejects(s.api.save({profile:base(),verify:false}),/Trust/);s.trusted=true;await s.api.dispose();await assert.rejects(s.api.test({profile:base()}),/closed/);});
 test('save and connect uses the verified private credential even when remembering is disabled',async()=>{const s=setup();try{const first=await s.api.save({profile:base(),password:'private-reused',rememberPassword:true});const result=await s.api.save({profile:first.profile,expectedRevision:first.revision,rememberPassword:false,connectAfterSave:true});assert.equal(result.connected,true);assert.equal(result.hasSavedPassword,false);assert.equal(s.connected.password,'private-reused');assert.equal(s.secretValues.size,0);assert.ok(!JSON.stringify(result).includes('private-reused'));}finally{await s.api.dispose();}});
 test('import cannot overwrite an existing profile identity or attached secret',async()=>{const s=setup();try{const r=await s.api.save({profile:base(),password:'existing',rememberPassword:true});await s.api.importProfiles({format:'RocketbrainConnectionProfiles',version:1,credentialsIncluded:false,profiles:[{...r.profile,name:'Imported'}]});assert.equal(s.api.list().length,2);assert.equal(s.api.list().find(v=>v.id===r.id).profile.name,'Local dev');assert.deepEqual([...s.secretValues.values()],['existing']);}finally{await s.api.dispose();}});
+
+test('local profiles export without endpoint paths and import unconfigured alongside legacy TCP profiles', async t => {
+  const source = setup(), target = setup();
+  t.after(() => Promise.all([source.api.dispose(), target.api.dispose()]));
+  const { host, port, ...common } = base();
+  await source.api.save({ profile: base(), verify: false });
+  const local = await source.api.save({
+    profile: { ...common, name: 'Private socket', transport: { kind: 'unix-socket', address: '/run/local/mysql.sock' } },
+    password: 'private-password', rememberPassword: true
+  });
+  assert.deepEqual(local.observed.transport, { kind: 'unix-socket' });
+  const shared = source.api.exportProfiles();
+  assert.equal(shared.version, 2);
+  assert.equal(shared.credentialsIncluded, false);
+  assert.deepEqual(shared.profiles.find(item => item.transport).transport, { kind: 'unix-socket' });
+  assert.ok(!JSON.stringify(shared).includes('/run/local/mysql.sock'));
+  assert.ok(!JSON.stringify(shared).includes('private-password'));
+  await assert.rejects(target.api.importProfiles({
+    ...shared, profiles: shared.profiles.map(item => item.transport ? {
+      ...item, transport: { ...item.transport, address: '/run/imported.sock' }
+    } : item)
+  }), /Re-enter local socket paths/);
+  assert.equal(target.api.list().length, 0);
+  assert.deepEqual(await target.api.importProfiles(shared), { imported: 2, connectionsAttempted: 0 });
+  const reopened = target.api.list().find(item => item.profile.transport);
+  assert.deepEqual(reopened.profile.transport, { kind: 'unix-socket' });
+  assert.equal(target.api.list().find(item => !item.profile.transport).profile.host, host);
+  assert.equal(target.api.list().find(item => !item.profile.transport).profile.port, port);
+  await assert.rejects(target.api.connect({ id: reopened.id }), /Edit this profile/);
+  assert.equal(target.connected, undefined);
+  await target.api.save({ profile: {
+    ...reopened.profile, transport: { kind: 'unix-socket', address: '/run/reviewed.sock' }
+  }, expectedRevision: reopened.revision, connectAfterSave: true, password: 'new' });
+  assert.deepEqual(target.connected.transport, { kind: 'unix-socket', address: '/run/reviewed.sock' });
+  assert.equal(target.connected.host, undefined);
+  assert.equal(target.connected.port, undefined);
+});
+
+test('changing a local endpoint never reuses the saved password for another route', async t => {
+  const s = setup();
+  t.after(() => s.api.dispose());
+  const { host, port, ...common } = base();
+  const local = { ...common, transport: { kind: 'named-pipe', address: 'MySQL' } };
+  const saved = await s.api.save({ profile: local, password: 'private-credential', rememberPassword: true });
+  await s.api.connect({ id: saved.id });
+  assert.equal(s.connected.password, 'private-credential');
+  const amended = { ...saved.profile, transport: { kind: 'named-pipe', address: 'different' } };
+  await s.api.save({ profile: amended, expectedRevision: saved.revision, connectAfterSave: true });
+  assert.equal(s.connected.password, '');
+  assert.equal(s.secretValues.size, 0);
+  for (const mixed of [{ host }, { port }, { tls: { mode: 'verify' } }, { ssh: { host: 'example.test' } }]) {
+    assert.throws(() => normalizeProfile({ ...local, ...mixed }), /cannot be combined/);
+  }
+});

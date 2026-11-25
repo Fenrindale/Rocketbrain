@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {fileURLToPath}=require('node:url');
+const { inspectDmlScope } = require('./sql-dml-scope');
 
 function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output}={}) {
   const collection=vscode.languages.createDiagnosticCollection('rocketbrain-sql');
@@ -23,6 +24,21 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   const virtualActive=document=>vscode.workspace.isTrusted&&
     (ddlPreviews.has(document.uri.toString())||Boolean(configuredScope(document)));
+  function dmlDiagnostics(document, text, parts, sqlMode) {
+    return parts.slice(0, 100).flatMap(part => {
+      let scope;
+      try { scope = inspectDmlScope(text.slice(part.start, part.end), sqlMode); }
+      catch { return []; }
+      if (!scope || scope.hasWhere) return [];
+      const range = new vscode.Range(document.positionAt(part.start + scope.start), document.positionAt(part.start + scope.end));
+      const item = new vscode.Diagnostic(range, scope.command + ' has no outer WHERE clause.' +
+        (scope.hasLimit ? ' LIMIT constrains rows but does not select them by predicate.' : ' It may affect every target row.'),
+      vscode.DiagnosticSeverity.Warning);
+      item.source = 'Rocketbrain SQL';
+      item.code = 'sql.dml.noWhere';
+      return [item];
+    });
+  }
   function analyzeDocument(document){
     if(disposed||!config().get('enabled',true)||document.languageId!=='sql')return {state:'disabled',statements:[]};
     const key=document.uri.toString(),previous=cache.get(key);
@@ -40,11 +56,15 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
       }
     }
     const seed=preview?.type==='local'?preview.model:metadata;
-    if(!seed){collection.delete(document.uri);return {state:'not-connected',statements:[]};}
     if(previous?.version===document.version&&previous.epoch===epoch&&previous.preview===preview)return previous.value;
     const text=document.getText(),opts=options();
     let statements=[];
     if(Buffer.byteLength(text)>128*1024){collection.set(document.uri,[new vscode.Diagnostic(new vscode.Range(0,0,0,0),'SQL analysis is limited to 128 KiB per document.',vscode.DiagnosticSeverity.Information)]);return {state:'unknown',reason:'document-size-limit',statements:[]};}
+    if (!seed) {
+      const parts = engine().statementRanges(text, opts).statements;
+      collection.set(document.uri, dmlDiagnostics(document, text, parts, undefined));
+      return { state:'not-connected', statements:[] };
+    }
     const split=preview?null:engine().statementRanges(text,opts);
     const virtual=preview?require('./ddl-model').analyzeDdlScript(text,seed):null;
     const parts=split?.statements||[];
@@ -55,7 +75,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
       if(/^(?:CREATE|ALTER|DROP|RENAME|TRUNCATE|USE|SET)\b/i.test(head)||/\/\*!/.test(source))contextChanged=true;
       return {start:part.start,end:part.end,model};
     });
-    const diagnostics=[];
+    const diagnostics=dmlDiagnostics(document, text, statements, opts.sqlMode);
     for(const statement of statements)for(const issue of statement.model.diagnostics||[]){
       const start=statement.start+(issue.start??0),end=statement.start+(issue.end??issue.start??0);
       const item=new vscode.Diagnostic(new vscode.Range(document.positionAt(start),document.positionAt(end)),issue.message,issue.severity==='error'?vscode.DiagnosticSeverity.Error:issue.severity==='warning'?vscode.DiagnosticSeverity.Warning:vscode.DiagnosticSeverity.Information);

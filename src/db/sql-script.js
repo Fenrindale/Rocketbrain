@@ -111,5 +111,12 @@ function bindScript(script,input){
   return {...script,statements,parameterDefinitions:script.parameterDefinitions.map(definition=>({...definition,valueKind:bound.get(definition.key)?.kind}))};
 }
 
-function publicScript(script){return {parameterStyle:script.parameterStyle,parameterDefinitions:structuredClone(script.parameterDefinitions),statements:script.statements.map(({index,start,end,sql,first,mayWrite,ddl})=>({index,start,end,sql,first,mayWrite,ddl})),statementCount:script.statements.length,hasWrites:script.hasWrites,requiresImplicitCommitApproval:script.requiresImplicitCommitApproval,sqlMode:[...script.sqlMode],atomic:false,executedSql:false};}
+function publicScript(script){
+  const unboundedDml = script.statements.flatMap(statement => statement.unboundedDml
+    ? [{ index:statement.index, command:statement.unboundedDml.command, hasLimit:statement.unboundedDml.hasLimit }] : []);
+  return {parameterStyle:script.parameterStyle,parameterDefinitions:structuredClone(script.parameterDefinitions),
+    statements:script.statements.map(({index,start,end,sql,first,mayWrite,ddl})=>({index,start,end,sql,first,mayWrite,ddl})),
+    statementCount:script.statements.length,hasWrites:script.hasWrites,requiresImplicitCommitApproval:script.requiresImplicitCommitApproval,
+    unboundedDml,sqlMode:[...script.sqlMode],atomic:false,executedSql:false};
+}
 module.exports={analyzeScript,bindScript,typedParameter,publicScript,normalizeMode,digest,LIMITS,fail};

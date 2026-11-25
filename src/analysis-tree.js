@@ -40,7 +40,12 @@ function registerAnalysisTree(context, vscode, { spring, jpa }) {
     }), 'server-process'));
     const conditions = [true, false].map(matched => node(matched ? 'Matched conditions' : 'Unmatched conditions', 'Observed report; missing entries are not a negative proof', limited((runtime.conditions || []).filter(item => item.matched === matched), item => node(item.source, item.condition, [], matched ? 'pass' : 'circle-slash')), 'filter'));
     const endpoints = Object.entries(runtime.endpoints || {}).map(([name, result]) => node(name, `${result.state}${result.status ? ` · HTTP ${result.status}` : ''}`, [], result.state === 'available' ? 'pass' : 'info'));
+    const healthState = spring.runtime?.health?.snapshot?.();
+    const health = node('Actuator Health', healthState?.state === 'observed' ?
+      [healthState.path.at(-1)?.name, healthState.observation.status].filter(Boolean).join(' · ') : 'Open to observe', [], 'heart');
+    health.command = { command: 'rocketbrain.spring.runtimeHealth', title: 'Open Spring Actuator Health' };
     const runtimeChildren = [
+      health,
       node('Endpoint coverage', runtime.fetchedAt ? `${runtime.fetchedAt} · use Refresh Runtime Snapshot to fetch again` : 'No runtime snapshot; connect explicitly', endpoints, 'checklist'),
       node('Bean contexts', `${runtime.counts?.beans || 0} observed beans`, contextNodes, 'symbol-class'),
       node('Conditions', `${runtime.counts?.conditions || 0} report entries`, conditions, 'filter'),
@@ -97,6 +102,7 @@ function registerAnalysisTree(context, vscode, { spring, jpa }) {
     vscode.workspace.onDidChangeWorkspaceFolders(refresh), vscode.workspace.onDidSaveTextDocument(refresh)
   ];
   if (spring.runtime?.onDidChange) subscriptions.push(spring.runtime.onDidChange(refresh));
+  if (spring.runtime?.health?.onDidChange) subscriptions.push(spring.runtime.health.onDidChange(refresh));
   if (jpa.onDidChange) subscriptions.push(jpa.onDidChange(refresh));
   return {
     refresh,

@@ -4,6 +4,7 @@ const { DatabaseService } = require('./db/service');
 const { MysqlService } = require('./db/mysql');
 const { ResultsView } = require('./results');
 const { statementAt } = require('./sql');
+const { inspectDmlScope } = require('./db/sql-dml-scope');
 const { completeSql } = require('./db/completion');
 const { TableEditor } = require('./table-editor');
 const { relatedRows } = require('./db/related-rows');
@@ -106,7 +107,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       const schema = [...metadata.tables,...metadata.views];
       const profile = require('./db/connection-security').connectionProfile(config);
       const layoutConnection = tableLayoutConnectionKey(config, profile);
-      await switchDatabase(next, profile ? profile.name+' · '+config.database : `${config.database} @ ${config.host}`,
+      const endpoint = require('./db/local-transport').transportLabel(config.transport) || config.host;
+      await switchDatabase(next, profile ? profile.name+' · '+config.database : `${config.database} @ ${endpoint}`,
         true, schema, expectedEpoch, metadata, profile, layoutConnection);
     }
     catch (error) { if (state.db !== next) await next.dispose(); throw error; }
@@ -220,6 +222,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   }
   async function runSql(sql, document = currentDocument(), { connectionEpoch, connectionKey, saved = false, userQuery = false, beforeRun } = {}) {
     if (!sql.trim()) return;
+    const documentVersion = document?.version;
     if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
     if (connectionEpoch !== undefined && (connectionEpoch !== state.epoch ||
         connectionKey !== undefined && connectionKey !== savedQueryTarget().key)) {
@@ -236,13 +239,30 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const source = state.mysql ? `${state.label} · ${binding.id} · ${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}` : 'Offline demo · SQLite · sample data';
     let id;
     try {
+      const scope = session && !session.readOnly ? inspectDmlScope(sql) : undefined;
+      const allowUnboundedDml = scope && !scope.hasWhere;
+      if (allowUnboundedDml) {
+        const action = 'Run ' + scope.command;
+        const accepted = await vscode.window.showWarningMessage(scope.command + ' has no outer WHERE clause.', {
+          modal:true,
+          detail:source + '\n' + (scope.hasLimit ? 'The statement has a LIMIT but does not filter rows with WHERE.'
+            : 'The statement may affect every row in the target tables.')
+        }, action);
+        if (accepted !== action) return;
+      }
       const editor = vscode.window.activeTextEditor;
       await results.show();
       if (editor) await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
       if (saved && (!vscode.workspace.isTrusted || document.isClosed || document.getText() !== sql)) throw new Error('The saved SQL changed or the workspace is unavailable.');
       beforeRun?.();
+      if (allowUnboundedDml) {
+        assertBinding(document, binding);
+        if (document.isClosed || document.version !== documentVersion || !vscode.workspace.isTrusted) {
+          throw Error('The SQL source changed after review. Run it again.');
+        }
+      }
       id = results.begin(sql, source, { readOnly: session?.readOnly ?? true, sessionId: binding.id });
-      results.finish(id, await db.query(sql, { sessionId: binding.id, maxRows: 500, timeoutMs: 5000 }));
+      results.finish(id, await db.query(sql, { sessionId: binding.id, maxRows: 500, timeoutMs: 5000, allowUnboundedDml }));
       if (historyTarget?.key && vscode.workspace.isTrusted && binding.epoch===state.epoch && db===state.db) {
         completedUserSql.fire({ sql, target:historyTarget });
       }
@@ -620,7 +640,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       if(!state.mysql||request.connectionEpoch!==state.epoch)throw new Error('The database connection changed. Preview the script again.');
       const binding=bindings.get(request.documentUri);
       if(!binding||binding.id!==request.sessionId||binding.epoch!==state.epoch)throw new Error('The SQL console changed. Preview the script again.');
-      const db=state.db;return withSession(binding.id,()=>db.runScript({reviewId:request.reviewId,allowImplicitCommit:request.allowImplicitCommit===true,cancellation:request.cancellation}));
+      const db=state.db;return withSession(binding.id,()=>db.runScript({reviewId:request.reviewId,
+        allowImplicitCommit:request.allowImplicitCommit===true,allowUnboundedDml:request.allowUnboundedDml===true,
+        cancellation:request.cancellation}));
     },
     async captureSchemaSnapshot(options={}) {
       if(!vscode.workspace.isTrusted||!state.mysql||state.disposed||state.switching)throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');

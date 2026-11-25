@@ -7,6 +7,7 @@ const { validateQuery, validateReadQuery, parameters } = require('./sql-policy')
 const { operationOf, outcomeOf } = require('./activity-log');
 const { readMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
+const { localDriverOptions } = require('./local-transport');
 const { geometryType, preserveGeometry, captureGeometry } = require('./result-map');
 const { TableEditor } = require('./grid');
 const { SchemaRenamer } = require('./schema-rename');
@@ -25,7 +26,8 @@ function limits(options = {}) {
 }
 function connectionOptions(config) {
   if (!config || typeof config !== 'object') throw new Error('A MySQL connection is required.');
-  for (const key of ['host', 'user', 'database']) {
+  const local = localDriverOptions(config);
+  for (const key of local ? ['user', 'database'] : ['host', 'user', 'database']) {
     if (typeof config[key] !== 'string' || !config[key].trim() || config[key].length > 1024) throw new Error('Enter a valid MySQL ' + key + '.');
   }
   const port = config.port ?? 3306;
@@ -33,8 +35,13 @@ function connectionOptions(config) {
   if (config.password !== undefined && typeof config.password !== 'string') throw new Error('The password must be text.');
   if (config.readOnly !== undefined && typeof config.readOnly !== 'boolean') throw new Error('readOnly must be a boolean.');
   if (config.ssl && (typeof config.ssl !== 'object' || config.ssl.rejectUnauthorized === false)) throw new Error('TLS certificate verification must remain enabled.');
+  // MySQL treats Unix sockets as secure for full SHA-2 authentication. Windows named pipes require RSA exchange.
+  const pipeAuth = config.transport?.kind === 'named-pipe' ? {
+    authPlugins: { caching_sha2_password: require('mysql2').authPlugins.caching_sha2_password({ overrideIsSecure: false }) }
+  } : undefined;
   return {
-    host: config.host.trim(), port, user: config.user, database: config.database, password: config.password || '',
+    ...(local || { host: config.host.trim(), port }), user: config.user, database: config.database, password: config.password || '',
+    ...pipeAuth,
     ...(config.ssl ? { ssl: { rejectUnauthorized: true, ...(typeof config.ssl.ca === 'string' ? { ca: config.ssl.ca } : {}) } } : {}),
     multipleStatements: false, rowsAsArray: true, supportBigNumbers: true, bigNumberStrings: true,
     dateStrings: true, jsonStrings: true, charset: 'utf8mb4', connectTimeout: 5000, enableKeepAlive: true,
@@ -49,6 +56,9 @@ function safeError(error) {
     ER_DBACCESS_DENIED_ERROR: 'This MySQL user cannot access the selected database.',
     ER_BAD_DB_ERROR: 'The selected MySQL database does not exist.',
     ECONNREFUSED: 'The MySQL server refused the connection. Check its address and port.',
+    ENOENT: 'The database socket or named pipe is unavailable. Check that the local server is listening.',
+    EACCES: 'The database transport was denied by the operating system. Check the socket or pipe permissions.',
+    EPERM: 'The database transport was denied by the operating system. Check the socket or pipe permissions.',
     ENOTFOUND: 'The MySQL server address could not be found.',
     ETIMEDOUT: 'The MySQL connection timed out.',
     PROTOCOL_CONNECTION_LOST: 'The database connection was lost. Reconnect this console explicitly; a write may have completed.',
@@ -230,6 +240,9 @@ class MysqlService {
     const session = this._session(options.sessionId);
     return this._enqueue(session, async () => {
       const policy = validateQuery(sql, { readOnly: session.readOnly });
+      if (policy.unboundedDml && options.allowUnboundedDml !== true) {
+        throw fail('ROCKETBRAIN_UNBOUNDED_DML', 'Review the ' + policy.unboundedDml.command + ' without an outer WHERE clause before running it.');
+      }
       await this._ensureConnection(session);
       let result, queryError;
       try { result = await this._stream(session, sql, values, bounded, policy.mayWrite, { category: 'query', operation: policy.first }); }
@@ -277,10 +290,13 @@ class MysqlService {
     });
   }
   discardScript(reviewId){return this._scriptReviews.delete(reviewId);}
-  async runScript({reviewId,allowImplicitCommit=false,onStatement,cancellation}={}){
+  async runScript({reviewId,allowImplicitCommit=false,allowUnboundedDml=false,onStatement,cancellation}={}){
     this._assertOpen();const review=this._scriptReviews.get(reviewId);
     if(!review||Date.now()>review.expiresAt)throw fail('ROCKETBRAIN_SCRIPT_STALE','The script review expired or was already consumed. Review again.');
     if(review.script.requiresImplicitCommitApproval&&!allowImplicitCommit)throw fail('ROCKETBRAIN_SCRIPT_DDL','Explicitly acknowledge possible DDL implicit commits before running this script.');
+    if (review.script.statements.some(statement => statement.unboundedDml) && allowUnboundedDml !== true) {
+      throw fail('ROCKETBRAIN_UNBOUNDED_DML', 'Review the script statements without an outer WHERE clause before running them.');
+    }
     const session=this._session(review.sessionId);
     return this._enqueue(session,async()=>{
       if(this._scriptReviews.get(reviewId)!==review||Date.now()>review.expiresAt)throw fail('ROCKETBRAIN_SCRIPT_STALE','The script review expired or was already consumed.');

@@ -203,7 +203,8 @@ function registerSpringFeatures(vscode, context, output) {
     if (selected) { const item = selected.endpoint; await vscode.window.showTextDocument(vscode.Uri.parse(item.uri), { selection: new vscode.Range(item.range.start.line, item.range.start.character, item.range.end.line, item.range.end.character) }); }
   }));
   subscriptions.push(vscode.workspace.onDidChangeTextDocument(invalidate), vscode.workspace.onDidCreateFiles(invalidate), vscode.workspace.onDidDeleteFiles(invalidate), vscode.workspace.onDidRenameFiles(invalidate));
-  return { endpoints, properties, analyze: semantic.analyze, snapshot: semantic.snapshot, definitions: semantic.definitions, refresh: semantic.refresh, runtime, dispose() { for (const item of subscriptions) item.dispose(); cache.clear(); } };
+  return { endpoints, properties, analyze: semantic.analyze, snapshot: semantic.snapshot, definitions: semantic.definitions, refresh: semantic.refresh,
+    beanGraph:semantic.beanGraph,runtime, dispose() { for (const item of subscriptions) item.dispose(); cache.clear(); } };
 }
 
 module.exports = { parseSpringEndpoints, metadataProperties, yamlPrefix, registerSpringFeatures };

@@ -63,11 +63,13 @@ async function waitForDatabase(config, child, timeoutMs = 45000) {
   throw new Error(`Disposable MariaDB did not become ready (${lastCode || 'timeout'}).`);
 }
 
-async function startFixture({tls}={}) {
+async function startFixture({tls,namedPipe=false}={}) {
+  if(namedPipe&&process.platform!=='win32')throw Error('The MariaDB named pipe fixture needs a Windows host.');
   if(tls){if(Object.keys(tls).some(k=>!['ca','cert','key'].includes(k))||['ca','cert','key'].some(k=>typeof tls[k]!=='string'||!tls[k]||Buffer.byteLength(tls[k])>2*1024*1024||tls[k].includes('\0')))throw Error('Use bounded PEM ca/cert/key strings for the owned TLS fixture.');const cert=new crypto.X509Certificate(tls.cert);new crypto.X509Certificate(tls.ca);if(!cert.checkPrivateKey(crypto.createPrivateKey(tls.key)))throw Error('TLS fixture server certificate/key mismatch.');}
   const runtime = await ensureMariaDbRuntime();
   await fsp.mkdir(INSTANCE_ROOT, { recursive: true });
   const id = crypto.randomUUID();
+  const pipeName = namedPipe ? 'rocketbrain-mariadb-' + id : undefined;
   const folder = assertOwnedPath(path.join(INSTANCE_ROOT, id));
   await fsp.mkdir(folder);
   await fsp.writeFile(path.join(folder, 'owner.json'), JSON.stringify({ kind: MARKER, id, workspace: WORKSPACE, createdAt: new Date().toISOString() }));
@@ -120,7 +122,12 @@ async function startFixture({tls}={}) {
     // Omitting --service ensures no Windows service is installed.
     await runProcess(runtime.initializer, [`--datadir=${datadir}`, `--password=${rootPassword}`, `--port=${port}`, '--silent'], { cwd: runtime.home });
     logFd = fs.openSync(path.join(folder, 'server-console.log'), 'a');
-    child = spawn(runtime.server, ['--no-defaults', `--basedir=${runtime.home}`, `--datadir=${datadir}`, `--tmpdir=${tmpdir}`, `--secure-file-priv=${filesdir}`, ...(tls?[`--ssl-ca=${tlsPaths.ca}`,`--ssl-cert=${tlsPaths.cert}`,`--ssl-key=${tlsPaths.key}`]:[]), '--local-infile=0', '--bind-address=127.0.0.1', `--port=${port}`, '--skip-name-resolve', '--skip-log-bin', '--max-connections=20', '--innodb-buffer-pool-size=33554432', `--pid-file=${path.join(folder, 'server.pid')}`, `--log-error=${path.join(folder, 'server-error.log')}`, '--console'], { cwd: folder, windowsHide: true, stdio: ['ignore', logFd, logFd] });
+    child = spawn(runtime.server, ['--no-defaults', `--basedir=${runtime.home}`, `--datadir=${datadir}`, `--tmpdir=${tmpdir}`, `--secure-file-priv=${filesdir}`,
+      ...(tls?[`--ssl-ca=${tlsPaths.ca}`,`--ssl-cert=${tlsPaths.cert}`,`--ssl-key=${tlsPaths.key}`]:[]),
+      ...(pipeName?['--enable-named-pipe','--socket='+pipeName]:[]),
+      '--local-infile=0', '--bind-address=127.0.0.1', `--port=${port}`, '--skip-name-resolve', '--skip-log-bin', '--max-connections=20',
+      '--innodb-buffer-pool-size=33554432', `--pid-file=${path.join(folder, 'server.pid')}`,
+      `--log-error=${path.join(folder, 'server-error.log')}`, '--console'], { cwd: folder, windowsHide: true, stdio: ['ignore', logFd, logFd] });
     exitPromise = new Promise(resolve => child.once('exit', resolve));
     child.once('error', () => {});
     admin = await waitForDatabase(adminConfig, child);
@@ -130,6 +137,10 @@ async function startFixture({tls}={}) {
     await admin.query(fixtureSql);
     await admin.query('CREATE USER ?@? IDENTIFIED BY ?', [config.user, '127.0.0.1', password]);
     await admin.query('GRANT ALL PRIVILEGES ON rocketbrain_fixture.* TO ?@?', [config.user, '127.0.0.1']);
+    if(pipeName){
+      await admin.query('CREATE USER ?@? IDENTIFIED BY ?', [config.user,'localhost',password]);
+      await admin.query('GRANT SELECT ON rocketbrain_fixture.* TO ?@?', [config.user,'localhost']);
+    }
     // Only this freshly owned disposable actor can inspect the global FK dictionary.
     await admin.query('GRANT PROCESS ON *.* TO ?@?', [config.user, '127.0.0.1']);
     let crossConfigPath;
@@ -148,7 +159,7 @@ async function startFixture({tls}={}) {
     const configPath = path.join(folder, 'connection.json');
     await fsp.writeFile(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
     await fsp.writeFile(path.join(folder, 'fixture.json'), JSON.stringify({ readOnlyConfig, id, datadir, processId: child.pid }, null, 2), { mode: 0o600 });
-    return { id, folder, datadir, configPath, crossConfigPath, config, readOnlyConfig, withAdmin, runtime, process: child, server: versionRows[0], stop, close: stop };
+    return { id, folder, datadir, configPath, crossConfigPath, config, pipeName, readOnlyConfig, withAdmin, runtime, process: child, server: versionRows[0], stop, close: stop };
   } catch (error) {
     await stop().catch(() => {});
     throw error;
@@ -159,7 +170,7 @@ async function main() {
   const mode = process.argv[2] || 'smoke';
   if (!['smoke', 'run', 'start', 'runtime'].includes(mode)) throw new Error('Use integration-db.js smoke | runtime | start | run <node arguments>.');
   if (mode === 'runtime') { const runtime = await ensureMariaDbRuntime(); console.log(JSON.stringify(runtime, null, 2)); return; }
-  const fixture = await startFixture();
+  const fixture = await startFixture({namedPipe:process.env.ROCKETBRAIN_FIXTURE_NAMED_PIPE==='1'});
   console.log(JSON.stringify({ status: 'ready', id: fixture.id, host: fixture.config.host, port: fixture.config.port, version: fixture.server.version, configPath: fixture.configPath, processId: fixture.process.pid, installedService: false }));
   try {
     if (mode === 'smoke') {
@@ -175,6 +186,7 @@ async function main() {
       if (!args.length) throw new Error('Pass Node arguments after run.');
       const code = await new Promise((resolve, reject) => {
         const child = spawn(process.execPath, args, { cwd: WORKSPACE, windowsHide: true, stdio: 'inherit', env: { ...process.env, ROCKETBRAIN_TEST_MYSQL_JSON: JSON.stringify(fixture.config), ROCKETBRAIN_TEST_MYSQL_CONFIG: fixture.configPath, ROCKETBRAIN_MYSQL_TEST_CONFIG: fixture.configPath,
+          ...(fixture.pipeName?{ROCKETBRAIN_TEST_MYSQL_PIPE:fixture.pipeName}:{}),
           ...(fixture.crossConfigPath ? { ROCKETBRAIN_SCHEMA_CROSS_CONFIG: fixture.crossConfigPath } : {}) } });
         child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
       });

@@ -73,7 +73,7 @@ class SchemaRenamer{
     if(!numbers||(maria?(Number(numbers[1])<10||Number(numbers[1])===10&&Number(numbers[2])<5):Number(numbers[1])<8))throw fail('ROCKETBRAIN_SCHEMA_VERSION','Schema rename requires MySQL 8 or later, or MariaDB 10.5 or later.');
     let serverUniqueId;try{const unique=await this._read(session,maria?'SELECT @@server_uid':'SELECT @@server_uuid');serverUniqueId=unique[0]?.[0];}catch{throw fail('ROCKETBRAIN_SCHEMA_IDENTITY','The server unique identity is unavailable. Use a server patch exposing MySQL server_uuid or MariaDB server_uid.');}if(typeof serverUniqueId!=='string'||!serverUniqueId)throw fail('ROCKETBRAIN_SCHEMA_IDENTITY','The server unique identity could not be observed.');
     if(database!==this.db._options.database)throw fail('ROCKETBRAIN_SCHEMA_IDENTITY','The owned schema connection selected a different database.');
-    return {dialect:maria?'mariadb':'mysql',version,hostname,port:String(port),serverId:String(serverId),serverUniqueId,tableNameCaseSensitive:Number(tableCase)===0,sqlMode:String(mode),currentUser:user,database,endpoint:{host:this.db._options.host,port:this.db._options.port}};
+    return {dialect:maria?'mariadb':'mysql',version,hostname,port:String(port),serverId:String(serverId),serverUniqueId,tableNameCaseSensitive:Number(tableCase)===0,sqlMode:String(mode),currentUser:user,database,endpoint:require('./local-transport').connectionEndpoint(this.db._options)};
   }
   async _snapshot(session,target,identity){
     const schema=this.db._options.database,read=(sql,values=[])=>this._read(session,sql,values);

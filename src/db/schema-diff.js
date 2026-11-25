@@ -18,7 +18,7 @@ const unique=(values,key,label)=>{if(new Set(values.map(key)).size!==values.leng
 const order=(a,b)=>a.name<b.name?-1:a.name>b.name?1:0;
 function identity(value){
  if(!value||!['mysql','mariadb'].includes(value.dialect))throw error('ROCKETBRAIN_DIFF_SNAPSHOT','A MySQL/MariaDB server identity is required.');
- if(!Number.isInteger(Number(value.port))||Number(value.port)<1||Number(value.port)>65535||!/^\d{1,20}$/.test(String(value.serverId))||typeof value.tableNameCaseSensitive!=='boolean'||!value.serverUniqueId)throw error('ROCKETBRAIN_DIFF_SNAPSHOT','Invalid server identity fields.');
+ if(!/^\d{1,5}$/.test(String(value.port))||Number(value.port)>65535||!/^\d{1,20}$/.test(String(value.serverId))||typeof value.tableNameCaseSensitive!=='boolean'||!value.serverUniqueId)throw error('ROCKETBRAIN_DIFF_SNAPSHOT','Invalid server identity fields.');
  return {dialect:value.dialect,version:text(value.version,'server version',200),serverUniqueId:text(value.serverUniqueId,'server unique identity',256),hostname:text(value.hostname,'server hostname',1024),port:String(value.port),serverId:String(value.serverId),currentUser:text(value.currentUser,'database account',1024),database:identifier(value.database,{table:true}),sqlMode:text(value.sqlMode,'SQL mode',8192),tableNameCaseSensitive:value.tableNameCaseSensitive===true};
 }
 function column(value){

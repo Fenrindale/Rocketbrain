@@ -1,25 +1,25 @@
 {
-  "version": "0.41.0",
-  "verifiedAt": "2026-11-25T07:45:24.769Z",
+  "version": "0.42.0",
+  "verifiedAt": "2026-11-25T08:03:02.316Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.41.0.vsix",
-    "bytes": 1857236,
-    "sha256": "fad1440d78495662f033ea3a466170dea7b6181d5c0be7b96dc3ad17c40a61ce",
+    "name": "rocketbrain-0.42.0.vsix",
+    "bytes": 1881195,
+    "sha256": "c1105d8890a5530488e49db976361512d1c7b6fea3d4d79c68c4b74cf01be89f",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1210,
-    "inputVectorSha256": "351f64d5ec35f3d5ec8d72eae35a76fb7ae46078c5deda7429a93f73c273b4af",
+    "frozenPublicInputs": 1234,
+    "inputVectorSha256": "310c21ad17df11f3069d0176d1424040fa7c12a4f9a5c318999334558ad40179",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1271,
-    "pass": 1217,
+    "tests": 1295,
+    "pass": 1239,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 54,
+    "skipped": 56,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,22 +29,26 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "notebook",
+          "group": "extract",
           "checks": 1
         },
         {
-          "group": "objects",
+          "group": "transport",
           "checks": 1
         },
         {
-          "group": "map",
+          "group": "dml",
           "checks": 1
         },
         {
-          "group": "structure",
+          "group": "springGraph",
+          "checks": 1
+        },
+        {
+          "group": "actuatorHealth",
           "checks": 1
         }
       ],
@@ -59,22 +63,26 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "notebook",
+          "group": "extract",
           "checks": 1
         },
         {
-          "group": "objects",
+          "group": "transport",
           "checks": 1
         },
         {
-          "group": "map",
+          "group": "dml",
           "checks": 1
         },
         {
-          "group": "structure",
+          "group": "springGraph",
+          "checks": 1
+        },
+        {
+          "group": "actuatorHealth",
           "checks": 1
         }
       ],
@@ -85,85 +93,97 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-021": {
-      "scope": "두 Spring 프로젝트에서 타입이 맞는 패턴을 프로젝트 3곳·개별 파일 1곳에서 찾았다. 두 파일 치환과 빌드, 호환되지 않는 치환, 평가 동작이 바뀌는 캡처, 원본 변경의 거부를 확인했다.",
+    "IDEA-031": {
+      "scope": "두 실제 Spring 픽스처에서 제네릭 경계를 보존하고 호환되는 호출부만 전환했다. 동명 파일 충돌 거부, 새 파일 저장, 기존 버퍼의 수동 저장과 빌드를 확인했다.",
       "runtimeGroups": [
-        "structure"
+        "extract"
       ]
     },
-    "DG-023": {
-      "scope": "MySQL 객체 7종과 MariaDB 10종에서 서버 원문과 열린 문서를 대조했다. 교차 스키마, SELECT 전용 계정의 뷰 원문 거부, 트리 열기와 새로 고침을 확인했다.",
+    "IDEA-054": {
+      "scope": "실제 Spring 프로젝트의 의존 관계와 런타임 읽기, 명시적 순환과 모호한 후보, 소스 이동을 검증했다.",
       "runtimeGroups": [
-        "objects"
+        "springGraph"
       ]
     },
-    "DG-058": {
-      "scope": "실제 MySQL과 MariaDB에서 셀 순서, 쓰기 거부와 이후 실행 중단을 확인했다. 고정한 결과 하나만 파일에 저장하고 연결 없이 공유 사본을 열어 복원했다.",
+    "IDEA-057": {
+      "scope": "두 Spring 앱에서 Health 상태, readiness·liveness, DB 구성 요소와 재조회·오래된 화면 정리를 확인했다.",
       "runtimeGroups": [
-        "notebook"
+        "actuatorHealth"
       ]
     },
-    "DG-077": {
-      "scope": "두 서버의 캡처에서 지리 도형 3행·평면 도형 1행과 표시 제외 2행을 대조했다. 축 순서, 재투영, 다각형 내부 구멍, 연결 종료 후 지도 유지도 확인했다.",
+    "DG-011": {
+      "scope": "두 실제 서버의 Windows 명명된 파이프에 저장 프로필로 연결했다. Spring 테이블을 직접 TCP 결과와 대조하고 공유 시 주소와 비밀번호 생략을 확인했다.",
       "runtimeGroups": [
-        "map"
+        "transport"
+      ]
+    },
+    "DG-035": {
+      "scope": "두 엔진에서 편집기 경고와 사전 차단, 승인한 2행 변경과 수동 트랜잭션 롤백을 확인했다.",
+      "runtimeGroups": [
+        "dml"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 215,
+    "sourceCorrespondences": 225,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 45,
-      "partial": 109,
-      "not-implemented": 43,
+      "implemented": 49,
+      "partial": 107,
+      "not-implemented": 42,
       "host-provided": 13,
-      "unverified": 4,
+      "unverified": 3,
       "platform-limited": 2
     },
-    "weightedPoints": 112.5,
-    "previousWeightedPoints": 109,
+    "weightedPoints": 115.5,
+    "previousWeightedPoints": 112.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 52.1,
+    "referencePercent": 53.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-021",
-        "before": "not-implemented",
+        "id": "IDEA-031",
+        "before": "unverified",
         "after": "implemented"
       },
       {
-        "id": "DG-023",
+        "id": "IDEA-054",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-058",
-        "before": "not-implemented",
+        "id": "IDEA-057",
+        "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-077",
+        "id": "DG-011",
         "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-035",
+        "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java 구조 치환은 저장된 소스와 클래스 경로, 지원하는 식과 문장 패턴에 적용한다. 확인한 원본이 바뀌거나 컴파일 검증이 실패하면 적용을 중단한다.",
-    "SQL 노트북은 활성 MySQL 또는 MariaDB에서 셀마다 하나의 읽기 전용 문장을 실행한다. 결과를 고정한 셀에서만 표시 데이터가 공유 파일에 들어간다.",
-    "공간 지도는 캡처한 결과의 2차원 SRID 0, 4326, 3857을 표시한다. 다른 좌표계와 해석할 수 없는 공간값의 수를 표시한다.",
-    "현행 정의가 정확한 JetBrains 창 배치를 요구하는 IDEA-001과 DG-095는 일반 확장 구조에서 점수를 얻을 수 없다. 다른 모든 행이 충족되면 현재 산식의 상한은 214/216점이다."
+    "인터페이스 추출은 명시적으로 고른 메서드와 지원되는 Java 소스에 적용한다. 파일 충돌과 컴파일 실패를 차단한다.",
+    "Bean 그래프는 분석한 소스의 후보와 선택된 주입을 구분한다. Actuator Health는 선택한 실행 앱이 공개하는 상태만 표시한다.",
+    "Windows 파이프는 실제 두 엔진에서 검증했다. Unix 소켓의 프로필과 전송 경로가 있으며 실제 Unix 서버 시험이 남아 있다.",
+    "위험 SQL 검토는 바깥쪽 WHERE가 없는 UPDATE·DELETE를 맡는다. 조건의 유효성과 영향 행 수는 서버 집계 없이 단정하지 않는다.",
+    "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Java 인터페이스 추출과 상속 계층의 멤버 이동",
-    "Spring Bean 의존 그래프와 Actuator Health 진단",
-    "데이터베이스 로컬 소켓 연결과 위험한 UPDATE·DELETE의 실행 전 검토"
+    "상속 계층의 Java 멤버 올리기·내리기와 코드 변환",
+    "오프라인 DB 메타데이터 재사용과 Unix 소켓 실서버 검증",
+    "DuckDB의 독립 연결·카탈로그·쿼리 흐름"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

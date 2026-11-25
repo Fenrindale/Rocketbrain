@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.41.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.42.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 45 |
-| 부분 구현 | 109 |
-| 미구현 | 43 |
+| 구현 | 49 |
+| 부분 구현 | 107 |
+| 미구현 | 42 |
 | VS Code 재사용 | 13 |
-| 지원 미확인 | 4 |
+| 지원 미확인 | 3 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **52.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **53.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.41에서는 Java의 구조 검색·치환, DB 객체 원문 보기, SQL 노트북과 공간 데이터 지도를 새 정상 작업 흐름에서 검증했다. 상태가 바뀐 항목은 4개이고 가중 점수는 109점에서 112.5점으로 바뀌었다.
+v0.42에서는 Java 인터페이스 추출, Spring Bean 그래프·Actuator Health, DB 로컬 전송과 위험 SQL 실행 검토를 구현했다. 상태가 바뀐 항목은 5개이고 가중 점수는 112.5점에서 115.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -51,7 +51,7 @@ v0.41에서는 Java의 구조 검색·치환, DB 객체 원문 보기, SQL 노�
 | IDEA-028 | IntelliJ IDEA | 클래스·멤버 이동 | 부분 구현 |
 | IDEA-029 | IntelliJ IDEA | Change Signature·파라미터 전파 | 부분 구현 |
 | IDEA-030 | IntelliJ IDEA | Safe Delete | 부분 구현 |
-| IDEA-031 | IntelliJ IDEA | 인터페이스 추출 | 지원 미확인 |
+| IDEA-031 | IntelliJ IDEA | 인터페이스 추출 | 구현 |
 | IDEA-032 | IntelliJ IDEA | 멤버 Pull Up·Push Down | 지원 미확인 |
 | IDEA-033 | IntelliJ IDEA | 리팩터링 미리보기·충돌·일괄 undo | 부분 구현 |
 | IDEA-034 | IntelliJ IDEA | 람다·익명 클래스·루프 변환 | 지원 미확인 |
@@ -74,10 +74,10 @@ v0.41에서는 Java의 구조 검색·치환, DB 객체 원문 보기, SQL 노�
 | IDEA-051 | IntelliJ IDEA | Spring Initializr 프로젝트 생성 | 부분 구현 |
 | IDEA-052 | IntelliJ IDEA | 기존 프로젝트 starter 편집 | 부분 구현 |
 | IDEA-053 | IntelliJ IDEA | Bean·Autowiring 분석·빠른 수정 | 부분 구현 |
-| IDEA-054 | IntelliJ IDEA | Bean의 논리 구조·의존성 그래프 | 부분 구현 |
+| IDEA-054 | IntelliJ IDEA | Bean의 논리 구조·의존성 그래프 | 구현 |
 | IDEA-055 | IntelliJ IDEA | Application Context·분석용 프로필 | 부분 구현 |
 | IDEA-056 | IntelliJ IDEA | Boot properties·YAML 메타데이터 | 부분 구현 |
-| IDEA-057 | IntelliJ IDEA | Actuator 런타임 Bean·Health·Mappings | 부분 구현 |
+| IDEA-057 | IntelliJ IDEA | Actuator 런타임 Bean·Health·Mappings | 구현 |
 | IDEA-058 | IntelliJ IDEA | Spring 디버거의 실제 설정값·출처 | 부분 구현 |
 | IDEA-059 | IntelliJ IDEA | Spring Data 파생 메서드·쿼리 | 부분 구현 |
 | IDEA-060 | IntelliJ IDEA | JPQL/HQL 작성·JPA Console | 부분 구현 |
@@ -151,7 +151,7 @@ v0.41에서는 Java의 구조 검색·치환, DB 객체 원문 보기, SQL 노�
 | DG-008 | DataGrip | TLS CA·호스트 검증 | 부분 구현 |
 | DG-009 | DataGrip | 클라이언트 인증서·truststore | 부분 구현 |
 | DG-010 | DataGrip | SSH 터널·키·agent 인증 | 부분 구현 |
-| DG-011 | DataGrip | Unix socket·Windows named pipe | 미구현 |
+| DG-011 | DataGrip | Unix socket·Windows named pipe | 부분 구현 |
 | DG-012 | DataGrip | 클라우드 DB 접속·토큰 인증 범위 | 미구현 |
 | DG-013 | DataGrip | 초기 SQL·keep-alive·idle timeout | 부분 구현 |
 | DG-014 | DataGrip | 연결 그룹·환경 색상 | 부분 구현 |
@@ -175,7 +175,7 @@ v0.41에서는 Java의 구조 검색·치환, DB 객체 원문 보기, SQL 노�
 | DG-032 | DataGrip | 파일·폴더별 SQL resolution scope | 구현 |
 | DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 부분 구현 |
 | DG-034 | DataGrip | 실시간·범위별 정적 검사 | 부분 구현 |
-| DG-035 | DataGrip | 위험한 UPDATE/DELETE 경고 | 부분 구현 |
+| DG-035 | DataGrip | 위험한 UPDATE/DELETE 경고 | 구현 |
 | DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 부분 구현 |
 | DG-037 | DataGrip | 테이블·열·alias 의미적 Rename | 부분 구현 |
 | DG-038 | DataGrip | 의미적 Find Usages·영향 추적 | 부분 구현 |

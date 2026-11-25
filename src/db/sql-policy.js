@@ -1,5 +1,7 @@
 'use strict';
 
+const { inspectDmlTokens } = require('./sql-dml-scope');
+
 const MAX_SQL_BYTES = 128 * 1024;
 const FORBIDDEN_FUNCTIONS = new Set(['LOAD_FILE', 'GET_LOCK', 'RELEASE_LOCK', 'RELEASE_ALL_LOCKS', 'MASTER_POS_WAIT', 'SOURCE_POS_WAIT', 'WAIT_FOR_EXECUTED_GTID_SET']);
 const READ_FORBIDDEN = new Set(['INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'UPSERT', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'GRANT', 'REVOKE', 'SET', 'RESET', 'CALL', 'DO', 'LOAD', 'INSTALL', 'UNINSTALL', 'LOCK', 'UNLOCK', 'FLUSH', 'KILL', 'HANDLER', 'PREPARE', 'EXECUTE', 'DEALLOCATE', 'COMMIT', 'ROLLBACK', 'SAVEPOINT', 'START', 'BEGIN', 'REPAIR', 'OPTIMIZE', 'INTO', 'OUTFILE', 'DUMPFILE', ...FORBIDDEN_FUNCTIONS]);
@@ -115,7 +117,9 @@ function validateQuery(sql, { readOnly = true, sqlMode, allowOptimizerHints = tr
     }
   }
   const mayWrite = !['SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN'].includes(first) || words.some(w => ['INSERT', 'UPDATE', 'DELETE', 'REPLACE'].includes(w));
-  return { sql, first, mayWrite, ddl: ['CREATE', 'ALTER', 'DROP', 'TRUNCATE'].includes(first) };
+  const scope = mayWrite && !readOnly ? inspectDmlTokens(tokens) : undefined;
+  return { sql, first, mayWrite, ddl: ['CREATE', 'ALTER', 'DROP', 'TRUNCATE'].includes(first),
+    ...(scope && !scope.hasWhere && { unboundedDml:scope }) };
 }
 
 function validateReadQuery(sql) { validateQuery(sql); return sql; }

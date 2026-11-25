@@ -9,10 +9,11 @@ const { inside, local } = require('./workbench-model');
 const { classDiagram,mermaidDiagram,dataFlow } = require('./source-analysis-model');
 const { diagramHtml } = require('./source-diagram-view');
 const { structuralQuery,parseCaptureConstraints,reviewedStructuralMatches,structuralEdits } = require('./structural-search');
+const { createInterfaceExtraction } = require('./extract-interface-vscode');
 
 const COMMANDS = Object.freeze({
   diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow',
-  structural:'rocketbrain.java.structuralSearch'
+  structural:'rocketbrain.java.structuralSearch', extractInterface:'rocketbrain.java.extractInterface'
 });
 const EXCLUDE = '**/{.git,.gradle,.metadata,node_modules,build,target,out,bin,dist}/**';
 const MAX_UNITS = 240;
@@ -48,6 +49,20 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       !path.relative(document.uri.fsPath,uri.fsPath) && document.isDirty);
   }
 
+  function assertUnchangedSourceSnapshots(sources) {
+    const open = vscode.workspace.textDocuments.filter(document => !document.isClosed && localFile(document.uri));
+    const normalize = text => text.replace(/\r\n/g,'\n');
+    for (const source of sources) {
+      const uri = vscode.Uri.parse(source.uri), file = uri.fsPath, stat = lstatSync(file);
+      const document = open.find(candidate => !path.relative(candidate.uri.fsPath,file));
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== source.bytes || path.relative(file,realpathSync(file)) ||
+          signatures(readFileSync(file)) !== source.sha ||
+          document && (document.isDirty || normalize(document.getText()) !== normalize(source.text))) {
+        throw Error('A Java dependency source changed after review.');
+      }
+    }
+  }
+
   async function projects(cancellation) {
     assertReady(cancellation);
     const state = await java.start();
@@ -57,7 +72,8 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     }
     let projects = java.workbench.getSnapshot().projects;
     if (!projects.length) projects = (await java.workbench.refresh({cancellation})).projects;
-    return { javaHome:state.javaHome,projects };
+    return { javaHome:state.javaHome,runtimeIdentity:state.runtimeIdentity,
+      extractInterfaceReplaceUsages:state.extractInterfaceReplaceUsages,projects };
   }
 
   function findProject(projects,documentUri,projectUri) {
@@ -112,17 +128,17 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     return sources;
   }
 
-  async function compile(state,project,sources,inspection,cancellation) {
+  async function compile(state,project,sources,inspection,cancellation,{newSources = [],errorTitle} = {}) {
     if (!sources.length) throw Error('No saved Java source was found in this scope.');
     const classpath = await classpaths(project,cancellation);
     const compliance = /^(?:1\.)?(\d+)$/.exec(String(project.compliance || ''))?.[1];
     const report = await analyzeJavaSources({
       javaHome:state.javaHome,classpath,release:Number(compliance || 25),storagePath,cancellation,
-      sources:sources.map(({uri,text}) => ({uri,text})),manifestLimit:256*1024,inspection
+      sources:[...sources,...newSources].map(({uri,text}) => ({uri,text})),manifestLimit:256*1024,inspection
     });
     if (report.errors.length) {
-      const prefix = inspection.kind === 'check' ? 'The replacement would fail Java compiler analysis: ' :
-        'Resolve Java compiler errors before analysis: ';
+      const prefix = errorTitle || (inspection.kind === 'check' ? 'The replacement would fail Java compiler analysis: ' :
+        'Resolve Java compiler errors before analysis: ');
       throw Error(prefix + report.errors[0].message);
     }
     for (const source of sources) {
@@ -195,19 +211,6 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     }
     const edits = structuralEdits(matches,ids,sources);
     const dependencies = sources.filter(source => !Object.hasOwn(edits.changes,source.uri));
-    function assertDependenciesCurrent() {
-      const open = vscode.workspace.textDocuments.filter(document => !document.isClosed && localFile(document.uri));
-      const normalize = text => text.replace(/\r\n/g,'\n');
-      for (const source of dependencies) {
-        const uri = vscode.Uri.parse(source.uri), file = uri.fsPath, stat = lstatSync(file);
-        const document = open.find(candidate => !path.relative(candidate.uri.fsPath,file));
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== source.bytes || path.relative(file,realpathSync(file)) ||
-            signatures(readFileSync(file)) !== source.sha ||
-            document && (document.isDirty || normalize(document.getText()) !== normalize(source.text))) {
-          throw Error('A Java dependency source changed after structural search. Search again.');
-        }
-      }
-    }
     await checkSources(cancellation);
     const verified = await compile(state,project,edits.sources,{kind:'check'},cancellation);
     if (verified.classpathFingerprint !== compiler.classpathFingerprint) {
@@ -225,7 +228,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
         }
         verified.validateClasspath();
       },
-      preApply:() => { verified.validateClasspath(); assertDependenciesCurrent(); }
+      preApply:() => { verified.validateClasspath(); assertUnchangedSourceSnapshots(dependencies); }
     });
   }
 
@@ -417,7 +420,11 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     return report;
   }
 
-  const commands = Object.entries({diagram:showProjectDiagram,flow:showTrace,structural:showStructuralSearch}).map(([kind,run]) =>
+  const extraction = createInterfaceExtraction(vscode,{
+    java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
+  });
+  const commands = Object.entries({diagram:showProjectDiagram,flow:showTrace,structural:showStructuralSearch,
+    extractInterface:extraction.run}).map(([kind,run]) =>
     vscode.commands.registerCommand(COMMANDS[kind],async () => {
       try { assertReady(); return await run(); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message); return null; }
@@ -426,6 +433,8 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     diagram:options => managed(() => diagram(options)),trace:options => managed(() => trace(options)),
     structuralSearch:options => managed(() => structuralSearch(options)),
     prepareStructuralReplacement:(report,ids,options) => managed(() => prepareStructuralReplacement(report,ids,options)),
+    inspectInterface:options => managed(() => extraction.inspect(options)),
+    prepareInterfaceExtraction:(report,options) => managed(() => extraction.prepare(report,options)),
     reveal,showDiagram,exportMermaid,
     dispose() {
       if (stopping) return stopping;
