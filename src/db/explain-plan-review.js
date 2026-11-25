@@ -96,25 +96,44 @@ function readReviewPayload(bytes) {
   return payload;
 }
 
-async function readPlanReview(file, keys) {
+async function inspectPlanReview(file, keys) {
   const bytes = await readPlanFile(file, MAX_REVIEW_FILE_BYTES, 'Choose a regular local SQL plan review file.',
     () => Error('SQL plan review files must be at most 16 KiB.'));
   const payload = readReviewPayload(bytes);
   const key = await keys.get(payload.keyId);
-  if (!key) throw Error('Open this SQL plan review with the same VS Code secret store that signed it.');
+  if (!key) return { payload, verified:false };
   const valid = timingSafeEqual(Buffer.from(payload.signature, 'hex'), Buffer.from(signature(payload, key), 'hex'));
   if (!valid) throw Error('The SQL plan review signature is invalid. Choose the original review file.');
+  return { payload, verified:true };
+}
+
+async function readPlanReview(file, keys) {
+  const { payload, verified } = await inspectPlanReview(file, keys);
+  if (!verified) throw Error('Open this SQL plan review with the same VS Code secret store that signed it.');
   return payload;
 }
 
-function applyPlanReview(payload, binding, pairs, current, compare) {
+async function readSharedPlanReview(file, keys) {
+  const { payload, verified } = await inspectPlanReview(file, keys);
+  if (verified) throw Error('This SQL plan review was verified by your VS Code secret store. Use Load review.');
+  return payload;
+}
+
+function planReviewCandidates(payload, binding, pairs) {
   if (payload.kind !== binding.kind || payload.captures.some((capture, index) => capture !== binding.captures[index])) {
     throw Error('Open the original SQL plan captures in the same baseline and candidate order.');
   }
-  const candidates = new Map(pairs.map(pair => [pair.id, pair])), decisions = new Map(current);
-  for (const [id, evidence, state] of payload.decisions) {
+  const candidates = new Map(pairs.map(pair => [pair.id, pair]));
+  return payload.decisions.map(([id, evidence, state]) => {
     const pair = candidates.get(id);
     if (!pair || pairFingerprint(pair) !== evidence) throw Error('The original SQL plan candidates have changed.');
+    return { pair, suggested:state };
+  });
+}
+
+function applyPlanReview(payload, binding, pairs, current, compare) {
+  const verified = planReviewCandidates(payload, binding, pairs), decisions = new Map(current);
+  for (const { pair:{ id }, suggested:state } of verified) {
     if (current.has(id) && current.get(id) !== state) {
       throw Error('The saved review conflicts with an existing decision in this comparison.');
     }
@@ -128,4 +147,4 @@ function applyPlanReview(payload, binding, pairs, current, compare) {
   return { report, decisions };
 }
 
-module.exports = { captureBinding, reviewKeyStore, serializePlanReview, readPlanReview, applyPlanReview };
+module.exports = { captureBinding, reviewKeyStore, serializePlanReview, readPlanReview, readSharedPlanReview, planReviewCandidates, applyPlanReview };

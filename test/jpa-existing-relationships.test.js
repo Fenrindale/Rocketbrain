@@ -191,6 +191,70 @@ test('EmbeddedId refuses a missing companion, nonliteral key, and unrelated extr
   }
 });
 
+const override = (attribute, name) => `@AttributeOverride(name = "${attribute}", column = @Column(name = "${name}"))`;
+
+test('explicit EmbeddedId overrides bind all referenced columns in observed order', () => {
+  const { plan, sources } = embedded();
+  sources[2].text = sources[2].text.replace('"tenant_id"', '"base_tenant"').replace('"id"', '"base_id"');
+  sources[1].text = sources[1].text.replace('@EmbeddedId', `@EmbeddedId
+    @AttributeOverrides({${override('id', 'id')}, ${override('tenant', 'tenant_id')}})`);
+  const result = plan();
+  assert.deepEqual(result.embeddedKeyOverrides, [{ entity:pkg + '.Parent', embeddedId:'identity',
+    columns:[{ attribute:'tenant', column:'tenant_id' }, { attribute:'id', column:'id' }] }]);
+  assert.match(result.edits[0].text, /parent_tenant.*"tenant_id"[\s\S]*parent_id.*"id"/);
+  assert.doesNotMatch(result.edits[0].text, /base_tenant|base_id/);
+  sources[1].text = sources[1].text.replace('"tenant_id"', '"absent"');
+  assert.throws(plan, /match the observed primary key/);
+});
+
+function derived() {
+  const result = fixture();
+  const { child, sources } = result;
+  child.columns[1].primaryKey = true;
+  child.columns[1].nullable = false;
+  child.indexes[0].columns.unshift({ name:'parent_id', ordinal:1, prefixLength:null });
+  child.indexes[0].columns[1].ordinal = 2;
+  sources[0].text = sources[0].text.replace('@Id @Column(name = "id") private Long id;', `@EmbeddedId
+    ${override('local', 'id')} private DependentKey key;`);
+  sources.push({ uri:uri('DependentKey'), text:`package ${pkg};
+import jakarta.persistence.*;
+@Embeddable public class DependentKey {
+    @Column(name = "parent_id") private Long owner;
+    @Column(name = "base_id") private Long local;
+}
+` });
+  return result;
+}
+
+test('MapsId binds exactly one shared column and leaves local embedded key overrides in place', () => {
+  const { plan, sources } = derived();
+  const result = plan();
+  assert.deepEqual(result.derivedIdentity, { embeddedId:'key', attribute:'owner', column:'parent_id', referencedColumn:'id' });
+  assert.equal(result.ownership, 'derived-identity');
+  assert.match(result.edits[0].text, /@jakarta\.persistence\.MapsId\("owner"\)/);
+  assert.match(result.edits[0].text, /JoinColumn\(name = "parent_id", referencedColumnName = "id", nullable = false\)/);
+  assert.match(result.edits[0].text, /void setParentReference/);
+  assert.match(result.edits[1].text, /mappedBy = "parentReference"/);
+  assert.deepEqual(result.edits.map(item => item.uri), sources.slice(0, 2).map(source => source.uri));
+});
+
+test('derived identity rejects overrides of MapsId keys, duplicate owners, and Java type mismatches', () => {
+  for (const [change, reason] of [
+    [({ sources }) => { sources[0].text = sources[0].text.replace('@EmbeddedId', '@EmbeddedId ' + override('owner', 'parent_id')); },
+      /cannot change the member supplied by MapsId/],
+    [({ sources }) => { sources[0].text = sources[0].text.replace('@EmbeddedId', '@EmbeddedId ' + override('local', 'id')); },
+      /distinct basic key field/],
+    [({ sources }) => { sources[0].text = sources[0].text.replace('"local"', '"absent"'); }, /distinct basic key field/],
+    [({ sources }) => { sources[1].text = sources[1].text.replace('private Long id;', 'private long id;'); }, /derived identity/],
+    [({ child }) => { child.foreignKeys.push({ ...child.foreignKeys[0], name:'other_owner' }); }, /derived identity/],
+    [({ child }) => { child.indexes[1].unique = true; }, /non-unique/]
+  ]) {
+    const sample = derived();
+    change(sample);
+    assert.throws(sample.plan, reason);
+  }
+});
+
 test('the existing-entity edit proves all ordered non-primary unique columns and fingerprints the index', () => {
   const { plan, parent } = alternateKey();
   const result = plan();

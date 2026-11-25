@@ -106,6 +106,19 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
         preApply(token);
       };
       preApply(cancellation);
+      const reviewWarnings = [...warnings];
+      if (planned.referencedKey?.kind === 'unique') {
+        reviewWarnings.push('The foreign key references the observed unique columns ' + planned.referencedKey.columns.join(', ') + '.');
+      }
+      for (const key of planned.embeddedKeyOverrides) {
+        const columns = key.columns.map(column => column.attribute + ' → ' + column.column).join(', ');
+        reviewWarnings.push(key.entity + '.' + key.embeddedId + ' declares explicit key column overrides for ' + columns + '.');
+      }
+      if (planned.derivedIdentity) {
+        const { embeddedId, attribute, column } = planned.derivedIdentity;
+        reviewWarnings.push('Set the owning association before persisting. MapsId supplies ' + embeddedId + '.' + attribute +
+          ' through the reviewed foreign-key column ' + column + '.');
+      }
       const plan = await java.refactoring.previewWorkspaceEdit({
         documentChanges:planned.edits.map((edit, index) => {
           const doc = docs[index], at = doc.positionAt(edit.offset);
@@ -113,13 +126,13 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
           return { textDocument:{ uri:edit.uri, version:doc.version }, edits:[{ range:{ start:point, end:point }, newText:edit.text }] };
         })
       }, { title:'JPA relationship · ' + (selection.foreignKey || selection.joinSchema + '.' + selection.joinTable), kind:'refactor.jpa.bidirectional',
-        anchorDocument:docs[0], cancellation, validate, preApply, warnings:planned.referencedKey?.kind === 'unique'
-          ? [...warnings, 'The foreign key references the observed unique columns ' + planned.referencedKey.columns.join(', ') + '.']
-          : warnings });
+        anchorDocument:docs[0], cancellation, validate, preApply, warnings:reviewWarnings });
       for (const [id, expiresAt] of reviews) if (Date.now() >= expiresAt) reviews.delete(id);
       if (reviews.size >= 10) reviews.delete(reviews.keys().next().value);
       reviews.set(plan.id, plan.expiresAt);
       return { ...plan, relationship:{ ...selection, ownership:planned.ownership,
+        ...(planned.embeddedKeyOverrides.length && { embeddedKeyOverrides:planned.embeddedKeyOverrides }),
+        ...(planned.derivedIdentity && { derivedIdentity:planned.derivedIdentity }),
         ...(planned.referencedKey && { referencedKey:planned.referencedKey }) } };
     } finally { preparing = false; }
   }

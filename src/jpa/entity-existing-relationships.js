@@ -135,6 +135,28 @@ function edit(source, placement, lines, returnType) {
   return { uri:source.uri, offset:placement.offset, text, getter:'get' + placement.stem, returnType };
 }
 
+function derivedIdentityProof(columns, childMapping, childId, parentEntity, referenced, sourceTable, key) {
+  const identityColumns = childMapping.fields.filter(field => field.id && columns.some(column => column.name === field.sql));
+  if (!identityColumns.length) return undefined;
+  const [column] = columns;
+  const leaf = childId.leaves?.get(column.name);
+  const [parentId, repeated] = parentEntity.columnMappings.filter(binding => binding.column?.physicalName === column.physicalReference);
+  if (columns.length !== 1 || referenced.indexes || parentEntity.identity?.kind !== 'simple' || !leaf ||
+      childId.keys.length < 2 || column.nullable || identityColumns[0].identity ||
+      sourceTable.foreignKeys.some(other => other !== key && other.columns.some(member => member.name === column.name)) ||
+      repeated || !parentId?.id || parentId.column.dbType?.source !== 'basic' || parentId.column.dbType.certainty !== 'known' ||
+      leaf.binding.javaType !== parentId.javaType || !leaf.binding.column.insertable || !leaf.binding.column.updatable) {
+    throw Error('A derived identity needs one writable EmbeddedId member matching a simple parent primary key and a separate local key member.');
+  }
+  if (leaf.overridden) throw Error('An EmbeddedId AttributeOverride cannot change the member supplied by MapsId.');
+  return { embeddedId:childId.embedded, attribute:leaf.attribute, column:column.name, referencedColumn:column.physicalReference };
+}
+
+function embeddedKeyOverrides(roles, identities) {
+  return identities.flatMap((identity, index) => identity.overrides?.length ? [{ entity:roles[index].type,
+    embeddedId:identity.embedded, columns:identity.overrides }] : []);
+}
+
 function planChildRelationship(catalog, selection, [childSource, parentSource], [childEntity, parentEntity], issues, provePrimary) {
   const { child, parent, foreignKey } = selection;
   if (catalog?.coverage?.foreignKeys !== 'loaded') throw Error('Review a catalog with observed foreign keys.');
@@ -156,12 +178,14 @@ function planChildRelationship(catalog, selection, [childSource, parentSource], 
   if (columns.some(column => column.nullable !== optional)) {
     throw Error('The composite foreign key needs the same nullability for each column.');
   }
-  if (childMapping.fields.some(field => names.includes(field.sql) && (field.id || field.identity)) ||
+  if (childMapping.fields.some(field => field.identity && names.includes(field.sql)) ||
       sourceTable.indexes.some(index => makesUnique(index, names))) {
-    throw Error('Use a non-unique, non-identity child foreign key with types matching the parent key.');
+    throw Error('Use a non-unique, non-generated child foreign key with types matching the parent key.');
   }
+  const derivedIdentity = derivedIdentityProof(columns, childMapping, childId, parentEntity, referenced, sourceTable, key);
   const scalar = new Map();
-  for (const binding of childEntity.columnMappings.filter(item => names.includes(item.column.physicalName))) {
+  for (const binding of childEntity.columnMappings.filter(item => names.includes(item.column.physicalName) &&
+    item.column.physicalName !== derivedIdentity?.column)) {
     const field = childMapping.fields.find(item => item.sql === binding.column.physicalName);
     if (scalar.has(field.sql) || ![field.javaClass, keyTypes[field.type]].includes(binding.javaType) ||
         binding.column.insertable !== true || binding.column.updatable !== true || binding.id) {
@@ -173,12 +197,15 @@ function planChildRelationship(catalog, selection, [childSource, parentSource], 
     throw Error('For a composite key, existing writable scalars must map all foreign-key columns.');
   }
   const scalarOwned = scalar.size > 0;
-  const annotations = columns.map(column => joinColumn(scalarOwned ? JSON.stringify(scalar.get(column.name)) :
-    quoteSql(column.name), column.reference, column.nullable, scalarOwned));
+  const annotations = columns.map(column => {
+    const name = scalar.get(column.name) ?? (derivedIdentity && childId.leaves.get(column.name).binding.column.name);
+    return joinColumn(name ? JSON.stringify(name) : quoteSql(column.name), column.reference, column.nullable, scalarOwned);
+  });
   const joins = annotations.length === 1 ? annotations :
     ['@' + jakarta + 'JoinColumns({', ...annotations.map((line, i) => '    ' + line + (i + 1 < annotations.length ? ',' : '')), '})'];
   const ownerLines = [
     '@' + jakarta + 'ManyToOne(fetch = ' + jakarta + 'FetchType.LAZY, optional = ' + optional + ')',
+    ...(derivedIdentity ? ['@' + jakarta + 'MapsId(' + JSON.stringify(derivedIdentity.attribute) + ')'] : []),
     ...joins,
     'private ' + parent.type + ' ' + child.property + ';',
     '',
@@ -195,7 +222,8 @@ function planChildRelationship(catalog, selection, [childSource, parentSource], 
   return { fingerprint:fingerprint([childMapping.fingerprint, parentMapping.fingerprint, sourceTable.indexes, referenced.indexes]),
     referencedKey:referenced.indexes ? { kind:'unique', columns:referenced.columns.map(column => column.sql),
       indexes:referenced.indexes.map(index => index.name) } : { kind:'primary', columns:parentId.keys.map(column => column.sql) },
-    ownership:scalarOwned ? 'scalar' : 'association',
+    ownership:derivedIdentity ? 'derived-identity' : scalarOwned ? 'scalar' : 'association', derivedIdentity,
+    embeddedKeyOverrides:embeddedKeyOverrides([child, parent], [childId, parentId]),
     edits:[edit(childSource, childPlacement, ownerLines, parent.type), edit(parentSource, parentPlacement, inverseLines, list)] };
 }
 
@@ -253,7 +281,7 @@ function planJoinRelationship(proof, selection, sources, entities, issues, prove
     ], type));
   }
   return { fingerprint:fingerprint([observed.fingerprint, table.indexes, left.mapping.fingerprint, right.mapping.fingerprint]),
-    ownership:'join-table', edits:accessors };
+    ownership:'join-table', embeddedKeyOverrides:embeddedKeyOverrides([owner, target], identities), edits:accessors };
 }
 
 function planExistingRelationship({ catalog, joinProof, selection, sources }) {

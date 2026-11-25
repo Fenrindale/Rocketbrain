@@ -6,7 +6,8 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { normalizePlan, comparePlans } = require('../src/db/explain-plan');
-const { captureBinding, reviewKeyStore, serializePlanReview, readPlanReview, applyPlanReview } = require('../src/db/explain-plan-review');
+const { captureBinding, reviewKeyStore, serializePlanReview, readPlanReview, readSharedPlanReview,
+  planReviewCandidates, applyPlanReview } = require('../src/db/explain-plan-review');
 
 function measured(scans) {
   return normalizePlan({
@@ -92,4 +93,26 @@ test('simultaneous first saves keep reviews readable through the same secret sto
     await fs.writeFile(file, archive);
     assert.deepEqual(await readPlanReview(file, restored), JSON.parse(archive));
   }
+});
+
+test('shared plan reviews require reapproval and match the complete ordered capture and candidate evidence', async t => {
+  const file = await reviewFile(t), signer = reviewKeyStore(secretStore()), receiver = reviewKeyStore(secretStore());
+  const { compare, pairs, binding, decisions } = fixture();
+  const archive = await serializePlanReview(binding, pairs, decisions, signer);
+  await fs.writeFile(file, archive);
+  await assert.rejects(readSharedPlanReview(file, signer), /verified by your VS Code secret store/);
+  const payload = await readSharedPlanReview(file, receiver);
+  assert.deepEqual(planReviewCandidates(payload, binding, pairs), [
+    { pair:pairs[0], suggested:'accepted' }, { pair:pairs[1], suggested:'ignored' }
+  ]);
+  assert.throws(() => planReviewCandidates(payload, { ...binding, captures:[...binding.captures].reverse() }, pairs),
+    /original SQL plan captures/);
+  const [included, skipped] = payload.decisions;
+  skipped[1] = '0'.repeat(64);
+  assert.throws(() => planReviewCandidates(payload, binding, pairs), /original SQL plan candidates/);
+  await fs.writeFile(file, JSON.stringify(payload));
+  await assert.rejects(readSharedPlanReview(file, signer), /signature is invalid/);
+  const existing = new Map([[pairs[2].id, 'accepted']]);
+  assert.throws(() => applyPlanReview({ ...payload, decisions:[included] }, binding, pairs, existing, compare), /conflicts/);
+  assert.deepEqual([...existing], [[pairs[2].id, 'accepted']]);
 });

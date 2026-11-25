@@ -11,8 +11,9 @@ const reviewStyles = `
   .candidate-review td div{margin:.2rem 0}
   .candidate-review button{margin:.25rem .35rem .25rem 0;padding:.25rem .55rem;cursor:pointer;border:1px solid transparent;
     color:var(--vscode-button-secondaryForeground);background:var(--vscode-button-secondaryBackground);font:inherit}
-  .candidate-review button:hover{background:var(--vscode-button-secondaryHoverBackground)}
+  .candidate-review button:not(:disabled):hover{background:var(--vscode-button-secondaryHoverBackground)}
   .candidate-review button:focus-visible{outline:2px solid var(--vscode-focusBorder)}
+  .candidate-review button:disabled{cursor:default;opacity:.65}
 `;
 
 function candidateReviewHtml(result, nonce) {
@@ -23,7 +24,8 @@ function candidateReviewHtml(result, nonce) {
   const cell = side => '<strong>' + escape(side.position) + ' · ' + escape(side.name) + '</strong>' +
     [['Access',side.method], ['Index',side.index], ['Predicate',side.predicate]].filter(([, value]) => value)
       .map(([label, value]) => '<div>' + label + ' <code>' + escape(value) + '</code></div>').join('');
-  const button = (action, label, pair) => '<button type="button" data-review-action="' + action + '"' +
+  const button = (action, label, pair, disabled = false) => '<button type="button" data-review-action="' + action + '"' +
+    (disabled ? ' disabled' : '') +
     (pair ? ' data-candidate-id="' + escape(pair.id) + '" aria-label="' + escape(label + ' ' +
       pair.baseline.position + ' with ' + pair.candidate.position) + '"' : '') + '>' + label + '</button>';
   const rows = review.pairs.map(pair => '<tr><td>' + cell(pair.baseline) + '</td><td>' + cell(pair.candidate) +
@@ -31,21 +33,41 @@ function candidateReviewHtml(result, nonce) {
     '</td><td>' + states[pair.status] + (editable && pair.status === 'pending' ?
       '<div>' + button('accept', 'Pair', pair) + button('ignore', 'Ignore', pair) + '</div>' : '') + '</td></tr>').join('');
   const hasDecisions = review.pairs.some(pair => pair.status === 'accepted' || pair.status === 'ignored');
-  const fileControls = editable ? '<div>' + button('load', 'Load review') +
+  const fileControls = editable ? '<div>' + button('load', 'Load review') + button('share-open', 'Review shared file') +
     (hasDecisions ? button('save', 'Save review') + button('reset', 'Reset review') : '') + '</div>' +
-    '<p>Load a saved review from the same VS Code secret store with the original captures in order.</p>' : '';
+    '<p>Open the original baseline and candidate in order. Load a review from the same VS Code secret store, ' +
+    'or review suggestions from another VS Code profile.</p>' : '';
+  const draft = result.sharedReview;
+  const reviewTable = '<p>Choose one pairing per operator. Decisions apply to this comparison.</p>' +
+    (review.limited ? '<p>The display is limited to 60 pairs and eight alternatives per baseline operator.</p>' : '') +
+    fileControls + '<table><thead><tr><th scope="col">Baseline</th><th scope="col">Candidate</th><th scope="col">Evidence</th>' +
+    '<th scope="col">Review</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  const sharedTable = draft ? '<section data-shared-review="' + escape(draft.id) + '"><h2>Review shared suggestions</h2>' +
+    '<p>This VS Code profile could not verify the file’s signer. Check each suggestion against the original captures. ' +
+    'Approve or skip every row, then apply the approved decisions together.</p>' +
+    '<table><thead><tr><th scope="col">Baseline</th><th scope="col">Candidate</th>' +
+    '<th scope="col">Suggestion</th><th scope="col">Your choice</th></tr></thead><tbody>' +
+    draft.candidates.map(pair => '<tr><td>' + cell(pair.baseline) + '</td><td>' + cell(pair.candidate) + '</td><td>' +
+      (pair.suggested === 'accepted' ? 'Pair these operators' : 'Ignore this alternative') +
+      '<div>Current decision: ' + states[pair.status] + '</div></td><td>' +
+      ({ approve:'Approved', skip:'Skipped', pending:'Pending' })[pair.choice] + '<div>' +
+      button('share-approve', pair.suggested === 'accepted' ? 'Approve pairing' : 'Approve ignore', pair, pair.choice === 'approve') +
+      button('share-skip', 'Skip', pair, pair.choice === 'skip') + '</div></td></tr>').join('') +
+    '</tbody></table><div>' + button('share-apply', 'Apply approved decisions', undefined, !draft.ready) +
+    button('share-cancel', 'Cancel shared review') + '</div></section>' : '';
   const script = editable ? `<script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   document.getElementById('candidate-review').addEventListener('click', event => {
     const button = event.target.closest('button[data-review-action]');
-    if (button) vscode.postMessage({type:'review-plan-candidate', action:button.dataset.reviewAction, candidateId:button.dataset.candidateId});
+    if (!button) return;
+    const message = {type:'review-plan-candidate', action:button.dataset.reviewAction, candidateId:button.dataset.candidateId};
+    const shared = button.closest('[data-shared-review]');
+    if (shared) message.draftId = shared.dataset.sharedReview;
+    vscode.postMessage(message);
   });
   </script>` : '';
   return '<details id="candidate-review" class="candidate-review" open><summary>Review alternative operator pairs (' +
-    review.pairs.length + ')</summary><p>Choose one pairing per operator. Decisions apply to this comparison.</p>' +
-    (review.limited ? '<p>The display is limited to 60 pairs and eight alternatives per baseline operator.</p>' : '') +
-    fileControls + '<table><thead><tr><th scope="col">Baseline</th><th scope="col">Candidate</th><th scope="col">Evidence</th>' +
-    '<th scope="col">Review</th></tr></thead><tbody>' + rows + '</tbody></table></details>' + script;
+    review.pairs.length + ')</summary>' + (draft ? sharedTable : reviewTable) + '</details>' + script;
 }
 
 function fields(source, extra = '') {

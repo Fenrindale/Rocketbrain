@@ -179,16 +179,28 @@ test('visual EXPLAIN Webview displays the tree, keyboard filter, rows, cost mark
       body:comparisonHtml({ ...pending, reviewId:'fixture' }, 'test-only') }));
     await page.route('https://reviewed.local/', route => route.fulfill({ contentType:'text/html',
       body:comparisonHtml({ ...reviewed, reviewId:'fixture' }, 'test-only') }));
+    const sharedPairs = pending.candidateReview.pairs.slice(0, 2);
+    const shared = (choices, ready) => comparisonHtml({ ...pending, reviewId:'fixture',
+      sharedReview:{ id:'shared-fixture', ready, candidates:sharedPairs.map((pair, index) => ({
+        ...pair, suggested:index === 0 ? 'accepted' : 'ignored', choice:choices[index]
+      })) }
+    }, 'test-only');
+    await page.route('https://shared-plan.local/', route => route.fulfill({ contentType:'text/html',
+      body:shared(['pending', 'pending'], false) }));
+    await page.route('https://ready-plan.local/', route => route.fulfill({ contentType:'text/html',
+      body:shared(['approve', 'skip'], true) }));
     await page.goto('https://review.local/');
     assert.equal(await page.locator('#candidate-review tbody tr').count(), 4);
     assert.match(await page.locator('#candidate-review').innerText(), /Same decoded operator details/);
     assert.match(await page.locator('#candidate-review').innerText(), /same VS Code secret store/);
     assert.equal(await page.getByRole('button', { name:'Save review', exact:true }).count(), 0);
     await page.getByRole('button', { name:'Load review', exact:true }).click();
+    await page.getByRole('button', { name:'Review shared file', exact:true }).click();
     await page.getByRole('button', { name:'Ignore 1.1 with 1.4', exact:true }).click();
     await page.getByRole('button', { name:'Pair 1.1 with 1.3', exact:true }).click();
     assert.deepEqual(await page.evaluate(() => window.messages), [
       { type:'review-plan-candidate', action:'load', candidateId:undefined },
+      { type:'review-plan-candidate', action:'share-open', candidateId:undefined },
       { type:'review-plan-candidate', action:'ignore', candidateId:'2' },
       { type:'review-plan-candidate', action:'accept', candidateId:'1' }
     ]);
@@ -199,6 +211,22 @@ test('visual EXPLAIN Webview displays the tree, keyboard filter, rows, cost mark
     assert.deepEqual(await page.evaluate(() => window.messages), [
       { type:'review-plan-candidate', action:'save', candidateId:undefined },
       { type:'review-plan-candidate', action:'reset', candidateId:undefined }
+    ]);
+    await page.goto('https://shared-plan.local/');
+    assert.match(await page.locator('[data-shared-review]').innerText(), /could not verify the file’s signer/);
+    assert.equal(await page.getByRole('button', { name:'Apply approved decisions', exact:true }).isDisabled(), true);
+    await page.getByRole('button', { name:'Approve pairing 1.1 with 1.3', exact:true }).click();
+    await page.getByRole('button', { name:'Skip 1.1 with 1.4', exact:true }).click();
+    await page.getByRole('button', { name:'Cancel shared review', exact:true }).click();
+    assert.deepEqual(await page.evaluate(() => window.messages), [
+      { type:'review-plan-candidate', action:'share-approve', candidateId:'1', draftId:'shared-fixture' },
+      { type:'review-plan-candidate', action:'share-skip', candidateId:'2', draftId:'shared-fixture' },
+      { type:'review-plan-candidate', action:'share-cancel', candidateId:undefined, draftId:'shared-fixture' }
+    ]);
+    await page.goto('https://ready-plan.local/');
+    await page.getByRole('button', { name:'Apply approved decisions', exact:true }).click();
+    assert.deepEqual(await page.evaluate(() => window.messages), [
+      { type:'review-plan-candidate', action:'share-apply', candidateId:undefined, draftId:'shared-fixture' }
     ]);
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }

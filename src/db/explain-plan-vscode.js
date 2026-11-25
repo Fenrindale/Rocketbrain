@@ -8,7 +8,8 @@ const { explanationHtml, comparisonHtml, seriesHtml } = require('./explain-plan-
 const { comparePlans, comparablePlans, validatePlanQuery } = require('./explain-plan');
 const { sampleCount, summarizeSeries, compareSeries, serializeSamples } = require('./explain-plan-series');
 const { MAX_SAMPLE_FILE_BYTES, readSavedSamples } = require('./explain-plan-archive');
-const { captureBinding, reviewKeyStore, serializePlanReview, readPlanReview, applyPlanReview } = require('./explain-plan-review');
+const { captureBinding, reviewKeyStore, serializePlanReview, readPlanReview, readSharedPlanReview,
+  planReviewCandidates, applyPlanReview } = require('./explain-plan-review');
 
 const VISUAL_EXPLAIN = 'rocketbrain.sql.explainVisual';
 const MEASURE_PLAN = 'rocketbrain.sql.measurePlan';
@@ -354,18 +355,27 @@ function registerExplainPlans(context, vscode, { database }) {
     const enableScripts = report.candidateReview.pairs.length > 0;
     const panel = vscode.window.createWebviewPanel(viewType, title, vscode.ViewColumn.Beside,
       { enableScripts, localResourceRoots:[] });
-    const record = { panel, binding, compare, render, decisions, report };
+    const record = { panel, binding, compare, render, decisions, report, sharedReview:undefined };
     comparisons.set(reviewId, record);
     panel.onDidDispose(() => comparisons.delete(reviewId));
     if (enableScripts) panel.webview.onDidReceiveMessage(async message => {
       if (message?.type !== 'review-plan-candidate') return;
       try {
-        if (['save', 'load'].includes(message.action)) await selectReviewFile(reviewId, message.action);
-        else updateReview(reviewId, message);
+        switch (message.action) {
+          case 'save': case 'load': case 'share-open': await selectReviewFile(reviewId, message.action); break;
+          case 'share-approve': setSharedReviewChoice(reviewId, message.draftId, message.candidateId, 'approve'); break;
+          case 'share-skip': setSharedReviewChoice(reviewId, message.draftId, message.candidateId, 'skip'); break;
+          case 'share-apply':
+            applySharedComparisonReview(reviewId, message.draftId);
+            void vscode.window.showInformationMessage('Approved SQL plan review decisions applied.');
+            break;
+          case 'share-cancel': cancelSharedComparisonReview(reviewId, message.draftId); break;
+          default: updateReview(reviewId, message);
+        }
       }
       catch (error) { void vscode.window.showErrorMessage(error.message); }
     });
-    panel.webview.html = render({ ...report, reviewId }, randomBytes(24).toString('base64'));
+    renderReview(reviewId, record, report);
     return structuredClone({ ...report, reviewId });
   }
 
@@ -376,10 +386,15 @@ function registerExplainPlans(context, vscode, { database }) {
     return record;
   }
 
+  function renderReview(reviewId, record, report, sharedReview) {
+    record.panel.webview.html = record.render({ ...report, reviewId, sharedReview }, randomBytes(24).toString('base64'));
+  }
+
   function publishReview(reviewId, record, decisions, report) {
-    record.panel.webview.html = record.render({ ...report, reviewId }, randomBytes(24).toString('base64'));
+    renderReview(reviewId, record, report);
     record.decisions = decisions;
     record.report = report;
+    record.sharedReview = undefined;
     return report;
   }
 
@@ -428,8 +443,68 @@ function registerExplainPlans(context, vscode, { database }) {
     return structuredClone({ ...report, reviewId });
   }
 
+  function showSharedReview(reviewId, record, draft) {
+    const candidates = draft.candidates.map(({ pair, suggested }) => ({
+      ...pair, suggested, choice:draft.choices.get(pair.id) ?? 'pending'
+    }));
+    const view = {
+      id:draft.id, signerVerified:false, candidates,
+      ready:candidates.length === draft.choices.size && [...draft.choices.values()].includes('approve')
+    };
+    renderReview(reviewId, record, record.report, view);
+    record.sharedReview = draft;
+    return structuredClone(view);
+  }
+
+  async function prepareSharedComparisonReview(reviewId, uri) {
+    const record = openReview(reviewId), { decisions, sharedReview } = record;
+    checkReviewFile(uri);
+    const payload = await readSharedPlanReview(uri.fsPath, signingKeys);
+    unchangedReview(reviewId, decisions);
+    if (record.sharedReview !== sharedReview) throw Error('The shared SQL plan review changed while opening the file. Try again.');
+    const candidates = planReviewCandidates(payload, record.binding, record.report.candidateReview.pairs);
+    return showSharedReview(reviewId, record, { id:randomUUID(), payload, candidates, choices:new Map() });
+  }
+
+  function openSharedReview(reviewId, draftId) {
+    const record = openReview(reviewId);
+    const draft = record.sharedReview;
+    if (!draft || draft.id !== draftId) throw Error('Open the shared SQL plan review again.');
+    return { record, draft };
+  }
+
+  function setSharedReviewChoice(reviewId, draftId, candidateId, choice) {
+    const { record, draft } = openSharedReview(reviewId, draftId);
+    if (!draft.candidates.some(({ pair }) => pair.id === candidateId) || !['approve', 'skip'].includes(choice)) {
+      throw Error('Choose Approve or Skip for a candidate in this shared SQL plan review.');
+    }
+    const choices = new Map(draft.choices).set(candidateId, choice);
+    return showSharedReview(reviewId, record, { ...draft, choices });
+  }
+
+  function applySharedComparisonReview(reviewId, draftId) {
+    const { record, draft } = openSharedReview(reviewId, draftId);
+    if (draft.choices.size !== draft.candidates.length) {
+      throw Error('Approve or skip every candidate in this shared SQL plan review before applying.');
+    }
+    const { binding, decisions:current, report:original, compare } = record;
+    const pairs = original.candidateReview.pairs;
+    planReviewCandidates(draft.payload, binding, pairs);
+    const approved = draft.payload.decisions.filter(([id]) => draft.choices.get(id) === 'approve');
+    if (!approved.length) throw Error('Approve at least one candidate or cancel the shared SQL plan review.');
+    const { report, decisions } = applyPlanReview({ ...draft.payload, decisions:approved }, binding, pairs, current, compare);
+    publishReview(reviewId, record, decisions, report);
+    return structuredClone({ ...report, reviewId });
+  }
+
+  function cancelSharedComparisonReview(reviewId, draftId) {
+    const { record } = openSharedReview(reviewId, draftId);
+    renderReview(reviewId, record, record.report);
+    record.sharedReview = undefined;
+  }
+
   async function selectReviewFile(reviewId, action) {
-    const current = openReview(reviewId).decisions;
+    const record = openReview(reviewId), { decisions:current, sharedReview } = record;
     const filters = { 'SQL plan review': ['json'] };
     if (action === 'save') {
       const file = await vscode.window.showSaveDialog({ title:'Save SQL Plan Review', filters });
@@ -438,9 +513,16 @@ function registerExplainPlans(context, vscode, { database }) {
       await saveComparisonReview(reviewId, file);
       void vscode.window.showInformationMessage('SQL plan review saved.');
     } else {
-      const [file] = await vscode.window.showOpenDialog({ title:'Load SQL Plan Review', filters, canSelectMany:false }) ?? [];
+      const sharing = action === 'share-open';
+      const [file] = await vscode.window.showOpenDialog({
+        title:sharing ? 'Review Shared SQL Plan File' : 'Load SQL Plan Review', filters, canSelectMany:false
+      }) ?? [];
       if (!file) return;
       unchangedReview(reviewId, current);
+      if (sharing) {
+        if (record.sharedReview !== sharedReview) throw Error('The shared SQL plan review changed while choosing the file. Try again.');
+        return prepareSharedComparisonReview(reviewId, file);
+      }
       await loadComparisonReview(reviewId, file);
       void vscode.window.showInformationMessage('SQL plan review applied.');
     }
@@ -515,7 +597,8 @@ function registerExplainPlans(context, vscode, { database }) {
   }));
   return { open, revealSource, loadTree, prepareMeasurement, measure, comparison, showComparison, close(id) { panels.get(id)?.panel.dispose(); },
     prepareSeries, measureSeries, getSample, exportSamples, openSavedSamples, seriesComparison, showSeriesComparison,
-    reviewComparison, saveComparisonReview, loadComparisonReview, closeComparison(id) { comparisons.get(id)?.panel.dispose(); },
+    reviewComparison, saveComparisonReview, loadComparisonReview, prepareSharedComparisonReview, setSharedReviewChoice,
+    applySharedComparisonReview, cancelSharedComparisonReview, closeComparison(id) { comparisons.get(id)?.panel.dispose(); },
     closeSeries(id) { seriesPanels.get(id)?.panel.dispose(); },
     dispose() {
       disposed = true;

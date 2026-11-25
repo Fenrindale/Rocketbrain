@@ -6,7 +6,8 @@ const { canonicalValue, describeType } = require('./schema-conversion');
 const { StreamImporter, newSession, LIMITS: IMPORT_LIMITS } = require('./import-stream');
 const { readSnapshot, streamLimits } = require('./table-transfer-snapshot');
 const { recoveryLifetimeMs } = require('./table-transfer-recovery');
-const { createCommitEvidence, verifyCommitEvidence, verifyAllCommitKeys, exactBitParameter } = require('./table-transfer-verification');
+const { createCommitEvidence, verifyCommitEvidence, verifyAllCommitKeys, prepareRecoveryStatements,
+  exactBitParameter } = require('./table-transfer-verification');
 
 const limits = Object.freeze({ rows: 500, columns: 64, bytes: 1024 * 1024, entries: 4, durationMs: 10 * 60 * 1000 });
 const fail = message => Object.assign(new Error(message), { code: 'ROCKETBRAIN_TABLE_TRANSFER' });
@@ -224,9 +225,9 @@ function retainedSource(capture, target) {
   };
 }
 
-function createTableTransfer(database, { recovery, history } = {}) {
+function createTableTransfer(database, { recovery, history, runs } = {}) {
   const captures = new Map(), targets = new Map(), reviews = new Map(), operations = new Set(), controllers = new Set(), removals = new Set();
-  const verificationReviews = new Map(), recoveryPlans = new Map();
+  const verificationReviews = new Map(), recoveryPlans = new Map(), recoverySqlReviews = new Map();
   let pending, writingCapture, closed = false;
   const tracked = (action, abortable = false) => (...args) => {
     if (closed) return Promise.reject(fail('Table copy is closed.'));
@@ -320,6 +321,27 @@ function createTableTransfer(database, { recovery, history } = {}) {
     } };
   }
 
+  async function recoverySqlEvidence(captureId, cancellation, expectedRevision) {
+    if (!history) throw fail('Recovery SQL review requires a trusted workspace with verification history.');
+    const { revision, observation } = await history.latestEvidence(captureId);
+    if (expectedRevision && revision !== expectedRevision) {
+      throw fail('Verification evidence changed. Open a new recovery SQL review.');
+    }
+    if (observation.method !== 'full-mapped-keys' || observation.coverage !== 'all-reviewed-keys' ||
+        observation.review?.decision !== 'follow-up-required' || !(observation.missing || observation.mismatch)) {
+      throw fail('Verify all destination keys and mark the latest discrepancy for follow-up.');
+    }
+    const source = await getRecovery().inspectUncertainSource(captureId);
+    const preview = await prepareRecoveryStatements(source, verificationContext(cancellation), observation);
+    if ((await history.latestEvidence(captureId)).revision !== revision) {
+      throw fail('Verification evidence changed. Open a new recovery SQL review.');
+    }
+    await source.assertCurrent();
+    if (cancelled(cancellation)) throw fail('Recovery SQL review cancelled.');
+    return { revision, sourceExpiresAt: source.expiresAt, preview: { captureId, observation, ...preview,
+      replayBlocked: true, historicalCommitConfirmed: false, executable: false } };
+  }
+
   const api = {
     capture: tracked(async ({ table, mode = 'captured', recoverable = false, cancellation, onProgress } = {}) => database.withTableTransfer(async lease => {
       if (!['captured', 'stream'].includes(mode)) throw fail('Choose a captured or streamed source snapshot.');
@@ -369,9 +391,22 @@ function createTableTransfer(database, { recovery, history } = {}) {
     }, true),
     verifyAllTransferKeys: tracked(async ({ captureId, cancellation, onProgress } = {}) => {
       const source = await getRecovery().inspectUncertainSource(captureId);
-      const result = await verifyAllCommitKeys(source, verificationContext(cancellation), onProgress);
-      return recordVerification(captureId, result);
+      const run = await runs?.begin(captureId, source.evidence?.rowCount).catch(() => undefined);
+      try {
+        const result = await verifyAllCommitKeys(source, verificationContext(cancellation), async progress => {
+          await run?.checkpoint(progress).catch(() => {});
+          await onProgress?.(progress);
+        });
+        const report = await recordVerification(captureId, result);
+        const runRecorded = Boolean(await run?.finish(result.coverage === 'all-reviewed-keys' ? 'complete' : 'inconclusive')
+          .then(() => true, () => false));
+        return { ...report, runRecorded };
+      } catch (error) {
+        await run?.finish(cancelled(cancellation) ? 'cancelled' : 'failed').catch(() => {});
+        throw error;
+      }
     }, true),
+    listTransferVerificationRuns: tracked(async ({ captureId } = {}) => runs ? runs.list(captureId) : []),
     listTransferVerificationHistory: tracked(async ({ captureId } = {}) => history ? history.list(captureId) : []),
     listTransferVerificationEvidence: tracked(async ({ captureId } = {}) => history ? history.evidence(captureId) : []),
     prepareTransferVerificationReview: tracked(async ({ captureId } = {}) => {
@@ -403,6 +438,19 @@ function createTableTransfer(database, { recovery, history } = {}) {
       }
       return { planId, expiresAt: existing.expiresAt, ...preview };
     }),
+    prepareTransferRecoverySql: tracked(async ({ captureId, cancellation } = {}) => {
+      const { revision, preview, sourceExpiresAt } = await recoverySqlEvidence(captureId, cancellation);
+      const reviewId = randomUUID(), expiresAt = Math.min(Date.now() + limits.durationMs, sourceExpiresAt);
+      bounded(recoverySqlReviews);
+      recoverySqlReviews.set(reviewId, { captureId, revision, expiresAt });
+      return { reviewId, expiresAt, ...preview };
+    }, true),
+    validateTransferRecoverySql: tracked(async ({ reviewId, cancellation } = {}) => {
+      const existing = retained(recoverySqlReviews, reviewId, 'recovery SQL review');
+      const { preview } = await recoverySqlEvidence(existing.captureId, cancellation, existing.revision);
+      retained(recoverySqlReviews, reviewId, 'recovery SQL review');
+      return { reviewId, expiresAt: existing.expiresAt, ...preview };
+    }, true),
     inspectDestination: tracked(async ({ captureId, table } = {}) => database.withTableTransfer(async lease => {
       const capture = retained(captures, captureId, 'source snapshot');
       await confirmReady(capture);
@@ -509,7 +557,7 @@ function createTableTransfer(database, { recovery, history } = {}) {
       await Promise.allSettled([...reviews.values()].map(review => review.manager.dispose()));
       for (const id of captures.keys()) discardSource(id);
       await Promise.allSettled(removals);
-      targets.clear(); reviews.clear(); verificationReviews.clear(); recoveryPlans.clear();
+      targets.clear(); reviews.clear(); verificationReviews.clear(); recoveryPlans.clear(); recoverySqlReviews.clear();
     }
   };
   return api;

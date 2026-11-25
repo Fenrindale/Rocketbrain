@@ -45,7 +45,7 @@ async function checkFullTransferRestart(api, vscode) {
   return { observations: evidence.length, fullObservations: full.length, reviewed: reviewed.length, historySha256, disconnected: true };
 }
 
-async function runTableTransferFullChecks(api, vscode, checks) {
+async function runTableTransferFullChecks(api, vscode, checks, { beforeFollowUp, onFollowUp } = {}) {
   const engines = participants(), tools = api.tableTransfer, directions = [];
   const commands = await vscode.commands.getCommands(true);
   assert.ok(commands.includes('rocketbrain.data.verifyAllTransferKeys') && commands.includes('rocketbrain.data.previewTransferRecovery'));
@@ -130,15 +130,18 @@ async function runTableTransferFullChecks(api, vscode, checks) {
       await verify(captureId, { status: 'mismatch', counts: [rows - 2, 1, 1] });
       const priorReview = await tools.prepareTransferRecoveryPlan({ captureId });
       assert.ok(priorReview.steps.includes('review-observation'));
+      await beforeFollowUp?.(captureId);
       const review = await tools.prepareTransferVerificationReview({ captureId });
       await tools.recordTransferVerificationReview({ reviewId: review.reviewId, decision: 'follow-up-required' });
       await assert.rejects(tools.validateTransferRecoveryPlan({ planId: priorReview.planId }), /evidence or the retained snapshot changed/i);
       const next = await tools.prepareTransferRecoveryPlan({ captureId });
       assert.ok(next.steps.includes('investigate-missing-keys') && next.steps.includes('investigate-different-values'));
       assert.equal(next.observation.review.decision, 'follow-up-required');
+      const afterDiscard = await onFollowUp?.({ captureId, target, from, to, changed, missing, columns: names });
       await assert.rejects(tools.resumeSource({ captureId }), /previous Commit/);
       await tools.discardRecoverableSource({ captureId });
       await assert.rejects(tools.validateTransferRecoveryPlan({ planId: next.planId }), /evidence or the retained snapshot changed/i);
+      await afterDiscard?.();
 
       const missingId = await stage(absent, false);
       await verify(missingId, { status: 'missing', counts: [0, rows, 0] });

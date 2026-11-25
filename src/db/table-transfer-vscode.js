@@ -4,15 +4,25 @@ const path = require('node:path');
 const { createTableTransfer } = require('./table-transfer');
 const { createTransferRecovery } = require('./table-transfer-recovery');
 const { createTransferHistory, historyLimits, verificationReviewDecisions, publishNewJson } = require('./table-transfer-history');
+const { createTransferRuns, transferRunLimits } = require('./table-transfer-runs');
 
 const historyCommand = 'rocketbrain.data.transferVerificationHistory';
 const reviewCommand = 'rocketbrain.data.reviewTransferVerification';
 const exportCommand = 'rocketbrain.data.exportTransferVerificationHistory';
 const fullVerificationCommand = 'rocketbrain.data.verifyAllTransferKeys';
 const recoveryPlanCommand = 'rocketbrain.data.previewTransferRecovery';
+const runsCommand = 'rocketbrain.data.showTransferVerificationRuns';
+const recoverySqlCommand = 'rocketbrain.data.previewTransferRecoverySql';
 const historyScheme = 'rocketbrain-table-copy-history';
 const recoveryPlanScheme = 'rocketbrain-table-copy-recovery';
+const runsScheme = 'rocketbrain-table-copy-runs';
+const recoverySqlScheme = 'rocketbrain-table-copy-recovery-sql';
 const statusLabels = { matching: 'Matching', missing: 'Missing keys', mismatch: 'Different values', inconclusive: 'Inconclusive' };
+const runLabels = { running: 'Running in this window', 'last-checkpoint': 'Last checkpoint without a local run',
+  cancelled: 'Cancelled', complete: 'Complete', inconclusive: 'Inconclusive', failed: 'Failed' };
+const statementLabels = { 'audit-key': 'Read the current mapped values for one reviewed key',
+  'insert-missing-key': 'Insert one reviewed key if it is still absent',
+  'update-unchanged-key': 'Update one reviewed key if its mapped values still match the audit' };
 const reviewDetails = {
   acknowledged: 'Record that you read the destination observation.',
   'follow-up-required': 'Flag the observation for further investigation.',
@@ -60,7 +70,8 @@ function registerTableTransfer(context, vscode, { database }) {
   const isTrusted = () => !closed && vscode.workspace.isTrusted;
   const recovery = createTransferRecovery({ storagePath, secrets: context.secrets, isTrusted });
   const history = storagePath && createTransferHistory({ storagePath, isTrusted });
-  const core = createTableTransfer(database, { recovery, history });
+  const runs = storagePath && createTransferRuns({ storagePath, isTrusted });
+  const core = createTableTransfer(database, { recovery, history, runs });
   const subscriptions = [], documents = new Map();
   let closed = false, historyText = '';
 
@@ -144,6 +155,37 @@ function registerTableTransfer(context, vscode, { database }) {
   }
   command(historyCommand, () => showTransferHistory());
 
+  subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(runsScheme, {
+    async provideTextDocumentContent(uri) {
+      if (!isTrusted()) return '';
+      const captureId = uri.path.split('/').filter(Boolean)[0];
+      const entries = await core.listTransferVerificationRuns({ captureId: captureId === 'all' ? undefined : captureId });
+      return [
+        'Table Copy Verification Runs',
+        'The workspace keeps up to ' + transferRunLimits.entries + ' runs for ' + transferRunLimits.days + ' days.',
+        'Each attempt opens a fresh read-only destination snapshot. Pages from earlier attempts are historical progress.',
+        'Use Table Copy Verification History for completed observations. Run this command again to refresh the checkpoints.',
+        '',
+        ...(entries.length ? entries.flatMap(entry => [
+          runLabels[entry.state] + ' · Capture ' + entry.captureId,
+          'Started ' + entry.startedAt + ' · Checkpoint ' + entry.checkpointAt,
+          entry.checkedKeys + ' / ' + entry.rows + ' keys examined · ' + entry.pages + ' pages',
+          ''
+        ]) : ['No verification runs are available.'])
+      ].join('\n');
+    }
+  }));
+
+  async function showTransferVerificationRuns(captureId) {
+    const entries = await core.listTransferVerificationRuns({ captureId });
+    const uri = vscode.Uri.parse(runsScheme + ':/' + (captureId || 'all') + '/Table Copy Verification Runs.txt')
+      .with({ query: String(Date.now()) });
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document, { preview: true });
+    return entries;
+  }
+  command(runsCommand, showTransferVerificationRuns);
+
   subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(recoveryPlanScheme, {
     async provideTextDocumentContent(uri) {
       if (!isTrusted()) return '';
@@ -191,6 +233,62 @@ function registerTableTransfer(context, vscode, { database }) {
     return plan;
   }
   command(recoveryPlanCommand, captureId => previewTransferRecovery(captureId));
+
+  subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(recoverySqlScheme, {
+    async provideTextDocumentContent(uri) {
+      if (!isTrusted()) return '';
+      try {
+        const plan = await core.validateTransferRecoverySql({ reviewId: uri.path.split('/').filter(Boolean)[0] });
+        const { observation, destination } = plan;
+        return [
+          'Table Copy Recovery SQL Review',
+          'Capture ' + plan.captureId + ' · Observation ' + observation.observationId,
+          destination.engine + ' · ' + destination.database + '.' + destination.table,
+          observationDetail(observation),
+          'Marked for follow-up ' + observation.review.reviewedAt + ' · Review expires ' + new Date(plan.expiresAt).toISOString(),
+          '',
+          'Confirm the original Commit outcome using independent transaction records. The replay fence remains active.',
+          'Coordinate any external patch with the destination owner after reviewing later edits, key collisions, constraints and defaults.',
+          'Bind one exact reviewed key and compare the current key and mapped values with the source. An audit overflow flag of 1 means the values are unavailable.',
+          'For a missing row, bind desired values from that source row, including the identical reviewed key. For a changed row, bind the exact values from a fresh audit.',
+          'Use a prepared statement with explicit SQL NULLs and exact numeric strings or binary buffers as appropriate.',
+          'If the destination owner approves an external patch, check the affected row and resulting values before committing.',
+          'Rocketbrain displays these templates in a read-only document.',
+          ...plan.statements.flatMap(statement => [
+            '', statementLabels[statement.kind], statement.sql,
+            ...(statement.overflowFlag ? ['Audit overflow flag ' + statement.overflowFlag] : []),
+            ...statement.parameters.map(({ column, type, value }, index) =>
+              (index + 1) + '. ' + value + ' · ' + JSON.stringify(column) + ' · ' + type)
+          ])
+        ].join('\n');
+      } catch {
+        return 'The destination or verification evidence changed, or the review expired. Run Review Table Copy Recovery SQL again.';
+      }
+    }
+  }));
+
+  async function previewTransferRecoverySql(captureId) {
+    if (captureId === undefined) {
+      const latest = new Map();
+      for (const entry of await core.listTransferVerificationEvidence()) {
+        if (!latest.has(entry.captureId)) latest.set(entry.captureId, entry);
+      }
+      const choices = [...latest.values()].filter(entry => entry.coverage === 'all-reviewed-keys' &&
+        entry.review?.decision === 'follow-up-required' && (entry.missing || entry.mismatch))
+        .map(entry => ({ label: statusLabels[entry.status] + ' · ' + entry.recordedAt,
+          description: 'Capture ' + entry.captureId, detail: observationDetail(entry), captureId: entry.captureId }));
+      if (!choices.length) throw Error('Verify all destination keys and mark the latest discrepancy for follow-up.');
+      const choice = await vscode.window.showQuickPick(choices, { title: 'Choose a Reviewed Transfer Discrepancy' });
+      if (!choice) return;
+      captureId = choice.captureId;
+    }
+    const plan = await core.prepareTransferRecoverySql({ captureId });
+    const uri = vscode.Uri.parse(recoverySqlScheme + ':/' + plan.reviewId + '/Table Copy Recovery SQL.txt');
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document, { preview: true });
+    return plan;
+  }
+  command(recoverySqlCommand, previewTransferRecoverySql);
 
   async function reviewTransferVerification(captureId) {
     if (captureId === undefined) {
@@ -284,13 +382,16 @@ function registerTableTransfer(context, vscode, { database }) {
     const destination = result.destination ? result.destination.database + '.' + result.destination.table + ': ' : '';
     const limit = 'This observes current rows. Commit history remains unconfirmed and replay stays blocked.';
     const details = result.status === 'inconclusive' ? (reasons[result.reason] || reasons['destination-unavailable']) : checkSummary(result);
-    const message = destination + details + ' ' + limit + (result.historyRecorded ? '' : ' The local observation could not be saved.');
+    const message = destination + details + ' ' + limit + (result.historyRecorded ? '' : ' The local observation could not be saved.') +
+      (full && !result.runRecorded ? ' The final run checkpoint could not be saved.' : '');
     const actions = result.historyRecorded ? ['Review Evidence', 'Preview Recovery', 'Show Verification History'] : [];
+    if (full && result.runRecorded) actions.push('Show Verification Runs');
     const selected = result.status === 'matching' ? await vscode.window.showInformationMessage(message, ...actions)
       : await vscode.window.showWarningMessage(message, ...actions);
     if (selected === 'Review Evidence') await reviewTransferVerification(captureId);
     else if (selected === 'Preview Recovery') await previewTransferRecovery(captureId);
     else if (selected === 'Show Verification History') await showTransferHistory(captureId);
+    else if (selected === 'Show Verification Runs') await showTransferVerificationRuns(captureId);
     return result;
   }
 

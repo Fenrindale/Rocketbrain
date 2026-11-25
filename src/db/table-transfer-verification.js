@@ -314,4 +314,62 @@ async function verifyAllCommitKeys(source, config, onProgress) {
   return result;
 }
 
-module.exports = { createCommitEvidence, destinationSummary, sampleLimit, verifyCommitEvidence, verifyAllCommitKeys, exactBitParameter };
+async function prepareRecoveryStatements(source, config, observation) {
+  const { evidence } = source;
+  if (!evidenceShape(evidence) || evidence.version !== 3 || evidence.keys.includes(-1) ||
+      evidence.rowCount !== observation.rows || evidence.columns.length !== observation.comparedMappedColumns) {
+    throw fail('The retained source does not match the complete verification observation.');
+  }
+  const review = await readReviewedDestination(evidence, config, async ({ columns, types, check }) => {
+    await source.assertCurrent();
+    check();
+    const mapped = columns.map((_, index) => index);
+    const { keys } = evidence;
+    const updates = mapped.filter(index => !keys.includes(index));
+    const field = index => quote(columns[index].name);
+    const bind = (index, value) => ({ column: columns[index].name, type: columns[index].type, value });
+    const binds = (indices, value) => indices.map(index => bind(index, value));
+    const keyMatch = keys.map(index => field(index) + ' = ' + placeholder(types[index])).join(' AND ');
+    const table = quote(evidence.destination.database, true) + '.' + quote(evidence.destination.table, true);
+    const { sql, headers } = sampleQuery(evidence, columns, types);
+    const statements = [{
+      kind: 'audit-key',
+      sql: sql + ';',
+      parameters: binds(keys, 'reviewed-key'),
+      overflowFlag: headers.at(-1)
+    }];
+    if (observation.missing > 0) {
+      const existing = index => 'rb_existing.' + field(index);
+      const join = keys.map(index => existing(index) + ' = ' + placeholder(types[index])).join(' AND ');
+      statements.push({
+        kind: 'insert-missing-key',
+        sql: 'INSERT INTO ' + table + ' (' + mapped.map(field).join(', ') + ') SELECT ' + types.map(placeholder).join(', ') +
+          ' FROM (SELECT 1 AS marker) AS rb_single LEFT JOIN ' + table + ' AS rb_existing ON ' + join +
+          ' WHERE ' + existing(keys[0]) + ' IS NULL;',
+        parameters: [...mapped.map(index => bind(index, keys.includes(index) ? 'reviewed-key' : 'desired-value')),
+          ...binds(keys, 'reviewed-key')]
+      });
+    }
+    if (observation.mismatch > 0 && updates.length) {
+      const exactBytes = index => ['text', 'binary'].includes(types[index].category) || types[index].kind === 'json';
+      const guarded = mapped.filter(index => !keys.includes(index) || exactBytes(index));
+      const guards = guarded.map(index => exactBytes(index)
+        ? 'CAST(' + field(index) + ' AS BINARY) <=> CAST(? AS BINARY)'
+        : field(index) + ' <=> ' + placeholder(types[index]));
+      statements.push({
+        kind: 'update-unchanged-key',
+        sql: 'UPDATE ' + table + ' SET ' + updates.map(index => field(index) + ' = ' + placeholder(types[index])).join(', ') +
+          ' WHERE ' + [keyMatch, ...guards].join(' AND ') + ' LIMIT 1;',
+        parameters: [...binds(updates, 'desired-value'), ...binds(keys, 'reviewed-key'), ...binds(guarded, 'observed-value')]
+      });
+    }
+    return { destination: destinationSummary(evidence), statements };
+  }, reason => ({ failure: reason }));
+  if (review.failure) throw fail('The reviewed destination or retained source could not be revalidated (' + review.failure + ').');
+  return review;
+}
+
+module.exports = {
+  createCommitEvidence, destinationSummary, sampleLimit, verifyCommitEvidence, verifyAllCommitKeys, prepareRecoveryStatements,
+  exactBitParameter
+};
