@@ -397,3 +397,5 @@ For mutual TLS, select **Verify CA and server identity** in the connection edito
 The SQL editor analyzes common JSON calls against the current catalog. It checks argument counts and highlights malformed literal documents or paths in place. MySQL JSON arrows and engine-specific wildcard rules are interpreted using the selected dialect and observed version. Paths supplied by a parameter or column remain runtime-dependent.
 
 Named and inline SQL windows retain links to their definitions and partition or order columns. The editor checks known ROWS and RANGE frame boundaries, numeric or temporal order types and engine-specific call restrictions. Computed offsets and unsupported frame forms retain a server-validation note.
+
+For bitwise SQL, the editor separates numeric operands from MySQL binary-string operations. It uses observed fixed BINARY widths and marks conflicting lengths or literal conversions that can discard data. Widths and conversions that depend on stored row values stay unresolved until execution.

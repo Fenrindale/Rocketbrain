@@ -3,6 +3,7 @@
 // A bounded SELECT binder. It never sends SQL or loads server/provider code.
 const { isJsonFunction, checkJsonFunction, checkPath, literalValue } = require('./sql-json-expressions');
 const { createWindowAnalysis, windowReturn, windowOnly, isAggregate } = require('./sql-window-expressions');
+const { bitwiseExpression, bitCount } = require('./sql-bitwise-expressions');
 const LIMITS={bytes:128*1024,tokens:24000,scopes:256,depth:32,columns:2048};
 const CLAUSES=new Set(['FROM','WHERE','GROUP','HAVING','ORDER','LIMIT','WINDOW','INTO','FOR','LOCK','PROCEDURE','QUALIFY']);
 const RESERVED=new Set(('SELECT FROM WHERE AS DISTINCT ALL JOIN INNER OUTER LEFT RIGHT CROSS FULL NATURAL LATERAL ON USING GROUP BY HAVING ORDER ASC DESC LIMIT OFFSET UNION INTERSECT EXCEPT WITH RECURSIVE AND OR XOR NOT IS NULL TRUE FALSE UNKNOWN IN EXISTS BETWEEN LIKE REGEXP RLIKE ESCAPE CASE WHEN THEN ELSE END OVER PARTITION ROWS RANGE GROUPS UNBOUNDED PRECEDING FOLLOWING CURRENT ROW ASC DESC COLLATE DIV MOD FOR UPDATE LOCK SHARE MODE SQL_CALC_FOUND_ROWS STRAIGHT_JOIN HIGH_PRIORITY LOW_PRIORITY SQL_SMALL_RESULT SQL_BIG_RESULT SQL_BUFFER_RESULT SQL_NO_CACHE INTO OUTFILE DUMPFILE WINDOW QUALIFY SEPARATOR BOTH LEADING TRAILING FROM RETURNING').split(' '));
@@ -91,11 +92,26 @@ function analyzeSql(text,catalog=[],options={}){
   const mergeTypes=types=>{const unique=[...new Set(types.map(t=>t.family).filter(f=>f!=='null'))];if(!unique.length)return family('null',{nullable:true});if(unique.length===1)return {...types.find(t=>t.family===unique[0]),nullable:types.some(t=>t.nullable||t.family==='null')};if(unique.every(f=>['integer','decimal','floating'].includes(f)))return family(unique.includes('floating')?'floating':unique.includes('decimal')?'decimal':'integer');unknown('Result type depends on server coercion/collation rules.');return UNKNOWN();};
   const windows=createWindowAnalysis({tokens:token,top,split,id,span,expression,dialect:model.dialect,issue,unknown,
     reference:ref,supported});
+  const outerJoined=token.some((item,index)=>['LEFT','RIGHT','FULL'].includes(item.upper)&&
+    (token[index+1]?.upper==='JOIN'||token[index+1]?.upper==='OUTER'&&token[index+2]?.upper==='JOIN'));
+  const bitwiseContext=(scope,context)=>({
+    tokens:token,source:text,sqlMode:options.sqlMode,dialect:model.dialect,top,span,issue,unknown,outerJoined,
+    physicalColumn(offset) {
+      const reference=model.references.findLast(item=>item.start===offset&&item.kind==='column');
+      return reference?.physicalColumn && model.relations.some(relation=>relation.id===reference.relationId&&relation.kind==='catalog');
+    },
+    read:(a,b)=>expression(a,b,scope,context)
+  });
   let parseQuery;
   function expression(a,b,scope,context={}){
     while(token[a]?.value==='('&&token[a].close===b-1){a++;b--;}
     if(a>=b){unknown('Incomplete SQL expression.',token[a]?.start);return UNKNOWN();}
     if(['SELECT','WITH'].includes(token[a]?.upper)){const sub=parseQuery(a,b,scope,new Map(scope.ctes),scope.depth+1);supported.add('scalar-subquery');if(sub.projections.length!==1){if(sub.complete)issue('sql.shape.scalar','Scalar subquery must return exactly one column.',token[a]);return UNKNOWN();}return {...sub.projections[0].type,nullable:true};}
+    const bitwise=bitwiseExpression(a,b,bitwiseContext(scope,context));
+    if (bitwise) {
+      supported.add('dialect-bitwise-expression');
+      return bitwise;
+    }
     // Expressions are traversed for all nested scopes and column references before inference.
     const atoms=[];let operator=false,comparison=false;
     for(let i=a;i<b;i++){const t=token[i];
@@ -149,6 +165,15 @@ function analyzeSql(text,catalog=[],options={}){
             } else if (!over) issue('sql.window.required',t.value+' requires an OVER clause.',t);
             atoms.push(windowReturn(t.upper,t,values,{dialect:model.dialect,tokens:token,issue,unknown}));
           }
+          else if (t.upper==='BIT_COUNT') {
+            const slots=i+2===close?[]:split(i+2,close);
+            if (slots.length!==1 || slots[0][0]>=slots[0][1]) {
+              issue('sql.bitwise.arity','BIT_COUNT expects exactly one argument.',t);
+              for (const [x,y] of slots) if (x<y) expression(x,y,scope,argContext);
+              atoms.push(UNKNOWN());
+            } else atoms.push(bitCount(...slots[0],bitwiseContext(scope,argContext)));
+            supported.add('dialect-bitwise-expression');
+          }
           else if (isJsonFunction(t.upper)) {
             const slots = i+2===close ? [] : split(i+2,close);
             const values = slots.map(([x,y])=>{
@@ -199,7 +224,7 @@ function analyzeSql(text,catalog=[],options={}){
       if(['=','!=','<>','<','>','>=','<=','<=>','AND','OR','XOR','NOT','IS','IN','EXISTS','BETWEEN','LIKE','REGEXP','RLIKE'].includes(t.upper||t.value))comparison=true;
       else if(t.value==='&&')comparison=true;
       else if(t.value==='||'){unknown('Double-pipe semantics depend on PIPES_AS_CONCAT and provider modes.',t.start);atoms.push(UNKNOWN());}
-      else if(['&','|','^','~','<<','>>','->','->>'].includes(t.value)){unknown('Bitwise/JSON operator result and coercion rules are not statically covered.',t.start);atoms.push(UNKNOWN());}
+      else if(['&','|','^','~','<<','>>','->','->>'].includes(t.value)){unknown('This mixed bitwise/JSON expression does not have a verified static type contract.',t.start);atoms.push(UNKNOWN());}
       else if(['+','-','*','/','DIV','MOD','%'].includes(t.upper||t.value))operator=true;
       else if(t.value==='*'&&a+1===b)atoms.push(family('wildcard'));
       else if(['CASE','WHEN','THEN','ELSE','END'].includes(t.upper)){unknown('CASE branch result coercion is not statically complete.',t.start);}
