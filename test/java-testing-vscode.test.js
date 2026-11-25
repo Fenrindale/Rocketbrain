@@ -7,7 +7,7 @@ function host(backend,{workspaceState}={}){
   class Collection extends Map{add(item){this.set(item.id,item);}replace(items){this.clear();for(const item of items)this.add(item);}forEach(callback){for(const item of this.values())callback(item);}}
   const uri=value=>({scheme:'file',fsPath:value,toString:()=>pathToFileURL(value).href});
   const controller={items:new Collection(),createTestItem:(id,label,value)=>({id,label,uri:value,children:new Collection()}),createRunProfile:(name,kind,handler)=>{handlers.set(kind,handler);const profile={dispose(){}};profiles.set(name,profile);return profile;},createTestRun:()=>{const data={events:[],coverage:[],output:[],ended:false,enqueued:item=>data.events.push(['queued',item.id]),started:item=>data.events.push(['started',item.id]),passed:item=>data.events.push(['passed',item.id]),failed:(item,message)=>data.events.push(['failed',item.id,message]),errored:(item,message)=>data.events.push(['error',item.id,message]),skipped:item=>data.events.push(['skipped',item.id]),appendOutput:text=>data.output.push(text),addCoverage:value=>data.coverage.push(value),end:()=>{data.ended=true;}};runs.push(data);return data;},dispose(){}};
-  const vscode={tests:{createTestController:()=>controller},TestRunProfileKind:{Run:1,Coverage:3},TestRunRequest:class{constructor(include,exclude){this.include=include;this.exclude=exclude;}},CancellationTokenSource:class{constructor(){const event=new Event();this.token={isCancellationRequested:false,onCancellationRequested:event.event};this.cancel=()=>{this.token.isCancellationRequested=true;event.fire();};}dispose(){}},Uri:{file:uri,parse:value=>uri(fileURLToPath(value))},Range:class{constructor(...args){this.args=args;}},Position:class{constructor(line,character){this.line=line;this.character=character;}},Location:class{constructor(value,range){this.uri=value;this.range=range;}},TestMessage:class{constructor(message){this.message=message;}static diff(message,expected,actual){return {message,expected,actual};}},FileCoverage:class{constructor(value,lines,branches,methods,includesTests){Object.assign(this,{uri:value,lines,branches,methods,includesTests});}},StatementCoverage:class{constructor(executed,location){Object.assign(this,{executed,location});}},DeclarationCoverage:class{constructor(name,executed,location){Object.assign(this,{name,executed,location});}},window:{createOutputChannel:()=>({appendLine(){},dispose(){}}),showErrorMessage:async()=>{}},commands:{registerCommand:()=>({dispose(){}})},workspace:{isTrusted:true,workspaceFolders:[{uri:uri(workspace)}],textDocuments:[],getWorkspaceFolder:()=>({uri:uri(workspace)}),getConfiguration:()=>({get:(key,fallback)=>fallback})}};
+  const vscode={tests:{createTestController:()=>controller},TestRunProfileKind:{Run:1,Coverage:3},TestRunRequest:class{constructor(include,exclude){this.include=include;this.exclude=exclude;}},CancellationTokenSource:class{constructor(){const event=new Event();this.token={isCancellationRequested:false,onCancellationRequested:event.event};this.cancel=()=>{this.token.isCancellationRequested=true;event.fire();};}dispose(){}},Uri:{file:uri,parse:value=>uri(fileURLToPath(value))},Range:class{constructor(...args){this.args=args;}},Position:class{constructor(line,character){this.line=line;this.character=character;}},Location:class{constructor(value,range){this.uri=value;this.range=range;}},TestMessage:class{constructor(message){this.message=message;}static diff(message,expected,actual){return {message,expected,actual};}},FileCoverage:class{constructor(value,lines,branches,methods,includesTests){Object.assign(this,{uri:value,lines,branches,methods,includesTests});}},StatementCoverage:class{constructor(executed,location,branches=[]){Object.assign(this,{executed,location,branches});}},BranchCoverage:class{constructor(executed,location,label){Object.assign(this,{executed,location,label});}},DeclarationCoverage:class{constructor(name,executed,location){Object.assign(this,{name,executed,location});}},window:{createOutputChannel:()=>({appendLine(){},dispose(){}}),showErrorMessage:async()=>{}},commands:{registerCommand:()=>({dispose(){}})},workspace:{isTrusted:true,workspaceFolders:[{uri:uri(workspace)}],textDocuments:[],getWorkspaceFolder:()=>({uri:uri(workspace)}),getConfiguration:()=>({get:(key,fallback)=>fallback})}};
   for(const name of ['onDidChangeTextDocument','onDidCreateFiles','onDidDeleteFiles','onDidRenameFiles','onDidChangeWorkspaceFolders','onDidChangeConfiguration']){events[name]=new Event();vscode.workspace[name]=events[name].event;}
   events.disk=new Event();vscode.workspace.createFileSystemWatcher=()=>({onDidChange:events.disk.event,onDidCreate:()=>({dispose(){}}),onDidDelete:()=>({dispose(){}}),dispose(){}});
   const project={id:'fixture',workspace,classPath:[process.execPath],javaHome:workspace,testClassPaths:[workspace],sourceRoots:[workspace],classDirectories:[workspace],runtimePath:'unused'};
@@ -139,4 +139,34 @@ test('test debugging cannot silently run a coverage profile',async()=>{
 test('external changes to closed project Java sources invalidate the compiled test tree',async()=>{
  let discoveries=0;const h=host({discoverTests:async()=>{discoveries++;return {state:'completed',tests:testData};},runTests:async()=>({state:'completed',summary:{}})});
  try{await h.api.discover({projects:[h.project],build:false});assert.equal(h.api.snapshot().state,'ready');h.events.disk.fire(h.uri(path.join(h.project.workspace,'src/test/java/fixture/boot/RocketbrainTestNGTest.java')));assert.equal(h.api.snapshot().state,'stale');await h.api.run({projects:[h.project],build:false});assert.equal(discoveries,2);assert.equal(h.api.snapshot().state,'ready');}finally{await h.api.dispose();}
+});
+
+
+test('native coverage details emit exact then and else ranges and discard stale branch locations',async()=>{
+  const fs=require('node:fs'),crypto=require('node:crypto');
+  const source=path.resolve('test/fixtures/spring-boot-app/src/main/java/fixture/boot/RiskPolicy.java'),uri=pathToFileURL(source).href;
+  const range=(line,start,end)=>({start:{line,character:start},end:{line,character:end}});
+  const condition=range(3,8,25),then=range(4,8,22),otherwise=range(5,8,24);
+  const file={uri,lines:{covered:1,total:1},branches:{covered:1,total:2},methods:{covered:1,total:1},
+    branchSourceSha256:crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex'),
+    details:[{line:3,covered:true,branchSource:{condition,arms:[
+      {label:'then',covered:true,range:then},{label:'else',covered:false,range:otherwise}
+    ]}}]};
+  const h=host({discoverTests:async()=>({state:'completed',tests:testData}),runTests:async()=>({state:'completed',
+    coverage:{state:'available',files:[file]},perTestCoverage:{state:'available',tests:[{testId:'simple',coverage:{state:'available',files:[file]}}]}})});
+  try{
+    await h.api.discover({projects:[h.project],build:false});
+    await h.api.run({perTestCoverage:true,build:false});
+    const coverage=h.runs[0].coverage[0],profile=h.profiles.get('Coverage by Test (Serial)');
+    const aggregate=await profile.loadDetailedCoverage(null,coverage);
+    const individual=await profile.loadDetailedCoverageForTest(null,coverage,coverage.includesTests[0]);
+    assert.deepEqual(aggregate,individual);
+    assert.deepEqual(aggregate[0].location.args.map(position=>({...position})),[condition.start,condition.end]);
+    assert.deepEqual(aggregate[0].branches.map(branch=>[branch.label,branch.executed]),[['then',true],['else',false]]);
+    assert.deepEqual(aggregate[0].branches[1].location.args.map(position=>({...position})),[otherwise.start,otherwise.end]);
+    h.vscode.workspace.textDocuments.push({uri:h.uri(source),isDirty:true});
+    const stale=await profile.loadDetailedCoverage(null,coverage);
+    assert.equal(stale[0].branches.length,0);
+    assert.equal(stale[0].location.character,0);
+  }finally{await h.api.dispose();}
 });

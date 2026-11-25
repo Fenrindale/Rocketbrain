@@ -1,5 +1,5 @@
 'use strict';
-const path=require('node:path'),crypto=require('node:crypto');
+const path=require('node:path'),crypto=require('node:crypto'),fs=require('node:fs/promises');
 const {resolveTestingProjects,inside}=require('./testing-projects');
 const {createTestDebugger}=require('./testing-debug');
 const {createTestHistory,describeFailure,historicalSelection,MAX_FAILURES}=require('./testing-history');
@@ -76,10 +76,29 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
     }
     return selected;
   }
-  function detailsFor(file){
-    const details=(file.details||[]).filter(line=>Number.isInteger(line.line)&&line.line>=0).map(line=>new vscode.StatementCoverage(line.covered,new vscode.Position(line.line,0)));
+  async function detailsFor(file){
+    const uri=vscode.Uri.parse(file.uri);
+    const withBranches=typeof vscode.BranchCoverage==='function'&&await currentBranchSource(file,uri);
+    const range=value=>new vscode.Range(new vscode.Position(value.start.line,value.start.character),new vscode.Position(value.end.line,value.end.character));
+    const details=(file.details||[]).filter(line=>Number.isInteger(line.line)&&line.line>=0).map(line=>{
+      const source=withBranches&&line.branchSource;
+      return source?new vscode.StatementCoverage(line.covered,range(source.condition),
+        source.arms.map(arm=>new vscode.BranchCoverage(arm.covered,range(arm.range),arm.label)))
+        :new vscode.StatementCoverage(line.covered,new vscode.Position(line.line,0));
+    });
     if(vscode.DeclarationCoverage)for(const method of file.methodDetails||[])if(Number.isInteger(method.line)&&method.line>=0)details.push(new vscode.DeclarationCoverage(method.name,method.covered,new vscode.Position(method.line,0)));
     return details;
+  }
+  async function currentBranchSource(file,uri){
+    if(!file.branchSourceSha256||!vscode.workspace.isTrusted||vscode.workspace.textDocuments.some(doc=>doc.uri.toString()===uri.toString()&&doc.isDirty))return false;
+    try{
+      const stat=await fs.stat(uri.fsPath);
+      if(!stat.isFile()||stat.size>1024*1024)return false;
+      const bytes=await fs.readFile(uri.fsPath);
+      return vscode.workspace.isTrusted&&vscode.workspace.getWorkspaceFolder(uri)&&bytes.length<=1024*1024&&
+        crypto.createHash('sha256').update(bytes).digest('hex')===file.branchSourceSha256&&
+        !vscode.workspace.textDocuments.some(doc=>doc.uri.toString()===uri.toString()&&doc.isDirty);
+    }catch{return false;}
   }
   function publishCoverage(run,value,project,perTest){
     if(value?.state!=='available'&&value?.state!=='partial')return;
@@ -88,10 +107,10 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
       const tests=new Map();
       if(['available','partial'].includes(perTest?.state)&&!perTest.concurrencyObserved)for(const segment of perTest.tests||[]){
         const item=items.get(itemId(project,segment.testId))?.item,measured=segment.coverage?.files?.find(f=>f.uri===file.uri);
-        if(item&&measured&&['available','partial'].includes(segment.coverage?.state))tests.set(item,detailsFor(measured));
+        if(item&&measured&&['available','partial'].includes(segment.coverage?.state))tests.set(item,measured);
       }
       const coverage=new vscode.FileCoverage(uri,file.lines,file.branches,file.methods,[...tests.keys()]);
-      coverageDetails.set(coverage,{all:detailsFor(file),tests});run.addCoverage(coverage);
+      coverageDetails.set(coverage,{all:file,tests});run.addCoverage(coverage);
     }
   }
   async function execute(request={},token,options={}){
@@ -183,8 +202,14 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
   const coverageProfile=controller.createRunProfile('Run Java tests with coverage',vscode.TestRunProfileKind.Coverage,profileHandler({coverage:true}),true);
   const perTestProfile=controller.createRunProfile('Coverage by Test (Serial)',vscode.TestRunProfileKind.Coverage,profileHandler({coverage:true,perTestCoverage:true}),false);
   for(const profile of [coverageProfile,perTestProfile]){
-    profile.loadDetailedCoverage=async(testRun,file)=>coverageDetails.get(file)?.all||[];
-    profile.loadDetailedCoverageForTest=async(testRun,file,item)=>coverageDetails.get(file)?.tests.get(item)||[];
+    profile.loadDetailedCoverage=async(testRun,file)=>{
+      const observed=coverageDetails.get(file)?.all;
+      return observed?detailsFor(observed):[];
+    };
+    profile.loadDetailedCoverageForTest=async(testRun,file,item)=>{
+      const observed=coverageDetails.get(file)?.tests.get(item);
+      return observed?detailsFor(observed):[];
+    };
   }
   subscriptions.push(runProfile,debugProfile,coverageProfile,perTestProfile);
   controller.resolveHandler=async()=>{if(dirty&&!busy)await discover();};controller.refreshHandler=async token=>{await discover({cancellation:token});};
