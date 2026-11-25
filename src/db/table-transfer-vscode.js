@@ -8,7 +8,10 @@ const { createTransferHistory, historyLimits, verificationReviewDecisions, publi
 const historyCommand = 'rocketbrain.data.transferVerificationHistory';
 const reviewCommand = 'rocketbrain.data.reviewTransferVerification';
 const exportCommand = 'rocketbrain.data.exportTransferVerificationHistory';
+const fullVerificationCommand = 'rocketbrain.data.verifyAllTransferKeys';
+const recoveryPlanCommand = 'rocketbrain.data.previewTransferRecovery';
 const historyScheme = 'rocketbrain-table-copy-history';
+const recoveryPlanScheme = 'rocketbrain-table-copy-recovery';
 const statusLabels = { matching: 'Matching', missing: 'Missing keys', mismatch: 'Different values', inconclusive: 'Inconclusive' };
 const reviewDetails = {
   acknowledged: 'Record that you read the destination observation.',
@@ -22,13 +25,30 @@ const reasons = {
   'destination-identity-changed': 'Connect to the reviewed server, database, endpoint and account.',
   'destination-definition-changed': 'The reviewed table definition is different or unavailable.',
   'destination-unavailable': 'The reviewed destination could not be opened for a read-only check.',
-  'sample-unreadable': 'The sampled destination rows could not be read exactly.'
+  'sample-unreadable': 'The sampled destination rows could not be read exactly.',
+  'full-evidence-unavailable': 'Full key verification needs a retained snapshot with a complete mapping reviewed by this version.',
+  'retained-snapshot-unavailable': 'The encrypted source snapshot could not be authenticated and read to the end.',
+  'retained-snapshot-metadata-changed': 'The encrypted source file identity changed before or during verification.',
+  'retained-snapshot-authentication-failed': 'The encrypted source rows failed authentication.',
+  'retained-evidence-changed': 'The retained commit evidence changed during verification.',
+  'destination-verification-interrupted': 'The dedicated read-only verification connection closed or stopped being current.',
+  'full-page-unreadable': 'A destination key page could not be compared exactly.'
+};
+const recoveryStepLabels = {
+  'verify-all-keys': 'Run Verify All Table Copy Keys with the reviewed destination connected.',
+  'recheck-destination': 'Confirm the server, account and table definition used in the original review.',
+  'investigate-missing-keys': 'Investigate missing keys and later deletions with the destination owner.',
+  'investigate-different-values': 'Check later edits and the expected mapped values with the destination owner.',
+  'review-observation': 'Use Review Table Copy Verification to record your review of this observation.',
+  'confirm-transaction-externally': 'Use independent transaction records to establish the original Commit outcome.',
+  'retain-replay-fence': 'Keep the saved snapshot locked while deciding on any recovery outside this preview.'
 };
 
 function checkSummary(result) {
   const scope = result.coverage === 'all-reviewed-keys' ? 'all reviewed keys' : 'sampled reviewed keys';
+  const pages = result.method === 'full-mapped-keys' ? ' · ' + result.pages + ' pages' : '';
   return result.checkedKeys + ' / ' + result.rows + ' keys checked (' + scope + ') · ' +
-    result.matching + ' matching · ' + result.missing + ' missing · ' + result.mismatch + ' different.';
+    result.matching + ' matching · ' + result.missing + ' missing · ' + result.mismatch + ' different' + pages + '.';
 }
 
 function observationDetail(entry) {
@@ -124,6 +144,54 @@ function registerTableTransfer(context, vscode, { database }) {
   }
   command(historyCommand, () => showTransferHistory());
 
+  subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(recoveryPlanScheme, {
+    async provideTextDocumentContent(uri) {
+      if (!isTrusted()) return '';
+      try {
+        const plan = await core.validateTransferRecoveryPlan({ planId: uri.path.split('/').filter(Boolean)[0] });
+        const { observation } = plan;
+        return [
+          'Table Copy Recovery Preview',
+          'Capture ' + plan.captureId,
+          'Observation ' + observation.recordedAt + ' · ' + statusLabels[observation.status],
+          observationDetail(observation),
+          observation.review ? 'Operator review · ' + verificationReviewDecisions[observation.review.decision] +
+            ' · ' + observation.review.reviewedAt : 'Operator review pending.',
+          plan.snapshot.retained ? 'Saved source retained through ' + new Date(plan.snapshot.expiresAt).toISOString() + '.' :
+            'Saved source unavailable. This preview uses retained verification history.',
+          'The observation describes the destination at check time. Commit history remains unconfirmed and replay stays blocked.',
+          '',
+          ...plan.steps.map((step, index) => (index + 1) + '. ' + recoveryStepLabels[step]),
+          '',
+          'Open a new preview after recording another observation or review.'
+        ].join('\n');
+      } catch {
+        return 'Recovery evidence changed or the preview expired. Run Preview Table Copy Recovery again.';
+      }
+    }
+  }));
+
+  async function previewTransferRecovery(captureId) {
+    if (captureId === undefined) {
+      const latest = new Map();
+      for (const entry of await core.listTransferVerificationEvidence()) {
+        if (!latest.has(entry.captureId)) latest.set(entry.captureId, entry);
+      }
+      const choices = [...latest.values()].map(entry => ({ label: statusLabels[entry.status] + ' · ' + entry.recordedAt,
+        description: 'Capture ' + entry.captureId, detail: observationDetail(entry), captureId: entry.captureId }));
+      if (!choices.length) throw Error('Verify destination rows before preparing a recovery preview.');
+      const choice = await vscode.window.showQuickPick(choices, { title: 'Choose a Transfer Recovery Preview' });
+      if (!choice) return;
+      captureId = choice.captureId;
+    }
+    const plan = await core.prepareTransferRecoveryPlan({ captureId });
+    const uri = vscode.Uri.parse(recoveryPlanScheme + ':/' + plan.planId + '/Table Copy Recovery.txt');
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document, { preview: false });
+    return plan;
+  }
+  command(recoveryPlanCommand, captureId => previewTransferRecovery(captureId));
+
   async function reviewTransferVerification(captureId) {
     if (captureId === undefined) {
       const latest = new Map();
@@ -206,32 +274,39 @@ function registerTableTransfer(context, vscode, { database }) {
     return result;
   });
 
-  async function verifyDestination(captureId) {
+  async function verifyDestination(captureId, full = false) {
     const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification,
-      title: 'Checking the reviewed destination rows', cancellable: true },
-    (_, cancellation) => core.verifyUncertainCommit({ captureId, cancellation }));
+      title: full ? 'Checking all reviewed destination keys' : 'Checking the reviewed destination rows', cancellable: true },
+    (progress, cancellation) => full ? core.verifyAllTransferKeys({ captureId, cancellation, onProgress: state => {
+      progress.report({ message: state.stage === 'inspect-destination' ? 'Checking the reviewed destination' :
+        state.checkedKeys + ' / ' + state.rows + ' keys examined' });
+    } }) : core.verifyUncertainCommit({ captureId, cancellation }));
     const destination = result.destination ? result.destination.database + '.' + result.destination.table + ': ' : '';
     const limit = 'This observes current rows. Commit history remains unconfirmed and replay stays blocked.';
     const details = result.status === 'inconclusive' ? (reasons[result.reason] || reasons['destination-unavailable']) : checkSummary(result);
     const message = destination + details + ' ' + limit + (result.historyRecorded ? '' : ' The local observation could not be saved.');
-    const actions = result.historyRecorded ? ['Review Evidence', 'Show Verification History'] : [];
+    const actions = result.historyRecorded ? ['Review Evidence', 'Preview Recovery', 'Show Verification History'] : [];
     const selected = result.status === 'matching' ? await vscode.window.showInformationMessage(message, ...actions)
       : await vscode.window.showWarningMessage(message, ...actions);
     if (selected === 'Review Evidence') await reviewTransferVerification(captureId);
+    else if (selected === 'Preview Recovery') await previewTransferRecovery(captureId);
     else if (selected === 'Show Verification History') await showTransferHistory(captureId);
     return result;
   }
 
-  command('rocketbrain.data.verifyTransferDestination', async () => {
+  async function chooseDestinationVerification(full = false) {
     const saved = core.canRecover ? await core.listRecoverableSources() : [];
-    const pending = saved.filter(source => source.recoveryState === 'settlement-unconfirmed');
-    if (!pending.length) throw new Error('There are no saved transfers with an unconfirmed Commit.');
+    const pending = saved.filter(source => source.recoveryState === 'settlement-unconfirmed' && (!full || source.fullVerificationAvailable));
+    if (!pending.length) throw new Error(full ? 'No saved unconfirmed transfer has a complete reviewed key mapping for full verification.' :
+      'There are no saved transfers with an unconfirmed Commit.');
     const choices = pending.map(capture => ({ label: capture.database + '.' + capture.table,
       description: capture.verificationTarget && ('Destination ' + capture.verificationTarget.engine + ' · ' +
         capture.verificationTarget.database + '.' + capture.verificationTarget.table), captureId: capture.id }));
     const selected = await vscode.window.showQuickPick(choices, { title: 'Select a Transfer with an Unconfirmed Commit' });
-    if (selected) return verifyDestination(selected.captureId);
-  });
+    if (selected) return verifyDestination(selected.captureId, full);
+  }
+  command('rocketbrain.data.verifyTransferDestination', () => chooseDestinationVerification());
+  command(fullVerificationCommand, () => chooseDestinationVerification(true));
 
   async function finish() {
     const pending = core.pending();

@@ -3,7 +3,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createHash } = require('node:crypto');
-const { createCommitEvidence, verifyCommitEvidence } = require('../src/db/table-transfer-verification');
+const { Readable } = require('node:stream');
+const { createCommitEvidence, verifyCommitEvidence, verifyAllCommitKeys } = require('../src/db/table-transfer-verification');
 const { tableIdentity, transferable } = require('../src/db/table-transfer');
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -36,7 +37,29 @@ function transport({ dataRows = data, connectedIdentity = identity, afterLockDef
   const service = {
     _options: { database: connectedIdentity.database, ...connectedIdentity.endpoint },
     _assertOpen() {},
-    async _ensureConnection(session) { assert.equal(session.readOnly, true); session.connected = true; },
+    async _ensureConnection(session) {
+      assert.equal(session.readOnly, true);
+      session.connected = true;
+      session.connection = { execute({ sql, values, rowsAsArray }) {
+        assert.ok(rowsAsArray);
+        assert.match(sql, /^SELECT .* CAST\(\? AS DECIMAL\(20,0\)\).* LIMIT 2/s);
+        assert.ok(values.length > 0 && values.length <= 32 && values.length % 2 === 0);
+        events.push('page');
+        return { stream({ highWaterMark }) {
+          assert.equal(highWaterMark, 1);
+          assert.equal(session.inTransaction, true);
+          const readable = Readable.from((async function* () {
+            const headers = ['__rb_verified_ordinal', ...columns.map(column => column.name), '__rb_source_overflow'];
+            readable.emit('fields', headers.map(name => ({ name })));
+            for (let index = 0; index < values.length; index += 2) {
+              const row = byKey.get(JSON.stringify(values.slice(index, index + 2)));
+              if (row) yield [index / 2, ...row, row[0] === overflowKey ? 1 : 0];
+            }
+          })());
+          return readable;
+        } };
+      } };
+    },
     async _control(session, sql) {
       events.push(sql);
       if (sql === 'START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY') session.inTransaction = true;
@@ -53,8 +76,9 @@ function transport({ dataRows = data, connectedIdentity = identity, afterLockDef
       }
       if (sql === 'SELECT @@server_uuid') return { rows: [[connectedIdentity.serverUniqueId]] };
       assert.equal(session.inTransaction, true);
+      if (sql === 'SHOW WARNINGS') return { rows: [] };
       if (sql.endsWith('LIMIT 0')) return { rows: [[0]] };
-      assert.match(sql, /WHERE rb_destination\.`id` = \? AND rb_destination\.`unit` = \? LIMIT 2$/);
+      assert.match(sql, /WHERE rb_destination\.`id` = CAST\(\? AS DECIMAL\(20,0\)\) AND rb_destination\.`unit` = \? LIMIT 2$/);
       assert.equal(bounds.maxRows, 2);
       assert.equal(bounds.timeoutMs, 5000);
       events.push('lookup');
@@ -64,8 +88,10 @@ function transport({ dataRows = data, connectedIdentity = identity, afterLockDef
     },
     _editor: { async definition() { return ++definitions === 1 ? definition : afterLockDefinition; } }
   };
-  return { events, verify: (evidence, cancellation) => verifyCommitEvidence(evidence, { cancellation, transferable, tableIdentity,
-    targetDefinition: value => value, withTableTransfer: action => action({ db: service, guard: () => true }) }) };
+  const config = cancellation => ({ cancellation, transferable, tableIdentity,
+    targetDefinition: value => value, withTableTransfer: action => action({ db: service, guard: () => true }) });
+  return { events, verify: (evidence, cancellation) => verifyCommitEvidence(evidence, config(cancellation)),
+    verifyAll: (source, onProgress, cancellation) => verifyAllCommitKeys(source, config(cancellation), onProgress) };
 }
 
 test('deterministic bounded sampling includes both ends and key values remain private', async () => {
@@ -120,4 +146,51 @@ test('new evidence verifies every available small key set while existing version
   assert.deepEqual([legacy.checkedKeys, legacy.keyLimit, legacy.coverage], [32, 32, 'sampled-reviewed-keys']);
   const unsupported = await transport().verify({ ...evidence, version: 99 });
   assert.equal(unsupported.reason, 'missing-review-evidence');
+});
+
+function retainedFixture(evidence = sampled()) {
+  return {
+    evidence, columns, expiresAt: Date.now() + 60000,
+    async scan({ onRow }) {
+      for (const row of data) await onRow(row);
+      return { rowCount: data.length, sourceHash: 'captured' };
+    },
+    async assertCurrent() {}
+  };
+}
+
+test('full verification visits every sealed key in bounded pages and reveals unsampled discrepancies', async () => {
+  const expected = sampled();
+  const keys = new Set(expected.samples.map(sample => JSON.stringify(sample.key)));
+  const [first, second] = data.filter(row => !keys.has(JSON.stringify(row.slice(0, 2))));
+  const actual = data.filter(row => row !== first).map(row => row === second ? [...row.slice(0, 2), '0x11', row[3]] : row);
+  const { events, verifyAll } = transport({ dataRows: actual });
+  const progress = [];
+  const result = await verifyAll(retainedFixture(expected), state => progress.push(state));
+  assert.deepEqual([result.status, result.checkedKeys, result.sampledKeys, result.matching, result.missing, result.mismatch, result.pages],
+    ['mismatch', 144, 0, 142, 1, 1, 9]);
+  assert.equal(result.coverage, 'all-reviewed-keys');
+  assert.equal(result.replayBlocked, true);
+  assert.equal(result.historicalCommitConfirmed, false);
+  assert.deepEqual(progress.map(state => state.checkedKeys), [0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 144]);
+  assert.equal(progress.at(-1).stage, 'complete');
+  assert.equal(events.filter(value => value === 'page').length, 9);
+  assert.equal(events.filter(value => value === 'ROLLBACK').length, 1);
+});
+
+test('full verification refuses coverage after a stale snapshot, page failure or cancellation', async () => {
+  const expected = sampled();
+  const stale = retainedFixture(expected);
+  stale.assertCurrent = () => { throw Error('changed'); };
+  const failed = await transport().verifyAll(stale);
+  assert.deepEqual([failed.status, failed.coverage, failed.checkedKeys, failed.reason],
+    ['inconclusive', 'none', 0, 'retained-evidence-changed']);
+  const badPage = await transport({ overflowKey: data[0][0] }).verifyAll(retainedFixture(expected));
+  assert.deepEqual([badPage.checkedKeys, badPage.reason], [0, 'full-page-unreadable']);
+  const legacy = await transport().verifyAll(retainedFixture({ ...expected, version: 2 }));
+  assert.equal(legacy.reason, 'full-evidence-unavailable');
+  const cancellation = new AbortController();
+  await assert.rejects(transport().verifyAll(retainedFixture(expected), event => {
+    if (event.stage === 'compare-page') cancellation.abort();
+  }, cancellation.signal), /verification cancelled/i);
 });

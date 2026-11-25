@@ -9,7 +9,17 @@ const frameHeaderBytes = 4;
 const tagBytes = 16;
 const fail = message => Object.assign(new Error(message), { code: 'ROCKETBRAIN_TABLE_TRANSFER' });
 const statIdentity = stat => ({ dev: String(stat.dev), ino: String(stat.ino), size: stat.size, modified: stat.mtimeMs, changed: stat.ctimeMs });
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function snapshotFailure(reason, message, phase, fields) {
+  return Object.assign(fail(message), { verificationReason: reason, snapshotCheck: { phase, ...(fields && { fields }) } });
+}
+
+function assertSnapshotFile(stat, expected, phase) {
+  const actual = statIdentity(stat);
+  const changed = Object.keys(actual).filter(key => actual[key] !== expected?.[key]);
+  if (!stat.isFile() || changed.length) throw snapshotFailure('retained-snapshot-metadata-changed',
+    'The encrypted source snapshot changed.', phase, changed);
+}
 
 async function writeAll(file, bytes, position) {
   for (let offset = 0; offset < bytes.length;) {
@@ -22,7 +32,7 @@ async function writeAll(file, bytes, position) {
 async function readAll(file, bytes, position) {
   for (let offset = 0; offset < bytes.length;) {
     const { bytesRead } = await file.read(bytes, offset, bytes.length - offset, position + offset);
-    if (!bytesRead) throw fail('The encrypted source snapshot is incomplete.');
+    if (!bytesRead) throw snapshotFailure('retained-snapshot-authentication-failed', 'The encrypted source snapshot is incomplete.', 'frame');
     offset += bytesRead;
   }
 }
@@ -121,7 +131,14 @@ async function createRowSpool({ columns, maxRows, maxRowBytes, maxBytes, directo
         writer = undefined;
         check(signal);
         if (stat.size !== size) throw fail('The encrypted snapshot length changed before sealing.');
-        sealed = { rowCount: rows, bytes: size, maxFrameBytes, sourceHash: observed.digest('hex'), identity: statIdentity(stat) };
+        // Use metadata from the closed file. Windows may finalize timestamps when the writer closes.
+        const finalStat = await fs.lstat(file);
+        const identity = statIdentity(finalStat);
+        const written = statIdentity(stat);
+        if (!finalStat.isFile() || identity.dev !== written.dev || identity.ino !== written.ino || finalStat.size !== size) {
+          throw fail('The encrypted source snapshot was replaced before sealing.');
+        }
+        sealed = { rowCount: rows, bytes: size, maxFrameBytes, sourceHash: observed.digest('hex'), identity };
         return structuredClone(sealed);
       } finally { writing = false; cleanIfIdle(); }
     },
@@ -133,16 +150,18 @@ async function createRowSpool({ columns, maxRows, maxRowBytes, maxBytes, directo
       try {
         reader = await fs.open(file, 'r');
         const before = await reader.stat();
-        if (!before.isFile() || !same(statIdentity(before), sealed.identity)) throw fail('The encrypted source snapshot changed.');
+        assertSnapshotFile(before, sealed.identity, 'before-read');
         await onStart?.(structuredClone(sealed));
         const hash = hashRows(), header = Buffer.alloc(frameHeaderBytes);
         let position = 0, count = 0;
         while (position < sealed.bytes) {
           check(cancellation);
-          if (count >= sealed.rowCount) throw fail('The encrypted source snapshot has extra rows.');
+          if (count >= sealed.rowCount) throw snapshotFailure('retained-snapshot-authentication-failed', 'The encrypted source snapshot has extra rows.', 'frame');
           await readAll(reader, header, position);
           const length = header.readUInt32BE(), end = position + frameHeaderBytes + length + tagBytes;
-          if (length < 2 || length > maxRowBytes || end > sealed.bytes) throw fail('The encrypted source row size changed.');
+          if (length < 2 || length > maxRowBytes || end > sealed.bytes) {
+            throw snapshotFailure('retained-snapshot-authentication-failed', 'The encrypted source row size changed.', 'frame');
+          }
           const payload = Buffer.alloc(length + tagBytes);
           await readAll(reader, payload, position + frameHeaderBytes);
           let clear, authenticated, row;
@@ -156,18 +175,20 @@ async function createRowSpool({ columns, maxRows, maxRowBytes, maxBytes, directo
             hash.update(header).update(clear);
             row = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(clear));
           } catch {
-            throw fail('An encrypted source row failed authentication.');
+            throw snapshotFailure('retained-snapshot-authentication-failed', 'An encrypted source row failed authentication.', 'frame');
           } finally { clear?.fill(0); authenticated?.fill(0); }
           if (!Array.isArray(row) || row.length !== columns.length || row.some(value => value !== null && typeof value !== 'string')) {
-            throw fail('The source row shape changed.');
+            throw snapshotFailure('retained-snapshot-authentication-failed', 'The source row shape changed.', 'frame');
           }
           check(cancellation);
           await onRow?.(row, count);
           count++;
           position = end;
         }
-        if (count !== sealed.rowCount || hash.digest('hex') !== sealed.sourceHash) throw fail('The authenticated source rows differ from the sealed snapshot.');
-        if (!same(statIdentity(await reader.stat()), sealed.identity)) throw fail('The encrypted source snapshot changed during the read.');
+        if (count !== sealed.rowCount || hash.digest('hex') !== sealed.sourceHash) {
+          throw snapshotFailure('retained-snapshot-authentication-failed', 'The authenticated source rows differ from the sealed snapshot.', 'row-digest');
+        }
+        assertSnapshotFile(await reader.stat(), sealed.identity, 'after-read');
         check(cancellation);
         return structuredClone(sealed);
       } finally {

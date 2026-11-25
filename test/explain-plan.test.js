@@ -182,16 +182,22 @@ test('visual EXPLAIN Webview displays the tree, keyboard filter, rows, cost mark
     await page.goto('https://review.local/');
     assert.equal(await page.locator('#candidate-review tbody tr').count(), 4);
     assert.match(await page.locator('#candidate-review').innerText(), /Same decoded operator details/);
+    assert.match(await page.locator('#candidate-review').innerText(), /same VS Code secret store/);
+    assert.equal(await page.getByRole('button', { name:'Save review', exact:true }).count(), 0);
+    await page.getByRole('button', { name:'Load review', exact:true }).click();
     await page.getByRole('button', { name:'Ignore 1.1 with 1.4', exact:true }).click();
     await page.getByRole('button', { name:'Pair 1.1 with 1.3', exact:true }).click();
     assert.deepEqual(await page.evaluate(() => window.messages), [
+      { type:'review-plan-candidate', action:'load', candidateId:undefined },
       { type:'review-plan-candidate', action:'ignore', candidateId:'2' },
       { type:'review-plan-candidate', action:'accept', candidateId:'1' }
     ]);
     await page.goto('https://reviewed.local/');
     assert.match(await page.locator('#candidate-review').innerText(), /An operator is paired elsewhere/);
+    await page.getByRole('button', { name:'Save review', exact:true }).click();
     await page.getByRole('button', { name:'Reset review', exact:true }).click();
     assert.deepEqual(await page.evaluate(() => window.messages), [
+      { type:'review-plan-candidate', action:'save', candidateId:undefined },
       { type:'review-plan-candidate', action:'reset', candidateId:undefined }
     ]);
     assert.deepEqual(errors, []);

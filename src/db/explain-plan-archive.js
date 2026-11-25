@@ -42,17 +42,23 @@ function deserializeSamples(bytes) {
 }
 
 async function readSavedSamples(path) {
+  return deserializeSamples(await readPlanFile(path, MAX_SAMPLE_FILE_BYTES, 'Choose a regular local SQL plan sample file.', sizeError));
+}
+
+async function readPlanFile(path, maxBytes, typeError, sizeError) {
   const file = await fs.open(path, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const stat = await file.stat();
-    if (!stat.isFile()) throw Error('Choose a regular local SQL plan sample file.');
-    if (stat.size > MAX_SAMPLE_FILE_BYTES) throw sizeError();
+    if (!stat.isFile()) throw Error(typeError);
+    if (stat.size > maxBytes) throw sizeError();
     const chunks = [];
-    for await (const chunk of file.createReadStream({ start:0, end:MAX_SAMPLE_FILE_BYTES, autoClose:false })) chunks.push(chunk);
-    return deserializeSamples(Buffer.concat(chunks));
+    for await (const chunk of file.createReadStream({ start:0, end:maxBytes, autoClose:false })) chunks.push(chunk);
+    const bytes = Buffer.concat(chunks);
+    if (bytes.length > maxBytes) throw sizeError();
+    return bytes;
   } finally {
     await file.close();
   }
 }
 
-module.exports = { MAX_SAMPLE_FILE_BYTES, deserializeSamples, readSavedSamples };
+module.exports = { MAX_SAMPLE_FILE_BYTES, deserializeSamples, readSavedSamples, readPlanFile };

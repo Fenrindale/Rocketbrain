@@ -135,6 +135,85 @@ test('composite existing-entity plans refuse ID-class mismatch, FK reversal, mix
   }
 });
 
+function embedded(sample = composite()) {
+  sample.sources[1].text = declaration('Parent', 'parent', '').replace('@Id @Column(name = "id") private Long id;',
+    '@EmbeddedId private ParentKey identity;');
+  sample.sources.push({ uri:uri('ParentKey'), text:`package ${pkg};
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.Column;
+@Embeddable
+public class ParentKey {
+    @Column(name = "tenant_id") private Long tenant;
+    @Column(name = "id") private Long id;
+}
+` });
+  return sample;
+}
+
+function alternateKey() {
+  const sample = fixture();
+  const { child, parent, sources } = sample;
+  parent.columns.push(column('tenant', 2, false, false),
+    { ...column('account_code', 3, false, false), type:'varchar(24)' });
+  parent.indexes.push({ ...index('account_nat', 'tenant'), columns:[
+    { name:'tenant', ordinal:1, prefixLength:null }, { name:'account_code', ordinal:2, prefixLength:null }
+  ] });
+  child.columns.push({ ...column('parent_code', 3, false, true), type:'varchar(24)' });
+  child.foreignKeys[0].columns = [
+    { name:'parent_id', referencedColumn:'tenant', ordinal:1 },
+    { name:'parent_code', referencedColumn:'account_code', ordinal:2 }
+  ];
+  sources[1].text = declaration('Parent', 'parent', '@Column(name = "tenant") private Long tenant;\n' +
+    '@Column(name = "account_code") private String code;');
+  return sample;
+}
+
+test('EmbeddedId uses explicit companion key columns and preserves existing two-file edits', () => {
+  const { plan, sources } = embedded();
+  const result = plan();
+  assert.deepEqual(result.referencedKey, { kind:'primary', columns:['tenant_id', 'id'] });
+  assert.deepEqual(result.edits.map(edit => edit.uri), sources.slice(0, 2).map(source => source.uri));
+  assert.match(result.edits[0].text, /parent_tenant.*tenant_id[\s\S]*parent_id.*"id"/);
+  sources[2].text = sources[2].text.replace('private Long id;', 'private Integer id;');
+  assert.throws(plan, /EmbeddedId columns and types/);
+});
+
+test('EmbeddedId refuses a missing companion, nonliteral key, and unrelated extra key columns', () => {
+  for (const change of [
+    ({ sources }) => sources.pop(),
+    ({ sources }) => { sources[2].text = sources[2].text.replace('"id"', 'ID_NAME'); },
+    ({ sources }) => { sources[2].text = sources[2].text.replace('private Long id;',
+      'private Long id; @Column(name = "not_a_key") private Long extra;'); }
+  ]) {
+    const sample = embedded();
+    change(sample);
+    assert.throws(sample.plan, /EmbeddedId|Embeddable/);
+  }
+});
+
+test('the existing-entity edit proves all ordered non-primary unique columns and fingerprints the index', () => {
+  const { plan, parent } = alternateKey();
+  const result = plan();
+  assert.deepEqual(result.referencedKey, { kind:'unique', columns:['tenant','account_code'], indexes:['account_nat'] });
+  assert.match(result.edits[0].text, /parent_id.*"tenant"[\s\S]*parent_code.*"account_code"/);
+  parent.indexes[1].name = 'replacement_unique';
+  assert.notEqual(plan().fingerprint, result.fingerprint);
+});
+
+test('non-primary joins refuse narrowed, non-unique, prefix, nullable, and mismapped keys', () => {
+  for (const [change, error] of [
+    [({ child }) => { child.foreignKeys[0].columns.pop(); }, /complete ordered/],
+    [({ parent }) => { parent.indexes[1].unique = false; }, /complete ordered/],
+    [({ parent }) => { parent.indexes[1].columns[1].prefixLength = 12; }, /complete ordered/],
+    [({ parent }) => { parent.columns[2].nullable = true; }, /non-null explicit/],
+    [({ sources }) => { sources[1].text = sources[1].text.replace('private String code;', 'private Long code;'); }, /non-null explicit/]
+  ]) {
+    const sample = alternateKey();
+    change(sample);
+    assert.throws(sample.plan, error);
+  }
+});
+
 function joinScenario() {
   const remote = 'fixture_other';
   const { parent, sources } = composite();

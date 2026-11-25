@@ -112,6 +112,67 @@ test('resume rejects changed ciphertext and leaves the snapshot available for ex
   await core.dispose();
 });
 
+test('an interrupted encrypted scan remains readable and distinguishes identity drift from unauthenticated ciphertext', async t => {
+  const { store, id, directory, sealed, spool, contents } = await fixture(t);
+  await spool.dispose();
+  await store.beginCommit(id, { version: 3, keys: [0], sourceHash: sealed.sourceHash, rowCount: sealed.rowCount });
+  const cancellation = new AbortController();
+  const interrupted = await store.inspectUncertainSource(id);
+  await assert.rejects(interrupted.scan({ cancellation: cancellation.signal, onRow() { cancellation.abort(); } }), /cancelled/);
+  const reopened = await store.inspectUncertainSource(id);
+  assert.equal((await reopened.scan({})).sourceHash, sealed.sourceHash);
+  await reopened.assertCurrent();
+  const file = path.join(directory, 'rows.bin');
+  const bytes = await fs.readFile(file);
+  bytes[bytes.length - 1] ^= 1;
+  await fs.writeFile(file, bytes);
+  await assert.rejects(reopened.scan({}), error => error.verificationReason === 'retained-snapshot-metadata-changed' &&
+    error.snapshotCheck.phase === 'before-read');
+  // Simulate a forged storage record whose file attributes agree with the modified bytes.
+  const [name, text] = [...contents][0], saved = JSON.parse(text), stat = await fs.stat(file);
+  Object.assign(saved.recovery.sealed.identity, { size: stat.size, changed: stat.ctimeMs, modified: stat.mtimeMs });
+  contents.set(name, JSON.stringify(saved));
+  await reopened.assertCurrent();
+  const corrupted = await store.inspectUncertainSource(id);
+  await assert.rejects(corrupted.scan({}), error => error.verificationReason === 'retained-snapshot-authentication-failed' &&
+    error.snapshotCheck.phase === 'frame');
+  await assert.rejects(store.resume(id), /previous Commit/);
+});
+
+test('an authenticated commit marker binds full evidence through stale SecretStorage and detects tampering and discard', async t => {
+  const { store, id, directory, sealed, spool, contents } = await fixture(t);
+  const [name, ready] = [...contents][0];
+  const marker = path.join(directory, 'commit.intent');
+  const evidence = { version: 3, keys: [0], sourceHash: sealed.sourceHash, rowCount: sealed.rowCount,
+    samples: [{ key: ['private-mapped-value'], hash: 'a'.repeat(64) }] };
+  await spool.dispose();
+  await store.beginCommit(id, evidence);
+  const tombstone = contents.get(name);
+  const bytes = await fs.readFile(marker);
+  assert.ok(!bytes.includes(Buffer.from('private-mapped-value')) && !bytes.includes(Buffer.from(sealed.sourceHash)));
+  contents.set(name, ready);
+  assert.equal((await store.list())[0].fullVerificationAvailable, true);
+  assert.deepEqual(await store.uncertainCommit(id), evidence);
+  await assert.rejects(store.resume(id), /previous Commit/);
+  const retained = await store.inspectUncertainSource(id);
+  assert.equal((await retained.scan({})).sourceHash, sealed.sourceHash);
+  contents.delete(name);
+  await retained.assertCurrent();
+  contents.set(name, tombstone);
+  const corrupted = Buffer.from(bytes);
+  corrupted[corrupted.length - 1] ^= 1;
+  await fs.writeFile(marker, corrupted);
+  await assert.rejects(retained.assertCurrent(), error => error.verificationReason === 'retained-evidence-changed');
+  assert.equal(await store.uncertainCommit(id), undefined, 'invalid marker does not fall back to the tombstone');
+  assert.equal((await store.list())[0].fullVerificationAvailable, false);
+  await assert.rejects(store.resume(id), /previous Commit/);
+  await fs.writeFile(marker, bytes);
+  const restored = await store.inspectUncertainSource(id);
+  await restored.assertCurrent();
+  await store.discard(id);
+  await assert.rejects(restored.assertCurrent(), error => error.verificationReason === 'retained-evidence-changed');
+});
+
 test('new exact types validate unsigned bits, year zero, declarations and fixed width without coercion', () => {
   const bit = { ...column, type: 'bit(64)' };
   const year = { ...column, type: 'year(4)' };

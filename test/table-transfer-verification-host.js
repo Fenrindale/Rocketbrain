@@ -184,4 +184,4 @@ async function runTableTransferVerificationChecks(api, vscode, checks, { expande
   return { directions, springIsolation, ...(expanded && { historyObservations }) };
 }
 
-module.exports = { runTableTransferVerificationChecks };
+module.exports = { runTableTransferVerificationChecks, participants, probe, loseCommitAcknowledgement };

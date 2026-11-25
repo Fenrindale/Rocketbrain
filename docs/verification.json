@@ -1,22 +1,22 @@
 {
-  "version": "0.38.0",
-  "verifiedAt": "2026-11-25T05:23:29.291Z",
+  "version": "0.39.0",
+  "verifiedAt": "2026-11-25T06:07:57.128Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.38.0.vsix",
-    "bytes": 1801491,
-    "sha256": "3a9c03754638235c66610111622a60a498140637ee50183a63f0affc19b111b8",
+    "name": "rocketbrain-0.39.0.vsix",
+    "bytes": 1812283,
+    "sha256": "36f833913e386ec268c45a7f0ab0ba019370f056e92094fbc980ba8b30edf231",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1177,
-    "inputVectorSha256": "c494ab265801a8cb3e873eb9589289eb3a62360eedf7f394645fcee5fa3e91c7",
+    "frozenPublicInputs": 1186,
+    "inputVectorSha256": "616361e5458e32d0a13135bc754a592e5436e4bd76f996e3ef93c42083eb20d8",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1241,
-    "pass": 1188,
+    "tests": 1252,
+    "pass": 1199,
     "fail": 0,
     "cancelled": 0,
     "skipped": 53,
@@ -78,25 +78,25 @@
   ],
   "newlyVerified": {
     "IDEA-061": {
-      "scope": "실제 Spring 환경에서 두 열 FK와 동명 교차 스키마 테이블을 검증했다. Hibernate 양방향 조회·소유 측 쓰기·롤백과 원격 인덱스 변경 시 적용 거부를 확인했다.",
+      "scope": "두 Spring 환경에서 실제 PK·고유 키 제약을 기준으로 관계를 검토하고 Hibernate 양방향 조회·쓰기와 롤백을 확인했다.",
       "runtimeGroups": [
         "relationships"
       ]
     },
     "DG-056": {
-      "scope": "MySQL과 MariaDB의 반복 접근 계획에서 후보 네 쌍을 확인했다. 선택 충돌을 거부하고 제외·초기화 뒤에 원래 캡처가 유지됐다.",
+      "scope": "양쪽 실서버 계획의 후보 검토를 로컬 파일에 저장하고 적용했다. 캡처 순서나 파일 내용이 바뀌면 적용을 거부했다.",
       "runtimeGroups": [
         "explain"
       ]
     },
     "DG-057": {
-      "scope": "MySQL과 MariaDB의 실측 시리즈에서 복수 후보를 검토했고 비교나 선택 때문에 SQL이 추가 실행되지 않는 것을 확인했다.",
+      "scope": "MySQL TREE와 MariaDB JSON 표본을 저장하고 새 확장 호스트에서 연결 없이 다시 열었다. 검토를 복원한 뒤 원문 표본이 유지되는 것을 확인했다.",
       "runtimeGroups": [
         "explain"
       ]
     },
     "DG-073": {
-      "scope": "실제 양방향 전송의 점검 결과를 검토하고 JSON으로 내보냈다. 재시작 후 연결 없이 같은 점검과 검토를 다시 확인했고 재실행 잠금이 유지됐다.",
+      "scope": "MySQL과 MariaDB 양방향으로 BIGINT UNSIGNED 최댓값을 포함한 144개 키를 9배치로 대조했다. 표본 밖 변경·누락, 취소와 재대조, 잠금 유지 및 재시작 후 미리보기를 검증했다.",
       "runtimeGroups": [
         "stream"
       ]
@@ -104,7 +104,7 @@
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 205,
+    "sourceCorrespondences": 208,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
@@ -126,14 +126,14 @@
     "stateChanges": []
   },
   "limits": [
-    "실행 계획의 복수 후보는 두 트리의 위치와 접근 근거를 함께 보여 준다. 기준 연산자당 8쌍, 전체 60쌍까지 현재 비교 화면에서 검토한다.",
-    "기존 엔티티의 복합 FK는 명시적 중첩 IdClass가 매핑한 PK를 참조한다. 같은 서버의 교차 스키마 연결 테이블은 두 FK 열 묶음이 전체 PK를 이루는 경우 지원한다. 양쪽 Java 버퍼를 함께 편집한다.",
-    "전송 검토는 최신 관찰마다 한 건을 기록하고 점검 이력과 함께 작업 공간에 최대 7일간 64건을 보존한다. JSON은 점검 건수와 검토 결과를 담으며 재실행 잠금을 유지한다."
+    "실행 계획 검토 파일은 작성한 VS Code 비밀 저장소와 같은 순서의 두 캡처에 연결된다. 최대 16 KiB 파일의 서명과 각 후보를 확인한 뒤 적용한다.",
+    "JPA 편집은 명시적 독립 EmbeddedId 키 클래스와 물리 외래 키를 대조한다. 직접 연관의 고유 키는 접두 길이 없이 모든 열을 포함하는 비NULL 고유 인덱스와 명시적 Java 열을 요구한다.",
+    "전체 전송 대조는 매핑이 보존된 신규 미확정 커밋과 암호화 스냅샷을 사용한다. 이전 기록은 표본 대조를 제공한다. 대상을 한 읽기 전용 스냅샷에서 검사하며 복구 미리보기는 재실행 잠금을 유지한다."
   ],
   "next": [
-    "실행 계획 검토 결과를 내보내거나 저장 기록에 다시 적용하고 여러 종류의 연산자 후보를 비교하는 흐름",
-    "기존 JPA 엔티티의 EmbeddedId와 PK 이외 고유 키, 여러 카탈로그에 걸친 복합 관계 검토",
-    "전송 전체 키의 단계별 대조와 운영자 검토를 거친 복구 실행 계획의 별도 미리보기"
+    "다른 프로필에서 실행 계획 검토를 미리 읽고 후보마다 다시 승인하는 공유 방식",
+    "JPA의 EmbeddedId 속성 재정의, 관계에서 파생된 식별자와 여러 스키마의 고유 키 연결 검토",
+    "장시간 전송의 전체 대조를 위한 진행 기록과 읽기 증거를 활용한 별도 복구 SQL 검토"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -6,6 +6,7 @@ const { createHash, randomUUID } = require('node:crypto');
 const { createRowSpool } = require('./table-transfer-spool');
 const { streamLimits } = require('./table-transfer-snapshot');
 const { destinationSummary } = require('./table-transfer-verification');
+const { closeEvidence, openEvidence, readMarker, fileIdentity, sameIdentity, legacyCommitMarker } = require('./table-transfer-commit-marker');
 
 const recoveryLifetimeMs = 24 * 60 * 60 * 1000;
 const maxSaved = 3;
@@ -13,6 +14,8 @@ const idPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const fail = message => Object.assign(new Error(message), { code: 'ROCKETBRAIN_TABLE_TRANSFER' });
 const missing = error => { if (error.code !== 'ENOENT') throw error; };
 const attributes = ['id', 'expiresAt', 'database', 'table', 'scope', 'engine', 'columns', 'omittedColumns', 'maxBufferedRows'];
+const fullAvailable = evidence => evidence?.version === 3 && Array.isArray(evidence.keys) &&
+  evidence.keys.length > 0 && evidence.keys.every(index => Number.isInteger(index) && index >= 0);
 
 function createTransferRecovery({ storagePath, secrets, isTrusted }) {
   if (!storagePath || !secrets) return null;
@@ -71,6 +74,33 @@ function createTransferRecovery({ storagePath, secrets, isTrusted }) {
     return item;
   }
 
+  async function uncertain(id) {
+    trusted();
+    if (!(await ownedDirectory(root))) throw fail('The saved table snapshot is unavailable.');
+    const { item, blocked, stat } = await record(id);
+    if (!item || item.metadata.expiresAt <= Date.now()) throw fail('The saved table snapshot expired or is unavailable.');
+    if (!blocked) throw fail('This snapshot has no unconfirmed Commit.');
+    return { item, directoryIdentity: fileIdentity(stat), ...(await boundEvidence(id, item)) };
+  }
+
+  async function boundEvidence(id, item) {
+    const path = files(id).marker;
+    try {
+      const marker = await readMarker(path);
+      let evidence;
+      if (marker && !marker.bytes.equals(legacyCommitMarker)) evidence = openEvidence(item, marker.bytes, scope);
+      else if (item.commitEvidence?.version !== 3 && (marker || !await fs.lstat(path).catch(missing))) evidence = item.commitEvidence;
+      if (!evidence || evidence.sourceHash !== item.recovery.sealed.sourceHash || evidence.rowCount !== item.recovery.sealed.rowCount) return {};
+      return { evidence, ...(evidence.version === 3 && { marker: { identity: marker.identity, digest: marker.digest } }) };
+    } catch { return {}; }
+  }
+
+  async function openSpool(id, { metadata, recovery }) {
+    trusted();
+    return createRowSpool({ columns: metadata.columns, maxRows: streamLimits.rows, maxRowBytes: streamLimits.rowBytes,
+      maxBytes: streamLimits.bytes, directory: files(id).directory, recovery });
+  }
+
   async function inventory() {
     trusted();
     if (!(await ownedDirectory(root))) return { occupied: 0, sources: [] };
@@ -85,9 +115,12 @@ function createTransferRecovery({ storagePath, secrets, isTrusted }) {
         if (await discard(entry.name)) occupied--;
         continue;
       }
-      if (item) sources.push({ ...item.metadata, ...item.recovery.sealed, directory: undefined,
-        recoveryState: blocked ? 'settlement-unconfirmed' : 'ready',
-        ...(blocked && { verificationTarget: destinationSummary(item.commitEvidence) }) });
+      if (item) {
+        const { evidence } = blocked ? await boundEvidence(entry.name, item) : {};
+        sources.push({ ...item.metadata, ...item.recovery.sealed, directory: undefined,
+          recoveryState: blocked ? 'settlement-unconfirmed' : 'ready',
+          ...(blocked && { verificationTarget: destinationSummary(evidence), fullVerificationAvailable: fullAvailable(evidence) }) });
+      }
     }
     return { occupied, sources: sources.sort((a, b) => b.expiresAt - a.expiresAt) };
   }
@@ -110,32 +143,63 @@ function createTransferRecovery({ storagePath, secrets, isTrusted }) {
     async list() { return (await inventory()).sources; },
     assertReady: ready,
     async resume(id) {
-      const { metadata, recovery } = await ready(id);
-      trusted();
-      const spool = await createRowSpool({ columns: metadata.columns, maxRows: streamLimits.rows, maxRowBytes: streamLimits.rowBytes,
-        maxBytes: streamLimits.bytes, directory: files(id).directory, recovery });
+      const item = await ready(id);
+      const { metadata, recovery } = item;
+      const spool = await openSpool(id, item);
       return { ...metadata, ...recovery.sealed, recoveryState: 'ready', spool };
     },
     async uncertainCommit(id) {
+      return (await uncertain(id)).evidence;
+    },
+    async describeUncertainSource(id) {
       trusted();
-      if (!(await ownedDirectory(root))) throw fail('The saved table snapshot is unavailable.');
+      if (!(await ownedDirectory(root))) return;
       const { item, blocked } = await record(id);
-      if (!item || item.metadata.expiresAt <= Date.now()) throw fail('The saved table snapshot expired or is unavailable.');
-      if (!blocked) throw fail('This snapshot has no unconfirmed Commit.');
-      const evidence = item.commitEvidence;
-      if (evidence?.sourceHash === item.recovery.sealed.sourceHash && evidence.rowCount === item.recovery.sealed.rowCount) return evidence;
+      if (item && blocked && item.metadata.expiresAt > Date.now()) {
+        const { evidence } = await boundEvidence(id, item);
+        return { expiresAt: item.metadata.expiresAt, fullVerificationAvailable: fullAvailable(evidence) };
+      }
+    },
+    async inspectUncertainSource(id) {
+      const { item, evidence, marker, directoryIdentity } = await uncertain(id);
+      return {
+        evidence, columns: item.metadata.columns, expiresAt: item.metadata.expiresAt,
+        async scan(callbacks) {
+          const spool = await openSpool(id, item);
+          try { return await spool.scan(callbacks); }
+          finally { await spool.dispose(); }
+        },
+        async assertCurrent() {
+          const paths = files(id);
+          let current, directory;
+          try {
+            trusted();
+            if (marker && item.metadata.expiresAt > Date.now() && await ownedDirectory(root)) {
+              current = await readMarker(paths.marker);
+              directory = await ownedDirectory(paths.directory);
+              trusted();
+            }
+          } catch { /* Unavailable evidence cannot attest this verification. */ }
+          if (!current || item.metadata.expiresAt <= Date.now() || !sameIdentity(fileIdentity(directory), directoryIdentity) ||
+              !sameIdentity(current.identity, marker.identity) || current.digest !== marker.digest) {
+            throw Object.assign(fail('The retained evidence changed during the destination check.'),
+              { verificationReason: 'retained-evidence-changed' });
+          }
+        }
+      };
     },
     async beginCommit(id, commitEvidence) {
       const item = await ready(id);
       const { marker } = files(id);
       trusted();
+      const evidenceBytes = closeEvidence(item, commitEvidence, scope);
       let file;
       try { file = await fs.open(marker, 'wx', 0o600); }
       catch (error) {
         if (error.code === 'EEXIST') throw fail('A previous Commit may have reached the destination. Check its rows before repeating this copy.');
         throw error;
       }
-      try { await file.writeFile('1\n'); await file.sync(); }
+      try { await file.writeFile(evidenceBytes); await file.sync(); }
       finally { await file.close(); }
       await secrets.store(secretKey(id), JSON.stringify({ ...item, state: 'settlement-unconfirmed', commitEvidence }));
     },

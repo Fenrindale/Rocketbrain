@@ -103,12 +103,14 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - **Export SQL Plan Samples**는 열린 시리즈의 원본 서버 출력, 표본별 계획 형태, 정확한 통계 요약을 새 로컬 JSON 파일에 저장합니다. 원본 서버 출력에는 쿼리의 리터럴 값이 포함될 수 있습니다.
 - **Open Saved SQL Plan Samples**에서 저장한 시리즈를 다시 열어 원본 표본을 확인하고 비교할 수 있습니다. SQL을 실행하지 않고 원문에서 통계를 재구성합니다. 조건이나 인덱스가 바뀐 경우 양쪽에서 고유한 접근 이름과 방식으로 이동 후보를 표시합니다.
 - 계획 비교에서 한 연산자에 가능한 대응이 여러 개면 후보의 위치와 접근 근거를 볼 수 있습니다. 비교 화면에서 대응을 선택하거나 제외하고 초기화할 수 있습니다.
+- 계획 비교의 **Save review**와 **Load review**는 결정과 두 캡처를 확인하는 정보를 JSON에 저장하고 다시 적용합니다. 작성한 VS Code 프로필에서 저장한 두 측정 시리즈를 같은 순서로 열면 검토를 불러올 수 있습니다.
 - **Show SQL Activity Log**에서 작업 공간의 로컬 기록을 선택적으로 켭니다. 콘솔·스크립트·메타데이터 요청의 상태와 소요 시간이 메모리에 기록되며 SQL 원문·변수 값은 보관하지 않습니다. **Browse Database Object Names**에서는 테이블·뷰 이름을 먼저 읽고 선택한 객체의 열과 인덱스를 조회합니다.
 - 결과 탭에 이름을 붙이거나 고정하고, 보관된 스크립트 결과에서 각 문장의 캡처를 다시 엽니다. 테이블 필터는 중첩 AND/OR와 타입별 열 검색을 지원하며, 저장한 조건을 같은 연결·테이블에서 다시 선택할 수 있습니다.
 - **Generate JPA Entity from Table**은 현재 스키마의 열과 기본 키에서 Jakarta Persistence 클래스를 만듭니다. 선택한 외래 키와 같은 프로젝트의 대상 엔티티를 대조해 `@ManyToOne` 또는 `@OneToOne`을 추가할 수 있습니다. 스칼라 필드 또는 연관 필드 중 하나를 쓰기 소유자로 지정하고, 적용 전에 카탈로그와 Java 원본을 다시 확인합니다.
 - 같은 명령에서 기존 자식 엔티티의 명시적 `@ManyToOne` 필드를 확인해 역방향 `@OneToMany(mappedBy)`를 생성합니다. 두 외래 키가 기본 키를 구성하는 연결 테이블에서는 소유 측 `@ManyToMany`를 생성합니다. 검토한 새 엔티티 파일에 적용합니다.
 - 새 엔티티의 기본 키를 가리키는 자기 참조 FK와 같은 MySQL·MariaDB 서버의 다른 스키마를 가리키는 FK도 매핑할 수 있습니다. 교차 스키마 대상은 실제 FK와 로컬 Jakarta 엔티티의 명시적 `@Table(catalog = …)`을 함께 확인합니다.
 - **Review JPA Relationship Between Existing Entities**는 실제 단일·복합 FK를 기준으로 기존 Jakarta 엔티티의 `@ManyToOne`과 역방향 `@OneToMany(mappedBy)`를 검토합니다. 동일 서버의 교차 스키마 연결 테이블을 사용하는 양방향 `@ManyToMany`도 검토할 수 있습니다. 두 파일과 카탈로그를 다시 확인한 뒤 편집기에 함께 적용합니다. 파일 저장은 사용자가 결정합니다.
+- 기존 엔티티 관계 검토에서 명시적으로 매핑한 `@EmbeddedId`와 기본 키 외 고유 키를 사용하는 FK도 물리 열과 대조합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
@@ -119,6 +121,7 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - **Verify Table Copy Destination**은 새 미확정 커밋 기록의 검토된 대상에서 최대 128개 기본 키와 매핑된 값을 읽기 전용으로 대조합니다. 표본의 현재 상태를 보고하며 재실행 잠금은 유지됩니다.
 - **Show Table Copy Verification History**에서는 최근 점검의 시각·대조 건수·결과를 확인할 수 있습니다. 원본 키나 행 값은 점검 이력에 저장하지 않습니다.
 - **Review Table Copy Verification**은 최신 점검 결과를 확인한 뒤 검토 완료, 후속 확인 필요 또는 외부 처리 기록을 남깁니다. **Export Table Copy Verification History**는 점검과 검토 내역을 새 JSON 파일로 저장합니다. 검토는 과거 커밋을 미확정으로 표시하며 재실행 잠금을 유지합니다.
+- **Verify All Table Copy Keys**는 새 미확정 기록의 암호화 스냅샷에 매핑된 전체 기본 키를 같은 대상 읽기 스냅샷에서 여러 배치로 대조합니다. **Preview Table Copy Recovery**는 최신 점검과 운영자 판단을 바탕으로 후속 확인 절차를 표시합니다.
 - 호환되는 `BIT(64)`, `YEAR`, 같은 레이블의 `ENUM`·`SET`, 같은 길이의 고정 `BINARY`도 테이블 복사에서 검증합니다.
 - **Open Schema Diagram**에서 실제 FK와 저장 연결의 워크스페이스 가상 FK를 탐색합니다. 노드 위치를 저장하거나 JSON으로 교환하고 PNG로 내보낼 수 있습니다.
 - **Save Schema DDL**에서 테이블·외래 키·지원하는 뷰의 순서를 검토하고 SQL 파일을 저장합니다. 저장 전 현재 정의와 비교하며, 파일 생성 과정에서는 서버 정의를 읽습니다.

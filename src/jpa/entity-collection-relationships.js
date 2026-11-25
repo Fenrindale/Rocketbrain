@@ -42,16 +42,16 @@ function findFk(table, name, database) {
   return matches[0];
 }
 
-function matchForeignKey(key, fields, ids) {
+function matchForeignKey(key, fields, ids, keyLabel = 'primary key') {
   const columns = [...key.columns].sort((a, b) => a.ordinal - b.ordinal);
   if (columns.length !== ids.length || new Set(columns.map(column => column.name)).size !== columns.length) {
-    throw Error('The foreign key must cover the exact referenced primary key.');
+    throw Error('The foreign key must cover the exact referenced ' + keyLabel + '.');
   }
   return columns.map((column, index) => {
     const field = fields.find(item => item.sql === column.name);
     const target = ids[index];
     if (column.ordinal !== index + 1 || !field || column.referencedColumn !== target.sql || field.type !== target.type) {
-      throw Error('Foreign key types and order must match the referenced primary key.');
+      throw Error('Foreign key types and order must match the referenced ' + keyLabel + '.');
     }
     return { name: field.sql, reference: target.declared, physicalReference: target.sql, nullable: field.nullable };
   });

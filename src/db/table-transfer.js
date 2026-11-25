@@ -6,7 +6,7 @@ const { canonicalValue, describeType } = require('./schema-conversion');
 const { StreamImporter, newSession, LIMITS: IMPORT_LIMITS } = require('./import-stream');
 const { readSnapshot, streamLimits } = require('./table-transfer-snapshot');
 const { recoveryLifetimeMs } = require('./table-transfer-recovery');
-const { createCommitEvidence, verifyCommitEvidence } = require('./table-transfer-verification');
+const { createCommitEvidence, verifyCommitEvidence, verifyAllCommitKeys, exactBitParameter } = require('./table-transfer-verification');
 
 const limits = Object.freeze({ rows: 500, columns: 64, bytes: 1024 * 1024, entries: 4, durationMs: 10 * 60 * 1000 });
 const fail = message => Object.assign(new Error(message), { code: 'ROCKETBRAIN_TABLE_TRANSFER' });
@@ -152,10 +152,12 @@ async function captureTable(lease, table, { id, mode, cancellation, onProgress, 
 }
 
 function returnCapture(capture) {
-  const { id, expiresAt, database, table, scope, engine, rowCount, omittedColumns, sourceHash, recoveryState, verificationTarget } = capture;
+  const { id, expiresAt, database, table, scope, engine, rowCount, omittedColumns, sourceHash, recoveryState,
+    verificationTarget, fullVerificationAvailable } = capture;
   return { id, expiresAt, database, table, scope, engine, rowCount, omittedColumns, sourceHash, columns: capture.columns.map(publicColumn),
     ...((capture.spool || recoveryState) && { mode: 'stream', encryptedBytes: capture.bytes, maxFrameBytes: capture.maxFrameBytes, maxBufferedRows: capture.maxBufferedRows }),
-    ...(recoveryState && { recoveryState }), ...(verificationTarget && { verificationTarget }) };
+    ...(recoveryState && { recoveryState }), ...(verificationTarget && { verificationTarget }),
+    ...(fullVerificationAvailable && { fullVerificationAvailable }) };
 }
 
 function retainedSource(capture, target) {
@@ -169,7 +171,7 @@ function retainedSource(capture, target) {
       return evidence;
     },
     placeholder(column) {
-      return transferable(column)?.kind === 'bit' ? 'CAST(? AS UNSIGNED)' : '?';
+      return transferable(column)?.kind === 'bit' ? exactBitParameter : '?';
     },
     bindParameters(values) {
       return values.map((value, index) => {
@@ -224,7 +226,7 @@ function retainedSource(capture, target) {
 
 function createTableTransfer(database, { recovery, history } = {}) {
   const captures = new Map(), targets = new Map(), reviews = new Map(), operations = new Set(), controllers = new Set(), removals = new Set();
-  const verificationReviews = new Map();
+  const verificationReviews = new Map(), recoveryPlans = new Map();
   let pending, writingCapture, closed = false;
   const tracked = (action, abortable = false) => (...args) => {
     if (closed) return Promise.reject(fail('Table copy is closed.'));
@@ -287,6 +289,37 @@ function createTableTransfer(database, { recovery, history } = {}) {
   };
   const confirmReady = capture => capture.recoveryState ? getRecovery().assertReady(capture.id) : undefined;
 
+  async function recordVerification(captureId, result) {
+    let entry;
+    try { entry = await history?.append(captureId, result); }
+    catch { /* A completed read-only result stays available even when history cannot be written. */ }
+    return { ...result, historyRecorded: Boolean(entry) };
+  }
+
+  function verificationContext(cancellation) {
+    return { withTableTransfer: database.withTableTransfer, cancellation, transferable, targetDefinition, tableIdentity };
+  }
+
+  async function recoveryPlanEvidence(captureId) {
+    if (!history) throw fail('Recovery previews require a trusted workspace with verification history.');
+    const observed = await history.latestEvidence(captureId);
+    const snapshot = await recovery?.describeUncertainSource(captureId);
+    const snapshotState = snapshot ? { retained: true, fullVerificationAvailable: Boolean(snapshot.fullVerificationAvailable),
+      expiresAt: snapshot.expiresAt } : { retained: false, fullVerificationAvailable: false };
+    const { observation } = observed;
+    const steps = [];
+    if (observation.coverage !== 'all-reviewed-keys' && snapshotState.fullVerificationAvailable) steps.push('verify-all-keys');
+    if (observation.status === 'inconclusive') steps.push('recheck-destination');
+    if (observation.missing > 0) steps.push('investigate-missing-keys');
+    if (observation.mismatch > 0) steps.push('investigate-different-values');
+    if (!observation.review) steps.push('review-observation');
+    steps.push('confirm-transaction-externally', 'retain-replay-fence');
+    return { revision: digest([observed.revision, snapshotState]), preview: {
+      captureId, observation, snapshot: snapshotState, steps, replayBlocked: true,
+      historicalCommitConfirmed: false, executable: false
+    } };
+  }
+
   const api = {
     capture: tracked(async ({ table, mode = 'captured', recoverable = false, cancellation, onProgress } = {}) => database.withTableTransfer(async lease => {
       if (!['captured', 'stream'].includes(mode)) throw fail('Choose a captured or streamed source snapshot.');
@@ -331,12 +364,13 @@ function createTableTransfer(database, { recovery, history } = {}) {
     }),
     verifyUncertainCommit: tracked(async ({ captureId, cancellation } = {}) => {
       const evidence = await getRecovery().uncertainCommit(captureId);
-      const result = await verifyCommitEvidence(evidence, { withTableTransfer: database.withTableTransfer, cancellation,
-        transferable, targetDefinition, tableIdentity });
-      let entry;
-      try { entry = await history?.append(captureId, result); }
-      catch { /* Keep the completed read-only result available when local persistence fails. */ }
-      return { ...result, historyRecorded: Boolean(entry) };
+      const result = await verifyCommitEvidence(evidence, verificationContext(cancellation));
+      return recordVerification(captureId, result);
+    }, true),
+    verifyAllTransferKeys: tracked(async ({ captureId, cancellation, onProgress } = {}) => {
+      const source = await getRecovery().inspectUncertainSource(captureId);
+      const result = await verifyAllCommitKeys(source, verificationContext(cancellation), onProgress);
+      return recordVerification(captureId, result);
     }, true),
     listTransferVerificationHistory: tracked(async ({ captureId } = {}) => history ? history.list(captureId) : []),
     listTransferVerificationEvidence: tracked(async ({ captureId } = {}) => history ? history.evidence(captureId) : []),
@@ -352,6 +386,22 @@ function createTableTransfer(database, { recovery, history } = {}) {
       const review = retained(verificationReviews, reviewId, 'verification review');
       verificationReviews.delete(reviewId);
       return history.recordReview(review.captureId, review.revision, decision);
+    }),
+    prepareTransferRecoveryPlan: tracked(async ({ captureId } = {}) => {
+      const { revision, preview } = await recoveryPlanEvidence(captureId);
+      const planId = randomUUID(), expiresAt = Date.now() + limits.durationMs;
+      bounded(recoveryPlans);
+      recoveryPlans.set(planId, { captureId, revision, expiresAt });
+      return { planId, expiresAt, ...preview };
+    }),
+    validateTransferRecoveryPlan: tracked(async ({ planId } = {}) => {
+      const existing = retained(recoveryPlans, planId, 'recovery preview');
+      const { revision, preview } = await recoveryPlanEvidence(existing.captureId);
+      if (revision !== existing.revision) {
+        recoveryPlans.delete(planId);
+        throw fail('Verification evidence or the retained snapshot changed. Open a new recovery preview.');
+      }
+      return { planId, expiresAt: existing.expiresAt, ...preview };
     }),
     inspectDestination: tracked(async ({ captureId, table } = {}) => database.withTableTransfer(async lease => {
       const capture = retained(captures, captureId, 'source snapshot');
@@ -459,7 +509,7 @@ function createTableTransfer(database, { recovery, history } = {}) {
       await Promise.allSettled([...reviews.values()].map(review => review.manager.dispose()));
       for (const id of captures.keys()) discardSource(id);
       await Promise.allSettled(removals);
-      targets.clear(); reviews.clear(); verificationReviews.clear();
+      targets.clear(); reviews.clear(); verificationReviews.clear(); recoveryPlans.clear();
     }
   };
   return api;

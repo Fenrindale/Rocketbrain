@@ -8,6 +8,7 @@ const { explanationHtml, comparisonHtml, seriesHtml } = require('./explain-plan-
 const { comparePlans, comparablePlans, validatePlanQuery } = require('./explain-plan');
 const { sampleCount, summarizeSeries, compareSeries, serializeSamples } = require('./explain-plan-series');
 const { MAX_SAMPLE_FILE_BYTES, readSavedSamples } = require('./explain-plan-archive');
+const { captureBinding, reviewKeyStore, serializePlanReview, readPlanReview, applyPlanReview } = require('./explain-plan-review');
 
 const VISUAL_EXPLAIN = 'rocketbrain.sql.explainVisual';
 const MEASURE_PLAN = 'rocketbrain.sql.measurePlan';
@@ -31,9 +32,28 @@ function captureSource(document, selection) {
   return { document, uri: document.uri, version: document.version, active, start, end, digest: hash(text), sql };
 }
 
+async function writeNewFile(filePath, contents) {
+  let file;
+  try {
+    file = await fs.open(filePath, 'wx', 0o600);
+  } catch (error) {
+    if (error.code === 'EEXIST') throw Error('Choose a new file name to preserve the existing export.');
+    throw error;
+  }
+  try {
+    await file.writeFile(contents, 'utf8');
+    await file.close();
+  } catch (error) {
+    await file.close().catch(() => {});
+    await fs.unlink(filePath).catch(() => {});
+    throw error;
+  }
+}
+
 function registerExplainPlans(context, vscode, { database }) {
   const panels = new Map(), comparisons = new Map(), reviews = new Map();
   const seriesPanels = new Map(), seriesReviews = new Map();
+  const signingKeys = reviewKeyStore(context.secrets);
   let disposed = false, opening = false;
 
   function trusted(cancellation) {
@@ -225,21 +245,7 @@ function registerExplainPlans(context, vscode, { database }) {
     }
     const contents = serializeSamples(record.series, record.plans, record.capturedAt);
     if (Buffer.byteLength(contents) > MAX_SAMPLE_FILE_BYTES) throw Error('SQL plan sample files must be at most 32 MiB.');
-    let file;
-    try {
-      file = await fs.open(uri.fsPath, 'wx', 0o600);
-    } catch (error) {
-      if (error.code === 'EEXIST') throw Error('Choose a new file name to preserve the existing export.');
-      throw error;
-    }
-    try {
-      await file.writeFile(contents, 'utf8');
-      await file.close();
-    } catch (error) {
-      await file.close().catch(() => {});
-      await fs.unlink(uri.fsPath).catch(() => {});
-      throw error;
-    }
+    await writeNewFile(uri.fsPath, contents);
     return { uri:uri.toString(), samples:record.plans.length };
   }
 
@@ -279,8 +285,9 @@ function registerExplainPlans(context, vscode, { database }) {
 
   function showSeriesComparison(leftId, rightId) {
     const [left, right] = comparableSeries(leftId, rightId);
-    return openComparison('rocketbrain.comparePlanSeries', 'Compare SQL measurement series', decisions =>
-      ({ ...compareSeries(left.series, right.series, decisions), saved:Boolean(left.fileName || right.fileName) }),
+    const binding = captureBinding('series', left, right);
+    return openComparison('rocketbrain.comparePlanSeries', 'Compare SQL measurement series', binding,
+      decisions => ({ ...compareSeries(left.series, right.series, decisions), saved:Boolean(left.fileName || right.fileName) }),
       (report, nonce) => seriesHtml(report, null, nonce));
   }
 
@@ -309,11 +316,12 @@ function registerExplainPlans(context, vscode, { database }) {
     if (!left || !right || left === right || left.target.key !== right.target.key) {
       throw Error('Choose two open captures from the same database connection.');
     }
-    return [left.report, right.report];
+    return [left, right];
   }
 
   function comparison(leftId, rightId) {
-    return comparePlans(...comparableCaptures(leftId, rightId));
+    const [left, right] = comparableCaptures(leftId, rightId);
+    return comparePlans(left.report, right.report);
   }
 
   async function chooseComparison() {
@@ -336,32 +344,47 @@ function registerExplainPlans(context, vscode, { database }) {
 
   function showComparison(leftId, rightId) {
     const [left, right] = comparableCaptures(leftId, rightId);
-    return openComparison('rocketbrain.comparePlans', 'Compare SQL plans',
-      decisions => comparePlans(left, right, decisions), comparisonHtml);
+    return openComparison('rocketbrain.comparePlans', 'Compare SQL plans', captureBinding('plan', left, right),
+      decisions => comparePlans(left.report, right.report, decisions), comparisonHtml);
   }
 
-  function openComparison(viewType, title, compare, render) {
+  function openComparison(viewType, title, binding, compare, render) {
     if (comparisons.size >= 4) throw Error('Close a plan comparison before opening another.');
     const reviewId = randomUUID(), decisions = new Map(), report = compare(decisions);
     const enableScripts = report.candidateReview.pairs.length > 0;
     const panel = vscode.window.createWebviewPanel(viewType, title, vscode.ViewColumn.Beside,
       { enableScripts, localResourceRoots:[] });
-    const record = { panel, compare, render, decisions, report };
+    const record = { panel, binding, compare, render, decisions, report };
     comparisons.set(reviewId, record);
     panel.onDidDispose(() => comparisons.delete(reviewId));
-    if (enableScripts) panel.webview.onDidReceiveMessage(message => {
+    if (enableScripts) panel.webview.onDidReceiveMessage(async message => {
       if (message?.type !== 'review-plan-candidate') return;
-      try { updateReview(reviewId, message); }
+      try {
+        if (['save', 'load'].includes(message.action)) await selectReviewFile(reviewId, message.action);
+        else updateReview(reviewId, message);
+      }
       catch (error) { void vscode.window.showErrorMessage(error.message); }
     });
     panel.webview.html = render({ ...report, reviewId }, randomBytes(24).toString('base64'));
     return structuredClone({ ...report, reviewId });
   }
 
-  function updateReview(reviewId, { action, candidateId } = {}) {
+  function openReview(reviewId) {
     trusted();
     const record = comparisons.get(reviewId);
     if (!record) throw Error('The SQL plan comparison is closed.');
+    return record;
+  }
+
+  function publishReview(reviewId, record, decisions, report) {
+    record.panel.webview.html = record.render({ ...report, reviewId }, randomBytes(24).toString('base64'));
+    record.decisions = decisions;
+    record.report = report;
+    return report;
+  }
+
+  function updateReview(reviewId, { action, candidateId } = {}) {
+    const record = openReview(reviewId);
     const decisions = new Map(record.decisions);
     if (action === 'reset') decisions.clear();
     else if (action === 'accept' || action === 'ignore') {
@@ -369,15 +392,58 @@ function registerExplainPlans(context, vscode, { database }) {
       if (pair?.status !== 'pending') throw Error('Choose an available pair in this SQL plan comparison.');
       decisions.set(candidateId, action === 'accept' ? 'accepted' : 'ignored');
     } else throw Error('Choose a SQL plan review action.');
-    const report = record.compare(decisions);
-    record.panel.webview.html = record.render({ ...report, reviewId }, randomBytes(24).toString('base64'));
-    record.decisions = decisions;
-    record.report = report;
-    return report;
+    return publishReview(reviewId, record, decisions, record.compare(decisions));
   }
 
   function reviewComparison(reviewId, action) {
     return structuredClone({ ...updateReview(reviewId, action), reviewId });
+  }
+
+  function checkReviewFile(uri) {
+    if (uri?.scheme !== 'file' || path.extname(uri.fsPath).toLowerCase() !== '.json') {
+      throw Error('Choose a local JSON file for the SQL plan review.');
+    }
+  }
+
+  function unchangedReview(reviewId, decisions) {
+    if (openReview(reviewId).decisions !== decisions) throw Error('The SQL plan review changed while opening the file. Try again.');
+  }
+
+  async function saveComparisonReview(reviewId, uri) {
+    const record = openReview(reviewId), decisions = record.decisions;
+    checkReviewFile(uri);
+    const contents = await serializePlanReview(record.binding, record.report.candidateReview.pairs, decisions, signingKeys);
+    unchangedReview(reviewId, decisions);
+    await writeNewFile(uri.fsPath, contents);
+    return { uri:uri.toString(), decisions:decisions.size };
+  }
+
+  async function loadComparisonReview(reviewId, uri) {
+    const record = openReview(reviewId), current = record.decisions;
+    checkReviewFile(uri);
+    const saved = await readPlanReview(uri.fsPath, signingKeys);
+    unchangedReview(reviewId, current);
+    const { report, decisions } = applyPlanReview(saved, record.binding, record.report.candidateReview.pairs, current, record.compare);
+    publishReview(reviewId, record, decisions, report);
+    return structuredClone({ ...report, reviewId });
+  }
+
+  async function selectReviewFile(reviewId, action) {
+    const current = openReview(reviewId).decisions;
+    const filters = { 'SQL plan review': ['json'] };
+    if (action === 'save') {
+      const file = await vscode.window.showSaveDialog({ title:'Save SQL Plan Review', filters });
+      if (!file) return;
+      unchangedReview(reviewId, current);
+      await saveComparisonReview(reviewId, file);
+      void vscode.window.showInformationMessage('SQL plan review saved.');
+    } else {
+      const [file] = await vscode.window.showOpenDialog({ title:'Load SQL Plan Review', filters, canSelectMany:false }) ?? [];
+      if (!file) return;
+      unchangedReview(reviewId, current);
+      await loadComparisonReview(reviewId, file);
+      void vscode.window.showInformationMessage('SQL plan review applied.');
+    }
   }
 
   context.subscriptions.push(vscode.commands.registerCommand(VISUAL_EXPLAIN, async () => {
@@ -449,7 +515,7 @@ function registerExplainPlans(context, vscode, { database }) {
   }));
   return { open, revealSource, loadTree, prepareMeasurement, measure, comparison, showComparison, close(id) { panels.get(id)?.panel.dispose(); },
     prepareSeries, measureSeries, getSample, exportSamples, openSavedSamples, seriesComparison, showSeriesComparison,
-    reviewComparison, closeComparison(id) { comparisons.get(id)?.panel.dispose(); },
+    reviewComparison, saveComparisonReview, loadComparisonReview, closeComparison(id) { comparisons.get(id)?.panel.dispose(); },
     closeSeries(id) { seriesPanels.get(id)?.panel.dispose(); },
     dispose() {
       disposed = true;

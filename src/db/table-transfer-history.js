@@ -10,7 +10,10 @@ const reviewPrefix = 'review-';
 const limits = Object.freeze({ entries: 64, ageMs: 7 * 24 * 60 * 60 * 1000, bytes: 1024 });
 const statuses = new Set(['matching', 'missing', 'mismatch', 'inconclusive']);
 const reasons = new Set(['missing-review-evidence', 'primary-key-not-mapped', 'no-bounded-keys', 'destination-identity-changed',
-  'destination-definition-changed', 'destination-unavailable', 'sample-unreadable']);
+  'destination-definition-changed', 'destination-unavailable', 'sample-unreadable',
+  'full-evidence-unavailable', 'retained-snapshot-unavailable', 'full-page-unreadable',
+  'retained-snapshot-metadata-changed', 'retained-snapshot-authentication-failed',
+  'retained-evidence-changed', 'destination-verification-interrupted']);
 const coverage = new Set(['all-reviewed-keys', 'sampled-reviewed-keys', 'none']);
 const counts = ['rows', 'sampledKeys', 'checkedKeys', 'keyLimit', 'matching', 'missing', 'mismatch', 'comparedMappedColumns'];
 const decisions = Object.freeze({
@@ -50,12 +53,19 @@ function recordFields(captureId, observation, recordedAt) {
       !counts.every(name => Number.isSafeInteger(observation[name]) && observation[name] >= 0) ||
       observation.reason && !reasons.has(observation.reason)) return undefined;
   const { checkedKeys, sampledKeys, rows, keyLimit, matching, missing, mismatch } = observation;
-  if (checkedKeys !== matching + missing + mismatch || checkedKeys > sampledKeys || sampledKeys > rows || sampledKeys > keyLimit) return undefined;
+  const full = observation.method === 'full-mapped-keys';
+  if (observation.method !== undefined && !full || checkedKeys !== matching + missing + mismatch || checkedKeys > rows ||
+      (!full && (checkedKeys > sampledKeys || sampledKeys > rows || sampledKeys > keyLimit))) return undefined;
+  if (full && (sampledKeys !== 0 || keyLimit !== rows || !Number.isSafeInteger(observation.pages) ||
+      (observation.status === 'inconclusive' ? checkedKeys !== 0 || observation.pages !== 0 || observation.coverage !== 'none'
+        : checkedKeys !== rows || checkedKeys < 1 || observation.pages < 1 || observation.pages > checkedKeys ||
+          observation.coverage !== 'all-reviewed-keys'))) return undefined;
   return {
     version: 1, captureId, recordedAt, status: observation.status,
     ...(observation.reason && { reason: observation.reason }),
     coverage: observation.coverage,
     ...Object.fromEntries(counts.map(name => [name, observation[name]])),
+    ...(full && { method: observation.method, pages: observation.pages }),
     historicalCommitConfirmed: false, replayBlocked: true
   };
 }
@@ -130,12 +140,17 @@ function createTransferHistory({ storagePath, isTrusted }) {
     return items;
   }
 
-  async function currentReview(captureId) {
+  async function latestEvidence(captureId) {
     if (typeof captureId !== 'string') throw Error('Choose a saved table snapshot.');
     const entries = await evidence(captureId);
     if (!entries.length) throw Error('No retained verification observation is available.');
-    if (entries[0].review) throw Error('The latest verification observation already has a review.');
     return { observation: entries[0], revision: fingerprint(entries) };
+  }
+
+  async function currentReview(captureId) {
+    const latest = await latestEvidence(captureId);
+    if (latest.observation.review) throw Error('The latest verification observation already has a review.');
+    return latest;
   }
 
   return {
@@ -161,6 +176,7 @@ function createTransferHistory({ storagePath, isTrusted }) {
     },
     async list(captureId) { return (await observations(captureId)).map(item => item.record); },
     evidence,
+    latestEvidence,
     currentReview,
     async recordReview(captureId, revision, decision) {
       trusted();

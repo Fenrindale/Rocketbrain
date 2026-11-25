@@ -3,10 +3,11 @@
 const { createHash } = require('node:crypto');
 const { scopedName } = require('../db/metadata');
 const { validIdentifier } = require('../java/file-templates');
-const { lexJava, literal, parseJavaFile } = require('../spring/java');
+const { lexJava, parseJavaFile } = require('../spring/java');
 const { inspectTable } = require('./entity-scaffold');
 const { matchForeignKey, makesUnique } = require('./entity-collection-relationships');
-const { exactTarget, jakartaAnnotation, targetRequest } = require('./entity-relationships');
+const { jakartaAnnotation, targetRequest } = require('./entity-relationships');
+const { explicitColumn, primaryKeyProof, referencedKey } = require('./entity-existing-keys');
 const { analyzeJPA } = require('./model');
 
 function entitySelection(selection) {
@@ -81,7 +82,7 @@ function nestedIdentity(source, parsed, type, entity) {
     declaration.fields.some(member => member.name === field.name && unqualified(member.type.raw) === unqualified(field.type.raw)));
 }
 
-function inspectEntity(source, target, entity, issues) {
+function inspectEntity(source, target, entity, issues, identity) {
   const parsed = parseJavaFile(source);
   const [type] = parsed.types;
   const provenNestedKey = type && nestedIdentity(source, parsed, type, entity);
@@ -89,13 +90,13 @@ function inspectEntity(source, target, entity, issues) {
     issues[0] === 'IdClass declaration is external or does not contain every declared identity attribute.';
   if ((parsed.issues.length && !provenNestedKey) || parsed.types.length !== 1 || type.fqn !== target.type || type.superTypes.length ||
       !mappingSupported || !entity.attributesComplete ||
-      entity.access !== 'FIELD' || !type.fields.some(field => jakartaAnnotation(parsed, field, 'Id')) ||
-      entity.attributes.some(field => field.kind !== 'basic' || field.status !== 'known') ||
+      entity.access !== 'FIELD' || !type.fields.some(field => jakartaAnnotation(parsed, field, identity.embedded ? 'EmbeddedId' : 'Id')) ||
+      entity.attributes.some(field => field.status !== 'known' ||
+        (field.kind !== 'basic' && !(field.name === identity.embedded && field.kind === 'embedded'))) ||
       entity.columnMappings.some(binding => {
+        if (identity.properties?.has(binding.property)) return false;
         const field = type.fields.find(item => item.name === binding.property);
-        return !field || binding.status !== 'known' || binding.storageTable?.physicalName !== target.table ||
-          !binding.column?.physicalName || binding.column.columnDefinition ||
-          literal(jakartaAnnotation(parsed, field, 'Column'), 'name', null) !== binding.column.name;
+        return !explicitColumn(binding, parsed, field) || binding.storageTable?.physicalName !== target.table;
       })) {
     throw Error('Both entities need unambiguous Jakarta field access and explicit basic columns on their own table.');
   }
@@ -134,18 +135,22 @@ function edit(source, placement, lines, returnType) {
   return { uri:source.uri, offset:placement.offset, text, getter:'get' + placement.stem, returnType };
 }
 
-function planChildRelationship(catalog, selection, [childSource, parentSource], [childEntity, parentEntity], issues) {
+function planChildRelationship(catalog, selection, [childSource, parentSource], [childEntity, parentEntity], issues, provePrimary) {
   const { child, parent, foreignKey } = selection;
   if (catalog?.coverage?.foreignKeys !== 'loaded') throw Error('Review a catalog with observed foreign keys.');
   const childMapping = inspectTable(catalog, child.table), parentMapping = inspectTable(catalog, parent.table);
-  exactTarget(childSource, child.type, child.table, childMapping, catalog.database);
-  const parentIds = exactTarget(parentSource, parent.type, parent.table, parentMapping, catalog.database);
   const sourceTable = catalog.tables.find(table => table.name === child.table);
+  const targetTable = catalog.tables.find(table => table.name === parent.table);
   const [key, duplicate] = sourceTable.foreignKeys.filter(key => key.name === foreignKey);
   if (!key || duplicate || key.referencedSchema !== catalog.database || key.referencedTable !== parent.table) {
-    throw Error('The selected foreign key must reference the parent’s exact primary key in the active schema.');
+    throw Error('The selected foreign key must reference the parent’s exact primary key or unique key in the active schema.');
   }
-  const columns = matchForeignKey(key, childMapping.fields, parentIds);
+  const childId = provePrimary(0, childMapping, catalog.database);
+  const parentId = provePrimary(1, parentMapping, catalog.database);
+  const childPlacement = inspectEntity(childSource, child, childEntity, issues[0], childId);
+  const parentPlacement = inspectEntity(parentSource, parent, parentEntity, issues[1], parentId);
+  const referenced = referencedKey(key, targetTable, parentMapping, parentId.keys, parentEntity);
+  const columns = matchForeignKey(key, childMapping.fields, referenced.columns, referenced.indexes ? 'unique key' : 'primary key');
   const names = columns.map(column => column.name);
   const optional = columns[0].nullable;
   if (columns.some(column => column.nullable !== optional)) {
@@ -153,10 +158,8 @@ function planChildRelationship(catalog, selection, [childSource, parentSource], 
   }
   if (childMapping.fields.some(field => names.includes(field.sql) && (field.id || field.identity)) ||
       sourceTable.indexes.some(index => makesUnique(index, names))) {
-    throw Error('Use a non-unique, non-identity child foreign key with the same signed type as the parent primary key.');
+    throw Error('Use a non-unique, non-identity child foreign key with types matching the parent key.');
   }
-  const childPlacement = inspectEntity(childSource, child, childEntity, issues[0]);
-  const parentPlacement = inspectEntity(parentSource, parent, parentEntity, issues[1]);
   const scalar = new Map();
   for (const binding of childEntity.columnMappings.filter(item => names.includes(item.column.physicalName))) {
     const field = childMapping.fields.find(item => item.sql === binding.column.physicalName);
@@ -189,12 +192,14 @@ function planChildRelationship(catalog, selection, [childSource, parentSource], 
     '',
     'public ' + list + ' get' + parentPlacement.stem + '() { return ' + parent.property + '; }'
   ];
-  return { fingerprint:fingerprint([childMapping.fingerprint, parentMapping.fingerprint, sourceTable.indexes]),
+  return { fingerprint:fingerprint([childMapping.fingerprint, parentMapping.fingerprint, sourceTable.indexes, referenced.indexes]),
+    referencedKey:referenced.indexes ? { kind:'unique', columns:referenced.columns.map(column => column.sql),
+      indexes:referenced.indexes.map(index => index.name) } : { kind:'primary', columns:parentId.keys.map(column => column.sql) },
     ownership:scalarOwned ? 'scalar' : 'association',
     edits:[edit(childSource, childPlacement, ownerLines, parent.type), edit(parentSource, parentPlacement, inverseLines, list)] };
 }
 
-function planJoinRelationship(proof, selection, sources, entities, issues) {
+function planJoinRelationship(proof, selection, sources, entities, issues, provePrimary) {
   const { joinSchema, joinTable, ownerForeignKey, targetForeignKey, owner, target } = selection;
   const { activeDatabase, join, targets } = proof ?? {};
   if (!scopedName(activeDatabase) || join?.scope !== 'table' || join.selectedTable !== joinTable || join.database !== joinSchema ||
@@ -208,7 +213,7 @@ function planJoinRelationship(proof, selection, sources, entities, issues) {
       (joinSchema === target.schema && joinTable === target.table)) {
     throw Error('The join table needs exactly two foreign keys and two distinct endpoint tables.');
   }
-  function endpoint(entity, keyName, source) {
+  function endpoint(entity, keyName, position) {
     const [key, duplicate] = table.foreignKeys.filter(item => item.name === keyName);
     const [catalog, repeated] = targets.filter(item => item.database === entity.schema && item.selectedTable === entity.table);
     if (!key || duplicate || key.referencedSchema !== entity.schema || key.referencedTable !== entity.table ||
@@ -216,11 +221,11 @@ function planJoinRelationship(proof, selection, sources, entities, issues) {
       throw Error('Each reviewed Java entity must map the exact table referenced by its selected foreign key.');
     }
     const mapping = inspectTable(catalog, entity.table);
-    const ids = exactTarget(source, entity.type, entity.table, mapping, entity.schema, entity.schema !== activeDatabase);
-    return { mapping, columns:matchForeignKey(key, observed.fields, ids) };
+    const identity = provePrimary(position, mapping, entity.schema, entity.schema !== activeDatabase);
+    return { mapping, identity, columns:matchForeignKey(key, observed.fields, identity.keys) };
   }
-  const left = endpoint(owner, ownerForeignKey, sources[0]);
-  const right = endpoint(target, targetForeignKey, sources[1]);
+  const left = endpoint(owner, ownerForeignKey, 0);
+  const right = endpoint(target, targetForeignKey, 1);
   const all = [...left.columns, ...right.columns];
   const names = all.map(column => column.name);
   if (all.length !== observed.fields.length || all.length !== observed.keys.length || new Set(names).size !== all.length ||
@@ -228,7 +233,8 @@ function planJoinRelationship(proof, selection, sources, entities, issues) {
       table.indexes.some(index => !index.primaryKey && index.columns.length < all.length && makesUnique(index, names))) {
     throw Error('The join table must contain only the two disjoint foreign keys as its non-null composite primary key without narrower uniqueness.');
   }
-  const placements = [owner, target].map((role, i) => inspectEntity(sources[i], role, entities[i], issues[i]));
+  const identities = [left.identity, right.identity];
+  const placements = [owner, target].map((role, i) => inspectEntity(sources[i], role, entities[i], issues[i], identities[i]));
   const columns = values => values.map(column => joinColumn(quoteSql(column.name), column.reference, false));
   const accessors = [];
   for (const [i, role] of [owner, target].entries()) {
@@ -254,11 +260,13 @@ function planExistingRelationship({ catalog, joinProof, selection, sources }) {
   const roles = relationshipEntities(selection);
   const selected = roles.map(role => sources.find(source => source.uri === role.uri));
   if (selected.some(source => !source)) throw Error('Both reviewed Java sources are required.');
-  const model = analyzeJPA(selected, { physicalNaming:'standard' });
+  const model = analyzeJPA(sources, { physicalNaming:'standard' });
   const entities = roles.map(role => model.entities.find(entity => entity.fqn === role.type));
   const issues = selected.map(source => model.issues.filter(issue => issue.uri === source.uri).map(issue => issue.message));
-  return selection.kind === 'manyToMany' ? planJoinRelationship(joinProof, selection, selected, entities, issues) :
-    planChildRelationship(catalog, selection, selected, entities, issues);
+  const provePrimary = (role, mapping, database, requireCatalog) =>
+    primaryKeyProof(selected[role], roles[role], mapping, database, entities[role], model, sources, requireCatalog);
+  return selection.kind === 'manyToMany' ? planJoinRelationship(joinProof, selection, selected, entities, issues, provePrimary) :
+    planChildRelationship(catalog, selection, selected, entities, issues, provePrimary);
 }
 
 module.exports = { existingRelationshipSelection, planExistingRelationship, relationshipEntities };

@@ -30,8 +30,10 @@ function candidateReviewHtml(result, nonce) {
     '</td><td>' + (pair.matching === 'details' ? 'Same decoded operator details' : 'Same table or alias and access method') +
     '</td><td>' + states[pair.status] + (editable && pair.status === 'pending' ?
       '<div>' + button('accept', 'Pair', pair) + button('ignore', 'Ignore', pair) + '</div>' : '') + '</td></tr>').join('');
-  const reset = editable && review.pairs.some(pair => pair.status === 'accepted' || pair.status === 'ignored')
-    ? button('reset', 'Reset review') : '';
+  const hasDecisions = review.pairs.some(pair => pair.status === 'accepted' || pair.status === 'ignored');
+  const fileControls = editable ? '<div>' + button('load', 'Load review') +
+    (hasDecisions ? button('save', 'Save review') + button('reset', 'Reset review') : '') + '</div>' +
+    '<p>Load a saved review from the same VS Code secret store with the original captures in order.</p>' : '';
   const script = editable ? `<script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   document.getElementById('candidate-review').addEventListener('click', event => {
@@ -42,7 +44,7 @@ function candidateReviewHtml(result, nonce) {
   return '<details id="candidate-review" class="candidate-review" open><summary>Review alternative operator pairs (' +
     review.pairs.length + ')</summary><p>Choose one pairing per operator. Decisions apply to this comparison.</p>' +
     (review.limited ? '<p>The display is limited to 60 pairs and eight alternatives per baseline operator.</p>' : '') +
-    reset + '<table><thead><tr><th scope="col">Baseline</th><th scope="col">Candidate</th><th scope="col">Evidence</th>' +
+    fileControls + '<table><thead><tr><th scope="col">Baseline</th><th scope="col">Candidate</th><th scope="col">Evidence</th>' +
     '<th scope="col">Review</th></tr></thead><tbody>' + rows + '</tbody></table></details>' + script;
 }
 

@@ -51,6 +51,22 @@ function captureRelationshipSources(vscode, project, requests) {
   };
 }
 
+function captureRelationshipIdentitySources(vscode, project, names) {
+  const requests = [...new Set(names)].map(name => {
+    const split = name.lastIndexOf('.');
+    const packageName = name.slice(0, split);
+    const fileName = name.slice(split + 1) + '.java';
+    const candidates = new Set(project.sourceRoots.filter(root => !root.unavailable && contained(project.root, root.path))
+      .flatMap(root => root.packages.filter(pkg => pkg.name === packageName)
+        .flatMap(pkg => pkg.files.filter(file => path.basename(file.path) === fileName).map(file => file.path))));
+    if (candidates.size !== 1) {
+      throw Error('Observe the standalone key source for ' + name + ' in the selected Java project.');
+    }
+    return { targetUri:vscode.Uri.file([...candidates][0]).toString() };
+  });
+  return captureRelationshipSources(vscode, project, requests);
+}
+
 function chooseableDeclarations(vscode, project, tables) {
   const candidates = [];
   for (const file of observedFiles(project)) {
@@ -63,4 +79,4 @@ function chooseableDeclarations(vscode, project, tables) {
   return candidates.sort((a, b) => a.targetType.localeCompare(b.targetType));
 }
 
-module.exports = { captureRelationshipSources, chooseableDeclarations };
+module.exports = { captureRelationshipSources, captureRelationshipIdentitySources, chooseableDeclarations };

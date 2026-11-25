@@ -6,7 +6,7 @@ const fs = require('node:fs/promises');
 const mysql = require('mysql2/promise');
 const path = require('node:path');
 
-async function runExplainReviewChecks(api, vscode, checks) {
+async function runExplainReviewChecks(api, vscode, checks, { afterReviewed } = {}) {
   const runtime = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const config = JSON.parse(await fs.readFile(runtime.dbConfigPath, 'utf8'));
   const owner = JSON.parse(await fs.readFile(path.join(path.dirname(runtime.dbConfigPath), 'owner.json'), 'utf8'));
@@ -109,6 +109,7 @@ async function runExplainReviewChecks(api, vscode, checks) {
     const seriesReviewed = review(series, 'accept', seriesPairs[0].id);
     assert.equal(seriesReviewed.reviewedPairCount, 1);
     assert.ok(seriesReviewed.metrics.some(metric => metric.alignment === 'reviewed' && metric.baseline && metric.candidate));
+    if (afterReviewed) await afterReviewed({ first, second, firstSeries, secondSeries, single, series });
     const reset = review(single, 'reset');
     assert.equal(reset.reviewedPairCount, 0);
     assert.deepEqual(realOptions(reset), realOptions(single));

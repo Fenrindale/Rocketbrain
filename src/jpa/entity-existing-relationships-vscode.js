@@ -6,8 +6,9 @@ const { scopedName } = require('../db/metadata');
 const { validIdentifier, contained } = require('../java/file-templates');
 const { buildFingerprint } = require('../java/workbench-model');
 const { analyzeJavaSources } = require('../java/signature-compiler');
-const { captureRelationshipSources, chooseableDeclarations } = require('./entity-relationship-sources');
+const { captureRelationshipSources, captureRelationshipIdentitySources, chooseableDeclarations } = require('./entity-relationship-sources');
 const { existingRelationshipSelection, planExistingRelationship, relationshipEntities } = require('./entity-existing-relationships');
+const { embeddedIdentityType } = require('./entity-existing-keys');
 
 const COMMAND = 'rocketbrain.jpa.reviewExistingRelationship';
 const warnings = [
@@ -56,9 +57,12 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
         return uri;
       });
       const sources = captureRelationshipSources(vscode, project, files.map(uri => ({ targetUri:uri.toString() })));
+      const identities = captureRelationshipIdentitySources(vscode, project, sources.sources.map(embeddedIdentityType).filter(Boolean));
+      const sourceSet = [...sources.sources, ...identities.sources];
       const docs = await Promise.all(files.map(uri => vscode.workspace.openTextDocument(uri)));
       function verifySources() {
         sources.verify();
+        identities.verify();
         for (const [index, doc] of docs.entries()) {
           const saved = sources.sources[index].text;
           if (doc.isDirty || doc.isClosed || doc.getText() !== saved || parser.decode(fs.readFileSync(files[index].fsPath)) !== saved) {
@@ -74,7 +78,7 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
           { joinProof:await database.relationshipJoinCatalog({ joinSchema:selection.joinSchema, joinTable:selection.joinTable }) } :
           { catalog:await database.databaseCatalog() };
         assertTarget(target, token);
-        return planExistingRelationship({ ...catalogs, selection, sources:sources.sources });
+        return planExistingRelationship({ ...catalogs, selection, sources:sourceSet });
       }
       const planned = await currentPlan(cancellation);
       const compiler = await compilerScope(project, runtime, cancellation);
@@ -82,7 +86,7 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
         const edit = planned.edits[index];
         return { uri:source.uri, text:source.text.slice(0, edit.offset) + edit.text + source.text.slice(edit.offset) };
       });
-      const analyzed = await analyzeJavaSources({ ...compiler, storagePath, sources:editedSources,
+      const analyzed = await analyzeJavaSources({ ...compiler, storagePath, sources:[...editedSources, ...identities.sources],
         cancellation, manifestLimit:256 * 1024 });
       if (analyzed.errors.length) throw Error('The edited Java sources failed compiler validation: ' + analyzed.errors[0].message);
       if (planned.edits.some((edit, index) => !analyzed.methods.some(method => method.owner === entities[index].type &&
@@ -109,11 +113,14 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
           return { textDocument:{ uri:edit.uri, version:doc.version }, edits:[{ range:{ start:point, end:point }, newText:edit.text }] };
         })
       }, { title:'JPA relationship · ' + (selection.foreignKey || selection.joinSchema + '.' + selection.joinTable), kind:'refactor.jpa.bidirectional',
-        anchorDocument:docs[0], cancellation, validate, preApply, warnings });
+        anchorDocument:docs[0], cancellation, validate, preApply, warnings:planned.referencedKey?.kind === 'unique'
+          ? [...warnings, 'The foreign key references the observed unique columns ' + planned.referencedKey.columns.join(', ') + '.']
+          : warnings });
       for (const [id, expiresAt] of reviews) if (Date.now() >= expiresAt) reviews.delete(id);
       if (reviews.size >= 10) reviews.delete(reviews.keys().next().value);
       reviews.set(plan.id, plan.expiresAt);
-      return { ...plan, relationship:{ ...selection, ownership:planned.ownership } };
+      return { ...plan, relationship:{ ...selection, ownership:planned.ownership,
+        ...(planned.referencedKey && { referencedKey:planned.referencedKey }) } };
     } finally { preparing = false; }
   }
 

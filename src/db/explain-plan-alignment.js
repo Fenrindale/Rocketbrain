@@ -195,4 +195,4 @@ function alignOperators(before, after, decisions = new Map()) {
   return { rows, candidateReview:{ pairs:reviewPairs, limited:review.limited } };
 }
 
-module.exports = { PLAN_TEXT_LIMIT, indexOperators, alignOperators };
+module.exports = { PLAN_TEXT_LIMIT, REVIEW_LIMIT, indexOperators, alignOperators };
