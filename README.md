@@ -64,6 +64,12 @@ pnpm run package
 
 **Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다. 필터 순서·매처·권한 목록은 앱의 보안 구성에서 확인합니다.
 
+### Quarkus Maven
+
+**Create Quarkus Maven Project**로 시작 프로젝트를 만든 뒤 **Java Projects**에서 가져옵니다. 시작 프로젝트는 JDK 25와 Maven을 사용합니다. `application.properties`에서 Java에 선언된 MicroProfile Config와 SmallRye ConfigMapping 키를 완성하고 선언으로 이동할 수 있습니다. **Inspect Quarkus Configuration and Endpoints**에서는 프로필별 키, REST 경로와 Qute 템플릿을 엽니다.
+
+**Start Quarkus Dev Mode**는 루프백에서 개발 서버가 준비되면 주소를 표시합니다. **Stop Quarkus Dev Mode**로 세션을 종료하고 **Run Quarkus Tests**로 Maven 테스트를 실행합니다. 이 흐름은 모듈 POM에 Quarkus 3 플러그인을 직접 선언한 프로젝트와 리터럴 어노테이션을 지원합니다.
+
 ### Java CI 품질 게이트
 
 VSIX의 `extension/dist/java-quality-gate.js`를 추출하거나 소스의 `scripts/java-quality-gate.js`를 실행합니다. Node.js 20 이상과 Git이 있는 CI에서 대상 저장소와 기준선 커밋을 로컬로 준비합니다.
