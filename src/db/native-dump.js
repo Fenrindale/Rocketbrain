@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const native = require('./native-dump-process');
+const schemaGraph = require('./native-dump-graph');
 
 const key = 'rocketbrain.nativeDumps.v1';
 const maxTables = 64;
@@ -46,7 +47,9 @@ async function verifyTarget(db) {
     throw fail('CONTEXT', 'The observed server or database account changed. Connect again.');
   }
   const schemaKey = digest([dialect, server, database]);
-  return { dialect, database, config, schemaKey, route: digest([schemaKey, account, config.host, config.port]),
+  const serverKey = digest([dialect, server]);
+  return { dialect, version, database, account, config, schemaKey, serverKey, accountKey: digest([serverKey, account]),
+    route: digest([schemaKey, account, config.host, config.port]),
     endpoint: config.host.includes(':') ? '[' + config.host + ']:' + config.port : config.host + ':' + config.port };
 }
 
@@ -93,7 +96,8 @@ function verifiedReceipt(item) {
     typeof item.capturedAt === 'string' && item.capturedAt.length === 24 && Number.isFinite(Date.parse(item.capturedAt)) &&
     typeof item.toolVersion === 'string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(item.toolVersion) &&
     Number.isInteger(item.bytes) && item.bytes > 0 && item.bytes <= native.maxDumpBytes &&
-    Array.isArray(item.tables) && item.tables.length > 0 && item.tables.length <= maxTables && item.tables.every(legalName);
+    Array.isArray(item.tables) && item.tables.length > 0 && item.tables.length <= maxTables && item.tables.every(legalName) &&
+    (item.graph === undefined || schemaGraph.validGraph(item.graph));
 }
 
 function createNativeDumps(memento, withTarget) {
@@ -116,9 +120,10 @@ function createNativeDumps(memento, withTarget) {
   return {
     listTables: () => withTarget(async ({ db, guard, epoch }) => {
       const source = await verifyTarget(db);
-      const candidates = dumpable(await db.metadata()).map(table => table.name);
+      const catalog = await db.metadata();
+      const candidates = dumpable(catalog).map(table => table.name);
       current(guard);
-      return { database: source.database, dialect: source.dialect, tables: candidates, connectionEpoch: epoch };
+      return { database: source.database, dialect: source.dialect, tables: candidates, objects: schemaGraph.objectsFrom(catalog), connectionEpoch: epoch };
     }),
     dump: (request, options = {}) => withTarget(async ({ db, guard, epoch }) => {
       const { signal, onProgress } = options;
@@ -126,7 +131,11 @@ function createNativeDumps(memento, withTarget) {
       if (request.connectionEpoch !== epoch) throw fail('CONTEXT', 'The backup connection changed. Select the source tables again.');
       const source = await verifyTarget(db);
       const tools = await native.inspectTools(request.tools, source.dialect);
-      const tables = selectTables(await db.metadata(), request.tables);
+      const catalog = await db.metadata();
+      const tables = selectTables(catalog, request.tables);
+      const selected = request.objects ?? [];
+      if (!Array.isArray(selected)) throw fail('GRAPH', 'Choose visible schema objects for the native graph.');
+      const graph = selected.length ? await schemaGraph.captureGraph(db, source, catalog, tables, selected) : undefined;
       const file = await absolute(request.file, 'output');
       const pending = path.join(path.dirname(file), '.rocketbrain-' + randomUUID() + '.pending');
       let owned = false;
@@ -134,7 +143,7 @@ function createNativeDumps(memento, withTarget) {
         const handle = await fs.open(pending, 'wx', 0o600);
         owned = true;
         try {
-          const streamed = await native.withPrivateDirectory(async directory => {
+          let streamed = await native.withPrivateDirectory(async directory => {
             await native.writeClientFile(directory, source.config);
             const counter = native.measure(native.maxDumpBytes, onProgress, signal);
             current(guard, signal);
@@ -146,15 +155,26 @@ function createNativeDumps(memento, withTarget) {
           });
           current(guard, signal);
           if (!streamed.bytes) throw fail('SIZE', 'The native backup tool produced no output.');
+          if (graph) {
+            const observed = await verifyTarget(db);
+            const fresh = await schemaGraph.captureGraph(db, observed, await db.metadata(), tables, selected);
+            current(guard, signal);
+            if (observed.route !== source.route || fresh.sourceStamp !== graph.sourceStamp) {
+              throw fail('GRAPH', 'The source schema changed during native backup. Prepare the graph again.');
+            }
+            await fs.appendFile(pending, graph.suffix);
+            streamed = { ...(await native.readFile(pending, { maxBytes: native.maxDumpBytes, signal })), warnings: streamed.warnings };
+          }
           const synced = await fs.open(pending, 'r+');
           try { await synced.sync(); } finally { await synced.close(); }
           const receipt = { bytes: streamed.bytes, sha256: streamed.sha256, dialect: source.dialect, sourceDatabase: source.database,
-            sourceKey: source.schemaKey, toolVersion: tools.version, tables, capturedAt: new Date().toISOString() };
+            sourceKey: source.schemaKey, toolVersion: tools.version, tables, capturedAt: new Date().toISOString(),
+            ...(graph && { graph: graph.graph }) };
           try { await fs.link(pending, file); }
           catch { throw fail('PUBLISH', 'The backup was not published. Choose a new filename on a local filesystem that supports atomic file creation.'); }
           try { await record(receipt); }
           catch { throw fail('RECEIPT', 'The backup file was created, but its local restore receipt could not be saved.'); }
-          return { file, ...receipt, warnings: streamed.warnings };
+          return { file, ...structuredClone(receipt), warnings: streamed.warnings };
         } finally { await handle.close(); }
       } finally { if (owned) await fs.unlink(pending); }
     }),
@@ -168,6 +188,7 @@ function createNativeDumps(memento, withTarget) {
       if (!receipt) throw fail('RECEIPT', 'Choose an unchanged backup produced and registered in this workspace by the same database dialect.');
       if (receipt.sourceKey === destination.schemaKey) throw fail('DESTINATION', 'Connect to a different empty schema before native restore.');
       await assertEmpty(db, destination);
+      if (receipt.graph) await schemaGraph.checkDestination(db, destination, receipt.graph);
       current(guard, options.signal);
       const reviewId = randomUUID();
       for (const [id, review] of prepares) if (review.expires < Date.now()) prepares.delete(id);
@@ -176,7 +197,8 @@ function createNativeDumps(memento, withTarget) {
       prepares.set(reviewId, { file, receipt, expires, route: destination.route, epoch, tools });
       return { reviewId, file, bytes: receipt.bytes, sha256: receipt.sha256, sourceDatabase: receipt.sourceDatabase,
         destinationDatabase: destination.database, destinationEndpoint: destination.endpoint,
-        tables: [...receipt.tables], clientVersion: tools.version, expiresAt: new Date(expires).toISOString() };
+        tables: [...receipt.tables], ...(receipt.graph && { objects: structuredClone(receipt.graph.objects) }),
+        clientVersion: tools.version, expiresAt: new Date(expires).toISOString() };
     }),
     restore: (request, options = {}) => withTarget(async ({ db, guard, epoch }) => {
       const { signal, onProgress } = options;
@@ -202,6 +224,7 @@ function createNativeDumps(memento, withTarget) {
         const latest = await verifyTarget(db);
         if (latest.route !== stored.route) throw fail('DESTINATION', 'The destination changed before restore. Review the active connection again.');
         await assertEmpty(db, latest);
+        if (stored.receipt.graph) await schemaGraph.checkDestination(db, latest, stored.receipt.graph);
         await native.writeClientFile(directory, latest.config);
         current(guard, signal);
         const counter = native.measure(native.maxDumpBytes, onProgress, signal);
@@ -211,7 +234,14 @@ function createNativeDumps(memento, withTarget) {
             '--local-infile=0', '--skip-reconnect', '--database=' + latest.database], { cwd: directory, signal, input });
           const applied = counter.summary();
           if (applied.sha256 !== content.sha256 || applied.bytes !== content.bytes) throw fail('CHANGED', 'The reviewed file was not fully restored.');
-          return { state: 'restored', database: latest.database, ...applied, tables: [...stored.receipt.tables], warnings: result.warnings };
+          const graph = stored.receipt.graph;
+          if (graph) {
+            current(guard, signal);
+            const saved = await schemaGraph.captureGraph(db, latest, await db.metadata(), stored.receipt.tables, graph.objects);
+            if (saved.graph.fingerprint !== graph.fingerprint) throw fail('GRAPH', 'The restored server object graph differs from the reviewed definitions.');
+          }
+          return { state: 'restored', database: latest.database, ...applied, tables: [...stored.receipt.tables], warnings: result.warnings,
+            ...(graph && { graphVerified: true, objects: structuredClone(graph.objects) }) };
         } catch (cause) {
           throw fail('RESTORE', cause.message + ' Inspect the chosen schema for partial changes before retrying.');
         }

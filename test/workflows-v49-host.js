@@ -15,7 +15,8 @@ exports.run=async(vscode=require('vscode'))=>{
   const report=path.resolve(__dirname,'../test-output',prefix+'-native-'+engine+'.json');
   const suites={
     postgres:()=>require('./postgresql-jdbc-host').runPostgreSqlChecks(api,vscode,checks),
-    webdav:()=>require('./webdav-deploy-host').runWebDavChecks(api,vscode,checks)
+    webdav:()=>require('./webdav-deploy-host').runWebDavChecks(api,vscode,checks),
+    dumpGraph:()=>require('./native-dump-graph-host').runNativeDumpGraphChecks(api,vscode,checks)
   };
   const selection=process.env.ROCKETBRAIN_V49_ONLY?.split(',')||Object.keys(suites);
   assert.ok(selection.length&&new Set(selection).size===selection.length);
