@@ -88,6 +88,12 @@ Micronaut 5 Maven 플랫폼 부모를 선언한 JAR 모듈을 **Java Projects**�
 
 **Run Micronaut Tests**는 Maven 테스트를 실행합니다. **Build and Run Micronaut**는 선택한 환경으로 실행 가능 JAR를 패키징하고 루프백 주소를 표시합니다. **Stop Micronaut Application**으로 실행 중인 JVM을 종료합니다. 소스 변경을 반영하려면 다시 빌드하고 실행합니다.
 
+### Scala · sbt
+
+독립 JDK와 [공식 sbt 1.13.1 런처](https://repo.maven.apache.org/maven2/org/scala-sbt/sbt-launch/1.13.1/sbt-launch-1.13.1.jar)를 준비하고 사용자 설정 `rocketbrain.scala.sbtLauncher`에 JAR 경로를 지정합니다. **Discover sbt Projects**는 `build.sbt`의 실제 하위 프로젝트를 표시합니다. **Run sbt Tests**와 **Run sbt Main Class**에서 실행할 프로젝트와 진입점을 선택합니다. 실행 출력은 **Rocketbrain Scala / sbt**에서 확인합니다.
+
+Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compile and Index Scala**를 실행합니다. `.scala` 편집기의 **Go to Definition**은 컴파일러가 해석한 심볼을 사용하므로 하위 프로젝트 간 오버로드도 올바른 선언으로 이동합니다. 소스나 빌드가 바뀌면 다시 컴파일합니다.
+
 ### Java CI 품질 게이트
 
 VSIX의 `extension/dist/java-quality-gate.js`를 추출하거나 소스의 `scripts/java-quality-gate.js`를 실행합니다. Node.js 20 이상과 Git이 있는 CI에서 대상 저장소와 기준선 커밋을 로컬로 준비합니다.

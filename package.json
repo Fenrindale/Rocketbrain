@@ -27,6 +27,7 @@
     "onLanguage:kotlin",
     "onLanguage:groovy",
     "onLanguage:python",
+    "onLanguage:scala",
     "onLanguage:duckdb-sql",
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
@@ -34,6 +35,7 @@
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
+    "workspaceContains:**/build.sbt",
     "onView:rocketbrain.javaProjects",
     "onView:rocketbrain.connections",
     "onNotebook:rocketbrain-sql-notebook",
@@ -53,6 +55,7 @@
       { "type": "rocketbrain-jupyter", "displayName": "Rocketbrain Jupyter Notebook", "selector": [{ "filenamePattern": "*.ipynb" }] }
     ],
     "languages": [
+      { "id": "scala", "aliases": ["Scala", "scala"], "extensions": [".scala", ".sbt"] },
       {
         "id": "rocketbrain-http",
         "aliases": ["Rocketbrain HTTP", "HTTP"],
@@ -64,6 +67,7 @@
       { "id": "groovy", "aliases": ["Groovy"], "extensions": [".groovy"] }
     ],
     "grammars": [
+      { "language": "scala", "scopeName": "source.scala", "path": "./media/scala.tmLanguage.json" },
       { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" },
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
@@ -95,6 +99,12 @@
       { "command": "rocketbrain.micronaut.run", "title": "Build and Run Micronaut", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.test", "title": "Run Micronaut Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.stop", "title": "Stop Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.discover", "title": "Discover sbt Projects", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.compile", "title": "Compile and Index Scala", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.test", "title": "Run sbt Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.run", "title": "Run sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.definition", "title": "Open Compiled Scala Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == scala" },
+      { "command": "rocketbrain.scala.stop", "title": "Stop sbt Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1868,6 +1878,24 @@
           "default": "",
           "scope": "machine",
           "description": "Absolute directory of an independently installed Apache Tomcat 11 distribution for local Jakarta WAR deployments."
+        },
+        "rocketbrain.scala.sbtLauncher": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to the official sbt 1.13.1 launcher JAR for explicit Scala builds."
+        },
+        "rocketbrain.scala.cacheDirectory": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional absolute directory for the Rocketbrain sbt boot and dependency caches. Uses extension storage by default."
+        },
+        "rocketbrain.scala.repositoryConfig": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional absolute path to your sbt repository override configuration for managed tasks."
         },
         "rocketbrain.spring.initializr.endpoint": {
           "type": "string",
