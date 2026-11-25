@@ -545,6 +545,30 @@
         "enablement": "isWorkspaceTrusted && (rocketbrain.mysqlConnected || rocketbrain.profileConsole) && editorLangId == sql"
       },
       {
+        "command": "rocketbrain.sqlDraft.track",
+        "title": "Track SQL Console as Draft",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && editorLangId == sql"
+      },
+      {
+        "command": "rocketbrain.sqlDraft.open",
+        "title": "Restore SQL Draft",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.sqlDraft.checkpoint",
+        "title": "Save SQL Draft Checkpoint",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && editorLangId == sql"
+      },
+      {
+        "command": "rocketbrain.sqlDraft.remove",
+        "title": "Remove SQL Draft",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.prepare",
         "title": "Prepare Independent JPA Observer Agent",
         "category": "Rocketbrain"

@@ -23,6 +23,10 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const profileSessions = new Map(), profileBindings = new Map();
   const activityLog = require('./db/activity-log-vscode').registerSqlActivity(context, vscode);
   const output = vscode.window.createOutputChannel('Rocketbrain');
+  const sqlDrafts = require('./db/console-drafts').registerConsoleDrafts(context, vscode, { profileFiles, output,
+    canTrack: document => document.languageId === 'sql' && !document.isClosed && !isVirtualSqlPreview(document) &&
+      (isProfileConsole(document) && profileBindings.has(document.uri.toString()) ||
+        document.uri.scheme === 'untitled' && bindings.has(document.uri.toString())) });
   const state = { db: new DatabaseService(), schema: [], metadata:null, profile:null, tableLayoutConnection:undefined, label: 'Offline demo', mysql: false, running: new Set(), connecting: new Set(), switching: false, disposed: false, candidates: new Set(), epoch: 0 };
   const metadataCache = createMetadataCache(context.workspaceState, { isTrusted: () => vscode.workspace.isTrusted && !state.disposed });
   let catalogFingerprints = new Map();
@@ -98,9 +102,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const binding = existingBinding(document);
     const session = (state.mysql || dedicated) && binding ? consoleDatabase(binding.id).getSessionState(binding.id) : null;
     const shared = session && linkedEditors(binding.id).length > 1;
-    const mode = streamTransactions.size ? 'import waiting for Commit or Roll Back' : session ? session.needsReconnect ? (session.lifecycle?.disconnectedByIdleTimeout ? 'idle timeout · reconnect required' : 'disconnected · reconnect required') : `${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}${session.inTransaction ? ' · transaction active' : ''}${session.transactionIsolation ? ' · ' + session.transactionIsolation.toLowerCase() : ''}` : dedicated ? 'profile session closed' : state.mysql ? 'new console · read only' : 'SQLite demo';
+    const mode = sqlDrafts.isRecovered(document) ? 'offline SQL draft' : streamTransactions.size ? 'import waiting for Commit or Roll Back' : session ? session.needsReconnect ? (session.lifecycle?.disconnectedByIdleTimeout ? 'idle timeout · reconnect required' : 'disconnected · reconnect required') : `${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}${session.inTransaction ? ' · transaction active' : ''}${session.transactionIsolation ? ' · ' + session.transactionIsolation.toLowerCase() : ''}` : dedicated ? 'profile session closed' : state.mysql ? 'new console · read only' : 'SQLite demo';
     const cached = !dedicated && state.offlineMetadata?.provenance;
-    const label = dedicated && !binding ? 'Dedicated profile' : consoleLabel(binding?.id);
+    const label = sqlDrafts.isRecovered(document) ? 'Recovered draft' : dedicated && !binding ? 'Dedicated profile' : consoleLabel(binding?.id);
     status.text = cached ? '$(database) Rocketbrain · ' + cached.database + ' · cached metadata' :
       `${state.running.size ? '$(sync~spin)' : '$(database)'} Rocketbrain · ${dedicated && binding ? label : binding?.id || label}${shared ? ' · shared' : ''} · ${mode}`;
     status.command=streamTransactions.size?'rocketbrain.import.stream':cached?'rocketbrain.db.openCachedMetadata':'rocketbrain.sessionStatus';
@@ -344,6 +348,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     return withSession(binding.id, action);
   }
   async function bindInteractive(document) {
+    if (sqlDrafts.isRecovered(document)) throw Error('This is an offline SQL draft. Copy the reviewed text to a console connected to the intended database.');
     if (!isProfileConsole(document)) return bind(document);
     if (exclusiveDatabaseWork()) throw Error('Finish the schema operation or pending import transaction before using a console.');
     const binding = existingBinding(document);
@@ -665,6 +670,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   command('rocketbrain.openSharedConsole', () => openSharedConsole(currentDocument()));
   command('rocketbrain.runQuery', async () => {
     const editor = vscode.window.activeTextEditor;
+    if (sqlDrafts.isRecovered(editor?.document)) throw Error('This is an offline SQL draft. Copy the reviewed text to a console connected to the intended database.');
     const dedicated = isProfileConsole(editor?.document);
     if ((state.mysql || dedicated) && editor?.document.languageId === 'sql' &&
         /^\uFEFF?[ \t]*DELIMITER(?=[ \t\r]|$)/im.test(editor.document.getText())) {
@@ -833,7 +839,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     await context.secrets.store(secretId, password); await context.workspaceState.update('rocketbrain.mysqlProfile', profile);
   });
   let disposePromise;
-  function disposeDatabase(){if(disposePromise)return disposePromise;state.disposed=true;state.epoch++;schemaMigrations.clear();schemaRebuilds.clear();streamReviews.clear();streamTransactions.clear();const databases=new Set([state.db,...state.candidates,...[...profileSessions.values()].map(item=>item.db)]);state.candidates.clear();bindings.clear();profileSessions.clear();profileBindings.clear();disposePromise=(async()=>{const settled=await Promise.allSettled([...databases].map(closeDatabaseResources));const failure=settled.find(item=>item.status==='rejected');if(failure)throw failure.reason;})();return disposePromise;}
+  function disposeDatabase(){if(disposePromise)return disposePromise;state.disposed=true;state.epoch++;schemaMigrations.clear();schemaRebuilds.clear();streamReviews.clear();streamTransactions.clear();const databases=new Set([state.db,...state.candidates,...[...profileSessions.values()].map(item=>item.db)]);state.candidates.clear();bindings.clear();profileSessions.clear();profileBindings.clear();disposePromise=(async()=>{const settled=await Promise.allSettled([sqlDrafts.dispose(),...[...databases].map(closeDatabaseResources)]);const failure=settled.find(item=>item.status==='rejected');if(failure)throw failure.reason;})();return disposePromise;}
   context.subscriptions.push(project, schemaTree, output, status, tableEditor, connectionEvents,
     vscode.window.registerTreeDataProvider('rocketbrain.project', project),
     vscode.window.registerTreeDataProvider('rocketbrain.databases', schemaTree),
@@ -889,7 +895,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   return {
     ...require('./db/authoring-facade').authoringFacade({state,assertReady:assertExclusiveReady,pendingDraft:pendingTableDraft,isTrusted:()=>vscode.workspace.isTrusted,sessions:()=>[...bindings.values()].map(binding=>state.db.getSessionState(binding.id)),updateStatus,refresh:refreshAfterSchemaAttempt}),
     dispose:disposeDatabase,disconnectMysql:useDemo,activityLog,activeConnectionProfile:()=>state.profile?structuredClone(state.profile):null,
-    openProfileConsole,
+    openProfileConsole,sqlDrafts,
     hasProfileConsole: id => [...profileSessions.values()].some(item => item.profile.id === id),
     schema: () => structuredClone(state.schema),
     catalogSnapshot:()=>analysisMetadata()?structuredClone(analysisMetadata()):null,
