@@ -214,6 +214,7 @@
       { "command": "rocketbrain.spring.runtimeSecurity", "title": "Inspect Spring Security Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeProperty", "title": "Inspect Spring Property Value and Origin", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.debugProperty", "title": "Inspect Spring Property in Active Debug Target", "category": "Rocketbrain", "icon": "$(search)", "enablement": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java" },
+      { "command": "rocketbrain.spring.securityTrace", "title": "Inspect Spring Security Filter Trace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewProcedureCall", "title": "Review Stored Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewPackageCall", "title": "Review MariaDB Package Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -580,12 +581,12 @@
       },
       {
         "command": "rocketbrain.jpa.observer.prepare",
-        "title": "Prepare Independent JPA Observer Agent",
+        "title": "Prepare Local JVM Observer",
         "category": "Rocketbrain"
       },
       {
         "command": "rocketbrain.jpa.observer.connect",
-        "title": "Connect JPA Provider Observer",
+        "title": "Connect Local JVM Observer",
         "category": "Rocketbrain"
       },
       {

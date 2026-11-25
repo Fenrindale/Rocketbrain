@@ -77,7 +77,9 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 **JPA: Show Entity Relationship Diagram**으로 워크스페이스 선언이나 실행 중인 Hibernate의 엔티티 관계를 엽니다. 엔티티 연결과 매핑 선언을 탐색하고, 카드 위치와 숨김 상태를 워크스페이스에 저장합니다. [JPA 관계도 사용 범위](docs/jpa-relationship-diagram.md)
 
-**Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다. 필터 순서·매처·권한 목록은 앱의 보안 구성에서 확인합니다.
+**Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다.
+
+**Inspect Spring Security Filter Trace**는 관찰을 켠 로컬 앱에서 요청별 매처 순서, 선택된 체인, 실제 실행에 들어간 필터와 관찰된 인가 결과를 표시합니다. [Spring Security 추적 설정](docs/spring-security-filter-trace.md)
 
 ### Quarkus Maven
 

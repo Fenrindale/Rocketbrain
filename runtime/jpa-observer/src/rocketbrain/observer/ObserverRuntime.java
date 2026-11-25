@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /** Calls injected into Hibernate; every hook fails closed without changing application exceptions. */
 public final class ObserverRuntime {
-    public static final String VERSION="0.13.0";
+    public static final String VERSION="0.14.0";
     private static volatile HttpServer server;private static volatile ThreadPoolExecutor executor;
     private static byte[] expectedAuthorization;private static boolean queries,validate,consoleSelect,consoleFetchSnapshots;private static int maxEvents=128,maxQueryChars=4096;
     private static final ArrayDeque<Map<String,Object>> events=new ArrayDeque<>();private static final List<String> warnings=new ArrayList<>(),instrumented=new ArrayList<>();
@@ -40,11 +40,12 @@ public final class ObserverRuntime {
     private record Origin(String kind,String factoryId){}
     private static final class Frame {int depth=1;final String query,factoryId,origin;final long started=System.nanoTime();Frame(String query,String factoryId,String origin){this.query=query;this.factoryId=factoryId;this.origin=origin;}}
     static synchronized void start(Map<String,Object> config)throws Exception {
-        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
+        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","securityTrace");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
         Path tokenPath=Path.of(requiredText(config,"tokenFile"));if(!tokenPath.isAbsolute()||!Files.isRegularFile(tokenPath,LinkOption.NOFOLLOW_LINKS)||Files.size(tokenPath)>256)throw new IllegalArgumentException("Invalid token file");
         String token=Files.readString(tokenPath,StandardCharsets.UTF_8).trim();if(!token.matches("[A-Za-z0-9_-]{32,128}"))throw new IllegalArgumentException("Invalid bearer token");expectedAuthorization=("Bearer "+token).getBytes(StandardCharsets.US_ASCII);
         queries=flag(config,"queries");validate=flag(config,"validate");consoleSelect=flag(config,"consoleSelect");PerformanceRuntime.configure(flag(config,"performance"));maxEvents=integer(config,"maxEvents",128,1,256);maxQueryChars=integer(config,"maxQueryChars",4096,64,16384);int port=integer(config,"port",0,0,65535);
         consoleFetchSnapshots=flag(config,"consoleFetchSnapshots")&&consoleSelect;
+        SecurityTraceRuntime.configure(flag(config,"securityTrace"));
         HttpServer next=HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"),port),8);
         executor=new ThreadPoolExecutor(2,2,0,TimeUnit.MILLISECONDS,new ArrayBlockingQueue<>(8),r->{Thread thread=new Thread(r,"Rocketbrain JPA observer");thread.setDaemon(true);return thread;},new ThreadPoolExecutor.AbortPolicy());
         next.setExecutor(executor);next.createContext("/",ObserverRuntime::handle);server=next;
@@ -52,11 +53,12 @@ public final class ObserverRuntime {
         Thread starter=new Thread(next::start,"Rocketbrain observer starter");starter.setDaemon(true);starter.start();starter.join();
         Map<String,Object> descriptor=new LinkedHashMap<>();descriptor.put("agentVersion",VERSION);descriptor.put("baseUrl","http://127.0.0.1:"+next.getAddress().getPort());descriptor.put("processId",ProcessHandle.current().pid());descriptor.put("queryEvents",queries);descriptor.put("semanticValidation",validate);descriptor.put("consoleSelectEnabled",consoleSelect);descriptor.put("performanceCapture",PerformanceRuntime.enabled());descriptor.put("javaFeature",Runtime.version().feature());
         descriptor.put("consoleFetchSnapshotsEnabled",consoleFetchSnapshots);
+        descriptor.put("securityTraceEnabled",SecurityTraceRuntime.enabled());
         if(config.containsKey("descriptorFile")){Path path=Path.of(requiredText(config,"descriptorFile"));if(!path.isAbsolute()||!Files.isDirectory(path.getParent(),LinkOption.NOFOLLOW_LINKS))throw new IllegalArgumentException("Invalid descriptor path");Files.writeString(path,Json.encode(descriptor),StandardCharsets.UTF_8,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);}
         Runtime.getRuntime().addShutdownHook(new Thread(ObserverRuntime::stop,"Rocketbrain observer shutdown"));
         System.out.println("ROCKETBRAIN_JPA_OBSERVER "+Json.encode(descriptor));
     }
-    static synchronized void stop(){if(server!=null){server.stop(0);server=null;}if(executor!=null){executor.shutdownNow();executor=null;}expectedAuthorization=null;PerformanceRuntime.configure(false);}
+    static synchronized void stop(){if(server!=null){server.stop(0);server=null;}if(executor!=null){executor.shutdownNow();executor=null;}expectedAuthorization=null;PerformanceRuntime.configure(false);SecurityTraceRuntime.configure(false);}
     private static String requiredText(Map<String,Object> map,String key){Object value=map.get(key);if(!(value instanceof String text)||text.isBlank()||text.length()>8192)throw new IllegalArgumentException("Text option required");return text;}
     private static boolean flag(Map<String,Object> config,String key){Object value=config.get(key);if(value!=null&&!(value instanceof Boolean))throw new IllegalArgumentException("Boolean option required");return Boolean.TRUE.equals(value);}
     private static int integer(Map<String,Object> map,String key,int fallback,int min,int max){Object value=map.getOrDefault(key,(long)fallback);if(!(value instanceof Number number)||number.longValue()<min||number.longValue()>max)throw new IllegalArgumentException("Numeric option outside limits");return number.intValue();}
@@ -95,6 +97,10 @@ public final class ObserverRuntime {
         if(!(acquired=requests.tryAcquire())){reply(exchange,429,Map.of("error","busy"));return;}
         String path=exchange.getRequestURI().getPath(),method=exchange.getRequestMethod();if(exchange.getRequestURI().getRawQuery()!=null){reply(exchange,400,Map.of("error","query_parameters_not_allowed"));return;}
         if(path.equals("/snapshot")&&method.equals("GET")){reply(exchange,200,snapshot());return;}
+        if(path.equals("/security-trace")){
+            if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
+            reply(exchange,200,SecurityTraceRuntime.snapshot());return;
+        }
         if(path.equals("/console/describe")||path.equals("/console/select")){
             if(!method.equals("POST")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
             handleConsole(exchange,path.endsWith("/select"));return;
