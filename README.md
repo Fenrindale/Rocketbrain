@@ -406,3 +406,7 @@ For bitwise SQL, the editor separates numeric operands from MySQL binary-string 
 Use **Open Database Source for Editing** to open a disabled scheduled event owned by the current account. Edit its body and choose **Review Database Object Source** to see the exact ALTER statement and observed schedule. Apply the review to save the body while the event stays disabled. **Restore Retained Database Object Source** verifies the live event and target definitions before restoring the retained body, including after reconnecting.
 
 Event edits support bounded INSERT, UPDATE with WHERE, and DELETE with WHERE against observed same-schema InnoDB targets. The editor reads catalog metadata for review and retains the original source in the database authoring journal on apply.
+
+Use **Review Database Password Rotation** to review an exact existing account on the active MySQL or MariaDB server. The command checks the password plugin, account state and visible role metadata. Connect through a local socket, direct numeric loopback address, or verified TLS. Enter and confirm the new credential in the masked prompts after approval. Reviews and Rocketbrain activity history omit the credential and the server-side comparison tag.
+
+The supported path covers unlocked, unexpired accounts with one password method. Already authenticated sessions stay connected. Update clients that use the rotated account before opening another session.
