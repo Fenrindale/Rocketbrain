@@ -3,6 +3,7 @@
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { examineJdbcDriver, runJdbc, credentials, classpathFingerprint, maxLibraries } = require('./jdbc');
+const { postgresqlRoute, postgresJdbcUrl } = require('./postgresql-jdbc');
 
 const key = 'rocketbrain.jdbc.profiles.v1';
 const approvalLifetime = 5 * 60 * 1000;
@@ -38,7 +39,13 @@ function profile(item, legacy) {
   const versions = item.versions.map(version);
   if (!versions.every(Boolean) || new Set(versions.map(entry => entry.id)).size !== versions.length ||
       !versions.some(entry => entry.id === item.selectedVersion)) return null;
-  return { id: item.id, name: item.name, selectedVersion: item.selectedVersion, versions };
+  const result = { id: item.id, name: item.name, selectedVersion: item.selectedVersion, versions };
+  if (item.postgresql !== undefined) {
+    try { result.postgresql = postgresqlRoute(item.postgresql); }
+    catch { return null; }
+    if (versions.some(entry => entry.driverClass !== 'org.postgresql.Driver')) return null;
+  }
+  return result;
 }
 
 function selected(item) { return item.versions.find(entry => entry.id === item.selectedVersion); }
@@ -74,24 +81,28 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
   function current() {
     if (!active) throw fail('Open a saved JDBC connection first.');
     const saved = profiles().find(item => item.id === active.profile.id);
-    if (!saved || saved.selectedVersion !== active.profile.selectedVersion || selected(saved).classpathFingerprint !== active.profile.classpathFingerprint) {
+    if (!saved || saved.selectedVersion !== active.profile.selectedVersion || selected(saved).classpathFingerprint !== active.profile.classpathFingerprint ||
+        JSON.stringify(saved.postgresql) !== JSON.stringify(active.profile.postgresql)) {
       active = undefined;
       throw fail('The approved JDBC version changed. Reopen the saved profile.');
     }
     return active;
   }
-  function prepare(target, { name, jar, driverClass, libraries }, signal) {
+  function prepare(target, { name, jar, driverClass, libraries, postgresql }, signal) {
     return run(async cancellation => {
       if (!validName(name)) throw fail('Enter a JDBC profile or version name up to 80 characters.');
-      if (target && !profiles().some(item => item.id === target)) throw fail('Select a current approved JDBC profile.');
+      const current = target && profiles().find(item => item.id === target);
+      if (target && !current) throw fail('Select a current approved JDBC profile.');
+      const route = target ? current.postgresql : postgresql === undefined ? undefined : postgresqlRoute(postgresql);
+      if (route && driverClass !== 'org.postgresql.Driver') throw fail('Use the official PostgreSQL JDBC driver class for this profile.');
       const data = await examineJdbcDriver(jar, driverClass, cancellation, libraries);
       trusted();
       if (cancellation.aborted) throw fail('The JDBC operation was cancelled.');
       const id = randomUUID(), proposal = { id, name: name.trim(), ...data };
       for (const [saved, value] of approvals) if (value.expires <= Date.now()) approvals.delete(saved);
       while (approvals.size >= 8) approvals.delete(approvals.keys().next().value);
-      approvals.set(id, { expires: Date.now() + approvalLifetime, target, proposal });
-      return structuredClone(proposal);
+      approvals.set(id, { expires: Date.now() + approvalLifetime, target, proposal, route });
+      return structuredClone({ ...proposal, ...(route && { postgresql: route }) });
     }, signal);
   }
 
@@ -112,10 +123,11 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
     },
     save(id, approved) {
       return run(async () => {
-        const { proposal } = approval(id, approved, false), catalog = profiles();
+        const { proposal, route } = approval(id, approved, false), catalog = profiles();
         if (catalog.length >= 20) throw fail('Remove a JDBC profile before adding another.');
         if (catalog.some(item => item.name.toLowerCase() === proposal.name.toLowerCase())) throw fail('Choose a unique JDBC profile name.');
-        const item = { id: proposal.id, name: proposal.name, selectedVersion: proposal.id, versions: [{ ...proposal, name: 'Initial driver' }] };
+        const item = { id: proposal.id, name: proposal.name, selectedVersion: proposal.id,
+          versions: [{ ...proposal, name: 'Initial driver' }], ...(route && { postgresql: route }) };
         await persist([...catalog, item]);
         approvals.delete(id);
         return view(item);
@@ -167,7 +179,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
         const item = profiles().find(candidate => candidate.id === id);
         if (!item) throw fail('Select a current approved JDBC profile.');
         const profile = view(item);
-        const credential = credentials(input);
+        const credential = credentials(profile.postgresql ? { ...input, url: postgresJdbcUrl(profile.postgresql) } : input);
         const catalog = await runJdbc({ javaHome: getJavaHome(), profile, credential, operation: 'catalog', signal: cancellation });
         trusted();
         if (cancellation.aborted) throw fail('The JDBC operation was cancelled.');

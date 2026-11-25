@@ -15,6 +15,7 @@ import java.security.SecureClassLoader;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.Driver;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -157,10 +158,25 @@ class DriverWorker {
         if (!HexFormat.of().formatHex(digest.digest()).equals(expected)) throw new SQLException("JAR changed", "RB002");
     }
 
+    static boolean isPostgres(DatabaseMetaData metadata) throws Exception {
+        return "postgresql".equals(metadata.getDatabaseProductName().toLowerCase(Locale.ROOT));
+    }
+
     static void readOnly(Connection connection, DatabaseMetaData metadata) throws Exception {
         String product = metadata.getDatabaseProductName().toLowerCase(Locale.ROOT);
         connection.setReadOnly(true);
-        if (product.contains("mysql") || product.contains("mariadb")) {
+        if (isPostgres(metadata)) {
+            try (Statement statement = connection.createStatement()) {
+                statement.setQueryTimeout(5);
+                statement.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+                statement.execute("SET standard_conforming_strings = on");
+                connection.setAutoCommit(false);
+                try (ResultSet setting = statement.executeQuery("SHOW transaction_read_only")) {
+                    if (!setting.next() || !"on".equals(setting.getString(1))) throw new SQLException("PostgreSQL read only required", "RB003");
+                }
+            }
+            return;
+        } else if (product.contains("mysql") || product.contains("mariadb")) {
             try (Statement statement = connection.createStatement()) {
                 statement.setQueryTimeout(5);
                 statement.execute("SET SESSION TRANSACTION READ ONLY");
@@ -176,8 +192,12 @@ class DriverWorker {
         emit("I", metadata.getDatabaseProductName(), metadata.getDatabaseProductVersion(), metadata.getDriverName(),
             metadata.getDriverVersion(), catalog, schema);
         int rows = 0;
-        try (ResultSet tables = metadata.getTables(catalog, schema, "%", new String[]{"TABLE", "BASE TABLE", "VIEW"})) {
+        boolean postgres = isPostgres(metadata);
+        String[] types = postgres ? new String[]{"TABLE", "BASE TABLE", "VIEW", "MATERIALIZED VIEW", "PARTITIONED TABLE"}
+            : new String[]{"TABLE", "BASE TABLE", "VIEW"};
+        try (ResultSet tables = metadata.getTables(catalog, schema, "%", types)) {
             while (tables.next()) {
+                if (postgres && !nullText(schema).equals(nullText(tables.getString("TABLE_SCHEM")))) continue;
                 if (++rows > 500) break;
                 emit("T", tables.getString("TABLE_CAT"), tables.getString("TABLE_SCHEM"), tables.getString("TABLE_NAME"), tables.getString("TABLE_TYPE"));
             }
@@ -244,14 +264,14 @@ class DriverWorker {
 
     static void query(Connection connection, DatabaseMetaData metadata, String sql, int maxRows) throws Exception {
         readOnly(connection, metadata);
-        try (var statement = connection.prepareStatement(sql)) {
+        try (Statement statement = isPostgres(metadata) ? connection.createStatement() : connection.prepareStatement(sql)) {
             statement.setQueryTimeout(8);
             statement.setMaxRows(maxRows + 1);
             synchronized (ACTIVE) {
                 if (cancelled) throw new SQLException("Cancelled", "57014");
                 ACTIVE.set(statement);
             }
-            try (var result = statement.executeQuery()) {
+            try (var result = statement instanceof PreparedStatement prepared ? prepared.executeQuery() : statement.executeQuery(sql)) {
                 ResultSetMetaData columns = result.getMetaData();
                 int width = columns.getColumnCount();
                 if (width < 1 || width > MAX_COLUMNS) throw new SQLException("Column limit", "RB001");
@@ -288,6 +308,7 @@ class DriverWorker {
             if (count < 0 || count > 6) throw new Exception("Dependency count invalid");
             List<String> hashes = new ArrayList<>();
             for (int i = 0; i < count; i++) hashes.add(input(in));
+            String expectedDatabase = input(in), expectedSchema = input(in);
             observeCancel(in);
             Path jar = Path.of("driver.jar").toAbsolutePath();
             verifyJar(jar, sha);
@@ -310,6 +331,8 @@ class DriverWorker {
                 try (Connection connection = driver.connect(url, properties)) {
                     if (connection == null) throw new SQLException("Driver rejected this URL", "08001");
                     DatabaseMetaData metadata = connection.getMetaData();
+                    if (!expectedDatabase.isEmpty() && (!isPostgres(metadata) || !expectedDatabase.equals(connection.getCatalog()) ||
+                            !expectedSchema.equals(connection.getSchema()))) throw new SQLException("PostgreSQL connection scope changed", "RB005");
                     switch (operation) {
                         case "catalog" -> catalog(connection, metadata);
                         case "describe" -> describe(metadata, catalog, schema, object);
