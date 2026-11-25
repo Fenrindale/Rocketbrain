@@ -18,7 +18,11 @@ Run **Rocketbrain: Browse MongoDB Collections** to choose an authorized database
 }
 ```
 
-Filters accept equality, comparisons, `$in`, `$nin`, `$exists`, `$and`, `$or` and `$nor`. Canonical Extended JSON literals support ObjectId, numeric BSON types, dates and binary values. Results preserve native BSON types in canonical Extended JSON, including integers beyond the JavaScript safe integer range. The query cap is 64 KiB, with up to 200 returned documents, a 256 KiB document budget, a 1 MiB aggregate document budget and a five-second server read limit. The current connection targets one loopback server and exposes catalog browsing and find queries.
+Filters accept equality, comparisons, `$in`, `$nin`, `$exists`, `$and`, `$or` and `$nor`. Canonical Extended JSON literals support ObjectId, numeric BSON types, dates and binary values. Results preserve native BSON types in canonical Extended JSON, including integers beyond the JavaScript safe integer range. The query cap is 64 KiB, with up to 200 returned documents, a 256 KiB document budget, a 1 MiB preview budget and a five-second server read limit. The connection targets one loopback server.
+
+Run **New MongoDB Aggregation** and select an ordinary collection. The editor records the current collection UUID, its database, the pipeline and the preview limit. Edit the pipeline and run **Run Read-Only MongoDB Aggregation** to open the typed preview. Save it as `.mongo-aggregate.json` to reuse the pipeline against the same collection. A collection recreated with the same name needs a new editor to use its new UUID.
+
+The bounded pipeline supports `$match`, `$project`, `$group`, `$sort`, `$limit` and `$count`. For example, `{ "$group": { "_id": "$category", "total": { "$sum": "$amount" }, "count": { "$sum": 1 } } }` groups documents by category. Use ordinary field references and the existing Extended JSON filter types. Up to 16 stages use the same read and preview budgets as Find. The built-in `read` role exposes the required collection metadata. The server checks the UUID with the query. The workflow was verified on MongoDB 8.0.38 and handles a single ordinary collection. Views, other collection sources, scripting and write stages are outside its scope.
 
 The official MongoDB Node.js driver is distributed under Apache-2.0 with its dependency notices included in the VSIX. MongoDB Community Server is a separately obtained SSPL component. The portable vendor runtime used for verification is outside the VSIX. [MongoDB licensing](https://www.mongodb.com/legal/licensing/community-edition)
 

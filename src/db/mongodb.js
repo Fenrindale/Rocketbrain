@@ -8,8 +8,12 @@ const maxPreviewBytes = 1024 * 1024;
 const maxDocuments = 200;
 const maxCatalogEntries = 200;
 const maxTimeMS = 5000;
+const maxStages = 16;
 const reserved = new Set(['__proto__', 'prototype', 'constructor']);
 const queryKeys = new Set(['database', 'collection', 'filter', 'projection', 'sort', 'limit']);
+const aggregateKeys = new Set(['database', 'collection', 'collectionId', 'pipeline', 'limit']);
+const accumulators = new Set(['$sum', '$min', '$max', '$avg', '$first', '$last']);
+const uuidPattern = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 const comparisons = new Set(['$eq', '$ne', '$lt', '$lte', '$gt', '$gte']);
 const logicalOperators = new Set(['$and', '$or', '$nor']);
 const decimal = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$/;
@@ -174,6 +178,104 @@ function parseMongoFind(source) {
   return { database, collection, filter: bsonFilter, projection, sort, limit };
 }
 
+function aggregationTarget(input) {
+  const database = databaseName(input?.database), collection = collectionName(input?.collection);
+  if (collection.startsWith('system.')) throw new MongoDbError('Choose an ordinary MongoDB collection.');
+  return { database, collection };
+}
+
+function resultName(name) {
+  fieldName(name);
+  if (name.includes('.')) throw new MongoDbError('Use a single field name for the aggregation result.');
+}
+
+function fieldReference(value) {
+  if (typeof value !== 'string' || !value.startsWith('$')) {
+    throw new MongoDbError('Use a MongoDB field reference such as $amount.');
+  }
+  fieldName(value.slice(1));
+}
+
+function validateGroup(group) {
+  const fields = Object.entries(group);
+  if (!Object.hasOwn(group, '_id') || fields.length > 33) {
+    throw new MongoDbError('A $group needs an _id and supports up to 32 accumulator fields.');
+  }
+  if (group._id !== null) fieldReference(group._id);
+  for (const [name, expression] of fields) {
+    if (name === '_id') continue;
+    resultName(name);
+    const [operator] = plainObject(expression) ? Object.keys(expression) : [];
+    if (!accumulators.has(operator) || !exactShape(expression, [operator])) {
+      throw new MongoDbError('Use one supported accumulator per group result field.');
+    }
+    if (operator !== '$sum' || expression[operator] !== 1) fieldReference(expression[operator]);
+  }
+}
+
+function validateProjection(projection) {
+  if (Object.keys(projection).length > 64) throw new MongoDbError('A $project supports up to 64 fields.');
+  let includes = false, excludes = false;
+  for (const [name, expression] of Object.entries(projection)) {
+    fieldName(name);
+    if (expression === 0) { if (name !== '_id') excludes = true; }
+    else {
+      if (expression !== 1) fieldReference(expression);
+      includes = true;
+    }
+  }
+  if (includes && excludes) throw new MongoDbError('Use either inclusion and field references or exclusion in one $project.');
+}
+
+function parseMongoAggregation(source) {
+  if (typeof source !== 'string' || Buffer.byteLength(source) > maxQueryBytes) {
+    throw new MongoDbError('A MongoDB aggregation document is limited to 64 KiB.');
+  }
+  let input;
+  try { input = JSON.parse(source); }
+  catch { throw new MongoDbError('Enter one valid JSON aggregation document.'); }
+  if (!plainObject(input) || Object.keys(input).some(key => !aggregateKeys.has(key))) {
+    throw new MongoDbError('Use only database, collection, collectionId, pipeline and limit.');
+  }
+  const target = aggregationTarget(input);
+  if (typeof input.collectionId !== 'string' || !uuidPattern.test(input.collectionId)) {
+    throw new MongoDbError('Open an aggregation editor for the observed MongoDB collection.');
+  }
+  const limit = input.limit === undefined ? 50 : input.limit;
+  if (!Number.isInteger(limit) || limit < 1 || limit > maxDocuments) throw new MongoDbError('Use a preview limit from 1 to 200.');
+  if (!Array.isArray(input.pipeline) || input.pipeline.length < 1 || input.pipeline.length > maxStages) {
+    throw new MongoDbError('Use a pipeline with one to 16 stages.');
+  }
+  const count = scope();
+  const pipeline = input.pipeline.map(value => {
+    const [stage] = plainObject(value) ? Object.keys(value) : [];
+    if (!stage || !exactShape(value, [stage])) throw new MongoDbError('Give each MongoDB stage a single operator.');
+    const argument = value[stage];
+    if (stage === '$count') resultName(argument);
+    else if (stage === '$limit') {
+      if (!Number.isInteger(argument) || argument < 1 || argument > maxDocuments) {
+        throw new MongoDbError('Use a $limit from 1 to 200.');
+      }
+    } else {
+      if (!plainObject(argument) || !Object.keys(argument).length && stage !== '$match') {
+        throw new MongoDbError('Give the aggregation stage an object with supported fields.');
+      }
+      switch (stage) {
+        case '$match':
+          checkFilter(argument, 0, count);
+          try { return { $match: BSON.EJSON.deserialize(argument, { relaxed: false }) }; }
+          catch { throw new MongoDbError('The $match contains an invalid Extended JSON value.'); }
+        case '$project': validateProjection(argument); break;
+        case '$group': validateGroup(argument); break;
+        case '$sort': fieldOptions(argument, [-1, 1], 16, 'Sort'); break;
+        default: throw new MongoDbError('Use $match, $project, $group, $sort, $limit or $count for a read-only MongoDB aggregation.');
+      }
+    }
+    return value;
+  });
+  return { ...target, collectionId: input.collectionId.toLowerCase(), pipeline, limit };
+}
+
 function safeError(error, signal) {
   if (signal?.aborted) return new MongoDbError('MongoDB operation cancelled or timed out.', 'ROCKETBRAIN_MONGO_CANCELLED');
   if (error instanceof MongoDbError) return error;
@@ -182,6 +284,7 @@ function safeError(error, signal) {
     case 13: return new MongoDbError('The MongoDB account cannot read this database or collection.', 'ROCKETBRAIN_MONGO_FORBIDDEN');
     case 18: return new MongoDbError('MongoDB rejected the connection credentials.', 'ROCKETBRAIN_MONGO_AUTH');
     case 50: return new MongoDbError('MongoDB reached the read time limit.', 'ROCKETBRAIN_MONGO_TIMEOUT');
+    case 361: return new MongoDbError('The selected MongoDB collection changed. Open a new aggregation editor.', 'ROCKETBRAIN_MONGO_STALE');
     default: return new MongoDbError('MongoDB could not complete the read. Check the local server and query settings.', 'ROCKETBRAIN_MONGO_READ');
   }
 }
@@ -196,6 +299,36 @@ function serializeDocument(document) {
 async function closeCursor(cursor) {
   // Preserve the original query outcome if the driver already closed the socket.
   await cursor.close().catch(() => {});
+}
+
+async function collectDocuments(cursor, limit) {
+  const documents = [];
+  let bytes = 0;
+  let truncated;
+  try {
+    for await (const document of cursor) {
+      if (documents.length === limit) { truncated = 'row-limit'; break; }
+      const json = serializeDocument(document);
+      if (json === undefined) { truncated = 'document-size'; break; }
+      bytes += Buffer.byteLength(json);
+      if (bytes > maxPreviewBytes) { truncated = 'preview-size'; break; }
+      documents.push(JSON.parse(json));
+    }
+  } finally { await closeCursor(cursor); }
+  return { documents, encoding: 'canonical-extended-json', truncated: truncated ?? null };
+}
+
+async function observeAggregationTarget(db, collection, signal) {
+  const cursor = db.listCollections({ name: collection }, { nameOnly: false, batchSize: 2, maxTimeMS, signal });
+  try {
+    const item = await cursor.next();
+    const id = item?.info?.uuid;
+    if (item?.name !== collection || item.type !== 'collection' ||
+        !(id instanceof BSON.Binary) || id.sub_type !== BSON.Binary.SUBTYPE_UUID || id.length() !== 16) {
+      throw new MongoDbError('Choose an ordinary MongoDB collection with visible identity metadata.', 'ROCKETBRAIN_MONGO_AGGREGATE_SCOPE');
+    }
+    return new BSON.UUID(id.buffer.subarray(0, 16));
+  } finally { await closeCursor(cursor); }
 }
 
 async function collectCatalog(cursor) {
@@ -270,22 +403,26 @@ async function openMongoDb(configuration, { signal } = {}) {
       const { database, collection, filter, sort, projection, limit } = parseMongoFind(source);
       const cursor = client.db(database).collection(collection).find(filter, { sort, projection, limit: limit + 1,
         batchSize: 10, maxTimeMS, allowDiskUse: false, promoteValues: false, signal: request });
-      const documents = [];
-      let bytes = 0;
-      let truncated;
-      try {
-        for await (const document of cursor) {
-          if (documents.length === limit) { truncated = 'row-limit'; break; }
-          const json = serializeDocument(document);
-          if (json === undefined) { truncated = 'document-size'; break; }
-          bytes += Buffer.byteLength(json);
-          if (bytes > maxPreviewBytes) { truncated = 'preview-size'; break; }
-          documents.push(JSON.parse(json));
-        }
-      } finally { await closeCursor(cursor); }
-      return { database, collection, documents, encoding: 'canonical-extended-json', truncated: truncated ?? null };
+      return { database, collection, ...await collectDocuments(cursor, limit) };
+    }, options),
+    inspectAggregation: (input, options) => use(async request => {
+      const target = aggregationTarget(input);
+      const uuid = await observeAggregationTarget(client.db(target.database), target.collection, request);
+      return { ...target, collectionId: uuid.toHexString() };
+    }, options),
+    aggregate: (source, options) => use(async request => {
+      const { database, collection, collectionId, pipeline, limit } = parseMongoAggregation(source);
+      const db = client.db(database);
+      const uuid = await observeAggregationTarget(db, collection, request);
+      if (uuid.toHexString() !== collectionId) {
+        throw new MongoDbError('The selected MongoDB collection changed. Open a new aggregation editor.', 'ROCKETBRAIN_MONGO_STALE');
+      }
+      const cursor = db.runCursorCommand({ aggregate: collection, collectionUUID: uuid, pipeline: [...pipeline, { $limit: limit + 1 }],
+        cursor: { batchSize: 10 }, maxTimeMS, allowDiskUse: false }, { promoteValues: false, signal: request }).setBatchSize(10);
+      return { database, collection, collectionId, kind: 'aggregation', stages: pipeline.map(stage => Object.keys(stage)[0]),
+        ...await collectDocuments(cursor, limit) };
     }, options)
   };
 }
 
-module.exports = { openMongoDb, parseMongoFind, mongoTarget, MongoDbError };
+module.exports = { openMongoDb, parseMongoFind, parseMongoAggregation, mongoTarget, MongoDbError };

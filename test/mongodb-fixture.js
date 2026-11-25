@@ -99,6 +99,7 @@ async function startMongoFixture(bin) {
     await source.createCollection(sample.view, { viewOn: sample.collection, pipeline: [{ $match: { active: true } }] });
     await source.collection('wide').insertOne({ text: 'a'.repeat(270000) });
     await source.collection('budget').insertMany(Array.from({ length: 7 }, (_, index) => ({ index, text: 'z'.repeat(200000) })));
+    await source.collection('stale_target').insertOne({ generation: 1 });
     await administrator.db(sample.extra).collection('nested').insertOne({ n: 1 });
     await administrator.db(sample.hidden).collection('secret').insertOne({ n: 2 });
     const config = { host: '127.0.0.1', port, authSource: 'admin', ...readerAuth };
@@ -110,7 +111,21 @@ async function startMongoFixture(bin) {
       } catch (error) { return error.code === 13; }
       finally { await reader.close(); }
     }
-    return { sample, config, version: build.version, readerWriteDenied, stop };
+    async function replaceAggregationTarget() {
+      await source.collection('stale_target').drop();
+      await source.collection('stale_target').insertOne({ generation: 2 });
+    }
+    async function readerRejectsStaleAggregationIdentity(uuid) {
+      const reader = fixtureClient(port, readerAuth);
+      try {
+        await reader.db(sample.database).command({ aggregate: 'stale_target', collectionUUID: new BSON.UUID(uuid),
+          pipeline: [{ $match: {} }], cursor: {}, allowDiskUse: false });
+        return false;
+      } catch (error) { return error.code === 361; }
+      finally { await reader.close(); }
+    }
+    return { sample, config, version: build.version, readerWriteDenied, replaceAggregationTarget,
+      readerRejectsStaleAggregationIdentity, stop };
   } catch (error) {
     await stop();
     const reason = error?.code ? ' (driver code ' + error.code + ')' : '';
