@@ -89,9 +89,11 @@ async function runSqlCollationChecks(api, vscode, checks) {
       assert.deepEqual(diagnostics.map(item => [item.code, document.getText(item.range)]), expected);
     },
     async assertVirtualDisabled(document) {
+      const diagnostics = () => vscode.languages.getDiagnostics(document.uri).filter(item => String(item.code).startsWith('sql.collation.'));
       await api.sqlAnalysis.useDdlPreview(document);
-      assert.deepEqual(api.sqlCollations.inspect(document), []);
+      assert.deepEqual(diagnostics(), []);
       assert.equal(api.sqlAnalysis.clearDdlPreview(document), true);
+      assert.equal(diagnostics().length, 1);
     },
     async assertLiveEditorChange(document) {
       const diagnostics = () => vscode.languages.getDiagnostics(document.uri).filter(item => String(item.code).startsWith('sql.collation.'));

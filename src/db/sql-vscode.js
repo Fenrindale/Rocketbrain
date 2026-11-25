@@ -498,12 +498,14 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     }
     if(ddlPreviews.size>=24&&!ddlPreviews.has(uri))throw Error('Close a SQL preview before opening another.');
     ddlPreviews.set(uri,preview);cache.delete(uri);preparedRenames.delete(uri);
-    return analyzeDocument(document);
+    const report=analyzeDocument(document);
+    events.fire(document);
+    return report;
   }
   function clearDdlPreview(document){
     if(!document||!ddlPreviews.delete(document.uri.toString()))return false;
     cache.delete(document.uri.toString());
-    if(!document.isClosed)analyzeDocument(document);
+    if(!document.isClosed){analyzeDocument(document);events.fire(document);}
     return true;
   }
   function overlayContext(){
@@ -557,7 +559,9 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     ddlPreviews.set(uri,{type:'overlay',model,scope,assertCurrent,report:{id,label:value.label,revision:value.revision,changes,externalInputs}});
     cache.delete(uri);
     preparedRenames.delete(uri);
-    return analyzeDocument(document);
+    const report=analyzeDocument(document);
+    events.fire(document);
+    return report;
   }
   const virtualSchemas={list:listOverlays,read:readOverlay,save:saveOverlay,remove:removeOverlay,use:useOverlay};
   if(overlays)subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(overlaySourceScheme,{

@@ -74,7 +74,7 @@ function registerSqlCollations(vscode, { database, virtualActive = () => false, 
   subscriptions.push(vscode.workspace.onDidChangeTextDocument(({ document }) => inspect(document)));
   subscriptions.push(vscode.workspace.onDidCloseTextDocument(document => collection.delete(document.uri)));
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('rocketbrain.sql.analysis')) update(); }));
-  if (onDidChangeAnalysis) subscriptions.push(onDidChangeAnalysis(update));
+  if (onDidChangeAnalysis) subscriptions.push(onDidChangeAnalysis(document => document ? inspect(document) : update()));
   subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.refreshCollationChecks', async () => {
     try {
       const value = await refresh();
