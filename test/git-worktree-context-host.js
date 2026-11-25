@@ -5,18 +5,18 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const {randomUUID}=require('node:crypto');
 const {pathToFileURL}=require('node:url');
-const {importedSpring,jdbcReadback}=require('./java-source-analysis-host');
+const {jdbcReadback}=require('./java-source-analysis-host');
 const {owned}=require('./schema-stored-diff-host');
 const {gitWorktreeFixture}=require('./helpers/git-worktree-fixture');
 
 async function runGitWorktreeContextChecks(api,vscode,checks) {
   const workspace=vscode.workspace.workspaceFolders[0].uri.fsPath;
-  await importedSpring(api,workspace);
   const runtime=JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG,'utf8'));
   const fixture=await gitWorktreeFixture(workspace),profiles=[],sessions=[];
   const service=api.gitWorktrees,imported=[];
   let database;
   try {
+    await api.java.start();
     assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.gitWorktree.context'));
     for(const project of [fixture.main,fixture.linked]){
       const projectUri=pathToFileURL(project).href;
@@ -71,7 +71,7 @@ async function runGitWorktreeContextChecks(api,vscode,checks) {
     const jdbc=await jdbcReadback();
     assert.ok(jdbc,'Use the owned JDBC Spring fixture.');
     checks.push('The installed worktree context resolved two real Git/JDT projects, read the selected Spring Actuator and opened each worktree’s distinct database profile in its own SQL session.');
-    return {springWorkspace:true,jdbc,gitWorktrees:2,javaProjects:2,actuatorHealth:'UP',databaseSessions:2,
+    return {springRuntime:true,jdbc,gitWorktrees:2,javaProjects:2,actuatorHealth:'UP',databaseSessions:2,
       activeConnectionPreserved:true,staleProfileRefused:true,staleContextRefused:true,dbEngine:runtime.dbEngine};
   }finally{
     try {
