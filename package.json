@@ -70,6 +70,7 @@
       },
       { "id": "duckdb-sql", "aliases": ["DuckDB SQL"], "extensions": [".duckdb.sql"] },
       { "id": "rocketbrain-jdbc", "aliases": ["Rocketbrain JDBC SQL"], "extensions": [".jdbc.sql"] },
+      { "id": "rocketbrain-java-regex", "aliases": ["Java Regular Expression"] },
       { "id": "rocketbrain-jpql", "aliases": ["JPQL", "Hibernate Query"], "extensions": [".jpql", ".hql"] },
       { "id": "kotlin", "aliases": ["Kotlin"], "extensions": [".kt"] },
       { "id": "vue", "aliases": ["Vue"], "extensions": [".vue"] },
@@ -79,7 +80,8 @@
       { "language": "scala", "scopeName": "source.scala", "path": "./media/scala.tmLanguage.json" },
       { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" },
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" },
-      { "language": "rocketbrain-jpql", "scopeName": "source.rocketbrain-jpql", "path": "./media/jpql.tmLanguage.json" }
+      { "language": "rocketbrain-jpql", "scopeName": "source.rocketbrain-jpql", "path": "./media/jpql.tmLanguage.json" },
+      { "language": "rocketbrain-java-regex", "scopeName": "source.rocketbrain-java-regex", "path": "./media/java-regex.tmLanguage.json" }
     ],
     "commands": [
       { "command": "rocketbrain.java.copyAsyncTraceHelper", "title": "Copy Java Async Trace Helper", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -188,8 +190,9 @@
       { "command": "rocketbrain.db.newFederatedSelect", "title": "New Federated SELECT", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.runFederatedSelect", "title": "Run Federated SELECT", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.vcs.changelists", "title": "Manage Git Changelists", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
-      { "command": "rocketbrain.sql.editEmbedded", "title": "Edit Embedded SQL or JSON", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == xml || editorLangId == sql)" },
-      { "command": "rocketbrain.sql.applyEmbedded", "title": "Review and Apply Embedded Source Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == untitled && (editorLangId == sql || editorLangId == json)" },
+      { "command": "rocketbrain.sql.editEmbedded", "title": "Edit Embedded Language", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == xml || editorLangId == sql)" },
+      { "command": "rocketbrain.sql.applyEmbedded", "title": "Review and Apply Embedded Source Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == untitled && (editorLangId == sql || editorLangId == json || editorLangId == html || editorLangId == rocketbrain-java-regex)" },
+      { "command": "rocketbrain.java.revealEmbeddedSource", "title": "Reveal Embedded Java Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == untitled && (editorLangId == sql || editorLangId == json || editorLangId == html || editorLangId == rocketbrain-java-regex)" },
       { "command": "rocketbrain.db.nativeDump", "title": "Create Native Database Dump", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.nativeRestore", "title": "Review and Restore Native Dump", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.duckdb.open", "title": "Open Local DuckDB Read-Only", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },

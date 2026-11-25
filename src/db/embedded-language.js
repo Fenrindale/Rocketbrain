@@ -8,13 +8,15 @@ const { decodeLiteral } = require('./schema-program-paths');
 const { literal: encodeSqlLiteral } = require('./schema-designer-ddl');
 
 const limit = 16384;
+const javaLanguages = new Set(['sql', 'json', 'regex', 'html']);
 const mapperStatements = new Set(['select', 'insert', 'update', 'delete', 'sql']);
 const unicodeWarning = 'Java Unicode pre-lexing escapes are not fully modeled';
 
 function validateValue(text, language) {
-  if (typeof text !== 'string' || !text.isWellFormed() || !text.trim() || text.length > limit || text.includes('\0')) {
-    throw Error('Use nonempty text up to 16,384 characters without NUL or unpaired surrogates.');
+  if (typeof text !== 'string' || !text.isWellFormed() || text.length > limit || text.includes('\0')) {
+    throw Error('Use text up to 16,384 characters without NUL or unpaired surrogates.');
   }
+  if (['sql', 'json'].includes(language) && !text.trim()) throw Error('Enter a nonempty SQL or JSON fragment.');
   if (language === 'json') {
     try { JSON.parse(text); }
     catch { throw Error('Fix the JSON syntax before applying it to the original source.'); }
@@ -83,10 +85,10 @@ function inspectEmbedded(hostLanguage, language, text, offset, sqlMode) {
     throw Error('Open a supported source of up to one MiB and place the cursor inside its fragment.');
   }
   let snippet;
-  if (hostLanguage === 'java' && ['sql', 'json'].includes(language)) snippet = javaSnippet(text, offset);
+  if (hostLanguage === 'java' && javaLanguages.has(language)) snippet = javaSnippet(text, offset);
   else if (hostLanguage === 'xml' && language === 'sql') snippet = mapperSnippet(text, offset);
   else if (hostLanguage === 'sql' && language === 'json') snippet = sqlSnippet(text, offset, sqlMode);
-  else throw Error('Choose SQL or JSON in Java, SQL in a MyBatis mapper, or JSON in a SQL string.');
+  else throw Error('Choose a supported Java, MyBatis or SQL fragment.');
   validateValue(snippet.text, language);
   return { ...snippet, hostLanguage, language, original: text.slice(snippet.start, snippet.end) };
 }
@@ -99,6 +101,19 @@ function javaString(text) {
   });
 }
 
+function javaTextBlock(text, original) {
+  const eol = original.includes('\r\n') ? '\r\n' : '\n';
+  const indent = /\n([ \t]*)"""$/.exec(original)?.[1] ?? '';
+  const trailingNewline = text.endsWith('\n');
+  const lines = text.split('\n');
+  if (trailingNewline) lines.pop();
+  const encoded = lines.map(line => {
+    const value = javaString(line).slice(1, -1);
+    return indent + value.replace(/ +$/, whitespace => '\\s'.repeat(whitespace.length));
+  }).join(eol);
+  return '"""' + eol + encoded + (trailingNewline ? '' : '\\') + eol + indent + '"""';
+}
+
 function replacementFor(snippet, text) {
   validateValue(text, snippet.language);
   if (text === snippet.text) return snippet.original;
@@ -107,8 +122,9 @@ function replacementFor(snippet, text) {
   }
   switch (snippet.kind) {
     case 'string':
-    case 'text-block':
       return javaString(text);
+    case 'text-block':
+      return ['regex', 'html'].includes(snippet.language) ? javaTextBlock(text, snippet.original) : javaString(text);
     case 'text':
       return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\r', '&#13;');
     case 'cdata':
@@ -121,4 +137,11 @@ function replacementFor(snippet, text) {
   }
 }
 
-module.exports = { inspectEmbedded, replacementFor };
+function projectionRange(snippet, start, end) {
+  if (snippet.hostLanguage !== 'java' || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+      start < 0 || end < start || end > snippet.text.length) throw Error('Choose a valid range in the original Java fragment.');
+  const position = snippet.map[start] ?? snippet.ends.at(-1) ?? snippet.start + (snippet.kind === 'string' ? 1 : 3);
+  return { start: position, end: start === end ? position : snippet.ends[end - 1] };
+}
+
+module.exports = { inspectEmbedded, replacementFor, projectionRange };
