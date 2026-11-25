@@ -131,6 +131,8 @@ async function activate(context) {
   context.subscriptions.push(jupyter);
   const python = require('./python/python-vscode').registerPython(vscode);
   context.subscriptions.push(python);
+  const devContainers = require('./devcontainer/vscode').registerDevContainers(context, vscode);
+  context.subscriptions.push(devContainers);
   const schemaComparison=require('./db/schema-diff-vscode').registerSchemaComparison(context,vscode,{
     capture:options=>database.captureSchemaSnapshot(options),
     prepare:request=>database.previewSchemaMigration(request),
@@ -154,7 +156,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists, codeReview, federation };
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists, codeReview, federation };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

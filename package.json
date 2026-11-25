@@ -68,6 +68,11 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.devcontainer.inspect", "title": "Inspect Dev Container Configuration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.devcontainer.start", "title": "Start Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.devcontainer.exec", "title": "Run in Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.devcontainer.status", "title": "Check Managed Dev Container Status", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.devcontainer.stop", "title": "Stop Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
@@ -1376,6 +1381,18 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.devcontainer.cliPath": {
+          "type": "string", "default": "", "scope": "machine",
+          "description": "Absolute path to the installed @devcontainers/cli 0.91.0 package folder for local workspace containers."
+        },
+        "rocketbrain.devcontainer.nodePath": {
+          "type": "string", "default": "", "scope": "machine",
+          "description": "Optional absolute path to the Node.js 20+ executable. Defaults to node on the local PATH."
+        },
+        "rocketbrain.devcontainer.dockerPath": {
+          "type": "string", "default": "", "scope": "machine",
+          "description": "Optional absolute path to the Docker executable. Defaults to docker on the local PATH and requires a local Docker context."
+        },
         "rocketbrain.jupyter.pythonPath": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Absolute path to local Python with jupyter_client and ipykernel for explicit notebook execution."
