@@ -1,7 +1,8 @@
 'use strict';
 const crypto=require('node:crypto');
 const { createParameterPresets, presetSignature } = require('./parameter-presets');
-const { clientStatementAt } = require('./sql-format-script');
+const { clientStatementAt, selectedClientStatement } = require('./sql-format-script');
+const { LIMITS } = require('./sql-script');
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
 
 function registerSqlScripts(context,vscode,{database}={}) {
@@ -38,11 +39,20 @@ function registerSqlScripts(context,vscode,{database}={}) {
     return describeFrame(frame(document,range));
   }
 
-  async function describeCurrent(document, offset) {
+  async function describeCurrent(document, offset, range) {
+    if (range && document?.languageId === 'sql' && Buffer.byteLength(document.getText()) > LIMITS.sqlBytes) return;
     const saved = frame(document);
     const observed = await database.describeSqlScript('SELECT 1', { document });
     assertFrame(saved);
-    const selected = clientStatementAt(saved.sql,offset,{sqlMode:observed.sqlMode,dialect:observed.dialect});
+    const options = {sqlMode:observed.sqlMode,dialect:observed.dialect};
+    let selected;
+    if (range) {
+      try { selected = selectedClientStatement(saved.sql,range,options); }
+      catch { return; }
+      if (!selected) return;
+    } else {
+      selected = clientStatementAt(saved.sql,offset,options);
+    }
     const result = await describeFrame({ ...saved, ...selected },observed);
     return { ...result, editorRange:{start:selected.start,end:selected.end}, compound:selected.compound };
   }
@@ -198,7 +208,7 @@ function registerSqlScripts(context,vscode,{database}={}) {
     if (current && (editor.document.uri.toString() !== current.uri || editor.document.version !== current.version)) {
       throw Error('The selected SQL editor changed. Select the statement again.');
     }
-    const description = current ? await api.describeCurrent(editor.document,current.offset) :
+    const description = current ? await api.describeCurrent(editor.document,current.offset,current.selection) :
       await api.describe(editor.document, { range: editor.selection.isEmpty ? undefined : editor.selection });
     return { editor, description };
   }
@@ -235,6 +245,7 @@ function registerSqlScripts(context,vscode,{database}={}) {
   async function command(reviewOnly=false,current){
     try{
       const { editor, description } = await prepareActive(current);
+      if (!description && current?.selection) return {useDirectSelection:true};
       const matches = api.matchingPresets(description.id);
       let selected;
       if (matches.length) {

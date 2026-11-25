@@ -74,20 +74,40 @@ function splitFormatScript(source, options) {
   return { statements, directives };
 }
 
+const statementEnd = item => item.end + (item.terminated ? item.delimiter.length : 0);
+
+function sourceForStatement(source, statement) {
+  const end = statementEnd(statement);
+  const selected = source.slice(statement.start,end);
+  const sql = statement.delimiter === ';' ? selected :
+    'DELIMITER ' + statement.delimiter + '\n' + selected + '\nDELIMITER ;';
+  return { start: statement.start, end, sql, compound: statement.delimiter !== ';' };
+}
+
 function clientStatementAt(source, offset, options) {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > source.length) {
     throw Error('Place the cursor inside a SQL statement.');
   }
   const { statements } = splitFormatScript(source, options);
-  const endOf = item => item.end + (item.terminated ? item.delimiter.length : 0);
   const statement = statements.find(item => offset >= item.start &&
-    (offset < endOf(item) || offset === source.length && offset === endOf(item)));
+    (offset < statementEnd(item) || (offset === source.length && offset === statementEnd(item))));
   if (!statement) throw Error('Place the cursor inside a SQL statement, outside the DELIMITER directives.');
-  const end = endOf(statement);
-  const selected = source.slice(statement.start,end);
-  const sql = statement.delimiter === ';' ? selected :
-    'DELIMITER ' + statement.delimiter + '\n' + selected + '\nDELIMITER ;';
-  return { start: statement.start, end, sql, compound: statement.delimiter !== ';' };
+  return sourceForStatement(source,statement);
+}
+
+function selectedClientStatement(source, { start,end }, options) {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > source.length || start >= end) return;
+  const text = source.slice(start,end);
+  const first = start + text.length - text.trimStart().length;
+  const last = start + text.trimEnd().length;
+  const { statements } = splitFormatScript(source, options);
+  const statement = statements.find(item => {
+    if (item.delimiter === ';' || first < item.start || first >= item.end) return false;
+    const body = source.slice(item.start,item.end);
+    return first === item.start + body.length - body.trimStart().length &&
+      (last === item.start + body.trimEnd().length || last === statementEnd(item));
+  });
+  if (statement) return sourceForStatement(source,statement);
 }
 
 function programHeader(tokens, dialect) {
@@ -261,4 +281,5 @@ function formatProgram(source, options) {
   return formatted;
 }
 
-module.exports = { formatProgram, splitFormatScript, delimiterDirective, compoundCreation, clientStatementAt, keywordText };
+module.exports = { formatProgram, splitFormatScript, delimiterDirective, compoundCreation, clientStatementAt,
+  selectedClientStatement, keywordText };

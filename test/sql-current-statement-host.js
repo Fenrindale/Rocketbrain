@@ -50,7 +50,11 @@ async function runCurrentSqlStatementChecks(api,vscode,checks) {
     assert.equal(description.compound,true);
     assert.equal(sql.slice(description.editorRange.start, description.editorRange.end),
       'CREATE PROCEDURE '+routine+"() BEGIN SELECT 'literal // text'; SELECT 9 AS n; END//");
-    const reviewed = await api.sqlScripts.preview(description.id,[]);
+    const selection = {start:sql.indexOf('CREATE PROCEDURE'),end:description.editorRange.end-2};
+    const selected = await api.sqlScripts.describeCurrent(document,selection.end,selection);
+    assert.equal(selected.sourceSqlHash,description.sourceSqlHash);
+    assert.equal(await api.sqlScripts.describeCurrent(document,selection.end,{...selection,start:selection.start+1}),undefined);
+    const reviewed = await api.sqlScripts.preview(selected.id,[]);
     await assert.rejects(api.sqlScripts.run(reviewed.id),/acknowledge/);
     const deployed = await api.sqlScripts.run(reviewed.id,{allowImplicitCommit:true});
     assert.equal(deployed.completed,1);
@@ -63,7 +67,7 @@ async function runCurrentSqlStatementChecks(api,vscode,checks) {
     assert.deepEqual(jdbc,{people:2,departments:1,rolledBackNames:0});
     checks.push('The installed current-statement command respected client separators and the reviewed routine excluded adjacent DDL.');
     return {engine:runtime.dbEngine,installedRunQuery:true,compoundStatementOnly:true,adjacentDdlExcluded:true,
-      directiveRowsRefused:true,exactBody:true,jdbc};
+      directiveRowsRefused:true,exactBody:true,exactSelection:true,partialSelectionExcluded:true,jdbc};
   } finally {
     try {
       if (sessionId) await api.closeConsoleSession(sessionId);
