@@ -1,5 +1,5 @@
 {
-  "version": "0.74.0",
+  "version": "0.75.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 95,
-    "partial": 107,
+    "implemented": 98,
+    "partial": 104,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 74.3,
+    "percent": 75,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-008",
-    "IDEA-011",
-    "IDEA-056",
-    "DG-094"
+    "IDEA-014",
+    "IDEA-051",
+    "DG-014",
+    "DG-036"
   ],
   "expandedFeatures": [
-    "IDEA-008",
-    "IDEA-011",
-    "IDEA-056",
-    "DG-094"
+    "IDEA-014",
+    "IDEA-051",
+    "DG-014",
+    "DG-036"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -274,8 +274,8 @@
       "verification": {
         "state": "v0.74-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.74.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -364,8 +364,8 @@
       "verification": {
         "state": "v0.74-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.74.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -444,27 +444,24 @@
       "category": "작업 공간·편집기",
       "feature": "새 파일 템플릿",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "Java·Spring 새 파일 템플릿에서 Maven·Gradle·JDT 소스 루트와 패키지를 선택한다. 사용자 템플릿은 세 변수를 치환하고 헤더를 포함할 수 있다. 기존 파일 충돌을 차단하고 생성한 파일을 연다.",
-      "remaining": [
-        "전용 저작권 프로필, 추가 사용자 변수 및 프로젝트 종류별 생성기 연동이 남는다."
-      ],
+      "scope": "빌드 도구와 주·테스트 소스 루트에 맞는 Java 파일 템플릿과 저작권 프로필을 선택한다. 식별자·문자열·정수 변수를 검증해 렌더링하고 생성한 파일을 연다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.28-installed-coverage",
+        "state": "v0.75-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.28.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "최종 v0.28.0 VSIX, 실제 Spring과 MySQL 8.4.13·MariaDB 11.4.8에서 사용자 템플릿으로 Spring @Service를 생성하고, 같은 Java 경로의 추가 생성을 거부한 뒤 JDT로 컴파일했다.",
+        "testedScope": "두 실제 Spring 작업공간에서 일치하는 빌드·소스 루트 프로필로 Java 컴포넌트를 만들었다. JDT로 컴파일하고 같은 클래스패스에서 실행해 한글·따옴표·정수 값을 읽었다. 범위 불일치, 잘못된 식별자와 중복 파일은 거부했다.",
         "publicEvidence": [
           "src/java/file-templates.js",
           "src/java/utilities-vscode.js",
-          "test/java-utilities.test.js",
-          "test/java-utilities-host.js"
+          "test/template-profiles-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1599,24 +1596,25 @@
       "category": "Spring·영속성",
       "feature": "Spring Initializr 프로젝트 생성",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "공식 Initializr 메타데이터와 버전별 dependency 카탈로그에서 Java jar·빌드·starter를 선택해 새 디렉터리의 파일 목록/내용을 검토하고 생성한다. 워크스페이스 안의 최초 import는 별도 실행 승인을 받는다.",
-      "remaining": [
-        "새 물리 디렉터리만 허용하며 기존 파일 덮어쓰기·링크·경로 탈출은 거부한다. ZIP16MiB/전개64MiB/500항목 등 한도가 있다.",
-        "다른 JVM 언어/WAR/일반 사용자 생성 형식은 남는다. 실제 생성 앱 빌드·실행은 Gradle Groovy/JDK25 범위다."
-      ],
+      "scope": "공식 Spring Initializr 메타데이터에서 Java·Kotlin·Groovy, Maven·Gradle, JAR·WAR, YAML·properties를 선택한다. 실제 아카이브의 빌드와 소스 구조, 파일 내용 및 해시를 검토하고 승인한 새 디렉터리에 생성한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.75-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 공식 아카이브의 길이/CRC·불변 검토·경로 거부와 실제 생성 앱의 빌드/실행·DB/Actuator·소유 Stop을 확인한다. 생성 앱의 별도 schema 데이터3/2와 두 기준 Spring 앱의2/1/0을 구분한다.",
-        "publicEvidence": [],
+        "testedScope": "두 DB에서 공식 Initializr의 Java Maven WAR, Kotlin Gradle JAR, Groovy Gradle JAR을 생성했다. 검토한 파일 바이트와 일회성 승인, 생성 단계의 자동 빌드 차단, 별도 실제 빌드·실행 및 각 앱의 JDBC 응답을 확인했다.",
+        "publicEvidence": [
+          "src/spring/project-tools.js",
+          "src/spring/project-archive-shape.js",
+          "test/spring-initializr-forms-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -1759,8 +1757,8 @@
       "verification": {
         "state": "v0.74-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.74.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4077,23 +4075,26 @@
       "category": "연결·드라이버",
       "feature": "연결 그룹·환경 색상",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "저장된 연결의 그룹·환경 색상을 전용 트리와 활성 프로필 표시로 구분한다. 연결 전환은 대기 중인 표 편집과 미해결 거래를 임의로 버리지 않는다.",
-      "remaining": [
-        "워크스페이스 프로필32·활성 연결 하나다. 여러 활성 데이터 소스의 동시 관리/조정은 남는다."
-      ],
+      "scope": "저장한 연결을 그룹·환경 색상으로 구분하고 동시에 열린 전용 SQL 세션의 상태를 표시한다. 원래 편집기를 다시 열고 각 연결의 읽기 전용 카탈로그를 확인한다. 미해결 거래 또는 공유 편집기의 영향은 세션 닫기 전에 확인한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.75-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 연결 폼/트리·저장·전환과 pending draft/거래 거부 후 명시 rollback·재접속을 확인한다.",
-        "publicEvidence": [],
+        "testedScope": "실제 MySQL·MariaDB를 동시에 연결하고 그룹 색상, 세션 상태, 별도 카탈로그와 거래 격리를 확인했다. 편집기를 닫았다 다시 열어 미확정 값이 유지됐으며 승인 후 선택 세션만 닫아 롤백했다. 다른 연결과 활성 카탈로그를 이어서 사용했다.",
+        "publicEvidence": [
+          "src/db/connection-profiles-vscode.js",
+          "src/db/profile-session-view.js",
+          "src/database-workbench.js",
+          "test/profile-session-tree-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -4749,23 +4750,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "이미 지정한 두 실테이블의 비어 있는 JOIN 조건에서 실제 복합 FK를 고르는 빠른 수정을 제공한다. 소스와 서버 관계를 재검증하고 검토한 위치에 정확한 조건을 삽입한다.",
+      "scope": "실제 복합 FK를 확인해 JOIN 조건을 제안한다. 현재 문장에서 확인한 누락 테이블과 기존 테이블의 누락 열을 실제 메타데이터와 대조해 검토형 테이블 디자이너를 연다.",
       "remaining": [
-        "누락된 객체 생성과 일반 조인·다중 문맥의 복합 구문 교정이 남아 있다."
+        "복합 JOIN, 다중 문맥과 지원하지 않는 SQL 구문의 일반 교정이 남는다."
       ],
       "verification": {
-        "state": "v0.69-installed-coverage",
+        "state": "v0.75-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.69.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 복합 키로 정확한 테넌트 행만 조회했다. 편집된 SQL, 이미 작성한 ON과 외부에서 삭제한 FK는 적용을 거절했다. 앞 문장과 기존 별칭·WHERE를 보존했다.",
+        "testedScope": "두 설치 환경에서 두 번째 문장의 누락 테이블과 DECIMAL 열을 찾아 실제 디자이너에 연결했다. 타입 명시와 새 DDL 검토, 정확한 값과 기존 행 보존, 외부 생성 충돌 및 오래된 문서 후보 거부를 확인했다.",
         "publicEvidence": [
-          "src/db/sql-join-fixes.js",
+          "src/db/sql-quick-fixes.js",
           "src/db/sql-editing-vscode.js",
-          "test/sql-join-fix-host.js"
+          "test/sql-missing-object-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6533,8 +6534,8 @@
       "verification": {
         "state": "v0.74-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.74.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6609,8 +6610,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "1e0d0cde1657803af0165bc811fa7c9ae928e3bcaf95f6561833f1d4d7001c1e",
-    "sourceManifestSha256": "e62cf00b99e0e324b97372496c9442f92fe84e39b18d04488ebcd5df1a7e5c7e",
+    "vsixSha256": "7d0ea5975afcb47b3e860992de244269aed849350527805890e7254ffd8a5dc6",
+    "sourceManifestSha256": "91b2c6cffdf9b9a5bb9c2337174db2a8c839a15c1a9bb1672074315c892cef93",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6624,28 +6625,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-008",
+      "id": "IDEA-014",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-056",
+      "id": "IDEA-051",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-094",
+      "id": "DG-014",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1650,
-    "pass": 1543,
+    "tests": 1659,
+    "pass": 1551,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 107,
+    "skipped": 108,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

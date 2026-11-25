@@ -50,7 +50,61 @@ class SchemaDesigner{
  _track(fn){const work=fn();this.operations.add(work);void work.finally(()=>this.operations.delete(work)).catch(()=>{});return work;}
  _capture(session,options={}){return E.captureSchema({_metadataQuery:async(sql,values)=>({rows:await this.transport._read(session,sql,values),truncated:false})},options);}
  _check(input){if(this.disposed||input?.guard&&input.guard()!==true||input?.cancellation?.aborted||input?.cancellation?.isCancellationRequested)throw fail('The workspace, connection or designer operation changed.');}
- open(input={}){return this._track(async()=>{this._idle();return this.transport._withSession(async session=>{this._check(input);const current=await this._capture(session),existing=input.table?current.tables.find(t=>t.name===input.table):null;if(input.table&&!existing)throw fail('The selected table is no longer visible.');if(existing&&(existing.kind!=='table'||existing.engine.toUpperCase()!=='INNODB'||existing.partitions.length))throw fail('Open an ordinary nonpartitioned InnoDB table.');if(existing)generated.validate(existing);let seed=existing;if(!seed)seed={name:'new_table',comment:'',charset:'utf8mb4',collation:'utf8mb4_bin',columns:[{name:'id',type:'BIGINT',nullable:false,defaultValue:null,extra:'auto_increment',comment:'',charset:null,collation:null}],indexes:[{name:'PRIMARY',unique:true,primaryKey:true,type:'BTREE',comment:'',columns:[{name:'id',ordinal:1,prefixLength:null,collation:'A'}]}],foreignKeys:[],checks:[]};const id=randomUUID(),model={id,current,existing:input.table||null,draft:draft(seed,current.server),expiresAt:Date.now()+LIMITS.modelMs};while(this.models.size>=LIMITS.models)this.models.delete(this.models.keys().next().value);this.models.set(id,model);return{modelId:id,expiresAt:model.expiresAt,mode:existing?'alter':'create',database:current.database,server:current.server,draft:clone(model.draft),references:current.tables.filter(t=>t.kind==='table'&&!/^__rb_/i.test(t.name)).map(t=>({name:t.name,columns:t.columns.map(c=>({name:c.name,type:c.type,nullable:c.nullable})),indexes:clone(t.indexes)})),validationCreatesOwnedEmptyTable:true};});});}
+ open(input={}) {
+  return this._track(async()=>{
+   this._idle();
+   const verify = () => { this._check(input); input.assertSqlSourceCurrent?.(); };
+   return this.transport._withSession(async session=>{
+    verify();
+    const { table, missingTable, missingColumn } = input;
+    if (missingTable !== undefined && (table !== undefined || missingColumn !== undefined) ||
+        missingColumn !== undefined && !table) throw fail('Choose one unresolved table or column.');
+    if (missingTable !== undefined) D.name(missingTable);
+    if (missingColumn !== undefined) D.name(missingColumn);
+    const current = await this._capture(session);
+    const existing = table ? current.tables.find(item=>item.name===table) : null;
+    if (table && !existing) throw fail('The selected table is no longer visible.');
+    if (existing && (existing.kind!=='table'||existing.engine.toUpperCase()!=='INNODB'||existing.partitions.length)) {
+     throw fail('Open an ordinary nonpartitioned InnoDB table.');
+    }
+    if (existing) generated.validate(existing);
+    if (missingTable !== undefined) {
+     let absent = false;
+     try {
+      await this.transport._read(session,'SHOW CREATE TABLE '+D.q(current.database)+'.'+D.q(missingTable));
+     } catch (error) {
+      absent = error.code === 'ER_NO_SUCH_TABLE' || error.errno === 1146;
+      if (!absent) throw fail('The active account could not confirm that the selected table name is missing.');
+     }
+     if (!absent) throw fail('The selected table name already exists. Refresh the SQL catalog.');
+    }
+    if (missingColumn !== undefined && existing.columns.some(column=>column.name.toLowerCase()===missingColumn.toLowerCase())) {
+     throw fail('The selected column already exists. Refresh the SQL catalog.');
+    }
+    const seed = existing || {
+     name:missingTable??'new_table',comment:'',charset:'utf8mb4',collation:'utf8mb4_bin',
+     columns:[{name:'id',type:'BIGINT',nullable:false,defaultValue:null,extra:'auto_increment',comment:'',charset:null,collation:null}],
+     indexes:[{name:'PRIMARY',unique:true,primaryKey:true,type:'BTREE',comment:'',columns:[{name:'id',ordinal:1,prefixLength:null,collation:'A'}]}],
+     foreignKeys:[],checks:[]
+    };
+    const draftValue = draft(seed,current.server);
+    if (missingColumn !== undefined) draftValue.columns.push({
+     name:missingColumn,type:'',nullable:true,defaultKind:'none',defaultValue:'',autoIncrement:false,
+     generationMode:'none',generationExpression:'',charset:'',collation:'',comment:'',srsId:''
+    });
+    verify();
+    const id=randomUUID(),model={id,current,existing:table||null,draft:draftValue,expiresAt:Date.now()+LIMITS.modelMs};
+    while(this.models.size>=LIMITS.models)this.models.delete(this.models.keys().next().value);
+    this.models.set(id,model);
+    return {
+     modelId:id,expiresAt:model.expiresAt,mode:existing?'alter':'create',database:current.database,server:current.server,draft:clone(model.draft),
+     references:current.tables.filter(t=>t.kind==='table'&&!/^__rb_/i.test(t.name)).map(t=>({
+      name:t.name,columns:t.columns.map(c=>({name:c.name,type:c.type,nullable:c.nullable})),indexes:clone(t.indexes)
+     })),validationCreatesOwnedEmptyTable:true
+    };
+   });
+  });
+ }
  preview(input){return this._track(async()=>{this._idle();const saved=this.models.get(input?.modelId);if(!saved||saved.expiresAt<=Date.now())throw fail('Open the designer again; its server model expired.');const value=tableFromDraft(clone(input.draft),saved.current);if(saved.existing&&value.name!==saved.existing)throw fail('Use the dedicated reviewed schema rename command to rename an existing table.');let current,canonical;this.applying=true;try{await this.transport._withSession(async session=>{this._check(input);const key='rocketbrain.migration.'+createHash('sha256').update(saved.current.database).digest('hex').slice(0,40);for(const lock of ['rocketbrain.rebuild.server.v15',key])if(Number((await this.transport._read(session,'SELECT GET_LOCK(?,0)',[lock]))[0]?.[0])!==1)throw fail('Another cooperating schema operation owns this server/database.');current=await this._capture(session);if(current.fingerprint!==saved.current.fingerprint)throw fail('The database schema changed; reopen the designer.');const token=randomUUID().replaceAll('-','').slice(0,20),physical='__rb_designer_'+token,prefix='__rb_d_'+token,marker='Rocketbrain designer validation '+token;let created=false;try{await this.db._stream(session,D.render({...value,comment:marker},current,{physical,constraintPrefix:prefix}),[],{maxRows:1,timeoutMs:10000},true);created=true;if((await this.transport._read(session,'SHOW WARNINGS')).length)throw fail('Server validation produced warnings; adjust the typed design.');const captured=(await this._capture(session,{tables:[physical]})).tables[0];if(captured.comment!==marker)throw fail('The owned validation table marker changed.');canonical={...captured,name:value.name,comment:value.comment,checks:captured.checks.map(c=>({...c,name:c.name.startsWith(prefix+'_c')?value.checks[Number(c.name.slice((prefix+'_c').length))].name:c.name})),foreignKeys:captured.foreignKeys.map(f=>({...f,name:value.foreignKeys[Number(f.name.slice((prefix+'_f').length))].name,referencedTable:f.referencedTable===physical?value.name:f.referencedTable}))};canonical.createSql=D.render(canonical,current);}finally{if(created){const observed=(await this._capture(session,{tables:[physical]})).tables[0];if(!observed||observed.comment!==marker)throw fail('Validation-table ownership changed; no cleanup DDL was submitted.');await this.db._stream(session,'DROP TABLE '+D.q(current.database)+'.'+D.q(physical),[],{maxRows:1,timeoutMs:10000},true);}}this._check(input);});}finally{this.applying=false;}
  const desired=E.normalizeSnapshot({...clone(current),tables:[...current.tables.filter(t=>t.name!==value.name),canonical]},{verifyFingerprint:false}),kind=saved.existing?'rebuild':'create';let prepared;if(kind==='rebuild')prepared=await this.db._schemaRecovery.preview({current,desired,tables:[value.name]});else{const comparison=E.compareSnapshots(current,desired),ids=comparison.changes.filter(c=>c.table===value.name&&c.kind==='create-table'&&c.selectable).map(c=>c.id);if(ids.length!==1)throw fail('This typed CREATE is outside the supported additive migration profile.');prepared=await this.db._schemaApplier.preview({current,desired,changeIds:ids});}const id=randomUUID();while(this.reviews.size>=LIMITS.reviews){const old=this.reviews.keys().next().value;this.discard(old);}this.reviews.set(id,{kind,prepared,modelId:input.modelId});return{...clone(prepared),reviewId:id,kind,modelId:input.modelId,validation:{ownedEmptyTableCompiled:true,dataExecuted:false,cleaned:true},sql:prepared.plan.sql};});}
  apply(input){return this._track(async()=>{this._idle();this._check(input);const saved=this.reviews.get(input?.reviewId);if(!saved)throw fail('Review the typed design again.');if(input.allowImplicitCommit!==true||saved.kind==='rebuild'&&input.allowDestructive!==true)throw fail('Acknowledge the concrete reviewed DDL and retained-original rebuild before applying.');this.reviews.delete(input.reviewId);return saved.kind==='create'?this.db._schemaApplier.apply({...input,reviewId:saved.prepared.reviewId}):this.db._schemaRecovery.apply({...input,reviewId:saved.prepared.reviewId});});}

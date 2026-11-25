@@ -1,25 +1,25 @@
 {
-  "version": "0.74.0",
-  "verifiedAt": "2026-11-25T18:07:27.150Z",
+  "version": "0.75.0",
+  "verifiedAt": "2026-11-25T18:31:22.124Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.74.0.vsix",
-    "sha256": "1e0d0cde1657803af0165bc811fa7c9ae928e3bcaf95f6561833f1d4d7001c1e",
-    "bytes": 3496972,
+    "name": "rocketbrain-0.75.0.vsix",
+    "sha256": "7d0ea5975afcb47b3e860992de244269aed849350527805890e7254ffd8a5dc6",
+    "bytes": 3506869,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1935,
-    "inputVectorSha256": "e62cf00b99e0e324b97372496c9442f92fe84e39b18d04488ebcd5df1a7e5c7e",
+    "frozenPublicInputs": 1949,
+    "inputVectorSha256": "91b2c6cffdf9b9a5bb9c2337174db2a8c839a15c1a9bb1672074315c892cef93",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1650,
-    "pass": 1543,
+    "tests": 1659,
+    "pass": 1551,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 107,
+    "skipped": 108,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaTypeImports",
+          "group": "profileSessions",
           "checks": 1
         },
         {
-          "group": "codeInformation",
+          "group": "springInitializrForms",
           "checks": 1
         },
         {
-          "group": "springConfiguration",
+          "group": "sqlMissingObjects",
           "checks": 1
         },
         {
-          "group": "gridReviewRecovery",
+          "group": "javaTemplateProfiles",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaTypeImports",
+          "group": "profileSessions",
           "checks": 1
         },
         {
-          "group": "codeInformation",
+          "group": "springInitializrForms",
           "checks": 1
         },
         {
-          "group": "springConfiguration",
+          "group": "sqlMissingObjects",
           "checks": 1
         },
         {
-          "group": "gridReviewRecovery",
+          "group": "javaTemplateProfiles",
           "checks": 1
         }
       ],
@@ -85,81 +85,89 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-008": {
-      "scope": "두 설치 환경에서 JDT Java·Kotlin Gradle 서버의 실제 오버로드, 활성 인수와 Kotlin 매개변수 KDoc을 확인했다. 독립 JDT 검증에서는 소스 없는 JAR의 매개변수 이름과 시그니처를 관찰했다.",
+    "IDEA-014": {
+      "scope": "두 실제 Spring 작업공간에서 일치하는 빌드·소스 루트 프로필로 Java 컴포넌트를 만들었다. JDT로 컴파일하고 같은 클래스패스에서 실행해 한글·따옴표·정수 값을 읽었다. 범위 불일치, 잘못된 식별자와 중복 파일은 거부했다.",
       "runtimeGroups": [
-        "codeInformation"
+        "javaTemplateProfiles"
       ]
     },
-    "IDEA-011": {
-      "scope": "두 Spring 프로젝트에서 실제 Date 후보 두 개 중 java.sql.Date를 선택했다. 미해결 진단 소거, 참조 두 개, 원래 정적·와일드카드 import와 디스크 원본, Undo, 위조·오래된 후보 거부를 확인했다.",
+    "IDEA-051": {
+      "scope": "두 DB에서 공식 Initializr의 Java Maven WAR, Kotlin Gradle JAR, Groovy Gradle JAR을 생성했다. 검토한 파일 바이트와 일회성 승인, 생성 단계의 자동 빌드 차단, 별도 실제 빌드·실행 및 각 앱의 JDBC 응답을 확인했다.",
       "runtimeGroups": [
-        "javaTypeImports"
+        "springInitializrForms"
       ]
     },
-    "IDEA-056": {
-      "scope": "Boot 4.1.2의 실제 플러그인이 만든 Integer 설정 메타데이터를 읽어 YAML에서 완성하고 정확한 Java 필드로 이동했다. 두 DB에서 프로필별 문서, 목록 교체, 맵·별칭, 여러 줄 값과 명령줄 우선순위를 실제 바인더 및 JDBC로 확인했다.",
+    "DG-014": {
+      "scope": "실제 MySQL·MariaDB를 동시에 연결하고 그룹 색상, 세션 상태, 별도 카탈로그와 거래 격리를 확인했다. 편집기를 닫았다 다시 열어 미확정 값이 유지됐으며 승인 후 선택 세션만 닫아 롤백했다. 다른 연결과 활성 카탈로그를 이어서 사용했다.",
       "runtimeGroups": [
-        "springConfiguration"
+        "profileSessions"
       ]
     },
-    "DG-094": {
-      "scope": "두 실제 DB에서 UPDATE·DELETE·INSERT 보관안을 별도 VS Code 프로세스에서 열었다. 정확한 매개변수, 물리 서버와 실제 행, 외부 변경 거부, 새 검토, 직접 적용 후 롤백 및 원래 데이터 보존을 확인했다.",
+    "DG-036": {
+      "scope": "두 설치 환경에서 두 번째 문장의 누락 테이블과 DECIMAL 열을 찾아 실제 디자이너에 연결했다. 타입 명시와 새 DDL 검토, 정확한 값과 기존 행 보존, 외부 생성 충돌 및 오래된 문서 후보 거부를 확인했다.",
       "runtimeGroups": [
-        "gridReviewRecovery"
+        "sqlMissingObjects"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 417,
+    "sourceCorrespondences": 419,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
+  "nativePayloadEquivalence": {
+    "files": 21,
+    "testedArchiveSha256": "964531541d50acf76e13af4f61f8bb65b75519b941ffb628d8c814fce4454194",
+    "testedInputVectorSha256": "100d20236f3ba14b2253b4108f953ad1ffba9c8009b32673d8cc9b654621b935",
+    "onlySourceChanges": [
+      "test/template-profiles-host.js"
+    ]
+  },
   "progress": {
     "counts": {
-      "implemented": 95,
-      "partial": 107,
+      "implemented": 98,
+      "partial": 104,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 160.5,
-    "previousWeightedPoints": 159,
+    "weightedPoints": 162,
+    "previousWeightedPoints": 160.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 74.3,
+    "referencePercent": 75,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-008",
+        "id": "IDEA-014",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "IDEA-056",
+        "id": "IDEA-051",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-094",
+        "id": "DG-014",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java import는 저장하고 가져온 소스에서 타입 후보를 검토한다. 정적 멤버·와일드카드 편집과 생성된 타입은 별도다.",
-    "빠른 문서는 사용하는 언어 서버가 공급하는 설명과 시그니처를 보여 준다.",
-    "Spring 소스 모델은 일반 Boot YAML과 생성 메타데이터를 읽는다. 외부 우선순위는 실행 중인 Boot 앱이 제공하는 실제 출처와 함께 확인한다.",
-    "편집 검토를 다시 올리려면 같은 물리 서버·계정·테이블의 편집 가능한 페이지가 필요하다. 적용 전에 새 검토를 만든다.",
-    "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
+    "워크스페이스에 프로필 최대 32개와 연결된 전용 콘솔 최대 12개를 관리한다. 공유 스키마 작성 도구에는 활성 카탈로그 하나를 선택한다.",
+    "Initializr 생성은 광고된 언어·패키징·빌드와 인식할 수 있는 아카이브 구조를 대상으로 한다. 파일 생성과 생성된 프로젝트의 빌드·실행을 별도로 승인한다.",
+    "SQL 객체 빠른 수정은 단일 선택 문장에서 확인된 누락 테이블과 기존 테이블의 명시적 열로 디자이너를 연다. 열 타입·DDL 검토·적용은 사용자 선택이다.",
+    "Java 파일 템플릿의 사용자 입력은 식별자, 문자열, 정수로 타입을 지정하며 Maven·Gradle 소스 루트별 프로필을 적용한다.",
+    "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "동시에 연결한 프로필의 세션과 읽기 전용 카탈로그 관리",
-    "공식 Spring Initializr의 언어·빌드·패키징 선택과 Java 템플릿",
-    "누락 SQL 테이블 또는 열을 검토형 디자이너로 연결"
+    "SQL 편집기와 결과 창 사이 단축키·접근성 및 원래 선택 복원",
+    "Spring 실행 프로필과 환경 인수 관리 및 JVM 인라인 힌트",
+    "검토형 SQL 쓰기 영향 분석과 원본 상태 재확인"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

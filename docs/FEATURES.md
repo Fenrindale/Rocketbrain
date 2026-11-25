@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.74.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.75.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 95 |
-| 부분 구현 | 107 |
+| 구현 | 98 |
+| 부분 구현 | 104 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **74.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **75%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.74에서는 JDT 기반 Java 타입 import와 Java·Kotlin 코드 설명, Spring 설정 메타데이터, 보관한 테이블 편집 검토를 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 159점에서 160.5점으로 바뀌었다.
+v0.75에서는 여러 DB 프로필 세션과 카탈로그를 관리하고 공식 Initializr 프로젝트 형식을 검토해 생성한다. SQL 빠른 수정에서 누락 테이블과 열을 디자이너로 연결하고 Java 파일에 빌드와 소스 루트별 템플릿을 적용한다. 상태가 바뀐 항목은 3개이고 가중 점수는 160.5점에서 162점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -34,7 +34,7 @@ v0.74에서는 JDT 기반 Java 타입 import와 Java·Kotlin 코드 설명, Spri
 | IDEA-011 | IntelliJ IDEA | 자동 import·사용하지 않는 import 정리 | 부분 구현 |
 | IDEA-012 | IntelliJ IDEA | 인레이 힌트·의미 강조 | 부분 구현 |
 | IDEA-013 | IntelliJ IDEA | 로컬 변경 이력·삭제 복구 | VS Code 재사용 |
-| IDEA-014 | IntelliJ IDEA | 새 파일 템플릿 | 부분 구현 |
+| IDEA-014 | IntelliJ IDEA | 새 파일 템플릿 | 구현 |
 | IDEA-015 | IntelliJ IDEA | 선언·타입·구현·상위 메서드 이동 | 구현 |
 | IDEA-016 | IntelliJ IDEA | Find Usages·참조 탐색 | 구현 |
 | IDEA-017 | IntelliJ IDEA | 호출 계층 | 구현 |
@@ -71,7 +71,7 @@ v0.74에서는 JDT 기반 Java 타입 import와 Java·Kotlin 코드 설명, Spri
 | IDEA-048 | IntelliJ IDEA | 외부 라이브러리 소스·바이트코드 디컴파일 | 부분 구현 |
 | IDEA-049 | IntelliJ IDEA | Scratch·JShell 실험 코드 | 구현 |
 | IDEA-050 | IntelliJ IDEA | 어노테이션 프로세서·Lombok 생성 코드 | 구현 |
-| IDEA-051 | IntelliJ IDEA | Spring Initializr 프로젝트 생성 | 부분 구현 |
+| IDEA-051 | IntelliJ IDEA | Spring Initializr 프로젝트 생성 | 구현 |
 | IDEA-052 | IntelliJ IDEA | 기존 프로젝트 starter 편집 | 부분 구현 |
 | IDEA-053 | IntelliJ IDEA | Bean·Autowiring 분석·빠른 수정 | 부분 구현 |
 | IDEA-054 | IntelliJ IDEA | Bean의 논리 구조·의존성 그래프 | 구현 |
@@ -154,7 +154,7 @@ v0.74에서는 JDT 기반 Java 타입 import와 Java·Kotlin 코드 설명, Spri
 | DG-011 | DataGrip | Unix socket·Windows named pipe | 구현 |
 | DG-012 | DataGrip | 클라우드 DB 접속·토큰 인증 범위 | 부분 구현 |
 | DG-013 | DataGrip | 초기 SQL·keep-alive·idle timeout | 구현 |
-| DG-014 | DataGrip | 연결 그룹·환경 색상 | 부분 구현 |
+| DG-014 | DataGrip | 연결 그룹·환경 색상 | 구현 |
 | DG-015 | DataGrip | 연결 복제·가져오기·공유 | 구현 |
 | DG-016 | DataGrip | 연결·테이블 읽기 전용 보호 | 구현 |
 | DG-017 | DataGrip | introspection 대상 schema 선택 | 구현 |

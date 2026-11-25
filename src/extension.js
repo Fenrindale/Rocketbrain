@@ -139,7 +139,7 @@ async function activate(context) {
     joinCatalog:database.joinCompletionCatalog,joinLogicalRelationships:database.joinLogicalRelationships,
     objectDefinition:objectSources.definition});
   context.subscriptions.push(sqlAnalysis);
-  const sqlEditing=require('./db/sql-editing-vscode').registerSqlEditing(context,vscode,{database,sqlAnalysis});
+  const sqlEditing=require('./db/sql-editing-vscode').registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner:dbAuthoring.openDesigner});
   context.subscriptions.push(sqlEditing);
   const schemaRename=require('./db/schema-vscode').registerSchemaRename(context,vscode,{database,sqlAnalysis});
   activeSchemaRename=schemaRename;context.subscriptions.push(schemaRename);

@@ -11,6 +11,12 @@ const KEYWORDS = new Set(('abstract assert boolean break byte case catch char cl
 const WINDOWS_DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 const IDENTIFIER = /^[\p{ID_Start}_$][\p{ID_Continue}$]*$/u;
 const MAX_TEMPLATE_BYTES = 32 * 1024;
+const BUILD_TOOLS = new Set(['maven','gradle','java']);
+const SOURCE_KINDS = new Set(['main','test','any']);
+const VARIABLE_NAME = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
+const VARIABLE_KINDS = new Set(['identifier','string','integer']);
+const HEADER_PLACEHOLDERS = new Set(['year','name','package']);
+const ESCAPE = /\\u+[0-9a-f]{4}/i;
 const TYPES = {
   'Java class': 'public class ${name} {\n}\n',
   'Java interface': 'public interface ${name} {\n}\n',
@@ -54,17 +60,65 @@ function checkPackage(value) {
   return value;
 }
 
+function scopeOf(item) {
+  const source=item.source??'any',tools=item.buildTools;
+  if (!SOURCE_KINDS.has(source)) throw Error('Choose an allowed source kind for the Java template or copyright profile.');
+  if (tools!==undefined&&(!Array.isArray(tools)||!tools.length||tools.length>BUILD_TOOLS.size||
+      new Set(tools).size!==tools.length||tools.some(value=>!BUILD_TOOLS.has(value)))) {
+    throw Error('Choose distinct Maven, Gradle or Java build tools.');
+  }
+  return {source,...(tools&&{buildTools:[...tools]})};
+}
+
+function matchesFileScope(item,source,tool) {
+  return (item.source==='any'||item.source===source)&&(!item.buildTools||item.buildTools.includes(tool));
+}
+
+function templateVariableError(kind,value) {
+  if (typeof value!=='string'||value.length>512||/[\x00-\x1f\x7f]/.test(value)) return 'Enter at most 512 characters on one line.';
+  if (kind==='identifier'&&!validIdentifier(value)) return 'Enter a valid Java identifier.';
+  if (kind==='integer'&&(!/^-?\d{1,10}$/.test(value)||Number(value)<-2147483648||Number(value)>2147483647)) {
+    return 'Enter a 32-bit Java integer.';
+  }
+}
+
+function variablesOf(template) {
+  const entries=template.variables??[];
+  if (!Array.isArray(entries)||entries.length>8) throw Error('Declare at most eight Java template variables.');
+  const names=new Set(),variables=[];
+  for (const item of entries) {
+    if(!item||typeof item.name!=='string'||!VARIABLE_NAME.test(item.name)||names.has(item.name)||!VARIABLE_KINDS.has(item.kind)||
+        item.prompt!==undefined&&(typeof item.prompt!=='string'||!item.prompt.trim()||item.prompt.length>120||/[\x00-\x1f]/.test(item.prompt))) {
+      throw Error('Each Java template variable needs a distinct name and an identifier, string or integer kind.');
+    }
+    if (item.default!==undefined) {
+      const invalid=templateVariableError(item.kind,item.default);
+      if(invalid)throw Error('Invalid default for '+item.name+'. '+invalid);
+    }
+    names.add(item.name);
+    variables.push({name:item.name,kind:item.kind,prompt:item.prompt??item.name,...(item.default!==undefined&&{default:item.default})});
+  }
+  return {names,variables};
+}
+
 function validateTemplate(template) {
   if (!template || typeof template.name !== 'string' || !template.name.trim() ||
       template.name.length > 80 || /[\r\n\0]/.test(template.name) ||
-      !['main','test','any'].includes(template.source ?? 'any') ||
       typeof template.template !== 'string' || !template.template.includes('${name}') ||
       template.template.includes('\0') || Buffer.byteLength(template.template) > MAX_TEMPLATE_BYTES) {
     throw Error('Each Java file template needs a name, an allowed source kind and text with a ${name} placeholder.');
   }
-  const body = template.template.replaceAll(/\$\{(?:name|package|packageDeclaration)\}/g, '');
-  if (body.includes('${')) throw Error('Java file templates support ${name}, ${package} and ${packageDeclaration}.');
-  return { name: template.name.trim(), source: template.source ?? 'any', template: template.template };
+  const scope=scopeOf(template),{names,variables}=variablesOf(template),used=new Set();
+  const body=template.template.replace(/\$\{(name|package|packageDeclaration|variable\.([A-Za-z][A-Za-z0-9_]{0,39}))\}/g,
+    (placeholder,_key,variable)=>{
+      if (!variable) return '';
+      if (!names.has(variable)) return placeholder;
+      used.add(variable);
+      return '';
+    });
+  if (body.includes('${')) throw Error('Java file templates support ${name}, ${package}, ${packageDeclaration} and declared ${variable.name} placeholders.');
+  if (used.size!==names.size) throw Error('Use each declared variable in the Java template.');
+  return {name:template.name.trim(),...scope,template:template.template,...(variables.length&&{variables})};
 }
 
 function listFileTemplates(custom = []) {
@@ -78,13 +132,59 @@ function listFileTemplates(custom = []) {
   return [...entries.values()];
 }
 
-function renderJavaFile(template, name, packageName = '') {
+function listCopyrightProfiles(profiles=[]) {
+  if(!Array.isArray(profiles)||profiles.length>20)throw Error('Configure at most 20 Java copyright profiles.');
+  const entries=new Map();
+  for(const item of profiles) {
+    if(!item||typeof item.name!=='string'||!item.name.trim()||item.name.length>80||/[\x00-\x1f]/.test(item.name)||
+        typeof item.notice!=='string'||!item.notice.trim()||Buffer.byteLength(item.notice)>4096||
+        /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(item.notice)||ESCAPE.test(item.notice)) {
+      throw Error('A Java copyright profile requires a short name and ordinary notice text.');
+    }
+    const name=item.name.trim();
+    if(entries.has(name))throw Error('Java copyright profile names must be distinct.');
+    const body=item.notice.replace(/\$\{(\w+)\}/g,(placeholder,key)=>HEADER_PLACEHOLDERS.has(key)?'':placeholder);
+    if(body.includes('${'))throw Error('Java copyright profiles support ${year}, ${name} and ${package}.');
+    entries.set(name,{name,notice:item.notice.replace(/\r\n?/g,'\n').trim(),...scopeOf(item)});
+  }
+  return [...entries.values()];
+}
+
+function copyrightHeader(profile,name,packageName,year) {
+  if (!profile) return '';
+  const [checked]=listCopyrightProfiles([profile]);
+  const substitutions={name,package:packageName,year:String(year)};
+  const expanded=checked.notice.replace(/\$\{(\w+)\}/g,(_,key)=>substitutions[key]);
+  return expanded.split('\n').map(line=>line?'// '+line:'//').join('\n')+'\n\n';
+}
+
+function variableValues(declared,values) {
+  if (!values||typeof values!=='object'||Array.isArray(values)) throw Error('Supply the declared Java template variables by name.');
+  const keys=new Set(declared.map(item=>item.name));
+  if(Object.keys(values).some(name=>!keys.has(name)))throw Error('Only supply declared Java template variables.');
+  const rendered=new Map();
+  for(const item of declared) {
+    const value=Object.hasOwn(values,item.name)?values[item.name]:item.default;
+    if (value===undefined) throw Error('Enter a value for Java template variable '+item.name+'.');
+    const invalid=templateVariableError(item.kind,value);
+    if(invalid)throw Error(item.name+'. '+invalid);
+    const source=item.kind==='integer'?String(Number(value)):item.kind==='string'?JSON.stringify(value):value;
+    rendered.set(item.name,source);
+  }
+  return rendered;
+}
+
+function renderJavaFile(template, name, packageName = '', {variables={},copyrightProfile}={}) {
   if (!validIdentifier(name)) throw Error('Use a valid Java type name without the .java extension.');
   checkPackage(packageName);
   const values = { name, package: packageName, packageDeclaration: packageName ? 'package ' + packageName + ';\n\n' : '' };
-  const text = validateTemplate(template).template
-    .replace(/\$\{(name|package|packageDeclaration)\}/g, (_, key) => values[key])
+  const definition=validateTemplate(template),rendered=variableValues(definition.variables??[],variables);
+  const body = definition.template
+    .replace(/\$\{(name|package|packageDeclaration|variable\.([A-Za-z][A-Za-z0-9_]{0,39}))\}/g,
+      (_,key,variable)=>variable?rendered.get(variable):values[key])
     .replaceAll(/\r\n?/g, '\n');
+  const text=copyrightHeader(copyrightProfile,name,packageName,new Date().getUTCFullYear())+body;
+  if(Buffer.byteLength(text)>64*1024)throw Error('The generated Java source exceeds 64 KiB.');
   const { tokens } = lexJava(text);
   const packages = tokens.filter(token => token.kind === 'id' && token.text === 'package');
   const declared = packages.length === 1 ?
@@ -109,11 +209,11 @@ async function physicalDirectory(directory) {
 }
 
 async function writeTemplateFile({workspaceRoot, sourceRoot, template, name, packageName = '',
-  createSourceRoot = false, assertTrusted, assertTarget = () => {}}) {
+  variables, copyrightProfile, createSourceRoot = false, assertTrusted, assertTarget = () => {}}) {
   if (!path.isAbsolute(workspaceRoot) || !path.isAbsolute(sourceRoot) || !contained(workspaceRoot, sourceRoot)) {
     throw Error('Select a Java source root inside the open workspace.');
   }
-  const content = renderJavaFile(template, name, packageName);
+  const content = renderJavaFile(template, name, packageName,{variables,copyrightProfile});
   await physicalDirectory(workspaceRoot);
   async function ensureDirectory(parent, segment) {
     const directory = path.join(parent, segment);
@@ -146,4 +246,5 @@ async function writeTemplateFile({workspaceRoot, sourceRoot, template, name, pac
   return { path: file, name, packageName, template: template.name };
 }
 
-module.exports = { listFileTemplates, validIdentifier, checkPackage, renderJavaFile, writeTemplateFile, contained, physicalDirectory };
+module.exports = { listFileTemplates, listCopyrightProfiles, matchesFileScope, templateVariableError, validIdentifier, checkPackage,
+  renderJavaFile, writeTemplateFile, contained, physicalDirectory };

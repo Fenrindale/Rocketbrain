@@ -280,10 +280,14 @@ class MysqlService {
     catch (error) { this._lose(session, safeError(error)); throw safeError(error); }
     session.connection = connection;
     connection.on('error', error => {
-      if (session.connection === connection) this._lose(session, connectionError(error), Boolean(session.active?.mayWrite));
+      if (session.connection !== connection) return;
+      this._lose(session, connectionError(error), Boolean(session.active?.mayWrite));
+      this._reportSession?.();
     });
     connection.on('end', () => {
-      if (session.connection === connection) this._lose(session, fail('ROCKETBRAIN_CONNECTION_LOST', 'The server closed this console connection. Reconnect explicitly.'), Boolean(session.active?.mayWrite));
+      if (session.connection !== connection) return;
+      this._lose(session, fail('ROCKETBRAIN_CONNECTION_LOST', 'The server closed this console connection. Reconnect explicitly.'), Boolean(session.active?.mayWrite));
+      this._reportSession?.();
     });
     await new Promise((resolve, reject) => {
       let finished = false;

@@ -55,8 +55,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 **Select Python Interpreter**로 프로젝트 가상환경을 선택합니다. Python Outline과 구문 오류는 해당 인터프리터의 AST에서 얻습니다. **Run Python File**로 저장한 파일을 실행하고 `debugpy`가 설치된 환경에서 **Debug Python File**로 중단점·변수를 볼 수 있습니다. [debugpy](https://github.com/microsoft/debugpy)
 4. **Build Java Project / Choose Build Task**, 저장한 **Run / Debug / Stop** 구성을 사용합니다.
-5. **Create Spring Project**로 공식 Initializr 프로젝트를 생성하거나 **Edit Spring Starters**로 지원하는 의존성 변경을 검토합니다. [Maven BOM으로 관리하는 스타터](docs/spring-maven-bom-starters.md)도 직접 검토할 수 있습니다.
-6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. `rocketbrain.java.fileTemplates`에서 사용자 템플릿과 변수 `${name}`, `${package}`, `${packageDeclaration}`를 사용할 수 있습니다.
+5. **Create Spring Project**로 공식 Initializr의 Java·Kotlin·Groovy JAR/WAR 프로젝트를 검토하고 생성합니다. **Edit Spring Starters**에서 지원하는 의존성 변경을 검토합니다. [Spring 프로젝트 만들기](docs/spring-initializr-project-forms.md) · [Maven BOM으로 관리하는 스타터](docs/spring-maven-bom-starters.md)
+6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. Maven·Gradle 및 main·test에 맞는 사용자 템플릿과 저작권 프로필을 선택하고 필요한 변수 값을 입력할 수 있습니다. [Java 파일 템플릿](docs/java-file-templates.md)
 7. **New JShell Scratch**로 저장할 코드를 만들고 **Run JShell Scratch**로 독립 JDK에서 실행합니다. 프로젝트 클래스가 필요하면 실행할 때 관찰된 로컬 클래스 경로를 선택합니다.
 8. **Explore Java Call Hierarchy**와 **Explore Java Type Hierarchy**에서 JDT가 확인한 호출과 상속·구현 관계를 이동합니다. **Inspect Java Dependencies**는 소스 import, 선언된 빌드·모듈과 빌드된 클래스의 의존성을 구분해 순환 경로를 보여줍니다.
 9. **Insert Java Live Template**과 `rocketbrain.java.liveTemplates`에서 Java 스니펫을 사용합니다. **Generate Java Members**에서 선택한 필드의 생성자·접근자·`equals`와 `hashCode` 또는 위임 메서드를 미리 보고 적용합니다.
@@ -271,7 +271,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 
 **Open SQL Console**은 읽기 전용 전용 세션을 엽니다. 기존 SQL 편집기에서 **Open Shared SQL Console**을 실행하면 같은 서버 연결과 트랜잭션을 사용하는 새 편집기가 열립니다. 두 편집기에서 쓰기 모드, 커밋과 롤백이 공유됩니다. 편집기를 닫아도 트랜잭션은 남습니다. **Manage Console Sessions**에서 연결된 편집기 수를 확인하고 공유 세션을 한 번에 종료합니다.
 
-연결 트리에서 **Open Dedicated Profile SQL Console**을 선택하면 활성 카탈로그를 바꾸지 않고 선택한 프로필로 SQL을 실행할 수 있습니다. 전용 편집기에는 대상 프로필과 스키마가 표시됩니다. 읽기 전용으로 시작하며, 쿼리 실행·쓰기 모드·커밋·롤백·세션 격리를 제공합니다. 트리 카탈로그·스키마 편집·검토 스크립트·EXPLAIN은 활성 DB에서 사용합니다.
+연결 트리에서 **Open Dedicated Profile SQL Console**을 선택하면 활성 카탈로그를 바꾸지 않고 선택한 프로필로 SQL을 실행할 수 있습니다. 전용 편집기에는 대상 프로필과 스키마가 표시됩니다. 읽기 전용으로 시작하며, 쿼리 실행·쓰기 모드·커밋·롤백·세션 격리를 제공합니다. 연결 그룹의 색상과 세션 상태로 여러 서버를 구분합니다. 세션 트리에서 SQL 편집기를 다시 열거나 해당 프로필 카탈로그를 읽기 전용으로 확인합니다. 미해결 거래나 공유 편집기가 있는 세션은 영향을 확인한 뒤 닫을 수 있습니다. 공유 스키마 편집·검토 스크립트·EXPLAIN은 활성 카탈로그를 사용합니다.
 
 **Track SQL Console as Draft**로 보관을 시작하면 편집 중인 SQL과 선택 영역이 로컬에 갱신됩니다. 닫거나 재시작한 뒤 **Restore SQL Draft**에서 오프라인으로 이어서 편집합니다. [SQL 콘솔 초안 복원](docs/sql-draft-recovery.md)
 
@@ -288,6 +288,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 비어 있는 SQL 절에서 카탈로그 기준 필드 목록을 완성합니다. SELECT에는 현재 범위의 열, INSERT에는 자동 생성 열을 제외한 쓰기 열, GROUP BY에는 SELECT에서 확인한 직접 참조 열을 제안합니다.
 - 편집기는 바깥쪽 `WHERE`가 없는 `UPDATE`와 `DELETE`를 표시합니다. 쓰기 콘솔과 스크립트 실행은 이 문장이 대상 행 전체에 미칠 수 있는 영향을 검토하고 승인한 뒤 진행합니다.
 - 활성 MySQL/MariaDB 연결의 SQL 편집기에서 두 실테이블을 지정한 `JOIN`의 대상이나 비어 있는 `ON`에 커서를 놓습니다. **Complete JOIN using …** 빠른 수정은 실제 FK의 모든 열을 순서대로 삽입합니다. 선택 뒤 소스나 관계가 바뀌면 다시 선택합니다.
+- 활성 스키마의 SELECT에서 해석되지 않는 테이블명이나 대상이 분명한 누락 열에 커서를 놓습니다. **Design Unresolved Table** 또는 **Design Column**에서 확인된 이름으로 테이블 디자이너를 엽니다. 열을 추가할 때는 필요한 타입을 지정합니다. 실제 스키마는 SQL 검토와 적용을 거쳐서 변경합니다.
 - **Review SQL Script**는 독립된 `DELIMITER` 줄 사이에 있는 `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE TRIGGER`의 `BEGIN … END` 블록을 한 문장으로 검토합니다. 실행은 쓰기 콘솔에서 DDL의 암시적 커밋을 승인한 뒤 진행합니다. `DELIMITER ;`로 돌아오면 일반 문장에 바인딩 값을 사용할 수 있습니다. 저장 프로그램 본문의 동적 SQL, 세션 제어와 매개변수 바인딩은 지원 범위 밖입니다.
 - 읽기 전용 스크립트에서는 현재 스키마의 검증된 `CALL procedure(:input)`을 다른 조회와 함께 실행합니다. 보이는 프로시저의 본문과 IN 매개변수를 다시 확인합니다. 지원 범위는 같은 스키마의 기본 테이블을 읽는 단순 `SELECT`입니다. 스크립트 결과에서 각 결과 집합을 다시 열 수 있습니다.
 - `DELIMITER`가 있는 SQL 파일에서 **Run Selected SQL or Current Statement**를 실행하면 서버의 SQL 모드로 커서 아래 문장이나 선택한 전체 복합 문장의 범위를 구합니다. 복합 DDL 검토에는 그 문장 하나가 표시됩니다.
