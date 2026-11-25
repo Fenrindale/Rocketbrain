@@ -18,13 +18,14 @@ const { createMethodInline } = require('./inline-method-vscode');
 const { createMethodExtraction } = require('./extract-method-vscode');
 const { createTypeImport } = require('./type-import-vscode');
 const { createTypedFileStructure } = require('./typed-file-structure');
+const { createJavaCleanup,COMMAND:cleanupCommand } = require('./java-cleanup-vscode');
 
 const COMMANDS = Object.freeze({
   diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow',
   structural:'rocketbrain.java.structuralSearch', extractInterface:'rocketbrain.java.extractInterface',
   pullUp:'rocketbrain.java.pullUpMembers', pushDown:'rocketbrain.java.pushDownMembers',
   convert:'rocketbrain.java.convertStructure', extractConstant:'rocketbrain.java.extractConstant',
-  extractVariable:'rocketbrain.java.extractVariable', extractField:'rocketbrain.java.extractField'
+  extractVariable:'rocketbrain.java.extractVariable', extractField:'rocketbrain.java.extractField',cleanup:cleanupCommand
 });
 const EXCLUDE = '**/{.git,.gradle,.metadata,node_modules,build,target,out,bin,dist}/**';
 const MAX_UNITS = 240;
@@ -459,6 +460,9 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const staticImport = createTypeImport(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation,staticMember:true
   });
+  const cleanup=createJavaCleanup(vscode,{
+    java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
+  });
   const typedStructure = createTypedFileStructure(vscode,{
     java,assertReady,projects,findProject,classSources,compile,snapshot,assertUnchangedSourceSnapshots
   });
@@ -477,6 +481,10 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       try { assertReady(); return await run(kind.startsWith('extract') && kind !== 'extractInterface' ? anchor : undefined); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message); return null; }
     }));
+  commands.push(vscode.commands.registerCommand(COMMANDS.cleanup,async()=>{
+    try { assertReady(); return await cleanup.run(); }
+    catch(error) { if(!disposed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);return null; }
+  }));
   return {
     diagram:options => managed(() => diagram(options)),trace:options => managed(() => trace(options)),
     structuralSearch:options => managed(() => structuralSearch(options)),
@@ -496,6 +504,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     prepareTypeImport:(report,options) => managed(() => typeImport.prepare(report,options)),
     inspectStaticMemberImport:options => managed(() => staticImport.inspect(options)),
     prepareStaticMemberImport:(report,options) => managed(() => staticImport.prepare(report,options)),
+    prepareCleanup:options => managed(() => cleanup.prepare(options)),
     streamTrace,
     reveal,showDiagram,exportMermaid,
     dispose() {
