@@ -5,7 +5,7 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const assert = require('node:assert/strict');
 
-async function prepareDatabaseAdminFixture(fixture, { allowPrincipalCreation = false } = {}) {
+async function prepareDatabaseAdminFixture(fixture, { allowPrincipalCreation = false, allowRoleInheritance = false } = {}) {
   const { db, dbEngine } = fixture;
   const source = db.config, folder = path.dirname(db.configPath);
   const marker = JSON.parse(await fs.readFile(path.join(folder, 'owner.json')));
@@ -17,7 +17,10 @@ async function prepareDatabaseAdminFixture(fixture, { allowPrincipalCreation = f
   const admin = { ...source, user: 'rb_acl_writer_' + tag, password: randomBytes(24).toString('base64url') };
   const guest = { ...source, user: 'rb_acl_guest_' + tag, password: randomBytes(24).toString('base64url') };
   const role = 'rb_acl_role_' + tag;
-  const roleSql = dbEngine === 'mysql' ? "'" + role + "'@'%'" : '`' + role + '`';
+  const roleName = name => dbEngine === 'mysql' ? "'" + name + "'@'%'" : '`' + name + '`';
+  const roleSql = roleName(role);
+  const nested = allowRoleInheritance ? { table: 'rb_acl_chain_' + tag,
+    root: role, middle: 'rb_acl_mid_' + tag, leaf: 'rb_acl_leaf_' + tag } : undefined;
   await db.withAdmin(async connection => {
     await connection.query('CREATE USER ?@? IDENTIFIED BY ?', [admin.user, admin.host, admin.password]);
     await connection.query('CREATE USER ?@? IDENTIFIED BY ?', [guest.user, guest.host, guest.password]);
@@ -33,10 +36,19 @@ async function prepareDatabaseAdminFixture(fixture, { allowPrincipalCreation = f
       : 'GRANT SELECT (User,Host,Role,Admin_option) ON mysql.roles_mapping TO ?@?', [admin.user, admin.host]);
     await connection.query('CREATE ROLE ' + roleSql);
     await connection.query('GRANT ' + roleSql + ' TO ?@?', [guest.user, guest.host]);
+    if (nested) {
+      await connection.query('CREATE TABLE rocketbrain_fixture.' + nested.table + ' (id INT PRIMARY KEY) ENGINE=InnoDB');
+      await connection.query('INSERT INTO rocketbrain_fixture.' + nested.table + ' VALUES (17)');
+      await connection.query('CREATE ROLE ' + roleName(nested.middle));
+      await connection.query('CREATE ROLE ' + roleName(nested.leaf));
+      await connection.query('GRANT ' + roleName(nested.middle) + ' TO ' + roleSql);
+      await connection.query('GRANT ' + roleName(nested.leaf) + ' TO ' + roleName(nested.middle) + ' WITH ADMIN OPTION');
+      await connection.query('GRANT SELECT ON rocketbrain_fixture.' + nested.table + ' TO ' + roleName(nested.leaf));
+    }
   });
   const file = path.join(folder, 'database-admin-fixture-' + tag + '.json');
   await fs.writeFile(file, JSON.stringify({ format: 'RocketbrainOwnedDatabaseAdminFixture', version: 1, owner: marker.id,
-    sourceConfigPath: db.configPath, engine: dbEngine, admin, guest, role }) + '\n', { flag: 'wx', mode: 0o600 });
+    sourceConfigPath: db.configPath, engine: dbEngine, admin, guest, role, ...(nested && { nested }) }) + '\n', { flag: 'wx', mode: 0o600 });
   return file;
 }
 

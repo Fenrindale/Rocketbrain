@@ -54,6 +54,53 @@ test('access scope distinguishes direct privilege, role and account catalog cove
   }
 });
 
+test('role inheritance preserves shortest provenance, alternate edges, and unreadable descendants', async () => {
+  const context = { dialect: 'mysql', version: '8.4.13', account: 'owner@localhost', activeRoles: null };
+  const memberships = new Map([
+    ['owner', [['a', '%', 'N'], ['b', '%', 'N']]],
+    ['a', [['leaf', '%', 'Y']]],
+    ['b', [['leaf', '%', 'N']]]
+  ]);
+  const reads = [];
+  const read = async (sql, params = []) => {
+    reads.push([sql, params]);
+    if (sql.includes('mysql.role_edges')) {
+      if (params[0] === 'leaf') throw Error('Fixture account may not inspect the next edge.');
+      return memberships.get(params[0]) || [];
+    }
+    if (sql.includes('TABLE_PRIVILEGES') && params[0] === "'leaf'@'%'") {
+      return [['SELECT', 'NO', 'application', 'catalog']];
+    }
+    return [];
+  };
+  const result = await metadata.inspectRoleInheritance(read, context);
+  assert.equal(result.visibility, 'partial');
+  assert.deepEqual(result.roles.map(item => [item.identity.user, item.depth]), [['a', 1], ['b', 1], ['leaf', 2]]);
+  assert.deepEqual(result.roles[2].path.map(item => item.user), ['owner', 'a', 'leaf']);
+  assert.deepEqual(result.edges.slice(-2).map(item => [item.member.user, item.role.user, item.adminOption]),
+    [['a', 'leaf', true], ['b', 'leaf', false]]);
+  assert.deepEqual(result.roles[2].privileges.table.entries, [{ name: 'SELECT', grantable: false, schema: 'application', table: 'catalog' }]);
+  assert.deepEqual(result.unresolved, [{ identity: { user: 'leaf', host: '%' }, reason: 'unavailable' }]);
+  assert.equal(result.effectiveAccessCalculated, false);
+  assert.ok(reads.every(([sql]) => /^SELECT/.test(sql) && !/password|authentication_string/i.test(sql)));
+});
+
+test('role inheritance bounds depth and distinguishes denied root metadata from no assignments', async () => {
+  const context = { dialect: 'mariadb', version: '11.4.8-MariaDB', account: 'r0@localhost', activeRoles: null };
+  const read = async (sql, params) => sql.includes('mysql.roles_mapping')
+    ? [['r' + (Number(params[0].slice(1)) + 1), null, 'N']] : [];
+  const bounded = await metadata.inspectRoleInheritance(read, context);
+  assert.equal(bounded.roles.length, bounded.limits.depth);
+  assert.equal(bounded.visibility, 'partial');
+  assert.deepEqual(bounded.unresolved, [{ identity: { user: 'r9', host: '' }, reason: 'role-or-depth-limit' }]);
+  const denied = await metadata.inspectRoleInheritance(async () => { throw Error('denied'); }, context);
+  assert.equal(denied.visibility, 'unavailable');
+  assert.deepEqual(denied.roles, []);
+  const unassigned = await metadata.inspectRoleInheritance(async () => [], context);
+  assert.equal(unassigned.visibility, 'observed');
+  assert.deepEqual(unassigned.edges, []);
+});
+
 function fakeTransport(dialect = 'mysql') {
   const state = { id: 1, ddl: 'CREATE TABLE `items` (id INT)', columns: '', held: [], writes: [], cut: false };
   const identity = { dialect, database: 'application', currentUser: 'admin@localhost',
