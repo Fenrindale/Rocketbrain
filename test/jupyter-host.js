@@ -6,6 +6,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const { jdbcReadback } = require('./java-source-analysis-host');
+const { until } = require('./helpers/stdio-lsp');
 
 async function runJupyterChecks(api, vscode, checks) {
   const type = 'rocketbrain-jupyter';
@@ -20,8 +21,10 @@ async function runJupyterChecks(api, vscode, checks) {
   ] };
   const file = path.join(workspace.uri.fsPath, 'rb-jupyter-' + randomUUID() + '.ipynb');
   await fs.writeFile(file, JSON.stringify(initial) + '\n', { flag: 'wx' });
-  const notebook = await vscode.workspace.openNotebookDocument(vscode.Uri.file(file));
-  assert.equal(notebook.notebookType, type);
+  const uri = vscode.Uri.file(file);
+  await vscode.commands.executeCommand('vscode.openWith', uri, type, { preview: false });
+  const notebook = await until(() => vscode.workspace.notebookDocuments.find(item =>
+    item.uri.toString() === uri.toString() && item.notebookType === type), 6000);
   await vscode.window.showNotebookDocument(notebook, { preview: false });
   await vscode.commands.executeCommand('notebook.selectKernel', {
     id: 'rocketbrain-python-kernel', extension: 'rocketbrain-local.rocketbrain'
