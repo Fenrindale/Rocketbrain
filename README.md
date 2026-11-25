@@ -400,6 +400,8 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 
 프로젝트 자체 코드의 배포 라이선스는 아직 선택되지 않아 `package.json`의 **UNLICENSED**를 유지합니다. 저장소의 공개 설정만으로 별도의 사용·재배포 라이선스가 부여되지는 않습니다. 외부 구성요소에는 각 구성요소의 라이선스가 적용됩니다.
 
+MySQL·MariaDB 연결 편집기에서 **Verify CA and server identity**와 **JKS CA truststore**를 선택하면 독립 JDK 25 이상으로 로컬 JKS의 유효한 CA 인증서 항목을 읽습니다. DNS 이름을 계속 검증하며, 상호 TLS를 쓰면 클라이언트 인증서와 키를 별도로 설정합니다. JKS 암호는 연결할 때 입력하고, 공유 프로필에는 신뢰 저장소 종류만 보존합니다.
+
 For mutual TLS, select **Verify CA and server identity** in the connection editor, then choose **PEM certificate and encrypted key** or **PKCS#12 identity**. Set the server DNS name and its CA independently from the client files. An encrypted PEM needs the matching certificate and key. A PKCS#12 file needs exactly one private-key identity and a certificate chain, plus an independent JDK 25 or newer configured through **rocketbrain.java.javaHome**. Rocketbrain asks for the client passphrase on each connection attempt and keeps it out of profile exports and Secret Storage. Portable exports preserve the identity type. Select the files again on the destination machine.
 
 The SQL editor analyzes common JSON calls against the current catalog. It checks argument counts and highlights malformed literal documents or paths in place. MySQL JSON arrows and engine-specific wildcard rules are interpreted using the selected dialect and observed version. Paths supplied by a parameter or column remain runtime-dependent.

@@ -12,7 +12,7 @@ import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Enumeration;
 
-// One explicitly selected local PKCS#12 identity. No system trust changes or provider discovery.
+// Read one local PKCS#12 client identity or CA-only JKS truststore.
 class ClientIdentity {
     public static void main(String[] args) {
         byte[] secret = null;
@@ -35,6 +35,12 @@ class ClientIdentity {
             if (decoded.hasArray()) Arrays.fill(decoded.array(), '\0');
 
             Security.setProperty("keystore.type.compat", "false");
+            if (args.length == 1 && "jks-trust".equals(args[0])) {
+                writeTrustedAuthorities(contents, password);
+                complete = true;
+                return;
+            }
+            if (args.length != 0) throw new IllegalArgumentException();
             KeyStore store = KeyStore.getInstance("PKCS12");
             store.load(new ByteArrayInputStream(contents), password);
             String chosen = null;
@@ -77,6 +83,25 @@ class ClientIdentity {
             if (keyBytes != null) Arrays.fill(keyBytes, (byte) 0);
         }
         if (!complete) System.exit(2);
+    }
+
+    private static void writeTrustedAuthorities(byte[] contents, char[] password) throws Exception {
+        KeyStore store = KeyStore.getInstance("JKS");
+        store.load(new ByteArrayInputStream(contents), password);
+        if (store.size() == 0 || store.size() > 16) throw new IllegalArgumentException();
+        var output = new DataOutputStream(System.out);
+        Enumeration<String> aliases = store.aliases();
+        while (aliases.hasMoreElements()) {
+            String alias = aliases.nextElement();
+            if (!store.isCertificateEntry(alias) ||
+                    !(store.getCertificate(alias) instanceof X509Certificate certificate) ||
+                    certificate.getBasicConstraints() < 0) throw new IllegalArgumentException();
+            boolean[] usage = certificate.getKeyUsage();
+            if (usage != null && (usage.length <= 5 || !usage[5])) throw new IllegalArgumentException();
+            certificate.checkValidity();
+            write(output, certificate.getEncoded());
+        }
+        output.flush();
     }
 
     private static byte[] readExact(DataInputStream input, int size) throws Exception {
