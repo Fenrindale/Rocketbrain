@@ -762,6 +762,7 @@
       { "command": "rocketbrain.java.inlineMethod", "title": "Inline Java Method Call", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.extractMethod", "title": "Extract Java Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.addTypeImport", "title": "Add Java Type Import", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.addStaticMemberImport", "title": "Add Java Static Member Import", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.editor.expandSelection", "title": "Expand Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.shrinkSelection", "title": "Shrink Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.quickDocumentation", "title": "Quick Code Documentation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
@@ -2016,6 +2017,13 @@
           "type": "boolean",
           "default": true,
           "description": "Start Rocketbrain's directly connected Java language engine in trusted workspaces."
+        },
+        "rocketbrain.java.staticImport.favorites": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 512 },
+          "maxItems": 32,
+          "default": ["java.lang.Math.*", "java.lang.StrictMath.*", "java.lang.Integer.MAX_VALUE", "java.util.Collections.*", "org.junit.Assert.*", "org.junit.jupiter.api.Assertions.*", "org.testng.Assert.*"],
+          "description": "Static methods and fields JDT may suggest. Use a qualified member or a wildcard on a declaring type. Reviewed imports add the specific member."
         },
         "rocketbrain.java.extractInterface.replaceUsages": {
           "type": "boolean",

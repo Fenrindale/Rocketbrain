@@ -60,11 +60,11 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
       inspection.end<=item.text.length&&inspection.callOffset<item.text.length)){
     query.push('methodExtract',inspection.uri,String(inspection.start),String(inspection.end),inspection.name,String(inspection.callOffset));
   }
-  else if(inspection.kind==='typeImport'&&typeof inspection.fqn==='string'&&inspection.fqn.length<1024&&
+  else if(['typeImport','staticImport'].includes(inspection.kind)&&typeof inspection.fqn==='string'&&inspection.fqn.length<1024&&
     inspection.fqn.includes('.')&&inspection.fqn.split('.').every(validIdentifier)&&Number.isSafeInteger(inspection.start)&&
     Number.isSafeInteger(inspection.end)&&inspection.start>=0&&inspection.end>inspection.start&&
     sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)){
-    query.push('typeImport',inspection.uri,String(inspection.start),String(inspection.end),inspection.fqn);
+    query.push(inspection.kind,inspection.uri,String(inspection.start),String(inspection.end),inspection.fqn);
   }
   else if(inspection.kind==='dataflow'&&Number.isSafeInteger(inspection.offset)&&inspection.offset>=0&&
     sources.some(item=>item.uri===inspection.uri&&inspection.offset<item.text.length))query.push('dataflow',inspection.uri,String(inspection.offset));

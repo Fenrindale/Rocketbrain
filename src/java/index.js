@@ -67,7 +67,8 @@ function registerJavaFeatures(context, vscode) {
       });
       const extractInterfaceReplaceUsages = config.get('extractInterface.replaceUsages', false) === true;
       const settings = serverSettings(config.get('projectJdks', []), { gradleHome: config.get('gradleHome'),
-        gradleJavaHome: config.get('gradleJavaHome'),extractInterfaceReplaceUsages,gradleAnnotationProcessing });
+        gradleJavaHome: config.get('gradleJavaHome'),extractInterfaceReplaceUsages,gradleAnnotationProcessing,
+        favoriteStaticMembers:config.get('staticImport.favorites') });
       const {profile:nullChecks,...nullAnalysis}=readNullChecks(config);
       settings.java.compile.nullAnalysis=nullAnalysis;
       const { LanguageClient, ErrorAction, CloseAction } = require('vscode-languageclient/node');
@@ -334,7 +335,7 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{
     if(event.affectsConfiguration('rocketbrain.java.nullChecks'))void serial(syncNullChecks).catch(error=>output.appendLine(error.message));
   }));
-  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
+  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages', 'staticImport.favorites', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
   update('stopped', 'Java server is stopped.');
   void api.start().catch(error => output.appendLine(error.message));
   return api;

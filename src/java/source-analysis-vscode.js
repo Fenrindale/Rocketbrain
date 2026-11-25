@@ -148,7 +148,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       javaHome:state.javaHome,classpath,release:Number(compliance || 25),storagePath,cancellation,
       sources:[...sources,...newSources].map(({uri,text}) => ({uri,text})),manifestLimit:256*1024,inspection
     });
-    if (report.errors.length&&!(allowTypeImportErrors&&inspection.kind==='typeImport')) {
+    if (report.errors.length&&!(allowTypeImportErrors&&['typeImport','staticImport'].includes(inspection.kind))) {
       const prefix = errorTitle || (inspection.kind === 'check' ? 'The replacement would fail Java compiler analysis: ' :
         'Resolve Java compiler errors before analysis: ');
       throw Error(prefix + report.errors[0].message);
@@ -456,6 +456,9 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const typeImport = createTypeImport(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
   });
+  const staticImport = createTypeImport(vscode,{
+    java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation,staticMember:true
+  });
   const typedStructure = createTypedFileStructure(vscode,{
     java,assertReady,projects,findProject,classSources,compile,snapshot,assertUnchangedSourceSnapshots
   });
@@ -491,6 +494,8 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     prepareMethodExtraction:options => managed(() => methodExtraction.prepare(options)),
     inspectTypeImport:options => managed(() => typeImport.inspect(options)),
     prepareTypeImport:(report,options) => managed(() => typeImport.prepare(report,options)),
+    inspectStaticMemberImport:options => managed(() => staticImport.inspect(options)),
+    prepareStaticMemberImport:(report,options) => managed(() => staticImport.prepare(report,options)),
     streamTrace,
     reveal,showDiagram,exportMermaid,
     dispose() {
@@ -501,6 +506,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       inline.dispose();
       methodExtraction.dispose();
       typeImport.dispose();
+      staticImport.dispose();
       structureRegistration.dispose();
       for (const entry of [...panels,...commands]) entry.dispose();
       stopping = Promise.allSettled(active).then(() => {});
