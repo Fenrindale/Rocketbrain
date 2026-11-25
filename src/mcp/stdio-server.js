@@ -17,7 +17,7 @@ const toolDeadline=30000;
 const decoder=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true});
 const validId=value=>Number.isSafeInteger(value) || typeof value==='string' && value.length<=128;
 const hasOwn=(object,key)=>Object.hasOwn(object,key);
-const instructions='Read-only Rocketbrain tools for one locally approved workspace. Tools are selected when the server starts.';
+const instructions='Read-only Rocketbrain tools selected at launch. Database tools require separately approved tables and columns.';
 const capabilities={tools:{}};
 
 function validImplementation(value) {
@@ -106,7 +106,7 @@ function stdioServer(input,output,registry,{version}) {
         }
       },()=>{
         if (request.timedOut) toolFailure(id,'The tool exceeded its execution time limit.',modernRequest);
-        else if (!controller.signal.aborted) toolFailure(id,'The tool could not read or analyze the approved workspace scope.',modernRequest);
+        else if (!controller.signal.aborted) toolFailure(id,'The tool could not read or analyze the approved scope.',modernRequest);
       }).finally(()=>{clearTimeout(timer);active.delete(id);});
     }
 

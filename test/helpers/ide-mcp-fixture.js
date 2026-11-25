@@ -10,9 +10,12 @@ const clientInfo={name:'rocketbrain-stdio-fixture',version:'1.0.0'};
 const meta={'io.modelcontextprotocol/protocolVersion':modern,'io.modelcontextprotocol/clientInfo':clientInfo,
   'io.modelcontextprotocol/clientCapabilities':{}};
 
-function openMcp(node,cli,workspace,tools) {
-  const child=spawn(node,[cli,'--workspace',workspace,...tools.flatMap(name=>['--allow-tool',name])],
-    {windowsHide:true,stdio:['pipe','pipe','pipe']});
+function openMcp(node,cli,workspace,tools,{dbScope,password}={}) {
+  const env={...process.env};
+  delete env.ROCKETBRAIN_MCP_DB_PASSWORD;
+  if(password!==undefined) env.ROCKETBRAIN_MCP_DB_PASSWORD=password;
+  const child=spawn(node,[cli,'--workspace',workspace,...tools.flatMap(name=>['--allow-tool',name]),...(dbScope?['--db-scope',dbScope]:[])],
+    {windowsHide:true,stdio:['pipe','pipe','pipe'],env});
   const lines=createInterface({input:child.stdout,crlfDelay:Infinity});
   const received=[],waiters=new Map();
   let next=1,stderr='',malformed=null;
