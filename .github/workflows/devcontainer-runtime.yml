@@ -3,7 +3,7 @@ name: Dev Container runtime
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'verify-devcontainer-*']
     paths:
       - '.github/workflows/devcontainer-runtime.yml'
       - 'src/devcontainer/**'
