@@ -21,6 +21,8 @@ async function build() {
     'src/main/resources/application.properties','src/main/resources/templates/greeting.html','src/test/java/quarkusfixture/GreetingResourceTest.java'];
   fs.writeFileSync(path.join(__dirname,'../src/java/quarkus-starter-source.json'),JSON.stringify(
     Object.fromEntries(quarkusFiles.map(file=>[file,fs.readFileSync(path.join(quarkusStarter,file),'utf8')]))));
+  const jakartaHost=fs.readFileSync(path.join(__dirname,'../runtime/jakarta/JakartaWarHost.java'),'utf8');
+  fs.writeFileSync(path.join(__dirname,'../src/java/jakarta-host-source.json'),JSON.stringify(jakartaHost));
   fs.mkdirSync('dist', { recursive: true });
   await esbuild.build({ entryPoints: ['scripts/java-quality-gate.js'], outfile: 'dist/java-quality-gate.js', bundle: true, platform: 'node', target: 'node20' });
   await esbuild.build({ entryPoints: ['scripts/ide-mcp-server.js'], outfile: 'dist/ide-mcp-server.js', bundle: true, platform: 'node', target: 'node20' });
