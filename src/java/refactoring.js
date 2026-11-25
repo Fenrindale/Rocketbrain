@@ -187,7 +187,8 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    }
   }
   const eol=file.formattingEndOfLine==='crlf'?vscode.EndOfLine.CRLF:vscode.EndOfLine.LF;
-  const converted=await editor.edit(edit=>edit.setEndOfLine(eol),{undoStopBefore:true,undoStopAfter:true});
+  // VS Code applies the EOL before undoStopBefore. The preceding call already closed the stack.
+  const converted=await editor.edit(edit=>edit.setEndOfLine(eol),{undoStopBefore:false,undoStopAfter:true});
   if(!converted&&file.edits.length) throw Error('Text formatting was applied. Line-ending conversion failed. Review the document again.');
   return converted;
  }

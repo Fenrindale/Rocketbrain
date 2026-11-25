@@ -39,7 +39,8 @@ test('a Java formatting review closes prior history before an independent editor
   const plan=await h.api.previewWorkspaceEdit(edit,{kind:'source.format.java',anchorDocument:h.document,formattingEndOfLine:'crlf'});
   assert.equal(plan.documents[0].after,h.document.text.replace(/\n/g,'\r\n'));
   assert.equal((await h.api.apply(plan.id)).state,'applied');
-  assert.deepEqual(applied,[1,2].map(eol=>({eol,options:{undoStopBefore:true,undoStopAfter:true}})));
+  assert.deepEqual(applied,[{eol:1,options:{undoStopBefore:true,undoStopAfter:true}},
+    {eol:2,options:{undoStopBefore:false,undoStopAfter:true}}]);
  }finally{await h.api.dispose();}
 });
 test('a Kotlin formatting review only permits text edits to its anchored Kotlin document',async()=>{
