@@ -186,7 +186,7 @@ class TableEditor {
       prepare: () => context.db.rebindChangeSetReview({ sessionId: context.sessionId, modelId, saved }),
       editMessage: 'The matching saved changes are staged. Review the current page before applying them.' });
   }
-  async stageDatasetChanges(id, { changes, modelId, draftRevision, requestId, assertFresh, prepare, editMessage }) {
+  async stageDatasetChanges(id, { changes, exactDeletes, modelId, draftRevision, requestId, assertFresh, prepare, editMessage }) {
     const context = this._context(id), record = this._record(id);
     const verify = () => {
       this._context(id);
@@ -205,8 +205,11 @@ class TableEditor {
     try {
       await this.withSession(context.sessionId, async () => {
         verify();
-        const staged = prepare ? await prepare() : changes;
+        const prepared = prepare ? await prepare() : changes;
         verify();
+        const { exactDeletes: recoveredDeletes, ...staged } = prepared;
+        const protectedRows = exactDeletes ?? recoveredDeletes;
+        if (protectedRows?.length) context.db.markDatasetDeletes({ sessionId: context.sessionId, modelId, rowIds: protectedRows });
         this.results.editState(id, { bulkDraft: { id: randomUUID(), modelId, draftRevision, ...staged },
           editMessage: editMessage ?? 'Compared rows are staged. Review SQL, Apply, then Commit or Roll Back.' });
       });

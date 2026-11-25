@@ -557,6 +557,36 @@ class TableEditor {
     if (session.readOnly) throw fail('ROCKETBRAIN_READ_ONLY', 'Enable read/write mode explicitly before reviewing table changes.');
     return model;
   }
+  markDatasetDeletes({ sessionId, modelId, rowIds }) {
+    const model = this._editableModel(this.db._session(sessionId), modelId);
+    if (!Array.isArray(rowIds) || rowIds.some(id => !model.rows.has(id))) {
+      throw fail('ROCKETBRAIN_GRID_ROW', 'Choose saved-comparison deletes on the current destination page.');
+    }
+    model.datasetDeletes ??= new Set();
+    rowIds.forEach(id => model.datasetDeletes.add(id));
+  }
+  async verifyDatasetDeleteTarget(table, session) {
+    const schema = this.db._options.database;
+    const read = session ? (sql, values) => this._read(session, sql, values, 1) : (sql, values) => this.db._metadataQuery(sql, values);
+    const { rows: [[version]] } = await read('SELECT VERSION()', []);
+    if (/mariadb/i.test(version)) {
+      // A separate MariaDB session can add an inbound foreign key with checks disabled even while this transaction pins the parent.
+      throw fail('ROCKETBRAIN_DATASET_FOREIGN_KEYS', 'Saved-comparison deletes require a MySQL destination with verifiable foreign-key isolation.');
+    }
+    if (![schema, table].every(name => /^[A-Za-z0-9_]{1,64}$/.test(name))) {
+      throw fail('ROCKETBRAIN_DATASET_FOREIGN_KEYS', 'Saved-comparison deletes require identifiers supported by the InnoDB foreign-key dictionary check.');
+    }
+    let relationships;
+    try {
+      relationships = await read('SELECT REF_NAME FROM information_schema.INNODB_FOREIGN WHERE LOWER(REF_NAME)=LOWER(?) LIMIT 1',
+        [schema + '/' + table]);
+    } catch {
+      throw fail('ROCKETBRAIN_DATASET_FOREIGN_KEYS', 'Saved-comparison deletes require global InnoDB foreign-key visibility (PROCESS privilege).');
+    }
+    if (relationships.truncated || relationships.rows.length) {
+      throw fail('ROCKETBRAIN_DATASET_FOREIGN_KEYS', 'A foreign key references the destination. Saved-comparison deletes require no inbound foreign keys.');
+    }
+  }
   stagePaste({ sessionId, modelId, parsed, draft, acrossPages, anchorRowId, anchorColumn, nullToken }) {
     const { planPaste, mergePasteDraft } = require('./grid-bulk');
     const session = this.db._session(sessionId);
@@ -648,7 +678,8 @@ class TableEditor {
     for (const rowId of deletes) {
       const row = original(rowId);
       operations.push({ type: 'delete', row, rowId, sql: 'DELETE FROM ' + target + ' WHERE ' + where,
-        parameters: pk.map(column => snapshotParameter(row[index(column.name)], column)) });
+        parameters: pk.map(column => snapshotParameter(row[index(column.name)], column)),
+        ...(model.datasetDeletes?.has(rowId) && { exactDatasetDelete: true }) });
     }
     for (const insert of inserts) {
       const values = valuesFor(insert?.values, true), provided = new Set(values.map(value => value.column.name));
@@ -689,6 +720,7 @@ class TableEditor {
       return { schema: this.db._options.database, table: model.definition.name, server, definition: reviewDigest(model.fingerprint),
         operations: operations.map(operation => ({ type: operation.type, ...(operation.values && { values: operation.values }),
           ...(operation.row && { key: reviewDigest(keys.map(index => operation.row[index])), row: reviewDigest(operation.row) }),
+          ...(operation.exactDatasetDelete && { exactDatasetDelete: true }),
           sql: operation.sql, parameters: operation.parameters.map(viewParameter) })) };
     });
   }
@@ -712,6 +744,7 @@ class TableEditor {
       const keys = model.definition.columns.flatMap((column, index) => column.primaryKey ? [index] : []);
       const byKey = new Map([...model.rows].map(([id, row]) => [reviewDigest(keys.map(index => row[index])), { id, row }]));
       const changes = { updates: [], deletes: [], inserts: [] };
+      const exactDeletes = [];
       const selected = new Set();
       const originals = [];
       for (const operation of saved.operations) {
@@ -725,7 +758,10 @@ class TableEditor {
         }
         selected.add(current.id);
         originals.push(current.row);
-        if (operation.type === 'delete') changes.deletes.push(current.id);
+        if (operation.type === 'delete') {
+          changes.deletes.push(current.id);
+          if (operation.exactDatasetDelete === true) exactDeletes.push(current.id);
+        }
         else changes.updates.push({ rowId: current.id, values: draftValues(operation.values) });
       }
       const validation = this.reviewChangeSet({ sessionId, modelId, ...changes });
@@ -753,7 +789,7 @@ class TableEditor {
           }
         });
       }
-      return changes;
+      return { ...changes, ...(exactDeletes.length && { exactDeletes }) };
     });
   }
   applyChangeSet({ sessionId = 'default', reviewId } = {}) {
@@ -778,6 +814,7 @@ class TableEditor {
         await this._read(session, 'SELECT ' + definition.columns.map(column => quote(column.name)).join(',') + ' FROM ' + quote(this.db._options.database) + '.' + quote(definition.name) + ' LIMIT 0 FOR UPDATE', [], 1);
         definition = await this.definition(model.definition.name);
         if (fingerprint(definition) !== model.fingerprint) throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The table schema changed before the apply acquired its metadata lock. Refresh and review again.');
+        if (review.operations.some(operation => operation.exactDatasetDelete)) await this.verifyDatasetDeleteTarget(definition.name, session);
         const pk = definition.columns.filter(column => column.primaryKey), indices = pk.map(column => definition.columns.findIndex(item => item.name === column.name));
         const target = quote(this.db._options.database) + '.' + quote(definition.name);
         const select = 'SELECT ' + definition.columns.map(column => quote(column.name)).join(',') + ' FROM ' + target + ' WHERE ' + pk.map(column => quote(column.name) + ' <=> ?').join(' AND ') + ' FOR UPDATE';

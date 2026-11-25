@@ -1366,6 +1366,7 @@ class MysqlService {
   previewRelatedTable(target, options) { return this._editor.previewRelatedTable(target, options); }
   retainTableSnapshot(binding) { return this._editor.retainTableSnapshot(binding); }
   stageGridPaste(request) { return this._editor.stagePaste(request); }
+  markDatasetDeletes(request) { return this._editor.markDatasetDeletes(request); }
   releaseTableSnapshot(binding) { return this._editor.releaseTableSnapshot(binding); }
   reviewChangeSet(changes) { return this._editor.reviewChangeSet(changes); }
   captureChangeSetReview(request) { return this._editor.captureReview(request); }

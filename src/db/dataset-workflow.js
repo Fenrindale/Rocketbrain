@@ -5,7 +5,7 @@ const { SchemaRenamer, identifier } = require('./schema-rename');
 const { newSession } = require('./import-stream');
 const { boundedProjection } = require('./table-transfer-snapshot');
 const { canonicalValue, describeType } = require('./schema-conversion');
-const { typedCell } = require('./grid');
+const { capturedCell } = require('./dataset-comparison');
 
 const limits = Object.freeze({ workflows: 24, columns: 32, keys: 4, rows: 50000, pageRows: 8,
   rowBytes: 64 * 1024, sampleRows: 100, sampleBytes: 1024 * 1024, durationMs: 10 * 60 * 1000, reviewMs: 10 * 60 * 1000 });
@@ -25,7 +25,7 @@ function describeTable(definition) {
   if (!keys.length || keys.length > limits.keys || keys.some(name => !columns.some(column => column.name === name && column.kind === 'integer'))) {
     throw fail('Choose tables with one to four exact integer primary-key columns.');
   }
-  return { name: definition.name, keys, columns, definition: digest(definition) };
+  return { name: definition.name, keys, columns, columnCount: definition.columns.length, definition: digest(definition) };
 }
 
 function matchingColumn(target, source, independent = false) {
@@ -106,13 +106,18 @@ async function* orderedRows(db, session, schema, table, mapped, side, check) {
   }
 }
 
-async function mergeOrdered(target, source, mapped, check, onProgress) {
+async function mergeOrdered(target, source, mapped, oneSided, check, onProgress) {
   let left = await target.next(), right = await source.next(), sampleBytes = 0, examined = 0;
   const summary = { equal: 0, changed: 0, targetOnly: 0, sourceOnly: 0 }, sample = [];
   function record(state, row, changes, original) {
     summary[state]++;
     if (sample.length >= limits.sampleRows) return;
     const entry = { index: sample.length, state, key: row.key.map(String), ...(changes && { changes, original }) };
+    const operation = state === 'targetOnly' && oneSided.delete ? 'delete' : state === 'sourceOnly' && oneSided.insert ? 'insert' : undefined;
+    if (operation) {
+      entry.operation = operation;
+      entry.values = Object.fromEntries(mapped.map((pair, index) => [pair.target, row.values[index]]));
+    }
     const bytes = Buffer.byteLength(JSON.stringify(entry));
     if (sampleBytes + bytes <= limits.sampleBytes) {
       sampleBytes += bytes;
@@ -302,7 +307,18 @@ function createDatasetWorkflows(storage, withConnection, profileSource = () => u
         };
         validate();
         const mapped = prepareMapping(tables.target, tables.source, workflow.mapping, independent);
+        const complete = tables.target.columnCount === mapped.length;
+        const oneSided = { delete: complete, insert: complete && mapped.every(pair => pair.left.insertable) };
         const { target, source } = endpoints;
+        if (oneSided.delete) {
+          try { await target.db._editor.verifyDatasetDeleteTarget(tables.target.name, target.session); }
+          catch (error) {
+            if (error.code !== 'ROCKETBRAIN_DATASET_FOREIGN_KEYS') throw error;
+            oneSided.delete = false;
+            oneSided.deleteReason = error.message;
+          }
+        }
+        validate();
         const readers = Object.entries(endpoints).map(([side, { db, session, schema }]) =>
           orderedRows(db, session, schema, tables[side], mapped, side, validate));
         let result, snapshotStartedAt, sourceSnapshotStartedAt;
@@ -316,7 +332,7 @@ function createDatasetWorkflows(storage, withConnection, profileSource = () => u
             }
             await verify();
           }
-          result = await mergeOrdered(...readers, mapped, validate, onProgress);
+          result = await mergeOrdered(...readers, mapped, oneSided, validate, onProgress);
           validate();
           await verify();
         } finally {
@@ -333,10 +349,10 @@ function createDatasetWorkflows(storage, withConnection, profileSource = () => u
               source: { engine: sourceEngine, schema: source.schema, profile: source.label, startedAt: sourceSnapshotStartedAt } } }
           : { snapshotStartedAt };
         return structuredClone({ id: report.id, created: report.created, ...snapshots, target: workflow.target, source: workflow.source,
-          summary: result.summary, sample: result.sample.map(({ original, ...visible }) => visible), omitted: result.omitted });
+          summary: result.summary, sample: result.sample.map(({ original, ...visible }) => visible), omitted: result.omitted, oneSided });
       });
     },
-    async reconcile(id, target, indices, assertCurrent) {
+    async reconcile(id, target, indices, assertCurrent, { includeOneSided = false } = {}) {
       const saved = report;
       const check = () => {
         if (report !== saved || !saved || saved.id !== id || Date.now() - Date.parse(saved.created) > limits.reviewMs ||
@@ -346,8 +362,10 @@ function createDatasetWorkflows(storage, withConnection, profileSource = () => u
       };
       check();
       if (!Array.isArray(indices) || !indices.length || indices.length > limits.sampleRows || new Set(indices).size !== indices.length ||
-          indices.some(index => !Number.isInteger(index) || saved.sample[index]?.state !== 'changed')) {
-        throw fail('Choose distinct changed rows from the current comparison report.');
+          indices.some(index => !Number.isInteger(index) || !saved.sample[index] ||
+            saved.sample[index].state !== 'changed' && !(includeOneSided === true && saved.sample[index].operation))) {
+        throw fail(includeOneSided === true ? 'Choose distinct eligible rows from the current comparison. One-sided changes require a complete destination column mapping.'
+          : 'Choose distinct changed rows from the current comparison report.');
       }
       const model = target.edit;
       if (!model?.canEdit || model.table !== saved.workflow.target || !Array.isArray(model.rowIds) || model.rowIds.length !== target.rows.length) {
@@ -363,21 +381,37 @@ function createDatasetWorkflows(storage, withConnection, profileSource = () => u
         const values = saved.mapped.map((pair, i) => value(row[columns[i]], pair.type));
         return [JSON.stringify(values.slice(0, keyCount)), { index, values }];
       }));
-      const updates = indices.map(index => {
+      const changes = { updates: [], inserts: [], deletes: [] };
+      for (const index of indices) {
         const sample = saved.sample[index], row = visible.get(JSON.stringify(sample.key));
-        if (!row || row.values.some((item, i) => item !== sample.original[i])) throw fail('A selected destination row changed or is outside the current grid page.');
+        if (sample.operation === 'insert') {
+          if (row) throw fail('A selected source-only key already exists on the current destination page. Replay the comparison.');
+          if (!model.insertable || columns.some(column => !model.columns[column].insertable)) throw fail('The destination does not accept all mapped source values.');
+          changes.inserts.push({ values: Object.fromEntries(columns.map(index => {
+            const column = model.columns[index];
+            return [column.name, capturedCell(sample.values[column.name], column)];
+          })) });
+          continue;
+        }
+        const original = sample.operation === 'delete' ? saved.mapped.map(pair => sample.values[pair.target]) : sample.original;
+        if (!row || row.values.some((item, index) => item !== original[index])) throw fail('A selected destination row changed or is outside the current grid page.');
+        if (sample.operation === 'delete') {
+          changes.deletes.push(model.rowIds[row.index]);
+          continue;
+        }
         const values = Object.fromEntries(sample.changes.map(change => {
           const column = model.columns.find(item => item.name === change.target);
           if (!column.editable) throw fail('A selected destination column is protected.');
-          const cell = change.value === null ? { kind: 'null' } : { kind: 'value', text: change.value };
-          typedCell(cell, column);
-          return [column.name, cell];
+          return [column.name, capturedCell(change.value, column)];
         }));
-        return { rowId: model.rowIds[row.index], values };
-      });
-      const changes = { updates, inserts: [], deletes: [] };
+        changes.updates.push({ rowId: model.rowIds[row.index], values });
+      }
       if (Buffer.byteLength(JSON.stringify(changes)) > limits.sampleBytes) throw fail('Choose at most 1 MiB of staged changes.');
-      return { changes, assertFresh: check };
+      if (changes.deletes.length) {
+        await saved.db._editor.verifyDatasetDeleteTarget(model.table);
+        check();
+      }
+      return { changes, exactDeletes: changes.deletes, assertFresh: check };
     }
   };
 }
