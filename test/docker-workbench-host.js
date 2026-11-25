@@ -10,7 +10,7 @@ async function runDockerWorkbenchChecks(api,vscode,checks) {
     assert.ok(commands.includes('rocketbrain.docker.'+name));
   }
   await vscode.commands.executeCommand('rocketbrain.docker.focus');
-  await assert.rejects(api.docker.inventory(),/Select a Docker context/);
+  await assert.rejects(api.docker.inventory(),/Choose a Docker context first\./);
   checks.push('The installed Docker tree and six commands are available and inventory requires selecting a Docker context.');
   return { nativeTree:true,commands:6,explicitContextRequired:true,jdbc:await jdbcReadback() };
 }
