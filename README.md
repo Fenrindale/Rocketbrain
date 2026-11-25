@@ -218,6 +218,8 @@ TestNG 데이터 공급자의 동일한 스칼라 값도 관찰된 행 위치로
 
 Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후와 파일 작업을 검토한 뒤 적용합니다. 텍스트 편집과 클래스 이동에는 VS Code Undo를 사용합니다. Safe Delete로 지운 파일은 **Restore Deleted Java File**에서 복원합니다. 검토 뒤 원본·참조·리소스가 바뀌면 다시 검토해야 합니다.
 
+**Go to Code Target**으로 Java 선언·타입·구현·상위 메서드로 이동합니다. 대상이 여러 개면 파일과 줄을 골라 열 수 있습니다. Kotlin 엔진을 구성한 Gradle 프로젝트에서는 수신 객체 타입에 맞는 확장 함수 선언으로 이동합니다. [코드 탐색](docs/java-symbol-navigation.md)
+
 **Extract Java Constant**는 선택한 컴파일 상수식을 `private static final` 필드로 추출합니다. 이름과 선언 위치를 확인한 뒤 선택한 한 곳만 바꿉니다. [Java 상수 추출](docs/java-extract-constant.md)
 
 | 명령 | 지원 범위 | 추가 분석이 필요한 범위 |
