@@ -11,6 +11,7 @@ const { defaultEntityName, inspectTable, planEntity } = require('./entity-scaffo
 const { MAX_RELATIONSHIPS, CROSS, SELF } = require('./entity-relationships');
 const { INVERSE, THROUGH, relationshipRequests } = require('./entity-collection-relationships');
 const { captureRelationshipSources, chooseableDeclarations } = require('./entity-relationship-sources');
+const { registerExistingEntityRelationships } = require('./entity-existing-relationships-vscode');
 
 const GENERATE_ENTITY = 'rocketbrain.jpa.generateEntity';
 const PREVIEW_SCHEME = 'rocketbrain-jpa-entity';
@@ -87,6 +88,20 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
     return { runtime, projects };
   }
 
+  async function compilerScope(project, runtime, cancellation) {
+    const classpaths = await java.requestWorkspaceCommand('java.project.getClasspaths', [project.uri, { scope: 'runtime' }], cancellation);
+    trusted(cancellation);
+    if (!Array.isArray(classpaths?.classpaths) || !Array.isArray(classpaths.modulepaths) || classpaths.modulepaths.length) {
+      throw Error('JPA entity generation supports Jakarta Persistence projects on a local classpath.');
+    }
+    // Build output directories can be rewritten by JDT during independent validation.
+    const classpath = [...new Set(classpaths.classpaths.map(local).filter(item =>
+      path.extname(item).toLowerCase() === '.jar' && fs.statSync(item, { throwIfNoEntry: false })?.isFile()))];
+    const release = /^(?:1\.)?(\d+)$/.exec(String(project.compliance ?? ''));
+    if (!release || Number(release[1]) < 8 || Number(release[1]) > 25) throw Error('Use a project with observed Java 8–25 compiler settings.');
+    return { classpath, javaHome:runtime.javaHome, release:Number(release[1]) };
+  }
+
   async function projectScope(options) {
     const { projectUri, sourceRootId, packageName, name, cancellation } = options;
     if (!validIdentifier(name)) throw Error('Use a valid Java class name.');
@@ -100,22 +115,12 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
     const directory = path.join(root.path, ...packageName.split('.'));
     await physicalDirectory(directory).catch(() => { throw Error('Choose an existing physical Java package in the selected source root.'); });
     const file = path.join(directory, name + '.java');
-    const classpaths = await java.requestWorkspaceCommand('java.project.getClasspaths', [project.uri, { scope: 'runtime' }], cancellation);
-    trusted(cancellation);
-    if (!Array.isArray(classpaths?.classpaths) || !Array.isArray(classpaths.modulepaths) || classpaths.modulepaths.length) {
-      throw Error('JPA entity generation supports Jakarta Persistence projects on a local classpath.');
-    }
-    // Generated entities use only JDK and Jakarta API types. Build output
-    // directories can be rewritten by JDT during this independent validation.
-    const classpath = [...new Set(classpaths.classpaths.map(local).filter(item =>
-      path.extname(item).toLowerCase() === '.jar' && fs.statSync(item, { throwIfNoEntry: false })?.isFile()))];
-    const release = /^(?:1\.)?(\d+)$/.exec(String(project.compliance ?? ''));
-    if (!release || Number(release[1]) < 8 || Number(release[1]) > 25) throw Error('Use a project with observed Java 8–25 compiler settings.');
-    const fingerprint = JSON.stringify({ workspace: folder.uri.toString(), root: root.path, javaHome: runtime.javaHome,
-      project: project.root, build: buildFingerprint(project.root), classpath, release: release[1],
+    const compiler = await compilerScope(project, runtime, cancellation);
+    const fingerprint = JSON.stringify({ workspace: folder.uri.toString(), root: root.path, ...compiler,
+      project: project.root, build: buildFingerprint(project.root),
       sourceRoots: project.sourceRoots.map(item => [item.path, Boolean(item.unavailable)]) });
-    return { project, root, folder, file, directory, fingerprint, classpath, javaHome: runtime.javaHome,
-      release: Number(release[1]), sourceFingerprint: sourceReview(vscode, project, packageName, name) };
+    return { project, root, folder, file, directory, fingerprint, ...compiler,
+      sourceFingerprint: sourceReview(vscode, project, packageName, name) };
   }
 
   function assertTarget(target, cancellation) {
@@ -366,7 +371,11 @@ function registerEntityScaffolding(context, vscode, { database, java }) {
     try { return await generate(argument); }
     catch (error) { await vscode.window.showErrorMessage(error.message); }
   }));
-  return { prepare, apply, discard, dispose() { disposed = true; previews.clear(); } };
+  const existing = registerExistingEntityRelationships(context, vscode, {
+    database, java, observedProjects, compilerScope, storagePath, trusted, assertTarget
+  });
+  return { prepare, apply, discard, ...existing,
+    dispose() { disposed = true; previews.clear(); existing.disposeExistingRelationships(); } };
 }
 
 module.exports = { registerEntityScaffolding, GENERATE_ENTITY };

@@ -4,7 +4,8 @@ const assert=require('node:assert/strict');
 const test=require('node:test');
 const { normalizePlan,comparePlans }=require('../src/db/explain-plan');
 const { sampleCount,summarizeSeries,compareSeries,serializeSamples }=require('../src/db/explain-plan-series');
-const { seriesHtml }=require('../src/db/explain-plan-view');
+const { deserializeSamples,MAX_SAMPLE_FILE_BYTES }=require('../src/db/explain-plan-archive');
+const { comparisonHtml,seriesHtml }=require('../src/db/explain-plan-view');
 
 const mysql=raw=>normalizePlan({raw,engine:'mysql',version:'8.4',database:'test',format:'tree',measured:true});
 const tree=(root,rows,child='')=>'-> '+root+' (cost=1 rows=7) (actual time=.010..2e-2 rows='+rows+' loops=1)\n'+child;
@@ -63,4 +64,72 @@ test('sample export keeps raw plan text and exact summarized values', () => {
   assert.deepEqual(report.samples.map(sample => [sample.number, sample.shape, sample.format, sample.raw]),
     [[1, 1, 'tree', first.raw], [2, 1, 'tree', second.raw]]);
   assert.equal(report.summary.metrics.find(item => item.key === 'actual_rows').median, '9007199254740993.5');
+});
+
+test('moved access changes require a unique stable relation and the same access method', () => {
+  const branch = (index, predicate) => '    ' + tree('Filter: ' + predicate, '2',
+    '        ' + tree('Index range scan on p using ' + index + ' over ' + predicate, '3'));
+  const oldBranch = branch('ix_name', '(p.name < 5)'), newBranch = branch('ix_zip', '(p.zip > 8)');
+  const other = '    ' + tree('Table scan on d', '1');
+  const before = mysql(tree('Append', '3', oldBranch + other));
+  const after = mysql(tree('Append', '4', other + newBranch));
+  const changes = comparePlans(before, after);
+  assert.deepEqual(changes.rows.filter(row => row.changes.length).map(row =>
+    [row.alignment, row.baselinePosition, row.candidatePosition, row.changes.map(change => change.label)]),
+  [['candidate-move', '1.1', '1.2', ['Predicate']], ['candidate-move', '1.1.1', '1.2.1', ['Index', 'Predicate']]]);
+  assert.equal(changes.candidateMoveCount, 2);
+  assert.match(comparisonHtml(changes, 'test'), /Changed index <strong>ix_zip/);
+  const measured = compareSeries(summarizeSeries([before, before]), summarizeSeries([after, after]));
+  assert.equal(measured.changedAccess.length, 2);
+  assert.match(seriesHtml(measured, null, 'test'), /Changed access details[\s\S]*ix_name[\s\S]*ix_zip/);
+
+  const repeated = '    ' + tree('Table scan on p', '1');
+  const ambiguousBefore = mysql(tree('Append', '5', oldBranch + other + repeated));
+  const ambiguousAfter = mysql(tree('Append', '5', other + newBranch + repeated));
+  assert.equal(comparePlans(ambiguousBefore, ambiguousAfter).rows.filter(row => row.changes.length).length, 0);
+  const differentMethod = mysql(tree('Append', '4', other +
+    newBranch.replace('Index range scan', 'Index lookup')));
+  assert.equal(comparePlans(before, differentMethod).rows.filter(row => row.changes.length).length, 0);
+  const unstable = compareSeries(summarizeSeries([before, ambiguousBefore]), summarizeSeries([after, after]));
+  assert.equal(unstable.changedAccess.length, 0);
+});
+
+test('JSON table comparison detects a changed index and condition on a uniquely moved alias', () => {
+  const table = (name, access, index, condition) => ({table:{table_name:name, access_type:access,
+    key:index, attached_condition:condition, r_rows:3, r_loops:1}});
+  const maria = children => normalizePlan({ raw:JSON.stringify({query_block:{nested_loop:children}}), engine:'mariadb',
+    database:'test', version:'11.4', measured:true });
+  const first = table('people', 'range', 'ix_primary', 'people.id <= 10');
+  const second = table('people', 'range', 'ix_secondary', 'people.code >= 20');
+  const other = table('dept', 'ALL');
+  const match = comparePlans(maria([first, other]), maria([other, second])).rows.find(row => row.changes.length);
+  assert.equal(match.alignment, 'candidate-move');
+  assert.deepEqual(match.changes, [
+    {label:'Index', before:'ix_primary', after:'ix_secondary'},
+    {label:'Predicate', before:'people.id <= 10', after:'people.code >= 20'}
+  ]);
+});
+
+test('reopening v1 plan archives recomputes untrusted summaries without dispatching SQL', () => {
+  const first = mysql(tree('Scan <script>', '9007199254740993'));
+  const second = mysql(tree('Scan <script>', '9007199254740994'));
+  const expected = summarizeSeries([first, second]);
+  const capturedAt = '2026-11-25T00:00:00.000Z';
+  const archive = JSON.parse(serializeSamples(expected, [first, second], capturedAt));
+  archive.summary.metrics = [{ count:99, median:'forged' }];
+  archive.summary.shapes = [];
+  archive.samples[0].warnings = ['forged'];
+  const encode = value => Buffer.from(JSON.stringify(value));
+  const opened = deserializeSamples(encode(archive));
+  assert.deepEqual(opened, {series:expected, plans:[first, second], capturedAt});
+  const html = seriesHtml({ ...opened.series, saved:true }, opened.plans, 'test');
+  assert.match(html, /Confirm their origin/);
+  assert.match(html, /Scan &lt;script&gt;/);
+  assert.doesNotMatch(html, /forged|<script>/);
+  assert.throws(() => deserializeSamples(encode({ ...archive, version:2 })), /version 1/);
+  assert.throws(() => deserializeSamples(encode({ ...archive, capturedAt:'2026-11-31T00:00:00.000Z' })), /timestamp/);
+  assert.throws(() => deserializeSamples(encode({ ...archive, samples:[...archive.samples].reverse() })), /out of order/);
+  assert.throws(() => deserializeSamples(encode({ ...archive, summary:{ ...archive.summary, format:'json' } })), /inconsistent/);
+  assert.throws(() => deserializeSamples(Buffer.from([0xff, 0xfe])), /UTF-8/);
+  assert.throws(() => deserializeSamples(Buffer.alloc(MAX_SAMPLE_FILE_BYTES + 1)), /32 MiB/);
 });

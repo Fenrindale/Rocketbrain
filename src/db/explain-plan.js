@@ -210,15 +210,16 @@ function comparePlans(left, right) {
     return { name:node.name, depth:node.depth, values:[...node.costs, ...node.rows, ...(node.actual || [])],
       detail:[...node.tags, ...node.expressions].map(item => [item.label, item.value]) };
   }
-  const rows = alignOperators(indexOperators(left), indexOperators(right)).map(({ before, after, alignment }) => {
+  const rows = alignOperators(indexOperators(left), indexOperators(right)).map(({ before, after, alignment, changes = [] }) => {
     const a = project(before), b = project(after);
     const state = !a ? 'added' : !b ? 'removed' :
       JSON.stringify(a) === JSON.stringify(b) ? 'same' : 'changed';
-    return { state, before:a, after:b, alignment, baselinePosition:before?.address, candidatePosition:after?.address };
+    return { state, before:a, after:b, alignment, changes, baselinePosition:before?.address, candidatePosition:after?.address };
   });
   return { engine: left.engine, version: left.version, database: left.database, measured: Boolean(left.measured), rows,
     baselineWarnings: left.warnings, candidateWarnings: right.warnings,
     movedCount: rows.filter(row => row.alignment === 'moved').length,
+    candidateMoveCount: rows.filter(row => row.alignment === 'candidate-move').length,
     counts: Object.fromEntries(['same', 'changed', 'removed', 'added'].map(state => [state, rows.filter(row => row.state === state).length])) };
 }
 

@@ -2,13 +2,35 @@
 
 const { createTableTransfer } = require('./table-transfer');
 const { createTransferRecovery } = require('./table-transfer-recovery');
+const { createTransferHistory, historyLimits } = require('./table-transfer-history');
+
+const historyCommand = 'rocketbrain.data.transferVerificationHistory';
+const historyScheme = 'rocketbrain-table-copy-history';
+const statusLabels = { matching: 'Matching', missing: 'Missing keys', mismatch: 'Different values', inconclusive: 'Inconclusive' };
+const reasons = {
+  'missing-review-evidence': 'This saved transfer has no destination evidence.',
+  'primary-key-not-mapped': 'The review did not map every destination primary-key column.',
+  'no-bounded-keys': 'The sampled destination keys exceeded the verification limit.',
+  'destination-identity-changed': 'Connect to the reviewed server, database, endpoint and account.',
+  'destination-definition-changed': 'The reviewed table definition is different or unavailable.',
+  'destination-unavailable': 'The reviewed destination could not be opened for a read-only check.',
+  'sample-unreadable': 'The sampled destination rows could not be read exactly.'
+};
+
+function checkSummary(result) {
+  const scope = result.coverage === 'all-reviewed-keys' ? 'all reviewed keys' : 'sampled reviewed keys';
+  return result.checkedKeys + ' / ' + result.rows + ' keys checked (' + scope + ') · ' +
+    result.matching + ' matching · ' + result.missing + ' missing · ' + result.mismatch + ' different.';
+}
 
 function registerTableTransfer(context, vscode, { database }) {
-  const recovery = createTransferRecovery({ storagePath: context.storageUri?.fsPath, secrets: context.secrets,
-    isTrusted: () => !closed && vscode.workspace.isTrusted });
-  const core = createTableTransfer(database, { recovery });
+  const storagePath = context.storageUri?.fsPath;
+  const isTrusted = () => !closed && vscode.workspace.isTrusted;
+  const recovery = createTransferRecovery({ storagePath, secrets: context.secrets, isTrusted });
+  const history = storagePath && createTransferHistory({ storagePath, isTrusted });
+  const core = createTableTransfer(database, { recovery, history });
   const subscriptions = [], documents = new Map();
-  let closed = false;
+  let closed = false, historyText = '';
 
   function trusted() {
     if (closed || !vscode.workspace.isTrusted) throw new Error('Open a trusted workspace to copy database rows.');
@@ -56,6 +78,36 @@ function registerTableTransfer(context, vscode, { database }) {
   subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-table-copy', {
     provideTextDocumentContent(uri) { return reviewText(uri.path.split('/').filter(Boolean)[0]); }
   }));
+  const historyUri = vscode.Uri.parse(historyScheme + ':/Table Copy Verification History.txt');
+  const historyChanged = new vscode.EventEmitter();
+  subscriptions.push(historyChanged, vscode.workspace.registerTextDocumentContentProvider(historyScheme, {
+    onDidChange: historyChanged.event,
+    provideTextDocumentContent(uri) {
+      if (!isTrusted() || uri.toString() !== historyUri.toString()) return '';
+      return historyText;
+    }
+  }));
+
+  async function showTransferHistory(captureId) {
+    const entries = await core.listTransferVerificationHistory({ captureId });
+    trusted();
+    historyText = [
+      'Table Copy Verification History',
+      'This workspace retains ' + historyLimits.entries + ' observations for up to ' + historyLimits.ageMs / 86400000 + ' days.',
+      'Observations report the destination at the time of each check. Commit history remains unconfirmed and replay stays blocked.',
+      ...(captureId ? ['Capture ' + captureId] : []),
+      '',
+      ...(entries.length ? entries.flatMap(entry => [
+        entry.recordedAt + ' · ' + statusLabels[entry.status] + ' · Capture ' + entry.captureId,
+        entry.reason ? reasons[entry.reason] : checkSummary(entry), ''
+      ]) : ['No verification observations are available.'])
+    ].join('\n');
+    historyChanged.fire(historyUri);
+    const document = await vscode.workspace.openTextDocument(historyUri);
+    await vscode.window.showTextDocument(document, { preview: false });
+    return entries;
+  }
+  command(historyCommand, () => showTransferHistory());
 
   command('rocketbrain.data.captureTransferSource', async item => {
     const selected = item?.table?.name || (await vscode.window.showQuickPick(tableChoices(), { title: 'Select Source Table' }))?.label;
@@ -84,24 +136,12 @@ function registerTableTransfer(context, vscode, { database }) {
     (_, cancellation) => core.verifyUncertainCommit({ captureId, cancellation }));
     const destination = result.destination ? result.destination.database + '.' + result.destination.table + ': ' : '';
     const limit = 'This observes current rows. Commit history remains unconfirmed and replay stays blocked.';
-    const reasons = {
-      'missing-review-evidence': 'This saved transfer has no destination evidence.',
-      'primary-key-not-mapped': 'The review did not map every destination primary-key column.',
-      'no-bounded-keys': 'The sampled destination keys exceeded the verification limit.',
-      'destination-identity-changed': 'Connect to the reviewed server, database, endpoint and account.',
-      'destination-definition-changed': 'The reviewed table definition is different or unavailable.',
-      'destination-unavailable': 'The reviewed destination could not be opened for a read-only check.',
-      'sample-unreadable': 'The sampled destination rows could not be read exactly.'
-    };
-    if (result.status === 'inconclusive') {
-      await vscode.window.showWarningMessage(destination + (reasons[result.reason] || reasons['destination-unavailable']) + ' ' + limit);
-    } else {
-      const counts = result.sampledKeys + ' of ' + result.rows + ' reviewed keys checked · ' + result.matching + ' matching · ' +
-        result.missing + ' missing · ' + result.mismatch + ' different. ';
-      const message = destination + counts + limit;
-      if (result.status === 'matching') await vscode.window.showInformationMessage(message);
-      else await vscode.window.showWarningMessage(message);
-    }
+    const details = result.status === 'inconclusive' ? (reasons[result.reason] || reasons['destination-unavailable']) : checkSummary(result);
+    const message = destination + details + ' ' + limit + (result.historyRecorded ? '' : ' The local observation could not be saved.');
+    const actions = result.historyRecorded ? ['Show Verification History'] : [];
+    const selected = result.status === 'matching' ? await vscode.window.showInformationMessage(message, ...actions)
+      : await vscode.window.showWarningMessage(message, ...actions);
+    if (selected === 'Show Verification History') await showTransferHistory(captureId);
     return result;
   }
 
@@ -203,6 +243,7 @@ function registerTableTransfer(context, vscode, { database }) {
     for (const subscription of subscriptions) subscription.dispose();
     await core.dispose();
     documents.clear();
+    historyText = '';
   } };
 }
 

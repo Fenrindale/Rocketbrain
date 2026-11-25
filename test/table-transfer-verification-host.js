@@ -6,7 +6,6 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const mysql = require('mysql2/promise');
 
-const rows = 48, sampleKeys = 32;
 const springIsolation = { people: 2, departments: 1, rolledBackNames: 0 };
 const columns = 'id BIGINT UNSIGNED NOT NULL, label VARCHAR(16) NOT NULL, note VARCHAR(100), ' +
   'cost DECIMAL(24,6), payload VARBINARY(8), PRIMARY KEY(id,label)';
@@ -65,10 +64,13 @@ async function loseCommitAcknowledgement(api, reviewId, sendCommit) {
   } finally { db._control = original; }
 }
 
-async function runTableTransferVerificationChecks(api, vscode, checks) {
+async function runTableTransferVerificationChecks(api, vscode, checks, { expanded = false } = {}) {
   const engines = participants(), tools = api.tableTransfer, directions = [];
+  const rows = expanded ? 144 : 48;
+  const commands = await vscode.commands.getCommands(true);
   assert.equal(tools.canRecover, true);
-  assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.data.verifyTransferDestination'));
+  assert.ok(commands.includes('rocketbrain.data.verifyTransferDestination'));
+  if (expanded) assert.ok(commands.includes('rocketbrain.data.transferVerificationHistory'));
   await probe(engines);
   for (const from of engines) {
     const to = engines.find(item => item.engine !== from.engine);
@@ -80,6 +82,7 @@ async function runTableTransferVerificationChecks(api, vscode, checks) {
     const data = Array.from({ length: rows }, (_, index) => [(9007199254740993n + BigInt(index)).toString(), '키 ' + index,
       index % 7 ? '내용 🍀 ' + index + '\r\n' : null, '123456789012345678.' + String(index).padStart(6, '0'),
       index % 9 ? Buffer.from([0, 255, index]) : null]);
+    let direction;
     const setup = async (table, sendCommit) => {
       await api.connectMysql(from.config);
       const capture = await tools.capture({ table: sourceTable, mode: 'stream', recoverable: true });
@@ -102,17 +105,23 @@ async function runTableTransferVerificationChecks(api, vscode, checks) {
       const listed = (await tools.listRecoverableSources()).find(item => item.id === matchingId);
       assert.deepEqual(listed.verificationTarget, { table: committedTable, database: to.config.database, engine: to.engine });
       const matching = await tools.verifyUncertainCommit({ captureId: matchingId });
+      const sampleKeys = expanded ? 128 : Math.min(matching.keyLimit ?? 32, rows);
       assert.deepEqual([matching.status, matching.matching, matching.missing, matching.mismatch], ['matching', sampleKeys, 0, 0]);
-      assert.equal(matching.coverage, 'sampled-reviewed-keys');
+      assert.equal(matching.coverage, sampleKeys < rows ? 'sampled-reviewed-keys' : 'all-reviewed-keys');
+      if (expanded) assert.deepEqual([matching.checkedKeys, matching.keyLimit, matching.historyRecorded], [128, 128, true]);
       assert.equal(matching.historicalCommitConfirmed, false);
       assert.equal(matching.replayBlocked, true);
       assert.equal(matching.comparedMappedColumns, mapping.length);
       assert.ok(!Object.hasOwn(matching, 'samples') && !JSON.stringify(matching).includes(data[0][0]));
       await assert.rejects(tools.resumeSource({ captureId: matchingId }), /previous Commit/);
       await api.connectMysql(from.config);
-      assert.equal((await tools.verifyUncertainCommit({ captureId: matchingId })).reason, 'destination-identity-changed');
+      const wrongTarget = await tools.verifyUncertainCommit({ captureId: matchingId });
+      assert.equal(wrongTarget.reason, 'destination-identity-changed');
+      if (expanded) assert.deepEqual([wrongTarget.checkedKeys, wrongTarget.coverage, wrongTarget.historyRecorded], [0, 'none', true]);
       await api.connectMysql(to.config);
-      await target.execute('UPDATE ' + committedTable + ' SET note=? WHERE id=? AND label=?', ['changed by another session', ...data[0].slice(0, 2)]);
+      // The midpoint is covered by the expanded selection and was outside the original 32 selected ordinals.
+      const changedRow = data[expanded ? 72 : 0];
+      await target.execute('UPDATE ' + committedTable + ' SET note=? WHERE id=? AND label=?', ['changed by another session', ...changedRow.slice(0, 2)]);
       await target.execute('DELETE FROM ' + committedTable + ' WHERE id=? AND label=?', data.at(-1).slice(0, 2));
       const changed = await tools.verifyUncertainCommit({ captureId: matchingId });
       assert.deepEqual([changed.status, changed.matching, changed.missing, changed.mismatch], ['mismatch', sampleKeys - 2, 1, 1]);
@@ -126,9 +135,9 @@ async function runTableTransferVerificationChecks(api, vscode, checks) {
       assert.equal(await count(missingTable), 0);
       await assert.rejects(tools.resumeSource({ captureId: missingId }), /previous Commit/);
       assert.ok((await tools.listRecoverableSources()).filter(item => saved.includes(item.id)).every(item => item.recoveryState === 'settlement-unconfirmed'));
-      directions.push({ sourceEngine: from.engine, destinationEngine: to.engine, rows, sampledKeys: sampleKeys, mappedColumns: mapping.length,
+      direction = { sourceEngine: from.engine, destinationEngine: to.engine, rows, sampledKeys: sampleKeys, mappedColumns: mapping.length,
         matchingAfterLostAck: true, missingWithoutDispatch: true, detectsChangedAndDeletedKeys: true, rejectsWrongIdentity: true,
-        rejectsTableDrift: true, replayRemainsBlocked: true, historicalCommitConfirmed: false });
+        rejectsTableDrift: true, replayRemainsBlocked: true, historicalCommitConfirmed: false };
     } finally {
       if (tools.pending()) await tools.settle({ transactionId: tools.pending().transactionId, commit: false });
       for (const captureId of saved) await tools.discardRecoverableSource({ captureId });
@@ -138,10 +147,36 @@ async function runTableTransferVerificationChecks(api, vscode, checks) {
       try { for (const table of [committedTable, missingTable]) await target.query('DROP TABLE IF EXISTS ' + table); }
       finally { await target.end(); }
     }
+    if (expanded) {
+      assert.ok(!(await tools.listRecoverableSources()).some(item => saved.includes(item.id)));
+      const committed = await tools.listTransferVerificationHistory({ captureId: saved[0] });
+      const absent = await tools.listTransferVerificationHistory({ captureId: saved[1] });
+      assert.deepEqual(committed.map(item => item.status).sort(), ['inconclusive', 'inconclusive', 'matching', 'mismatch']);
+      assert.deepEqual(absent.map(item => item.status), ['missing']);
+      const recorded = JSON.stringify([...committed, ...absent]);
+      for (const secret of [sourceTable, committedTable, missingTable, data[0][0], data[1][2], 'mysql', 'mariadb', 'destination":']) {
+        assert.ok(!recorded.includes(secret));
+      }
+      assert.ok([...committed, ...absent].every(item => item.replayBlocked && !item.historicalCommitConfirmed));
+      Object.assign(direction, { historyRetainedAfterDiscard: true, historyRedacted: true });
+    }
+    directions.push(direction);
   }
   await probe(engines);
-  checks.push('Both MySQL/MariaDB directions sampled 32 mapped composite keys after a deliberately interrupted acknowledgement. Real committed, absent, changed, deleted, wrong-target, and schema-drift cases left the replay fence intact.');
-  return { directions, springIsolation };
+  checks.push('Both MySQL/MariaDB directions checked mapped composite keys after a deliberately interrupted acknowledgement. Real committed, absent, changed, deleted, wrong-target, and schema-drift cases left the replay fence intact.');
+  let historyObservations;
+  if (expanded) {
+    const entries = await vscode.commands.executeCommand('rocketbrain.data.transferVerificationHistory');
+    assert.equal(entries.length, 10);
+    const document = vscode.window.activeTextEditor?.document;
+    assert.equal(document?.uri.scheme, 'rocketbrain-table-copy-history');
+    assert.match(document.getText(), /128 \/ 144 keys checked \(sampled reviewed keys\)/);
+    assert.match(document.getText(), /Different values/);
+    assert.doesNotMatch(document.getText(), /rb_verify|9007199254740993/);
+    historyObservations = entries.length;
+    checks.push('Expanded verification checked 128 of 144 reviewed keys. The workspace history showed ten redacted observations after discarding their saved snapshots, with no live destination connection.');
+  }
+  return { directions, springIsolation, ...(expanded && { historyObservations }) };
 }
 
 module.exports = { runTableTransferVerificationChecks };

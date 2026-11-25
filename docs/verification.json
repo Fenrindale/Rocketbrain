@@ -1,22 +1,22 @@
 {
-  "version": "0.36.0",
-  "verifiedAt": "2026-11-24T23:29:36.598Z",
+  "version": "0.37.0",
+  "verifiedAt": "2026-11-25T04:29:18.668Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.36.0.vsix",
-    "bytes": 1783709,
-    "sha256": "343c2545700df83a902d0259bfae87be725c7302d84c9021b6e6cf7ea9a85dfd",
+    "name": "rocketbrain-0.37.0.vsix",
+    "bytes": 1793180,
+    "sha256": "98509ac420cc537d20aefb099a344cb57e4b9e30e09f2ef8290d51699430374f",
     "files": 13
   },
   "source": {
-    "frozenPublicInputs": 1161,
-    "inputVectorSha256": "1cbc83116c023a9a32d5a761748bdf7e3c8bc96070935291fc72fc933be58bc8",
+    "frozenPublicInputs": 1172,
+    "inputVectorSha256": "af8cb1cdc3865ca9747ebcfc9a291035b349e1b87437fb1a9ce4c6448e0d2ebc",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.1",
-    "tests": 1221,
-    "pass": 1168,
+    "tests": 1231,
+    "pass": 1178,
     "fail": 0,
     "cancelled": 0,
     "skipped": 53,
@@ -78,25 +78,25 @@
   ],
   "newlyVerified": {
     "IDEA-061": {
-      "scope": "두 Spring 환경에서 동명 테이블을 스키마로 구별하고 Hibernate 조회·저장·롤백을 확인했다. 다른 FK 대상과 검토 후 바뀐 대상 스키마 정의·Java 소스를 거부했다.",
+      "scope": "두 Spring 환경에서 양쪽 미리보기와 버퍼의 단일 편집을 확인했다. Hibernate 양방향 조회와 소유 측 저장·롤백, 소스와 카탈로그 변경 시 거부를 검증했다.",
       "runtimeGroups": [
         "relationships"
       ]
     },
     "DG-056": {
-      "scope": "실제 MySQL과 MariaDB에서 Spring 테이블을 읽는 UNION ALL의 분기 순서를 바꾸고 단일 캡처와 2대2 시리즈에서 접근 연산자 두 개의 이동을 각각 확인했다.",
+      "scope": "MySQL과 MariaDB에서 실제 UNION ALL 분기를 옮긴 뒤 기존 조건과 인덱스가 모두 달라진 접근을 단일 표본과 시리즈에서 후보로 확인했다.",
       "runtimeGroups": [
         "explain"
       ]
     },
     "DG-057": {
-      "scope": "MySQL TREE와 MariaDB JSON의 원본 두 표본 및 분포를 비교했고, 기존 파일 덮어쓰기와 내보내기 중 추가 서버 실행이 없음을 검증했다.",
+      "scope": "MySQL TREE와 MariaDB JSON의 두 시리즈를 내보내고 다시 열어 비교했다. 원문이 보존되고 읽기·비교가 쿼리를 실행하지 않음을 확인했다.",
       "runtimeGroups": [
         "explain"
       ]
     },
     "DG-073": {
-      "scope": "실제 MySQL↔MariaDB의 48행 전송에서 커밋 후 응답 유실과 전송 전 실패를 재현했다. 32개 복합 키와 5개 매핑 열에서 변경·삭제를 구별하고, 잘못된 대상 및 테이블 정의 변경을 거부했으며 재실행 잠금을 확인했다.",
+      "scope": "MySQL과 MariaDB 간 양방향 144행 전송에서 128개 복합 키와 5개 매핑 열을 검사했다. 새 호스트에서 DB 연결 없이 같은 작업 공간의 점검 이력 10건을 다시 읽었다.",
       "runtimeGroups": [
         "stream"
       ]
@@ -104,7 +104,7 @@
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 201,
+    "sourceCorrespondences": 205,
     "sourceConfidence": "inferred",
     "archiveEntries": 13,
     "archiveConfidence": "observed"
@@ -126,14 +126,14 @@
     "stateChanges": []
   },
   "limits": [
-    "단일 캡처와 시리즈 비교는 같은 연결·모드·형식에서 위치가 달라진 고유 연산자를 디코딩된 이름·속성·조건으로 대응한다. 동일 후보가 여러 개면 이동으로 분류하지 않는다. 표본 JSON에는 서버 원문이 포함된다.",
-    "JPA는 관찰한 물리 외래 키가 기본 키를 가리키는 자기 참조와 동일 서버 교차 스키마 단방향 관계를 생성한다. 교차 매핑의 스키마·테이블 이름은 소문자 식별자로 제한하며 대상은 로컬 Jakarta 엔티티의 명시적 catalog를 요구한다.",
-    "저장한 복구 스냅샷의 미확정 커밋은 검토한 대상에서 매핑된 기본 키를 최대 32개 읽어 현재 상태를 확인한다. 커밋 이력을 확정하거나 재실행 잠금을 해제하지 않는다."
+    "이동한 실행 계획에서 접근 이름과 방식이 양쪽에서 고유하면 조건·인덱스가 바뀐 연산자를 대응 후보로 표시한다. 저장 표본은 원문으로 통계를 복원하며 파일의 서버 정보에 표시용 출처를 붙인다.",
+    "기존 JPA 엔티티 양쪽의 변경은 같은 프로젝트와 스키마에서 단일 컬럼 FK가 단일 컬럼 PK를 가리킬 때 지원한다. 두 버퍼를 함께 편집하고 저장은 사용자가 결정한다.",
+    "미확정 전송은 새 기록에서 최대 128개 키를 읽기 전용으로 대조한다. 작업 공간에 최대 7일간 64건의 점검 결과와 건수를 보존한다. 과거 커밋 여부를 미확정으로 표시하고 재실행 잠금을 유지한다."
   ],
   "next": [
-    "계획에서 조건이나 인덱스가 함께 바뀌어도 이동을 검토할 수 있는 연산자 대응과 저장한 표본 파일 다시 열기",
-    "기존 엔티티 양쪽의 변경을 미리 검토하는 JPA 양방향 매핑과 교차 스키마 연결 테이블",
-    "미확정 전송의 더 넓은 키 대조, 점검 내역 저장과 운영자가 검토하는 복구 결정"
+    "여러 후보가 있는 실행 계획에서 대응 근거와 사용자 검토를 더하는 비교",
+    "복합 FK와 교차 스키마 연결 테이블을 포함하는 기존 JPA 엔티티 편집",
+    "전송 대조 이력의 내보내기와 운영자가 검토할 수 있는 복구 근거"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

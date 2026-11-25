@@ -7,6 +7,7 @@ const { statementAt } = require('../sql');
 const { explanationHtml, comparisonHtml, seriesHtml } = require('./explain-plan-view');
 const { comparePlans, comparablePlans, validatePlanQuery } = require('./explain-plan');
 const { sampleCount, summarizeSeries, compareSeries, serializeSamples } = require('./explain-plan-series');
+const { MAX_SAMPLE_FILE_BYTES, readSavedSamples } = require('./explain-plan-archive');
 
 const VISUAL_EXPLAIN = 'rocketbrain.sql.explainVisual';
 const MEASURE_PLAN = 'rocketbrain.sql.measurePlan';
@@ -14,6 +15,7 @@ const COMPARE_PLANS = 'rocketbrain.sql.comparePlans';
 const MEASURE_SERIES = 'rocketbrain.sql.measurePlanSeries';
 const COMPARE_SERIES = 'rocketbrain.sql.comparePlanSeries';
 const EXPORT_SAMPLES = 'rocketbrain.sql.exportPlanSamples';
+const OPEN_SAMPLES = 'rocketbrain.sql.openPlanSamples';
 const MAX_PANELS = 8;
 const hash = text => createHash('sha256').update(text).digest('hex');
 
@@ -35,7 +37,7 @@ function registerExplainPlans(context, vscode, { database }) {
   let disposed = false, opening = false;
 
   function trusted(cancellation) {
-    if (disposed || !vscode.workspace.isTrusted) throw Error('Trust the workspace and connect to MySQL or MariaDB first.');
+    if (disposed || !vscode.workspace.isTrusted) throw Error('Use a trusted workspace to open and compare SQL plans.');
     if (cancellation?.isCancellationRequested) throw Error('Visual EXPLAIN was cancelled.');
   }
 
@@ -192,14 +194,19 @@ function registerExplainPlans(context, vscode, { database }) {
         await onProgress?.({ completed: plans.length, total: review.samples });
       }
       unchanged();
-      const series = summarizeSeries(plans), seriesId = randomUUID();
-      const panel = vscode.window.createWebviewPanel('rocketbrain.planSeries', 'SQL measurement series · ' + series.engine,
-        vscode.ViewColumn.Beside, { enableScripts: false, localResourceRoots: [] });
-      seriesPanels.set(seriesId, { panel, plans, series, target:review.target, source:review.source, capturedAt:new Date().toISOString() });
-      panel.onDidDispose(() => seriesPanels.delete(seriesId));
-      panel.webview.html = seriesHtml(series, plans, randomBytes(24).toString('base64'));
-      return { id:seriesId, ...structuredClone(series) };
+      return showSeries({ series:summarizeSeries(plans), plans, target:review.target, source:review.source, capturedAt:new Date().toISOString() });
     } finally { opening = false; }
+  }
+
+  function showSeries(record) {
+    const { series, plans, fileName } = record, id = randomUUID();
+    const title = fileName ? 'Saved SQL plan samples · ' + fileName : 'SQL measurement series · ' + series.engine;
+    const panel = vscode.window.createWebviewPanel('rocketbrain.planSeries', title, vscode.ViewColumn.Beside,
+      { enableScripts:false, localResourceRoots:[] });
+    seriesPanels.set(id, { ...record, panel });
+    panel.onDidDispose(() => seriesPanels.delete(id));
+    panel.webview.html = seriesHtml({ ...series, saved:Boolean(fileName) }, plans, randomBytes(24).toString('base64'));
+    return { id, saved:Boolean(fileName), ...structuredClone(series) };
   }
 
   function getSample(id, index) {
@@ -217,6 +224,7 @@ function registerExplainPlans(context, vscode, { database }) {
       throw Error('Choose a local JSON file for the measurement samples.');
     }
     const contents = serializeSamples(record.series, record.plans, record.capturedAt);
+    if (Buffer.byteLength(contents) > MAX_SAMPLE_FILE_BYTES) throw Error('SQL plan sample files must be at most 32 MiB.');
     let file;
     try {
       file = await fs.open(uri.fsPath, 'wx', 0o600);
@@ -235,13 +243,33 @@ function registerExplainPlans(context, vscode, { database }) {
     return { uri:uri.toString(), samples:record.plans.length };
   }
 
+  async function openSavedSamples(uri) {
+    trusted();
+    if (uri?.scheme !== 'file' || path.extname(uri.fsPath).toLowerCase() !== '.json') {
+      throw Error('Choose a local JSON file containing saved SQL plan samples.');
+    }
+    if (opening) throw Error('Wait for the current SQL plan capture or file.');
+    if (seriesPanels.size >= 4) throw Error('Close a measurement series before opening another.');
+    opening = true;
+    try {
+      const record = await readSavedSamples(uri.fsPath);
+      trusted();
+      return showSeries({ ...record, fileName:path.basename(uri.fsPath) });
+    } finally { opening = false; }
+  }
+
+  function seriesCompatible(left, right) {
+    return left && right && left !== right && comparablePlans(left.series, right.series) &&
+      Boolean(left.fileName || right.fileName || left.target.key === right.target.key);
+  }
+
   function seriesComparison(leftId, rightId) {
     trusted();
     const left = seriesPanels.get(leftId), right = seriesPanels.get(rightId);
-    if (!left || !right || left === right || left.target.key !== right.target.key) {
-      throw Error('Choose two open measurement series from the same database connection.');
+    if (!seriesCompatible(left, right)) {
+      throw Error('Choose compatible SQL plan series. Live captures require the same connection.');
     }
-    return compareSeries(left.series, right.series);
+    return { ...compareSeries(left.series, right.series), saved:Boolean(left.fileName || right.fileName) };
   }
 
   function showSeriesComparison(leftId, rightId) {
@@ -258,14 +286,14 @@ function registerExplainPlans(context, vscode, { database }) {
   function seriesChoices() {
     return [...seriesPanels].map(([id, record]) => ({
       id, record, label: record.series.totalSamples + ' samples · ' + record.series.database, description: record.capturedAt,
-      detail:record.source.sql.replace(/\s+/g, ' ').slice(0, 150)
+      detail:record.fileName ? 'Saved file · ' + record.fileName : record.source.sql.replace(/\s+/g, ' ').slice(0, 150)
     }));
   }
 
   async function chooseSeriesComparison() {
     trusted();
     const choices = seriesChoices();
-    const compatible = (a, b) => a.id !== b.id && a.record.target.key === b.record.target.key && comparablePlans(a.record.series, b.record.series);
+    const compatible = (a, b) => seriesCompatible(a.record, b.record);
     const possible = choices.filter(item => choices.some(other => compatible(item, other)));
     if (!possible.length) throw Error('Open two comparable SQL measurement series.');
     const left = await vscode.window.showQuickPick(possible, { title:'Compare Measurement Series · Baseline' });
@@ -370,9 +398,17 @@ function registerExplainPlans(context, vscode, { database }) {
       void vscode.window.showInformationMessage('Exported ' + result.samples + ' SQL plan samples.');
       return result;
     } catch (error) { await vscode.window.showErrorMessage(error.message); }
+  }), vscode.commands.registerCommand(OPEN_SAMPLES, async () => {
+    try {
+      trusted();
+      const [uri] = await vscode.window.showOpenDialog({
+        title:'Open Saved SQL Plan Samples', canSelectMany:false, filters:{ 'Plan samples JSON':['json'] }
+      }) || [];
+      if (uri) return await openSavedSamples(uri);
+    } catch (error) { await vscode.window.showErrorMessage(error.message); }
   }));
   return { open, revealSource, loadTree, prepareMeasurement, measure, comparison, showComparison, close(id) { panels.get(id)?.panel.dispose(); },
-    prepareSeries, measureSeries, getSample, exportSamples, seriesComparison, showSeriesComparison,
+    prepareSeries, measureSeries, getSample, exportSamples, openSavedSamples, seriesComparison, showSeriesComparison,
     closeSeries(id) { seriesPanels.get(id)?.panel.dispose(); },
     dispose() {
       disposed = true;

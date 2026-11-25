@@ -19,7 +19,7 @@ const columns = [
 ];
 const definition = { kind: 'BASE TABLE', engine: 'InnoDB', columns };
 const target = { ...place, definitionHash: digest(definition) };
-const data = Array.from({ length: 48 }, (_, index) => [(9007199254740993n + BigInt(index)).toString(), '키' + index,
+const data = Array.from({ length: 144 }, (_, index) => [(9007199254740993n + BigInt(index)).toString(), '키' + index,
   index % 2 ? '0x' : null, index % 3 ? '0xffffffffffffffff' : '0x00']);
 
 function sampled(rows = data, selected = columns) {
@@ -70,17 +70,18 @@ function transport({ dataRows = data, connectedIdentity = identity, afterLockDef
 
 test('deterministic bounded sampling includes both ends and key values remain private', async () => {
   const evidence = sampled();
-  assert.equal(evidence.samples.length, 32);
+  assert.equal(evidence.samples.length, 128);
   assert.deepEqual(evidence.samples[0].key, data[0].slice(0, 2));
   assert.deepEqual(evidence.samples.at(-1).key, data.at(-1).slice(0, 2));
   const { events, verify } = transport();
   const report = await verify(evidence);
-  assert.deepEqual([report.status, report.matching, report.missing, report.mismatch], ['matching', 32, 0, 0]);
+  assert.deepEqual([report.status, report.matching, report.missing, report.mismatch], ['matching', 128, 0, 0]);
+  assert.deepEqual([report.sampledKeys, report.checkedKeys, report.keyLimit], [128, 128, 128]);
   assert.equal(report.historicalCommitConfirmed, false);
   assert.equal(report.replayBlocked, true);
   assert.equal(report.coverage, 'sampled-reviewed-keys');
   assert.ok(!JSON.stringify(report).includes(data[0][0]));
-  assert.equal(events.filter(action => action === 'lookup').length, 32);
+  assert.equal(events.filter(action => action === 'lookup').length, 128);
   assert.ok(events.includes('ROLLBACK'));
 });
 
@@ -90,9 +91,9 @@ test('changed typed values and absent primary keys are reported separately witho
   updated[0][2] = '0x';
   updated.pop();
   const report = await transport({ dataRows: updated }).verify(sampled());
-  assert.deepEqual([report.status, report.matching, report.missing, report.mismatch], ['mismatch', 30, 1, 1]);
+  assert.deepEqual([report.status, report.matching, report.missing, report.mismatch], ['mismatch', 126, 1, 1]);
   const absent = await transport({ dataRows: [] }).verify(sampled());
-  assert.deepEqual([absent.status, absent.matching, absent.missing, absent.mismatch], ['missing', 0, 32, 0]);
+  assert.deepEqual([absent.status, absent.matching, absent.missing, absent.mismatch], ['missing', 0, 128, 0]);
   assert.equal(absent.replayBlocked, true);
 });
 
@@ -104,8 +105,19 @@ test('legacy records, incomplete keys, drift, overwide observations and cancella
   assert.equal((await verifyCommitEvidence(sampled(wide), { withTableTransfer: noDatabase })).reason, 'no-bounded-keys');
   assert.equal((await transport({ connectedIdentity: { ...identity, hostname: 'replacement' } }).verify(sampled())).reason, 'destination-identity-changed');
   assert.equal((await transport({ afterLockDefinition: { ...definition, modified: true } }).verify(sampled())).reason, 'destination-definition-changed');
-  assert.equal((await transport({ overflowKey: data[0][0] }).verify(sampled())).reason, 'sample-unreadable');
+  const failed = await transport({ overflowKey: data[0][0] }).verify(sampled());
+  assert.deepEqual([failed.reason, failed.checkedKeys, failed.coverage], ['sample-unreadable', 0, 'none']);
   const controller = new AbortController();
   const { verify } = transport({ onSample: () => controller.abort() });
   await assert.rejects(verify(sampled(), controller.signal), /verification cancelled/i);
+});
+
+test('new evidence verifies every available small key set while existing version-1 evidence keeps its narrower limit', async () => {
+  const small = await transport().verify(sampled(data.slice(0, 64)));
+  assert.deepEqual([small.checkedKeys, small.coverage], [64, 'all-reviewed-keys']);
+  const evidence = sampled();
+  const legacy = await transport().verify({ ...evidence, version: 1, samples: evidence.samples.slice(0, 32) });
+  assert.deepEqual([legacy.checkedKeys, legacy.keyLimit, legacy.coverage], [32, 32, 'sampled-reviewed-keys']);
+  const unsupported = await transport().verify({ ...evidence, version: 99 });
+  assert.equal(unsupported.reason, 'missing-review-evidence');
 });

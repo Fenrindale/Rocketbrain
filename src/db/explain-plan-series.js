@@ -29,12 +29,15 @@ function summarizeSeries(plans) {
     if (!shapes.has(shape)) shapes.set(shape, { label: shapes.size + 1, samples: [], decodedNodes: paths.size });
     shapes.get(shape).samples.push(index + 1);
     for (const warning of plan.warnings) warnings.add(warning);
-    for (const [path, { node, address, signature }] of paths) {
+    for (const [path, { node, address, signature, anchor, anchorBlocked }] of paths) {
       if (!nodes.has(path)) {
-        nodes.set(path, { path, address, signatures:new Set(), name:node.name, depth:node.depth, observedSamples:0, measures:new Map() });
+        nodes.set(path, { path, address, signatures:new Set(), anchors:new Map(), anchorBlocked:false,
+          name:node.name, depth:node.depth, observedSamples:0, measures:new Map() });
       }
       const item = nodes.get(path);
       item.signatures.add(signature);
+      if (anchor) item.anchors.set(anchor.scope, anchor);
+      if (!anchor || anchorBlocked) item.anchorBlocked = true;
       item.observedSamples++;
       for (const metric of node.actual || []) {
         if (!item.measures.has(metric.key)) item.measures.set(metric.key, { label: metric.label, values: [] });
@@ -49,7 +52,11 @@ function summarizeSeries(plans) {
   if (!metrics.some(metric => metric.count > 0)) throw Error('The server returned no decodable observed metrics for these plans.');
   const operators = [...nodes.values()].map(item => {
     const signatures = [...item.signatures];
-    return { path:item.path, address:item.address, signatures, signature:signatures.length === 1 ? signatures[0] : null };
+    const anchorScopes = [...item.anchors.keys()];
+    const anchor = !item.anchorBlocked && anchorScopes.length === 1 && item.observedSamples === plans.length ?
+      item.anchors.get(anchorScopes[0]) : null;
+    return { path:item.path, address:item.address, name:item.name, signatures, signature:signatures.length === 1 ? signatures[0] : null,
+      anchorScopes, anchor };
   });
   return { engine:first.engine, version:first.version, database:first.database, format:first.format, measured:true, operators,
     totalSamples:plans.length, metrics, shapes:[...shapes.values()], warnings:[...warnings] };
@@ -68,10 +75,15 @@ function compareSeries(baseline, candidate) {
       baseline:before?.metrics.get(key) || null, candidate:after?.metrics.get(key) || null,
       alignment, baselinePosition:before?.address, candidatePosition:after?.address
     })));
+  const changedAccess = aligned.filter(item => item.changes?.length).map(({ before, after, alignment, changes }) => ({
+    baselineName:before.name, candidateName:after.name, baselinePosition:before.address, candidatePosition:after.address,
+    alignment, changes
+  }));
   return { baseline:{ samples:baseline.totalSamples, shapes:baseline.shapes.length, warnings:baseline.warnings },
     candidate:{ samples:candidate.totalSamples, shapes:candidate.shapes.length, warnings:candidate.warnings },
-    engine: baseline.engine, version: baseline.version, database: baseline.database, metrics,
-    movedCount:aligned.filter(item => item.alignment === 'moved').length };
+    engine: baseline.engine, version: baseline.version, database: baseline.database, metrics, changedAccess,
+    movedCount:aligned.filter(item => item.alignment === 'moved').length,
+    candidateMoveCount:aligned.filter(item => item.alignment === 'candidate-move').length };
 }
 
 function serializeSamples(series, plans, capturedAt) {

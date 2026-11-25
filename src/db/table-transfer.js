@@ -222,7 +222,7 @@ function retainedSource(capture, target) {
   };
 }
 
-function createTableTransfer(database, { recovery } = {}) {
+function createTableTransfer(database, { recovery, history } = {}) {
   const captures = new Map(), targets = new Map(), reviews = new Map(), operations = new Set(), controllers = new Set(), removals = new Set();
   let pending, writingCapture, closed = false;
   const tracked = (action, abortable = false) => (...args) => {
@@ -330,9 +330,14 @@ function createTableTransfer(database, { recovery } = {}) {
     }),
     verifyUncertainCommit: tracked(async ({ captureId, cancellation } = {}) => {
       const evidence = await getRecovery().uncertainCommit(captureId);
-      return verifyCommitEvidence(evidence, { withTableTransfer: database.withTableTransfer, cancellation,
+      const result = await verifyCommitEvidence(evidence, { withTableTransfer: database.withTableTransfer, cancellation,
         transferable, targetDefinition, tableIdentity });
+      let entry;
+      try { entry = await history?.append(captureId, result); }
+      catch { /* Keep the completed read-only result available when local persistence fails. */ }
+      return { ...result, historyRecorded: Boolean(entry) };
     }, true),
+    listTransferVerificationHistory: tracked(async ({ captureId } = {}) => history ? history.list(captureId) : []),
     inspectDestination: tracked(async ({ captureId, table } = {}) => database.withTableTransfer(async lease => {
       const capture = retained(captures, captureId, 'source snapshot');
       await confirmReady(capture);

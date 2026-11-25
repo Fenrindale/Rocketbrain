@@ -25,23 +25,23 @@ async function springSourceRoot(api, workspace, packageName) {
   throw Error('JDT did not import the Spring fixture for the scoped relationship check.');
 }
 
-async function javaProof(api, runtime, config, sources, classes, schema) {
+async function runJpaHibernateProof(api, runtime, config, sources, args, proofClass, marker) {
   const { javaHome } = api.java.getState();
   const exe = name => path.join(javaHome, 'bin', name + (process.platform === 'win32' ? '.exe' : ''));
   const classpath = (await fs.readFile(path.join(runtime.projectPath, 'build/runtime-classpath.txt'), 'utf8')).trim();
   const directory = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rb-scoped-relations-'));
-  const proof = path.join(__dirname, 'fixtures/jpa-entity-proof/GeneratedScopedRelationshipProof.java');
+  const proof = path.join(__dirname, 'fixtures/jpa-entity-proof', proofClass + '.java');
   const url = runtime.dbEngine === 'mysql' ? 'jdbc:mysql://127.0.0.1:' + config.port + '/' + config.database
     + '?allowPublicKeyRetrieval=true&sslMode=DISABLED' : 'jdbc:mariadb://127.0.0.1:' + config.port + '/' + config.database;
   const options = { cwd: directory, encoding: 'utf8', windowsHide: true, timeout: 55000 };
   try {
     await execFile(exe('javac'), ['-encoding', 'UTF-8', '-proc:none', '-cp', classpath, '-d', directory, proof, ...sources], options);
     const { stdout } = await execFile(exe('java'), ['-cp', directory + path.delimiter + classpath,
-      'GeneratedScopedRelationshipProof', ...classes, schema], {
+      proofClass, ...args], {
       ...options, env: { ...process.env, RB_GENERATED_ENTITY_JDBC_URL: url,
         RB_GENERATED_ENTITY_JDBC_USER: config.user, RB_GENERATED_ENTITY_JDBC_PASSWORD: config.password }
     });
-    assert.match(stdout, /ROCKETBRAIN_JPA_SCOPED_JDBC_OK/);
+    assert.ok(stdout.split(/\r?\n/).includes(marker), 'Hibernate JDBC proof marker was absent.');
   } catch (error) {
     throw Error([error.message, error.stdout, error.stderr].filter(Boolean).join('\n').replaceAll(config.password, '[redacted]'));
   } finally { await fs.rm(directory, { recursive: true, force: true }); }
@@ -123,7 +123,8 @@ public class ${external} {
     paths.push(created.path);
     assert.equal(await fs.readFile(targetPath, 'utf8'), targetSource);
     assert.equal(await fs.readFile(created.path, 'utf8'), review.text);
-    await javaProof(api, runtime, config, paths, [name, external].map(type => pkg + '.' + type), remoteSchema);
+    await runJpaHibernateProof(api, runtime, config, paths, [pkg + '.' + name, pkg + '.' + external, remoteSchema],
+      'GeneratedScopedRelationshipProof', 'ROCKETBRAIN_JPA_SCOPED_JDBC_OK');
     const [rows] = await actor.query('SELECT COUNT(*) AS n FROM ' + q(table));
     assert.equal(Number(rows[0].n), 2);
 
@@ -156,4 +157,4 @@ public class ${external} {
   }
 }
 
-module.exports = { runJpaScopedRelationshipChecks };
+module.exports = { runJpaScopedRelationshipChecks, springSourceRoot, runJpaHibernateProof };

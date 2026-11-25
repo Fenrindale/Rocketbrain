@@ -7,9 +7,10 @@ const { boundedProjection } = require('./table-transfer-snapshot');
 const { newSession } = require('./import-stream');
 const { typedCell } = require('./grid');
 
-const sampleLimit = 32;
+const legacySampleLimit = 32;
+const sampleLimit = 128;
 const keyBytes = 256;
-const verificationTimeoutMs = 30000;
+const verificationTimeoutMs = 60000;
 const fail = message => Object.assign(new Error(message), { code: 'ROCKETBRAIN_TABLE_TRANSFER' });
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const quote = (name, table = false) => '`' + identifier(name, { table }).replaceAll('`', '``') + '`';
@@ -25,7 +26,7 @@ function createCommitEvidence({ destination, capture, definition, selected }) {
   const keys = definition.columns.filter(column => column.primaryKey).map(column => selected.findIndex(item => item.column.name === column.name));
   const rowCount = capture.rowCount;
   const columns = selected.map(item => item.column.name);
-  const base = { version: 1, destination, rowCount, sourceHash: capture.sourceHash, keys, columns };
+  const base = { version: 2, destination, rowCount, sourceHash: capture.sourceHash, keys, columns };
   const samples = [], indices = new Set(), distinct = new Set();
   const size = Math.min(rowCount, sampleLimit);
   const canSample = keys.length && keys.every(index => index >= 0);
@@ -45,13 +46,20 @@ function createCommitEvidence({ destination, capture, definition, selected }) {
   };
 }
 
+function evidenceLimit(evidence) {
+  if (evidence?.version === 1) return legacySampleLimit;
+  if (evidence?.version === 2) return sampleLimit;
+  return 0;
+}
+
 function evidenceShape(evidence) {
-  return evidence?.version === 1 && destinationSummary(evidence) &&
+  const limit = evidenceLimit(evidence);
+  return limit && destinationSummary(evidence) &&
     Number.isSafeInteger(evidence.rowCount) && evidence.rowCount > 0 && Array.isArray(evidence.columns) &&
     evidence.columns.length >= 1 && evidence.columns.length <= 64 && new Set(evidence.columns).size === evidence.columns.length &&
     evidence.columns.every(name => typeof name === 'string') && Array.isArray(evidence.keys) && evidence.keys.length <= 64 &&
     evidence.keys.every(index => Number.isInteger(index) && index < evidence.columns.length && index >= -1) &&
-    Array.isArray(evidence.samples) && evidence.samples.length <= Math.min(sampleLimit, evidence.rowCount) &&
+    Array.isArray(evidence.samples) && evidence.samples.length <= Math.min(limit, evidence.rowCount) &&
     evidence.samples.every(sample => typeof sample?.hash === 'string' && /^[a-f0-9]{64}$/.test(sample.hash) &&
       Array.isArray(sample.key) && sample.key.length === evidence.keys.length && sample.key.every(value => typeof value === 'string') &&
       Buffer.byteLength(JSON.stringify(sample.key)) <= keyBytes);
@@ -59,8 +67,9 @@ function evidenceShape(evidence) {
 
 function observation(evidence, { status = 'inconclusive', reason, counts = { matching: 0, missing: 0, mismatch: 0 } } = {}) {
   const rows = evidence?.rowCount || 0, samples = evidence?.samples.length || 0;
-  return { status, reason, destination: destinationSummary(evidence), rows, sampledKeys: samples, ...counts,
-    coverage: samples ? samples === rows ? 'all-reviewed-keys' : 'sampled-reviewed-keys' : 'none',
+  const checkedKeys = counts.matching + counts.missing + counts.mismatch;
+  return { status, reason, destination: destinationSummary(evidence), rows, sampledKeys: samples, checkedKeys, keyLimit: evidenceLimit(evidence), ...counts,
+    coverage: checkedKeys ? checkedKeys === rows ? 'all-reviewed-keys' : 'sampled-reviewed-keys' : 'none',
     comparedMappedColumns: evidence?.columns.length || 0, historicalCommitConfirmed: false, replayBlocked: true };
 }
 
