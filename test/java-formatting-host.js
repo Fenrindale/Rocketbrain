@@ -36,9 +36,6 @@ async function runJavaFormattingChecks(api,vscode,checks) {
     await api.java.buildWorkspace();
     const nativePlain = await until(()=>vscode.commands.executeCommand('vscode.executeFormatDocumentProvider',plainDoc.uri,documentOptions).then(edits=>edits?.length?edits:null),45000);
     assertFormat(editedText(plainDoc.getText(),nativePlain),{insertSpaces:true,indentSize:2,tabWidth:2});
-    const nativeMixed = await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider',mixedDoc.uri,documentOptions);
-    assertFormat(editedText(original,nativeMixed.filter(edit=>edit.newEol===undefined)),{insertSpaces:false,indentSize:2,tabWidth:4});
-    assert.equal(nativeMixed.find(edit=>edit.newEol!==undefined)?.newEol,vscode.EndOfLine.CRLF);
 
     const range = new vscode.Range(mixedDoc.positionAt(mixed.from),mixedDoc.positionAt(mixed.until));
     const rangePlan = await service.prepare({document:mixedDoc,range,options:documentOptions});
@@ -63,6 +60,7 @@ async function runJavaFormattingChecks(api,vscode,checks) {
     const full = await service.prepare({document:mixedDoc,options:documentOptions});
     assert.equal(full.formatting.endOfLine,'crlf');
     assert.equal(full.formatting.configurationSources.length,2);
+    assertFormat(full.documents[0].after,{insertSpaces:false,indentSize:2,tabWidth:4});
     const preview = await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-java-refactor:/'+full.id+'/0/after.java'));
     assert.equal(preview.getText().replace(/\r\n/g,'\n'),full.documents[0].after.replace(/\r\n/g,'\n'));
     assert.equal((await api.java.refactoring.apply(full.id)).state,'applied');
