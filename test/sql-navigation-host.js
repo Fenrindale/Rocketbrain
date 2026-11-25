@@ -41,11 +41,11 @@ async function verifySqlNavigation(runtime, api, vscode, checks) {
   try {
     folder = await fs.mkdtemp(path.join(path.dirname(runtime.dbConfigPath), 'rb-navigation-'));
     await api.connectMysql(config);
-    const statement = "SELECT CONCAT('first:',COUNT(*)) AS result_marker FROM rb_spring_person;";
+    const statement = "SELECT CAST(CONCAT('first:',COUNT(*)) AS CHAR CHARACTER SET utf8mb4) AS result_marker FROM rb_spring_person;";
     const before = "SELECT 'sentinel';\n";
     const first = await open('first.sql', before + statement + "\nSELECT 'tail';\n");
     const firstResult = await run(first, before.length, before.length + statement.length, 'first:2');
-    const second = await open('second.sql', "SELECT CONCAT('second:',COUNT(*)) AS result_marker FROM rb_spring_person;\n");
+    const second = await open('second.sql', "SELECT CAST(CONCAT('second:',COUNT(*)) AS CHAR CHARACTER SET utf8mb4) AS result_marker FROM rb_spring_person;\n");
     const secondResult = await run(second, 5, 5, 'second:2');
     assert.notEqual(firstResult.resultId, secondResult.resultId);
     assert.notEqual(firstResult.sessionId, secondResult.sessionId);
