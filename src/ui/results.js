@@ -47,7 +47,8 @@
   }
   function send(type, payload = {}) {
     const record = current(); if (!record) return;
-    if (['copy', 'export', 'closeResult', 'openRelatedRows', 'returnToRelatedSource', 'setResultPin', 'renameResult', 'openScriptStatement', 'saveFilterPreset', 'removeFilterPreset'].includes(type)) {
+    if (['copy', 'export', 'closeResult', 'openRelatedRows', 'returnToRelatedSource', 'setResultPin', 'renameResult',
+      'openScriptStatement', 'saveFilterPreset', 'removeFilterPreset', 'saveSortPreset', 'removeSortPreset'].includes(type)) {
       vscode.postMessage({ type, id: record.id, ...payload }); return;
     }
     const item = draft(record);
@@ -175,7 +176,7 @@
     let form = browseForms.get(record.id);
     if (!form || form.modelId !== model.modelId) {
       form = { modelId: model.modelId, expanded: form?.expanded || false, sort: structuredClone(browse.sort || []),
-        filters: structuredClone(browse.filters || []), selectedFilter: form?.selectedFilter, search: '' };
+        filters: structuredClone(browse.filters || []), selectedSort: form?.selectedSort, selectedFilter: form?.selectedFilter, search: '' };
       browseForms.set(record.id, form);
     }
     const session = record.sessionState || result.state, item = draft(record);
@@ -199,18 +200,68 @@
       control.value = value; control.onchange = () => change(control.value); return control;
     };
     const remove = (label, action) => { const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Remove'; button.setAttribute('aria-label', label); button.disabled = blocked; button.onclick = action; return button; };
-    $('sort-rules').replaceChildren(...form.sort.map((rule, index) => {
-      const row = document.createElement('div'); row.className = 'browse-rule';
-      row.append(select(`Sort column ${index + 1}`, scalar.map(column => ({ value: column.name, label: column.name })), rule.column, value => { rule.column = value; }),
-        select(`Sort direction ${index + 1}`, [{ value: 'asc', label: 'Ascending' }, { value: 'desc', label: 'Descending' }], rule.direction, value => { rule.direction = value; }),
-        remove(`Remove sort ${index + 1}`, () => { form.sort.splice(index, 1); render(); })); return row;
-    }));
+    renderSortRules(browse.sortOptions, scalar, form, blocked, select, remove);
     renderFilterRules(record, form, scalar, blocked, select, remove);
+    renderSortPresets(record, form, blocked);
     renderFilterPresets(record, form, blocked);
-    $('add-sort').disabled = blocked || !scalar.length || form.sort.length >= Math.min(scalar.length, 8);
     $('apply-browse').disabled = $('clear-browse').disabled = blocked;
     $('browse-status').textContent = localChanges ? 'Apply or discard staged changes before changing pages, sorting or filters.' : session?.inTransaction ? 'Commit or roll back the current transaction before changing pages, sorting or filters.' : !browse.pageable ? 'First page only: this table has no primary key.' : 'Server-side results. Concurrent data changes may move rows between pages.';
-    $('add-sort').onclick = () => { const column = scalar.find(column => !form.sort.some(rule => rule.column === column.name)); if (column) { form.sort.push({ column: column.name, direction: 'asc' }); render(); } };
+  }
+  function renderSortRules(sortOptions, scalar, form, blocked, select, remove) {
+    const columns = sortOptions?.columns || scalar;
+    const used = new Set(form.sort.map(rule => rule.column));
+    const move = (index, delta) => {
+      const button = document.createElement('button'), destination = index + delta;
+      button.type = 'button';
+      button.textContent = delta < 0 ? '↑' : '↓';
+      button.setAttribute('aria-label', 'Move sort ' + (index + 1) + (delta < 0 ? ' up' : ' down'));
+      button.disabled = blocked || destination < 0 || destination >= form.sort.length;
+      button.onclick = () => { form.sort.splice(destination, 0, form.sort.splice(index, 1)[0]); render(); };
+      return button;
+    };
+    const rowFor = (rule, index) => {
+      const row = document.createElement('div'), position = index + 1;
+      row.className = 'browse-rule';
+      const choices = columns.filter(column => column.name === rule.column || !used.has(column.name));
+      const column = columns.find(item => item.name === rule.column);
+      row.append(select('Sort column ' + position, choices.map(item => ({ value: item.name, label: item.name })), rule.column, value => {
+        rule.column = value;
+        delete rule.collation;
+        const expression = columns.find(item => item.name === value)?.expression;
+        if (expression) rule.expression = expression;
+        else delete rule.expression;
+        render();
+      }), select('Sort direction ' + position, [{ value: 'asc', label: 'Ascending' }, { value: 'desc', label: 'Descending' }], rule.direction, value => { rule.direction = value; }));
+      if (sortOptions) {
+        row.append(select('Sort NULLs ' + position, [{ value: '', label: 'Server NULL order' }, { value: 'first', label: 'NULLs first' },
+          { value: 'last', label: 'NULLs last' }], rule.nulls || '', value => { if (value) rule.nulls = value; else delete rule.nulls; }));
+        const collations = Object.hasOwn(sortOptions.collations, column?.charset) ? sortOptions.collations[column.charset] : [];
+        if (collations.length) row.append(select('Sort collation ' + position,
+          [{ value: '', label: 'Column collation' }, ...collations.map(name => ({ value: name, label: name }))], rule.collation || '',
+          value => { if (value) rule.collation = value; else delete rule.collation; }));
+        const expression = document.createElement('input');
+        expression.type = 'text';
+        expression.maxLength = 256;
+        expression.disabled = blocked;
+        expression.spellcheck = false;
+        expression.setAttribute('aria-label', 'Sort expression ' + position);
+        expression.placeholder = 'Optional sort expression';
+        expression.title = 'Exact column names, arithmetic, ABS, LOWER, UPPER, TRIM, CHAR_LENGTH, JSON_TEXT or BYTE_PREFIX';
+        expression.value = rule.expression || '';
+        expression.oninput = () => { if (expression.value.trim()) rule.expression = expression.value; else delete rule.expression; };
+        row.append(expression);
+      }
+      row.append(move(index, -1), move(index, 1), remove('Remove sort ' + position, () => { form.sort.splice(index, 1); render(); }));
+      return row;
+    };
+    $('sort-rules').replaceChildren(...form.sort.map(rowFor));
+    $('add-sort').disabled = blocked || form.sort.length >= Math.min(columns.length, 8);
+    $('add-sort').onclick = () => {
+      const column = columns.find(item => !used.has(item.name));
+      if (!column) return;
+      form.sort.push({ column: column.name, direction: 'asc', ...(column.expression && { expression: column.expression }) });
+      render();
+    };
   }
   const filterLabels = { eq: 'Equals', ne: 'Does not equal', lt: 'Less than', lte: 'At most', gt: 'Greater than', gte: 'At least',
     contains: 'Contains text', startsWith: 'Starts with', endsWith: 'Ends with', isNull: 'Is NULL', isNotNull: 'Is not NULL' };
@@ -333,6 +384,23 @@
     const saved = record.result.browse.filters || [];
     $('save-filter').disabled = blocked || !saved.length;
     $('save-filter').onclick = () => send('saveFilterPreset', { name: current?.name, modelId: form.modelId });
+  }
+  function renderSortPresets(record, form, blocked) {
+    const presets = record.sortPresets;
+    $('sort-presets').hidden = !presets;
+    if (!presets) return;
+    const select = $('saved-sort'), preset = presets.find(item => item.name === form.selectedSort);
+    options(select, [{ value: '', label: 'Choose a saved sort' }, ...presets.map(item => ({
+      value: item.name, label: item.name + (item.applicable ? '' : ' (metadata changed)')
+    }))], preset?.name || '');
+    select.disabled = blocked;
+    select.onchange = () => { form.selectedSort = select.value; render(); };
+    $('load-sort').disabled = blocked || !preset?.applicable;
+    $('load-sort').onclick = () => { form.sort = structuredClone(preset.sort); render(); };
+    $('remove-sort').disabled = blocked || !preset;
+    $('remove-sort').onclick = () => send('removeSortPreset', { name: preset.name, modelId: form.modelId });
+    $('save-sort').disabled = blocked || !record.result.browse.sort?.length;
+    $('save-sort').onclick = () => send('saveSortPreset', { name: preset?.name, modelId: form.modelId });
   }
   function renderTools(record, result) {
     const model = result.edit, item = draft(record), session = record.sessionState || result.state;

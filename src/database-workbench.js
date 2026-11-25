@@ -955,6 +955,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     savedResultFilters: id => results.savedFilters(id),
     saveResultFilter: (id, modelId, name) => results.saveFilterPreset(id, modelId, name),
     removeResultFilter: (id, modelId, name) => results.removeFilterPreset(id, modelId, name),
+    savedResultSorts: id => results.savedSorts(id),
+    saveResultSort: (id, modelId, name) => results.saveSortPreset(id, modelId, name),
+    removeResultSort: (id, modelId, name) => results.removeSortPreset(id, modelId, name),
     showResults:()=>results.show(),
     openTableSnapshot,
     async configureConsoleSession(sessionId,{readOnly,autocommit}={}) {

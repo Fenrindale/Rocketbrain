@@ -1,16 +1,17 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),mysql=require('mysql2/promise');
 const {MysqlService}=require('../src/db/mysql'),{ResultsView}=require('../src/results'),{TableEditor}=require('../src/table-editor'),{browserRuntime}=require('./helpers/browser-runtime');
+const {tableLayoutConnectionKey}=require('../src/db/result-layouts');
 const runtime=browserRuntime(),file=process.env.ROCKETBRAIN_TEST_MYSQL_CONFIG||process.env.ROCKETBRAIN_MYSQL_TEST_CONFIG,config=file?JSON.parse(fs.readFileSync(file,'utf8')):null;
 test('actual table Webview pages, multi-sorts and filters on the server while protecting staged and uncommitted edits',{skip:runtime.skip||(!config&&'Use an owned disposable database fixture.'),timeout:90000},async t=>{
  const marker=JSON.parse(fs.readFileSync(path.join(path.dirname(file),'owner.json'),'utf8'));assert.ok(['RocketbrainDisposableMariaDbFixture-v1','RocketbrainDisposableOracleMysqlFixture-v1'].includes(marker.kind));
  const observer=await mysql.createConnection({...config}),name='rb_browse_ui_'+crypto.randomBytes(5).toString('hex'),db=new MysqlService(config);t.after(async()=>{await db.dispose();await observer.query('DROP TABLE IF EXISTS `'+name+'`');await observer.end();});
  const version=(await observer.query('SELECT VERSION() AS version'))[0][0].version,engine=/mariadb/i.test(version)?'mariadb':'mysql';
- await observer.query('CREATE TABLE `'+name+'` (id INT PRIMARY KEY,category VARCHAR(20) NOT NULL,label VARCHAR(100) NOT NULL,score INT NOT NULL,note VARCHAR(20) NULL) ENGINE=InnoDB');
+ await observer.query('CREATE TABLE `'+name+'` (id INT PRIMARY KEY,category VARCHAR(20) NOT NULL,label VARCHAR(100) NOT NULL,score INT NOT NULL,note VARCHAR(20) CHARACTER SET utf8mb4 NULL) ENGINE=InnoDB');
  for(let i=1;i<=61;i++)await observer.execute('INSERT INTO `'+name+'` VALUES (?,?,?,?,?)',[i,i%2?'odd':'even','row'+i,i,i%3?'note':null]);await db.openSession('browse-ui',{readOnly:true});
  const browser=await runtime.chromium.launch({executablePath:runtime.executablePath,headless:true});t.after(()=>browser.close());const page=await browser.newPage({viewport:{width:1120,height:900}}),errors=[],unexpected=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',async route=>{const asset=route.request().url().split('/').at(-1);if(['results.js','results.css'].includes(asset))await route.fulfill({contentType:asset.endsWith('.js')?'application/javascript':'text/css',body:(asset.endsWith('.css')?fs.readFileSync(path.join(__dirname,'helpers/webview-palette.css'),'utf8'):'')+fs.readFileSync(path.join(__dirname,'../src/ui',asset),'utf8')});else{unexpected.push(route.request().url());await route.abort();}});
- let receive,lastPost=Promise.resolve(),controller;const connection={db,mysql:true,epoch:1,label:'Owned browse UI fixture'},host=new ResultsView({Uri:{joinPath:(root,...p)=>path.posix.join(root,...p),file:v=>v},window:{showWarningMessage:async()=> 'Close Result',showErrorMessage:message=>{throw Error(message);}}},{extensionUri:'/virtual/rocketbrain',subscriptions:[]},{editAction:(id,message)=>controller.handle(id,message)});
+ let receive,lastPost=Promise.resolve(),controller;const connection={db,mysql:true,epoch:1,label:'Owned browse UI fixture',tableLayoutConnection:tableLayoutConnectionKey(config)},workspaceData=new Map(),host=new ResultsView({Uri:{joinPath:(root,...p)=>path.posix.join(root,...p),file:v=>v},window:{showInputBox:async()=> 'Server ordering',showWarningMessage:async()=> 'Close Result',showErrorMessage:message=>{throw Error(message);}}},{extensionUri:'/virtual/rocketbrain',subscriptions:[],workspaceState:{get:key=>workspaceData.get(key),async update(key,value){workspaceData.set(key,value);}}},{editAction:(id,message)=>controller.handle(id,message)});
  controller=new TableEditor({results:host,connection:()=>connection,trusted:()=>true,withSession:async(id,action)=>action(id)});t.after(()=>controller.dispose());host.resolveWebviewView({webview:{cspSource:'https://rocketbrain.test',asWebviewUri:uri=>'https://rocketbrain.test/'+path.posix.basename(uri),onDidReceiveMessage:handler=>{receive=handler;return{dispose(){}};},postMessage:data=>{lastPost=lastPost.then(()=>page.evaluate(data=>window.dispatchEvent(new MessageEvent('message',{data})),data));return lastPost;}},onDidDispose(){}});await lastPost;
  await page.exposeFunction('__postToHost',message=>receive(message));await page.evaluate(()=>{window.acquireVsCodeApi=()=>({postMessage:m=>window.__postToHost(m),getState:()=>window.__savedState,setState:state=>{window.__savedState=structuredClone(state);}});});await page.setContent(host.view.webview.html,{waitUntil:'networkidle'});const id=await controller.open({table:name,sessionId:'browse-ui',sql:'SELECT * FROM `'+name+'`'});await lastPost;
  const settled=async()=>{await page.waitForFunction(()=>!document.getElementById('browse-options').disabled);await lastPost;};
@@ -28,5 +29,20 @@ test('actual table Webview pages, multi-sorts and filters on the server while pr
  await page.locator('#discard').click();await page.locator('#restore-browsing').click();await page.waitForFunction(()=>!document.getElementById('enable-edit').hidden&&!document.getElementById('page-size').disabled);await settled();assert.equal(host.history[0].result.browse.page,1);assert.equal(host.history[0].result.browse.filters.length,2);
  await page.locator('#clear-browse').click();await settled();assert.deepEqual((await ids()).slice(0,3),['1','2','3']);assert.equal(host.history[0].result.browse.page,0);assert.equal(host.history[0].result.browse.filters.length,0);
  await page.locator('#add-filter').click();await page.getByRole('textbox',{name:'Filter value 1',exact:true}).fill('not an integer');await page.locator('#apply-browse').click();await settled();assert.match(await page.locator('#edit-status').textContent(),/integer/);assert.deepEqual((await ids()).slice(0,3),['1','2','3']);
+ await page.locator('#clear-browse').click();await settled();
+ await page.locator('#add-sort').click();await page.getByRole('combobox',{name:'Sort column 1',exact:true}).selectOption('score');
+ await page.getByRole('combobox',{name:'Sort direction 1',exact:true}).selectOption('desc');await page.getByRole('textbox',{name:'Sort expression 1',exact:true}).fill('ABS(score)');
+ await page.locator('#add-sort').click();await page.getByRole('combobox',{name:'Sort column 2',exact:true}).selectOption('note');
+ await page.getByRole('combobox',{name:'Sort NULLs 2',exact:true}).selectOption('first');
+ await page.getByRole('combobox',{name:'Sort collation 2',exact:true}).selectOption('utf8mb4_bin');
+ await page.getByRole('button',{name:'Move sort 2 up',exact:true}).click();await page.locator('#apply-browse').click();await settled();
+ assert.deepEqual((await ids()).slice(0,3),['60','57','54']);assert.deepEqual(host.history[0].result.browse.sort,
+  [{column:'note',direction:'asc',nulls:'first',collation:'utf8mb4_bin'},{column:'score',direction:'desc',expression:'ABS(score)'}]);
+ await page.locator('#save-sort').click();await page.locator('#saved-sort').selectOption('Server ordering');
+ await page.locator('#clear-browse').click();await settled();assert.deepEqual((await ids()).slice(0,3),['1','2','3']);
+ await page.locator('#load-sort').click();assert.deepEqual((await ids()).slice(0,3),['1','2','3']);
+ assert.equal(await page.getByRole('textbox',{name:'Sort expression 2',exact:true}).inputValue(),'ABS(score)');
+ await page.locator('#apply-browse').click();await settled();assert.deepEqual((await ids()).slice(0,3),['60','57','54']);
+ await page.locator('#remove-sort').click();await page.waitForFunction(()=>document.getElementById('load-sort').disabled);
  await page.screenshot({path:path.resolve('test-output/v0.10-grid-browse-ui-'+engine+'.png')});assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
 });

@@ -1,5 +1,6 @@
 'use strict';
 const { randomUUID } = require('node:crypto');
+const { compileGridSort, observeSortCollations, sortOptions } = require('./grid-sort');
 const QUOTE = String.fromCharCode(96);
 const quote = name => QUOTE + name.replaceAll(QUOTE, QUOTE + QUOTE) + QUOTE;
 const fail = (code, message, extra = {}) => Object.assign(new Error(message), { code, ...extra });
@@ -153,27 +154,22 @@ function keysetAfter(order, columns, anchor) {
   return { sql: alternatives.length ? '(' + alternatives.join(' OR ') + ')' : '0 = 1', parameters };
 }
 /** Compile only catalog-backed identifiers and explicitly typed bound values. */
-function browseQuery(definition, input = {}, schema, related = false, cursor, reverse = false) {
+function browseQuery(definition, input = {}, schema, related = false, collations = {}, cursor, reverse = false) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose table paging, sorting and filter options.');
   if (Object.keys(input).some(key => !['page', 'pageSize', 'maxRows', 'sort', 'filters', 'sessionId'].includes(key))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Unsupported table browsing option.');
   const page = input.page ?? 0, pageSize = input.pageSize ?? input.maxRows ?? 200;
   if (!Number.isInteger(page) || page < 0 || page > MAX_PAGE) throw fail('ROCKETBRAIN_GRID_QUERY', 'Page index must be between 0 and 2000.');
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 500) throw fail('ROCKETBRAIN_GRID_QUERY', 'Page size must be between 1 and 500.');
   const columns = new Map(definition.columns.map(column => [column.name, column]));
-  const pk = definition.columns.filter(column => column.primaryKey), order = [], used = new Set(), parameters = [], where = [], filters = [];
+  const pk = definition.columns.filter(column => column.primaryKey), parameters = [], where = [], filters = [];
   if (page && !pk.length) throw fail('ROCKETBRAIN_GRID_QUERY', 'A primary key is required for stable page navigation.');
   if (!Array.isArray(input.sort || []) || (input.sort || []).length > 8 || !Array.isArray(input.filters || []) || (input.filters || []).length > 20) throw fail('ROCKETBRAIN_GRID_QUERY', 'Use at most 8 sort columns and 20 filters.');
-  for (const item of input.sort || []) {
-    const column = columns.get(item?.column);
-    if (!column || used.has(column.name) || !['asc', 'desc'].includes(item?.direction) || ['json', 'binary', 'unsupported'].includes(column.kind)) throw fail('ROCKETBRAIN_GRID_QUERY', 'Select distinct supported sort columns and ascending or descending order.');
-    used.add(column.name); order.push({ column: column.name, direction: item.direction });
-  }
-  const sort = order.map(item => ({ ...item }));
-  for (const column of pk) if (!used.has(column.name)) order.push({ column: column.name, direction: 'asc' });
-  if (cursor && (!pk.length || order.some(({ column }) => {
+  const { sort, order, fragments } = compileGridSort(definition.columns, input.sort || [], collations);
+  if (cursor && (!pk.length || order.some(({ column, nulls, expression, collation }) => {
     const { type, kind } = columns.get(column);
-    return ['json', 'unsupported'].includes(kind) || /^(?:enum|set)\b/i.test(type);
-  }))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose a primary-key table and sort columns with comparable scalar values for keyset browsing.');
+    return nulls !== undefined || expression !== undefined || collation !== undefined ||
+      ['json', 'unsupported'].includes(kind) || /^(?:enum|set)\b/i.test(type);
+  }))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose a primary-key table and default-ordered scalar columns for keyset browsing.');
   const operators = { eq: '=', ne: '<>', lt: '<', lte: '<=', gt: '>', gte: '>=' };
   let conditions = 0, groups = 0;
   function buildFilter(item, depth) {
@@ -232,8 +228,9 @@ function browseQuery(definition, input = {}, schema, related = false, cursor, re
     where.push(seek.sql);
     parameters.push(...seek.parameters);
   }
+  const orderBy = reverse ? scanOrder.map(item => quote(item.column) + ' ' + item.direction.toUpperCase()) : fragments;
   const sql = 'SELECT ' + definition.columns.map(column => quote(column.name)).join(',') + ' FROM ' + quote(schema) + '.' + quote(definition.name)
-    + (where.length ? ' WHERE ' + where.join(' AND ') : '') + (scanOrder.length ? ' ORDER BY ' + scanOrder.map(item => quote(item.column) + ' ' + item.direction.toUpperCase()).join(',') : '')
+    + (where.length ? ' WHERE ' + where.join(' AND ') : '') + (orderBy.length ? ' ORDER BY ' + orderBy.join(',') : '')
     + ' LIMIT ' + (pageSize + 1) + (cursor ? '' : ' OFFSET ' + (page * pageSize));
   return { sql, parameters, page, pageSize, order, query: { page, pageSize, sort, filters }, pageable: pk.length > 0,
     consistency: pk.length ? 'Offset pages use explicit ordering plus primary-key tiebreakers. Concurrent inserts, deletes or sort-value changes may move rows between pages; no cross-page snapshot is implied.' : 'No primary key is visible. Only the first page is available; tied rows have no stable cross-page order.' };
@@ -253,7 +250,7 @@ class TableEditor {
       if (definition.kind !== 'BASE TABLE' || String(definition.engine).toUpperCase() !== 'INNODB') {
         throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose an InnoDB table for a consistent snapshot.');
       }
-      browseQuery(definition, { ...options, page: 0 }, schema, false, []);
+      browseQuery(definition, { ...options, page: 0 }, schema, false, {}, []);
       await this.db.openSession(sessionId, { readOnly: true });
       await this.db.setTransactionIsolation('REPEATABLE READ', { sessionId });
       const transaction = await this.db._transaction('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY',
@@ -282,7 +279,7 @@ class TableEditor {
       if (!Number.isSafeInteger(page) || page < 0 || (page !== 0 && Math.abs(page - browser.page) > 1)) {
         throw fail('ROCKETBRAIN_GRID_QUERY', 'Move through the snapshot one page at a time.');
       }
-      const first = browseQuery(definition, { ...options, page: 0 }, schema, false, []);
+      const first = browseQuery(definition, { ...options, page: 0 }, schema, false, {}, []);
       const signature = JSON.stringify(first.query);
       let cursor=[], reverse=false;
       if (page > 0) {
@@ -294,7 +291,7 @@ class TableEditor {
         else if (browser.hasNext) cursor = browser.last;
         else throw fail('ROCKETBRAIN_GRID_QUERY', 'The current snapshot has no next page.');
       }
-      const plan = cursor.length ? browseQuery(definition, first.query, schema, false, cursor, reverse) : first;
+      const plan = cursor.length ? browseQuery(definition, first.query, schema, false, {}, cursor, reverse) : first;
       const result = await this._read(session, plan.sql, plan.parameters, plan.pageSize + 1);
       if (result.truncated || !session.inTransaction || !session.connected || this.keysetBrowsers.get(id) !== browser) {
         throw fail('ROCKETBRAIN_GRID_STALE', 'The table snapshot ended or the page exceeded the byte limit. Open a fresh snapshot.');
@@ -442,7 +439,8 @@ class TableEditor {
     else if (!definition.triggerVisibility) reason = 'Trigger metadata visibility could not be verified for this account; editing is disabled.';
     else if (definition.triggers.length) reason = 'Tables with triggers are read-only until their transactional side effects can be verified.';
     if (!definition.columns.length) throw fail('ROCKETBRAIN_GRID_TABLE', 'The table has no visible columns.');
-    const browsing = browseQuery(definition, options, schema, Boolean(related)), maxRows = browsing.pageSize;
+    const collations = await observeSortCollations(definition.columns, async (sql, values) => (await this.db._metadataQuery(sql, values)).rows);
+    const browsing = browseQuery(definition, options, schema, Boolean(related), collations), maxRows = browsing.pageSize;
     const result = await this._read(session, browsing.sql, browsing.parameters, maxRows + 1);
     const hasNext = result.truncated ? null : result.rows.length > maxRows;
     if (result.rows.length > maxRows) result.rows = result.rows.slice(0, maxRows);
@@ -457,7 +455,7 @@ class TableEditor {
     result.edit = { modelId, table: name, ...(related ? { schema } : {}), columns: definition.columns, rowIds, canEdit: !reason, reason,
       query: browsing.query, hasMorePossible: hasNext === true, insertable: !reason && !definition.columns.some(column => column.required && !column.insertable),
       concurrency: 'Primary-key locking read plus exact original visible-row comparison; a server-side delete/reinsert ABA without a version column cannot be detected.' };
-    result.browse = { ...browsing.query, order: browsing.order, hasNext, hasPrevious: browsing.page > 0, pageable: browsing.pageable, sql: browsing.sql, consistency: browsing.consistency, totalRows: null };
+    result.browse = { ...browsing.query, order: browsing.order, sortOptions: sortOptions(definition.columns, collations), hasNext, hasPrevious: browsing.page > 0, pageable: browsing.pageable, sql: browsing.sql, consistency: browsing.consistency, totalRows: null };
     return result;
   }
   reviewChangeSet({ sessionId = 'default', modelId, updates = [], deletes = [], inserts = [] } = {}) {
