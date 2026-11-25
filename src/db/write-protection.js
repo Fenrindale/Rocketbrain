@@ -123,4 +123,4 @@ function requireStatementScope(policy, sql, database, { mayWrite, readOnly, user
   return target;
 }
 
-module.exports = { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope, tableProtection };
+module.exports = { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope, tableProtection, verifyCallableScope };

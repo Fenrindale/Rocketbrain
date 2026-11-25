@@ -1246,6 +1246,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       if(!binding||binding.id!==request.sessionId||binding.epoch!==state.epoch)throw new Error('The SQL console changed. Preview the script again.');
       const db=state.db;return withSession(binding.id,()=>db.runScript({reviewId:request.reviewId,
         allowImplicitCommit:request.allowImplicitCommit===true,allowUnboundedDml:request.allowUnboundedDml===true,
+        allowTransactionCommit:request.allowTransactionCommit===true,
         cancellation:request.cancellation}));
     },
     discardSqlScript(reviewId, connectionEpoch) {
