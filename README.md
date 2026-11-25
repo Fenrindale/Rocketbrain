@@ -189,7 +189,7 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 GET {{host}}/actuator/health
 ```
 
-응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI JSON**은 OpenAPI 3.0·3.1 문서의 작업과 로컬 참조를 살핍니다. **Create HTTP Request from OpenAPI JSON**으로 편집할 요청 초안을 만들고, 환경과 필요한 매개변수를 채운 뒤 실행합니다.
+응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI Description**은 OpenAPI 3.0·3.1 JSON과 YAML에서 작업을 확인합니다. 신뢰한 작업 공간에서 상대 경로로 연결한 JSON·YAML 경로 항목, 매개변수, 요청 본문과 단순 스키마 참조를 읽습니다. **Create HTTP Request from OpenAPI**로 요청 초안을 만들고, 환경과 매개변수를 채운 뒤 실행합니다. [OpenAPI 설명 상대 참조](https://spec.openapis.org/oas/v3.1.1.html#relative-references-in-api-description-uris)
 
 `GRAPHQL` 본문은 GraphQL 문서나 `query`, `variables`, `operationName`을 담은 JSON입니다. **Send HTTP Request**로 실행하면 HTTP 상태와 GraphQL 오류 수를 확인할 수 있습니다. **Inspect GraphQL Endpoint Schema**는 선택한 엔드포인트에서 인트로스펙션을 요청합니다.
 

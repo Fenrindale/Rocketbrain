@@ -5,40 +5,130 @@ const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value)
 const owns=(value,key)=>object(value)&&Object.hasOwn(value,key);
 const token=/^[A-Za-z_][A-Za-z0-9_.-]{0,59}$/;
 const limit=1024*1024;
+const maxReferenceFiles=24;
+const maxDescriptionBytes=4*limit;
 
-function localReference(document,value) {
-  const seen=new Set();
-  while (owns(value,'$ref')) {
-    const reference=value.$ref;
-    if (typeof reference!=='string' || !reference.startsWith('#/') || seen.has(reference) || seen.size>=12) {
-      throw Error('This item requires a local, acyclic JSON pointer.');
-    }
-    if (Object.keys(value).some(key=>!['$ref','summary','description'].includes(key))) {
-      throw Error('This reference has additional operation or parameter fields.');
-    }
-    seen.add(reference);
-    let decoded;
-    try { decoded=decodeURIComponent(reference.slice(1)); }
-    catch { throw Error('The local reference has an invalid pointer.'); }
-    let target=document;
-    for (const segment of decoded.slice(1).split('/')) {
-      if (/~(?![01])/.test(segment)) throw Error('The local reference has an invalid pointer escape.');
-      const key=segment.replaceAll('~1','/').replaceAll('~0','~');
-      if (target===null || typeof target!=='object' || !Object.hasOwn(target,key)) throw Error('The local reference target is missing.');
-      target=target[key];
-    }
-    value=target;
+function parseDescription(text,format) {
+  if (typeof text!=='string'||Buffer.byteLength(text)>limit) throw Error('OpenAPI descriptions are limited to 1 MiB per file.');
+  if (format==='json') {
+    try { return {value:JSON.parse(text.replace(/^\uFEFF/,'')),ranges:new Map()}; }
+    catch { throw Error('OpenAPI preview requires valid JSON.'); }
   }
-  if (!object(value)) throw Error('The referenced entry must be an object.');
-  return value;
+  if (format!=='yaml') throw Error('Open an OpenAPI JSON or YAML description.');
+  const {isMap,parseDocument}=require('yaml');
+  try {
+    const document=parseDocument(text,{version:'1.2',schema:'core',uniqueKeys:true,intAsBigInt:true});
+    if (document.errors.length||document.warnings.length) throw Error();
+    const value=document.toJS({maxAliasCount:0});
+    const pending=[value];
+    let count=0;
+    while (pending.length) {
+      const current=pending.pop();
+      if (current===null||typeof current!=='object') continue;
+      for (const key of Object.keys(current)) {
+        const item=current[key];
+        if (++count>100000) throw Error();
+        if (typeof item==='bigint') {
+          if (item>BigInt(Number.MAX_SAFE_INTEGER)||item<BigInt(Number.MIN_SAFE_INTEGER)) throw Error();
+          current[key]=Number(item);
+        } else if (typeof item==='number'&&!Number.isFinite(item)) throw Error();
+        else if (item!==null&&typeof item==='object') pending.push(item);
+      }
+    }
+    const paths=document.get('paths',true),ranges=new Map();
+    if (isMap(paths)) for (const item of paths.items) {
+      if (typeof item.key?.value==='string'&&item.key.range) {
+        ranges.set(item.key.value,{start:item.key.range[0],end:item.key.range[1]});
+      }
+    }
+    return {value,ranges};
+  } catch { throw Error('Use one OpenAPI YAML document with unique keys and exact JSON-compatible values, without aliases or unsupported tags.'); }
 }
 
-function params(document, inputs) {
+function pointerTarget(document,fragment,schema) {
+  let pointer;
+  try { pointer=decodeURIComponent(fragment); }
+  catch { throw Error('The OpenAPI reference has an invalid JSON pointer.'); }
+  if (pointer&&!pointer.startsWith('/')) throw Error('Use a JSON pointer fragment in this OpenAPI reference.');
+  let target=document;
+  const checkBase=()=>{
+    if (schema&&owns(target,'$id')) throw Error('A schema with a custom base URI requires a full JSON Schema resolver.');
+  };
+  checkBase();
+  for (const segment of pointer?pointer.slice(1).split('/'):[]) {
+    if (/~(?![01])/.test(segment)) throw Error('The OpenAPI reference has an invalid pointer escape.');
+    const key=segment.replaceAll('~1','/').replaceAll('~0','~');
+    if (target===null||typeof target!=='object'||!Object.hasOwn(target,key)) throw Error('The OpenAPI reference target is missing.');
+    target=target[key];
+    checkBase();
+  }
+  return {target,pointer};
+}
+
+function referenceResolver(document,sourceId,bytes,loadReference) {
+  const root={id:sourceId,value:document};
+  const documents=new Map([[sourceId,root]]),routes=new Map();
+  function external(frame,reference) {
+    if (!loadReference) throw Error('This item requires a local, acyclic JSON pointer.');
+    const key=frame.id+'\0'+reference;
+    if (routes.has(key)) {
+      const cached=routes.get(key);
+      if (cached.error) throw cached.error;
+      return cached.frame;
+    }
+    if (routes.size>=96) throw Error('OpenAPI preview is limited to 96 reference paths.');
+    try {
+      const loaded=loadReference(reference,frame.id);
+      if (typeof loaded?.id!=='string'||!['json','yaml'].includes(loaded.format)||typeof loaded.text!=='string') {
+        throw Error('The referenced OpenAPI file is unavailable.');
+      }
+      if (!documents.has(loaded.id)) {
+        if (documents.size>=maxReferenceFiles||bytes+Buffer.byteLength(loaded.text)>maxDescriptionBytes) {
+          throw Error('OpenAPI preview is limited to 24 files and 4 MiB of source.');
+        }
+        const {value}=parseDescription(loaded.text,loaded.format);
+        bytes+=Buffer.byteLength(loaded.text);
+        documents.set(loaded.id,{id:loaded.id,value});
+      }
+      const result=documents.get(loaded.id);
+      routes.set(key,{frame:result});
+      return result;
+    } catch (error) {
+      routes.set(key,{error});
+      throw error;
+    }
+  }
+  function resolve(value,frame=root,{schema=false}={}) {
+    const seen=new Set();
+    while (owns(value,'$ref')) {
+      const reference=value.$ref;
+      if (typeof reference!=='string'||!reference||reference.length>2048||seen.size>=12) {
+        throw Error('Use an acyclic OpenAPI reference chain of at most 12 links.');
+      }
+      if (Object.keys(value).some(key=>!['$ref','summary','description'].includes(key))) {
+        throw Error('This reference has additional operation, parameter or schema fields.');
+      }
+      const delimiter=reference.indexOf('#');
+      const file=delimiter<0?reference:reference.slice(0,delimiter);
+      const fragment=delimiter<0?'':reference.slice(delimiter+1);
+      if (file) frame=external(frame,file);
+      const {target,pointer}=pointerTarget(frame.value,fragment,schema);
+      const key=frame.id+'\0'+pointer;
+      if (seen.has(key)) throw Error('Use an acyclic OpenAPI reference chain of at most 12 links.');
+      seen.add(key);value=target;
+    }
+    if (!object(value)) throw Error('The referenced entry must be an object.');
+    return {value,frame};
+  }
+  return resolve;
+}
+
+function params(resolve,frame,inputs) {
   if (inputs===undefined) return [];
   if (!Array.isArray(inputs)||inputs.length>40) throw Error('This entry has more than 40 parameters or an invalid parameter list.');
   const names=new Set();
   return inputs.map(input=>{
-    const item=localReference(document,input);
+    const {value:item,frame:itemFrame}=resolve(input,frame);
     if (typeof item.name!=='string'||!token.test(item.name)||!['path','query','header','cookie'].includes(item.in)) {
       throw Error('Use a supported path, query, header or cookie parameter name.');
     }
@@ -46,8 +136,10 @@ function params(document, inputs) {
     if (names.has(key)) throw Error('This parameter is duplicated.');
     names.add(key);
     if (item.in==='path'&&item.required!==true) throw Error('Path parameters require required:true.');
-    return { key,name:item.name,in:item.in,required:item.required===true,
-      type:typeof item.schema?.type==='string'?item.schema.type:'unspecified' };
+    const schema=object(item.schema)?resolve(item.schema,itemFrame,{schema:true}).value:undefined;
+    const type=typeof schema?.type==='string'?schema.type:Array.isArray(schema?.type)&&
+      schema.type.length<=8&&schema.type.every(value=>typeof value==='string')?schema.type.join(' | '):'unspecified';
+    return {key,name:item.name,in:item.in,required:item.required===true,type};
   });
 }
 
@@ -59,31 +151,34 @@ function serverUrls(input) {
   });
 }
 
-function analyzeOpenApi(text) {
-  if (typeof text!=='string'||Buffer.byteLength(text)>limit) throw Error('OpenAPI JSON documents are limited to 1 MiB.');
-  let document;
-  try { document=JSON.parse(text.replace(/^\uFEFF/,'')); } catch { throw Error('OpenAPI preview requires valid JSON.'); }
+function analyzeOpenApi(text,{format='json',sourceId='entry',loadReference}={}) {
+  const {value:document,ranges}=parseDescription(text,format);
   if (!object(document)||!/^3\.[01]\.\d+$/.test(document.openapi)||!object(document.info)||!object(document.paths)) {
-    throw Error('Use an OpenAPI 3.0 or 3.1 JSON description with info and paths.');
+    throw Error('Use an OpenAPI 3.0 or 3.1 description with info and paths.');
   }
+  const resolve=referenceResolver(document,sourceId,Buffer.byteLength(text),loadReference);
   const entries=Object.entries(document.paths).filter(([path])=>!path.startsWith('x-'));
   if (entries.length>256) throw Error('OpenAPI preview is limited to 256 paths.');
   const operations=[],diagnostics=[];
+  const diagnose=(path,message,method)=>{
+    const range=ranges.get(path);
+    diagnostics.push({path,...(method&&{method}),message,...(range&&{range})});
+  };
   const paths=new Set(), ids=new Set();
   for (const [path,input] of entries) {
     if (!/^\/(?!\/)[^?\x00-\x20#\\]*$/.test(path)||path.length>2048) {
-      diagnostics.push({path,message:'Use an absolute API path component without query or fragment.'});
+      diagnose(path,'Use an absolute API path component without query or fragment.');
       continue;
     }
     const pathKey=path.replace(/\{[^}]*\}/g,'{}');
     if (paths.has(pathKey)) {
-      diagnostics.push({path,message:'A path with the same template shape already exists.'});
+      diagnose(path,'A path with the same template shape already exists.');
       continue;
     }
     paths.add(pathKey);
-    let pathItem;
-    try { pathItem=localReference(document,input); }
-    catch(error) { diagnostics.push({path,message:error.message}); continue; }
+    let pathItem,frame;
+    try { ({value:pathItem,frame}=resolve(input)); }
+    catch(error) { diagnose(path,error.message); continue; }
     for (const method of methods) {
       if (!owns(pathItem,method)) continue;
       try {
@@ -91,28 +186,34 @@ function analyzeOpenApi(text) {
         if (!object(entry)||!object(entry.responses)) throw Error('An operation requires a responses mapping.');
         const id=typeof entry.operationId==='string'?entry.operationId.slice(0,120):null;
         if (id && ids.has(id)) throw Error('The operationId is duplicated.');
-        const parameters=new Map(params(document,pathItem.parameters).map(item=>[item.key,item]));
-        for (const item of params(document,entry.parameters)) parameters.set(item.key,item);
+        const parameters=new Map(params(resolve,frame,pathItem.parameters).map(item=>[item.key,item]));
+        for (const item of params(resolve,frame,entry.parameters)) parameters.set(item.key,item);
         const pathParams=[...path.matchAll(/\{([^{}]+)\}/g)].map(match=>match[1]);
         if (/[{}]/.test(path.replace(/\{[^{}]+\}/g,'')) ||
             pathParams.some(name=>!parameters.has('path:'+name)) ||
             [...parameters.values()].some(item=>item.in==='path'&&!pathParams.includes(item.name))) {
           throw Error('Every path placeholder must have the corresponding required parameter.');
         }
-        const body=entry.requestBody===undefined?null:localReference(document,entry.requestBody);
+        const request=entry.requestBody===undefined?null:resolve(entry.requestBody,frame);
+        const body=request?.value;
         const jsonBody=body?.content?.['application/json'];
+        let example=jsonBody?.example;
+        if (example===undefined&&object(jsonBody?.schema)) {
+          const schema=resolve(jsonBody.schema,request.frame,{schema:true}).value;
+          example=schema.example ?? (Array.isArray(schema.examples)?schema.examples[0]:undefined);
+        }
         const statuses=Object.keys(entry.responses).filter(key=>/^[1-5](?:\d\d|XX)$/.test(key)||key==='default');
         if (!statuses.length) throw Error('The operation must declare at least one response status.');
         operations.push({key:method.toUpperCase()+' '+path,method:method.toUpperCase(),path,id,
           summary:typeof entry.summary==='string'?entry.summary.slice(0,180):'',
           parameters:[...parameters.values()],statuses,servers:serverUrls(entry.servers ?? pathItem.servers ?? document.servers),
-          requestBody:body?{required:body.required===true,json:object(jsonBody),example:jsonBody?.example}:null,
+          requestBody:body?{required:body.required===true,json:object(jsonBody),example}:null,
           security:(entry.security ?? document.security)?.length>0 });
         if (id) ids.add(id);
         if (operations.length>512) throw Error('OpenAPI preview is limited to 512 operations.');
       } catch(error) {
         if (operations.length>512) throw error;
-        diagnostics.push({path,method,message:error.message});
+        diagnose(path,error.message,method);
       }
     }
   }
