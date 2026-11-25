@@ -27,7 +27,7 @@ test('rename checks cancellation, document closure and a concurrent edit before 
   const source='SELECT p.id FROM people p',h=host(source),pos=h.doc.positionAt(source.indexOf('p.id'));
   try{await assert.rejects(()=>h.api.renameDocument(h.doc,pos,'person',{isCancellationRequested:true}),/cancelled/);const work=h.api.renameDocument(h.doc,pos,'person');h.update(source+' ');await assert.rejects(()=>work,/source or connection changed/);h.doc.isClosed=true;assert.throws(()=>h.api.prepareRename(h.doc,pos),/closed/);}finally{h.api.dispose();}
 });
-test('rename refuses catalog objects, unknown mode/schema context and untrusted source',async()=>{
+test('rename refuses catalog objects, preceding DDL and untrusted source',async()=>{
   const h=host('SELECT p.id FROM people p'),pos=h.doc.positionAt(9);
-  try{assert.throws(()=>h.api.prepareRename(h.doc,pos),/separate schema migration/);h.update('ALTER TABLE people ADD x int; SELECT p.id FROM people p');assert.throws(()=>h.api.prepareRename(h.doc,h.doc.positionAt(h.doc.getText().lastIndexOf('p.id'))),/fully resolved/);h.vscode.workspace.isTrusted=false;assert.throws(()=>h.api.prepareRename(h.doc,pos),/Trust/);}finally{h.api.dispose();}
+  try{assert.throws(()=>h.api.prepareRename(h.doc,pos),/separate schema migration/);h.update('ALTER TABLE people ADD x int; SELECT p.id FROM people p');assert.throws(()=>h.api.prepareRename(h.doc,h.doc.positionAt(h.doc.getText().lastIndexOf('p.id'))),/Open the live statement separately.*preceding DDL/);assert.equal(h.calls(),0);h.vscode.workspace.isTrusted=false;assert.throws(()=>h.api.prepareRename(h.doc,pos),/Trust/);}finally{h.api.dispose();}
 });

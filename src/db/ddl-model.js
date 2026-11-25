@@ -3,6 +3,7 @@
 const { analyzeSql,statementRanges,sourceTokens }=require('./sql-analysis');
 const generatedColumn=require('./schema-generated-column');
 const { endpointKey }=require('./join-catalog');
+const scriptIndexes=require('./ddl-script-indexes');
 
 const tableLimit=256;
 const supportedTypes=new Set([
@@ -101,8 +102,8 @@ function column(source,tokens,{generatedDialect}={}) {
     ...(generationExpression!==undefined&&{generationExpression,extra,defaultValue:null})};
 }
 
-function constraints(source,groups) {
-  const columns=[],primary=[];
+function constraints(source,groups,automatic) {
+  const columns=[],primary=[],indexGroups=[];
   for (const tokens of groups) {
     if(word(tokens[0],'PRIMARY')&&word(tokens[1],'KEY')){
       if(primary.length)throw Error('A virtual table cannot declare duplicate primary keys.');
@@ -113,7 +114,13 @@ function constraints(source,groups) {
       }
       continue;
     }
-    if(tokens[0].kind==='word'&&columnConstraints.has(tokens[0].upper))continue;
+    if(tokens[0].kind==='word'&&columnConstraints.has(tokens[0].upper)){
+      if(automatic){
+        if(!['INDEX','KEY','UNIQUE'].includes(tokens[0].upper))throw Error('This table constraint is outside the script catalog.');
+        indexGroups.push(tokens);
+      }
+      continue;
+    }
     const next=column(source,tokens);
     if(columns.some(item=>same(item.name,next.name)))throw Error('Duplicate virtual table columns.');
     columns.push(next);
@@ -125,8 +132,13 @@ function constraints(source,groups) {
     selected.primaryKey=true;
     selected.nullable=false;
   }
-  return columns;
+  if(!automatic)return {columns};
+  const indexes=indexGroups.map(tokens=>scriptIndexes.addedIndex(tokens,columns));
+  if(indexes.length>64||new Set(indexes.map(index=>index.name.toLowerCase())).size!==indexes.length)throw Error('Use at most 64 distinct secondary indexes.');
+  return {columns:scriptColumns(columns),indexes,foreignKeys:[]};
 }
+
+const scriptColumns=columns=>columns.map((column,index)=>({...column,extra:column.extra??'',ordinal:index+1}));
 
 function createView(source,tokens,after,model,overlay) {
   if(!word(tokens[after],'AS')||!(word(tokens[after+1],'SELECT')||overlay&&word(tokens[after+1],'WITH')))
@@ -155,9 +167,9 @@ function createView(source,tokens,after,model,overlay) {
   return {columns,dependencies,...(externalDependencies.length&&{externalDependencies})};
 }
 
-function createTable(source,tokens,after) {
+function createTable(source,tokens,after,automatic) {
   const close=match(tokens,after);
-  let at=close+1;
+  let at=close+1,engine;
   while(at<tokens.length){
     if(word(tokens[at],'DEFAULT'))at++;
     const option=tokens[at++];
@@ -166,29 +178,49 @@ function createTable(source,tokens,after) {
       throw Error('Only literal ENGINE, CHARSET and COLLATE table options are modeled.');
     }
     if(value(tokens[at],'='))at++;
-    identifier(tokens[at++]);
+    const selected=identifier(tokens[at++]);
+    if(word(option,'ENGINE'))engine=selected;
   }
-  return {columns:constraints(source,split(tokens,after+1,close))};
+  const definition=constraints(source,split(tokens,after+1,close),automatic);
+  if(automatic&&definition.indexes.length&&engine?.toUpperCase()!=='INNODB')throw Error('Declare ENGINE=InnoDB for a new table with modeled indexes.');
+  return {...definition,...(automatic&&engine&&{engine})};
 }
 
-function launchAlter(source,tokens,at,table,liveViewsUnresolved,overlay) {
+function launchAlter(source,tokens,at,table,liveViewsUnresolved,overlay,automatic,indexesObserved) {
   const columns=table.columns.map(item=>({...item}));
+  const indexes=automatic&&Array.isArray(table.indexes)?table.indexes.map(index=>({...index,columns:index.columns.map(column=>({...column}))})):undefined;
+  const indexChanges=[], usedIndexes=new Set(), usedColumns=new Set();
+  const reserve=name=>{
+    if(!automatic)return;
+    if(usedColumns.has(name.toLowerCase()))throw Error('Use separate ALTER statements when changing the same column twice.');
+    usedColumns.add(name.toLowerCase());
+  };
   const changes=split(tokens,at,tokens.length);
   if(overlay&&(changes.length!==1||!word(changes[0][0],'ADD')))throw Error('Use one additive column definition per ALTER TABLE in a saved overlay.');
   for(const tokens of changes){
     const action=tokens[0]?.upper;
     const start=word(tokens[1],'COLUMN')?2:1;
+    if(automatic&&scriptIndexes.isIndexAlter(tokens)){
+      if(!indexes||!indexesObserved||String(table.engine).toUpperCase()!=='INNODB')throw Error('Index modeling requires observed InnoDB table and index metadata.');
+      const change=scriptIndexes.alterIndex(tokens,{columns,indexes},usedIndexes);
+      indexChanges.push(change);
+      continue;
+    }
     if(action==='ADD'){
       const chosen=column(source,tokens.slice(start),{generatedDialect:overlay?.dialect});
       if(chosen.primaryKey||tokens.some(token=>word(token,'FIRST')||word(token,'AFTER'))||
           columns.some(item=>same(item.name,chosen.name)))throw Error('Use a distinct simple appended column.');
+      reserve(chosen.name);
       columns.push(chosen);
       if(chosen.generationExpression!==undefined)generatedColumn.definition(chosen,columns);
     }else if(action==='DROP'){
       if(tokens.length!==start+1)throw Error('Use one column name when dropping a virtual column.');
-      const index=columns.findIndex(item=>same(item.name,identifier(tokens[start])));
+      const name=identifier(tokens[start]),index=columns.findIndex(item=>same(item.name,name));
       if(index<0||columns[index].primaryKey)throw Error('Use an existing non-key column for this virtual drop.');
       if(liveViewsUnresolved&&!columns[index].virtual)throw Error('The live view dependencies on this column are unavailable.');
+      if(automatic&&(!columns[index].virtual||!indexesObserved))throw Error('Remove only a column introduced earlier in the script with known index coverage.');
+      if(automatic&&indexes?.some(key=>key.columns.some(column=>column.name&&same(column.name,name))))throw Error('Drop the modeled index before removing its column.');
+      reserve(name);
       columns.splice(index,1);
     }else if(action==='RENAME'){
       if(!word(tokens[1],'COLUMN')||!word(tokens[3],'TO')||tokens.length!==5)throw Error('Use RENAME COLUMN old TO new.');
@@ -196,6 +228,9 @@ function launchAlter(source,tokens,at,table,liveViewsUnresolved,overlay) {
       const selected=columns.find(item=>same(item.name,from));
       if(!selected||columns.some(item=>same(item.name,to)))throw Error('The virtual column name is missing or already present.');
       if(liveViewsUnresolved&&!selected.virtual)throw Error('The live view dependencies on this column are unavailable.');
+      if(automatic&&(!selected.virtual||!indexesObserved))throw Error('Rename only a column introduced earlier in the script with known index coverage.');
+      reserve(from);reserve(to);
+      if(automatic)for(const key of indexes??[])for(const column of key.columns)if(column.name&&same(column.name,from))column.name=to;
       selected.name=to;
       selected.virtual=true;
     }else{
@@ -203,16 +238,27 @@ function launchAlter(source,tokens,at,table,liveViewsUnresolved,overlay) {
     }
   }
   if(!columns.length||columns.length>256)throw Error('A virtual table requires one to 256 columns.');
-  return columns;
+  return {table:{...table,columns:automatic?scriptColumns(columns):columns,...(indexes&&{indexes})},indexChanges};
 }
 
-function applyDdl(source,model,overlay) {
+function applyDdl(source,model,overlay,{automatic=false}={}) {
   if (!/^\s*(?:(?:--[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)\s*)*(CREATE|ALTER|DROP|RENAME|TRUNCATE|USE|SET)\b/i.test(source)) return null;
   const tokens=sourceTokens(source,{sqlMode:model.sqlMode});
   if(value(tokens.at(-1),';'))tokens.pop();
   const action=tokens[0]?.upper;
   if(!starters.has(action))return null;
   if(!['CREATE','DROP','ALTER'].includes(action))throw Error('This statement changes the context outside the reviewed virtual schema grammar.');
+  const indexAt=word(tokens[1],'UNIQUE')&&action==='CREATE'?2:1;
+  if(automatic&&['CREATE','DROP'].includes(action)&&word(tokens[indexAt],'INDEX')){
+    if(!word(tokens[indexAt+2],'ON'))throw Error('Use a named index and explicit ON table target.');
+    const target=nameAt(tokens,indexAt+3,model.database),table=model.tables.find(item=>objectEquals(item.name,target.name,model));
+    if(!table||action==='DROP'&&target.next!==tokens.length)throw Error('Use a single observed table for this script index operation.');
+    const modifier=action==='CREATE'?{kind:'word',upper:'ADD'}:tokens[0];
+    const clause=[modifier,...tokens.slice(1,indexAt+2),...tokens.slice(target.next)];
+    const edited=launchAlter(source,clause,0,table,false,null,true,table.virtual||model.coverage?.indexes==='loaded');
+    return {model:{...model,tables:model.tables.map(item=>item===table?edited.table:item),virtual:true},
+      change:{action:'alter',kind:'table',name:table.name,indexChanges:edited.indexChanges}};
+  }
   let at=1;
   const replace=action==='CREATE'&&word(tokens[1],'OR')&&word(tokens[2],'REPLACE');
   if(replace)at=3;
@@ -235,27 +281,31 @@ function applyDdl(source,model,overlay) {
   const hasDependentView=model.views.some(view=>view.dependencies?.some(dependency=>objectEquals(name,dependency,model)));
   if(hasDependentView&&(action!=='CREATE'||replace))throw Error('A modeled view depends on this object. Model its removal first.');
   const liveViewsUnresolved=model.views.some(view=>view!==existing&&!view.virtual);
+  if(automatic&&(conditional||(action==='DROP'||replace)&&!existing?.virtual))throw Error('Conditional DDL or removal of a live object requires explicit dependency review.');
   if(existing&&!existing.virtual&&(action==='DROP'||replace)&&liveViewsUnresolved){
     throw Error('The live view dependencies are unavailable in the virtual schema preview.');
   }
-  let updated=[...model[field]];
+  let updated=[...model[field]],indexChanges;
   if(action==='CREATE'){
     if(conditional&&existing)return {model,change:{action:'retain',kind,name}};
     if(existing&&!replace)throw Error('A virtual schema object with this name already exists.');
-    const definition=kind==='table'?createTable(source,tokens,next):createView(source,tokens,next,model,overlay);
+    const definition=kind==='table'?createTable(source,tokens,next,automatic):createView(source,tokens,next,model,overlay);
     const table={name,kind,...definition,virtual:true};
     updated=existing?updated.map(item=>item===existing?table:item):[...updated,table];
   }else if(action==='ALTER'){
     if(kind!=='table')throw Error('ALTER requires a table in the virtual schema.');
     if(!existing)throw Error('The ALTER target is unobserved in this virtual schema.');
-    updated=updated.map(item=>item===existing?{...item,columns:launchAlter(source,tokens,next,item,liveViewsUnresolved,overlay)}:item);
+    const changed=launchAlter(source,tokens,next,existing,liveViewsUnresolved,overlay,automatic,existing.virtual||model.coverage?.indexes==='loaded');
+    updated=updated.map(item=>item===existing?changed.table:item);
+    indexChanges=changed.indexChanges;
   }else{
     if(next!==tokens.length)throw Error('Drop a single exact table or view in this virtual model.');
     if(!existing&&!conditional)throw Error('The DROP target is unobserved in this virtual schema.');
     updated=updated.filter(item=>item!==existing);
   }
   if(updated.length+model[kind==='table'?'views':'tables'].length>tableLimit)throw Error('The virtual schema is limited to 256 objects.');
-  return {model:{...model,[field]:updated,virtual:true},change:{action:action.toLowerCase(),kind,name}};
+  return {model:{...model,[field]:updated,virtual:true},change:{action:action.toLowerCase(),kind,name,
+    ...(indexChanges?.length&&{indexChanges})}};
 }
 
 function emptySchema(database,dialect='mysql') {
@@ -313,4 +363,58 @@ function analyzeDdlScript(text,seed) {
       uncertain||statements.some(part=>part.model.state==='unknown')?'unknown':'known'};
 }
 
-module.exports={applyDdl,emptySchema,parseSchema,analyzeDdlScript};
+function scriptCatalogSupported(seed) {
+  if (!seed?.semanticContextObserved || seed.cachedMetadata || !Array.isArray(seed.sqlMode) || seed.sqlMode.includes('ORACLE') ||
+      !['tables','columns'].every(area=>seed.coverage?.[area]==='loaded')) return false;
+  const version = /^(\d+)\.(\d+)\.(\d+)/.exec(seed.serverVersion ?? '');
+  if (!version) return false;
+  const [,major,minor,patch]=version.map(Number);
+  if (seed.dialect==='mysql') return major>=8 && !/mariadb/i.test(seed.serverVersion);
+  return seed.dialect==='mariadb' && /mariadb/i.test(seed.serverVersion) && (major>10 || major===10 && (minor>5 || minor===5 && patch>=3));
+}
+
+function liveScriptAction(source, lexicalIssues) {
+  const head=source.replace(/^(?:\s+|--\s[^\r\n]*(?:\r?\n|$)|#[^\r\n]*(?:\r?\n|$)|\/\*[\s\S]*?\*\/)+/u,'');
+  return /^(?:CREATE|ALTER|DROP|RENAME|TRUNCATE|USE|SET|CALL|DELIMITER|DO|PREPARE|EXECUTE|DEALLOCATE|GRANT|REVOKE|LOAD)\b/i.test(head) ||
+    lexicalIssues.some(issue=>issue.reason.startsWith('Executable comments'));
+}
+
+function analyzeLiveDdlScript(text,seed,split=statementRanges(text,seed)) {
+  const changesContext=part=>liveScriptAction(text.slice(part.start,part.end),
+    split.unknown.filter(issue=>issue.start>=part.start&&issue.start<part.end));
+  if (!scriptCatalogSupported(seed) || !split.statements.some(changesContext)) return null;
+  const options={dialect:seed.dialect,database:seed.database,tableNameCaseSensitive:seed.tableNameCaseSensitive,sqlMode:seed.sqlMode};
+  let catalog=seed,contextMayChange=false,uncertain=split.statements.length>100 || split.unknown.some(issue=>issue.start===undefined);
+  const changes=[],issues=[];
+  const statements=split.statements.slice(0,100).map(part=>{
+    const source=text.slice(part.start,part.end),priorContextChange=contextMayChange;
+    const statement={...part,priorContextChange,scriptShadow:priorContextChange&&!uncertain};
+    if (statement.scriptShadow) Object.defineProperty(statement,'scriptCatalog',{value:catalog});
+    if (changesContext(part)) {
+      contextMayChange=true;
+      if (!uncertain) try {
+        if (!/;\s*$/u.test(source)) throw Error('Complete this DDL statement before modeling later statements.');
+        const applied=applyDdl(source,catalog,null,{automatic:true});
+        if (!applied) throw Error('This command may change the connection context outside the script catalog.');
+        catalog=applied.model;
+        changes.push({...applied.change,start:part.start});
+        return {...statement,model:{state:'known',text:source,diagnostics:[],references:[],projections:[],executedSql:false,validityVerified:false}};
+      } catch (error) {
+        uncertain=true;
+        issues.push({reason:error.message,start:part.start});
+      }
+    }
+    if (uncertain) {
+      const model=analyzeSql(source,null,{...options,sqlMode:undefined,catalogComplete:false});
+      return {...statement,model,scriptShadow:false,contextUncertain:true};
+    }
+    const analysisSource=statement.scriptShadow?scriptIndexes.maskModeledHint(source,catalog):source;
+    statement.model=analyzeSql(analysisSource,catalog,{...options,catalogComplete:true});
+    statement.model.text=source;
+    return statement;
+  });
+  return {statements,contextMayChange,changes,unknown:[...split.unknown,...issues],
+    state:statements.some(part=>part.model.state==='invalid')?'invalid':uncertain||statements.some(part=>part.model.state==='unknown')?'unknown':'known'};
+}
+
+module.exports={applyDdl,emptySchema,parseSchema,analyzeDdlScript,analyzeLiveDdlScript};

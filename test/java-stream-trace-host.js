@@ -52,4 +52,65 @@ async function runStreamTraceChecks(api,vscode,checks) {
   } finally { await fs.unlink(file); }
 }
 
-module.exports = { runStreamTraceChecks };
+
+
+async function runAdvancedStreamTraceChecks(api, vscode, checks) {
+  const workspace = vscode.workspace.workspaceFolders[0].uri.fsPath;
+  await importedSpring(api, workspace);
+  const name = 'RbAdvancedStreamTrace' + randomBytes(6).toString('hex');
+  const file = path.join(workspace, 'src/main/java/fixture/boot', name + '.java');
+  const sample = {
+    match: 'java.util.stream.IntStream.rangeClosed(1, 20).map(n -> n * 3).filter(n -> n % 2 == 0).anyMatch(n -> n > 8)',
+    sorted: 'java.util.stream.IntStream.of(9, 2, 2, 1, 5).distinct().sorted().skip(1).findFirst()',
+    count: 'java.util.stream.LongStream.range(9007199254740993L, 9007199254741002L).map(n -> 1L / (n - n)).count()'
+  };
+  const content = 'package fixture.boot;\nclass ' + name + ' {\n' +
+    '  boolean match() { return ' + sample.match + '; }\n' +
+    '  java.util.OptionalInt sorted() { return ' + sample.sorted + '; }\n' +
+    '  long size() { return ' + sample.count + '; }\n}\n';
+  await fs.writeFile(file, content, { flag: 'wx' });
+  try {
+    const service = api.javaSourceAnalysis.streamTrace;
+    const source = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+    await vscode.window.showTextDocument(source, { preview: false });
+    const trace = text => {
+      const start = source.getText().indexOf(text);
+      assert.ok(start > 0);
+      return service.trace(source, new vscode.Range(source.positionAt(start), source.positionAt(start + text.length)));
+    };
+    const matched = await trace(sample.match);
+    assert.equal(matched.terminal.value, 'true');
+    assert.deepEqual(matched.demand, { evaluation: 'short-circuited', sourceCount: 20, inputEvents: 4 });
+    assert.deepEqual(matched.events.filter(event => event.action === 'predicate').map(event => [event.input, event.output]),
+      [['6', 'false'], ['12', 'true']]);
+    assert.ok(matched.events.every((event, index) => event.sequence === index + 1));
+    const output = await vscode.workspace.openTextDocument(matched.uri);
+    await vscode.window.showTextDocument(output, { preview: false });
+    assert.match(output.getText(), /Evaluation order/);
+    assert.match(output.getText(), /anyMatch · predicate "12" → "true" \[java.lang.Integer → java.lang.Boolean\]/);
+    assert.ok(vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.input?.uri?.toString() === matched.uri.toString())));
+    const reveal = await service.reveal(matched.uri, 3);
+    assert.equal(reveal.document.getText(reveal.selection), 'anyMatch(n -> n > 8)');
+
+    const sorted = await trace(sample.sorted);
+    assert.equal(sorted.terminal.type, 'java.util.OptionalInt');
+    assert.equal(sorted.terminal.value, '2');
+    assert.equal(sorted.demand.inputEvents, 5);
+    const sortedIndex = sorted.stages.findIndex(stage => stage.name === 'sorted');
+    assert.deepEqual(sorted.events.filter(event => event.stage === sortedIndex && event.action === 'emitted').map(event => event.input), ['1', '2']);
+
+    const count = await trace(sample.count);
+    assert.deepEqual(count.events, []);
+    assert.equal(count.demand.evaluation, 'count-without-traversal');
+    assert.equal(count.terminal.value, '9');
+    assert.equal(await fs.readFile(file, 'utf8'), content);
+    const build = await api.java.buildWorkspace();
+    assert.ok(build === 0 || build === 1 || build?.status === 'succeed');
+    const jdbc = await jdbcReadback();
+    checks.push('Java Stream Trace shows typed primitive events in JDK evaluation order, stateful sort demand, short-circuit, and elided count.');
+    return { typedEvents: true, timeline: true, primitive: true, sortedInputEvents: sorted.demand.inputEvents,
+      shortCircuitInputs: matched.demand.inputEvents, countWithoutTraversal: true, sourceNavigation: true, springBuild: true, jdbc };
+  } finally { await fs.unlink(file); }
+}
+
+module.exports = { runStreamTraceChecks, runAdvancedStreamTraceChecks };

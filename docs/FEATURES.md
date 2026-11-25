@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.82.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.83.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 112 |
-| 부분 구현 | 90 |
+| 구현 | 114 |
+| 부분 구현 | 88 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **78.2%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **78.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.82에서는 WebFlux의 실제 보안 필터와 메서드 결정을 관찰한다. 연결 방언에 맞춰 SQL 함수와 별칭을 완성하고, 역할 변경과 저장 프로시저의 출력값을 검토한다. 상태가 바뀐 항목은 2개이고 가중 점수는 168점에서 169점으로 바뀌었다.
+v0.83에서는 Java Stream의 중간값을 실제 JDK 평가 순서로 표시한다. SQL 스크립트에 작성한 열·인덱스 변경을 이후 문장의 분석에 반영하고 서버에 확인된 콜레이션을 진단한다. 상태가 바뀐 항목은 2개이고 가중 점수는 169점에서 170점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -102,7 +102,7 @@ v0.82에서는 WebFlux의 실제 보안 필터와 메서드 결정을 관찰한�
 | IDEA-079 | IntelliJ IDEA | Smart Step·라이브러리 필터·비동기 스택 | 부분 구현 |
 | IDEA-080 | IntelliJ IDEA | 표현식 평가·Watch·변수 수정·프레임 | 부분 구현 |
 | IDEA-081 | IntelliJ IDEA | HotSwap·변경 클래스 재적용 | 구현 |
-| IDEA-082 | IntelliJ IDEA | Java Stream 값 변환 시각화 | 부분 구현 |
+| IDEA-082 | IntelliJ IDEA | Java Stream 값 변환 시각화 | 구현 |
 | IDEA-083 | IntelliJ IDEA | Kotlin 코루틴 상태·생성 스택 | 부분 구현 |
 | IDEA-084 | IntelliJ IDEA | JUnit·TestNG 발견·실행·디버그 | 부분 구현 |
 | IDEA-085 | IntelliJ IDEA | 테스트 결과·실패 diff·재실행 | 구현 |
@@ -173,7 +173,7 @@ v0.82에서는 WebFlux의 실제 보안 필터와 메서드 결정을 관찰한�
 | DG-030 | DataGrip | alias·약어·함수 구문 완성 | 구현 |
 | DG-031 | DataGrip | MySQL/MariaDB dialect별 구문·키워드 | 부분 구현 |
 | DG-032 | DataGrip | 파일·폴더별 SQL resolution scope | 구현 |
-| DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 부분 구현 |
+| DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 구현 |
 | DG-034 | DataGrip | 실시간·범위별 정적 검사 | 부분 구현 |
 | DG-035 | DataGrip | 위험한 UPDATE/DELETE 경고 | 구현 |
 | DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 부분 구현 |

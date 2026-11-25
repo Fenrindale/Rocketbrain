@@ -313,6 +313,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - SQL 편집기는 단일 테이블 INSERT 열 목록, UPDATE의 SET, UPDATE·DELETE의 WHERE에서 관찰한 열 이름과 서버 타입을 제안합니다. 스키마를 명시하면 그 테이블을 확인합니다. 자동 증가·생성 열은 쓰기 제안에서 제외합니다.
 - **Find SQL Catalog References**는 열 목록이 있는 `INSERT … SELECT`의 입력과 대상, 실제 테이블을 조인한 UPDATE의 SET과 읽기 표현식, 여러 별칭을 대상으로 한 DELETE를 구분합니다. 사용처를 찾을 때 원래 쓰기 문장은 실행하지 않습니다.
 - **Preview SQL with a Virtual Schema**는 로컬 UTF-8 DDL 파일 또는 관찰한 DB 카탈로그를 바탕으로 현재 SQL 문서의 테이블·뷰와 열 변경을 순서대로 분석합니다. 편집기의 완성·진단에만 반영합니다. 파일을 수정한 뒤에는 다시 선택해 캡처하고, **Exit Virtual SQL Schema Preview**로 종료합니다.
+- **Refresh SQL Collation Checks**를 실행하면 연결된 서버의 콜레이션과 문자 집합을 읽어 SQL 편집기에 표시합니다. 확인된 열, 명시적 문자 집합 리터럴과 문자형 CAST에 적용할 수 없는 콜레이션, 관찰되지 않은 이름, 비교식의 충돌하는 명시적 콜레이션을 해당 위치에 표시합니다. 연결이 바뀌면 다시 새로 고칩니다.
 - **Manage Saved Virtual Schemas**는 선택한 ALTER TABLE … ADD COLUMN과 CREATE VIEW … AS SELECT 정의를 현재 연결과 스키마의 로컬 작업공간에 저장합니다. 다른 SQL 편집기에서 저장한 모델을 적용하면 가상 열과 뷰의 타입을 완성과 진단에서 볼 수 있습니다. 지원하는 생성 열은 부호 있는 정수·고정소수점 열의 산술식이며, 교차 스키마 뷰 입력은 현재 계정으로 확인할 수 있는 이름과 열을 사용합니다. 저장된 모델이나 카탈로그가 바뀌면 다시 적용합니다. 적용한 편집기에서 SQL을 실행하려면 **Exit Virtual SQL Schema Preview**를 선택합니다.
 - **Edit Embedded SQL or JSON**은 Java 문자열·텍스트 블록, MyBatis의 정적 SQL 또는 SQL 안의 JSON을 해당 언어 편집기로 엽니다. SQL 편집에서는 연결한 DB의 열 완성과 정의 이동을 사용할 수 있습니다. **Review and Apply Embedded Source Edit**에서 원본 범위의 diff를 확인하고 적용합니다.
 - **Create Native Database Dump**와 **Review and Restore Native Dump**에서 설치한 MySQL 또는 MariaDB 클라이언트를 선택합니다. 로컬 연결의 InnoDB 테이블을 내보내고, 검토한 백업 파일을 원본과 다른 빈 스키마에 복원합니다. 함께 참조하는 FK 테이블은 같은 백업에 포함합니다.
@@ -346,6 +347,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - SQL 표현식에서는 현재 범위의 별칭과 열을 약어로 찾을 수 있습니다. 예를 들어 `p.dn`으로 `p.display_name`을 완성합니다. 활성 MySQL·MariaDB의 버전과 SQL 모드에 맞는 내장 함수 템플릿을 삽입하고 괄호 안의 현재 인수를 표시합니다. 지원하는 구문은 [MySQL 함수 참조](https://dev.mysql.com/doc/refman/8.4/en/built-in-function-reference.html)와 [MariaDB 함수 참조](https://mariadb.com/docs/server/reference/sql-functions/function-and-operator-reference)를 따릅니다.
+- 일반 SQL 편집기에서 스크립트에 선언한 열과 InnoDB 보조 인덱스의 변화를 뒤 문장의 자동 완성과 진단에 반영합니다. 열 추가·이름 변경·삭제와 단순 인덱스 추가·이름 변경·삭제를 지원합니다. 모델을 적용할 때 DB에 DDL을 보내지 않습니다. SQL 모드 변경이나 모델링 범위 밖의 문장이 나타나면 이후 문장의 이름 추론을 중단합니다. [MySQL ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html), [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
 - **Open Consistent Table Snapshot**은 기본 키가 있는 InnoDB 테이블을 별도 읽기 전용 트랜잭션에서 엽니다. 다음·이전 페이지는 정렬 값과 기본 키를 기준으로 서버에서 읽습니다. 탭을 닫으면 스냅샷 연결이 해제됩니다.
 - 이 결과 그리드에서 **Continuous scroll**을 켜면 위·아래로 이동할 때 인접 페이지를 읽습니다. 최근 페이지를 최대 4개, 합계 1,000행과 4 MiB 범위로 보관하며 단일 페이지는 기존 결과 한도를 따릅니다. 복사와 내보내기는 현재 보관한 행을 사용합니다. `ENUM`은 서버 멤버 순서로, `SET`은 각 엔진의 64비트 정렬 순서로 비교하며 셀에는 원래 값이 표시됩니다.

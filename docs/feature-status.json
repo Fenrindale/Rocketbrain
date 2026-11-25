@@ -1,5 +1,5 @@
 {
-  "version": "0.82.0",
+  "version": "0.83.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 112,
-    "partial": 90,
+    "implemented": 114,
+    "partial": 88,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 78.2,
+    "percent": 78.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-064",
-    "DG-030",
-    "DG-045",
-    "DG-080"
+    "IDEA-082",
+    "DG-033",
+    "DG-034"
   ],
   "expandedFeatures": [
-    "IDEA-064",
-    "DG-030",
-    "DG-045",
-    "DG-080"
+    "IDEA-082",
+    "DG-033",
+    "DG-034"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1988,8 +1986,8 @@
       "verification": {
         "state": "v0.82-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.82.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2510,25 +2508,22 @@
       "category": "디버깅",
       "feature": "Java Stream 값 변환 시각화",
       "priority": "P2",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "선택한 리터럴 입력의 순차 Java Stream을 독립 JDK에서 실행하고 filter·map·flatMap·limit 단계의 값과 원본 범위를 표시한다.",
-      "remaining": [
-        "기존 JVM의 정지 프레임, 일반 입력과 참조, 병렬 스트림과 추가 터미널 연산을 지원한다."
-      ],
+      "scope": "Java 객체 및 원시 타입 Stream의 단계별 값·타입과 실제 평가 순서를 표시한다. 정렬 버퍼링과 단축 평가, 순회하지 않는 최적화를 실제 JDK 실행에서 구분한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.48-installed-coverage",
+        "state": "v0.83-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.48.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 Spring 작업 공간의 선택한 식에서 단계별 값과 최종 값 20·21·40, 단락 평가, 원본 단계로 이동 및 바뀐 원본 거부를 확인했다.",
+        "testedScope": "설치판에서 anyMatch가 네 번째 입력에서 끝나는 사례와 정렬 입력 다섯 건을 확인했다. 순회하지 않은 count 및 Spring Java 원본 선택으로 이동하는 흐름도 검증했다.",
         "publicEvidence": [
           "src/java/stream-trace.js",
-          "src/java/stream-trace-vscode.js",
           "test/java-stream-trace-host.js"
         ],
         "originalProductParityVerified": false
@@ -4549,8 +4544,8 @@
       "verification": {
         "state": "v0.82-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.82.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4631,27 +4626,24 @@
       "category": "SQL 의미 분석·편집",
       "feature": "현재 스크립트의 DDL 변화 인식",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "명시한 가상 SQL 미리보기에서 관찰한 카탈로그 또는 로컬 DDL에 CREATE·제한된 ALTER·DROP 변경을 순서대로 적용한다.",
-      "remaining": [
-        "지원하지 않는 DDL·복합 의존성·SQL 모드를 자동 해석하는 범위가 남는다."
-      ],
+      "scope": "SQL 편집기에서 앞 문장의 CREATE·ALTER·RENAME·DROP이 이후 문장의 테이블·열·인덱스 분석에 반영된다. 실제 변경 작업은 분석 중인 가상 범위와 분리한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.32-installed-coverage",
+        "state": "v0.83-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.32.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 카탈로그에서 열 추가·이름 수정, SELECT 뷰 작성·제거의 순서별 타입을 확인했다. 물리적 이름 변경은 차단됐다.",
+        "testedScope": "두 DB에서 열·인덱스 변경 다섯 사례와 정확한 DECIMAL을 실제 DDL 결과와 대조했다. 편집 중 물리 카탈로그 보존, 모드 변경에서 추론 중단, 수정 시 재분석을 확인했다.",
         "publicEvidence": [
-          "src/db/ddl-model.js",
           "src/db/sql-vscode.js",
-          "test/sql-ddl-model.test.js",
-          "test/sql-ddl-model-host.js"
+          "src/db/ddl-script-indexes.js",
+          "test/live-script-ddl-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4665,26 +4657,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "복잡 SELECT의 이름·모호성·열 개수/행 모양 진단과 보수적 타입 family·unknown coverage를 구현했다.",
+      "scope": "현재 DB에서 조회한 콜레이션 이름과 사용 가능한 문자 집합을 대조한다. 정확히 확인되는 열·리터럴·CAST의 불일치와 명시적 비교 충돌을 편집기에서 진단한다.",
       "remaining": [
-        "collation·묵시 변환·window/JSON/bitwise·unknown함수·DDL script 전체 정적 검사는 남는다."
+        "일반 암시 변환, 윈도·JSON·비트 연산과 전체 스크립트 문법의 진단이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.83-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
+        "testedScope": "두 실제 엔진에서 아홉 진단·정상 대조 사례의 서버 결과와 편집기 범위를 확인했다. 미리보기 전환 중 진단 해제 및 문서 편집 시 갱신을 확인했다.",
         "publicEvidence": [
-          "src/db/sql-analysis.js",
-          "src/db/completion.js",
-          "test/sql-analysis.test.js",
-          "test/sql-v08-runtime.test.js",
-          "src/db/sql-vscode.js",
-          "test/sql-analysis-host.js"
+          "src/db/sql-collation-checks.js",
+          "test/sql-collation-checks-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5009,8 +4997,8 @@
       "verification": {
         "state": "v0.82-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.82.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6078,8 +6066,8 @@
       "verification": {
         "state": "v0.82-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.82.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6571,38 +6559,38 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "a359c4bc9ad07e3a6377935613b0f51a47534f42de5244d06c61b571b98974df",
-    "sourceManifestSha256": "1c67cff2c0d504707828da171839441b8f05707431b094133bff488a6e276b91",
+    "vsixSha256": "2099917c37f840c42f0331e576c55738da5765b8b42a4a5029d2d8ed2009d40a",
+    "sourceManifestSha256": "c9dd9fccff353d195a5ba914f3db1fc6b0b08621ced9d9fe360421a3bf36a98f",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 4
+        "featureGroups": 3
       },
       {
         "engine": "mariadb",
-        "featureGroups": 4
+        "featureGroups": 3
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "DG-030",
+      "id": "IDEA-082",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-045",
+      "id": "DG-033",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1720,
-    "pass": 1603,
+    "tests": 1732,
+    "pass": 1610,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 117,
+    "skipped": 122,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

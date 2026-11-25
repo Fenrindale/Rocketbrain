@@ -98,6 +98,9 @@ function analyzeSql(text,catalog=[],options={}){
       if(t.value==='('&&t.close!==undefined&&t.close<b){if(['SELECT','WITH'].includes(token[i+1]?.upper)){const sub=parseQuery(i+1,t.close,scope,new Map(scope.ctes),scope.depth+1);const exists=token[i-1]?.upper==='EXISTS',inList=token[i-1]?.upper==='IN';if(!exists&&sub.projections.length!==1&&sub.complete)issue('sql.shape.scalar',inList?'IN subquery column count is not covered for row operands.':'Scalar subquery must return exactly one column.',t,inList?'information':'error');atoms.push(exists?family('boolean'):sub.projections[0]?.type||UNKNOWN());}else atoms.push(expression(i+1,t.close,scope,context));i=t.close;continue;}
       if(t.kind==='number'){atoms.push(family(/[.eE]/.test(t.value)?'decimal':'integer'));continue;}
       if(t.kind==='string'){atoms.push(family('string'));continue;}
+      if(t.kind==='word'&&/^_[a-z0-9_]{1,64}$/iu.test(t.value)&&token[i+1]?.kind==='string'){
+        atoms.push(family('string'));i++;supported.add('charset-introduced-literal');continue;
+      }
       if(t.kind==='parameter'){
         const bound=options.usageParameters&&/^(?:\?(?:[1-9]\d*)?|:[\p{L}_][\p{L}\p{N}_]*)$/u.test(t.value);
         if(!bound)unknown('Parameter/session-variable type requires a runtime binding contract.',t.start);
