@@ -36,10 +36,11 @@ function exceptionPolicy(value) {
   return Object.fromEntries(fields.map(key => [key, filterList(value[key], key)]));
 }
 
-function debugSettings(policy, { javaHome, mode, updated = false } = {}) {
+function debugSettings(policy, { javaHome, mode, updated = false, decompiledSources = true } = {}) {
   return JSON.stringify({
     hotCodeReplace: mode === 'never' ? 'never' : 'manual',
     logLevel: 'WARNING', javaHome,
+    debugSupportOnDecompiledSource: decompiledSources ? 'on' : 'off',
     exceptionFilters: exceptionPolicy(policy),
     exceptionFiltersUpdated: updated
   });
@@ -69,7 +70,8 @@ function createExceptionControls(vscode, { run, ensureTrusted, engineState, hasS
       await run('vscode.java.updateDebugSettings', debugSettings(policy, {
         javaHome: engine.javaHome,
         mode: config()?.get('hotCodeReplace', 'manual'),
-        updated: needsRefresh
+        updated: needsRefresh,
+        decompiledSources: config()?.get('debugDecompiledSources',true)!==false
       }));
       applied = next;
       return policy;

@@ -213,6 +213,10 @@ Java 프로젝트 가져오기와 빌드는 프로젝트 코드를 실행할 수
 - 디버그 세션에서 일반 중단점을 검증한 줄에 커서를 두고 **Add Java Inline Breakpoints**를 실행합니다. 디버거가 반환한 위치 중 멈출 람다를 선택합니다.
 - 멈춘 세션의 **변수**에서 객체의 필드를 펼칩니다. 필드 메뉴에서 읽기, 쓰기 또는 읽기·쓰기에 중단점을 설정합니다.
 
+### Java 라이브러리 소스
+
+Java 코드의 라이브러리 기호에서 정의로 이동하면 JDT가 원본 소스 또는 디컴파일된 읽기 전용 문서를 엽니다. **Manage Java Library Sources**에서 해당 바이너리 버전과 맞는 로컬 UTF-8 소스 JAR·ZIP을 확인하고 연결하거나 해제할 수 있습니다. 연결은 JDT에서 변경을 허용하는 프로젝트 클래스 경로에 적용되며, 소스 아카이브는 표준 패키지 경로의 `.java` 파일을 포함해야 합니다. 지원하는 클래스의 디컴파일된 줄에서 중단점을 사용할 수 있습니다. `rocketbrain.java.debugDecompiledSources`를 끄면 다음 Java 디버그 세션에서 이 줄 매핑을 사용하지 않습니다.
+
 ### Java 어노테이션 처리와 Lombok
 
 Maven에서 `maven-compiler-plugin`의 `annotationProcessorPaths`에 프로세서를 선언하고, 편집 중에도 처리하려면 `m2e.apt.activation`을 `jdt_apt`로 설정합니다. Gradle에서는 `annotationProcessor` 의존성을 선언하고 사용자 설정 `rocketbrain.java.annotationProcessing.gradleEnabled`를 켜면 가져올 때 JDT가 해당 프로세서 구성을 동기화합니다. 이미 프로젝트가 관리하는 Eclipse APT 설정은 프로젝트 파일에서 관리합니다.

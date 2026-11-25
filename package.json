@@ -389,6 +389,12 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.java.manageLibrarySources",
+        "title": "Manage Java Library Sources",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && (editorLangId == java || resourceScheme == jdt)"
+      },
+      {
         "command": "rocketbrain.java.restart",
         "title": "Restart Java Language Server",
         "category": "Rocketbrain"
@@ -2134,6 +2140,12 @@
           ],
           "default": "manual",
           "description": "Allow explicitly triggered Java Hot Code Replace; no automatic source edits or code replacement."
+        },
+        "rocketbrain.java.debugDecompiledSources": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Use Java debugger line mappings for supported decompiled JAR classes in Java debug sessions."
         },
         "rocketbrain.java.exceptionBreakpoints": {
           "type": "object",
