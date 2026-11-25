@@ -654,6 +654,12 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.java.mavenAdvisories",
+        "title": "Audit Maven Dependencies with OSV",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.workbench.refresh",
         "title": "Refresh Java Projects",
         "category": "Rocketbrain",
