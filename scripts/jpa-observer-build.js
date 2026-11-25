@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{spawnSync}=require('node:child_process');
-const VERSION='0.11.0';const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
+const VERSION='0.12.0';const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 function run(executable,args){const result=spawnSync(executable,args,{encoding:'utf8',windowsHide:true,maxBuffer:4*1024*1024});if(result.error||result.status!==0)throw new Error(`Observer Java build failed: ${result.stderr||result.stdout||result.error}`);return result.stdout;}
 function readObserverSources(){const folder=path.join(__dirname,'../runtime/jpa-observer/src/rocketbrain/observer');return Object.fromEntries(fs.readdirSync(folder).filter(name=>name.endsWith('.java')).sort().map(name=>[name,fs.readFileSync(path.join(folder,name),'utf8')]));}
 async function publish(file,bytes){const staging=path.join(path.dirname(file),'.observer-publish-'+crypto.randomUUID());await fs.promises.writeFile(staging,bytes,{flag:'wx'});try{try{await fs.promises.link(staging,file);}catch(error){if(error.code!=='EEXIST')throw error;if(sha(await fs.promises.readFile(file))!==sha(bytes))throw new Error('Existing immutable observer artifact does not match its source/build fingerprint. Use a fresh installation target.');}}finally{await fs.promises.unlink(staging);}}

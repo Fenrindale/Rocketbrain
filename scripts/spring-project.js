@@ -193,6 +193,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   child = spawn(javaExe(), javaArgs, { cwd: PROJECT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env,
     SERVER_PORT: String(port), SERVER_ADDRESS: '127.0.0.1', SPRING_DATASOURCE_URL: url, SPRING_DATASOURCE_USERNAME: db.config.user, ...propertyProbe,
     ...(endpointProbePort ? {FIXTURE_ENDPOINT_PROBE_PORT: String(endpointProbePort)} : {}),
+    ...(process.env.ROCKETBRAIN_JPA_DIAGRAM_TEST==='1' ? {FIXTURE_DIAGRAM_SECOND_FACTORY:'true'} : {}),
     SPRING_DATASOURCE_PASSWORD: db.config.password, SPRING_DATASOURCE_DRIVER_CLASS_NAME: engine === 'mysql' ? 'com.mysql.cj.jdbc.Driver' : 'org.mariadb.jdbc.Driver',
     SPRING_JPA_HIBERNATE_NAMING_PHYSICAL_STRATEGY:naming==='opaque'?'fixture.boot.OpaquePhysicalNamingStrategy':naming==='custom'?'fixture.boot.FixturePhysicalNamingStrategy':'org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl',
     SPRING_JPA_HIBERNATE_NAMING_IMPLICIT_STRATEGY:naming==='custom'?'fixture.boot.FixtureImplicitNamingStrategy':'org.hibernate.boot.model.naming.ImplicitNamingStrategyJpaCompliantImpl' } });

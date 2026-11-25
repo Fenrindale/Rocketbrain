@@ -64,7 +64,10 @@ function registerAnalysisTree(context, vscode, { spring, jpa }) {
       node('Catalog findings', `${comparison.mismatches?.length || 0}`, limited(comparison.mismatches, issue => node(issue.message || issue.reason || issue.code, [issue.entity, issue.property].filter(Boolean).join('.'), [], 'info', issue)), 'info'),
       node('Unresolved mappings', `${comparison.unknowns?.length || 0}`, limited(comparison.unknowns, issue => node(issue.message || issue.reason || 'Unknown mapping', [issue.entity, issue.property].filter(Boolean).join('.'), [], 'question', issue)), 'question')
     ] : [];
+    const relationships = node('JPA Relationships', 'Open the source or observed Hibernate entity diagram', [], 'type-hierarchy');
+    relationships.command = { command: 'rocketbrain.jpa.relationshipDiagram', title: 'JPA: Show Entity Relationship Diagram' };
     const jpaChildren = [
+      relationships,
       node('JPA provider runtime', `${providerRuntime.state} · ${providerRuntime.fetchedAt||'Connect explicitly to observe'}`, [
         ...limited(providerRuntime.factories, factory=>node(factory.id,`${factory.provider} ${factory.version} · runtime/source revision unverified`,[
           node('Runtime mappings',`${factory.entities?.length||0} entities`,limited(factory.entities,entity=>node(entity.name||entity.javaType,entity.javaType,limited(entity.attributes,attribute=>node(attribute.name,[attribute.javaType,JSON.stringify(attribute.columns||[])].filter(Boolean).join(' · '),[],'symbol-field')),'symbol-class')),'table'),

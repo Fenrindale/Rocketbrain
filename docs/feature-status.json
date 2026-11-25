@@ -1,5 +1,5 @@
 {
-  "version": "0.68.0",
+  "version": "0.69.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 85,
-    "partial": 116,
+    "implemented": 86,
+    "partial": 115,
     "not-implemented": 0,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 72.2,
+    "percent": 72.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-019",
-    "IDEA-058",
-    "DG-082",
-    "DG-094"
+    "IDEA-027",
+    "IDEA-062",
+    "DG-036",
+    "DG-078"
   ],
   "expandedFeatures": [
-    "IDEA-019",
-    "IDEA-058",
-    "DG-082",
-    "DG-094"
+    "IDEA-027",
+    "IDEA-062",
+    "DG-036",
+    "DG-078"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -606,8 +606,8 @@
       "verification": {
         "state": "v0.68-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.68.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -845,24 +845,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "JDT의 지역 변수 인라인 액션을 조회하고 실제 편집을 전후 소스와 함께 검토·적용한다. 충돌·오래된 소스와 지원 밖 파일 작업을 거부하며 편집기 Undo 경로를 유지한다.",
+      "scope": "선택한 Java 호출을 javac 바인딩으로 확인하고 같은 클래스의 단순 private static 메서드를 인라인한다. 임시 지역 변수가 원래 인자 순서와 실행 횟수를 보존한다.",
       "remaining": [
-        "지역 변수 인라인의 검증 사례 범위이며 메서드 인라인·부작용/평가 순서·전체 Java 문법 조합은 남는다. 추가 엔진 명령이나 대화를 요구하는 refactoring, 파일 생성·삭제·이동 및 전체 Java 문법·대규모 프로젝트 조합은 남는다. 원본 IDE 전체 리팩터링 동등성은 판정하지 않는다."
+        "다형 인스턴스 호출, 복잡한 본문과 재귀 선언·호출자 변경이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.69-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 JDT의 Inline Local Variable 편집을 적용한 Java를 컴파일·실행해 이전 결과와 비교한다. 문서/디스크가 바뀐 계획과 지원하지 않는 추가 명령을 거부한다.",
+        "testedScope": "두 Spring DB 환경에서 선택한 오버로드만 바꾸고, 중복 사용과 미사용을 포함한 인자 세 개를 순서대로 평가했다. 중첩 호출과 변경된 검토 거부, VS Code Undo와 원본 디스크 보존을 확인했다.",
         "publicEvidence": [
-          "src/java/refactoring.js",
-          "src/java/index.js",
-          "test/java-refactoring.test.js",
-          "test/java-refactoring-host.js"
+          "src/java/inline-method.js",
+          "runtime/java-signature/src/rocketbrain/signature/InlineMethodInspector.java",
+          "test/java-inline-method-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1830,8 +1829,8 @@
       "verification": {
         "state": "v0.68-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.68.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1943,27 +1942,24 @@
       "category": "Spring·영속성",
       "feature": "Persistence 트리·엔티티 관계도",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "소스/실행 entity·열 매핑과 DB 비교를 네이티브 트리에 표시한다.",
-      "remaining": [
-        "관계도·그래프 편집·레이아웃 보존과 자동 unit 선택이 남는다."
-      ],
+      "scope": "JPA 소스와 실제 Hibernate Persistence Unit의 엔티티·상속·관계를 다이어그램으로 열고 정확한 매핑 선언으로 이동한다. 실행 중인 모델의 범위를 선택하고 위치, 숨김, 복원을 저장한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.69-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
+        "testedScope": "각 실제 DB에서 기본 Hibernate 팩터리의 엔티티 21개와 관계 13개를 확인했다. 두 번째 팩터리와 중복 엔티티를 분리하고 실제 FK와 소스 위치, Canvas 렌더링 및 위치 복원, 연결 종료를 확인했다.",
         "publicEvidence": [
-          "src/jpa/model.js",
-          "src/jpa/query.js",
-          "src/jpa/types.js",
-          "src/jpa/observer-vscode.js"
+          "src/jpa/relationship-diagram.js",
+          "src/jpa/relationship-diagram-vscode.js",
+          "test/jpa-relationship-diagram-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4765,23 +4761,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "현재 카탈로그와 SQL 문맥에서 정확히 묶을 수 있는 알 수 없는 열의 이름 수정을 제안한다.",
+      "scope": "이미 지정한 두 실테이블의 비어 있는 JOIN 조건에서 실제 복합 FK를 고르는 빠른 수정을 제공한다. 소스와 서버 관계를 재검증하고 검토한 위치에 정확한 조건을 삽입한다.",
       "remaining": [
-        "DB 객체 생성, 조인 수리와 복합 구문 교정을 확장한다."
+        "누락된 객체 생성과 일반 조인·다중 문맥의 복합 구문 교정이 남아 있다."
       ],
       "verification": {
-        "state": "v0.31-installed-coverage",
+        "state": "v0.69-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.31.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "VS Code 코드 액션으로 실제 Spring 테이블의 잘못된 열 이름을 수정한 뒤 두 서버에서 쿼리를 실행했다.",
+        "testedScope": "두 DB에서 복합 키로 정확한 테넌트 행만 조회했다. 편집된 SQL, 이미 작성한 ON과 외부에서 삭제한 FK는 적용을 거절했다. 앞 문장과 기존 별칭·WHERE를 보존했다.",
         "publicEvidence": [
-          "src/db/sql-quick-fixes.js",
+          "src/db/sql-join-fixes.js",
           "src/db/sql-editing-vscode.js",
-          "test/sql-editing-host.js"
+          "test/sql-join-fix-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6072,21 +6068,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "컬럼·NULL·기본값·문자 설정·키/FK/CHECK를 실제 폼으로 편집한다. 명시적 검토에서 소유 빈 테이블로 서버 형식을 확인하고 CREATE 또는 기존 원본 보관 재구성·복구로 적용한다.",
+      "scope": "시각 테이블 디자이너에서 일반 숫자 열을 사용하는 가상·저장 생성 열을 검토·추가·수정한다. 재구성은 쓰기 가능한 입력을 복사하고 엔진이 계산한 값을 검증한다.",
       "remaining": [
-        "일반 InnoDB·컬럼100·인덱스40·FK/CHECK각20 한도다. 생성 컬럼·특수 저장 구조·일반 default 표현식은 남는다.",
-        "검증 자체에 빈 객체 DDL이 있으며 데이터는 넣지 않는다. 중단 후 정리 미확인 객체를 임의로 삭제하지 않는다."
+        "일반 생성 표현식, 생성 열 인덱스와 FK, 연쇄 참조 및 특수 저장 구조가 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.69-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 Chromium 폼과 네이티브 명령/API에서 PK/FK/CHECK/ENUM·정확 기본값·DECIMAL 변경/원본 복구·readonly SQL·카탈로그 갱신을 확인한다.",
-        "publicEvidence": [],
+        "testedScope": "MySQL STORED·MariaDB PERSISTENT 및 양쪽 VIRTUAL을 검증했다. 53비트 한계 밖 DECIMAL의 정밀도·NULL·재계산, 안전하지 않은 표현식·직접 쓰기 거부, 원본 복원과 오버플로 시 게시 중단을 확인했다.",
+        "publicEvidence": [
+          "src/db/schema-generated-column.js",
+          "src/db/schema-designer-vscode.js",
+          "test/generated-columns-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -6194,8 +6193,8 @@
       "verification": {
         "state": "v0.68-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.68.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6559,8 +6558,8 @@
       "verification": {
         "state": "v0.68-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.68.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6634,33 +6633,33 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "d64ad570e70f3804a4f2a831bcf2aa678ae944d2a4a1d94552e043bcc4f49640",
-    "sourceManifestSha256": "09076a7f25138c496f68548d585c0ba1e32ad82d1941ef0424c24d8381020e05",
+    "vsixSha256": "668af94a28eeb4a87d7ca4a9ef66638245d503edb584ec897097809c4d3cded7",
+    "sourceManifestSha256": "91147a5950b37f0796e4258e84a7a29efa5235b16bf5eee334ba53b70b8725d4",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 5
+        "featureGroups": 4
       },
       {
         "engine": "mariadb",
-        "featureGroups": 5
+        "featureGroups": 4
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-058",
+      "id": "IDEA-062",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1589,
-    "pass": 1492,
+    "tests": 1600,
+    "pass": 1502,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 97,
+    "skipped": 98,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.68.0",
+  "version": "0.69.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -470,6 +470,7 @@
         "title": "JPA: Navigate to Entity",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.jpa.relationshipDiagram", "title": "JPA: Show Entity Relationship Diagram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
         "command": "rocketbrain.jpa.refresh",
         "title": "JPA: Refresh Analysis",
@@ -677,6 +678,7 @@
       },
       { "command": "rocketbrain.java.extractVariable", "title": "Extract Java Local Variable", "category": "Rocketbrain", "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.extractField", "title": "Extract Java Field", "category": "Rocketbrain", "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.inlineMethod", "title": "Inline Java Method Call", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       {
         "command": "rocketbrain.java.pullUpMembers",
         "title": "Pull Up Java Members",

@@ -14,6 +14,7 @@ const { createMemberHierarchy } = require('./member-hierarchy-vscode');
 const { createJavaConversion } = require('./java-conversion-vscode');
 const { createConstantExtraction } = require('./extract-constant-vscode');
 const { createValueExtraction } = require('./extract-value-vscode');
+const { createMethodInline } = require('./inline-method-vscode');
 
 const COMMANDS = Object.freeze({
   diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow',
@@ -443,6 +444,9 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const values = createValueExtraction(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
   });
+  const inline = createMethodInline(vscode,{
+    java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
+  });
   const constantPreparation = java.refactoring.registerConstantPreparation(async options => {
     const report = await constant.inspect(options);
     return constant.prepare(report,{cancellation:options.cancellation});
@@ -467,6 +471,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     prepareConstantExtraction:(report,options) => managed(() => constant.prepare(report,options)),
     inspectValueExtraction:options => managed(() => values.inspect(options)),
     prepareValueExtraction:(report,options) => managed(() => values.prepare(report,options)),
+    prepareInlineMethod:options => managed(() => inline.prepare(options)),
     streamTrace,
     reveal,showDiagram,exportMermaid,
     dispose() {
@@ -474,6 +479,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       disposed = true;
       streamTrace.dispose();
       constantPreparation.dispose();
+      inline.dispose();
       for (const entry of [...panels,...commands]) entry.dispose();
       stopping = Promise.allSettled(active).then(() => {});
       return stopping;

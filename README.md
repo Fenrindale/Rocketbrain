@@ -75,6 +75,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 20. **Build and Index Mixed JVM Sources**로 가져온 Gradle·Maven 혼합 프로젝트의 표준 main 소스를 빌드하고 인덱싱합니다. Java Projects에서 Kotlin 파일을 열고, 한 줄에서 대상을 식별할 수 있는 호출·getter·상위 클래스에 **Go to Mixed JVM Declaration**을 사용합니다. 소스나 컴파일 결과가 바뀌면 다시 인덱싱합니다. Gradle `application` 프로젝트는 **Run Mixed Gradle Application**에서 실행합니다.
 21. Java Projects에서 Groovy 패키지와 파일을 엽니다. **Run Groovy and Spock Tests**는 가져온 Gradle 프로젝트의 `test` 작업을 실행합니다. **Groovy Console**과 **Evaluate Groovy Selection**은 함께 사용하는 세션에서 변수를 보존하며, **Reset Groovy Console**로 초기화합니다. **Run Groovy Script**는 저장한 파일을 별도 JVM에서 실행하고 구문 오류를 Problems에 표시합니다. 콘솔과 스크립트 실행에는 Gradle 홈에 포함된 Apache Groovy 4.0.28 또는 사용자 설정 `rocketbrain.java.groovyConsoleJar`의 공식 코어 JAR를 사용합니다.
 
+**JPA: Show Entity Relationship Diagram**으로 워크스페이스 선언이나 실행 중인 Hibernate의 엔티티 관계를 엽니다. 엔티티 연결과 매핑 선언을 탐색하고, 카드 위치와 숨김 상태를 워크스페이스에 저장합니다. [JPA 관계도 사용 범위](docs/jpa-relationship-diagram.md)
+
 **Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다. 필터 순서·매처·권한 목록은 앱의 보안 구성에서 확인합니다.
 
 ### Quarkus Maven
@@ -229,6 +231,8 @@ Java·Kotlin의 **Format Document**와 **Format Selection**은 상위 폴더와 
 
 **Extract Java Local Variable**, **Extract Java Field**, **Extract Java Constant**에서 새 이름과 변경 내용을 먼저 검토할 수 있습니다. 지역 변수와 필드는 `return` 식 전체 또는 지역 변수의 초기화 식을 선택합니다. 필드를 추출하면 현재 메서드에서 값을 계산해 `private` 필드에 대입합니다. 상수 추출은 컴파일 타임 상수식을 `private static final` 필드로 옮깁니다. [Java 변수·필드·상수 추출](docs/java-extract-constant.md)
 
+**Inline Java Method Call**은 선택한 Java 호출을 메서드 본문 식으로 바꿉니다. 인자는 호출 순서대로 한 번씩 계산하며 적용 전에 변경 내용을 검토할 수 있습니다. [Java 메서드 호출 인라인](docs/java-inline-method.md)
+
 | 명령 | 지원 범위 | 추가 분석이 필요한 범위 |
 |---|---|---|
 | **Move Java Class File / Move Java Class Across Projects** | 같은 소스 루트의 클래스 이동. Gradle 복합 조건과 Maven 리액터의 부모·중첩 BOM·속성 프로필을 분석한다. 기본 로컬 Maven 저장소의 외부 부모·BOM도 좌표와 SHA-256을 검증해 가시성 계산에 포함한다 | 사용자 지정 저장소 배치, 원격 확인, SNAPSHOT·복합 외부 POM, 전이 의존성 중재, 의존 관계 자동 변경 |
@@ -278,6 +282,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Format SQL**은 현재 문서나 선택한 SQL에서 절의 줄 배치와 들여쓰기를 정리합니다. **Insert SQL Template**은 활성 카탈로그의 테이블·열을 넣으며, 알 수 없는 이름과 모호한 열에는 확인한 빠른 수정을 제공합니다.
 - 비어 있는 SQL 절에서 카탈로그 기준 필드 목록을 완성합니다. SELECT에는 현재 범위의 열, INSERT에는 자동 생성 열을 제외한 쓰기 열, GROUP BY에는 SELECT에서 확인한 직접 참조 열을 제안합니다.
 - 편집기는 바깥쪽 `WHERE`가 없는 `UPDATE`와 `DELETE`를 표시합니다. 쓰기 콘솔과 스크립트 실행은 이 문장이 대상 행 전체에 미칠 수 있는 영향을 검토하고 승인한 뒤 진행합니다.
+- 활성 MySQL/MariaDB 연결의 SQL 편집기에서 두 실테이블을 지정한 `JOIN`의 대상이나 비어 있는 `ON`에 커서를 놓습니다. **Complete JOIN using …** 빠른 수정은 실제 FK의 모든 열을 순서대로 삽입합니다. 선택 뒤 소스나 관계가 바뀌면 다시 선택합니다.
 - **Review SQL Script**는 독립된 `DELIMITER` 줄 사이에 있는 `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE TRIGGER`의 `BEGIN … END` 블록을 한 문장으로 검토합니다. 실행은 쓰기 콘솔에서 DDL의 암시적 커밋을 승인한 뒤 진행합니다. `DELIMITER ;`로 돌아오면 일반 문장에 바인딩 값을 사용할 수 있습니다. 저장 프로그램 본문의 동적 SQL, 세션 제어와 매개변수 바인딩은 지원 범위 밖입니다.
 - `DELIMITER`가 있는 SQL 파일에서 **Run Selected SQL or Current Statement**를 실행하면 서버의 SQL 모드로 커서 아래 문장이나 선택한 전체 복합 문장의 범위를 구합니다. 복합 DDL 검토에는 그 문장 하나가 표시됩니다.
 - SQL 편집기는 단일 테이블 INSERT 열 목록, UPDATE의 SET, UPDATE·DELETE의 WHERE에서 관찰한 열 이름과 서버 타입을 제안합니다. 스키마를 명시하면 그 테이블을 확인합니다. 자동 증가·생성 열은 쓰기 제안에서 제외합니다.
@@ -326,6 +331,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Open Schema Diagram**에서 실제 FK와 저장 연결의 워크스페이스 가상 FK를 탐색합니다. 노드 위치를 저장하거나 JSON으로 교환하고 PNG로 내보낼 수 있습니다.
 - **Save Schema DDL**에서 InnoDB 테이블, 외래 키, 지원하는 뷰, SQL/PSM 프로시저, 결정적 숫자 함수, 트리거의 복원 순서를 검토하고 Git으로 추적할 SQL 파일을 저장합니다. 선택 모드에서는 대상 테이블에 연결된 트리거와 호출하는 프로시저를 포함합니다. 확인할 수 없는 본문, 동적 SQL, 교차 스키마 참조, 순서를 확인할 수 없는 트리거는 생략 이유를 표시합니다. 저장 직전에 서버 정의를 다시 비교합니다. 파일에는 행 데이터, 권한, 이벤트, 시퀀스와 패키지를 포함하지 않습니다. 복원할 때는 동일한 이름과 기본 콜레이션의 빈 스키마와 원래 DEFINER 계정을 준비하고 호환되는 UTF-8 MySQL·MariaDB 클라이언트에서 파일을 검토한 뒤 실행합니다.
 - **Save Schema Snapshot with Stored Objects**로 프로시저, 함수, 트리거, 이벤트의 관찰 가능한 원문과 생성 설정을 스냅샷에 저장합니다. 다른 연결에서 **Compare Current Database with Schema Snapshot**을 실행해 같은 이름·종류의 원문과 설정을 비교하고 **Open Stored Object Diff**에서 나란히 엽니다. 보이지 않는 원문과 한쪽 계정에만 보이는 객체는 미확정으로 표시합니다. 비교 결과는 검토용이며 저장 객체 배포나 SQL 의미 동등성을 판단하는 데 사용하지 않습니다.
+- 테이블 디자이너에서 NULL을 허용하는 부호 있는 정수·DECIMAL 생성 열을 추가하거나 수정할 수 있습니다. 앞에 선언된 일반 숫자 열을 참조해 괄호와 `+`, `-`, `*` 표현식을 작성하고 Virtual 또는 Stored를 선택합니다. MySQL은 `STORED`, MariaDB는 `PERSISTENT`로 검토합니다. 기존 테이블을 재구성할 때 일반 열만 복사하고 서버가 계산한 결과를 확인합니다. 함수·서브쿼리·생성 열 연쇄 참조·생성 열의 인덱스나 외래 키·일반 열과 생성 열 사이의 변환에는 별도 검토가 필요합니다.
 
 테이블 설계와 기존 뷰·프로시저 원문 편집은 검토·명시적 적용 흐름을 제공합니다. 서버 검증에는 DDL 권한이 필요할 수 있습니다. MySQL/MariaDB DDL과 객체 교체에는 비원자적인 단계가 있으므로 표시된 범위·복구 조건·미완료 트랜잭션을 확인하세요. 모호한 결과를 자동 재실행하지 않습니다.
 

@@ -15,6 +15,10 @@ function registerJPAFeatures(context, vscode, { catalog, output } = {}) {
   const observer = require('./observer-vscode').registerObserver(context,vscode,channel,{source:()=>snapshot()});
   let providerSnapshotKey='';
   subscriptions.push(observer,observer.onDidChange(value=>{const key=value.state+':'+value.fetchedAt;if(key!==providerSnapshotKey){providerSnapshotKey=key;invalidate();}else events.fire();}));
+  const relationshipDiagram=require('./relationship-diagram-vscode').registerRelationshipDiagram(vscode,context,{
+    source:()=>snapshot(),revision:()=>revision,getObserver:observer.snapshot,refreshObserver:observer.refresh,onChange:events.event
+  });
+  subscriptions.push(relationshipDiagram);
   const range = value => new vscode.Range(value.start.line, value.start.character, value.end.line, value.end.character);
   function publish(items, collection, source) {
     collection.clear();
@@ -168,7 +172,7 @@ function registerJPAFeatures(context, vscode, { catalog, output } = {}) {
     vscode.workspace.onDidCreateFiles(invalidate), vscode.workspace.onDidDeleteFiles(invalidate), vscode.workspace.onDidRenameFiles(invalidate), vscode.workspace.onDidChangeWorkspaceFolders(invalidate),
     vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('rocketbrain.jpa')) invalidate(); }));
   void snapshot().catch(() => channel.appendLine('JPA source index could not initialize.'));
-  return { snapshot, refresh, observer, compareCatalog: compareConnectedCatalog, catalogComparison: () => comparison, invalidateCatalog, onDidChange: events.event, dispose() { disposed = true; clearTimeout(timer); for (const item of subscriptions) item.dispose(); } };
+  return { snapshot, refresh, observer, relationshipDiagram, compareCatalog: compareConnectedCatalog, catalogComparison: () => comparison, invalidateCatalog, onDidChange: events.event, dispose() { disposed = true; clearTimeout(timer); for (const item of subscriptions) item.dispose(); } };
 }
 
 module.exports = { registerJPAFeatures };
