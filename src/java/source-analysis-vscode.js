@@ -13,12 +13,14 @@ const { createInterfaceExtraction } = require('./extract-interface-vscode');
 const { createMemberHierarchy } = require('./member-hierarchy-vscode');
 const { createJavaConversion } = require('./java-conversion-vscode');
 const { createConstantExtraction } = require('./extract-constant-vscode');
+const { createValueExtraction } = require('./extract-value-vscode');
 
 const COMMANDS = Object.freeze({
   diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow',
   structural:'rocketbrain.java.structuralSearch', extractInterface:'rocketbrain.java.extractInterface',
   pullUp:'rocketbrain.java.pullUpMembers', pushDown:'rocketbrain.java.pushDownMembers',
-  convert:'rocketbrain.java.convertStructure', extractConstant:'rocketbrain.java.extractConstant'
+  convert:'rocketbrain.java.convertStructure', extractConstant:'rocketbrain.java.extractConstant',
+  extractVariable:'rocketbrain.java.extractVariable', extractField:'rocketbrain.java.extractField'
 });
 const EXCLUDE = '**/{.git,.gradle,.metadata,node_modules,build,target,out,bin,dist}/**';
 const MAX_UNITS = 240;
@@ -438,15 +440,18 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const constant = createConstantExtraction(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
   });
+  const values = createValueExtraction(vscode,{
+    java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
+  });
   const constantPreparation = java.refactoring.registerConstantPreparation(async options => {
     const report = await constant.inspect(options);
     return constant.prepare(report,{cancellation:options.cancellation});
   });
   const commands = Object.entries({diagram:showProjectDiagram,flow:showTrace,structural:showStructuralSearch,
     extractInterface:extraction.run,pullUp:hierarchy.pullUp,pushDown:hierarchy.pushDown,convert:conversion.run,
-    extractConstant:constant.run}).map(([kind,run]) =>
+    extractConstant:constant.run,extractVariable:anchor => values.run('local',anchor),extractField:anchor => values.run('field',anchor)}).map(([kind,run]) =>
     vscode.commands.registerCommand(COMMANDS[kind],async anchor => {
-      try { assertReady(); return await run(kind === 'extractConstant' ? anchor : undefined); }
+      try { assertReady(); return await run(kind.startsWith('extract') && kind !== 'extractInterface' ? anchor : undefined); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message); return null; }
     }));
   return {
@@ -460,6 +465,8 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     prepareConversion:options => managed(() => conversion.prepare(options)),
     inspectConstant:options => managed(() => constant.inspect(options)),
     prepareConstantExtraction:(report,options) => managed(() => constant.prepare(report,options)),
+    inspectValueExtraction:options => managed(() => values.inspect(options)),
+    prepareValueExtraction:(report,options) => managed(() => values.prepare(report,options)),
     streamTrace,
     reveal,showDiagram,exportMermaid,
     dispose() {

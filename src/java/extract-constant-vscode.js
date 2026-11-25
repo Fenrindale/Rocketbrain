@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { KIND,constantPlacement,validateConstantName,constantChange,confirmConstant } = require('./extract-constant');
+const { selectedExtraction } = require('./extraction-actions');
 const { rangeAt } = require('../spring/java');
 
 function createConstantExtraction(vscode,{
@@ -97,16 +98,9 @@ function createConstantExtraction(vscode,{
   }
 
   async function run(anchor) {
-    const editor = vscode.window.activeTextEditor;
-    const uri = anchor && vscode.Uri.parse(anchor.uri);
-    if (uri && (uri.scheme !== 'file' || uri.authority || uri.query || uri.fragment || !vscode.workspace.getWorkspaceFolder(uri))) {
-      throw Error('Select an open local Java workspace source.');
-    }
-    const document = uri ? await vscode.workspace.openTextDocument(uri) : editor?.document;
-    const range = anchor ? new vscode.Range(anchor.range.start.line,anchor.range.start.character,anchor.range.end.line,anchor.range.end.character) : editor?.selection;
-    if (anchor && document?.version !== anchor.version) throw Error('The source changed after listing Java code actions. Select the expression again.');
+    const selection = await selectedExtraction(vscode,anchor);
     const report = await operation('Inspect Java Constant Selection',cancellation => inspect({
-      document,range,cancellation
+      ...selection,cancellation
     }));
     const record = inspections.get(report);
     const name = await vscode.window.showInputBox({title:'Extract Java Constant',prompt:`Name the ${report.type} constant in ${report.owner}.`,

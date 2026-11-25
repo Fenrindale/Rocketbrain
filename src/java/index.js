@@ -3,6 +3,7 @@ const path = require('node:path');
 const { resolveLaunch, serverSettings } = require('./runtime');
 const { registerSpringFeatures } = require('./spring');
 const { registerJavaDebugger } = require('./debug');
+const { ACTIONS,namedAction,editorAnchor } = require('./extraction-actions');
 
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
@@ -57,18 +58,17 @@ function registerJavaFeatures(context, vscode) {
             const version = document.version;
             const actions = await provide(document,range,context,token);
             if (document.isClosed || document.version !== version || token.isCancellationRequested) return [];
-            const position = point => ({line:point.line,character:point.character});
             return actions?.map(action => {
-              if (action.kind?.value !== 'refactor.extract.constant') return action;
-              const reviewed = new vscode.CodeAction('Extract Java Constant…',action.kind);
+              const named = namedAction(action.kind?.value,action.title);
+              if (!named || named !== ACTIONS.constant && (document.isDirty || range.isEmpty)) return action;
+              const reviewed = new vscode.CodeAction(named === ACTIONS.constant ? 'Extract Java Constant…' : action.title,action.kind);
               reviewed.disabled = action.disabled;
-              reviewed.command = { command:'rocketbrain.java.extractConstant',title:reviewed.title,
-                arguments:[{uri:document.uri.toString(),range:{start:position(range.start),end:position(range.end)},version}] };
+              reviewed.command = {command:named.command,title:reviewed.title,arguments:[editorAnchor(document,range)]};
               return reviewed;
             });
           },
           resolveCodeAction(item,token,resolve) {
-            return item.command?.command === 'rocketbrain.java.extractConstant' ? item : resolve(item,token);
+            return Object.values(ACTIONS).some(action => action.command === item.command?.command) ? item : resolve(item,token);
           }
         },
         errorHandler: { error: () => ({ action: ErrorAction.Continue }), closed: () => { if (!disposed) { client = undefined; update('error', 'Java server exited. Check Rocketbrain Java output, then restart.'); } return { action: CloseAction.DoNotRestart }; } },
@@ -152,6 +152,12 @@ function registerJavaFeatures(context, vscode) {
   api.constantRefactoring=(params,cancellation)=>refactoringRequest('java/getRefactorEdit',{
     command:'extractConstant',context:params,options:{tabSize:4,insertSpaces:true},commandArguments:[]
   },cancellation);
+  api.valueExtraction=(kind,params,cancellation)=>{
+    if(!['local','field'].includes(kind))throw Error('Choose Java local variable or field extraction.');
+    return refactoringRequest('java/getRefactorEdit',{
+      command:ACTIONS[kind].jdt,context:params,options:{tabSize:4,insertSpaces:true},commandArguments:[]
+    },cancellation);
+  };
   api.interfaceRefactoring={
     async members(params,cancellation){
       await api.start();

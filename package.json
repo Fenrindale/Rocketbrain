@@ -643,6 +643,8 @@
         "category": "Rocketbrain",
         "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted"
       },
+      { "command": "rocketbrain.java.extractVariable", "title": "Extract Java Local Variable", "category": "Rocketbrain", "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.extractField", "title": "Extract Java Field", "category": "Rocketbrain", "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted" },
       {
         "command": "rocketbrain.java.pullUpMembers",
         "title": "Pull Up Java Members",

@@ -40,6 +40,10 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   else if(inspection.kind==='constant'&&Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&inspection.start>=0&&
     inspection.end>inspection.start&&inspection.end-inspection.start<=4096&&sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)&&
     (inspection.name===undefined||validIdentifier(inspection.name)))query.push('constant',inspection.uri,String(inspection.start),String(inspection.end),inspection.name||'');
+  else if(inspection.kind==='extraction'&&['local','field'].includes(inspection.extractionKind)&&Number.isSafeInteger(inspection.offset)&&
+    inspection.offset>=0&&validIdentifier(inspection.name)&&sources.some(item=>item.uri===inspection.uri&&inspection.offset+inspection.name.length<=item.text.length)){
+    query.push('extraction',inspection.uri,inspection.extractionKind,String(inspection.offset),inspection.name);
+  }
   else if(inspection.kind==='dataflow'&&Number.isSafeInteger(inspection.offset)&&inspection.offset>=0&&
     sources.some(item=>item.uri===inspection.uri&&inspection.offset<item.text.length))query.push('dataflow',inspection.uri,String(inspection.offset));
   else if(inspection.kind==='structural'&&(inspection.uri===undefined||sources.some(item=>item.uri===inspection.uri))){

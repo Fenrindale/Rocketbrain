@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {inside}=require('./testing-projects');
 const {metadataFile}=require('./package-services');
+const {namedAction,editorAnchor}=require('./extraction-actions');
 const hash=text=>crypto.createHash('sha256').update(text).digest('hex');
 const key=file=>process.platform==='win32'?path.resolve(file).toLowerCase():path.resolve(file);
 function binaryIdentity(file){const stat=fs.lstatSync(file,{bigint:true});if(!stat.isFile()||stat.isSymbolicLink())throw Error('Reviewed binary resources require plain regular files.');return {real:fs.realpathSync(file),size:String(stat.size),mtimeNs:String(stat.mtimeNs),ctimeNs:String(stat.ctimeNs),ino:String(stat.ino),dev:String(stat.dev)};}
@@ -199,7 +200,19 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   if(choice==='Apply Refactoring')return api.apply(plan.id);
   return {state:'cancelled',id:plan.id};
  }
- subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.refactor',async()=>{try{const editor=vscode.window.activeTextEditor;if(!editor||editor.document.languageId!=='java')throw Error('Select Java source to refactor.');const {document,selection}=editor,version=document.version,actions=await api.list(document,selection),selected=await vscode.window.showQuickPick(actions.map(action=>({label:action.title,description:action.kind,action})),{title:'Refactor Java selection'});if(!selected)return;if(document.isClosed||document.version!==version)throw Error('The Java source changed after listing refactorings. Select the expression again.');return await api.review(await api.preview(document,selection,{title:selected.action.title,kind:selected.action.kind}));}catch(error){if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);}}));
+ subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.refactor',async()=>{
+  try{
+   const editor=vscode.window.activeTextEditor;
+   if(!editor||editor.document.languageId!=='java')throw Error('Select Java source to refactor.');
+   const {document,selection}=editor,version=document.version,actions=await api.list(document,selection);
+   const selected=await vscode.window.showQuickPick(actions.map(action=>({label:action.title,description:action.kind,action})),{title:'Refactor Java selection'});
+   if(!selected)return;
+   if(document.isClosed||document.version!==version)throw Error('The Java source changed after listing refactorings. Select the expression again.');
+   const {title,kind}=selected.action,named=namedAction(kind,title);
+   if(named&&!document.isDirty&&!selection.isEmpty)return await vscode.commands.executeCommand(named.command,editorAnchor(document,selection));
+   return await api.review(await api.preview(document,selection,{title,kind}));
+  }catch(error){if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);}
+ }));
  function tracked(fn){return (...args)=>{const work=fn(...args);operations.add(work);void work.finally(()=>operations.delete(work)).catch(()=>{});return work;};}
  const api={list:tracked(list),resolveAction:tracked(resolveAction),preview:tracked(preview),previewWorkspaceEdit:tracked(previewWorkspaceEdit),review:tracked(review),apply:tracked(apply),validate:tracked(validate),registerConstantPreparation,async dispose(){closed=true;prepareConstant=undefined;plans.clear();checkedPlans.clear();validators.clear();await Promise.allSettled([...operations]);for(const sub of subscriptions)sub.dispose();}};return api;
 }
