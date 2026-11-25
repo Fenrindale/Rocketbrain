@@ -5,7 +5,7 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const assert = require('node:assert/strict');
 
-async function prepareDatabaseAdminFixture(fixture) {
+async function prepareDatabaseAdminFixture(fixture, { allowPrincipalCreation = false } = {}) {
   const { db, dbEngine } = fixture;
   const source = db.config, folder = path.dirname(db.configPath);
   const marker = JSON.parse(await fs.readFile(path.join(folder, 'owner.json')));
@@ -23,6 +23,10 @@ async function prepareDatabaseAdminFixture(fixture) {
     await connection.query('CREATE USER ?@? IDENTIFIED BY ?', [guest.user, guest.host, guest.password]);
     await connection.query('GRANT SELECT ON rocketbrain_fixture.* TO ?@? WITH GRANT OPTION', [admin.user, admin.host]);
     await connection.query('GRANT SELECT (User,Host' + (dbEngine === 'mariadb' ? ',is_role' : '') + ') ON mysql.user TO ?@?', [admin.user, admin.host]);
+    if (allowPrincipalCreation) {
+      await connection.query('GRANT CREATE USER ON *.* TO ?@?', [admin.user, admin.host]);
+      if (dbEngine === 'mysql') await connection.query('GRANT SELECT (account_locked) ON mysql.user TO ?@?', [admin.user, admin.host]);
+    }
     await connection.query('GRANT SELECT (User,Host,Db,Table_name,Table_priv,Column_priv) ON mysql.tables_priv TO ?@?', [admin.user, admin.host]);
     await connection.query(dbEngine === 'mysql'
       ? 'GRANT SELECT (FROM_USER,FROM_HOST,TO_USER,TO_HOST,WITH_ADMIN_OPTION) ON mysql.role_edges TO ?@?'
