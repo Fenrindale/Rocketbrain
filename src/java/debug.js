@@ -209,7 +209,12 @@ function registerJavaDebugger(vscode, api, output, request) {
     if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
   return { breakpoints, exceptions, smartStep, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
-    getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; },
+    getState(sessionId) {
+      const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id);
+      return info ? { state: info.state, threadId: info.threadId, stopVersion: info.stopVersion, resuming: info.resuming,
+        buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents],
+        lastHcrResult: info.lastHcrResult } : undefined;
+    },
     async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); },
     dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
 }
