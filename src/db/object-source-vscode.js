@@ -5,6 +5,8 @@ const { contextOf, listNames, loadSource } = require('./object-source');
 const { searchDatabaseText, textHash } = require('./unified-search');
 const { sourceTokens } = require('./sql-analysis');
 const { ddlDefinitionLocation } = require('./sql-ddl-location');
+const { isApplicationSchema, limits: viewImpactLimits } = require('./view-impact');
+const { registerViewImpact } = require('./view-impact-vscode');
 
 const scheme = 'rocketbrain-object-source';
 const maxDocuments = 16;
@@ -115,11 +117,11 @@ function registerObjectSources(vscode, { database }) {
     return open(current.object);
   }
 
-  async function choosePage(load, frame, title) {
+  async function choosePage(load, frame, title, initialChoices = []) {
     let after = '';
     for (;;) {
       const page = await load(after);
-      const choices = page.items.map(item => ({ label: item.name, description: item.kind, item }));
+      const choices = [...initialChoices, ...page.items.map(item => ({ label: item.name, description: item.kind, item }))];
       if (page.next) choices.push({ label: 'Next page…', next: true });
       if (!choices.length) {
         await vscode.window.showInformationMessage('No matching objects are visible to the current account.');
@@ -127,7 +129,7 @@ function registerObjectSources(vscode, { database }) {
       }
       const selected = await vscode.window.showQuickPick(choices, { title });
       check(frame);
-      if (!selected || !selected.next) return { item: selected?.item, kinds: page.kinds };
+      if (!selected || !selected.next) return { item: selected?.item, kinds: page.kinds, action: selected?.action };
       after = page.next;
     }
   }
@@ -154,10 +156,50 @@ function registerObjectSources(vscode, { database }) {
     if (target?.item) return open(target.item, frame);
   }
 
+  const viewImpact = registerViewImpact(vscode, { inspect, check, currentFrame: () => generation });
+  async function browseImpact(request) {
+    const frame = generation;
+    if (request?.target) return viewImpact.open(request, frame);
+    async function schemaPage(after, excluded = []) {
+      const page = await list({ kind: 'schema', after }, frame);
+      return { ...page, items: page.items.filter(item => isApplicationSchema(item.name) && !excluded.includes(item.name)) };
+    }
+    let target;
+    if (request?.table?.name) {
+      target = { schema: database.catalogSnapshot()?.database, name: request.table.name, kind: request.table.kind };
+    } else {
+      const schema = await choosePage(schemaPage, frame, 'Choose the target schema');
+      if (!schema?.item) return;
+      const choice = await vscode.window.showQuickPick([
+        { label: 'Table', kind: 'table' }, { label: 'View', kind: 'view' }
+      ], { title: 'Choose the target relation kind' });
+      check(frame);
+      if (!choice) return;
+      const relation = await choosePage(after => list({ kind: choice.kind, schema: schema.item.name, after }, frame),
+        frame, 'Choose the target table or view');
+      target = relation?.item;
+    }
+    if (!target) return;
+    const schemas = [target.schema];
+    while (schemas.length < viewImpactLimits.schemas) {
+      const selected = await choosePage(after => schemaPage(after, schemas), frame,
+        'Add a schema to inspect (' + schemas.join(', ') + ')',
+        [{ label: 'Inspect selected schemas', action: 'inspect' }]);
+      if (selected?.action === 'inspect') break;
+      if (!selected?.item) return;
+      schemas.push(selected.item.name);
+    }
+    return viewImpact.open({ target, schemas }, frame);
+  }
+
   function command(id, action) {
     return vscode.commands.registerCommand(id, async argument => {
       try { return await action(argument); }
-      catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain object source: ' + error.message); }
+      catch (error) {
+        if (!disposed && !(error instanceof vscode.CancellationError)) {
+          await vscode.window.showErrorMessage('Rocketbrain object source: ' + error.message);
+        }
+      }
     });
   }
 
@@ -174,8 +216,10 @@ function registerObjectSources(vscode, { database }) {
     database.onDidChangeDatabase(({ epoch, mysql }) => {
       generation++;
       for (const [key, value] of documents) if (!mysql || value.epoch !== epoch) forget(key);
+      viewImpact.invalidate(epoch, mysql);
     }),
     command('rocketbrain.db.openObjectSource', browse),
+    command('rocketbrain.db.inspectViewImpact', browseImpact),
     command('rocketbrain.db.refreshObjectSource', refresh)
   ];
 
@@ -183,6 +227,7 @@ function registerObjectSources(vscode, { database }) {
     listSchemas: options => list({ ...options, kind: 'schema' }),
     listObjects: options => list(options),
     open,
+    viewImpact: { inspect: viewImpact.inspect, open: viewImpact.open },
     definition,
     columnOrigin,
     search(options, assertActive = () => {}) {
@@ -200,6 +245,7 @@ function registerObjectSources(vscode, { database }) {
       if (disposed) return;
       disposed = true;
       documents.clear();
+      viewImpact.dispose();
       for (const subscription of subscriptions) subscription.dispose();
     }
   };
