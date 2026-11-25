@@ -237,6 +237,7 @@
       { "command": "rocketbrain.java.navigateSymbol", "title": "Go to Code Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.findUsages", "title": "Find JVM & Spring Usages", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin || resourceExtname =~ /^\\.(xml|properties|ya?ml)$/i)" },
       { "command": "rocketbrain.java.previewFormatting", "title": "Preview Java Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == java" },
+      { "command": "rocketbrain.kotlinEditor.previewFormatting", "title": "Preview Kotlin Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.java.goToSuperMethod", "title": "Go to Java Super Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.insertLiveTemplate", "title": "Insert Java Live Template", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.generateMembers", "title": "Generate Java Members", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
