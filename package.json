@@ -1009,6 +1009,8 @@
         "title": "Add Java Run Configuration",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.java.workbench.reviewRuntimes", "title": "Review Java Runtime Compatibility", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.workbench.changeRuntime", "title": "Change Saved Java Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
         "command": "rocketbrain.java.workbench.exportSharedRun",
         "title": "Export Shared Java Run",
@@ -1589,6 +1591,8 @@
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
           "group": "launch"
         },
+        { "command": "rocketbrain.java.workbench.reviewRuntimes", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject && isWorkspaceTrusted", "group": "launch" },
+        { "command": "rocketbrain.java.workbench.changeRuntime", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaRunConfiguration && isWorkspaceTrusted", "group": "configuration" },
         {
           "command": "rocketbrain.java.workbench.runTask",
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaBuildTask",
@@ -2278,7 +2282,7 @@
             ],
             "additionalProperties": false
           },
-          "description": "Project execution environments, e.g. name JavaSE-21 with a standalone JDK path."
+          "description": "Project execution environments such as JavaSE-1.8, JavaSE-17 or JavaSE-21 with standalone JDK paths."
         },
         "rocketbrain.spring.enabled": {
           "type": "boolean",
