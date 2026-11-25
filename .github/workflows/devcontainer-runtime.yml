@@ -1,0 +1,46 @@
+name: Dev Container runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/devcontainer-runtime.yml'
+      - 'src/devcontainer/**'
+      - 'test/devcontainer.test.js'
+      - 'test/fixtures/devcontainer/**'
+  pull_request:
+    paths:
+      - '.github/workflows/devcontainer-runtime.yml'
+      - 'src/devcontainer/**'
+      - 'test/devcontainer.test.js'
+      - 'test/fixtures/devcontainer/**'
+
+permissions:
+  contents: read
+
+jobs:
+  docker-lifecycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the locked specification CLI
+        run: npm ci --prefix test/fixtures/devcontainer/tooling --ignore-scripts --no-audit --no-fund
+      - name: Verify the image and Dockerfile project lifecycles with real Docker
+        env:
+          ROCKETBRAIN_DEVCONTAINER_LIVE: 'true'
+          ROCKETBRAIN_DEVCONTAINER_CLI_PATH: ${{ github.workspace }}/test/fixtures/devcontainer/tooling/node_modules/@devcontainers/cli
+          ROCKETBRAIN_DEVCONTAINER_RECEIPT: ${{ runner.temp }}/rocketbrain-devcontainer-receipt.json
+        run: node --test test/devcontainer.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-devcontainer-runtime
+          path: ${{ runner.temp }}/rocketbrain-devcontainer-receipt.json
+          if-no-files-found: error
+          retention-days: 7

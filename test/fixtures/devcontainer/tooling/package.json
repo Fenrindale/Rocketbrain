@@ -1,0 +1,7 @@
+{
+  "name": "rocketbrain-devcontainer-test-tooling",
+  "private": true,
+  "dependencies": {
+    "@devcontainers/cli": "0.91.0"
+  }
+}
