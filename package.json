@@ -2552,7 +2552,12 @@
           "type": "array",
           "default": [],
           "items": { "type": "string" },
-          "description": "Optional local Java source folders inside the workspace for semantic usage searches in recognized native SQL literals. Java matches are read-only."
+          "description": "Optional local Java source folders inside the workspace for semantic usage searches in recognized native SQL literals."
+        },
+        "rocketbrain.sql.project.renameEmbeddedJava": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include proven native SQL query literals in selected Java roots when reviewing source updates for a database rename."
         },
         "rocketbrain.java.mavenHome": {
           "type": "string",

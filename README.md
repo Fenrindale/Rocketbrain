@@ -323,6 +323,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - `DELIMITER`가 있는 SQL 파일에서 **Run Selected SQL or Current Statement**를 실행하면 서버의 SQL 모드로 커서 아래 문장이나 선택한 전체 복합 문장의 범위를 구합니다. 복합 DDL 검토에는 그 문장 하나가 표시됩니다.
 - SQL 편집기는 단일 테이블 INSERT 열 목록, UPDATE의 SET, UPDATE·DELETE의 WHERE에서 관찰한 열 이름과 서버 타입을 제안합니다. 스키마를 명시하면 그 테이블을 확인합니다. 자동 증가·생성 열은 쓰기 제안에서 제외합니다.
 - **Find SQL Catalog References**는 열 목록이 있는 `INSERT … SELECT`의 입력과 대상, 실제 테이블을 조인한 UPDATE의 SET과 읽기 표현식, 여러 별칭을 대상으로 한 DELETE를 구분합니다. 사용처를 찾을 때 원래 쓰기 문장은 실행하지 않습니다.
+- 물리 테이블이나 열의 이름을 바꿀 때 `rocketbrain.sql.project.javaRoots`로 범위를 잡고 `rocketbrain.sql.project.renameEmbeddedJava`를 켜면 검증한 Java의 네이티브 SELECT 참조도 소스 미리보기에 포함됩니다. 문자열 연결 사이에 걸친 식별자와 동적 쿼리는 수동 검토가 필요합니다. DB와 소스의 변경 결과는 각각 확인합니다.
 - **Preview SQL with a Virtual Schema**는 로컬 UTF-8 DDL 파일 또는 관찰한 DB 카탈로그를 바탕으로 현재 SQL 문서의 테이블·뷰와 열 변경을 순서대로 분석합니다. 편집기의 완성·진단에만 반영합니다. 파일을 수정한 뒤에는 다시 선택해 캡처하고, **Exit Virtual SQL Schema Preview**로 종료합니다.
 - **Refresh SQL Collation Checks**를 실행하면 연결된 서버의 콜레이션과 문자 집합을 읽어 SQL 편집기에 표시합니다. 확인된 열, 명시적 문자 집합 리터럴과 문자형 CAST에 적용할 수 없는 콜레이션, 관찰되지 않은 이름, 비교식의 충돌하는 명시적 콜레이션을 해당 위치에 표시합니다. 연결이 바뀌면 다시 새로 고칩니다.
 - **Manage Saved Virtual Schemas**는 선택한 ALTER TABLE … ADD COLUMN과 CREATE VIEW … AS SELECT 정의를 현재 연결과 스키마의 로컬 작업공간에 저장합니다. 다른 SQL 편집기에서 저장한 모델을 적용하면 가상 열과 뷰의 타입을 완성과 진단에서 볼 수 있습니다. 지원하는 생성 열은 부호 있는 정수·고정소수점 열의 산술식이며, 교차 스키마 뷰 입력은 현재 계정으로 확인할 수 있는 이름과 열을 사용합니다. 저장된 모델이나 카탈로그가 바뀌면 다시 적용합니다. 적용한 편집기에서 SQL을 실행하려면 **Exit Virtual SQL Schema Preview**를 선택합니다.

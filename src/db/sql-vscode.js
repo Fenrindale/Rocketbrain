@@ -336,6 +336,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   async function scanProject(target,token,scanOptions={},forRename=false){
     projectTrusted(token);const scope=projectRoots(scanOptions),frame={epoch,projectGeneration,database:metadata.database,dialect:metadata.dialect},observed=structuredClone(metadata),opts=options();
+    const includeEmbeddedJava=scanOptions.includeEmbeddedJava===true;
     const sameDatabase=!target?.database||(opts.tableNameCaseSensitive===false
       ? String(target.database).toLowerCase()===observed.database.toLowerCase() : target.database===observed.database);
     let joinTables=[];
@@ -390,9 +391,9 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
       ...scope,excluded:projectExclude,files:inventory.files.length,analyzedFiles:documents.length,totalBytes,
       limits:{files:200,fileBytes:128*1024,totalBytes:8*1024*1024},unknownFiles,
       java:{enabled:scope.javaRoots.length>0,analyzedFiles:documents.filter(record=>record.language==='java').length,
-        recognizedFragments:recognizedJavaFragments,references:javaReferences},
+        recognizedFragments:recognizedJavaFragments,references:javaReferences,...(includeEmbeddedJava&&{renameEnabled:true})},
       dml:{readReferences:references.filter(ref=>ref.usage==='read').length,writeReferences:references.filter(ref=>ref.usage==='write').length},
-      sourceRenameEligible:unknownFiles.length===0&&javaReferences===0&&!references.some(ref=>ref.command),
+      sourceRenameEligible:unknownFiles.length===0&&(includeEmbeddedJava||javaReferences===0)&&!references.some(ref=>ref.command),
       embeddedSql:'Recognized native Java SQL in selected Java roots. Other embedded languages and runtime strings are outside scope.'};
     return {target,frame,...scope,options:opts,metadata:observed,inventory:inventory.files.map(u=>u.toString()),documents,references,coverage};
   }
@@ -433,11 +434,17 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     const scan=await scanProject(target,token,scanOptions,true);lastProjectReport=publicProjectReport(scan);
     if(!scan.coverage.complete)throw Object.assign(new Error('Unsupported, incomplete or excluded-by-limit SQL prevents a complete source rename plan. Select query-only roots or review a database-only rename explicitly.'),{code:'SQL_PROJECT_INCOMPLETE',coverage:scan.coverage});
     if(!scan.coverage.sourceRenameEligible)throw Object.assign(new Error('The selected database object has embedded Java SQL usages. Review those sources separately before renaming.'),{code:'SQL_PROJECT_EMBEDDED_READ_ONLY',coverage:scan.coverage});
-    const documents=scan.documents.map(record=>({...record,changes:record.language==='java'?[]:projectEngine().planCatalogDocumentRename(record.text,scan.metadata,scan.options,scan.target,newName).edits}));
+    const documents=scan.documents.map(record=>{
+      let changes;
+      if(record.language==='java')changes=scan.coverage.java.renameEnabled
+        ?require('./sql-usage-sources').planJavaCatalogRename(record.text,scan.metadata,scan.options,scan.target,newName).edits:[];
+      else changes=projectEngine().planCatalogDocumentRename(record.text,scan.metadata,scan.options,scan.target,newName).edits;
+      return {...record,changes};
+    });
     const plan={id:crypto.randomUUID(),createdAt:Date.now(),...scan,documents,newName};
     for(const [id,value]of projectPlans)if(Date.now()-value.createdAt>120000)projectPlans.delete(id);while(projectPlans.size>=5)projectPlans.delete(projectPlans.keys().next().value);projectPlans.set(plan.id,plan);
     await validateCatalogRename(plan.id,token);
-    const edit=buildCatalogEdit(plan);return {id:plan.id,target:structuredClone(plan.target),newName,edit,edits:edit,expiresAt:plan.createdAt+120000,documents:structuredClone(documents.map(r=>({uri:r.uri,version:r.version,hash:r.hash,edits:r.changes}))),coverage:structuredClone(plan.coverage),executedSql:false,atomicWithDatabaseDDL:false};
+    const edit=buildCatalogEdit(plan);return {id:plan.id,target:structuredClone(plan.target),newName,edit,edits:edit,expiresAt:plan.createdAt+120000,documents:structuredClone(documents.map(r=>({uri:r.uri,language:r.language,version:r.version,hash:r.hash,edits:r.changes}))),coverage:structuredClone(plan.coverage),executedSql:false,atomicWithDatabaseDDL:false};
   }
   async function validateCatalogRename(id,token,validationOptions={}){
     const plan=projectPlans.get(typeof id==='string'?id:id?.id);if(!plan||Date.now()-plan.createdAt>120000)throw new Error('The SQL source rename plan expired. Review it again.');

@@ -4,13 +4,14 @@ const crypto=require('node:crypto');
 function registerSchemaRename(context,vscode,{database,sqlAnalysis}={}) {
   const plans=new Map(),operations=new Set(),subscriptions=[];let closed=false;
   const trusted=()=>{if(closed)throw new Error('Schema renaming is closed.');if(!vscode.workspace.isTrusted)throw new Error('Trust the workspace before changing a database schema.');};
-  async function preview(request,{scope,cancellation}={}){
+  async function preview(request,{scope,cancellation,includeEmbeddedJava}={}){
     trusted();const ddl=await database.previewSchemaRename(request);trusted();
     const target={kind:ddl.kind,database:ddl.schema,table:ddl.table,...(ddl.kind==='column'?{column:ddl.column}:{})};
+    const sourceOptions={scope,includeEmbeddedJava:includeEmbeddedJava??vscode.workspace.getConfiguration?.('rocketbrain.sql.project')?.get('renameEmbeddedJava',false)};
     let references,sourcePlan,sourceError;
     try{
-      references=await sqlAnalysis.findCatalogReferences(target,cancellation,{scope});
-      if(references.coverage?.complete)sourcePlan=await sqlAnalysis.planCatalogRename(target,ddl.newName,cancellation,{scope});
+      references=await sqlAnalysis.findCatalogReferences(target,cancellation,sourceOptions);
+      if(references.coverage?.complete)sourcePlan=await sqlAnalysis.planCatalogRename(target,ddl.newName,cancellation,sourceOptions);
     }catch(error){sourceError=error.message;}
     trusted();if(cancellation?.isCancellationRequested)throw new Error('Schema rename preview was cancelled.');
     for(const [id,p]of plans)if(p.expiresAt<Date.now())plans.delete(id);
@@ -19,7 +20,7 @@ function registerSchemaRename(context,vscode,{database,sqlAnalysis}={}) {
     for(const file of sourcePlan?.documents||[]){
       const document=await vscode.workspace.openTextDocument(vscode.Uri.parse(file.uri)),before=document.getText();let after=before;
       for(const edit of [...(file.edits||[])].sort((a,b)=>b.start-a.start))after=after.slice(0,edit.start)+edit.newText+after.slice(edit.end);
-      if(before!==after)sourcePreviews.push({uri:file.uri,before,after});
+      if(before!==after)sourcePreviews.push({uri:file.uri,before,after,language:file.language??'sql'});
     }
     if(sourcePlan)await sqlAnalysis.validateCatalogRename(sourcePlan.id,cancellation);
     trusted();
@@ -58,7 +59,9 @@ function registerSchemaRename(context,vscode,{database,sqlAnalysis}={}) {
       '-- It uses a separate connection; existing console work is never committed automatically.',
       '-- SQL source files and the database cannot be changed atomically.',
       '-- SQL references cover SELECT/WITH statements in the selected local query folders.',
-      '-- Java annotations, embedded or dynamic SQL and external application references are outside this source update.',
+      ...(coverage?.java?.renameEnabled?['-- Selected native Java SQL literals are included when their exact identifier ranges can be verified.']:
+        ['-- To include native Java queries, configure Java roots and enable embedded Java rename.']),
+      '-- Dynamic queries and external application references require separate review.',
       '-- Source scan complete in its declared scope: '+Boolean(coverage?.complete),
       '-- SQL files inspected: '+files.length,...plan.sourceDocuments.map(file=>'-- '+file.uri+' · '+(file.edits?.length||0)+' reference change(s)'),
       ...((coverage?.unknownFiles||[]).map(file=>'-- Unresolved SQL file: '+(file.uri||file.file||file.reason||String(file)))),
@@ -66,7 +69,7 @@ function registerSchemaRename(context,vscode,{database,sqlAnalysis}={}) {
       ...(ddl.warnings||[]).map(warning=>'-- '+(typeof warning==='string'?warning:warning.message||JSON.stringify(warning))),
       '',ddl.sql+';','', '-- Reverse DDL is a separate future change requiring a new review.',ddl.reverseSql?'-- '+ddl.reverseSql+';':''].join('\n');
   }
-  subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-schema-review',{provideTextDocumentContent(uri){const parts=uri.path.split('/').filter(Boolean),plan=plans.get(parts[0]);if(!plan)return '-- This schema rename review expired.';if(parts.length===3){const file=plan.sourcePreviews[Number(parts[1])];return file?(parts[2]==='before.sql'?file.before:file.after):'-- Source preview unavailable.';}return reviewText(plan);}}));
+  subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-schema-review',{provideTextDocumentContent(uri){const parts=uri.path.split('/').filter(Boolean),plan=plans.get(parts[0]);if(!plan)return '-- This schema rename review expired.';if(parts.length===3){const file=plan.sourcePreviews[Number(parts[1])];return file?(/^before\.(?:sql|java)$/.test(parts[2])?file.before:file.after):'-- Source preview unavailable.';}return reviewText(plan);}}));
   async function command(kind,item){
     try{
       trusted();const catalog=database.catalogSnapshot();if(!catalog)throw new Error('Connect to MySQL or MariaDB first.');
@@ -77,11 +80,16 @@ function registerSchemaRename(context,vscode,{database,sqlAnalysis}={}) {
       const newName=await vscode.window.showInputBox({title:kind==='table'?'New table name':'New column name',value:column||selected.name,ignoreFocusOut:true});if(!newName||newName===(column||selected.name))return;
       const plan=await api.preview({kind,table:selected.name,column,newName});
       const document=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-review:/'+plan.id+'/rename.sql'));await vscode.window.showTextDocument(document,{preview:false});
-      const suffix=plan.ddl.requiresUnverifiedDependencyApproval?' (Unverified Dependencies)':'',databaseOnly='Rename Database Object'+suffix,withSources='Rename and Update SQL Files'+suffix,choices=plan.sourcePlanId?[withSources,databaseOnly]:[databaseOnly];
+      const java=plan.sourcePreviews.some(file=>file.language==='java');
+      const suffix=plan.ddl.requiresUnverifiedDependencyApproval?' (Unverified Dependencies)':'',databaseOnly='Rename Database Object'+suffix,
+        withSources='Rename and Update '+(java?'Source Files':'SQL Files')+suffix,choices=plan.sourcePlanId?[withSources,databaseOnly]:[databaseOnly];
       let choice;
       do{
         choice=await vscode.window.showWarningMessage('Apply the reviewed '+kind+' rename? This commits the schema change on the database server. SQL files are a separate update.',{modal:true},...(plan.sourcePreviews.length?['Review SQL Changes']:[]),...choices);
-        if(choice==='Review SQL Changes')for(let index=0;index<plan.sourcePreviews.length;index++)await vscode.commands.executeCommand('vscode.diff',vscode.Uri.parse('rocketbrain-schema-review:/'+plan.id+'/'+index+'/before.sql'),vscode.Uri.parse('rocketbrain-schema-review:/'+plan.id+'/'+index+'/after.sql'),'SQL reference rename · '+plan.sourcePreviews[index].uri);
+        if(choice==='Review SQL Changes')for(let index=0;index<plan.sourcePreviews.length;index++){
+          const file=plan.sourcePreviews[index],base='rocketbrain-schema-review:/'+plan.id+'/'+index+'/';
+          await vscode.commands.executeCommand('vscode.diff',vscode.Uri.parse(base+'before.'+file.language),vscode.Uri.parse(base+'after.'+file.language),'SQL reference rename · '+file.uri);
+        }
       }while(choice==='Review SQL Changes');
       if(!choice)return;
       const result=await api.apply(plan.id,{updateSql:choice===withSources,allowUnverifiedDependencies:plan.ddl.requiresUnverifiedDependencyApproval===true});
