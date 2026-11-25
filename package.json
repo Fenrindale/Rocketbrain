@@ -1132,6 +1132,12 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.connections.reviewTlsTrust",
+        "title": "Review Database TLS Trust and Reconnect",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.connections.test",
         "title": "Test Database Connection",
         "category": "Rocketbrain"
@@ -1647,6 +1653,11 @@
           "command": "rocketbrain.connections.closeSession",
           "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionSession && isWorkspaceTrusted",
           "group": "connection@3"
+        },
+        {
+          "command": "rocketbrain.connections.reviewTlsTrust",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile && isWorkspaceTrusted",
+          "group": "navigation@6"
         },
         {
           "command": "rocketbrain.connections.test",

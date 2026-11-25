@@ -28,6 +28,7 @@ const {randomUUID}=require('node:crypto');
 const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTimeout } = require('./rds-iam');
 const { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope,verifyCallableScope } = require('./write-protection');
 const { sessionLifecycle, initializationStatements } = require('./session-lifecycle');
+const { observeServerTls, reviewedTls, guardBeforeAuthentication, changedPeer } = require('./server-tls-trust');
 const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 const METADATA_ID = '__rocketbrain_metadata__';
 const MAX_PROTECTED_DEPENDENCIES = 128;
@@ -142,6 +143,7 @@ class MysqlService {
       }
       this._rdsIam = () => createRdsIamHandshake({ host, user, port, auth }, mintIamToken);
     }
+    this._expectedTls = reviewedTls(config);
     this._defaultReadOnly = this._writeProtection?.connectionReadOnly || config.readOnly !== false;
     this._createConnection = createConnection || (options => require('mysql2').createConnection(options));
     this._reportActivity = reportActivity;
@@ -277,14 +279,17 @@ class MysqlService {
     requireConnectionMode(this._writeProtection, session.readOnly);
     if (session.connection && session.connected) return;
     if (session.needsReconnect) throw fail('ROCKETBRAIN_RECONNECT_REQUIRED', 'Reconnect this console explicitly before running SQL.');
-    let connection;
+    let connection, tlsGate;
     const iam = this._rdsIam?.();
-    const connectionError = error => iam?.error() ?? safeError(error);
-    // mysql2 caches TLS sessions by SSL options identity. IAM needs the peer certificate on every physical connection.
-    const options = iam ? { ...this._options, ...iam.options, ssl: { ...this._options.ssl } } : { ...this._options };
-    try { connection = this._createConnection(options); }
-    catch (error) { this._lose(session, safeError(error)); throw safeError(error); }
-    session.connection = connection;
+    const connectionError = error => tlsGate?.error ?? iam?.error() ?? safeError(error);
+    // An exact TLS review and IAM both need current peer evidence on each physical connection.
+    const options = iam || this._expectedTls
+      ? { ...this._options, ...iam?.options, ssl: { ...this._options.ssl } } : { ...this._options };
+    try {
+      connection = this._createConnection(options);
+      session.connection = connection;
+      if (this._expectedTls) tlsGate = guardBeforeAuthentication(connection,this._options,this._expectedTls);
+    } catch (error) { this._lose(session, safeError(error)); throw safeError(error); }
     connection.on('error', error => {
       if (session.connection !== connection) return;
       this._lose(session, connectionError(error), Boolean(session.active?.mayWrite));
@@ -314,6 +319,9 @@ class MysqlService {
       } catch (error) { this._lose(session, connectionError(error)); }
     });
     try {
+      session.tlsEvidence=tlsGate ? tlsGate.evidence : this._options.ssl&&session.id===METADATA_ID
+        ? observeServerTls(connection.stream,this._options) : null;
+      if (tlsGate&&!session.tlsEvidence) throw changedPeer();
       if (this._passwordFreeUser) {
         const [row] = await this._control(session, 'SELECT CURRENT_USER()');
         const account = row?.[0];
@@ -1182,6 +1190,9 @@ class MysqlService {
     this._editor.invalidate(id);
     for(const [reviewId,review]of this._scriptReviews)if(review.sessionId===id)this._scriptReviews.delete(reviewId);
     this._sessions.delete(id);
+  }
+  serverTlsEvidence() {
+    return this._metadataSession.connected ? this._metadataSession.tlsEvidence || null : null;
   }
   async _metadataQuery(sql, values = []) {
     const session = this._metadataSession;
