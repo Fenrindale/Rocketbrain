@@ -3,6 +3,25 @@
 const path = require('node:path');
 const { analyzeJPA, completionsAt, definitionsAt, compareCatalog } = require('./model');
 
+function derivedQueryHover(query) {
+  const {predicateGroups,order,parameters} = query.derivedAnalysis || {};
+  const lines = ['Spring Data source analysis · '+query.status, query.reason];
+  if (predicateGroups?.length) {
+    const predicate = predicateGroups.map(group => group.map(part =>
+      part.path+' '+part.operator.toLowerCase().replaceAll('_',' ')+(part.ignoreCase === 'ALWAYS' ? ' (ignore case)' : '')
+    ).join(' AND '));
+    const grouped = predicate.length > 1 ? predicate.map(group => '('+group+')').join(' OR ') : predicate[0];
+    lines.push('Predicate '+grouped);
+    if (predicateGroups.flat().some(part => part.ignoreCase === 'WHEN_POSSIBLE')) lines.push('Ignore case on supported properties.');
+  }
+  if (order?.length) lines.push('Static order '+order.map(item => item.path+' '+item.direction).join(', '));
+  if (parameters) {
+    lines.push('Bindable arguments '+parameters.bindable.length+' declared, '+parameters.expected+' expected.');
+    if (parameters.special.length) lines.push('Special parameters '+parameters.special.map(item => item.name+' ('+item.kind+')').join(', '));
+  }
+  return lines.join('\n');
+}
+
 function registerJPAFeatures(context, vscode, { catalog, output } = {}) {
   const channel = output || vscode.window.createOutputChannel('Rocketbrain JPA');
   const diagnostics = vscode.languages.createDiagnosticCollection('rocketbrain-jpa');
@@ -138,6 +157,11 @@ function registerJPAFeatures(context, vscode, { catalog, output } = {}) {
       const current=await snapshot();if(token?.isCancellationRequested)return;
       const offset=document.offsetAt(position),uri=document.uri.toString();
       const query=current.queries.find(q=>q.uri===uri&&q.range&&offset>=document.offsetAt(new vscode.Position(q.range.start.line,q.range.start.character))&&offset<=document.offsetAt(new vscode.Position(q.range.end.line,q.range.end.character)));
+      if (query?.source === 'spring-data-derived') {
+        const markdown = new vscode.MarkdownString();
+        markdown.appendText(derivedQueryHover(query));
+        return new vscode.Hover(markdown);
+      }
       if(!query?.typeAnalysis)return;
       const types=query.typeAnalysis,lines=['JPQL source types: '+types.state];
       if(query.dynamicResolution?.state==='finite')lines.push('Possible query branches: '+query.dynamicResolution.alternatives+'; no runtime branch was selected.');

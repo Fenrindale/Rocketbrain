@@ -7,9 +7,7 @@ const { resolveSpel } = require('./spel');
 const { analyzeQueryTypes, environmentFor } = require('./types');
 const { callContext, methodContext, enclosingMethod, matching } = require('./type-context');
 const provider = require('./provider');
-
-const managed = model => [...model.entities, ...(model.embeddables || []), ...(model.mappedSuperclasses || [])];
-function uniqueType(model, fqn) { const matches = managed(model).filter(type => type.fqn === fqn); return matches.length === 1 ? matches[0] : null; }
+const { analyzeDerivedMethods } = require('./derived-query');
 function offsetAt(text, position) { if (typeof position === 'number') return position; const lines = text.split('\n'); let offset = 0; for (let i = 0; i < position.line && i < lines.length - 1; i++) offset += lines[i].length + 1; return Math.min(text.length, offset + position.character); }
 function contains(range, position) { return (position.line > range.start.line || position.line === range.start.line && position.character >= range.start.character) && (position.line < range.end.line || position.line === range.end.line && position.character <= range.end.character); }
 
@@ -36,6 +34,12 @@ function analyzeQueries(model, parsedFiles, helpers) {
   model.queries ||= []; model.diagnostics ||= []; model.references ||= []; model.issues ||= [];
   const environment = environmentFor(model), sourceFiles = new Map(model.files.map(value => [value.uri, value.text]));
   const providerProfile = provider.normalizeProviderProfile(model.options?.providerProfile), providerDeclarations = provider.contributorDeclarations(parsedFiles);
+  const sourceTypes = new Map(parsedFiles.flatMap(file => file.types?.map(type => [type.fqn,type]) || []));
+  const managed = new Map();
+  for (const type of [...model.entities,...(model.embeddables || []),...(model.mappedSuperclasses || [])]) {
+    if (!managed.has(type.fqn)) managed.set(type.fqn,[]);
+    managed.get(type.fqn).push({...type,sourceType:sourceTypes.get(type.fqn)});
+  }
   function inspect(file, query, context = {}) {
     Object.defineProperty(query, '_sourceFiles', { value: sourceFiles, enumerable: false });
     Object.defineProperty(query, '_providerProfile', { value: providerProfile, enumerable: false });
@@ -84,7 +88,7 @@ function analyzeQueries(model, parsedFiles, helpers) {
         const native = literal(annotation, 'nativeQuery', false), context = methodContext(file, method, environment);
         add(annotation.attributes.value, native === false ? 'spring-data-query' : 'native-sql', native === false ? undefined : 'Native/unknown query mode is not validated as JPQL.', { method, entityName:templateEntityName,typeContext:context });
       }
-      derivedMethods(model, file, type, helpers);
+      analyzeDerivedMethods(model,file,type,helpers,sourceTypes,managed);
     }
     const receiverTypes = new Map();
     function receiver(name, type) { if (!receiverTypes.has(name)) receiverTypes.set(name, new Set()); receiverTypes.get(name).add(type); }
@@ -104,33 +108,6 @@ function analyzeQueries(model, parsedFiles, helpers) {
     const query = { ...value, _sourceUris:value._map?.map(()=>file.uri)||[], _literalStart:value._map?.[0]??0,_literalEnd:value._ends?.at(-1)??0 }; model.queries.push(query);
     if (value.forcedReason || value.source==='native-sql'||value.source==='xml-native-query'||value.text.length>16384||!value._map?.length) { query._unsupported=true;query.status='unknown';query.reason=value.forcedReason||'Native, unmapped or oversized XML query remains unknown.'; }
     inspect(file,query);
-  }
-}
-
-function derivedMethods(model, file, type, helpers) {
-  if (type.kind !== 'interface') return;
-  const tokens = file.tokens || lexJava(file.text).tokens, index = tokens.findIndex(token => token.start === type.start);
-  const open = tokens.findIndex((token, position) => position > index && token.text === '{');
-  const header = tokens.slice(index + 1, open), extendsAt = header.findIndex(token => token.text === 'extends');
-  if (extendsAt < 0) return;
-  const repository = header[extendsAt + 1];
-  const resolved = helpers.resolveType(repository?.text, file);
-  if (!['org.springframework.data.jpa.repository.JpaRepository', 'org.springframework.data.repository.CrudRepository', 'org.springframework.data.repository.Repository', 'org.springframework.data.repository.ListCrudRepository', 'org.springframework.data.repository.PagingAndSortingRepository'].includes(resolved) || header[extendsAt + 2]?.text !== '<') return;
-  const domainToken = header[extendsAt + 3], domainFqn = helpers.resolveType(domainToken?.text, file), domain = uniqueType(model, domainFqn);
-  for (const method of type.methods) {
-    if (method.annotations.some(item => item.shortName === 'Query' && helpers.accepted(item, file, 'org.springframework.data.jpa.repository'))) continue;
-    const match = /^(?:find|read|get|query|search|stream|count|exists|delete|remove)(?:All|First\d*|Top\d*)?By(.+)$/.exec(method.name); if (!match) continue;
-    const query = { uri: file.uri, text: method.name, range: rangeAt(file.text, method.start, method.end), source: 'spring-data-derived', status: 'unknown', reason: 'Only direct attributes and explicit underscore traversal are modeled.' };
-    model.queries.push(query); if (!domain) continue;
-    const expression = match[1], start = method.start + method.name.length - expression.length, parts = expression.split('_'); let current = domain, offset = start, valid = true;
-    const references = [];
-    for (const part of parts) {
-      const name = part[0]?.toLowerCase() + part.slice(1), attribute = current?.attributes.find(item => item.name === name);
-      if (!attribute) { valid = false; break; }
-      references.push({ uri: file.uri, range: rangeAt(file.text, offset, offset + part.length), targets: [{ uri: attribute.uri, range: attribute.range }], kind: 'jpa-derived-query' });
-      offset += part.length + 1; current = uniqueType(model, attribute.targetFqn);
-    }
-    if (valid) { model.references.push(...references); query.status = 'known'; query.reason = 'Direct/underscore property path resolved; full Spring Data method parsing is not asserted.'; }
   }
 }
 
@@ -167,7 +144,9 @@ function completionsAt(model, uri, position) {
 function definitionsAt(model, uri, position) {
   const file = model.files.find(item => item.uri === uri); if (!file) return [];
   const pos = typeof position === 'number' ? rangeAt(file.text, position, position).start : position;
-  const targets = model.references.filter(reference => reference.uri === uri && contains(reference.range, pos)).flatMap(reference => reference.targets || []);
+  const targets = model.references.filter(reference => reference.uri === uri && contains(reference.range,pos) &&
+    (reference.kind !== 'jpa-derived-query' || reference.range.end.line !== pos.line || reference.range.end.character !== pos.character))
+    .flatMap(reference => reference.targets || []);
   return [...new Map(targets.filter(target => target?.uri && target.range).map(target => [JSON.stringify(target), target])).values()];
 }
 
