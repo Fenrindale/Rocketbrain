@@ -13,8 +13,11 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis}) {
     open(document);
     const catalog=database.catalogSnapshot();
     const indent=options.insertSpaces===false?'\t':' '.repeat(Math.min(8,Math.max(1,Number(options.tabSize)||2)));
+    const settings=vscode.workspace.getConfiguration('rocketbrain.sql',document.uri);
+    const style=settings.get('formatting.style','expanded');
+    const keywordCase=settings.get('formatting.keywordCase','preserve');
     const text=range?document.getText(range):document.getText();
-    return formatSql(text,{dialect:catalog?.dialect||'mysql',sqlMode:catalog?.sqlMode,indent});
+    return formatSql(text,{dialect:catalog?.dialect||'mysql',sqlMode:catalog?.sqlMode,indent,style,keywordCase});
   }
   const whole=document=>new vscode.Range(document.positionAt(0),document.positionAt(document.getText().length));
   function values(document) {

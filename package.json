@@ -1371,6 +1371,18 @@
             }
           }
         },
+        "rocketbrain.sql.formatting.style": {
+          "type": "string",
+          "enum": ["expanded", "compact"],
+          "default": "expanded",
+          "description": "Choose whether ordinary SQL clauses wrap onto new lines or use compact spacing. Stored-program block indentation follows the SQL editor settings."
+        },
+        "rocketbrain.sql.formatting.keywordCase": {
+          "type": "string",
+          "enum": ["preserve", "upper", "lower"],
+          "default": "preserve",
+          "description": "Change the case of recognized statement, clause and stored-program block keywords. Identifier and literal spelling stays exact."
+        },
         "rocketbrain.sql.templates": {
           "type": "array",
           "default": [],
