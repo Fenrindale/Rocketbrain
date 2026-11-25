@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto=require('node:crypto');
-const {validateQuery}=require('./sql-policy');
+const {validateQuery,tokenize}=require('./sql-policy');
 const {delimiterDirective,compoundCreation}=require('./sql-format-script');
 const LIMITS={sqlBytes:128*1024,statements:100,parameters:2000,parameterNames:1000,parameterBytes:1024*1024,parameterValueBytes:128*1024,reviewLifetimeMs:120000,reviews:16,resultBytes:4*1024*1024,totalTimeoutMs:120000};
 const fail=(code,message,extra={})=>Object.assign(new Error(message),{code,...extra});
@@ -41,8 +41,36 @@ function programPolicy(sql, sqlMode, readOnly) {
   return { sql, first: 'CREATE', mayWrite: true, ddl: true, program: program.type };
 }
 
+function scriptCall(sql, sqlMode) {
+  const tokens=tokenize(sql,false,{sqlMode});
+  if(tokens[0]?.kind!=='word'||tokens[0].upper!=='CALL')return null;
+  const invalid=()=>fail('ROCKETBRAIN_SCRIPT_CALL','Use CALL procedure(?, ...) with typed input bindings in the current schema.');
+  const name=token=>['word','identifier'].includes(token?.kind)&&/^[A-Za-z_][A-Za-z0-9_$]{0,63}$/.test(token.value);
+  const symbol=(token,value)=>token?.kind==='symbol'&&token.value===value;
+  let index=1,schema;
+  if(!name(tokens[index]))throw invalid();
+  let procedure=tokens[index++].value;
+  if(symbol(tokens[index],'.')){
+    schema=procedure;
+    index++;
+    if(!name(tokens[index]))throw invalid();
+    procedure=tokens[index++].value;
+  }
+  if(!symbol(tokens[index++],'('))throw invalid();
+  let inputs=0;
+  if(!symbol(tokens[index],')')){
+    while(true){
+      if(!symbol(tokens[index++],'?')||++inputs>32)throw invalid();
+      if(!symbol(tokens[index],','))break;
+      index++;
+    }
+  }
+  if(!symbol(tokens[index++],')')||index!==tokens.length)throw invalid();
+  return {first:'CALL',mayWrite:false,ddl:false,call:{...(schema&&{schema}),procedure,inputs}};
+}
+
 /** A client script splitter, not a complete SQL parser. Every part is also policy checked. */
-function analyzeScript(sql,{sqlMode,readOnly=true}={}){
+function analyzeScript(sql,{sqlMode,readOnly=true,allowCalls=false}={}){
   const modes=normalizeMode(sqlMode),backslash=!modes.includes('NO_BACKSLASH_ESCAPES'),ansi=modes.includes('ANSI_QUOTES');
   if(typeof sql!=='string'||!sql.trim()||sql.includes('\0')||Buffer.byteLength(sql)>LIMITS.sqlBytes)throw fail('ROCKETBRAIN_SCRIPT_INPUT','Enter a script of at most128KiB without NUL.');
   const statements=[],parameters=[];let start=0,hasCode=false,quote='',quoteStart=0,lineComment=false,blockComment=false,blockStart=0;
@@ -53,7 +81,7 @@ function analyzeScript(sql,{sqlMode,readOnly=true}={}){
       const source=sql.slice(start,end);let policySql=source;
       for(const parameter of parameters.filter(p=>p.start>=start&&p.end<=end).reverse())policySql=policySql.slice(0,parameter.start-start)+'?'+policySql.slice(parameter.end-start);
       const policy=delimiter === ';'
-        ? validateQuery(policySql,{readOnly,sqlMode:modes})
+        ? (allowCalls && scriptCall(policySql,modes)) || validateQuery(policySql,{readOnly,sqlMode:modes})
         : programPolicy(policySql,modes,readOnly);
       statements.push({...policy,index:statements.length,start,end,sql:source});
     }
@@ -161,7 +189,8 @@ function bindScript(script,input){
   const statements=script.statements.map(statement=>{
     const placeholders=script.parameters.filter(p=>p.start>=statement.start&&p.end<=statement.end);let sql=statement.sql;
     for(const parameter of [...placeholders].reverse())sql=sql.slice(0,parameter.start-statement.start)+'?'+sql.slice(parameter.end-statement.start);
-    return {...statement,preparedSql:sql,values:placeholders.map(parameter=>{const value=bound.get(parameter.key).bound;return Buffer.isBuffer(value)?Buffer.from(value):value;})};
+    return {...statement,preparedSql:sql,values:placeholders.map(parameter=>{const value=bound.get(parameter.key).bound;return Buffer.isBuffer(value)?Buffer.from(value):value;}),
+      ...(statement.call && {valueKinds:placeholders.map(parameter=>bound.get(parameter.key).kind)})};
   });
   return {...script,statements,parameterDefinitions:script.parameterDefinitions.map(definition=>({...definition,valueKind:bound.get(definition.key)?.kind}))};
 }
@@ -170,8 +199,8 @@ function publicScript(script){
   const unboundedDml = script.statements.flatMap(statement => statement.unboundedDml
     ? [{ index:statement.index, command:statement.unboundedDml.command, hasLimit:statement.unboundedDml.hasLimit }] : []);
   return {parameterStyle:script.parameterStyle,parameterDefinitions:structuredClone(script.parameterDefinitions),
-    statements:script.statements.map(({index,start,end,sql,first,mayWrite,ddl,program})=>({index,start,end,sql,first,mayWrite,ddl,
-      ...(program && {program})})),
+    statements:script.statements.map(({index,start,end,sql,first,mayWrite,ddl,program,call})=>({index,start,end,sql,first,mayWrite,ddl,
+      ...(program && {program}),...(call && {call})})),
     statementCount:script.statements.length,hasWrites:script.hasWrites,requiresImplicitCommitApproval:script.requiresImplicitCommitApproval,
     unboundedDml,sqlMode:[...script.sqlMode],atomic:false,executedSql:false};
 }

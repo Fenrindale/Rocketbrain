@@ -1233,7 +1233,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     scriptResultBegin(sql,source,options){return results.begin(sql,source,options);},
     scriptResultFinish(id,result,error,sessionState){results.finish(id,result,error,sessionState);},
     scriptResultRetained: id => results.hasResult(id),
-    scriptStatementResult: (id, index) => results.findStatement(id, index),
+    scriptStatementResult: (id,index,resultSet) => results.findStatement(id,index,resultSet),
     activateResult: id => results.activateResult(id),
     setResultTab: (id, settings) => results.setResultTab(id, settings),
     savedResultFilters: id => results.savedFilters(id),
