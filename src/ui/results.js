@@ -570,7 +570,7 @@
   function resultRows(record) {
     const model = record.result.edit, draftItem = draft(record);
     const rows = record.result.rows.map((values, index) => {
-      const id = model?.rowIds[index];
+      const id = (model || record.result.relatedRows)?.rowIds[index];
       return { id, values, number: rowNumber(record.result, index), deleted: draftItem.deletes.has(id),
         pending: draftItem.updates.get(id), inserted: false };
     });
@@ -615,7 +615,7 @@
   }
 
   function addRelatedRowAction(target, record, row, compact = false) {
-    const model = record.result.edit;
+    const model = record.result.edit || record.result.relatedRows;
     const session = record.sessionState;
     if (!model || !row.id || row.inserted || !record.readOnly || session?.inTransaction || session?.needsReconnect ||
         session?.outcomeUnknown || record.closing || record.editBusy || record.hasDraft || record.review ||
@@ -1341,7 +1341,7 @@
     corner.className = 'row-number';
     head.append(corner);
     const pins = new Map();
-    const numberWidth = enabled ? 104 : active.readOnly && result.edit ? 80 : 56;
+    const numberWidth = enabled ? 104 : active.readOnly && (result.edit || result.relatedRows) ? 80 : 56;
     if (columns.some(index => layout.pinned.has(index) || layout.widths[index])) {
       let width = numberWidth;
       corner.style.width = numberWidth + 'px';
@@ -1404,8 +1404,10 @@
     const active = current();
     if (active) currentId = active.id;
     const origin = active?.relatedOrigin;
-    const source = origin && history.find(record => record.id === origin.id && record.result?.edit?.modelId === origin.modelId &&
-      record.result.edit.rowIds.includes(origin.rowId));
+    const source = origin && history.find(record => {
+      const model = record.result?.edit || record.result?.relatedRows;
+      return record.id === origin.id && model?.modelId === origin.modelId && model.rowIds.includes(origin.rowId);
+    });
     $('return-source-row').hidden = !source;
     $('return-source-row').disabled = Boolean(editingCell || active?.editBusy || source?.editBusy);
     $('tabs').replaceChildren(...history.map(record => {
@@ -1488,8 +1490,9 @@
       const record = history.find(item => item.id === id);
       if ((!editingCell || editingCell.id === id) && record) {
         let row;
-        if (rowId && record.result?.edit?.modelId === modelId) {
-          row = record.result.edit.rowIds.indexOf(rowId);
+        const model = record.result?.edit || record.result?.relatedRows;
+        if (rowId && model?.modelId === modelId) {
+          row = model.rowIds.indexOf(rowId);
           if (row >= 0) resultLayout(record).row = row;
         }
         currentId = id;

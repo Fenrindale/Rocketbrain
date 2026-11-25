@@ -420,6 +420,9 @@ class TableEditor {
   }
   async _preview(session, name, options, definition, related) {
     await this.db._ensureConnection(session);
+    if (related?.sourceServer && await this.db._sqlRelatedServer(session) !== related.sourceServer) {
+      throw fail('ROCKETBRAIN_GRID_STALE', 'The related preview is connected to a different server or account. Run the source query again.');
+    }
     const schema = related?.schema ?? this.db._options.database;
     definition ||= await this.definition(name, schema);
     if (related && (!session.readOnly || !session.autocommit || session.inTransaction || definition.kind !== 'BASE TABLE' ||
@@ -578,4 +581,4 @@ class TableEditor {
     });
   }
 }
-module.exports = { TableEditor, typedCell, columnKind, columnDefinition, equalRows, normalizedCreate, browseQuery };
+module.exports = { TableEditor, typedCell, columnKind, columnDefinition, equalRows, normalizedCreate, browseQuery, keysetValue };

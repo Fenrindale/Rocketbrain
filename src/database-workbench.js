@@ -8,6 +8,8 @@ const { inspectDmlScope } = require('./db/sql-dml-scope');
 const { completeSql } = require('./db/completion');
 const { TableEditor } = require('./table-editor');
 const { relatedRowsFromObservation } = require('./db/related-rows');
+const { keyParameters } = require('./db/sql-related-source');
+const { randomUUID } = require('node:crypto');
 const { logicalKey, scopeKey, logicalEdges } = require('./db/schema-erd');
 const { tableLayoutConnectionKey } = require('./db/result-layouts');
 const { createMetadataCache, observeCatalogIdentity } = require('./db/metadata-cache');
@@ -42,12 +44,13 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   context.subscriptions.push(completedUserSql);
   let sequence = 0;
   let tableEditor, transferLease;
+  const relatedSources = new Map();
   const project = new ProjectTree(), schemaTree = new SchemaTree(state), results = new ResultsView(vscode, context, {
     editAction: (id, message) => tableEditor.handle(id, message),
     relatedAction: chooseRelatedRows,
     relatedReturn: returnToRelatedSource,
     datasetAction: (id, input) => tableEditor.stageDatasetChanges(id, input),
-    resultClosed: id => tableEditor.forget(id)
+    resultClosed: id => { relatedSources.delete(id); tableEditor.forget(id); }
   });
   tableEditor = new TableEditor({ results, connection: () => state, withSession, trusted: () => vscode.workspace.isTrusted, onStatus: () => updateStatus() });
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 30);
@@ -469,21 +472,52 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     return Array.isArray(saved) && saved.length <= 24 ? saved.find(record => record?.identity === scope)?.value : undefined;
   }
   async function relatedChoices(snapshot) {
+    await snapshot.recheck?.();
     const records = savedLogicalRelationships(snapshot.schema);
     const logical = records?.length ? logicalEdges(await snapshot.db.metadata(), records) : [];
     const catalog = await snapshot.db.relatedRowsCatalog({ schema: snapshot.schema, table: snapshot.table, logical });
     snapshot.validate();
     return relatedRowsFromObservation(catalog, snapshot.columns, snapshot.values, snapshot.definitions);
   }
+  function relateSqlResult(id, sqlSource, result, db, binding, document, version) {
+    const rowIds = result.rows.map((row, index) => {
+      try { keyParameters(sqlSource, row); return String(index); }
+      catch { return null; }
+    });
+    if (!rowIds.some(rowId => rowId !== null)) return;
+    const modelId = randomUUID();
+    relatedSources.set(id, { sqlSource, result, db, binding, document, version, modelId, rowIds });
+    return { modelId, rowIds };
+  }
+  function relatedSnapshot(id, selection) {
+    const retained = relatedSources.get(id);
+    if (!retained) return tableEditor.relatedSnapshot(id, selection);
+    const { sqlSource, result, db, binding, document, version, modelId, rowIds } = retained;
+    const record = results.history.find(item => item.id === id), index = rowIds.indexOf(selection?.rowId);
+    const validate = () => {
+      if (!record || !results.history.includes(record) || record.result !== result || record.closing || record.state !== 'done' ||
+          relatedSources.get(id) !== retained || index < 0 || typeof selection?.rowId !== 'string' || selection.modelId !== modelId ||
+          !databaseGuard(db, binding.epoch)() || document.isClosed || document.version !== version ||
+          !db.canFollowSqlResult(binding.id, result.state.connectionId)) {
+        throw Error('The captured SQL row, editor or connection changed. Run the query again.');
+      }
+      assertBinding(document, binding);
+    };
+    validate();
+    const row = result.rows[index];
+    return { db, sessionId: binding.id, schema: sqlSource.schema, table: sqlSource.table,
+      columns: sqlSource.columns, values: row, definitions: sqlSource.definitions, validate,
+      server: sqlSource.server, recheck: () => db.recheckSqlRowSource({ source: sqlSource, row }) };
+  }
   async function inspectRelatedRows(id, selection) {
-    const snapshot = tableEditor.relatedSnapshot(id, selection);
+    const snapshot = relatedSnapshot(id, selection);
     return withSession(snapshot.sessionId, async () => {
       return (await relatedChoices(snapshot)).map(({ filters, keys, ...match }) => match);
     });
   }
   async function openRelatedRows(id, selection, key) {
     if (typeof key !== 'string' || key.length > 16384) throw Error('Choose a visible foreign key relation.');
-    const snapshot = tableEditor.relatedSnapshot(id, selection);
+    const snapshot = relatedSnapshot(id, selection);
     return withSession(snapshot.sessionId, async () => {
       const match = (await relatedChoices(snapshot)).find(item => item.key === key);
       if (!match) throw Error('The foreign key or visible row changed. Choose the relation again.');
@@ -495,9 +529,12 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       try {
         assertBinding(document, binding);
         snapshot.validate();
+        await snapshot.recheck?.();
+        snapshot.validate();
         opened = await tableEditor.open({ table:match.table, sessionId:binding.id,
           sql:document.getText(), filters:match.filters,
-          relation: { schema: match.schema, keys: match.keys, origin: { id, modelId: selection.modelId, rowId: selection.rowId } } });
+          relation: { schema: match.schema, keys: match.keys, sourceServer: snapshot.server,
+            origin: { id, modelId: selection.modelId, rowId: selection.rowId } } });
       } catch (error) {
         if (bindings.get(document.uri.toString()) === binding && snapshot.db === state.db) {
           await state.db.closeSession(binding.id);
@@ -512,7 +549,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   async function returnToRelatedSource(id) {
     const origin = results.history.find(record => record.id === id && !record.closing)?.relatedOrigin;
     if (!origin) throw Error('This preview has no retained source row.');
-    const snapshot = tableEditor.relatedSnapshot(origin.id, origin);
+    const snapshot = relatedSnapshot(origin.id, origin);
     await results.show();
     snapshot.validate();
     await results.activateResult(origin.id, origin);
@@ -584,7 +621,17 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
         }
       }
       id = results.begin(sql, source, { readOnly: session?.readOnly ?? true, sessionId: binding.id });
-      results.finish(id, await db.query(sql, { sessionId: binding.id, maxRows: 500, timeoutMs: 5000, allowUnboundedDml }));
+      const result = await db.query(sql, { sessionId: binding.id, maxRows: 500, timeoutMs: 5000, allowUnboundedDml });
+      if (historyTarget && session?.readOnly && document && !document.isClosed && document.version === documentVersion) {
+        let sqlSource;
+        try { sqlSource = await db.captureSqlRowSource(sql, result, binding.id); }
+        catch { /* The user query already completed. Missing provenance only disables related navigation. */ }
+        if (sqlSource && document.version === documentVersion && !document.isClosed && databaseGuard(db, binding.epoch)()) {
+          const relatedRows = relateSqlResult(id, sqlSource, result, db, binding, document, documentVersion);
+          if (relatedRows) result.relatedRows = relatedRows;
+        }
+      }
+      results.finish(id, result);
       if (historyTarget?.key && vscode.workspace.isTrusted && binding.epoch===state.epoch && db===state.db) {
         completedUserSql.fire({ sql, target:historyTarget });
       }

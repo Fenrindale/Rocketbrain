@@ -108,6 +108,7 @@ function cellValue(value) {
 }
 function newSession(id, readOnly, database) {
   return { id, readOnly, database, autocommit: true, inTransaction: false, transactionState: 'idle',
+    everWritable: !readOnly,
     transactionIsolation: null,
     outcomeUnknown: false, needsReconnect: false, connected: false, connection: null, connectionId: null,
     queue: Promise.resolve(), active: null, closed: false, cancellationVersion: 0 };
@@ -826,7 +827,8 @@ class MysqlService {
       await this._ensureConnection(session);
       if (session.inTransaction) throw new Error('Commit or roll back before changing the console read/write mode.');
       const result = await this._control(session, 'SET SESSION TRANSACTION ' + (readOnly ? 'READ ONLY' : 'READ WRITE'));
-      this._observe(session, result); session.readOnly = readOnly; this._editor.invalidate(session.id); return this._state(session);
+      this._observe(session, result); session.readOnly = readOnly; session.everWritable ||= !readOnly;
+      this._editor.invalidate(session.id); return this._state(session);
     });
   }
   async setAutocommit(enabled, options = {}) {
@@ -1066,6 +1068,36 @@ class MysqlService {
     return result;
   }
   relatedRowsCatalog(request) { return this._relationshipCatalog(readRelatedCatalog, request); }
+  canFollowSqlResult(sessionId, connectionId) {
+    const session = this._sessions.get(sessionId);
+    return Boolean(session && session.connectionId === connectionId && session.connected && !session.closed &&
+      session.readOnly && !session.everWritable && session.autocommit && !session.inTransaction &&
+      !session.needsReconnect && !session.outcomeUnknown);
+  }
+  _sqlRelatedServer(session) {
+    const { sourceServer } = require('./sql-related-source');
+    return sourceServer(sql => this._stream(session, sql, [], { maxRows: 2, timeoutMs: 3000 }, false,
+      { category: 'metadata', operation: 'SELECT' }));
+  }
+  async captureSqlRowSource(sql, result, sessionId) {
+    if (!result.rows.length || !this.canFollowSqlResult(sessionId, result.state?.connectionId)) return null;
+    const { sourceServer, parseProjection, describeSource, proveProjection } = require('./sql-related-source');
+    const shape = parseProjection(sql, this._options.database);
+    if (!shape) return null;
+    const session = this._session(sessionId), connectionId = result.state.connectionId;
+    const server = await this._enqueue(session, () => {
+      return this.canFollowSqlResult(sessionId, connectionId) ? this._sqlRelatedServer(session) : null;
+    });
+    if (!server) return null;
+    const observed = await this._relationshipCatalog(async (query, _database, target) => {
+      return await sourceServer(query) === server ? describeSource(query, target) : null;
+    }, shape);
+    const source = this.canFollowSqlResult(sessionId, connectionId) ? proveProjection(result, shape, observed) : null;
+    return source && { ...source, server };
+  }
+  recheckSqlRowSource(request) {
+    return this._relationshipCatalog(require('./sql-related-source').recheckSource, request);
+  }
   joinCompletionCatalog(request) { return this._relationshipCatalog(readJoinCatalog, request); }
   previewTable(name, options) { return this._editor.previewTable(name, options); }
   openKeysetBrowser(name, options) { return this._editor.openKeysetBrowser(name, options); }
