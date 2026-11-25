@@ -49,9 +49,13 @@ test('dynamic calls, forward references, defaults, key roles and unknown numeric
   child.defaultKind = 'literal';
   assert.throws(() => designer.tableFromDraft(draft, current), /without.*default|cannot have a default/iu);
   child.defaultKind = 'none';
-  draft.indexes.push({ name: 'idx', unique: false, primaryKey: false, type: 'BTREE', comment: '',
+  draft.indexes.push({ name: 'idx', unique: true, primaryKey: false, type: 'BTREE', comment: '',
     columns: [{ name: 'virtual_amount', ordinal: 1, prefixLength: null, collation: 'A' }] });
-  assert.throws(() => designer.tableFromDraft(draft, current), /Indexes and foreign keys on generated columns/u);
+  assert.throws(() => designer.tableFromDraft(draft, current), /non-unique ascending BTREE/u);
+  draft.indexes.at(-1).unique = false;
+  assert.match(D.render(designer.tableFromDraft(draft, current), current), /KEY `idx` \(`virtual_amount`\)/u);
+  draft.indexes.at(-1).columns[0].collation = 'D';
+  assert.throws(() => designer.tableFromDraft(draft, current), /non-unique ascending BTREE/u);
   assert.equal(generated.mode({ extra: 'PERSISTENT GENERATED', generationExpression: 'id * 2' }), 'stored');
 });
 
@@ -61,13 +65,31 @@ test('reviewed rebuild copies ordinary inputs and rejects changing a column betw
   const first = designer.tableFromDraft(draft, current), previous = snapshot(current, first);
   draft.columns.find(column => column.name === 'existing').generationExpression = 'id * 3';
   draft.columns.push(field('extra', 'stored', 'id + 12'));
+  draft.indexes.push({ name: 'idx_generated', unique: false, primaryKey: false, type: 'BTREE', comment: '',
+    columns: [{ name: 'id', ordinal: 1, prefixLength: null, collation: 'A' },
+      { name: 'extra', ordinal: 2, prefixLength: null, collation: 'A' }] });
   const after = snapshot(current, designer.tableFromDraft(draft, current));
   const planned = recovery.makePlan(previous, after, { tables: [source.name], operationId: 'e'.repeat(32) }).steps[0];
   assert.deepEqual(planned.common, ['id']);
   assert.match(planned.copySql, /\(`id`\) SELECT /u);
   assert.doesNotMatch(planned.copySql, /existing|extra/u);
   assert.match(planned.createSql, /GENERATED ALWAYS AS/u);
+  assert.match(planned.createSql, /KEY `idx_generated` \(`id`,\s*`extra`\)/u);
   Object.assign(draft.columns.find(column => column.name === 'existing'), { generationMode: 'none', generationExpression: '' });
   const replaced = snapshot(current, designer.tableFromDraft(draft, current));
   assert.throws(() => recovery.makePlan(previous, replaced, { tables: [source.name] }), /between stored input and generated output/u);
+});
+
+test('an index containing a generated part cannot satisfy the child foreign-key index requirement', () => {
+  const { current, draft } = editable();
+  const column = (name, ordinal) => ({ name, ordinal, prefixLength: null, collation: 'A' });
+  draft.columns.push(field('parent_id', 'none', '', { type: 'INT' }), field('computed', 'stored', 'id * 2'));
+  draft.indexes.push({ name: 'idx_composite', unique: false, primaryKey: false, type: 'BTREE', comment: '',
+    columns: [column('parent_id', 1), column('computed', 2)] });
+  draft.foreignKeys.push({ name: 'fk_parent', referencedSchema: current.database, referencedTable: draft.name,
+    onUpdate: 'RESTRICT', onDelete: 'RESTRICT', columns: [{ name: 'parent_id', referencedColumn: 'id' }] });
+  assert.throws(() => designer.tableFromDraft(draft, current), /separate child index on ordinary columns/);
+  draft.indexes.push({ name: 'idx_ordinary', unique: false, primaryKey: false, type: 'BTREE', comment: '',
+    columns: [column('parent_id', 1)] });
+  assert.match(D.render(designer.tableFromDraft(draft, current), current), /KEY `idx_ordinary` \(`parent_id`\)/u);
 });

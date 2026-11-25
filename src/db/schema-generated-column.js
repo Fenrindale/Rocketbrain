@@ -82,10 +82,23 @@ function definition(column, columns) {
 function validate(table) {
   const generated = new Set();
   for (const column of table.columns) if (definition(column, table.columns)) generated.add(column.name);
-  if (table.indexes.some(index => index.columns.some(column => generated.has(column.name))) ||
-      table.foreignKeys.some(key => key.columns.some(column => generated.has(column.name) ||
-        key.referencedTable === table.name && generated.has(column.referencedColumn)))) {
-    throw fail('Indexes and foreign keys on generated columns require a separate review profile.');
+  const indexedGeneration = index => index.columns.some(column => generated.has(column.name));
+  const indexed = table.indexes.filter(indexedGeneration);
+  for (const index of indexed) {
+    if (index.type !== 'BTREE' || index.unique || index.primaryKey ||
+        index.columns.some(column => column.prefixLength != null || ![null, 'A'].includes(column.collation))) {
+      throw fail('Generated columns support non-unique ascending BTREE indexes without prefixes.');
+    }
+  }
+  for (const key of table.foreignKeys) {
+    if (key.columns.some(column => generated.has(column.name) ||
+        key.referencedTable === table.name && generated.has(column.referencedColumn))) {
+      throw fail('Foreign keys on generated columns require a separate review profile.');
+    }
+    if (indexed.length && !table.indexes.some(index => index.type === 'BTREE' && !indexedGeneration(index) &&
+        key.columns.every((column, i) => index.columns[i]?.name === column.name && !index.columns[i]?.prefixLength))) {
+      throw fail('Give each foreign key a separate child index on ordinary columns.');
+    }
   }
   return generated;
 }

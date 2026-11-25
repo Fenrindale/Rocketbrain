@@ -19,8 +19,11 @@ const field = (name, type, options = {}) => ({ name, type, nullable: true, defau
   autoIncrement: false, comment: '', charset: '', collation: '', srsId: '', generationMode: 'none', generationExpression: '', ...options });
 const approvals = { allowImplicitCommit: true, allowDestructive: true, allowDependencyChanges: true,
   allowUnverifiedDependencies: true, autoRecover: true };
+const index = (name, ...columns) => ({ name, unique: false, primaryKey: false, type: 'BTREE', comment: '',
+  columns: columns.map((column, i) => ({ name: column, ordinal: i + 1, prefixLength: null, collation: 'A' })) });
+const initialIndexes = () => [index('idx_line_total', 'line_total'), index('idx_weighted', 'weighted'), index('idx_qty_weighted', 'qty', 'weighted')];
 
-async function verifyGeneratedColumns(runtime, adapter) {
+async function verifyGeneratedColumns(runtime, adapter, { indexCoverage = false } = {}) {
   const directory = path.dirname(await fs.realpath(runtime.dbConfigPath)), marker = await read(path.join(directory, 'owner.json'));
   assert.ok(['RocketbrainDisposableMariaDbFixture-v1', 'RocketbrainDisposableOracleMysqlFixture-v1'].includes(marker.kind));
   assert.equal(marker.id, path.basename(directory));
@@ -39,6 +42,25 @@ async function verifyGeneratedColumns(runtime, adapter) {
   const returns = async () => (await actor.query('SELECT qty,price,line_total,weighted FROM ' + literalName + ' ORDER BY id'))[0];
   const existing = async table => Number((await actor.execute('SELECT COUNT(*) n FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME=?',
     [config.database, table]))[0][0].n);
+  async function verifyIndexes(table, models) {
+    const [rows] = await actor.query('SHOW INDEX FROM ' + quote(table));
+    const bindings = rows.filter(row => row.Key_name !== 'PRIMARY').map(row => [
+      row.Key_name, Number(row.Seq_in_index), row.Column_name, Number(row.Non_unique), row.Index_type, row.Collation, row.Sub_part
+    ]);
+    const projection = models.flatMap(model => model.columns.map((column, i) => [model.name, i + 1, column.name, 1, 'BTREE', 'A', null]));
+    const order = (left, right) => left[0].localeCompare(right[0]) || left[1] - right[1];
+    assert.deepEqual(bindings.sort(order), projection.sort(order));
+  }
+  async function indexedRead(name, column, value, { qty, selected = value !== null ? 4 : 1, missing = false } = {}) {
+    const prefix = qty === undefined ? '' : 'qty=? AND ';
+    const predicate = quote(column) + (value === null ? ' IS NULL' : '=CAST(? AS DECIMAL(34,6))');
+    const query = 'SELECT qty,' + quote(column) + ' AS observed FROM ' + literalName + ' FORCE INDEX (' + quote(name) + ') WHERE ' + prefix + predicate;
+    const parameters = [...(qty === undefined ? [] : [qty]), ...(value === null ? [] : [value])];
+    const [[plan]] = await actor.execute('EXPLAIN ' + query, parameters);
+    assert.equal(plan.key, name);
+    const [rows] = await actor.execute(query, parameters);
+    assert.deepEqual(rows, missing ? [] : [{ qty: selected, observed: value }]);
+  }
   try {
     const [[server]] = await actor.query('SELECT VERSION() version,@@datadir datadir');
     assert.equal(path.dirname(await fs.realpath(server.datadir)).toLowerCase(), directory.toLowerCase());
@@ -68,14 +90,16 @@ async function verifyGeneratedColumns(runtime, adapter) {
       assert.equal(await existing(name), 0);
     }
     const indexed = structuredClone(draft);
-    indexed.indexes.push({ name: 'idx_computed', unique: false, primaryKey: false, type: 'BTREE', comment: '',
-      columns: [{ name: 'line_total', ordinal: 1, prefixLength: null, collation: 'A' }] });
-    await assert.rejects(adapter.review(create.modelId, indexed), /foreign keys on generated columns/);
+    indexed.indexes.push({ ...index('idx_computed', 'line_total'), unique: true });
+    await assert.rejects(adapter.review(create.modelId, indexed), /non-unique ascending BTREE/);
+    const originalIndexes = indexCoverage ? initialIndexes() : [];
+    draft.indexes.push(...originalIndexes);
     const reviewed = await adapter.review(create.modelId, draft);
     assert.equal(reviewed.kind, 'create');
     assert.equal(reviewed.validation.cleaned, true);
     assert.match(reviewed.sql, /GENERATED ALWAYS AS .* VIRTUAL/u);
     assert.match(reviewed.sql, maria ? /GENERATED ALWAYS AS .* PERSISTENT/u : /GENERATED ALWAYS AS .* STORED/u);
+    if (indexCoverage) assert.match(reviewed.sql, /KEY `idx_qty_weighted` \(`qty`,\s*`weighted`\)/u);
     assert.equal(await existing(name), 0);
     if (adapter.preview) await adapter.preview(create, reviewed);
     const created = await adapter.apply(create.modelId, reviewed);
@@ -86,6 +110,14 @@ async function verifyGeneratedColumns(runtime, adapter) {
     await actor.query('UPDATE ' + literalName + ' SET qty=4 WHERE price IS NOT NULL');
     assert.deepEqual((await returns())[0], { qty: 4, price, line_total: amount(4), weighted: amount(7) });
     await assert.rejects(actor.query('UPDATE ' + literalName + ' SET weighted=5'));
+    if (indexCoverage) {
+      await verifyIndexes(name, originalIndexes);
+      await indexedRead('idx_line_total', 'line_total', amount(4));
+      await indexedRead('idx_line_total', 'line_total', amount(2), { missing: true });
+      await indexedRead('idx_line_total', 'line_total', null);
+      await indexedRead('idx_weighted', 'weighted', amount(7));
+      await indexedRead('idx_qty_weighted', 'weighted', amount(7), { qty: 4 });
+    }
 
     const modify = await adapter.open(name);
     assert.equal(modify.mode, 'alter');
@@ -95,6 +127,8 @@ async function verifyGeneratedColumns(runtime, adapter) {
     assert.match(clone.columns.find(column => column.name === 'weighted').generationExpression, /`qty` \+ 3/u);
     clone.columns.find(column => column.name === 'weighted').generationExpression = '(qty + 7) * price';
     clone.columns.push(field('extra_total', 'DECIMAL(34,6)', { generationMode: 'virtual', generationExpression: 'qty * price + 1' }));
+    const addedIndex = index('idx_extra_total', 'extra_total');
+    if (indexCoverage) clone.indexes.push(addedIndex);
     const altered = await adapter.review(modify.modelId, clone);
     rebuilds.push(altered);
     assert.equal(altered.kind, 'rebuild');
@@ -102,16 +136,27 @@ async function verifyGeneratedColumns(runtime, adapter) {
     assert.deepEqual(plan.common, ['id', 'qty', 'price']);
     assert.match(plan.copySql, /\(`id`,`qty`,`price`\) SELECT /u);
     assert.doesNotMatch(plan.copySql, /line_total|weighted|extra_total/u);
+    if (indexCoverage) assert.match(plan.createSql, /KEY `idx_extra_total` \(`extra_total`\)/u);
     if (adapter.preview) await adapter.preview(modify, altered);
     const applied = await adapter.apply(modify.modelId, altered);
     assert.equal(applied.state, 'applied', JSON.stringify(applied.error || applied.originalError || applied));
     assert.equal((await returns())[0].weighted, amount(11));
-    assert.equal((await actor.query('SELECT extra_total FROM ' + literalName + ' WHERE price IS NOT NULL'))[0][0].extra_total,
-      (scaled * 4n / 1000000n + 1n) + '.500000');
+    const extra = (scaled * 4n / 1000000n + 1n) + '.500000';
+    assert.equal((await actor.query('SELECT extra_total FROM ' + literalName + ' WHERE price IS NOT NULL'))[0][0].extra_total, extra);
     assert.equal((await actor.query('SELECT weighted FROM ' + quote(plan.backup) + ' WHERE price IS NOT NULL'))[0][0].weighted, amount(7));
+    if (indexCoverage) {
+      await verifyIndexes(plan.backup, originalIndexes);
+      await verifyIndexes(name, [...originalIndexes, addedIndex]);
+      await indexedRead('idx_weighted', 'weighted', amount(11));
+      await indexedRead('idx_extra_total', 'extra_total', extra);
+    }
     const recovered = await adapter.recover(modify.modelId, altered);
     assert.equal(recovered.state, 'recovered', JSON.stringify(recovered.error || recovered));
     assert.equal((await returns())[0].weighted, amount(7));
+    if (indexCoverage) {
+      await verifyIndexes(name, originalIndexes);
+      await indexedRead('idx_qty_weighted', 'weighted', amount(7), { qty: 4 });
+    }
     const after = await adapter.open(name);
     assert.equal(after.draft.columns.some(column => column.name === 'extra_total'), false);
     assert.match(after.draft.columns.find(column => column.name === 'weighted').generationExpression, /\+ 3/u);
@@ -127,7 +172,10 @@ async function verifyGeneratedColumns(runtime, adapter) {
     await assertSpring();
     return { engine, version: server.version, virtualAndStoredCreation: true, storedSyntax: maria ? 'PERSISTENT' : 'STORED',
       readonlyReview: Boolean(adapter.preview), exactDecimalsAndNullPropagation: true, recalculatedAfterWrite: true,
-      directGeneratedWriteRefused: true, unsafeExpressionsRefused: unsafe.length, generatedIndexRefused: true,
+      directGeneratedWriteRefused: true, unsafeExpressionsRefused: unsafe.length,
+      ...(indexCoverage ? { virtualAndStoredIndexed: true, compositeIndexObserved: true, indexedExactDecimalAndNull: true,
+        generatedIndexMaintainedAfterUpdate: true, indexAndDataRebuilt: true, indexesRestored: true, unsupportedGeneratedIndexRefused: true } :
+        { generatedIndexRefused: true }),
       editableObservedModel: true, writableInputsOnlyCopied: true, originalRestored: true, overflowRefusedWithoutPublication: true,
       springIsolation: expectedSpring };
   } finally {
@@ -147,7 +195,7 @@ async function verifyGeneratedColumns(runtime, adapter) {
   }
 }
 
-async function runGeneratedColumnChecks(api, vscode, checks) {
+async function runGeneratedColumnChecks(api, vscode, checks, options) {
   const runtime = await read(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG), author = api.dbAuthoring;
   assert.ok(author);
   const result = await verifyGeneratedColumns(runtime, {
@@ -162,9 +210,10 @@ async function runGeneratedColumnChecks(api, vscode, checks) {
       assert.equal(view.getText().replaceAll('\r\n', '\n'), reviewed.sql.replaceAll('\r\n', '\n'));
       assert.equal(view.isDirty, false);
     }
-  });
+  }, options);
   checks.push('Native table designer reviewed and deployed exact virtual and stored generation, including signed decimal precision and null propagation.');
-  checks.push('The review copied only ordinary inputs, verified engine-derived output, restored original generation, and refused unsupported expressions and indexes.');
+  checks.push('The review copied only ordinary inputs, verified engine-derived output, and restored the original generated columns.');
+  if (options?.indexCoverage) checks.push('Exact native BTREE predicates used virtual, stored and composite generated indexes before and after reviewed rebuild and recovery.');
   return result;
 }
 

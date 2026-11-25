@@ -191,6 +191,8 @@ GET {{host}}/actuator/health
 
 응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI Description**은 OpenAPI 3.0·3.1 JSON과 YAML에서 작업을 확인합니다. 신뢰한 작업 공간에서 상대 경로로 연결한 JSON·YAML 경로 항목, 매개변수, 요청 본문과 단순 스키마 참조를 읽습니다. **Create HTTP Request from OpenAPI**로 요청 초안을 만들고, 환경과 매개변수를 채운 뒤 실행합니다. [OpenAPI 설명 상대 참조](https://spec.openapis.org/oas/v3.1.1.html#relative-references-in-api-description-uris)
 
+**Create Java Client from OpenAPI**로 선택한 작업을 Java 11 이상에서 쓸 수 있는 편집 가능한 클라이언트로 생성합니다. 기본 직렬화의 경로·쿼리·헤더·쿠키 값과 JSON 요청 본문을 지원합니다. 호출자가 서비스 주소와 인증 헤더를 전달하고, 응답은 상태·헤더와 원본 바이트를 제공합니다.
+
 `GRAPHQL` 본문은 GraphQL 문서나 `query`, `variables`, `operationName`을 담은 JSON입니다. **Send HTTP Request**로 실행하면 HTTP 상태와 GraphQL 오류 수를 확인할 수 있습니다. **Inspect GraphQL Endpoint Schema**는 선택한 엔드포인트에서 인트로스펙션을 요청합니다.
 
 ```http
@@ -372,7 +374,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Save Schema DDL**에서 InnoDB 테이블, 외래 키, 지원하는 뷰, SQL/PSM 프로시저, 결정적 숫자 함수, 트리거의 복원 순서를 검토하고 Git으로 추적할 SQL 파일을 저장합니다. 선택 모드에서는 대상 테이블에 연결된 트리거와 호출하는 프로시저를 포함합니다. 확인할 수 없는 본문, 동적 SQL, 교차 스키마 참조, 순서를 확인할 수 없는 트리거는 생략 이유를 표시합니다. 저장 직전에 서버 정의를 다시 비교합니다. 파일에는 행 데이터, 권한, 이벤트, 시퀀스와 패키지를 포함하지 않습니다. 복원할 때는 동일한 이름과 기본 콜레이션의 빈 스키마와 원래 DEFINER 계정을 준비하고 호환되는 UTF-8 MySQL·MariaDB 클라이언트에서 파일을 검토한 뒤 실행합니다.
 - **Save Schema Snapshot with Stored Objects**로 프로시저, 함수, 트리거, 이벤트의 관찰 가능한 원문과 생성 설정을 스냅샷에 저장합니다. 다른 연결에서 **Compare Current Database with Schema Snapshot**을 실행해 같은 이름·종류의 원문과 설정을 비교하고 **Open Stored Object Diff**에서 나란히 엽니다. 보이지 않는 원문과 한쪽 계정에만 보이는 객체는 미확정으로 표시합니다. 비교 결과는 검토용이며 저장 객체 배포나 SQL 의미 동등성을 판단하는 데 사용하지 않습니다.
 - **Compare Schema Snapshot with Options**에서 식별자의 정확한 철자 또는 ASCII 대소문자 무시와 CREATE 헤더의 DEFINER 계정 포함 여부를 각각 선택합니다. 비교 보고서에 양쪽 엔진의 테이블 이름 규칙과 모호한 이름을 표시합니다. **Open Compared Table or View DDL**에서 비교에 사용한 원문을 열 수 있습니다. SQL SECURITY, 본문과 리터럴은 비교에 포함하며, 변경을 적용하려면 일반 스키마 비교에서 다시 검토합니다.
-- 테이블 디자이너에서 NULL을 허용하는 부호 있는 정수·DECIMAL 생성 열을 추가하거나 수정할 수 있습니다. 앞에 선언된 일반 숫자 열을 참조해 괄호와 `+`, `-`, `*` 표현식을 작성하고 Virtual 또는 Stored를 선택합니다. MySQL은 `STORED`, MariaDB는 `PERSISTENT`로 검토합니다. 기존 테이블을 재구성할 때 일반 열만 복사하고 서버가 계산한 결과를 확인합니다. 함수·서브쿼리·생성 열 연쇄 참조·생성 열의 인덱스나 외래 키·일반 열과 생성 열 사이의 변환에는 별도 검토가 필요합니다.
+- 테이블 디자이너에서 NULL을 허용하는 부호 있는 정수·DECIMAL 생성 열을 추가하거나 수정할 수 있습니다. 앞에 선언된 일반 숫자 열을 참조해 괄호와 `+`, `-`, `*` 표현식을 작성하고 Virtual 또는 Stored를 선택합니다. MySQL은 `STORED`, MariaDB는 `PERSISTENT`로 검토합니다. 기존 테이블을 재구성할 때 일반 열만 복사하고 서버가 계산한 결과를 확인합니다. 생성 열을 포함한 단일·복합 인덱스는 접두 길이 없는 비고유 오름차순 BTREE로 검토합니다. 함수·서브쿼리·생성 열 연쇄 참조·생성 열을 포함한 외래 키·일반 열과 생성 열 사이의 변환에는 별도 검토가 필요합니다.
 
 테이블 설계와 기존 뷰·프로시저 원문 편집은 검토·명시적 적용 흐름을 제공합니다. 서버 검증에는 DDL 권한이 필요할 수 있습니다. MySQL/MariaDB DDL과 객체 교체에는 비원자적인 단계가 있으므로 표시된 범위·복구 조건·미완료 트랜잭션을 확인하세요. 모호한 결과를 자동 재실행하지 않습니다.
 
@@ -395,3 +397,5 @@ For mutual TLS, select **Verify CA and server identity** in the connection edito
 The SQL editor analyzes common JSON calls against the current catalog. It checks argument counts and highlights malformed literal documents or paths in place. MySQL JSON arrows and engine-specific wildcard rules are interpreted using the selected dialect and observed version. Paths supplied by a parameter or column remain runtime-dependent.
 
 Named and inline SQL windows retain links to their definitions and partition or order columns. The editor checks known ROWS and RANGE frame boundaries, numeric or temporal order types and engine-specific call restrictions. Computed offsets and unsupported frame forms retain a server-validation note.
+
+For bitwise SQL, the editor separates numeric operands from MySQL binary-string operations. It uses observed fixed BINARY widths and marks conflicting lengths or literal conversions that can discard data. Widths and conversions that depend on stored row values stay unresolved until execution.

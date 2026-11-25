@@ -4,6 +4,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {analyzeOpenApi,requestTemplate}=require('../src/http/openapi');
 const {requestAt,resolveRequest}=require('../src/http/client');
+const {javaClientSource}=require('../src/http/openapi-java-client');
 
 test('OpenAPI JSON applies local parameter references and emits a previewable executable HTTP template',async()=>{
   const document={
@@ -103,4 +104,23 @@ test('YAML descriptions reject duplicate keys, aliases, unexpected tags, and uns
     'x-a: 9007199254740993\n',
     'x-a: .inf\n'
   ]) assert.throws(()=>analyzeOpenApi(entry+suffix,{format:'yaml'}),/exact JSON-compatible values/);
+});
+
+test('Java client generation grounds scalar values in selected operations and keeps the service address caller-owned',()=>{
+  const schema={openapi:'3.1.1',info:{title:'Fixture'},servers:[{url:'https://example.invalid/private'}],paths:{
+    '/items/{id}':{get:{operationId:'findItem',parameters:[
+      {name:'id',in:'path',required:true,schema:{type:'string'}},
+      {name:'limit',in:'query',schema:{type:'integer'}}
+    ],responses:{200:{description:'Found'}}}}
+  }};
+  const [operation]=analyzeOpenApi(JSON.stringify(schema)).operations;
+  const code=javaClientSource([operation],{className:'ItemsClient',packageName:'fixture.items'});
+  assert.match(code,/public HttpResponse<byte\[\]> callFindItem\(String pathId, Long queryLimit\)/);
+  assert.match(code,/if \(queryLimit != null\)/);
+  assert.match(code,/HttpClient\.Redirect\.NEVER/);
+  assert.equal(code.includes(schema.servers[0].url),false);
+  assert.throws(()=>javaClientSource([operation,operation]),/distinct, bounded Java names/);
+  assert.throws(()=>javaClientSource([operation],{className:'HttpClient'}),/valid Java class/);
+  const withStyle={...operation,parameters:[{...operation.parameters[0],style:'matrix'}]};
+  assert.throws(()=>javaClientSource([withStyle]),/default serialization/);
 });

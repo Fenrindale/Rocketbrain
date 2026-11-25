@@ -139,7 +139,8 @@ function params(resolve,frame,inputs) {
     const schema=object(item.schema)?resolve(item.schema,itemFrame,{schema:true}).value:undefined;
     const type=typeof schema?.type==='string'?schema.type:Array.isArray(schema?.type)&&
       schema.type.length<=8&&schema.type.every(value=>typeof value==='string')?schema.type.join(' | '):'unspecified';
-    return {key,name:item.name,in:item.in,required:item.required===true,type};
+    return {key,name:item.name,in:item.in,required:item.required===true,type,
+      ...(owns(item,'style')&&{style:item.style}),...(owns(item,'allowReserved')&&{allowReserved:item.allowReserved})};
   });
 }
 

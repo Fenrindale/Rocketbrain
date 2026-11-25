@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {isDeepStrictEqual}=require('node:util');
 const { analyzeOpenApi,requestTemplate } = require('./openapi');
+const { javaClientSource }=require('./openapi-java-client');
 
 const fileLimit=1024*1024;
 const formatFor=file=>/\.ya?ml$/i.test(file)?'yaml':/\.json$/i.test(file)?'json':undefined;
@@ -87,18 +88,31 @@ function registerOpenApiTools(context,vscode) {
     if (!operation) throw Error('Choose an observed OpenAPI operation.');
     return requestTemplate(operation);
   }
-  async function choose() {
+  function createJavaClient(document,keys,options) {
+    const byKey=new Map(analyze(document).operations.map(operation=>[operation.key,operation]));
+    if (!Array.isArray(keys)||new Set(keys).size!==keys.length||keys.some(key=>!byKey.has(key))) {
+      throw Error('Choose observed OpenAPI operations.');
+    }
+    return javaClientSource(keys.map(key=>byKey.get(key)),options);
+  }
+  async function choose(multiple=false) {
     const document=vscode.window.activeTextEditor?.document;
     const report=analyze(document),version=document.version;
     const options=report.operations.map(operation=>({
       label:operation.key, description:operation.id||undefined, detail:operation.summary||undefined,operation
     }));
-    const selection=await vscode.window.showQuickPick(options,{title:report.title+' · OpenAPI Operations',matchOnDescription:true,matchOnDetail:true});
-    if (!selection) return;
+    const selection=await vscode.window.showQuickPick(options,{
+      title:report.title+' · OpenAPI Operations',matchOnDescription:true,matchOnDetail:true,canPickMany:multiple
+    });
+    if (!selection||multiple&&!selection.length) return;
     if (document.isClosed||document.version!==version) throw Error('The OpenAPI document changed. Reopen its operation list.');
-    const operation=analyze(document).operations.find(item=>item.key===selection.operation.key);
-    if (!isDeepStrictEqual(operation,selection.operation)) throw Error('A referenced OpenAPI operation changed. Reopen its operation list.');
-    return operation;
+    const byKey=new Map(analyze(document).operations.map(operation=>[operation.key,operation]));
+    const chosen=(multiple?selection:[selection]).map(({operation})=>{
+      const current=byKey.get(operation.key);
+      if (!isDeepStrictEqual(current,operation)) throw Error('A referenced OpenAPI operation changed. Reopen its operation list.');
+      return current;
+    });
+    return multiple?chosen:chosen[0];
   }
   async function preview() {
     const operation=await choose();
@@ -125,6 +139,18 @@ function registerOpenApiTools(context,vscode) {
     await vscode.window.showTextDocument(document,{preview:false});
     return document;
   }
+  async function javaClient() {
+    const className=await vscode.window.showInputBox({title:'Java Client Class',value:'OpenApiClient'});
+    if (className===undefined) return;
+    const packageName=await vscode.window.showInputBox({title:'Java Client Package',value:''});
+    if (packageName===undefined) return;
+    const operations=await choose(true);
+    if (!operations) return;
+    const content=javaClientSource(operations,{className,packageName});
+    const document=await vscode.workspace.openTextDocument({language:'java',content});
+    await vscode.window.showTextDocument(document,{preview:false});
+    return document;
+  }
   const register=(id,action)=>vscode.commands.registerCommand(id,async()=>{
     try { return await action(); }
     catch (error) { if(!disposed)await vscode.window.showErrorMessage('Rocketbrain OpenAPI: '+error.message); }
@@ -132,10 +158,11 @@ function registerOpenApiTools(context,vscode) {
   const subscriptions=[
     register('rocketbrain.openapi.inspect',preview),
     register('rocketbrain.openapi.createRequest',create),
+    register('rocketbrain.openapi.createJavaClient',javaClient),
     vscode.workspace.onDidCloseTextDocument(document=>collection.delete(document.uri)),
     vscode.workspace.onDidChangeTextDocument(event=>collection.delete(event.document.uri))
   ];
-  return {analyze,createRequest,dispose(){
+  return {analyze,createRequest,createJavaClient,dispose(){
     if(disposed)return;
     disposed=true;
     for(const subscription of subscriptions)subscription.dispose();

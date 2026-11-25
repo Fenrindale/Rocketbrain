@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.86.0",
+  "version": "0.87.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -325,6 +325,7 @@
       { "command": "rocketbrain.http.saveSecret", "title": "Set HTTP Environment Secret", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
       { "command": "rocketbrain.openapi.inspect", "title": "Inspect OpenAPI Description", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
       { "command": "rocketbrain.openapi.createRequest", "title": "Create HTTP Request from OpenAPI", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
+      { "command": "rocketbrain.openapi.createJavaClient", "title": "Create Java Client from OpenAPI", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
       { "command": "rocketbrain.schema.diagram", "title": "Open Schema Diagram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.schema.logicalAcrossSchemas", "title": "Manage Cross-Schema Logical Relationships", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.schema.exportDdl", "title": "Save Schema DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -764,6 +765,7 @@
       { "command": "rocketbrain.java.extractMethod", "title": "Extract Java Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.addTypeImport", "title": "Add Java Type Import", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.addStaticMemberImport", "title": "Add Java Static Member Import", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.cleanUpFile", "title": "Review Java File Cleanup", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.editor.expandSelection", "title": "Expand Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.shrinkSelection", "title": "Shrink Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.quickDocumentation", "title": "Quick Code Documentation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
@@ -1274,6 +1276,11 @@
         {
           "command": "rocketbrain.java.generateMembers",
           "when": "editorLangId == java && isWorkspaceTrusted",
+          "group": "refactor"
+        },
+        {
+          "command": "rocketbrain.java.cleanUpFile",
+          "when": "editorLangId == java && resourceScheme == file && isWorkspaceTrusted",
           "group": "refactor"
         },
         {

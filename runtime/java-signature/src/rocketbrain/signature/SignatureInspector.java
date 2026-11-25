@@ -296,6 +296,7 @@ public final class SignatureInspector {
                 !(args.length == 9 && args[4].equals("methodInline")) &&
                 !(args.length == 8 && args[4].equals("typeStructure")) &&
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
+                !(args.length == 7 && args[4].equals("cleanup")) &&
                 !(args.length == 9 && Set.of("typeImport", "staticImport").contains(args[4])) &&
                 !(args.length == 5 && args[4].equals("check")) &&
                 !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
@@ -338,6 +339,10 @@ public final class SignatureInspector {
                     else if (args[4].equals("conversion")) {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
                         report.put("conversions",new ConversionInspector(task,unit,byUri.get(args[5]).text).inspect());
+                    }
+                    else if (args[4].equals("cleanup")) {
+                        var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
+                        report.put("cleanup",new CleanupInspector(unit,trees,byUri.get(args[5]).text,args[6].equals("plan")).inspect());
                     }
                     else if (args[4].equals("constant")) {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
