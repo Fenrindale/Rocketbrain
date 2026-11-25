@@ -44,7 +44,7 @@ async function runDelimiterScriptChecks(api,vscode,checks) {
  const name='rb_script_program_'+crypto.randomBytes(5).toString('hex');
  const proc=quote(name+'_proc'),trigger=quote(name+'_trigger'),table=quote(name);
  const workspace=vscode.workspace.workspaceFolders[0].uri.fsPath;
- assert.equal(path.resolve(workspace),path.resolve(process.env.ROCKETBRAIN_JAVA_TEST_WORKSPACE));
+ assert.equal(fs.realpathSync(workspace),fs.realpathSync(process.env.ROCKETBRAIN_JAVA_TEST_WORKSPACE));
  const sourcePath=path.join(workspace,name+'.sql');
  const sql=[
   'DELIMITER $$',
