@@ -101,7 +101,10 @@ test('actual result Webview renders database values as text and routes history/c
       get: key => memories.get(key),
       async update(key, value) { memories.set(key, structuredClone(value)); }
     }
-  }, { relatedAction: (id, selection) => { relatedSelection = { id, ...selection }; }, datasetAction: async (id, input) => {
+  }, { relatedAction: (id, selection) => { relatedSelection = { id, ...selection }; }, relatedReturn: id => {
+    const origin = host.history.find(record => record.id === id)?.relatedOrigin;
+    if (origin) return host.activateResult(origin.id, origin);
+  }, datasetAction: async (id, input) => {
     input.assertFresh();
     host.editState(id, { editResponseId: input.requestId, bulkDraft: {
       id: 'comparison-bulk', modelId: input.modelId, draftRevision: input.draftRevision, ...input.changes
@@ -335,6 +338,24 @@ test('actual result Webview renders database values as text and routes history/c
     await page.locator('#close-result').click();
     await page.waitForFunction(value => window.__completed.some(message => message.type==='closeResult' && message.id===value),id);
     await lastPost;
+  });
+
+  await t.test('related previews return to the exact retained record row', async () => {
+    const source = host.begin('SELECT name FROM departments', 'Source table');
+    host.finish(source, { columns: ['name'], rows: [['first source'], ['second source']], rowCount: 2, durationMs: 1,
+      state: { readOnly: true, autocommit: true }, edit: { modelId: 'source-related', table: 'departments',
+        rowIds: ['first-id', 'second-id'], columns: [{ name: 'name', type: 'varchar(64)' }] } });
+    await lastPost;
+    await page.locator('#result-view').selectOption('record');
+    assert.equal(await page.locator('.result-fields dd').first().textContent(), 'first source');
+    const target = host.begin('SELECT name FROM employees', 'Related table', {
+      relatedOrigin: { id: source, modelId: 'source-related', rowId: 'second-id' }
+    });
+    host.finish(target, { columns: ['name'], rows: [['related']], rowCount: 1, durationMs: 1 });
+    await lastPost;
+    await page.getByRole('button', { name: 'Back to Source Row' }).click();
+    await page.waitForFunction(() => document.querySelector('.result-fields dd')?.textContent === 'second source');
+    assert.equal(await page.getByRole('button', { name: 'Back to Source Row' }).count(), 0);
   });
 
   await t.test('Grid and Record share staged cells and review; a named table retains display settings after reopening', async () => {

@@ -1,5 +1,5 @@
 {
-  "version": "0.51.0",
+  "version": "0.52.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 66,
-    "partial": 113,
-    "not-implemented": 22,
+    "implemented": 67,
+    "partial": 115,
+    "not-implemented": 19,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 62.7,
+    "percent": 63.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-047",
-    "IDEA-095",
-    "IDEA-120",
-    "DG-040"
+    "IDEA-040",
+    "IDEA-066",
+    "DG-066",
+    "DG-090"
   ],
   "expandedFeatures": [
-    "IDEA-047",
-    "IDEA-095",
-    "IDEA-120",
-    "DG-040"
+    "IDEA-040",
+    "IDEA-066",
+    "DG-066",
+    "DG-090"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1294,25 +1294,26 @@
       "category": "검사·품질·보안",
       "feature": "의존성 취약점·취약 API 사용 분석",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "의존성 취약점·취약 API 호출 경로 분석 통합이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "Maven의 실제 의존성 트리에서 사용자가 선택한 이름과 버전의 OSV 권고를 확인하고, 직접·전이 경로와 검사 시각을 보고서로 연다.",
       "remaining": [
-        "취약점 데이터·버전 판정·실제 호출 경로와 수정 안내가 필요하다."
+        "Gradle 의존성, 실제 Java 취약 API 호출 경로와 수정 제안이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.52-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "Maven 3.9.11과 Dependency Plugin 3.11.0에서 직접·전이 Log4j 의존성을 해석하고 실제 OSV 권고 ID를 에디터에서 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/dependency-advisories.js",
+          "src/java/dependency-advisories-vscode.js",
+          "test/dependency-advisories-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1508,8 +1509,8 @@
       "verification": {
         "state": "v0.51-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.51.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2080,25 +2081,26 @@
       "category": "기타 JVM 프레임워크",
       "feature": "Quarkus·MicroProfile",
       "priority": "P3",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Quarkus/MicroProfile 전용 엔진 통합이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "Maven Quarkus 프로젝트 생성, MicroProfile 설정 완료·선언 이동, REST·Qute 탐색, 로컬 개발 모드 시작·종료와 Maven 테스트를 지원한다.",
       "remaining": [
-        "설정·DI·실행·프레임워크 의미 분석이 필요하다."
+        "동적 CDI 그래프, 중첩 설정, Gradle 및 디버거 연결이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.52-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "Quarkus 3.40.1.2의 HTTP 테스트 2개, 열려 있는 설정의 편집기 탐색, Qute, 실제 개발 모드의 설정 다시 읽기, 소유 서버의 종료를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/quarkus-vscode.js",
+          "src/java/quarkus-dev.js",
+          "test/quarkus-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2955,8 +2957,8 @@
       "verification": {
         "state": "v0.51-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.51.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3704,8 +3706,8 @@
       "verification": {
         "state": "v0.51-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.51.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4909,8 +4911,8 @@
       "verification": {
         "state": "v0.51-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.51.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5715,27 +5717,24 @@
       "priority": "P1",
       "status": "partial",
       "label": "부분 구현",
-      "delivery": "none",
-      "scope": "Grid·Record의 캡처 행에서 현재 스키마의 물리 FK를 양방향으로 따른다. 복합 키의 순서와 값을 보존하고 새 읽기 전용 콘솔에서 매개변수화된 관련 행을 조회한다.",
+      "delivery": "rocketbrain",
+      "scope": "Grid·Record에서 캡처한 행에서 물리 FK를 스키마 너머까지 따라가고, 저장한 논리 관계를 같은 스키마에서 양방향으로 따라간다. 관련 결과를 읽기 전용으로 열고 출발 행으로 돌아간다.",
       "remaining": [
-        "다른 스키마, 가상 FK와 지원 밖 타입의 이동, 임의 쿼리 결과의 원본 행 추적을 확장한다."
+        "임의 SQL 결과의 원본 행 추적과 교차 스키마 논리 관계 등록이 남아 있다."
       ],
       "verification": {
-        "state": "v0.29-installed-coverage",
+        "state": "v0.52-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.29.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Spring 테이블 부모 1행·자식 2행, 별도 복합 FK 값의 양방향 결합, NULL과 오래된 행·관계 거부를 실제 MySQL·MariaDB에서 검증했다. Chromium에서 원본 행 식별자 전달을 확인했다.",
+        "testedScope": "두 실제 서버에서 같은 이름의 테이블을 구분하고 복합 unsigned BIGINT·바이너리 값을 보존했다. 논리 관계 선택, 메타데이터 변경 거부와 원래 행으로 돌아가기를 확인했다.",
         "publicEvidence": [
+          "docs/related-rows.md",
           "src/db/related-rows.js",
-          "src/database-workbench.js",
-          "src/table-editor.js",
-          "src/ui/results.js",
-          "test/db-related-rows-host.js",
-          "test/results.test.js"
+          "test/db-related-scoped-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6460,25 +6459,26 @@
       "category": "AI·도구 연결",
       "feature": "외부 AI용 DB MCP·권한·결과 제공",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "외부 AI용 DB MCP 서버를 제공하지 않는다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "독립 stdio MCP에서 승인 파일로 지정한 로컬 MySQL·MariaDB 테이블·열의 메타데이터와 형식 보존 행 표본을 읽는다. 명시한 도구와 읽기 전용 권한으로 제한하며 취소와 크기 제한을 적용한다.",
       "remaining": [
-        "인증·권한·SQL 제한·결과/취소 계약이 필요하다."
+        "프로필 간 도구 위임과 원격 전송을 지원하려면 추가 구현이 필요하다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.52-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 두 서버에서 Spring 행, BIGINT·DECIMAL의 정확한 비교, 바이너리·시간·JSON 결과, 범위·바이트 제한과 상속 쓰기 권한 거부를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "docs/database-mcp.md",
+          "src/mcp/database-tools.js",
+          "test/db-mcp-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6664,8 +6664,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "a8cae5007fed645111f1cafb4459eedbde83bd79bed064fc5bf1c71aaaf94743",
-    "sourceManifestSha256": "92e36021b93da0c3928d919b3c1d8b16e81ce1bfac61c52f25956060fed3d1e0",
+    "vsixSha256": "b2aa49d4352ec514ebd8ab187162671a02dc9f3af5219855f196e578ce8ecf7b",
+    "sourceManifestSha256": "7e8ec8b65c79749e74ecb270e8995e60d7ba7b05d457b5d26656097eaa541434",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6679,33 +6679,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-047",
+      "id": "IDEA-040",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-095",
+      "id": "IDEA-066",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-120",
+      "id": "DG-090",
       "before": "not-implemented",
-      "after": "partial"
-    },
-    {
-      "id": "DG-040",
-      "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1377,
-    "pass": 1311,
+    "tests": 1387,
+    "pass": 1320,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 66,
+    "skipped": 67,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

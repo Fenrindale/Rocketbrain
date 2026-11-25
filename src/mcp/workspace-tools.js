@@ -136,13 +136,15 @@ function sqlSummary(sql,dialect) {
     truncated:limited};
 }
 
-function workspaceTools(root,names) {
+function workspaceTools(root,names,additional=new Map()) {
   const selected=new Set(names);
-  if (!selected.size || [...selected].some(name=>!Object.hasOwn(inputSchemas,name))) throw Error('Choose recognized tools with --allow-tool.');
-  const tools=Object.keys(inputSchemas).filter(name=>selected.has(name)).sort().map(name=>({name,description:descriptions[name],
-    inputSchema:inputSchemas[name],annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}}));
+  if (!selected.size || [...selected].some(name=>!Object.hasOwn(inputSchemas,name)&&!additional.has(name))) throw Error('Choose recognized tools with --allow-tool.');
+  const tools=[...selected].sort().map(name=>({name,...(additional.get(name)?.definition??{
+    description:descriptions[name],inputSchema:inputSchemas[name]}),
+    annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:additional.has(name)}}));
   async function invoke(name,args,signal) {
     signal.throwIfAborted();
+    if (additional.has(name)) return additional.get(name).invoke(args,signal);
     if (name==='project_inventory') return inventory(root,args.folder ?? '.',signal);
     if (name==='sql_structure') return sqlSummary(args.sql,args.dialect ?? 'mysql');
     const directory=await getFolder(root,'.');
@@ -152,7 +154,7 @@ function workspaceTools(root,names) {
     const findings=items.slice(0,maxFindings).map(({rule,path:source,severity,range,state})=>({rule,source,severity,range,state}));
     return {summary,findings,truncated:items.length>maxFindings};
   }
-  return {tools,authorized:name=>selected.has(name),validate:validateArguments,invoke};
+  return {tools,authorized:name=>selected.has(name),validate:(name,args)=>additional.has(name)?additional.get(name).validate(args):validateArguments(name,args),invoke};
 }
 
 module.exports={approveWorkspace,workspaceTools,isObject};

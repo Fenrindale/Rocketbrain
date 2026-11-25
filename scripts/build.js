@@ -16,6 +16,11 @@ async function build() {
   const signatureDirectory=path.join(__dirname,'../runtime/java-signature/src/rocketbrain/signature');
   const signatureSources=Object.fromEntries(fs.readdirSync(signatureDirectory).filter(name=>name.endsWith('.java')).sort().map(name=>[name,fs.readFileSync(path.join(signatureDirectory,name),'utf8')]));
   fs.writeFileSync(path.join(__dirname,'../src/java/signature-compiler-sources.json'),JSON.stringify(signatureSources));
+  const quarkusStarter = path.join(__dirname,'../test/fixtures/java/quarkus');
+  const quarkusFiles = ['pom.xml','src/main/java/quarkusfixture/GreetingConfig.java','src/main/java/quarkusfixture/GreetingResource.java',
+    'src/main/resources/application.properties','src/main/resources/templates/greeting.html','src/test/java/quarkusfixture/GreetingResourceTest.java'];
+  fs.writeFileSync(path.join(__dirname,'../src/java/quarkus-starter-source.json'),JSON.stringify(
+    Object.fromEntries(quarkusFiles.map(file=>[file,fs.readFileSync(path.join(quarkusStarter,file),'utf8')]))));
   fs.mkdirSync('dist', { recursive: true });
   await esbuild.build({ entryPoints: ['scripts/java-quality-gate.js'], outfile: 'dist/java-quality-gate.js', bundle: true, platform: 'node', target: 'node20' });
   await esbuild.build({ entryPoints: ['scripts/ide-mcp-server.js'], outfile: 'dist/ide-mcp-server.js', bundle: true, platform: 'node', target: 'node20' });

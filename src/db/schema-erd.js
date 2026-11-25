@@ -202,5 +202,7 @@ function parseLayout(diagram, body) {
   return normalizeLayout(diagram, value);
 }
 
-module.exports = { tableInventory, buildDiagram, defaultLayout, normalizeLayout, parseLayout, card,
+const logicalKey = 'rocketbrain.schemaDiagram.logical.v1';
+
+module.exports = { tableInventory, buildDiagram, defaultLayout, normalizeLayout, parseLayout, card, logicalKey,
   maxPosition, maxLayoutBytes, maxLogical, digest, exact, label, scopeKey, logicalRelation, logicalEdges };

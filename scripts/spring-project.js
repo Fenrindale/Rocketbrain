@@ -236,12 +236,15 @@ async function main() {
       const adminConfig = process.env.ROCKETBRAIN_ENABLE_DBADMIN_FIXTURE === '1'
         ? await require('../test/helpers/database-admin-fixture').prepareDatabaseAdminFixture(fixture)
         : undefined;
+      const dbMcpEnvironment = process.env.ROCKETBRAIN_ENABLE_DB_MCP_FIXTURE === '1'
+        ? await require('../test/helpers/db-mcp-fixture').prepareDbMcpFixture(fixture)
+        : {};
       process.exitCode = await new Promise((resolve, reject) => {
         const child = spawn(process.execPath, args, { cwd: WORKSPACE, windowsHide: true, stdio: 'inherit', env: { ...process.env,
           ROCKETBRAIN_SPRING_RUNTIME_CONFIG: fixture.configPath, ROCKETBRAIN_SPRING_PROJECT_CONFIG: fixture.configPath, ROCKETBRAIN_JPA_RUNTIME: '1',
           ROCKETBRAIN_TEST_MYSQL_ENGINE: engine, ROCKETBRAIN_MYSQL_TEST_CONFIG: fixture.db.configPath, ROCKETBRAIN_TEST_MYSQL_CONFIG: fixture.db.configPath,
           ...(fixture.db.pipeName ? { ROCKETBRAIN_TEST_MYSQL_PIPE: fixture.db.pipeName } : {}),
-          ...(adminConfig ? { ROCKETBRAIN_DBADMIN_TEST_CONFIG: adminConfig } : {}),
+          ...(adminConfig ? { ROCKETBRAIN_DBADMIN_TEST_CONFIG: adminConfig } : {}), ...dbMcpEnvironment,
           ...(fixture.db.crossConfigPath ? { ROCKETBRAIN_SCHEMA_CROSS_CONFIG: fixture.db.crossConfigPath } : {}) } });
         child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
       });

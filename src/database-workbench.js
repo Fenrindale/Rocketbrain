@@ -7,7 +7,8 @@ const { statementAt } = require('./sql');
 const { inspectDmlScope } = require('./db/sql-dml-scope');
 const { completeSql } = require('./db/completion');
 const { TableEditor } = require('./table-editor');
-const { relatedRows } = require('./db/related-rows');
+const { relatedRowsFromObservation } = require('./db/related-rows');
+const { logicalKey, scopeKey, logicalEdges } = require('./db/schema-erd');
 const { tableLayoutConnectionKey } = require('./db/result-layouts');
 const { createMetadataCache, observeCatalogIdentity } = require('./db/metadata-cache');
 const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
@@ -39,6 +40,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const project = new ProjectTree(), schemaTree = new SchemaTree(state), results = new ResultsView(vscode, context, {
     editAction: (id, message) => tableEditor.handle(id, message),
     relatedAction: chooseRelatedRows,
+    relatedReturn: returnToRelatedSource,
     datasetAction: (id, input) => tableEditor.stageDatasetChanges(id, input),
     resultClosed: id => tableEditor.forget(id)
   });
@@ -289,22 +291,26 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const editor = await vscode.window.showTextDocument(document, { preview: false });
     await bind(document); return editor;
   }
+  async function relatedChoices(snapshot) {
+    const scope = scopeKey({ database: snapshot.schema }, state.profile);
+    const saved = scope && context.workspaceState.get(logicalKey, []);
+    const records = Array.isArray(saved) && saved.length <= 24 ? saved.find(record => record?.identity === scope)?.value : undefined;
+    const logical = records?.length ? logicalEdges(await snapshot.db.metadata(), records) : [];
+    const catalog = await snapshot.db.relatedRowsCatalog({ schema: snapshot.schema, table: snapshot.table, logical });
+    snapshot.validate();
+    return relatedRowsFromObservation(catalog, snapshot.columns, snapshot.values, snapshot.definitions);
+  }
   async function inspectRelatedRows(id, selection) {
     const snapshot = tableEditor.relatedSnapshot(id, selection);
     return withSession(snapshot.sessionId, async () => {
-      const catalog = await snapshot.db.metadata();
-      snapshot.validate();
-      return relatedRows(catalog, snapshot.table, snapshot.columns, snapshot.values)
-        .map(({ key, label, table, direction, columns }) => ({ key, label, table, direction, columns }));
+      return (await relatedChoices(snapshot)).map(({ filters, keys, ...match }) => match);
     });
   }
   async function openRelatedRows(id, selection, key) {
     if (typeof key !== 'string' || key.length > 16384) throw Error('Choose a visible foreign key relation.');
     const snapshot = tableEditor.relatedSnapshot(id, selection);
     return withSession(snapshot.sessionId, async () => {
-      const catalog = await snapshot.db.metadata();
-      snapshot.validate();
-      const match = relatedRows(catalog, snapshot.table, snapshot.columns, snapshot.values).find(item => item.key === key);
+      const match = (await relatedChoices(snapshot)).find(item => item.key === key);
       if (!match) throw Error('The foreign key or visible row changed. Choose the relation again.');
       const document = await vscode.workspace.openTextDocument({
         language: 'sql', content: '-- Related rows are fetched by the Results view with bound key values.\n'
@@ -315,7 +321,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
         assertBinding(document, binding);
         snapshot.validate();
         opened = await tableEditor.open({ table:match.table, sessionId:binding.id,
-          sql:document.getText(), filters:match.filters });
+          sql:document.getText(), filters:match.filters,
+          relation: { schema: match.schema, keys: match.keys, origin: { id, modelId: selection.modelId, rowId: selection.rowId } } });
       } catch (error) {
         if (bindings.get(document.uri.toString()) === binding && snapshot.db === state.db) {
           await state.db.closeSession(binding.id);
@@ -327,14 +334,23 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       return opened;
     });
   }
+  async function returnToRelatedSource(id) {
+    const origin = results.history.find(record => record.id === id && !record.closing)?.relatedOrigin;
+    if (!origin) throw Error('This preview has no retained source row.');
+    const snapshot = tableEditor.relatedSnapshot(origin.id, origin);
+    await results.show();
+    snapshot.validate();
+    await results.activateResult(origin.id, origin);
+    return { resultId: origin.id, rowId: origin.rowId };
+  }
   async function chooseRelatedRows(id, selection) {
     const matches = await inspectRelatedRows(id, selection);
     if (!matches.length) {
-      await vscode.window.showInformationMessage('This row has no navigable foreign keys in the current schema.');
+      await vscode.window.showInformationMessage('This row has no relationship with visible tables and usable key values.');
       return;
     }
     const options = matches.map(item => ({ label:item.label,
-      description:item.direction === 'referenced' ? 'Referenced rows' : 'Referencing rows',
+      description:(item.direction === 'referenced' ? 'Referenced rows' : 'Referencing rows') + (item.kind === 'logical' ? ' · Logical relationship' : ''),
       detail:item.columns.map(([from,to]) => from + ' → ' + to).join(', '),
       key:item.key }));
     const chosen = await vscode.window.showQuickPick(options, { title:'Open Related Rows' });
@@ -583,7 +599,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     stageDatasetComparison: (id, input) => results.stageDatasetComparison(id,input),
     savedResultLayout: id => results.savedLayout(id),
     saveResultLayout: (id, modelId, columns) => results.saveLayout(id, modelId, columns),
-    inspectRelatedRows, openRelatedRows,
+    inspectRelatedRows, openRelatedRows, returnToRelatedSource,
     onDidChangeDatabase: connectionEvents.event,
     onDidCompleteUserSql: completedUserSql.event,
     async withDatabaseAdmin(action,{write=false}={}){

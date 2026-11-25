@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.51.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.52.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 66 |
-| 부분 구현 | 113 |
-| 미구현 | 22 |
+| 구현 | 67 |
+| 부분 구현 | 115 |
+| 미구현 | 19 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **62.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **63.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.51에서는 Groovy·Spock 실행, GitHub·GitLab 리뷰, JavaFX FXML 탐색과 런타임 이미지, 저장 프로그램 SQL 포맷을 검증했다. 상태가 바뀐 항목은 4개이고 가중 점수는 133.5점에서 135.5점으로 바뀌었다.
+v0.52에서는 Quarkus Maven 작업, 승인 범위의 DB MCP, Maven 의존성 권고 조회, 교차 스키마 관련 행 탐색을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 135.5점에서 137.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -60,7 +60,7 @@ v0.51에서는 Groovy·Spock 실행, GitHub·GitLab 리뷰, JavaFX FXML 탐색�
 | IDEA-037 | IntelliJ IDEA | Intention·Quick Fix·코드 정리 | 부분 구현 |
 | IDEA-038 | IntelliJ IDEA | 프로젝트 검사·스코프·심각도 프로필 | 구현 |
 | IDEA-039 | IntelliJ IDEA | 중복 코드 감지 | 구현 |
-| IDEA-040 | IntelliJ IDEA | 의존성 취약점·취약 API 사용 분석 | 미구현 |
+| IDEA-040 | IntelliJ IDEA | 의존성 취약점·취약 API 사용 분석 | 부분 구현 |
 | IDEA-041 | IntelliJ IDEA | Qodana·CI 품질 게이트 연결 | 구현 |
 | IDEA-042 | IntelliJ IDEA | Java 버전·JDK·언어 수준 | 부분 구현 |
 | IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 부분 구현 |
@@ -86,7 +86,7 @@ v0.51에서는 Groovy·Spock 실행, GitHub·GitLab 리뷰, JavaFX FXML 탐색�
 | IDEA-063 | IntelliJ IDEA | Hibernate 디버거·SQL 바인딩·N+1 | 부분 구현 |
 | IDEA-064 | IntelliJ IDEA | Spring Security 런타임 진단 | 부분 구현 |
 | IDEA-065 | IntelliJ IDEA | MVC·WebFlux·Feign 엔드포인트 탐색 | 부분 구현 |
-| IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 미구현 |
+| IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 부분 구현 |
 | IDEA-067 | IntelliJ IDEA | Micronaut 개발 | 미구현 |
 | IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 미구현 |
 | IDEA-069 | IntelliJ IDEA | Maven 프로젝트·목표·의존성 | 부분 구현 |
@@ -230,7 +230,7 @@ v0.51에서는 Groovy·Spock 실행, GitHub·GitLab 리뷰, JavaFX FXML 탐색�
 | DG-087 | DataGrip | diagram 출력·레이아웃 보존 | 구현 |
 | DG-088 | DataGrip | SQL 파일 Git·diff·변경 검토 | VS Code 재사용 |
 | DG-089 | DataGrip | schema 문맥의 자연어 SQL·설명 | 미구현 |
-| DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 미구현 |
+| DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 구현 |
 | DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 미구현 |
 | DG-092 | DataGrip | 서로 다른 data source의 cross-database SQL | 구현 |
 | DG-093 | DataGrip | DuckDB dialect·함수·introspection | 부분 구현 |

@@ -1,25 +1,25 @@
 {
-  "version": "0.51.0",
-  "verifiedAt": "2026-11-25T10:59:19.037Z",
+  "version": "0.52.0",
+  "verifiedAt": "2026-11-25T11:10:15.442Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.51.0.vsix",
-    "bytes": 2581673,
-    "sha256": "a8cae5007fed645111f1cafb4459eedbde83bd79bed064fc5bf1c71aaaf94743",
+    "name": "rocketbrain-0.52.0.vsix",
+    "bytes": 3024764,
+    "sha256": "b2aa49d4352ec514ebd8ab187162671a02dc9f3af5219855f196e578ce8ecf7b",
     "files": 17
   },
   "source": {
-    "frozenPublicInputs": 1418,
-    "inputVectorSha256": "92e36021b93da0c3928d919b3c1d8b16e81ce1bfac61c52f25956060fed3d1e0",
+    "frozenPublicInputs": 1444,
+    "inputVectorSha256": "7e8ec8b65c79749e74ecb270e8995e60d7ba7b05d457b5d26656097eaa541434",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1377,
-    "pass": 1311,
+    "tests": 1387,
+    "pass": 1320,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 66,
+    "skipped": 67,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "codeReview",
+          "group": "dbMcp",
           "checks": 1
         },
         {
-          "group": "groovySpock",
+          "group": "osv",
           "checks": 1
         },
         {
-          "group": "javaFx",
+          "group": "relatedRows",
           "checks": 1
         },
         {
-          "group": "sqlFormat",
+          "group": "quarkus",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "codeReview",
+          "group": "dbMcp",
           "checks": 1
         },
         {
-          "group": "groovySpock",
+          "group": "osv",
           "checks": 1
         },
         {
-          "group": "javaFx",
+          "group": "relatedRows",
           "checks": 1
         },
         {
-          "group": "sqlFormat",
+          "group": "quarkus",
           "checks": 1
         }
       ],
@@ -85,85 +85,81 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-047": {
-      "scope": "Gradle 9.1과 Groovy 4.0.28에서 Java·Groovy를 함께 컴파일하고 Spock 2.4 테스트 3개, 실제 동적 호출, 구문 오류 위치, 이전 변수 유지·초기화를 확인했다.",
+    "IDEA-040": {
+      "scope": "Maven 3.9.11과 Dependency Plugin 3.11.0에서 직접·전이 Log4j 의존성을 해석하고 실제 OSV 권고 ID를 에디터에서 확인했다.",
       "runtimeGroups": [
-        "groovySpock"
+        "osv"
       ]
     },
-    "IDEA-095": {
-      "scope": "인증을 검증하는 두 로컬 API에서 변경과 검사 결과를 표시하고, 패치 전용 편집기와 커밋에 묶인 로컬 초안을 확인했다. 실제 공개 GitHub API 읽기도 별도로 확인했다.",
+    "IDEA-066": {
+      "scope": "Quarkus 3.40.1.2의 HTTP 테스트 2개, 열려 있는 설정의 편집기 탐색, Qute, 실제 개발 모드의 설정 다시 읽기, 소유 서버의 종료를 확인했다.",
       "runtimeGroups": [
-        "codeReview"
+        "quarkus"
       ]
     },
-    "IDEA-120": {
-      "scope": "OpenJFX 25.0.2에서 컨트롤러 주입, 이벤트 호출, 포함 리소스 및 CSS의 로딩을 확인했고 실제 jlink 이미지를 생성해 실행했다.",
+    "DG-066": {
+      "scope": "두 실제 서버에서 같은 이름의 테이블을 구분하고 복합 unsigned BIGINT·바이너리 값을 보존했다. 논리 관계 선택, 메타데이터 변경 거부와 원래 행으로 돌아가기를 확인했다.",
       "runtimeGroups": [
-        "javaFx"
+        "relatedRows"
       ]
     },
-    "DG-040": {
-      "scope": "두 실제 DB에서 원본과 두 포맷의 각 100개 문을 실행해 결과 일치와 재포맷 안정성을 확인했다. IF, CASE, WHILE, REPEAT, LOOP, 트리거·함수와 여러 DELIMITER 스타일을 포함했다.",
+    "DG-090": {
+      "scope": "실제 두 서버에서 Spring 행, BIGINT·DECIMAL의 정확한 비교, 바이너리·시간·JSON 결과, 범위·바이트 제한과 상속 쓰기 권한 거부를 확인했다.",
       "runtimeGroups": [
-        "sqlFormat"
+        "dbMcp"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 278,
+    "sourceCorrespondences": 285,
     "sourceConfidence": "inferred",
     "archiveEntries": 17,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 66,
-      "partial": 113,
-      "not-implemented": 22,
+      "implemented": 67,
+      "partial": 115,
+      "not-implemented": 19,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 135.5,
-    "previousWeightedPoints": 133.5,
+    "weightedPoints": 137.5,
+    "previousWeightedPoints": 135.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 62.7,
+    "referencePercent": 63.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-047",
+        "id": "IDEA-040",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-095",
+        "id": "IDEA-066",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-120",
+        "id": "DG-090",
         "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-040",
-        "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Groovy 콘솔은 독립 Groovy 코어를 사용한다. 프로젝트 클래스 경로가 포함된 REPL과 정적 리팩터링은 별도 범위다.",
-    "Git 검토는 변경·검사 상태 조회 및 로컬 초안에 한정한다. 원격 제출과 전체 변경 파일·대화 페이지 조회가 남아 있다.",
-    "FXML 탐색은 표준 Maven·Gradle 소스 구조와 언어 서버가 확인한 컨트롤러를 사용한다. 시각적 Scene Builder와 Gradle 이미지 작업 지원이 필요하다.",
+    "Quarkus는 Maven 프로젝트의 로컬 개발 모드와 정적 설정을 대상으로 한다. 동적 CDI, Gradle과 디버깅은 남아 있다.",
+    "OSV에는 사용자가 선택한 이름과 버전을 보낸다. 취약 API의 실제 호출 경로 분석이 필요하다.",
+    "DB MCP는 승인한 로컬 서버의 한 스키마와 명시한 테이블·열을 제공한다. 임의 SQL과 여러 연결의 동시 위임은 별도 범위다.",
+    "교차 스키마 탐색은 관찰된 물리 FK, 논리 관계 탐색은 저장된 동일 스키마 관계에 적용한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Quarkus 개발 모드와 MicroProfile 설정 탐색",
-    "권한을 지정한 외부 DB MCP와 스키마를 넘는 관련 행 탐색",
-    "Maven 의존성의 OSV 조회 및 직접·전이 경로 보고서"
+    "Micronaut Maven 실행과 Jakarta WAR 배포·디버깅",
+    "Python 인터프리터·debugpy 및 Jupyter 로컬 커널",
+    "AWS RDS MySQL IAM 토큰과 검증된 TLS 연결"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

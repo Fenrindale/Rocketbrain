@@ -15,9 +15,9 @@ function resultName(value) {
   return value.trim();
 }
 class ResultsView {
-  constructor(vscode, context, { editAction, relatedAction, datasetAction, resultClosed } = {}) {
+  constructor(vscode, context, { editAction, relatedAction, relatedReturn, datasetAction, resultClosed } = {}) {
     this.vscode = vscode; this.context = context; this.history = []; this.view = null; this.sequence = 0;
-    this.editAction = editAction; this.relatedAction = relatedAction; this.resultClosed = resultClosed;
+    this.editAction = editAction; this.relatedAction = relatedAction; this.relatedReturn = relatedReturn; this.resultClosed = resultClosed;
     this.datasetAction = datasetAction;
     this.comparisons = new WeakMap();
     this.resultSequence = 0;
@@ -35,6 +35,7 @@ class ResultsView {
     view.webview.html = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${style}"><title>Query Results</title></head><body>
 <header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option><option value="compare">Compare</option><option value="map" disabled>Map</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option><option value="extractor">Custom Extractor</option></select><button id="export" disabled>Export CSV</button><button id="pin-result" aria-pressed="false" disabled>Pin Result</button><button id="rename-result" disabled>Rename Result</button><button id="close-result">Close Result</button></header>
 <nav id="tabs" aria-label="Query result history"></nav>
+<button id="return-source-row" type="button" hidden>Back to Source Row</button>
 <section id="script-result-sets" aria-label="Captured statement results" hidden><label>Statement result <select id="script-result-selection"></select></label><button id="open-script-statement" type="button">Open Captured Statement</button></section>
 <div id="message" role="status" aria-live="polite">Run SQL from the editor with Ctrl+Enter.</div>
 <section id="result-layout" aria-label="Result view options" hidden><div id="result-row-navigation" hidden><button id="result-row-previous">Previous Row</button><span id="result-row-status" role="status"></span><button id="result-row-next">Next Row</button></div><button id="result-columns" aria-expanded="false">Columns</button></section>
@@ -101,6 +102,8 @@ class ResultsView {
         await this.saveLayout(record.id, msg.modelId, msg.columns);
       } else if (msg.type === 'openRelatedRows') {
         await this.relatedAction?.(record.id, { modelId:msg.modelId, rowId:msg.rowId });
+      } else if (msg.type === 'returnToRelatedSource') {
+        await this.relatedReturn?.(record.id);
       } else if (msg.type === 'analyzeResult') {
         const response = { type: 'resultAnalysis', id: record.id, revision: msg.revision, requestId: msg.requestId };
         try { response.analysis = this.analyzeSnapshot(record.id, msg.options, msg.revision); }
@@ -155,14 +158,15 @@ class ResultsView {
     this.send();
   }
   async show() { await this.vscode.commands.executeCommand('rocketbrain.results.focus'); this.view?.show(true); }
-  begin(sql, source, { readOnly = true, sessionId, tableLayoutConnection, table, scriptCapture } = {}) {
+  begin(sql, source, { readOnly = true, sessionId, tableLayoutConnection, table, scriptCapture, relatedOrigin } = {}) {
     while (this.history.length >= 8) {
-      const removable = this.history.findIndex(record => !record.closing && !record.tabPinned && !this.protectedResult(record));
+      const removable = this.history.findIndex(record => record.id !== relatedOrigin?.id && !record.closing && !record.tabPinned && !this.protectedResult(record));
       if (removable < 0) throw new Error('All eight result tabs are pinned or contain active work. Unpin or close a result before opening another.');
       const [removed] = this.history.splice(removable, 1); this.resultClosed?.(removed.id);
     }
     const record = { id: ++this.sequence, sql: sql.slice(0, 4000), source, state: 'running', readOnly, sessionId };
     if (scriptCapture) record.scriptCapture = scriptCapture;
+    if (relatedOrigin) record.relatedOrigin = relatedOrigin;
     const key = resultTableKey(tableLayoutConnection, table);
     if (key) this.layoutKeys.set(record, { key, table });
     this.history.push(record); this.send(); return record.id;
@@ -182,8 +186,9 @@ class ResultsView {
   findStatement(resultId, index) {
     return this.history.find(record => !record.closing && record.scriptCapture?.resultId === resultId && record.scriptCapture.index === index)?.id;
   }
-  activateResult(id) {
-    if (this.hasResult(id)) return this.view?.webview.postMessage({ type: 'activateResult', id });
+  activateResult(id, selection) {
+    if (this.hasResult(id)) return this.view?.webview.postMessage({ type: 'activateResult', id,
+      ...(selection ? { modelId: selection.modelId, rowId: selection.rowId } : {}) });
   }
   exportable(record) {
     return Boolean(record?.state === 'done' && record.result?.columns.length && this.history.includes(record) && !record.closing &&
