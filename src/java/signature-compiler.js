@@ -14,8 +14,13 @@ async function inspectCompilerJar(file,manifestLimit=65536){
  await visitJar(file,async(entry,read)=>{
   if(/^META-INF\/INDEX\.LIST$/i.test(entry.fileName))sanitized=true;
   if(/^META-INF\/MANIFEST\.MF$/i.test(entry.fileName)){
-   if(entry.uncompressedSize>manifestLimit)throw Error('Compiler JAR manifest exceeds its metadata limit.');
-   if(/^Class-Path\s*:\s*\S/mi.test((await read()).toString('utf8').replace(/\r?\n /g,'')))sanitized=true;
+   // Signed archives can have thousands of per-entry digests. The JAR classpath is a main-section attribute.
+   if(entry.uncompressedSize>4*1024*1024)throw Error('Compiler JAR manifest exceeds its archive limit.');
+   const manifest=(await read()).toString('utf8').replace(/\r\n?/g,'\n');
+   const separator=manifest.indexOf('\n\n');
+   const main=separator===-1?manifest:manifest.slice(0,separator);
+   if(Buffer.byteLength(main)>manifestLimit)throw Error('Compiler JAR manifest exceeds its metadata limit.');
+   if(/^Class-Path\s*:\s*\S/mi.test(main.replace(/\n /g,'')))sanitized=true;
   }
  });
  return {sanitized};

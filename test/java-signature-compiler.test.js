@@ -18,6 +18,15 @@ test('larger bounded framework manifests retain compiler classpath sanitization'
  assert.equal((await inspectCompilerJar(sanitized,256*1024)).sanitized,false);
  await assert.rejects(inspectCompilerJar(file,256*1024+1),/Invalid compiler JAR manifest limit/);
 });
+test('large signed-entry manifests keep the main header limit and indirect-path guard', async () => {
+ const dir=folder(),file=path.join(dir,'signed-entries.jar');
+ const entries=Array.from({length:9500},(_,index)=>`Name: org/example/Class${index}.class\r\nSHA-256-Digest: ${'A'.repeat(43)}=\r\n\r\n`).join('');
+ assert.ok(Buffer.byteLength(entries)>256*1024);
+ jar(file,[['META-INF/MANIFEST.MF','Manifest-Version: 1.0\r\nMulti-Release: true\r\n\r\n'+entries]]);
+ assert.deepEqual(await inspectCompilerJar(file),{sanitized:false});
+ jar(file,[['META-INF/MANIFEST.MF','Manifest-Version: 1.0\r\nClass-Path: another.jar\r\n second.jar\r\n\r\n'+entries]]);
+ assert.deepEqual(await inspectCompilerJar(file),{sanitized:true});
+});
 test('actual compiler uses explicit source mode with a long helper path and a shorter process directory',{skip:!enabled,timeout:120000},async()=>{
  const config=JSON.parse(fs.readFileSync(process.env.ROCKETBRAIN_JAVA_TEST_CONFIG||'test-output/v0.4-java-host-runtime.json')),root=folder();assert.ok(root.length<215,'The owned fixture must allow a process working directory below260 characters.');let storage=root;while(storage.length<215)storage=path.join(storage,'x'.repeat(Math.max(1,Math.min(70,215-storage.length-1))));fs.mkdirSync(storage,{recursive:true});const anticipatedFolder=path.join(storage,'inspection-XXXXXX'),anticipatedHelper=path.join(anticipatedFolder,'rocketbrain','signature','SignatureInspector.java');assert.ok(anticipatedFolder.length<260);assert.ok(anticipatedHelper.length>260);
  const source={uri:pathToFileURL(path.join(root,'LongStorageCheck.java')).href,text:'final class LongStorageCheck { int value(){return 7;} }'},result=await analyzeJavaSources({javaHome:config.javaHome,sources:[source],release:17,storagePath:storage});assert.deepEqual(result.errors,[]);assert.equal(result.processorsEnabled,false);assert.equal(result.classGenerationEnabled,false);assert.ok(result.methods.some(method=>method.key==='LongStorageCheck#value()'));assert.deepEqual(fs.readdirSync(storage),[],'The long owned helper directory is cleaned after its process exits.');
