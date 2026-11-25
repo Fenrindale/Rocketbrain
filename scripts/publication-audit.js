@@ -25,9 +25,12 @@ function publicPath(name) {
   if (name.includes('/.vscode/')) return false;
   if (/^src\/.+\.(?:js|cjs|json|css)$/.test(name)) return true;
   if (/^runtime\/.+\.java$/.test(name)) return true;
+  if (name === 'runtime/jupyter/notebook_bridge.py') return true;
+  if (name === 'runtime/python/source_inspector.py') return true;
   if (name === 'test/fixtures/refactoring-v24-package/src/main/resources/fixture/packagev24/payload/nested/rows.csv') return true;
   if (/^test\/fixtures\/javafx-app\/src\/main\/resources\/views\/(?:panel|extra)\.fxml$/.test(name)) return true;
   if (name === 'test/fixtures/java/quarkus/src/main/resources/templates/greeting.html') return true;
+  if (name === 'test/fixtures/java/jakarta-war/src/main/webapp/page.jsp') return true;
   if (/^test\/fixtures\/java\/groovy-spock\/(?:scripts|src\/(?:main|test)\/groovy\/groovyfixture)\/[A-Za-z]+\.groovy$/.test(name)) return true;
   if (/^test\/.+\.(?:js|cjs|java|kt|json|xml|properties|sql|gradle|txt|css|ya?ml)$/.test(name)) return true;
   if (/^test\/fixtures\/[^\0]+\/src\/(?:main|test)\/resources\/META-INF\/services\/[A-Za-z_$][\w.$]*$/.test(name)) return true;

@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.52.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.53.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -9,15 +9,15 @@
 | 판정 | 항목 수 |
 | --- | ---: |
 | 구현 | 67 |
-| 부분 구현 | 115 |
-| 미구현 | 19 |
+| 부분 구현 | 120 |
+| 미구현 | 14 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **63.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **64.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.52에서는 Quarkus Maven 작업, 승인 범위의 DB MCP, Maven 의존성 권고 조회, 교차 스키마 관련 행 탐색을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 135.5점에서 137.5점으로 바뀌었다.
+v0.53에서는 Micronaut, Jakarta WAR, 로컬 Python·Jupyter와 AWS RDS MySQL IAM 인증 경로를 검증했다. 상태가 바뀐 항목은 5개이고 가중 점수는 137.5점에서 140점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -87,8 +87,8 @@ v0.52에서는 Quarkus Maven 작업, 승인 범위의 DB MCP, Maven 의존성 �
 | IDEA-064 | IntelliJ IDEA | Spring Security 런타임 진단 | 부분 구현 |
 | IDEA-065 | IntelliJ IDEA | MVC·WebFlux·Feign 엔드포인트 탐색 | 부분 구현 |
 | IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 부분 구현 |
-| IDEA-067 | IntelliJ IDEA | Micronaut 개발 | 미구현 |
-| IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 미구현 |
+| IDEA-067 | IntelliJ IDEA | Micronaut 개발 | 부분 구현 |
+| IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 부분 구현 |
 | IDEA-069 | IntelliJ IDEA | Maven 프로젝트·목표·의존성 | 부분 구현 |
 | IDEA-070 | IntelliJ IDEA | Gradle·Kotlin DSL·Task 탐색 | 부분 구현 |
 | IDEA-071 | IntelliJ IDEA | 모듈·혼합 빌드·프로젝트 인덱스 | 부분 구현 |
@@ -129,8 +129,8 @@ v0.52에서는 Quarkus Maven 작업, 승인 범위의 DB MCP, Maven 의존성 �
 | IDEA-106 | IntelliJ IDEA | JavaScript·TypeScript·Node/브라우저 디버그 | VS Code 재사용 |
 | IDEA-107 | IntelliJ IDEA | React·Angular·Vue 프레임워크 | 미구현 |
 | IDEA-108 | IntelliJ IDEA | HTML·CSS/SCSS·Emmet·Preview | VS Code 재사용 |
-| IDEA-109 | IntelliJ IDEA | Python 언어·환경·디버그 | 미구현 |
-| IDEA-110 | IntelliJ IDEA | Jupyter Notebook·커널·셀 디버그 | 미구현 |
+| IDEA-109 | IntelliJ IDEA | Python 언어·환경·디버그 | 부분 구현 |
+| IDEA-110 | IntelliJ IDEA | Jupyter Notebook·커널·셀 디버그 | 부분 구현 |
 | IDEA-111 | IntelliJ IDEA | 원격 파일 배포·SFTP/FTPS/WebDAV | 부분 구현 |
 | IDEA-112 | IntelliJ IDEA | 설정·스타일·프로필 동기화 | VS Code 재사용 |
 | IDEA-113 | IntelliJ IDEA | IDE 키맵·동작 컨텍스트·테마 | 부분 구현 |
@@ -152,7 +152,7 @@ v0.52에서는 Quarkus Maven 작업, 승인 범위의 DB MCP, Maven 의존성 �
 | DG-009 | DataGrip | 클라이언트 인증서·truststore | 부분 구현 |
 | DG-010 | DataGrip | SSH 터널·키·agent 인증 | 부분 구현 |
 | DG-011 | DataGrip | Unix socket·Windows named pipe | 구현 |
-| DG-012 | DataGrip | 클라우드 DB 접속·토큰 인증 범위 | 미구현 |
+| DG-012 | DataGrip | 클라우드 DB 접속·토큰 인증 범위 | 부분 구현 |
 | DG-013 | DataGrip | 초기 SQL·keep-alive·idle timeout | 부분 구현 |
 | DG-014 | DataGrip | 연결 그룹·환경 색상 | 부분 구현 |
 | DG-015 | DataGrip | 연결 복제·가져오기·공유 | 부분 구현 |

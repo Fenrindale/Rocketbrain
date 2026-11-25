@@ -42,6 +42,10 @@ pnpm run package
 표준 `src/main/resources`의 FXML에서 Outline을 볼 수 있습니다. 컨트롤러, 이벤트 메서드, `fx:id` 필드와 같은 모듈에 있는 포함 파일·리소스는 정의로 이동할 수 있습니다. **Run or Package JavaFX Application**에서 JavaFX Maven 플러그인이 구성된 모듈을 선택해 앱을 실행하거나 `jlink` 런타임 이미지를 만들 수 있습니다.
 
 **Audit Maven Dependencies with OSV**는 선택한 Maven 모듈의 실제 의존성 트리를 해석합니다. OSV로 전송할 패키지 이름·버전을 직접 선택하면 직접·전이 의존 경로와 조회 시각, 등록된 권고 ID를 보고서에 표시합니다. [OSV API](https://google.github.io/osv.dev/post-v1-querybatch/)
+
+`.ipynb`는 **Rocketbrain Jupyter Notebook**에서 열 수 있습니다. `jupyter_client`와 `ipykernel`이 설치된 Python 실행 파일을 `rocketbrain.jupyter.pythonPath`에 지정하면 셀을 실행하고 커널 세션을 유지할 수 있습니다. 셀 소스, 출력과 Markdown 첨부 파일은 노트북에 저장됩니다. [Jupyter 파일 형식](https://nbformat.readthedocs.io/en/v5.10.0/format_description.html)
+
+**Select Python Interpreter**로 프로젝트 가상환경을 선택합니다. Python Outline과 구문 오류는 해당 인터프리터의 AST에서 얻습니다. **Run Python File**로 저장한 파일을 실행하고 `debugpy`가 설치된 환경에서 **Debug Python File**로 중단점·변수를 볼 수 있습니다. [debugpy](https://github.com/microsoft/debugpy)
 4. **Build Java Project / Choose Build Task**, 저장한 **Run / Debug / Stop** 구성을 사용합니다.
 5. **Create Spring Project**로 공식 Initializr 프로젝트를 생성하거나 **Edit Spring Starters**로 지원하는 의존성 변경을 검토합니다.
 6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. `rocketbrain.java.fileTemplates`에서 사용자 템플릿과 변수 `${name}`, `${package}`, `${packageDeclaration}`를 사용할 수 있습니다.
@@ -69,6 +73,18 @@ pnpm run package
 **Create Quarkus Maven Project**로 시작 프로젝트를 만든 뒤 **Java Projects**에서 가져옵니다. 시작 프로젝트는 JDK 25와 Maven을 사용합니다. `application.properties`에서 Java에 선언된 MicroProfile Config와 SmallRye ConfigMapping 키를 완성하고 선언으로 이동할 수 있습니다. **Inspect Quarkus Configuration and Endpoints**에서는 프로필별 키, REST 경로와 Qute 템플릿을 엽니다.
 
 **Start Quarkus Dev Mode**는 루프백에서 개발 서버가 준비되면 주소를 표시합니다. **Stop Quarkus Dev Mode**로 세션을 종료하고 **Run Quarkus Tests**로 Maven 테스트를 실행합니다. 이 흐름은 모듈 POM에 Quarkus 3 플러그인을 직접 선언한 프로젝트와 리터럴 어노테이션을 지원합니다.
+
+### Jakarta WAR 배포
+
+독립 Apache Tomcat 11 설치 경로를 사용자 설정 `rocketbrain.java.jakarta.tomcatHome`에 지정합니다. Java Projects로 가져온 Maven WAR 모듈에서 **Build Jakarta WAR**를 실행한 뒤 **Deploy Jakarta WAR to Tomcat**으로 `target`의 WAR와 컨텍스트 이름을 선택합니다. **Show Jakarta Deployment**에서 로컬 주소와 출력을 확인하고 **Stop Jakarta Deployment**로 서버를 종료합니다.
+
+**Debug Jakarta WAR on Tomcat**은 Rocketbrain Java 디버거로 관리 중인 로컬 Tomcat JVM에 연결합니다. 배포에는 선택한 WAR의 별도 임시 복사본과 루프백 포트를 사용합니다. 이 흐름은 로컬 Tomcat 11의 Jakarta Servlet·JSP WAR를 지원합니다.
+
+### Micronaut Maven
+
+Micronaut 5 Maven 플랫폼 부모를 선언한 JAR 모듈을 **Java Projects**로 가져옵니다. **Inspect Micronaut Application**에서 타입이 지정된 설정 키, 환경별 설정 파일, HTTP 경로와 생성자 연결의 소스를 엽니다. `application*.properties`에서 키 완성과 선언 이동을 사용하고, 단일 문서 YAML의 스칼라 키에서 선언으로 이동합니다.
+
+**Run Micronaut Tests**는 Maven 테스트를 실행합니다. **Build and Run Micronaut**는 선택한 환경으로 실행 가능 JAR를 패키징하고 루프백 주소를 표시합니다. **Stop Micronaut Application**으로 실행 중인 JVM을 종료합니다. 소스 변경을 반영하려면 다시 빌드하고 실행합니다.
 
 ### Java CI 품질 게이트
 

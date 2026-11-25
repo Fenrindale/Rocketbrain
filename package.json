@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.52.0",
+  "version": "0.53.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -26,26 +26,31 @@
     "onLanguage:java",
     "onLanguage:kotlin",
     "onLanguage:groovy",
+    "onLanguage:python",
     "onLanguage:duckdb-sql",
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
+    "onDebug:rocketbrain-python",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
     "onView:rocketbrain.javaProjects",
     "onView:rocketbrain.connections",
-    "onNotebook:rocketbrain-sql-notebook"
+    "onNotebook:rocketbrain-sql-notebook",
+    "onNotebook:rocketbrain-jupyter"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
   },
   "contributes": {
     "notebooks": [
-      { "type": "rocketbrain-sql-notebook", "displayName": "Rocketbrain SQL Notebook", "selector": [{ "filenamePattern": "*.rbsql" }] }
+      { "type": "rocketbrain-sql-notebook", "displayName": "Rocketbrain SQL Notebook", "selector": [{ "filenamePattern": "*.rbsql" }] },
+      { "type": "rocketbrain-jupyter", "displayName": "Rocketbrain Jupyter Notebook", "selector": [{ "filenamePattern": "*.ipynb" }] }
     ],
     "languages": [
       {
@@ -73,6 +78,20 @@
       { "command": "rocketbrain.quarkus.startDev", "title": "Start Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.stopDev", "title": "Stop Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.runTests", "title": "Run Quarkus Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.python.select", "title": "Select Python Interpreter", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.python.run", "title": "Run Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
+      { "command": "rocketbrain.python.debug", "title": "Debug Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
+      { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
+      { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
+      { "command": "rocketbrain.jakarta.buildWar", "title": "Build Jakarta WAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.deploy", "title": "Deploy Jakarta WAR to Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.debug", "title": "Debug Jakarta WAR on Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.status", "title": "Show Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.stop", "title": "Stop Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.micronaut.inspect", "title": "Inspect Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.micronaut.run", "title": "Build and Run Micronaut", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.micronaut.test", "title": "Run Micronaut Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.micronaut.stop", "title": "Stop Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1216,6 +1235,24 @@
     ],
     "debuggers": [
       {
+        "type": "rocketbrain-python",
+        "label": "Rocketbrain Python",
+        "languages": ["python"],
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "program": { "type": "string", "description": "Python source file inside the workspace." },
+              "cwd": { "type": "string", "description": "Working directory inside the workspace." },
+              "args": { "type": "array", "items": { "type": "string" }, "description": "Program arguments." },
+              "console": { "enum": ["internalConsole", "integratedTerminal"], "default": "internalConsole" },
+              "stopOnEntry": { "type": "boolean", "default": false },
+              "justMyCode": { "type": "boolean", "default": true }
+            }
+          }
+        },
+        "initialConfigurations": [{ "type": "rocketbrain-python", "request": "launch", "name": "Python: Current File", "program": "${file}" }]
+      },
+      {
         "type": "rocketbrain-java",
         "label": "Rocketbrain Java",
         "languages": [
@@ -1339,6 +1376,14 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.jupyter.pythonPath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to local Python with jupyter_client and ipykernel for explicit notebook execution."
+        },
+        "rocketbrain.python.path": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to the Python interpreter for local source inspection, tasks and debugpy."
+        },
         "rocketbrain.sql.analysis.resolutionScopes": {
           "type": "array",
           "default": [],
@@ -1792,6 +1837,12 @@
           "default": "",
           "scope": "machine-overridable",
           "description": "Optional Apache Maven home for explicit Java project tasks. Maven is not bundled."
+        },
+        "rocketbrain.java.jakarta.tomcatHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute directory of an independently installed Apache Tomcat 11 distribution for local Jakarta WAR deployments."
         },
         "rocketbrain.spring.initializr.endpoint": {
           "type": "string",

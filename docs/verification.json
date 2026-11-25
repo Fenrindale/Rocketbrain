@@ -1,25 +1,25 @@
 {
-  "version": "0.52.0",
-  "verifiedAt": "2026-11-25T11:26:15.866Z",
+  "version": "0.53.0",
+  "verifiedAt": "2026-11-25T11:39:03.852Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.52.0.vsix",
-    "bytes": 3024764,
-    "sha256": "9fa53f590107c87048b590bc85c758ff680da146f051a09ab406fff8c92a3095",
+    "name": "rocketbrain-0.53.0.vsix",
+    "bytes": 3056911,
+    "sha256": "21df5dcbaa5f5a682660d49198d912d64c19c6a5414ab351321d0d0e25b2e3e4",
     "files": 17
   },
   "source": {
-    "frozenPublicInputs": 1444,
-    "inputVectorSha256": "268397f5db0853aadb17ec0d702a6e91c122baa91929ef0e41634084ab88a192",
+    "frozenPublicInputs": 1487,
+    "inputVectorSha256": "177d01b40909093ac8a2e3cf726e4b547444fdd71c9efb87fc1820865d6261f6",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1388,
-    "pass": 1321,
+    "tests": 1403,
+    "pass": 1331,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 67,
+    "skipped": 72,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,22 +29,26 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "dbMcp",
+          "group": "python",
           "checks": 1
         },
         {
-          "group": "osv",
+          "group": "jupyter",
           "checks": 1
         },
         {
-          "group": "relatedRows",
+          "group": "rds",
           "checks": 1
         },
         {
-          "group": "quarkus",
+          "group": "micronaut",
+          "checks": 1
+        },
+        {
+          "group": "jakarta",
           "checks": 1
         }
       ],
@@ -59,22 +63,26 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "dbMcp",
+          "group": "python",
           "checks": 1
         },
         {
-          "group": "osv",
+          "group": "jupyter",
           "checks": 1
         },
         {
-          "group": "relatedRows",
+          "group": "rds",
           "checks": 1
         },
         {
-          "group": "quarkus",
+          "group": "micronaut",
+          "checks": 1
+        },
+        {
+          "group": "jakarta",
           "checks": 1
         }
       ],
@@ -85,34 +93,40 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-040": {
-      "scope": "Maven 3.9.11과 Dependency Plugin 3.11.0에서 직접·전이 Log4j 의존성을 해석하고 실제 OSV 권고 ID를 에디터에서 확인했다.",
+    "IDEA-067": {
+      "scope": "Micronaut 5.2.8의 실제 HTTP 테스트 2개, 생성된 Bean 정의, properties와 YAML 선언 이동, dev·test 환경 응답과 소유 리스너 종료를 확인했다.",
       "runtimeGroups": [
-        "osv"
+        "micronaut"
       ]
     },
-    "IDEA-066": {
-      "scope": "Quarkus 3.40.1.2의 HTTP 테스트 2개, 열려 있는 설정의 편집기 탐색, Qute, 실제 개발 모드의 설정 다시 읽기, 소유 서버의 종료를 확인했다.",
+    "IDEA-068": {
+      "scope": "Tomcat 11.0.29에서 실제 Servlet·JSP HTTP 응답과 Servlet 선언의 중단점·재개를 확인했다. 디버거 연결 해제 후에도 앱이 응답했고 배포 종료 뒤 포트가 닫혔다.",
       "runtimeGroups": [
-        "quarkus"
+        "jakarta"
       ]
     },
-    "DG-066": {
-      "scope": "두 실제 서버에서 같은 이름의 테이블을 구분하고 복합 unsigned BIGINT·바이너리 값을 보존했다. 논리 관계 선택, 메타데이터 변경 거부와 원래 행으로 돌아가기를 확인했다.",
+    "IDEA-109": {
+      "scope": "Python 3.12.14에서 AST 위치를 확인하고 실제 debugpy 1.8.22로 3번째 줄에서 멈춰 지역 변수를 읽고 4번째 줄로 이동했다.",
       "runtimeGroups": [
-        "relatedRows"
+        "python"
       ]
     },
-    "DG-090": {
-      "scope": "실제 두 서버에서 Spring 행, BIGINT·DECIMAL의 정확한 비교, 바이너리·시간·JSON 결과, 범위·바이트 제한과 상속 쓰기 권한 거부를 확인했다.",
+    "IDEA-110": {
+      "scope": "실제 ipykernel 7.2.0으로 두 셀 사이의 상태를 전달하고 결과를 저장했다. nbformat 5.10.4가 파일을 검증했으며 실행 중 취소도 별도 확인했다.",
       "runtimeGroups": [
-        "dbMcp"
+        "jupyter"
+      ]
+    },
+    "DG-012": {
+      "scope": "공식 AWS CLI의 합성 SigV4 서명과 실제 로컬 TLS 토큰 교환, 재연결·잘못된 호스트와 인증서 거부를 확인했다. MySQL과 MariaDB 서버에서는 별도 TLS 회귀 검증을 수행했다.",
+      "runtimeGroups": [
+        "rds"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 285,
+    "sourceCorrespondences": 297,
     "sourceConfidence": "inferred",
     "archiveEntries": 17,
     "archiveConfidence": "observed"
@@ -120,46 +134,56 @@
   "progress": {
     "counts": {
       "implemented": 67,
-      "partial": 115,
-      "not-implemented": 19,
+      "partial": 120,
+      "not-implemented": 14,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 137.5,
-    "previousWeightedPoints": 135.5,
+    "weightedPoints": 140,
+    "previousWeightedPoints": 137.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 63.7,
+    "referencePercent": 64.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-040",
+        "id": "IDEA-067",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-066",
+        "id": "IDEA-068",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "DG-090",
+        "id": "IDEA-109",
         "before": "not-implemented",
-        "after": "implemented"
+        "after": "partial"
+      },
+      {
+        "id": "IDEA-110",
+        "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-012",
+        "before": "not-implemented",
+        "after": "partial"
       }
     ]
   },
   "limits": [
-    "Quarkus는 Maven 프로젝트의 로컬 개발 모드와 정적 설정을 대상으로 한다. 동적 CDI, Gradle과 디버깅은 남아 있다.",
-    "OSV에는 사용자가 선택한 이름과 버전을 보낸다. 취약 API의 실제 호출 경로 분석이 필요하다.",
-    "DB MCP는 승인한 로컬 서버의 한 스키마와 명시한 테이블·열을 제공한다. 임의 SQL과 여러 연결의 동시 위임은 별도 범위다.",
-    "교차 스키마 탐색은 관찰된 물리 FK, 논리 관계 탐색은 저장된 동일 스키마 관계에 적용한다.",
+    "Micronaut는 Maven과 정적인 설정·주입 모델을 지원한다. Gradle, 핫 리로드와 AOT 분석은 남아 있다.",
+    "Jakarta 배포는 로컬 Tomcat의 Servlet·JSP에 적용한다. 원격 서버, 복수 앱과 전체 Jakarta EE 서버 기능은 별도 범위다.",
+    "Python은 로컬 인터프리터의 AST와 debugpy를 사용한다. Jupyter는 로컬 ipykernel 셀을 실행하고 저장한다.",
+    "AWS RDS IAM은 합성 자격 증명으로 서명·TLS·토큰 교환을 검증했다. 실제 AWS RDS 계정에서의 로그인은 미검증이다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Micronaut Maven 실행과 Jakarta WAR 배포·디버깅",
-    "Python 인터프리터·debugpy 및 Jupyter 로컬 커널",
-    "AWS RDS MySQL IAM 토큰과 검증된 TLS 연결"
+    "Scala·sbt 프로젝트와 컴파일러 기반 선언 탐색",
+    "Kotlin Multiplatform의 JVM·JavaScript 소스 세트와 실행",
+    "실제 로컬 모델을 사용하는 SQL 초안과 코드 검토"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

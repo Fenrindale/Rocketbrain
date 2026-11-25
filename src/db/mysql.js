@@ -16,6 +16,7 @@ const { SchemaRecovery } = require('./schema-recovery');
 const { SchemaApplier } = require('./schema-apply');
 const scriptEngine=require('./sql-script');
 const {randomUUID}=require('node:crypto');
+const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTimeout } = require('./rds-iam');
 const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 const METADATA_ID = '__rocketbrain_metadata__';
 function fail(code, message, extra = {}) { return Object.assign(new Error(message), { code, ...extra }); }
@@ -102,9 +103,18 @@ function newSession(id, readOnly, database) {
  * The SQL policy is not a sandbox for privileged server UDFs.
  */
 class MysqlService {
-  constructor(config, { createConnection, reportActivity } = {}) {
+  constructor(config, { createConnection, reportActivity, mintIamToken } = {}) {
     this._options = connectionOptions(config);
     const security = require('./connection-security').connectionSecurity(config);Object.assign(this._options,security.options);this._connectionCleanup=security.dispose;
+    if (config.auth !== undefined) {
+      const auth = normalizeRdsIam(config.auth);
+      const { host, user, port = 3306 } = config;
+      validateRdsIamRoute({ ...config, auth }, config.ssl);
+      if (!config.ssl.ca || security.options.stream || config.password) {
+        throw fail('ROCKETBRAIN_RDS_IAM', 'Use the AWS RDS CA bundle and direct TLS with IAM authentication.');
+      }
+      this._rdsIam = () => createRdsIamHandshake({ host, user, port, auth }, mintIamToken);
+    }
     this._defaultReadOnly = config.readOnly !== false;
     this._createConnection = createConnection || (options => require('mysql2').createConnection(options));
     this._reportActivity = reportActivity;
@@ -182,11 +192,15 @@ class MysqlService {
     if (session.connection && session.connected) return;
     if (session.needsReconnect) throw fail('ROCKETBRAIN_RECONNECT_REQUIRED', 'Reconnect this console explicitly before running SQL.');
     let connection;
-    try { connection = this._createConnection({ ...this._options }); }
+    const iam = this._rdsIam?.();
+    const connectionError = error => iam?.error() ?? safeError(error);
+    // mysql2 caches TLS sessions by SSL options identity. IAM needs the peer certificate on every physical connection.
+    const options = iam ? { ...this._options, ...iam.options, ssl: { ...this._options.ssl } } : { ...this._options };
+    try { connection = this._createConnection(options); }
     catch (error) { this._lose(session, safeError(error)); throw safeError(error); }
     session.connection = connection;
     connection.on('error', error => {
-      if (session.connection === connection) this._lose(session, safeError(error), Boolean(session.active?.mayWrite));
+      if (session.connection === connection) this._lose(session, connectionError(error), Boolean(session.active?.mayWrite));
     });
     connection.on('end', () => {
       if (session.connection === connection) this._lose(session, fail('ROCKETBRAIN_CONNECTION_LOST', 'The server closed this console connection. Reconnect explicitly.'), Boolean(session.active?.mayWrite));
@@ -196,14 +210,18 @@ class MysqlService {
       const finish = error => { if (finished) return; finished = true; clearTimeout(timer); if (session.active === active) session.active = null; error ? reject(error) : resolve(); };
       const active = { mayWrite: false, abort: finish };
       session.active = active;
-      const timer = setTimeout(() => this._lose(session, fail('ROCKETBRAIN_TIMEOUT', 'The MySQL connection timed out. Reconnect this console.')), 5000);
+      const timer = setTimeout(() => this._lose(session, fail('ROCKETBRAIN_TIMEOUT', 'The MySQL connection timed out. Reconnect this console.')), iam ? handshakeTimeout : 5000);
       try {
         connection.connect(error => {
           if (finished) return;
-          if (error) { this._lose(session, safeError(error)); return; }
+          if (error) { this._lose(session, connectionError(error)); return; }
+          if (iam && !iam.sent()) {
+            this._lose(session, fail('ROCKETBRAIN_RDS_IAM', 'The server did not authenticate this connection with the RDS IAM token.'));
+            return;
+          }
           session.connected = true; session.connectionId = connection.threadId ?? null; finish();
         });
-      } catch (error) { this._lose(session, safeError(error)); }
+      } catch (error) { this._lose(session, connectionError(error)); }
     });
     try {
       await this._control(session, 'SET SESSION TRANSACTION ' + (session.readOnly ? 'READ ONLY' : 'READ WRITE'));
