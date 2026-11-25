@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.54.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.55.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -9,15 +9,15 @@
 | 판정 | 항목 수 |
 | --- | ---: |
 | 구현 | 67 |
-| 부분 구현 | 124 |
-| 미구현 | 10 |
+| 부분 구현 | 128 |
+| 미구현 | 6 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **65.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **66.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.54에서는 Scala·sbt, Kotlin Multiplatform의 JVM·JavaScript 개발 흐름과 로컬 모델 기반 코드·SQL 검토를 검증했다. 상태가 바뀐 항목은 4개이고 가중 점수는 140점에서 142점으로 바뀌었다.
+v0.55에서는 Kotlin JVM 편집, Vue 단일 파일 컴포넌트, SSH 원격 파일, 병렬 로컬 SQL 제안을 검증했다. 상태가 바뀐 항목은 4개이고 가중 점수는 142점에서 144점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -64,7 +64,7 @@ v0.54에서는 Scala·sbt, Kotlin Multiplatform의 JVM·JavaScript 개발 흐름
 | IDEA-041 | IntelliJ IDEA | Qodana·CI 품질 게이트 연결 | 구현 |
 | IDEA-042 | IntelliJ IDEA | Java 버전·JDK·언어 수준 | 부분 구현 |
 | IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 부분 구현 |
-| IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 미구현 |
+| IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 부분 구현 |
 | IDEA-045 | IntelliJ IDEA | Kotlin Multiplatform·Compose 개발 | 부분 구현 |
 | IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 부분 구현 |
 | IDEA-047 | IntelliJ IDEA | Groovy·Spock·콘솔 | 부분 구현 |
@@ -116,7 +116,7 @@ v0.54에서는 Scala·sbt, Kotlin Multiplatform의 JVM·JavaScript 개발 흐름
 | IDEA-093 | IntelliJ IDEA | Branch·Rebase·Merge 충돌 해결 | VS Code 재사용 |
 | IDEA-094 | IntelliJ IDEA | Git Worktree·작업별 프로젝트 설정 | 부분 구현 |
 | IDEA-095 | IntelliJ IDEA | GitHub PR·GitLab MR 리뷰 | 부분 구현 |
-| IDEA-096 | IntelliJ IDEA | SSH 원격 개발 | 미구현 |
+| IDEA-096 | IntelliJ IDEA | SSH 원격 개발 | 부분 구현 |
 | IDEA-097 | IntelliJ IDEA | WSL 실행·개발 | 미구현 |
 | IDEA-098 | IntelliJ IDEA | Dev Container 환경 | 미구현 |
 | IDEA-099 | IntelliJ IDEA | Docker·Compose·Registry 관리 | 미구현 |
@@ -127,7 +127,7 @@ v0.54에서는 Scala·sbt, Kotlin Multiplatform의 JVM·JavaScript 개발 흐름
 | IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 구현 |
 | IDEA-105 | IntelliJ IDEA | IDE 안의 DB 연결·SQL·데이터 편집 | 부분 구현 |
 | IDEA-106 | IntelliJ IDEA | JavaScript·TypeScript·Node/브라우저 디버그 | VS Code 재사용 |
-| IDEA-107 | IntelliJ IDEA | React·Angular·Vue 프레임워크 | 미구현 |
+| IDEA-107 | IntelliJ IDEA | React·Angular·Vue 프레임워크 | 부분 구현 |
 | IDEA-108 | IntelliJ IDEA | HTML·CSS/SCSS·Emmet·Preview | VS Code 재사용 |
 | IDEA-109 | IntelliJ IDEA | Python 언어·환경·디버그 | 부분 구현 |
 | IDEA-110 | IntelliJ IDEA | Jupyter Notebook·커널·셀 디버그 | 부분 구현 |
@@ -231,7 +231,7 @@ v0.54에서는 Scala·sbt, Kotlin Multiplatform의 JVM·JavaScript 개발 흐름
 | DG-088 | DataGrip | SQL 파일 Git·diff·변경 검토 | VS Code 재사용 |
 | DG-089 | DataGrip | schema 문맥의 자연어 SQL·설명 | 부분 구현 |
 | DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 구현 |
-| DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 미구현 |
+| DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 부분 구현 |
 | DG-092 | DataGrip | 서로 다른 data source의 cross-database SQL | 구현 |
 | DG-093 | DataGrip | DuckDB dialect·함수·introspection | 부분 구현 |
 | DG-094 | DataGrip | 미실행 SQL·최근 파일·Local History 복원 | 부분 구현 |

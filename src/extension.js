@@ -64,6 +64,7 @@ async function activate(context) {
   const objectSources = require('./db/object-source-vscode').registerObjectSources(vscode, { database });
   const explainPlans=require('./db/explain-plan-vscode').registerExplainPlans(context,vscode,{database});
   const localSqlAssistant = require('./db/local-sql-assistant-vscode').registerLocalSqlAssistant(context, vscode, database);
+  const sqlProposalReview = require('./db/sql-proposal-review-vscode').registerSqlProposalReview(context, vscode, database);
   context.subscriptions.push(lazyCatalog,objectSources,explainPlans);
   const tableTransfer=require('./db/table-transfer-vscode').registerTableTransfer(context,vscode,{database});
   activeTableTransfer=tableTransfer;
@@ -80,6 +81,7 @@ async function activate(context) {
   const codeReview = require('./vcs/code-review-vscode').registerCodeReview(context,vscode);
   context.subscriptions.push(codeReview);
   const codeModel = require('./ai/editor-model-vscode').registerEditorModel(vscode);
+  const sshWorkspace = require('./remote/ssh-workspace-vscode').registerSshWorkspace(context, vscode);
   context.subscriptions.push(codeModel);
   const java = registerJavaFeatures(context, vscode);
   const javaFx = require('./java/javafx-vscode').registerJavaFx(vscode, { java });
@@ -133,6 +135,7 @@ async function activate(context) {
   const jupyter = require('./python/jupyter-vscode').registerJupyter(vscode);
   context.subscriptions.push(jupyter);
   const python = require('./python/python-vscode').registerPython(vscode);
+  const vue = require('./web/vue-vscode').registerVueWorkbench(context, vscode);
   context.subscriptions.push(python);
   const schemaComparison=require('./db/schema-diff-vscode').registerSchemaComparison(context,vscode,{
     capture:options=>database.captureSchemaSnapshot(options),
@@ -157,7 +160,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, localSqlAssistant, springProjects, changelists, codeReview, codeModel, federation };
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, federation };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

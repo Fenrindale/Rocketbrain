@@ -1,5 +1,5 @@
 {
-  "version": "0.54.0",
+  "version": "0.55.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -31,28 +31,28 @@
   },
   "summary": {
     "implemented": 67,
-    "partial": 124,
-    "not-implemented": 10,
+    "partial": 128,
+    "not-implemented": 6,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 65.7,
+    "percent": 66.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-045",
-    "IDEA-046",
-    "IDEA-115",
-    "DG-089"
+    "IDEA-044",
+    "IDEA-096",
+    "IDEA-107",
+    "DG-091"
   ],
   "expandedFeatures": [
-    "IDEA-045",
-    "IDEA-046",
-    "IDEA-115",
-    "DG-089"
+    "IDEA-044",
+    "IDEA-096",
+    "IDEA-107",
+    "DG-091"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1412,25 +1412,26 @@
       "category": "JVM 언어·프로젝트",
       "feature": "Kotlin JVM 코드 지원",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "독립 Kotlin JVM 언어 지원을 연결하지 않았다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "독립 ktlsp로 로컬 Gradle Kotlin JVM 프로젝트에 자동완성, 타입 표시, 선언 이동 및 편집 중 컴파일 진단을 표시한다.",
       "remaining": [
-        "Kotlin 구문·타입·완성·디버깅 통합이 필요하다."
+        "Maven, 라이브 KMP 의미 분석과 Kotlin 리팩터링이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.55-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "ktlsp 1.4.0-rc1과 실제 Gradle 프로젝트에서 멤버 완성, String 타입 표시, 파일 간 이동 및 저장 전 잘못된 타입의 진단과 수정 후 해제를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/kotlin-editor-vscode.js",
+          "src/java/kotlin-editor-runtime.js",
+          "test/kotlin-editor-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1451,8 +1452,8 @@
       "verification": {
         "state": "v0.54-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.54.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1481,8 +1482,8 @@
       "verification": {
         "state": "v0.54-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.54.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2981,25 +2982,26 @@
       "category": "원격·컨테이너",
       "feature": "SSH 원격 개발",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "독립 SSH 원격 개발 엔진을 포함하지 않는다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "검증한 호스트 키로 SSH 파일 트리를 열고 VS Code에서 읽는다. 기존 UTF-8 텍스트를 교체할 때 로컬 파일을 선택해 차이와 변경 여부를 검토한다.",
       "remaining": [
-        "원격 파일/엔진/인증/디버깅 수명주기 통합이 필요하다."
+        "원격 Java 엔진·터미널·디버거, 대량 파일 변경과 전체 원격 작업 영역 수명주기가 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.55-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 OpenSSH와 독립 Python의 인증된 시험 서버에서 편집기 파일 시스템, 차이 비교, 변경 뒤 거절 및 승인한 정확한 바이트 교체를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/remote/ssh-workspace.js",
+          "src/remote/ssh-workspace-vscode.js",
+          "test/ssh-workspace-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3308,25 +3310,26 @@
       "category": "웹·API·데이터 도구",
       "feature": "React·Angular·Vue 프레임워크",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "React/Angular/Vue의 전용 프레임워크 엔진 통합이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "Vue 3 단일 파일 컴포넌트에서 템플릿의 컴포넌트와 스크립트 바인딩 선언을 열고 vue-tsc 진단과 Vite 개발 서버를 제공한다.",
       "remaining": [
-        "템플릿 타입·라우팅·언어 서버·실행/디버그 연결이 필요하다."
+        "Vue의 전체 언어 서버·디버거, React 및 Angular 전용 편집 흐름이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.55-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "Vue 3.5.46, TypeScript 5.9.3, vue-tsc 3.3.14, Vite 8.3.8에서 두 유형 오류의 소스 위치와 수정 후 통과, 선언 이동 및 실제 변환된 HTTP 응답을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/web/vue-tools.js",
+          "src/web/vue-vscode.js",
+          "test/vue-workbench-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3553,8 +3556,8 @@
       "verification": {
         "state": "v0.54-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.54.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6448,8 +6451,8 @@
       "verification": {
         "state": "v0.54-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.54.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6498,25 +6501,26 @@
       "category": "AI·도구 연결",
       "feature": "2026.3 Air·여러 agent 작업 검토",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Air/여러 agent DB 작업 검토 통합이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "검토한 스키마 범위에서 로컬 모델에 여러 읽기 SQL을 맡긴 뒤 개별 제안의 취소, 승인, 거절 및 편집기 내보내기를 지원한다.",
       "remaining": [
-        "작업 격리·변경 검토·승인/취소 수명주기가 필요하다."
+        "범용 ACP·외부 에이전트 연결과 여러 도구를 사용하는 DB 작업 검토가 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.55-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "동시에 구동한 실제 Qwen 모델 제안 둘을 비교하고 승인 범위를 확인했다. 사용자가 검토한 SQL을 두 DB에서 수동 실행해 Spring 기준 결과와 비교했고, 취소는 단위 테스트로 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/sql-proposal-review.js",
+          "src/db/sql-proposal-review-vscode.js",
+          "test/sql-proposal-review-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6673,8 +6677,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "dc38ddb74240822b3591bcfa3a54b64fcd2b231c2aa900bbc2998162f0aaa4e5",
-    "sourceManifestSha256": "e65450bbb90614f2f468debf753281fc9cd0c501b9f18d9846b0e06633628746",
+    "vsixSha256": "286d1f18703333ed50f4c5a4ed754502f144caf22056e48aa7308f59d9ef3797",
+    "sourceManifestSha256": "7701b0e678c798584fffb093477a076444479ef2cc77889b332a9e8d9fda51cc",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6688,33 +6692,33 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-045",
+      "id": "IDEA-044",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-046",
+      "id": "IDEA-096",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-115",
+      "id": "IDEA-107",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "DG-089",
+      "id": "DG-091",
       "before": "not-implemented",
       "after": "partial"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1417,
-    "pass": 1343,
+    "tests": 1428,
+    "pass": 1352,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 74,
+    "skipped": 76,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

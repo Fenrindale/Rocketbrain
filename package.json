@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.54.0",
+  "version": "0.55.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -23,11 +23,13 @@
     "onView:rocketbrain.databases",
     "onView:rocketbrain.results",
     "onView:rocketbrain.analysis",
+    "onView:rocketbrain.sshWorkspace",
     "onLanguage:java",
     "onLanguage:kotlin",
     "onLanguage:groovy",
     "onLanguage:python",
     "onLanguage:scala",
+    "onLanguage:vue",
     "onLanguage:duckdb-sql",
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
@@ -44,7 +46,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path"],
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
@@ -64,6 +66,7 @@
       { "id": "duckdb-sql", "aliases": ["DuckDB SQL"], "extensions": [".duckdb.sql"] },
       { "id": "rocketbrain-jdbc", "aliases": ["Rocketbrain JDBC SQL"], "extensions": [".jdbc.sql"] },
       { "id": "kotlin", "aliases": ["Kotlin"], "extensions": [".kt"] },
+      { "id": "vue", "aliases": ["Vue"], "extensions": [".vue"] },
       { "id": "groovy", "aliases": ["Groovy"], "extensions": [".groovy"] }
     ],
     "grammars": [
@@ -72,9 +75,16 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.sshWorkspace.attach", "title": "Open SSH Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
+      { "command": "rocketbrain.sshWorkspace.refresh", "title": "Refresh SSH Files", "category": "Rocketbrain", "icon": "$(refresh)" },
+      { "command": "rocketbrain.sshWorkspace.upload", "title": "Review Local File Upload to SSH", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
+      { "command": "rocketbrain.kotlinEditor.start", "title": "Start Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlinEditor.stop", "title": "Stop Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlinEditor.output", "title": "Show Kotlin Language Server Output", "category": "Rocketbrain" },
       { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
@@ -88,6 +98,9 @@
       { "command": "rocketbrain.python.select", "title": "Select Python Interpreter", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.run", "title": "Run Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
       { "command": "rocketbrain.python.debug", "title": "Debug Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
+      { "command": "rocketbrain.vue.checkProject", "title": "Check Vue Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.vue.startDevServer", "title": "Start Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
       { "command": "rocketbrain.jakarta.buildWar", "title": "Build Jakarta WAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -192,6 +205,7 @@
       { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.draft", "title": "Draft SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
+      { "command": "rocketbrain.localSqlAssistant.compareProposals", "title": "Compare Local SQL Proposals", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.measurePlan", "title": "Measure SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.comparePlans", "title": "Compare Captured SQL Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -902,6 +916,10 @@
         {
           "id": "rocketbrain.connections",
           "name": "Database Connections"
+        },
+        {
+          "id": "rocketbrain.sshWorkspace",
+          "name": "SSH Workspace"
         }
       ],
       "rocketbrain-query-panel": [
@@ -948,6 +966,9 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.sshWorkspace.attach", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "navigation@1" },
+        { "command": "rocketbrain.sshWorkspace.refresh", "when": "view == rocketbrain.sshWorkspace", "group": "navigation@2" },
+        { "command": "rocketbrain.sshWorkspace.close", "when": "view == rocketbrain.sshWorkspace", "group": "setup@1" },
         {
           "command": "rocketbrain.schema.exportDdl",
           "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1112,6 +1133,7 @@
         }
       ],
       "view/item/context": [
+        { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
         {
           "command": "rocketbrain.db.openObjectSource",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1397,6 +1419,28 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.sshWorkspace.profiles": {
+          "type": "array",
+          "scope": "machine",
+          "default": [],
+          "description": "Trusted SSH workspaces configured in user settings. Remote files require OpenSSH and a Python 3.8+ launcher on the host.",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "required": ["id", "host", "user", "root", "knownHostsPath"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,30}$" },
+              "host": { "type": "string" },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 22 },
+              "user": { "type": "string" },
+              "root": { "type": "string", "description": "Existing absolute directory on the remote host." },
+              "knownHostsPath": { "type": "string", "description": "Absolute local path to the verified OpenSSH known_hosts file." },
+              "privateKeyPath": { "type": "string", "description": "Absolute local key path. Omit to use OpenSSH agent or default identities." },
+              "python": { "enum": ["python3", "python", "py -3"], "default": "python3" }
+            }
+          }
+        },
         "rocketbrain.jupyter.pythonPath": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Absolute path to local Python with jupyter_client and ipykernel for explicit notebook execution."
@@ -1412,6 +1456,14 @@
         "rocketbrain.localCodeModel.model": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Model name exposed by the configured local chat server."
+        },
+        "rocketbrain.vue.nodePath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to Node.js for workspace-local Vue tools. An empty value uses Node.js from PATH."
+        },
+        "rocketbrain.vue.enableDefinitions": {
+          "type": "boolean", "default": false, "scope": "resource",
+          "description": "Load the installed Vue compiler and TypeScript in an independent Node process when finding Vue template definitions in this trusted workspace."
         },
         "rocketbrain.sql.analysis.resolutionScopes": {
           "type": "array",
@@ -1878,6 +1930,18 @@
           "default": "",
           "scope": "machine-overridable",
           "description": "Optional Apache Maven home for explicit Java project tasks. Maven is not bundled."
+        },
+        "rocketbrain.kotlinEditor.serverHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute server directory of the standalone open-source ktlsp 1.4.0-rc1 release."
+        },
+        "rocketbrain.kotlinEditor.gradleUserHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional Gradle user home for Kotlin language server classpath resolution."
         },
         "rocketbrain.java.jakarta.tomcatHome": {
           "type": "string",

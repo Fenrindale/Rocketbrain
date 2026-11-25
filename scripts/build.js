@@ -16,6 +16,8 @@ async function build() {
   const signatureDirectory=path.join(__dirname,'../runtime/java-signature/src/rocketbrain/signature');
   const signatureSources=Object.fromEntries(fs.readdirSync(signatureDirectory).filter(name=>name.endsWith('.java')).sort().map(name=>[name,fs.readFileSync(path.join(signatureDirectory,name),'utf8')]));
   fs.writeFileSync(path.join(__dirname,'../src/java/signature-compiler-sources.json'),JSON.stringify(signatureSources));
+  const kotlinWindowsPath=fs.readFileSync(path.join(__dirname,'../runtime/kotlin-editor/KtlspWindowsPath.java'),'utf8');
+  fs.writeFileSync(path.join(__dirname,'../src/java/kotlin-editor-windows-source.json'),JSON.stringify(kotlinWindowsPath));
   const quarkusStarter = path.join(__dirname,'../test/fixtures/java/quarkus');
   const quarkusFiles = ['pom.xml','src/main/java/quarkusfixture/GreetingConfig.java','src/main/java/quarkusfixture/GreetingResource.java',
     'src/main/resources/application.properties','src/main/resources/templates/greeting.html','src/test/java/quarkusfixture/GreetingResourceTest.java'];

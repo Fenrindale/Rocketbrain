@@ -1,25 +1,25 @@
 {
-  "version": "0.54.0",
-  "verifiedAt": "2026-11-25T12:03:58.599Z",
+  "version": "0.55.0",
+  "verifiedAt": "2026-11-25T12:16:47.088Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.54.0.vsix",
-    "sha256": "dc38ddb74240822b3591bcfa3a54b64fcd2b231c2aa900bbc2998162f0aaa4e5",
-    "bytes": 3086786,
+    "name": "rocketbrain-0.55.0.vsix",
+    "sha256": "286d1f18703333ed50f4c5a4ed754502f144caf22056e48aa7308f59d9ef3797",
+    "bytes": 3112021,
     "files": 18
   },
   "source": {
-    "frozenPublicInputs": 1525,
-    "inputVectorSha256": "e65450bbb90614f2f468debf753281fc9cd0c501b9f18d9846b0e06633628746",
+    "frozenPublicInputs": 1564,
+    "inputVectorSha256": "7701b0e678c798584fffb093477a076444479ef2cc77889b332a9e8d9fda51cc",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1417,
-    "pass": 1343,
+    "tests": 1428,
+    "pass": 1352,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 74,
+    "skipped": 76,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "sql",
+          "group": "ssh",
           "checks": 1
         },
         {
-          "group": "editor",
+          "group": "review",
           "checks": 1
         },
         {
-          "group": "scala",
+          "group": "vue",
           "checks": 1
         },
         {
-          "group": "kmp",
+          "group": "kotlin",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "sql",
+          "group": "ssh",
           "checks": 1
         },
         {
-          "group": "editor",
+          "group": "review",
           "checks": 1
         },
         {
-          "group": "scala",
+          "group": "vue",
           "checks": 1
         },
         {
-          "group": "kmp",
+          "group": "kotlin",
           "checks": 1
         }
       ],
@@ -85,95 +85,86 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-045": {
-      "scope": "Kotlin 2.4.21과 Gradle 9.7.0에서 JVM과 Node 타깃의 앱 출력, 각 2개 테스트, 오버로드와 속성 선언 이동을 실제 확인했다.",
+    "IDEA-044": {
+      "scope": "ktlsp 1.4.0-rc1과 실제 Gradle 프로젝트에서 멤버 완성, String 타입 표시, 파일 간 이동 및 저장 전 잘못된 타입의 진단과 수정 후 해제를 확인했다.",
       "runtimeGroups": [
-        "kmp"
+        "kotlin"
       ]
     },
-    "IDEA-046": {
-      "scope": "공식 sbt 1.13.1과 Scala 3.9.0에서 Java·Scala가 혼합된 앱, MUnit 테스트 2개, 서로 다른 오버로드와 변경된 소스 차단을 확인했다.",
+    "IDEA-096": {
+      "scope": "실제 OpenSSH와 독립 Python의 인증된 시험 서버에서 편집기 파일 시스템, 차이 비교, 변경 뒤 거절 및 승인한 정확한 바이트 교체를 확인했다.",
       "runtimeGroups": [
-        "scala"
+        "ssh"
       ]
     },
-    "IDEA-115": {
-      "scope": "llama.cpp의 실제 Qwen2.5-Coder에서 선택한 Java 명령문의 반환값 42를 답하고 43으로 바꾸는 차이를 검토·적용했다.",
+    "IDEA-107": {
+      "scope": "Vue 3.5.46, TypeScript 5.9.3, vue-tsc 3.3.14, Vite 8.3.8에서 두 유형 오류의 소스 위치와 수정 후 통과, 선언 이동 및 실제 변환된 HTTP 응답을 확인했다.",
       "runtimeGroups": [
-        "editor"
+        "vue"
       ]
     },
-    "DG-089": {
-      "scope": "실제 Qwen2.5-Coder와 두 DB의 Spring 스키마에서 검토한 SQL 초안을 수동 실행해 기준 쿼리의 두 행과 일치함을 확인했다.",
+    "DG-091": {
+      "scope": "동시에 구동한 실제 Qwen 모델 제안 둘을 비교하고 승인 범위를 확인했다. 사용자가 검토한 SQL을 두 DB에서 수동 실행해 Spring 기준 결과와 비교했고, 취소는 단위 테스트로 확인했다.",
       "runtimeGroups": [
-        "sql"
+        "review"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 309,
+    "sourceCorrespondences": 320,
     "sourceConfidence": "inferred",
     "archiveEntries": 18,
     "archiveConfidence": "observed"
   },
-  "nativePayloadEquivalence": {
-    "files": 18,
-    "testedArchiveSha256": "e18296db44dd989afceb1d23a0d9614da64e35a881604ca5dfff80293c5a4696",
-    "testedInputVectorSha256": "17d1f618b7cf0bbbb575ef49c9a1a6d906664cf7d0c6e3b85dd973bef66cc04c",
-    "onlySourceChanges": [
-      "scripts/publication-audit.js",
-      "scripts/test-vsix.js"
-    ]
-  },
   "progress": {
     "counts": {
       "implemented": 67,
-      "partial": 124,
-      "not-implemented": 10,
+      "partial": 128,
+      "not-implemented": 6,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 142,
-    "previousWeightedPoints": 140,
+    "weightedPoints": 144,
+    "previousWeightedPoints": 142,
     "targetWeightedPoints": 216,
-    "referencePercent": 65.7,
+    "referencePercent": 66.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-045",
+        "id": "IDEA-044",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-046",
+        "id": "IDEA-096",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-115",
+        "id": "IDEA-107",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "DG-089",
+        "id": "DG-091",
         "before": "not-implemented",
         "after": "partial"
       }
     ]
   },
   "limits": [
-    "Scala 선언 이동은 Scala 3이 생성한 SemanticDB에 기반한다. Scala 2와 상시 언어 서버 지원이 남아 있다.",
-    "Kotlin Multiplatform의 대상은 JVM과 Node.js다. Compose, Android, iOS, 네이티브 타깃의 실행은 별도 범위다.",
-    "로컬 코드 모델은 명시한 선택 범위와 제안 검토를 지원한다. 인라인 완성과 프로젝트 전체 문맥이 남아 있다.",
-    "로컬 SQL 모델은 사용자가 선택한 스키마를 이용해 읽기 쿼리 초안을 작성하고 설명한다. 실행은 사용자가 편집기에서 선택한다.",
+    "Kotlin 편집은 local Gradle JVM 프로젝트와 검증한 ktlsp 런타임을 사용한다.",
+    "Vue의 컴파일러 기반 탐색과 타입 진단을 지원한다. Angular와 React의 프레임워크 지능화는 남아 있다.",
+    "SSH는 신뢰한 원격 루트의 파일 읽기와 검토 기반 교체를 지원한다. 원격 Java 엔진과 디버깅은 별도 범위다.",
+    "SQL 제안은 명시한 로컬 모델과 읽기 쿼리를 지원한다. 외부 에이전트 실행과 DB 변경은 별도 범위다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Kotlin JVM 기본 편집과 Vue 프로젝트 진단·실행",
-    "SSH 원격 파일 탐색과 검토 기반 갱신",
-    "여러 로컬 SQL 제안의 비교와 승인"
+    "Kotlin 코루틴 상태와 생성 스택",
+    "Docker 컨텍스트와 Compose 수명주기, 레지스트리 조회",
+    "병렬 로컬 ACP 에이전트 응답 비교"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

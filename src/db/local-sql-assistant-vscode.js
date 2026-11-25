@@ -5,6 +5,21 @@ const { normalizeLocalChatTarget, cancelled } = require('../ai/local-chat');
 
 const section = 'rocketbrain.localSqlAssistant';
 
+async function pickLocalSqlSchema(vscode, options) {
+  const selected = await vscode.window.showQuickPick(options.map(item => ({ label: item.name, item })),
+    { title: 'Choose Schema Tables for the Local Model', canPickMany: true, ignoreFocusOut: true });
+  if (!selected?.length) return null;
+  if (selected.length > 6) throw Error('Choose at most six tables.');
+  const scopes = [];
+  for (const { item } of selected) {
+    const columns = await vscode.window.showQuickPick(item.columns, { title: 'Share Column Metadata from ' + item.name,
+      canPickMany: true, ignoreFocusOut: true });
+    if (!columns?.length) return null;
+    scopes.push({ table: item.name, columns });
+  }
+  return scopes;
+}
+
 function registerLocalSqlAssistant(context, vscode, database) {
   let epoch = 0, busy = false, active, disposed = false;
   function invalidate() { epoch++; active?.abort(); }
@@ -24,21 +39,6 @@ function registerLocalSqlAssistant(context, vscode, database) {
     if (disposed || !vscode.workspace.isTrusted || started.epoch !== epoch) {
       throw Error('The database or local model configuration changed. Prepare the request again.');
     }
-  }
-
-  async function chooseSchema(options) {
-    const selected = await vscode.window.showQuickPick(options.map(item => ({ label: item.name, item })),
-      { title: 'Choose Schema Tables for the Local Model', canPickMany: true, ignoreFocusOut: true });
-    if (!selected?.length) return null;
-    if (selected.length > 6) throw Error('Choose at most six tables.');
-    const scopes = [];
-    for (const { item } of selected) {
-      const columns = await vscode.window.showQuickPick(item.columns, { title: 'Share Column Metadata from ' + item.name,
-        canPickMany: true, ignoreFocusOut: true });
-      if (!columns?.length) return null;
-      scopes.push({ table: item.name, columns });
-    }
-    return scopes;
   }
 
   function selectedSql() {
@@ -70,7 +70,7 @@ function registerLocalSqlAssistant(context, vscode, database) {
         prompt: 'Describe the query to send with the selected schema metadata', ignoreFocusOut: true,
         validateInput: value => Buffer.byteLength(value) > 4096 ? 'Keep the request within 4 KiB.' : undefined });
       if (input === undefined) return;
-      const selections = await chooseSchema(started.options);
+      const selections = await pickLocalSqlSchema(vscode, started.options);
       if (!selections) return;
       check(started);
       const prepared = prepareLocalSqlRequest({ ...started, selections, input, mode });
@@ -110,4 +110,4 @@ function registerLocalSqlAssistant(context, vscode, database) {
   } };
 }
 
-module.exports = { registerLocalSqlAssistant };
+module.exports = { registerLocalSqlAssistant, pickLocalSqlSchema };
