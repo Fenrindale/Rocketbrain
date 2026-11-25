@@ -1,6 +1,7 @@
 'use strict';
 
-const { analyzeSql,statementRanges }=require('./sql-analysis');
+const { analyzeSql,scopeAt,statementRanges }=require('./sql-analysis');
+const { quickFixContext }=require('./sql-fix-context');
 const { tokenize }=require('./sql-policy');
 
 const knownCodes=new Set(['sql.name.column','sql.name.ambiguous','sql.name.qualifier','sql.name.table']);
@@ -23,24 +24,22 @@ function nearby(left,right) {
 }
 
 function sqlQuickFixes(text,offset,catalog) {
-  if (!catalog?.database||catalog.coverage?.tables!=='loaded'||catalog.coverage?.columns!=='loaded') return [];
-  const options={dialect:catalog.dialect,database:catalog.database,catalogComplete:true,
-    sqlMode:catalog.sqlMode,tableNameCaseSensitive:catalog.tableNameCaseSensitive};
-  const split=statementRanges(text,options),part=split.statements[0];
-  if (!part||split.unknown.length||offset<part.start||offset>=part.end) return [];
-  const source=text.slice(part.start,part.end),on=offset-part.start;
+  const context=quickFixContext(text,offset,catalog);
+  if(!context)return [];
+  const { part,source,local:on,options,tokens }=context;
+  if(!['SELECT','WITH'].includes(tokens[0]?.upper))return [];
   const before=analyzeSql(source,catalog,options);
-  if(before.scopes.length!==1||before.scopes[0].partial||before.relations.some(item=>item.kind!=='catalog'))return [];
+  const scope=scopeAt(before,on);
+  if(!scope||scope.partial)return [];
   const issue=before.diagnostics.find(item=>knownCodes.has(item.code)&&on>=item.start&&on<item.end);
   if(!issue)return [];
-  let tokens;
-  try{tokens=tokenize(source,false,options);}catch{return [];}
-  if(tokens[0]?.upper!=='SELECT')return [];
   const at=tokens.findIndex(item=>item.start===issue.start&&item.end===issue.end);
   const target=tokens[at];
   if(!id(target))return [];
   const possible=new Set();
-  const relations=before.scopes[0].relations;
+  // JOIN ON binds only the tables introduced at that point in this block.
+  const onPredicate=scope.predicates.some(([start,end])=>at>=start&&at<end);
+  const relations=onPredicate?scope.relations.filter(item=>item.start<issue.start):scope.relations;
   const left=tokens[at-1]?.value==='.'&&id(tokens[at-2])?tokens[at-2].value:null;
   const column=relation=>relation.columns.some(value=>same(value.name,target.value));
   const offerSole=candidates=>{
@@ -48,13 +47,17 @@ function sqlQuickFixes(text,offset,catalog) {
     if(distinct.length===1)possible.add(quote(distinct[0]));
   };
   if(issue.code==='sql.name.table'){
+    if(!relations.some(item=>item.kind==='catalog'&&!item.catalog&&item.start<=issue.start&&issue.start<item.end))return [];
     if(left&&!same(left,catalog.database))return [];
     offerSole([...catalog.tables,...(catalog.views||[])].map(item=>item.name)
       .filter(name=>name!==target.value&&nearby(name,target.value)));
   }else if(issue.code==='sql.name.qualifier'){
     const columnName=tokens[at+1]?.value==='.'&&id(tokens[at+2])?tokens[at+2].value:null;
-    if(!columnName||left)return [];
-    offerSole(relations.filter(item=>nearby(item.alias,target.value)&&item.columns.some(c=>same(c.name,columnName))).map(item=>item.alias));
+    if(!columnName||left&&tokens[at-3]?.value==='.')return [];
+    const schemaMatches=item=>!left||item.kind==='catalog'&&!item.definition&&item.catalog&&
+      (catalog.tableNameCaseSensitive===false?same(item.catalog.database,left):item.catalog.database===left);
+    offerSole(relations.filter(item=>item.complete&&schemaMatches(item)&&nearby(item.alias,target.value)&&
+      item.columns.some(c=>same(c.name,columnName))).map(item=>item.alias));
   }else if(issue.code==='sql.name.ambiguous'){
     if(left)return [];
     for(const relation of relations.filter(column))possible.add(quote(relation.alias)+'.'+quote(target.value));

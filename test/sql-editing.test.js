@@ -52,3 +52,19 @@ test('SQL quick fixes prove exact corrections and explicit choices against a bou
   assert.deepEqual(sqlQuickFixes('USE unknown; '+column,50,catalog),[]);
   assert.deepEqual(sqlQuickFixes(column,column.indexOf('department_ix'),{...catalog,coverage:{}}),[]);
 });
+
+test('quick fixes bind the current statement, nested scope, and tables already introduced in an ON predicate',()=>{
+  const catalog={database:'demo',dialect:'mysql',coverage:{tables:'loaded',columns:'loaded'},tables:['person','dept','later']
+    .map(name=>({name,columns:[{name:'id',type:'int'},{name:'department_id',type:'int'}]}))};
+  const script='SELECT 1;\r\nSELECT p.id FROM person p WHERE EXISTS ('+
+    'SELECT |id FROM person p JOIN dept d ON p.department_id=d.id WHERE d.id>1);\r\nSELECT 2;';
+  const options=text=>sqlQuickFixes(text.replace('|',''),text.indexOf('|'),catalog);
+  const fixes=options(script);
+  assert.deepEqual(fixes.map(item=>item.replacement),['`p`.`id`','`d`.`id`']);
+  assert.ok(fixes.every(item=>item.start===script.indexOf('|')&&item.end===item.start+2));
+  assert.deepEqual(options('SELECT p.id FROM person p JOIN dept d ON |id=1 JOIN later x ON x.id=d.id')
+    .map(item=>item.replacement),['`p`.`id`','`d`.`id`']);
+  assert.deepEqual(options('SELECT demo.|persom.id FROM demo.person').map(item=>item.replacement),['`person`']);
+  assert.deepEqual(options('SELECT other.|persom.id FROM demo.person'),[]);
+  assert.deepEqual(options('USE other; '+script),[]);
+});
