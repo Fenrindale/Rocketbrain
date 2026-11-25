@@ -155,7 +155,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const resultSnapshots=require('./db/result-snapshots').registerResultSnapshots(context,vscode,results,command);
   const gridReviewRecovery=require('./db/table-edit-recovery').registerGridReviewRecovery(context,vscode,tableEditor,results,command);
   const dataExtractors = require('./db/data-extractor-vscode').registerDataExtractors(context, vscode, command, results);
+  let datasetProfileSource;
   const datasetWorkflows = require('./db/dataset-workflow-vscode').registerDatasetWorkflows(context, vscode, command, {
+    profileSource: () => datasetProfileSource,
     tableNames: () => { assertExclusiveReady(); return state.schema.filter(item => item.kind === 'table').map(item => item.name); },
     async withConnection(action) {
       assertExclusiveReady();
@@ -1025,7 +1027,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     return result;
   }
 
-  return {
+  const api = {
     ...require('./db/authoring-facade').authoringFacade({state,assertReady:assertExclusiveReady,pendingDraft:pendingTableDraft,isTrusted:()=>vscode.workspace.isTrusted,sessions:()=>[...bindings.values()].map(binding=>state.db.getSessionState(binding.id)),updateStatus,refresh:refreshAfterSchemaAttempt}),
     dispose:disposeDatabase,disconnectMysql:useDemo,activityLog,activeConnectionProfile:()=>state.profile?structuredClone(state.profile):null,
     openProfileConsole,sqlDrafts,
@@ -1408,6 +1410,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       await closeConsoleBindings(id);
     })
   };
+  Object.defineProperty(api, 'setDatasetProfileSource', { value: source => { datasetProfileSource = source; } });
+  return api;
 }
 
 module.exports = { registerDatabaseWorkbench };

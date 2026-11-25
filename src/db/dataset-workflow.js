@@ -28,12 +28,21 @@ function describeTable(definition) {
   return { name: definition.name, keys, columns, definition: digest(definition) };
 }
 
-function matchingColumn(target, source) {
-  return target && source && target.kind === source.kind && target.type.toLowerCase() === source.type.toLowerCase() &&
-    target.charset === source.charset && target.collation === source.collation;
+function matchingColumn(target, source, independent = false) {
+  if (!target || !source || target.kind !== source.kind || target.charset !== source.charset || target.collation !== source.collation) return false;
+  if (!independent) return target.type.toLowerCase() === source.type.toLowerCase();
+  if (source.nullable && !target.nullable) return false;
+  try {
+    const left = describeType(target), right = describeType(source);
+    if (left.kind !== right.kind || left.category !== right.category) return false;
+    if (left.kind === 'integer') return left.bits === right.bits && left.unsigned === right.unsigned;
+    if (left.kind === 'decimal') return left.precision === right.precision && left.scale === right.scale && left.unsigned === right.unsigned;
+    if (['varchar', 'binary', 'varbinary'].includes(left.kind)) return left.length === right.length;
+    return false;
+  } catch { return false; }
 }
 
-function prepareMapping(target, source, payload) {
+function prepareMapping(target, source, payload, independent) {
   if (!Array.isArray(payload) || !payload.length || payload.length + target.keys.length > limits.columns ||
       target.keys.length !== source.keys.length) throw fail('Choose corresponding integer primary keys and at least one supported payload column.');
   const targetNames = new Set(), sourceNames = new Set();
@@ -41,8 +50,10 @@ function prepareMapping(target, source, payload) {
   return [...keys, ...payload.map(pair => ({ target: pair?.target, source: pair?.source, key: false }))].map(pair => {
     const left = target.columns.find(column => column.name === pair.target);
     const right = source.columns.find(column => column.name === pair.source);
-    if (!matchingColumn(left, right) || targetNames.has(pair.target) || sourceNames.has(pair.source)) {
-      throw fail('Map distinct columns with identical declared SQL types, character sets and collations.');
+    if (!matchingColumn(left, right, independent) || targetNames.has(pair.target) || sourceNames.has(pair.source)) {
+      throw fail(independent
+        ? 'Map distinct compatible integer, decimal, VARCHAR or binary columns with matching collation and destination nullability.'
+        : 'Map distinct columns with identical declared SQL types, character sets and collations.');
     }
     targetNames.add(pair.target);
     sourceNames.add(pair.source);
@@ -69,7 +80,8 @@ async function* orderedRows(db, session, schema, table, mapped, side, check) {
   const { fields, headers } = boundedProjection(columns, field, limits.rowBytes);
   const sql = 'SELECT ' + fields + ' FROM ' + quote(schema) + '.' + quote(table.name) + ' AS rb_data';
   const tail = ' ORDER BY ' + keys.map(key => field(key.name)).join(',') + ' LIMIT ' + limits.pageRows;
-  const bound = (key, operator) => field(key.name) + operator + 'CAST(? AS ' + (/\bunsigned\b/i.test(key.type) ? 'UNSIGNED' : 'SIGNED') + ')';
+  // Both engines can bind the complete signed or unsigned BIGINT domain as an exact decimal.
+  const bound = (key, operator) => field(key.name) + operator + 'CAST(? AS DECIMAL(20,0))';
   const alternatives = keys.map((key, index) => '(' + [...keys.slice(0, index).map(previous => bound(previous, '=')), bound(key, '>')].join(' AND ') + ')');
   const where = ' WHERE ' + alternatives.join(' OR ');
   let last, seen = 0;
@@ -85,7 +97,8 @@ async function* orderedRows(db, session, schema, table, mapped, side, check) {
       if (String(raw.at(-1)) !== '0') throw fail('A comparison row exceeds the 64 KiB wire-size limit. Choose smaller projected columns.');
       const values = mapped.map((pair, index) => value(raw[index], pair.type));
       const key = values.slice(0, keys.length).map(item => BigInt(item));
-      if (++seen > limits.rows || last && order(last, key) >= 0) throw fail('The comparison exceeded 50,000 rows per table or lost exact key order.');
+      if (++seen > limits.rows) throw fail('The comparison exceeded 50,000 rows per table.');
+      if (last && order(last, key) >= 0) throw fail('The ' + side + ' lost exact primary-key order. Replay the comparison.');
       last = key;
       yield { key, values };
     }
@@ -131,63 +144,132 @@ function validateName(name) {
   return name.trim();
 }
 
-function createDatasetWorkflows(storage, withConnection) {
+async function withReader({ db, guard, label }, action) {
+  const reader = new SchemaRenamer(db, { createSession: (id, _, schema) => newSession(id, true, schema) });
+  try {
+    return await reader._withSession(async session => {
+      const check = () => { if (!guard() || !session.connected) throw fail('The connection or workspace changed. Reopen the comparison.'); };
+      const identity = async () => {
+        const server = await reader._identity(session);
+        return { server, scope: digest([server, await db._sqlRelatedServer(session)]) };
+      };
+      check();
+      return await action({
+        db, session, check, identity,
+        read: (sql, values) => reader._read(session, sql, values),
+        schema: db._options.database, label
+      });
+    });
+  } finally { reader.dispose(); }
+}
+
+async function startSnapshot({ db, session }) {
+  await db._control(session, 'SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+  await db._control(session, 'START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
+  const startedAt = new Date().toISOString();
+  await db._refreshState(session);
+  if (!session.inTransaction) throw fail('The consistent comparison transaction could not be established.');
+  return startedAt;
+}
+
+async function closeSnapshot({ db, session }) {
+  if (!session.connected || !session.inTransaction) return;
+  await db._control(session, 'ROLLBACK');
+  await db._refreshState(session);
+  if (session.inTransaction) throw fail('The read-only comparison transaction did not close.');
+}
+
+function createDatasetWorkflows(storage, withConnection, profileSource = () => undefined) {
   let report, pendingUpdate = Promise.resolve();
   const read = () => {
     const records = storage.get(storeKey, []);
     return Array.isArray(records) ? records.filter(item => validId(item?.id) && Array.isArray(item.mapping)).slice(0, limits.workflows) : [];
   };
-  const list = () => structuredClone(read().map(({ id, name, target, source, mapping }) => ({ id, name, target, source, mapping })));
+  const list = () => structuredClone(read().map(({ id, name, target, source, mapping, sourceProfile }) =>
+    ({ id, name, target, source, mapping, ...(sourceProfile && { sourceProfile }) })));
   const update = change => {
     const operation = pendingUpdate.then(() => storage.update(storeKey, change(read())));
     pendingUpdate = operation.catch(() => {});
     return operation;
   };
-  async function withTables({ target, source }, action) {
-    if (target === source) throw fail('Choose distinct source and destination tables.');
+  const selectedProfileSource = () => {
+    const profiles = profileSource();
+    if (!profiles) throw fail('Saved connection profiles are unavailable for comparison.');
+    return profiles;
+  };
+  async function withTables({ target, source, sourceProfile }, action) {
+    if (!sourceProfile && target === source) throw fail('Choose distinct source and destination tables.');
     identifier(target, { table: true }); identifier(source, { table: true });
-    return withConnection(async ({ db, guard }) => {
-      const reader = new SchemaRenamer(db, { createSession: (id, _, schema) => newSession(id, true, schema) });
-      try {
-        return await reader._withSession(async session => {
-          const check = () => { if (!guard() || !session.connected) throw fail('The connection or workspace changed. Reopen the comparison.'); };
-          const fingerprint = async () => digest([await reader._identity(session), await db._sqlRelatedServer(session)]);
-          const observe = async () => ({ target: describeTable(await db._editor.definition(target)), source: describeTable(await db._editor.definition(source)) });
-          check();
-          const scope = await fingerprint(), tables = await observe();
-          check();
-          const verify = async () => {
-            const current = await observe();
-            if (await fingerprint() !== scope || current.target.definition !== tables.target.definition || current.source.definition !== tables.source.definition) {
-              throw fail('The table definition or physical connection changed during comparison. Refresh and replay.');
-            }
-            check();
-          };
-          return await action({ db, session, scope, tables, check, verify });
-        });
-      } finally { reader.dispose(); }
-    });
+    if (sourceProfile && (!validId(sourceProfile.id) || !Number.isSafeInteger(sourceProfile.revision) || sourceProfile.revision < 1)) {
+      throw fail('Choose a current revision of a saved source profile.');
+    }
+    const independent = Boolean(sourceProfile);
+    async function inspectReaders(destination, origin) {
+      const endpoints = { target: destination, source: origin };
+      const check = () => { destination.check(); if (independent) origin.check(); };
+      const observedTarget = await destination.identity();
+      const observedSource = independent ? await origin.identity() : observedTarget;
+      if (independent && observedSource.server.dialect === observedTarget.server.dialect &&
+          observedSource.server.serverUniqueId === observedTarget.server.serverUniqueId) {
+        throw fail('Choose a source profile on a different physical server.');
+      }
+      const definition = async (endpoint, name) => describeTable(await endpoint.db._editor.definition(
+        name, endpoint.schema, independent ? endpoint.read : undefined));
+      const observe = async () => ({ target: await definition(destination, target), source: await definition(origin, source) });
+      const tables = await observe();
+      const verify = async () => {
+        const current = await observe();
+        if ((await destination.identity()).scope !== observedTarget.scope ||
+            independent && (await origin.identity()).scope !== observedSource.scope ||
+            current.target.definition !== tables.target.definition || current.source.definition !== tables.source.definition) {
+          throw fail('The table definition or physical connection changed during comparison. Refresh and replay.');
+        }
+        check();
+      };
+      check();
+      return action({ endpoints, scope: observedTarget.scope, sourceScope: observedSource.scope,
+        targetEngine: observedTarget.server.dialect, sourceEngine: observedSource.server.dialect, tables, check, verify, independent });
+    }
+    return withConnection(destination => withReader(destination, targetReader =>
+      independent ? selectedProfileSource().withProfile(sourceProfile, origin =>
+        withReader(origin, sourceReader => inspectReaders(targetReader, sourceReader))) : inspectReaders(targetReader, targetReader)));
   }
   return {
     list,
+    sourceProfiles: () => profileSource()?.list() ?? [],
+    sourceTableNames(binding) {
+      return selectedProfileSource().withProfile(binding, async ({ db, guard }) => {
+        const result = await db._metadataQuery(
+          "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_TYPE='BASE TABLE' AND ENGINE='InnoDB' ORDER BY TABLE_NAME LIMIT 1001",
+          [db._options.database]);
+        if (!guard() || result.truncated || result.rows.length > 1000) throw fail('The saved source catalog changed or contains over 1,000 InnoDB tables.');
+        return result.rows.map(([name]) => name);
+      });
+    },
     inspect(selection) {
-      return withTables(selection, async ({ tables, verify }) => {
-        const payload = tables.target.columns.filter(left => !tables.target.keys.includes(left.name) &&
-          tables.source.columns.some(right => right.name === left.name && !tables.source.keys.includes(right.name) && matchingColumn(left, right)))
-          .map(({ name }) => ({ target: name, source: name }));
-        if (!payload.length) throw fail('The tables have no same-name exact payload columns to compare.');
-        prepareMapping(tables.target, tables.source, payload.slice(0, 1));
+      return withTables(selection, async ({ tables, verify, independent }) => {
+        const targetColumns = tables.target.columns.filter(column => !tables.target.keys.includes(column.name));
+        const sourceColumns = tables.source.columns.filter(column => !tables.source.keys.includes(column.name));
+        const matches = targetColumns.map(left => ({ target: left.name, sources: sourceColumns
+          .filter(right => (independent || right.name === left.name) && matchingColumn(left, right, independent))
+          .map(right => right.name) })).filter(item => item.sources.length);
+        if (!matches.length) throw fail(independent ? 'The tables have no compatible payload columns to compare.'
+          : 'The tables have no same-name exact payload columns to compare.');
+        const payload = matches.filter(item => item.sources.includes(item.target)).map(({ target }) => ({ target, source: target }));
+        prepareMapping(tables.target, tables.source, [{ target: matches[0].target, source: matches[0].sources[0] }], independent);
         await verify();
-        return { payload, keys: tables.target.keys.map((name, index) => ({ target: name, source: tables.source.keys[index] })) };
+        return { payload, keys: tables.target.keys.map((name, index) => ({ target: name, source: tables.source.keys[index] })),
+          ...(independent && { matches }) };
       });
     },
     save(selection) {
       const name = validateName(selection.name);
-      return withTables(selection, async ({ tables, scope, verify }) => {
-        const mapping = prepareMapping(tables.target, tables.source, selection.mapping);
+      return withTables(selection, async ({ tables, scope, sourceScope, verify, independent }) => {
+        const mapping = prepareMapping(tables.target, tables.source, selection.mapping, independent);
         await verify();
         const saved = { id: randomUUID(), name, scope, target: tables.target.name, source: tables.source.name,
           targetDefinition: tables.target.definition, sourceDefinition: tables.source.definition,
+          ...(independent && { sourceScope, sourceProfile: { id: selection.sourceProfile.id, revision: selection.sourceProfile.revision } }),
           mapping: mapping.filter(pair => !pair.key).map(({ target, source }) => ({ target, source })) };
         await update(current => {
           if (current.length >= limits.workflows) throw fail('Remove an unused saved comparison before saving another.');
@@ -207,8 +289,9 @@ function createDatasetWorkflows(storage, withConnection) {
       const workflow = validId(id) && read().find(item => item.id === id);
       if (!workflow) throw fail('Choose a current saved comparison.');
       report = undefined;
-      return withTables(workflow, async ({ db, session, scope, tables, check, verify }) => {
-        if (workflow.scope !== scope || workflow.targetDefinition !== tables.target.definition || workflow.sourceDefinition !== tables.source.definition) {
+      return withTables(workflow, async ({ endpoints, scope, sourceScope, targetEngine, sourceEngine, tables, check, verify, independent }) => {
+        if (workflow.scope !== scope || independent && workflow.sourceScope !== sourceScope ||
+            workflow.targetDefinition !== tables.target.definition || workflow.sourceDefinition !== tables.source.definition) {
           throw fail('The saved comparison belongs to a different server, account or table definition. Choose the tables and mapping again.');
         }
         const deadline = performance.now() + limits.durationMs;
@@ -218,26 +301,38 @@ function createDatasetWorkflows(storage, withConnection) {
           check();
         };
         validate();
-        const mapped = prepareMapping(tables.target, tables.source, workflow.mapping);
-        await db._control(session, 'SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
-        await db._control(session, 'START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
-        await db._refreshState(session);
-        if (!session.inTransaction) throw fail('The consistent comparison transaction could not be established.');
-        const snapshotStartedAt = new Date().toISOString();
-        const schema = db._options.database;
-        const readers = ['target', 'source'].map(side => orderedRows(db, session, schema, tables[side], mapped, side, validate));
-        let result;
-        try { result = await mergeOrdered(...readers, mapped, validate, onProgress); }
-        finally { await Promise.all(readers.map(reader => reader.return())); }
-        validate();
-        await verify();
-        await db._control(session, 'ROLLBACK');
-        await db._refreshState(session);
-        if (session.inTransaction) throw fail('The read-only comparison transaction did not close.');
+        const mapped = prepareMapping(tables.target, tables.source, workflow.mapping, independent);
+        const { target, source } = endpoints;
+        const readers = Object.entries(endpoints).map(([side, { db, session, schema }]) =>
+          orderedRows(db, session, schema, tables[side], mapped, side, validate));
+        let result, snapshotStartedAt, sourceSnapshotStartedAt;
+        try {
+          snapshotStartedAt = await startSnapshot(target);
+          if (independent) {
+            sourceSnapshotStartedAt = await startSnapshot(source);
+            for (const [side, endpoint] of Object.entries(endpoints)) {
+              // Open the selected table within the transaction so its metadata stays pinned during the read.
+              await endpoint.read('SELECT 1 FROM ' + quote(endpoint.schema) + '.' + quote(tables[side].name) + ' LIMIT 1');
+            }
+            await verify();
+          }
+          result = await mergeOrdered(...readers, mapped, validate, onProgress);
+          validate();
+          await verify();
+        } finally {
+          await Promise.all(readers.map(reader => reader.return()));
+          const closed = await Promise.allSettled([...new Set(Object.values(endpoints))].map(closeSnapshot));
+          if (closed.some(result => result.status === 'rejected')) throw fail('A read-only comparison transaction did not close cleanly.');
+        }
         validate();
         if (!read().some(item => item.id === id)) throw fail('The saved comparison was removed during replay.');
-        report = { ...result, id: randomUUID(), created: new Date().toISOString(), workflow, mapped, db };
-        return structuredClone({ id: report.id, created: report.created, snapshotStartedAt, target: workflow.target, source: workflow.source,
+        report = { ...result, id: randomUUID(), created: new Date().toISOString(), workflow, mapped, db: target.db };
+        const snapshots = independent
+          ? { workflowName: workflow.name, snapshotScope: 'independent-servers',
+            snapshots: { destination: { engine: targetEngine, schema: target.schema, startedAt: snapshotStartedAt },
+              source: { engine: sourceEngine, schema: source.schema, profile: source.label, startedAt: sourceSnapshotStartedAt } } }
+          : { snapshotStartedAt };
+        return structuredClone({ id: report.id, created: report.created, ...snapshots, target: workflow.target, source: workflow.source,
           summary: result.summary, sample: result.sample.map(({ original, ...visible }) => visible), omitted: result.omitted });
       });
     },
@@ -246,6 +341,7 @@ function createDatasetWorkflows(storage, withConnection) {
       const check = () => {
         if (report !== saved || !saved || saved.id !== id || Date.now() - Date.parse(saved.created) > limits.reviewMs ||
             !read().some(item => item.id === saved.workflow.id)) throw fail('Replay the current saved comparison before staging changes.');
+        if (saved.workflow.sourceProfile) selectedProfileSource().assertCurrent(saved.workflow.sourceProfile);
         assertCurrent(saved.db);
       };
       check();

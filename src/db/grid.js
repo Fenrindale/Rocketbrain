@@ -441,9 +441,9 @@ class TableEditor {
     }
     while (this.reviews.size > 40) this.reviews.delete(this.reviews.keys().next().value);
   }
-  async definition(name, schema = this.db._options.database) {
+  async definition(name, schema = this.db._options.database, metadataRead) {
     if (typeof name !== 'string' || !name || name.includes('\0') || name.length > 64) throw fail('ROCKETBRAIN_GRID_TABLE', 'Select a table from the current database metadata.');
-    const read = async (sql, values) => (await this.db._metadataQuery(sql, values)).rows;
+    const read = metadataRead ?? (async (sql, values) => (await this.db._metadataQuery(sql, values)).rows);
     const rows = await read('SELECT TABLE_NAME,TABLE_TYPE,ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME=?', [schema, name]);
     if (rows.length !== 1 || rows[0][0] !== name) throw fail('ROCKETBRAIN_GRID_TABLE', 'The selected table no longer exists in the current database metadata.');
     const columns = (await read('SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,COLUMN_KEY,EXTRA,GENERATION_EXPRESSION,CHARACTER_SET_NAME,COLLATION_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? ORDER BY ORDINAL_POSITION', [schema, name])).map(columnDefinition);

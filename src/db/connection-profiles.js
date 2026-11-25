@@ -84,13 +84,14 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
      (profile.user!==saved?.user||JSON.stringify(transportKey(profile.transport))!==JSON.stringify(transportKey(saved?.transport))))return'';
   return(await secrets.get(secretKey(profile.id)))||'';
  }
- async function prepare(profile,pass,signal){
+ async function prepare(profile,pass,signal,{forceReadOnly=false}={}){
   if(profile.transport&&!profile.transport.address)throw fail('Edit this profile and enter the local socket path or pipe name before connecting.');
   if(profile.auth&&(!profile.auth.source||!profile.tls.caPath))throw fail('Select the local AWS credential source and RDS CA bundle before connecting.');
   const route=profile.transport?{transport:profile.transport}:{host:profile.host,port:profile.port};
   const config={...route,user:profile.user,database:profile.database,password:pass,readOnly:true,
    ...(profile.auth?{auth:profile.auth}:{}),...(profile.writeProtection?{writeProtection:profile.writeProtection}:{}),
    ...(profile.sessionLifecycle && {sessionLifecycle:profile.sessionLifecycle})};
+  if(forceReadOnly)config.writeProtection={...config.writeProtection,connectionReadOnly:true};
   if(profile.tls.mode==='verify'){config.ssl={rejectUnauthorized:true,verifyIdentity:true,serverName:profile.tls.serverName};for(const [field,file]of [['ca',profile.tls.caPath],['cert',profile.tls.certPath],['key',profile.tls.keyPath]])if(file)config.ssl[field]=await readPem(file);connectionSecurity(config);}
   const observedRoute=profile.transport?{transport:{kind:profile.transport.kind}}:route;
   const info={id:profile.id,name:profile.name,group:profile.group,color:profile.color,...observedRoute,database:profile.database,tls:profile.tls.mode==='verify',ssh:Boolean(profile.ssh),
@@ -252,6 +253,39 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   },
   async dispose(){if(disposed)return;disposed=true;revision++;for(const controller of controllers)controller.abort();await Promise.allSettled([...operations]);events.removeAllListeners();}
  };
+ const datasetProfile = binding => {
+  trusted();
+  const record = records.get(binding?.id);
+  if (!record || record.revision !== binding.revision) throw fail('The saved source profile changed. Choose the source and save a new comparison.');
+  return record.profile;
+ };
+ Object.defineProperty(api, 'datasetProfileSource', { value: {
+  list() {
+   trusted();
+   return list().map(({ id, revision, profile, observed }) => ({ id, revision, label: profile.name,
+    description: [profile.group, profile.database, observed?.serverVersion].filter(Boolean).join(' · ') }));
+  },
+  assertCurrent(binding) { datasetProfile(binding); },
+  withProfile(binding, action) {
+   return run(async (ticket, signal) => {
+    const profile = datasetProfile(binding);
+    const pass = await credentials(profile);
+    const resource = await prepare(profile, pass, signal, { forceReadOnly: true });
+    let db;
+    try {
+     guard(ticket);
+     db = createService(resource.config);
+     const current = () => { guard(ticket); datasetProfile(binding); return !signal.aborted; };
+     const result = await action({ db, guard: current, label: profile.name });
+     current();
+     return result;
+    } finally {
+     try { await db?.dispose(); }
+     finally { await resource.dispose(); }
+    }
+   });
+  }
+ } });
  return api;
 }
 module.exports={normalizeProfile,createConnectionProfiles,persistedProfileOnFailure};

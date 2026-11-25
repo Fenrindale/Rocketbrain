@@ -63,6 +63,7 @@ window.addEventListener('message',({data:m})=>{if(m.type==='model'){editorId=m.e
 function registerConnectionProfiles(context,vscode,{database}){
  const manager=createConnectionProfiles({state:context.workspaceState,secrets:context.secrets,connect:database.connectMysql,disconnect:database.disconnectMysql,getActiveProfile:database.activeConnectionProfile,isTrusted:()=>vscode.workspace.isTrusted,createService:config=>new MysqlService(config,{reportActivity:database.activityLog?.createReporter()}),openProfileConsole:database.openProfileConsole,hasProfileConsole:database.hasProfileConsole}),editors=new Map(),subscriptions=[];let closed=false;
  const events=new vscode.EventEmitter();
+ database.setDatasetProfileSource?.(manager.datasetProfileSource);
  const listSessions = database.profileSessionList || (() => []);
  const tree = createProfileTree(vscode, { changes: events.event, listProfiles: manager.list,
   activeProfile: database.activeConnectionProfile, listSessions });
