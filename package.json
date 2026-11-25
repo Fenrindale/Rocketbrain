@@ -689,6 +689,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.java.testing.history",
+        "title": "Open Java Test Run History",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.testing.clearHistory",
+        "title": "Clear Java Test Run History",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.testing.cancel",
         "title": "Cancel Java Tests",
         "category": "Rocketbrain"
@@ -2356,6 +2368,12 @@
           "type": "string",
           "default": "",
           "description": "Path to the separately provisioned java-testing-runtime.json. Empty uses the extension storage installation."
+        },
+        "rocketbrain.java.testing.saveHistory": {
+          "type": "boolean",
+          "scope": "window",
+          "default": false,
+          "description": "Store recent completed Java test summaries, failure messages and comparison texts in the current workspace's local extension state."
         },
         "rocketbrain.java.testing.projects": {
           "type": "array",

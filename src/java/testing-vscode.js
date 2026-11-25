@@ -2,6 +2,8 @@
 const path=require('node:path'),crypto=require('node:crypto');
 const {resolveTestingProjects,inside}=require('./testing-projects');
 const {createTestDebugger}=require('./testing-debug');
+const {createTestHistory,describeFailure,historicalSelection,MAX_FAILURES}=require('./testing-history');
+const {registerTestHistoryView}=require('./testing-history-vscode');
 
 function registerJavaTesting(context,vscode,{java,backend}={}) {
   const controller=vscode.tests.createTestController('rocketbrain-java-tests','Rocketbrain Java Tests');
@@ -11,6 +13,8 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
   let generation=0,dirty=true,disposed=false,busy=false,activeCancellation,lastReport=null;
   const engine=()=>backend||require('./testing');
   const trusted=()=>{if(disposed)throw new Error('Java testing is closed.');if(!vscode.workspace.isTrusted)throw new Error('Trust the workspace before loading or executing Java tests.');};
+  const history=createTestHistory(context.workspaceState),historyView=registerTestHistoryView(vscode,{history,trusted,replay:replayHistory});
+  subscriptions.push(historyView);
   const itemId=(project,id)=>JSON.stringify([project.id,id]);
   const snapshot=()=>({state:disposed?'closed':busy?'running':dirty?'stale':'ready',projects:[...projects.values()].map(p=>({id:p.id,label:p.label,workspace:p.workspace,framework:p.framework||'junit'})),tests:[...items.values()].map(({data,item,project})=>({...data,nativeId:item.id,projectId:project.id,framework:project.framework||'junit'})),lastReport:lastReport?structuredClone(lastReport):null});
   function markDirty(){generation++;dirty=true;}
@@ -96,10 +100,15 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
     if(dirty||options.projects)await discover({projects:options.projects,build:options.build,cancellation:token});
     if(busy)throw new Error('Wait for the current Java test operation or cancel it.');
     assertSaved([...projects.values()]);
-    const selection=selectedProjects(request);if(!selection.size)throw new Error('No runnable Java tests match this selection. Refresh discovery for test templates or dynamic cases.');
+    const historySelection=options.historySelection;
+    const selection=historySelection?historicalSelection(historySelection,projects.values(),(project,id)=>items.get(itemId(project,id))):selectedProjects(request);
+    if(!selection.size)throw new Error('No runnable Java tests match this selection. Refresh discovery for test templates or dynamic cases.');
+    if(historySelection)request=new vscode.TestRunRequest([...selection.values()].flatMap(value=>value.items),undefined,runProfile);
     busy=true;const before=generation,cancellation=new vscode.CancellationTokenSource();activeCancellation=cancellation;
     const external=token?.onCancellationRequested(()=>cancellation.cancel()),run=controller.createTestRun(request,options.debug?'Debug Java tests':options.perTestCoverage?'Java tests with serial per-test coverage':options.coverage?'Java tests with JaCoCo coverage':'Java tests');
     const reports=[],pendingItems=new Map();
+    const keepHistory=historyView.enabled(),historyProjects=[],historyFailures=[];
+    let failureCount=0;
     const within=(id,prefix)=>id===prefix||id.startsWith(prefix+'/');
     try{
       for(const [project,{selectors,excludes}] of selection){
@@ -126,6 +135,10 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
               const frame=failure.frames?.find(value=>value.uri&&Number.isInteger(value.line)&&value.line>=0&&vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(value.uri)));
               if(frame)message.location=new vscode.Location(vscode.Uri.parse(frame.uri),new vscode.Range(frame.line,0,frame.line,0));
               run.failed(item,message,event.durationMs);if(failure.stack)run.appendOutput(String(failure.stack).replace(/\r?\n/g,'\r\n')+'\r\n',undefined,item);failed.add(item.id);
+              if(keepHistory&&(data.kind==='test'||failure.message)){
+                failureCount++;
+                if(historyFailures.length<MAX_FAILURES)historyFailures.push(describeFailure(project,data,failure,text));
+              }
             }
             finished.add(item.id);
             pendingItems.delete(item.id);
@@ -140,14 +153,30 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
         if(result.state==='errored')throw new Error(result.error?.message||result.errors?.[0]?.message||'Java test runner did not complete.');
         for(const [id,item] of pendingItems){if(items.get(id)?.project!==project)continue;if(result.summary?.containersFailed){run.errored(item,new vscode.TestMessage('A test container failed before this test could complete.'));failed.add(id);}else run.skipped(item);pendingItems.delete(id);}
         reports.push({projectId:project.id,framework:project.framework||'junit',state:result.state,summary:result.summary,runDirectory:result.runDirectory,coverage:result.coverage,perTestCoverage:result.perTestCoverage,debug:result.debug});
+        if(keepHistory)historyProjects.push({project,summary:result.summary});
         if(generation===before&&!cancellation.token.isCancellationRequested)publishCoverage(run,result.coverage,project,result.perTestCoverage);
         else run.appendOutput('Source changed or run was cancelled; coverage was not applied to editor lines.\r\n');
       }
-      lastReport={state:cancellation.token.isCancellationRequested?'cancelled':'completed',sourceChanged:generation!==before,coverageScope:options.perTestCoverage?'test-execution-interval':'run',perTestCoverage:!cancellation.token.isCancellationRequested&&generation===before&&reports.some(report=>['available','partial'].includes(report.perTestCoverage?.state)&&!report.perTestCoverage.concurrencyObserved),perTestCoverageRequested:Boolean(options.perTestCoverage),projects:reports};return structuredClone(lastReport);
+      lastReport={state:cancellation.token.isCancellationRequested?'cancelled':'completed',sourceChanged:generation!==before,coverageScope:options.perTestCoverage?'test-execution-interval':'run',perTestCoverage:!cancellation.token.isCancellationRequested&&generation===before&&reports.some(report=>['available','partial'].includes(report.perTestCoverage?.state)&&!report.perTestCoverage.concurrencyObserved),perTestCoverageRequested:Boolean(options.perTestCoverage),projects:reports};
+      if(keepHistory&&historyView.enabled()&&lastReport.state==='completed'&&historyProjects.length){
+        try {
+          lastReport.historyId=await history.append({projects:historyProjects,failures:historyFailures,failureCount,
+            mode:options.debug?'debug':options.coverage||options.perTestCoverage?'coverage':'run',sourceChanged:lastReport.sourceChanged});
+        }catch(error){channel.appendLine('Java test history could not be saved. '+error.message);}
+      }
+      return structuredClone(lastReport);
     }catch(error){if(!disposed&&vscode.workspace.isTrusted){run.appendOutput(error.message+'\r\n');for(const project of selection.keys())run.errored(project.root,new vscode.TestMessage(error.message));for(const item of pendingItems.values())run.errored(item,new vscode.TestMessage(error.message));}throw error;}
     finally{run.end();external?.dispose();cancellation.dispose();activeCancellation=undefined;busy=false;}
   }
   function run(options={}){const request=options.request||new vscode.TestRunRequest(options.includeIds?.map(id=>items.get(id)?.item).filter(Boolean),options.excludeIds?.map(id=>items.get(id)?.item).filter(Boolean),options.debug?debugProfile:options.perTestCoverage?perTestProfile:options.coverage?coverageProfile:runProfile);return track(execute(request,options.cancellation,options));}
+  function replayHistory(id,index,options={}) {
+    trusted();
+    const saved=history.get(id);
+    if(!saved)throw Error('The saved Java test run is no longer available.');
+    const chosen=index===undefined?saved.failures.filter(failure=>failure.rerun):[saved.failures[index]];
+    if(!chosen.length||chosen.some(failure=>!failure?.rerun))throw Error('Choose a saved failure with a stable test ID.');
+    return run({...options,historySelection:chosen,debug:false,coverage:false,perTestCoverage:false});
+  }
   const profileHandler=options=>async(request,token)=>{try{await run({request,cancellation:token,...options});}catch(error){channel.appendLine(error.message);}};
   const runProfile=controller.createRunProfile('Run Java tests',vscode.TestRunProfileKind.Run,profileHandler({}),true);
   const debugProfile=controller.createRunProfile('Debug Java tests',vscode.TestRunProfileKind.Debug,profileHandler({debug:true}),true);
@@ -164,6 +193,8 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
   command('rocketbrain.java.testing.discover',()=>discover());command('rocketbrain.java.testing.run',()=>run());command('rocketbrain.java.testing.coverage',()=>run({coverage:true}));
   command('rocketbrain.java.testing.debug',()=>run({debug:true}));command('rocketbrain.java.testing.coverageByTest',()=>run({coverage:true,perTestCoverage:true}));
   command('rocketbrain.java.testing.rerunFailed',()=>{const includeIds=[...failed].filter(id=>items.has(id));return includeIds.length?run({includeIds}):{state:'no-failures'};});
+  command('rocketbrain.java.testing.history',historyView.open);
+  command('rocketbrain.java.testing.clearHistory',historyView.clear);
   command('rocketbrain.java.testing.cancel',()=>activeCancellation?.cancel());
   subscriptions.push(vscode.workspace.onDidChangeTextDocument(event=>{if(event.document.languageId==='java')markDirty();}),vscode.workspace.onDidCreateFiles(markDirty),vscode.workspace.onDidDeleteFiles(markDirty),vscode.workspace.onDidRenameFiles(markDirty),vscode.workspace.onDidChangeWorkspaceFolders(markDirty),vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.java'))markDirty();}));
   const sourceWatcher=vscode.workspace.createFileSystemWatcher?.('**/*.java');
@@ -172,6 +203,8 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
     subscriptions.push(sourceWatcher,sourceWatcher.onDidChange(changed),sourceWatcher.onDidCreate(changed),sourceWatcher.onDidDelete(changed));
   }
   let disposing;
-  return {controller,discover,run,snapshot,cancel:()=>activeCancellation?.cancel(),rerunFailed:options=>failed.size?run({...options,includeIds:[...failed]}):Promise.resolve({state:'no-failures'}),dispose(){if(!disposing){disposed=true;generation++;activeCancellation?.cancel();disposing=Promise.allSettled([...operations]).then(()=>testDebugger.dispose()).finally(()=>{for(const item of subscriptions)item.dispose();});}return disposing;}};
+  return {controller,discover,run,snapshot,cancel:()=>activeCancellation?.cancel(),rerunFailed:options=>failed.size?run({...options,includeIds:[...failed]}):Promise.resolve({state:'no-failures'}),
+    history:{list:()=>{trusted();return history.list();},replay:replayHistory,openDiff:historyView.openDiff},
+    dispose(){if(!disposing){disposed=true;generation++;activeCancellation?.cancel();disposing=Promise.allSettled([...operations]).then(()=>testDebugger.dispose()).finally(()=>{for(const item of subscriptions)item.dispose();});}return disposing;}};
 }
 module.exports={registerJavaTesting};
