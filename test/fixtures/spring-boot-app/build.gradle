@@ -6,6 +6,18 @@ group = 'fixture'
 version = '0.9.0'
 repositories { mavenCentral() }
 java { sourceCompatibility = JavaVersion.VERSION_25; targetCompatibility = JavaVersion.VERSION_25 }
+def captureEndpoints = providers.environmentVariable('ROCKETBRAIN_SPRING_ENDPOINTS_TEST').orElse('0').get() == '1'
+sourceSets {
+    endpointProbe {
+        java.srcDir 'src/endpoint-probe/java'
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+configurations {
+    endpointProbeImplementation.extendsFrom implementation
+    endpointProbeRuntimeOnly.extendsFrom runtimeOnly
+}
 dependencies {
     implementation platform('org.springframework.boot:spring-boot-dependencies:4.1.2')
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
@@ -17,6 +29,9 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testImplementation 'org.testng:testng:7.11.0'
+    endpointProbeImplementation 'org.springframework:spring-webflux'
+    endpointProbeImplementation 'io.projectreactor.netty:reactor-netty-http'
+    endpointProbeImplementation 'org.springframework.cloud:spring-cloud-starter-openfeign:5.1.0'
 }
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.incremental = false; options.compilerArgs += '-parameters' }
 tasks.withType(Test).configureEach { useJUnitPlatform() }
@@ -32,10 +47,12 @@ tasks.register('writeTestClasspath') {
 }
 tasks.register('writeClasspath') {
     dependsOn classes
+    if (captureEndpoints) dependsOn endpointProbeClasses
     doLast {
         def output = layout.buildDirectory.file('runtime-classpath.txt').get().asFile
-        output.text = sourceSets.main.runtimeClasspath.asPath
-        def artifacts = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.collect {
+        output.text = (captureEndpoints ? sourceSets.endpointProbe : sourceSets.main).runtimeClasspath.asPath
+        def runtime = captureEndpoints ? configurations.endpointProbeRuntimeClasspath : configurations.runtimeClasspath
+        def artifacts = runtime.resolvedConfiguration.resolvedArtifacts.collect {
             [group: it.moduleVersion.id.group, name: it.name, version: it.moduleVersion.id.version, file: it.file.absolutePath]
         }
         layout.buildDirectory.file('dependencies.json').get().asFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(artifacts))

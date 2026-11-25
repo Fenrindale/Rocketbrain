@@ -61,7 +61,7 @@ async function buildSpringProject() {
       const base = 'https://repo.maven.apache.org/maven2/' + item.group.replaceAll('.', '/') + '/' + item.name + '/' + item.version + '/' + item.name + '-' + item.version;
       dependencies.push({ ...item, url: base + '.jar', pomUrl: base + '.pom', sourceUrl: base + '-sources.jar', sha256: await hash(item.file) });
     }
-    const checked = new Set(['spring-boot', 'spring-core', 'hibernate-core', 'spring-data-jpa', 'mysql-connector-j', 'mariadb-java-client']);
+    const checked = new Set(['spring-boot', 'spring-core', 'hibernate-core', 'spring-data-jpa', 'mysql-connector-j', 'mariadb-java-client', 'spring-webflux', 'spring-cloud-openfeign-core', 'reactor-netty-http']);
     for (const item of dependencies.filter(item => checked.has(item.name))) {
       const pomResponse = await fetch(item.pomUrl, { signal: AbortSignal.timeout(15000) });
       if (!pomResponse.ok) throw new Error('Cannot inspect the official dependency POM license: ' + item.name);
@@ -146,6 +146,10 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   let db,spawned=false;
   await fsp.mkdir(INSTANCES, { recursive: true });
   const id = crypto.randomUUID(), folder = path.join(INSTANCES, id), port = await unusedPort();
+  let endpointProbePort;
+  if (process.env.ROCKETBRAIN_SPRING_ENDPOINTS_TEST === '1') {
+    do { endpointProbePort = await unusedPort(); } while (endpointProbePort === port);
+  }
   await fsp.mkdir(folder);
   await fsp.writeFile(path.join(folder, 'owner.json'), JSON.stringify({ kind: MARKER, id }));
   try {
@@ -159,11 +163,17 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     observerArgs=['-javaagent:'+agent.jarPath+'=config='+pathToFileURL(configFile).href];
   }
   const runtimeUrl = 'http://127.0.0.1:' + port + '/actuator', baseUrl = 'http://127.0.0.1:' + port;
-  const classpath = await fsp.readFile(path.join(PROJECT, 'build', 'runtime-classpath.txt'), 'utf8');
-  // This pinned classpath is below Windows' command-line limit. Passing it via
-  // CreateProcessW avoids the launcher's native-encoding decoding of @argfiles
-  // on this Korean Windows profile. Credentials remain environment-only.
-  if (process.platform === 'win32' && classpath.length > 28000) throw new Error('Fixture classpath exceeds its Windows launch limit.');
+  let classpath = await fsp.readFile(path.join(PROJECT, 'build', 'runtime-classpath.txt'), 'utf8');
+  // The optional reactive stack can exceed the Windows launcher command line.
+  // An owned manifest jar keeps its classpath URLs and Unicode paths intact.
+  if (process.platform === 'win32' && classpath.length > 28000) {
+    const { manifestText } = require('../src/java/testing');
+    const entries=[...new Set(classpath.split(path.delimiter).filter(file=>fs.existsSync(file)))];
+    const manifest=path.join(folder,'MANIFEST.MF'), jar=path.join(folder,'classpath.jar');
+    await fsp.writeFile(manifest,manifestText(entries),{flag:'wx'});
+    await run(path.join(javaHome(),'bin','jar.exe'),['--create','--file',jar,'--manifest',manifest],{cwd:folder});
+    classpath=jar;
+  }
   const javaArgs = ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8',
     ...observerArgs,
     ...(jfrRepository ? ['-XX:FlightRecorderOptions=repository='+jfrRepository] : []),
@@ -177,6 +187,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   const output = fs.createWriteStream(logFile);
   child = spawn(javaExe(), javaArgs, { cwd: PROJECT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env,
     SERVER_PORT: String(port), SERVER_ADDRESS: '127.0.0.1', SPRING_DATASOURCE_URL: url, SPRING_DATASOURCE_USERNAME: db.config.user,
+    ...(endpointProbePort ? {FIXTURE_ENDPOINT_PROBE_PORT: String(endpointProbePort)} : {}),
     SPRING_DATASOURCE_PASSWORD: db.config.password, SPRING_DATASOURCE_DRIVER_CLASS_NAME: engine === 'mysql' ? 'com.mysql.cj.jdbc.Driver' : 'org.mariadb.jdbc.Driver',
     SPRING_JPA_HIBERNATE_NAMING_PHYSICAL_STRATEGY:naming==='opaque'?'fixture.boot.OpaquePhysicalNamingStrategy':naming==='custom'?'fixture.boot.FixturePhysicalNamingStrategy':'org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl',
     SPRING_JPA_HIBERNATE_NAMING_IMPLICIT_STRATEGY:naming==='custom'?'fixture.boot.FixtureImplicitNamingStrategy':'org.hibernate.boot.model.naming.ImplicitNamingStrategyJpaCompliantImpl' } });
@@ -211,6 +222,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     const config = { runtimeUrl, baseUrl, appURL: baseUrl, projectPath: PROJECT, sourcePaths: [path.join(PROJECT, 'src', 'main', 'java')],
       port, dbEngine: engine, dbConfigPath: db.configPath, processId: child.pid, javaProcessId: child.pid, debugPort: debugPort || null,naming,
       ...(observer?{observerUrl:observerConnection.baseUrl,observerTokenFile}:{}),
+      ...(endpointProbePort?{endpointProbeUrl:'http://127.0.0.1:'+endpointProbePort}:{}),
       namingStrategy:naming==='opaque'?{physical:'fixture.boot.OpaquePhysicalNamingStrategy'}:naming==='custom'?{physical:'fixture.boot.FixturePhysicalNamingStrategy',implicit:'fixture.boot.FixtureImplicitNamingStrategy'}:null,
       expectations: { conditionalBean: 'conditionalRuntimeThing', dynamicBean: 'registeredRuntimeThing', factoryBean: 'productFactory',
         proxiedBean: 'probeService', configurationPrefix: 'fixture.credentials', mappingPath: '/probe', packageName: 'fixture.boot' } };
