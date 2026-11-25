@@ -575,6 +575,24 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.results.saveSnapshot",
+        "title": "Save Query Result Snapshot",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.results.openSnapshot",
+        "title": "Open Saved Query Result",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.results.removeSnapshot",
+        "title": "Remove Saved Query Result",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.sqlDraft.remove",
         "title": "Remove SQL Draft",
         "category": "Rocketbrain",
