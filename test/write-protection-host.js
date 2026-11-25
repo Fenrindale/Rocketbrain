@@ -41,12 +41,21 @@ async function runWriteProtectionChecks(api, vscode, checks) {
     return { doc, sessionId };
   }
 
+  async function releaseSession(id) {
+    await api.closeConsoleSession(id);
+    sessions.delete(id);
+  }
+
   async function query(sql, setWritable = false) {
-    await document(sql, setWritable);
-    await vscode.commands.executeCommand('rocketbrain.runQuery');
-    const record = api.results().at(-1);
-    assert.equal(record.sql, sql);
-    return record;
+    const { sessionId } = await document(sql, setWritable);
+    try {
+      await vscode.commands.executeCommand('rocketbrain.runQuery');
+      const record = api.results().at(-1);
+      assert.equal(record.sql, sql);
+      return record;
+    } finally {
+      await releaseSession(sessionId);
+    }
   }
 
   async function grid(name) {
@@ -54,6 +63,7 @@ async function runWriteProtectionChecks(api, vscode, checks) {
     const record = api.results().at(-1);
     assert.equal(record.result?.edit?.table, name, record.error);
     sessions.add(record.sessionId);
+    await releaseSession(record.sessionId);
     return record;
   }
 
@@ -76,6 +86,7 @@ async function runWriteProtectionChecks(api, vscode, checks) {
     await profile({ connectionReadOnly: true });
     const locked = await document('SELECT 1', false);
     await assert.rejects(api.configureConsoleSession(locked.sessionId, { readOnly: false }), /locked to read-only/);
+    await releaseSession(locked.sessionId);
     const connectionGrid = await grid(names.writable);
     assert.equal(connectionGrid.result.edit.canEdit, false);
     assert.match(connectionGrid.result.edit.reason, /locked to read-only/);
@@ -102,6 +113,7 @@ async function runWriteProtectionChecks(api, vscode, checks) {
       + names.protected + " SET label='blocked' WHERE id=1;";
     const scripted = await document(script, true);
     await assert.rejects(api.previewSqlScript(script, { document: scripted.doc }), /protects this table/);
+    await releaseSession(scripted.sessionId);
     const deniedTrigger = await query("UPDATE " + names.triggered + " SET label='blocked' WHERE id=1", true);
     assert.match(deniedTrigger.error, /no triggers/);
     const deniedCascade = await query('UPDATE ' + names.parent + ' SET id=2 WHERE id=1', true);
@@ -159,6 +171,7 @@ async function runWriteProtectionChecks(api, vscode, checks) {
     assert.equal((await raw.query('SELECT label FROM ' + names.writable + ' WHERE id=1'))[0][0].label, 'allowed');
     await api.controlConsoleSession(manual.sessionId, 'rollback');
     assert.equal((await raw.query('SELECT label FROM ' + names.writable + ' WHERE id=1'))[0][0].label, 'allowed');
+    await releaseSession(manual.sessionId);
     const explicit = await document('UPDATE ' + names.writable + " SET label='explicit' WHERE id=1", true);
     await api.controlConsoleSession(explicit.sessionId, 'begin');
     await vscode.commands.executeCommand('rocketbrain.runQuery');
@@ -166,6 +179,7 @@ async function runWriteProtectionChecks(api, vscode, checks) {
     assert.equal((await raw.query('SELECT label FROM ' + names.writable + ' WHERE id=1'))[0][0].label, 'allowed');
     await api.controlConsoleSession(explicit.sessionId, 'commit');
     assert.equal((await raw.query('SELECT label FROM ' + names.writable + ' WHERE id=1'))[0][0].label, 'explicit');
+    await releaseSession(explicit.sessionId);
     const unrelated = await query('UPDATE ' + names.writable + ' SET id=2 WHERE id=1', true);
     assert.equal(unrelated.result.affectedRows, 1);
     assert.equal((await raw.query('SELECT id FROM ' + names.unrelated))[0][0].id, 2);
