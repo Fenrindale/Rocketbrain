@@ -94,6 +94,14 @@ Micronaut 5 Maven 플랫폼 부모를 선언한 JAR 모듈을 **Java Projects**�
 
 Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compile and Index Scala**를 실행합니다. `.scala` 편집기의 **Go to Definition**은 컴파일러가 해석한 심볼을 사용하므로 하위 프로젝트 간 오버로드도 올바른 선언으로 이동합니다. 소스나 빌드가 바뀌면 다시 컴파일합니다.
 
+### Kotlin Multiplatform
+
+**Inspect Kotlin Multiplatform Targets**에서 Gradle이 구성한 JVM·JavaScript 타깃과 소스셋 의존 관계를 확인합니다. **Compile Kotlin Multiplatform Targets**, **Test Kotlin Multiplatform Targets**, **Run Kotlin Multiplatform Target**은 관찰된 타깃의 컴파일·테스트·실행 작업을 사용합니다. JavaScript 실행과 테스트는 Node.js 타깃을 대상으로 합니다.
+
+Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를 시작하지 못하면 `rocketbrain.kotlin.gradleHome`에 Gradle 9.7.0 설치 경로를 지정합니다. 이 설정은 Kotlin Multiplatform 작업에 적용됩니다.
+
+컴파일 뒤 편집기의 **Go to Definition** 또는 **Open Kotlin Expect or Actual Declaration**에서 최상위 함수와 프로퍼티의 단순 스칼라 시그니처를 연결합니다. 공통 `expect`에서 플랫폼별 `actual`을 선택하거나 `actual`에서 원래 선언으로 돌아갈 수 있습니다. 소스나 빌드 구성이 바뀌면 다시 컴파일합니다.
+
 ### Java CI 품질 게이트
 
 VSIX의 `extension/dist/java-quality-gate.js`를 추출하거나 소스의 `scripts/java-quality-gate.js`를 실행합니다. Node.js 20 이상과 Git이 있는 CI에서 대상 저장소와 기준선 커밋을 로컬로 준비합니다.

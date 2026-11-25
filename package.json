@@ -105,6 +105,12 @@
       { "command": "rocketbrain.scala.run", "title": "Run sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.definition", "title": "Open Compiled Scala Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == scala" },
       { "command": "rocketbrain.scala.stop", "title": "Stop sbt Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.inspect", "title": "Inspect Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.compile", "title": "Compile Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.test", "title": "Test Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.run", "title": "Run Kotlin Multiplatform Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
+      { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1896,6 +1902,24 @@
           "default": "",
           "scope": "machine",
           "description": "Optional absolute path to your sbt repository override configuration for managed tasks."
+        },
+        "rocketbrain.kotlin.gradleHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional independent Gradle installation for Kotlin Multiplatform actions. Falls back to the Java Gradle installation."
+        },
+        "rocketbrain.kotlin.gradleUserHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional Gradle user home used by Rocketbrain Kotlin Multiplatform tasks."
+        },
+        "rocketbrain.kotlin.nodeHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional standalone Node.js directory prepended to the Kotlin Gradle task environment when a project uses a system Node.js."
         },
         "rocketbrain.spring.initializr.endpoint": {
           "type": "string",
