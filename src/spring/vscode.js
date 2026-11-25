@@ -116,7 +116,8 @@ function registerSemanticSpring(vscode, context, output) {
       return absolute.scheme==='file'&&relative!==''&&relative!=='..'&&!relative.startsWith('..'+path.sep)&&
         !path.isAbsolute(relative)&&!/(?:^|[\\/])src[\\/](?:test|testFixtures|integrationTest)[\\/]/iu.test(relative);
     });
-    return {scopedProperties,options:structuredClone(inputs.options),
+    // VS Code returns configuration proxies. Materialize the JSON settings before attribution.
+    return {scopedProperties,options:JSON.parse(JSON.stringify(inputs.options)),
       valid:()=>!disposed&&enabled()&&!dirty&&model===current&&revision===current.revision};
   }
   const beanGraph = registerBeanGraph(vscode,{analyze,refresh,enabled,revision:() => revision,
