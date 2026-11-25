@@ -6,6 +6,7 @@ const grants = require('./database-table-grant');
 const principals = require('./database-principal-create');
 const roleMembership = require('./database-role-membership');
 const rotation = require('./database-password-rotation');
+const accountAccess = require('./database-account-access');
 
 function registerDatabaseAdmin(context, vscode, { database }) {
   const documents = new Map(), reviews = new Map(), subscriptions = [];
@@ -118,6 +119,21 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     return consumeReview('password-rotation', reviewId, (lease, plan) => rotation.apply(lease, plan, password));
   }
 
+  async function prepareAccountAccess(input) {
+    trusted();
+    const ticket = generation;
+    return database.withDatabaseAdmin(async lease => {
+      const plan = await accountAccess.plan(guarded(lease,ticket),input);
+      return { ...retainReview('account-access',lease,ticket,plan), ...accountAccess.publicReview(plan) };
+    });
+  }
+
+  function applyAccountAccess({reviewId,approved}={}) {
+    trusted();
+    if(approved!==true)throw new Error('Approve the exact reviewed account lock change.');
+    return consumeReview('account-access',reviewId,accountAccess.apply);
+  }
+
   function listRoleMembershipOptions() {
     trusted();
     const ticket = generation;
@@ -168,6 +184,9 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     preparePasswordRotation,
     applyPasswordRotation,
     openPasswordRotationReview,
+    prepareAccountAccess,
+    applyAccountAccess,
+    openAccountAccessReview,
     listRoleMembershipOptions,
     prepareRoleMembership,
     applyRoleMembership,
@@ -448,8 +467,53 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     } finally { reviews.delete(review.reviewId); }
   }
 
+  function openAccountAccessReview(reviewId) {
+    const {plan}=reviewed('account-access',reviewId);
+    const review=accountAccess.publicReview(plan);
+    const {state,definers}=review,action=review.desiredLocked?'Lock':'Unlock';
+    const limits=state.limits;
+    const lines=['# '+action+' database account', '',
+      'Target account '+text(describeAccount(review.target)),
+      'Executing account '+text(review.server.account)+' · '+text(review.server.version),
+      'Observed state '+(state.locked?'locked':'unlocked')+' · '+text(state.plugin)+
+        (state.hasPassword?' · password set':' · no password set')+(state.passwordExpired?' · password expired':''),
+      'TLS requirement '+text(state.tls)+' · Direct roles '+state.roles+' · Default roles '+state.defaultRoles,
+      'Limits per hour '+limits.queriesPerHour+' queries / '+limits.updatesPerHour+' updates / '+limits.connectionsPerHour+
+        ' connections · '+limits.concurrentConnections+' concurrent connections', '',
+      'The lock controls fresh logins. Already authenticated sessions remain connected, and stored objects retain their definers.', '',
+      '## Stored objects with this definer', '',
+      ...definers.map(object=>'- '+text(object.schema)+'.'+text(object.name)+' · '+text(object.routine||object.kind)+
+        ' · '+text(object.security)+(object.status?' · '+text(object.status):'')+
+        (object.table?' · '+text(object.table.schema)+'.'+text(object.table.name)+' '+text(object.timing)+' '+text(object.operation):'')),
+      ...(!definers.length?['No objects use this account as their definer in the observed server inventory.']:[]),
+      '', '~~~sql',review.sql+';','~~~'];
+    return show(lines.join('\n'),'account-access.md',reviewId);
+  }
+
+  async function reviewAccountAccess() {
+    const ticket=generation,accounts=await api.listAccounts();
+    if(accounts.visibility!=='observed')throw new Error('A complete visible account list is required for this review.');
+    const selected=await vscode.window.showQuickPick(accounts.entries.filter(item=>item.kind!=='role'&&item.host)
+      .map(({user,host})=>({label:describeAccount({user,host}),account:{user,host}})),{title:'Choose a Database Account'});
+    if(!selected)return;
+    const action=await vscode.window.showQuickPick([{label:'Lock account',locked:true},{label:'Unlock account',locked:false}],
+      {title:selected.label});
+    if(!action)return;
+    if(ticket!==generation)throw new Error('The administrator connection changed. Start the review again.');
+    const review=await prepareAccountAccess({account:selected.account,locked:action.locked});
+    try {
+      await openAccountAccessReview(review.reviewId);
+      const confirm=action.locked?'Lock Reviewed Account':'Unlock Reviewed Account';
+      if(await vscode.window.showWarningMessage(action.label+' '+selected.label+'?',{modal:true},confirm)!==confirm)return;
+      const result=await applyAccountAccess({reviewId:review.reviewId,approved:true});
+      if(result.state==='verified')void vscode.window.showInformationMessage('The account lock state was verified.');
+      else void vscode.window.showWarningMessage('Account change '+result.state+'. Inspect the account before making another review.');
+      return result;
+    } finally {reviews.delete(review.reviewId);}
+  }
+
   for (const [name, command] of [['systemCatalog', browseSystem], ['inspectAccess', inspectAccount], ['inspectRoleInheritance', inspectRoles], ['reviewRoleMembership', editRoleMembership], ['reviewTableGrant', editGrant],
-    ['reviewCreatePrincipal', createPrincipal], ['reviewPasswordRotation', rotatePassword]]) {
+    ['reviewCreatePrincipal', createPrincipal], ['reviewPasswordRotation', rotatePassword], ['reviewAccountAccess', reviewAccountAccess]]) {
     subscriptions.push(vscode.commands.registerCommand('rocketbrain.db.' + name, async () => {
       try { trusted(); return await command(); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Database: ' + error.message); }

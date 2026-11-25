@@ -274,6 +274,9 @@ async function main() {
       const adminConfig = allowPrincipalCreation || allowRoleInheritance || allowRoleMembership || process.env.ROCKETBRAIN_ENABLE_DBADMIN_FIXTURE === '1'
         ? await require('../test/helpers/database-admin-fixture').prepareDatabaseAdminFixture(fixture, { allowPrincipalCreation, allowRoleInheritance, allowRoleMembership })
         : undefined;
+      const accountAccessConfig = process.env.ROCKETBRAIN_ENABLE_ACCOUNT_ACCESS_FIXTURE === '1'
+        ? await require('../test/helpers/database-account-access-fixture').prepareAccountAccessFixture(fixture)
+        : undefined;
       const passwordRotationConfig = process.env.ROCKETBRAIN_ENABLE_PASSWORD_ROTATION_FIXTURE === '1'
         ? await require('../test/helpers/database-password-rotation-fixture').preparePasswordRotationFixture(fixture)
         : undefined;
@@ -291,6 +294,7 @@ async function main() {
           ...(adminConfig ? { ROCKETBRAIN_DBADMIN_TEST_CONFIG: adminConfig } : {}), ...dbMcpEnvironment,
           ...(passwordRotationConfig ? { ROCKETBRAIN_PASSWORD_ROTATION_CONFIG:passwordRotationConfig } : {}),
           ...(passwordFreeFixture ? { ROCKETBRAIN_PASSWORD_FREE_CONFIG: passwordFreeFixture } : {}),
+          ...(accountAccessConfig ? { ROCKETBRAIN_ACCOUNT_ACCESS_CONFIG:accountAccessConfig } : {}),
           ...(fixture.db.crossConfigPath ? { ROCKETBRAIN_SCHEMA_CROSS_CONFIG: fixture.db.crossConfigPath } : {}) } });
         child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
       });
