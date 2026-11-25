@@ -1,25 +1,25 @@
 {
-  "version": "0.73.0",
-  "verifiedAt": "2026-11-25T17:46:45.476Z",
+  "version": "0.74.0",
+  "verifiedAt": "2026-11-25T18:07:27.150Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.73.0.vsix",
-    "sha256": "4b0a0d2a45f989dc560020e1f66847bfc294449fc09aaa26b873cc8c816dc295",
-    "bytes": 3429872,
+    "name": "rocketbrain-0.74.0.vsix",
+    "sha256": "1e0d0cde1657803af0165bc811fa7c9ae928e3bcaf95f6561833f1d4d7001c1e",
+    "bytes": 3496972,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1910,
-    "inputVectorSha256": "298741c5e516235cd41f2101eedc8403bfe9d8e2590a63e890b285fbe1ce8b4a",
+    "frozenPublicInputs": 1935,
+    "inputVectorSha256": "e62cf00b99e0e324b97372496c9442f92fe84e39b18d04488ebcd5df1a7e5c7e",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1641,
-    "pass": 1537,
+    "tests": 1650,
+    "pass": 1543,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 104,
+    "skipped": 107,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "semanticSelection",
+          "group": "javaTypeImports",
           "checks": 1
         },
         {
-          "group": "springMethodSecurity",
+          "group": "codeInformation",
           "checks": 1
         },
         {
-          "group": "duckdbFileLifecycle",
+          "group": "springConfiguration",
           "checks": 1
         },
         {
-          "group": "sqlActivityDurable",
+          "group": "gridReviewRecovery",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "semanticSelection",
+          "group": "javaTypeImports",
           "checks": 1
         },
         {
-          "group": "springMethodSecurity",
+          "group": "codeInformation",
           "checks": 1
         },
         {
-          "group": "duckdbFileLifecycle",
+          "group": "springConfiguration",
           "checks": 1
         },
         {
-          "group": "sqlActivityDurable",
+          "group": "gridReviewRecovery",
           "checks": 1
         }
       ],
@@ -85,81 +85,81 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-006": {
-      "scope": "두 실제 Spring 환경의 JDT Java, Kotlin Gradle 서버와 SQL 편집기에서 선택 경계 및 확장·축소를 확인했다. 커서 수와 방향 복원, 수동 이동 시 선택 이력 초기화, 문장 경계 및 원본 보존을 검증했다.",
+    "IDEA-008": {
+      "scope": "두 설치 환경에서 JDT Java·Kotlin Gradle 서버의 실제 오버로드, 활성 인수와 Kotlin 매개변수 KDoc을 확인했다. 독립 JDT 검증에서는 소스 없는 JAR의 매개변수 이름과 시그니처를 관찰했다.",
       "runtimeGroups": [
-        "semanticSelection"
+        "codeInformation"
       ]
     },
-    "IDEA-064": {
-      "scope": "두 Spring Security 앱에서 HTTP 필터가 허용해도 메서드 인가가 403을 반환하는 경로를 확인했다. 호출 전·후 거부를 실제 JDBC 횟수로 구분하고 상속 역할 비교, 기본 숨김과 이력 상한을 확인했다.",
+    "IDEA-011": {
+      "scope": "두 Spring 프로젝트에서 실제 Date 후보 두 개 중 java.sql.Date를 선택했다. 미해결 진단 소거, 참조 두 개, 원래 정적·와일드카드 import와 디스크 원본, Undo, 위조·오래된 후보 거부를 확인했다.",
       "runtimeGroups": [
-        "springMethodSecurity"
+        "javaTypeImports"
       ]
     },
-    "DG-052": {
-      "scope": "두 실제 DB에서 디자이너 DDL, 암호를 포함하는 승인된 계정 생성, 카탈로그와 세션 작업이 유형만 남기는 것을 확인했다. 메타데이터 호출이 몰려도 최근 제출 변경이 유지됐고 보관 설정, 초기화 및 비활성화를 확인했다.",
+    "IDEA-056": {
+      "scope": "Boot 4.1.2의 실제 플러그인이 만든 Integer 설정 메타데이터를 읽어 YAML에서 완성하고 정확한 Java 필드로 이동했다. 두 DB에서 프로필별 문서, 목록 교체, 맵·별칭, 여러 줄 값과 명령줄 우선순위를 실제 바인더 및 JDBC로 확인했다.",
       "runtimeGroups": [
-        "sqlActivityDurable"
+        "springConfiguration"
       ]
     },
-    "DG-093": {
-      "scope": "두 Spring·DB 설치 환경에서 실제 DuckDB 1.5.6의 CSV와 타입 있는 Parquet를 열고 큰 정수, DECIMAL, 중첩 타입을 확인했다. 두 공식 확장을 설치해 읽기 쿼리에서 사용하고 갱신·제거했다. 깊은 Windows 경로, 원본 파일 보존, 일반 쿼리의 외부 파일 접근 차단을 확인했다.",
+    "DG-094": {
+      "scope": "두 실제 DB에서 UPDATE·DELETE·INSERT 보관안을 별도 VS Code 프로세스에서 열었다. 정확한 매개변수, 물리 서버와 실제 행, 외부 변경 거부, 새 검토, 직접 적용 후 롤백 및 원래 데이터 보존을 확인했다.",
       "runtimeGroups": [
-        "duckdbFileLifecycle"
+        "gridReviewRecovery"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 410,
+    "sourceCorrespondences": 417,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 92,
-      "partial": 110,
+      "implemented": 95,
+      "partial": 107,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 159,
-    "previousWeightedPoints": 157.5,
+    "weightedPoints": 160.5,
+    "previousWeightedPoints": 159,
     "targetWeightedPoints": 216,
-    "referencePercent": 73.6,
+    "referencePercent": 74.3,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-006",
+        "id": "IDEA-008",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-052",
+        "id": "IDEA-056",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-093",
+        "id": "DG-094",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java 선택은 JDT 구문 범위를 사용한다. Kotlin에서 구문 범위를 제공하지 않는 서버는 식별자와 선언 위치를 사용한다. SQL은 검증 가능한 읽기 문맥을 지원한다.",
-    "Spring 인가 추적은 동기 Servlet 요청의 지원되는 Spring Security 메서드 인터셉터를 관찰한다.",
-    "DuckDB 외부 파일은 명시 선택한 로컬 CSV·Parquet를 표본 조회한다. 워크스페이스 확장 관리는 공식 서명된 tpch·tpcds를 지원한다.",
-    "DB 활동 기록은 Rocketbrain이 제출한 작업을 제한된 작업 단위로 기록한다. 관리 대상 세션에만 적용하며 쿼리와 바인딩 값 및 자격 증명을 보관하지 않는다.",
+    "Java import는 저장하고 가져온 소스에서 타입 후보를 검토한다. 정적 멤버·와일드카드 편집과 생성된 타입은 별도다.",
+    "빠른 문서는 사용하는 언어 서버가 공급하는 설명과 시그니처를 보여 준다.",
+    "Spring 소스 모델은 일반 Boot YAML과 생성 메타데이터를 읽는다. 외부 우선순위는 실행 중인 Boot 앱이 제공하는 실제 출처와 함께 확인한다.",
+    "편집 검토를 다시 올리려면 같은 물리 서버·계정·테이블의 편집 가능한 페이지가 필요하다. 적용 전에 새 검토를 만든다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "JDT의 모호한 Java import와 Java·Kotlin 빠른 문서 및 호출 인자",
-    "실제 Spring Boot YAML과 컴파일러 생성 설정 메타데이터",
-    "보관한 편집 검토를 새 프로세스에서 열고 실제 행을 대조한 뒤 그리드에 다시 올리기"
+    "동시에 연결한 프로필의 세션과 읽기 전용 카탈로그 관리",
+    "공식 Spring Initializr의 언어·빌드·패키징 선택과 Java 템플릿",
+    "누락 SQL 테이블 또는 열을 검토형 디자이너로 연결"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

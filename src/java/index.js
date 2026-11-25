@@ -171,6 +171,9 @@ function registerJavaFeatures(context, vscode) {
   api.constantRefactoring=(params,cancellation)=>refactoringRequest('java/getRefactorEdit',{
     command:'extractConstant',context:params,options:{tabSize:4,insertSpaces:true},commandArguments:[]
   },cancellation);
+  api.typeImportActions=(textDocument,range,diagnostic,cancellation)=>refactoringRequest('textDocument/codeAction',{
+    textDocument,range,context:{diagnostics:[diagnostic],only:['quickfix']}
+  },cancellation);
   api.valueExtraction=(kind,params,cancellation)=>{
     if(!['local','field'].includes(kind))throw Error('Choose Java local variable or field extraction.');
     return refactoringRequest('java/getRefactorEdit',{
@@ -230,6 +233,19 @@ function registerJavaFeatures(context, vscode) {
     }
   });
   subscriptions.push(semanticSelection);
+  api.codeInformation=require('./code-information-vscode').registerCodeInformation(vscode,{java:api,
+    readJava:async (document,position,{method},cancellation)=>{
+      await api.start();
+      const server=client;
+      if (!server?.isRunning()||!vscode.workspace.isTrusted||cancellation.isCancellationRequested) {
+        throw Error('Start Java support before requesting code information.');
+      }
+      const response=await server.sendRequest(method,{textDocument:{uri:document.uri.toString()},position},cancellation);
+      if(client!==server||!vscode.workspace.isTrusted)throw Error('The Java server changed. Request code information again.');
+      return response;
+    }
+  });
+  subscriptions.push(api.codeInformation);
   api.coroutines=require('./kotlin-coroutines-vscode').registerKotlinCoroutines(vscode,api);
   async function installEngine() {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before installing and starting the Java engine.');

@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.73.0",
+  "version": "0.74.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -595,6 +595,10 @@
         "category": "Rocketbrain",
         "enablement": "isWorkspaceTrusted"
       },
+      { "command": "rocketbrain.results.saveEditReview", "title": "Save Table Edit Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.results.openEditReview", "title": "Open Saved Table Edit Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.results.stageEditReview", "title": "Stage Saved Table Edit Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.results.removeEditReview", "title": "Remove Saved Table Edit Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
         "command": "rocketbrain.sqlDraft.remove",
         "title": "Remove SQL Draft",
@@ -709,8 +713,11 @@
       { "command": "rocketbrain.java.extractField", "title": "Extract Java Field", "category": "Rocketbrain", "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.inlineMethod", "title": "Inline Java Method Call", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.extractMethod", "title": "Extract Java Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.addTypeImport", "title": "Add Java Type Import", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.editor.expandSelection", "title": "Expand Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.shrinkSelection", "title": "Shrink Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
+      { "command": "rocketbrain.editor.quickDocumentation", "title": "Quick Code Documentation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
+      { "command": "rocketbrain.editor.callSignatures", "title": "Show Call Signatures", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
       {
         "command": "rocketbrain.java.pullUpMembers",
         "title": "Pull Up Java Members",
@@ -2376,6 +2383,7 @@
     "sql.js": "1.13.0",
     "vscode-languageclient": "11.0.0",
     "ws": "8.23.0",
+    "yaml": "2.9.1",
     "yauzl": "3.4.0"
   },
   "devDependencies": {

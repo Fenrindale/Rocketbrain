@@ -14,6 +14,12 @@ Place the cursor over a symbol or key and run **Rocketbrain: Find JVM & Spring U
 
 Scope filters locations the providers can resolve. Kotlin and Java providers operate on their imported project models. Spring search covers static qualified class attributes and literal keys. Runtime registration, reflection, dynamic expressions, mixed-language classpath references, and unrelated XML dialects require separate analysis.
 
+## Documentation and call signatures
+
+Run **Rocketbrain: Quick Code Documentation** on a Java or Kotlin symbol to read the documentation returned by its configured language server. Inside a call, **Rocketbrain: Show Call Signatures** opens the available overloads and highlights the active parameter. Expand an overload to read its signature and parameter documentation. The same read-only side panel is reused for both commands.
+
+If the provider supplies a signature for a class from a binary-only library, it appears with any available parameter names. The view distinguishes a missing documentation response. It renders the provider text and code blocks without executing markup or opening external URLs. Editing the source closes the displayed snapshot.
+
 ## Expand and shrink semantic selection
 
 Run **Rocketbrain: Expand Semantic Selection** from the Command Palette or press **Ctrl+K, Ctrl+Shift+Right** on Windows and Linux. Use **Ctrl+K, Ctrl+Shift+Left** to reverse the last expansion. On macOS, replace Ctrl with Command.

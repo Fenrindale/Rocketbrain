@@ -193,6 +193,20 @@ function registerKotlinEditor(context,vscode,java) {
     return response;
   }
 
+  async function codeInformation(document,position,{method,capability},token) {
+    await start({document});
+    trusted();
+    const record=active,root=projectOf(document);
+    if(!['textDocument/hover','textDocument/signatureHelp'].includes(method)||
+        !record?.client?.isRunning()||!root||path.relative(record.launch.root,root)||token?.isCancellationRequested) {
+      throw fail('Start Kotlin editing for the current Gradle project.');
+    }
+    if(!record.client.initializeResult?.capabilities?.[capability])throw fail('The configured Kotlin provider does not supply this code information.');
+    const response=await record.client.sendRequest(method,{textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)},position},token);
+    if(active!==record)throw fail('The Kotlin server changed. Request code information again.');
+    return response;
+  }
+
   async function sourceRequest(method,document,position,context,cancellation) {
     trusted();
     const current=active,root=projectOf(document);
@@ -238,7 +252,7 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,definition,references,formatting,documentSymbols,selectionRanges,getState:()=>({...state}),dispose() {
+  return {start,stop,definition,references,formatting,documentSymbols,selectionRanges,codeInformation,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;

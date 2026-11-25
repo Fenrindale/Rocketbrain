@@ -72,11 +72,11 @@ test('Java syntax parsing ignores fake annotations in strings/comments/text bloc
   assert.equal(analyzeSpring([{ uri: 'file:///No.java', text: impostor }]).beans.length, 0);
 });
 
-test('configuration supports escaped .properties and conservative YAML scalars', () => {
+test('configuration supports escaped .properties and YAML scalars and arrays', () => {
   const parsed = parseProperties({ uri: 'file:///application.properties', text: 'escaped\\.key=hello\\nworld\ncontinued=first\\\n  second\n' });
   assert.equal(parsed.entries[0].value, 'hello\nworld'); assert.equal(parsed.entries[1].value, 'firstsecond');
   const yaml = parseYaml({ uri: 'file:///application.yml', text: 'app:\n  title: "Rocketbrain"\n  enabled: false\n  complex: [one, two]\n' });
-  assert.deepEqual(yaml.entries.map(item => item.key), ['app.title', 'app.enabled']); assert.ok(yaml.issues.length);
+  assert.deepEqual(yaml.entries.map(item => item.key), ['app.title', 'app.enabled','app.complex[0]','app.complex[1]']); assert.deepEqual(yaml.issues,[]);
   const config = configuration([{ uri: 'file:///application.properties', text: 'app.value=base\n' }, { uri: 'file:///application-dev.properties', text: 'app.value=dev\n' }], { activeProfiles: ['dev'], properties: { 'app.value': 'override' } });
   assert.equal(config.entries.get('app.value').value, 'override');
 });
@@ -92,7 +92,7 @@ test('opaque conditions, meta annotations and incomplete configuration do not be
   assert.equal(custom.injections[0].resolution.state, 'unknown');
   assert.equal(custom.diagnostics.length, 0); assert.equal(custom.closedWorld, false);
   const conditional = [{ uri: 'file:///Feature.java', text: 'package demo; import org.springframework.stereotype.Component; import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty; @Component @ConditionalOnProperty(name="flag") class Feature {}' }];
-  const partial = analyzeSpring(conditional, [{ uri: 'file:///application.yml', text: '---\nflag: true\n' }], { closedWorld: true });
+  const partial = analyzeSpring(conditional, [{ uri: 'file:///application.yml', text: 'flag: true\nspring.config.import: optional:file:unobserved.yml\n' }], { closedWorld: true });
   assert.equal(partial.beans[0].state, 'unknown'); assert.equal(partial.closedWorld, false);
 });
 

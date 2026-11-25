@@ -3,6 +3,8 @@ const { registerSemanticSpring } = require('../spring/vscode');
 const { registerRuntimeSpring } = require('../spring/runtime-vscode');
 const { parseEndpointContracts, mappingPaths } = require('../spring/endpoint-contracts');
 const { lexJava, splitTop } = require('../spring/java');
+const { yamlCompletionContext } = require('../spring/configuration-yaml');
+const { metadataProperties,metadataModule,workspaceMetadata,selectMetadata,declarationAt,metadataJavaSource } = require('../spring/configuration-metadata');
 const ENDPOINT_KINDS = { mvc: 'MVC server', webflux: 'WebFlux server', feign: 'Feign client' };
 
 const BASIC_PROPERTIES = [
@@ -123,24 +125,7 @@ function endpointDescription(item) {
   return [ENDPOINT_KINDS[item.kind],item.containerName+'.'+item.method,item.reason || (item.constrained ? 'Additional request conditions' : '')].filter(Boolean).join(' · ');
 }
 
-function metadataProperties(json, origin) {
-  if (!json || !Array.isArray(json.properties)) return [];
-  return json.properties.filter(item => item && typeof item.name === 'string' && item.name.length <= 500).map(item => ({ name: item.name, type: String(item.type || 'java.lang.String'), description: String(item.description || '').slice(0, 4000), defaultValue: item.defaultValue, origin }));
-}
-
-function yamlPrefix(text, line) {
-  const lines = text.split(/\r?\n/), stack = [];
-  for (let i = 0; i < line; i++) {
-    const match = /^( *)([\w.-]+):\s*(?:#.*)?$/.exec(lines[i]);
-    if (!match) continue;
-    while (stack.length && stack[stack.length - 1].indent >= match[1].length) stack.pop();
-    stack.push({ indent: match[1].length, key: match[2] });
-  }
-  const indent = /^ */.exec(lines[line] || '')[0].length;
-  while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
-  return stack.map(item => item.key).join('.');
-}
-
+function yamlPrefix(text,line){return yamlCompletionContext(text,line)?.prefix||'';}
 function registerSpringFeatures(vscode, context, output, { verifiedLocalPid } = {}) {
   const subscriptions = [], cache = new Map();
   const semantic = registerSemanticSpring(vscode, context, output);
@@ -149,18 +134,56 @@ function registerSpringFeatures(vscode, context, output, { verifiedLocalPid } = 
   subscriptions.push(runtime);
   const enabled = () => vscode.workspace.getConfiguration('rocketbrain.spring').get('enabled', true);
   const invalidate = () => cache.clear();
-  async function properties() {
-    const result = new Map(BASIC_PROPERTIES.map(item => [item.name, item]));
-    const metadata = await vscode.workspace.findFiles('**/META-INF/*spring-configuration-metadata.json', '**/{node_modules,.git,.idea}/**', 100);
-    for (const uri of metadata) {
-      try {
-        const stat = await vscode.workspace.fs.stat(uri);
-        if (stat.size > 2 * 1024 * 1024) continue;
-        const json = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8'));
-        for (const item of metadataProperties(json, vscode.workspace.asRelativePath(uri))) result.set(item.name, item);
-      } catch (error) { output.appendLine(`Spring metadata: ${error.message}`); }
+  async function properties(documentUri,token) {
+    const candidates=[], limit=100;
+    const excludes='**/{node_modules,.git,.idea,.gradle,test-output,.vscode-test}/**';
+    const metadata=await vscode.workspace.findFiles('**/META-INF/*spring-configuration-metadata.json',excludes,limit+1,token);
+    const owner=documentUri&&vscode.workspace.getWorkspaceFolder(documentUri);
+    const records=metadata.flatMap(uri=>{
+      if(owner&&vscode.workspace.getWorkspaceFolder(uri)?.uri.toString()!==owner.uri.toString())return [];
+      return [{uri,moduleRoot:metadataModule(uri.path)}];
+    });
+    let total=0;
+    for(const item of workspaceMetadata(records,documentUri?.path).slice(0,limit)){
+      if(token?.isCancellationRequested)return [];
+      try{
+        const stat=await vscode.workspace.fs.stat(item.uri);
+        if(stat.size>2*1024*1024||total+stat.size>8*1024*1024)continue;
+        const contents=await vscode.workspace.fs.readFile(item.uri);
+        if(contents.byteLength>2*1024*1024)continue;
+        total+=contents.byteLength;
+        const json=JSON.parse(Buffer.from(contents).toString('utf8'));
+        candidates.push(...metadataProperties(json,vscode.workspace.asRelativePath(item.uri)).map(entry=>({...entry,moduleRoot:item.moduleRoot})));
+      }catch{output.appendLine('Spring metadata file was unavailable or malformed.');}
     }
+    const result=new Map(BASIC_PROPERTIES.map(item=>[item.name,item]));
+    for(const item of selectMetadata(candidates))result.set(item.name,item);
     return [...result.values()];
+  }
+  async function propertyDefinition(document,position,token){
+    if(!enabled()||document.getText().length>1024*1024)return [];
+    const version=document.version, target=declarationAt({uri:document.uri.toString(),text:document.getText()},position);
+    if(!target)return [];
+    const entries=await properties(document.uri,token);
+    const entry=entries.find(item=>item.name===target.key);
+    if(!entry?.sourceType||entry.sourceType.includes('$')||token.isCancellationRequested||document.version!==version)return [];
+    const simple=entry.sourceType.split('.').at(-1);
+    const root=document.uri.with({path:entry.moduleRoot});
+    const files=await vscode.workspace.findFiles(new vscode.RelativePattern(root,'**/'+simple+'.java'),
+      '**/{node_modules,.git,.idea,build,target,.gradle,test-output,.vscode-test}/**',17,token);
+    if(files.length>16)return [];
+    const definitions=[];
+    for(const uri of files){
+      try{
+        const doc=await vscode.workspace.openTextDocument(uri);
+        if(doc.getText().length>1024*1024)continue;
+        const definition=metadataJavaSource({uri:uri.toString(),text:doc.getText()},entry);
+        if(definition)definitions.push(definition);
+      }catch{continue;}
+    }
+    if(definitions.length!==1||token.isCancellationRequested||document.version!==version)return [];
+    const match=definitions[0], {start,end}=match.range;
+    return [new vscode.Location(vscode.Uri.parse(match.uri),new vscode.Range(start.line,start.character,end.line,end.character))];
   }
   async function endpoints(token) {
     if (!enabled()) return [];
@@ -189,6 +212,7 @@ function registerSpringFeatures(vscode, context, output, { verifiedLocalPid } = 
     return result;
   }
   const selector = [{ scheme: 'file', pattern: '**/application*.properties' }, { scheme: 'file', pattern: '**/application*.yml' }, { scheme: 'file', pattern: '**/application*.yaml' }];
+  subscriptions.push(vscode.languages.registerDefinitionProvider(selector,{provideDefinition:propertyDefinition}));
   subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, {
     async provideCompletionItems(document, position, token) {
       if (!enabled()) return [];
@@ -196,19 +220,22 @@ function registerSpringFeatures(vscode, context, output, { verifiedLocalPid } = 
       const yaml = /\.ya?ml$/i.test(document.uri.path);
       if (/^\s*[#!]/.test(line)) return [];
       if (yaml ? line.slice(0, position.character).includes(':') : /[=:]/.test(line.slice(0, position.character))) return [];
-      const prefix = yaml ? yamlPrefix(document.getText(), position.line) : '';
+      const version=document.version;
+      const parsed=yaml?yamlCompletionContext(document.getText(),position.line):null;
+      if(yaml&&!parsed)return [];
+      const prefix=parsed?.prefix||'';
       const prefixWithDot = prefix ? prefix + '.' : '';
-      const entries = await properties();
-      if (token.isCancellationRequested) return [];
+      const entries = await properties(document.uri,token);
+      if (token.isCancellationRequested||document.version!==version) return [];
       const seen = new Set();
       return entries.filter(entry => !prefix || entry.name.startsWith(prefixWithDot)).flatMap(entry => {
         const label = entry.name.slice(prefixWithDot.length);
         if (seen.has(label)) return []; seen.add(label);
         const item = new vscode.CompletionItem(label, vscode.CompletionItemKind.Property);
         item.insertText = label;
-        const keyStart = /^\s*/.exec(line)[0].length;
+        const keyStart = parsed?.keyStart??/^\s*/.exec(line)[0].length;
         const separator = yaml ? line.indexOf(':') : line.search(/[=:]/);
-        const keyEnd = separator >= 0 ? line.slice(0, separator).trimEnd().length : line.trimEnd().length;
+        const keyEnd = parsed?.keyEnd??(separator >= 0 ? line.slice(0, separator).trimEnd().length : line.trimEnd().length);
         item.range = new vscode.Range(position.line, Math.min(keyStart, position.character), position.line, Math.max(position.character, keyEnd));
         item.detail = `${entry.type} · ${entry.origin}`;
         item.documentation = entry.description + (entry.defaultValue !== undefined && entry.defaultValue !== '' ? `\nDefault: ${String(entry.defaultValue)}` : '');

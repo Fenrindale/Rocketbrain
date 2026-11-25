@@ -268,6 +268,25 @@ public final class SignatureInspector {
         return object("error","The selected Java source is outside the compiler scope.");
     }
 
+    static Map<String,Object> typeImport(CompilationUnitTree unit,Trees trees,int from,int to,String expected) {
+        var positions=trees.getSourcePositions();
+        var bindings=new ArrayList<Map<String,Object>>();
+        String[] selected={null};
+        String simple=expected.substring(expected.lastIndexOf('.')+1);
+        new TreePathScanner<Void,Void>() {
+            @Override public Void visitIdentifier(IdentifierTree tree,Void unused) {
+                if(tree.getName().contentEquals(simple)&&trees.getElement(getCurrentPath()) instanceof TypeElement type) {
+                    long start=positions.getStartPosition(unit,tree),end=positions.getEndPosition(unit,tree);
+                    String qualified=type.getQualifiedName().toString();
+                    bindings.add(object("start",start,"end",end,"type",qualified));
+                    if(start==from&&end==to)selected[0]=qualified;
+                }
+                return super.visitIdentifier(tree,unused);
+            }
+        }.scan(unit,null);
+        return object("target",selected[0],"bindings",bindings);
+    }
+
     public static void main(String[] args) throws Exception {
         if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy").contains(args[4])) &&
                 !(args.length == 7 && args[4].equals("dataflow")) &&
@@ -277,6 +296,7 @@ public final class SignatureInspector {
                 !(args.length == 9 && args[4].equals("methodInline")) &&
                 !(args.length == 8 && args[4].equals("typeStructure")) &&
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
+                !(args.length == 9 && args[4].equals("typeImport")) &&
                 !(args.length == 5 && args[4].equals("check")) &&
                 !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
             throw new IllegalArgumentException("Use classpath-file, source-list, empty-provider-path and release.");
@@ -340,6 +360,10 @@ public final class SignatureInspector {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
                         report.put("methodExtract",new ExtractMethodInspector(task,unit,byUri.get(args[5]).text)
                             .inspect(Integer.parseInt(args[6]),Integer.parseInt(args[7]),args[8],Integer.parseInt(args[9])));
+                    }
+                    else if (args[4].equals("typeImport")) {
+                        var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
+                        report.put("typeImport",typeImport(unit,trees,Integer.parseInt(args[6]),Integer.parseInt(args[7]),args[8]));
                     }
                     else if (args[4].equals("structural")) {
                         report.put("structural",new StructuralSearch(task).search(compiler,files,options,units,byUri,args));

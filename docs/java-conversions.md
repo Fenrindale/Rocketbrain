@@ -13,3 +13,9 @@ The loop action converts a primitive-array index loop into enhanced for when the
 Select two or more complete trailing statements in a saved, non-void Java method, including its final return. Run **Rocketbrain: Extract Java Method** from the editor code action or Command Palette and name the new private helper. Review the two edits before applying them. The helper moves the selected statements with their comments. It carries over the method's type parameters and declared exceptions and passes captured method parameters and locals by their attributed types.
 
 The action checks conditional return and throw paths, local declarations and ordinary expressions. Javac verifies the moved syntax, referenced declarations, selected overloads, and the new call and its arguments. The action refuses captured assignments, name conflicts, partial selections and constructs with nonlocal control flow. It operates on saved production sources in imported classpath projects. JDT's existing expression extraction remains available.
+
+## Add and organize Java imports
+
+Save a Java production source in an imported project and put the caret on a type the Java language server reports as unresolved. Run **Rocketbrain: Add Java Type Import** from the editor quick fix or Command Palette. Choose the fully qualified type if the server offers multiple candidates. Review the single import before applying it. The existing static, wildcard and ordinary imports stay in place.
+
+The read-only javac check requires every matching source use to be unresolved before the edit and to resolve to the selected type after it. It refuses unrelated compiler errors, name collisions and changes to reviewed source. The editor buffer retains control of saving. Use **Organize Imports** afterward to remove unused imports or reorder the list.

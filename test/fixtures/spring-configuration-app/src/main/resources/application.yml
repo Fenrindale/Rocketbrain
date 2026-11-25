@@ -1,0 +1,34 @@
+server:
+  address: 127.0.0.1
+  port: 0
+management:
+  endpoints.web.exposure.include: health,env
+  endpoint.env.show-values: never
+fixture:
+  defaults: &defaultLabels {team: catalog, tier: test}
+  catalog:
+    display-name: base
+    query-limit: 1
+    retries: 1
+    timeout: 2s
+    thresholds: [12, 99]
+    labels: *defaultLabels
+---
+spring:
+  config.activate.on-profile: "local-db & !offline"
+fixture:
+  catalog:
+    display-name: >-
+      local
+      catalog
+    query-limit: 2
+    retries: 2
+    thresholds: [13]
+    labels:
+      tier: local
+---
+spring:
+  config.activate.on-profile: offline
+fixture:
+  catalog:
+    query-limit: 9

@@ -1168,6 +1168,8 @@ class MysqlService {
   retainTableSnapshot(binding) { return this._editor.retainTableSnapshot(binding); }
   releaseTableSnapshot(binding) { return this._editor.releaseTableSnapshot(binding); }
   reviewChangeSet(changes) { return this._editor.reviewChangeSet(changes); }
+  captureChangeSetReview(request) { return this._editor.captureReview(request); }
+  rebindChangeSetReview(request) { return this._editor.rebindReview(request); }
   applyChangeSet(review) { return this._editor.applyChangeSet(review); }
   listSchemaObjects() { return this._objectEditor.list(); }
   inspectSchemaObject(request) { return this._objectEditor.inspect(request); }

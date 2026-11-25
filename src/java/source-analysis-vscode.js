@@ -16,6 +16,7 @@ const { createConstantExtraction } = require('./extract-constant-vscode');
 const { createValueExtraction } = require('./extract-value-vscode');
 const { createMethodInline } = require('./inline-method-vscode');
 const { createMethodExtraction } = require('./extract-method-vscode');
+const { createTypeImport } = require('./type-import-vscode');
 const { createTypedFileStructure } = require('./typed-file-structure');
 
 const COMMANDS = Object.freeze({
@@ -139,7 +140,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     return sources;
   }
 
-  async function compile(state,project,sources,inspection,cancellation,{newSources = [],errorTitle} = {}) {
+  async function compile(state,project,sources,inspection,cancellation,{newSources = [],errorTitle,allowTypeImportErrors=false} = {}) {
     if (!sources.length) throw Error('No saved Java source was found in this scope.');
     const classpath = await classpaths(project,cancellation);
     const compliance = /^(?:1\.)?(\d+)$/.exec(String(project.compliance || ''))?.[1];
@@ -147,7 +148,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       javaHome:state.javaHome,classpath,release:Number(compliance || 25),storagePath,cancellation,
       sources:[...sources,...newSources].map(({uri,text}) => ({uri,text})),manifestLimit:256*1024,inspection
     });
-    if (report.errors.length) {
+    if (report.errors.length&&!(allowTypeImportErrors&&inspection.kind==='typeImport')) {
       const prefix = errorTitle || (inspection.kind === 'check' ? 'The replacement would fail Java compiler analysis: ' :
         'Resolve Java compiler errors before analysis: ');
       throw Error(prefix + report.errors[0].message);
@@ -452,6 +453,9 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const methodExtraction = createMethodExtraction(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
   });
+  const typeImport = createTypeImport(vscode,{
+    java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
+  });
   const typedStructure = createTypedFileStructure(vscode,{
     java,assertReady,projects,findProject,classSources,compile,snapshot,assertUnchangedSourceSnapshots
   });
@@ -485,6 +489,8 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     prepareValueExtraction:(report,options) => managed(() => values.prepare(report,options)),
     prepareInlineMethod:options => managed(() => inline.prepare(options)),
     prepareMethodExtraction:options => managed(() => methodExtraction.prepare(options)),
+    inspectTypeImport:options => managed(() => typeImport.inspect(options)),
+    prepareTypeImport:(report,options) => managed(() => typeImport.prepare(report,options)),
     streamTrace,
     reveal,showDiagram,exportMermaid,
     dispose() {
@@ -494,6 +500,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       constantPreparation.dispose();
       inline.dispose();
       methodExtraction.dispose();
+      typeImport.dispose();
       structureRegistration.dispose();
       for (const entry of [...panels,...commands]) entry.dispose();
       stopping = Promise.allSettled(active).then(() => {});

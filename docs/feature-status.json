@@ -1,5 +1,5 @@
 {
-  "version": "0.73.0",
+  "version": "0.74.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 92,
-    "partial": 110,
+    "implemented": 95,
+    "partial": 107,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 73.6,
+    "percent": 74.3,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-006",
-    "IDEA-064",
-    "DG-052",
-    "DG-093"
+    "IDEA-008",
+    "IDEA-011",
+    "IDEA-056",
+    "DG-094"
   ],
   "expandedFeatures": [
-    "IDEA-006",
-    "IDEA-064",
-    "DG-052",
-    "DG-093"
+    "IDEA-008",
+    "IDEA-011",
+    "IDEA-056",
+    "DG-094"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -215,8 +215,8 @@
       "verification": {
         "state": "v0.73-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.73.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -266,27 +266,24 @@
       "category": "작업 공간·편집기",
       "feature": "파라미터 정보·빠른 문서",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT의 Java signature help·hover를 연결한다.",
-      "remaining": [
-        "KDoc·모든 오버로드·소스 없는 외부 라이브러리의 문서·인자 표시 시험은 남는다."
-      ],
+      "scope": "Java·Kotlin의 빠른 문서와 호출 오버로드를 읽기 전용 패널에서 보여 준다. 활성 매개변수와 해당 설명을 표시하며, 바이너리 라이브러리는 실제 서버가 공급한 항목을 사용한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.74-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "testedScope": "두 설치 환경에서 JDT Java·Kotlin Gradle 서버의 실제 오버로드, 활성 인수와 Kotlin 매개변수 KDoc을 확인했다. 독립 JDT 검증에서는 소스 없는 JAR의 매개변수 이름과 시그니처를 관찰했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/code-information.js",
+          "src/java/code-information-vscode.js",
+          "test/code-information-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -360,24 +357,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "공개 JDT 코드 액션의 import 정리를 Rocketbrain의 선택·변경 미리보기·편집기 적용으로 연결한다. 문서 버전과 디스크 해시, 신뢰 경계 및 다중 파일 편집 범위를 검증한다.",
+      "scope": "기존 import 정리에 더해 미해결 타입의 실제 JDT 후보를 고른다. javac로 참조를 대조하고 한 import 추가를 검토해 적용한다.",
       "remaining": [
-        "Organize Imports 지원 범위이며 자동 import의 모든 완성·이름 충돌·static/wildcard 조합과 Lombok 생성 코드 검증은 남는다. 추가 엔진 명령이나 대화를 요구하는 refactoring, 파일 생성·삭제·이동 및 전체 Java 문법·대규모 프로젝트 조합은 남는다. 원본 IDE 전체 리팩터링 동등성은 판정하지 않는다."
+        "정적 멤버·일괄 와일드카드 추가와 Lombok 등 생성 타입의 import 검증이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.74-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 JDT의 Organize Imports 편집을 적용하고 독립 JDK 컴파일·실행 전후 결과를 비교한다. 오래된 문서·디스크 변경과 지원하지 않는 추가 명령을 거부한다.",
+        "testedScope": "두 Spring 프로젝트에서 실제 Date 후보 두 개 중 java.sql.Date를 선택했다. 미해결 진단 소거, 참조 두 개, 원래 정적·와일드카드 import와 디스크 원본, Undo, 위조·오래된 후보 거부를 확인했다.",
         "publicEvidence": [
-          "src/java/refactoring.js",
-          "src/java/index.js",
-          "test/java-refactoring.test.js",
-          "test/java-refactoring-host.js"
+          "src/java/type-import.js",
+          "src/java/type-import-vscode.js",
+          "test/java-type-import-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1755,27 +1751,24 @@
       "category": "Spring·영속성",
       "feature": "Boot properties·YAML 메타데이터",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "로컬 Spring 메타데이터의 설정 완성·정의 이동과 활성 프로필 소스 해석이 있다.",
-      "remaining": [
-        "전체 YAML 문법·생성 메타데이터·외부 설정 우선순위가 남는다."
-      ],
+      "scope": "Spring Boot YAML·properties의 문서 및 프로필 출처를 탐색하고 빌드가 생성한 메타데이터로 완성·선언 이동을 제공한다. 실행 중 관찰한 외부 우선순위는 실제 Actuator 출처와 함께 표시한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.74-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "testedScope": "Boot 4.1.2의 실제 플러그인이 만든 Integer 설정 메타데이터를 읽어 YAML에서 완성하고 정확한 Java 필드로 이동했다. 두 DB에서 프로필별 문서, 목록 교체, 맵·별칭, 여러 줄 값과 명령줄 우선순위를 실제 바인더 및 JDBC로 확인했다.",
         "publicEvidence": [
-          "src/spring/model.js",
-          "src/spring/vscode.js",
-          "src/spring/runtime-client.js",
-          "src/analysis-tree.js"
+          "src/spring/configuration-yaml.js",
+          "src/spring/configuration-metadata.js",
+          "test/spring-configuration-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2006,8 +1999,8 @@
       "verification": {
         "state": "v0.73-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.73.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5250,8 +5243,8 @@
       "verification": {
         "state": "v0.73-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.73.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6511,8 +6504,8 @@
       "verification": {
         "state": "v0.73-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.73.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6532,25 +6525,24 @@
       "category": "복원·작업 연속성",
       "feature": "미실행 SQL·최근 파일·Local History 복원",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "SQL 초안과 이전 버전에 더해 선택한 읽기 전용 결과를 로컬 워크스페이스에 보관한다. 다시 열린 프로세스에서 기존 값과 확인한 열 타입을 읽기 전용으로 복원한다.",
-      "remaining": [
-        "저장한 편집 검토의 복원과 DB에서의 재검증이 남아 있다."
-      ],
+      "scope": "SQL 초안과 이전 버전, 읽기 전용 결과 그리드와 테이블 편집 검토를 로컬에 보관하고 새 VS Code 프로세스에서 다시 연다. 편집 제안은 같은 서버와 원본 행을 대조한 뒤 로컬 그리드에 다시 올린다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.72-installed-coverage",
+        "state": "v0.74-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.72.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB 결과를 별도 VS Code 프로세스에서 큰 정수·정밀 DECIMAL·바이너리·NULL·Unicode까지 복원했다. 원래 세션 없이 열고 읽기 전용 모델, 재실행 방지와 보관본 제거를 확인했다.",
+        "testedScope": "두 실제 DB에서 UPDATE·DELETE·INSERT 보관안을 별도 VS Code 프로세스에서 열었다. 정확한 매개변수, 물리 서버와 실제 행, 외부 변경 거부, 새 검토, 직접 적용 후 롤백 및 원래 데이터 보존을 확인했다.",
         "publicEvidence": [
-          "src/db/result-snapshots.js",
-          "test/result-snapshot-host.js",
+          "src/db/table-edit-recovery.js",
+          "src/db/grid.js",
+          "test/grid-edit-recovery-host.js",
           "docs/sql-draft-recovery.md"
         ],
         "originalProductParityVerified": false
@@ -6617,8 +6609,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "4b0a0d2a45f989dc560020e1f66847bfc294449fc09aaa26b873cc8c816dc295",
-    "sourceManifestSha256": "298741c5e516235cd41f2101eedc8403bfe9d8e2590a63e890b285fbe1ce8b4a",
+    "vsixSha256": "1e0d0cde1657803af0165bc811fa7c9ae928e3bcaf95f6561833f1d4d7001c1e",
+    "sourceManifestSha256": "e62cf00b99e0e324b97372496c9442f92fe84e39b18d04488ebcd5df1a7e5c7e",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6632,28 +6624,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-006",
+      "id": "IDEA-008",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-052",
+      "id": "IDEA-056",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-093",
+      "id": "DG-094",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1641,
-    "pass": 1537,
+    "tests": 1650,
+    "pass": 1543,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 104,
+    "skipped": 107,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

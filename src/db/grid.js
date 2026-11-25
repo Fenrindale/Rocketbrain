@@ -1,5 +1,5 @@
 'use strict';
-const { randomUUID } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { compileGridSort, observeSortCollations, sortOptions } = require('./grid-sort');
 const { protectionError, tableProtection } = require('./write-protection');
 const QUOTE = String.fromCharCode(96);
@@ -118,6 +118,12 @@ function fingerprint(definition) {
 function equalRows(left, right) {
   return left.length === right.length && left.every((value, i) => value === right[i]);
 }
+const reviewDigest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const retainedValues = values => Object.fromEntries(values.map(value => [value.column.name, value.display]));
+const draftValues = values => Object.fromEntries(Object.entries(values).map(([name, value]) =>
+  [name, value === null ? { kind: 'null' } : { kind: 'value', text: value }]));
+const viewParameter = value => Buffer.isBuffer(value) ? '0x' + value.toString('hex') : value;
+const reviewRowChanged = () => fail('ROCKETBRAIN_GRID_CONFLICT', 'A saved row is absent or its exact values changed.');
 const MAX_PAGE = 2000;
 const choiceType = /^(enum|set)\(/i;
 function keysetValue(column, value, cast) {
@@ -547,7 +553,7 @@ class TableEditor {
     for (const update of updates) {
       const row = original(update?.rowId), values = valuesFor(update.values, false);
       if (!values.length) throw fail('ROCKETBRAIN_GRID_CHANGESET', 'An updated row contains no changed columns.');
-      operations.push({ type: 'update', row, rowId: update.rowId,
+      operations.push({ type: 'update', row, rowId: update.rowId, values: retainedValues(values),
         sql: 'UPDATE ' + target + ' SET ' + values.map(value => quote(value.column.name) + '=?').join(',') + ' WHERE ' + where,
         parameters: [...values.map(value => value.parameter), ...pk.map(column => snapshotParameter(row[index(column.name)], column))] });
     }
@@ -559,13 +565,100 @@ class TableEditor {
     for (const insert of inserts) {
       const values = valuesFor(insert?.values, true), provided = new Set(values.map(value => value.column.name));
       if (model.definition.columns.some(column => column.required && !provided.has(column.name))) throw fail('ROCKETBRAIN_GRID_VALUE', 'A required insert column has no value.');
-      operations.push({ type: 'insert', sql: 'INSERT INTO ' + target + ' (' + values.map(value => quote(value.column.name)).join(',') + ') VALUES (' + values.map(() => '?').join(',') + ')', parameters: values.map(value => value.parameter) });
+      operations.push({ type: 'insert', values: retainedValues(values),
+        sql: 'INSERT INTO ' + target + ' (' + values.map(value => quote(value.column.name)).join(',') + ') VALUES (' + values.map(() => '?').join(',') + ')', parameters: values.map(value => value.parameter) });
     }
     const reviewId = randomUUID();
     for (const [id, review] of this.reviews) if (review.modelId === modelId) this.reviews.delete(id);
     this.reviews.set(reviewId, { reviewId, model, modelId, sessionId, operations, created: Date.now() });
-    return { reviewId, statements: operations.map(operation => ({ sql: operation.sql, parameters: operation.parameters.map(value => Buffer.isBuffer(value) ? '0x' + value.toString('hex') : value) })),
+    return { reviewId, statements: operations.map(operation => ({ sql: operation.sql, parameters: operation.parameters.map(viewParameter) })),
       summary: { updates: updates.length, deletes: deletes.length, inserts: inserts.length }, atomic: true, pendingTransaction: !session.autocommit };
+  }
+  captureReview({ sessionId, reviewId }) {
+    const session = this.db._session(sessionId);
+    return this.db._enqueue(session, async () => {
+      this._prune();
+      const review = this.reviews.get(reviewId);
+      if (!review || review.sessionId !== sessionId || review.model.connectionId !== session.connectionId ||
+          !session.connected || session.readOnly || session.outcomeUnknown || session.needsReconnect) {
+        throw fail('ROCKETBRAIN_GRID_STALE', 'Review the current table edits before saving them.');
+      }
+      const { model, operations } = review;
+      const server = await this.db._sqlRelatedServer(session);
+      const definition = await this.definition(model.definition.name);
+      if (fingerprint(definition) !== model.fingerprint || this.reviews.get(reviewId) !== review) {
+        throw fail('ROCKETBRAIN_GRID_STALE', 'The table or edit review changed before the save.');
+      }
+      const keys = model.definition.columns.flatMap((column, index) => column.primaryKey ? [index] : []);
+      return { schema: this.db._options.database, table: model.definition.name, server, definition: reviewDigest(model.fingerprint),
+        operations: operations.map(operation => ({ type: operation.type, ...(operation.values && { values: operation.values }),
+          ...(operation.row && { key: reviewDigest(keys.map(index => operation.row[index])), row: reviewDigest(operation.row) }),
+          sql: operation.sql, parameters: operation.parameters.map(viewParameter) })) };
+    });
+  }
+  rebindReview({ sessionId, modelId, saved }) {
+    const session = this.db._session(sessionId);
+    return this.db._enqueue(session, async () => {
+      this._prune();
+      const model = this.models.get(modelId);
+      if (!model?.canEdit || model.sessionId !== sessionId || model.connectionId !== session.connectionId ||
+          !session.connected || session.readOnly || session.outcomeUnknown || session.needsReconnect ||
+          saved.schema !== this.db._options.database || saved.table !== model.definition.name) {
+        throw fail('ROCKETBRAIN_GRID_STALE', 'Open the same table in a clean editable grid before recovering this review.');
+      }
+      if (saved.server !== await this.db._sqlRelatedServer(session)) {
+        throw fail('ROCKETBRAIN_GRID_STALE', 'The saved review belongs to a different physical server, account or SQL context.');
+      }
+      const definition = await this.definition(model.definition.name);
+      if (fingerprint(definition) !== model.fingerprint || saved.definition !== reviewDigest(model.fingerprint) || this.models.get(modelId) !== model) {
+        throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The table definition or editable page changed after this review was saved.');
+      }
+      const keys = model.definition.columns.flatMap((column, index) => column.primaryKey ? [index] : []);
+      const byKey = new Map([...model.rows].map(([id, row]) => [reviewDigest(keys.map(index => row[index])), { id, row }]));
+      const changes = { updates: [], deletes: [], inserts: [] };
+      const selected = new Set();
+      const originals = [];
+      for (const operation of saved.operations) {
+        if (operation.type === 'insert') {
+          changes.inserts.push({ values: draftValues(operation.values) });
+          continue;
+        }
+        const current = byKey.get(operation.key);
+        if (!current || selected.has(current.id) || operation.row !== reviewDigest(current.row)) {
+          throw reviewRowChanged();
+        }
+        selected.add(current.id);
+        originals.push(current.row);
+        if (operation.type === 'delete') changes.deletes.push(current.id);
+        else changes.updates.push({ rowId: current.id, values: draftValues(operation.values) });
+      }
+      const validation = this.reviewChangeSet({ sessionId, modelId, ...changes });
+      this.reviews.delete(validation.reviewId);
+      const savedStatements = saved.operations.map(({ sql, parameters }) => ({ sql, parameters }));
+      if (reviewDigest(validation.statements) !== reviewDigest(savedStatements)) {
+        throw fail('ROCKETBRAIN_GRID_STALE', 'The current statements or parameters differ from the saved edit review.');
+      }
+      if (originals.length) {
+        const { sourceServer } = require('./sql-related-source');
+        const columns = definition.columns;
+        const target = quote(saved.schema) + '.' + quote(definition.name);
+        const match = '(' + keys.map(index => quote(columns[index].name) + ' <=> ?').join(' AND ') + ')';
+        const prefix = 'SELECT ' + columns.map(column => quote(column.name)).join(',') + ' FROM ' + target + ' WHERE ';
+        await this.db._relationshipCatalog(async read => {
+          if (await sourceServer(read) !== saved.server) {
+            throw fail('ROCKETBRAIN_GRID_STALE', 'The current metadata session has a different server, account or SQL context.');
+          }
+          for (let offset = 0; offset < originals.length; offset += 32) {
+            const batch = originals.slice(offset, offset + 32);
+            const parameters = batch.flatMap(row => keys.map(index => snapshotParameter(row[index], columns[index])));
+            const { rows } = await read(prefix + batch.map(() => match).join(' OR '), parameters);
+            const digests = new Set(rows.map(reviewDigest));
+            if (rows.length !== batch.length || batch.some(row => !digests.has(reviewDigest(row)))) throw reviewRowChanged();
+          }
+        });
+      }
+      return changes;
+    });
   }
   applyChangeSet({ sessionId = 'default', reviewId } = {}) {
     const session = this.db._session(sessionId);
