@@ -2383,6 +2383,7 @@
     "sql.js": "1.13.0",
     "vscode-languageclient": "11.0.0",
     "ws": "8.23.0",
+    "yaml": "2.9.1",
     "yauzl": "3.4.0"
   },
   "devDependencies": {
