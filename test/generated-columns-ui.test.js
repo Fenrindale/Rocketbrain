@@ -7,7 +7,7 @@ const { designerHtml } = require('../src/db/schema-designer-vscode');
 
 const browser = browserRuntime();
 
-test('the designer form stages a generated expression with incompatible controls disabled', { skip: browser.skip, timeout: 30000 }, async () => {
+test('the designer form stages a generated expression and exact ordered index parts', { skip: browser.skip, timeout: 30000 }, async () => {
   const chromium = await browser.chromium.launch({ executablePath: browser.executablePath, headless: true });
   try {
     const page = await chromium.newPage();
@@ -37,11 +37,18 @@ test('the designer form stages a generated expression with incompatible controls
     assert.equal(await page.getByRole('combobox', { name: 'Column 2 default kind', exact: true }).isDisabled(), true);
     assert.equal(await page.getByRole('checkbox', { name: 'Column 2 auto increment', exact: true }).isDisabled(), true);
     await expression.fill('(amount + 2) * 3');
+    await page.getByRole('button', { name: 'Add key or index' }).click();
+    await page.getByRole('textbox', { name: 'Index 1 name', exact: true }).fill('idx_amount_total');
+    await page.getByRole('combobox', { name: 'Index 1 kind', exact: true }).selectOption('BTREE');
+    await page.getByRole('textbox', { name: 'Index 1 ordered columns', exact: true }).fill('amount,total');
     await page.getByRole('button', { name: 'Review and validate' }).click();
     const review = await pending;
     assert.equal(review?.draft.columns[1].generationMode, 'stored');
     assert.equal(review.draft.columns[1].generationExpression, '(amount + 2) * 3');
     assert.equal(review.draft.columns[1].defaultKind, 'none');
+    assert.deepEqual(review.draft.indexes[0], { name: 'idx_amount_total', type: 'BTREE', unique: false, primaryKey: false, comment: '',
+      columns: [{ name: 'amount', ordinal: 1, prefixLength: null, collation: 'A' },
+        { name: 'total', ordinal: 2, prefixLength: null, collation: 'A' }] });
     assert.equal(await page.getByRole('button', { name: 'Apply reviewed design' }).isDisabled(), true);
     assert.deepEqual(errors, []);
   } finally { await chromium.close(); }
