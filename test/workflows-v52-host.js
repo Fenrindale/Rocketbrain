@@ -16,6 +16,7 @@ exports.run = async (vscode = require('vscode')) => {
   const api = await extension.activate();
   const checks = [];
   const details = {};
+  const failures = [];
   const groups = {
     dbMcp: () => require('./db-mcp-host').runDbMcpChecks(api, vscode, checks),
     osv: () => require('./dependency-advisories-host').runDependencyAdvisoryChecks(api, vscode, checks),
@@ -25,13 +26,22 @@ exports.run = async (vscode = require('vscode')) => {
       finally { await api.java.stop(); }
     }
   };
-  for (const [group, test] of Object.entries(groups)) {
+  const names = process.env.ROCKETBRAIN_V52_ONLY?.split(',') || Object.keys(groups);
+  assert.ok(names.length && names.every(name => Object.hasOwn(groups, name)) && new Set(names).size === names.length);
+  for (const group of names) {
     checkpoint(group, 'started');
-    details[group] = await test();
-    assert.ok(details[group], group + ' returned no proof.');
-    checkpoint(group, 'completed');
+    try {
+      const detail = await groups[group]();
+      assert.ok(detail, group + ' returned no proof.');
+      details[group] = detail;
+      checkpoint(group, 'completed');
+    } catch (error) {
+      failures.push({ group, message: error.message.slice(0, 1000) });
+      checkpoint(group, 'failed');
+    }
   }
-  const report = path.resolve(__dirname, '../test-output', `${prefix}-native-${engine}.json`);
+  const report = path.resolve(__dirname, '../test-output', `${prefix}-native-${engine}${failures.length ? '-failed' : ''}.json`);
   fs.writeFileSync(report, JSON.stringify({ version: extension.packageJSON.version, extensionPath: extension.extensionPath,
-    vscode: vscode.version, engine, hostPid: process.pid, passed: Object.keys(details).length, checks, details }, null, 2) + '\n', { flag: 'wx' });
+    vscode: vscode.version, engine, hostPid: process.pid, passed: Object.keys(details).length, checks, details, failures }, null, 2) + '\n', { flag: 'wx' });
+  assert.equal(failures.length, 0, failures.map(({ group, message }) => `${group}: ${message}`).join('\n'));
 };
