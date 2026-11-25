@@ -3,9 +3,10 @@ const net = require('node:net');
 
 // Own DAP transport: the public Java engine still owns Java/JDI semantics.
 class JavaDebugAdapter {
-  constructor(vscode, port, observe = () => {}, output) {
+  constructor(vscode, port, observe = () => {}, output, observeRequest = () => {}) {
     this.emitter = new vscode.EventEmitter(); this.onDidSendMessage = this.emitter.event;
     this.buffer = Buffer.alloc(0); this.mutations = new Set(); this.disposed = false; this.observe = observe; this.output = output;
+    this.observeRequest = observeRequest;
     this.socket = net.connect({ host: '127.0.0.1', port });
     this.socket.on('data', chunk => this.read(chunk));
     this.socket.on('error', error => this.fail(error));
@@ -53,6 +54,7 @@ class JavaDebugAdapter {
       this.mutations.add(message.seq);
       outgoing = { ...message, command: 'evaluate', arguments: { expression: `${args.expression} = (${args.value})`, frameId: args.frameId, context: 'repl', format: args.format } };
     }
+    this.observeRequest(outgoing);
     const body = Buffer.from(JSON.stringify(outgoing)); this.socket.write(Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`), body]));
   }
   dispose() { if (this.disposed) return; this.disposed = true; this.mutations.clear(); this.socket.destroy(); this.emitter.dispose(); }

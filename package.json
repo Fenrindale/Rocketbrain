@@ -79,6 +79,7 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.java.smartStepInto", "title": "Step Into a Java Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.openTableSnapshot", "title": "Open Consistent Table Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.attach", "title": "Open SSH Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
@@ -1435,6 +1436,10 @@
                 "type": "boolean",
                 "default": false
               },
+              "stepFilters": {
+                "type": "object",
+                "description": "Per-session overrides for rocketbrain.java.stepFilters."
+              },
               "hotCodeReplace": {
                 "type": "string",
                 "enum": [
@@ -1469,6 +1474,10 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 65535
+              },
+              "stepFilters": {
+                "type": "object",
+                "description": "Per-session overrides for rocketbrain.java.stepFilters."
               },
               "projectName": {
                 "type": "string"
@@ -1806,6 +1815,20 @@
             "exceptionTypes": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Exact Java binary names. Includes subtypes. An empty list matches all exception types." },
             "allowClasses": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Throw-site class names or prefix/suffix wildcard patterns. Every listed pattern must match." },
             "skipClasses": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Throw-site class names or prefix/suffix wildcard patterns to exclude." }
+          }
+        },
+        "rocketbrain.java.stepFilters": {
+          "type": "object",
+          "default": {},
+          "scope": "window",
+          "additionalProperties": false,
+          "description": "Default per-session Java step filters. A stepFilters field in launch.json overrides the matching setting.",
+          "properties": {
+            "allowClasses": { "type": "array", "items": { "type": "string" }, "description": "Restrict Java step locations to classes matching every pattern." },
+            "skipClasses": { "type": "array", "items": { "type": "string" }, "description": "Exclude Java classes or packages by exact name or a leading/trailing wildcard." },
+            "skipSynthetics": { "type": "boolean", "description": "Skip compiler-generated methods during Java step-in." },
+            "skipStaticInitializers": { "type": "boolean", "description": "Skip Java static initializers during step-in." },
+            "skipConstructors": { "type": "boolean", "description": "Skip Java constructors during step-in." }
           }
         },
         "rocketbrain.java.projectJdks": {

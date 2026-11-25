@@ -4,19 +4,26 @@ const { independentJavaExecutable, argumentString } = require('./debug-runtime')
 const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
 const { createExceptionControls } = require('./debug-exceptions');
+const { createSmartStep, mergeStepFilters } = require('./debug-step');
 const DEBUG_TYPE = 'rocketbrain-java';
+const resumeCommands = new Set(['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue', 'restart',
+  'restartFrame', 'goto', 'terminate', 'disconnect']);
 
 function registerJavaDebugger(vscode, api, output, request) {
   const sessions = new Map(); let disposed = false;
   function record(session) {
-    if (!sessions.has(session.id)) sessions.set(session.id, { session, state: 'starting', buildVersion: 0, appliedVersion: 0, hcrEvents: [] });
+    if (!sessions.has(session.id)) sessions.set(session.id, { session, state: 'starting', stopVersion: 0, buildVersion: 0, appliedVersion: 0, hcrEvents: [] });
     return sessions.get(session.id);
   }
   function observe(session, message) {
     const info = sessions.get(session.id); if (!info) return;
     if (message.type === 'response' && message.command === 'initialize' && message.success) info.capabilities = message.body;
+    if (message.type === 'response' && info.resuming !== undefined && info.resuming === message.request_seq) {
+      if (message.success && info.state === 'stopped') info.state = 'running';
+      info.resuming = undefined;
+    }
     if (message.type === 'event') {
-      if (message.event === 'stopped') { info.state = 'stopped'; info.threadId = message.body?.threadId; }
+      if (message.event === 'stopped') { info.state = 'stopped'; info.threadId = message.body?.threadId; info.stopVersion++; info.resuming = undefined; }
       if (message.event === 'continued') info.state = 'running';
       if (message.event === 'terminated') info.state = 'terminated';
       if (message.event === 'hotcodereplace') {
@@ -52,10 +59,13 @@ function registerJavaDebugger(vscode, api, output, request) {
     run: runReady, ensureTrusted, engineState: () => api.getState(), output,
     hasSessions: () => [...sessions.values()].some(info => info.state !== 'terminated')
   });
+  const smartStep = createSmartStep(vscode, { getState: id => sessions.get(id), ensureTrusted });
   async function resolve(folder, value, token) {
     ensureTrusted();
     const config = { ...value, type: DEBUG_TYPE, name: value.name || 'Rocketbrain Java', request: value.request || 'launch' };
     if (token?.isCancellationRequested) return undefined;
+    const stepFilters = mergeStepFilters(vscode.workspace.getConfiguration?.('rocketbrain.java', folder?.uri).get('stepFilters'), value.stepFilters);
+    if (Object.keys(stepFilters).length || value.stepFilters) config.stepFilters = stepFilters;
     if (config.request === 'attach') {
       config.hostName = config.hostName || '127.0.0.1'; config.port = config.port === undefined ? 5005 : Number(config.port);
       if (typeof config.hostName !== 'string' || !config.hostName.trim() || !Number.isInteger(config.port) || config.port < 1 || config.port > 65535) throw new Error('Attach requires a hostName and TCP port from 1 to 65535.');
@@ -104,8 +114,13 @@ function registerJavaDebugger(vscode, api, output, request) {
     await api.start();
     await exceptions.sync();
     const port = await runReady('vscode.java.startDebugSession'); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Java engine returned an invalid debugger port.');
-    record(session);
-    return new vscode.DebugAdapterInlineImplementation(new JavaDebugAdapter(vscode, port, message => observe(session, message), output));
+    const info = record(session);
+    const adapter = new JavaDebugAdapter(vscode, port, message => observe(session, message), output, message => {
+      if (message.type !== 'request') return;
+      if (resumeCommands.has(message.command)) { info.stopVersion++; info.resuming = message.seq; }
+      if (message.command === 'redefineClasses') info.stopVersion++;
+    });
+    return new vscode.DebugAdapterInlineImplementation(adapter);
   } };
   async function hotCodeReplace(sessionId) {
     ensureTrusted();
@@ -138,6 +153,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     catch (error) { void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return false; }
   }),
   breakpointCommand('rocketbrain.java.configureExceptionBreakpoints', () => exceptions.edit()),
+  breakpointCommand('rocketbrain.java.smartStepInto', () => smartStep.choose()),
   breakpointCommand('rocketbrain.java.addMethodBreakpoint',() => breakpoints.addMethod(activeSelection())),
   breakpointCommand('rocketbrain.java.addInlineBreakpoints',async () => {
     const report = await breakpoints.inspectInline(activeSelection());
@@ -146,7 +162,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     })),{title:'Add Java Inline Breakpoints',canPickMany:true});
     if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
-  return { breakpoints,exceptions,hotCodeReplace, getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; }, async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); }, dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
+  return { breakpoints,exceptions,smartStep,hotCodeReplace, getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; }, async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); }, dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
 }
 
 module.exports = { DEBUG_TYPE, registerJavaDebugger };
