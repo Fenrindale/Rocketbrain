@@ -333,6 +333,7 @@
       { "command": "rocketbrain.openapi.inspect", "title": "Inspect OpenAPI Description", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
       { "command": "rocketbrain.openapi.createRequest", "title": "Create HTTP Request from OpenAPI", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
       { "command": "rocketbrain.openapi.createJavaClient", "title": "Create Java Client from OpenAPI", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
+      { "command": "rocketbrain.openapi.createSpringServer", "title": "Create Spring MVC Controller from OpenAPI", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc || editorLangId == yaml || editorLangId == yml" },
       { "command": "rocketbrain.schema.diagram", "title": "Open Schema Diagram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.schema.logicalAcrossSchemas", "title": "Manage Cross-Schema Logical Relationships", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.schema.exportDdl", "title": "Save Schema DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },

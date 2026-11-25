@@ -5,6 +5,7 @@ const path=require('node:path');
 const {isDeepStrictEqual}=require('node:util');
 const { analyzeOpenApi,requestTemplate } = require('./openapi');
 const { javaClientSource }=require('./openapi-java-client');
+const { springServerSource }=require('./openapi-spring-server');
 const {schemaLines}=require('./openapi-schema-shapes');
 
 const fileLimit=1024*1024;
@@ -106,13 +107,15 @@ function registerOpenApiTools(context,vscode) {
   }
   const createRequest=(document,key)=>requestTemplate(observedOperation(document,key));
   const previewText=(document,key)=>operationDetails(observedOperation(document,key));
-  function createJavaClient(document,keys,options) {
+  function selectedOperations(document,keys) {
     const byKey=new Map(analyze(document).operations.map(operation=>[operation.key,operation]));
     if (!Array.isArray(keys)||new Set(keys).size!==keys.length||keys.some(key=>!byKey.has(key))) {
       throw Error('Choose observed OpenAPI operations.');
     }
-    return javaClientSource(keys.map(key=>byKey.get(key)),options);
+    return keys.map(key=>byKey.get(key));
   }
+  const createJavaClient=(document,keys,options)=>javaClientSource(selectedOperations(document,keys),options);
+  const createSpringServer=(document,keys,options)=>springServerSource(selectedOperations(document,keys),options);
   async function choose(multiple=false) {
     const document=vscode.window.activeTextEditor?.document;
     const report=analyze(document),version=document.version;
@@ -147,14 +150,14 @@ function registerOpenApiTools(context,vscode) {
     await vscode.window.showTextDocument(document,{preview:false});
     return document;
   }
-  async function javaClient() {
-    const className=await vscode.window.showInputBox({title:'Java Client Class',value:'OpenApiClient'});
+  async function generateJava(label,defaultClass,generator) {
+    const className=await vscode.window.showInputBox({title:label+' Class',value:defaultClass});
     if (className===undefined) return;
-    const packageName=await vscode.window.showInputBox({title:'Java Client Package',value:''});
+    const packageName=await vscode.window.showInputBox({title:label+' Package',value:''});
     if (packageName===undefined) return;
     const operations=await choose(true);
     if (!operations) return;
-    const content=javaClientSource(operations,{className,packageName});
+    const content=generator(operations,{className,packageName});
     const document=await vscode.workspace.openTextDocument({language:'java',content});
     await vscode.window.showTextDocument(document,{preview:false});
     return document;
@@ -166,11 +169,12 @@ function registerOpenApiTools(context,vscode) {
   const subscriptions=[
     register('rocketbrain.openapi.inspect',preview),
     register('rocketbrain.openapi.createRequest',create),
-    register('rocketbrain.openapi.createJavaClient',javaClient),
+    register('rocketbrain.openapi.createJavaClient',()=>generateJava('Java Client','OpenApiClient',javaClientSource)),
+    register('rocketbrain.openapi.createSpringServer',()=>generateJava('Spring MVC Controller','OpenApiController',springServerSource)),
     vscode.workspace.onDidCloseTextDocument(document=>collection.delete(document.uri)),
     vscode.workspace.onDidChangeTextDocument(event=>collection.delete(event.document.uri))
   ];
-  return {analyze,createRequest,createJavaClient,previewText,dispose(){
+  return {analyze,createRequest,createJavaClient,createSpringServer,previewText,dispose(){
     if(disposed)return;
     disposed=true;
     for(const subscription of subscriptions)subscription.dispose();

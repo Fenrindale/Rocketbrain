@@ -193,9 +193,11 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 GET {{host}}/actuator/health
 ```
 
-응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI Description**은 OpenAPI 3.0·3.1 JSON과 YAML에서 작업을 확인합니다. 신뢰한 작업 공간에서 상대 경로로 연결한 JSON·YAML 경로 항목, 매개변수, 요청 본문과 단순 스키마 참조를 읽습니다. **Create HTTP Request from OpenAPI**로 요청 초안을 만들고, 환경과 매개변수를 채운 뒤 실행합니다. [OpenAPI 설명 상대 참조](https://spec.openapis.org/oas/v3.1.1.html#relative-references-in-api-description-uris)
+응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI Description**은 Swagger 2.0과 OpenAPI 3.0·3.1의 JSON·YAML 작업을 읽습니다. 신뢰한 작업 공간에서 상대 경로로 연결한 경로 항목, 매개변수, 요청 본문과 스키마를 확인합니다. **Create HTTP Request from OpenAPI**로 요청 초안을 만들고, 환경과 매개변수를 채운 뒤 실행합니다. [OpenAPI 설명 상대 참조](https://spec.openapis.org/oas/v3.1.1.html#relative-references-in-api-description-uris)
 
 **Create Java Client from OpenAPI**로 선택한 작업을 Java 11 이상에서 쓸 수 있는 편집 가능한 클라이언트로 생성합니다. 기본 직렬화의 경로·쿼리·헤더·쿠키 값과 JSON 요청 본문을 지원합니다. 호출자가 서비스 주소와 인증 헤더를 전달하고, 응답은 상태·헤더와 원본 바이트를 제공합니다.
+
+**Create Spring MVC Controller from OpenAPI**는 단순 경로와 스칼라 매개변수, JSON 본문을 연결하는 컨트롤러와 `Handler` 인터페이스를 편집 가능한 Java 문서로 생성합니다. 애플리케이션에서 `Handler`를 구현합니다. Swagger 2.0의 `basePath`를 반영하며, 문서가 별도 인증을 요구하는 작업은 생성 전에 표시합니다.
 
 OpenAPI 작업 미리보기는 JSON 요청·응답의 중첩 필드, 필수 항목, 배열, 재귀 참조 및 `allOf`·`oneOf`·`anyOf` 구조를 표시합니다. 서로 호환되는 객체 `allOf`는 필드를 합쳐 볼 수 있습니다. HTTP 초안은 문서에 명시된 본문 예제를 사용합니다.
 
