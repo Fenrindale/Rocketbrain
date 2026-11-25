@@ -74,6 +74,22 @@ function splitFormatScript(source, options) {
   return { statements, directives };
 }
 
+function clientStatementAt(source, offset, options) {
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > source.length) {
+    throw Error('Place the cursor inside a SQL statement.');
+  }
+  const { statements } = splitFormatScript(source, options);
+  const endOf = item => item.end + (item.terminated ? item.delimiter.length : 0);
+  const statement = statements.find(item => offset >= item.start &&
+    (offset < endOf(item) || offset === source.length && offset === endOf(item)));
+  if (!statement) throw Error('Place the cursor inside a SQL statement, outside the DELIMITER directives.');
+  const end = endOf(statement);
+  const selected = source.slice(statement.start,end);
+  const sql = statement.delimiter === ';' ? selected :
+    'DELIMITER ' + statement.delimiter + '\n' + selected + '\nDELIMITER ;';
+  return { start: statement.start, end, sql, compound: statement.delimiter !== ';' };
+}
+
 function programHeader(tokens, dialect) {
   const first = labelIndex(tokens, 0);
   if (word(tokens[first]) === 'BEGIN' && word(tokens[first + 1]) === 'NOT' && word(tokens[first + 2]) === 'ATOMIC') {
@@ -245,4 +261,4 @@ function formatProgram(source, options) {
   return formatted;
 }
 
-module.exports = { formatProgram, splitFormatScript, delimiterDirective, compoundCreation, keywordText };
+module.exports = { formatProgram, splitFormatScript, delimiterDirective, compoundCreation, clientStatementAt, keywordText };

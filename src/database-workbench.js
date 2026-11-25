@@ -464,6 +464,13 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   });
   command('rocketbrain.runQuery', async () => {
     const editor = vscode.window.activeTextEditor;
+    if (state.mysql && editor?.document.languageId === 'sql' && editor.selection.isEmpty &&
+        /^\uFEFF?[ \t]*DELIMITER(?=[ \t\r]|$)/im.test(editor.document.getText())) {
+      return vscode.commands.executeCommand('rocketbrain.sql.runClientStatement', {
+        uri: editor.document.uri.toString(), version: editor.document.version,
+        offset: editor.document.offsetAt(editor.selection.active)
+      });
+    }
     return runSql(selectedSql(editor), editor.document,{userQuery:true});
   });
   command('rocketbrain.openTable', async name => {
