@@ -1,6 +1,6 @@
 'use strict';
 
-function conversionSource(packageName,className) {
+function conversionSource(packageName,className,{custom=false}={}) {
   return [
     'package '+packageName+';',
     'import java.util.function.IntUnaryOperator;',
@@ -20,6 +20,37 @@ function conversionSource(packageName,className) {
     '        for (int i = 0; i < values.length; i++) { sum += values[i]; }',
     '        return sum;',
     '    }',
+    ...(custom ? [
+      '    interface Contract<T> { String apply(T input); }',
+      '    @FunctionalInterface interface Formatter<T> extends Contract<T> {}',
+      '    interface Stateful {',
+      '        Object STATE = new Object();',
+      '        default Object state() { return STATE; }',
+      '        int apply(int input);',
+      '    }',
+      '    private static String render(String value, String prefix) { return prefix + "string:" + value; }',
+      '    private static String render(Object value, String prefix) { return prefix + "object:" + value; }',
+      '    public static String customLambda(String prefix) {',
+      '        String suffix = "!";',
+      '        Formatter<String> action = input -> '+className+'.render(input, prefix) + suffix;',
+      '        return action.apply("L");',
+      '    }',
+      '    public static String customAnonymous(String prefix) {',
+      '        String suffix = "?";',
+      '        Formatter<Object> action = new Formatter<Object>() {',
+      '            @Override public String apply(Object input) { return '+className+'.render(input, prefix) + suffix; }',
+      '        };',
+      '        return action.apply("A");',
+      '    }',
+      '    static int unsafeState() {',
+      '        Stateful unsafe = x -> x + 99;',
+      '        return unsafe.apply(1);',
+      '    }',
+      '    static boolean unsafeCustomIdentity() {',
+      '        Formatter<String> risky = x -> x;',
+      '        return risky instanceof java.io.Serializable;',
+      '    }'
+    ] : []),
     '    static boolean escaped() {',
     '        IntUnaryOperator escaped = n -> n + 1;',
     '        return escaped == escaped;',
@@ -39,7 +70,8 @@ function conversionSource(packageName,className) {
     '        for (int i = 0; i < values.length; i++) { values[i] += 1; }',
     '    }',
     '    public static void main(String[] args) {',
-    '        System.out.print(lambda(3) + ":" + anonymous(5) + ":" + loop(new int[]{1,3,-2}) + ":" + loop(new int[]{}));',
+    '        System.out.print(lambda(3) + ":" + anonymous(5) + ":" + loop(new int[]{1,3,-2}) + ":" + loop(new int[]{})'+
+      (custom ? ' + "|" + customLambda("case-") + "|" + customAnonymous("case-")' : '')+');',
     '    }',
     '}',''
   ].join('\n');

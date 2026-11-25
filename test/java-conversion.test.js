@@ -42,10 +42,12 @@ test('conversion review accepts only an exact unannotated single edit to the rev
 });
 
 test('conversion verification rejects changed attributed bodies, bindings and array roles',() => {
-  const before = {kind:'lambda',start:5,end:10,sam:'F#apply(int)',type:'F',parameters:['x:int'],body:'x + 1',bindings:['x']};
+  const before = {kind:'lambda',start:5,end:10,sam:'F#apply(int)',type:'F',parameters:['x:int'],body:'x + 1',bindings:['x'],
+    captures:['outer'],callTargets:['Example#use(int)']};
   const after = {...before,kind:'anonymous',end:50};
   assert.equal(verifyConversion(before,[after],45).checkedBindings,1);
-  for (const mutation of [{body:'x + 2'},{bindings:['y']},{parameters:['y:int']},{end:49}]) {
+  for (const mutation of [{body:'x + 2'},{bindings:['y']},{parameters:['y:int']},{end:49},
+    {captures:['other']},{callTargets:['Example#use(long)']}]) {
     assert.throws(() => verifyConversion(before,[{...after,...mutation}],45),/preserves its checked Java behavior/);
   }
   const loop = {kind:'indexed',start:5,end:10,array:'entries',arrayType:'int[]',accumulator:'total',accumulatorType:'long'};
@@ -60,7 +62,7 @@ test('real JDT LS conversions retain Javac bindings and identical Java runtime r
   await fs.mkdir(pkg,{recursive:true});
   await fs.copyFile(path.join(__dirname,'fixtures/java/maven/pom.xml'),path.join(project,'pom.xml'));
   const file = path.join(pkg,'Conversion.java'), uri = pathToFileURL(file).href, rootUri = pathToFileURL(project).href;
-  const text = conversionSource('fixture','Conversion');
+  const text = conversionSource('fixture','Conversion',{custom:true});
   await fs.writeFile(file,text);
 
   const inspect = async source => {
@@ -71,12 +73,21 @@ test('real JDT LS conversions retain Javac bindings and identical Java runtime r
   };
   const allSites = await inspect(text);
   const sites = allSites.filter(site => site.start < text.indexOf('static boolean escaped'));
-  assert.deepEqual(sites.map(site => site.kind),['lambda','anonymous','indexed']);
-  for (const snippet of ['escaped = n ->','captured = n ->','new IntUnaryOperator() {\n            @Override public int applyAsInt(int input) { return this','values[i] += 1']) {
+  assert.deepEqual(sites.map(site => site.kind),['lambda','anonymous','indexed','lambda','anonymous']);
+  for (const snippet of ['escaped = n ->','captured = n ->','new IntUnaryOperator() {\n            @Override public int applyAsInt(int input) { return this',
+    'values[i] += 1','unsafe = x ->','risky = x ->']) {
     const offset = text.indexOf(snippet);
     assert.ok(offset > 0,snippet);
     assert.throws(() => conversionAt(allSites,offset),/Select a nonescaping/);
   }
+  assert.deepEqual(sites.slice(3).map(site=>site.type),[
+    'fixture.Conversion.Formatter<java.lang.String>','fixture.Conversion.Formatter<java.lang.Object>'
+  ]);
+  assert.ok(sites.slice(3).every(site=>site.sam==='fixture.Conversion.Contract#apply(T)'));
+  assert.deepEqual(sites.slice(3).map(site=>site.captures),[['prefix','suffix'],['prefix','suffix']]);
+  assert.deepEqual(sites.slice(3).flatMap(site=>site.callTargets),[
+    'fixture.Conversion#render(java.lang.String,java.lang.String)','fixture.Conversion#render(java.lang.Object,java.lang.String)'
+  ]);
 
   const lsp = new StdioLsp(resolveLaunch({javaHome,serverPath,storagePath:path.join(root,'jdt')}));
   const replacements = [];
@@ -110,6 +121,8 @@ test('real JDT LS conversions retain Javac bindings and identical Java runtime r
       replacements.push({site,text:review.replacement.newText});
     }
   } finally { await lsp.close(); }
+  assert.match(replacements[3].text,/new Formatter<String>\(\) \{/);
+  assert.match(replacements[4].text,/input -> .*\.render\(input, prefix\) \+ suffix/);
 
   const run = promisify(execFile), classes = path.join(root,'classes');
   const java = name => path.join(javaHome,'bin',name+(process.platform === 'win32' ? '.exe' : ''));
@@ -122,6 +135,11 @@ test('real JDT LS conversions retain Javac bindings and identical Java runtime r
   };
   const transformed = replacements.slice().reverse().reduce((source,replacement) =>
     source.slice(0,replacement.site.start) + replacement.text + source.slice(replacement.site.end),text);
-  assert.equal(await execute(text),'5:9:2:0');
-  assert.equal(await execute(transformed),'5:9:2:0');
+  const before=await execute(text),after=await execute(transformed);
+  assert.equal(before,'5:9:2:0|case-string:L!|case-object:A?');
+  assert.equal(after,before);
+  if (process.env.ROCKETBRAIN_CUSTOM_SAM_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_CUSTOM_SAM_RECEIPT,
+    JSON.stringify({jdk:'Temurin 25.0.5+8',jdt:'1.63.0',before,after,rewrites:replacements.length,
+      custom:sites.slice(3).map(({sam,type,captures,callTargets})=>({sam,type,captures,callTargets})),
+      statefulInterfaceRefused:true,identityRefused:true},null,2)+'\n');
 });

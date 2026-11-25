@@ -68,12 +68,28 @@ final class ConversionInspector {
 
     private ExecutableElement sam(VariableElement variable) {
         if (!(variable.asType() instanceof DeclaredType declared) || !(declared.asElement() instanceof TypeElement type) ||
-                !elements.isFunctionalInterface(type)) return null;
+                !elements.isFunctionalInterface(type) || type.getKind() != ElementKind.INTERFACE) return null;
         String name = type.getQualifiedName().toString();
-        if (!name.startsWith("java.util.function.") && !Set.of("java.lang.Runnable", "java.util.concurrent.Callable").contains(name)) return null;
+        boolean platform = name.startsWith("java.util.function.") || Set.of("java.lang.Runnable","java.util.concurrent.Callable").contains(name);
+        if (!platform && (name.isEmpty() || !sourceContract(type,new HashSet<>()))) return null;
         var methods = elements.getAllMembers(type).stream()
             .filter(member -> member instanceof ExecutableElement && member.getModifiers().contains(Modifier.ABSTRACT)).toList();
-        return methods.size() == 1 ? (ExecutableElement) methods.getFirst() : null;
+        if (methods.size() != 1) return null;
+        ExecutableElement method = (ExecutableElement)methods.getFirst();
+        return method.getTypeParameters().isEmpty() ? method : null;
+    }
+
+    private boolean sourceContract(TypeElement type, Set<TypeElement> checked) {
+        if (!checked.add(type)) return true;
+        if (checked.size() > 100 || trees.getPath(type) == null || type.getModifiers().contains(Modifier.SEALED)) return false;
+        for (Element member : type.getEnclosedElements()) {
+            if (member instanceof VariableElement field && field.getConstantValue() == null) return false;
+        }
+        for (TypeMirror parent : type.getInterfaces()) {
+            if (!(parent instanceof DeclaredType declared) || !(declared.asElement() instanceof TypeElement inherited) ||
+                !sourceContract(inherited,checked)) return false;
+        }
+        return true;
     }
 
     private static Tree executionBoundary(TreePath path) {
@@ -141,12 +157,12 @@ final class ConversionInspector {
         }
         TreePath normalized = normalizeBody(bodyPath, method.getReturnType().getKind() == TypeKind.VOID);
         if (normalized == null) return null;
-        var bindings = bodyBindings(normalized, parameterBindings);
-        if (bindings == null) return null;
+        var proof = bodyBindings(normalized, parameterBindings);
+        if (proof == null) return null;
         return object("kind", kind, "start", start(initializer), "end", end(initializer), "cursorStart", start(declaration),
             "actionOffset", actionOffset, "sam", SignatureInspector.key(method), "type", variable.asType().toString(),
             "parameters", parameterBindings.values(), "body", normalized.getLeaf().toString(),
-            "bindings", bindings);
+            "bindings", proof.bindings(), "captures", proof.captures(), "callTargets", proof.callTargets());
     }
 
     private TreePath normalizeBody(TreePath body, boolean isVoid) {
@@ -159,8 +175,12 @@ final class ConversionInspector {
         return expression == null ? null : path(path(body, statement), expression);
     }
 
-    private List<String> bodyBindings(TreePath body, Map<Element, String> parameters) {
+    private record BodyProof(List<String> bindings, Collection<String> captures, Collection<String> callTargets) {}
+
+    private BodyProof bodyBindings(TreePath body, Map<Element, String> parameters) {
         var bindings = new ArrayList<String>();
+        var captures = new LinkedHashSet<String>();
+        var callTargets = new LinkedHashSet<String>();
         var unsafe = new boolean[1];
         new TreePathScanner<Void, Void>() {
             void keep(Tree node, String name, boolean qualified) {
@@ -174,7 +194,21 @@ final class ConversionInspector {
                 }
                 String key;
                 if (parameters.containsKey(target)) key = "parameter:" + parameters.get(target);
-                else if (target instanceof ExecutableElement method) key = SignatureInspector.key(method);
+                else if (target instanceof ExecutableElement method) {
+                    key = SignatureInspector.key(method);
+                    callTargets.add(key);
+                }
+                else if (target instanceof VariableElement captured && Set.of(ElementKind.LOCAL_VARIABLE,ElementKind.PARAMETER,
+                        ElementKind.EXCEPTION_PARAMETER,ElementKind.RESOURCE_VARIABLE,ElementKind.BINDING_VARIABLE).contains(target.getKind())) {
+                    TreePath declaration = trees.getPath(captured);
+                    if (declaration == null || declaration.getCompilationUnit() != unit || start(declaration.getLeaf()) < 0 ||
+                        start(declaration.getLeaf()) >= start(body.getLeaf())) {
+                        unsafe[0] = true;
+                        return;
+                    }
+                    captures.add(captured.getSimpleName().toString());
+                    key = "capture:" + start(declaration.getLeaf()) + ":" + captured.getSimpleName() + ":" + captured.asType();
+                }
                 else key = target.getKind() + ":" + target.getEnclosingElement() + ":" + target;
                 bindings.add(node.getKind() + ":" + key + ":" + type);
             }
@@ -190,7 +224,7 @@ final class ConversionInspector {
             @Override public Void visitNewClass(NewClassTree node, Void unused) { unsafe[0] = true; return null; }
             @Override public Void visitMemberReference(MemberReferenceTree node, Void unused) { unsafe[0] = true; return null; }
         }.scan(body, null);
-        return unsafe[0] ? null : bindings;
+        return unsafe[0] ? null : new BodyProof(bindings,captures,callTargets);
     }
 
     private record Accumulation(Element accumulator, TreePath value) {}

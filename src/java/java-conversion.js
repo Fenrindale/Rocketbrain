@@ -8,13 +8,13 @@ const ACTIONS = Object.freeze({
   anonymous:{title:'Convert to lambda expression',result:'lambda'},
   indexed:{title:"Convert to enhanced 'for' loop",result:'enhanced'}
 });
-const SAME_FUNCTION_FIELDS = ['sam','type','parameters','body','bindings'];
+const SAME_FUNCTION_FIELDS = ['sam','type','parameters','body','bindings','captures','callTargets'];
 const SAME_LOOP_FIELDS = ['array','arrayType','accumulator','accumulatorType'];
 
 function conversionAt(sites,offset) {
   const candidates = sites.filter(site => Object.hasOwn(ACTIONS,site.kind) && site.cursorStart <= offset && offset < site.end);
   if (candidates.length !== 1) {
-    throw Error('Select a nonescaping platform functional-interface initializer or an indexed primitive-array summation loop.');
+    throw Error('Select a nonescaping functional-interface initializer or an indexed primitive-array summation loop.');
   }
   return candidates[0];
 }
@@ -56,7 +56,10 @@ function verifyConversion(before,sites,newLength) {
   if (!next || fields.some(field => JSON.stringify(next[field]) !== JSON.stringify(before[field]))) {
     throw Error('Javac could not confirm the selected conversion preserves its checked Java behavior.');
   }
-  return {from:before.kind,to:next.kind,checkedBindings:next.bindings?.length || fields.length};
+  const result = {from:before.kind,to:next.kind,checkedBindings:next.bindings?.length || fields.length};
+  if (before.kind !== 'indexed') Object.assign(result,{functionalType:next.type,sam:next.sam,
+    captures:next.captures || [],callTargets:next.callTargets || []});
+  return result;
 }
 
 module.exports = { ACTIONS,conversionAt,reviewConversionEdit,verifyConversion };

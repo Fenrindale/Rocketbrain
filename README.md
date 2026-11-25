@@ -70,7 +70,7 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 16. **Pull Up Java Members**와 **Push Down Java Members**는 같은 패키지에서 직접 상속하는 클래스 사이의 메서드·상수 이동을 미리 봅니다. Javac가 전후 참조를 비교하고 선언 충돌이나 다른 오버로드로의 연결을 감지하면 적용을 차단합니다.
 17. **Manage Git Changelists**에서 변경 파일을 이름 있는 작업 목록에 배정합니다. 목록에 편집 위치와 실행 구성 선택을 기록해 복원할 수 있습니다. 복원 후 실행 구성은 VS Code의 Run and Debug에서 시작할 수 있습니다.
    **Open GitHub or GitLab Review**는 `rocketbrain.codeReview`에 지정한 프로젝트의 열린 검토를 불러옵니다. 변경 패치와 댓글, 연결 이슈 번호와 CI 상태를 볼 수 있으며 **Add Local Review Draft**로 새 줄에 연결한 초안을 작업 공간에 저장합니다.
-18. **Convert Java Lambda, Anonymous Class or Loop**에서 지역 SAM 변수와 지원하는 배열 합산 루프의 변환을 검토합니다. 적용 전에 Javac로 참조 연결을 확인합니다.
+18. **Convert Java Lambda, Anonymous Class or Loop**에서 플랫폼 또는 프로젝트에 선언된 단일 추상 메서드 인터페이스를 구현하는 지역 변수와 배열 합산 루프의 변환을 검토합니다. 적용 전에 Javac로 캡처한 지역 값과 호출 오버로드의 바인딩을 확인합니다. [Java 변환](docs/java-conversions.md)
 19. **Trace Java Stream Values**에서 `Stream.of` 또는 `List.of(...).stream()`부터 `toList()`까지 선택합니다. 독립 JDK에서 `filter`, `map`, `flatMap`, `limit`의 실제 값 흐름을 실행하고 **Go to Java Stream Stage**로 원본 단계에 이동합니다.
 20. **Build and Index Mixed JVM Sources**로 가져온 Gradle·Maven 혼합 프로젝트의 표준 main 소스를 빌드하고 인덱싱합니다. Java Projects에서 Kotlin 파일을 열고, 한 줄에서 대상을 식별할 수 있는 호출·getter·상위 클래스에 **Go to Mixed JVM Declaration**을 사용합니다. 소스나 컴파일 결과가 바뀌면 다시 인덱싱합니다. Gradle `application` 프로젝트는 **Run Mixed Gradle Application**에서 실행합니다.
 21. Java Projects에서 Groovy 패키지와 파일을 엽니다. **Run Groovy and Spock Tests**는 가져온 Gradle 프로젝트의 `test` 작업을 실행합니다. **Groovy Console**과 **Evaluate Groovy Selection**은 함께 사용하는 세션에서 변수를 보존하며, **Reset Groovy Console**로 초기화합니다. **Run Groovy Script**는 저장한 파일을 별도 JVM에서 실행하고 구문 오류를 Problems에 표시합니다. 콘솔과 스크립트 실행에는 Gradle 홈에 포함된 Apache Groovy 4.0.28 또는 사용자 설정 `rocketbrain.java.groovyConsoleJar`의 공식 코어 JAR를 사용합니다.
