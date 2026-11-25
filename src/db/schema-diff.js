@@ -2,6 +2,7 @@
 const {createHash,randomUUID}=require('node:crypto');
 const {identifier,stableCreate}=require('./schema-rename');
 const Spatial=require('./schema-conversion-spatial'),spatialIndex=require('./schema-spatial-index');
+const stored=require('./schema-stored-diff');
 const LIMITS={tables:100,columnsPerTable:500,indexesPerTable:200,foreignKeysPerTable:200,snapshotBytes:8*1024*1024,changes:5000,selectedChanges:100};
 const quote=value=>'`'+identifier(value).replaceAll('`','``')+'`';
 const error=(code,message)=>Object.assign(new Error(message),{code});
@@ -51,17 +52,23 @@ function normalizeSnapshot(value,{verifyFingerprint=true}={}){
  if(scope.kind==='selected-tables'&&result.tables.some(t=>!scope.tables.includes(t.name)))throw error('ROCKETBRAIN_DIFF_SNAPSHOT','Snapshot object is outside its declared scope.');
  if(!server.tableNameCaseSensitive)unique(result.tables,t=>t.name.toLowerCase(),'case-folded schema object names');
  const fingerprint=digest(snapshotContent(result));if(verifyFingerprint&&value.fingerprint!==fingerprint)throw error('ROCKETBRAIN_DIFF_SNAPSHOT','Snapshot content does not match its fingerprint.');result.fingerprint=fingerprint;
+ if(Object.hasOwn(value,'storedObjects')){
+  if(scope.kind!=='database')throw error('ROCKETBRAIN_DIFF_SCOPE','Capture stored-object comparison metadata with the full visible database scope.');
+  result.storedObjects=stored.normalizeStored(value.storedObjects,server,{verifyFingerprint});
+ }
  if(Buffer.byteLength(JSON.stringify(result))>LIMITS.snapshotBytes)throw error('ROCKETBRAIN_DIFF_LIMIT','Schema snapshot exceeds 8 MiB. Narrow the table selection.');return result;
 }
-async function captureSchema(db,{tables}={}){
+async function captureSchema(db,{tables,includeStoredObjects=false}={}){
  if(!db||typeof db._metadataQuery!=='function')throw error('ROCKETBRAIN_DIFF_CONNECTION','Connect to the independent MySQL/MariaDB service first.');
+ if(typeof includeStoredObjects!=='boolean'||includeStoredObjects&&tables!==undefined)throw error('ROCKETBRAIN_DIFF_SCOPE','Capture stored-object comparison metadata with the full visible database scope.');
  if(tables!==undefined){tables=unique(list(tables,'selected tables',LIMITS.tables).map(v=>identifier(v,{table:true})),v=>v,'selected tables');if(!tables.length)throw error('ROCKETBRAIN_DIFF_SCOPE','Select at least one table.');}
  const read=async(sql,values=[])=>{const result=await db._metadataQuery(sql,values);if(result.truncated)throw error('ROCKETBRAIN_DIFF_LIMIT','Schema inspection was truncated.');return result.rows;};
  async function readIdentity(){const rows=await read('SELECT VERSION(),@@hostname,@@port,@@server_id,@@lower_case_table_names,@@sql_mode,CURRENT_USER(),DATABASE()'),r=rows[0];if(rows.length!==1||r?.length!==8)throw error('ROCKETBRAIN_DIFF_IDENTITY','Server identity could not be observed.');const dialect=/mariadb/i.test(r[0])?'mariadb':'mysql',id=(await read(dialect==='mysql'?'SELECT @@server_uuid':'SELECT @@server_uid'))[0]?.[0];return identity({dialect,version:String(r[0]),hostname:String(r[1]),port:r[2],serverId:r[3],tableNameCaseSensitive:Number(r[4])===0,sqlMode:String(r[5]),currentUser:String(r[6]),database:r[7],serverUniqueId:id});}
  const server=await readIdentity(),objectSql='SELECT TABLE_NAME,TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_SCHEMA=?'+(tables?' AND TABLE_NAME IN ('+tables.map(()=>'?').join(',')+')':'')+' ORDER BY TABLE_NAME',objectParameters=[server.database,...(tables||[])];
  const objectRows=await read(objectSql,objectParameters),objects=objectRows.map(([name,type])=>({name,kind:type==='VIEW'?'view':'table'}));
  if(objects.length>LIMITS.tables)throw error('ROCKETBRAIN_DIFF_LIMIT','A schema snapshot supports at most 100 objects. Select specific tables.');
- const coverage={tables:'loaded',columns:'loaded',indexes:'loaded',foreignKeys:'loaded',checks:'loaded',partitions:'loaded',definitions:'loaded'},warnings=['Schema visibility is limited to the current account. Separate metadata reads are not an atomic server snapshot.','No row data is captured. Definitions, defaults and comments may contain application information.','Stored program bodies, privileges, cross-database and dynamic application dependencies are outside this comparison.'];
+ const coverage={tables:'loaded',columns:'loaded',indexes:'loaded',foreignKeys:'loaded',checks:'loaded',partitions:'loaded',definitions:'loaded'},warnings=['Schema visibility is limited to the current account. Separate metadata reads are not an atomic server snapshot.','No row data is captured. Definitions, defaults and comments may contain application information.',
+  includeStoredObjects?'Stored object comparison uses observable source and creation context. Privileges and external application dependencies remain outside this comparison.':'Stored program bodies, privileges, cross-database and dynamic application dependencies are outside this comparison.'];
  const definitions=[];let capturedBytes=0;
  for(const item of objects){
   const base=(await read('SELECT t.TABLE_NAME,t.TABLE_TYPE,t.ENGINE,t.TABLE_COLLATION,t.TABLE_COMMENT,t.ROW_FORMAT,t.CREATE_OPTIONS,c.CHARACTER_SET_NAME FROM information_schema.TABLES t LEFT JOIN information_schema.COLLATIONS c ON c.COLLATION_NAME=t.TABLE_COLLATION WHERE t.TABLE_SCHEMA=? AND t.TABLE_NAME=?',[server.database,item.name]))[0];
@@ -80,7 +87,8 @@ async function captureSchema(db,{tables}={}){
  const after=await readIdentity();if(canonical(after)!==canonical(server))throw error('ROCKETBRAIN_DIFF_IDENTITY','The database server or SQL context changed during schema inspection.');
  const afterNames=await read(objectSql,objectParameters);if(canonical(afterNames)!==canonical(objectRows))throw error('ROCKETBRAIN_DIFF_STALE','The schema object set changed during inspection. Capture again.');
  for(const object of definitions)if(object.createSql){const latest=(await read('SHOW CREATE '+(object.kind==='view'?'VIEW ':'TABLE ')+quote(server.database)+'.'+quote(object.name)))[0]?.[1];if(stableCreate(String(latest))!==stableCreate(object.createSql))throw error('ROCKETBRAIN_DIFF_STALE','An object definition changed during inspection. Capture again.');}
- return normalizeSnapshot({format:'RocketbrainSchemaSnapshot',formatVersion:1,capturedAt:new Date().toISOString(),database:server.database,server,scope:{kind:tables?'selected-tables':'database',tables:tables||[]},coverage,tables:definitions,warnings:[...new Set(warnings)]},{verifyFingerprint:false});
+ const storedObjects=includeStoredObjects?await stored.captureStored((sql,values)=>db._metadataQuery(sql,values),server):undefined;
+ return normalizeSnapshot({format:'RocketbrainSchemaSnapshot',formatVersion:1,capturedAt:new Date().toISOString(),database:server.database,server,scope:{kind:tables?'selected-tables':'database',tables:tables||[]},coverage,tables:definitions,warnings:[...new Set(warnings)],...(storedObjects&&{storedObjects})},{verifyFingerprint:false});
 }
 function quoteLiteral(value,server){let result=String(value).replaceAll("'","''");if(!server.sqlMode.split(',').includes('NO_BACKSLASH_ESCAPES'))result=result.replaceAll('\\','\\\\');return "'"+result+"'";}
 function typeSql(value){const geometry=Spatial.describe(value);if(geometry)return geometry.type;const type=value.trim().toUpperCase().replace(/\s+/g,' ');if(!/^(?:(?:TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)(?:\(\d{1,3}\))?(?: UNSIGNED)?|(?:DECIMAL|NUMERIC)\(\d{1,2},\d{1,2}\)(?: UNSIGNED)?|(?:VAR)?CHAR\(\d{1,5}\)|(?:VAR)?BINARY\(\d{1,5}\)|TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|DATE|(?:DATETIME|TIMESTAMP|TIME)(?:\([0-6]\))?|DOUBLE(?: UNSIGNED)?|FLOAT(?: UNSIGNED)?)$/.test(type))throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Unsupported additive column type: '+value);let match=/^(?:DECIMAL|NUMERIC)\((\d+),(\d+)\)/.exec(type);if(match&&(Number(match[1])<1||Number(match[1])>65||Number(match[2])>30||Number(match[2])>Number(match[1])))throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Unsupported decimal precision or scale.');match=/^(CHAR|VARCHAR|BINARY|VARBINARY)\((\d+)\)/.exec(type);if(match&&(Number(match[2])<1||Number(match[2])>(['CHAR','BINARY'].includes(match[1])?255:65535)))throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Unsupported character or binary width.');return type;}
@@ -135,7 +143,9 @@ function compareSnapshots(currentValue,desiredValue){
  }
  for(const source of current.tables)if(!desiredNames.has(source.name))add('drop-table',source.name,source.name,source,null);
  if(changes.length>LIMITS.changes)throw error('ROCKETBRAIN_DIFF_LIMIT','The comparison exceeds 5000 changes. Narrow the snapshots.');
- return {format:'RocketbrainSchemaComparison',formatVersion:1,currentFingerprint:current.fingerprint,desiredFingerprint:desired.fingerprint,currentDatabase:current.database,desiredDatabase:desired.database,currentServer:clone(current.server),desiredServer:clone(desired.server),changes,warnings,coverage:{complete:coverage,sameDialect:modesMatch,current:current.coverage,desired:desired.coverage,ddlTextNormalization:'Volatile AUTO_INCREMENT counters and redundant inherited column encoding clauses only.'},summary:{changes:changes.length,selectable:changes.filter(c=>c.selectable).length,blocked:changes.filter(c=>!c.selectable).length},rowDataCompared:false,executedSql:false};
+ return {format:'RocketbrainSchemaComparison',formatVersion:1,currentFingerprint:current.fingerprint,desiredFingerprint:desired.fingerprint,currentDatabase:current.database,desiredDatabase:desired.database,currentServer:clone(current.server),desiredServer:clone(desired.server),changes,warnings,coverage:{complete:coverage,sameDialect:modesMatch,current:current.coverage,desired:desired.coverage,ddlTextNormalization:'Volatile AUTO_INCREMENT counters and redundant inherited column encoding clauses only.'},summary:{changes:changes.length,selectable:changes.filter(c=>c.selectable).length,blocked:changes.filter(c=>!c.selectable).length},
+  ...((current.storedObjects||desired.storedObjects)&&{storedObjects:stored.compareStored(current.storedObjects,desired.storedObjects,modesMatch)}),
+  rowDataCompared:false,executedSql:false};
 }
 function planMigration(currentValue,desiredValue,{changeIds}={}){
  const current=normalizeSnapshot(currentValue),desired=normalizeSnapshot(desiredValue),comparison=compareSnapshots(current,desired);list(changeIds,'selected migration changes',LIMITS.selectedChanges);if(!changeIds.length||new Set(changeIds).size!==changeIds.length)throw error('ROCKETBRAIN_DIFF_SELECTION','Select one or more distinct additive changes.');

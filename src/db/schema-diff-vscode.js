@@ -8,7 +8,9 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
  function scopeOptions(snapshot){return snapshot.scope.kind==='selected-tables'?{tables:snapshot.scope.tables}:{};}
  async function captureSnapshot(options={}){trusted();const value=engine.normalizeSnapshot(await capture(options));trusted();return value;}
  async function compare(desiredValue,{current}={}){
-  trusted();const desired=engine.normalizeSnapshot(desiredValue),before=current?engine.normalizeSnapshot(current):await captureSnapshot(scopeOptions(desired)),report=engine.compareSnapshots(before,desired);trusted();
+  trusted();const desired=engine.normalizeSnapshot(desiredValue),before=current?engine.normalizeSnapshot(current):await captureSnapshot({
+   ...scopeOptions(desired),...(desired.storedObjects&&{includeStoredObjects:true})
+  }),report=engine.compareSnapshots(before,desired);trusted();
   while(comparisons.size>=10)comparisons.delete(comparisons.keys().next().value);
   const id=randomUUID();comparisons.set(id,{current:before,desired,report,createdAt:Date.now()});return {id,...structuredClone(report)};
  }
@@ -43,12 +45,47 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
   return ['# Schema comparison',`Current: ${report.currentDatabase} · ${report.currentServer.dialect} ${report.currentServer.version}`,`Desired: ${report.desiredDatabase} · ${report.desiredServer.dialect} ${report.desiredServer.version}`,
    '',`${report.summary.changes} differences; ${report.summary.selectable} additive SQL candidates; ${report.summary.blocked} changes need separate migration work.`,
    '',...report.warnings.map(v=>'- '+v),'','No row data was compared. Account visibility and non-atomic metadata reads limit this report.','',
-   ...report.changes.flatMap(change=>[`## ${change.kind}: ${change.table}.${change.object}`,change.selectable?'Selectable additive SQL review candidate.':'Not selectable: '+change.reason,change.sql?'```sql\n'+change.sql+';\n```':'```json\n'+JSON.stringify({before:change.before,after:change.after},null,2)+'\n```',''])].join('\n');
+   ...report.changes.flatMap(change=>[`## ${change.kind}: ${change.table}.${change.object}`,change.selectable?'Selectable additive SQL review candidate.':'Not selectable: '+change.reason,change.sql?'```sql\n'+change.sql+';\n```':'```json\n'+JSON.stringify({before:change.before,after:change.after},null,2)+'\n```','']),
+   ...storedReviewLines(report.storedObjects)].join('\n');
  }
- subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-schema-compare',{provideTextDocumentContent(uri){const pieces=uri.path.split('/').filter(Boolean);if(pieces[1]==='migration.sql')return plans.get(pieces[0])?.sql||'-- This schema migration review is unavailable.';if(pieces[1]==='application.md')return applicationText(pieces[0]);return reviewText(pieces[0]);}}));
- async function saveSnapshotCommand(){
-  const value=await api.capture(),destination=await vscode.window.showSaveDialog({title:'Save Schema Snapshot',filters:{'Rocketbrain schema snapshot':['json']},defaultUri:vscode.Uri.file(path.join(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath||process.cwd(),value.database+'-schema.json'))});
-  if(!destination)return;trusted();if(destination.scheme!=='file'||destination.authority)throw new Error('Save the snapshot to a local JSON file.');await vscode.workspace.fs.writeFile(destination,Buffer.from(JSON.stringify(value,null,2)+'\n','utf8'));return {state:'saved',uri:destination.toString(),fingerprint:value.fingerprint,rowDataIncluded:false};
+ function storedReviewLines(stored) {
+  if(!stored)return [];
+  if(stored.state==='not-compared')return ['## Stored-object comparison',stored.reason,''];
+  return ['## Stored-object comparison',stored.note,
+   'Missing inventory or source stays unresolved. An object visible on only one side may exist under different permissions.',
+   'Use Open Stored Object Diff for side-by-side source. Stored objects cannot be selected for migration.',
+   '',`${stored.matchedExact} exact source/context matches; ${stored.differences.length} differences or unresolved objects.`,
+   '```json',JSON.stringify({current:stored.current,desired:stored.desired},null,2),'```','',
+   ...stored.differences.flatMap(change=>[`### ${change.kind} ${change.name}`,`State: ${change.state}. Aspects: ${change.aspects.join(', ')||'none confirmed'}.`,
+    'Current: '+(change.before?.state||'outside visible inventory')+'. Desired: '+(change.after?.state||'outside visible inventory')+'.',
+    ...(change.aspects.some(aspect=>aspect!=='definition')?['```json',JSON.stringify({
+     current:{settings:change.before?.settings,trigger:change.before?.trigger},desired:{settings:change.after?.settings,trigger:change.after?.trigger}
+    },null,2),'```']:[]),''])];
+ }
+ function storedSource(comparisonId,objectId,side){
+  trusted();
+  const change=comparisons.get(comparisonId)?.report.storedObjects?.differences.find(item=>item.id===objectId);
+  const object=side==='current.sql'?change?.before:side==='desired.sql'?change?.after:undefined;
+  return object?.state==='observed'?object.definition:'-- Complete source is unavailable on this side of the comparison.\n';
+ }
+ async function openStoredDiff(comparisonId,objectId){
+  trusted();
+  const item=comparisons.get(comparisonId)?.report.storedObjects?.differences.find(change=>change.id===objectId);
+  if(!item)throw Error('Choose a retained stored-object difference.');
+  const prefix='rocketbrain-schema-compare:/'+comparisonId+'/stored/'+objectId+'/';
+  const current=vscode.Uri.parse(prefix+'current.sql'),desired=vscode.Uri.parse(prefix+'desired.sql');
+  await vscode.commands.executeCommand('vscode.diff',current,desired,item.kind+' '+item.name+' · Stored Object');
+  return {current:current.toString(),desired:desired.toString(),state:item.state,executedSql:false};
+ }
+ subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-schema-compare',{provideTextDocumentContent(uri){const pieces=uri.path.split('/').filter(Boolean);if(pieces[1]==='migration.sql')return plans.get(pieces[0])?.sql||'-- This schema migration review is unavailable.';if(pieces[1]==='application.md')return applicationText(pieces[0]);if(pieces[1]==='stored')return storedSource(pieces[0],pieces[2],pieces[3]);return reviewText(pieces[0]);}}));
+ async function saveSnapshotCommand(includeStoredObjects=false){
+  const value=await api.capture({includeStoredObjects}),destination=await vscode.window.showSaveDialog({title:includeStoredObjects?'Save Schema Snapshot with Stored Objects':'Save Schema Snapshot',filters:{'Rocketbrain schema snapshot':['json']},defaultUri:vscode.Uri.file(path.join(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath||process.cwd(),value.database+'-schema.json'))});
+  if(!destination)return;trusted();if(destination.scheme!=='file'||destination.authority)throw new Error('Save the snapshot to a local JSON file.');
+  const body=Buffer.from(JSON.stringify(value,null,includeStoredObjects?undefined:2)+'\n','utf8');
+  if(body.length>engine.LIMITS.snapshotBytes)throw Error('The saved schema snapshot would exceed 8 MiB.');
+  await vscode.workspace.fs.writeFile(destination,body);
+  return {state:'saved',uri:destination.toString(),fingerprint:value.fingerprint,
+   ...(value.storedObjects&&{storedObjectsFingerprint:value.storedObjects.fingerprint}),rowDataIncluded:false};
  }
  async function compareCommand(){
   const files=await vscode.window.showOpenDialog({title:'Choose Desired Schema Snapshot',canSelectMany:false,filters:{'Rocketbrain schema snapshot':['json']}});if(!files?.[0])return;
@@ -60,6 +97,16 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
  }
  function command(name,fn){subscriptions.push(vscode.commands.registerCommand(name,async()=>{try{return await fn();}catch(error){if(!closed)await vscode.window.showErrorMessage('Rocketbrain Schema: '+error.message);}}));}
  command('rocketbrain.schema.saveSnapshot',saveSnapshotCommand);command('rocketbrain.schema.compareSnapshot',compareCommand);
+ command('rocketbrain.schema.saveSnapshotWithStoredObjects',()=>saveSnapshotCommand(true));
+ command('rocketbrain.schema.openStoredObjectDiff',async()=>{
+  trusted();
+  const items=[...comparisons].flatMap(([comparisonId,{report}])=>(report.storedObjects?.differences||[]).map(change=>({
+   label:change.kind+' '+change.name,description:change.state,detail:report.currentDatabase+' ↔ '+report.desiredDatabase,comparisonId,objectId:change.id
+  })));
+  if(!items.length)throw Error('Compare snapshots with stored-object metadata first.');
+  const selected=await vscode.window.showQuickPick(items,{title:'Open Stored Object Diff'});
+  if(selected)return openStoredDiff(selected.comparisonId,selected.objectId);
+ });
  command('rocketbrain.schema.validateMigration',async()=>{trusted();const items=[...plans.values()].filter(p=>p.format==='RocketbrainSchemaMigrationPlan');if(!items.length)throw new Error('Create a selected schema migration review first.');const selected=await vscode.window.showQuickPick(items.map(p=>({label:p.database+' · '+p.steps.length+' step(s)',description:p.createdAt,plan:p})),{title:'Revalidate Migration Review'});if(!selected)return;const result=await api.validate(selected.plan.id);await vscode.window.showInformationMessage('Current schema still matches this migration review. Exported SQL does not enforce this check at later execution.');return result;});
  command('rocketbrain.schema.applyMigration',async()=>{trusted();const choices=[...plans.values()].filter(p=>applications.has(p.id)).map(p=>({label:p.database+' · '+p.steps.length+' selected step(s)',description:p.createdAt,plan:p}));if(!choices.length)throw new Error('Create a selected migration review first.');const selected=await vscode.window.showQuickPick(choices,{title:'Apply Reviewed Schema Migration'});if(!selected)return;const document=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+selected.plan.id+'/migration.sql'));await vscode.window.showTextDocument(document,{preview:false});const accepted=await vscode.window.showWarningMessage('Apply this reviewed SQL? Each schema statement can commit implicitly. Earlier successful steps remain when a later one fails; automatic retry and rollback are unavailable.',{modal:true},'Apply Reviewed Schema');if(accepted!=='Apply Reviewed Schema')return;trusted();const report=await vscode.window.withProgress({title:'Applying reviewed schema changes',location:vscode.ProgressLocation.Notification,cancellable:true},(_progress,cancellation)=>api.apply(selected.plan.id,{allowImplicitCommit:true,cancellation}));const outcome=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+report.id+'/application.md'));await vscode.window.showTextDocument(outcome,{preview:false});return report;});
  command('rocketbrain.schema.reviewRebuild',async()=>{trusted();const choices=[...comparisons].map(([id,c])=>({label:c.current.database+' · '+c.report.changes.length+' differences',id,value:c}));const selected=await vscode.window.showQuickPick(choices,{title:'Review Complex or Destructive Schema Rebuild'});if(!selected)return;const spatialTables=selected.value.current.tables.filter(table=>table.kind==="table"&&String(table.engine).toUpperCase()==="INNODB"&&table.columns.some(column=>/^(?:geometry|point|linestring|polygon|multipoint|multilinestring|multipolygon|geometrycollection|geomcollection)$/i.test(column.type.trim()))).map(table=>table.name);const names=[...new Set([...selected.value.report.changes.map(c=>c.table),...spatialTables])].filter(name=>selected.value.current.tables.some(t=>t.name===name));const tables=await vscode.window.showQuickPick(names,{title:'Select Existing Tables to Rebuild or Retire',canPickMany:true});if(!tables?.length)return;const rules=await require('./schema-conversion-vscode').chooseConversions(vscode,selected.value.current,selected.value.desired,tables);if(rules===null)return;const plan=await api.planRebuild(selected.id,tables,{conversions:rules}),document=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+plan.id+'/migration.sql'));await vscode.window.showTextDocument(document,{preview:false});await vscode.window.showInformationMessage('Review the rebuild SQL, retained backup names, conversion limits and dependency warnings, then Apply Reviewed Schema Rebuild.');return plan;});
@@ -70,6 +117,6 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
  command('rocketbrain.schema.applyRebuild',async()=>{trusted();const selected=await vscode.window.showQuickPick([...plans.values()].filter(p=>rebuildApplications.has(p.id)).map(plan=>({label:plan.database+' · '+plan.steps.length+' table(s)',plan})),{title:'Apply Reviewed Schema Rebuild'});if(!selected)return;const document=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+selected.plan.id+'/migration.sql'));await vscode.window.showTextDocument(document,{preview:false});const unknown=await dependencyAck(selected.plan);if(selected.plan.requiresUnverifiedDependencyApproval&&!unknown)return;if(!await disruptionAck(selected.plan)||!await lossyAck(selected.plan))return;const accepted=await vscode.window.showWarningMessage('Apply the reviewed destructive rebuild? Columns/table names may disappear. Original tables and data remain in named backups. DDL commits implicitly; guarded automatic compensation can fail or refuse changed live data.',{modal:true},'Apply Rebuild with Guarded Recovery');if(accepted!=='Apply Rebuild with Guarded Recovery')return;return outcome(await vscode.window.withProgress({title:'Rebuilding reviewed tables',location:vscode.ProgressLocation.Notification,cancellable:true},(_,cancellation)=>api.applyRebuild(selected.plan.id,{allowDestructive:true,allowImplicitCommit:true,allowUnverifiedDependencies:unknown,allowDependencyChanges:selected.plan.requiresDependencyChangeApproval===true,allowLossyConversions:selected.plan.requiresLossyConversionApproval===true,autoRecover:true,cancellation})));});
  command('rocketbrain.schema.recoverRebuild',async()=>{const value=await api.listRecoveries(),selected=await vscode.window.showQuickPick(value.operations.map(operation=>({label:operation.state+' · '+operation.tables.join(', '),description:operation.operationId,operation})),{title:'Recover Retained Original Tables'});if(!selected)return;const unknown=await dependencyAck({requiresUnverifiedDependencyApproval:true});if(!unknown)return;if(!await disruptionAck({requiresDependencyChangeApproval:selected.operation.requiresDependencyChangeApproval===true}))return;const accepted=await vscode.window.showWarningMessage('Restore retained originals? Recovery verifies the current server, owned journal, backup schema/data and unchanged published rows before renaming. Changed live data is preserved and recovery is refused. Original/after tables are retained.',{modal:true},'Recover Verified Originals');if(accepted!=='Recover Verified Originals')return;return outcome(await vscode.window.withProgress({title:'Recovering retained original tables',location:vscode.ProgressLocation.Notification,cancellable:true},(_,cancellation)=>api.recoverRebuild(selected.operation.operationId,{connectionEpoch:value.connectionEpoch,allowDestructive:true,allowImplicitCommit:true,allowUnverifiedDependencies:true,allowDependencyChanges:selected.operation.requiresDependencyChangeApproval===true,cancellation})));});
  function tracked(fn){return(...args)=>{const work=fn(...args);operations.add(work);void work.finally(()=>operations.delete(work)).catch(()=>{});return work;};}
- const api={capture:tracked(captureSnapshot),compare:tracked(compare),plan:tracked(plan),validate:tracked(validate),apply:tracked(apply),planRebuild:tracked(planRebuild),applyRebuild:tracked(applyRebuild),recoverRebuild:tracked(recoverRebuild),listRecoveries:tracked(listRecoveries),readSnapshot,reviewText,applicationText,async dispose(){if(closed)return;closed=true;for(const controller of controllers)controller.abort();await Promise.allSettled([...operations]);await Promise.allSettled([...applications.values()].map(application=>discard?.(application.reviewId)));await Promise.allSettled([...rebuildApplications.values()].map(application=>discardRebuild?.(application.reviewId)));comparisons.clear();plans.clear();applications.clear();rebuildApplications.clear();reports.clear();for(const subscription of subscriptions)subscription.dispose();}};return api;
+ const api={capture:tracked(captureSnapshot),compare:tracked(compare),openStoredDiff:tracked(openStoredDiff),plan:tracked(plan),validate:tracked(validate),apply:tracked(apply),planRebuild:tracked(planRebuild),applyRebuild:tracked(applyRebuild),recoverRebuild:tracked(recoverRebuild),listRecoveries:tracked(listRecoveries),readSnapshot,reviewText,applicationText,async dispose(){if(closed)return;closed=true;for(const controller of controllers)controller.abort();await Promise.allSettled([...operations]);await Promise.allSettled([...applications.values()].map(application=>discard?.(application.reviewId)));await Promise.allSettled([...rebuildApplications.values()].map(application=>discardRebuild?.(application.reviewId)));comparisons.clear();plans.clear();applications.clear();rebuildApplications.clear();reports.clear();for(const subscription of subscriptions)subscription.dispose();}};return api;
 }
 module.exports={registerSchemaComparison};

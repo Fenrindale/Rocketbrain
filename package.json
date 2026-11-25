@@ -756,6 +756,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.schema.saveSnapshotWithStoredObjects",
+        "title": "Save Schema Snapshot with Stored Objects",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected"
+      },
+      {
+        "command": "rocketbrain.schema.openStoredObjectDiff",
+        "title": "Open Stored Object Diff",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.schema.validateMigration",
         "title": "Revalidate Selected Schema Migration Review",
         "category": "Rocketbrain"
