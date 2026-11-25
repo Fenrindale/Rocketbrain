@@ -15,7 +15,7 @@ function embeddedIssue(text, fragment, issue) {
 function analyzeJavaUsageDocument(text, catalog, options) {
   const scanned = scanJavaSql(text), unknown = [...scanned.unknown];
   const fragments = scanned.fragments.map(fragment => {
-    const report = analyzeProjectDocument(fragment.text, catalog, { ...options, usageParameters: true });
+    const report = analyzeProjectDocument(fragment.text, catalog, { ...options, usageParameters: true, dmlUsages: true });
     for (const issue of report.unknown) unknown.push(embeddedIssue(text, fragment, issue));
     return { ...fragment, report };
   });
@@ -48,6 +48,7 @@ function targetAtJava(report, offset, options) {
     if (position < 0) continue;
     const selected = targetAtDocument(fragment.report, position, options);
     if (!selected || selected.kind === 'local') continue;
+    if (selected.kind === 'pending-dml') { possible.push(selected); continue; }
     const matching = referencesInDocument(fragment.report, selected, options).filter(ref => ref.start <= position && position < ref.end);
     if (matching.some(ref => javaSourceSpan(fragment, ref.start, ref.end))) possible.push(selected);
   }

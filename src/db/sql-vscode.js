@@ -14,7 +14,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   const engine=()=>require('./sql-analysis');
   const config=()=>vscode.workspace.getConfiguration('rocketbrain.sql.analysis');
   function invalidate(){epoch++;request++;metadata=null;lastProjectReport=null;cache.clear();navigationCache.clear();collection.clear();if(!disposed)events.fire();}
-  function options(){return {dialect:metadata?.dialect||'mysql',database:metadata?.database,catalogComplete:Boolean(metadata?.coverage?.tables==='loaded'&&metadata?.coverage?.columns==='loaded'),tableNameCaseSensitive:metadata?.tableNameCaseSensitive,sqlMode:metadata?.sqlMode};}
+  function options(){return {dialect:metadata?.dialect||'mysql',database:metadata?.database,serverVersion:metadata?.serverVersion,catalogComplete:Boolean(metadata?.coverage?.tables==='loaded'&&metadata?.coverage?.columns==='loaded'),tableNameCaseSensitive:metadata?.tableNameCaseSensitive,sqlMode:metadata?.sqlMode};}
   function configuredScope(document){
     if(!vscode.workspace.isTrusted||document.uri.scheme!=='file')return null;
     const folder=vscode.workspace.getWorkspaceFolder?.(document.uri);
@@ -136,6 +136,8 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
         remote=found.tables;
         target=navigation.liveNavigation(scope.model.text,scope.offset,snapshot,observed,remote);
       }
+      if(target?.local)return [new vscode.Location(document.uri,new vscode.Range(
+        document.positionAt(scope.start+target.local.start),document.positionAt(scope.start+target.local.end)))];
       if(!target?.object)return [];
       const destination=await objectDefinition({...target,sqlMode:observed.sqlMode},assertCurrent);
       assertCurrent();
@@ -260,7 +262,19 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   async function scanProject(target,token,scanOptions={},forRename=false){
     projectTrusted(token);const scope=projectRoots(scanOptions),frame={epoch,projectGeneration,database:metadata.database,dialect:metadata.dialect},observed=structuredClone(metadata),opts=options();
-    target=projectEngine().normalizeTarget(target,observed,opts);
+    const sameDatabase=!target?.database||(opts.tableNameCaseSensitive===false
+      ? String(target.database).toLowerCase()===observed.database.toLowerCase() : target.database===observed.database);
+    let joinTables=[];
+    if(sameDatabase||forRename||!joinCatalog)target=projectEngine().normalizeTarget(target,observed,opts);
+    else{
+      projectEngine().validateIdentifier(target.database);projectEngine().validateIdentifier(target.table);
+      const visible=await joinCatalog({endpoints:[{schema:target.database,table:target.table}],includeEdges:false});
+      assertProjectFrame(frame,token);
+      joinTables=visible.tables;
+      const catalog={database:target.database,tables:joinTables.filter(table=>table.schema===target.database),views:[]};
+      target=projectEngine().normalizeTarget(target,catalog,{...opts,database:target.database});
+    }
+    const usageOptions={...opts,usageParameters:!forRename,dmlUsages:!forRename,joinOrigins:joinTables.length>0,joinTables};
     const inventory=await projectFiles(scope,token);assertProjectFrame(frame,token);
     const documents=[],unknownFiles=[],references=[];let totalBytes=0;
     let recognizedJavaFragments=0;
@@ -284,11 +298,11 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
         documents.push(record);
         let usages,unknown;
         if(java){
-          const embedded=require('./sql-usage-sources'),report=embedded.analyzeJavaUsageDocument(text,observed,opts);
+          const embedded=require('./sql-usage-sources'),report=embedded.analyzeJavaUsageDocument(text,observed,usageOptions);
           const found=embedded.usagesInJava(report,target,opts);
           usages=found.references;unknown=[...report.unknown,...found.unknown];recognizedJavaFragments+=report.fragments.length;
         }else{
-          const report=projectEngine().analyzeProjectDocument(text,observed,{...opts,usageParameters:!forRename});
+          const report=projectEngine().analyzeProjectDocument(text,observed,usageOptions);
           usages=projectEngine().referencesInDocument(report,target,opts);unknown=report.unknown;
         }
         references.push(...usages.map(ref=>({...ref,uri:record.uri})));
@@ -303,13 +317,14 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
       limits:{files:200,fileBytes:128*1024,totalBytes:8*1024*1024},unknownFiles,
       java:{enabled:scope.javaRoots.length>0,analyzedFiles:documents.filter(record=>record.language==='java').length,
         recognizedFragments:recognizedJavaFragments,references:javaReferences},
-      sourceRenameEligible:unknownFiles.length===0&&javaReferences===0,
+      dml:{readReferences:references.filter(ref=>ref.usage==='read').length,writeReferences:references.filter(ref=>ref.usage==='write').length},
+      sourceRenameEligible:unknownFiles.length===0&&javaReferences===0&&!references.some(ref=>ref.command),
       embeddedSql:'Recognized native Java SQL in selected Java roots. Other embedded languages and runtime strings are outside scope.'};
     return {target,frame,...scope,options:opts,metadata:observed,inventory:inventory.files.map(u=>u.toString()),documents,references,coverage};
   }
   function publicProjectReport(scan){return structuredClone({target:scan.target,references:scan.references,coverage:scan.coverage,executedSql:false});}
   async function findCatalogReferences(target,token,scanOptions={}){const scan=await scanProject(target,token,scanOptions);return lastProjectReport=publicProjectReport(scan);}
-  function javaReport(document){
+  function javaReport(document,observed){
     if(document.uri.scheme!=='file'||sourceLanguage(document.uri)!=='java'||document.isClosed)return null;
     const configured=vscode.workspace.getConfiguration('rocketbrain.sql.project').get('javaRoots',[]);
     if(!Array.isArray(configured)||!configured.length)return null;
@@ -321,12 +336,12 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     if(!stat.isFile()||stat.isSymbolicLink()||stat.size>128*1024||!javaRoots.some(root=>inside(root,real)))return null;
     const text=document.getText();
     if(Buffer.byteLength(text)>128*1024)return null;
-    return require('./sql-usage-sources').analyzeJavaUsageDocument(text,metadata,options());
+    return require('./sql-usage-sources').analyzeJavaUsageDocument(text,metadata,observed);
   }
-  function usageTarget(document,position){
-    const offset=document.offsetAt(position),observed={...options(),usageParameters:true};
+  function usageTarget(document,position,joinTables=[]){
+    const offset=document.offsetAt(position),observed={...options(),usageParameters:true,dmlUsages:true,joinOrigins:joinTables.length>0,joinTables};
     if(document.languageId==='java'){
-      const report=javaReport(document);
+      const report=javaReport(document,observed);
       return report?{report,selected:require('./sql-usage-sources').targetAtJava(report,offset,observed),embedded:true}:null;
     }
     const report=projectEngine().analyzeProjectDocument(document.getText(),metadata,observed);
@@ -335,7 +350,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   function catalogTargetAt(document,position){
     if(virtualActive(document))return null;
     projectTrusted();const target=usageTarget(document,position)?.selected;
-    return target?.kind==='local'?null:target;
+    return !target||['local','pending-dml'].includes(target.kind)?null:target;
   }
   function buildCatalogEdit(plan,{reviewed=false}={}){
     const edit=new vscode.WorkspaceEdit();for(const record of plan.documents)for(const change of record.changes)edit.replace(vscode.Uri.parse(record.uri),new vscode.Range(record.document.positionAt(change.start),record.document.positionAt(change.end)),change.newText,{label:'Rename physical SQL reference',needsConfirmation:!reviewed});return edit;
@@ -365,7 +380,20 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   async function catalogRenameEdit(id,token,validationOptions={}){await validateCatalogRename(id,token,validationOptions);return buildCatalogEdit(projectPlans.get(typeof id==='string'?id:id?.id),validationOptions);}
   async function provideReferences(document,position,context={},token){
     if(!config().get('enabled',true)||virtualActive(document)||!metadata||metadata.cachedMetadata||!vscode.workspace.isTrusted)return [];
-    projectTrusted(token);const version=document.version,usage=usageTarget(document,position),selected=usage?.selected;if(!selected)return [];
+    projectTrusted(token);
+    const version=document.version,generation=epoch;
+    let usage=usageTarget(document,position);
+    if(usage?.selected?.kind==='pending-dml'){
+      if(!joinCatalog)return [];
+      try{
+        const observed=await joinCatalog({endpoints:usage.selected.endpoints,includeEdges:false});
+        projectTrusted(token);
+        if(document.isClosed||document.version!==version||epoch!==generation)return [];
+        usage=usageTarget(document,position,observed.tables);
+      }catch{return [];}
+    }
+    const selected=usage?.selected;
+    if(!selected||selected.kind==='pending-dml')return [];
     if(selected.kind==='local')return selected.statement.model.references.filter(ref=>!ref.implicit&&ref.start<ref.end&&sameDefinition(ref.definition,selected.definition)&&(context.includeDeclaration||!ref.kind.endsWith('-definition'))).map(ref=>new vscode.Location(document.uri,new vscode.Range(document.positionAt(selected.statement.start+ref.start),document.positionAt(selected.statement.start+ref.end))));
     const found=await findCatalogReferences(selected,token),locations=found.references.map(ref=>new vscode.Location(vscode.Uri.parse(ref.uri),new vscode.Range(ref.range.start,ref.range.end)));
     if(document.isClosed||document.version!==version)return [];
