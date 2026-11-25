@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.59.0",
+  "version": "0.60.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -79,6 +79,8 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.java.copyAsyncTraceHelper", "title": "Copy Java Async Trace Helper", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.showAsyncTaskStack", "title": "Show Java Async Submission Stack", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.smartStepInto", "title": "Step Into a Java Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.attachProcess", "title": "Attach to Local Java Process", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.openTableSnapshot", "title": "Open Consistent Table Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
@@ -661,6 +663,18 @@
         "command": "rocketbrain.sql.runWithParameters",
         "title": "Run SQL with Typed Parameters",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.sql.saveParameterPreset",
+        "title": "Save SQL Parameter Preset",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.sql.removeParameterPreset",
+        "title": "Remove SQL Parameter Preset",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.sql.openScriptResult",

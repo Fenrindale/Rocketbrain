@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.59.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.60.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 71 |
-| 부분 구현 | 130 |
+| 구현 | 74 |
+| 부분 구현 | 127 |
 | 미구현 | 0 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **69%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **69.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.59에서는 다중 스키마 카탈로그, 서버 정렬 프리셋, Windows Java PID 연결과 Smart Step을 검증했다. 상태가 바뀐 항목은 1개이고 가중 점수는 148.5점에서 149점으로 바뀌었다.
+v0.60에서는 DB 쓰기 보호, 복합 FK JOIN, SQL 정의 이동과 파라미터 프리셋, DELIMITER 실행, Java 비동기 스택 추적을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 149점에서 150.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -156,7 +156,7 @@ v0.59에서는 다중 스키마 카탈로그, 서버 정렬 프리셋, Windows J
 | DG-013 | DataGrip | 초기 SQL·keep-alive·idle timeout | 부분 구현 |
 | DG-014 | DataGrip | 연결 그룹·환경 색상 | 부분 구현 |
 | DG-015 | DataGrip | 연결 복제·가져오기·공유 | 부분 구현 |
-| DG-016 | DataGrip | 연결·테이블 읽기 전용 보호 | 부분 구현 |
+| DG-016 | DataGrip | 연결·테이블 읽기 전용 보호 | 구현 |
 | DG-017 | DataGrip | introspection 대상 schema 선택 | 구현 |
 | DG-018 | DataGrip | 로컬 메타데이터 cache·오프라인 재사용 | 구현 |
 | DG-019 | DataGrip | 전체·증분·객체별 refresh | 구현 |
@@ -168,7 +168,7 @@ v0.59에서는 다중 스키마 카탈로그, 서버 정렬 프리셋, Windows J
 | DG-025 | DataGrip | 실제 FK 없는 관계 정의 | 구현 |
 | DG-026 | DataGrip | virtual view·virtual column | 부분 구현 |
 | DG-027 | DataGrip | schema-aware 이름·열 완성 | 부분 구현 |
-| DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 부분 구현 |
+| DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 구현 |
 | DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 구현 |
 | DG-030 | DataGrip | alias·약어·함수 구문 완성 | 부분 구현 |
 | DG-031 | DataGrip | MySQL/MariaDB dialect별 구문·키워드 | 부분 구현 |
@@ -183,7 +183,7 @@ v0.59에서는 다중 스키마 카탈로그, 서버 정렬 프리셋, Windows J
 | DG-040 | DataGrip | dialect별 SQL formatting | 구현 |
 | DG-041 | DataGrip | live template·snippet·문맥 변수 | 구현 |
 | DG-042 | DataGrip | 문자열 안 SQL/JSON 언어 주입 | 구현 |
-| DG-043 | DataGrip | 쿼리 parameter 입력·재사용 | 부분 구현 |
+| DG-043 | DataGrip | 쿼리 parameter 입력·재사용 | 구현 |
 | DG-044 | DataGrip | 현재 문장·선택 SQL 실행 | 부분 구현 |
 | DG-045 | DataGrip | 전체 스크립트·batch·오류 처리 | 부분 구현 |
 | DG-046 | DataGrip | 같은 세션·temporary table 상태 유지 | 구현 |

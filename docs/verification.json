@@ -1,25 +1,25 @@
 {
-  "version": "0.59.0",
-  "verifiedAt": "2026-11-25T13:31:44.484Z",
+  "version": "0.60.0",
+  "verifiedAt": "2026-11-25T13:59:35.811Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.59.0.vsix",
-    "sha256": "cce5660a87ef6f6811bd731688a675c4a3ee4ac3d7b5ded5e403f89df4e0bd3d",
-    "bytes": 3181805,
-    "files": 18
+    "name": "rocketbrain-0.60.0.vsix",
+    "sha256": "3b7dcc07ad3ff356ff4f406a5fe3ba8e435453f1257d0824194b940ad4eaecf6",
+    "bytes": 3212411,
+    "files": 19
   },
   "source": {
-    "frozenPublicInputs": 1659,
-    "inputVectorSha256": "08aa19fb33c7f3a17e69d3bd59f00fe9bdea3366ec417f8b1c96bfb4d0aae3d3",
+    "frozenPublicInputs": 1682,
+    "inputVectorSha256": "9ce3e270dc42f40d70d75deeafef1c60ed32db517debcf162de961415bbb47a9",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1469,
-    "pass": 1385,
+    "tests": 1494,
+    "pass": 1409,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 84,
+    "skipped": 85,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,26 +29,30 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 5,
+      "groupCount": 6,
       "groups": [
         {
-          "group": "schemaCatalog",
+          "group": "writeProtection",
           "checks": 1
         },
         {
-          "group": "gridSort",
+          "group": "scopedJoins",
           "checks": 1
         },
         {
-          "group": "processAttach",
+          "group": "delimiter",
           "checks": 1
         },
         {
-          "group": "smartStep",
+          "group": "asyncTrace",
           "checks": 1
         },
         {
-          "group": "keyset",
+          "group": "liveDefinitions",
+          "checks": 1
+        },
+        {
+          "group": "parameterPresets",
           "checks": 1
         }
       ],
@@ -63,26 +67,30 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 5,
+      "groupCount": 6,
       "groups": [
         {
-          "group": "schemaCatalog",
+          "group": "writeProtection",
           "checks": 1
         },
         {
-          "group": "gridSort",
+          "group": "scopedJoins",
           "checks": 1
         },
         {
-          "group": "processAttach",
+          "group": "delimiter",
           "checks": 1
         },
         {
-          "group": "smartStep",
+          "group": "asyncTrace",
           "checks": 1
         },
         {
-          "group": "keyset",
+          "group": "liveDefinitions",
+          "checks": 1
+        },
+        {
+          "group": "parameterPresets",
           "checks": 1
         }
       ],
@@ -93,71 +101,91 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-075": {
-      "scope": "Spring 작업 공간의 실제 JVM에서 자동 포트를 찾고 일반 리스너와 오래된 PID를 거부했다. 미저장 SQL 초안을 열어 둔 상태로 중단점과 변수 평가를 수행했다. 연결을 끊은 뒤 JVM이 계속 실행되는지 확인했다.",
-      "runtimeGroups": [
-        "processAttach"
-      ]
-    },
     "IDEA-079": {
-      "scope": "Spring 작업 공간의 실제 JVM에서 문자열 오버로드를 선택하고, 패키지와 클래스의 제외 규칙이 적용되는 위치와 허용된 라이브러리 호출 진입을 확인했다.",
+      "scope": "설치 확장에서 제공한 소스 도우미를 실제 Spring 프로젝트에 복사해 두 스레드의 작업 제출과 실행을 연결했다. 중단된 프레임의 원래 소스로 이동하고 계측 없는 프레임을 거부했다.",
       "runtimeGroups": [
-        "smartStep"
+        "asyncTrace"
       ]
     },
-    "DG-017": {
-      "scope": "설치 확장과 두 실제 서버에서 같은 이름의 표가 있는 두 스키마를 선택하고 정확한 DDL을 열었다. 한 스키마의 숨김을 다른 스키마와 분리하고, 재연결과 제한 계정의 범위 거부를 확인했다.",
+    "DG-016": {
+      "scope": "두 실제 Spring DB에서 연결·그리드·SQL 스크립트 보호, 동시 트리거·외래 키 변경 차단, 자동 커밋 뒤 새 외래 키의 영향 반영, 수동 롤백과 명시적 커밋을 검증했다.",
       "runtimeGroups": [
-        "schemaCatalog"
+        "writeProtection"
       ]
     },
-    "DG-060": {
-      "scope": "두 실제 Spring DB에서 혼합 방향 다중 정렬과 정확한 PK 순서, 강제 NULL 위치, 호환 collation, JSON·바이너리 접두사, 프리셋 재사용과 열 정의 변경 뒤 거부를 확인했다. 일반 InnoDB 스냅샷 탭도 확인했다.",
+    "DG-028": {
+      "scope": "두 실제 엔진에서 Spring 테이블, CTE·파생 열 별칭, 중첩된 교차 스키마 복합 외래 키와 가상 관계로 완성한 JOIN을 실행했다. 인접 문장 유지와 가상 관계 삭제 뒤 제안 제거를 확인했다.",
       "runtimeGroups": [
-        "gridSort",
-        "keyset"
+        "scopedJoins"
+      ]
+    },
+    "DG-039": {
+      "scope": "두 서버에서 교차 스키마 동명 객체, 뷰 출력 별칭, 루틴, 외부 DDL 변경 뒤 새 스냅샷과 권한 거부를 검증했다. 로컬 CTE는 편집기 안에서 이동한다.",
+      "runtimeGroups": [
+        "liveDefinitions"
+      ]
+    },
+    "DG-043": {
+      "scope": "두 실제 Spring DB에서 정확한 BIGINT·DECIMAL 값으로 저장과 검토를 수행했다. 다른 계정·프로필 및 타입이나 SQL 변경 뒤 재사용을 거부하고 명시적 승인 뒤 실행하는지 확인했다.",
+      "runtimeGroups": [
+        "parameterPresets"
+      ]
+    },
+    "DG-045": {
+      "scope": "두 실제 엔진에서 리터럴 안의 구분자 보존, 프로시저·함수·트리거 생성 및 효과, 암시적 커밋 승인, 기존 트랜잭션 중 거부, 이후의 정확한 바인딩과 보관 결과를 확인했다.",
+      "runtimeGroups": [
+        "delimiter"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 341,
+    "sourceCorrespondences": 349,
     "sourceConfidence": "inferred",
-    "archiveEntries": 18,
+    "archiveEntries": 19,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 71,
-      "partial": 130,
+      "implemented": 74,
+      "partial": 127,
       "not-implemented": 0,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 149,
-    "previousWeightedPoints": 148.5,
+    "weightedPoints": 150.5,
+    "previousWeightedPoints": 149,
     "targetWeightedPoints": 216,
-    "referencePercent": 69,
+    "referencePercent": 69.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "DG-017",
+        "id": "DG-016",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-028",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-043",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "고급 정렬 프리셋은 일반 그리드 페이지에서 지원한다. InnoDB 스냅샷의 키셋 정렬은 기본 순서를 지원하는 열에 적용한다.",
-    "Java 자동 PID 연결은 Windows IPv4 루프백에 한한다. 비동기 인과 스택은 별도 구현 대상이다.",
+    "보호된 SQL 쓰기는 의존성과 물리 세션 상태를 확인한 InnoDB 경로에 한한다.",
+    "Java 비동기 스택은 Java 21 이상에서 도우미로 감싼 작업을 대상으로 한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "연결·테이블 읽기 전용 보호와 동시 DDL 경합",
-    "CTE·파생 테이블과 교차 스키마 외래 키 JOIN 완성",
-    "DELIMITER 저장 프로그램 스크립트 실행",
-    "Java 비동기 인과 스택"
+    "Java 프레임 재시작과 큰 배열·문자열 탐색",
+    "Java 문자열에 내장된 SQL의 의미적 사용처",
+    "SQL 편집기에서 DELIMITER 문장 단위 검토와 실행"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

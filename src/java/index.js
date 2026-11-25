@@ -112,7 +112,8 @@ function registerJavaFeatures(context, vscode) {
   };
   debuggerController = registerJavaDebugger(vscode,api,output,refactoringRequest);
   api.debug = debuggerController;
-  subscriptions.push(debuggerController);
+  api.debug.asyncTrace = require('./async-trace-vscode').registerJavaAsyncTrace(context, vscode, debuggerController);
+  subscriptions.push(debuggerController, api.debug.asyncTrace);
   api.refactoring=require('./refactoring').registerJavaRefactoring(context,vscode,{request:refactoringRequest});
   subscriptions.push(api.refactoring);
   api.interfaceRefactoring={

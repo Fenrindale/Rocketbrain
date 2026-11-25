@@ -322,10 +322,13 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const editor = await vscode.window.showTextDocument(document, { preview: false });
     await bind(document); return editor;
   }
-  async function relatedChoices(snapshot) {
-    const scope = scopeKey({ database: snapshot.schema }, state.profile);
+  function savedLogicalRelationships(database) {
+    const scope = scopeKey({ database }, state.profile);
     const saved = scope && context.workspaceState.get(logicalKey, []);
-    const records = Array.isArray(saved) && saved.length <= 24 ? saved.find(record => record?.identity === scope)?.value : undefined;
+    return Array.isArray(saved) && saved.length <= 24 ? saved.find(record => record?.identity === scope)?.value : undefined;
+  }
+  async function relatedChoices(snapshot) {
+    const records = savedLogicalRelationships(snapshot.schema);
     const logical = records?.length ? logicalEdges(await snapshot.db.metadata(), records) : [];
     const catalog = await snapshot.db.relatedRowsCatalog({ schema: snapshot.schema, table: snapshot.table, logical });
     snapshot.validate();
@@ -574,6 +577,10 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     });
   });
   command('rocketbrain.consoleMode', () => sessionAction(async id => {
+    if (state.db.getSessionState(id).writeProtection?.connectionReadOnly) {
+      void vscode.window.showInformationMessage('This connection profile is locked to read-only mode.');
+      return;
+    }
     const choice = await vscode.window.showQuickPick([
       { label: 'Read only', description: 'Reject write SQL in this console', readOnly: true, autocommit: true },
       { label: 'Read/write · manual commit', description: 'Changes remain pending until Commit or Roll Back', readOnly: false, autocommit: false },
@@ -686,6 +693,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     async withDatabaseAdmin(action,{write=false}={}){
       if(typeof action!=='function')throw Error('Choose a database catalog or privilege operation.');
       assertExclusiveReady();
+      const protection = state.db.getSessionState().writeProtection;
+      if (write && protection) {
+        throw Error(protection.connectionReadOnly ? 'This connection profile is locked to read-only mode.'
+          : 'Database-wide writes are unavailable while this profile protects tables.');
+      }
       if(write&&(pendingTableDraft()||[...bindings.values()].some(binding=>{
         const session=state.db.getSessionState(binding.id);
         return session?.inTransaction||session?.outcomeUnknown||session?.needsReconnect;
@@ -795,6 +807,12 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     },
     relationshipTargetCatalog: request => inspectRelationshipCatalog(request, 'relationshipTargetCatalog'),
     relationshipJoinCatalog: request => inspectRelationshipCatalog(request, 'relationshipJoinCatalog'),
+    joinCompletionCatalog: request => inspectRelationshipCatalog(request, 'joinCompletionCatalog'),
+    joinLogicalRelationships(catalog) {
+      if (!state.mysql || state.offlineMetadata || !vscode.workspace.isTrusted || catalog?.database !== state.profile?.database) return [];
+      const records = savedLogicalRelationships(catalog.database);
+      return records?.length ? logicalEdges(catalog, records) : [];
+    },
     sessionState: () => state.mysql && existingBinding() ? state.db.getSessionState(existingBinding().id) : null,
     sessions: () => state.mysql ? [...bindings.values()].map(binding => ({ ...state.db.getSessionState(binding.id), editorClosed: Boolean(binding.documentClosed) })) : [],
     async inspectConsoleIsolation(document = currentDocument()) {
@@ -866,15 +884,24 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       return { documentUri: document.uri.toString(), resultId };
     },
     tableAction: (id, message) => tableEditor.handle(id, message),
-    async describeSqlScript(sql,{document=currentDocument()}={}) {
+    async describeSqlScript(sql,{document=currentDocument(),inspectParameters=false}={}) {
       if(!state.mysql)throw new Error('Connect to MySQL or MariaDB before running a SQL script.');
       const binding=await bind(document);assertBinding(document,binding);
-      return withSession(binding.id,async()=>({...await state.db.describeScript(sql,{sessionId:binding.id}),connectionEpoch:state.epoch,documentUri:document.uri.toString()}));
+      return withSession(binding.id, async () => {
+        const described = await state.db.describeScript(sql, { sessionId: binding.id, inspectParameters });
+        assertBinding(document, binding);
+        const scope = described.parameterAccountScope && state.tableLayoutConnection;
+        const parameterScope = scope ? require('./db/sql-script').digest(JSON.stringify([
+          state.tableLayoutConnection, described.parameterAccountScope
+        ])) : undefined;
+        return { ...described, connectionEpoch: binding.epoch, documentUri: document.uri.toString(),
+          ...(parameterScope && { parameterScope }) };
+      });
     },
-    async previewSqlScript(sql,{document=currentDocument(),parameters,connectionEpoch,maxRows,timeoutMs,totalTimeoutMs}={}) {
+    async previewSqlScript(sql,{document=currentDocument(),parameters,connectionEpoch,maxRows,timeoutMs,totalTimeoutMs,presetContext}={}) {
       if(!state.mysql||connectionEpoch!==undefined&&connectionEpoch!==state.epoch)throw new Error('The database connection changed. Prepare the script again.');
       const binding=await bind(document);assertBinding(document,binding);
-      return withSession(binding.id,async()=>({...await state.db.previewScript(sql,{sessionId:binding.id,parameters,maxRows,timeoutMs,totalTimeoutMs}),connectionEpoch:state.epoch,documentUri:document.uri.toString()}));
+      return withSession(binding.id,async()=>({...await state.db.previewScript(sql,{sessionId:binding.id,parameters,maxRows,timeoutMs,totalTimeoutMs,presetContext}),connectionEpoch:state.epoch,documentUri:document.uri.toString()}));
     },
     async runSqlScript(request) {
       if(!state.mysql||request.connectionEpoch!==state.epoch)throw new Error('The database connection changed. Preview the script again.');
@@ -883,6 +910,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       const db=state.db;return withSession(binding.id,()=>db.runScript({reviewId:request.reviewId,
         allowImplicitCommit:request.allowImplicitCommit===true,allowUnboundedDml:request.allowUnboundedDml===true,
         cancellation:request.cancellation}));
+    },
+    discardSqlScript(reviewId, connectionEpoch) {
+      return state.mysql && state.epoch === connectionEpoch ? state.db.discardScript(reviewId) : false;
     },
     async captureSchemaSnapshot(options={}) {
       if(!vscode.workspace.isTrusted||!state.mysql||state.disposed||state.switching)throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');

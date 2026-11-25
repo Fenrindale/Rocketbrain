@@ -17,6 +17,23 @@ function local(uri) {
   return uri?.scheme === 'file' && !uri.authority && !uri.query && !uri.fragment;
 }
 
+async function openJavaFrame(vscode, frame) {
+  const binary = frame?.type?.split('$')[0] || '';
+  if (!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(binary) || !Number.isInteger(frame.line) || frame.line < 1) return false;
+  const parts = binary.split('.'), simple = parts.pop();
+  const sources = await vscode.workspace.findFiles('**/' + simple + '.java', EXCLUDE, 15);
+  const matches = [];
+  for (const uri of sources.filter(local)) {
+    const document = await vscode.workspace.openTextDocument(uri);
+    const source = document.getText();
+    if (source.length <= 512 * 1024 && packageName(source) === parts.join('.') && frame.line <= document.lineCount) matches.push(document);
+  }
+  if (matches.length !== 1) return false;
+  const point = new vscode.Position(frame.line - 1, 0);
+  await vscode.window.showTextDocument(matches[0], { preview: true, selection: new vscode.Range(point, point) });
+  return true;
+}
+
 function registerJvmDiagnostics(context,vscode,{java}) {
   const base = (context.storageUri || context.globalStorageUri).fsPath;
   const storagePath = path.join(base,'jvm-diagnostics');
@@ -86,24 +103,7 @@ function registerJvmDiagnostics(context,vscode,{java}) {
     output.show(true);
   }
 
-  async function openFrame(frame) {
-    const binary = frame?.type?.split('$')[0] || '';
-    if (!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.test(binary) || !frame.line) return false;
-    const parts = binary.split('.'), simple = parts.pop();
-    const sources = await vscode.workspace.findFiles('**/' + simple + '.java',EXCLUDE,15);
-    const matches = [];
-    for (const uri of sources.filter(local)) {
-      const document = await vscode.workspace.openTextDocument(uri);
-      const source = document.getText();
-      if (source.length <= 512 * 1024 && packageName(source) === parts.join('.') && frame.line <= document.lineCount) {
-        matches.push(document);
-      }
-    }
-    if (matches.length !== 1) return false;
-    const point = new vscode.Position(frame.line - 1,0);
-    await vscode.window.showTextDocument(matches[0],{ preview:true,selection:new vscode.Range(point,point) });
-    return true;
-  }
+  const openFrame = frame => openJavaFrame(vscode, frame);
 
   const labelFrame = frame => frame.type + '.' + frame.method + (frame.line ? ':' + frame.line : '');
 
@@ -272,4 +272,4 @@ function registerJvmDiagnostics(context,vscode,{java}) {
   };
 }
 
-module.exports = { registerJvmDiagnostics, COMMANDS };
+module.exports = { registerJvmDiagnostics, openJavaFrame, COMMANDS };

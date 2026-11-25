@@ -232,6 +232,12 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 
 ## DB 사용
 
+MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 읽기 전용으로 잠그거나 보호할 `schema.table`을 줄마다 지정합니다. 보호 설정을 바꾸려면 해당 프로필의 연결을 끊고 다시 연결합니다. 보호된 테이블의 결과 그리드는 조회용으로 열립니다. 테이블 보호가 설정된 프로필에서 테이블과 뷰를 조회하는 SQL은 읽기 전용 콘솔에서 실행합니다. 쓰기는 대상 InnoDB 테이블 하나의 트리거와 연쇄 변경 위험을 확인한 경우에 허용됩니다. 저장 함수의 실행 권한과 외부 클라이언트의 쓰기에는 서버 계정과 트랜잭션 권한이 적용됩니다.
+
+보호 설정이 적용된 쓰기는 같은 InnoDB 트랜잭션에서 대상 테이블과 보호 테이블로 연쇄 변경을 전달할 수 있는 의존성의 메타데이터 잠금을 유지합니다. 자동 커밋 모드에서 쓰기 검증을 위해 자동으로 시작한 트랜잭션은 쓰기마다 끝납니다. 사용자가 시작한 트랜잭션과 수동 커밋 모드에서는 **Commit** 또는 **Roll Back**까지 잠금이 유지됩니다.
+
+**Save SQL Parameter Preset**은 선택한 SQL의 typed parameter 값을 VS Code Secret Storage에 저장합니다. SQL 실행에서 저장값을 선택하면 연결과 서버 계정, SQL 원문, 파라미터 정의와 관찰한 열 타입이 일치하는지 확인하고 실행 전에 검토를 받습니다. 단일 테이블의 열과 파라미터를 비교하는 SELECT와 열을 명시한 INSERT에는 확인한 열 타입을 제안합니다. **Remove SQL Parameter Preset**에서 저장값을 삭제할 수 있습니다.
+
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
 
 - **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. 외부 파일 접근과 쓰기는 차단하며 결과는 표본으로 표시합니다.
@@ -245,6 +251,7 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 - **Format SQL**은 현재 문서나 선택한 SQL에서 절의 줄 배치와 들여쓰기를 정리합니다. **Insert SQL Template**은 활성 카탈로그의 테이블·열을 넣으며, 알 수 없는 이름과 모호한 열에는 확인한 빠른 수정을 제공합니다.
 - 비어 있는 SQL 절에서 카탈로그 기준 필드 목록을 완성합니다. SELECT에는 현재 범위의 열, INSERT에는 자동 생성 열을 제외한 쓰기 열, GROUP BY에는 SELECT에서 확인한 직접 참조 열을 제안합니다.
 - 편집기는 바깥쪽 `WHERE`가 없는 `UPDATE`와 `DELETE`를 표시합니다. 쓰기 콘솔과 스크립트 실행은 이 문장이 대상 행 전체에 미칠 수 있는 영향을 검토하고 승인한 뒤 진행합니다.
+- **Review SQL Script**는 독립된 `DELIMITER` 줄 사이에 있는 `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE TRIGGER`의 `BEGIN … END` 블록을 한 문장으로 검토합니다. 실행은 쓰기 콘솔에서 DDL의 암시적 커밋을 승인한 뒤 진행합니다. `DELIMITER ;`로 돌아오면 일반 문장에 바인딩 값을 사용할 수 있습니다. 저장 프로그램 본문의 동적 SQL, 세션 제어와 매개변수 바인딩은 지원 범위 밖입니다.
 - **Preview SQL with a Virtual Schema**는 로컬 UTF-8 DDL 파일 또는 관찰한 DB 카탈로그를 바탕으로 현재 SQL 문서의 테이블·뷰와 열 변경을 순서대로 분석합니다. 편집기의 완성·진단에만 반영합니다. 파일을 수정한 뒤에는 다시 선택해 캡처하고, **Exit Virtual SQL Schema Preview**로 종료합니다.
 - **Edit Embedded SQL or JSON**은 Java 문자열·텍스트 블록, MyBatis의 정적 SQL 또는 SQL 안의 JSON을 해당 언어 편집기로 엽니다. SQL 편집에서는 연결한 DB의 열 완성과 정의 이동을 사용할 수 있습니다. **Review and Apply Embedded Source Edit**에서 원본 범위의 diff를 확인하고 적용합니다.
 - **Create Native Database Dump**와 **Review and Restore Native Dump**에서 설치한 MySQL 또는 MariaDB 클라이언트를 선택합니다. 로컬 연결의 InnoDB 테이블을 내보내고, 검토한 백업 파일을 원본과 다른 빈 스키마에 복원합니다. 함께 참조하는 FK 테이블은 같은 백업에 포함합니다.

@@ -3,16 +3,17 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {fileURLToPath}=require('node:url');
 const { inspectDmlScope } = require('./sql-dml-scope');
 
-function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output}={}) {
+function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output,joinCatalog,joinLogicalRelationships,objectDefinition}={}) {
   const collection=vscode.languages.createDiagnosticCollection('rocketbrain-sql');
   const events=new vscode.EventEmitter(),subscriptions=[collection,events];
   let metadata=catalogSnapshot?.()||null,epoch=0,request=0,disposed=false;
   const cache=new Map(),preparedRenames=new Map(),projectPlans=new Map(),ddlPreviews=new Map();let projectGeneration=0,lastProjectReport=null;
   const resolutionScopes=require('./sql-resolution-scopes');
   const scopeCache=new Map();
+  const navigationCache=new Map();
   const engine=()=>require('./sql-analysis');
   const config=()=>vscode.workspace.getConfiguration('rocketbrain.sql.analysis');
-  function invalidate(){epoch++;request++;metadata=null;cache.clear();collection.clear();if(!disposed)events.fire();}
+  function invalidate(){epoch++;request++;metadata=null;cache.clear();navigationCache.clear();collection.clear();if(!disposed)events.fire();}
   function options(){return {dialect:metadata?.dialect||'mysql',database:metadata?.database,catalogComplete:Boolean(metadata?.coverage?.tables==='loaded'&&metadata?.coverage?.columns==='loaded'),tableNameCaseSensitive:metadata?.tableNameCaseSensitive,sqlMode:metadata?.sqlMode};}
   function configuredScope(document){
     if(!vscode.workspace.isTrusted||document.uri.scheme!=='file')return null;
@@ -71,10 +72,11 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     const parts=split?.statements||[];
     let contextChanged=false;
     statements=virtual?.statements||parts.slice(0,100).map(part=>{
+      const priorContextChange=contextChanged;
       const source=text.slice(part.start,part.end),model=engine().analyzeSql(source,contextChanged?{tables:[],views:[],complete:false}:metadata,contextChanged?{...opts,catalogComplete:false,sqlMode:undefined}:opts);
       const head=source.replace(/^(?:\s+|--[^\r\n]*(?:\r?\n|$)|#[^\r\n]*(?:\r?\n|$)|\/\*[\s\S]*?\*\/)+/g,'');
       if(/^(?:CREATE|ALTER|DROP|RENAME|TRUNCATE|USE|SET)\b/i.test(head)||/\/\*!/.test(source))contextChanged=true;
-      return {start:part.start,end:part.end,model};
+      return {start:part.start,end:part.end,model,priorContextChange};
     });
     const cached = preview?.type === 'local' ? undefined : metadata?.cachedMetadata;
     const diagnostics=dmlDiagnostics(document, text, statements, opts.sqlMode);
@@ -106,6 +108,73 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     cache.set(key,{version:document.version,epoch,preview,value});return value;
   }
   function locate(document,position){const offset=document.offsetAt(position),report=analyzeDocument(document),statement=report.statements.find(s=>offset>=s.start&&offset<=s.end);return statement?{...statement,offset:offset-statement.start}:null;}
+  function navigationReady(document, scope) {
+    return Boolean(objectDefinition && metadata && !metadata.cachedMetadata && scope && !scope.priorContextChange &&
+      !disposed && !document.isClosed && vscode.workspace.isTrusted && config().get('enabled', true) &&
+      !virtualActive(document) && !require('./federated-select').isFederatedDocument(document));
+  }
+  function retainedNavigation(document, scope) {
+    const snapshot=navigationCache.get(document.uri.toString());
+    return snapshot?.version===document.version&&snapshot.epoch===epoch&&snapshot.start===scope.start?snapshot:undefined;
+  }
+  function localDefinitions(document, scope) {
+    return engine().definitionsAt(scope.model,scope.offset,{skipImplicit:true}).map(value=>new vscode.Location(document.uri,
+      new vscode.Range(document.positionAt(scope.start+value.start),document.positionAt(scope.start+value.end))));
+  }
+  async function liveDefinition(document, scope, token) {
+    const navigation=require('./sql-live-navigation');
+    const snapshot=metadata, generation=epoch, version=document.version, observed=options();
+    let remote=[];
+    const current=()=>!token?.isCancellationRequested&&document.version===version&&generation===epoch&&snapshot===metadata&&navigationReady(document,scope);
+    const assertCurrent=()=>{if(!current())throw Error('The SQL editor or database changed. Resolve the definition again.');};
+    try {
+      assertCurrent();
+      let target=navigation.liveNavigation(scope.model.text,scope.offset,snapshot,observed,remote);
+      if(target?.endpoints&&joinCatalog){
+        const found=await joinCatalog({endpoints:target.endpoints,includeEdges:false});
+        assertCurrent();
+        remote=found.tables;
+        target=navigation.liveNavigation(scope.model.text,scope.offset,snapshot,observed,remote);
+      }
+      if(!target?.object)return [];
+      const destination=await objectDefinition({...target,sqlMode:observed.sqlMode},assertCurrent);
+      assertCurrent();
+      if(!destination)return [];
+      const key=document.uri.toString();
+      let currentFrame=retainedNavigation(document,scope);
+      if(!currentFrame){
+        if(navigationCache.size>=32)navigationCache.delete(navigationCache.keys().next().value);
+        currentFrame={version,epoch:generation,start:scope.start,remote,verified:new Set()};
+        navigationCache.set(key,currentFrame);
+      }else if(remote.length)currentFrame.remote=remote;
+      if(currentFrame.verified.size<32)currentFrame.verified.add(navigation.identityOf(target.object));
+      return [destination];
+    } catch { return []; }
+  }
+  function provideDefinition(document,position,token){
+    const scope=locate(document,position);
+    if(!scope)return [];
+    const local=localDefinitions(document,scope);
+    return local.length||!navigationReady(document,scope)?local:liveDefinition(document,scope,token);
+  }
+  function provideHover(document,position){
+    const scope=locate(document,position);
+    if(!scope)return null;
+    const value=engine().hoverAt(scope.model,scope.offset),markdown=new vscode.MarkdownString();
+    if(value)markdown.appendText(value);
+    if(metadata?.cachedMetadata&&!virtualActive(document)&&value){
+      markdown.appendText('\nCached metadata captured '+metadata.cachedMetadata.capturedAt);
+    }
+    if(navigationReady(document,scope)){
+      const navigation=require('./sql-live-navigation'),retained=retainedNavigation(document,scope);
+      const target=engine().definitionsAt(scope.model,scope.offset,{skipImplicit:true}).length?undefined:
+        navigation.liveNavigation(scope.model.text,scope.offset,metadata,options(),retained?.remote);
+      const verified=target?.object&&retained?.verified.has(navigation.identityOf(target.object));
+      const info=navigation.quickInfo(target,verified);
+      if(info){if(value)markdown.appendText('\n\n');markdown.appendText(info);return new vscode.Hover(markdown);}
+    }
+    return value?new vscode.Hover(markdown):null;
+  }
   const renameEngine=()=>require('./sql-rename');
   const projectEngine=()=>require('./sql-project');
   const textHash=text=>require('node:crypto').createHash('sha256').update(text).digest('hex');
@@ -303,13 +372,18 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {provideCompletionItems(document,position){const scope=locate(document,position);if(!scope)return [];return engine().completionsAt(scope.model,scope.offset).map(value=>{const item=new vscode.CompletionItem(value.label,value.kind==='column'?vscode.CompletionItemKind.Field:vscode.CompletionItemKind.Struct);item.detail=metadata?.cachedMetadata&&!virtualActive(document)?'Cached metadata · '+value.detail:value.detail;item.insertText=value.insertText||value.label;return item;});}},'.'));
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {
-    provideCompletionItems(document,position) {
+    async provideCompletionItems(document,position,token) {
       if(disposed||!vscode.workspace.isTrusted||!config().get('enabled',true)||!metadata||virtualActive(document)||require('./federated-select').isFederatedDocument(document))return [];
       const text = document.getText(), offset = document.offsetAt(position), observed = options();
+      const snapshot = metadata, version = document.version, generation = epoch;
+      const current = () => !disposed && !token?.isCancellationRequested && !document.isClosed && document.version === version &&
+        epoch === generation && snapshot === metadata && vscode.workspace.isTrusted && config().get('enabled', true) && !virtualActive(document);
       const candidates = [
-        ...require('./sql-field-lists').sqlFieldLists(text, offset, metadata, observed),
-        ...require('./foreign-key-joins').foreignKeyJoins(text, offset, metadata, observed)
+        ...require('./sql-field-lists').sqlFieldLists(text, offset, snapshot, observed),
+        ...await require('./foreign-key-joins').scopedForeignKeyJoins(text, offset, snapshot,
+          { ...observed, readLogical: joinLogicalRelationships }, joinCatalog, current)
       ];
+      if (!current()) return [];
       return candidates.map(candidate=>{
         const item=new vscode.CompletionItem(candidate.label, candidate.kind
           ? vscode.CompletionItemKind.Snippet : vscode.CompletionItemKind.Reference);
@@ -319,15 +393,15 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
         return item;
       });
     }
-  },' '));
-  subscriptions.push(vscode.languages.registerDefinitionProvider({language:'sql'}, {provideDefinition(document,position){const scope=locate(document,position);if(!scope)return [];return engine().definitionsAt(scope.model,scope.offset).map(value=>new vscode.Location(document.uri,new vscode.Range(document.positionAt(scope.start+value.start),document.positionAt(scope.start+value.end))));}}));
-  subscriptions.push(vscode.languages.registerHoverProvider({language:'sql'}, {provideHover(document,position){const scope=locate(document,position);if(!scope)return;const value=engine().hoverAt(scope.model,scope.offset);if(!value)return;const markdown=new vscode.MarkdownString();markdown.appendText(value);if(metadata?.cachedMetadata&&!virtualActive(document))markdown.appendText('\nCached metadata captured '+metadata.cachedMetadata.capturedAt);return new vscode.Hover(markdown);}}));
+  },' ','.'));
+  subscriptions.push(vscode.languages.registerDefinitionProvider({language:'sql'}, {provideDefinition}));
+  subscriptions.push(vscode.languages.registerHoverProvider({language:'sql'}, {provideHover}));
   if(vscode.languages.registerRenameProvider)subscriptions.push(vscode.languages.registerRenameProvider({language:'sql'},{prepareRename,provideRenameEdits:renameDocument}));
   if(vscode.languages.registerReferenceProvider)subscriptions.push(vscode.languages.registerReferenceProvider({language:'sql'},{provideReferences}));
   if(vscode.workspace.onDidOpenTextDocument)subscriptions.push(vscode.workspace.onDidOpenTextDocument(document=>{
     if(document.languageId==='sql'&&configuredScope(document))analyzeDocument(document);
   }));
-  subscriptions.push(vscode.workspace.onDidChangeTextDocument(event=>{if(event.document.languageId==='sql')analyzeDocument(event.document);}),vscode.workspace.onDidCloseTextDocument(document=>{cache.delete(document.uri.toString());ddlPreviews.delete(document.uri.toString());preparedRenames.delete(document.uri.toString());collection.delete(document.uri);}),vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.analysis')){scopeCache.clear();reanalyze();}}));
+  subscriptions.push(vscode.workspace.onDidChangeTextDocument(event=>{if(event.document.languageId==='sql')analyzeDocument(event.document);}),vscode.workspace.onDidCloseTextDocument(document=>{cache.delete(document.uri.toString());navigationCache.delete(document.uri.toString());ddlPreviews.delete(document.uri.toString());preparedRenames.delete(document.uri.toString());collection.delete(document.uri);}),vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.analysis')){scopeCache.clear();navigationCache.clear();reanalyze();}}));
   if(onDidChangeDatabase)subscriptions.push(onDidChangeDatabase(value=>{
     for(const [uri,preview] of ddlPreviews)if(preview.type==='observed')ddlPreviews.delete(uri);
     invalidate();

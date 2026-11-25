@@ -174,4 +174,4 @@ if (require.main === module) verifyBackend().then(result => console.log(JSON.str
   process.exitCode = 1;
 });
 
-module.exports = { runRelatedScopedChecks };
+module.exports = { runRelatedScopedChecks, withScopedRelationshipFixture: withFixture };

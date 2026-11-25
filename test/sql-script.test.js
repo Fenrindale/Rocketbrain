@@ -4,6 +4,36 @@ const {analyzeScript,bindScript,typedParameter,publicScript,LIMITS}=require('../
 const {MysqlService}=require('../src/db/mysql');
 const options={sqlMode:[],readOnly:true},text=value=>({kind:'text',value});
 
+test('delimiter directives leave literal markers, labels and later parameter positions intact', () => {
+ const sql=[
+  '/*\nDELIMITER invalid\n*/', 'DELIMITER $$',
+  "CREATE PROCEDURE sample() lbl: BEGIN SELECT ':hidden $$ ?'; END lbl$$",
+  'DELIMITER ;', 'SELECT :visible;'
+ ].join('\r\n');
+ const parsed=analyzeScript(sql,{...options,readOnly:false});
+ const [program,query]=parsed.statements;
+ assert.equal(program.program,'PROCEDURE');
+ assert.equal(program.sql,sql.slice(program.start,program.end));
+ assert.equal(program.sql.endsWith('END lbl'),true);
+ assert.deepEqual(parsed.parameterDefinitions.map(item=>item.key),['visible']);
+ const bound=bindScript(parsed,{visible:text('bound value')});
+ assert.equal(bound.statements[0].preparedSql,program.sql);
+ assert.equal(bound.statements[1].preparedSql,query.sql.replace(':visible','?'));
+ assert.equal(parsed.requiresImplicitCommitApproval,true);
+});
+
+test('delimiter batches refuse unfinished, appended, dynamic and unbound program commands', () => {
+ const input={...options,readOnly:false};
+ const wrap=body=>'DELIMITER $$\nCREATE PROCEDURE p() BEGIN '+body+' END$$\nDELIMITER ;';
+ for(const sql of [wrap('SELECT ?;'),wrap('SELECT :value;'),wrap("PREPARE x FROM 'SELECT 1';"),
+  wrap('SELECT @@GLOBAL.sql_mode;'),wrap('CALL long_lived();'),
+  'DELIMITER //\nCREATE PROCEDURE p() BEGIN SELECT 1; END; DROP TABLE internal//',
+  'DELIMITER $$\nCREATE FUNCTION f() RETURNS INT BEGIN RETURN 1; END',
+  'SELECT 1\nDELIMITER //\nSELECT 2//']) {
+  assert.throws(()=>analyzeScript(sql,input),{code:'ROCKETBRAIN_SCRIPT_UNSUPPORTED'});
+ }
+});
+
 test('script splitting and named binding preserve quoted/comment text and repeated values',()=>{
  const sql="SELECT '; :hidden ?' AS s,:id; -- ignored :comment ?\nSELECT :id,:label /* :ignored */;",parsed=analyzeScript(sql,options),bound=bindScript(parsed,{id:{kind:'integer',value:'9007199254740993'},label:text("'; DROP TABLE data; --")});
  assert.equal(parsed.statements.length,2);assert.deepEqual(parsed.parameterDefinitions,[{key:'id',kind:'named',name:'id',occurrences:2},{key:'label',kind:'named',name:'label',occurrences:1}]);

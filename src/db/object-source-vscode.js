@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { contextOf, listNames, loadSource } = require('./object-source');
 const { searchDatabaseText, textHash } = require('./unified-search');
 const { sourceTokens } = require('./sql-analysis');
+const { ddlDefinitionLocation } = require('./sql-ddl-location');
 
 const scheme = 'rocketbrain-object-source';
 const maxDocuments = 16;
@@ -20,6 +21,7 @@ function registerObjectSources(vscode, { database }) {
 
   function inspect(action, frame = generation, assertActive = () => {}) {
     check(frame);
+    assertActive();
     return database.withDatabaseAdmin(async lease => {
       let connection;
       const query = async (sql, values) => {
@@ -53,15 +55,13 @@ function registerObjectSources(vscode, { database }) {
     changed.fire(previous.uri);
   }
 
-  async function open(object, frame = generation, navigation) {
-    const { value, epoch } = await inspect((query, context) => loadSource(query, context, object), frame);
+  async function retainDocument(value, epoch, frame, exact, assertActive = () => {}) {
     check(frame);
-    if (navigation?.hash && textHash(value.source) !== navigation.hash) throw Error('The database definition changed. Search again.');
-    const anchor = navigation?.member ? memberLocation(value, navigation.member) : navigation?.span;
+    assertActive();
     const identity = JSON.stringify(value.object);
     const existing = [...documents.values()].find(item => item.epoch === epoch && item.identity === identity &&
-      (!navigation || item.source === value.source));
-    if (existing) {
+      (!exact || item.source === value.source));
+    if (existing && existing.source !== value.source) {
       existing.source = value.source;
       changed.fire(existing.uri);
     }
@@ -74,10 +74,29 @@ function registerObjectSources(vscode, { database }) {
     }
     const document = await vscode.workspace.openTextDocument(uri);
     check(frame);
+    assertActive();
+    return document;
+  }
+
+  async function open(object, frame = generation, navigation) {
+    const { value, epoch } = await inspect((query, context) => loadSource(query, context, object), frame);
+    if (navigation?.hash && textHash(value.source) !== navigation.hash) throw Error('The database definition changed. Search again.');
+    const anchor = navigation?.member ? memberLocation(value, navigation.member) : navigation?.span;
+    const document = await retainDocument(value, epoch, frame, Boolean(navigation));
     const selection = anchor ? new vscode.Range(document.positionAt(anchor.start), document.positionAt(anchor.end)) : undefined;
     await vscode.window.showTextDocument(document, { preview: false, ...(selection && { selection }) });
     check(frame);
-    return { ...value, documentUri: key };
+    return { ...value, documentUri: document.uri.toString() };
+  }
+
+  async function definition({ object, member, sqlMode }, assertActive = () => {}) {
+    const frame = generation;
+    const { value, epoch } = await inspect((query, context) => loadSource(query, context, object), frame, assertActive);
+    const anchor = ddlDefinitionLocation(value, member, sqlMode);
+    if (!anchor) return undefined;
+    const document = await retainDocument(value, epoch, frame, true, assertActive);
+    if (document.getText() !== value.source) throw Error('The database definition changed. Resolve it again.');
+    return new vscode.Location(document.uri, new vscode.Range(document.positionAt(anchor.start), document.positionAt(anchor.end)));
   }
 
   async function refresh(uri = vscode.window.activeTextEditor?.document.uri) {
@@ -154,6 +173,7 @@ function registerObjectSources(vscode, { database }) {
     listSchemas: options => list({ ...options, kind: 'schema' }),
     listObjects: options => list(options),
     open,
+    definition,
     search(options, assertActive = () => {}) {
       return inspect((query, context) => searchDatabaseText(query, context, options, assertActive), generation, assertActive)
         .then(({ value }) => value);
@@ -175,19 +195,18 @@ function registerObjectSources(vscode, { database }) {
 }
 
 function memberLocation(loaded, member) {
+  if (member.kind === 'column') return ddlDefinitionLocation(loaded, member);
   try {
     const options = { dialect: loaded.dialect, sqlMode: String(loaded.settings?.sql_mode ?? '').split(',').filter(Boolean) };
     const tokens = sourceTokens(loaded.source, options);
-    let depth = 0, viewBody = false;
+    let depth = 0;
     for (const [index, token] of tokens.entries()) {
       const previous = tokens[index - 1];
       if (token.kind === 'symbol' && token.value === '(') depth++;
       if (token.kind === 'symbol' && token.value === ')') depth--;
-      if (loaded.object.kind === 'view' && token.upper === 'AS') viewBody = true;
       if (!['word', 'identifier'].includes(token.kind) || token.value !== member.name &&
           !(member.name === 'PRIMARY' && token.upper === 'PRIMARY')) continue;
-      const located = member.kind === 'column' && (viewBody || depth === 1 && ['(', ','].includes(previous?.value)) ||
-        member.kind === 'index' && depth === 1 && (['KEY', 'INDEX'].includes(previous?.upper) || token.upper === 'PRIMARY') ||
+      const located = member.kind === 'index' && depth === 1 && (['KEY', 'INDEX'].includes(previous?.upper) || token.upper === 'PRIMARY') ||
         member.kind === 'constraint' && depth === 1 && (previous?.upper === 'CONSTRAINT' || token.upper === 'PRIMARY' ||
           ['KEY', 'INDEX'].includes(previous?.upper));
       if (located) return { start: token.start, end: token.end };

@@ -3,11 +3,12 @@ const {SchemaDesigner}=require('./schema-designer');
 const {SchemaObjectEditor}=require('./object-editor');
 
 const { performance } = require('node:perf_hooks');
-const { validateQuery, validateReadQuery, parameters } = require('./sql-policy');
+const { validateQuery, validateReadQuery, parameters, tokenize } = require('./sql-policy');
 const { operationOf, outcomeOf } = require('./activity-log');
 const { readMetadata, attachCheckMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
 const { readCatalogRefresh } = require('./catalog-refresh');
 const { readRelatedCatalog } = require('./related-rows');
+const { readJoinCatalog } = require('./join-catalog');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
 const { localDriverOptions } = require('./local-transport');
 const { geometryType, preserveGeometry, captureGeometry } = require('./result-map');
@@ -16,10 +17,19 @@ const { SchemaRenamer } = require('./schema-rename');
 const { SchemaRecovery } = require('./schema-recovery');
 const { SchemaApplier } = require('./schema-apply');
 const scriptEngine=require('./sql-script');
+const { inferScriptParameters } = require('./parameter-inference');
 const {randomUUID}=require('node:crypto');
 const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTimeout } = require('./rds-iam');
+const { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope } = require('./write-protection');
 const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 const METADATA_ID = '__rocketbrain_metadata__';
+const MAX_PROTECTED_DEPENDENCIES = 128;
+const CASCADE_RULES = new Set(['CASCADE', 'SET NULL', 'SET DEFAULT']);
+const FOREIGN_KEY_RULES = new Set(['RESTRICT', 'NO ACTION', ...CASCADE_RULES]);
+const quoteIdentifier = name => {
+  const quote = String.fromCharCode(96);
+  return quote + name.replaceAll(quote, quote + quote) + quote;
+};
 function fail(code, message, extra = {}) { return Object.assign(new Error(message), { code, ...extra }); }
 function limits(options = {}) {
   const maxRows = options.maxRows ?? 500, timeoutMs = options.timeoutMs ?? 5000;
@@ -106,6 +116,7 @@ function newSession(id, readOnly, database) {
 class MysqlService {
   constructor(config, { createConnection, reportActivity, mintIamToken } = {}) {
     this._options = connectionOptions(config);
+    this._writeProtection = normalizeWriteProtection(config.writeProtection);
     const security = require('./connection-security').connectionSecurity(config);Object.assign(this._options,security.options);this._connectionCleanup=security.dispose;
     if (config.auth !== undefined) {
       const auth = normalizeRdsIam(config.auth);
@@ -116,7 +127,7 @@ class MysqlService {
       }
       this._rdsIam = () => createRdsIamHandshake({ host, user, port, auth }, mintIamToken);
     }
-    this._defaultReadOnly = config.readOnly !== false;
+    this._defaultReadOnly = this._writeProtection?.connectionReadOnly || config.readOnly !== false;
     this._createConnection = createConnection || (options => require('mysql2').createConnection(options));
     this._reportActivity = reportActivity;
     this._sessions = new Map([['default', newSession('default', this._defaultReadOnly, this._options.database)]]);
@@ -144,12 +155,14 @@ class MysqlService {
   }
   _state(session) {
     const { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect } = session;
-    return { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect, busy: Boolean(session.active||session.scriptRunning) };
+    return { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect, busy: Boolean(session.active||session.scriptRunning),
+      ...(this._writeProtection && { writeProtection: structuredClone(this._writeProtection) }) };
   }
   getSessionState(id = 'default') { return this._state(this._session(id)); }
   async openSession(id, { readOnly = this._defaultReadOnly } = {}) {
     this._assertOpen(); this._id(id);
     if (typeof readOnly !== 'boolean') throw new Error('readOnly must be a boolean.');
+    requireConnectionMode(this._writeProtection, readOnly);
     let session = this._sessions.get(id);
     if (!session) {
       if (this._sessions.size >= 32) throw new Error('Close an unused console before opening more than 32 sessions.');
@@ -191,6 +204,7 @@ class MysqlService {
     if (abort && active) active.abort(reason);
   }
   async _ensureConnection(session) {
+    requireConnectionMode(this._writeProtection, session.readOnly);
     if (session.connection && session.connected) return;
     if (session.needsReconnect) throw fail('ROCKETBRAIN_RECONNECT_REQUIRED', 'Reconnect this console explicitly before running SQL.');
     let connection;
@@ -231,6 +245,9 @@ class MysqlService {
     } catch (error) { this._lose(session, error); throw error; }
   }
   _control(session, sql, timeoutMs = 5000) {
+    if (this._writeProtection?.connectionReadOnly && /\bREAD[\s]+WRITE\b/i.test(sql)) {
+      return Promise.reject(protectionError('This connection profile is locked to read-only mode.'));
+    }
     return new Promise((resolve, reject) => {
       let finished = false;
       const finish = (error, result) => {
@@ -290,11 +307,41 @@ class MysqlService {
     await this._refreshState(session);
     return {sqlMode,serverVersion:version,dialect:/mariadb/i.test(version)?'mariadb':'mysql',database,serverConnectionId:String(connectionId),connectionId:session.connectionId};
   }
-  async describeScript(sql,{sessionId='default'}={}){
+  async _observeParameterContext(session, script, context) {
+    if (!script.parameterDefinitions.length) return {};
+    const observed = await this._stream(session, 'SELECT CURRENT_USER(), CURRENT_ROLE(), @@hostname, @@port, @@server_id, @@session.time_zone, @@session.collation_connection',
+      [], { maxRows: 1, timeoutMs: 5000 }, false, { category: 'metadata', operation: 'SELECT' });
+    const actor = observed.rows[0];
+    if (observed.truncated || observed.rows.length !== 1 || actor.length !== 7 ||
+      typeof actor[0] !== 'string' || !actor[0] || typeof actor[2] !== 'string' || !actor[2]) {
+      throw fail('ROCKETBRAIN_SCRIPT_CONTEXT', 'The current server and account could not be observed for SQL parameter presets.');
+    }
+    const hints = await inferScriptParameters(script, context.database, async (schema, table) => {
+      const result = await this._metadataQuery(
+        "SELECT c.COLUMN_NAME,c.COLUMN_TYPE,c.IS_NULLABLE,c.CHARACTER_SET_NAME,c.COLLATION_NAME FROM information_schema.COLUMNS c JOIN information_schema.TABLES t ON BINARY t.TABLE_SCHEMA=BINARY c.TABLE_SCHEMA AND BINARY t.TABLE_NAME=BINARY c.TABLE_NAME WHERE BINARY c.TABLE_SCHEMA=BINARY ? AND BINARY c.TABLE_NAME=BINARY ? AND t.TABLE_TYPE='BASE TABLE' ORDER BY c.ORDINAL_POSITION",
+        [schema, table]);
+      return result.rows;
+    });
+    return { ...hints, parameterAccountScope: scriptEngine.digest(JSON.stringify([context.dialect, context.database, actor])) };
+  }
+  async _checkPresetContext(session, script, context, expected) {
+    const observed = await this._observeParameterContext(session, script, context);
+    if (!expected?.accountScope || observed.parameterAccountScope !== expected.accountScope ||
+      observed.parameterEvidence !== expected.evidence) {
+      throw fail('ROCKETBRAIN_SCRIPT_STALE', 'The database account or parameter column metadata changed. Review the selected preset again.');
+    }
+  }
+  async describeScript(sql,{sessionId='default',inspectParameters=false}={}){
     const session=this._session(sessionId);
     return this._enqueue(session,async()=>{
       const context=await this._scriptContext(session),script=scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly});
-      return structuredClone({...scriptEngine.publicScript(script),...context,sessionId,state:this._state(session)});
+      await this._protectScript(session, script, context);
+      let parameterContext = {};
+      if (inspectParameters) {
+        try { parameterContext = await this._observeParameterContext(session, script, context); }
+        catch (error) { if (!session.connected || session.needsReconnect) throw error; }
+      }
+      return structuredClone({...scriptEngine.publicScript(script),...context,...parameterContext,sessionId,state:this._state(session)});
     });
   }
   async previewScript(sql,options={}){
@@ -302,15 +349,28 @@ class MysqlService {
     if(!Number.isInteger(totalTimeoutMs)||totalTimeoutMs<100||totalTimeoutMs>scriptEngine.LIMITS.totalTimeoutMs)throw fail('ROCKETBRAIN_SCRIPT_LIMIT','Script timeout must be100ms to120000ms.');
     return this._enqueue(session,async()=>{
       const context=await this._scriptContext(session),script=scriptEngine.bindScript(scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly}),options.parameters);
+      await this._protectScript(session, script, context);
+      const presetContext = options.presetContext ? { ...options.presetContext } : undefined;
+      if (presetContext) await this._checkPresetContext(session, script, context, presetContext);
       if(script.requiresImplicitCommitApproval&&session.inTransaction)throw fail('ROCKETBRAIN_SCRIPT_TRANSACTION','Commit or roll back the existing transaction before reviewing a DDL script.');
       for(const [id,review]of this._scriptReviews)if(Date.now()>review.expiresAt)this._scriptReviews.delete(id);
       while(this._scriptReviews.size>=scriptEngine.LIMITS.reviews)this._scriptReviews.delete(this._scriptReviews.keys().next().value);
-      const reviewId=randomUUID(),state=this._state(session),review={reviewId,script,context,state,session,sessionId:session.id,cancellationVersion:session.cancellationVersion,expiresAt:Date.now()+scriptEngine.LIMITS.reviewLifetimeMs,bounded,totalTimeoutMs};
+      const reviewId=randomUUID(),state=this._state(session),review={reviewId,script,context,state,session,sessionId:session.id,cancellationVersion:session.cancellationVersion,expiresAt:Date.now()+scriptEngine.LIMITS.reviewLifetimeMs,bounded,totalTimeoutMs,presetContext};
       this._scriptReviews.set(reviewId,review);
       return structuredClone({...scriptEngine.publicScript(script),...context,reviewId,sessionId:session.id,readOnly:state.readOnly,autocommit:state.autocommit,expiresAt:review.expiresAt,scriptHash:scriptEngine.digest(sql),state,stopOnError:true,autoRetried:false,warnings:[...(script.requiresImplicitCommitApproval?['DDL may implicitly commit earlier statements in this script. It is not transactionally undoable.']:[]),'Preflight checks boundaries, execution policy and parameter types; it does not prove all statements are valid on this server.','A script is not an atomic transaction; completed statements are never retried automatically.']});
     });
   }
   discardScript(reviewId){return this._scriptReviews.delete(reviewId);}
+  async _protectScript(session, script, context) {
+    if (!this._writeProtection) return;
+    const targets = new Map();
+    for (const statement of script.statements) {
+      const target = requireStatementScope(this._writeProtection, statement.preparedSql || statement.sql, context.database,
+        { mayWrite: statement.mayWrite, readOnly: session.readOnly, sqlMode: context.sqlMode, userSql: true });
+      if (target) targets.set(JSON.stringify([target.schema, target.name]), target);
+    }
+    for (const target of targets.values()) await this._ensureSafeProtectedTarget(target);
+  }
   async runScript({reviewId,allowImplicitCommit=false,allowUnboundedDml=false,onStatement,cancellation}={}){
     this._assertOpen();const review=this._scriptReviews.get(reviewId);
     if(!review||Date.now()>review.expiresAt)throw fail('ROCKETBRAIN_SCRIPT_STALE','The script review expired or was already consumed. Review again.');
@@ -326,6 +386,13 @@ class MysqlService {
       const context=await this._scriptContext(session),state=this._state(session);
       const stateKeys=['readOnly','autocommit','inTransaction','transactionState','connectionId','needsReconnect','outcomeUnknown'];
       if(review.session!==session||session.cancellationVersion!==review.cancellationVersion||stateKeys.some(key=>state[key]!==review.state[key])||JSON.stringify(context)!==JSON.stringify(review.context))throw fail('ROCKETBRAIN_SCRIPT_STALE','The console connection, transaction mode or SQL mode changed after script review. Review again.');
+      await this._protectScript(session, review.script, context);
+      if (review.presetContext) {
+        await this._checkPresetContext(session, review.script, context, review.presetContext);
+        if (cancelled() || session.cancellationVersion !== review.cancellationVersion || Date.now() > review.expiresAt) {
+          throw fail('ROCKETBRAIN_SCRIPT_STALE', 'The saved parameter review changed before execution. Review again.');
+        }
+      }
       if(review.script.requiresImplicitCommitApproval&&session.inTransaction)throw fail('ROCKETBRAIN_SCRIPT_TRANSACTION','An existing transaction must be explicitly finished before DDL script execution.');
       this._scriptReviews.delete(reviewId);
       session.scriptRunning=true;
@@ -341,7 +408,7 @@ class MysqlService {
           if(session.closed||session.needsReconnect||!session.connected){resultState='stopped';stopReason='connection-unavailable';break;}
           if(elapsed>=review.totalTimeoutMs){resultState='stopped';stopReason='script-time-limit';break;}
           entry.stateBefore=this._state(session);const statementStart=performance.now();let result,error;
-          try{result=await this._stream(session,statement.preparedSql,statement.values,{maxRows:review.bounded.maxRows,timeoutMs:Math.max(1,Math.floor(Math.min(review.bounded.timeoutMs,review.totalTimeoutMs-elapsed)))},statement.mayWrite,{category:'script',operation:statement.first});}catch(failure){error=failure;}
+          try{result=await this._stream(session,statement.preparedSql,statement.values,{maxRows:review.bounded.maxRows,timeoutMs:Math.max(1,Math.floor(Math.min(review.bounded.timeoutMs,review.totalTimeoutMs-elapsed)))},statement.mayWrite,{category:'script',operation:statement.first,sqlMode:context.sqlMode});}catch(failure){error=failure;}
           if(session.connected)try{await this._refreshState(session);}catch(failure){if(statement.mayWrite)session.outcomeUnknown=true;if(!error)error=fail('ROCKETBRAIN_STATE_UNAVAILABLE','The statement finished but its transaction state could not be confirmed.',{queryCompleted:Boolean(result)});}
           if(statement.mayWrite)this._editor.invalidate(session.id);
           entry.durationMs=Math.round((performance.now()-statementStart)*100)/100;entry.stateAfter=this._state(session);
@@ -361,7 +428,110 @@ class MysqlService {
       return {reviewId,sessionId:session.id,scriptHash:scriptEngine.digest(review.script.sql),state:resultState,statements,completed,failed,notRun:statements.filter(entry=>entry.status==='not-run').length,stopReason,durationMs:Math.round((performance.now()-started)*100)/100,stateBefore,stateAfter:this._state(session),atomic:false,autoRetried:false,resultBytes:bytes,parameterBindingsIncluded:false,resultMayContainParameterValues:true};
     });
   }
-  _stream(session, sql, values, { maxRows, timeoutMs }, mayWrite, activity) {
+  async _protectedParents({ schema, name }, definition) {
+    const expected = new Map(definition.foreignKeys.map(([constraint, , , parentSchema, parentName]) => (
+      [constraint, { schema: parentSchema, name: parentName }]
+    )));
+    const tokens = tokenize(definition.createSql, false);
+    const declared = tokens.filter((token, index) => token.kind === 'word' && token.upper === 'FOREIGN'
+      && tokens[index + 1]?.kind === 'word' && tokens[index + 1].upper === 'KEY').length;
+    const observed = await this._metadataQuery(
+      'SELECT CONSTRAINT_NAME,UNIQUE_CONSTRAINT_SCHEMA,REFERENCED_TABLE_NAME,UPDATE_RULE,DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=? AND TABLE_NAME=? ORDER BY CONSTRAINT_NAME',
+      [schema, name]);
+    if (declared !== expected.size || observed.rows.length !== expected.size) {
+      throw protectionError('Foreign key metadata for a protected table could not be verified.');
+    }
+    const parents = [];
+    for (const [constraint, parentSchema, parentName, updateRule, deleteRule] of observed.rows) {
+      const parent = expected.get(constraint);
+      if (!parent || parent.schema !== parentSchema || parent.name !== parentName ||
+        !FOREIGN_KEY_RULES.has(updateRule) || !FOREIGN_KEY_RULES.has(deleteRule)) {
+        throw protectionError('Foreign key metadata for a protected table could not be verified.');
+      }
+      expected.delete(constraint);
+      if (CASCADE_RULES.has(updateRule) || CASCADE_RULES.has(deleteRule)) parents.push(parent);
+    }
+    return parents;
+  }
+  async _ensureSafeProtectedTarget(target, pin) {
+    const observed = new Map();
+    const observe = async table => {
+      const key = JSON.stringify([table.schema, table.name]);
+      if (!observed.has(key)) {
+        if (observed.size >= MAX_PROTECTED_DEPENDENCIES) throw protectionError('The protected table dependencies exceed the supported limit.');
+        await pin?.(table);
+        const definition = await this._editor.definition(table.name, table.schema);
+        if (definition.kind !== 'BASE TABLE' || String(definition.engine).toUpperCase() !== 'INNODB') {
+          throw protectionError('This profile permits writes only when the target and protected dependencies are InnoDB base tables.');
+        }
+        observed.set(key, definition);
+      }
+      return observed.get(key);
+    };
+    const definition = await observe(target);
+    if (!definition.triggerVisibility || definition.triggers.length) {
+      throw protectionError('This profile permits writes only to InnoDB base tables with verified trigger visibility and no triggers.');
+    }
+    // A cascade into a protected table must pass one of these child-side foreign keys.
+    // Pin each child before reading its outgoing dependency edges.
+    const pending = new Map(this._writeProtection.tables.map(table => [JSON.stringify([table.schema, table.name]), table]));
+    for (const table of pending.values()) {
+      if (table.schema.toLowerCase() === target.schema.toLowerCase() && table.name.toLowerCase() === target.name.toLowerCase()) {
+        throw protectionError('This write could cascade to a table protected by the connection profile.');
+      }
+      for (const parent of await this._protectedParents(table, await observe(table))) {
+        const key = JSON.stringify([parent.schema, parent.name]);
+        if (pending.has(key)) continue;
+        if (pending.size >= MAX_PROTECTED_DEPENDENCIES) throw protectionError('The protected table dependencies exceed the supported limit.');
+        pending.set(key, parent);
+      }
+    }
+  }
+  async _pinnedProtectedWrite(session, target, timeoutMs, executeWrite) {
+    const started = !session.inTransaction;
+    const cancelVersion = session.cancellationVersion;
+    const autoCommit = session.autocommit;
+    const deadline = performance.now() + timeoutMs;
+    let committing = false;
+    const remaining = () => {
+      if (!session.connected || session.cancellationVersion !== cancelVersion) throw fail('ROCKETBRAIN_CANCELLED', 'The protected write was cancelled.');
+      if (!session.inTransaction) throw protectionError('The protected write lost its database transaction.');
+      const left = Math.floor(deadline - performance.now());
+      if (left < 1) throw fail('ROCKETBRAIN_TIMEOUT', 'The protected write exceeded its verification time limit.');
+      return left;
+    };
+    try {
+      if (session.readOnly) throw protectionError('Use a writable console for a protected profile write.');
+      if (started) this._observe(session, await this._control(session, 'START TRANSACTION READ WRITE', timeoutMs));
+      await this._ensureSafeProtectedTarget(target, async ({ schema, name }) => {
+        const sql = 'SELECT 1 FROM ' + quoteIdentifier(schema) + '.' + quoteIdentifier(name) + ' LIMIT 0 FOR UPDATE';
+        await this._executeStream(session, sql, [], { maxRows: 1, timeoutMs: remaining() }, false);
+      });
+      const result = await executeWrite(remaining());
+      if (started && autoCommit) {
+        const commitTimeout = remaining();
+        committing = true;
+        this._observe(session, await this._control(session, 'COMMIT', commitTimeout));
+        if (session.inTransaction) throw protectionError('The protected write commit could not be confirmed.');
+      }
+      return result;
+    } catch (error) {
+      if (committing) session.outcomeUnknown = true;
+      if (started && session.connected && session.inTransaction) {
+        try { this._observe(session, await this._control(session, 'ROLLBACK')); }
+        catch (rollbackError) { this._lose(session, rollbackError, committing); }
+      }
+      throw error;
+    }
+  }
+  async _stream(session, sql, values, { maxRows, timeoutMs }, mayWrite, activity) {
+    const userSql = activity?.category === 'query' || activity?.category === 'script';
+    const target = requireStatementScope(this._writeProtection, sql, session.database,
+      { mayWrite, readOnly: session.readOnly, userSql, sqlMode: activity?.sqlMode });
+    const execute = left => this._executeStream(session, sql, values, { maxRows, timeoutMs: left }, mayWrite, activity);
+    return target ? this._pinnedProtectedWrite(session, target, timeoutMs, execute) : execute(timeoutMs);
+  }
+  _executeStream(session, sql, values, { maxRows, timeoutMs }, mayWrite, activity) {
     const started = performance.now();
     return new Promise((resolve, reject) => {
       let finished = false, bytes = 0, reportOutcome;
@@ -466,6 +636,7 @@ class MysqlService {
   rollback(options = {}) { return this._transaction('ROLLBACK', options); }
   async setReadOnly(readOnly, options = {}) {
     if (typeof readOnly !== 'boolean') throw new Error('readOnly must be a boolean.');
+    requireConnectionMode(this._writeProtection, readOnly);
     const session = this._session(options.sessionId);
     return this._enqueue(session, async () => {
       await this._ensureConnection(session);
@@ -711,6 +882,7 @@ class MysqlService {
     return result;
   }
   relatedRowsCatalog(request) { return this._relationshipCatalog(readRelatedCatalog, request); }
+  joinCompletionCatalog(request) { return this._relationshipCatalog(readJoinCatalog, request); }
   previewTable(name, options) { return this._editor.previewTable(name, options); }
   openKeysetBrowser(name, options) { return this._editor.openKeysetBrowser(name, options); }
   readKeysetPage(id, options) { return this._editor.readKeysetPage(id, options); }

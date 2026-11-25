@@ -46,6 +46,11 @@ function analyzeSql(text,catalog=[],options={}){
   const id=t=>t&&(t.kind==='identifier'||t.kind==='word'&&!RESERVED.has(t.upper));
   const colEq=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase();
   const nameEq=(a,b)=>options.tableNameCaseSensitive===false?colEq(a,b):String(a)===String(b);
+  const joinOrigins=options.joinOrigins===true;
+  const sourceNavigation=options.sourceNavigation===true;
+  const joinOrigin=column=>joinOrigins?{joinOrigin:column.joinOrigin}:{};
+  const sameOrigin=(left,right)=>left&&right&&left.database===right.database&&left.table===right.table&&left.column===right.column;
+  const duplicateOutputs=columns=>new Set(columns.map(column=>column.name.toLowerCase())).size!==columns.length;
   const issue=(code,message,t,severity='error')=>{if(!t)return;if(!model.diagnostics.some(d=>d.code===code&&d.start===t.start))model.diagnostics.push({code,message,severity,start:t.start,end:t.end,range:sourceRange(text,t.start,t.end)});};
   const top=(a,b,action)=>{for(let i=a;i<b;i++){const t=token[i];const result=action(t,i);if(result!==undefined)return result;if(t.kind==='symbol'&&t.value==='('&&t.close!==undefined)i=t.close;}};
   const split=(a,b,value=',')=>{const result=[];let start=a;top(a,b,(t,i)=>{if(t.kind==='word'&&t.upper===value||t.kind==='symbol'&&t.value===value){result.push([start,i]);start=i+1;}});result.push([start,b]);return result;};
@@ -53,22 +58,29 @@ function analyzeSql(text,catalog=[],options={}){
   const ref=(t,kind,name,type,definition,extra={})=>{const key=t.start+':'+kind;if(seenReferences.has(key))return;seenReferences.add(key);model.references.push({start:t.start,end:t.end,range:sourceRange(text,t.start,t.end),kind,name,type,definition,...extra});};
   const findRelation=(scope,name)=>{for(let current=scope;current;current=current.parent){const matches=current.relations.filter(r=>colEq(r.alias,name));if(matches.length)return matches.length===1?matches[0]:null;}return null;};
   const isCompleteScope=scope=>scope&&scope.relations.every(r=>r.complete)&&!scope.partial;
+  const missingOrigin=(relation)=>relation.requested&&!relation.catalog&&model.database&&!nameEq(relation.requested.schema,model.database);
+  const pendingSource=(at,scope,relations)=>{
+    if(!sourceNavigation||scope.partial)return;
+    const endpoints=relations.filter(missingOrigin).map(relation=>relation.requested);
+    if(endpoints.length)ref(at,'pending-physical-source',at.value,UNKNOWN(),undefined,{scopeId:scope.id,endpoints});
+  };
   const resolve=(scope,parts,at,{projectionAlias=false,projectionClause,uncertain=false}={})=>{
     const name=parts.at(-1).value;
     if(parts.length>3){unknown('Column paths with more than database/table/column components are not supported.',at.start);return UNKNOWN();}
     if(parts.length>1){const qualifier=parts.at(-2).value,relation=findRelation(scope,qualifier);if(!relation){if(uncertain||scope.partial||!catalogComplete)unknown('Column qualifier is unresolved in a partial scope.',at.start);else issue('sql.name.qualifier','Unknown relation alias '+qualifier+'.',parts.at(-2));return UNKNOWN();}
+      if(parts.length<3||!relation.definition&&relation.requested&&nameEq(parts[0].value,relation.requested.schema))pendingSource(at,scope,[relation]);
       if(parts.length===3&&(relation.kind!=='catalog'||relation.definition||!relation.catalog||!nameEq(parts[0].value,relation.catalog.database))){unknown('The database-qualified column does not prove an unaliased relation in the observed database.',parts[0].start);return UNKNOWN();}
       const columns=relation.columns.filter(c=>colEq(c.name,name));
       ref(parts.at(-2),'relation',qualifier,UNKNOWN(),relation.definition,{relationId:relation.id,scopeId:scope.id,physicalTable:relation.kind==='catalog'&&!relation.definition?relation.catalog:undefined});
-      if(columns.length===1){const c=columns[0];ref(at,'column',name,c.type,c.definition,{relationId:relation.id,scopeId:scope.id,catalog:relation.catalog,physicalColumn:c.physicalColumn||c.catalog,renamePhysicalColumn:c.renamePhysicalColumn!==false,correlated:relation.scopeId!==scope.id});supported.add(relation.scopeId===scope.id?'column-binding':'correlated-subquery');return c.type;}
+      if(columns.length===1){const c=columns[0];ref(at,'column',name,c.type,c.definition,{relationId:relation.id,scopeId:scope.id,catalog:relation.catalog,physicalColumn:c.physicalColumn||c.catalog,...joinOrigin(c),renamePhysicalColumn:c.renamePhysicalColumn!==false,correlated:relation.scopeId!==scope.id});supported.add(relation.scopeId===scope.id?'column-binding':'correlated-subquery');return c.type;}
       if(columns.length>1&&!uncertain)issue('sql.name.ambiguous','Column '+name+' is duplicated in '+qualifier+'.',at);
       else if(relation.complete&&!uncertain)issue('sql.name.column','Unknown column '+qualifier+'.'+name+'.',at);else unknown('Column metadata or expression grammar is incomplete for '+qualifier+'.',at.start);return UNKNOWN();
     }
     if(projectionAlias){const matches=scope.projections?.filter(c=>colEq(c.name,name));if(matches?.length===1){ref(at,'projection',name,matches[0].type,matches[0].definition,{scopeId:scope.id,projectionClause,physicalColumn:matches[0].physicalColumn,renamePhysicalColumn:matches[0].renamePhysicalColumn!==false});return matches[0].type;}}
     for(let current=scope;current;current=current.parent){const choices=current.relations.flatMap(r=>r.columns.filter(c=>colEq(c.name,name)).map(c=>({relation:r,column:c})));
-      if(choices.length===1&&isCompleteScope(current)){const {relation,column}=choices[0];ref(at,'column',name,column.type,column.definition,{relationId:relation.id,scopeId:scope.id,catalog:relation.catalog,physicalColumn:column.physicalColumn||column.catalog,renamePhysicalColumn:column.renamePhysicalColumn!==false,correlated:current!==scope});supported.add(current===scope?'column-binding':'correlated-subquery');return column.type;}
+      if(choices.length===1&&isCompleteScope(current)){const {relation,column}=choices[0];ref(at,'column',name,column.type,column.definition,{relationId:relation.id,scopeId:scope.id,catalog:relation.catalog,physicalColumn:column.physicalColumn||column.catalog,...joinOrigin(column),renamePhysicalColumn:column.renamePhysicalColumn!==false,correlated:current!==scope});supported.add(current===scope?'column-binding':'correlated-subquery');return column.type;}
       if(choices.length>1){if(uncertain||current.partial)unknown('Column ownership is uncertain in an unsupported expression/join.',at.start);else issue('sql.name.ambiguous','Column '+name+' is ambiguous; qualify its relation.',at);return UNKNOWN();}
-      if(choices.length===1||!isCompleteScope(current)){unknown('Unqualified column ownership is uncertain in a partial scope.',at.start);return UNKNOWN();}
+      if(choices.length===1||!isCompleteScope(current)){if(!uncertain)pendingSource(at,scope,current.relations);unknown('Unqualified column ownership is uncertain in a partial scope.',at.start);return UNKNOWN();}
     }
     if(catalogComplete&&!scope.partial&&!uncertain)issue('sql.name.column','Unknown column '+name+'.',at);else unknown('Column or expression symbol '+name+' is not resolved in the supported grammar/catalog.',at.start);return UNKNOWN();
   };
@@ -94,6 +106,21 @@ function analyzeSql(text,catalog=[],options={}){
       if(t.upper==='BINARY'&&i===a&&a+1<b){unknown('BINARY prefix coercion is outside exact static result typing.',t.start);continue;}
       if(t.upper==='OVER'&&id(token[i+1])){unknown('Named window declarations and frame semantics are not bound.',t.start);i++;continue;}
       if(id(t)){
+        if(sourceNavigation&&token[i-1]?.value==='.'){
+          unknown('An unresolved qualifier precedes this reference.',t.start);atoms.push(UNKNOWN());continue;
+        }
+        if(token[i+1]?.value==='.'&&['word','identifier'].includes(token[i+2]?.kind)&&
+            token[i+3]?.value==='('&&token[i+3].close<b){
+          const name=token[i+2],close=token[i+3].close;
+          if(sourceNavigation)ref(name,'stored-function',name.value,UNKNOWN(),undefined,{scopeId:scope.id,
+            physicalRoutine:{schema:t.value,name:name.value,kind:'function'}});
+          for(const [x,y]of split(i+4,close))if(x<y)expression(x,y,scope,context);
+          const matches=catalog?.coverage?.routines==='loaded'&&nameEq(t.value,model.database)?
+            (catalog.routines||[]).filter(r=>String(r.type).toUpperCase()==='FUNCTION'&&colEq(r.name,name.value)):[];
+          const result=matches.length===1?dbType(matches[0].returnType):UNKNOWN();
+          if(result.family==='unknown')unknown('The stored function result type requires its observed routine contract.',name.start);
+          atoms.push(result);i=close;continue;
+        }
         if(token[i+1]?.value==='('){const close=token[i+1].close;if(close===undefined||close>=b){unknown('Incomplete function call.',t.start);return UNKNOWN();}const args=split(i+2,close).filter(([x,y])=>x<y);let argTypes=[];
           if(['COUNT','LOWER','UPPER','LCASE','UCASE','LENGTH','CHAR_LENGTH','CHARACTER_LENGTH','SUM','AVG','MIN','MAX','ABS'].includes(t.upper)&&args.length!==1)issue('sql.function.arity',t.value+' requires exactly one argument in this supported form.',t);
           if(t.upper==='EXTRACT'){const from=top(i+2,close,(v,n)=>v.upper==='FROM'?n:undefined);if(from!==undefined){expression(from+1,close,scope,context);atoms.push(family(token[i+2]?.upper==='SECOND'?'decimal':'integer'));}else{unknown('Incomplete EXTRACT form.',t.start);atoms.push(UNKNOWN());}}
@@ -130,22 +157,40 @@ function analyzeSql(text,catalog=[],options={}){
   function relation(scope,a,b,ctes){
     let i=a,lateral=false;if(token[i]?.upper==='LATERAL'){lateral=true;i++;unknown('LATERAL provider/version restrictions are not fully checked.',token[a].start);}
     if(token[i]?.value==='('&&token[i].close!==undefined&&token[i].close<b){const close=token[i].close;if(!['SELECT','WITH'].includes(token[i+1]?.upper)){scope.partial=true;unknown('Parenthesized join/table functions are outside this binder.',token[i].start);return close+1;}
-      const sub=parseQuery(i+1,close,lateral?scope:scope.parent,new Map(ctes),scope.depth+1);let next=close+1;if(token[next]?.upper==='AS')next++;const alias=id(token[next])?token[next]:null;if(alias)next++;else{scope.partial=true;unknown('Derived table alias is incomplete.',token[close].start);}
+      const sub=parseQuery(i+1,close,lateral?scope:scope.parent,new Map(ctes),scope.depth+1);let next=close+1;if(token[next]?.upper==='AS')next++;const alias=id(token[next])?token[next]:null;if(alias){next++;if(joinOrigins&&scope.relations.some(existing=>colEq(existing.alias,alias.value)))issue('sql.name.alias.duplicate','Relation alias '+alias.value+' is duplicated in this query block.',alias);}else{scope.partial=true;unknown('Derived table alias is incomplete.',token[close].start);}
+      if(joinOrigins&&duplicateOutputs(sub.projections))issue('sql.shape.derived.duplicate','A derived table has duplicate output names.',alias||token[i]);
       const r={id:'relation-'+model.relations.length,scopeId:scope.id,kind:'derived',name:alias?.value||'(derived)',alias:alias?.value||'',columns:sub.projections,complete:sub.complete,definition:alias?{start:alias.start,end:alias.end}:span(i,close+1),start:token[a].start,end:token[next-1]?.end};scope.relations.push(r);model.relations.push(r);if(alias)ref(alias,'relation-definition',alias.value,UNKNOWN(),r.definition,{relationId:r.id,scopeId:scope.id});supported.add('derived-table');return next;
     }
     if(!id(token[i])){scope.partial=true;unknown('FROM relation is not a supported table/derived form.',token[i]?.start);return i+1;}
     const first=token[i],parts=[first];i++;while(token[i]?.value==='.'&&id(token[i+1])){parts.push(token[i+1]);i+=2;}
     if(token[i]?.value==='('){scope.partial=true;unknown('Table-valued functions are outside the supported subset.',first.start);return token[i].close!==undefined?token[i].close+1:i+1;}
-    const name=parts.at(-1).value,db=parts.length>1?parts.at(-2).value:null;let aliasToken;if(token[i]?.upper==='AS'){i++;if(id(token[i]))aliasToken=token[i++];}else if(id(token[i])&&!['USE','FORCE','IGNORE','PARTITION'].includes(token[i].upper))aliasToken=token[i++];
-    const cte=!db?ctes.get(name.toLowerCase()):null;let table,columns=[],complete=false,definition=cte?.definition;
+    const name=parts.at(-1).value,db=parts.length>1?parts.at(-2).value:null;let aliasToken;if(token[i]?.upper==='AS'){i++;if(id(token[i]))aliasToken=token[i++];else if(joinOrigins){scope.partial=true;unknown('Relation alias is incomplete.',token[i-1].start);}}else if(id(token[i])&&!['USE','FORCE','IGNORE','PARTITION'].includes(token[i].upper))aliasToken=token[i++];
+    if(joinOrigins&&parts.length>2){scope.partial=true;unknown('A table identity has more than a schema and a name.',first.start);}
+    const cte=!db?ctes.get(name.toLowerCase()):null;
+    let table,columns=[],complete=false,definition=cte?.definition,database=db||model.database;
     if(cte){columns=cte.columns;complete=cte.complete;supported.add('cte-reference');}
-    else if(db&&model.database&& !nameEq(db,model.database)){unknown('Cross-database metadata is unavailable for '+db+'.'+name+'.',first.start);}
-    else{const matches=tables.filter(t=>nameEq(t.name,name));if(matches.length===1){table=matches[0];columns=(table.columns||[]).slice(0,LIMITS.columns).map(c=>({name:c.name,type:{...dbType(c.type),nullable:c.nullable},catalog:{database:db||model.database,table:table.name,column:c.name}}));complete=catalogComplete&&table.columns?.length<=LIMITS.columns;}else if(matches.length>1)unknown('Catalog table name is ambiguous.',first.start);else if(catalogComplete)issue('sql.name.table','Table '+(db?db+'.':'')+name+' is not in the visible catalog.',parts.at(-1),'warning');else unknown('Table '+name+' is not in the available partial catalog.',first.start);}
-    const r={id:'relation-'+model.relations.length,scopeId:scope.id,kind:cte?'cte':'catalog',name,alias:aliasToken?.value||name,columns,complete,definition:aliasToken?{start:aliasToken.start,end:aliasToken.end}:definition,start:first.start,end:token[i-1].end,catalog:table?{database:db||model.database,table:table.name}:undefined};
+    else {
+      const remote=Boolean(db&&model.database&&!nameEq(db,model.database));
+      const inventory=remote?(joinOrigins?options.joinTables||[]:[]).filter(item=>nameEq(item.schema,db)):tables;
+      const matches=inventory.filter(item=>nameEq(item.name,name));
+      if(matches.length===1){
+        table=matches[0];
+        if(joinOrigins)database=remote?table.schema:model.database||db;
+        columns=(table.columns||[]).slice(0,LIMITS.columns).map(column=>{
+          const origin={database,table:table.name,column:column.name};
+          return {name:column.name,type:{...dbType(column.type),nullable:column.nullable},catalog:origin,...(joinOrigins&&{joinOrigin:origin})};
+        });
+        complete=catalogComplete&&table.columns?.length<=LIMITS.columns;
+      }else if(matches.length>1)unknown('Catalog table name is ambiguous.',first.start);
+      else if(remote)unknown('Cross-database metadata is unavailable for '+db+'.'+name+'.',first.start);
+      else if(catalogComplete)issue('sql.name.table','Table '+(db?db+'.':'')+name+' is not in the visible catalog.',parts.at(-1),'warning');
+      else unknown('Table '+name+' is not in the available partial catalog.',first.start);
+    }
+    const r={id:'relation-'+model.relations.length,scopeId:scope.id,kind:cte?'cte':'catalog',name,alias:aliasToken?.value||name,columns,complete,definition:aliasToken?{start:aliasToken.start,end:aliasToken.end}:definition,start:first.start,end:token[i-1].end,catalog:table?{database,table:table.name}:undefined,...(joinOrigins&&{requested:db&&!cte&&{schema:db,table:name}})};
     if(scope.relations.some(existing=>colEq(existing.alias,r.alias)))issue('sql.name.alias.duplicate','Relation alias '+r.alias+' is duplicated in this query block.',aliasToken||parts.at(-1));
     scope.relations.push(r);model.relations.push(r);ref(parts.at(-1),'table',name,UNKNOWN(),definition,{relationId:r.id,scopeId:scope.id,catalog:r.catalog});if(aliasToken)ref(aliasToken,'relation-definition',aliasToken.value,UNKNOWN(),r.definition,{relationId:r.id,scopeId:scope.id});supported.add('table-binding');return i;
   }
-  function from(scope,a,b,ctes){let i=a,expect=true;while(i<b){const t=token[i];if(expect){i=relation(scope,i,b,ctes);expect=false;continue;}if(t.value===','||['JOIN','STRAIGHT_JOIN'].includes(t.upper)){expect=true;i++;continue;}if(['LEFT','RIGHT','INNER','OUTER','CROSS'].includes(t.upper)){i++;continue;}if(t.upper==='NATURAL'||t.upper==='USING'){scope.partial=true;unknown('NATURAL/USING output-column coalescing is not modeled.',t.start);if(token[i+1]?.value==='('&&token[i+1].close!==undefined)i=token[i+1].close+1;else i++;continue;}if(t.upper==='ON'){const start=++i;for(;i<b;i++){if(token[i].value==='('&&token[i].close!==undefined)i=token[i].close;else if(token[i].value===','||['JOIN','LEFT','RIGHT','INNER','CROSS','NATURAL','STRAIGHT_JOIN'].includes(token[i].upper))break;}scope.predicates.push([start,i]);continue;}scope.partial=true;unknown('Unsupported FROM modifier '+t.value+'.',t.start);i++;}}
+  function from(scope,a,b,ctes){let i=a,expect=true;while(i<b){const t=token[i];if(expect){i=relation(scope,i,b,ctes);expect=false;continue;}if(t.value===','||['JOIN','STRAIGHT_JOIN'].includes(t.upper)){expect=true;i++;continue;}if(['LEFT','RIGHT','INNER','OUTER','CROSS'].includes(t.upper)){i++;continue;}if(t.upper==='NATURAL'||t.upper==='USING'){scope.partial=true;unknown('NATURAL/USING output-column coalescing is not modeled.',t.start);if(token[i+1]?.value==='('&&token[i+1].close!==undefined)i=token[i+1].close+1;else i++;continue;}if(t.upper==='ON'){const start=++i;for(;i<b;i++){if(token[i].value==='('&&token[i].close!==undefined)i=token[i].close;else if(token[i].value===','||['JOIN','LEFT','RIGHT','INNER','CROSS','NATURAL','STRAIGHT_JOIN'].includes(token[i].upper))break;}scope.predicates.push([start,i]);continue;}scope.partial=true;unknown('Unsupported FROM modifier '+t.value+'.',t.start);i++;}if(joinOrigins&&expect){scope.partial=true;unknown('FROM relation is incomplete.',token[b-1]?.start);}}
   function select(a,b,parent,ctes,depth){
     const scope={id:'scope-'+model.scopes.length,start:token[a]?.start??0,end:token[b-1]?.end??text.length,parent,parentId:parent?.id||null,depth,ctes,relations:[],projections:[],predicates:[],partial:false};model.scopes.push(scope);
     if(token[a]?.upper!=='SELECT'){scope.partial=true;unknown('Only SELECT query blocks are bound.',token[a]?.start);return scope;}
@@ -162,7 +207,7 @@ function analyzeSql(text,catalog=[],options={}){
       const type=expression(x,end,scope),last=token[end-1],simple=token.slice(x,end).every((t,index)=>index%2===0?id(t):t.value==='.');const name=alias?.value||(simple?last.value:text.slice(token[x].start,last.end));let definition=alias?{start:alias.start,end:alias.end}:simple?model.references.find(r=>r.start===last.start&&r.kind==='column')?.definition:undefined;
       const sourceRef=simple?model.references.find(r=>r.start===last.start&&r.kind==='column'):undefined,physicalColumn=sourceRef?.physicalColumn,renamePhysicalColumn=!alias&&sourceRef?.renamePhysicalColumn!==false;
       if(!definition){definition={start:last.end,end:last.end};ref({start:last.end,end:last.end},'implicit-projection-definition',name,type,definition,{scopeId:scope.id,implicit:true,physicalColumn,renamePhysicalColumn});}
-      scope.projections.push({name,type,definition,...span(x,y),physicalColumn,renamePhysicalColumn});if(alias)ref(alias,'projection-definition',name,type,{start:alias.start,end:alias.end},{scopeId:scope.id,physicalColumn,renamePhysicalColumn:false});
+      scope.projections.push({name,type,definition,...span(x,y),physicalColumn,...(sourceRef&&joinOrigin(sourceRef)),renamePhysicalColumn});if(alias)ref(alias,'projection-definition',name,type,{start:alias.start,end:alias.end},{scopeId:scope.id,physicalColumn,renamePhysicalColumn:false});
     }
     for(const [x,y]of scope.predicates)expression(x,y,scope);
     for(let n=0;n<clauses.length;n++){const c=clauses[n],end=clauses[n+1]?.start??b;if(c.kind==='FROM')continue;if(['WHERE','HAVING'].includes(c.kind))expression(c.start+1,end,scope,{projectionAlias:c.kind==='HAVING',projectionClause:c.kind});else if(['GROUP','ORDER'].includes(c.kind)){const start=token[c.start+1]?.upper==='BY'?c.start+2:c.start+1;for(const [x,y]of split(start,end))expression(x,y,scope,{projectionAlias:true,projectionClause:c.kind});}else if(c.kind!=='LIMIT')unknown('Clause '+c.kind+' is outside complete static checking.',token[c.start].start);}
@@ -177,6 +222,7 @@ function analyzeSql(text,catalog=[],options={}){
         if(token[i]?.upper!=='AS'||token[i+1]?.value!=='('||token[i+1].close===undefined){unknown('Incomplete CTE declaration.',name.start);break;}const open=i+1,close=token[open].close,entry={name:name.value,definition:{start:name.start,end:name.end},columns:[],complete:false};
         if(recursive){const union=top(open+1,close,(t,n)=>t.upper==='UNION'?n:undefined);if(union!==undefined){const anchor=parseQuery(open+1,union,parent,new Map(ctes),depth+1);entry.columns=anchor.projections.map((c,index)=>({...c,...(labels[index]?{name:labels[index].value,definition:{start:labels[index].start,end:labels[index].end},renamePhysicalColumn:false}:{})}));entry.complete=anchor.complete;ctes.set(name.value.toLowerCase(),entry);}else ctes.set(name.value.toLowerCase(),entry);}
         const sub=parseQuery(open+1,close,parent,new Map(ctes),depth+1);if(!entry.columns.length)entry.columns=sub.projections;entry.columns=entry.columns.map((c,index)=>({...c,...(labels[index]?{name:labels[index].value,definition:{start:labels[index].start,end:labels[index].end},renamePhysicalColumn:false}:{})}));if(labels.length&&labels.length!==entry.columns.length)issue('sql.shape.cte','CTE declared column count differs from its query output.',name);entry.complete=recursive?entry.complete:sub.complete;
+        if(joinOrigins&&duplicateOutputs(entry.columns))issue('sql.shape.cte.duplicate','A CTE has duplicate output names.',name);
         if(localCtes.has(name.value.toLowerCase()))issue('sql.name.cte.duplicate','CTE '+name.value+' is duplicated in this WITH clause.',name);localCtes.add(name.value.toLowerCase());
         ctes.set(name.value.toLowerCase(),entry);ref(name,'cte-definition',name.value,UNKNOWN(),entry.definition,{cteGroup});
         for(let index=0;index<labels.length;index++)ref(labels[index],'cte-column-definition',labels[index].value,entry.columns[index]?.type||UNKNOWN(),{start:labels[index].start,end:labels[index].end},{ownerDefinition:entry.definition,cteGroup});
@@ -185,7 +231,7 @@ function analyzeSql(text,catalog=[],options={}){
     }
     const arms=[];let start=a;top(a,b,(t,i)=>{if(['UNION','INTERSECT','EXCEPT'].includes(t.upper)){arms.push([start,i]);start=i+1;if(['ALL','DISTINCT'].includes(token[start]?.upper))start++;if(t.upper!=='UNION')unknown(t.upper+' dialect/version semantics are not verified.',t.start);}});arms.push([start,b]);
     let globalClauses=[];if(arms.length>1){const last=arms.at(-1);top(last[0],last[1],(t,i)=>{if(['ORDER','LIMIT'].includes(t.upper))globalClauses.push({kind:t.upper,start:i});});if(globalClauses.length)last[1]=globalClauses[0].start;}
-    const scopes=arms.map(([x,y])=>select(x,y,parent,ctes,depth));const main=scopes[0]||{projections:[],complete:false};if(scopes.length>1){for(const s of scopes.slice(1)){if(main.projections.length!==s.projections.length&&main.complete&&s.complete)issue('sql.shape.union','Set-operation branches return different column counts.',token[arms[scopes.indexOf(s)][0]]);}main.projections=main.projections.map((p,index)=>({...p,type:mergeTypes(scopes.map(s=>s.projections[index]?.type||UNKNOWN()))}));main.complete=scopes.every(s=>s.complete)&&main.projections.every(p=>p.type.family!=='unknown');supported.add('union-output');for(let n=0;n<globalClauses.length;n++){const c=globalClauses[n];if(c.kind==='ORDER')for(const [x,y]of split(c.start+(token[c.start+1]?.upper==='BY'?2:1),globalClauses[n+1]?.start??b))expression(x,y,main,{projectionAlias:true,projectionClause:'ORDER'});}}return main;
+    const scopes=arms.map(([x,y])=>select(x,y,parent,ctes,depth));const main=scopes[0]||{projections:[],complete:false};if(scopes.length>1){for(const s of scopes.slice(1)){if(main.projections.length!==s.projections.length&&main.complete&&s.complete)issue('sql.shape.union','Set-operation branches return different column counts.',token[arms[scopes.indexOf(s)][0]]);}main.projections=main.projections.map((p,index)=>({...p,type:mergeTypes(scopes.map(s=>s.projections[index]?.type||UNKNOWN())),...(joinOrigins&&{joinOrigin:scopes.every(s=>sameOrigin(s.projections[index]?.joinOrigin,p.joinOrigin))?p.joinOrigin:undefined})}));main.complete=scopes.every(s=>s.complete)&&main.projections.every(p=>p.type.family!=='unknown');supported.add('union-output');for(let n=0;n<globalClauses.length;n++){const c=globalClauses[n];if(c.kind==='ORDER')for(const [x,y]of split(c.start+(token[c.start+1]?.upper==='BY'?2:1),globalClauses[n+1]?.start??b))expression(x,y,main,{projectionAlias:true,projectionClause:'ORDER'});}}return main;
   };
   let end=token.length;const semicolons=token.flatMap((t,i)=>t.kind==='symbol'&&t.value===';'?[i]:[]);if(semicolons.length){end=semicolons[0];if(semicolons.length>1||end!==token.length-1)unknown('Analyze one statement at a time; batch SQL is not bound.');}
   if(!['SELECT','WITH'].includes(token[0]?.upper)){unknown('Only SELECT/WITH statements have a static semantic model.');return model;}
@@ -202,7 +248,7 @@ function completionsAt(model,offset){if(model._nonCode?.some(span=>offset>=span.
   for(const r of selected)for(const c of r.columns)if(c.name.toLowerCase().startsWith(prefix))result.push({label:c.name,kind:'column',detail:r.alias+' · '+(c.type.dbType||c.type.family)+' · '+r.kind,insertText:quote(c.name),table:r.name,type:c.type});return result;
 }
 const colEqLocal=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase();
-function definitionsAt(model,offset){const ref=model.references.find(r=>offset>=r.start&&offset<=r.end&&r.definition);return ref?[{...ref.definition,range:sourceRange(model.text,ref.definition.start,ref.definition.end)}]:[];}
+function definitionsAt(model,offset,{skipImplicit=false}={}){const ref=model.references.find(r=>offset>=r.start&&offset<=r.end&&r.definition&&(!skipImplicit||!r.implicit));return ref?[{...ref.definition,range:sourceRange(model.text,ref.definition.start,ref.definition.end)}]:[];}
 function hoverAt(model,offset){const ref=model.references.find(r=>offset>=r.start&&offset<=r.end);if(!ref)return null;return [ref.kind+': '+ref.name,ref.type?.dbType||ref.type?.family,ref.catalog?JSON.stringify(ref.catalog):null,ref.correlated?'Correlated outer-scope reference':null,'Static SELECT model; execution validity is unverified.'].filter(Boolean).join('\n');}
 function statementRanges(text,options={}){
   const unknown=[],statements=[];if(typeof text!=='string'||Buffer.byteLength(text)>LIMITS.bytes||text.includes('\0'))return {statements,unknown:[{reason:'SQL document exceeds limits or contains NUL.'}]};

@@ -2,6 +2,7 @@
 
 const crypto=require('node:crypto');
 const {validateQuery}=require('./sql-policy');
+const {delimiterDirective,compoundCreation}=require('./sql-format-script');
 const LIMITS={sqlBytes:128*1024,statements:100,parameters:2000,parameterNames:1000,parameterBytes:1024*1024,parameterValueBytes:128*1024,reviewLifetimeMs:120000,reviews:16,resultBytes:4*1024*1024,totalTimeoutMs:120000};
 const fail=(code,message,extra={})=>Object.assign(new Error(message),{code,...extra});
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
@@ -12,20 +13,51 @@ function normalizeMode(value){
   return modes;
 }
 
+const unsupportedProgramWords = new Set([
+  'CALL', 'PREPARE', 'EXECUTE', 'DEALLOCATE', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE',
+  'LOAD', 'LOAD_FILE', 'OUTFILE', 'DUMPFILE', 'GRANT', 'REVOKE', 'INSTALL', 'UNINSTALL',
+  'GET_LOCK', 'RELEASE_LOCK', 'RELEASE_ALL_LOCKS', 'MASTER_POS_WAIT', 'SOURCE_POS_WAIT',
+  'WAIT_FOR_EXECUTED_GTID_SET', 'COMMIT', 'ROLLBACK', 'SAVEPOINT', 'TRANSACTION', 'AUTOCOMMIT', 'SQL_MODE', 'GLOBAL'
+]);
+
+function programPolicy(sql, sqlMode, readOnly) {
+  let program;
+  try { program = compoundCreation(sql, { sqlMode, dialect: 'mysql' }); }
+  catch (error) { throw fail('ROCKETBRAIN_SCRIPT_UNSUPPORTED', error.message); }
+  if (!program) throw fail('ROCKETBRAIN_SCRIPT_UNSUPPORTED',
+    'A custom DELIMITER is supported for compound CREATE PROCEDURE, FUNCTION and TRIGGER statements.');
+  if (readOnly) throw fail('ROCKETBRAIN_READ_ONLY', 'Enable read/write mode before reviewing a stored-program creation.');
+  for (let index = 1; index < program.tokens.length; index++) {
+    const token = program.tokens[index];
+    const label = token.kind === 'symbol' && token.value === ':' &&
+      ['identifier','word'].includes(program.tokens[index - 1]?.kind) &&
+      ['BEGIN','LOOP','WHILE','REPEAT'].includes(program.tokens[index + 1]?.upper);
+    if (token.kind === 'parameter' || token.kind === 'symbol' && token.value === ':' && !label ||
+        ['word', 'identifier'].includes(token.kind) && unsupportedProgramWords.has(token.value.toUpperCase())) {
+      throw fail('ROCKETBRAIN_SCRIPT_UNSUPPORTED',
+        'This stored-program creation includes unsupported parameters, dynamic SQL, session controls or administrative operations.');
+    }
+  }
+  return { sql, first: 'CREATE', mayWrite: true, ddl: true, program: program.type };
+}
+
 /** A client script splitter, not a complete SQL parser. Every part is also policy checked. */
 function analyzeScript(sql,{sqlMode,readOnly=true}={}){
   const modes=normalizeMode(sqlMode),backslash=!modes.includes('NO_BACKSLASH_ESCAPES'),ansi=modes.includes('ANSI_QUOTES');
   if(typeof sql!=='string'||!sql.trim()||sql.includes('\0')||Buffer.byteLength(sql)>LIMITS.sqlBytes)throw fail('ROCKETBRAIN_SCRIPT_INPUT','Enter a script of at most128KiB without NUL.');
   const statements=[],parameters=[];let start=0,hasCode=false,quote='',quoteStart=0,lineComment=false,blockComment=false,blockStart=0;
-  const finish=end=>{
+  let delimiter = ';', delimiterCount = 0;
+  const finish=(end,nextStart=end)=>{
     if(hasCode){
       if(statements.length>=LIMITS.statements)throw fail('ROCKETBRAIN_SCRIPT_LIMIT','Scripts are limited to100 statements.');
       const source=sql.slice(start,end);let policySql=source;
       for(const parameter of parameters.filter(p=>p.start>=start&&p.end<=end).reverse())policySql=policySql.slice(0,parameter.start-start)+'?'+policySql.slice(parameter.end-start);
-      const policy=validateQuery(policySql,{readOnly,sqlMode:modes});
+      const policy=delimiter === ';'
+        ? validateQuery(policySql,{readOnly,sqlMode:modes})
+        : programPolicy(policySql,modes,readOnly);
       statements.push({...policy,index:statements.length,start,end,sql:source});
     }
-    start=end;hasCode=false;
+    start=nextStart;hasCode=false;
   };
   for(let i=0;i<sql.length;i++){
     const c=sql[i],next=sql[i+1];
@@ -37,11 +69,33 @@ function analyzeScript(sql,{sqlMode,readOnly=true}={}){
       if(c===quote){if(next===quote){i++;continue;}quote='';}
       continue;
     }
+    if (i === 0 || sql[i - 1] === '\n') {
+      const newline = sql.indexOf('\n', i);
+      const end = newline < 0 ? sql.length : newline;
+      let nextDelimiter;
+      try { nextDelimiter = delimiterDirective(sql.slice(i, end)); }
+      catch (error) { throw fail('ROCKETBRAIN_SCRIPT_UNSUPPORTED', error.message, { offset: i }); }
+      if (nextDelimiter) {
+        if (hasCode) throw fail('ROCKETBRAIN_SCRIPT_UNSUPPORTED',
+          'Finish the current SQL statement before changing its DELIMITER.', { offset: i });
+        if (++delimiterCount > LIMITS.statements) throw fail('ROCKETBRAIN_SCRIPT_LIMIT', 'Use at most 100 DELIMITER directives.');
+        delimiter = nextDelimiter;
+        start = Math.min(end + 1, sql.length);
+        i = start - 1;
+        continue;
+      }
+    }
     if(c==='#'||c==='-'&&next==='-'&&/\s/.test(sql[i+2]||' ')){lineComment=true;if(c==='-')i++;continue;}
     if(c==='/'&&next==='*'){if(/^\/\*(?:!|[mM]!)/.test(sql.slice(i)))throw fail('ROCKETBRAIN_SCRIPT_UNSUPPORTED','Executable SQL comments are not supported.');blockComment=true;blockStart=i;i++;continue;}
     if(c==="'"||c==='"'||c==='`'){quote=c;quoteStart=i;hasCode=true;continue;}
-    if(c===';'){finish(i+1);continue;}
+    if (sql.startsWith(delimiter, i)) {
+      const after = i + delimiter.length;
+      finish(delimiter === ';' ? after : i, after);
+      i = after - 1;
+      continue;
+    }
     if(!/\s|\uFEFF/.test(c))hasCode=true;
+    if (delimiter !== ';') continue;
     if(c==='?'){
       if(next==='?')throw fail('ROCKETBRAIN_SCRIPT_PARAMETER','Identifier placeholders (??) are not supported. Bind values only.');
       parameters.push({style:'positional',start:i,end:i+1});
@@ -54,6 +108,7 @@ function analyzeScript(sql,{sqlMode,readOnly=true}={}){
   }
   if(quote)throw fail('ROCKETBRAIN_SCRIPT_QUOTE','A SQL quote is not closed.',{offset:quoteStart});
   if(blockComment)throw fail('ROCKETBRAIN_SCRIPT_QUOTE','A SQL block comment is not closed.',{offset:blockStart});
+  if (hasCode && delimiter !== ';') throw fail('ROCKETBRAIN_SCRIPT_UNSUPPORTED', 'Terminate the stored-program statement with the current DELIMITER.');
   finish(sql.length);if(!statements.length)throw fail('ROCKETBRAIN_SCRIPT_INPUT','The script contains no statements.');
   const styles=new Set(parameters.map(parameter=>parameter.style));if(styles.size>1)throw fail('ROCKETBRAIN_SCRIPT_PARAMETER','Use either named or positional parameters in one script, not both.');
   const parameterStyle=styles.values().next().value||'none',definitions=new Map();let index=0;
@@ -115,7 +170,8 @@ function publicScript(script){
   const unboundedDml = script.statements.flatMap(statement => statement.unboundedDml
     ? [{ index:statement.index, command:statement.unboundedDml.command, hasLimit:statement.unboundedDml.hasLimit }] : []);
   return {parameterStyle:script.parameterStyle,parameterDefinitions:structuredClone(script.parameterDefinitions),
-    statements:script.statements.map(({index,start,end,sql,first,mayWrite,ddl})=>({index,start,end,sql,first,mayWrite,ddl})),
+    statements:script.statements.map(({index,start,end,sql,first,mayWrite,ddl,program})=>({index,start,end,sql,first,mayWrite,ddl,
+      ...(program && {program})})),
     statementCount:script.statements.length,hasWrites:script.hasWrites,requiresImplicitCommitApproval:script.requiresImplicitCommitApproval,
     unboundedDml,sqlMode:[...script.sqlMode],atomic:false,executedSql:false};
 }
