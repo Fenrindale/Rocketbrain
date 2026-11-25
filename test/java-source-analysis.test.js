@@ -96,8 +96,10 @@ test('independent Javac attributes declarations, preserves exact binding and rej
       assert.equal(report.processorsEnabled,false);
       assert.equal(report.classGenerationEnabled,false);
       const diagram = classDiagram(report,sources);
-      assert.deepEqual(diagram.edges.filter(edge => edge.from === 'sample.Sample').map(edge => [edge.kind,edge.to]),
+      assert.deepEqual(diagram.edges.filter(edge => edge.from === 'sample.Sample' && !edge.origins).map(edge => [edge.kind,edge.to]),
         [['extends','sample.Base'],['implements','sample.Value']]);
+      assert.ok(diagram.edges.some(edge=>edge.from==='sample.Sample'&&edge.to==='java.lang.String'&&
+        edge.kind==='uses'&&edge.origins.some(item=>item.role==='return')));
       assert.ok(diagram.edges.some(edge => edge.from === 'sample.Sample.Inner' && edge.kind === 'nestedIn'));
       assert.ok(diagram.nodes.find(node => node.id === 'sample.Sample').members.some(member => member.name === 'straight'));
       const cursor = text.indexOf('var second') + 4;

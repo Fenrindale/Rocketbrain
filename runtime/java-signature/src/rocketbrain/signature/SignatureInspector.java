@@ -66,6 +66,7 @@ public final class SignatureInspector {
     static List<Map<String,Object>> diagrams(List<CompilationUnitTree> units, Trees trees, Types types) {
         SourcePositions positions = trees.getSourcePositions();
         List<Map<String,Object>> declarations = new ArrayList<>();
+        int[] relationshipBudget = {9000};
         for (var unit : units) {
             new TreePathScanner<Void,Void>() {
                 @Override public Void visitClass(ClassTree node, Void unused) {
@@ -109,10 +110,13 @@ public final class SignatureInspector {
                                 "kind",ctor ? "constructor" : "method","modifiers",modifiers(method),"location",anchor));
                         }
                     }
+                    int structuralCount=relations.size();
+                    int omittedRelations=new JavaDiagramRelations(trees,declared,relations,relationshipBudget[0]).inspect(getCurrentPath());
+                    relationshipBudget[0]-=relations.size()-structuralCount;
                     declarations.add(object("id",declared.getQualifiedName().toString(),
                         "name",declared.getSimpleName().toString(),"kind",declared.getKind().toString(),
                         "modifiers",modifiers(declared),"location",location(unit,node,positions),
-                        "relations",relations,"members",members,"omittedMembers",omittedMembers));
+                        "relations",relations,"members",members,"omittedMembers",omittedMembers,"omittedRelations",omittedRelations));
                     if (declarations.size() > 300) throw new IllegalArgumentException("Java diagram declaration limit");
                     return super.visitClass(node,unused);
                 }

@@ -3,31 +3,38 @@
 const { rangeAt } = require('../spring/java');
 
 const KINDS = new Set(['CLASS','INTERFACE','ENUM','RECORD','ANNOTATION_TYPE']);
-const RELATIONS = new Set(['extends','implements','nestedIn']);
+const STRUCTURE = new Set(['extends','implements','nestedIn']);
+const RELATIONS = new Set([...STRUCTURE,'associates','uses']);
+const RELATION_MODES = new Set(['all','structure','associations','dependencies']);
+const ROLE_LABELS = Object.freeze({field:'Field type','field-argument':'Field type argument',return:'Return type',
+  'return-argument':'Return type argument',parameter:'Parameter type','parameter-argument':'Parameter type argument',
+  throws:'Thrown type','throws-argument':'Thrown type argument',construct:'Construction','construct-argument':'Construction type argument',
+  call:'Method call'});
 const TYPE_ID = /^[\p{ID_Start}_$][\p{ID_Continue}$]*(?:\.[\p{ID_Start}_$][\p{ID_Continue}$]*)*$/u;
 
 function plain(value, maximum = 240) {
   return typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,maximum) : '';
 }
 
-function checkedLocation(location,sources) {
+function checkedLocation(location,sources,{precise=false}={}) {
   const source = sources.get(location?.uri);
   if (!source || !Number.isSafeInteger(location.start) || !Number.isSafeInteger(location.end) ||
       location.start < 0 || location.end <= location.start || location.end > source.text.length) {
     throw Error('The compiler returned an invalid Java source location.');
   }
-  // Reveal the declaration, rather than selecting its entire class or method.
-  const range = rangeAt(source.text,location.start,location.start);
+  // Structural links open the declaration start. Member occurrences select the source that establishes the relationship.
+  const range = rangeAt(source.text,location.start,precise?location.end:location.start);
   return { uri:location.uri,range };
 }
 
 function classDiagram(report,sourceFiles) {
   if (!Array.isArray(report?.declarations) || report.declarations.length > 300) throw Error('Invalid Java class diagram report.');
   const byFile = new Map(sourceFiles.map(source => [source.uri,source]));
-  const byId = new Map(), edges = [];
+  const byId = new Map(), edges = [], grouped = new Map();
+  let omittedRelations=0,occurrences=0;
   for (const declaration of report.declarations) {
     if (!TYPE_ID.test(declaration.id ?? '') || byId.has(declaration.id) || !KINDS.has(declaration.kind) ||
-        !Array.isArray(declaration.members) || !Array.isArray(declaration.relations)) {
+        !Array.isArray(declaration.members) || !Array.isArray(declaration.relations) || declaration.relations.length>500) {
       throw Error('Invalid compiler Java type declaration.');
     }
     const type = {
@@ -40,9 +47,24 @@ function classDiagram(report,sourceFiles) {
       omittedMembers:Number.isSafeInteger(declaration.omittedMembers) ? declaration.omittedMembers : 0
     };
     byId.set(type.id,type);
+    if (Number.isSafeInteger(declaration.omittedRelations)&&declaration.omittedRelations>0) omittedRelations+=declaration.omittedRelations;
     for (const edge of declaration.relations) {
       if (!TYPE_ID.test(edge.target ?? '') || !RELATIONS.has(edge.kind)) throw Error('Invalid Java type relationship.');
-      edges.push({ from:type.id,to:edge.target,kind:edge.kind,signature:plain(edge.signature,350) });
+      if (STRUCTURE.has(edge.kind)) {
+        edges.push({ from:type.id,to:edge.target,kind:edge.kind,signature:plain(edge.signature,350) });
+        continue;
+      }
+      if (!Object.hasOwn(ROLE_LABELS,edge.role) || (edge.kind==='associates')!==edge.role.startsWith('field') || ++occurrences>9000) {
+        throw Error('Invalid Java relationship occurrence.');
+      }
+      const key=JSON.stringify([type.id,edge.target,edge.kind]);
+      if (!grouped.has(key)) {
+        const relation={id:'relation-'+grouped.size,from:type.id,to:edge.target,kind:edge.kind,origins:[]};
+        grouped.set(key,relation);
+        edges.push(relation);
+      }
+      grouped.get(key).origins.push({role:edge.role,label:ROLE_LABELS[edge.role],member:plain(edge.member,180),
+        signature:plain(edge.signature,350),location:checkedLocation(edge.location,byFile,{precise:true})});
     }
   }
   for (const edge of edges) {
@@ -50,24 +72,32 @@ function classDiagram(report,sourceFiles) {
       qualified:edge.to,kind:'EXTERNAL',external:true,members:[],omittedMembers:0 });
   }
   const nodes = [...byId.values()].sort((a,b) => Number(a.external) - Number(b.external) || a.id.localeCompare(b.id));
-  return { nodes,edges,localCount:report.declarations.length,externalCount:nodes.length - report.declarations.length };
+  return {nodes,edges,localCount:report.declarations.length,externalCount:nodes.length-report.declarations.length,omittedRelations};
 }
 
-function visibleClassLayout(diagram,{ focus,external = true,maxNodes = 90 } = {}) {
+function filterClassRelations(diagram,mode) {
+  if (!RELATION_MODES.has(mode)) throw Error('Choose a supported class relationship view.');
+  if (mode==='all') return diagram.edges;
+  if (mode==='structure') return diagram.edges.filter(edge=>STRUCTURE.has(edge.kind));
+  return diagram.edges.filter(edge=>edge.kind===(mode==='associations'?'associates':'uses'));
+}
+
+function visibleClassLayout(diagram,{focus,external=true,maxNodes=90,relationships='all'}={}) {
+  const available=filterClassRelations(diagram,relationships), externalTargets=new Set(available.map(edge=>edge.to));
   const byId = new Map(diagram.nodes.map(node => [node.id,node]));
   const selected = focus && byId.has(focus) ? new Set([focus]) : null;
   if (selected) {
-    for (const edge of diagram.edges) if (edge.from === focus || edge.to === focus) {
+    for (const edge of available) if (edge.from === focus || edge.to === focus) {
       selected.add(edge.from);
       selected.add(edge.to);
     }
   }
-  const candidates = diagram.nodes.filter(node => (external || !node.external) && (!selected || selected.has(node.id)));
+  const candidates = diagram.nodes.filter(node => (!node.external || external&&externalTargets.has(node.id)) && (!selected || selected.has(node.id)));
   const nodes = candidates.slice(0,maxNodes), ids = new Set(nodes.map(node => node.id));
-  const edges = diagram.edges.filter(edge => ids.has(edge.from) && ids.has(edge.to));
+  const edges = available.filter(edge => ids.has(edge.from) && ids.has(edge.to));
   const parents = new Map();
   for (const edge of edges) {
-    if (edge.kind === 'nestedIn') continue;
+    if (edge.kind!=='extends'&&edge.kind!=='implements') continue;
     if (!parents.has(edge.from)) parents.set(edge.from,[]);
     parents.get(edge.from).push(edge.to);
   }
@@ -100,18 +130,21 @@ function visibleClassLayout(diagram,{ focus,external = true,maxNodes = 90 } = {}
     height:PADDING*2 + DY*Math.max(0,row - 1) + CARD_H, omitted:candidates.length - nodes.length };
 }
 
-function mermaidDiagram(diagram,{ external = true } = {}) {
-  const nodes = diagram.nodes.filter(node => external || !node.external);
+function mermaidDiagram(diagram,{external=true,relationships='all'}={}) {
+  const edges=filterClassRelations(diagram,relationships), externalTargets=new Set(edges.map(edge=>edge.to));
+  const nodes = diagram.nodes.filter(node => !node.external || external&&externalTargets.has(node.id));
   const identifiers = new Map(nodes.map((node,index) => [node.id,'Type' + index]));
   const rows = ['classDiagram'];
   // The compiler supplies Java identifiers. Keep member labels separate
   // from Mermaid grammar so generic or annotation text cannot alter structure.
   for (const node of nodes) rows.push('    class ' + identifiers.get(node.id) + '["' + node.qualified + '"]');
-  for (const edge of diagram.edges) {
+  for (const edge of edges) {
     if (!identifiers.has(edge.from) || !identifiers.has(edge.to)) continue;
-    const operator = edge.kind === 'implements' ? '..|>' : edge.kind === 'nestedIn' ? '..>' : '--|>';
+    const operator = {'extends':'--|>','implements':'..|>','nestedIn':'..>','associates':'-->','uses':'..>'}[edge.kind];
+    const label=edge.kind==='nestedIn'?'nested in':edge.origins?.length?
+      [...new Set(edge.origins.map(item=>ROLE_LABELS[item.role].toLowerCase()))].join(', '):'';
     rows.push('    ' + identifiers.get(edge.from) + ' ' + operator + ' ' + identifiers.get(edge.to) +
-      (edge.kind === 'nestedIn' ? ' : nested in' : ''));
+      (label ? ' : '+label : ''));
   }
   return rows.join('\n') + '\n';
 }
@@ -154,4 +187,4 @@ function dataFlow(report,source,offset) {
   };
 }
 
-module.exports = { classDiagram,visibleClassLayout,mermaidDiagram,dataFlow };
+module.exports = { classDiagram,visibleClassLayout,mermaidDiagram,dataFlow,RELATION_MODES };

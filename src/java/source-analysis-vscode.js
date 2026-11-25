@@ -6,7 +6,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { analyzeJavaSources } = require('./signature-compiler');
 const { inside, local } = require('./workbench-model');
-const { classDiagram,mermaidDiagram,dataFlow } = require('./source-analysis-model');
+const { classDiagram,mermaidDiagram,dataFlow,RELATION_MODES } = require('./source-analysis-model');
 const { diagramHtml } = require('./source-diagram-view');
 const { structuralQuery,parseCaptureConstraints,reviewedStructuralMatches,structuralEdits } = require('./structural-search');
 const { createInterfaceExtraction } = require('./extract-interface-vscode');
@@ -51,7 +51,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const owned = (context.storageUri || context.globalStorageUri).fsPath;
   const storagePath = path.join(owned,'java-source-analysis');
   const streamTrace = require('./stream-trace-vscode').registerStreamTrace(vscode,java);
-  const snapshotByReport = new WeakMap(), structuralReports = new WeakMap(), active = new Set(), panels = new Set();
+  const snapshotByReport = new WeakMap(), diagramReviews = new WeakMap(), structuralReports = new WeakMap(), active = new Set(), panels = new Set();
   let disposed = false, stopping;
 
   function assertReady(cancellation) {
@@ -175,8 +175,45 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     const compiler = await compile(state,project,sources,{kind:'diagram'},cancellation);
     const report = { ...classDiagram(compiler,sources),project:project.name,sourceFiles:sources.length,projectUri:project.uri };
     if (!report.localCount) throw Error('The compiler found no Java class declarations in this scope.');
-    snapshotByReport.set(report,new Map(sources.map(item => [item.uri,item.sha])));
+    const hashes=new Map(sources.map(item=>[item.uri,item.sha]));
+    snapshotByReport.set(report,hashes);
+    const locations=new Map(report.edges.filter(edge=>edge.origins).map(edge=>[edge.id,edge.origins.map(item=>structuredClone(item.location))]));
+    diagramReviews.set(report,{state,project,sources,hashes,locations,compiler});
     return report;
+  }
+
+  async function refreshDiagram(report,{cancellation}={}) {
+    const reviewed=diagramReviews.get(report);
+    if (!reviewed) throw Error('Open a current Java class diagram before refreshing it.');
+    return diagram({projectUri:reviewed.project.uri,cancellation});
+  }
+
+  async function revealRelationship(report,id,origin,{cancellation}={}) {
+    assertReady(cancellation);
+    const reviewed=diagramReviews.get(report), location=Number.isSafeInteger(origin)&&origin>=0?reviewed?.locations.get(id)?.[origin]:null;
+    if (!location) throw Error('Choose a relationship source from the current Java class diagram.');
+    const {state,project,sources,hashes,compiler}=reviewed;
+    function checkRuntime() {
+      assertReady(cancellation);
+      const current=java.getState();
+      if (current.state!=='running'||current.runtimeIdentity!==state.runtimeIdentity) throw Error('The Java runtime changed. Refresh the class diagram.');
+    }
+    checkRuntime();
+    const current=java.workbench.getSnapshot().projects.find(item=>item.uri===project.uri);
+    if (!current||current.compliance!==project.compliance||!vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(current.uri))) {
+      throw Error('Java project settings changed. Refresh the class diagram before following this link.');
+    }
+    const live=await classSources(current,cancellation);
+    if (live.length!==hashes.size||live.some(item=>hashes.get(item.uri)!==item.sha)) {
+      throw Error('Java sources changed. Refresh the class diagram before following this link.');
+    }
+    const entries=await classpaths(current,cancellation);
+    if (entries.length!==compiler.classpathEntries.length||entries.some((item,index)=>item!==compiler.classpathEntries[index])) {
+      throw Error('Java sources or classpath changed. Refresh the class diagram before following this link.');
+    }
+    return reveal(report,location,()=>{
+      checkRuntime();assertUnchangedSourceSnapshots(sources);compiler.validateClasspath();
+    });
   }
 
   async function trace({ document,position,cancellation }) {
@@ -252,7 +289,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   }
 
   const range = value => new vscode.Range(value.start.line,value.start.character,value.end.line,value.end.character);
-  async function reveal(report,item) {
+  async function reveal(report,item,preOpen) {
     assertReady();
     const hashes = snapshotByReport.get(report), expected = hashes?.get(item?.uri);
     if (!expected) throw Error('Refresh Java analysis before opening a source link.');
@@ -265,16 +302,17 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       throw Error('Save the Java editor before opening this source link.');
     }
     const selection = document.validateRange(range(item.range));
+    if (preOpen) preOpen();
     return vscode.window.showTextDocument(document,{preview:true,selection});
   }
 
-  async function exportMermaid(report,destination,{external = true} = {}) {
+  async function exportMermaid(report,destination,{external=true,relationships='all'}={}) {
     assertReady();
     if (!snapshotByReport.has(report) || !Array.isArray(report.nodes) || !localFile(destination) ||
         path.extname(destination.fsPath).toLowerCase() !== '.mmd') throw Error('Choose a local .mmd file for this class diagram.');
     const parent = path.dirname(destination.fsPath);
     if (path.relative(parent,await fs.realpath(parent))) throw Error('Choose a physical directory for the Mermaid diagram.');
-    try { await fs.writeFile(destination.fsPath,mermaidDiagram(report,{external}),{flag:'wx',encoding:'utf8'}); }
+    try { await fs.writeFile(destination.fsPath,mermaidDiagram(report,{external,relationships}),{flag:'wx',encoding:'utf8'}); }
     catch (error) {
       if (error.code === 'EEXIST') throw Error('A Mermaid diagram already exists at the selected path.');
       throw error;
@@ -294,17 +332,18 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       (_value,token) => managed(() => fn(token)));
   }
 
-  function showDiagram(initial) {
+  function showDiagram(initial,{focus:initialFocus='',relationships:initialMode='all'}={}) {
     assertReady();
-    if (!snapshotByReport.has(initial) || !Array.isArray(initial.nodes)) throw Error('Analyze a saved Java project first.');
-    let report = initial, external = true, focus = '', closed = false, refreshing = false;
+    if (!diagramReviews.has(initial) || !Array.isArray(initial.nodes) || !RELATION_MODES.has(initialMode) ||
+        initialFocus&&!initial.nodes.some(node=>!node.external&&node.id===initialFocus)) throw Error('Choose a supported view of an analyzed Java project.');
+    let report=initial,external=true,focus=initialFocus,relationships=initialMode,closed=false,refreshing=false,revision=0;
     const panel = vscode.window.createWebviewPanel('rocketbrainJavaClassDiagram','Java Class Diagram',
       vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[]});
     panels.add(panel);
-    const render = () => { if (!closed) panel.webview.html = diagramHtml(report,{focus,external}); };
+    const render = () => { if (!closed) panel.webview.html=diagramHtml(report,{focus,external,relationships,revision:++revision}); };
     render();
     const messages = panel.webview.onDidReceiveMessage(async message => {
-      if (closed || !message || !['source','options','refresh','export'].includes(message.type)) return;
+      if (closed || !message || message.revision!==revision || !['source','relationship','options','refresh','export'].includes(message.type)) return;
       try {
         assertReady();
         if (message.type === 'source') {
@@ -313,27 +352,30 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
           const target = message.member === undefined ? type.location :
             Number.isInteger(message.member) && message.member >= 0 ? type.members[message.member]?.location : null;
           if (target) await reveal(report,target);
+        } else if (message.type === 'relationship') {
+          await operation('Verify Java Relationship Source',cancellation=>revealRelationship(report,message.id,message.origin,{cancellation}));
         } else if (message.type === 'options') {
-          if (typeof message.external !== 'boolean' ||
+          if (typeof message.external !== 'boolean' || !RELATION_MODES.has(message.relationships) ||
               (message.focus !== '' && !report.nodes.some(node => !node.external && node.id === message.focus))) return;
           external = message.external;
           focus = message.focus;
+          relationships=message.relationships;
           render();
         } else if (message.type === 'refresh' && !refreshing) {
           refreshing = true;
           try {
             report = await operation('Refresh Java Class Diagram',
-              cancellation => diagram({projectUri:report.projectUri,cancellation}));
+              cancellation => refreshDiagram(report,{cancellation}));
             if (focus && !report.nodes.some(node => node.id === focus)) focus = '';
             render();
           } finally { refreshing = false; }
         } else if (message.type === 'export') {
           const file = await vscode.window.showSaveDialog({title:'Export Java Class Diagram',filters:{Mermaid:['mmd']},
             defaultUri:vscode.Uri.joinPath(vscode.Uri.parse(report.projectUri),'class-diagram.mmd')});
-          if (file) await exportMermaid(report,file,{external});
+          if (file) await exportMermaid(report,file,{external,relationships});
         }
       } catch (error) {
-        if (!closed && !disposed) await vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message);
+        if (!closed && !disposed) void vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message);
       }
     });
     const changes = vscode.workspace.onDidChangeTextDocument(event => {
@@ -341,10 +383,15 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
         void panel.webview.postMessage({type:'stale'});
       }
     });
+    const watcher=vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.parse(initial.projectUri),'**/*.java'));
+    const stale=()=>{if(!closed)void panel.webview.postMessage({type:'stale'});};
+    const notifications=[watcher.onDidChange(stale),watcher.onDidCreate(stale),watcher.onDidDelete(stale)];
     panel.onDidDispose(() => {
       closed = true;
       messages.dispose();
       changes.dispose();
+      for (const notification of notifications) notification.dispose();
+      watcher.dispose();
       panels.delete(panel);
     });
     return panel;
@@ -500,6 +547,8 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   }));
   return {
     diagram:options => managed(() => diagram(options)),trace:options => managed(() => trace(options)),
+    refreshDiagram:(report,options)=>managed(()=>refreshDiagram(report,options)),
+    revealRelationship:(report,id,origin,options)=>managed(()=>revealRelationship(report,id,origin,options)),
     structuralSearch:options => managed(() => structuralSearch(options)),
     prepareStructuralReplacement:(report,ids,options) => managed(() => prepareStructuralReplacement(report,ids,options)),
     inspectInterface:options => managed(() => extraction.inspect(options)),

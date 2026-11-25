@@ -8,11 +8,12 @@ function literal(value) {
     '\\u' + character.charCodeAt(0).toString(16).padStart(4,'0'));
 }
 
-function diagramHtml(diagram,{ focus,external = true } = {}) {
+function diagramHtml(diagram,{focus,external=true,relationships='all',revision=0}={}) {
   const nonce = randomBytes(24).toString('base64url');
-  const view = visibleClassLayout(diagram,{focus,external});
+  const view = visibleClassLayout(diagram,{focus,external,relationships});
   const payload = {
-    ...view, focus:focus || '',external,localCount:diagram.localCount,externalCount:diagram.externalCount,
+    ...view,focus:focus||'',external,relationships,revision,localCount:diagram.localCount,externalCount:diagram.externalCount,
+    omittedRelations:diagram.omittedRelations,
     choices:diagram.nodes.filter(node => !node.external).map(node => ({ id:node.id,label:node.qualified }))
   };
   return `<!doctype html>
@@ -45,28 +46,43 @@ canvas { position:absolute; left:0; top:0; pointer-events:none; }
 .node-name { font-weight:700; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:3px 0; }
 .member { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; font-size:11px; margin:1px 0; }
 .members { flex:1; overflow:auto; display:flex; flex-direction:column; }
+#relationship-panel { padding:8px 16px; border-bottom:1px solid var(--vscode-panel-border); }
+#relation-links { display:grid; gap:4px; max-height:165px; overflow:auto; margin-top:8px; }
+.relation-link { overflow:hidden; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 <body>
 <header>
   <label>Focus <select id="focus"></select></label>
+  <label>Relationships <select id="relationships">
+    <option value="all">All relationships</option>
+    <option value="structure">Inheritance and nesting</option>
+    <option value="associations">Field associations</option>
+    <option value="dependencies">Member dependencies</option>
+  </select></label>
   <label><input id="external" type="checkbox">External types</label>
   <label>Zoom <input id="zoom" type="range" min="50" max="140" value="100"><span id="zoom-text">100%</span></label>
   <button id="refresh" type="button">Refresh</button>
   <button id="save" type="button">Export Mermaid</button>
   <span id="notice" role="status"></span>
 </header>
+<details id="relationship-panel">
+  <summary>Relationship source links</summary>
+  <div id="relation-links"></div>
+</details>
 <div id="viewport" aria-label="Compiler class relationships">
-  <div id="scroller"><div id="surface"><canvas id="edges" aria-label="Solid lines extend, dashed lines implement or indicate nesting"></canvas></div></div>
+  <div id="scroller"><div id="surface"><canvas id="edges" aria-label="Graph of Java inheritance, nesting, field associations and member dependencies"></canvas></div></div>
 </div>
 <script nonce="${nonce}">
 const model = ${literal(payload)};
 const vscode = acquireVsCodeApi();
+const send = message => vscode.postMessage({ ...message,revision:model.revision });
 const get = id => document.getElementById(id);
 const surface = get('surface'), scroller = get('scroller'), canvas = get('edges'), ctx = canvas.getContext('2d');
 const byId = new Map(model.nodes.map(type => [type.id,type]));
-const focus = get('focus'), external = get('external');
+const focus=get('focus'),external=get('external'),relationships=get('relationships');
 const notice = model.nodes.length + ' shown · ' + model.localCount + ' project types' +
-  (model.omitted ? ' · ' + model.omitted + ' more, choose a focused type' : '');
+  (model.omitted ? ' · ' + model.omitted + ' more, choose a focused type' : '') +
+  (model.omittedRelations?' · '+model.omittedRelations+' relationship occurrences exceeded the analysis limit':'');
 get('notice').textContent = notice;
 canvas.width = model.width;
 canvas.height = model.height;
@@ -82,11 +98,13 @@ for (const item of model.choices) {
 }
 focus.value = model.focus;
 external.checked = model.external;
-function optionsChanged() { vscode.postMessage({type:'options',focus:focus.value,external:external.checked}); }
+relationships.value=model.relationships;
+function optionsChanged() { send({type:'options',focus:focus.value,external:external.checked,relationships:relationships.value}); }
 focus.addEventListener('change',optionsChanged);
 external.addEventListener('change',optionsChanged);
-get('refresh').addEventListener('click',() => vscode.postMessage({type:'refresh'}));
-get('save').addEventListener('click',() => vscode.postMessage({type:'export'}));
+relationships.addEventListener('change',optionsChanged);
+get('refresh').addEventListener('click',() => send({type:'refresh'}));
+get('save').addEventListener('click',() => send({type:'export'}));
 const selected = vscode.getState()?.zoom || 100;
 const zoom = get('zoom');
 zoom.value = String(selected);
@@ -96,7 +114,7 @@ function rescale() {
   scroller.style.width = Math.ceil(model.width * amount/100) + 'px';
   scroller.style.height = Math.ceil(model.height * amount/100) + 'px';
   surface.style.transform = 'scale(' + amount/100 + ')';
-  vscode.setState({zoom:amount});
+  vscode.setState({...vscode.getState(),zoom:amount});
 }
 zoom.addEventListener('input',rescale);
 rescale();
@@ -109,6 +127,24 @@ const label = (tag, css, value) => {
   element.title = value;
   return element;
 };
+const panel=get('relationship-panel'), links=get('relation-links');
+panel.open=vscode.getState()?.relationshipLinks??Boolean(model.focus);
+panel.addEventListener('toggle',()=>vscode.setState({...vscode.getState(),relationshipLinks:panel.open}));
+const rows=[];
+for (const edge of model.edges) {
+  if (model.focus && edge.from!==model.focus && edge.to!==model.focus) continue;
+  for (const [index,origin] of (edge.origins||[]).entries()) rows.push({edge,index,origin});
+}
+for (const {edge,index,origin} of rows.slice(0,100)) {
+  const message=origin.label+' · '+origin.member+' · '+edge.from+' → '+edge.to;
+  const link=label('button','relation-link',message);
+  link.title=message+' · '+origin.signature;
+  link.type='button';
+  link.addEventListener('click',()=>send({type:'relationship',id:edge.id,origin:index}));
+  links.appendChild(link);
+}
+if (!rows.length) links.appendChild(label('span','kind','No member links in this view.'));
+if (rows.length>100) links.appendChild(label('span','kind','Showing 100 of '+rows.length+' source links. Filter the relationship view to narrow the list.'));
 function redraw() {
   const style = getComputedStyle(document.body);
   const defaultColor = style.getPropertyValue('--vscode-descriptionForeground').trim() || '#9299aa';
@@ -126,7 +162,7 @@ function redraw() {
     ctx.strokeStyle = adjacent ? focusColor : defaultColor;
     ctx.lineWidth = adjacent ? 2 : 1;
     ctx.globalAlpha = adjacent || !selectedType ? 0.9 : 0.28;
-    ctx.setLineDash(edge.kind === 'extends' ? [] : edge.kind === 'implements' ? [5,4] : [2,4]);
+    ctx.setLineDash(edge.kind==='extends'||edge.kind==='associates'?[]:edge.kind==='implements'?[5,4]:edge.kind==='uses'?[7,4]:[2,4]);
     ctx.beginPath();
     ctx.moveTo(startX,startY);
     ctx.lineTo(startX,mid);
@@ -153,7 +189,7 @@ for (const type of model.nodes) {
   const name = label(type.external ? 'span' : 'button','node-name',type.qualified);
   if (!type.external) {
     name.type = 'button';
-    name.addEventListener('click',() => vscode.postMessage({type:'source',node:type.id}));
+    name.addEventListener('click',() => send({type:'source',node:type.id}));
   }
   card.appendChild(name);
   const members = document.createElement('div');
@@ -162,7 +198,7 @@ for (const type of model.nodes) {
     const text = member.kind === 'field' ? member.name + ' : ' + member.signature : member.signature;
     const entry = label('button','member',text);
     entry.type = 'button';
-    entry.addEventListener('click',() => vscode.postMessage({type:'source',node:type.id,member:index}));
+    entry.addEventListener('click',() => send({type:'source',node:type.id,member:index}));
     members.appendChild(entry);
   }
   if (type.omittedMembers) members.appendChild(label('span','kind','+' + type.omittedMembers + ' more source members'));

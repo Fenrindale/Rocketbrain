@@ -66,7 +66,7 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 9. **Insert Java Live Template**과 `rocketbrain.java.liveTemplates`에서 Java 스니펫을 사용합니다. **Generate Java Members**에서 선택한 필드의 생성자·접근자·`equals`와 `hashCode` 또는 위임 메서드를 미리 보고 적용합니다.
 10. **Record JVM Profile**, **Capture JVM Threads**, **Inspect JVM Heap Histogram**에서 로컬 JVM을 직접 선택합니다. 저장한 JFR과 스레드 스냅샷도 다시 열 수 있습니다. 일부 Windows JDK에서 JFR이 빈 파일을 보고하면, 대상 JVM을 쓰기 가능한 ASCII 경로의 JFR 저장소로 시작한 뒤 다시 녹화합니다. **Inspect JVM Heap Dump**는 로컬 HotSpot HPROF에서 객체와 수명 유지 경로를 탐색합니다. [JVM 힙 덤프 분석](docs/java-heap-dump.md)
 11. **Run Java Inspection Profile**은 선택한 Java 소스 범위와 검사별 심각도를 VS Code Problems에 적용합니다. **Find Duplicate Java Code**는 정확한 토큰 일치 또는 리터럴을 무시한 후보를 표시하고 원본 범위를 엽니다. 사용자 프로필은 `rocketbrain.java.inspectionProfiles`에 저장합니다.
-12. **Show Java Class Diagram**은 Javac가 확인한 상속·구현·중첩 타입 관계와 소스 링크를 표시하고 Mermaid로 내보냅니다. **Trace Java Local Value**는 직선형 메서드에서 지역값의 정의와 사용 범위를 연결합니다. 구조 편집, 분기 병합, 객체의 공유 참조와 메서드 간 흐름은 지원 범위 밖입니다.
+12. **Show Java Class Diagram**은 Javac가 확인한 상속·구현·중첩 타입, 필드 연관, 메서드 의존 관계를 표시합니다. **Relationship source links**에서 타입이나 호출 위치를 열고, 소스를 저장한 뒤 **Refresh**로 관계를 갱신할 수 있습니다. 현재 관계 필터를 Mermaid로 내보낼 수 있습니다. **Trace Java Local Value**는 직선형 메서드에서 지역값의 정의와 사용 범위를 연결합니다.
 13. **Search or Replace Java Structure**는 Java 파일이나 프로젝트에서 Javac AST 패턴을 찾습니다. `$name$`으로 식을 캡처하고 타입 제약을 지정합니다. 치환할 결과를 선택해 변경 내역을 검토하면 적용 전에 Javac로 새 소스를 검사합니다.
 14. **Extract Java Interface**는 선택한 Java 클래스의 메서드로 같은 패키지에 인터페이스를 만듭니다. `rocketbrain.java.extractInterface.replaceUsages`를 켜면 호환되는 사용처 변경도 검토할 수 있습니다. 새 파일과 기존 소스 변경을 컴파일 검사와 diff에서 확인합니다.
 15. **Show Spring Bean Dependency Graph**는 선택된 주입, 모호한 후보, 지연 조회를 구분합니다. 선택한 Bean의 의존 관계와 순환, 선언·주입 소스를 탐색합니다. **Open Spring Actuator Health**는 연결한 실행 앱이 공개한 상태, 그룹과 구성 요소를 확인합니다.
