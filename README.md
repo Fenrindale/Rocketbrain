@@ -419,3 +419,5 @@ Use **Review Database Password Rotation** to review an exact existing account on
 The supported path covers unlocked, unexpired accounts with one password method. Already authenticated sessions stay connected. Update clients that use the rotated account before opening another session.
 
 For supported MySQL and MariaDB joined mutations, SQL completion resolves SET targets, value and filter columns, and explicit DELETE target aliases using the visible catalog. Qualify a shared column by its exact alias. Suggestions for assignment targets omit generated and auto-increment columns and keep read columns available. Completion only inspects metadata. The server checks statement validity and write permissions when you run the SQL.
+
+For a named MySQL or MariaDB profile, choose **No password** only when the server already allows that database user to connect without a password. Verify and save the profile to remove any previously saved password. Rocketbrain checks which account the server authenticated, and a portable export retains the mode without credentials. TLS and SSH settings still apply.
