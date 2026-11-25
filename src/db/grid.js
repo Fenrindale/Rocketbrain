@@ -1,6 +1,7 @@
 'use strict';
 const { randomUUID } = require('node:crypto');
 const { compileGridSort, observeSortCollations, sortOptions } = require('./grid-sort');
+const { protectionError, tableProtection } = require('./write-protection');
 const QUOTE = String.fromCharCode(96);
 const quote = name => QUOTE + name.replaceAll(QUOTE, QUOTE + QUOTE) + QUOTE;
 const fail = (code, message, extra = {}) => Object.assign(new Error(message), { code, ...extra });
@@ -430,8 +431,13 @@ class TableEditor {
       throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The related key columns changed. Follow the relation again.');
     }
     const pk = definition.columns.filter(column => column.primaryKey);
+    const restriction = tableProtection(this.db._writeProtection, schema, definition.name);
+    if (this.db._writeProtection?.tables.length && !session.readOnly && definition.kind !== 'BASE TABLE') {
+      throw protectionError('Use a read-only console to browse views while this profile protects tables.');
+    }
     let reason = '';
     if (related) reason = 'Related rows are opened in a read-only preview.';
+    else if (restriction) reason = restriction;
     else if (definition.kind !== 'BASE TABLE') reason = 'Views and arbitrary SQL results are read-only.';
     else if (String(definition.engine).toUpperCase() !== 'INNODB') reason = 'Editing currently requires an InnoDB table for transactional rollback.';
     else if (!pk.length) reason = 'A primary key is required to identify edited rows safely.';
@@ -462,6 +468,8 @@ class TableEditor {
     this._prune();
     const session = this.db._session(sessionId), model = this.models.get(modelId);
     if (!model || model.sessionId !== sessionId || model.connectionId !== session.connectionId) throw fail('ROCKETBRAIN_GRID_STALE', 'This table snapshot expired or its session changed. Refresh the table.');
+    const restriction = tableProtection(this.db._writeProtection, this.db._options.database, model.definition.name);
+    if (restriction) throw protectionError(restriction);
     if (!model.canEdit) throw fail('ROCKETBRAIN_GRID_READ_ONLY', 'This table is structurally read-only.');
     if (session.readOnly) throw fail('ROCKETBRAIN_READ_ONLY', 'Enable read/write mode explicitly before reviewing table changes.');
     if (![updates, deletes, inserts].every(Array.isArray) || updates.length + deletes.length + inserts.length < 1 || updates.length + deletes.length + inserts.length > MAX_CHANGES) throw fail('ROCKETBRAIN_GRID_CHANGESET', 'Review between 1 and 500 row changes at a time.');
@@ -516,6 +524,8 @@ class TableEditor {
       if (!review || review.sessionId !== sessionId || !this.models.has(review.modelId) || review.model.connectionId !== session.connectionId) throw fail('ROCKETBRAIN_GRID_STALE', 'This reviewed change set expired, was already used or belongs to another session.');
       if (session.readOnly) throw fail('ROCKETBRAIN_READ_ONLY', 'Enable read/write mode explicitly before applying table changes.');
       const model = review.model;
+      const restriction = tableProtection(this.db._writeProtection, this.db._options.database, model.definition.name);
+      if (restriction) throw protectionError(restriction);
       let definition = await this.definition(model.definition.name);
       if (fingerprint(definition) !== model.fingerprint) { this.invalidate(sessionId); throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The table schema or trigger visibility changed. Refresh and review the edits again.'); }
       const previousTransaction = session.inTransaction, autoCommit = session.autocommit, savepoint = 'rb_grid_' + randomUUID().replaceAll('-', '');

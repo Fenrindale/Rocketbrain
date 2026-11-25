@@ -232,6 +232,8 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 
 ## DB 사용
 
+MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 읽기 전용으로 잠그거나 보호할 `schema.table`을 줄마다 지정합니다. 보호 설정을 바꾸려면 해당 프로필의 연결을 끊고 다시 연결합니다. 보호된 테이블의 결과 그리드는 조회용으로 열립니다. 테이블 보호가 설정된 프로필에서 테이블과 뷰를 조회하는 SQL은 읽기 전용 콘솔에서 실행합니다. 쓰기는 대상 InnoDB 테이블 하나의 트리거와 연쇄 변경 위험을 확인한 경우에 허용됩니다. 저장 함수의 실행 권한과 외부 클라이언트의 쓰기에는 서버 계정과 트랜잭션 권한이 적용됩니다.
+
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
 
 - **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. 외부 파일 접근과 쓰기는 차단하며 결과는 표본으로 표시합니다.

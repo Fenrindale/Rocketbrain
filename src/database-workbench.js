@@ -574,6 +574,10 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     });
   });
   command('rocketbrain.consoleMode', () => sessionAction(async id => {
+    if (state.db.getSessionState(id).writeProtection?.connectionReadOnly) {
+      void vscode.window.showInformationMessage('This connection profile is locked to read-only mode.');
+      return;
+    }
     const choice = await vscode.window.showQuickPick([
       { label: 'Read only', description: 'Reject write SQL in this console', readOnly: true, autocommit: true },
       { label: 'Read/write · manual commit', description: 'Changes remain pending until Commit or Roll Back', readOnly: false, autocommit: false },
@@ -686,6 +690,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     async withDatabaseAdmin(action,{write=false}={}){
       if(typeof action!=='function')throw Error('Choose a database catalog or privilege operation.');
       assertExclusiveReady();
+      const protection = state.db.getSessionState().writeProtection;
+      if (write && protection) {
+        throw Error(protection.connectionReadOnly ? 'This connection profile is locked to read-only mode.'
+          : 'Database-wide writes are unavailable while this profile protects tables.');
+      }
       if(write&&(pendingTableDraft()||[...bindings.values()].some(binding=>{
         const session=state.db.getSessionState(binding.id);
         return session?.inTransaction||session?.outcomeUnknown||session?.needsReconnect;

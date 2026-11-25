@@ -4,6 +4,7 @@ const {connectionSecurity,bindConnectionResource,identifyConnection,dnsName}=req
 const {openTunnel}=require('./connection-tunnel');
 const { normalizeLocalTransport, transportKey } = require('./local-transport');
 const { normalizeRdsIam, validateRdsIamRoute } = require('./rds-iam');
+const { normalizeWriteProtection } = require('./write-protection');
 const savedFailures=new WeakMap();
 const persistedProfileOnFailure=error=>savedFailures.get(error)||null;
 const KEY='rocketbrain.database.profiles.v1',SCOPE='rocketbrain.database.secretScope.v1',MAX=32;
@@ -13,7 +14,7 @@ function text(value,label,max,optional=false){if(optional&&(value===undefined||v
 function port(value,otherwise){value=value??otherwise;if(!Number.isInteger(value)||value<1||value>65535)throw fail('Ports must be integers from 1 to 65535.');return value;}
 function localPath(value,label,optional=true){if(optional&&!value)return'';const result=text(value,label,4096);if(!path.isAbsolute(result)||/^\\\\/.test(result))throw fail('Select a local absolute '+label+' path.');return result;}
 function normalizeProfile(value,{allowUnconfigured=false}={}){
- exact(value,['id','name','group','color','host','port','user','database','tls','ssh','transport','auth']);
+ exact(value,['id','name','group','color','host','port','user','database','tls','ssh','transport','auth','writeProtection']);
  const id=value.id||crypto.randomUUID();if(!/^[a-f0-9-]{36}$/i.test(id))throw fail('The profile identity is invalid.');
  const transport=normalizeLocalTransport(value.transport,{allowUnconfigured});
  let route;
@@ -35,6 +36,8 @@ function normalizeProfile(value,{allowUnconfigured=false}={}){
   validateRdsIamRoute(p,p.tls.mode==='verify'?{serverName:p.tls.serverName,cert:p.tls.certPath,key:p.tls.keyPath}:undefined);
   if(!allowUnconfigured&&!p.tls.caPath)throw fail('Select the AWS RDS CA bundle for this IAM profile.');
  }
+ const writeProtection=normalizeWriteProtection(value.writeProtection);
+ if(writeProtection)p.writeProtection=writeProtection;
  return p;
 }
 function password(value){if(value===undefined)return undefined;if(typeof value!=='string'||Buffer.byteLength(value)>16384||value.includes('\0'))throw fail('Use a database password under 16 KiB.');return value;}
@@ -65,11 +68,13 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   if(profile.transport&&!profile.transport.address)throw fail('Edit this profile and enter the local socket path or pipe name before connecting.');
   if(profile.auth&&(!profile.auth.source||!profile.tls.caPath))throw fail('Select the local AWS credential source and RDS CA bundle before connecting.');
   const route=profile.transport?{transport:profile.transport}:{host:profile.host,port:profile.port};
-  const config={...route,user:profile.user,database:profile.database,password:pass,readOnly:true,...(profile.auth?{auth:profile.auth}:{})};
+  const config={...route,user:profile.user,database:profile.database,password:pass,readOnly:true,
+   ...(profile.auth?{auth:profile.auth}:{}),...(profile.writeProtection?{writeProtection:profile.writeProtection}:{})};
   if(profile.tls.mode==='verify'){config.ssl={rejectUnauthorized:true,verifyIdentity:true,serverName:profile.tls.serverName};for(const [field,file]of [['ca',profile.tls.caPath],['cert',profile.tls.certPath],['key',profile.tls.keyPath]])if(file)config.ssl[field]=await readPem(file);connectionSecurity(config);}
   const observedRoute=profile.transport?{transport:{kind:profile.transport.kind}}:route;
   const info={id:profile.id,name:profile.name,group:profile.group,color:profile.color,...observedRoute,database:profile.database,tls:profile.tls.mode==='verify',ssh:Boolean(profile.ssh),
    ...(profile.auth?{authentication:profile.auth.kind}:{}),
+   ...(profile.writeProtection?{writeProtection:profile.writeProtection}:{}),
    connectionKey:require('./result-layouts').tableLayoutConnectionKey(config,profile)};
   let tunnel;if(profile.ssh){tunnel=await createTunnel(profile.ssh,{host:profile.host,port:profile.port},{cancellation:signal,onExit:()=>events.emit('change')});return{config:bindConnectionResource(config,{endpoint:tunnel.endpoint,dispose:tunnel.dispose,profile:info}),dispose:tunnel.dispose};}
   return{config:identifyConnection(config,info),dispose:async()=>{}};
@@ -80,7 +85,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   list,
   onDidChange(listener){events.on('change',listener);return{dispose(){events.off('change',listener);}};},
   test(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),pass=await credentials(p,input.password),result=await verify(p,pass,signal,true);guard(ticket);return result;});},
-  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&p.auth)throw fail('RDS IAM profiles use temporary tokens without saving a database password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal);else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal);trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
+  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection))throw fail('Disconnect this profile before changing its write protection.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&p.auth)throw fail('RDS IAM profiles use temporary tokens without saving a database password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal);else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal);trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
   connect(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const effective=clone(record.profile);if(input.database!==undefined)effective.database=text(input.database,'schema',64);const pass=await credentials(effective,input.password);let prepared,transferred=false;try{prepared=await prepare(effective,pass,signal);guard(ticket);await connect(prepared.config);transferred=true;guard(ticket);return{connected:true,profile:clone(effective),credentialSaved:record.rememberPassword};}finally{if(!transferred)await prepared?.dispose();}});},
   schemas(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const pass=await credentials(record.profile,input.password),result=await verify(record.profile,pass,signal,true);guard(ticket);return result.schemas;});},
   federatedSelect(request) {
@@ -131,18 +136,20 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     if(p.auth)p.auth={kind:p.auth.kind,region:p.auth.region};
     return p;
    });
-   return{format:'RocketbrainConnectionProfiles',version:profiles.some(p=>p.auth)?3:profiles.some(p=>p.transport)?2:1,credentialsIncluded:false,profiles};
+   const version=profiles.some(p=>p.writeProtection)?4:profiles.some(p=>p.auth)?3:profiles.some(p=>p.transport)?2:1;
+   return{format:'RocketbrainConnectionProfiles',version,credentialsIncluded:false,profiles};
   },
   importProfiles(request){
    const input=clone(request);
    return run(async()=>{
     exact(input,['format','version','credentialsIncluded','profiles']);
-    if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3].includes(input.version)||input.credentialsIncluded!==false||!Array.isArray(input.profiles)||input.profiles.length+records.size>MAX||Buffer.byteLength(JSON.stringify(input))>256*1024)throw fail('Use a credential-free profile export of at most 32 profiles and 256 KiB.');
+    if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3,4].includes(input.version)||input.credentialsIncluded!==false||!Array.isArray(input.profiles)||input.profiles.length+records.size>MAX||Buffer.byteLength(JSON.stringify(input))>256*1024)throw fail('Use a credential-free profile export of at most 32 profiles and 256 KiB.');
     const normalized=input.profiles.map(value=>{
+     if(value?.writeProtection!==undefined&&input.version!==4)throw fail('Write protection requires the current profile export format.');
      if(value?.ssh)throw fail('Re-enter verified SSH host/key paths locally before importing an SSH profile.');
      if(value?.transport&&(input.version===1||Object.hasOwn(value.transport,'address')))throw fail('Re-enter local socket paths and pipe names in the connection editor after importing.');
      if(value?.auth){
-      if(input.version!==3)throw fail('RDS IAM profiles require the current export format.');
+      if(input.version<3)throw fail('RDS IAM profiles require the current export format.');
       exact(value.auth,['kind','region']);
       if(value.tls?.caPath||value.tls?.certPath||value.tls?.keyPath)throw fail('Select the RDS CA bundle locally after importing an IAM profile.');
      }

@@ -18,6 +18,7 @@ const { SchemaApplier } = require('./schema-apply');
 const scriptEngine=require('./sql-script');
 const {randomUUID}=require('node:crypto');
 const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTimeout } = require('./rds-iam');
+const { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope } = require('./write-protection');
 const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 const METADATA_ID = '__rocketbrain_metadata__';
 function fail(code, message, extra = {}) { return Object.assign(new Error(message), { code, ...extra }); }
@@ -106,6 +107,7 @@ function newSession(id, readOnly, database) {
 class MysqlService {
   constructor(config, { createConnection, reportActivity, mintIamToken } = {}) {
     this._options = connectionOptions(config);
+    this._writeProtection = normalizeWriteProtection(config.writeProtection);
     const security = require('./connection-security').connectionSecurity(config);Object.assign(this._options,security.options);this._connectionCleanup=security.dispose;
     if (config.auth !== undefined) {
       const auth = normalizeRdsIam(config.auth);
@@ -116,7 +118,7 @@ class MysqlService {
       }
       this._rdsIam = () => createRdsIamHandshake({ host, user, port, auth }, mintIamToken);
     }
-    this._defaultReadOnly = config.readOnly !== false;
+    this._defaultReadOnly = this._writeProtection?.connectionReadOnly || config.readOnly !== false;
     this._createConnection = createConnection || (options => require('mysql2').createConnection(options));
     this._reportActivity = reportActivity;
     this._sessions = new Map([['default', newSession('default', this._defaultReadOnly, this._options.database)]]);
@@ -144,12 +146,14 @@ class MysqlService {
   }
   _state(session) {
     const { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect } = session;
-    return { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect, busy: Boolean(session.active||session.scriptRunning) };
+    return { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect, busy: Boolean(session.active||session.scriptRunning),
+      ...(this._writeProtection && { writeProtection: structuredClone(this._writeProtection) }) };
   }
   getSessionState(id = 'default') { return this._state(this._session(id)); }
   async openSession(id, { readOnly = this._defaultReadOnly } = {}) {
     this._assertOpen(); this._id(id);
     if (typeof readOnly !== 'boolean') throw new Error('readOnly must be a boolean.');
+    requireConnectionMode(this._writeProtection, readOnly);
     let session = this._sessions.get(id);
     if (!session) {
       if (this._sessions.size >= 32) throw new Error('Close an unused console before opening more than 32 sessions.');
@@ -191,6 +195,7 @@ class MysqlService {
     if (abort && active) active.abort(reason);
   }
   async _ensureConnection(session) {
+    requireConnectionMode(this._writeProtection, session.readOnly);
     if (session.connection && session.connected) return;
     if (session.needsReconnect) throw fail('ROCKETBRAIN_RECONNECT_REQUIRED', 'Reconnect this console explicitly before running SQL.');
     let connection;
@@ -231,6 +236,9 @@ class MysqlService {
     } catch (error) { this._lose(session, error); throw error; }
   }
   _control(session, sql, timeoutMs = 5000) {
+    if (this._writeProtection?.connectionReadOnly && /\bREAD[\s]+WRITE\b/i.test(sql)) {
+      return Promise.reject(protectionError('This connection profile is locked to read-only mode.'));
+    }
     return new Promise((resolve, reject) => {
       let finished = false;
       const finish = (error, result) => {
@@ -294,6 +302,7 @@ class MysqlService {
     const session=this._session(sessionId);
     return this._enqueue(session,async()=>{
       const context=await this._scriptContext(session),script=scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly});
+      await this._protectScript(session, script, context);
       return structuredClone({...scriptEngine.publicScript(script),...context,sessionId,state:this._state(session)});
     });
   }
@@ -302,6 +311,7 @@ class MysqlService {
     if(!Number.isInteger(totalTimeoutMs)||totalTimeoutMs<100||totalTimeoutMs>scriptEngine.LIMITS.totalTimeoutMs)throw fail('ROCKETBRAIN_SCRIPT_LIMIT','Script timeout must be100ms to120000ms.');
     return this._enqueue(session,async()=>{
       const context=await this._scriptContext(session),script=scriptEngine.bindScript(scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly}),options.parameters);
+      await this._protectScript(session, script, context);
       if(script.requiresImplicitCommitApproval&&session.inTransaction)throw fail('ROCKETBRAIN_SCRIPT_TRANSACTION','Commit or roll back the existing transaction before reviewing a DDL script.');
       for(const [id,review]of this._scriptReviews)if(Date.now()>review.expiresAt)this._scriptReviews.delete(id);
       while(this._scriptReviews.size>=scriptEngine.LIMITS.reviews)this._scriptReviews.delete(this._scriptReviews.keys().next().value);
@@ -311,6 +321,16 @@ class MysqlService {
     });
   }
   discardScript(reviewId){return this._scriptReviews.delete(reviewId);}
+  async _protectScript(session, script, context) {
+    if (!this._writeProtection) return;
+    const targets = new Map();
+    for (const statement of script.statements) {
+      const target = requireStatementScope(this._writeProtection, statement.preparedSql || statement.sql, context.database,
+        { mayWrite: statement.mayWrite, readOnly: session.readOnly, sqlMode: context.sqlMode, userSql: true });
+      if (target) targets.set(JSON.stringify([target.schema, target.name]), target);
+    }
+    for (const target of targets.values()) await this._ensureSafeProtectedTarget(target);
+  }
   async runScript({reviewId,allowImplicitCommit=false,allowUnboundedDml=false,onStatement,cancellation}={}){
     this._assertOpen();const review=this._scriptReviews.get(reviewId);
     if(!review||Date.now()>review.expiresAt)throw fail('ROCKETBRAIN_SCRIPT_STALE','The script review expired or was already consumed. Review again.');
@@ -326,6 +346,7 @@ class MysqlService {
       const context=await this._scriptContext(session),state=this._state(session);
       const stateKeys=['readOnly','autocommit','inTransaction','transactionState','connectionId','needsReconnect','outcomeUnknown'];
       if(review.session!==session||session.cancellationVersion!==review.cancellationVersion||stateKeys.some(key=>state[key]!==review.state[key])||JSON.stringify(context)!==JSON.stringify(review.context))throw fail('ROCKETBRAIN_SCRIPT_STALE','The console connection, transaction mode or SQL mode changed after script review. Review again.');
+      await this._protectScript(session, review.script, context);
       if(review.script.requiresImplicitCommitApproval&&session.inTransaction)throw fail('ROCKETBRAIN_SCRIPT_TRANSACTION','An existing transaction must be explicitly finished before DDL script execution.');
       this._scriptReviews.delete(reviewId);
       session.scriptRunning=true;
@@ -341,7 +362,7 @@ class MysqlService {
           if(session.closed||session.needsReconnect||!session.connected){resultState='stopped';stopReason='connection-unavailable';break;}
           if(elapsed>=review.totalTimeoutMs){resultState='stopped';stopReason='script-time-limit';break;}
           entry.stateBefore=this._state(session);const statementStart=performance.now();let result,error;
-          try{result=await this._stream(session,statement.preparedSql,statement.values,{maxRows:review.bounded.maxRows,timeoutMs:Math.max(1,Math.floor(Math.min(review.bounded.timeoutMs,review.totalTimeoutMs-elapsed)))},statement.mayWrite,{category:'script',operation:statement.first});}catch(failure){error=failure;}
+          try{result=await this._stream(session,statement.preparedSql,statement.values,{maxRows:review.bounded.maxRows,timeoutMs:Math.max(1,Math.floor(Math.min(review.bounded.timeoutMs,review.totalTimeoutMs-elapsed)))},statement.mayWrite,{category:'script',operation:statement.first,sqlMode:context.sqlMode});}catch(failure){error=failure;}
           if(session.connected)try{await this._refreshState(session);}catch(failure){if(statement.mayWrite)session.outcomeUnknown=true;if(!error)error=fail('ROCKETBRAIN_STATE_UNAVAILABLE','The statement finished but its transaction state could not be confirmed.',{queryCompleted:Boolean(result)});}
           if(statement.mayWrite)this._editor.invalidate(session.id);
           entry.durationMs=Math.round((performance.now()-statementStart)*100)/100;entry.stateAfter=this._state(session);
@@ -361,7 +382,22 @@ class MysqlService {
       return {reviewId,sessionId:session.id,scriptHash:scriptEngine.digest(review.script.sql),state:resultState,statements,completed,failed,notRun:statements.filter(entry=>entry.status==='not-run').length,stopReason,durationMs:Math.round((performance.now()-started)*100)/100,stateBefore,stateAfter:this._state(session),atomic:false,autoRetried:false,resultBytes:bytes,parameterBindingsIncluded:false,resultMayContainParameterValues:true};
     });
   }
-  _stream(session, sql, values, { maxRows, timeoutMs }, mayWrite, activity) {
+  async _ensureSafeProtectedTarget({ schema, name }) {
+    const definition = await this._editor.definition(name, schema);
+    if (definition.kind !== 'BASE TABLE' || String(definition.engine).toUpperCase() !== 'INNODB'
+      || !definition.triggerVisibility || definition.triggers.length) {
+      throw protectionError('This profile permits writes only to InnoDB base tables with verified trigger visibility and no triggers.');
+    }
+    const cascades = await this._metadataQuery(
+      "SELECT CONSTRAINT_NAME FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE UNIQUE_CONSTRAINT_SCHEMA=? AND REFERENCED_TABLE_NAME=? AND (UPDATE_RULE IN ('CASCADE','SET NULL','SET DEFAULT') OR DELETE_RULE IN ('CASCADE','SET NULL','SET DEFAULT')) LIMIT 1",
+      [schema, name]);
+    if (cascades.rows.length) throw protectionError('This write could cascade to other tables protected by the connection profile.');
+  }
+  async _stream(session, sql, values, { maxRows, timeoutMs }, mayWrite, activity) {
+    const userSql = activity?.category === 'query' || activity?.category === 'script';
+    const target = requireStatementScope(this._writeProtection, sql, session.database,
+      { mayWrite, readOnly: session.readOnly, userSql, sqlMode: activity?.sqlMode });
+    if (target) await this._ensureSafeProtectedTarget(target);
     const started = performance.now();
     return new Promise((resolve, reject) => {
       let finished = false, bytes = 0, reportOutcome;
@@ -466,6 +502,7 @@ class MysqlService {
   rollback(options = {}) { return this._transaction('ROLLBACK', options); }
   async setReadOnly(readOnly, options = {}) {
     if (typeof readOnly !== 'boolean') throw new Error('readOnly must be a boolean.');
+    requireConnectionMode(this._writeProtection, readOnly);
     const session = this._session(options.sessionId);
     return this._enqueue(session, async () => {
       await this._ensureConnection(session);
