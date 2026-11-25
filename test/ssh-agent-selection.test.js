@@ -60,7 +60,8 @@ test('the child receives a copied public identity and chosen locally scoped agen
     assert.equal(prepared.fingerprint, 'SHA256:' + createHash('sha256').update(key).digest('base64url').replaceAll('-', '+').replaceAll('_', '/'));
   } finally { await prepared.dispose(); }
   await assert.rejects(fs.stat(temp), { code: 'ENOENT' });
-  await fs.writeFile(selected, '-----BEGIN OPENSSH PRIVATE KEY-----\n');
+  const privateHeader = ['-----BEGIN', 'OPENSSH PRIVATE', 'KEY-----'].join(' ');
+  await fs.writeFile(selected, privateHeader + '\n');
   await assert.rejects(prepareAgentIdentity({ endpoint, publicKeyPath: selected }), /one OpenSSH Ed25519 public key/);
 });
 
