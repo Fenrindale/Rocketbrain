@@ -4,6 +4,7 @@ const https = require('node:https');
 const { validateRuntimeUrl } = require('../spring/runtime-client');
 const { normalizeSecurityTrace } = require('../spring/security-trace');
 const { normalizeReactiveSecurityTrace } = require('../spring/reactive-security-trace');
+const {normalizeFeignContracts}=require('../spring/feign-contract-trace');
 
 class ObserverError extends Error { constructor(code, message) { super(message); this.code = code; } }
 const consoleTypes = new Set(['java.lang.String','java.lang.Long','java.lang.Integer','java.lang.Short','java.lang.Byte','java.lang.Boolean',
@@ -173,6 +174,11 @@ class ObserverClient {
     const payload = await this.#request('reactive-security-trace');
     try { return normalizeReactiveSecurityTrace(payload); }
     catch { throw new ObserverError('INVALID_SCHEMA', 'Observer returned invalid reactive Spring Security trace metadata.'); }
+  }
+  async feignContracts() {
+    const payload=await this.#request('feign-contracts');
+    try {return normalizeFeignContracts(payload);}
+    catch {throw new ObserverError('INVALID_SCHEMA','Observer returned invalid OpenFeign contract metadata.');}
   }
   async validate(query, factoryId) {
     if (typeof query !== 'string' || !query.trim() || Buffer.byteLength(query) > 16384 || query.includes('\0')) throw new ObserverError('INVALID_QUERY','Select a query of at most 16 KiB.');

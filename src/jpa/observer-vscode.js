@@ -6,14 +6,15 @@ const {summarizePerformance} = require('./fetch-performance');
 const {registerJpaConsole} = require('./console-vscode');
 const {registerSecurityTrace} = require('../spring/security-trace-vscode');
 const {registerReactiveSecurityTrace} = require('../spring/reactive-security-trace-vscode');
+const {registerFeignContracts}=require('../spring/feign-contract-trace-vscode');
 
 function registerObserver(context,vscode,output,{source}) {
   const events = new vscode.EventEmitter(), subscriptions=[events];
-  let current=emptySnapshot(), client, generation=0, snapshotRequest=0, validationRequest=0, disposed=false, consoleView,securityView,reactiveSecurityView;
+  let current=emptySnapshot(), client, generation=0, snapshotRequest=0, validationRequest=0, disposed=false, consoleView,securityView,reactiveSecurityView,feignView;
   const snapshot=()=>structuredClone(current);
   const performance=()=>summarizePerformance(current.performance);
   const emit=()=>{if(!disposed)events.fire(snapshot());};
-  function clearViews(){consoleView?.clear();securityView?.close();reactiveSecurityView?.close();}
+  function clearViews(){consoleView?.clear();securityView?.close();reactiveSecurityView?.close();feignView?.close();}
   function disconnect(){generation++;snapshotRequest++;client?.dispose();clearViews();client=undefined;current=emptySnapshot();emit();return snapshot();}
   function trusted(){if(disposed)throw new ObserverError('DISPOSED','Observer is closed.');if(!vscode.workspace.isTrusted){disconnect();throw new ObserverError('UNTRUSTED','Trust the workspace before connecting to a provider observer.');}}
   async function inputs(){
@@ -121,13 +122,14 @@ function registerObserver(context,vscode,output,{source}) {
   }
   const command=(name,action)=>subscriptions.push(vscode.commands.registerCommand(name,async(...args)=>{try{return await action(...args);}catch(error){output.appendLine('JPA observer: '+error.message);await vscode.window.showErrorMessage(error.message);}}));
   consoleView=registerJpaConsole(vscode,{source,target:consoleConnection,command});
-  const securityOptions={command,target(){
+  const observerViewOptions={command,target(){
     trusted();if(!client)throw new ObserverError('NOT_CONNECTED','Connect to a local JVM observer first.');
     const candidate=client,epoch=generation;
-    return {client:candidate,assertCurrent(){trusted();if(epoch!==generation||client!==candidate)throw new ObserverError('STALE','The observer changed during the Spring Security inspection.');}};
+    return {client:candidate,assertCurrent(){trusted();if(epoch!==generation||client!==candidate)throw new ObserverError('STALE','The observer changed during runtime inspection.');}};
   }};
-  securityView=registerSecurityTrace(vscode,securityOptions);
-  reactiveSecurityView=registerReactiveSecurityTrace(vscode,securityOptions);
+  securityView=registerSecurityTrace(vscode,observerViewOptions);
+  reactiveSecurityView=registerReactiveSecurityTrace(vscode,observerViewOptions);
+  feignView=registerFeignContracts(vscode,observerViewOptions);
   command('rocketbrain.jpa.observer.connect',()=>connect());command('rocketbrain.jpa.observer.refresh',refresh);command('rocketbrain.jpa.observer.disconnect',disconnect);command('rocketbrain.jpa.observer.validate',validateSelection);
   command('rocketbrain.jpa.observer.inspect',async()=>{const report={snapshot:snapshot(),comparison:await compareSource()};const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(report,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return report;});
   command('rocketbrain.jpa.observer.inspectPerformance',inspectPerformance);
