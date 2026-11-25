@@ -3,6 +3,7 @@ const http = require('node:http');
 const https = require('node:https');
 const { validateRuntimeUrl } = require('../spring/runtime-client');
 const { normalizeSecurityTrace } = require('../spring/security-trace');
+const { normalizeReactiveSecurityTrace } = require('../spring/reactive-security-trace');
 
 class ObserverError extends Error { constructor(code, message) { super(message); this.code = code; } }
 const consoleTypes = new Set(['java.lang.String','java.lang.Long','java.lang.Integer','java.lang.Short','java.lang.Byte','java.lang.Boolean',
@@ -167,6 +168,11 @@ class ObserverClient {
     const payload=await this.#request('security-trace');
     try {return normalizeSecurityTrace(payload);}
     catch {throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Spring Security trace metadata.');}
+  }
+  async reactiveSecurityTrace() {
+    const payload = await this.#request('reactive-security-trace');
+    try { return normalizeReactiveSecurityTrace(payload); }
+    catch { throw new ObserverError('INVALID_SCHEMA', 'Observer returned invalid reactive Spring Security trace metadata.'); }
   }
   async validate(query, factoryId) {
     if (typeof query !== 'string' || !query.trim() || Buffer.byteLength(query) > 16384 || query.includes('\0')) throw new ObserverError('INVALID_QUERY','Select a query of at most 16 KiB.');
