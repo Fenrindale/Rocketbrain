@@ -1,5 +1,5 @@
 {
-  "version": "0.93.0",
+  "version": "0.94.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,31 @@
     }
   },
   "summary": {
-    "implemented": 137,
-    "partial": 65,
+    "implemented": 139,
+    "partial": 63,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 84,
+    "percent": 84.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-007",
-    "DG-037",
-    "DG-038",
-    "DG-080"
+    "IDEA-020",
+    "IDEA-102",
+    "DG-001",
+    "DG-002",
+    "DG-024"
   ],
   "expandedFeatures": [
-    "IDEA-007",
-    "DG-037",
-    "DG-038",
-    "DG-080"
+    "IDEA-020",
+    "IDEA-102",
+    "DG-001",
+    "DG-002",
+    "DG-024"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -241,8 +243,8 @@
       "verification": {
         "state": "v0.93-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.93.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -605,24 +607,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "Javac가 확인한 직선형 Java 메서드에서 지역 스칼라·String 할당의 입력과 사용을 추적하고 정확한 원본 범위로 이동한다.",
+      "scope": "Java 소스의 정확한 직접 호출에서 인자·매개변수·반환값, null 가능성 및 호출자 문맥을 양방향으로 추적한다.",
       "remaining": [
-        "분기·루프, 객체 별칭과 힙, 메서드 간 값 흐름을 분석한다."
+        "일반 분기·루프·예외와 동적 호출 및 힙·별칭 해석을 확장한다."
       ],
       "verification": {
-        "state": "v0.33-installed-coverage",
+        "state": "v0.94-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.33.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring 작업 공간에서 매개변수·할당·반환과 원본 위치를 대조했다. 수정 뒤 이전 범위를 거부했고 분기와 취소를 확인했다.",
+        "testedScope": "실제 Spring 프로젝트에서 같은 메서드의 오버로드를 구분하고, 소스 이동·호출자 분리·null 경로·오래된 탐색과 재귀 거부를 설치판에서 확인했다.",
         "publicEvidence": [
-          "runtime/java-signature/src/rocketbrain/signature/SignatureInspector.java",
-          "src/java/source-analysis-model.js",
-          "src/java/source-analysis-vscode.js",
-          "test/java-source-analysis-host.js"
+          "docs/java-call-flow.md",
+          "test/java-call-flow-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3075,23 +3075,21 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "HTTP 파일의 선택 요청을 명시적으로 보내고 환경 변수, Secret Storage 인증 헤더, 응답 표시와 취소를 제공한다. 상태·헤더·JSON 경로의 예상값을 확인한다.",
+      "scope": "HTTP 요청의 URL·JSON 파생값과 논리·범위·존재 조건을 조합해 이름 있는 응답 검사를 실행한다.",
       "remaining": [
-        "사용자 검증 스크립트, 인증 프로토콜 자동 협상, 파일 업로드와 응답 기록을 확장한다."
+        "바이너리 본문, 쿠키 공유, 인증 프로토콜 협상, 범용 선행·응답 처리 단계가 남는다."
       ],
       "verification": {
-        "state": "v0.30-installed-coverage",
+        "state": "v0.94-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.30.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "최종 VSIX의 HTTP 명령으로 실제 Spring·JDBC 조회의 응답 조건 네 개를 확인했다. 소유 HTTP 서버에서 인증, 비밀값 표시 제거, 응답 제한과 취소를 검증했다.",
+        "testedScope": "두 실제 Spring JDBC 응답에서 URL 경로 파생값을 보내고, 통과한 검사 4개 및 비교 실패·미확정 2개를 분리했다.",
         "publicEvidence": [
           "src/http/client.js",
-          "src/http/vscode.js",
-          "test/http-client.test.js",
           "test/http-client-host.js"
         ],
         "originalProductParityVerified": false
@@ -3644,26 +3642,23 @@
       "category": "연결·드라이버",
       "feature": "MySQL 데이터 소스 생성·연결 검사",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "실제 MySQL8.4에서 자체 연결·오류 처리·형식 왕복을 검증했다.",
-      "remaining": [
-        "MySQL9 및 전체 시간대·인증/형식 조합 검증이 남는다."
-      ],
+      "scope": "MySQL 8 및 9 시험 서버의 연결과 인증 오류를 확인하고 utf8mb4, 시간대·정밀 수 및 해당 서버의 실제 VECTOR를 결과 모델에 보존한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.94-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "testedScope": "MySQL 8.4.13과 9.7.4에서 실제 정상·오류 연결, utf8mb4, +05:30 TIMESTAMP의 6자리 소수초, DECIMAL·unsigned BIGINT를 검증했다. MySQL 9의 VECTOR 통신과 텍스트·바인딩 조회에서 SQL NULL 보존도 확인했다.",
         "publicEvidence": [
-          "src/database-workbench.js",
-          "src/db/mysql.js",
-          "src/db/metadata.js"
+          "src/db/vector-result.js",
+          "test/mysql-native-vector-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3677,23 +3672,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "MariaDB11.4 실제 연결·세션·grid·Spring/JPA 대조를 검증했다.",
+      "scope": "MariaDB 고유 시퀀스·JSON·패키지 메타데이터와 Oracle 모드의 스칼라 패키지 함수 출력을 처리한다.",
       "remaining": [
-        "MariaDB 전용 package·dialect·버전 전체 지원이 남는다."
+        "MariaDB 10.11·12의 시퀀스·패키지·JSON·메타데이터를 각각 검증한다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.94-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "testedScope": "MariaDB 11.4.8에서 실제 스칼라 함수 반환과 IN OUT 소수, OUT BIGINT·NULL을 검증했다. MySQL에서는 일반 OUT 프로시저가 계속 동작했다.",
         "publicEvidence": [
-          "src/database-workbench.js",
-          "src/db/mysql.js",
-          "src/db/metadata.js"
+          "src/db/routine-package.js",
+          "test/routine-package-output-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4323,26 +4317,23 @@
       "category": "메타데이터·탐색",
       "feature": "루틴·인덱스·트리거·MariaDB package",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "MariaDB Oracle 모드와 SQL/PSM 패키지에서 공개 프로시저, 공개 스칼라 함수와 본문을 확인하고 승인한 유형의 호출 결과를 캡처한다.",
-      "remaining": [
-        "임의 패키지 타입·동적 호출과 일반 객체 소스 편집은 남는다."
-      ],
+      "scope": "관찰한 인덱스·루틴·트리거와 MariaDB 패키지를 탐색·갱신하고 명시적으로 검토한 스칼라 패키지 함수의 반환과 출력값을 확인한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.78-installed-coverage",
+        "state": "v0.94-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.78.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "MariaDB에서 실측 함수의 정밀 DECIMAL·NULL, INOUT·OUT, 읽기 전용 동작과 변경된 정의 거부를 확인했다. MySQL은 패키지 경로를 제한하고 기존 독립 프로시저의 정확한 출력은 유지했다.",
+        "testedScope": "실제 Oracle 모드 공개 함수와 서명을 탐색하고 정밀 반환·OUT 값을 보존했다. 비공개 함수와 쓰기 시도, 오래된 본문·검토 재사용을 거부했으며 MySQL의 일반 루틴을 비교했다.",
         "publicEvidence": [
-          "src/db/routine-package.js",
           "src/db/routine-call.js",
-          "test/routine-oracle-package-host.js"
+          "test/routine-package-output-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4709,8 +4700,8 @@
       "verification": {
         "state": "v0.93-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.93.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4738,8 +4729,8 @@
       "verification": {
         "state": "v0.93-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.93.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6000,8 +5991,8 @@
       "verification": {
         "state": "v0.93-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.93.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6493,8 +6484,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "0056248d6e4297c7882deb7f30619d1931c32fa88f5e053920822c5c7d10e305",
-    "sourceManifestSha256": "a3b350a6c993710fc56f48cc2f3aed43eae3b6fca513ce0487ca6df7295cb44e",
+    "vsixSha256": "65b0e6174b2d0fc395c2770bb84ff183d04de84c1014c68d4468df37a07f66cc",
+    "sourceManifestSha256": "c060593986b1cd2ee9a6d9aec9d67d1bd2f62cb3493f7bc0594563d7abbcde0c",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6508,28 +6499,23 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-007",
+      "id": "DG-001",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-037",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-080",
+      "id": "DG-024",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1844,
-    "pass": 1700,
+    "tests": 1854,
+    "pass": 1708,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 144,
+    "skipped": 146,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

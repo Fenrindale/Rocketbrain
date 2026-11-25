@@ -182,6 +182,8 @@ VSIX에서 `extension/dist/ide-mcp-server.js`를 추출하고, 같은 계정의 
 
 `.http` 파일에서 요청에 커서를 두고 **Send HTTP Request**를 실행합니다. `###`로 여러 요청을 구분하고, `@name = value` 또는 `rocketbrain.http.environments`에서 변수를 정의합니다. **Set HTTP Environment Secret**으로 저장한 값은 헤더나 본문에서 `{{secret.name}}`으로 참조합니다.
 
+요청 앞의 `# @derive query url-component "{{searchTerm}}"`은 검색어를 URL 구성 요소로 인코딩해 `{{query}}`에 넣습니다. `json-string`은 JSON 문자열로 이스케이프합니다. 파생 변수는 해당 요청의 일반 변수로 계산하며 Secret Storage 값에 접근하지 않습니다.
+
 gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 기준 `Proto: api/service.proto` 헤더를 사용합니다. 단일 요청은 JSON 객체, 클라이언트 스트림은 객체 배열을 입력합니다. 단항, 서버 스트림, 클라이언트 스트림, 양방향 스트림의 결과를 출력 창에서 확인할 수 있습니다. 현재는 자체 포함 `.proto` 파일을 사용합니다.
 
 **Review WebDAV Deployment**는 `rocketbrain.deploy.webdav`에 정의한 로컬·원격 폴더와 제외 패턴을 사용합니다. **Set WebDAV Password**로 필요한 비밀번호를 저장하고, 파일을 선택해 diff를 검토합니다. **Upload Reviewed WebDAV Files**는 비교한 ETag를 조건으로 전송하고 원격 파일이 바뀌면 충돌을 표시합니다. 기존 원격 폴더의 새 파일과 변경 파일을 업로드할 수 있습니다.
@@ -190,8 +192,11 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 @host = http://127.0.0.1:8080
 # @expect status 200
 # @expect json $.status == "UP"
+# @check healthy ["all",["gte","status",200],["lt","status",300],["eq","json:$.status","UP"]]
 GET {{host}}/actuator/health
 ```
+
+`# @check 이름 JSON식`을 요청 헤더 앞에 두면 여러 응답 조건을 한 검사로 묶을 수 있습니다. `all`, `any`, `not`과 `exists`, `eq`, `lt`, `lte`, `gt`, `gte`를 지원합니다. 값은 `status`, `header:헤더명`, `json:$.경로`에서 가져옵니다. 비교할 값이 없으면 비교 결과는 실패로 표시되고, 값의 부재는 `not`과 `exists`를 조합해 명시적으로 검사할 수 있습니다.
 
 응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI Description**은 Swagger 2.0과 OpenAPI 3.0·3.1의 JSON·YAML 작업을 읽습니다. 신뢰한 작업 공간에서 상대 경로로 연결한 경로 항목, 매개변수, 요청 본문과 스키마를 확인합니다. **Create HTTP Request from OpenAPI**로 요청 초안을 만들고, 환경과 매개변수를 채운 뒤 실행합니다. [OpenAPI 설명 상대 참조](https://spec.openapis.org/oas/v3.1.1.html#relative-references-in-api-description-uris)
 
@@ -352,6 +357,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Review Database Account or Role Creation**에서 대상 서버, 실행 계정, 새 로그인 계정의 정확한 호스트 또는 역할을 확인하고 한 번만 적용합니다. 암호는 확정 후 마스킹 입력창에서 받으며 Rocketbrain 검토 문서나 결과에 저장하지 않습니다. MariaDB는 생성한 역할의 관리자를 실행 계정으로 지정합니다. 서버에 계정 생성 권한과 좁은 계정 카탈로그 조회 권한이 필요합니다.
 - **Open Database Object Source**는 연결 계정에 보이는 스키마와 객체의 `SHOW CREATE` 원문을 읽기 전용 SQL 문서로 엽니다. DB 트리에서 바로 열거나 현재 객체의 원문을 새로 고칠 수 있습니다.
 - **Inspect Database View Impact**는 선택한 테이블이나 뷰를 직접·간접 참조하는 뷰와 경로를 최대 8개 선택 스키마에서 읽기 전용 보고서로 엽니다. 현재 계정에 보이는 메타데이터를 두 번 대조하며, 원문이 없거나 해석할 수 없는 뷰와 선택 범위 밖 참조를 따로 표시합니다. 계정에 완전히 숨겨진 객체의 영향은 확인할 수 없습니다.
+- MySQL 9의 네이티브 `VECTOR` 조회 결과를 일반·바인딩 SQL 결과 그리드에서 순서가 있는 값 배열로 읽습니다. SQL `NULL`과 실수 벡터를 구분하고, 유한한 원소 16,383개까지 표시합니다. 벡터 편집과 인덱스 관리는 별도 범위입니다.
 - **Go to Database Column Origin**은 SQL 편집기에서 선택한 열의 CTE·파생 테이블 별칭과 연결 계정으로 확인한 뷰 정의를 따라 원본 테이블의 열 선언을 엽니다. **Explain Database Column Origin**에서 경로와 열 타입을 확인할 수 있습니다. 원본을 찾을 수 있는 단일 열 전달을 지원하며, 계산 결과·재귀·집합 연산이나 확인할 수 없는 뷰에서 추적을 중단합니다. 일반 **Go to Definition**은 편집기 안의 별칭 정의로 계속 이동합니다.
 - **Open Database Source for Editing**의 트리거 편집은 MySQL 8.4와 MariaDB 11.4에서 현재 계정이 정의한 InnoDB 테이블의 BEFORE INSERT·UPDATE 트리거를 지원합니다. NEW 열에 대한 대입과 조건문을 빈 복제 테이블에서 컴파일한 뒤, 검토한 DROP·CREATE를 테이블 쓰기 잠금 아래 실행합니다. 연결이 끊기면 두 DDL 사이에 작업이 멈출 수 있으므로 적용과 복원 중에는 쓰기와 외부 스키마 변경을 중지합니다. 저장된 원문·생성 문맥·실행 순서를 재연결 후 확인해 복원할 수 있습니다.
 - **Open Database Source for Editing**에서는 기존의 결정적 `NO SQL` 스칼라 함수 중 숫자형 매개변수와 단일 `RETURN` 식을 편집할 수 있습니다. 원래 시그니처·소유자·보안·권한을 비교하고 검증용 객체를 컴파일한 뒤 실제 교체 SQL을 검토합니다. 앱 스키마의 의존 정의를 읽을 수 없거나 다른 객체의 참조·동적 SQL이 관찰되면 교체를 막습니다. `DROP`과 `CREATE` 사이에는 함수가 잠시 없어지므로 호출과 외부 스키마 변경을 중지해야 합니다. 보관된 원본은 검증된 상태에서 복원할 수 있습니다.
@@ -432,3 +438,5 @@ For a named MySQL or MariaDB profile, choose **No password** only when the serve
 Use **Review Database TLS Trust and Reconnect** on a saved MySQL or MariaDB profile with verified TLS. Compare the last saved TLS observation with the current certificate, issuer, expiry and loaded CA material. Approve to reconnect with that exact observed certificate. A changed certificate or CA file requires a fresh review.
 
 Use **Review Database Account Lock or Unlock** for an exact MySQL or MariaDB account. The review shows its current authentication and role policy and lists views, routines, triggers and events that name it as their definer. Rocketbrain requires observable server-wide inventory before applying. The lock controls fresh logins. Already authenticated sessions stay connected and stored objects keep their definers.
+
+**Review MariaDB Package Call** supports matching public Oracle-mode function signatures with scalar OUT and IN OUT parameters. Review the typed inputs, invocation and stored sources together. The dedicated read-only session captures the return value and output parameters in separate results, then rolls back.

@@ -82,6 +82,12 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   }
   else if(inspection.kind==='dataflow'&&Number.isSafeInteger(inspection.offset)&&inspection.offset>=0&&
     sources.some(item=>item.uri===inspection.uri&&inspection.offset<item.text.length))query.push('dataflow',inspection.uri,String(inspection.offset));
+  else if(inspection.kind==='callFlow'&&Number.isSafeInteger(inspection.offset)&&inspection.offset>=0&&
+    sources.some(item=>item.uri===inspection.uri&&inspection.offset<item.text.length)&&
+    (inspection.caller===undefined||Number.isSafeInteger(inspection.caller.start)&&inspection.caller.start>=0&&
+      sources.some(item=>item.uri===inspection.caller.uri&&inspection.caller.start<item.text.length))){
+    query.push('callFlow',inspection.uri,String(inspection.offset),inspection.caller?.uri||'',String(inspection.caller?.start??-1));
+  }
   else if(inspection.kind==='typeStructure'&&['inherited','nested'].includes(inspection.group)&&Number.isSafeInteger(inspection.offset)&&
     inspection.offset>=0&&sources.some(item=>item.uri===inspection.uri&&inspection.offset<=item.text.length)){
     query.push('typeStructure',inspection.uri,String(inspection.offset),inspection.group);

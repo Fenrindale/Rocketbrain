@@ -1,25 +1,25 @@
 {
-  "version": "0.93.0",
-  "verifiedAt": "2026-11-25T23:12:18.751Z",
+  "version": "0.94.0",
+  "verifiedAt": "2026-11-25T23:25:07.288Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.93.0.vsix",
-    "sha256": "0056248d6e4297c7882deb7f30619d1931c32fa88f5e053920822c5c7d10e305",
-    "bytes": 3733084,
+    "name": "rocketbrain-0.94.0.vsix",
+    "sha256": "65b0e6174b2d0fc395c2770bb84ff183d04de84c1014c68d4468df37a07f66cc",
+    "bytes": 3739799,
     "files": 22
   },
   "source": {
-    "frozenPublicInputs": 2212,
-    "inputVectorSha256": "a3b350a6c993710fc56f48cc2f3aed43eae3b6fca513ce0487ca6df7295cb44e",
+    "frozenPublicInputs": 2223,
+    "inputVectorSha256": "c060593986b1cd2ee9a6d9aec9d67d1bd2f62cb3493f7bc0594563d7abbcde0c",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1844,
-    "pass": 1700,
+    "tests": 1854,
+    "pass": 1708,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 144,
+    "skipped": 146,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "springQualifierCompletion",
+          "group": "javaCallFlow",
           "checks": 1
         },
         {
-          "group": "accountAccess",
+          "group": "mysqlNativeVector",
           "checks": 1
         },
         {
-          "group": "viewImpact",
+          "group": "packageFunctionOutput",
           "checks": 1
         },
         {
-          "group": "javaSqlSchemaRename",
+          "group": "httpResponseChecks",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "springQualifierCompletion",
+          "group": "javaCallFlow",
           "checks": 1
         },
         {
-          "group": "accountAccess",
+          "group": "mysqlNativeVector",
           "checks": 1
         },
         {
-          "group": "viewImpact",
+          "group": "packageFunctionOutput",
           "checks": 1
         },
         {
-          "group": "javaSqlSchemaRename",
+          "group": "httpResponseChecks",
           "checks": 1
         }
       ],
@@ -84,81 +84,96 @@
       }
     }
   ],
+  "additionalInstalledRuntimes": [
+    {
+      "engine": "mysql",
+      "database": {
+        "version": "9.7.4",
+        "product": "MySQL Community Server - GPL"
+      },
+      "groups": [
+        "mysqlNativeVector"
+      ],
+      "artifactSha256": "65b0e6174b2d0fc395c2770bb84ff183d04de84c1014c68d4468df37a07f66cc",
+      "sourceManifestSha256": "c060593986b1cd2ee9a6d9aec9d67d1bd2f62cb3493f7bc0594563d7abbcde0c"
+    }
+  ],
   "newlyVerified": {
-    "IDEA-007": {
-      "scope": "실제 Spring 프로젝트의 미완성 @Qualifier에서 타입·프로필과 별칭을 비교하고 설치판의 편집과 Undo를 확인했다.",
+    "IDEA-020": {
+      "scope": "실제 Spring 프로젝트에서 같은 메서드의 오버로드를 구분하고, 소스 이동·호출자 분리·null 경로·오래된 탐색과 재귀 거부를 설치판에서 확인했다.",
       "runtimeGroups": [
-        "springQualifierCompletion"
+        "javaCallFlow"
       ]
     },
-    "DG-037": {
-      "scope": "실제 Java 문자열 결합·텍스트 블록을 Spring JDBC에서 컴파일하고, 정확한 세 열 참조만 수정하여 이웃 동명 컬럼·주석·별칭 보존과 두 DB에서 변경 전후 조회를 확인했다.",
+    "IDEA-102": {
+      "scope": "두 실제 Spring JDBC 응답에서 URL 경로 파생값을 보내고, 통과한 검사 4개 및 비교 실패·미확정 2개를 분리했다.",
       "runtimeGroups": [
-        "javaSqlSchemaRename"
+        "httpResponseChecks"
       ]
     },
-    "DG-038": {
-      "scope": "두 스키마의 동명 객체를 구별했고, 두 직접 뷰·한 간접 뷰, 숨은 스키마와 정의 접근 경계를 실제 서버에서 검증했다.",
+    "DG-001": {
+      "scope": "MySQL 8.4.13과 9.7.4에서 실제 정상·오류 연결, utf8mb4, +05:30 TIMESTAMP의 6자리 소수초, DECIMAL·unsigned BIGINT를 검증했다. MySQL 9의 VECTOR 통신과 텍스트·바인딩 조회에서 SQL NULL 보존도 확인했다.",
       "runtimeGroups": [
-        "viewImpact"
+        "mysqlNativeVector"
       ]
     },
-    "DG-080": {
-      "scope": "두 DB에서 계정의 DEFINER 객체 다섯 개를 조사했고, 기존 로그인과 역할·운영 객체는 유지하며 신규 로그인 차단·복원을 확인했다.",
+    "DG-002": {
+      "scope": "MariaDB 11.4.8에서 실제 스칼라 함수 반환과 IN OUT 소수, OUT BIGINT·NULL을 검증했다. MySQL에서는 일반 OUT 프로시저가 계속 동작했다.",
       "runtimeGroups": [
-        "accountAccess"
+        "packageFunctionOutput"
+      ]
+    },
+    "DG-024": {
+      "scope": "실제 Oracle 모드 공개 함수와 서명을 탐색하고 정밀 반환·OUT 값을 보존했다. 비공개 함수와 쓰기 시도, 오래된 본문·검토 재사용을 거부했으며 MySQL의 일반 루틴을 비교했다.",
+      "runtimeGroups": [
+        "packageFunctionOutput"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 485,
+    "sourceCorrespondences": 486,
     "sourceConfidence": "inferred",
     "archiveEntries": 22,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 137,
-      "partial": 65,
+      "implemented": 139,
+      "partial": 63,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 181.5,
-    "previousWeightedPoints": 180,
+    "weightedPoints": 182.5,
+    "previousWeightedPoints": 181.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 84,
+    "referencePercent": 84.5,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-007",
+        "id": "DG-001",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-037",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-080",
+        "id": "DG-024",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Spring 자동완성은 확인한 빌드 클래스패스와 원본·런타임 근거가 있는 후보를 다룬다.",
-    "계정 검토는 관찰 가능한 서버 전체 객체 목록을 요구하며, 계정 잠금은 신규 접속에 적용된다.",
-    "뷰 영향은 선택한 스키마의 보이는 정의를 따라간다. 루틴과 작업 공간 SQL 파일의 통합 조사 범위는 별도 구현 항목이다.",
-    "Java 내 정적 SQL 수정과 서버 DDL은 각각 승인·적용한다. 구성할 수 없는 SQL은 분석 결과에 포함하지 않는다.",
+    "Java 값 흐름의 이번 범위는 컴파일러가 정확하게 결정한 직접 호출이다. 일반 명령문 분기·디스패치·객체 힙은 추가 범위다.",
+    "HTTP 검사는 선언형 연산과 요청별 파생값을 지원한다. 외부 인증 자동 협상, 바이너리 파일 및 세션 쿠키 정책은 남는다.",
+    "MySQL 9 검증은 실제 9.7.4 서버의 기본 연결과 조회를 포함한다. 벡터 쓰기와 인덱스는 별도다.",
+    "패키지 함수 호출은 MariaDB Oracle 모드의 확인 가능한 스칼라 형태를 지원한다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Java 메서드 간 값 흐름과 HTTP 요청 계산·응답 검사",
-    "MySQL 9 벡터와 MariaDB 패키지 함수 출력"
+    "Git 변경 조각 보관·복구와 대량 가져오기 중복 처리",
+    "UTF-16 CSV·TSV 가져오기와 MariaDB·MySQL 함수 권한 보존"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

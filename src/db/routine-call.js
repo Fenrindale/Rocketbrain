@@ -45,10 +45,11 @@ async function observeProcedure(query, context, target) {
       { kind: 'Body', source: body.source, settings: body.settings }];
     const fingerprint = digest([object, context.dialect, context.version, ids[0][1], accounts[0], packageSources, member.parameters, member.returns]);
     const callee = [object.schema, object.package, object.name].map(quote).join('.');
-    const sql = kind === 'function' ? 'SELECT ' + callee + '(' + member.parameters.map(() => '?').join(', ') + ') AS return_value'
-      : callSql(callee, fingerprint, member.parameters);
+    const invocation = kind === 'function' ? packageFunctionSql(callee, fingerprint, member.parameters)
+      : { sql: callSql(callee, fingerprint, member.parameters) };
     return { object, fingerprint, account: accounts[0][0], role: accounts[0][1], dialect: context.dialect,
-      version: context.version, packageSources, packageSyntax: syntax, parameters: member.parameters, ...(member.returns && { returns: member.returns }), sql };
+      version: context.version, packageSources, packageSyntax: syntax, parameters: member.parameters,
+      ...(member.returns && { returns: member.returns }), ...invocation };
   }
   if (context.dialect === 'mariadb' && accounts[0][7].split(',').includes('ORACLE')) {
     throw fail('MODE', 'Use a standard SQL mode for a reviewed standalone procedure call.');
@@ -77,8 +78,19 @@ async function observeProcedure(query, context, target) {
     version: context.version, source: definition.source, settings: definition.settings, parameters, sql, callee };
 }
 
+function invocationSql(callee, fingerprint, parameters) {
+  return callee + '(' + parameters.map(parameter => parameter.mode === 'IN' ? '?' : variable(fingerprint, parameter)).join(', ') + ')';
+}
+
 function callSql(callee, fingerprint, parameters) {
-  return 'CALL ' + callee + '(' + parameters.map(parameter => parameter.mode === 'IN' ? '?' : variable(fingerprint, parameter)).join(', ') + ')';
+  return 'CALL ' + invocationSql(callee, fingerprint, parameters);
+}
+
+function packageFunctionSql(callee, fingerprint, parameters) {
+  const invocation = invocationSql(callee, fingerprint, parameters);
+  if (parameters.every(parameter => parameter.mode === 'IN')) return { sql: 'SELECT ' + invocation + ' AS return_value' };
+  const returned = variable(fingerprint, { ordinal: 0 });
+  return { sql: 'SET ' + returned + ' = ' + invocation, returnSql: 'SELECT ' + returned + ' AS return_value' };
 }
 
 function bindProcedure(parameters, inputs) {
@@ -132,16 +144,16 @@ async function readProcedureOutputs(query, outputs) {
   if (!outputs.length) return [];
   const { rows } = await query('SELECT ' + outputs.map(item => item.variable).join(', '));
   if (rows.length !== 1 || rows[0].length !== outputs.length) throw fail('OUTPUT', 'The procedure output parameters could not be read.');
-  return outputs.map(({ variable: _, ...parameter }, index) => {
-    const value = rows[0][index];
-    const exact = parameter.kind === 'integer' || parameter.kind === 'decimal';
-    if (!exact || value === null) return { ...parameter, value };
-    const pattern = parameter.kind === 'integer' ? /^-?\d+$/u : /^-?\d+(?:\.\d+)?$/u;
-    if (!(typeof value === 'string' ? pattern.test(value) : Number.isSafeInteger(value))) {
-      throw fail('OUTPUT', 'The database did not return an exact procedure output number.');
-    }
-    return { ...parameter, value: String(value) };
-  });
+  return outputs.map(({ variable: _, ...parameter }, index) => ({ ...parameter, value: exactOutput(parameter.kind, rows[0][index]) }));
+}
+
+function exactOutput(kind, value, label = 'procedure output') {
+  if ((kind !== 'integer' && kind !== 'decimal') || value === null) return value;
+  const pattern = kind === 'integer' ? /^-?\d+$/u : /^-?\d+(?:\.\d+)?$/u;
+  if (!(typeof value === 'string' ? pattern.test(value) : Number.isSafeInteger(value))) {
+    throw fail('OUTPUT', 'The database did not return an exact ' + label + ' number.');
+  }
+  return String(value);
 }
 
 function procedureOutputGrid(parameters) {
@@ -151,4 +163,4 @@ function procedureOutputGrid(parameters) {
 }
 
 module.exports = { listProcedures, observeProcedure, bindProcedure, sessionArguments, scriptSessionArguments,
-  readProcedureOutputs, procedureOutputGrid, fail };
+  readProcedureOutputs, procedureOutputGrid, exactOutput, fail };

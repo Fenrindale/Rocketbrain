@@ -57,4 +57,57 @@ async function runHttpToolsChecks(api,vscode,checks) {
   }
 }
 
-module.exports = { runHttpToolsChecks };
+async function exerciseHttpResponseChecks(config,run) {
+  assert.match(config.baseUrl,/^http:\/\/127\.0\.0\.1:\d+$/);
+  const contents=[
+    '@host = '+config.baseUrl,
+    '@resource = testing-state',
+    '# @derive endpoint url-component "{{resource}}"',
+    '# @expect status 200',
+    '# @check jdbc ["all",["gte","status",200],["lt","status",300],["gte","json:$.people",2],["eq","json:$.departments",1],["eq","json:$.rolledBackNames",0]]',
+    '# @check alternative ["any",["eq","json:$.unavailable",0],["exists","header:Content-Type"]]',
+    '# @check absent ["not",["exists","json:$.unavailable"]]',
+    '# @check too-many ["gt","json:$.people",2]',
+    '# @check indeterminate ["not",["eq","json:$.unavailable",0]]',
+    'GET {{host}}/probe/{{endpoint}}',''
+  ].join('\n');
+  const result=await run(contents);
+  assert.equal(result.status,200);
+  assert.deepEqual(result.assertions.map(({name,passed})=>[name,passed]),[
+    [undefined,true],['jdbc',true],['alternative',true],['absent',true],['too-many',false],['indeterminate',false]
+  ]);
+  const jdbc=JSON.parse(result.body);
+  assert.deepEqual(jdbc,{people:2,departments:1,rolledBackNames:0});
+  return {engine:config.dbEngine,derivedEndpoint:true,passedChecks:4,failedChecks:2,jdbc};
+}
+
+async function runHttpResponseChecks(api,vscode,checks) {
+  const config=JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG,'utf8'));
+  assert.equal(config.dbEngine,process.env.ROCKETBRAIN_TEST_MYSQL_ENGINE);
+  const root=vscode.workspace.workspaceFolders[0].uri.fsPath;
+  for (const name of ['build.gradle','settings.gradle']) {
+    assert.deepEqual(await fs.readFile(path.join(root,name)),await fs.readFile(path.join(config.projectPath,name)));
+  }
+  const file=path.join(root,'rb-response-checks-'+randomUUID()+'.http');
+  const uri=vscode.Uri.file(file);
+  const proof=await exerciseHttpResponseChecks(config,async contents=>{
+    await fs.writeFile(file,contents,{encoding:'utf8',flag:'wx'});
+    try {
+      const document=await vscode.workspace.openTextDocument(uri);
+      assert.equal(document.languageId,'rocketbrain-http');
+      const editor=await vscode.window.showTextDocument(document,{preview:false});
+      const where=document.positionAt(contents.lastIndexOf('GET'));
+      editor.selection=new vscode.Selection(where,where);
+      return await vscode.commands.executeCommand('rocketbrain.http.run');
+    } finally {
+      if (vscode.window.activeTextEditor?.document.uri.toString()===uri.toString()) {
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+      }
+      await fs.unlink(file);
+    }
+  });
+  checks.push('The installed HTTP command derived a route variable and separated passing Spring JDBC response expressions from failed and unknown expressions.');
+  return {...proof,nativeCommand:true};
+}
+
+module.exports = { runHttpToolsChecks, exerciseHttpResponseChecks, runHttpResponseChecks };

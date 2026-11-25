@@ -35,10 +35,10 @@ async function removeOwned(folder, id) {
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative) || relative.includes(path.sep)) throw new Error('Fixture real path escaped its workspace.');
   await fsp.rm(absolute, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
-async function startMysqlFixture({tls,namedPipe=false,eventScheduler=false}={}) {
+async function startMysqlFixture({tls,namedPipe=false,eventScheduler=false,mysqlVersion=process.env.ROCKETBRAIN_TEST_MYSQL_VERSION}={}) {
   if(namedPipe&&process.platform!=='win32')throw Error('The MySQL named pipe fixture needs a Windows host.');
   if(tls){if(Object.keys(tls).some(k=>!['ca','cert','key'].includes(k))||['ca','cert','key'].some(k=>typeof tls[k]!=='string'||!tls[k]||Buffer.byteLength(tls[k])>2*1024*1024||tls[k].includes('\0')))throw Error('Use bounded PEM ca/cert/key strings for the owned TLS fixture.');const cert=new crypto.X509Certificate(tls.cert);new crypto.X509Certificate(tls.ca);if(!cert.checkPrivateKey(crypto.createPrivateKey(tls.key)))throw Error('TLS fixture server certificate/key mismatch.');}
-  const runtime = await ensureMysqlRuntime();
+  const runtime = await ensureMysqlRuntime(mysqlVersion);
   await fsp.mkdir(ROOT, { recursive: true });
   const id = crypto.randomUUID(), folder = owned(path.join(ROOT, id));
   const pipeName = namedPipe ? 'rocketbrain-mysql-' + id : undefined;
@@ -151,7 +151,7 @@ async function startMysqlFixture({tls,namedPipe=false,eventScheduler=false}={}) 
   }
 }
 async function main() {
-  if (process.argv[2] === 'runtime') { const runtime = await ensureMysqlRuntime(); console.log(JSON.stringify(runtime, null, 2)); return; }
+  if (process.argv[2] === 'runtime') { const runtime = await ensureMysqlRuntime(process.env.ROCKETBRAIN_TEST_MYSQL_VERSION); console.log(JSON.stringify(runtime, null, 2)); return; }
   const fixture = await startMysqlFixture({namedPipe:process.env.ROCKETBRAIN_FIXTURE_NAMED_PIPE==='1'});
   console.log(JSON.stringify({ status: 'ready', engine: 'Oracle MySQL', version: fixture.server.version, id: fixture.id, port: fixture.config.port, configPath: fixture.configPath, installedService: false }));
   try {

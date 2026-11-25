@@ -7,6 +7,7 @@ import java.nio.file.*;
 import java.util.*;
 import javax.lang.model.element.*;
 import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.*;
@@ -130,19 +131,40 @@ public final class SignatureInspector {
     }
 
     static final class Flow {
-        private record Event(int id, String kind, String name, int start, int end, List<Integer> inputs) {}
+        record Event(int id, String kind, String name, int start, int end, List<Integer> inputs,
+                     String uri, String method, int frame) {
+            Map<String,Object> output(boolean acrossCalls) {
+                var result = object("id",id,"kind",kind,"name",name,"start",start,"end",end,"inputs",inputs);
+                if (acrossCalls) result.putAll(object("uri",uri,"method",method,"frame",frame));
+                return result;
+            }
+        }
+        interface Calls {
+            List<Integer> invoke(Flow owner, TreePath at, MethodInvocationTree call);
+        }
         final Map<Element,Integer> definitions = new HashMap<>();
-        final List<Event> events = new ArrayList<>();
+        final List<Event> events;
         final CompilationUnitTree unit;
         final Trees trees;
         final SourcePositions positions;
         final String text;
+        final String method;
+        final int frame;
+        final Calls calls;
 
         Flow(CompilationUnitTree unit, Trees trees, String text) {
+            this(unit,trees,text,new ArrayList<>(),"",0,null);
+        }
+
+        Flow(CompilationUnitTree unit, Trees trees, String text, List<Event> events, String method, int frame, Calls calls) {
             this.unit = unit;
             this.trees = trees;
             this.positions = trees.getSourcePositions();
             this.text = text;
+            this.events = events;
+            this.method = method;
+            this.frame = frame;
+            this.calls = calls;
         }
         UnsupportedOperationException outsideScope() {
             return new UnsupportedOperationException("Trace a straight-line method with initialized local primitive or String values, simple assignments and returns.");
@@ -150,7 +172,7 @@ public final class SignatureInspector {
         int add(String kind, String name, int start, int end, List<Integer> inputs) {
             if (events.size() >= 700 || start < 0 || end <= start || end > text.length()) throw outsideScope();
             int index = events.size();
-            events.add(new Event(index,kind,name,start,end,List.copyOf(inputs)));
+            events.add(new Event(index,kind,name,start,end,List.copyOf(inputs),unit.getSourceFile().toUri().toString(),method,frame));
             return index;
         }
         int start(Tree node) { return (int) positions.getStartPosition(unit,node); }
@@ -160,7 +182,7 @@ public final class SignatureInspector {
             Element value = trees.getElement(route);
             if (!(value instanceof VariableElement local) ||
                     (local.getKind() != ElementKind.LOCAL_VARIABLE && local.getKind() != ElementKind.PARAMETER) ||
-                    (!local.asType().getKind().isPrimitive() && !local.asType().toString().equals("java.lang.String"))) {
+                    !scalar(local.asType())) {
                 throw outsideScope();
             }
             return local;
@@ -181,10 +203,14 @@ public final class SignatureInspector {
             return found;
         }
 
-        void declaration(TreePath at, VariableTree tree, boolean parameter) {
+        static boolean scalar(TypeMirror type) {
+            return type.getKind().isPrimitive() || type.toString().equals("java.lang.String");
+        }
+
+        void declaration(TreePath at, VariableTree tree, boolean parameter, List<Integer> arguments) {
             VariableElement value = variable(at);
             if (!parameter && tree.getInitializer() == null) throw outsideScope();
-            List<Integer> inputs = parameter ? List.of() : expression(new TreePath(at,tree.getInitializer()));
+            List<Integer> inputs = parameter ? arguments : expression(new TreePath(at,tree.getInitializer()));
             int offset = nameAt(tree);
             definitions.put(value,add(parameter ? "parameter" : "definition",value.getSimpleName().toString(),
                 offset,offset + tree.getName().length(),inputs));
@@ -207,6 +233,24 @@ public final class SignatureInspector {
                 }
                 case PARENTHESIZED -> expression(new TreePath(route,((ParenthesizedTree) leaf).getExpression()));
                 case TYPE_CAST -> expression(new TreePath(route,((TypeCastTree) leaf).getExpression()));
+                case METHOD_INVOCATION -> {
+                    if (calls == null) throw outsideScope();
+                    yield calls.invoke(this,route,(MethodInvocationTree) leaf);
+                }
+                case CONDITIONAL_EXPRESSION -> {
+                    if (calls == null) throw outsideScope();
+                    ConditionalExpressionTree ternary = (ConditionalExpressionTree) leaf;
+                    var trueValue = ternary.getTrueExpression();
+                    var falseValue = ternary.getFalseExpression();
+                    List<Integer> alternatives = new ArrayList<>(expression(new TreePath(route,ternary.getCondition())));
+                    if (!(ternary.getCondition() instanceof LiteralTree condition) || !Boolean.FALSE.equals(condition.getValue())) {
+                        alternatives.add(add("true-value","If true",start(trueValue),end(trueValue),expression(new TreePath(route,trueValue))));
+                    }
+                    if (!(ternary.getCondition() instanceof LiteralTree condition) || !Boolean.TRUE.equals(condition.getValue())) {
+                        alternatives.add(add("false-value","If false",start(falseValue),end(falseValue),expression(new TreePath(route,falseValue))));
+                    }
+                    yield List.of(add("choice","Conditional value",start(leaf),end(leaf),alternatives));
+                }
                 case LOGICAL_COMPLEMENT, UNARY_MINUS, UNARY_PLUS, BITWISE_COMPLEMENT ->
                     expression(new TreePath(route,((UnaryTree) leaf).getExpression()));
                 case PLUS, MINUS, MULTIPLY, DIVIDE, REMAINDER, LEFT_SHIFT, RIGHT_SHIFT, UNSIGNED_RIGHT_SHIFT,
@@ -221,14 +265,18 @@ public final class SignatureInspector {
             };
         }
 
-        List<Map<String,Object>> trace(TreePath methodPath) {
+        int trace(TreePath methodPath, List<Integer> arguments) {
             MethodTree node = (MethodTree) methodPath.getLeaf();
-            for (VariableTree parameter : node.getParameters()) declaration(new TreePath(methodPath,parameter),parameter,true);
+            for (int index = 0; index < node.getParameters().size(); index++) {
+                VariableTree parameter = node.getParameters().get(index);
+                declaration(new TreePath(methodPath,parameter),parameter,true,arguments.isEmpty()?List.of():List.of(arguments.get(index)));
+            }
             TreePath body = new TreePath(methodPath,node.getBody());
+            int returnedValue = -1;
             for (StatementTree statement : node.getBody().getStatements()) {
                 TreePath line = new TreePath(body,statement);
                 if (statement instanceof VariableTree local) {
-                    declaration(line,local,false);
+                    declaration(line,local,false,List.of());
                 } else if (statement instanceof ExpressionStatementTree expr && expr.getExpression() instanceof AssignmentTree assignment
                         && assignment.getVariable() instanceof IdentifierTree target) {
                     TreePath operation = new TreePath(line,assignment);
@@ -237,34 +285,37 @@ public final class SignatureInspector {
                     definitions.put(variable,add("assignment",variable.getSimpleName().toString(),start(target),end(target),inputs));
                 } else if (statement instanceof ReturnTree returned && returned.getExpression() != null) {
                     List<Integer> inputs = expression(new TreePath(line,returned.getExpression()));
-                    add("return","return",start(returned),start(returned) + 6,inputs);
+                    returnedValue = add("return","return",start(returned),start(returned) + 6,inputs);
                 } else if (statement.getKind() != Tree.Kind.EMPTY_STATEMENT) {
                     throw outsideScope();
                 }
             }
-            return events.stream().map(event -> object("id",event.id(),"kind",event.kind(),"name",event.name(),
-                "start",event.start(),"end",event.end(),"inputs",event.inputs())).toList();
+            return returnedValue;
         }
+    }
+
+    static TreePath flowMethod(CompilationUnitTree unit, Trees trees, int offset) {
+        var selected = new TreePath[1];
+        var positions = trees.getSourcePositions();
+        new TreePathScanner<Void,Void>() {
+            @Override public Void visitMethod(MethodTree method, Void unused) {
+                if (method.getBody() != null && positions.getStartPosition(unit,method) <= offset
+                        && positions.getEndPosition(unit,method) > offset) selected[0] = getCurrentPath();
+                return super.visitMethod(method,unused);
+            }
+        }.scan(unit,null);
+        return selected[0];
     }
 
     static Map<String,Object> dataFlow(List<CompilationUnitTree> units, Trees trees, Map<String,Source> sources, String uri, int offset) {
         for (var unit : units) {
             if (!unit.getSourceFile().toUri().toString().equals(uri)) continue;
-            var selected = new TreePath[1];
-            var positions = trees.getSourcePositions();
-            new TreePathScanner<Void,Void>() {
-                @Override public Void visitMethod(MethodTree method, Void unused) {
-                    if (method.getBody() != null && positions.getStartPosition(unit,method) <= offset
-                            && positions.getEndPosition(unit,method) > offset) {
-                        selected[0] = getCurrentPath();
-                    }
-                    return super.visitMethod(method,unused);
-                }
-            }.scan(unit,null);
-            if (selected[0] == null) return object("error","Place the cursor in a Java method.");
+            var selected = flowMethod(unit,trees,offset);
+            if (selected == null) return object("error","Place the cursor in a Java method.");
             try {
-                var events = new Flow(unit,trees,sources.get(uri).text).trace(selected[0]);
-                return object("uri",uri,"events",events);
+                var flow = new Flow(unit,trees,sources.get(uri).text);
+                flow.trace(selected,List.of());
+                return object("uri",uri,"events",flow.events.stream().map(event->event.output(false)).toList());
             } catch (UnsupportedOperationException outside) {
                 return object("error",outside.getMessage());
             }
@@ -294,6 +345,7 @@ public final class SignatureInspector {
     public static void main(String[] args) throws Exception {
         if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy").contains(args[4])) &&
                 !(args.length == 7 && args[4].equals("dataflow")) &&
+                !(args.length == 9 && args[4].equals("callFlow")) &&
                 !(args.length == 6 && args[4].equals("conversion")) &&
                 !(args.length == 9 && args[4].equals("constant")) &&
                 !(args.length == 9 && args[4].equals("extraction")) &&
@@ -342,6 +394,11 @@ public final class SignatureInspector {
                     if (args[4].equals("diagram")) report.put("declarations",diagrams(units,trees,types));
                     else if (args[4].equals("hierarchy")) report.put("hierarchy",new HierarchyInspector(task).inspect(units,byUri));
                     else if (args[4].equals("dataflow")) report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
+                    else if (args[4].equals("callFlow")) {
+                        var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
+                        report.put("callFlow",new CallFlowInspector(trees,byUri)
+                            .inspect(units,unit,Integer.parseInt(args[6]),args[7],Integer.parseInt(args[8])));
+                    }
                     else if (args[4].equals("conversion")) {
                         var unit = units.stream().filter(item -> item.getSourceFile().toUri().toString().equals(args[5])).findFirst().orElseThrow();
                         report.put("conversions",new ConversionInspector(task,unit,byUri.get(args[5]).text).inspect());

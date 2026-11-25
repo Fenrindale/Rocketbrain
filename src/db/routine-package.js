@@ -128,7 +128,7 @@ function memberSignature(loaded, tokens, at, kind, syntax) {
     if (symbol(tokens[after], '(')) after = tokens[after].close + 1;
     if (word(tokens[after], 'UNSIGNED')) after++;
     returns = scalarType(loaded.source, tokens, start, after, syntax);
-    if (!returns || parameters?.some(parameter => parameter.mode !== 'IN')) parameters = null;
+    if (!returns || syntax !== 'oracle' && parameters?.some(parameter => parameter.mode !== 'IN')) parameters = null;
     if (word(tokens[after], 'DETERMINISTIC')) after++;
     else if (word(tokens[after], 'NOT') && word(tokens[after + 1], 'DETERMINISTIC')) after += 2;
   }

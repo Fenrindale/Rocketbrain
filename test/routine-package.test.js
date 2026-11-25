@@ -60,7 +60,7 @@ test('Oracle package declarations pin typed modes and scalar return across store
   assert.throws(() => specificationMembers(oracleSpec(declaration.replace('END accounting', 'END another'))), /end boundary/);
 });
 
-test('Oracle overloads, defaults, function OUT parameters and composite returns remain disabled', () => {
+test('Oracle typed function OUT parameters are discovered without allowing defaults, composite types or ambiguous overloads', () => {
   const source = head + 'accounting AS ' +
     'FUNCTION change_it(v OUT NUMBER) RETURN NUMBER; ' +
     'FUNCTION defaulted(v NUMBER DEFAULT 1) RETURN NUMBER; ' +
@@ -68,6 +68,13 @@ test('Oracle overloads, defaults, function OUT parameters and composite returns 
     'FUNCTION collide RETURN NUMBER; FUNCTION Collide(v NUMBER) RETURN NUMBER; END accounting';
   const inspected = specificationMembers({ ...spec(source), settings: { sql_mode: 'ORACLE' } });
   assert.deepEqual(inspected.map(({ name, supported }) => [name, supported]), [
-    ['change_it', false], ['defaulted', false], ['anchored', false], ['collide', false], ['Collide', false]
+    ['change_it', true], ['defaulted', false], ['anchored', false], ['collide', false], ['Collide', false]
   ]);
+  assert.deepEqual(inspected[0].parameters,[{ordinal:1,name:'v',mode:'OUT',type:'NUMBER',kind:'decimal'}]);
+  const psm = specificationMembers(spec(head + 'accounting FUNCTION change_it(OUT v DECIMAL(12,2)) RETURNS DECIMAL(12,2); END;'));
+  assert.equal(psm[0].supported,false);
+  const implemented = { ...body(head + 'BODY accounting AS FUNCTION change_it(v OUT NUMBER) RETURN NUMBER ' +
+    'IS BEGIN v := 1; RETURN 2; END; END accounting;'), settings: { sql_mode: 'ORACLE' } };
+  assert.equal(implementedMembers(implemented, inspected, 'oracle')[0].supported,true);
+  assert.equal(implementedMembers({ ...implemented, source:implemented.source.replace('v OUT','v IN') }, inspected, 'oracle')[0].supported,false);
 });

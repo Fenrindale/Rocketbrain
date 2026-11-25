@@ -82,6 +82,7 @@ function registerRoutineCalls(vscode, { database }) {
       '-- Database: ' + JSON.stringify(procedure.object.schema),
       '-- ' + procedure.sql, ...parameters,
       ...(procedure.packageSyntax ? ['-- Package dialect: ' + (procedure.packageSyntax === 'oracle' ? 'Oracle PL/SQL' : 'SQL/PSM')] : []),
+      ...(procedure.returnSql ? ['-- OUT and INOUT values share the isolated invocation session.', '-- ' + procedure.returnSql] : []),
       ...(scalarCall ? ['-- Scalar return: ' + JSON.stringify(procedure.returns.type),
         '-- Runs in a dedicated read-only server transaction, then rolls back.'] :
         ['-- This approved call can change persistent data and can commit work within its own connection.']),

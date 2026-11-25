@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.93.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.94.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 137 |
-| 부분 구현 | 65 |
+| 구현 | 139 |
+| 부분 구현 | 63 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **84%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **84.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.93에서는 Spring 생성자 주입에 타입과 프로필을 확인한 후보를 제안한다. DB 계정의 잠금과 DEFINER를 검토하며, 스키마를 넘는 뷰 영향과 Java에 포함된 SQL 열 변경을 미리 볼 수 있다. 상태가 바뀐 항목은 3개이고 가중 점수는 180점에서 181.5점으로 바뀌었다.
+v0.94에서는 Java 메서드 간 인자와 반환값을 추적한다. HTTP 요청에 URL·JSON 파생값을 쓰고 응답 조건을 조합한다. MySQL 9에서 VECTOR와 SQL NULL을 읽고, MariaDB 패키지 함수의 반환값과 OUT 값을 함께 확인한다. 상태가 바뀐 항목은 2개이고 가중 점수는 181.5점에서 182.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -141,7 +141,7 @@ v0.93에서는 Spring 생성자 주입에 타입과 프로필을 확인한 후�
 | IDEA-118 | IntelliJ IDEA | 프로젝트 신뢰·제한 모드 | 구현 |
 | IDEA-119 | IntelliJ IDEA | 문자열 안 SQL/정규식/HTML 언어 주입 | 구현 |
 | IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 부분 구현 |
-| DG-001 | DataGrip | MySQL 데이터 소스 생성·연결 검사 | 부분 구현 |
+| DG-001 | DataGrip | MySQL 데이터 소스 생성·연결 검사 | 구현 |
 | DG-002 | DataGrip | MariaDB 전용 지원 | 부분 구현 |
 | DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 부분 구현 |
 | DG-004 | DataGrip | 사용자 JDBC JAR·드라이버 클래스 추가 | 구현 |
@@ -164,7 +164,7 @@ v0.93에서는 Spring 생성자 주입에 타입과 프로필을 확인한 후�
 | DG-021 | DataGrip | 시스템 schema minicatalog | 구현 |
 | DG-022 | DataGrip | 객체 이름·DDL·파일 검색 | 구현 |
 | DG-023 | DataGrip | DDL·object source 보기 | 구현 |
-| DG-024 | DataGrip | 루틴·인덱스·트리거·MariaDB package | 부분 구현 |
+| DG-024 | DataGrip | 루틴·인덱스·트리거·MariaDB package | 구현 |
 | DG-025 | DataGrip | 실제 FK 없는 관계 정의 | 구현 |
 | DG-026 | DataGrip | virtual view·virtual column | 구현 |
 | DG-027 | DataGrip | schema-aware 이름·열 완성 | 구현 |
