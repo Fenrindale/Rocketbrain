@@ -243,6 +243,33 @@ function synthesized(text, parsed) {
 
 const unresolved = (reason, command) => ({ state:'unknown',command,references:[],coverage:{unknown:[{reason}]} });
 
+function joinedCompletionContext(text, options, slot, edit) {
+  const placeholder = '`rb_completion_slot`';
+  const replacement = placeholder + (slot.fillAssignment ? ' = NULL' : '');
+  let source = text.slice(0, edit.start) + replacement + text.slice(edit.end);
+  let parsed;
+  try { parsed = joinedMutation(sourceTokens(source,options)); }
+  catch { return; }
+  if (!parsed) return;
+  let readClause;
+  const selected = token => token.start === edit.start && token.end === edit.start + placeholder.length;
+  if (slot.kind === 'write') {
+    if (parsed.command !== 'UPDATE' || !parsed.writes.some(item => selected(item.column))) return;
+  } else if (slot.kind === 'target') {
+    if (parsed.command !== 'DELETE' || !parsed.targets?.some(selected)) return;
+  } else {
+    const end = edit.start + placeholder.length;
+    const contains = range => range?.start <= edit.expressionStart && end <= range.end;
+    if (contains(parsed.where)) readClause = 'filter';
+    else if (parsed.values.some(contains)) readClause = 'value';
+    else return;
+    // Preserve source offsets while replacing only the unfinished column reference with a neutral expression.
+    source = source.slice(0, edit.expressionStart) + '0'.padEnd(end-edit.expressionStart) + source.slice(end);
+  }
+  return { query:synthesized(source,parsed).sql, readClause, writes:parsed.writes.filter(item => !selected(item.column)),
+    targets:parsed.targets?.filter(token => !selected(token)) || [] };
+}
+
 function boundJoinedUsage(text, parsed, catalog, options, remote) {
   const {command, targets, writes} = parsed;
   const uncertain = message=>unresolved(message,command);
@@ -366,4 +393,4 @@ function analyzeDmlUsage(text, catalog, options = {}, remote = [], parsedTokens)
     coverage:{unknown:[]},target:origin,executedSql:false };
 }
 
-module.exports = { analyzeDmlUsage };
+module.exports = { joinedCompletionContext, analyzeDmlUsage };

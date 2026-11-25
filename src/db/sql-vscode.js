@@ -670,7 +670,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
         .map(candidate=>({...candidate,start:scope.start+candidate.start,end:scope.start+candidate.end})):[];
       return [...fields, ...mutations, ...joins, ...indexes].map(candidate=>{
         const kind = candidate.kind === 'column' ? vscode.CompletionItemKind.Field :
-          candidate.kind ? vscode.CompletionItemKind.Snippet : vscode.CompletionItemKind.Reference;
+          candidate.kind && candidate.kind !== 'table' ? vscode.CompletionItemKind.Snippet : vscode.CompletionItemKind.Reference;
         const item=new vscode.CompletionItem(candidate.label,kind);
         item.detail=candidate.detail;
         item.insertText=candidate.insertText;
