@@ -13,6 +13,11 @@ const otherNamespace = 'rocketbrain-other';
 const chosen = 'reviewed-read-only';
 const ambient = 'wrong-ambient';
 
+function authorizationDenied(args, error) {
+  const words = args.filter(item => !item.startsWith('--'));
+  return words[0] === 'auth' && words[1] === 'can-i' && error.code === 1 && /^no(?: - [^\r\n]+)?$/.test(error.stdout?.trim() ?? '');
+}
+
 async function verifyKindFixture() {
   assert.equal(process.env.ROCKETBRAIN_KUBE_KIND_NAME, 'rocketbrain-explorer');
   const admin = await fs.realpath(process.env.ROCKETBRAIN_KUBE_ADMIN_CONFIG);
@@ -24,12 +29,14 @@ async function verifyKindFixture() {
     executable('helm', process.env.ROCKETBRAIN_HELM)]);
   assert.ok(helm);
   const adminBytes = await fs.readFile(admin);
-  const command = (args, file = admin, context = 'kind-rocketbrain-explorer') =>
-    run(kubectl, ['--kubeconfig=' + file, '--context=' + context, '--request-timeout=10s', ...args],
+  const command = (args, file = admin, context = 'kind-rocketbrain-explorer') => {
+    const operation = args.find(item => !item.startsWith('--'));
+    return run(kubectl, ['--kubeconfig=' + file, '--context=' + context, '--request-timeout=10s', ...args],
       { timeout: 16000, maxBuffer: 512 * 1024 }).then(result => result.stdout, error => {
-      if (args[0] === 'auth' && error.code === 1 && error.stdout.trim() === 'no') return 'no';
-      throw Error('The disposable cluster command did not complete.');
+      if (authorizationDenied(args, error)) return 'no';
+      throw Error('The disposable cluster operation ' + operation + ' did not complete.');
     });
+  };
   const { clusters, contexts } = JSON.parse(await command(['config', 'view', '--raw', '--minify', '-o=json']));
   assert.equal(contexts[0].name, 'kind-rocketbrain-explorer');
   const route = clusters[0].cluster;
@@ -104,4 +111,4 @@ async function verifyKindFixture() {
 if (require.main === module) verifyKindFixture().then(result => console.log(JSON.stringify(result)))
   .catch(error => { console.error(error.message); process.exitCode = 1; });
 
-module.exports = { verifyKindFixture };
+module.exports = { verifyKindFixture, authorizationDenied };

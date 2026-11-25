@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 const { approvedContexts, prepareKubernetesConfig } = require('../src/infra/kubernetes');
+const { authorizationDenied } = require('../scripts/test-kubernetes-kind');
 
 const token = 'fixture-embedded-token';
 const selected = { name: 'selected', context: { cluster: 'owned', user: 'reader', namespace: 'journal' } };
@@ -16,6 +17,16 @@ const config = { apiVersion: 'v1', kind: 'Config', 'current-context': 'ambient',
 const pod = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'app-1', namespace: 'journal', uid: 'fixture-uid' },
   spec: { containers: [{ name: 'main', env: [{ name: 'PRIVATE', value: 'not-for-product' }] }, { name: 'sidecar' }] },
   status: { phase: 'Running' } };
+
+test('kind fixture distinguishes an actual kubectl access denial from a failed command', () => {
+  const probe = ['--namespace=journal', 'auth', 'can-i', 'delete', 'pods'];
+  assert.equal(authorizationDenied(probe, { code: 1, stdout: 'no\n' }), true);
+  assert.equal(authorizationDenied(probe, { code: 1, stdout: 'no - no RBAC policy matched\n' }), true);
+  for (const failure of [{ code: 1, stdout: '' }, { code: 1, stdout: 'no connection' }, { code: 2, stdout: 'no' }]) {
+    assert.equal(authorizationDenied(probe, failure), false);
+  }
+  assert.equal(authorizationDenied(['--namespace=journal', 'get', 'pods'], { code: 1, stdout: 'no' }), false);
+});
 
 test('context projection allows only verified HTTPS with embedded token or certificate authentication', () => {
   const entries = approvedContexts(config);
