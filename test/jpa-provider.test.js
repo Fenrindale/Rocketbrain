@@ -1,7 +1,7 @@
 'use strict';
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {analyzeJPA}=require('../src/jpa/model');
+const {analyzeJPA,completionsAt,definitionsAt}=require('../src/jpa/model');
 const {normalizeProviderProfile,providerProfileFromSnapshot}=require('../src/jpa/provider');
 const files=[{uri:'file:///Person.java',text:'package example; import jakarta.persistence.*; @Entity class Person { @Id Long id; String name; java.time.LocalDate born; }'}];
 const profile={id:'owned-runtime-profile',provider:'hibernate',version:'7.4.13.Final',source:'runtime-observed',observedAt:'2026-11-13T02:00:00Z',functions:{rb_upper:{state:'observed',minArgs:1,maxArgs:1,arguments:[{category:'STRING'}],returns:{javaType:'java.lang.String'}}}};
@@ -54,8 +54,49 @@ test('Spring Data array IN bindings check elements under a selected supported pr
   const repo={uri:'file:///Repo.java',text:'package example; import java.util.List; import org.springframework.data.jpa.repository.JpaRepository; import org.springframework.data.jpa.repository.Query; import org.springframework.data.repository.query.Param; interface Repo extends JpaRepository<Person,Long> { @Query("select p from Person p where p.id in :ids") List<Person> byIds(@Param("ids") Long[] ids); }'};
   const model=analyzeJPA([...files,repo],{providerProfile:profile}),q=model.queries.find(value=>value.uri===repo.uri);assert.equal(q.typeAnalysis.state,'known',q.typeAnalysis.coverage.unknown.join('; '));assert.ok(q.providerAnalysis.usedFeatures.includes('spring-data-array-binding'));
 });
-test('a supplied runtime profile does not bless CTE/set/derived-root grammar or arbitrary functions',()=>{
-  for(const text of ['with x as (select p.id from Person p) select x from x','select p.id from Person p union select p.id from Person p','select x.id from (select p.id as id from Person p) x','select arbitrary_java(p.id) from Person p']){const q=query(text).query;assert.equal(q.typeAnalysis.state,'unknown',text);assert.equal(q.typeAnalysis.diagnostics.some(value=>value.severity==='warning'),false);assert.equal(q.providerAnalysis.allRuntimeRegistrationsVerified,false);}
+test('an explicit Hibernate profile types chained CTE and FROM-derived scalar outputs',()=>{
+  const cte=query('with picked as (select p.id as ownerId, p.name as displayName from Person p where p.id > :start), filtered as (select t.ownerId as keyId, t.displayName as label from picked t) select f.label, f.keyId from filtered f where f.keyId >= :stop');
+  assert.equal(cte.query.typeAnalysis.state,'known',cte.query.typeAnalysis.coverage.unknown.join('; '));
+  assert.deepEqual(types(cte.query),['java.lang.String','java.lang.Long']);
+  assert.deepEqual(cte.query.typeAnalysis.parameters.map(p=>[p.key,p.expectedTypes[0].javaType]),[[':start','java.lang.Long'],[':stop','java.lang.Long']]);
+  assert.ok(cte.query.providerAnalysis.usedFeatures.includes('hql-common-table-expression'));
+  assert.equal(cte.query.providerAnalysis.allRuntimeRegistrationsVerified,false);
+  const reference=cte.file.text.indexOf('f.label')+'f.la'.length;
+  const definition=definitionsAt(cte.model,cte.file.uri,reference);
+  assert.equal(definition[0].uri,cte.file.uri);
+  assert.equal(definition[0].range.start.character,cte.file.text.indexOf('as label')+'as '.length);
+  assert.ok(completionsAt(cte.model,cte.file.uri,reference).some(item=>item.label==='label'));
+  const derived=query('select x.displayName, x.exactId from (select p.name as displayName, p.id as exactId from Person p where p.id >= ?1) x order by x.exactId').query;
+  assert.equal(derived.typeAnalysis.state,'known',derived.typeAnalysis.coverage.unknown.join('; '));
+  assert.deepEqual(types(derived),['java.lang.String','java.lang.Long']);
+  assert.equal(derived.typeAnalysis.parameters[0].position,1);
+  assert.equal(derived.typeAnalysis.parameters[0].expectedTypes[0].javaType,'java.lang.Long');
+  assert.ok(derived.providerAnalysis.usedFeatures.includes('hql-derived-relation'));
+});
+test('set scopes type each arm and deliberately flag arity and definite Java clashes',()=>{
+  for(const operation of ['union all','intersect','except']){
+    const {query:q}=query('select p.id as number from Person p where p.id >= :floor '+operation+' select p.id as number from Person p where p.id <= :ceiling order by number');
+    assert.equal(q.typeAnalysis.state,'known',q.typeAnalysis.coverage.unknown.join('; '));
+    assert.deepEqual(types(q),['java.lang.Long']);
+    assert.deepEqual(q.typeAnalysis.parameters.map(p=>[p.key,p.expectedTypes[0].javaType]),[[':floor','java.lang.Long'],[':ceiling','java.lang.Long']]);
+    assert.ok(q.providerAnalysis.usedFeatures.includes('hql-set-operation'));
+  }
+  for(const [right,code] of [['p.id, p.name','jpa.type.set.arity'],['p.name','jpa.type.set.column']]){
+    const {query:q}=query('select p.id from Person p union select '+right+' from Person p');
+    assert.equal(q.typeAnalysis.state,'invalid');
+    assert.ok(q.typeAnalysis.diagnostics.some(item=>item.code===code));
+  }
+});
+test('missing profiles and unsupported or unresolved query graphs retain scoped uncertainty',()=>{
+  for(const text of ['with x as (select p.id from Person p) select x from x','with x as (select y.rid as rid from x y) select z.rid from x z',
+    'with x as (select y.id as id from y y), y as (select p.id as id from Person p) select z.id from x z',
+    'select x.id from (select o.id as id from Person p) x','select arbitrary_java(p.id) from Person p']){
+    const q=query(text).query;
+    assert.equal(q.typeAnalysis.state,'unknown',text);
+    assert.equal(q.typeAnalysis.diagnostics.some(value=>value.severity==='warning'),false);
+    assert.equal(q.providerAnalysis.allRuntimeRegistrationsVerified,false);
+  }
+  assert.equal(query('select p.id from Person p union select p.id from Person p',null).query.typeAnalysis.state,'unknown');
 });
 test('very deep operator ASTs stop as unknown rather than overflowing the analysis stack',()=>{
   const q=query('select '+Array(1000).fill('1').join('+')+' from Person p').query;assert.equal(q.typeAnalysis.state,'unknown');assert.ok(q.typeAnalysis.coverage.unknown.some(value=>value.includes('depth')));

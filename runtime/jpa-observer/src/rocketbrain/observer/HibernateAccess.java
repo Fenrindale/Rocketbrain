@@ -73,9 +73,8 @@ public final class HibernateAccess {
         if (factory == null || Boolean.TRUE.equals(optional(factory, "isClosed"))) return unknown(result, "factory.unavailable", "No open captured Hibernate factory is available.", null);
         if (hql == null || hql.isBlank() || hql.length() > 32768 || hql.indexOf('\0') >= 0) return unknown(result, "query.bounds", "Provide a nonempty HQL/JPQL query within the 32768-character limit.", null);
         try {
-            Object engine = invoke(factory, "getQueryEngine"), translator = invoke(engine, "getHqlTranslator");
             // Direct semantic interpretation: no Session, Query, SQL AST or binding values.
-            Object sqm = invoke(translator, "translate", hql, null);
+            Object sqm = translate(factory,hql);
             result.putAll(describeStatement(sqm)); result.putAll(base(factory));
             result.put("analysis", "hibernate-semantic-compile-only");
             return result;
@@ -86,6 +85,11 @@ public final class HibernateAccess {
             diagnostics.add(diagnostic(semanticFailure(cause) ? "hibernate.semantic.invalid" : "hibernate.semantic.unavailable", semanticFailure(cause) ? "The active Hibernate provider rejected this query during semantic compilation." : "The active provider could not complete semantic compilation.", cause));
             return result;
         }
+    }
+
+    static Object translate(Object factory,String hql) throws Throwable {
+        Object engine=invoke(factory,"getQueryEngine"), translator=invoke(engine,"getHqlTranslator");
+        return invoke(translator,"translate",hql,null);
     }
 
     /** Used both by explicit probes and instrumentation of actual successful translations. */
@@ -269,7 +273,7 @@ public final class HibernateAccess {
         return result;
     }
 
-    private static String javaType(Object node) {
+    static String javaType(Object node) {
         if (node == null) return null; if (node instanceof Class<?> c) return c.getName();
         for (String name : new String[]{"getJavaTypeClass", "getJavaType", "getBindableJavaType", "getParameterType"}) { Object value = optional(node, name); if (value instanceof Class<?> c) return c.getName(); }
         for (String name : new String[]{"getNodeJavaType", "getExpressibleJavaType", "getJavaTypeDescriptor"}) { Object descriptor = optional(node, name); if (descriptor != null && descriptor != node) { Object value = optional(descriptor, "getJavaTypeClass"); if (value instanceof Class<?> c) return c.getName(); } }

@@ -121,5 +121,5 @@ async function runJpqlConsoleChecks(api,vscode,checks) {
   } finally { client.dispose(); api.jpa.observer.disconnect(); }
 }
 
-module.exports={runJpqlConsoleChecks};
+module.exports={runJpqlConsoleChecks,readConfig};
 if (require.main===module) backend().then(result=>console.log(JSON.stringify(result))).catch(error=>{console.error(error.stack);process.exitCode=1;});

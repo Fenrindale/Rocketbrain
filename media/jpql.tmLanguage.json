@@ -6,7 +6,7 @@
     { "name": "comment.block.jpql", "begin": "/\\*", "end": "\\*/" },
     { "name": "string.quoted.single.jpql", "begin": "'", "end": "'(?!')", "patterns": [{ "name": "constant.character.escape.jpql", "match": "''" }] },
     { "name": "variable.parameter.jpql", "match": ":[A-Za-z_][A-Za-z0-9_]*|\\?[1-9][0-9]*" },
-    { "name": "keyword.control.jpql", "match": "(?i)\\b(?:select|distinct|from|join|fetch|left|right|inner|outer|where|on|group|having|order|by|as|asc|desc|and|or|not|in|exists|is|between|like|case|when|then|else|end)\\b" },
+    { "name": "keyword.control.jpql", "match": "(?i)\\b(?:with|select|distinct|from|join|fetch|left|right|inner|outer|where|on|group|having|order|by|as|asc|desc|union|intersect|except|all|and|or|not|in|exists|is|between|like|case|when|then|else|end)\\b" },
     { "name": "constant.language.jpql", "match": "(?i)\\b(?:null|true|false)\\b" },
     { "name": "constant.numeric.jpql", "match": "\\b\\d+(?:\\.\\d+)?\\b" }
   ]

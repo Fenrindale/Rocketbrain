@@ -1,15 +1,17 @@
 'use strict';
 const provider = require('./provider');
+const {analyzeGraph,startsGraph} = require('./query-graph');
 
 // A bounded JPQL name/path binder, not an executable query compiler. Scopes are
 // established before expression paths are bound, so a subquery may shadow its
 // parent and still resolve correlated references to other parent aliases.
-const RESERVED = new Set(('select distinct from join left right inner outer fetch on where order by group having asc desc nulls first last and or not null is true false between like escape in member of empty as end then else when case new update delete set exists all any some treat leading trailing both current_date current_time current_timestamp local date time datetime true false').split(' '));
+const RESERVED = new Set(('select distinct from join left right inner outer fetch on where order by group having asc desc nulls first last and or not null is true false between like escape in member of empty as end then else when case new update delete set exists all any some treat leading trailing both current_date current_time current_timestamp local date time datetime true false with union intersect except').split(' '));
 const FUNCTIONS = new Set(('abs avg ceiling coalesce concat count exp extract floor id index length ln locate lower max min mod nullif power replace round sign size sqrt substring sum trim type upper version cast function key value entry').split(' '));
 const EXTENSIONS = new Set('with union intersect except limit offset window over lateral recursive filter within ilike collate elements indices sql insert conflict returning'.split(' '));
 const BASIC = new Set('java.lang.String java.lang.Long java.lang.Integer java.lang.Double java.lang.Float java.lang.Boolean java.lang.Short java.lang.Byte java.lang.Character java.math.BigDecimal java.math.BigInteger java.time.LocalDate java.time.LocalTime java.time.LocalDateTime java.time.Instant java.util.UUID'.split(' '));
 const managed = model => [...model.entities, ...(model.embeddables || []), ...(model.mappedSuperclasses || [])];
 const uniqueType = (model, fqn) => { const values = managed(model).filter(item => item.fqn === fqn); return values.length === 1 ? values[0] : null; };
+const scopedType = (model,query,fqn) => query._queryRelations?.get(fqn) || uniqueType(model,fqn);
 const entity = (model, name) => { const values = model.entities.filter(item => item.entityNameKnown !== false && (item.name === name || item.fqn === name)); return values.length === 1 ? values[0] : null; };
 
 function lex(text) {
@@ -56,15 +58,28 @@ function inspect(model, file, query, hooks) {
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].text === '(') { open.push(i); if (open.length > 32) reasons.push('JPQL nesting limit exceeded.'); }
     else if (tokens[i].text === ')') { const start = open.pop(); if (start === undefined) reasons.push('Unbalanced JPQL parentheses.'); else { close.set(start, i); if (tokens[i + 1]?.text === '.' && tokens[start - 1]?.lower !== 'treat') reasons.push('Navigation from a function/group result is not modeled.'); } }
-    if (tokens[i].kind === 'id' && EXTENSIONS.has(tokens[i].lower) && !provider.isExtensionKeyword(query._providerProfile,tokens[i].lower) && tokens[i - 1]?.text !== '.' && tokens[i - 1]?.text !== ':') reasons.push('Set/CTE/provider extension syntax is not modeled: ' + tokens[i].text);
-    if (tokens[i].kind === 'id' && tokens[i + 1]?.text === '(' && tokens[i - 1]?.lower !== 'new' && !FUNCTIONS.has(tokens[i].lower) && !RESERVED.has(tokens[i].lower) && !provider.knownFunction(query._providerProfile,tokens[i].lower) && !provider.isExtensionKeyword(query._providerProfile,tokens[i].lower) && tokens[i - 1]?.text !== '.') reasons.push('Unrecognized function semantics: ' + tokens[i].text);
   }
   if (open.length) reasons.push('Unbalanced JPQL parentheses.');
+  let graph;
+  if (!reasons.length && startsGraph(tokens)) {
+    if (!query._providerProfile?.enabled) reasons.push('HQL SELECT graph syntax requires an explicit supported Hibernate profile.');
+    else {
+      graph=analyzeGraph(tokens,close);
+      if (graph.reason) reasons.push(graph.reason);
+    }
+  }
+  for (let i=0;i<tokens.length;i++) {
+    const token=tokens[i];
+    if (token.kind === 'id' && EXTENSIONS.has(token.lower) && !graph?.structural?.has(i) && !provider.isExtensionKeyword(query._providerProfile,token.lower) && tokens[i - 1]?.text !== '.' && tokens[i - 1]?.text !== ':') reasons.push('Provider extension syntax is not modeled: ' + token.text);
+    if (token.kind === 'id' && tokens[i + 1]?.text === '(' && tokens[i - 1]?.lower !== 'new' && !FUNCTIONS.has(token.lower) && !RESERVED.has(token.lower) && !provider.knownFunction(query._providerProfile,token.lower) && !provider.isExtensionKeyword(query._providerProfile,token.lower) && tokens[i - 1]?.text !== '.') reasons.push('Unrecognized function semantics: ' + token.text);
+  }
   if (reasons.length) return finish(true);
+  const scopedRelations=new WeakMap();
+  if (graph?.root) Object.defineProperty(query,'_queryRelations',{value:new Map()});
 
   function ref(token, target) { if (target) references.push([token, target]); }
   function path(scope, items, joining = false) {
-    let type = uniqueType(model, lookup(query, scope, items[0].text));
+    let type = scopedType(model,query,lookup(query, scope, items[0].text));
     if (!type) { reasons.push('Alias/entity target is external, incomplete or ambiguous: ' + items[0].text); return null; }
     let attribute;
     for (let i = 1; i < items.length; i++) {
@@ -94,6 +109,12 @@ function inspect(model, file, query, hooks) {
     return index;
   }
   function declaration(scope, index, end) {
+    const context=scopedRelations.get(scope), derived=context?.derived?.get(index);
+    if (derived) {
+      const group=buildGraph(derived.body,null,context.available,context.unavailable,context.nesting+1);
+      const target=relation(derived.alias,group);
+      return bind(scope,derived.last+1,target);
+    }
     if (tokens[index]?.lower === 'in' && tokens[index + 1]?.text === '(') {
       const last = close.get(index + 1), p = pathAt(tokens, index + 2, last);
       if (!p || last === undefined || p.next !== last) { reasons.push('Collection member declaration is incomplete.'); return index + 1; }
@@ -103,7 +124,9 @@ function inspect(model, file, query, hooks) {
     const p = pathAt(tokens, index, end);
     if (!p) { reasons.push('Entity declaration is incomplete.'); return index + 1; }
     const name = p.items.map(value => value.text).join('.');
-    const target = entity(model, name) || (p.items.length > 1 && lookup(query, scope, p.items[0].text) !== undefined ? path(scope, p.items, true) : null);
+    const unavailable=p.items.length===1 && context?.unavailable?.has(p.items[0].lower);
+    const available=p.items.length===1 ? context?.available?.get(p.items[0].lower) : null;
+    const target = available || (!unavailable && entity(model, name)) || (p.items.length > 1 && lookup(query, scope, p.items[0].text) !== undefined ? path(scope, p.items, true) : null);
     if (scope.statement !== 'select') scope.rootFqn = target?.fqn || null;
     if (!target) reasons.push('Entity declaration is external, nonliteral or ambiguous: ' + name);
     else ref(p.items.at(-1), target);
@@ -114,6 +137,40 @@ function inspect(model, file, query, hooks) {
     if (next === p.next && scope.statement !== 'select' && target) scope.aliases[target.name.toLowerCase()] = target.fqn;
     if (next === p.next && scope.statement === 'select') reasons.push('An explicit identification variable is required by this binder.');
     return next;
+  }
+  function location(token) {
+    return hooks.sourceSpans(file,query,token.start,token.end)[0] || {uri:file.uri,range:query.range};
+  }
+  function relation(token,group) {
+    const names=new Set(), fqn='@query-relation:'+token.start, attributes=[];
+    group.output.forEach((alias,index)=>{
+      if (!alias || names.has(alias.lower)) { reasons.push('A CTE or derived relation requires explicit unique projection aliases.'); return; }
+      names.add(alias.lower);
+      attributes.push({name:alias.text,kind:'query-projection',projection:group,projectionIndex:index,...location(alias)});
+    });
+    const target={name:token.text,fqn,attributes,attributesComplete:attributes.length===group.output.length,...location(token)};
+    query._queryRelations.set(fqn,target);
+    return target;
+  }
+  function buildGraph(node,parent,available=new Map(),unavailable=new Set(),nesting=0) {
+    const incoming=new Map(available), later=new Set([...unavailable,...node.ctes.map(item=>item.alias.lower)]);
+    const group={branches:[],output:node.output,order:node.order,start:tokens[node.origin].start,end:tokens[node.end]?.start??query.text.length};
+    for (const cte of node.ctes) {
+      if (incoming.has(cte.alias.lower)) reasons.push('A CTE shadows another named relation: '+cte.alias.text);
+      const definition=buildGraph(cte.body,null,incoming,later,nesting+1);
+      incoming.set(cte.alias.lower,relation(cte.alias,definition));
+      later.delete(cte.alias.lower);
+    }
+    for (const arm of node.arms) {
+      if (arm.child) group.branches.push({group:buildGraph(arm.child,parent,incoming,later,nesting+1)});
+      else group.branches.push({scope:build(arm.start,arm.end,parent,nesting,{derived:arm.derived,available:incoming,unavailable:later,nesting})});
+    }
+    if (group.order) {
+      const aliases=new Map(group.output.filter(Boolean).map(token=>[token.lower,token]));
+      for (const token of tokens.slice(group.order.start,group.order.end))
+        if (aliases.has(token.lower)) ref(token,location(aliases.get(token.lower)));
+    }
+    return group;
   }
   function treat(scope, index, end) {
     if (tokens[index]?.lower !== 'treat' || tokens[index + 1]?.text !== '(') return null;
@@ -128,15 +185,19 @@ function inspect(model, file, query, hooks) {
     query._treats.push({ start: tokens[index].start, after: tokens[last].end, fqn: target.fqn });
     return { next: last + 1, target };
   }
-  function build(start, end, parent, nesting = 0) {
+  function build(start, end, parent, nesting = 0, context) {
     if (nesting > 32 || query._scopes.length >= 128) { query._scopeIncomplete = true; reasons.push('JPQL scope limit exceeded.'); return; }
     const statement = tokens[start]?.lower === 'from' ? 'select' : tokens[start]?.lower;
     const scope = { parent: parent ? query._scopes.indexOf(parent) : null, aliases: Object.create(null), start: tokens[start]?.start ?? 0, end: tokens[end]?.start ?? query.text.length, tokenStart: start, tokenEnd: end, statement };
     query._scopes.push(scope);
+    if(context) scopedRelations.set(scope,context);
     if (!['select', 'update', 'delete'].includes(statement)) { reasons.push('Only SELECT, UPDATE and DELETE statements are modeled.'); return; }
     // Discover subqueries and omit their bodies from this scope's declaration scan.
     const children = new Map();
-    for (let i = start; i < end; i++) if (tokens[i].text === '(' && ['select', 'from'].includes(tokens[i + 1]?.lower)) { const last = close.get(i); if (last !== undefined) { children.set(i, last); i = last; } }
+    for (let i = start; i < end; i++) if (tokens[i].text === '(' &&
+      (context?.derived?.has(i) || ['select', 'from'].includes(tokens[i + 1]?.lower))) {
+      const last = close.get(i); if (last !== undefined) { children.set(i, last); i = last; }
+    }
     let from = -1;
     if (statement === 'update') from = start;
     else for (let i = start; i < end; i++) { if (children.has(i)) { i = children.get(i); continue; } if (tokens[i].text === '(') { i = close.get(i) ?? i; continue; } if (tokens[i].lower === 'from') { from = i; break; } }
@@ -153,6 +214,9 @@ function inspect(model, file, query, hooks) {
         if (token.text === ',') { i = declaration(scope, i + 1, end) - 1; continue; }
         if (token.lower === 'join') {
           let at = i + 1; if (tokens[at]?.lower === 'fetch') at++;
+          if (context?.derived?.has(at) || context?.available?.has(tokens[at]?.lower) || context?.unavailable?.has(tokens[at]?.lower)) {
+            i=declaration(scope,at,end)-1; continue;
+          }
           const downcast = treat(scope, at, end);
           if (downcast) { i = bind(scope, downcast.next, downcast.target) - 1; continue; }
           const p = pathAt(tokens, at, end);
@@ -167,7 +231,8 @@ function inspect(model, file, query, hooks) {
     }
     // Parent aliases have now been declared. A child's declarations shadow only
     // inside the child; sibling aliases are never visible to one another.
-    for (const [first, last] of children) build(first + 1, last, scope, nesting + 1);
+    for (const [first, last] of children) if (!context?.derived?.has(first))
+      build(first + 1, last, scope, nesting + 1,context && {...context,derived:undefined,nesting:nesting+1});
     for (let i = start; i < end; i++) {
       if (children.has(i)) { i = children.get(i); continue; }
       if (excluded.has(i)) continue;
@@ -197,9 +262,20 @@ function inspect(model, file, query, hooks) {
       else reasons.push('A path has an unresolved alias or enum/class literal: ' + token.text);
       i = p.next - 1;
     }
+    return scope;
   }
-  build(0, tokens.length, null);
-  query._aliases = query._scopes[0]?.aliases || {};
+  if (graph?.root) {
+    const root=buildGraph(graph.root,null);
+    Object.defineProperty(query,'_graphRoot',{value:root});
+    query.analysis='bounded-hibernate-select-graph-binding';
+    for(const name of graph.features) if(query.providerAnalysis && !query.providerAnalysis.usedFeatures.includes(name)) query.providerAnalysis.usedFeatures.push(name);
+    let branch=root.branches[0];
+    while(branch?.group) branch=branch.group.branches[0];
+    query._aliases=branch?.scope?.aliases || {};
+  } else {
+    build(0, tokens.length, null);
+    query._aliases=query._scopes[0]?.aliases || {};
+  }
   query.parameters = tokens.filter((token, i) => token.kind === 'id' && tokens[i - 1]?.text === ':').map(token => ({ name: token.text, range: hooks.sourceRange(file, query, token.start, token.end) }));
   finish(false);
 
@@ -223,7 +299,7 @@ function inspect(model, file, query, hooks) {
 
 function completionType(model, query, cursor, parts) {
   const scope = scopeAt(query, cursor); if (!scope) return null;
-  let type = uniqueType(model, lookup(query, scope, parts.shift()));
+  let type = scopedType(model,query,lookup(query, scope, parts.shift()));
   for (const part of parts) {
     const attribute = type?.attributes.find(item => item.name === part);
     if (attribute?.collection) return null;

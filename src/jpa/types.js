@@ -56,12 +56,13 @@ function environmentFor(model) {
 function analyzeQueryTypes(model, file, query, context = {}, hooks = {}) {
   const profile = context.providerProfile || provider.normalizeProviderProfile(model.options?.providerProfile);
   const environment = context.environment || environmentFor(model), diagnostics = [], errors = [], unknowns = new Set(), supported = new Set(), parameters = new Map(), scopeResults = new Map(), ast = [];
+  const graphResults = new Map();
   let checkedNodes = 0, totalNodes = 0, inferenceDepth = 0;
   query.providerAnalysis ||= provider.profileSummary(profile);
   function usedFeature(name){if(!query.providerAnalysis.usedFeatures.includes(name))query.providerAnalysis.usedFeatures.push(name);}
   for (const reason of context.unknownReasons || []) unknowns.add(reason);
   if (query.status === 'unknown' && query.reason) unknowns.add('Path/declaration binding is partial: ' + query.reason);
-  const records = managed(model), find = fqn => unique(records.filter(item => item.fqn === fqn));
+  const records = managed(model), find = fqn => query._queryRelations?.get(fqn) || unique(records.filter(item => item.fqn === fqn));
   const spans = (start, end) => hooks.sourceSpans ? hooks.sourceSpans(query, start, end) : [{ uri: file.uri, range: rangeAt(file.text, query._map?.[start] ?? 0, query._ends?.[end - 1] ?? query._map?.[start] ?? 0) }];
   function unknown(message, node) { unknowns.add(message); if (node) node.type = UNKNOWN(message); return UNKNOWN(message); }
   function error(code, message, node) { errors.push({ code: 'jpa.type.' + code, message, start: node?.start ?? 0, end: node?.end ?? query.text?.length ?? 0 }); }
@@ -151,13 +152,19 @@ function analyzeQueryTypes(model, file, query, context = {}, hooks = {}) {
   function attribute(type, name, node) {
     const record = find(type.javaType); if (!record) return unknown('Persistent path target is not a unique local managed type.', node);
     const field = record.attributes.find(value => value.name === name); if (!field) return unknown('Persistent path type is absent or incomplete: ' + name, node);
+    if (field.kind==='query-projection') {
+      const selected=analyzeGraphResult(field.projection).selectionTypes[field.projectionIndex];
+      if (!selected || ['unknown','query-relation','entity','embeddable','collection','array','object','null'].includes(selected.kind))
+        return unknown('A CTE or derived field needs a proved scalar output: '+name,node);
+      return selected;
+    }
     if (field.collection) return { kind: 'collection', javaType: field.javaType, elementType: typeFromJava(field.targetFqn || field.elementJavaType, model, environment) };
     return typeFromJava(field.targetFqn || field.javaType, model, environment);
   }
   function path(node, scope) {
     const [head, ...tail] = node.parts;
     let fqn = alias(scope, head), type;
-    if (fqn !== undefined) type = typeFromJava(fqn, model, environment);
+    if (fqn !== undefined) type = query._queryRelations?.has(fqn)?{kind:'query-relation',javaType:fqn}:typeFromJava(fqn, model, environment);
     else if (scope.resultAliases && Object.hasOwn(scope.resultAliases, head.toLowerCase())) type = scope.resultAliases[head.toLowerCase()];
     else {
       const full = node.parts.join('.'), enumClass = unique([...environment.keys()].filter(name => full.startsWith(name + '.') && environment.get(name).length === 1 && environment.get(name)[0].type.kind === 'enum'));
@@ -314,7 +321,7 @@ function analyzeQueryTypes(model, file, query, context = {}, hooks = {}) {
     const boundary = index => Math.min(tokens.length, ...['where', 'group', 'having', 'order'].map(clause).filter(value => value > index));
     if (scope.statement === 'select') {
       const from = clause('from'); let start = tokens[0]?.lower === 'select' ? 1 : 0; if (tokens[start]?.lower === 'distinct') start++;
-      if (from > start) for (const part of splitTop(tokens.slice(start, from))) { const expression = parse(part, scope, 'select', true); const type = valueType(expression.type); result.selectionTypes.push(type); if (['collection', 'subquery'].includes(type.kind)) unknown('Direct collection/scalar-subquery projection grammar is outside the typed JPQL subset.'); }
+      if (from > start) for (const part of splitTop(tokens.slice(start, from))) { const expression = parse(part, scope, 'select', true); const type = valueType(expression.type); result.selectionTypes.push(type); if (['collection', 'subquery','query-relation'].includes(type.kind)) unknown('Direct collection, scalar-subquery, or relation projection grammar is outside the typed JPQL subset.'); }
       else unknown('SELECT projection syntax is absent or implicit.');
     }
     for (const item of top.filter(value => value.word === 'on')) {
@@ -342,9 +349,53 @@ function analyzeQueryTypes(model, file, query, context = {}, hooks = {}) {
     }
     supported.add('statement:' + scope.statement); return result;
   }
+  function analyzeGraphResult(graph) {
+    if (graphResults.has(graph)) return graphResults.get(graph);
+    const result={selectionTypes:[]}; graphResults.set(graph,result);
+    const arms=graph.branches.map(arm=>arm.group?analyzeGraphResult(arm.group):(arm.scope?analyzeScope(arm.scope):{selectionTypes:[]}));
+    const [first,...others]=arms, at={start:graph.start,end:graph.end};
+    result.selectionTypes=first?.selectionTypes || [];
+    for (const arm of others) {
+      if (arm.selectionTypes.length!==result.selectionTypes.length) {
+        error('set.arity','Set-operation arms project different numbers of columns.',at);
+        continue;
+      }
+      arm.selectionTypes.forEach((right,index)=>{
+        const left=result.selectionTypes[index];
+        if (left.javaType && left.javaType===right.javaType && left.kind===right.kind) return;
+        if (compatible(left,right)===false)
+          error('set.column','Set-operation column '+(index+1)+' has incompatible types '+display(left)+' and '+display(right)+'.',at);
+        else unknown('Set-operation column '+(index+1)+' lacks one proved Java output type.');
+      });
+    }
+    if (graph.order) {
+      const aliases=new Set(graph.output.filter(Boolean).map(token=>token.lower));
+      for(const part of splitTop(query._tokens.slice(graph.order.start,graph.order.end))) {
+        const [key,...modifiers]=part;
+        const suffix=modifiers.map(token=>token.lower).join(' ');
+        const projected=aliases.has(key.lower) || key.kind==='number' && /^[1-9]\d*$/.test(key.text) && Number(key.text)<=result.selectionTypes.length;
+        if (!projected || !/^(?:asc|desc)?(?: ?nulls (?:first|last))?$/.test(suffix))
+          unknown('Set-operation ordering needs an unambiguous projected output alias or position.');
+      }
+    }
+    return result;
+  }
+  let rootResult;
   if (!query.text || query._unsupported || !query._scopes?.length) unknown('Query syntax/source is outside the supported typed JPQL subset.');
   else {
-    const result = analyzeScope(query._scopes[0]);
+    if (query._graphRoot) {
+      for (const relation of query._queryRelations.values()) {
+        for (const field of relation.attributes) {
+          const type=analyzeGraphResult(field.projection).selectionTypes[field.projectionIndex];
+          if (!type?.javaType || ['unknown','query-relation','entity','embeddable','collection','array','object'].includes(type.kind))
+            unknown('The relation projection lacks a proved scalar type: '+field.name);
+          else field.javaType=type.javaType;
+        }
+      }
+      for (const name of query.providerAnalysis.usedFeatures.filter(name=>name.startsWith('hql-'))) supported.add(name);
+      rootResult=analyzeGraphResult(query._graphRoot);
+    } else rootResult=analyzeScope(query._scopes[0]);
+    const result=rootResult;
     const target = context.resultType && typeFromJava(context.resultType, model, environment);
     if (target && result.selectionTypes.length) {
       if (result.selectionTypes.length > 1) { if (!(target.kind === 'array' && target.elementType.javaType === 'java.lang.Object') && !['jakarta.persistence.Tuple', 'javax.persistence.Tuple', 'java.lang.Object'].includes(target.javaType)) error('result', 'Multiple select items require a compatible tuple/Object[] result target.', { start: 0, end: query.text.length }); }
@@ -371,7 +422,7 @@ function analyzeQueryTypes(model, file, query, context = {}, hooks = {}) {
   for (const item of errors) for (const span of spans(item.start, item.end)) diagnostics.push({ ...span, code: state === 'unknown' ? 'jpa.type.partial' : item.code, severity: state === 'unknown' ? 'information' : 'warning', message: item.message + (state === 'unknown' ? ' Overall typed coverage is partial; this is not a complete invalid-query verdict.' : ' Source type finding; no query was executed.') });
   if (unknowns.size) diagnostics.push({ uri: file.uri, range: query.range, code: 'jpa.type.unknown', severity: 'information', message: [...unknowns].join('; ') });
   query.providerAnalysis.state=profile.enabled?'conditional-on-profile':'unconfigured';
-  const output = { state, selectionTypes: scopeResults.get(query._scopes?.[0]?.start)?.selectionTypes || [], parameters: [...parameters.values()], diagnostics, coverage: { supported: [...supported], unknown: [...unknowns], checkedNodes, totalNodes, allSupportedComponentsChecked: unknowns.size === 0 }, providerProfileId:profile.id, validityVerified: false, ast };
+  const output = { state, selectionTypes: rootResult?.selectionTypes || [], parameters: [...parameters.values()], diagnostics, coverage: { supported: [...supported], unknown: [...unknowns], checkedNodes, totalNodes, allSupportedComponentsChecked: unknowns.size === 0 }, providerProfileId:profile.id, validityVerified: false, ast };
   query.typeAnalysis = output; model.diagnostics.push(...diagnostics); return output;
 }
 
