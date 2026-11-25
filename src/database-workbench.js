@@ -1096,7 +1096,15 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       if(!vscode.workspace.isTrusted||!state.mysql||state.disposed||state.switching)throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');
       if(state.running.size||state.connecting.size)throw new Error('Finish running database operations before capturing a schema snapshot.');
       const {db,epoch}=state,key='schema-snapshot';state.running.add(key);updateStatus();
-      try{const snapshot=await require('./db/schema-diff').captureSchema(db,options);if(state.disposed||db!==state.db||epoch!==state.epoch)throw new Error('The database changed while capturing the schema. Capture again.');return snapshot;}finally{state.running.delete(key);updateStatus();}
+      try {
+        const snapshot = await require('./db/schema-diff').captureSchema(db, options);
+        if (options.includeStored === true) {
+          snapshot.ddlPrograms = await require('./db/schema-ddl-programs').captureDdlPrograms(
+            (sql, values) => db._metadataQuery(sql, values), snapshot);
+        }
+        if (state.disposed || db !== state.db || epoch !== state.epoch) throw new Error('The database changed while capturing the schema. Capture again.');
+        return snapshot;
+      } finally { state.running.delete(key); updateStatus(); }
     },
     async previewSchemaMigration(request) {
       if(!vscode.workspace.isTrusted||!state.mysql||state.disposed||state.switching)throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');

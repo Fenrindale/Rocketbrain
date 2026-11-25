@@ -5,6 +5,7 @@ const { normalizeSnapshot } = require('./schema-diff');
 const { identifier } = require('./schema-rename');
 const { tokenize } = require('./sql-policy');
 const { parseView } = require('./schema-dependency-graph');
+const { programId } = require('./schema-ddl-programs');
 
 const maxBytes = 8 * 1024 * 1024;
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -14,6 +15,8 @@ const symbol = (token, value) => token?.kind === 'symbol' && token.value === val
 const named = token => ['word', 'identifier'].includes(token?.kind);
 const ordered = values => [...values].sort((a, b) => a.object.name < b.object.name ? -1 : a.object.name > b.object.name ? 1 : 0);
 const unavailable = message => new Error(message);
+const triggerGroup = value => JSON.stringify([value.table, value.timing, value.event]);
+const programOrder = (a, b) => a.kind.localeCompare(b.kind, 'en') || a.name.localeCompare(b.name, 'en');
 
 function reference(tokens, at, database) {
   const first = tokens[at];
@@ -132,6 +135,86 @@ function definition(snapshot, object) {
   return object.kind === 'table' ? tableDefinition(snapshot, object, sql, tokens) : viewDefinition(snapshot, object, sql, tokens);
 }
 
+function storedOrder(snapshot, capture, relations, key) {
+  const library = new Map(capture.candidates.filter(row => row.kind !== 'trigger').map(row => [programId(row.kind, row.name), row]));
+  const omitted = capture.omitted.filter(row => snapshot.scope.kind === 'database' || row.kind === 'trigger');
+  const selected = new Map();
+  function select(program) {
+    if (!program) return;
+    const id = programId(program.kind, program.name);
+    if (selected.has(id)) return;
+    selected.set(id, program);
+    for (const child of program.dependencies.filter(dep => dep.kind === 'procedure' && key(dep.schema) === key(snapshot.database))) {
+      select(library.get(programId(child.kind, child.name)));
+    }
+  }
+  for (const program of capture.candidates) {
+    if (snapshot.scope.kind === 'database' || program.kind === 'trigger') select(program);
+  }
+  const procedures = new Map([...selected].filter(([, row]) => row.kind !== 'trigger').sort(([, a], [, b]) => programOrder(a, b)));
+  const emitted = new Set();
+  const unavailableDependency = row => row.dependencies.find(dep => {
+    if (key(dep.schema) !== key(snapshot.database)) return true;
+    if (dep.kind === 'procedure') return !emitted.has(programId(dep.kind, dep.name));
+    const relation = relations.get(key(dep.name));
+    return !relation || dep.kind === 'table' && relation !== 'table';
+  });
+  const omit = ({ kind, name }, reason) => omitted.push({ kind, name, reason });
+  const definitions = [];
+  while (procedures.size) {
+    const next = [...procedures].find(([, row]) => !unavailableDependency(row));
+    if (!next) break;
+    const [id, row] = next;
+    definitions.push(row);
+    emitted.add(id);
+    procedures.delete(id);
+  }
+  for (const row of procedures.values()) {
+    const dep = unavailableDependency(row);
+    omit(row, 'A required object is unavailable or cyclic: ' + quote(dep.schema) + '.' + quote(dep.name) + '.');
+  }
+  const groups = new Map();
+  for (const row of selected.values()) if (row.kind === 'trigger') {
+    const id = triggerGroup(row);
+    if (!groups.has(id)) groups.set(id, []);
+    groups.get(id).push(row);
+  }
+  for (const [id, rows] of [...groups].sort(([a], [b]) => a.localeCompare(b, 'en'))) {
+    rows.sort((a, b) => a.actionOrder - b.actionOrder);
+    const unsupportedGroup = omitted.some(row => row.kind === 'trigger' && triggerGroup(row) === id) ||
+      rows.some((row, index) => row.actionOrder !== index + 1 || unavailableDependency(row));
+    if (unsupportedGroup) {
+      for (const row of rows) {
+        const dep = unavailableDependency(row);
+        omit(row, dep ? 'Required trigger dependency missing from the export: ' + quote(dep.schema) + '.' + quote(dep.name) + '.'
+          : 'The trigger action group has an unavailable sibling or incomplete action order.');
+      }
+    } else definitions.push(...rows);
+  }
+  const databaseCollations = [...new Set(definitions.map(row => row.context.databaseCollation))].sort();
+  if (databaseCollations.length > 1) {
+    for (const row of definitions) omit(row, 'The stored programs disagree on their original schema collation; prepare a compatible source scope.');
+    definitions.length = 0;
+  }
+  return { definitions, omitted, databaseCollation: databaseCollations.length === 1 ? databaseCollations[0] : undefined };
+}
+
+function storedStatements(programs) {
+  const delimiters = ['$$', '//', ...Array.from({ length: 16 }, (_, index) => '~rb' + index + '~')];
+  return programs.flatMap(({ context, sql }) => {
+    const delimiter = delimiters.find(value => !sql.includes(value));
+    if (!delimiter) throw unavailable('No unused SQL client delimiter could be selected for a stored definition.');
+    return [
+      "SET SESSION sql_mode='" + context.sqlMode + "';",
+      "SET SESSION character_set_client='" + context.charset + "';",
+      "SET SESSION collation_connection='" + context.collation + "';",
+      'DELIMITER ' + delimiter,
+      sql + '\n' + delimiter,
+      'DELIMITER ;', ''
+    ];
+  });
+}
+
 function buildDdlExport(value) {
   const snapshot = normalizeSnapshot(value);
   if (!/^[A-Z0-9_,]*$/i.test(snapshot.server.sqlMode)) throw unavailable('The captured SQL mode has an unsupported form.');
@@ -177,30 +260,53 @@ function buildDdlExport(value) {
     }
     viewOrder.push(next[1]); views.delete(next[0]);
   }
-  omitted.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   const unavailableAreas = Object.keys(snapshot.coverage).filter(area => snapshot.coverage[area] !== 'loaded').sort();
-  const statements = [
+  const baseStatements = [
     ...tableOrder.map(entry => ({ kind: 'table', name: entry.object.name, sql: entry.ddl })),
     ...tableOrder.flatMap(entry => entry.constraints.map(constraint => ({ kind: 'foreignKey', name: constraint.name, table: entry.object.name, sql: constraint.sql }))),
     ...viewOrder.map(entry => ({ kind: 'view', name: entry.object.name, sql: entry.ddl }))
   ];
+  const capture = value.ddlPrograms;
+  const relations = new Map([...tableOrder, ...viewOrder].map(({ object }) => [key(object.name), object.kind]));
+  const programs = capture ? storedOrder(snapshot, capture, relations, key) : { definitions: [], omitted: [] };
+  if (capture?.unavailable) unavailableAreas.push('stored programs');
+  omitted.push(...programs.omitted.map(({ kind, name, reason }) => ({ kind, name, reason })));
+  omitted.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  const statements = [...baseStatements, ...programs.definitions.map(({ kind, name, sql, context }) => ({ kind, name, sql, context }))];
+  const replayPrograms = programs.definitions.length > 0;
+  const replay = [
+    ...baseStatements.map(statement => '\n' + statement.sql + ';'),
+    ...(replayPrograms ? [
+      '', '-- Restore stored programs in a dedicated UTF-8 client session.',
+      'SET @__rb_saved_mode=@@SESSION.sql_mode, @__rb_saved_cs=@@SESSION.character_set_client,',
+      '    @__rb_saved_collation=@@SESSION.collation_connection;',
+      ...storedStatements(programs.definitions),
+      'SET SESSION sql_mode=@__rb_saved_mode, character_set_client=@__rb_saved_cs,',
+      '    collation_connection=@__rb_saved_collation;',
+      'SET @__rb_saved_mode=NULL, @__rb_saved_cs=NULL, @__rb_saved_collation=NULL;'
+    ] : [])
+  ];
   const complete = !omitted.length && !unavailableAreas.length;
   const sql = [
-    '-- Rocketbrain schema DDL export v1',
+    '-- Rocketbrain schema DDL export ' + (capture ? 'v2' : 'v1'),
     '-- Account-visible ' + snapshot.scope.kind + ' scope on ' + snapshot.server.dialect + '.',
     '-- Source SQL mode ' + (snapshot.server.sqlMode || '(default)') + '. Review target schema and context before execution.',
-    '-- Table data, privileges, triggers and stored programs are outside this export.',
-    '-- Definitions can contain comments, literals and view definers. Review them before committing.',
+    capture ? '-- Table data, grants, events, sequences and packages are outside this export.'
+      : '-- Table data, privileges, triggers and stored programs are outside this export.',
+    '-- Definitions can contain comments, literals and definers. Review them before committing.',
     '-- AUTO_INCREMENT counters omitted. Foreign keys are added after base tables.',
+    ...(replayPrograms ? ['-- Use the same schema name and default collation ' + programs.databaseCollation + ' on a compatible server.',
+      '-- Definitions preserve the original DEFINER. Provide the appropriate accounts and existing restore privileges.'] : []),
     ...unavailableAreas.map(area => '-- Unavailable metadata ' + area),
     ...omitted.map(item => '-- Omitted ' + item.kind + ' ' + quote(item.name) + ' · ' + item.reason),
-    ...(statements.length ? ['', 'USE ' + quote(snapshot.database) + ';', ...statements.map(statement => '\n' + statement.sql + ';')] : []),
+    ...(statements.length ? ['', 'USE ' + quote(snapshot.database) + ';', ...replay] : []),
     ''
   ].join('\n');
   if (Buffer.byteLength(sql) > maxBytes) throw unavailable('The generated DDL exceeds 8 MiB. Select fewer objects.');
   return { state: complete ? 'account-visible-scope' : 'partial', database: snapshot.database,
     scope: snapshot.scope, statements, omitted, unavailableAreas, sql,
-    fingerprint: digest(sql), sourceIdentity: digest(JSON.stringify(snapshot.server)), rowDataIncluded: false, executedSql: false };
+    fingerprint: digest(sql), sourceIdentity: digest(JSON.stringify(capture ? [snapshot.server, capture.observation] : snapshot.server)),
+    rowDataIncluded: false, executedSql: false };
 }
 
 module.exports = { buildDdlExport };
