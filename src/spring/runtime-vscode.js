@@ -3,8 +3,9 @@ const crypto = require('node:crypto');
 const { ActuatorClient, RuntimeError, validateRuntimeUrl, compareRuntime, emptySnapshot } = require('./runtime-client');
 const { registerRuntimeHealth } = require('./runtime-health-vscode');
 const { registerRuntimeSecurity } = require('./runtime-security-vscode');
+const { registerRuntimeProperty } = require('./runtime-property-vscode');
 
-function registerRuntimeSpring(vscode, context, output, { analyze }) {
+function registerRuntimeSpring(vscode, context, output, { analyze, verifiedLocalPid }) {
   const subscriptions = [], events = new vscode.EventEmitter();
   subscriptions.push(events);
   let client = null, current = emptySnapshot(), generation = 0, disposed = false, refreshing = null;
@@ -14,7 +15,8 @@ function registerRuntimeSpring(vscode, context, output, { analyze }) {
   const assertTrusted = () => { if (disposed) throw new RuntimeError('DISPOSED', 'Spring runtime observation is closed.'); if (!vscode.workspace.isTrusted) { disconnect(); throw new RuntimeError('UNTRUSTED_WORKSPACE', 'Trust the workspace before connecting to a Spring runtime.'); } };
   const health = registerRuntimeHealth(vscode, { getClient: () => client, assertTrusted, onConnectionChange: events.event });
   const security = registerRuntimeSecurity(vscode, { getClient: () => client, assertTrusted, onConnectionChange:events.event });
-  subscriptions.push(health,security);
+  const properties = registerRuntimeProperty(vscode, { getClient: () => client, assertTrusted, onConnectionChange: events.event, verifiedLocalPid });
+  subscriptions.push(health,security,properties);
   function disconnect() { generation++; client?.dispose(); client = null; current = emptySnapshot(); emit(); return snapshot(); }
 
   async function connectionInput() {
@@ -80,6 +82,8 @@ function registerRuntimeSpring(vscode, context, output, { analyze }) {
   command('rocketbrain.spring.disconnectRuntime', disconnect);
   command('rocketbrain.spring.runtimeHealth', health.open);
   command('rocketbrain.spring.runtimeSecurity', security.open);
+  command('rocketbrain.spring.runtimeProperty', input => properties.open(false, input));
+  command('rocketbrain.spring.debugProperty', input => properties.open(true, input));
   command('rocketbrain.spring.compareRuntime', async () => {
     const comparison = await compare();
     vscode.window.showInformationMessage(`Spring comparison: ${comparison.summary.present} local Beans observed, ${comparison.summary.runtimeOnly} runtime-only, ${comparison.summary.notObserved} not observed.`);

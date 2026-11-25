@@ -212,6 +212,8 @@
       { "command": "rocketbrain.spring.beanGraph", "title": "Show Spring Bean Dependency Graph", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeHealth", "title": "Open Spring Actuator Health", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeSecurity", "title": "Inspect Spring Security Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.runtimeProperty", "title": "Inspect Spring Property Value and Origin", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.debugProperty", "title": "Inspect Spring Property in Active Debug Target", "category": "Rocketbrain", "icon": "$(search)", "enablement": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewProcedureCall", "title": "Review Stored Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewPackageCall", "title": "Review MariaDB Package Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -1109,6 +1111,9 @@
       }
     ],
     "menus": {
+      "debug/toolBar": [
+        { "command": "rocketbrain.spring.debugProperty", "when": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java", "group": "navigation@40" }
+      ],
       "notebook/cell/title": [
         { "command": "rocketbrain.sqlNotebook.pinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" },
         { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }

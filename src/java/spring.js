@@ -141,10 +141,10 @@ function yamlPrefix(text, line) {
   return stack.map(item => item.key).join('.');
 }
 
-function registerSpringFeatures(vscode, context, output) {
+function registerSpringFeatures(vscode, context, output, { verifiedLocalPid } = {}) {
   const subscriptions = [], cache = new Map();
   const semantic = registerSemanticSpring(vscode, context, output);
-  const runtime = registerRuntimeSpring(vscode, context, output, { analyze: semantic.analyze });
+  const runtime = registerRuntimeSpring(vscode, context, output, { analyze: semantic.analyze, verifiedLocalPid });
   subscriptions.push(semantic);
   subscriptions.push(runtime);
   const enabled = () => vscode.workspace.getConfiguration('rocketbrain.spring').get('enabled', true);

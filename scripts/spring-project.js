@@ -164,6 +164,10 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     observerArgs=['-javaagent:'+agent.jarPath+'=config='+pathToFileURL(configFile).href];
   }
   const runtimeUrl = 'http://127.0.0.1:' + port + '/actuator', baseUrl = 'http://127.0.0.1:' + port;
+  const propertyProbe = process.env.ROCKETBRAIN_SPRING_PROPERTY_TEST === '1' ? {
+    FIXTURE_INSPECTION_ENABLED: 'true', FIXTURE_INSPECTION_MESSAGE: engine + '-from-local-launch',
+    MANAGEMENT_ENDPOINT_ENV_SHOW_VALUES: 'always', MANAGEMENT_INFO_PROCESS_ENABLED: 'true'
+  } : {};
   let classpath = await fsp.readFile(path.join(PROJECT, 'build', 'runtime-classpath.txt'), 'utf8');
   // The optional reactive stack can exceed the Windows launcher command line.
   // An owned manifest jar keeps its classpath URLs and Unicode paths intact.
@@ -187,7 +191,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   const logFile = path.join(folder, 'application.log');
   const output = fs.createWriteStream(logFile);
   child = spawn(javaExe(), javaArgs, { cwd: PROJECT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env,
-    SERVER_PORT: String(port), SERVER_ADDRESS: '127.0.0.1', SPRING_DATASOURCE_URL: url, SPRING_DATASOURCE_USERNAME: db.config.user,
+    SERVER_PORT: String(port), SERVER_ADDRESS: '127.0.0.1', SPRING_DATASOURCE_URL: url, SPRING_DATASOURCE_USERNAME: db.config.user, ...propertyProbe,
     ...(endpointProbePort ? {FIXTURE_ENDPOINT_PROBE_PORT: String(endpointProbePort)} : {}),
     SPRING_DATASOURCE_PASSWORD: db.config.password, SPRING_DATASOURCE_DRIVER_CLASS_NAME: engine === 'mysql' ? 'com.mysql.cj.jdbc.Driver' : 'org.mariadb.jdbc.Driver',
     SPRING_JPA_HIBERNATE_NAMING_PHYSICAL_STRATEGY:naming==='opaque'?'fixture.boot.OpaquePhysicalNamingStrategy':naming==='custom'?'fixture.boot.FixturePhysicalNamingStrategy':'org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl',

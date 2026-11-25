@@ -14,7 +14,7 @@ function registerJavaFeatures(context, vscode) {
   let client, debuggerController, disposing, disposed = false, configuring = false, installing = false, pending = Promise.resolve();
   let state = { state: 'stopped', message: 'Java server is stopped.' };
   const subscriptions = [output, status];
-  const spring = registerSpringFeatures(vscode, context, output);
+  const spring = registerSpringFeatures(vscode, context, output, { verifiedLocalPid: session => debuggerController?.verifiedLocalPid(session) });
   subscriptions.push(spring);
   function update(next, message) {
     state = { ...state, state: next, message };

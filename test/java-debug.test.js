@@ -55,8 +55,14 @@ test('Java debugger validates attach ports and directly asks its own language en
   assert.equal(await provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'attach', processId: 'x' }), undefined);
   assert.match(errors.at(-1), /positive local Java process ID/);
   assert.equal(await provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'attach', port: 70000 }), undefined); assert.match(errors.at(-1), /TCP port/); assert.equal(calls.length, 0);
-  const resolved = await provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'attach', port: 5005 }); assert.equal(resolved.hostName, '127.0.0.1');
-  const adapter = await factory.createDebugAdapterDescriptor({ id: 'unit', type: 'rocketbrain-java' }); assert.ok(adapter.implementation); assert.equal(calls.at(-1).command, 'vscode.java.startDebugSession'); adapter.implementation.dispose();
+  const resolved = await provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'attach', port: 5005, __rocketbrainVerifiedAttach: 'forged' });
+  assert.equal(resolved.hostName, '127.0.0.1');
+  assert.equal(resolved.__rocketbrainVerifiedAttach, undefined);
+  const session = { id: 'unit', type: 'rocketbrain-java', configuration: resolved };
+  const adapter = await factory.createDebugAdapterDescriptor(session); assert.ok(adapter.implementation); assert.equal(calls.at(-1).command, 'vscode.java.startDebugSession');
+  adapter.implementation.send({ type:'response', command:'attach', success:true });
+  assert.equal(controller.verifiedLocalPid(session), undefined, 'A manual host/port attach cannot claim an OS-verified PID');
+  adapter.implementation.dispose();
   await assert.rejects(() => controller.hotCodeReplace(), /Pause/);
   controller.dispose(); await assert.rejects(() => factory.createDebugAdapterDescriptor(), /disposed/);
 });
