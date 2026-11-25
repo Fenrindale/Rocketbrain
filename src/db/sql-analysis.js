@@ -47,6 +47,7 @@ function analyzeSql(text,catalog=[],options={}){
   const colEq=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase();
   const nameEq=(a,b)=>options.tableNameCaseSensitive===false?colEq(a,b):String(a)===String(b);
   const joinOrigins=options.joinOrigins===true;
+  const sourceNavigation=options.sourceNavigation===true;
   const joinOrigin=column=>joinOrigins?{joinOrigin:column.joinOrigin}:{};
   const sameOrigin=(left,right)=>left&&right&&left.database===right.database&&left.table===right.table&&left.column===right.column;
   const duplicateOutputs=columns=>new Set(columns.map(column=>column.name.toLowerCase())).size!==columns.length;
@@ -57,10 +58,17 @@ function analyzeSql(text,catalog=[],options={}){
   const ref=(t,kind,name,type,definition,extra={})=>{const key=t.start+':'+kind;if(seenReferences.has(key))return;seenReferences.add(key);model.references.push({start:t.start,end:t.end,range:sourceRange(text,t.start,t.end),kind,name,type,definition,...extra});};
   const findRelation=(scope,name)=>{for(let current=scope;current;current=current.parent){const matches=current.relations.filter(r=>colEq(r.alias,name));if(matches.length)return matches.length===1?matches[0]:null;}return null;};
   const isCompleteScope=scope=>scope&&scope.relations.every(r=>r.complete)&&!scope.partial;
+  const missingOrigin=(relation)=>relation.requested&&!relation.catalog&&model.database&&!nameEq(relation.requested.schema,model.database);
+  const pendingSource=(at,scope,relations)=>{
+    if(!sourceNavigation||scope.partial)return;
+    const endpoints=relations.filter(missingOrigin).map(relation=>relation.requested);
+    if(endpoints.length)ref(at,'pending-physical-source',at.value,UNKNOWN(),undefined,{scopeId:scope.id,endpoints});
+  };
   const resolve=(scope,parts,at,{projectionAlias=false,projectionClause,uncertain=false}={})=>{
     const name=parts.at(-1).value;
     if(parts.length>3){unknown('Column paths with more than database/table/column components are not supported.',at.start);return UNKNOWN();}
     if(parts.length>1){const qualifier=parts.at(-2).value,relation=findRelation(scope,qualifier);if(!relation){if(uncertain||scope.partial||!catalogComplete)unknown('Column qualifier is unresolved in a partial scope.',at.start);else issue('sql.name.qualifier','Unknown relation alias '+qualifier+'.',parts.at(-2));return UNKNOWN();}
+      if(parts.length<3||!relation.definition&&relation.requested&&nameEq(parts[0].value,relation.requested.schema))pendingSource(at,scope,[relation]);
       if(parts.length===3&&(relation.kind!=='catalog'||relation.definition||!relation.catalog||!nameEq(parts[0].value,relation.catalog.database))){unknown('The database-qualified column does not prove an unaliased relation in the observed database.',parts[0].start);return UNKNOWN();}
       const columns=relation.columns.filter(c=>colEq(c.name,name));
       ref(parts.at(-2),'relation',qualifier,UNKNOWN(),relation.definition,{relationId:relation.id,scopeId:scope.id,physicalTable:relation.kind==='catalog'&&!relation.definition?relation.catalog:undefined});
@@ -72,7 +80,7 @@ function analyzeSql(text,catalog=[],options={}){
     for(let current=scope;current;current=current.parent){const choices=current.relations.flatMap(r=>r.columns.filter(c=>colEq(c.name,name)).map(c=>({relation:r,column:c})));
       if(choices.length===1&&isCompleteScope(current)){const {relation,column}=choices[0];ref(at,'column',name,column.type,column.definition,{relationId:relation.id,scopeId:scope.id,catalog:relation.catalog,physicalColumn:column.physicalColumn||column.catalog,...joinOrigin(column),renamePhysicalColumn:column.renamePhysicalColumn!==false,correlated:current!==scope});supported.add(current===scope?'column-binding':'correlated-subquery');return column.type;}
       if(choices.length>1){if(uncertain||current.partial)unknown('Column ownership is uncertain in an unsupported expression/join.',at.start);else issue('sql.name.ambiguous','Column '+name+' is ambiguous; qualify its relation.',at);return UNKNOWN();}
-      if(choices.length===1||!isCompleteScope(current)){unknown('Unqualified column ownership is uncertain in a partial scope.',at.start);return UNKNOWN();}
+      if(choices.length===1||!isCompleteScope(current)){if(!uncertain)pendingSource(at,scope,current.relations);unknown('Unqualified column ownership is uncertain in a partial scope.',at.start);return UNKNOWN();}
     }
     if(catalogComplete&&!scope.partial&&!uncertain)issue('sql.name.column','Unknown column '+name+'.',at);else unknown('Column or expression symbol '+name+' is not resolved in the supported grammar/catalog.',at.start);return UNKNOWN();
   };
@@ -98,6 +106,21 @@ function analyzeSql(text,catalog=[],options={}){
       if(t.upper==='BINARY'&&i===a&&a+1<b){unknown('BINARY prefix coercion is outside exact static result typing.',t.start);continue;}
       if(t.upper==='OVER'&&id(token[i+1])){unknown('Named window declarations and frame semantics are not bound.',t.start);i++;continue;}
       if(id(t)){
+        if(sourceNavigation&&token[i-1]?.value==='.'){
+          unknown('An unresolved qualifier precedes this reference.',t.start);atoms.push(UNKNOWN());continue;
+        }
+        if(token[i+1]?.value==='.'&&['word','identifier'].includes(token[i+2]?.kind)&&
+            token[i+3]?.value==='('&&token[i+3].close<b){
+          const name=token[i+2],close=token[i+3].close;
+          if(sourceNavigation)ref(name,'stored-function',name.value,UNKNOWN(),undefined,{scopeId:scope.id,
+            physicalRoutine:{schema:t.value,name:name.value,kind:'function'}});
+          for(const [x,y]of split(i+4,close))if(x<y)expression(x,y,scope,context);
+          const matches=catalog?.coverage?.routines==='loaded'&&nameEq(t.value,model.database)?
+            (catalog.routines||[]).filter(r=>String(r.type).toUpperCase()==='FUNCTION'&&colEq(r.name,name.value)):[];
+          const result=matches.length===1?dbType(matches[0].returnType):UNKNOWN();
+          if(result.family==='unknown')unknown('The stored function result type requires its observed routine contract.',name.start);
+          atoms.push(result);i=close;continue;
+        }
         if(token[i+1]?.value==='('){const close=token[i+1].close;if(close===undefined||close>=b){unknown('Incomplete function call.',t.start);return UNKNOWN();}const args=split(i+2,close).filter(([x,y])=>x<y);let argTypes=[];
           if(['COUNT','LOWER','UPPER','LCASE','UCASE','LENGTH','CHAR_LENGTH','CHARACTER_LENGTH','SUM','AVG','MIN','MAX','ABS'].includes(t.upper)&&args.length!==1)issue('sql.function.arity',t.value+' requires exactly one argument in this supported form.',t);
           if(t.upper==='EXTRACT'){const from=top(i+2,close,(v,n)=>v.upper==='FROM'?n:undefined);if(from!==undefined){expression(from+1,close,scope,context);atoms.push(family(token[i+2]?.upper==='SECOND'?'decimal':'integer'));}else{unknown('Incomplete EXTRACT form.',t.start);atoms.push(UNKNOWN());}}
@@ -225,7 +248,7 @@ function completionsAt(model,offset){if(model._nonCode?.some(span=>offset>=span.
   for(const r of selected)for(const c of r.columns)if(c.name.toLowerCase().startsWith(prefix))result.push({label:c.name,kind:'column',detail:r.alias+' · '+(c.type.dbType||c.type.family)+' · '+r.kind,insertText:quote(c.name),table:r.name,type:c.type});return result;
 }
 const colEqLocal=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase();
-function definitionsAt(model,offset){const ref=model.references.find(r=>offset>=r.start&&offset<=r.end&&r.definition);return ref?[{...ref.definition,range:sourceRange(model.text,ref.definition.start,ref.definition.end)}]:[];}
+function definitionsAt(model,offset,{skipImplicit=false}={}){const ref=model.references.find(r=>offset>=r.start&&offset<=r.end&&r.definition&&(!skipImplicit||!r.implicit));return ref?[{...ref.definition,range:sourceRange(model.text,ref.definition.start,ref.definition.end)}]:[];}
 function hoverAt(model,offset){const ref=model.references.find(r=>offset>=r.start&&offset<=r.end);if(!ref)return null;return [ref.kind+': '+ref.name,ref.type?.dbType||ref.type?.family,ref.catalog?JSON.stringify(ref.catalog):null,ref.correlated?'Correlated outer-scope reference':null,'Static SELECT model; execution validity is unverified.'].filter(Boolean).join('\n');}
 function statementRanges(text,options={}){
   const unknown=[],statements=[];if(typeof text!=='string'||Buffer.byteLength(text)>LIMITS.bytes||text.includes('\0'))return {statements,unknown:[{reason:'SQL document exceeds limits or contains NUL.'}]};

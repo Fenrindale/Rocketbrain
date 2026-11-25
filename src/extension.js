@@ -134,7 +134,8 @@ async function activate(context) {
   const analysis = require('./analysis-tree').registerAnalysisTree(context, vscode, { spring: java.spring, jpa });
   context.subscriptions.push(analysis);
   sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase,
-    joinCatalog:database.joinCompletionCatalog,joinLogicalRelationships:database.joinLogicalRelationships});
+    joinCatalog:database.joinCompletionCatalog,joinLogicalRelationships:database.joinLogicalRelationships,
+    objectDefinition:objectSources.definition});
   context.subscriptions.push(sqlAnalysis);
   const sqlEditing=require('./db/sql-editing-vscode').registerSqlEditing(context,vscode,{database,sqlAnalysis});
   context.subscriptions.push(sqlEditing);

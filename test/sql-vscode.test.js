@@ -81,3 +81,42 @@ test('registered JOIN provider uses exact editor ranges and drops changed docume
     assert.deepEqual(await pending, []);
   } finally { h.api.dispose(); }
 });
+
+test('SQL Definition opens scoped paths on demand and keeps hover and cached scopes offline', async () => {
+  const source = 'SELECT p.id FROM other.people p';
+  const remote = { schema: 'other', name: 'people', kind: 'table', columns: [{ name: 'id', type: 'int', nullable: false }] };
+  let graphReads = 0, ddlReads = 0, release, waitForDdl = false;
+  const h = host(source, async () => catalog, {
+    joinCatalog: async request => {
+      graphReads++;
+      assert.deepEqual(request, { endpoints: [{ schema: 'other', table: 'people' }], includeEdges: false });
+      return { tables: [remote] };
+    },
+    objectDefinition: async (target, assertCurrent) => {
+      ddlReads++;
+      assert.deepEqual(target.object, { schema: 'other', kind: 'table', name: 'people' });
+      assert.deepEqual(target.member, { name: 'id', kind: 'column' });
+      assertCurrent();
+      if (waitForDdl) await new Promise(resolve => { release = resolve; });
+      return { uri: 'rocketbrain-object-source:exact' };
+    }
+  });
+  try {
+    const position = h.doc.positionAt(source.indexOf('id') + 1);
+    h.providers.hover.provideHover(h.doc, position);
+    assert.equal(graphReads + ddlReads, 0);
+    assert.deepEqual(await h.providers.definition.provideDefinition(h.doc, position), [{ uri: 'rocketbrain-object-source:exact' }]);
+    assert.equal(graphReads + ddlReads, 2);
+    assert.match(h.providers.hover.provideHover(h.doc, position).contents[0].value, /other\.people\.id.*NOT NULL/);
+    assert.equal(graphReads + ddlReads, 2);
+    waitForDdl = true;
+    const pending = h.providers.definition.provideDefinition(h.doc, position);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(typeof release, 'function');
+    h.connection.fire({ mysql: false, metadata: { ...catalog, cachedMetadata: { capturedAt: 'fixture' } } });
+    release();
+    assert.deepEqual(await pending, []);
+    assert.deepEqual(await h.providers.definition.provideDefinition(h.doc, position), []);
+    assert.equal(graphReads + ddlReads, 4);
+  } finally { h.api.dispose(); }
+});
