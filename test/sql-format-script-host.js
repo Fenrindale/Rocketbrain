@@ -146,12 +146,31 @@ async function runSqlFormatScriptChecks(api, vscode, checks) {
       await setting.update('formatting.keywordCase', options.keywordCase, vscode.ConfigurationTarget.Workspace);
       const document = await vscode.workspace.openTextDocument({ language: 'sql', content: source });
       const editor = await vscode.window.showTextDocument(document, { preview: false });
+      editor.selection = new vscode.Selection(0, 0, 0, 0);
       editor.options = { tabSize: 2, insertSpaces: true };
+      const version = document.version;
       const edits = await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', document.uri, { tabSize: 2, insertSpaces: true });
-      const changed = await vscode.commands.executeCommand('rocketbrain.sql.format');
-      assert.equal(changed, edits.length > 0);
-      if (edits.length) assert.equal(document.getText(), edits[0].newText);
-      return document.getText();
+      assert.ok(edits.length <= 1, 'SQL formatter should return a single whole-document edit');
+      let settle;
+      const synchronized = new Promise(resolve => { settle = resolve; });
+      const subscription = vscode.workspace.onDidChangeTextDocument(event => {
+        if (event.document === document && event.document.version > version) settle(true);
+      });
+      const timer = setTimeout(() => settle(false), 5000);
+      try {
+        const changed = await vscode.commands.executeCommand('rocketbrain.sql.format');
+        assert.equal(changed, edits.length > 0, 'SQL formatting command and provider must agree on whether an edit is needed');
+        if (changed) {
+          assert.ok(document.version > version || await synchronized, 'The SQL editor did not observe its formatting edit');
+          const canonicalEol = text => text.replaceAll('\r\n', '\n');
+          assert.equal(canonicalEol(document.getText()), canonicalEol(edits[0].newText),
+            'SQL formatting command must apply the provider text');
+        }
+        return document.getText();
+      } finally {
+        clearTimeout(timer);
+        subscription.dispose();
+      }
     });
     checks.push('SQL Format Document preserved the results of 100 statements per layout through the native database client.');
     return { ...evidence, nativeFormatDocument: true };
