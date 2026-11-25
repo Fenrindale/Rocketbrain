@@ -53,19 +53,19 @@ async function runKotlinFormattingChecks(api,vscode,checks) {
     assert.ok(rangePlan.documents[0].after.endsWith(original.slice(hard.rangeEnd)));
     const nativeRange=await vscode.commands.executeCommand('vscode.executeFormatRangeProvider',hardDoc.uri,range,options);
     assert.equal(editedText(original,nativeRange),rangePlan.documents[0].after);
-    const undo=async stage=>{
+    const undo=async(stage,expected=original)=>{
       await vscode.window.showTextDocument(hardDoc,{preview:false,preserveFocus:false});
       await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
       assert.equal(vscode.window.activeTextEditor?.document,hardDoc);
       await vscode.commands.executeCommand('undo');
-      try { await until(()=>hardDoc.getText()===original,10000); }
+      try { await until(()=>hardDoc.getText()===expected,10000); }
       catch {
         const observed=hardDoc.getText();
         throw Error(`Undo after ${stage} did not restore the original Kotlin buffer (EOL ${hardDoc.eol}, dirty ${hardDoc.isDirty}, `+
-          `length ${observed.length}/${original.length}, text apart from line endings ${observed.replace(/\r\n/g,'\n')===original}).`);
+          `length ${observed.length}/${expected.length}, text apart from line endings ${observed.replace(/\r\n/g,'\n')===expected}).`);
       }
       assert.equal(hardDoc.eol,vscode.EndOfLine.LF);
-      assert.equal(hardDoc.isDirty,false);
+      assert.equal(hardDoc.isDirty,expected!==original);
     };
     assert.equal((await api.java.refactoring.apply(rangePlan.id)).state,'applied');
     assert.equal(hardDoc.eol,vscode.EndOfLine.LF);
@@ -82,10 +82,21 @@ async function runKotlinFormattingChecks(api,vscode,checks) {
     assert.equal(hardDoc.getText(),full.documents[0].after);
     assert.equal(hardDoc.eol,vscode.EndOfLine.CRLF);
     assert.equal(await fs.readFile(hardDoc.uri.fsPath,'utf8'),original);
-    await undo('reviewed document');
+    const formattedLf=full.documents[0].after.replace(/\r\n/g,'\n');
+    await undo('reviewed line endings',formattedLf);
+    await undo('reviewed text formatting');
+    await vscode.commands.executeCommand('redo');
+    await until(()=>hardDoc.getText()===formattedLf,10000);
+    await vscode.commands.executeCommand('redo');
+    await until(()=>hardDoc.getText()===full.documents[0].after,10000);
+    await undo('redone line endings',formattedLf);
+    await undo('redone text formatting');
     shell.selection=new vscode.Selection(0,0,0,0);
     await vscode.commands.executeCommand('editor.action.formatDocument');
+    await until(()=>hardDoc.getText()===formattedLf,12000);
+    await vscode.commands.executeCommand('editor.action.formatDocument');
     await until(()=>hardDoc.getText()===full.documents[0].after,12000);
+    await undo('native line endings',formattedLf);
     await undo('native document formatter');
     const stale=await service.prepare({document:hardDoc,options});
     await fs.writeFile(nestedConfig,savedNested.replace('tab_width=4','tab_width=8'));
@@ -93,7 +104,7 @@ async function runKotlinFormattingChecks(api,vscode,checks) {
     const jdbc=await jdbcReadback();
     assert.ok(jdbc,'Run with the owned Spring JDBC fixture.');
     checks.push('Pinned Kotlin native formatting obeyed inherited soft indentation and distinct hard tab stops, preserving raw and quoted literal content.');
-    checks.push('The selected complete Kotlin lines preserved the surrounding buffer. A reviewed full CRLF edit used one Undo and reject-on-changed-config.');
+    checks.push('The selected complete Kotlin lines preserved the surrounding buffer. Reviewed text edits and CRLF use separate Undo/Redo steps and reject changed configuration.');
     return {springWorkspace:true,jdbc,server:state.serverVersion,compiler:state.compilerVersion,nativeDocument:true,nativeRange:true,
       configurationFiles:2,softIndent:2,hardTabWidth:4,exactRange:true,rawAndQuotedLiterals:true,fullCrlf:true,nativeUndo:true,diskPreserved:true,changedConfigRefused:true};
   } finally {

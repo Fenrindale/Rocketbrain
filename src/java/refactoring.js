@@ -158,30 +158,65 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
  function reviewedUri(saved,value=saved.uri){return sourceUri(value,{guard:!!saved.guard,resource:!!saved.resourceSha256||!!saved.serviceDescriptor,kotlinFormatting:!!saved.kotlinFormatting});}
  async function validate(id,cancellation){trusted();cancelled(cancellation);const plan=plans.get(id);if(!plan||Date.now()>plan.expiresAt)throw Error('The Java refactoring review expired. Preview it again.');const custom=validators.get(id)?.validate;if(custom)await custom(cancellation);trusted();cancelled(cancellation);const checked=[];for(const saved of [...plan.documents,...plan.guardSnapshots]){if(saved.created)continue;const uri=reviewedUri(saved),doc=saved.binary?null:await vscode.workspace.openTextDocument(uri);checked.push({saved,doc,uri});cancelled(cancellation);}checkSnapshots(checked);checkResources(plan);checkedPlans.set(id,checked);return {state:'fresh',id,documents:plan.documents.length,resourceOperations:plan.resourceOperations.length};}
  function checkSnapshots(checked){trusted();for(const {saved,doc,uri}of checked){reviewedUri(saved,uri);if(saved.binary){if((vscode.workspace.textDocuments||[]).some(value=>!value.isClosed&&key(value.uri.fsPath)===key(uri.fsPath))||JSON.stringify(binaryIdentity(uri.fsPath))!==JSON.stringify(saved.identity)||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash)throw Error('A reviewed binary resource or text buffer changed after review.');continue;}if(doc.isClosed||doc.version!==saved.version||hash(doc.getText())!==saved.hash||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash||((saved.resourceOperation||saved.serviceDescriptor)&&doc.isDirty))throw Error('A refactoring source file changed after review. Preview again.');}}
+ function runFinalGuard(id,cancellation) {
+  const guard=validators.get(id)?.preApply;
+  if(guard){const value=guard(cancellation);if(value?.then)throw Error('The final refactoring guard must be synchronous.');}
+  trusted();cancelled(cancellation);checkSnapshots(checkedPlans.get(id));checkResources(plans.get(id));
+ }
+ async function applyFormattingEndOfLine(id,file,cancellation) {
+  const {doc,uri}=checkedPlans.get(id).find(entry=>entry.saved.uri===file.uri);
+  const editor=await vscode.window.showTextDocument(doc,{preview:false,preserveFocus:false});
+  if(!plans.has(id) || editor.document!==doc) throw Error('The formatting review is no longer open.');
+  runFinalGuard(id,cancellation);
+  if(!file.edits.length) {
+   if(!await editor.edit(edit=>edit.setEndOfLine(doc.eol),{undoStopBefore:true,undoStopAfter:true})) return false;
+   if(!plans.has(id)) throw Error('The formatting review is no longer open.');
+   runFinalGuard(id,cancellation);
+  }
+  removePlan(id);
+  const version=doc.version;
+  if(file.edits.length) {
+   const changes=file.edits.map(change=>({range:new vscode.Range(change.range.start.line,change.range.start.character,
+    change.range.end.line,change.range.end.character),text:change.newText}));
+   if(!await editor.edit(edit=>{for(const change of changes)edit.replace(change.range,change.text);},
+    {undoStopBefore:true,undoStopAfter:true})) return false;
+   const expected=editedText(file.before,file.edits);
+   if(doc.isClosed||doc.version!==version+1||doc.getText()!==expected||!vscode.workspace.isTrusted||
+    cancellation?.isCancellationRequested||hash(fs.readFileSync(uri.fsPath))!==file.diskHash) {
+    throw Error('Text formatting was applied. The document changed before line-ending conversion. Review the document again.');
+   }
+  }
+  const eol=file.formattingEndOfLine==='crlf'?vscode.EndOfLine.CRLF:vscode.EndOfLine.LF;
+  const converted=await editor.edit(edit=>edit.setEndOfLine(eol),{undoStopBefore:true,undoStopAfter:true});
+  if(!converted&&file.edits.length) throw Error('Text formatting was applied. Line-ending conversion failed. Review the document again.');
+  return converted;
+ }
  async function apply(id,cancellation){
   await validate(id,cancellation);
   const plan=plans.get(id),edit=new vscode.WorkspaceEdit();
-  checkSnapshots(checkedPlans.get(id));checkResources(plan);cancelled(cancellation);
-  for(const file of plan.documents){
-   if(!file.edits.length&&!file.formattingEndOfLine)continue;
-   const changes=file.edits.map(change=>new vscode.TextEdit(
-    new vscode.Range(change.range.start.line,change.range.start.character,change.range.end.line,change.range.end.character),change.newText));
-   if(file.formattingEndOfLine)changes.push(vscode.TextEdit.setEndOfLine(file.formattingEndOfLine==='crlf'?vscode.EndOfLine.CRLF:vscode.EndOfLine.LF));
-   edit.set(reviewedUri(file),changes);
+  const formatting=plan.documents.find(file=>file.formattingEndOfLine);
+  let applied;
+  if(formatting) applied=await applyFormattingEndOfLine(id,formatting,cancellation);
+  else {
+   for(const file of plan.documents){
+    if(!file.edits.length)continue;
+    const changes=file.edits.map(change=>new vscode.TextEdit(
+     new vscode.Range(change.range.start.line,change.range.start.character,change.range.end.line,change.range.end.character),change.newText));
+    edit.set(reviewedUri(file),changes);
+   }
+   for(const operation of plan.resourceOperations){
+    if(operation.kind==='create'){
+     const contents=Buffer.from(plan.documents.find(file=>file.created&&file.uri===operation.uri).after);
+     edit.createFile(sourceUri(operation.uri,{destination:true}),{overwrite:false,ignoreIfExists:false,contents});
+    }else if(operation.kind==='rename'){
+     const resource=!!operation.resourceSha256||!!operation.serviceDescriptor;
+     edit.renameFile(sourceUri(operation.uri,{resource}),sourceUri(operation.newUri,{destination:true,resource}),{overwrite:false,ignoreIfExists:false});
+    }else edit.deleteFile(sourceUri(operation.uri),{recursive:false,ignoreIfNotExists:false});
+   }
+   runFinalGuard(id,cancellation);
+   removePlan(id);
+   applied=await vscode.workspace.applyEdit(edit);
   }
-  for(const operation of plan.resourceOperations){
-   if(operation.kind==='create'){
-    const contents=Buffer.from(plan.documents.find(file=>file.created&&file.uri===operation.uri).after);
-    edit.createFile(sourceUri(operation.uri,{destination:true}),{overwrite:false,ignoreIfExists:false,contents});
-   }else if(operation.kind==='rename'){
-    const resource=!!operation.resourceSha256||!!operation.serviceDescriptor;
-    edit.renameFile(sourceUri(operation.uri,{resource}),sourceUri(operation.newUri,{destination:true,resource}),{overwrite:false,ignoreIfExists:false});
-   }else edit.deleteFile(sourceUri(operation.uri),{recursive:false,ignoreIfNotExists:false});
-  }
-  const guard=validators.get(id)?.preApply;
-  if(guard){const value=guard(cancellation);if(value?.then)throw Error('The final refactoring guard must be synchronous.');}
-  trusted();cancelled(cancellation);checkSnapshots(checkedPlans.get(id));checkResources(plan);removePlan(id);
-  const applied=await vscode.workspace.applyEdit(edit);
   return {state:applied?'applied':'rejected',title:plan.title,files:plan.documents.map(file=>file.uri),warnings:[...plan.warnings],
    resourceOperations:structuredClone(plan.resourceOperations),savedToDisk:false,
    resourceOperationsSavedToDisk:plan.resourceOperations.length?(applied?true:'unknown'):false,atomicAcrossExternalWriters:false};

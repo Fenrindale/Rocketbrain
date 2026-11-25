@@ -66,7 +66,9 @@ function registerSourceFormatting(vscode,{start,refactoring,request,output,name,
 
   function nativeEdits(edits,endOfLine) {
     const output = edits.map(({range:{start,end},newText})=>new vscode.TextEdit(new vscode.Range(start.line,start.character,end.line,end.character),newText));
-    if (endOfLine) output.push(vscode.TextEdit.setEndOfLine(endOfLine==='crlf'?vscode.EndOfLine.CRLF:vscode.EndOfLine.LF));
+    // VS Code Undo and Redo resolve text offsets against the current newline width.
+    // Keep a line-ending change separate from text edits, including on native Format Document.
+    if (endOfLine && !output.length) output.push(vscode.TextEdit.setEndOfLine(endOfLine==='crlf'?vscode.EndOfLine.CRLF:vscode.EndOfLine.LF));
     return output;
   }
 
@@ -99,7 +101,8 @@ function registerSourceFormatting(vscode,{start,refactoring,request,output,name,
     const formatting = {mode,options:style,configurationSources:config.sources,textEdits:edits.length,endOfLine:endOfLine || null};
     if (!edits.length && !endOfLine) return {state:'unchanged',formatting};
     const warnings = [];
-    if (endOfLine) warnings.push('Convert the '+name+' document line endings to '+endOfLine.toUpperCase()+'.');
+    if (endOfLine) warnings.push('Convert the '+name+' document line endings to '+endOfLine.toUpperCase()+
+      (edits.length?' in a separate Undo step from the text changes.':'.'));
     if (range && style.endOfLine && lineEnding(original.before,style.endOfLine==='crlf'?'\r\n':'\n')!==original.before) {
       warnings.push('Format the whole document to apply its configured line ending.');
     }

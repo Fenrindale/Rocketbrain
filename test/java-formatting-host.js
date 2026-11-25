@@ -46,19 +46,19 @@ async function runJavaFormattingChecks(api,vscode,checks) {
     assertFormat(rangePlan.documents[0].after,rangePlan.formatting.options,{range:true});
     const nativeRange = await vscode.commands.executeCommand('vscode.executeFormatRangeProvider',mixedDoc.uri,range,documentOptions);
     assert.equal(editedText(original,nativeRange),rangePlan.documents[0].after);
-    const undo = async stage => {
+    const undo = async (stage,expected=original) => {
       await vscode.window.showTextDocument(mixedDoc,{preview:false,preserveFocus:false});
       await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
       assert.equal(vscode.window.activeTextEditor?.document,mixedDoc);
       await vscode.commands.executeCommand('undo');
-      try { await until(()=>mixedDoc.getText()===original,10000); }
+      try { await until(()=>mixedDoc.getText()===expected,10000); }
       catch {
         const observed=mixedDoc.getText();
         throw Error(`Undo after ${stage} did not restore the original Java buffer (EOL ${mixedDoc.eol}, dirty ${mixedDoc.isDirty}, `+
-          `length ${observed.length}/${original.length}, text apart from line endings ${observed.replace(/\r\n/g,'\n')===original}).`);
+          `length ${observed.length}/${expected.length}, text apart from line endings ${observed.replace(/\r\n/g,'\n')===expected}).`);
       }
       assert.equal(mixedDoc.eol,vscode.EndOfLine.LF);
-      assert.equal(mixedDoc.isDirty,false);
+      assert.equal(mixedDoc.isDirty,expected!==original);
     };
     assert.equal((await api.java.refactoring.apply(rangePlan.id)).state,'applied');
     assert.equal(mixedDoc.eol,vscode.EndOfLine.LF);
@@ -74,11 +74,22 @@ async function runJavaFormattingChecks(api,vscode,checks) {
     assert.equal(mixedDoc.eol,vscode.EndOfLine.CRLF);
     assert.equal(mixedDoc.getText(),full.documents[0].after);
     assert.equal(await fs.readFile(mixedDoc.uri.fsPath,'utf8'),original);
-    await undo('reviewed document');
+    const formattedLf=full.documents[0].after.replace(/\r\n/g,'\n');
+    await undo('reviewed line endings',formattedLf);
+    await undo('reviewed text formatting');
+    await vscode.commands.executeCommand('redo');
+    await until(()=>mixedDoc.getText()===formattedLf,10000);
+    await vscode.commands.executeCommand('redo');
+    await until(()=>mixedDoc.getText()===full.documents[0].after,10000);
+    await undo('redone line endings',formattedLf);
+    await undo('redone text formatting');
 
+    await vscode.commands.executeCommand('editor.action.formatDocument');
+    await until(()=>mixedDoc.getText()===formattedLf,10000);
     await vscode.commands.executeCommand('editor.action.formatDocument');
     await until(()=>mixedDoc.getText()===full.documents[0].after,10000);
     assert.equal(mixedDoc.eol,vscode.EndOfLine.CRLF);
+    await undo('native line endings',formattedLf);
     await undo('native document formatter');
 
     const stale = await service.prepare({document:mixedDoc,options:documentOptions});
@@ -88,7 +99,7 @@ async function runJavaFormattingChecks(api,vscode,checks) {
     const jdbc = await jdbcReadback();
     assert.ok(jdbc,'Run with the owned Spring JDBC service.');
     checks.push('Native JDT document/range formatting applied nested EditorConfig spaces, tabs, distinct widths and line endings to imported Spring Java source.');
-    checks.push('An exact range preserved surrounding text. The full preview committed one undostep including CRLF and rejected changed configuration.');
+    checks.push('Exact range edits preserved surrounding text. The full preview uses separate Undo/Redo steps for text and CRLF and rejects changed configuration.');
     return {springWorkspace:true,jdbc,nativeDocument:true,nativeRange:true,configurationFiles:2,spaceIndent:2,mixedIndent:2,tabWidth:4,
       fullCrlf:true,rangeEolPreserved:true,exactRange:true,diskPreserved:true,nativeUndo:true,changedConfigRefused:true};
   } finally {
