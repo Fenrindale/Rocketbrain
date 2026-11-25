@@ -137,6 +137,8 @@ async function runRoleMembershipChecks(api, vscode, checks) {
         return response.json();
       }
     });
+    if (Array.isArray(checks)) checks.push('The installed roles workbench reviewed and applied explicit membership and delegation changes against the owned server.');
+    return checks.roleMembership;
   } finally { await api.disconnectMysql(); }
 }
 
