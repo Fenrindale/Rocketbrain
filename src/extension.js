@@ -79,6 +79,9 @@ async function activate(context) {
   const codeReview = require('./vcs/code-review-vscode').registerCodeReview(context,vscode);
   context.subscriptions.push(codeReview);
   const java = registerJavaFeatures(context, vscode);
+  const javaFx = require('./java/javafx-vscode').registerJavaFx(vscode, { java });
+  java.fx = javaFx;
+  context.subscriptions.push(javaFx);
   activeJava = java;
   const javaInspections=require('./java/inspections-vscode').registerJavaInspections(context,vscode);
   activeJavaInspections=javaInspections;

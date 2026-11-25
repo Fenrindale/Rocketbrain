@@ -648,6 +648,12 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.javafx.build",
+        "title": "Run or Package JavaFX Application",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.workbench.refresh",
         "title": "Refresh Java Projects",
         "category": "Rocketbrain",

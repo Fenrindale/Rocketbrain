@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.Group?>
+<Group xmlns:fx="http://javafx.com/fxml/1" fx:controller="dev.rocketbrain.fxml.Panel" stylesheets="@theme.css">
+    <children>
+        <Group fx:id="detail" onMouseClicked="#recordClick"/>
+        <fx:include fx:id="extra" source="extra.fxml"/>
+    </children>
+</Group>
