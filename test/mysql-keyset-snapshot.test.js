@@ -22,8 +22,13 @@ test('keyset continuation uses exact casts and nullable mixed directions',() => 
   const nullable=browseQuery({name:'table',columns},{sort:[{column:'rank_value',direction:'asc'}]},'schema',false,{},[null,'9']);
   assert.match(nullable.sql,/IS NOT NULL/);
   assert.deepEqual(nullable.parameters,['9']);
-  assert.throws(() => browseQuery({name:'table',columns},
-    {sort:[{column:'rank_value',direction:'asc',nulls:'last'}]},'schema',false,{},[]), /default-ordered scalar/);
+  const explicit = { sort: [{ column:'rank_value',direction:'asc',nulls:'last' }] };
+  const forward = browseQuery({ name:'table',columns }, explicit, 'schema', false, {}, ['10.50','9']);
+  assert.match(forward.sql, /ORDER BY \(`rank_value` IS NULL\) ASC,`rank_value` ASC/u);
+  assert.match(forward.sql, /\(`rank_value` > CAST\(\? AS DECIMAL\(30,10\)\) OR `rank_value` IS NULL\)/u);
+  const back = browseQuery({ name:'table',columns }, explicit, 'schema', false, {}, [null,'9'], true);
+  assert.match(back.sql, /ORDER BY \(`rank_value` IS NULL\) DESC,`rank_value` DESC/u);
+  assert.match(back.sql, /`rank_value` IS NOT NULL/u);
 });
 
 test('ENUM and 64-bit SET selectors bind exact engine positions while reserving private projection names', () => {

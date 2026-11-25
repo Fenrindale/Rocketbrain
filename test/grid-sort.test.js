@@ -80,3 +80,39 @@ test('persisted sort order is scoped by connection and table and revalidated aga
   assert.deepEqual(reopened.list('connectionA.table', columns, options), []);
   assert.equal(reopened.list('connectionB.table', columns, options).length, 1);
 });
+
+test('typed JSON paths share an exact order and private typed anchors across offset and snapshot pages', () => {
+  const rule = { column: 'data', direction: 'desc', jsonPath: '$.outer[0].wanted', jsonType: 'integer', nulls: 'first' };
+  const input = { sort: [rule, { column: 'label', direction: 'asc', collation: 'utf8mb4_general_ci' }] };
+  const regular = browseQuery(definition, input, 'app', false, collations);
+  assert.match(regular.sql, /JSON_EXTRACT.*'\$\.outer'\)\) = 'ARRAY'/u);
+  assert.match(regular.sql, /CAST\(JSON_UNQUOTE.*AS DECIMAL\(20,0\)\)/u);
+  assert.deepEqual(regular.query.sort, input.sort);
+  assert.deepEqual(regular.parameters, []);
+  const seek = browseQuery(definition, input, 'app', false, collations,
+    ['18446744073709551615', 'Same', 'pk-1'], false, 'mysql');
+  assert.deepEqual(seek.cursorColumns, ['__rb_grid_seek_0']);
+  assert.match(seek.sql, /< CAST\(\? AS DECIMAL\(20,0\)\)/u);
+  assert.match(seek.sql, /COLLATE utf8mb4_general_ci\) > \?/u);
+  assert.ok(seek.parameters.includes('18446744073709551615'));
+  assert.doesNotMatch(seek.sql, /OFFSET/u);
+
+  const textRule = { ...rule, jsonType: 'text' };
+  const text = browseQuery(definition, {sort:[textRule]}, 'app', false, collations, ['0x6120', 'pk-1'], true, 'mariadb');
+  assert.match(text.sql, /OCTET_LENGTH\(CAST.*<= 256/u);
+  assert.ok(text.parameters.some(value => Buffer.isBuffer(value) && value.equals(Buffer.from('a '))));
+  assert.throws(() => browseQuery(definition, { sort:[textRule] }, 'app', false, collations, ['untyped', 'pk-1'], false, 'mariadb'), /observed JSON continuation/u);
+  const snapshot = sortOptions(columns, collations, true);
+  assert.ok(snapshot.columns.some(column => column.name === 'data' && column.jsonScalar && !column.expression));
+});
+
+test('JSON sorting refuses widened paths, unobserved source types and combinations with raw expressions', () => {
+  const rule = { column: 'data', direction: 'desc', jsonPath: '$.outer[0].wanted', jsonType: 'integer' };
+  for (const change of [{ jsonPath: "$.names[*]" }, { jsonPath: "$.names[-1]" }, { jsonPath: '$."name"' },
+    { jsonPath: '$.a.a.a.a.a.a.a.a.a' }, { jsonType: 'dynamic' }, { column: 'label' },
+    { expression: 'JSON_TEXT(data)' }, { collation: 'utf8mb4_bin' }]) {
+    assert.throws(() => browseQuery(definition, { sort: [{ ...rule, ...change }] }, 'app', false, collations), /JSON/u);
+  }
+  assert.throws(() => browseQuery(definition, { sort: [{ column: 'data', direction: 'asc', expression: 'JSON_TEXT(data)' }] },
+    'app', false, collations, [], false, 'mysql'), /typed JSON paths/u);
+});

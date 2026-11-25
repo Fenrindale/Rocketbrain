@@ -226,6 +226,18 @@
   function renderSortRules(sortOptions, scalar, form, blocked, select, remove) {
     const columns = sortOptions?.columns || scalar;
     const used = new Set(form.sort.map(rule => rule.column));
+    const chooseColumn = (rule, column) => {
+      rule.column = column.name;
+      delete rule.collation;
+      delete rule.jsonPath;
+      delete rule.jsonType;
+      delete rule.expression;
+      if (column.expression) rule.expression = column.expression;
+      if (column.jsonScalar && sortOptions.snapshot) {
+        rule.jsonType = 'text';
+        rule.jsonPath = '$';
+      }
+    };
     const move = (index, delta) => {
       const button = document.createElement('button'), destination = index + delta;
       button.type = 'button';
@@ -241,11 +253,7 @@
       const choices = columns.filter(column => column.name === rule.column || !used.has(column.name));
       const column = columns.find(item => item.name === rule.column);
       row.append(select('Sort column ' + position, choices.map(item => ({ value: item.name, label: item.name })), rule.column, value => {
-        rule.column = value;
-        delete rule.collation;
-        const expression = columns.find(item => item.name === value)?.expression;
-        if (expression) rule.expression = expression;
-        else delete rule.expression;
+        chooseColumn(rule, columns.find(item => item.name === value));
         render();
       }), select('Sort direction ' + position, [{ value: 'asc', label: 'Ascending' }, { value: 'desc', label: 'Descending' }], rule.direction, value => { rule.direction = value; }));
       if (sortOptions) {
@@ -255,17 +263,46 @@
         if (collations.length) row.append(select('Sort collation ' + position,
           [{ value: '', label: 'Column collation' }, ...collations.map(name => ({ value: name, label: name }))], rule.collation || '',
           value => { if (value) rule.collation = value; else delete rule.collation; }));
-        const expression = document.createElement('input');
-        expression.type = 'text';
-        expression.maxLength = 256;
-        expression.disabled = blocked;
-        expression.spellcheck = false;
-        expression.setAttribute('aria-label', 'Sort expression ' + position);
-        expression.placeholder = 'Optional sort expression';
-        expression.title = 'Exact column names, arithmetic, ABS, LOWER, UPPER, TRIM, CHAR_LENGTH, JSON_TEXT or BYTE_PREFIX';
-        expression.value = rule.expression || '';
-        expression.oninput = () => { if (expression.value.trim()) rule.expression = expression.value; else delete rule.expression; };
-        row.append(expression);
+        if (column?.jsonScalar) {
+          const types = [
+            ...(!sortOptions.snapshot ? [{ value: '', label: 'Document expression' }] : []),
+            { value: 'integer', label: 'JSON integer' }, { value: 'boolean', label: 'JSON boolean' },
+            { value: 'text', label: 'JSON UTF-8 text (binary)' }
+          ];
+          row.append(select('JSON sort type ' + position, types, rule.jsonType || '', value => {
+            if (value) {
+              rule.jsonType = value;
+              rule.jsonPath ??= '$';
+              delete rule.expression;
+            } else chooseColumn(rule, column);
+            render();
+          }));
+        }
+        if (rule.jsonType) {
+          const path = document.createElement('input');
+          path.type = 'text';
+          path.maxLength = 128;
+          path.disabled = blocked;
+          path.spellcheck = false;
+          path.setAttribute('aria-label', 'JSON sort path ' + position);
+          path.placeholder = '$.items[0].name';
+          path.title = 'Use a single path with member names and array indexes. Missing, NULL and mismatched values sort as NULL.';
+          path.value = rule.jsonPath || '';
+          path.oninput = () => { rule.jsonPath = path.value; };
+          row.append(path);
+        } else if (!sortOptions.snapshot) {
+          const expression = document.createElement('input');
+          expression.type = 'text';
+          expression.maxLength = 256;
+          expression.disabled = blocked;
+          expression.spellcheck = false;
+          expression.setAttribute('aria-label', 'Sort expression ' + position);
+          expression.placeholder = 'Optional sort expression';
+          expression.title = 'Exact column names, arithmetic, ABS, LOWER, UPPER, TRIM, CHAR_LENGTH, JSON_TEXT or BYTE_PREFIX';
+          expression.value = rule.expression || '';
+          expression.oninput = () => { if (expression.value.trim()) rule.expression = expression.value; else delete rule.expression; };
+          row.append(expression);
+        }
       }
       row.append(move(index, -1), move(index, 1), remove('Remove sort ' + position, () => { form.sort.splice(index, 1); render(); }));
       return row;
@@ -275,7 +312,9 @@
     $('add-sort').onclick = () => {
       const column = columns.find(item => !used.has(item.name));
       if (!column) return;
-      form.sort.push({ column: column.name, direction: 'asc', ...(column.expression && { expression: column.expression }) });
+      const rule = { direction: 'asc' };
+      chooseColumn(rule, column);
+      form.sort.push(rule);
       render();
     };
   }
