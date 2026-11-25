@@ -76,8 +76,8 @@ async function runConsoleDraftChecks(api, vscode, checks, receipt) {
 
   const profiles = api.dbConnections;
   const live = await profiles.openDedicatedConsole({ id:seed.profileId, revision:seed.profileRevision, password:config.password });
-  const onlineEditor = vscode.window.activeTextEditor;
-  assert.equal(onlineEditor.document.uri.toString(), live.uri);
+  const onlineDocument = vscode.window.activeTextEditor.document;
+  assert.equal(onlineDocument.uri.toString(), live.uri);
   await profiles.connect({ id:seed.profileId, password:config.password });
   await vscode.window.showTextDocument(document, { preview:false });
   await assert.rejects(api.describeSqlScript('SELECT 1', { document }), /active database/i);
@@ -87,7 +87,7 @@ async function runConsoleDraftChecks(api, vscode, checks, receipt) {
   assert.equal(api.sessions().length, 1);
   await assert.rejects(api.sqlDrafts.remove(seed.id, snapshot.revision), /Close the open SQL draft/);
 
-  await vscode.window.showTextDocument(onlineEditor.document, { preview:false });
+  const onlineEditor = await vscode.window.showTextDocument(onlineDocument, { preview:false });
   const starter = onlineEditor.document;
   assert.equal(await onlineEditor.edit(edit => edit.replace(new vscode.Range(starter.positionAt(0), starter.positionAt(starter.getText().length)), sql)), true);
   onlineEditor.selection = new vscode.Selection(starter.positionAt(0), starter.positionAt(starter.getText().length));
