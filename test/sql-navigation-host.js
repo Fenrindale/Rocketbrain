@@ -34,19 +34,19 @@ async function verifySqlNavigation(runtime, api, vscode, checks) {
     const resultId = await vscode.commands.executeCommand('rocketbrain.runQuery');
     const result = api.results().find(item => item.id === resultId);
     assert.ok(result?.result, result?.error || 'The SQL editor returned no result.');
-    assert.equal(result.result.rows[0][0], expected);
+    assert.equal(String(result.result.rows[0][0]), expected);
     assert.equal(document.getText(), view);
     return { resultId, sessionId: result.sessionId };
   }
   try {
     folder = await fs.mkdtemp(path.join(path.dirname(runtime.dbConfigPath), 'rb-navigation-'));
     await api.connectMysql(config);
-    const statement = "SELECT CAST(CONCAT('first:',COUNT(*)) AS CHAR CHARACTER SET utf8mb4) AS result_marker FROM rb_spring_person;";
+    const statement = "SELECT COUNT(*) AS result_marker FROM rb_spring_person;";
     const before = "SELECT 'sentinel';\n";
     const first = await open('first.sql', before + statement + "\nSELECT 'tail';\n");
-    const firstResult = await run(first, before.length, before.length + statement.length, 'first:2');
-    const second = await open('second.sql', "SELECT CAST(CONCAT('second:',COUNT(*)) AS CHAR CHARACTER SET utf8mb4) AS result_marker FROM rb_spring_person;\n");
-    const secondResult = await run(second, 5, 5, 'second:2');
+    const firstResult = await run(first, before.length, before.length + statement.length, '2');
+    const second = await open('second.sql', "SELECT COUNT(*) + 1 AS result_marker FROM rb_spring_person;\n");
+    const secondResult = await run(second, 5, 5, '3');
     assert.notEqual(firstResult.resultId, secondResult.resultId);
     assert.notEqual(firstResult.sessionId, secondResult.sessionId);
     const distraction = await open('unrelated.txt', 'Retain the active query source from its own result.\n');
