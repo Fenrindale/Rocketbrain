@@ -70,8 +70,8 @@ test('real Javac inlines one exact method call while preserving side-effect orde
   const caret=source.indexOf(fixture.call)+2;
   assert.equal((await inspect(source,caret,caret)).method,'score');
   for (const [marker,from,reason] of [[fixture.call,source.indexOf('int nested()'),/whole return expression/],
-    ['score(take(4), take(5), take(6))',0,/whole return expression/],['instanceOnly(7)',0,/private static/],
-    ['locked(9)',0,/private static/],['score("other")',0,/supported Java operators/],['mutate(5)',0,/supported Java operators/]]) {
+    ['score(take(4), take(5), take(6))',0,/whole return expression/],['receiver.instanceOnly(7)',0,/newly constructed/],
+    ['locked(9)',0,/unsynchronized private/],['score("other")',0,/supported Java operators/],['mutate(5)',0,/supported Java operators/]]) {
     const {start,end}=at(marker,from);
     assert.match((await inspect(source,start,end)).error,reason);
   }
