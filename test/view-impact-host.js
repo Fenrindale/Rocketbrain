@@ -115,7 +115,7 @@ async function verifyViewImpact(adapter) {
       assert.ok(homeReport.unresolvedReferences.some(item => item.view.name === transitive.name &&
         item.relation.schema === peer && item.reason === 'outside-selected-schemas'));
       await assert.rejects(() => adapter.inspect({ target: { ...shadow, kind: 'table' }, schemas: [home, peer] }), /object kind/u);
-      await assert.rejects(() => adapter.inspect(request, () => { throw Error('fixture cancellation'); }), /fixture cancellation/u);
+      await assert.rejects(async () => adapter.inspect(request, () => { throw Error('fixture cancellation'); }), /fixture cancellation/u);
       await adapter.preview?.(request, report);
       published.nativeReadonlyReport = Boolean(adapter.preview);
     } finally {
