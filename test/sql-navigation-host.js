@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
 const { owned } = require('./schema-stored-diff-host');
 
@@ -11,7 +12,7 @@ const springBaseline = { people: 2, departments: 1, rolledBackNames: 0 };
 
 async function verifySqlNavigation(runtime, api, vscode, checks) {
   const { actor, config, version } = await owned(runtime.dbConfigPath);
-  let folder;
+  const folder = path.dirname(runtime.dbConfigPath), prefix = 'rb-navigation-' + randomUUID() + '-';
   const opened = [], previousSessions = new Set(api.sessions().map(row => row.id));
   async function active(uri, message) {
     for (let i = 0; i < 100; i++) {
@@ -21,7 +22,7 @@ async function verifySqlNavigation(runtime, api, vscode, checks) {
     throw Error(message);
   }
   async function open(name, text) {
-    const uri = vscode.Uri.file(path.join(folder, name));
+    const uri = vscode.Uri.file(path.join(folder, prefix + name));
     await fs.writeFile(uri.fsPath, text, { flag: 'wx' });
     const document = await vscode.workspace.openTextDocument(uri);
     const editor = await vscode.window.showTextDocument(document, { preview: false });
@@ -39,7 +40,6 @@ async function verifySqlNavigation(runtime, api, vscode, checks) {
     return { resultId, sessionId: result.sessionId };
   }
   try {
-    folder = await fs.mkdtemp(path.join(path.dirname(runtime.dbConfigPath), 'rb-navigation-'));
     await api.connectMysql(config);
     const statement = "SELECT COUNT(*) AS result_marker FROM rb_spring_person;";
     const before = "SELECT 'sentinel';\n";
@@ -87,7 +87,6 @@ async function verifySqlNavigation(runtime, api, vscode, checks) {
     } finally {
       try {
         for (const row of opened) await fs.unlink(row.file);
-        if (folder) await fs.rmdir(folder);
       } finally { await actor.end(); }
     }
   }
