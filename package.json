@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.77.0",
+  "version": "0.78.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -220,7 +220,7 @@
       { "command": "rocketbrain.spring.securityTrace", "title": "Inspect Spring Security Filter Trace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewProcedureCall", "title": "Review Stored Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
-      { "command": "rocketbrain.db.reviewPackageCall", "title": "Review MariaDB Package Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.db.reviewPackageCall", "title": "Review MariaDB Package Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.cacheMetadata", "title": "Save Database Metadata for Offline Use", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.openCachedMetadata", "title": "Open Cached Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && !rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.closeCachedMetadata", "title": "Close Cached Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.offlineMetadataActive" },
@@ -297,6 +297,7 @@
       { "command": "rocketbrain.jpa.generateEntity", "title": "Generate JPA Entity from Table", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.systemCatalog", "title": "Browse Database System Catalog", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.inspectAccess", "title": "Inspect Database Account Access", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.inspectRoleInheritance", "title": "Inspect Database Role Inheritance", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.reviewTableGrant", "title": "Review Table SELECT Grant or Revoke", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.reviewCreatePrincipal", "title": "Review Database Account or Role Creation", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.insertTemplate", "title": "Insert SQL Template", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
@@ -387,6 +388,12 @@
         "command": "rocketbrain.javaSupport",
         "title": "Set Up Java / Spring Support",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.java.manageLibrarySources",
+        "title": "Manage Java Library Sources",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && (editorLangId == java || resourceScheme == jdt)"
       },
       {
         "command": "rocketbrain.java.restart",
@@ -2134,6 +2141,12 @@
           ],
           "default": "manual",
           "description": "Allow explicitly triggered Java Hot Code Replace; no automatic source edits or code replacement."
+        },
+        "rocketbrain.java.debugDecompiledSources": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Use Java debugger line mappings for supported decompiled JAR classes in Java debug sessions."
         },
         "rocketbrain.java.exceptionBreakpoints": {
           "type": "object",

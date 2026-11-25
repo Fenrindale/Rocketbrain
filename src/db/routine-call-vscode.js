@@ -5,6 +5,7 @@ const { bindProcedure, fail } = require('./routine-call');
 
 const scheme = 'rocketbrain-procedure-review';
 const reviewLifetime = 120000;
+const isPackageFunction = procedure => procedure.object.kind === 'package-function';
 const routineLabel = object => [object.package, object.name].filter(Boolean).join('.');
 
 function registerRoutineCalls(vscode, { database }) {
@@ -61,7 +62,8 @@ function registerRoutineCalls(vscode, { database }) {
     drafts.delete(id);
     const uri = vscode.Uri.parse(scheme + ':/' + reviewId + '/procedure.sql');
     return { id: reviewId, uri, object: structuredClone(draft.procedure.object), connectionEpoch: draft.epoch,
-      ...Object.fromEntries(['sql', 'account', 'role', 'dialect', 'fingerprint'].map(key => [key, draft.procedure[key]])), parameterKinds: kinds };
+      ...Object.fromEntries(['sql', 'account', 'role', 'dialect', 'fingerprint'].map(key => [key, draft.procedure[key]])),
+      ...(draft.procedure.returns && { returns: structuredClone(draft.procedure.returns) }), parameterKinds: kinds };
   }
   function documentText(uri) {
     const id = uri.path.split('/')[1];
@@ -74,11 +76,15 @@ function registerRoutineCalls(vscode, { database }) {
       JSON.stringify(item.type) + (item.mode === 'OUT' ? ' · output only' : ' · ' + kinds[inputIndex++] + ' input kept private'));
     const definitions = procedure.packageSources ? procedure.packageSources.flatMap(({ kind, settings, source }) =>
       ['', '-- Package ' + kind.toLowerCase() + ' · ' + JSON.stringify(settings), source]) : ['', procedure.source];
-    return ['-- Rocketbrain stored procedure review', '-- Account: ' + JSON.stringify(procedure.account),
+    const scalarCall = isPackageFunction(procedure);
+    return [scalarCall ? '-- Rocketbrain package function review' : '-- Rocketbrain stored procedure review', '-- Account: ' + JSON.stringify(procedure.account),
       '-- Active role: ' + JSON.stringify(procedure.role), '-- Definition fingerprint: ' + procedure.fingerprint,
       '-- Database: ' + JSON.stringify(procedure.object.schema),
       '-- ' + procedure.sql, ...parameters,
-      '-- This approved call can change persistent data and can commit work within its own connection.',
+      ...(procedure.packageSyntax ? ['-- Package dialect: ' + (procedure.packageSyntax === 'oracle' ? 'Oracle PL/SQL' : 'SQL/PSM')] : []),
+      ...(scalarCall ? ['-- Scalar return: ' + JSON.stringify(procedure.returns.type),
+        '-- Runs in a dedicated read-only server transaction, then rolls back.'] :
+        ['-- This approved call can change persistent data and can commit work within its own connection.']),
       '-- The server enforces EXECUTE and routine privileges, including its SQL SECURITY mode.',
       ...(procedure.dialect === 'mariadb' ? ['-- MariaDB compares the definition before and after the call. Concurrent DDL can still change the routine.'] : []),
       ...(procedure.packageSources ? ['-- The package may run initialization code on this connection before the member.'] : []),
@@ -86,24 +92,25 @@ function registerRoutineCalls(vscode, { database }) {
   }
   async function run(id, { approved, signal, maxRows, timeoutMs } = {}) {
     const review = current(reviews, id);
-    if (approved !== true) throw fail('APPROVAL', 'Approve the exact stored procedure review before running it.');
+    const scalarCall = isPackageFunction(review.procedure);
+    if (approved !== true) throw fail('APPROVAL', 'Approve the exact stored ' + (scalarCall ? 'function' : 'procedure') + ' review before running it.');
     reviews.delete(id);
     const sql = review.procedure.sql, label = database.source() + ' · ' + routineLabel(review.procedure.object);
-    const resultId = database.scriptResultBegin(sql, label, { readOnly: false });
+    const resultId = database.scriptResultBegin(sql, label, { readOnly: scalarCall });
     try {
       const report = await database.withDatabaseAdmin(({ db, epoch, guard }) => {
         if (epoch !== review.epoch || !guard() || !review.guard()) throw fail('STALE', 'The reviewed database connection changed.');
         return db.runProcedureCall(review.procedure, review.inputs, { guard, signal, maxRows, timeoutMs });
-      }, { write: true });
+      }, { write: !scalarCall });
       const rows = report.resultSets.map((set, index) => [index + 1, set.columns.length, set.rowCount]);
-      const scriptStatements = report.resultSets.map((set, index) => ({ index, label: 'Result set ' + (index + 1) + ' · ' + set.rowCount + ' row(s)' }));
+      const scriptStatements = report.resultSets.map((set, index) => ({ index, label: scalarCall ? 'Scalar return value' : 'Result set ' + (index + 1) + ' · ' + set.rowCount + ' row(s)' }));
       const outputRows = report.outputParameters.map(({ name, mode, type, value }) => [name, mode, type, value]);
       const outputGrid = outputRows.length ? { columns: ['Parameter', 'Mode', 'SQL type', 'Value'], rows: outputRows,
         rowCount: outputRows.length, affectedRows: 0, durationMs: 0, truncated: false } : undefined;
       if (outputGrid) scriptStatements.push({ index: report.resultSets.length, label: 'Output parameters · ' + outputRows.length });
       for (const existing of captures.keys()) if (!database.scriptResultRetained(existing)) captures.delete(existing);
       if (captures.size >= 8) captures.delete(captures.keys().next().value);
-      captures.set(resultId, { sql, label, resultSets: report.resultSets, outputGrid });
+      captures.set(resultId, { sql, label, resultSets: report.resultSets, outputGrid, scalarCall });
       const summary = { columns: ['Result set', 'Columns', 'Rows'], rows, rowCount: rows.length, affectedRows: report.affectedRows,
         durationMs: report.durationMs, truncated: false, warningCount: report.warningCount, captureKind: 'procedure',
         procedureOutputAvailable: Boolean(outputGrid), scriptStatements };
@@ -124,7 +131,7 @@ function registerRoutineCalls(vscode, { database }) {
     }
     let id = database.scriptStatementResult(resultId, index);
     if (!id) {
-      const suffix = isOutput ? 'Output parameters' : 'Result set ' + (index + 1);
+      const suffix = isOutput ? 'Output parameters' : capture.scalarCall ? 'Scalar return value' : 'Result set ' + (index + 1);
       id = database.scriptResultBegin(capture.sql, capture.label + ' · ' + suffix,
         { readOnly: true, scriptCapture: { resultId, index } });
       database.scriptResultFinish(id, structuredClone(set));
@@ -154,17 +161,18 @@ function registerRoutineCalls(vscode, { database }) {
       after = page.next;
     } while (after);
   }
-  async function choosePackageProcedure() {
+  async function choosePackageMember() {
     const selected = await chooseCatalog(true);
     if (!selected) return;
     const details = await inspectPackage(selected.item);
     if (selected.epoch !== details.connectionEpoch) throw fail('STALE', 'The database changed during package selection.');
-    const procedures = details.members.filter(member => member.supported).map(member => ({ label: member.name, member,
-      description: member.parameters.map(parameter => parameter.mode + ' ' + parameter.type).join(', ') }));
-    if (!procedures.length) { await vscode.window.showInformationMessage('This package has no public procedure with a supported, matching scalar signature.'); return; }
-    const choice = await vscode.window.showQuickPick(procedures, { title: 'Choose a Public Package Procedure' });
+    const options = details.members.filter(member => member.supported).map(member => ({ label: member.name, member,
+      description: member.kind + ' · ' + member.parameters.map(parameter => parameter.mode + ' ' + parameter.type).join(', '),
+      ...(member.returns && { detail: 'Returns ' + member.returns.type }) }));
+    if (!options.length) { await vscode.window.showInformationMessage('This package has no public member with a supported, matching scalar signature.'); return; }
+    const choice = await vscode.window.showQuickPick(options, { title: 'Choose a Public Package Member' });
     if (choice) return { epoch: details.connectionEpoch, item: { schema: details.object.schema, package: details.object.name,
-      kind: 'package-procedure', name: choice.member.name } };
+      kind: 'package-' + choice.member.kind, name: choice.member.name } };
   }
   async function inputValues(parameters) {
     const values = [];
@@ -185,8 +193,8 @@ function registerRoutineCalls(vscode, { database }) {
   }
   async function command(target, packageMode = false) {
     requireTrusted();
-    const kind = packageMode ? 'package-procedure' : 'procedure';
-    const picked = target?.kind === kind ? { item: target } : packageMode ? await choosePackageProcedure() : await chooseCatalog(false);
+    const explicit = packageMode ? ['package-procedure', 'package-function'].includes(target?.kind) : target?.kind === 'procedure';
+    const picked = explicit ? { item: target } : packageMode ? await choosePackageMember() : await chooseCatalog(false);
     if (!picked) return;
     const draft = await inspect(picked.item);
     if (picked.epoch !== undefined && picked.epoch !== draft.connectionEpoch) { drafts.delete(draft.id); throw fail('STALE', 'The database changed during selection.'); }
@@ -198,9 +206,11 @@ function registerRoutineCalls(vscode, { database }) {
       review = prepare(draft.id, values);
       const document = await vscode.workspace.openTextDocument(review.uri);
       await vscode.window.showTextDocument(document, { preview: false });
-      const approved = await vscode.window.showWarningMessage('Run the reviewed stored procedure once?', { modal: true,
-        detail: 'A procedure can change or commit data. Review its definition and account before running.' }, 'Run Procedure');
-      if (approved !== 'Run Procedure') return;
+      const scalarCall = isPackageFunction(draft), action = scalarCall ? 'Run Function' : 'Run Procedure';
+      const approved = await vscode.window.showWarningMessage(scalarCall ? 'Run the reviewed package function once?' : 'Run the reviewed stored procedure once?', { modal: true,
+        detail: scalarCall ? 'Review the function body and the acting account before running in a read-only transaction.' :
+          'A procedure can change or commit data. Review its definition and account before running.' }, action);
+      if (approved !== action) return;
       const normalize = text => text.replaceAll('\r\n', '\n');
       if (document.isClosed || normalize(document.getText()) !== normalize(documentText(review.uri))) {
         throw fail('STALE', 'The procedure review document changed. Open a new review before running.');

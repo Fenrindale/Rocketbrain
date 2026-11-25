@@ -57,7 +57,7 @@ async function runMariaDbPackageCallChecks(api, vscode, checks) {
     await raw.query(body('0.000001'));
     assert.deepEqual((await calls.listPackages({ prefix: packageName })).items, [packageTarget]);
     const browse = await calls.inspectPackage(packageTarget);
-    assert.deepEqual(browse.members.map(item => [item.kind, item.name, item.supported]), [['procedure', 'emit_result', true], ['function', 'lookup', false]]);
+    assert.deepEqual(browse.members.map(item => [item.kind, item.name, item.supported]), [['procedure', 'emit_result', true], ['function', 'lookup', true]]);
     assert.match(browse.spec.source, /CREATE .* PACKAGE /);
     assert.match(browse.body.source, /CREATE .* PACKAGE BODY /);
     await assert.rejects(calls.inspect({ ...callTarget, name: 'hidden' }), /unambiguous public procedure/);

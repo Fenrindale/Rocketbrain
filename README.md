@@ -213,6 +213,10 @@ Java 프로젝트 가져오기와 빌드는 프로젝트 코드를 실행할 수
 - 디버그 세션에서 일반 중단점을 검증한 줄에 커서를 두고 **Add Java Inline Breakpoints**를 실행합니다. 디버거가 반환한 위치 중 멈출 람다를 선택합니다.
 - 멈춘 세션의 **변수**에서 객체의 필드를 펼칩니다. 필드 메뉴에서 읽기, 쓰기 또는 읽기·쓰기에 중단점을 설정합니다.
 
+### Java 라이브러리 소스
+
+Java 코드의 라이브러리 기호에서 정의로 이동하면 JDT가 원본 소스 또는 디컴파일된 읽기 전용 문서를 엽니다. **Manage Java Library Sources**에서 해당 바이너리 버전과 맞는 로컬 UTF-8 소스 JAR·ZIP을 확인하고 연결하거나 해제할 수 있습니다. 연결은 JDT에서 변경을 허용하는 프로젝트 클래스 경로에 적용되며, 소스 아카이브는 표준 패키지 경로의 `.java` 파일을 포함해야 합니다. 지원하는 클래스의 디컴파일된 줄에서 중단점을 사용할 수 있습니다. `rocketbrain.java.debugDecompiledSources`를 끄면 다음 Java 디버그 세션에서 이 줄 매핑을 사용하지 않습니다.
+
 ### Java 어노테이션 처리와 Lombok
 
 Maven에서 `maven-compiler-plugin`의 `annotationProcessorPaths`에 프로세서를 선언하고, 편집 중에도 처리하려면 `m2e.apt.activation`을 `jdt_apt`로 설정합니다. Gradle에서는 `annotationProcessor` 의존성을 선언하고 사용자 설정 `rocketbrain.java.annotationProcessing.gradleEnabled`를 켜면 가져올 때 JDT가 해당 프로세서 구성을 동기화합니다. 이미 프로젝트가 관리하는 Eclipse APT 설정은 프로젝트 파일에서 관리합니다.
@@ -324,10 +328,11 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 기존 엔티티 관계 검토에서 명시적으로 매핑한 `@EmbeddedId`와 기본 키 외 고유 키를 사용하는 FK도 물리 열과 대조합니다.
 - `@EmbeddedId`의 명시적 `@AttributeOverride`와 `@AttributeOverrides`를 물리 열에 맞춰 해석합니다. 단일 PK 부모의 FK가 자식의 복합 키 중 한 멤버를 구성하면 `@MapsId("멤버")`를 검토할 수 있습니다. 자식 연관 필드가 공유 키를 쓰고, 나머지 로컬 키 열의 매핑을 유지합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
+- **Inspect Database Role Inheritance**는 명시적으로 부여된 역할을 따라가며 직접·중첩 역할, 역할마다 관찰한 객체 권한, 경로 및 관리 옵션을 읽기 전용 문서로 엽니다. 연결 계정에서 볼 수 있는 메타데이터를 표시합니다. 역할 활성화, 암시적 역할, 권한 철회와 서버 정책은 실제 접근에 영향을 줍니다.
 - **Review Database Account or Role Creation**에서 대상 서버, 실행 계정, 새 로그인 계정의 정확한 호스트 또는 역할을 확인하고 한 번만 적용합니다. 암호는 확정 후 마스킹 입력창에서 받으며 Rocketbrain 검토 문서나 결과에 저장하지 않습니다. MariaDB는 생성한 역할의 관리자를 실행 계정으로 지정합니다. 서버에 계정 생성 권한과 좁은 계정 카탈로그 조회 권한이 필요합니다.
 - **Open Database Object Source**는 연결 계정에 보이는 스키마와 객체의 `SHOW CREATE` 원문을 읽기 전용 SQL 문서로 엽니다. DB 트리에서 바로 열거나 현재 객체의 원문을 새로 고칠 수 있습니다.
 - **Open Database Source for Editing**에서는 기존의 결정적 `NO SQL` 스칼라 함수 중 숫자형 매개변수와 단일 `RETURN` 식을 편집할 수 있습니다. 원래 시그니처·소유자·보안·권한을 비교하고 검증용 객체를 컴파일한 뒤 실제 교체 SQL을 검토합니다. 앱 스키마의 의존 정의를 읽을 수 없거나 다른 객체의 참조·동적 SQL이 관찰되면 교체를 막습니다. `DROP`과 `CREATE` 사이에는 함수가 잠시 없어지므로 호출과 외부 스키마 변경을 중지해야 합니다. 보관된 원본은 검증된 상태에서 복원할 수 있습니다.
-- **Review MariaDB Package Procedure Call**은 MariaDB 11.4 이상의 현재 DB에서 명세와 본문이 보이는 SQL/PSM 패키지를 찾습니다. 양쪽에 동일하게 선언된 공개 프로시저의 스칼라 `IN`·`OUT`·`INOUT`과 정확한 세 부분 이름을 검토한 뒤 전용 세션에서 한 번 실행합니다. 명세·본문 변경은 호출 전후 검사하며, 결과 집합과 출력 매개변수는 별도 그리드에 보관합니다. 호출은 패키지 초기화 코드도 실행할 수 있습니다. Oracle 모드 패키지, 함수 호출과 오버로드는 이 흐름의 범위 밖입니다.
+- **Review MariaDB Package Call**은 MariaDB 11.4 이상의 현재 DB에서 SQL/PSM과 Oracle 모드로 저장된 패키지의 명세·본문 및 공개 멤버를 찾습니다. 공개 프로시저는 스칼라 IN·OUT·INOUT을, 공개 함수는 스칼라 입력과 반환 타입을 검토하고 승인 후 전용 세션에서 한 번 실행합니다. 함수는 서버 읽기 전용 트랜잭션에서 한 값을 반환한 뒤 롤백합니다. 명세·본문 변경은 호출 전후 검사하며, 결과와 출력 매개변수는 별도 그리드에 보관합니다. 패키지 호출 시 서버가 초기화 코드를 실행할 수 있습니다. 오버로드, 기본값이 있는 매개변수와 복합 타입은 검토 대상에서 제외합니다.
 - **Review Stored Procedure Call**은 현재 DB에서 정의가 보이는 독립 프로시저를 찾아 계정, 실제 정의와 `IN`·`OUT`·`INOUT` 파라미터를 검토합니다. 확인 후 별도 연결에서 한 번만 실행하며, 결과 집합과 출력 파라미터를 각각 읽기 전용 그리드로 열 수 있습니다. 최대 32개 파라미터와 결과 집합 8개까지 처리합니다. DB 권한은 서버가 적용하며, 쓰기 보호 프로필은 호출을 거부합니다. MariaDB에서는 호출 전후 정의를 비교합니다. 호출 중 다른 세션이 정의를 바꿀 수 있고, 프로시저가 직접 커밋한 변경은 돌이킬 수 없습니다.
 - **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.

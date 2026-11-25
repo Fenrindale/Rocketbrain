@@ -1,25 +1,25 @@
 {
-  "version": "0.77.0",
-  "verifiedAt": "2026-11-25T18:58:16.656Z",
+  "version": "0.78.0",
+  "verifiedAt": "2026-11-25T19:11:34.212Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.77.0.vsix",
-    "sha256": "5b56c8c439d2be475510313ff4762429ac0ee8602657af515501fdb25a25ce1a",
-    "bytes": 3524806,
+    "name": "rocketbrain-0.78.0.vsix",
+    "sha256": "7e803908ec48e012b90e18e571b84373eff97378712f8577a1f99d46ebac66dc",
+    "bytes": 3534378,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1975,
-    "inputVectorSha256": "348d9eb1a5bfde0182b8c1c072854e08cab40f3b12d6c8f990d3c65689630010",
+    "frozenPublicInputs": 1983,
+    "inputVectorSha256": "72dbbb711980f8a93524242279793bdd1615aea1c988e823ff76791d84098509",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1681,
-    "pass": 1569,
+    "tests": 1687,
+    "pass": 1574,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 112,
+    "skipped": 113,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,15 +32,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "nullChecks",
+          "group": "javaLibrarySource",
           "checks": 1
         },
         {
-          "group": "gridJsonSort",
+          "group": "oraclePackageCalls",
           "checks": 1
         },
         {
-          "group": "reviewedTransactions",
+          "group": "databaseRoleInheritance",
           "checks": 1
         }
       ],
@@ -58,15 +58,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "nullChecks",
+          "group": "javaLibrarySource",
           "checks": 1
         },
         {
-          "group": "gridJsonSort",
+          "group": "oraclePackageCalls",
           "checks": 1
         },
         {
-          "group": "reviewedTransactions",
+          "group": "databaseRoleInheritance",
           "checks": 1
         }
       ],
@@ -77,69 +77,64 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-036": {
-      "scope": "가져온 실제 Spring Java 프로젝트에서 null 역참조, 반환 계약, 자원 누수 진단의 위치를 검증했다. 실제 Kotlin 프로젝트의 UNSAFE_CALL을 확인했다. 저장 전 수정과 실행 취소에서 두 진단이 갱신됐다.",
+    "IDEA-048": {
+      "scope": "실제 컴파일한 JAR에서 분기 본문을 디컴파일하고 원본 파일을 연결한 뒤 해제했다. 오래된 검토를 거부하고 JDT 디버거가 대응 위치에서 멈춘 실제 JVM 출력을 확인했다.",
       "runtimeGroups": [
-        "nullChecks"
+        "javaLibrarySource"
       ]
     },
-    "DG-045": {
-      "scope": "두 실제 DB에서 쓰기 커밋 승인, 세이브포인트 복구, 읽기 전용 트랜잭션, 중복 키 실패 후 롤백, 변경된 테이블 거부와 원래 거래 보존을 확인했다.",
+    "DG-024": {
+      "scope": "MariaDB에서 실측 함수의 정밀 DECIMAL·NULL, INOUT·OUT, 읽기 전용 동작과 변경된 정의 거부를 확인했다. MySQL은 패키지 경로를 제한하고 기존 독립 프로시저의 정확한 출력은 유지했다.",
       "runtimeGroups": [
-        "reviewedTransactions"
+        "oraclePackageCalls"
       ]
     },
-    "DG-060": {
-      "scope": "두 실제 DB에서 29행을 JSON 정수·불리언·텍스트 기준으로 각각 10페이지씩 양방향 탐색했다. 큰 정수, UTF-8 바이트와 후행 공백, NULL, 혼합 collation, 기본 키 동률 해소와 숨긴 커서 열을 확인했다.",
+    "DG-080": {
+      "scope": "양쪽 실제 DB의 계정에서 3단계 역할과 최하위 테이블 SELECT를 관찰했다. 같은 계정의 실제 세션은 역할 활성화 전 접근 거부, 활성화 뒤 정확한 행 조회를 보였다.",
       "runtimeGroups": [
-        "gridJsonSort"
+        "databaseRoleInheritance"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 427,
+    "sourceCorrespondences": 429,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 102,
-      "partial": 100,
+      "implemented": 103,
+      "partial": 99,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 164,
-    "previousWeightedPoints": 163,
+    "weightedPoints": 164.5,
+    "previousWeightedPoints": 164,
     "targetWeightedPoints": 216,
-    "referencePercent": 75.9,
+    "referencePercent": 76.2,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-036",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-060",
+        "id": "IDEA-048",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java 애너테이션은 가져온 프로젝트 클래스패스와 독립 JDT가 관찰하는 계약을 사용한다. Kotlin 진단은 현재 가져온 Kotlin 프로젝트와 언어 서버의 범위다.",
-    "그리드의 JSON 정수는 20자리, 문자열은 UTF-8 256바이트 한도를 사용한다. 누락·타입이 다른 값 등은 명시된 NULL 위치에 정렬한다.",
-    "트랜잭션 스크립트는 유휴 자동 커밋 콘솔과 확인한 같은 스키마의 InnoDB 기본 테이블을 사용한다.",
+    "Java 라이브러리 소스는 JDT가 바꿀 수 있는 로컬 클래스패스와 UTF-8 아카이브를 사용한다. 중단점은 디버거가 클래스 줄 정보를 관찰한 경우에 연결한다.",
+    "MariaDB 패키지는 관찰한 Oracle 모드와 SQL/PSM의 공개 계약, 검토 가능한 스칼라 함수와 프로시저에 한정한다.",
+    "권한 문서는 연결이 볼 수 있는 명시 역할과 긍정 부여 정보를 보여준다. 활성 역할과 서버 정책이 실제 접근을 결정한다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "디컴파일된 라이브러리 소스와 원본 연결·분리 및 디버깅",
-    "MariaDB Oracle/SQL 모드 패키지 공개 함수와 프로시저",
-    "여러 단계의 DB 역할 상속과 권한 출처"
+    "실제 HPROF 힙 덤프의 GC 루트 경로와 유지 객체",
+    "저장 가능한 가상 뷰와 가상 열 정의",
+    "여러 페이지의 결과 그리드에서 검토하고 일괄 적용"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

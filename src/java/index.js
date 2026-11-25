@@ -309,13 +309,15 @@ function registerJavaFeatures(context, vscode) {
       return info;
     } finally { installing = false; }
   }
-  subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('jdt', {
-    async provideTextDocumentContent(uri, token) {
+  api.librarySources=require('./library-source-vscode').registerLibrarySources(vscode,{
+    java:api,output,
+    async readContent(uri,token) {
       await api.start();
-      if (!client || token.isCancellationRequested) return '';
-      return client.sendRequest('java/classFileContents', { uri: uri.toString() }, token);
+      if (!client || token?.isCancellationRequested) return '';
+      return client.sendRequest('java/classFileContents', { uri: uri.toString() }, ...(token?[token]:[]));
     }
-  }));
+  });
+  subscriptions.push(api.librarySources);
   subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.installEngine', () => installEngine().catch(error => vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`))), vscode.commands.registerCommand('rocketbrain.java.start', () => api.start().catch(error => vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`))), vscode.commands.registerCommand('rocketbrain.java.restart', () => api.restart().catch(error => vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`))), vscode.commands.registerCommand('rocketbrain.java.status', () => api.getState()), vscode.commands.registerCommand('rocketbrain.javaSupport', async () => {
     const info = api.getState();
     const selected = await vscode.window.showQuickPick([{ label: 'Install and configure Java engine', description: 'Download Eclipse JDT LS and Temurin JDK; save Java paths', action: 'install' }, { label: 'Start / restart Java server', action: 'restart' }, { label: 'Open Java settings', action: 'settings' }, { label: 'Show Java output', action: 'output' }, { label: 'Browse Spring endpoints', action: 'endpoints' }], { title: `Rocketbrain Java · ${info.state}`, placeHolder: info.message });

@@ -112,6 +112,8 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     }),
     listAccounts: () => inspect(async read => metadata.accounts(read, await metadata.readContext(read))),
     inspectAccess: account => inspect(async read => metadata.inspectAccess(read, await metadata.readContext(read), account)),
+    inspectRoleInheritance: account => inspect(async read => metadata.inspectRoleInheritance(read, await metadata.readContext(read), account)),
+    openRoleInheritance,
     prepareTableGrant,
     applyTableGrant,
     preparePrincipal,
@@ -168,27 +170,65 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     }
   }
 
+  function privilegeText(entry) {
+    return '- ' + text(entry.name) + (entry.grantable ? ' · grantable' : '') +
+      (entry.schema ? ' · ' + [entry.schema, entry.table, entry.column].filter(Boolean).map(text).join('.') : '');
+  }
+
   function accessText(value) {
     return ['# Database Access', '', describeAccount(value.selected) + ' · ' + value.dialect + ' ' + value.version,
       '', 'Observed direct privileges. Effective access can depend on roles, global and schema grants, and server rules.',
       ...(value.isCurrent ? ['Active roles in the metadata session: ' + (value.activeRoles || 'none observed')] : []),
       '', ...Object.entries(value.privileges).flatMap(([scope, data]) => [
         '## ' + scope + ' privileges', '', data.visibility,
-        ...data.entries.map(entry => '- ' + text(entry.name) + (entry.grantable ? ' · grantable' : '') +
-          (entry.schema ? ' · ' + [entry.schema, entry.table, entry.column].filter(Boolean).map(text).join('.') : '')), ''
+        ...data.entries.map(privilegeText), ''
       ]), '## Roles', '', value.roleScope + ' · ' + value.roles.visibility,
       ...value.roles.entries.map(role => '- ' + text(describeAccount(role)) + (role.defaultRole ? ' · default' : '') + (role.grantable ? ' · grantable' : ''))].join('\n');
   }
 
-  async function inspectAccount() {
+  async function chooseAccount(title) {
     const ticket = generation, list = await api.listAccounts();
     const picked = await vscode.window.showQuickPick([
       { label: 'Current Session Account', description: list.visibility === 'unavailable' ? 'Other account names unavailable' : '' },
       ...list.entries.map(value => ({ label: describeAccount(value), description: value.kind, account: value }))
-    ], { title: 'Inspect Database Access' });
+    ], { title });
     if (!picked) return;
     if (ticket !== generation) throw new Error('The administrator connection changed. Select the account again.');
+    return picked;
+  }
+
+  async function inspectAccount() {
+    const picked=await chooseAccount('Inspect Database Access');
+    if (!picked) return;
     return show(accessText(await api.inspectAccess(picked.account)));
+  }
+
+  async function openRoleInheritance(input) {
+    const value = await api.inspectRoleInheritance(input);
+    const sections = value.roles.flatMap(role => [
+      '## ' + text(describeAccount(role.identity)), '',
+      (role.depth === 1 ? 'Direct role' : 'Inherited role') + ' · ' +
+        role.path.map(item => text(describeAccount(item))).join(' → '), '',
+      ...Object.entries(role.privileges).flatMap(([scope, grants]) => [
+        '### ' + scope + ' · ' + grants.visibility, '',
+        ...grants.entries.map(privilegeText), ''
+      ])
+    ]);
+    return show(['# Database Role Inheritance', '', text(describeAccount(value.selected)) + ' · ' + value.dialect + ' ' + value.version,
+      '', 'Explicit role assignments: ' + value.visibility,
+      ...(value.isCurrent ? ['Active roles in the metadata session: ' + text(value.activeRoles || 'none observed')] : []),
+      '', 'Positive grants visible to this connection. Session activation, implicit roles, revocations and server policy determine actual access.',
+      '', ...sections, '## Observed memberships', '',
+      ...value.edges.map(({ member, role, adminOption }) => '- ' + text(describeAccount(member)) + ' → ' +
+        text(describeAccount(role)) + (adminOption ? ' · admin option' : '')), '',
+      ...(value.unresolved.length ? ['## Coverage limits', '', ...value.unresolved.map(({ identity,reason }) =>
+        '- ' + text(describeAccount(identity)) + ' · ' + reason)] : [])
+    ].join('\n'), 'role-inheritance.md');
+  }
+
+  async function inspectRoles() {
+    const picked=await chooseAccount('Inspect Database Role Inheritance');
+    if (picked) return openRoleInheritance(picked.account);
   }
 
   async function editGrant() {
@@ -262,7 +302,7 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     } finally { reviews.delete(review.reviewId); }
   }
 
-  for (const [name, command] of [['systemCatalog', browseSystem], ['inspectAccess', inspectAccount], ['reviewTableGrant', editGrant],
+  for (const [name, command] of [['systemCatalog', browseSystem], ['inspectAccess', inspectAccount], ['inspectRoleInheritance', inspectRoles], ['reviewTableGrant', editGrant],
     ['reviewCreatePrincipal', createPrincipal]]) {
     subscriptions.push(vscode.commands.registerCommand('rocketbrain.db.' + name, async () => {
       try { trusted(); return await command(); }
