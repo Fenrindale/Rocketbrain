@@ -15,7 +15,7 @@ const fail = (code, message) => Object.assign(Error(message), { code: 'ROCKETBRA
 function targetOf(target, database) {
   const schema = identifier(target?.schema ?? database, { table: true });
   const name = identifier(target?.name);
-  if (schema === database && target?.kind === 'package-procedure') {
+  if (schema === database && ['package-procedure', 'package-function'].includes(target?.kind)) {
     return { schema, name: identifier(name, { table: true }), kind: target.kind, package: identifier(target.package, { table: true }) };
   }
   if (schema !== database || target?.kind !== 'procedure') throw fail('TARGET', 'Choose a standalone procedure in the connected database.');
@@ -35,19 +35,23 @@ async function observeProcedure(query, context, target) {
     accounts[0].length !== 8 || !accounts[0][0] || !accounts[0][2] || typeof accounts[0][7] !== 'string') {
     throw fail('ACCOUNT', 'The physical server and acting database account could not be confirmed.');
   }
-  if (context.dialect === 'mariadb' && accounts[0][7].split(',').includes('ORACLE')) {
-    throw fail('MODE', 'Use a standard SQL mode for a reviewed procedure call.');
-  }
-  if (object.kind === 'package-procedure') {
-    const { spec, body, members } = await inspectPackage(query, context, { schema: object.schema, name: object.package, kind: 'package' });
-    const member = members.find(member => member.name === object.name && member.kind === 'procedure' && member.supported);
-    if (!member) throw fail('PACKAGE_TARGET', 'Choose an unambiguous public procedure with matching scalar signatures in the specification and body.');
+  if (object.kind.startsWith('package-')) {
+    const { spec, body, members, syntax } = await inspectPackage(query, context,
+      { schema: object.schema, name: object.package, kind: 'package' });
+    const kind = object.kind.slice('package-'.length);
+    const member = members.find(item => item.name === object.name && item.kind === kind && item.supported);
+    if (!member) throw fail('PACKAGE_TARGET', 'Choose an unambiguous public ' + kind + ' with matching scalar signatures in the specification and body.');
     const packageSources = [{ kind: 'Specification', source: spec.source, settings: spec.settings },
       { kind: 'Body', source: body.source, settings: body.settings }];
-    const fingerprint = digest([object, context.dialect, context.version, ids[0][1], accounts[0], packageSources, member.parameters]);
+    const fingerprint = digest([object, context.dialect, context.version, ids[0][1], accounts[0], packageSources, member.parameters, member.returns]);
     const callee = [object.schema, object.package, object.name].map(quote).join('.');
+    const sql = kind === 'function' ? 'SELECT ' + callee + '(' + member.parameters.map(() => '?').join(', ') + ') AS return_value'
+      : callSql(callee, fingerprint, member.parameters);
     return { object, fingerprint, account: accounts[0][0], role: accounts[0][1], dialect: context.dialect,
-      version: context.version, packageSources, parameters: member.parameters, sql: callSql(callee, fingerprint, member.parameters) };
+      version: context.version, packageSources, packageSyntax: syntax, parameters: member.parameters, ...(member.returns && { returns: member.returns }), sql };
+  }
+  if (context.dialect === 'mariadb' && accounts[0][7].split(',').includes('ORACLE')) {
+    throw fail('MODE', 'Use a standard SQL mode for a reviewed standalone procedure call.');
   }
   const definition = await loadSource(query, context, object);
   if (context.dialect === 'mariadb' && String(definition.settings.sql_mode || '').split(',').includes('ORACLE')) {

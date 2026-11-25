@@ -559,6 +559,7 @@ class MysqlService {
   }
   async runProcedureCall(review, inputs, { guard, signal, maxRows = 500, timeoutMs = 10000 } = {}) {
     const bounded = limits({ maxRows, timeoutMs });
+    if (review?.object?.kind === 'package-function') return this._runPackageFunction(review, inputs, { guard, signal, timeoutMs: bounded.timeoutMs });
     return this._withRoutineSession(async (session, query, check) => {
       let invoked = false, committed = false;
       try {
@@ -603,6 +604,49 @@ class MysqlService {
       }
     }, { guard, signal, write: true });
   }
+  async _runPackageFunction(review, inputs, { guard, signal, timeoutMs }) {
+    if (this._writeProtection) {
+      throw protectionError('Package function calls are unavailable on protected profiles because the full routine effects cannot be verified.');
+    }
+    const bounded = { maxRows: 1, timeoutMs };
+    return this._withRoutineSession(async (session, query, check) => {
+      let invoked = false;
+      try {
+        const context = await objectSourceContext(query);
+        const before = await routineCall.observeProcedure(query, context, review.object);
+        if (before.fingerprint !== review.fingerprint) throw routineCall.fail('STALE', 'The package function definition or input signature changed. Prepare a new review.');
+        const { values } = routineCall.bindProcedure(before.parameters, inputs);
+        this._observe(session, await this._control(session, 'START TRANSACTION READ ONLY', bounded.timeoutMs));
+        await this._refreshState(session);
+        if (!session.readOnly || !session.inTransaction) throw routineCall.fail('TRANSACTION', 'The package function could not start an isolated read-only transaction.');
+        check();
+        invoked = true;
+        const result = await this._stream(session, before.sql, values, bounded, false, { category: 'procedure', operation: 'SELECT' });
+        if (result.truncated || result.columns.length !== 1 || result.columns[0] !== 'return_value' || result.rows.length !== 1 || result.rows[0].length !== 1)
+          throw routineCall.fail('FUNCTION_RESULT', 'The package function did not return one scalar value.');
+        const after = await routineCall.observeProcedure(query, await objectSourceContext(query), review.object);
+        if (after.fingerprint !== before.fingerprint) throw routineCall.fail('STALE', 'The package function definition or session context changed during invocation.');
+        await this._refreshState(session);
+        if (!session.inTransaction) throw routineCall.fail('TRANSACTION', 'The server did not retain the read-only invocation transaction.');
+        check();
+        this._observe(session, await this._control(session, 'ROLLBACK', bounded.timeoutMs));
+        if (session.inTransaction) throw routineCall.fail('TRANSACTION', 'The package function rollback could not be confirmed.');
+        return { ...result, resultSets: [result], outputParameters: [], totalRows: 1,
+          resultBytes: Buffer.byteLength(JSON.stringify({ columns: result.columns, fields: result.fields, rows: result.rows })),
+          returns: before.returns, state: 'completed', callerTransactionCommitted: false, readOnlyInvocation: true,
+          definitionCheck: 'before-and-after', sessionId: session.id, sql: before.sql };
+      } catch (error) {
+        if (session.connected && session.inTransaction) {
+          try { this._observe(session, await this._control(session, 'ROLLBACK', bounded.timeoutMs)); }
+          catch (rollbackError) { this._lose(session, rollbackError, invoked); }
+        }
+        if (!invoked) throw error;
+        throw Object.assign(routineCall.fail('EXECUTION', error.message + ' The function result was discarded. Inspect the routine before any retry.'),
+          { causeCode: error.code, possibleEffects: true, committed: false });
+      }
+    }, { guard, signal, write: false });
+  }
+
   _executeProcedure(session, sql, values, { maxRows, timeoutMs, mayWrite = true }) {
     return new Promise((resolve, reject) => {
       if (!session.connected) { reject(routineCall.fail('SESSION', 'The procedure connection was lost.')); return; }

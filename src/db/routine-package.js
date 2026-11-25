@@ -44,11 +44,10 @@ function characteristics(tokens, at) {
 
 function header(loaded) {
   const mode = loaded.settings.sql_mode;
-  if (typeof mode !== 'string' || mode.split(',').includes('ORACLE')) {
-    throw fail('MODE', 'Reviewed package calls currently support MariaDB SQL/PSM package definitions.');
-  }
+  if (typeof mode !== 'string') throw fail('MODE', 'This package does not report a stored SQL mode.');
+  const sqlMode = mode.split(','), syntax = sqlMode.includes('ORACLE') ? 'oracle' : 'psm';
   let tokens;
-  try { tokens = sourceTokens(loaded.source, { dialect: 'mariadb', sqlMode: mode.split(',') }); }
+  try { tokens = sourceTokens(loaded.source, { dialect: 'mariadb', sqlMode }); }
   catch { throw fail('SOURCE', 'This package source cannot be reviewed unambiguously within the supported SQL lexer.'); }
   let at = tokens.findIndex(token => word(token, 'PACKAGE'));
   if (!word(tokens[0], 'CREATE') || at < 1) throw fail('SOURCE', 'The package header could not be confirmed.');
@@ -63,23 +62,45 @@ function header(loaded) {
     at += 2;
   }
   if (!isName(tokens[at]) || tokens[at].value !== loaded.object.name) throw fail('SOURCE', 'The source names a different package.');
-  return { tokens, start: characteristics(tokens, at + 1) };
+  let start = characteristics(tokens, at + 1);
+  if (syntax === 'oracle') {
+    if (!word(tokens[start], 'AS') && !word(tokens[start], 'IS')) throw fail('SOURCE', 'The Oracle package declaration is missing AS or IS.');
+    start++;
+  }
+  return { tokens, start, syntax };
 }
 
-function parameter(source, tokens, start, end, ordinal) {
-  let at = start, mode = 'IN';
-  if (word(tokens[at], 'IN') && word(tokens[at + 1], 'OUT')) { mode = 'INOUT'; at += 2; }
-  else if (['IN', 'OUT', 'INOUT'].some(value => word(tokens[at], value))) mode = tokens[at++].upper;
-  if (!isName(tokens[at]) || end - at < 2) return null;
-  let name;
-  try { name = identifier(tokens[at].value); } catch { return null; }
-  const type = source.slice(tokens[at + 1].start, tokens[end - 1].end).toUpperCase().replace(/\s+/gu, ' ')
+function scalarType(source, tokens, start, end, syntax) {
+  if (start >= end || tokens[start]?.kind !== 'word') return null;
+  const type = source.slice(tokens[start].start, tokens[end - 1].end).toUpperCase().replace(/\s+/gu, ' ')
     .replace(/\s*([(),])\s*/gu, '$1').trim();
-  const kind = scalar.test(type) && typeKind(type);
-  return kind ? { ordinal, name, mode, type, kind } : null;
+  let compatible = type;
+  if (syntax === 'oracle') {
+    if (/^NUMBER(?:\(\d{1,2}(?:,\d{1,2})?\))?$/u.test(type)) return { type, kind: 'decimal' };
+    else if (/^VARCHAR2\(\d{1,5}\)$/u.test(type)) compatible = type.replace('VARCHAR2', 'VARCHAR');
+    else if (type === 'DATE') compatible = 'DATETIME';
+  }
+  const kind = scalar.test(compatible) && typeKind(compatible);
+  return kind ? { type, kind } : null;
 }
 
-function parametersOf(source, tokens, afterName) {
+function direction(tokens, at) {
+  if (word(tokens[at], 'IN') && word(tokens[at + 1], 'OUT')) return { mode: 'INOUT', next: at + 2 };
+  if (['IN', 'OUT', 'INOUT'].some(value => word(tokens[at], value))) return { mode: tokens[at].upper, next: at + 1 };
+  return { mode: 'IN', next: at };
+}
+
+function parameter(source, tokens, start, end, ordinal, syntax) {
+  const placement = direction(tokens, syntax === 'oracle' ? start + 1 : start);
+  const nameToken = tokens[syntax === 'oracle' ? start : placement.next];
+  if (!isName(nameToken)) return null;
+  let name;
+  try { name = identifier(nameToken.value); } catch { return null; }
+  const shape = scalarType(source, tokens, placement.next + (syntax === 'oracle' ? 0 : 1), end, syntax);
+  return shape ? { ordinal, name, mode: placement.mode, ...shape } : null;
+}
+
+function parametersOf(source, tokens, afterName, syntax) {
   if (!symbol(tokens[afterName], '(')) return { after: afterName, parameters: [] };
   const close = tokens[afterName].close;
   if (!Number.isInteger(close)) throw fail('SOURCE', 'A package member signature has an unclosed parameter list.');
@@ -89,7 +110,7 @@ function parametersOf(source, tokens, afterName) {
     if (symbol(tokens[at], '(')) { at = tokens[at].close; continue; }
     if (at === close || symbol(tokens[at], ',')) {
       if (parameters.length >= 32 || at === start || at + 1 === close && at !== close) return { after: close + 1, parameters: null };
-      parameters.push(parameter(source, tokens, start, at, parameters.length + 1));
+      parameters.push(parameter(source, tokens, start, at, parameters.length + 1, syntax));
       start = at + 1;
     }
   }
@@ -97,22 +118,41 @@ function parametersOf(source, tokens, afterName) {
   return { after: close + 1, parameters: parameters.every(Boolean) && unique.size === parameters.length ? parameters : null };
 }
 
+function memberSignature(loaded, tokens, at, kind, syntax) {
+  let { after, parameters } = parametersOf(loaded.source, tokens, at + 2, syntax);
+  let returns = null;
+  if (kind === 'function') {
+    if (!word(tokens[after], syntax === 'oracle' ? 'RETURN' : 'RETURNS')) return { after, parameters: null };
+    const start = ++after;
+    after++;
+    if (symbol(tokens[after], '(')) after = tokens[after].close + 1;
+    if (word(tokens[after], 'UNSIGNED')) after++;
+    returns = scalarType(loaded.source, tokens, start, after, syntax);
+    if (!returns || parameters?.some(parameter => parameter.mode !== 'IN')) parameters = null;
+    if (word(tokens[after], 'DETERMINISTIC')) after++;
+    else if (word(tokens[after], 'NOT') && word(tokens[after + 1], 'DETERMINISTIC')) after += 2;
+  }
+  return { after: characteristics(tokens, after), parameters, returns };
+}
+
 function specificationMembers(loaded) {
-  const { tokens, start } = header(loaded);
+  const { tokens, start, syntax } = header(loaded);
   const members = [];
   let at = start;
   while (at < tokens.length && !word(tokens[at], 'END')) {
     const kind = ['procedure', 'function'].find(value => word(tokens[at], value.toUpperCase()));
     if (!kind || !isName(tokens[at + 1]) || members.length >= 64) throw fail('SOURCE', 'The public package declaration exceeds its supported shape or member limit.');
     const name = identifier(tokens[at + 1].value, { table: true });
-    const { after, parameters } = parametersOf(loaded.source, tokens, at + 2);
+    const { after, parameters, returns } = memberSignature(loaded, tokens, at, kind, syntax);
     const end = tokens.findIndex((token, index) => index >= after && symbol(token, ';'));
     if (end < 0) throw fail('SOURCE', 'A public package declaration is incomplete.');
-    const supported = kind === 'procedure' && parameters !== null && characteristics(tokens, after) === end;
-    members.push({ kind, name, parameters: supported ? parameters : null, supported });
+    const supported = parameters !== null && after === end;
+    members.push({ kind, name, parameters: supported ? parameters : null, ...(returns && { returns }), supported });
     at = end + 1;
   }
-  if (!word(tokens[at], 'END') || tokens.slice(at + 1).some(token => !symbol(token, ';'))) {
+  const trailer = tokens[at + 1];
+  const namedEnd = syntax === 'oracle' && isName(trailer) && trailer.value.toLowerCase() === loaded.object.name.toLowerCase();
+  if (!word(tokens[at], 'END') || tokens.slice(at + (namedEnd ? 2 : 1)).some(token => !symbol(token, ';'))) {
     throw fail('SOURCE', 'The public package declaration has an unsupported end boundary.');
   }
   const counts = new Map();
@@ -122,23 +162,31 @@ function specificationMembers(loaded) {
 
 function sameSignature(left, right) {
   const signature = parameters => parameters.map(({ name, mode, type }) => [name.toLowerCase(), mode, type]);
-  return left !== null && right !== null && JSON.stringify(signature(left)) === JSON.stringify(signature(right));
+  return left.parameters !== null && right?.parameters != null &&
+    JSON.stringify(signature(left.parameters)) === JSON.stringify(signature(right.parameters)) &&
+    (left.returns?.type || null) === (right.returns?.type || null);
 }
 
-function implementedMembers(body, members) {
-  const { tokens, start } = header(body);
-  const byName = new Map(members.filter(member => member.supported).map(member => [member.name.toLowerCase(), []]));
+function implementedMembers(body, members, expectedSyntax) {
+  const { tokens, start, syntax } = header(body);
+  if (expectedSyntax && syntax !== expectedSyntax) throw fail('MODE', 'The package specification and body use different stored SQL dialects.');
+  const declarations = new Map(members.filter(member => member.supported).map(member =>
+    [member.kind + ':' + member.name.toLowerCase(), []]));
   for (let at = start; at < tokens.length; at++) {
-    if (!word(tokens[at], 'PROCEDURE') || !isName(tokens[at + 1])) continue;
-    const matches = byName.get(tokens[at + 1].value.toLowerCase());
+    const kind = ['procedure', 'function'].find(value => word(tokens[at], value.toUpperCase()));
+    if (!kind || !isName(tokens[at + 1])) continue;
+    const matches = declarations.get(kind + ':' + tokens[at + 1].value.toLowerCase());
     if (!matches) continue;
-    const { after, parameters } = parametersOf(body.source, tokens, at + 2);
-    const next = tokens[characteristics(tokens, after)];
-    if (!symbol(next, ';')) matches.push(word(next, 'BEGIN') ? parameters : null);
+    const heading = memberSignature(body, tokens, at, kind, syntax);
+    const next = tokens[heading.after];
+    if (symbol(next, ';')) continue;
+    const implementation = syntax === 'oracle' ? word(next, 'IS') || word(next, 'AS')
+      : word(next, 'BEGIN') || kind === 'function' && word(next, 'RETURN');
+    matches.push(implementation ? heading : null);
   }
   return members.map(member => {
-    const implementations = byName.get(member.name.toLowerCase());
-    const supported = member.supported && implementations?.length === 1 && sameSignature(member.parameters, implementations[0]);
+    const implementations = declarations.get(member.kind + ':' + member.name.toLowerCase());
+    const supported = member.supported && implementations?.length === 1 && sameSignature(member, implementations[0]);
     return supported ? member : { ...member, supported: false, parameters: null };
   });
 }
@@ -148,8 +196,9 @@ async function inspectPackage(query, context, target) {
   const object = namesOf(target, context.database);
   const spec = await loadSource(query, context, object);
   const body = await loadSource(query, context, { ...object, kind: 'package-body' });
-  const members = implementedMembers(body, specificationMembers(spec));
-  return { object, spec, body, members };
+  const syntax = spec.settings.sql_mode?.split(',').includes('ORACLE') ? 'oracle' : 'psm';
+  const members = implementedMembers(body, specificationMembers(spec), syntax);
+  return { object, spec, body, members, syntax };
 }
 
 module.exports = { listPackages, inspectPackage, specificationMembers, implementedMembers };
