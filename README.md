@@ -307,6 +307,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 활성 스키마의 SELECT에서 해석되지 않는 테이블명이나 대상이 분명한 누락 열에 커서를 놓습니다. **Design Unresolved Table** 또는 **Design Column**에서 확인된 이름으로 테이블 디자이너를 엽니다. 열을 추가할 때는 필요한 타입을 지정합니다. 실제 스키마는 SQL 검토와 적용을 거쳐서 변경합니다.
 - **Review SQL Script**는 독립된 `DELIMITER` 줄 사이에 있는 `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE TRIGGER`의 `BEGIN … END` 블록을 한 문장으로 검토합니다. 실행은 쓰기 콘솔에서 DDL의 암시적 커밋을 승인한 뒤 진행합니다. `DELIMITER ;`로 돌아오면 일반 문장에 바인딩 값을 사용할 수 있습니다. 저장 프로그램 본문의 동적 SQL, 세션 제어와 매개변수 바인딩은 지원 범위 밖입니다.
 - **Run SQL Script**에서 유휴 자동 커밋 콘솔에 하나의 `BEGIN … COMMIT` 또는 `BEGIN … ROLLBACK` 블록을 검토해 실행할 수 있습니다. 같은 스키마의 InnoDB 기본 테이블, 직접 행 변경, 단일 테이블 열 조회와 이름이 지정된 세이브포인트를 지원합니다. 쓰기 커밋은 별도 승인을 받습니다. 문장이 실패하거나 실행이 멈추면 확장이 시작한 트랜잭션의 롤백을 확인하고, 응답을 잃으면 결과를 미확정으로 표시합니다.
+- 읽기 전용 스크립트에서 검토한 프로시저의 IN과 INOUT 초기값을 타입으로 바인딩합니다. OUT 자리에는 `@output` 형식의 영문 이름을 입력합니다. OUT 이름은 캡처한 출력 그리드의 표시 이름이며 이후 SQL의 세션 변수에 값을 넣지 않습니다. 읽기와 출력 매개변수 대입만 하는 프로시저를 대상으로 하며 결과를 다시 열 때 호출을 반복하지 않습니다.
 - 읽기 전용 스크립트에서는 현재 스키마의 검증된 `CALL procedure(:input)`을 다른 조회와 함께 실행합니다. 보이는 프로시저의 본문과 IN 매개변수를 다시 확인합니다. 지원 범위는 같은 스키마의 기본 테이블을 읽는 단순 `SELECT`입니다. 스크립트 결과에서 각 결과 집합을 다시 열 수 있습니다.
 - `DELIMITER`가 있는 SQL 파일에서 **Run Selected SQL or Current Statement**를 실행하면 서버의 SQL 모드로 커서 아래 문장이나 선택한 전체 복합 문장의 범위를 구합니다. 복합 DDL 검토에는 그 문장 하나가 표시됩니다.
 - SQL 편집기는 단일 테이블 INSERT 열 목록, UPDATE의 SET, UPDATE·DELETE의 WHERE에서 관찰한 열 이름과 서버 타입을 제안합니다. 스키마를 명시하면 그 테이블을 확인합니다. 자동 증가·생성 열은 쓰기 제안에서 제외합니다.
@@ -334,6 +335,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - `@EmbeddedId`의 명시적 `@AttributeOverride`와 `@AttributeOverrides`를 물리 열에 맞춰 해석합니다. 단일 PK 부모의 FK가 자식의 복합 키 중 한 멤버를 구성하면 `@MapsId("멤버")`를 검토할 수 있습니다. 자식 연관 필드가 공유 키를 쓰고, 나머지 로컬 키 열의 매핑을 유지합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
 - **Inspect Database Role Inheritance**는 명시적으로 부여된 역할을 따라가며 직접·중첩 역할, 역할마다 관찰한 객체 권한, 경로 및 관리 옵션을 읽기 전용 문서로 엽니다. 연결 계정에서 볼 수 있는 메타데이터를 표시합니다. 역할 활성화, 암시적 역할, 권한 철회와 서버 정책은 실제 접근에 영향을 줍니다.
+- **Review Database Role Membership**에서는 현재 계정에 직접 ADMIN OPTION이 있는 역할을 기존 로그인 계정 하나에 부여하거나 회수합니다. 선택한 역할과 계정의 정확한 식별자, 관찰한 역할 권한·상속, 변경 전후의 직접 할당을 검토합니다. 관리 옵션을 함께 부여하려면 별도 승인이 필요합니다. MariaDB에서는 역할은 유지하고 관리 옵션만 회수할 수도 있습니다. 해당 역할이 기본 역할인 계정은 기본 설정을 별도로 검토해야 합니다.
 - **Review Database Account or Role Creation**에서 대상 서버, 실행 계정, 새 로그인 계정의 정확한 호스트 또는 역할을 확인하고 한 번만 적용합니다. 암호는 확정 후 마스킹 입력창에서 받으며 Rocketbrain 검토 문서나 결과에 저장하지 않습니다. MariaDB는 생성한 역할의 관리자를 실행 계정으로 지정합니다. 서버에 계정 생성 권한과 좁은 계정 카탈로그 조회 권한이 필요합니다.
 - **Open Database Object Source**는 연결 계정에 보이는 스키마와 객체의 `SHOW CREATE` 원문을 읽기 전용 SQL 문서로 엽니다. DB 트리에서 바로 열거나 현재 객체의 원문을 새로 고칠 수 있습니다.
 - **Go to Database Column Origin**은 SQL 편집기에서 선택한 열의 CTE·파생 테이블 별칭과 연결 계정으로 확인한 뷰 정의를 따라 원본 테이블의 열 선언을 엽니다. **Explain Database Column Origin**에서 경로와 열 타입을 확인할 수 있습니다. 원본을 찾을 수 있는 단일 열 전달을 지원하며, 계산 결과·재귀·집합 연산이나 확인할 수 없는 뷰에서 추적을 중단합니다. 일반 **Go to Definition**은 편집기 안의 별칭 정의로 계속 이동합니다.
@@ -343,6 +345,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Review Stored Procedure Call**은 현재 DB에서 정의가 보이는 독립 프로시저를 찾아 계정, 실제 정의와 `IN`·`OUT`·`INOUT` 파라미터를 검토합니다. 확인 후 별도 연결에서 한 번만 실행하며, 결과 집합과 출력 파라미터를 각각 읽기 전용 그리드로 열 수 있습니다. 최대 32개 파라미터와 결과 집합 8개까지 처리합니다. DB 권한은 서버가 적용하며, 쓰기 보호 프로필은 호출을 거부합니다. MariaDB에서는 호출 전후 정의를 비교합니다. 호출 중 다른 세션이 정의를 바꿀 수 있고, 프로시저가 직접 커밋한 변경은 돌이킬 수 없습니다.
 - **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
+- SQL 표현식에서는 현재 범위의 별칭과 열을 약어로 찾을 수 있습니다. 예를 들어 `p.dn`으로 `p.display_name`을 완성합니다. 활성 MySQL·MariaDB의 버전과 SQL 모드에 맞는 내장 함수 템플릿을 삽입하고 괄호 안의 현재 인수를 표시합니다. 지원하는 구문은 [MySQL 함수 참조](https://dev.mysql.com/doc/refman/8.4/en/built-in-function-reference.html)와 [MariaDB 함수 참조](https://mariadb.com/docs/server/reference/sql-functions/function-and-operator-reference)를 따릅니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
 - **Open Consistent Table Snapshot**은 기본 키가 있는 InnoDB 테이블을 별도 읽기 전용 트랜잭션에서 엽니다. 다음·이전 페이지는 정렬 값과 기본 키를 기준으로 서버에서 읽습니다. 탭을 닫으면 스냅샷 연결이 해제됩니다.
 - 이 결과 그리드에서 **Continuous scroll**을 켜면 위·아래로 이동할 때 인접 페이지를 읽습니다. 최근 페이지를 최대 4개, 합계 1,000행과 4 MiB 범위로 보관하며 단일 페이지는 기존 결과 한도를 따릅니다. 복사와 내보내기는 현재 보관한 행을 사용합니다. `ENUM`은 서버 멤버 순서로, `SET`은 각 엔진의 64비트 정렬 순서로 비교하며 셀에는 원래 값이 표시됩니다.

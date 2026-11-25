@@ -45,7 +45,7 @@ function programPolicy(sql, sqlMode, readOnly) {
 function scriptCall(sql, sqlMode) {
   const tokens=tokenize(sql,false,{sqlMode});
   if(tokens[0]?.kind!=='word'||tokens[0].upper!=='CALL')return null;
-  const invalid=()=>fail('ROCKETBRAIN_SCRIPT_CALL','Use CALL procedure(?, ...) with typed input bindings in the current schema.');
+  const invalid=()=>fail('ROCKETBRAIN_SCRIPT_CALL','Use typed bindings for CALL inputs and distinct @names for OUT arguments in the current schema.');
   const name=token=>['word','identifier'].includes(token?.kind)&&/^[A-Za-z_][A-Za-z0-9_$]{0,63}$/.test(token.value);
   const symbol=(token,value)=>token?.kind==='symbol'&&token.value===value;
   let index=1,schema;
@@ -59,15 +59,26 @@ function scriptCall(sql, sqlMode) {
   }
   if(!symbol(tokens[index++],'('))throw invalid();
   let inputs=0;
+  const slots=[], outputs=new Set();
   if(!symbol(tokens[index],')')){
     while(true){
-      if(!symbol(tokens[index++],'?')||++inputs>32)throw invalid();
+      const token=tokens[index++];
+      if(slots.length===32)throw invalid();
+      if(symbol(token,'?')){
+        inputs++;
+        slots.push(null);
+      }else if(token?.kind==='variable'&&!token.system&&/^@[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(token.value)){
+        const key=token.value.toLowerCase();
+        if(outputs.has(key))throw invalid();
+        outputs.add(key);
+        slots.push(token.value.slice(1));
+      }else throw invalid();
       if(!symbol(tokens[index],','))break;
       index++;
     }
   }
   if(!symbol(tokens[index++],')')||index!==tokens.length)throw invalid();
-  return {first:'CALL',mayWrite:false,ddl:false,call:{...(schema&&{schema}),procedure,inputs}};
+  return {first:'CALL',mayWrite:false,ddl:false,call:{...(schema&&{schema}),procedure,inputs,...(outputs.size&&{slots})}};
 }
 
 /** A client script splitter, not a complete SQL parser. Every part is also policy checked. */

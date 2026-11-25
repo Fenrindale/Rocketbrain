@@ -212,4 +212,4 @@ async function inspectRoleInheritance(read, context, requested) {
 }
 
 module.exports = { readRows, readContext, scope, objects, object, accounts, inspectAccess, inspectRoleInheritance,
-  account, currentAccount, allowSchema, fail };
+  account, currentAccount, allowSchema, fail, assignedRoles, rolePrivileges };

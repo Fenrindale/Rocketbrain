@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const metadata = require('./database-admin-metadata');
 const grants = require('./database-table-grant');
 const principals = require('./database-principal-create');
+const roleMembership = require('./database-role-membership');
 
 function registerDatabaseAdmin(context, vscode, { database }) {
   const documents = new Map(), reviews = new Map(), subscriptions = [];
@@ -96,6 +97,30 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     if (approved !== true) throw new Error('Approve the single reviewed account or role creation.');
     return consumeReview('principal-create', reviewId, (lease, plan) => principals.apply(lease, plan, password));
   }
+  function listRoleMembershipOptions() {
+    trusted();
+    const ticket = generation;
+    return database.withDatabaseAdmin(lease => roleMembership.availableRoles(guarded(lease, ticket)));
+  }
+
+  async function prepareRoleMembership(input) {
+    trusted();
+    const ticket = generation;
+    return database.withDatabaseAdmin(async lease => {
+      const plan = await roleMembership.plan(guarded(lease, ticket), input);
+      return { ...retainReview('role-membership', lease, ticket, plan), target: structuredClone(plan.target),
+        dialect: plan.before.identity.dialect, actor: metadata.currentAccount(plan.before.identity.currentUser),
+        sql: plan.sql, previous: structuredClone(plan.before.membership), expected: structuredClone(plan.expected),
+        automaticRetry: false, credentialsIncluded: false };
+    });
+  }
+
+  async function applyRoleMembership({ reviewId, approved, approvedDelegation } = {}) {
+    if (approved !== true) throw new Error('Approve the exact reviewed role membership change.');
+    const { plan } = reviewed('role-membership', reviewId);
+    if (plan.target.withAdmin && approvedDelegation !== true) throw new Error('Explicitly approve delegated ADMIN OPTION for this role.');
+    return consumeReview('role-membership', reviewId, roleMembership.apply);
+  }
 
   const api = {
     listSystemSchemas: () => inspect(read => metadata.scope(read)),
@@ -119,6 +144,10 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     preparePrincipal,
     applyPrincipal,
     openPrincipalReview,
+    listRoleMembershipOptions,
+    prepareRoleMembership,
+    applyRoleMembership,
+    openRoleMembershipReview,
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -231,6 +260,58 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     if (picked) return openRoleInheritance(picked.account);
   }
 
+  async function openRoleMembershipReview(reviewId) {
+    const { plan } = reviewed('role-membership', reviewId), { identity, graph, positiveGrants, defaults, policy } = plan.before;
+    const describe = list => list.length ? list.map(role => describeAccount(role) + (role.adminOption ? ' · ADMIN OPTION' : '')).join(', ') : '(none)';
+    const grants = observed => Object.entries(observed).flatMap(([scope, value]) =>
+      ['-- ' + scope + ' grants · ' + value.visibility, ...value.entries.map(entry => '-- ' + privilegeText(entry))]);
+    return show(['-- Reviewed direct role membership', '-- Executing account ' + text(identity.currentUser) + ' · direct ADMIN OPTION observed',
+      '-- Before · ' + describe(plan.before.membership), '-- Expected · ' + describe(plan.expected),
+      '-- Reviewed account defaults · ' + describe(defaults),
+      ...(identity.dialect === 'mysql' ? ['-- Activate all assigned roles on login · ' + (policy.automaticActivation ? 'yes' : 'no')] : []),
+      '-- Explicit inherited role paths observed · ' + graph.roles.length,
+      ...graph.edges.map(edge => '-- ' + text(describeAccount(edge.member)) + ' → ' + text(describeAccount(edge.role))),
+      '-- Observed grants of ' + text(describeAccount(plan.target.role)), ...grants(positiveGrants),
+      ...graph.roles.flatMap(role => ['-- Observed grants inherited from ' + text(describeAccount(role.identity)), ...grants(role.privileges)]),
+      '-- This statement changes membership immediately. Session activation and other grants determine actual access.',
+      ...(plan.target.withAdmin ? ['-- ADMIN OPTION permits this account to delegate the reviewed role.'] : []),
+      '', plan.sql + ';'].join('\n'), 'role-membership.sql', reviewId);
+  }
+
+  async function editRoleMembership() {
+    const ticket = generation, options = await listRoleMembershipOptions();
+    if (!options.roles.length) throw new Error('No observed role is directly administered by this account.');
+    const pickedRole = await vscode.window.showQuickPick(options.roles.map(role => ({label:describeAccount(role),role})),
+      {title:'Select a Role You Can Administer'});
+    if (!pickedRole) return;
+    const pickedAccount = await vscode.window.showQuickPick(options.accounts.map(account => ({label:describeAccount(account),account})),
+      {title:'Select an Existing Login Account'});
+    if (!pickedAccount) return;
+    const selected = await vscode.window.showQuickPick([
+      {label:'Grant Role Membership',action:'grant'}, {label:'Grant Role with ADMIN OPTION',action:'grant',withAdmin:true},
+      {label:'Revoke Direct Role Membership',action:'revoke'},
+      ...(options.dialect === 'mariadb' ? [{label:'Revoke ADMIN OPTION Only',action:'revoke-admin'}] : [])
+    ], {title:'Select One Role Membership Change'});
+    if (!selected) return;
+    if (ticket !== generation) throw new Error('The administrator connection changed. Start the review again.');
+    const planned = await prepareRoleMembership({role:pickedRole.role,account:pickedAccount.account,action:selected.action,withAdmin:selected.withAdmin});
+    try {
+      await openRoleMembershipReview(planned.reviewId);
+      const apply = 'Apply Reviewed Membership';
+      if (await vscode.window.showWarningMessage('Apply this exact role membership change?', {modal:true}, apply) !== apply) return;
+      let approvedDelegation = false;
+      if (planned.target.withAdmin) {
+        const delegate = 'Delegate ADMIN OPTION';
+        approvedDelegation = await vscode.window.showWarningMessage('Allow this account to delegate the reviewed role?', {modal:true}, delegate) === delegate;
+        if (!approvedDelegation) return;
+      }
+      const result = await applyRoleMembership({reviewId:planned.reviewId,approved:true,approvedDelegation});
+      if (result.state === 'verified') void vscode.window.showInformationMessage('The direct role membership change was verified.');
+      else void vscode.window.showWarningMessage('Role membership change ' + result.state + '. Inspect the database role memberships.');
+      return result;
+    } finally { reviews.delete(planned.reviewId); }
+  }
+
   async function editGrant() {
     const ticket = generation, list = await api.listAccounts();
     if (list.visibility !== 'observed') throw new Error('A complete visible account list is required to select an existing grant target.');
@@ -302,7 +383,7 @@ function registerDatabaseAdmin(context, vscode, { database }) {
     } finally { reviews.delete(review.reviewId); }
   }
 
-  for (const [name, command] of [['systemCatalog', browseSystem], ['inspectAccess', inspectAccount], ['inspectRoleInheritance', inspectRoles], ['reviewTableGrant', editGrant],
+  for (const [name, command] of [['systemCatalog', browseSystem], ['inspectAccess', inspectAccount], ['inspectRoleInheritance', inspectRoles], ['reviewRoleMembership', editRoleMembership], ['reviewTableGrant', editGrant],
     ['reviewCreatePrincipal', createPrincipal]]) {
     subscriptions.push(vscode.commands.registerCommand('rocketbrain.db.' + name, async () => {
       try { trusted(); return await command(); }

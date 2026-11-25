@@ -4,6 +4,7 @@ const {fileURLToPath}=require('node:url');
 const { inspectDmlScope } = require('./sql-dml-scope');
 const { isProfileConsole } = require('./profile-console-files');
 const { createOverlayStore, overlayScope, buildOverlay } = require('./virtual-schema-overlays');
+const { callCompletions, callSignature } = require('./sql-call-completion');
 const overlaySourceScheme='rocketbrain-virtual-schema-source';
 
 function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output,joinCatalog,joinLogicalRelationships,objectDefinition,objectColumnOrigin,liveCatalogIdentity}={}) {
@@ -568,7 +569,58 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
       return '-- The saved virtual schema is unavailable for the current database.\n';
     }
   }));
-  subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {provideCompletionItems(document,position){const scope=locate(document,position);if(!scope)return [];return engine().completionsAt(scope.model,scope.offset).map(value=>{const item=new vscode.CompletionItem(value.label,value.kind==='column'?vscode.CompletionItemKind.Field:vscode.CompletionItemKind.Struct);item.detail=metadata?.cachedMetadata&&!virtualActive(document)?'Cached metadata · '+value.detail:value.detail;item.insertText=value.insertText||value.label;return item;});}},'.'));
+  function callOptions(document, scope) {
+    if (!vscode.workspace.isTrusted || !metadata?.semanticContextObserved || metadata.cachedMetadata ||
+        virtualActive(document) || scope.priorContextChange) return {};
+    return options();
+  }
+  subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'sql' }, {
+    provideCompletionItems(document, position, token) {
+      const scope = locate(document, position);
+      if (!scope || token?.isCancellationRequested) return [];
+      const observed = callOptions(document, scope), cached = metadata?.cachedMetadata && !virtualActive(document);
+      const ordinary = engine().completionsAt(scope.model, scope.offset);
+      const extra = vscode.workspace.isTrusted && !scope.priorContextChange
+        ? callCompletions(scope.model.text, scope.offset, observed, scope.model) : [];
+      return [...ordinary, ...extra].map(value => {
+        const kind = value.kind === 'function' ? vscode.CompletionItemKind.Function : value.kind === 'alias' ? vscode.CompletionItemKind.Reference :
+          value.kind === 'column' ? vscode.CompletionItemKind.Field : vscode.CompletionItemKind.Struct;
+        const label = value.description ? { label: value.label, detail: ' · ' + value.description } : value.label;
+        const item = new vscode.CompletionItem(label, kind);
+        item.detail = cached ? 'Cached metadata · ' + value.detail : value.detail;
+        if (value.parts) {
+          const snippet = new vscode.SnippetString();
+          for (const part of value.parts) {
+            if (typeof part === 'string') snippet.appendText(part);
+            else snippet.appendPlaceholder(part.placeholder);
+          }
+          item.insertText = snippet;
+        } else item.insertText = value.insertText || value.label;
+        if (value.filterText) item.filterText = value.filterText;
+        if (value.rank !== undefined) item.sortText = `${value.rank + 1}:${value.label}:${value.description || ''}`;
+        if (value.start !== undefined) item.range = new vscode.Range(document.positionAt(scope.start + value.start), document.positionAt(scope.start + value.end));
+        return item;
+      });
+    }
+  }, '.'));
+  if (vscode.languages.registerSignatureHelpProvider) subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'sql' }, {
+    provideSignatureHelp(document, position, token) {
+      const scope = locate(document, position);
+      if (!scope || token?.isCancellationRequested) return;
+      const signatures = callSignature(scope.model.text, scope.offset, callOptions(document, scope));
+      if (!signatures?.length) return;
+      const help = new vscode.SignatureHelp();
+      help.signatures = signatures.map(entry => {
+        const info = new vscode.SignatureInformation(entry.label);
+        info.parameters = entry.parameters.map(parameter => new vscode.ParameterInformation(parameter));
+        info.activeParameter = entry.active;
+        return info;
+      });
+      help.activeSignature = 0;
+      help.activeParameter = signatures[0].active;
+      return help;
+    }
+  }, '(', ','));
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {
     async provideCompletionItems(document,position,token) {
       if(disposed||!vscode.workspace.isTrusted||!config().get('enabled',true)||!metadata||isProfileConsole(document)||virtualActive(document)||require('./federated-select').isFederatedDocument(document))return [];

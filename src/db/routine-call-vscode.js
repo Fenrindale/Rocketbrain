@@ -1,7 +1,7 @@
 'use strict';
 
 const { randomUUID } = require('node:crypto');
-const { bindProcedure, fail } = require('./routine-call');
+const { bindProcedure, procedureOutputGrid, fail } = require('./routine-call');
 
 const scheme = 'rocketbrain-procedure-review';
 const reviewLifetime = 120000;
@@ -104,10 +104,8 @@ function registerRoutineCalls(vscode, { database }) {
       }, { write: !scalarCall });
       const rows = report.resultSets.map((set, index) => [index + 1, set.columns.length, set.rowCount]);
       const scriptStatements = report.resultSets.map((set, index) => ({ index, label: scalarCall ? 'Scalar return value' : 'Result set ' + (index + 1) + ' · ' + set.rowCount + ' row(s)' }));
-      const outputRows = report.outputParameters.map(({ name, mode, type, value }) => [name, mode, type, value]);
-      const outputGrid = outputRows.length ? { columns: ['Parameter', 'Mode', 'SQL type', 'Value'], rows: outputRows,
-        rowCount: outputRows.length, affectedRows: 0, durationMs: 0, truncated: false } : undefined;
-      if (outputGrid) scriptStatements.push({ index: report.resultSets.length, label: 'Output parameters · ' + outputRows.length });
+      const outputGrid = procedureOutputGrid(report.outputParameters);
+      if (outputGrid) scriptStatements.push({ index: report.resultSets.length, label: 'Output parameters · ' + outputGrid.rowCount });
       for (const existing of captures.keys()) if (!database.scriptResultRetained(existing)) captures.delete(existing);
       if (captures.size >= 8) captures.delete(captures.keys().next().value);
       captures.set(resultId, { sql, label, resultSets: report.resultSets, outputGrid, scalarCall });

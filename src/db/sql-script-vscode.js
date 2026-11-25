@@ -150,8 +150,8 @@ function registerSqlScripts(context,vscode,{database,analysisOnly=()=>false}={})
   function capturedStatements(statement) {
     if(!statement.result||statement.result.resultOmitted)return [];
     const label='Statement '+(statement.index+1)+' · ';
-    if(Array.isArray(statement.result.resultSets))return statement.result.resultSets.map((_set,resultSet)=>({
-      index:statement.index,resultSet,label:label+'CALL result '+(resultSet+1)
+    if(Array.isArray(statement.result.resultSets))return statement.result.resultSets.map((set,resultSet)=>({
+      index:statement.index,resultSet,label:label+(set.procedureOutput?'CALL output parameters':'CALL result '+(resultSet+1))
     }));
     return [{index:statement.index,label:label+statement.sql.replace(/\s+/g,' ').slice(0,88)}];
   }
@@ -197,6 +197,8 @@ function registerSqlScripts(context,vscode,{database,analysisOnly=()=>false}={})
       ...(b.requiresImplicitCommitApproval?['-- Schema changes can implicitly commit earlier work and cannot be rolled back as a group.']:[]),
       ...b.statements.filter(statement=>statement.program).map(statement=>'-- Statement '+(statement.index+1)+' creates a '+statement.program.toLowerCase()+'.'),
       ...b.statements.filter(statement=>statement.call).map(statement=>'-- Statement '+(statement.index+1)+' calls the reviewed read-only '+statement.call.procedure+' procedure.'),
+      ...b.statements.flatMap(statement=>(statement.call?.outputParameters||[]).map(parameter=>
+        '-- Captured output '+(parameter.label||parameter.name)+' · '+parameter.mode+' · '+parameter.type)),
       ...(b.unboundedDml || []).map(({ index, command, hasLimit }) => '-- Statement ' + (index + 1) + ' uses ' +
         command + ' without an outer WHERE clause.' + (hasLimit ? ' A LIMIT is present.' : ' It can affect every target row.')),
       ...b.parameterDefinitions.map(p=>'-- Parameter '+(p.name||p.key)+': '+p.valueKind+' (value kept private)'),'',review.sql].join('\n');

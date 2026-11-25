@@ -511,7 +511,13 @@ class MysqlService {
       const reviewWarning=script.transactionBlock ?
         'This script manages its own transaction. Rocketbrain verifies the final transaction state.' :
         'A script is not an atomic transaction; completed statements are never retried automatically.';
-      return structuredClone({...scriptEngine.publicScript(script),...context,reviewId,sessionId:session.id,readOnly:state.readOnly,autocommit:state.autocommit,expiresAt:review.expiresAt,scriptHash:scriptEngine.digest(sql),state,stopOnError:true,autoRetried:false,warnings:[...(script.requiresImplicitCommitApproval?['DDL may implicitly commit earlier statements in this script. It is not transactionally undoable.']:[]),'Preflight checks boundaries, execution policy and parameter types; it does not prove all statements are valid on this server.',reviewWarning]});
+      const reviewed=scriptEngine.publicScript(script);
+      for(const statement of reviewed.statements){
+        const signature=calls.get(statement.index)?.parameters;
+        const outputs=signature?.filter(parameter=>parameter.mode!=='IN');
+        if(outputs?.length)statement.call={...statement.call,outputParameters:outputs};
+      }
+      return structuredClone({...reviewed,...context,reviewId,sessionId:session.id,readOnly:state.readOnly,autocommit:state.autocommit,expiresAt:review.expiresAt,scriptHash:scriptEngine.digest(sql),state,stopOnError:true,autoRetried:false,warnings:[...(script.requiresImplicitCommitApproval?['DDL may implicitly commit earlier statements in this script. It is not transactionally undoable.']:[]),'Preflight checks boundaries, execution policy and parameter types; it does not prove all statements are valid on this server.',reviewWarning]});
     });
   }
   discardScript(reviewId){return this._scriptReviews.delete(reviewId);}
@@ -683,6 +689,49 @@ class MysqlService {
     }
     for (const target of targets.values()) await this._ensureSafeProtectedTarget(target);
   }
+  async _executeReviewedScriptCall(session, statement, call, context, bounded, assertActive) {
+    const plan = { statements: [statement], hasWrites: false };
+    const next = await this._reviewScriptCalls(session, plan, context);
+    if (next.get(statement.index)?.fingerprint !== call.fingerprint) {
+      throw fail('ROCKETBRAIN_SCRIPT_STALE','The procedure changed before CALL.');
+    }
+    // One private set of slots per console, with no values retained between calls.
+    const slots = call.parameters.some(parameter=>parameter.mode!=='IN')
+      ? session.scriptProcedureSlots ||= randomUUID().replaceAll('-', '')
+      : call.fingerprint;
+    const args = routineCall.scriptSessionArguments(call, statement.values, slots);
+    const query = (sql, values = [], timeoutMs = assertActive()) =>
+      this._executeStream(session, sql, values, { timeoutMs, maxRows: 1 }, false);
+    try {
+      if (args.initializeSql) await query(args.initializeSql, args.variableValues);
+      const report = await this._executeProcedure(session, args.sql, args.callValues,
+        { ...bounded, timeoutMs: assertActive(), mayWrite: false });
+      this._observe(session, report);
+      const after = await this._reviewScriptCalls(session, plan, context);
+      if (after.get(statement.index)?.fingerprint !== call.fingerprint || report.resultSets.length !== call.resultSets) {
+        throw fail('ROCKETBRAIN_SCRIPT_STALE','The procedure definition or results changed during CALL.');
+      }
+      const outputParameters = await routineCall.readProcedureOutputs(query, args.outputs);
+      const output = routineCall.procedureOutputGrid(outputParameters);
+      if (output && report.resultBytes + Buffer.byteLength(JSON.stringify(output)) > maxRoutineResultBytes) {
+        throw routineCall.fail('RESULT_LIMIT','The result sets and output parameters together exceed the 4 MiB limit.');
+      }
+      return {
+        columns: [], fields: [], rows: [], rowCount: report.totalRows, affectedRows: report.affectedRows,
+        durationMs: report.durationMs, truncated: false, warningCount: report.warningCount,
+        resultSets: output ? [...report.resultSets, { ...output, procedureOutput: true }] : report.resultSets,
+        ...(output && { outputParameters })
+      };
+    } finally {
+      if (args.clearSql && session.connected) {
+        try { await query(args.clearSql, [], Math.min(5000, bounded.timeoutMs)); }
+        catch (error) {
+          this._lose(session,error);
+          throw fail('ROCKETBRAIN_RECONNECT_REQUIRED','The private procedure slots could not be cleared. Reconnect this console.');
+        }
+      }
+    }
+  }
   async _pinScriptTransaction(session, review, remaining) {
     for (const {schema,name,column,write} of review.transactionTables) {
       const sql='SELECT '+quoteIdentifier(column)+' FROM '+quoteIdentifier(schema)+'.'+quoteIdentifier(name)+
@@ -777,17 +826,7 @@ class MysqlService {
               }
               result={columns:[],fields:[],rows:[],rowCount:0,affectedRows:0,truncated:false,warningCount:control.warningStatus||0};
             } else if(call) {
-              const next=await this._reviewScriptCalls(session,{statements:[statement],hasWrites:false},context);
-              if(next.get(statement.index)?.fingerprint!==call.fingerprint)throw fail('ROCKETBRAIN_SCRIPT_STALE','The procedure changed before CALL.');
-              if(cancelled()||session.cancellationVersion!==review.cancellationVersion)throw fail('ROCKETBRAIN_CANCELLED','The script was cancelled before CALL.');
-              const report=await this._executeProcedure(session,call.sql,statement.values,{...bounded,mayWrite:false});
-              this._observe(session,report);
-              const after=await this._reviewScriptCalls(session,{statements:[statement],hasWrites:false},context);
-              if(after.get(statement.index)?.fingerprint!==call.fingerprint||report.resultSets.length!==call.resultSets) {
-                throw fail('ROCKETBRAIN_SCRIPT_STALE','The procedure definition or results changed during CALL.');
-              }
-              result={columns:[],fields:[],rows:[],rowCount:report.totalRows,affectedRows:report.affectedRows,
-                durationMs:report.durationMs,truncated:false,warningCount:report.warningCount,resultSets:report.resultSets};
+              result=await this._executeReviewedScriptCall(session,statement,call,context,bounded,remaining);
             } else result=await this._stream(session,statement.preparedSql,statement.values,bounded,statement.mayWrite,
               {category:'script',operation:statement.first,sqlMode:context.sqlMode});
           }catch(failure){error=failure;}

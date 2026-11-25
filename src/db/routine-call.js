@@ -74,7 +74,7 @@ async function observeProcedure(query, context, target) {
   const callee = context.dialect === 'mariadb' ? quote(object.name) : quote(object.schema) + '.' + quote(object.name);
   const sql = callSql(callee, fingerprint, parameters);
   return { object, fingerprint, account: accounts[0][0], role: accounts[0][1], dialect: context.dialect,
-    version: context.version, source: definition.source, settings: definition.settings, parameters, sql };
+    version: context.version, source: definition.source, settings: definition.settings, parameters, sql, callee };
 }
 
 function callSql(callee, fingerprint, parameters) {
@@ -104,19 +104,28 @@ function variable(fingerprint, { ordinal }) {
 }
 
 function sessionArguments(procedure, inputs) {
-  const bound = bindProcedure(procedure.parameters, inputs);
+  return sessionArgumentValues(procedure, bindProcedure(procedure.parameters, inputs).values, procedure.fingerprint);
+}
+
+function sessionArgumentValues(procedure, values, execution) {
   const callValues = [], variableValues = [], assignments = [], outputs = [];
   let inputIndex = 0;
   for (const parameter of procedure.parameters) {
-    if (parameter.mode === 'IN') callValues.push(bound.values[inputIndex++]);
+    if (parameter.mode === 'IN') callValues.push(values[inputIndex++]);
     else {
-      const name = variable(procedure.fingerprint, parameter);
+      const name = variable(execution, parameter);
       assignments.push(name + ' = ' + (parameter.mode === 'INOUT' ? '?' : 'NULL'));
-      if (parameter.mode === 'INOUT') variableValues.push(bound.values[inputIndex++]);
+      if (parameter.mode === 'INOUT') variableValues.push(values[inputIndex++]);
       outputs.push({ ...parameter, variable: name });
     }
   }
   return { callValues, variableValues, initializeSql: assignments.length ? 'SET ' + assignments.join(', ') : undefined, outputs };
+}
+
+function scriptSessionArguments(procedure, values, execution) {
+  const prepared = sessionArgumentValues(procedure, values, execution);
+  return { ...prepared, sql: callSql(procedure.callee, execution, procedure.parameters),
+    clearSql: prepared.outputs.length ? 'SET ' + prepared.outputs.map(item => item.variable + ' = NULL').join(', ') : undefined };
 }
 
 async function readProcedureOutputs(query, outputs) {
@@ -135,4 +144,11 @@ async function readProcedureOutputs(query, outputs) {
   });
 }
 
-module.exports = { listProcedures, observeProcedure, bindProcedure, sessionArguments, readProcedureOutputs, fail };
+function procedureOutputGrid(parameters) {
+  const rows = parameters.map(({ label, name, mode, type, value }) => [label || name, mode, type, value]);
+  return rows.length ? { columns: ['Parameter', 'Mode', 'SQL type', 'Value'], rows,
+    rowCount: rows.length, affectedRows: 0, durationMs: 0, truncated: false } : undefined;
+}
+
+module.exports = { listProcedures, observeProcedure, bindProcedure, sessionArguments, scriptSessionArguments,
+  readProcedureOutputs, procedureOutputGrid, fail };

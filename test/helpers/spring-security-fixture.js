@@ -117,4 +117,4 @@ if (require.main===module) buildSpringSecurityFixture().then(console.log).catch(
   console.error(error.stderr || error.message);process.exitCode=1;
 });
 
-module.exports={buildSpringSecurityFixture,startSpringSecurityFixture};
+module.exports={javaRuntime,buildSpringSecurityFixture,startSpringSecurityFixture};

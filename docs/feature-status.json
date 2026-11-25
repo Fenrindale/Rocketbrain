@@ -1,5 +1,5 @@
 {
-  "version": "0.81.0",
+  "version": "0.82.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 110,
-    "partial": 92,
+    "implemented": 112,
+    "partial": 90,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 77.8,
+    "percent": 78.2,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-094",
-    "DG-075",
-    "DG-081"
+    "IDEA-064",
+    "DG-030",
+    "DG-045",
+    "DG-080"
   ],
   "expandedFeatures": [
-    "IDEA-094",
-    "DG-075",
-    "DG-081"
+    "IDEA-064",
+    "DG-030",
+    "DG-045",
+    "DG-080"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1979,23 +1981,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Servlet 요청의 필터 체인에 더해 실제 메서드 호출 전·후 인가 결정과 역할 계층을 추적한다. 관찰 값의 라벨은 기본으로 숨기며 명시한 역할만 보여 준다.",
+      "scope": "Spring Security의 관찰 가능한 WebFlux 필터와 사전·사후 권한 결정을 기록한다. 동시 요청과 스케줄러 전환에도 해당 요청의 관찰 결과를 연결한다.",
       "remaining": [
-        "WebFlux, 비동기·사용자 정의 디스패치와 일반 정책의 역추적이 남아 있다."
+        "임의 사용자 정의 인증 구성과 계측하지 않은 필터·메서드, 다른 버전 및 환경이 남아 있다."
       ],
       "verification": {
-        "state": "v0.73-installed-coverage",
+        "state": "v0.82-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.73.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 Spring Security 앱에서 HTTP 필터가 허용해도 메서드 인가가 403을 반환하는 경로를 확인했다. 호출 전·후 거부를 실제 JDBC 횟수로 구분하고 상속 역할 비교, 기본 숨김과 이력 상한을 확인했다.",
+        "testedScope": "실제 Spring Boot, Reactor 및 두 DB의 설치판에서 권한 허용·거부, 두 필터 인스턴스, 스케줄러 전환과 JDBC 데이터 확인을 검증했다.",
         "publicEvidence": [
-          "runtime/jpa-observer/src/rocketbrain/observer/MethodSecurityTrace.java",
-          "test/spring-method-security-host.js",
-          "docs/spring-security-filter-trace.md"
+          "src/spring/reactive-security-trace.js",
+          "test/spring-reactive-security-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2875,8 +2876,8 @@
       "verification": {
         "state": "v0.81-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.81.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4540,29 +4541,23 @@
       "category": "SQL 의미 분석·편집",
       "feature": "alias·약어·함수 구문 완성",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "복잡 SELECT의 CTE·derived·중첩 별칭 scope와 UNION 출력 열을 바인딩하고 완성한다.",
-      "remaining": [
-        "약어·전체 함수 인수 문법·구문 template 및 모든 비SELECT 문맥이 남는다."
-      ],
+      "scope": "현재 SQL 범위의 별칭 및 열을 약어로 완성한다. 관찰된 MySQL·MariaDB 버전에 맞춰 지원 함수의 편집 가능한 템플릿과 활성 인수 안내를 제공한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.82-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 16개 unit/기존 회귀 검사와 MySQL8.4·MariaDB11.4×기본/opaque naming4구성의16개SELECT 표본. known10/unknown2/invalid4의 실제 결과·오류를 대조했다. 동일최종VSIX MySQL47/47·MariaDB35/35(각 exit0)에서 SQL 완성·hover·local정의·미저장진단·카탈로그교체무효화를 확인했다.",
+        "testedScope": "설치판에서 스코프가 있는 별칭·CTE, 문자열과 주석 차단, 정확한 삽입 범위, 방언별 함수와 중첩 인수 안내를 확인했다. 완성한 표현식을 두 실제 서버에서 실행했다.",
         "publicEvidence": [
-          "src/db/sql-analysis.js",
-          "src/db/completion.js",
-          "test/sql-analysis.test.js",
-          "test/sql-v08-runtime.test.js",
-          "src/db/sql-vscode.js",
-          "test/sql-analysis-host.js"
+          "src/db/sql-call-completion.js",
+          "test/sql-call-completion-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5006,27 +5001,23 @@
       "category": "쿼리 실행·세션",
       "feature": "전체 스크립트·batch·오류 처리",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "읽기 전용 IN CALL을 캡처하고, 명시적인 BEGIN·COMMIT·ROLLBACK과 이름 있는 세이브포인트를 검토해 실행한다. 실패하면 소유한 트랜잭션을 롤백하고 상태를 확인한다.",
-      "remaining": [
-        "검토 배치의 OUT·INOUT과 일반 루틴 실행, 복합·동적 배치의 트랜잭션은 남는다."
-      ],
+      "scope": "검토한 SQL 스크립트의 문장 경계·트랜잭션·실행 상태를 관리한다. 지원 읽기 전용 프로시저의 결과 집합과 입력·출력 매개변수 결과를 같은 콘솔에서 분리한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.77-installed-coverage",
+        "state": "v0.82-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.77.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 DB에서 쓰기 커밋 승인, 세이브포인트 복구, 읽기 전용 트랜잭션, 중복 키 실패 후 롤백, 변경된 테이블 거부와 원래 거래 보존을 확인했다.",
+        "testedScope": "설치판의 두 실제 엔진에서 정밀 BIGINT·DECIMAL 입출력과 출력 전용 호출을 검증했다. 호출자 변수 보존, 원문 변경 시 거부, 검토의 재사용 차단을 확인했다.",
         "publicEvidence": [
-          "src/db/sql-script-transaction.js",
-          "src/db/sql-script-vscode.js",
-          "src/db/mysql.js",
-          "test/sql-script-transaction-host.js"
+          "src/db/sql-script-call.js",
+          "test/sql-script-output-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5937,8 +5928,8 @@
       "verification": {
         "state": "v0.81-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.81.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6080,23 +6071,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "직접 권한과 계정 등록에 이어 명시적 역할 연결, 중첩 역할의 객체 권한과 각 경로의 관리 옵션을 조회한다.",
+      "scope": "확인된 사용자·역할 관계를 표시한다. 직접 권한과 위임 옵션 변경을 구분하고 실제 계정의 역할 활성과 그 결과를 검증한다.",
       "remaining": [
-        "역할 직접 부여·회수와 그 외 계정·역할 변경, 활성 세션의 전체 유효 권한 평가는 남는다."
+        "기타 계정 변경, 일반 위임 회수와 definer 영향, 전체 유효 권한 평가는 남아 있다."
       ],
       "verification": {
-        "state": "v0.78-installed-coverage",
+        "state": "v0.82-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.78.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "양쪽 실제 DB의 계정에서 3단계 역할과 최하위 테이블 SELECT를 관찰했다. 같은 계정의 실제 세션은 역할 활성화 전 접근 거부, 활성화 뒤 정확한 행 조회를 보였다.",
+        "testedScope": "실제 두 DB에서 직접 부여·회수, 위임 승인, 하위 역할의 읽기 권한, 회수 후 거부를 확인했다. MariaDB에서 위임 옵션만 회수했다.",
         "publicEvidence": [
-          "src/db/database-admin-metadata.js",
-          "src/db/database-admin-vscode.js",
-          "test/database-role-inheritance-host.js"
+          "src/db/database-role-membership.js",
+          "test/database-role-membership-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6117,8 +6107,8 @@
       "verification": {
         "state": "v0.81-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.81.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6581,33 +6571,38 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "14bc45ad1531fce2b9ab1a676bcb15b953427fecd3d6b283f347bced141213e0",
-    "sourceManifestSha256": "4518588b840811b0aef0f78a13e9c457f7cf24e02040495278dadfc824988032",
+    "vsixSha256": "a359c4bc9ad07e3a6377935613b0f51a47534f42de5244d06c61b571b98974df",
+    "sourceManifestSha256": "1c67cff2c0d504707828da171839441b8f05707431b094133bff488a6e276b91",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 3
+        "featureGroups": 4
       },
       {
         "engine": "mariadb",
-        "featureGroups": 3
+        "featureGroups": 4
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-094",
+      "id": "DG-030",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-045",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1709,
-    "pass": 1593,
+    "tests": 1720,
+    "pass": 1603,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 116,
+    "skipped": 117,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

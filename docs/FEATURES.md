@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.81.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.82.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 110 |
-| 부분 구현 | 92 |
+| 구현 | 112 |
+| 부분 구현 | 90 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **77.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **78.2%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.81에서는 Git Worktree마다 Java 프로젝트와 Spring 서비스, 데이터베이스 문맥을 연결한다. 실제 트리거의 변경을 검토하고 복원한다. 기본 키를 기준으로 대량 테이블 비교를 저장하고 대상 행의 변경을 검토한다. 상태가 바뀐 항목은 1개이고 가중 점수는 167.5점에서 168점으로 바뀌었다.
+v0.82에서는 WebFlux의 실제 보안 필터와 메서드 결정을 관찰한다. 연결 방언에 맞춰 SQL 함수와 별칭을 완성하고, 역할 변경과 저장 프로시저의 출력값을 검토한다. 상태가 바뀐 항목은 2개이고 가중 점수는 168점에서 169점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -170,7 +170,7 @@ v0.81에서는 Git Worktree마다 Java 프로젝트와 Spring 서비스, 데이�
 | DG-027 | DataGrip | schema-aware 이름·열 완성 | 부분 구현 |
 | DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 구현 |
 | DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 구현 |
-| DG-030 | DataGrip | alias·약어·함수 구문 완성 | 부분 구현 |
+| DG-030 | DataGrip | alias·약어·함수 구문 완성 | 구현 |
 | DG-031 | DataGrip | MySQL/MariaDB dialect별 구문·키워드 | 부분 구현 |
 | DG-032 | DataGrip | 파일·폴더별 SQL resolution scope | 구현 |
 | DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 부분 구현 |
@@ -185,7 +185,7 @@ v0.81에서는 Git Worktree마다 Java 프로젝트와 Spring 서비스, 데이�
 | DG-042 | DataGrip | 문자열 안 SQL/JSON 언어 주입 | 구현 |
 | DG-043 | DataGrip | 쿼리 parameter 입력·재사용 | 구현 |
 | DG-044 | DataGrip | 현재 문장·선택 SQL 실행 | 구현 |
-| DG-045 | DataGrip | 전체 스크립트·batch·오류 처리 | 부분 구현 |
+| DG-045 | DataGrip | 전체 스크립트·batch·오류 처리 | 구현 |
 | DG-046 | DataGrip | 같은 세션·temporary table 상태 유지 | 구현 |
 | DG-047 | DataGrip | 세션 공유·전용·introspection 분리 | 구현 |
 | DG-048 | DataGrip | 수동 commit/rollback·auto-commit 전환 | 구현 |

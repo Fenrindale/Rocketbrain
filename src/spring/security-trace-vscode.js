@@ -55,23 +55,27 @@ function renderSecurityTrace(report) {
   </style></head><body><h1>${TITLE}</h1><p>${safe(summary)}</p>${body}</body></html>`;
 }
 
-function registerSecurityTrace(vscode, { target, command }) {
+function registerTracePanel(vscode, { target, command }, { viewId, title, inspect, render }) {
   let panel, request=0;
   function close(){request++;const active=panel;panel=undefined;active?.dispose();}
   async function open(){
-    const epoch=++request, connection=target(), report=await connection.client.securityTrace();
+    const epoch=++request, connection=target(), report=await connection.client[inspect]();
     connection.assertCurrent();
     if(epoch!==request)return;
     if(!panel){
-      const view=vscode.window.createWebviewPanel(VIEW,TITLE,vscode.ViewColumn.Beside,{enableScripts:false,localResourceRoots:[],enableCommandUris:false});
+      const view=vscode.window.createWebviewPanel(viewId,title,vscode.ViewColumn.Beside,{enableScripts:false,localResourceRoots:[],enableCommandUris:false});
       panel=view;
       view.onDidDispose(()=>{if(panel===view){panel=undefined;request++;}});
     }else panel.reveal();
-    panel.webview.html=renderSecurityTrace(report);
-    return {...report,view:VIEW};
+    panel.webview.html=render(report);
+    return {...report,view:viewId};
   }
-  command(VIEW,open);
+  command(viewId,open);
   return {close};
 }
 
-module.exports={registerSecurityTrace,renderSecurityTrace};
+function registerSecurityTrace(vscode, options) {
+  return registerTracePanel(vscode, options, {viewId:VIEW,title:TITLE,inspect:'securityTrace',render:renderSecurityTrace});
+}
+
+module.exports={registerTracePanel,registerSecurityTrace,renderSecurityTrace};
