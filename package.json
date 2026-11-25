@@ -595,6 +595,10 @@
         "category": "Rocketbrain",
         "enablement": "isWorkspaceTrusted"
       },
+      { "command": "rocketbrain.results.saveEditReview", "title": "Save Table Edit Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.results.openEditReview", "title": "Open Saved Table Edit Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.results.stageEditReview", "title": "Stage Saved Table Edit Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.results.removeEditReview", "title": "Remove Saved Table Edit Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
         "command": "rocketbrain.sqlDraft.remove",
         "title": "Remove SQL Draft",

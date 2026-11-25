@@ -164,7 +164,29 @@ class TableEditor {
     this.results.finish(id, continuousGrid.present(context.scroll, result));
     this.results.editState(id, { sql: result.browse.sql });
   }
-  async stageDatasetChanges(id, { changes, modelId, draftRevision, requestId, assertFresh }) {
+  async captureReview(id, reviewId) {
+    const context = this._context(id), record = this._record(id);
+    const check = () => {
+      if (!reviewId || context.keysetId || context.relation || this._context(id) !== context || this._record(id) !== record ||
+          record.review?.reviewId !== reviewId || record.editBusy || record.closing) throw Error('Open the current edit review before saving it.');
+    };
+    check();
+    return this.withSession(context.sessionId, async () => {
+      check();
+      const saved = await context.db.captureChangeSetReview({ sessionId: context.sessionId, reviewId });
+      check();
+      return saved;
+    });
+  }
+  async restoreReview(id, saved, assertFresh) {
+    const context = this._context(id), record = this._record(id);
+    if (context.keysetId || context.relation || !record.result?.edit) throw Error('Open a current editable table grid.');
+    const modelId = record.result.edit.modelId, draftRevision = record.draftRevision || 0;
+    return this.stageDatasetChanges(id, { modelId, draftRevision, assertFresh,
+      prepare: () => context.db.rebindChangeSetReview({ sessionId: context.sessionId, modelId, saved }),
+      editMessage: 'The matching saved changes are staged. Review the current page before applying them.' });
+  }
+  async stageDatasetChanges(id, { changes, modelId, draftRevision, requestId, assertFresh, prepare, editMessage }) {
     const context = this._context(id), record = this._record(id);
     const verify = () => {
       this._context(id);
@@ -183,8 +205,10 @@ class TableEditor {
     try {
       await this.withSession(context.sessionId, async () => {
         verify();
-        this.results.editState(id, { bulkDraft: { id: randomUUID(), modelId, draftRevision, ...changes },
-          editMessage: 'Compared rows are staged. Review SQL, Apply, then Commit or Roll Back.' });
+        const staged = prepare ? await prepare() : changes;
+        verify();
+        this.results.editState(id, { bulkDraft: { id: randomUUID(), modelId, draftRevision, ...staged },
+          editMessage: editMessage ?? 'Compared rows are staged. Review SQL, Apply, then Commit or Roll Back.' });
       });
     } finally {
       this.results.editState(id, { editBusy: false, editResponseId: requestId });
