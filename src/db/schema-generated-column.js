@@ -66,6 +66,10 @@ function parsed(expression, available) {
   return sql;
 }
 
+function numericExpression(expression, columns) {
+  return parsed(expression, new Map(columns.map(column => [column.name.toLowerCase(), column])));
+}
+
 function definition(column, columns) {
   const generation = mode(column);
   if (!generation) return null;
@@ -75,8 +79,7 @@ function definition(column, columns) {
   }
   const at = columns.indexOf(column);
   if (at < 0) throw fail('The generated column must belong to the reviewed table.');
-  const available = new Map(columns.slice(0, at).map(value => [value.name.toLowerCase(), value]));
-  return { generation, expression: parsed(column.generationExpression, available) };
+  return { generation, expression: numericExpression(column.generationExpression, columns.slice(0, at)) };
 }
 
 function validate(table) {
@@ -107,4 +110,4 @@ function clause(value, dialect) {
   return ' GENERATED ALWAYS AS (' + value.expression + ') ' + (value.generation === 'virtual' ? 'VIRTUAL' : dialect === 'mariadb' ? 'PERSISTENT' : 'STORED');
 }
 
-module.exports = { mode, definition, validate, clause };
+module.exports = { mode, definition, validate, clause, numericExpression };

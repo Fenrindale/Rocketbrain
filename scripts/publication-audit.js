@@ -21,7 +21,8 @@ function publicPath(name) {
   if (/(?:^|\/)(?:node_modules|dist|target|build|bin|\.gradle|\.idea|\.settings|\.git)(?:\/|$)/i.test(name)) return false;
   if (/(?:^|\/)(?:\.env(?:\..*)?|\.classpath|\.project|application-local\.[^/]+|connection[^/]*\.local\.json)$/i.test(name)) return false;
   if (top.has(name)) return true;
-  if (name === 'media/jdbc.tmLanguage.json' || name === 'media/scala.tmLanguage.json' || name === 'media/jpql.tmLanguage.json') return true;
+  if (name === 'media/jdbc.tmLanguage.json' || name === 'media/scala.tmLanguage.json' || name === 'media/jpql.tmLanguage.json' ||
+      name === 'media/java-regex.tmLanguage.json') return true;
   if (name === 'test/fixtures/java/scala-sbt/build.sbt') return true;
   if (/^test\/fixtures\/java\/scala-sbt\/(?:app\/src\/(?:main|test)|core\/src\/main)\/scala\/scalafixture\/(?:Application|ApplicationSuite|Message)\.scala$/.test(name)) return true;
   if (name.includes('/.vscode/')) return false;

@@ -183,7 +183,8 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     ...observerArgs,
     ...(jfrRepository ? ['-XX:FlightRecorderOptions=repository='+jfrRepository] : []),
     ...(debugPort ? ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:' + debugPort] : []), '-cp', classpath, 'fixture.boot.FixtureApplication'];
-  const dbOptions={namedPipe:process.env.ROCKETBRAIN_FIXTURE_NAMED_PIPE==='1'};
+  const dbOptions={namedPipe:process.env.ROCKETBRAIN_FIXTURE_NAMED_PIPE==='1',
+    eventScheduler:process.env.ROCKETBRAIN_ENABLE_EVENT_DEPLOYMENT_FIXTURE==='1'};
   if (process.env.ROCKETBRAIN_ENABLE_DB_CLIENT_IDENTITY_FIXTURE === '1') {
     clientCertificates = await require('./connection-security-fixture').certificates({protectedIdentity:true,ssh:false});
     dbOptions.tls = clientCertificates.server;

@@ -35,7 +35,7 @@ async function removeOwned(folder, id) {
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative) || relative.includes(path.sep)) throw new Error('Fixture real path escaped its workspace.');
   await fsp.rm(absolute, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
-async function startMysqlFixture({tls,namedPipe=false}={}) {
+async function startMysqlFixture({tls,namedPipe=false,eventScheduler=false}={}) {
   if(namedPipe&&process.platform!=='win32')throw Error('The MySQL named pipe fixture needs a Windows host.');
   if(tls){if(Object.keys(tls).some(k=>!['ca','cert','key'].includes(k))||['ca','cert','key'].some(k=>typeof tls[k]!=='string'||!tls[k]||Buffer.byteLength(tls[k])>2*1024*1024||tls[k].includes('\0')))throw Error('Use bounded PEM ca/cert/key strings for the owned TLS fixture.');const cert=new crypto.X509Certificate(tls.cert);new crypto.X509Certificate(tls.ca);if(!cert.checkPrivateKey(crypto.createPrivateKey(tls.key)))throw Error('TLS fixture server certificate/key mismatch.');}
   const runtime = await ensureMysqlRuntime();
@@ -101,6 +101,7 @@ async function startMysqlFixture({tls,namedPipe=false}={}) {
     child = spawn(launch(runtime.server), ['--no-defaults', '--console', '--basedir=' + launch(runtime.home), '--datadir=' + launch(datadir), '--tmpdir=' + launch(tmpdir),
       ...(tls?['--ssl-ca='+launch(tlsPaths.ca),'--ssl-cert='+launch(tlsPaths.cert),'--ssl-key='+launch(tlsPaths.key)]:[]),
       ...(pipeName?['--named-pipe','--socket='+pipeName,'--named-pipe-full-access-group=*everyone*']:[]),
+      ...(eventScheduler?['--event-scheduler=ON']:[]),
       '--secure-file-priv=' + launch(filesdir), '--local-infile=0', '--bind-address=127.0.0.1', '--port=' + config.port, '--mysqlx=0',
       '--skip-name-resolve', '--skip-log-bin', '--max-connections=30', '--innodb-buffer-pool-size=33554432', '--init-file=' + launch(initFile),
       '--pid-file=' + launch(path.join(folder, 'server.pid')), '--log-error=' + launch(path.join(folder, 'server-error.log'))],

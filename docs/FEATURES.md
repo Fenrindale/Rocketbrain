@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.87.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.88.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 121 |
-| 부분 구현 | 81 |
+| 구현 | 123 |
+| 부분 구현 | 79 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **80.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **80.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.87에서는 컴파일 결과를 보존하는 Java 파일 정리, 방언별 SQL 비트 연산 진단, 가상·저장 생성 열 인덱스와 OpenAPI Java 클라이언트 생성을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 172.5점에서 173.5점으로 바뀌었다.
+v0.88에서는 Java 문자열의 정규식·HTML 조각을 편집한다. OpenAPI의 복합 스키마를 실제 응답과 비교한다. 두 DB에서 함수 인덱스 또는 생성 열 인덱스와 예약 이벤트를 검토한다. 상태가 바뀐 항목은 2개이고 가중 점수는 173.5점에서 174.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -139,7 +139,7 @@ v0.87에서는 컴파일 결과를 보존하는 Java 파일 정리, 방언별 SQ
 | IDEA-116 | IntelliJ IDEA | Air·ACP 에이전트·병렬 작업 | 부분 구현 |
 | IDEA-117 | IntelliJ IDEA | IDE 기능을 MCP 도구로 제공 | 구현 |
 | IDEA-118 | IntelliJ IDEA | 프로젝트 신뢰·제한 모드 | 구현 |
-| IDEA-119 | IntelliJ IDEA | 문자열 안 SQL/정규식/HTML 언어 주입 | 부분 구현 |
+| IDEA-119 | IntelliJ IDEA | 문자열 안 SQL/정규식/HTML 언어 주입 | 구현 |
 | IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 부분 구현 |
 | DG-001 | DataGrip | MySQL 데이터 소스 생성·연결 검사 | 부분 구현 |
 | DG-002 | DataGrip | MariaDB 전용 지원 | 부분 구현 |
@@ -219,7 +219,7 @@ v0.87에서는 컴파일 결과를 보존하는 Java 파일 정리, 방언별 SQ
 | DG-076 | DataGrip | 그리드 결과 차트·집계 | 구현 |
 | DG-077 | DataGrip | 지리 데이터 지도 보기 | 구현 |
 | DG-078 | DataGrip | table create/alter 시각 designer | 부분 구현 |
-| DG-079 | DataGrip | PK·FK·index·제약조건 편집 | 부분 구현 |
+| DG-079 | DataGrip | PK·FK·index·제약조건 편집 | 구현 |
 | DG-080 | DataGrip | 사용자·역할·권한 관리 | 부분 구현 |
 | DG-081 | DataGrip | routine·view source 수정·deploy | 부분 구현 |
 | DG-082 | DataGrip | 서로 다른 서버 schema/object 구조 diff | 구현 |

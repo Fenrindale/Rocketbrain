@@ -41,6 +41,8 @@ test('the designer form stages a generated expression and exact ordered index pa
     await page.getByRole('textbox', { name: 'Index 1 name', exact: true }).fill('idx_amount_total');
     await page.getByRole('combobox', { name: 'Index 1 kind', exact: true }).selectOption('BTREE');
     await page.getByRole('textbox', { name: 'Index 1 ordered columns', exact: true }).fill('amount,total');
+    await page.getByRole('button', { name: 'Add key or index' }).click();
+    await page.getByRole('textbox', { name: 'Index 2 ordered columns', exact: true }).fill('amount,(amount * 2)');
     await page.getByRole('button', { name: 'Review and validate' }).click();
     const review = await pending;
     assert.equal(review?.draft.columns[1].generationMode, 'stored');
@@ -49,6 +51,8 @@ test('the designer form stages a generated expression and exact ordered index pa
     assert.deepEqual(review.draft.indexes[0], { name: 'idx_amount_total', type: 'BTREE', unique: false, primaryKey: false, comment: '',
       columns: [{ name: 'amount', ordinal: 1, prefixLength: null, collation: 'A' },
         { name: 'total', ordinal: 2, prefixLength: null, collation: 'A' }] });
+    assert.deepEqual(review.draft.indexes[1].columns, [{ name: 'amount', ordinal: 1, prefixLength: null, collation: 'A' },
+      { name: null, ordinal: 2, prefixLength: null, collation: 'A', expression: 'amount * 2' }]);
     assert.equal(await page.getByRole('button', { name: 'Apply reviewed design' }).isDisabled(), true);
     assert.deepEqual(errors, []);
   } finally { await chromium.close(); }

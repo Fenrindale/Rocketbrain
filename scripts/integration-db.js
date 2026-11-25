@@ -63,7 +63,7 @@ async function waitForDatabase(config, child, timeoutMs = 45000) {
   throw new Error(`Disposable MariaDB did not become ready (${lastCode || 'timeout'}).`);
 }
 
-async function startFixture({tls,namedPipe=false}={}) {
+async function startFixture({tls,namedPipe=false,eventScheduler=false}={}) {
   if(namedPipe&&process.platform!=='win32')throw Error('The MariaDB named pipe fixture needs a Windows host.');
   if(tls){if(Object.keys(tls).some(k=>!['ca','cert','key'].includes(k))||['ca','cert','key'].some(k=>typeof tls[k]!=='string'||!tls[k]||Buffer.byteLength(tls[k])>2*1024*1024||tls[k].includes('\0')))throw Error('Use bounded PEM ca/cert/key strings for the owned TLS fixture.');const cert=new crypto.X509Certificate(tls.cert);new crypto.X509Certificate(tls.ca);if(!cert.checkPrivateKey(crypto.createPrivateKey(tls.key)))throw Error('TLS fixture server certificate/key mismatch.');}
   const runtime = await ensureMariaDbRuntime();
@@ -125,6 +125,7 @@ async function startFixture({tls,namedPipe=false}={}) {
     child = spawn(runtime.server, ['--no-defaults', `--basedir=${runtime.home}`, `--datadir=${datadir}`, `--tmpdir=${tmpdir}`, `--secure-file-priv=${filesdir}`,
       ...(tls?[`--ssl-ca=${tlsPaths.ca}`,`--ssl-cert=${tlsPaths.cert}`,`--ssl-key=${tlsPaths.key}`]:[]),
       ...(pipeName?['--enable-named-pipe','--socket='+pipeName]:[]),
+      ...(eventScheduler?['--event-scheduler=ON']:[]),
       '--local-infile=0', '--bind-address=127.0.0.1', `--port=${port}`, '--skip-name-resolve', '--skip-log-bin', '--max-connections=20',
       '--innodb-buffer-pool-size=33554432', `--pid-file=${path.join(folder, 'server.pid')}`,
       `--log-error=${path.join(folder, 'server-error.log')}`, '--console'], { cwd: folder, windowsHide: true, stdio: ['ignore', logFd, logFd] });

@@ -193,6 +193,8 @@ GET {{host}}/actuator/health
 
 **Create Java Client from OpenAPI**로 선택한 작업을 Java 11 이상에서 쓸 수 있는 편집 가능한 클라이언트로 생성합니다. 기본 직렬화의 경로·쿼리·헤더·쿠키 값과 JSON 요청 본문을 지원합니다. 호출자가 서비스 주소와 인증 헤더를 전달하고, 응답은 상태·헤더와 원본 바이트를 제공합니다.
 
+OpenAPI 작업 미리보기는 JSON 요청·응답의 중첩 필드, 필수 항목, 배열, 재귀 참조 및 `allOf`·`oneOf`·`anyOf` 구조를 표시합니다. 서로 호환되는 객체 `allOf`는 필드를 합쳐 볼 수 있습니다. HTTP 초안은 문서에 명시된 본문 예제를 사용합니다.
+
 `GRAPHQL` 본문은 GraphQL 문서나 `query`, `variables`, `operationName`을 담은 JSON입니다. **Send HTTP Request**로 실행하면 HTTP 상태와 GraphQL 오류 수를 확인할 수 있습니다. **Inspect GraphQL Endpoint Schema**는 선택한 엔드포인트에서 인트로스펙션을 요청합니다.
 
 ```http
@@ -375,6 +377,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Save Schema Snapshot with Stored Objects**로 프로시저, 함수, 트리거, 이벤트의 관찰 가능한 원문과 생성 설정을 스냅샷에 저장합니다. 다른 연결에서 **Compare Current Database with Schema Snapshot**을 실행해 같은 이름·종류의 원문과 설정을 비교하고 **Open Stored Object Diff**에서 나란히 엽니다. 보이지 않는 원문과 한쪽 계정에만 보이는 객체는 미확정으로 표시합니다. 비교 결과는 검토용이며 저장 객체 배포나 SQL 의미 동등성을 판단하는 데 사용하지 않습니다.
 - **Compare Schema Snapshot with Options**에서 식별자의 정확한 철자 또는 ASCII 대소문자 무시와 CREATE 헤더의 DEFINER 계정 포함 여부를 각각 선택합니다. 비교 보고서에 양쪽 엔진의 테이블 이름 규칙과 모호한 이름을 표시합니다. **Open Compared Table or View DDL**에서 비교에 사용한 원문을 열 수 있습니다. SQL SECURITY, 본문과 리터럴은 비교에 포함하며, 변경을 적용하려면 일반 스키마 비교에서 다시 검토합니다.
 - 테이블 디자이너에서 NULL을 허용하는 부호 있는 정수·DECIMAL 생성 열을 추가하거나 수정할 수 있습니다. 앞에 선언된 일반 숫자 열을 참조해 괄호와 `+`, `-`, `*` 표현식을 작성하고 Virtual 또는 Stored를 선택합니다. MySQL은 `STORED`, MariaDB는 `PERSISTENT`로 검토합니다. 기존 테이블을 재구성할 때 일반 열만 복사하고 서버가 계산한 결과를 확인합니다. 생성 열을 포함한 단일·복합 인덱스는 접두 길이 없는 비고유 오름차순 BTREE로 검토합니다. 함수·서브쿼리·생성 열 연쇄 참조·생성 열을 포함한 외래 키·일반 열과 생성 열 사이의 변환에는 별도 검토가 필요합니다.
+- MySQL 8.0.13 이상에서는 비고유 BTREE의 순서 있는 키 목록에 `quantity,(quantity * price)`처럼 하나의 산술 표현식 키를 넣을 수 있습니다. 서버가 보고한 표현식을 디자이너에서 다시 열고, 생성이나 재구성 전에 실제 DDL을 검토합니다. MariaDB에서는 이름을 지정한 생성 열을 인덱싱합니다.
 
 테이블 설계와 기존 뷰·프로시저 원문 편집은 검토·명시적 적용 흐름을 제공합니다. 서버 검증에는 DDL 권한이 필요할 수 있습니다. MySQL/MariaDB DDL과 객체 교체에는 비원자적인 단계가 있으므로 표시된 범위·복구 조건·미완료 트랜잭션을 확인하세요. 모호한 결과를 자동 재실행하지 않습니다.
 
@@ -399,3 +402,7 @@ The SQL editor analyzes common JSON calls against the current catalog. It checks
 Named and inline SQL windows retain links to their definitions and partition or order columns. The editor checks known ROWS and RANGE frame boundaries, numeric or temporal order types and engine-specific call restrictions. Computed offsets and unsupported frame forms retain a server-validation note.
 
 For bitwise SQL, the editor separates numeric operands from MySQL binary-string operations. It uses observed fixed BINARY widths and marks conflicting lengths or literal conversions that can discard data. Widths and conversions that depend on stored row values stay unresolved until execution.
+
+Use **Open Database Source for Editing** to open a disabled scheduled event owned by the current account. Edit its body and choose **Review Database Object Source** to see the exact ALTER statement and observed schedule. Apply the review to save the body while the event stays disabled. **Restore Retained Database Object Source** verifies the live event and target definitions before restoring the retained body, including after reconnecting.
+
+Event edits support bounded INSERT, UPDATE with WHERE, and DELETE with WHERE against observed same-schema InnoDB targets. The editor reads catalog metadata for review and retains the original source in the database authoring journal on apply.

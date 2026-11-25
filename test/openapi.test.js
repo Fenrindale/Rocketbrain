@@ -124,3 +124,21 @@ test('Java client generation grounds scalar values in selected operations and ke
   const withStyle={...operation,parameters:[{...operation.parameters[0],style:'matrix'}]};
   assert.throws(()=>javaClientSource([withStyle]),/default serialization/);
 });
+
+test('composed schemas keep conflicting definitions and constrained objects in separate branches',()=>{
+  const fields=(type,extra={})=>({type:'object',properties:{value:{type}},...extra});
+  const spec={openapi:'3.1.1',info:{title:'Compose'},paths:{
+    '/conflict':{get:{responses:{200:{content:{'application/json':{schema:{allOf:[fields('string'),fields('integer')]}}}}}}},
+    '/closed':{get:{responses:{200:{content:{'application/json':{schema:{allOf:[
+      fields('string',{additionalProperties:false}),fields('string')
+    ]}}}}}}}
+  }};
+  const operations=analyzeOpenApi(JSON.stringify(spec)).operations;
+  for (const operation of operations) {
+    const shape=operation.responseBodies[0].schema;
+    assert.equal(shape.kind,'allOf');
+    assert.equal(shape.merged,undefined);
+    assert.equal(shape.parts.length,2);
+  }
+  assert.deepEqual(operations[1].responseBodies[0].schema.parts[0].additional,{kind:'rule',accepts:false});
+});
