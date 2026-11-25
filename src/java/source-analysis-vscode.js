@@ -20,6 +20,7 @@ const { createTypeImport } = require('./type-import-vscode');
 const { createTypedFileStructure } = require('./typed-file-structure');
 const { createJavaCleanup,COMMAND:cleanupCommand } = require('./java-cleanup-vscode');
 const { createExpectedCompletion,COMMAND:expectedCompletionCommand } = require('./expected-completion-vscode');
+const { registerQualifierCompletion } = require('./qualifier-completion-vscode');
 
 const COMMANDS = Object.freeze({
   diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow',
@@ -148,7 +149,9 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
 
   async function compile(state,project,sources,inspection,cancellation,{newSources = [],errorTitle,allowTypeImportErrors=false,draftUri} = {}) {
     if (!sources.length) throw Error('No saved Java source was found in this scope.');
-    if (draftUri && inspection.kind!=='expectedCompletion') throw Error('An unsaved source is only supported for Java value completion.');
+    if (draftUri && !['expectedCompletion','springQualifier'].includes(inspection.kind)) {
+      throw Error('An unsaved source is only supported for Java completion.');
+    }
     const classpath = await classpaths(project,cancellation);
     const compliance = /^(?:1\.)?(\d+)$/.exec(String(project.compliance || ''))?.[1];
     const report = await analyzeJavaSources({
@@ -519,6 +522,9 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const completion=createExpectedCompletion(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,assertUnchangedSourceSnapshots,operation
   });
+  const qualifierCompletion=registerQualifierCompletion(vscode,{
+    java,projects,findProject,classSources,compile,assertUnchangedSourceSnapshots,managed
+  });
   const typedStructure = createTypedFileStructure(vscode,{
     java,assertReady,projects,findProject,classSources,compile,snapshot,assertUnchangedSourceSnapshots
   });
@@ -576,6 +582,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       disposed = true;
       streamTrace.dispose();
       constantPreparation.dispose();
+      qualifierCompletion.dispose();
       inline.dispose();
       methodExtraction.dispose();
       typeImport.dispose();

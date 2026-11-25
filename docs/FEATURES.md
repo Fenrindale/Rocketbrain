@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.92.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.93.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 134 |
-| 부분 구현 | 68 |
+| 구현 | 137 |
+| 부분 구현 | 65 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **83.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **84%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.92에서는 Java 클래스 다이어그램에서 타입과 멤버 관계를 탐색한다. Swagger 2에서 Spring MVC 서버 코드를 생성한다. Strict OOXML 통합 문서를 스트리밍으로 적재하고, 변경된 DB 서버 인증서를 검토해 재연결한다. 상태가 바뀐 항목은 3개이고 가중 점수는 178.5점에서 180점으로 바뀌었다.
+v0.93에서는 Spring 생성자 주입에 타입과 프로필을 확인한 후보를 제안한다. DB 계정의 잠금과 DEFINER를 검토하며, 스키마를 넘는 뷰 영향과 Java에 포함된 SQL 열 변경을 미리 볼 수 있다. 상태가 바뀐 항목은 3개이고 가중 점수는 180점에서 181.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -27,7 +27,7 @@ v0.92에서는 Java 클래스 다이어그램에서 타입과 멤버 관계를 �
 | IDEA-004 | IntelliJ IDEA | 최근 파일·편집 위치·뒤로/앞으로 | VS Code 재사용 |
 | IDEA-005 | IntelliJ IDEA | 다중 커서·열 선택·일괄 편집 | VS Code 재사용 |
 | IDEA-006 | IntelliJ IDEA | 의미 기반 선택 확장·축소 | 구현 |
-| IDEA-007 | IntelliJ IDEA | 문맥·타입 기반 코드 완성 | 부분 구현 |
+| IDEA-007 | IntelliJ IDEA | 문맥·타입 기반 코드 완성 | 구현 |
 | IDEA-008 | IntelliJ IDEA | 파라미터 정보·빠른 문서 | 구현 |
 | IDEA-009 | IntelliJ IDEA | Live Templates·Postfix 완성 | 구현 |
 | IDEA-010 | IntelliJ IDEA | 코드 포맷·EditorConfig | 구현 |
@@ -177,7 +177,7 @@ v0.92에서는 Java 클래스 다이어그램에서 타입과 멤버 관계를 �
 | DG-034 | DataGrip | 실시간·범위별 정적 검사 | 구현 |
 | DG-035 | DataGrip | 위험한 UPDATE/DELETE 경고 | 구현 |
 | DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 구현 |
-| DG-037 | DataGrip | 테이블·열·alias 의미적 Rename | 부분 구현 |
+| DG-037 | DataGrip | 테이블·열·alias 의미적 Rename | 구현 |
 | DG-038 | DataGrip | 의미적 Find Usages·영향 추적 | 부분 구현 |
 | DG-039 | DataGrip | SQL 참조→정의·DDL·빠른 설명 | 구현 |
 | DG-040 | DataGrip | dialect별 SQL formatting | 구현 |
@@ -220,7 +220,7 @@ v0.92에서는 Java 클래스 다이어그램에서 타입과 멤버 관계를 �
 | DG-077 | DataGrip | 지리 데이터 지도 보기 | 구현 |
 | DG-078 | DataGrip | table create/alter 시각 designer | 부분 구현 |
 | DG-079 | DataGrip | PK·FK·index·제약조건 편집 | 구현 |
-| DG-080 | DataGrip | 사용자·역할·권한 관리 | 부분 구현 |
+| DG-080 | DataGrip | 사용자·역할·권한 관리 | 구현 |
 | DG-081 | DataGrip | routine·view source 수정·deploy | 부분 구현 |
 | DG-082 | DataGrip | 서로 다른 서버 schema/object 구조 diff | 구현 |
 | DG-083 | DataGrip | 선택 변경의 migration DDL 생성·검토·실행 | 부분 구현 |

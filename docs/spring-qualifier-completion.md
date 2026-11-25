@@ -1,0 +1,7 @@
+# Spring qualifier completion
+
+In a trusted Java workspace with the Java provider running, invoke **Trigger Suggest** inside a Spring `@Qualifier` value. Rocketbrain offers explicit qualifier values, bean names and aliases for compatible local declarations. Suggestions replace only the current literal text. They can also close a missing quote when the surrounding annotation and Java declaration are complete.
+
+Javac binds the actual Spring annotation and checks the declared injection type against local component classes and attributed `@Bean` return types. The completion covers a single non-generic dependency in an autowired field, constructor argument, autowired method or factory parameter. It omits names that would identify multiple compatible candidates or select an inactive bean. [Spring documentation on qualifiers](https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired-qualifiers.html)
+
+The suggestion details show the profiles used by the selected imported project's configuration. An already connected local Actuator snapshot can confirm a declared conditional bean when the normalized name or alias, type and profile set agree. An observed match describes that runtime at the last refresh. Custom registration that has no local literal declaration, different runtime contexts, collections, generic dependencies and computed qualifier expressions are outside this scope.

@@ -26,7 +26,7 @@ const maria='SELECT u.User,u.Host,u.plugin,'+
 
 function accountTarget(input,identity) {
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['user','host'].includes(key))) {
-    throw fail('Choose one exact observed account to rotate.');
+    throw fail('Choose one exact observed account.');
   }
   const {user}=principal({kind:'account',user:input.user,host:input.host},identity.dialect);
   const target={user,host:input.host},actor=currentAccount(identity.currentUser);
@@ -43,18 +43,24 @@ function statement(target,dialect,credential='<password supplied on apply>') {
     :' IDENTIFIED VIA mysql_native_password USING PASSWORD('+credential+')');
 }
 
-async function loadAccount(read,identity,target,nonce) {
+async function loadAccount(read,identity,target,nonce,access) {
   let rows;
-  try {rows=await read(identity.dialect==='mysql'?mysql:maria,[nonce,target.user,target.host]);}
+  const query=identity.dialect==='mysql'?mysql:maria;
+  const accessStamp="CASE WHEN OCTET_LENGTH(u.authentication_string)=0 THEN 'empty' ELSE SHA2(CONCAT(?,CAST(u.authentication_string AS BINARY)),256) END";
+  try {rows=await read(access?query.replace(stamp,accessStamp):query,[nonce,target.user,target.host]);}
   catch {throw fail('The current account cannot observe the required authentication and policy metadata.');}
   if(rows.length!==1) throw fail('The exact login account is unavailable in the authorization dictionary.');
   const [user,host,plugin,locked,expired,alternate,comparisonTag,...policy]=rows[0];
-  if(user!==target.user||host!==target.host||plugin!==authPlugin[identity.dialect]||
-     locked!==(identity.dialect==='mysql'?'N':'false')||expired!=='N'||Number(alternate)!==0||!hex.test(comparisonTag||'')||
+  const open=identity.dialect==='mysql'?'N':'false',closed=identity.dialect==='mysql'?'Y':'true';
+  const knownAccess=access ? [open,closed].includes(locked)&&['Y','N'].includes(expired)&&
+    policy.length===(identity.dialect==='mysql'?15:12) : locked===open&&expired==='N';
+  if(user!==target.user||host!==target.host||plugin!==authPlugin[identity.dialect]||!knownAccess||
+     Number(alternate)!==0||!(access&&comparisonTag==='empty'||hex.test(comparisonTag||''))||
      policy.slice(8,11).some(value=>value!=='N')) {
-    throw fail('Rotation requires an unlocked, unexpired account with one supported password method and ordinary direct privileges.');
+    throw fail(access?'Account lock changes require one supported password method and ordinary direct privileges.':
+      'Rotation requires an unlocked, unexpired account with one supported password method and ordinary direct privileges.');
   }
-  return {plugin,comparisonTag,policy};
+  return {plugin,comparisonTag,policy,...(access&&{locked:locked===closed,expired:expired==='Y'})};
 }
 
 async function requireSecureRoute(db,transport,session,identity) {
@@ -70,12 +76,12 @@ async function requireSecureRoute(db,transport,session,identity) {
   throw fail('Connect over a local socket, a direct numeric loopback address or verified TLS to rotate a password.');
 }
 
-async function inspect(transport,session,identity,target,nonce) {
+async function inspect(transport,session,identity,target,nonce,{access=false}={}) {
   const read=(sql,values)=>transport._read(session,sql,values);
-  const first=await loadAccount(read,identity,target,nonce);
+  const first=await loadAccount(read,identity,target,nonce,access);
   const roles=await explicitRoles(read,identity,target),defaults=await loginDefaults(read,identity,target);
-  const second=await loadAccount(read,identity,target,nonce);
-  if(!same(first,second))throw fail('The account changed during inspection. Prepare a new password rotation review.');
+  const second=await loadAccount(read,identity,target,nonce,access);
+  if(!same(first,second))throw fail('The account changed during inspection. Prepare a new account review.');
   return {...first,roles,defaults};
 }
 
@@ -97,6 +103,10 @@ function outcome(state,acknowledged) {
     ...(state==='verified'&&{pluginAndObservedRolePolicyPreserved:true})};
 }
 
+function accountLockName(target) {
+  return 'rocketbrain.rotate.'+createHash('sha256').update(JSON.stringify([target.user,target.host.toLowerCase()])).digest('hex').slice(0,40);
+}
+
 function apply(lease,reviewed,password) {
   const problem=passwordProblem(password);
   if(problem)throw fail(problem);
@@ -106,8 +116,8 @@ function apply(lease,reviewed,password) {
     if(!same(identity,reviewed.identity)||!lease.guard())throw fail('The administrator identity or SQL context changed after review.');
     const read=(sql,values)=>transport._read(session,sql,values);
     await requireSecureRoute(lease.db,transport,session,identity);
-    const lock='rocketbrain.rotate.'+createHash('sha256').update(JSON.stringify([target.user,target.host.toLowerCase()])).digest('hex').slice(0,40);
-    if(Number((await read('SELECT GET_LOCK(?,0)',[lock]))[0]?.[0])!==1)throw fail('Another password rotation holds this account review.');
+    const lock=accountLockName(target);
+    if(Number((await read('SELECT GET_LOCK(?,0)',[lock]))[0]?.[0])!==1)throw fail('Another account change holds this account review.');
     const fresh=await inspect(transport,session,identity,target,nonce);
     if(!same(fresh,before)||!lease.guard())throw fail('The exact account credential, roles or connection changed after review.');
     let acknowledged=false;
@@ -137,4 +147,4 @@ function apply(lease,reviewed,password) {
   });
 }
 
-module.exports={plan,apply,accountTarget,statement};
+module.exports={plan,apply,accountTarget,statement,inspectAccountPolicy:inspect,accountLockName};

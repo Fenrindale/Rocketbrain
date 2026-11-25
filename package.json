@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.92.0",
+  "version": "0.93.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -231,6 +231,7 @@
       { "command": "rocketbrain.spring.reactiveSecurityTrace", "title": "Inspect Reactive Spring Security Trace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.feignContracts", "title": "Inspect OpenFeign Runtime Contracts", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.db.inspectViewImpact", "title": "Inspect Database View Impact", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewProcedureCall", "title": "Review Stored Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewPackageCall", "title": "Review MariaDB Package Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.cacheMetadata", "title": "Save Database Metadata for Offline Use", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -319,6 +320,7 @@
       { "command": "rocketbrain.db.reviewTableGrant", "title": "Review Table SELECT Grant or Revoke", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.reviewCreatePrincipal", "title": "Review Database Account or Role Creation", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.reviewPasswordRotation", "title": "Review Database Password Rotation", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.reviewAccountAccess", "title": "Review Database Account Lock or Unlock", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.insertTemplate", "title": "Insert SQL Template", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.data.captureTransferSource", "title": "Capture Table Copy Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.data.transfer", "title": "Copy Captured Rows", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -1549,6 +1551,11 @@
           "group": "schema"
         },
         {
+          "command": "rocketbrain.db.inspectViewImpact",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "schema"
+        },
+        {
           "command": "rocketbrain.jpa.generateEntity",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
           "group": "schema"
@@ -2545,7 +2552,12 @@
           "type": "array",
           "default": [],
           "items": { "type": "string" },
-          "description": "Optional local Java source folders inside the workspace for semantic usage searches in recognized native SQL literals. Java matches are read-only."
+          "description": "Optional local Java source folders inside the workspace for semantic usage searches in recognized native SQL literals."
+        },
+        "rocketbrain.sql.project.renameEmbeddedJava": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include proven native SQL query literals in selected Java roots when reviewing source updates for a database rename."
         },
         "rocketbrain.java.mavenHome": {
           "type": "string",
