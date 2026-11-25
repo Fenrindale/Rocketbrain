@@ -567,6 +567,12 @@
         "enablement": "isWorkspaceTrusted && editorLangId == sql"
       },
       {
+        "command": "rocketbrain.sqlDraft.history",
+        "title": "Browse SQL Draft Checkpoints",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.sqlDraft.remove",
         "title": "Remove SQL Draft",
         "category": "Rocketbrain",

@@ -50,3 +50,24 @@ test('the trusted workspace and storage bounds are enforced without replacing a 
   assert.throws(() => api.get(first.id), /trusted workspace/);
   await assert.rejects(api.remove(first.id,first.revision), /trusted workspace/);
 });
+
+test('explicit checkpoints preserve eight independent revisions and do not track automatic edits as history', async () => {
+  const state=memento(), first=createConsoleDraftStore(state,()=>true);
+  const source={title:'SQL history',text:'SELECT 0',anchor:1,active:4};
+  const known=await first.write(source);
+  assert.deepEqual(first.history(known.id),[]);
+  const revisions=[];
+  for (let index=0;index<10;index++) {
+    const current=await first.write({...source,text:'SELECT '+index},known.id,{pin:true});
+    revisions.unshift(current.revision);
+    assert.equal((await first.write(current,known.id,{pin:true})).revision,current.revision);
+  }
+  const newest=await first.write({...source,text:'SELECT 99'},known.id);
+  const resumed=createConsoleDraftStore(state,()=>true);
+  assert.equal(resumed.get(known.id).text,'SELECT 99');
+  assert.deepEqual(resumed.history(known.id).map(item=>item.revision),revisions.slice(0,8));
+  assert.equal(resumed.getCheckpoint(known.id,revisions[0]).text,'SELECT 9');
+  assert.throws(()=>resumed.getCheckpoint(known.id,revisions.at(-1)),/unavailable/);
+  await resumed.remove(known.id,newest.revision);
+  assert.throws(()=>resumed.history(known.id),/unavailable/);
+});

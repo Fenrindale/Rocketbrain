@@ -314,6 +314,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   async function bind(document) {
     if(exclusiveDatabaseWork())throw new Error('Finish the schema operation or pending import transaction before using a console.');
     if (!document || document.languageId !== 'sql') throw new Error('Open a SQL editor first.');
+    if (sqlDrafts.isRecovered(document)) throw Error('Open the active database console to run SQL from an offline draft.');
     if (isProfileConsole(document)) throw Error('This operation uses the active database. Use Run Selected SQL in a profile console.');
     if (state.disposed || state.switching) throw new Error('The database is changing or the workspace has closed.');
     if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
