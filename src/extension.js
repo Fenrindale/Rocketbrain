@@ -49,7 +49,7 @@ let activeJava,activeJavaTesting,activeJavaUtilities,activeJavaNavigation,active
 async function activate(context) {
   let sqlAnalysis;
   const database = await require("./database-workbench").registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree,
-    document=>sqlAnalysis?.virtualActive(document));
+    document=>sqlAnalysis?.virtualActive(document),document=>sqlAnalysis?.analysisOnly(document));
   activeDatabase=database;
   const duckdb = require('./db/duckdb-vscode').registerDuckDb(context, vscode);
   const mongoDb = require('./db/mongodb-vscode').registerMongoDb(context, vscode);
@@ -137,13 +137,13 @@ async function activate(context) {
   context.subscriptions.push(analysis);
   sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase,
     joinCatalog:database.joinCompletionCatalog,joinLogicalRelationships:database.joinLogicalRelationships,
-    objectDefinition:objectSources.definition});
+    objectDefinition:objectSources.definition,liveCatalogIdentity:database.liveCatalogIdentity});
   context.subscriptions.push(sqlAnalysis);
   const sqlEditing=require('./db/sql-editing-vscode').registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner:dbAuthoring.openDesigner});
   context.subscriptions.push(sqlEditing);
   const schemaRename=require('./db/schema-vscode').registerSchemaRename(context,vscode,{database,sqlAnalysis});
   activeSchemaRename=schemaRename;context.subscriptions.push(schemaRename);
-  const sqlScripts=require('./db/sql-script-vscode').registerSqlScripts(context,vscode,{database});
+  const sqlScripts=require('./db/sql-script-vscode').registerSqlScripts(context,vscode,{database,analysisOnly:sqlAnalysis.analysisOnly});
   activeSqlScripts=sqlScripts;context.subscriptions.push(sqlScripts);
   const sqlNotebook = require('./db/sql-notebook-vscode').registerSqlNotebook(vscode, { database });
   context.subscriptions.push(sqlNotebook);

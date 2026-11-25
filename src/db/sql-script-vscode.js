@@ -5,7 +5,7 @@ const { clientStatementAt, selectedClientStatement } = require('./sql-format-scr
 const { LIMITS } = require('./sql-script');
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
 
-function registerSqlScripts(context,vscode,{database}={}) {
+function registerSqlScripts(context,vscode,{database,analysisOnly=()=>false}={}) {
   const descriptions=new Map(),reviews=new Map(),runs=new Map(),priorValues=new Map(),operations=new Set(),controllers=new Set(),subscriptions=[];let closed=false;
   const presets = createParameterPresets({ state: context.workspaceState, secrets: context.secrets });
   const trusted=()=>{if(closed)throw new Error('SQL scripts are closed.');if(!vscode.workspace.isTrusted)throw new Error('Trust the workspace before preparing or running SQL.');};
@@ -19,11 +19,12 @@ function registerSqlScripts(context,vscode,{database}={}) {
   }
   function frame(document,range){
     trusted();if(!document||document.isClosed||document.languageId!=='sql')throw new Error('Open a SQL document first.');
+    if(analysisOnly(document))throw Error('Exit the saved virtual schema preview before reviewing or running this SQL.');
     const text=document.getText(),start=range?document.offsetAt(range.start):0,end=range?document.offsetAt(range.end):text.length,sql=text.slice(start,end);
     if(Buffer.byteLength(sql)>128*1024||Buffer.byteLength(text)>8*1024*1024)throw new Error('Choose a script or selection no larger than 128 KiB.');
     return {document,uri:document.uri.toString(),version:document.version,hash:digest(text),sql,start,end};
   }
-  function assertFrame(saved){trusted();if(saved.document.isClosed||saved.document.version!==saved.version||digest(saved.document.getText())!==saved.hash)throw new Error('The SQL source changed after preparation. Prepare it again.');}
+  function assertFrame(saved){trusted();if(analysisOnly(saved.document))throw Error('Exit the saved virtual schema preview before reviewing or running this SQL.');if(saved.document.isClosed||saved.document.version!==saved.version||digest(saved.document.getText())!==saved.hash)throw new Error('The SQL source changed after preparation. Prepare it again.');}
   async function describeFrame(saved, previous) {
     const value=await database.describeSqlScript(saved.sql,{document:saved.document,inspectParameters:Boolean(presets)});
     assertFrame(saved);

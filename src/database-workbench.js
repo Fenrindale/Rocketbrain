@@ -17,7 +17,7 @@ const { createMetadataCache, observeCatalogIdentity } = require('./db/metadata-c
 const { runCatalogOperation } = require('./db/catalog-refresh');
 const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
 
-async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree, isVirtualSqlPreview = () => false) {
+async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree, isVirtualSqlPreview = () => false, analysisOnlySql = () => false) {
   const { isProfileConsole, registerProfileConsoleFiles } = require('./db/profile-console-files');
   const profileFiles = registerProfileConsoleFiles(vscode, context);
   const profileSessions = new Map(), profileBindings = new Map();
@@ -673,6 +673,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   }
   async function runSql(sql, document = currentDocument(), { connectionEpoch, connectionKey, saved = false, userQuery = false, beforeRun } = {}) {
     if (!sql.trim()) return;
+    assertRunnable(document);
     const dedicated = isProfileConsole(document);
     if (dedicated && (saved || connectionEpoch !== undefined || connectionKey !== undefined || !userQuery)) {
       throw Error('Use Run Selected SQL in a profile console.');
@@ -687,6 +688,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     }
     const binding = await bindInteractive(document);
     assertBinding(document, binding);
+    assertRunnable(document);
     if (!dedicated && state.offlineMetadata) throw Error('The database switched to offline metadata. Connect before running SQL.');
     const db = consoleDatabase(binding.id);
     if (state.running.has(binding.id)) throw new Error('This console already has a running query.');
@@ -741,8 +743,12 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     } finally { state.running.delete(binding.id); updateStatus(); }
     return id;
   }
+  function assertRunnable(document) {
+    if (analysisOnlySql(document)) throw Error('Exit the saved virtual schema preview before running SQL from this editor.');
+  }
   function selectedSql(editor, { allowProfile = false } = {}) {
     if (!editor || editor.document.isClosed || editor.document.languageId !== 'sql') throw new Error('Open a SQL editor first.');
+    assertRunnable(editor.document);
     if (!allowProfile && isProfileConsole(editor.document)) throw Error('This operation requires a console on the active database.');
     return editor.selection.isEmpty ? statementAt(editor.document.getText(), editor.document.offsetAt(editor.selection.active), { dialect: state.mysql || isProfileConsole(editor.document) ? 'mysql' : 'sqlite' }) : editor.document.getText(editor.selection);
   }
@@ -765,6 +771,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       void vscode.window.showInformationMessage('This is an offline SQL draft. Copy the reviewed text to a console connected to the intended database.');
       return;
     }
+    assertRunnable(editor?.document);
     const dedicated = isProfileConsole(editor?.document);
     if ((state.mysql || dedicated) && editor?.document.languageId === 'sql' &&
         /^\uFEFF?[ \t]*DELIMITER(?=[ \t\r]|$)/im.test(editor.document.getText())) {

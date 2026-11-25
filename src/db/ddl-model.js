@@ -1,6 +1,8 @@
 'use strict';
 
 const { analyzeSql,statementRanges,sourceTokens }=require('./sql-analysis');
+const generatedColumn=require('./schema-generated-column');
+const { endpointKey }=require('./join-catalog');
 
 const tableLimit=256;
 const supportedTypes=new Set([
@@ -55,16 +57,30 @@ function split(tokens,start,end) {
   return groups;
 }
 
-function column(source,tokens) {
+function column(source,tokens,{generatedDialect}={}) {
   const name=identifier(tokens[0]),type=tokens[1];
   if(type?.kind!=='word'||!supportedTypes.has(type.upper))throw Error('The column type is outside the virtual schema model.');
   let end=value(tokens[2],'(')?match(tokens,2)+1:2;
   while(word(tokens[end],'UNSIGNED')||word(tokens[end],'ZEROFILL')||word(tokens[end],'PRECISION'))end++;
-  let primaryKey=false,notNull=false;
+  let primaryKey=false,notNull=false,generationExpression,extra;
   const typeEnd=end;
   while(end<tokens.length){
     const option=tokens[end++];
-    if(word(option,'PRIMARY')&&word(tokens[end],'KEY')){
+    if(generatedDialect&&(word(option,'GENERATED')||word(option,'AS'))){
+      if(end-1!==typeEnd)throw Error('Declare the virtual generation expression directly after its column type.');
+      if(word(option,'GENERATED')){
+        if(!word(tokens[end],'ALWAYS')||!word(tokens[end+1],'AS'))throw Error('Use GENERATED ALWAYS AS or AS for a virtual column.');
+        end+=2;
+      }
+      const close=match(tokens,end);
+      generationExpression=source.slice(tokens[end].end,tokens[close].start).trim();
+      end=close+1;
+      if(word(tokens[end],'PERSISTENT')&&generatedDialect!=='mariadb')throw Error('Use STORED or VIRTUAL for a MySQL generated column.');
+      const mode=word(tokens[end],'STORED')||word(tokens[end],'PERSISTENT')?'STORED':'VIRTUAL';
+      if(['STORED','PERSISTENT','VIRTUAL'].some(value=>word(tokens[end],value)))end++;
+      if(end!==tokens.length)throw Error('A generated overlay column uses an expression and optional storage mode.');
+      extra=mode+' GENERATED';
+    }else if(word(option,'PRIMARY')&&word(tokens[end],'KEY')){
       primaryKey=true;end++;
     }else if(word(option,'NOT')&&word(tokens[end],'NULL')){
       notNull=true;end++;
@@ -80,7 +96,9 @@ function column(source,tokens) {
       throw Error('This column option is outside the reviewed virtual schema grammar.');
     }
   }
-  return {name,type:source.slice(type.start,tokens[typeEnd-1].end).trim(),nullable:!notNull&&!primaryKey,primaryKey,virtual:true};
+  const rawType=source.slice(type.start,tokens[typeEnd-1].end).trim();
+  return {name,type:generationExpression===undefined?rawType:rawType.replace(/\s*([(),])\s*/gu,'$1'),nullable:!notNull&&!primaryKey,primaryKey,virtual:true,
+    ...(generationExpression!==undefined&&{generationExpression,extra,defaultValue:null})};
 }
 
 function constraints(source,groups) {
@@ -110,11 +128,18 @@ function constraints(source,groups) {
   return columns;
 }
 
-function createView(source,tokens,after,model) {
-  if(!word(tokens[after],'AS')||!word(tokens[after+1],'SELECT'))throw Error('Use an explicit SELECT-based virtual view.');
+function createView(source,tokens,after,model,overlay) {
+  if(!word(tokens[after],'AS')||!(word(tokens[after+1],'SELECT')||overlay&&word(tokens[after+1],'WITH')))
+    throw Error('Use an explicit SELECT-based virtual view.');
   const query=source.slice(tokens[after+1].start);
   const proof=analyzeSql(query,model,{dialect:model.dialect,database:model.database,catalogComplete:true,
-    tableNameCaseSensitive:model.tableNameCaseSensitive,sqlMode:model.sqlMode});
+    tableNameCaseSensitive:model.tableNameCaseSensitive,sqlMode:model.sqlMode,
+    ...(overlay&&{joinOrigins:true,joinTables:overlay.joinTables})});
+  if(overlay){
+    const pending=proof.relations.filter(relation=>relation.requested&&!relation.catalog&&
+      !objectEquals(relation.requested.schema,model.database,model)).map(relation=>relation.requested);
+    if(pending.length)throw Object.assign(Error('The external view inputs need current catalog metadata.'),{endpoints:pending});
+  }
   if(proof.state!=='known'||!proof.projections.length||proof.projections.length>256)throw Error('The virtual view output could not be bound to known columns.');
   const familyTypes={integer:'bigint',string:'varchar(4096)',boolean:'tinyint',decimal:'decimal',
     floating:'double',date:'date',temporal:'datetime',json:'json',binary:'varbinary(4096)'};
@@ -123,8 +148,11 @@ function createView(source,tokens,after,model) {
   }));
   if(columns.some(item=>!item.type||!item.name||item.name.length>64)||
       new Set(columns.map(item=>item.name.toLowerCase())).size!==columns.length)throw Error('Use distinct, typed virtual view columns.');
-  const dependencies=[...new Set(proof.relations.flatMap(relation=>relation.catalog?.table?[relation.catalog.table]:[]))];
-  return {columns,dependencies};
+  const inputs=proof.relations.flatMap(relation=>relation.catalog?[relation.catalog]:[]);
+  const dependencies=[...new Set(inputs.filter(item=>objectEquals(item.database,model.database,model)).map(item=>item.table))];
+  const external=inputs.filter(item=>!objectEquals(item.database,model.database,model)).map(item=>({schema:item.database,table:item.table}));
+  const externalDependencies=[...new Map(external.map(item=>[endpointKey(item),item])).values()];
+  return {columns,dependencies,...(externalDependencies.length&&{externalDependencies})};
 }
 
 function createTable(source,tokens,after) {
@@ -143,17 +171,19 @@ function createTable(source,tokens,after) {
   return {columns:constraints(source,split(tokens,after+1,close))};
 }
 
-function launchAlter(source,tokens,at,table,liveViewsUnresolved) {
+function launchAlter(source,tokens,at,table,liveViewsUnresolved,overlay) {
   const columns=table.columns.map(item=>({...item}));
   const changes=split(tokens,at,tokens.length);
+  if(overlay&&(changes.length!==1||!word(changes[0][0],'ADD')))throw Error('Use one additive column definition per ALTER TABLE in a saved overlay.');
   for(const tokens of changes){
     const action=tokens[0]?.upper;
     const start=word(tokens[1],'COLUMN')?2:1;
     if(action==='ADD'){
-      const chosen=column(source,tokens.slice(start));
+      const chosen=column(source,tokens.slice(start),{generatedDialect:overlay?.dialect});
       if(chosen.primaryKey||tokens.some(token=>word(token,'FIRST')||word(token,'AFTER'))||
           columns.some(item=>same(item.name,chosen.name)))throw Error('Use a distinct simple appended column.');
       columns.push(chosen);
+      if(chosen.generationExpression!==undefined)generatedColumn.definition(chosen,columns);
     }else if(action==='DROP'){
       if(tokens.length!==start+1)throw Error('Use one column name when dropping a virtual column.');
       const index=columns.findIndex(item=>same(item.name,identifier(tokens[start])));
@@ -176,7 +206,7 @@ function launchAlter(source,tokens,at,table,liveViewsUnresolved) {
   return columns;
 }
 
-function applyDdl(source,model) {
+function applyDdl(source,model,overlay) {
   if (!/^\s*(?:(?:--[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)\s*)*(CREATE|ALTER|DROP|RENAME|TRUNCATE|USE|SET)\b/i.test(source)) return null;
   const tokens=sourceTokens(source,{sqlMode:model.sqlMode});
   if(value(tokens.at(-1),';'))tokens.pop();
@@ -195,6 +225,9 @@ function applyDdl(source,model) {
   }else if(action==='DROP'&&word(tokens[at],'IF')&&word(tokens[at+1],'EXISTS')){
     conditional=true;at+=2;
   }
+  if(overlay&&(conditional||replace||!(action==='CREATE'&&kind==='view'||action==='ALTER'&&kind==='table'))){
+    throw Error('Saved overlays accept CREATE VIEW and ALTER TABLE ADD COLUMN definitions.');
+  }
   const {name,next}=nameAt(tokens,at,model.database);
   const field=kind==='table'?'tables':'views';
   const existing=[...model.tables,...model.views].find(item=>objectEquals(item.name,name,model));
@@ -209,13 +242,13 @@ function applyDdl(source,model) {
   if(action==='CREATE'){
     if(conditional&&existing)return {model,change:{action:'retain',kind,name}};
     if(existing&&!replace)throw Error('A virtual schema object with this name already exists.');
-    const definition=kind==='table'?createTable(source,tokens,next):createView(source,tokens,next,model);
+    const definition=kind==='table'?createTable(source,tokens,next):createView(source,tokens,next,model,overlay);
     const table={name,kind,...definition,virtual:true};
     updated=existing?updated.map(item=>item===existing?table:item):[...updated,table];
   }else if(action==='ALTER'){
     if(kind!=='table')throw Error('ALTER requires a table in the virtual schema.');
     if(!existing)throw Error('The ALTER target is unobserved in this virtual schema.');
-    updated=updated.map(item=>item===existing?{...item,columns:launchAlter(source,tokens,next,item,liveViewsUnresolved)}:item);
+    updated=updated.map(item=>item===existing?{...item,columns:launchAlter(source,tokens,next,item,liveViewsUnresolved,overlay)}:item);
   }else{
     if(next!==tokens.length)throw Error('Drop a single exact table or view in this virtual model.');
     if(!existing&&!conditional)throw Error('The DROP target is unobserved in this virtual schema.');
@@ -249,7 +282,8 @@ function parseSchema(text,database,dialect) {
 }
 
 function analyzeDdlScript(text,seed) {
-  const opts={dialect:seed.dialect,database:seed.database,tableNameCaseSensitive:seed.tableNameCaseSensitive,sqlMode:seed.sqlMode};
+  const opts={dialect:seed.dialect,database:seed.database,tableNameCaseSensitive:seed.tableNameCaseSensitive,sqlMode:seed.sqlMode,
+    ...(seed.overlayExternalTables&&{joinOrigins:true,joinTables:seed.overlayExternalTables})};
   const split=statementRanges(text,opts),known=split.unknown.length===0&&split.statements.length<=100;
   let catalog=seed,uncertain=!known,contextMayChange=false;
   const changes=[],issues=[];
