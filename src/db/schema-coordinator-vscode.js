@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),{randomUUID}=require('node
 const {MysqlService}=require('./mysql'),engine=require('./schema-diff'),{SchemaCoordinator}=require('./schema-coordinator'),{chooseConversions}=require('./schema-conversion-vscode');
 const PROFILE_KEY='rocketbrain.schemaCoordinator.profiles.v16',SECRET_PREFIX='rocketbrain.schemaCoordinator.password.';
 const C=require('./schema-coordinator-capabilities');
-function registerSchemaCoordinator(context,vscode,{withExclusiveSchemaWork,createService=config=>new MysqlService(config)}={}){
+function registerSchemaCoordinator(context,vscode,{withExclusiveSchemaWork,activityLog,createService=config=>new MysqlService(config,{reportActivity:activityLog?.createReporter()})}={}){
  if(typeof withExclusiveSchemaWork!=='function')throw Error('Distributed schema commands require the workbench exclusive-operation guard.');
  let closed=false;const reviews=new Map(),documents=new Map(),active=new Set(),subscriptions=[];
  const trusted=()=>{if(closed||vscode.workspace.isTrusted===false)throw Error('Trust the workspace before using distributed schema coordination.');};

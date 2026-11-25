@@ -167,7 +167,7 @@ async function activate(context) {
   activeSchemaComparison=schemaComparison;context.subscriptions.push(schemaComparison);
   const schemaPrograms=require('./db/schema-programs-vscode').registerSchemaPrograms(context,vscode,{list:()=>database.listSchemaPrograms(),analyze:request=>database.analyzeSchemaPrograms(request),onDidChangeDatabase:database.onDidChangeDatabase});
   activeSchemaPrograms=schemaPrograms;context.subscriptions.push(schemaPrograms);
-  const schemaCoordinator=require('./db/schema-coordinator-vscode').registerSchemaCoordinator(context,vscode,{withExclusiveSchemaWork:database.withExclusiveSchemaWork});
+  const schemaCoordinator=require('./db/schema-coordinator-vscode').registerSchemaCoordinator(context,vscode,{withExclusiveSchemaWork:database.withExclusiveSchemaWork,activityLog:database.activityLog});
   activeSchemaCoordinator=schemaCoordinator;context.subscriptions.push(schemaCoordinator);
   const streamImports=require('./db/import-stream-vscode').registerStreamImports(context,vscode,{
     inspect:request=>database.inspectStreamImport(request),prepare:request=>database.prepareStreamImport(request),

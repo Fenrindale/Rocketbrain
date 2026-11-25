@@ -55,10 +55,10 @@ async function readSnapshot({ db, session, schema, table, columns, keys, cancell
     guard();
 
     const query = session.connection.query({ sql, rowsAsArray: true });
+    report = db._activity?.(session, { category: 'transfer', operation: 'SELECT' });
     stream = query.stream({ highWaterMark: streamLimits.bufferedRows });
     active = { mayWrite: false, abort: error => stream.destroy(error) };
     session.active = active;
-    try { report = db._reportActivity?.(session, { category: 'query', operation: 'SELECT' }); } catch { /* Diagnostics are independent of capture. */ }
     let fieldsSeen = false, fieldsValid = false;
     stream.on('fields', fields => {
       fieldsValid = !fieldsSeen && fields.length === headers.length && fields.every((field, index) => field.name === headers[index]);
