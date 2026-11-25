@@ -178,6 +178,21 @@ function registerKotlinEditor(context,vscode,java) {
     return symbols;
   }
 
+  async function selectionRanges(document,positions,token) {
+    await start({document});
+    trusted();
+    const record=active,root=projectOf(document);
+    if (!record?.client?.isRunning()||!root||path.relative(record.launch.root,root)||token?.isCancellationRequested) {
+      throw fail('Start Kotlin editing for the current Gradle project.');
+    }
+    if (!record.client.initializeResult?.capabilities?.selectionRangeProvider) return undefined;
+    const response=await record.client.sendRequest('textDocument/selectionRange',{
+      textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)},positions
+    },token);
+    if (active!==record) throw fail('The Kotlin language server changed during selection.');
+    return response;
+  }
+
   async function sourceRequest(method,document,position,context,cancellation) {
     trusted();
     const current=active,root=projectOf(document);
@@ -223,7 +238,7 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,definition,references,formatting,documentSymbols,getState:()=>({...state}),dispose() {
+  return {start,stop,definition,references,formatting,documentSymbols,selectionRanges,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;

@@ -215,6 +215,21 @@ function registerJavaFeatures(context, vscode) {
     return symbols;
   }});
   subscriptions.push(api.structure);
+  const semanticSelection=require('./semantic-selection-vscode').registerSemanticSelection(vscode,{java:api,
+    readJava:async (document,positions,cancellation)=>{
+      await api.start();
+      const server=client;
+      if (!server?.isRunning()||!vscode.workspace.isTrusted||cancellation.isCancellationRequested) {
+        throw Error('Start Java support before expanding a semantic selection.');
+      }
+      const result=await server.sendRequest('textDocument/selectionRange',{
+        textDocument:{uri:document.uri.toString()},positions
+      },cancellation);
+      if (client!==server) throw Error('The Java language server changed. Try expanding again.');
+      return result;
+    }
+  });
+  subscriptions.push(semanticSelection);
   api.coroutines=require('./kotlin-coroutines-vscode').registerKotlinCoroutines(vscode,api);
   async function installEngine() {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before installing and starting the Java engine.');

@@ -14,6 +14,14 @@ Place the cursor over a symbol or key and run **Rocketbrain: Find JVM & Spring U
 
 Scope filters locations the providers can resolve. Kotlin and Java providers operate on their imported project models. Spring search covers static qualified class attributes and literal keys. Runtime registration, reflection, dynamic expressions, mixed-language classpath references, and unrelated XML dialects require separate analysis.
 
+## Expand and shrink semantic selection
+
+Run **Rocketbrain: Expand Semantic Selection** from the Command Palette or press **Ctrl+K, Ctrl+Shift+Right** on Windows and Linux. Use **Ctrl+K, Ctrl+Shift+Left** to reverse the last expansion. On macOS, replace Ctrl with Command.
+
+In Java, selection moves from an identifier segment through the full identifier and its JDT syntax parents. In Kotlin, it uses the configured server's range provider or the declaration ranges available through its symbol provider. In SQL, it selects identifiers, qualified names, parenthesized expressions and supported SELECT clauses within the current statement. SQL selection runs locally and requires an unambiguous source dialect and complete tokens.
+
+Shrink restores the original selection direction and cursor positions. Independent cursors expand together until the next ranges overlap. A source edit or manually changed selection ends the previous expansion sequence.
+
 ## File Structure
 
 Open a trusted Java or Kotlin workspace file and run **Rocketbrain: File Structure** from the editor menu or Command Palette. Filter by types, methods and functions, or fields and properties. Search the results by name, signature, or parent. Selecting a result opens its declaration in the current buffer. The current member appears first when it matches the chosen filter.
