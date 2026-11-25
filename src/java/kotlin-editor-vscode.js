@@ -101,6 +101,9 @@ function registerKotlinEditor(context,vscode,java) {
             protocol2Code:value=>vscode.Uri.parse(value)},
           synchronize:{fileEvents:record.watcher},markdown:{isTrusted:false},
           middleware:{
+            provideInlayHints(document,range,token,next) {
+              return java.codeHints?.available(document)?[]:next(document,range,token);
+            },
             provideDocumentSymbols(document,token,next) {
               return java.structure.outline(document,token,next);
             },
@@ -126,8 +129,13 @@ function registerKotlinEditor(context,vscode,java) {
       })]);
       trusted();
       if (suspended || active!==record) throw fail('Kotlin editing stopped during startup.');
-      return report('running',{projectUri:uri.toString(),serverVersion:launch.serverVersion,
+      await record.client.sendNotification('workspace/didChangeConfiguration',{settings:{
+        kotlin:{inlayHints:{typeHints:true,parameterHints:true,chainedHints:false}}
+      }});
+      const running=report('running',{projectUri:uri.toString(),serverVersion:launch.serverVersion,
         compilerVersion:launch.compilerVersion,windowsPathAdapter:launch.windowsPathAdapter,message:'Kotlin language features are connected.'});
+      java.codeHints?.refresh();
+      return running;
     } catch (error) {
       if (active===record) active=undefined;
       if (record) await release(record);
@@ -207,6 +215,16 @@ function registerKotlinEditor(context,vscode,java) {
     return response;
   }
 
+  async function inlayHints(document,range,token) {
+    const record=active,root=record&&projectOf(document);
+    if(!vscode.workspace.isTrusted||!record?.client?.isRunning()||state.state!=='running'||!root||
+        path.relative(record.launch.root,root)||token.isCancellationRequested)return [];
+    const response=await record.client.sendRequest('textDocument/inlayHint',{
+      textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)},range
+    },token);
+    return active===record?response:[];
+  }
+
   async function sourceRequest(method,document,position,context,cancellation) {
     trusted();
     const current=active,root=projectOf(document);
@@ -252,7 +270,7 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,definition,references,formatting,documentSymbols,selectionRanges,codeInformation,getState:()=>({...state}),dispose() {
+  return {start,stop,definition,references,formatting,documentSymbols,selectionRanges,codeInformation,inlayHints,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;

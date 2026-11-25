@@ -20,6 +20,12 @@ Run **Rocketbrain: Quick Code Documentation** on a Java or Kotlin symbol to read
 
 If the provider supplies a signature for a class from a binary-only library, it appears with any available parameter names. The view distinguishes a missing documentation response. It renders the provider text and code blocks without executing markup or opening external URLs. Editing the source closes the displayed snapshot.
 
+## Code hints and semantic highlighting
+
+Run **Rocketbrain: Configure Code Hints** in a Java or Kotlin source file to hide parameter names, show names at literal arguments, or show every available parameter hint. Control inferred type hints separately. The setting is stored for the current language in the selected workspace or workspace folder. Java includes inferred local and lambda parameter types reported by JDT. Kotlin uses the configured server's inferred types. VS Code's native inlay-hints setting controls whether hints are displayed.
+
+Run **Rocketbrain: Inspect Semantic Token** at an identifier to see the type and modifiers the active semantic-token provider supplied for its exact source range. The current theme applies the corresponding semantic color. Both actions leave the source untouched.
+
 ## Expand and shrink semantic selection
 
 Run **Rocketbrain: Expand Semantic Selection** from the Command Palette or press **Ctrl+K, Ctrl+Shift+Right** on Windows and Linux. Use **Ctrl+K, Ctrl+Shift+Left** to reverse the last expansion. On macOS, replace Ctrl with Command.

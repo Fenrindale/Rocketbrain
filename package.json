@@ -730,6 +730,8 @@
       { "command": "rocketbrain.editor.shrinkSelection", "title": "Shrink Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.quickDocumentation", "title": "Quick Code Documentation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
       { "command": "rocketbrain.editor.callSignatures", "title": "Show Call Signatures", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
+      { "command": "rocketbrain.editor.configureCodeHints", "title": "Configure Code Hints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
+      { "command": "rocketbrain.editor.inspectSemanticToken", "title": "Inspect Semantic Token", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
       {
         "command": "rocketbrain.java.pullUpMembers",
         "title": "Pull Up Java Members",
@@ -1967,6 +1969,24 @@
           "default": "",
           "scope": "machine",
           "description": "Absolute path to a standalone JDK 25 or later for the language server. Do not use an IDE's embedded runtime."
+        },
+        "rocketbrain.editor.javaHints": {
+          "type": "object", "scope": "resource", "default": { "parameters": "literals", "types": true },
+          "additionalProperties": false,
+          "description": "Java parameter names and JDT-inferred variable and lambda parameter types.",
+          "properties": {
+            "parameters": { "type": "string", "enum": ["none", "literals", "all"] },
+            "types": { "type": "boolean" }
+          }
+        },
+        "rocketbrain.editor.kotlinHints": {
+          "type": "object", "scope": "resource", "default": { "parameters": "literals", "types": true },
+          "additionalProperties": false,
+          "description": "Kotlin parameter names and inferred types from the configured language server.",
+          "properties": {
+            "parameters": { "type": "string", "enum": ["none", "literals", "all"] },
+            "types": { "type": "boolean" }
+          }
         },
         "rocketbrain.java.fileTemplates": {
           "type": "array",
