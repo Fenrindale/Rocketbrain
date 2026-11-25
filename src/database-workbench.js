@@ -670,7 +670,10 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   command('rocketbrain.openSharedConsole', () => openSharedConsole(currentDocument()));
   command('rocketbrain.runQuery', async () => {
     const editor = vscode.window.activeTextEditor;
-    if (sqlDrafts.isRecovered(editor?.document)) throw Error('This is an offline SQL draft. Copy the reviewed text to a console connected to the intended database.');
+    if (sqlDrafts.isRecovered(editor?.document)) {
+      void vscode.window.showInformationMessage('This is an offline SQL draft. Copy the reviewed text to a console connected to the intended database.');
+      return;
+    }
     const dedicated = isProfileConsole(editor?.document);
     if ((state.mysql || dedicated) && editor?.document.languageId === 'sql' &&
         /^\uFEFF?[ \t]*DELIMITER(?=[ \t\r]|$)/im.test(editor.document.getText())) {

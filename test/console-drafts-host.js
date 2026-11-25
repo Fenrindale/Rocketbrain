@@ -82,6 +82,7 @@ async function runConsoleDraftChecks(api, vscode, checks, receipt) {
   await vscode.window.showTextDocument(document, { preview:false });
   await assert.rejects(api.describeSqlScript('SELECT 1', { document }), /active database/i);
   assert.equal(await vscode.commands.executeCommand('rocketbrain.runQuery'), undefined);
+  await vscode.commands.executeCommand('notifications.clearAll');
   assert.deepEqual(api.results(), []);
   assert.equal(api.sessions().length, 1);
   await assert.rejects(api.sqlDrafts.remove(seed.id, snapshot.revision), /Close the open SQL draft/);
