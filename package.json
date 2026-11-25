@@ -909,6 +909,12 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.connections.duplicate",
+        "title": "Duplicate Database Profile",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.connections.test",
         "title": "Test Database Connection",
         "category": "Rocketbrain"
@@ -1392,6 +1398,11 @@
         {
           "command": "rocketbrain.connections.edit",
           "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile",
+          "group": "connection"
+        },
+        {
+          "command": "rocketbrain.connections.duplicate",
+          "when": "view == rocketbrain.connections && viewItem == rocketbrain.connectionProfile && isWorkspaceTrusted",
           "group": "connection"
         },
         {

@@ -252,6 +252,8 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
 
+**Duplicate Database Profile**은 기존 연결 설정을 새 이름으로 복사해 편집기를 엽니다. 복사본에는 새 프로필 ID가 부여되며 비밀번호가 필요한 연결은 별도로 입력합니다. 공유 파일을 가져올 때 같은 그룹에 이름이 겹치면 이름을 바꿔 가져오거나 해당 항목을 건너뜁니다.
+
 연결의 **Session lifecycle**에서 물리 연결마다 적용할 `SET SESSION` 초기 SQL을 지정합니다. 시간대·선택 SQL 엄격 모드·`sql_safe_updates`·`group_concat_max_len`을 지원합니다. Keep-alive는 유휴 세션의 상태를 읽습니다. Idle timeout은 실행 중인 문장과 트랜잭션이 없는 자동 커밋 세션을 종료합니다. **Reconnect Console Session**으로 새 연결을 열면 초기값을 다시 적용합니다.
 
 **Open SQL Console**은 읽기 전용 전용 세션을 엽니다. 기존 SQL 편집기에서 **Open Shared SQL Console**을 실행하면 같은 서버 연결과 트랜잭션을 사용하는 새 편집기가 열립니다. 두 편집기에서 쓰기 모드, 커밋과 롤백이 공유됩니다. 편집기를 닫아도 트랜잭션은 남습니다. **Manage Console Sessions**에서 연결된 편집기 수를 확인하고 공유 세션을 한 번에 종료합니다.
