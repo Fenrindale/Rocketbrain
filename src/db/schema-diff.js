@@ -4,6 +4,7 @@ const {identifier,stableCreate}=require('./schema-rename');
 const Spatial=require('./schema-conversion-spatial'),spatialIndex=require('./schema-spatial-index');
 const stored=require('./schema-stored-diff');
 const options=require('./schema-diff-options');
+const functional=require('./schema-functional-index');
 const LIMITS={tables:100,columnsPerTable:500,indexesPerTable:200,foreignKeysPerTable:200,snapshotBytes:8*1024*1024,changes:5000,selectedChanges:100};
 const quote=value=>'`'+identifier(value).replaceAll('`','``')+'`';
 const error=(code,message)=>Object.assign(new Error(message),{code});
@@ -31,7 +32,17 @@ function column(value){
 }
 function index(value){
  if(!value||typeof value.unique!=='boolean'||typeof value.primaryKey!=='boolean')throw error('ROCKETBRAIN_DIFF_SNAPSHOT','Invalid index metadata.');
- return {name:name(value.name),unique:value.unique,primaryKey:value.primaryKey,type:['RTREE','SPATIAL'].includes(String(value.type).toUpperCase())?'SPATIAL':text(value.type,'index type',64),comment:text(value.comment||'','index comment'),columns:list(value.columns,'index columns',LIMITS.columnsPerTable).map((item,i)=>{const prefixLength=item.prefixLength==null?null:Number(item.prefixLength);if(prefixLength!==null&&(!Number.isInteger(prefixLength)||prefixLength<1||prefixLength>65535))throw error('ROCKETBRAIN_DIFF_SNAPSHOT','Invalid index prefix length.');const spatial=['RTREE','SPATIAL'].includes(String(value.type).toUpperCase());if(spatial&&![null,32].includes(prefixLength))throw error('ROCKETBRAIN_DIFF_SNAPSHOT','SPATIAL prefix lengths are prohibited; catalog32 is an internal MBR width.');return {name:item.name==null?null:name(item.name),ordinal:i+1,prefixLength:spatial?32:prefixLength,collation:spatial&&item.collation==null?'A':nullableText(item.collation,'index collation',8)};})};
+ const spatial=['RTREE','SPATIAL'].includes(String(value.type).toUpperCase());
+ return {name:name(value.name),unique:value.unique,primaryKey:value.primaryKey,type:spatial?'SPATIAL':text(value.type,'index type',64),
+  comment:text(value.comment||'','index comment'),columns:list(value.columns,'index columns',LIMITS.columnsPerTable).map((item,i)=>{
+   const prefixLength=item.prefixLength==null?null:Number(item.prefixLength);
+   if(prefixLength!==null&&(!Number.isInteger(prefixLength)||prefixLength<1||prefixLength>65535))throw error('ROCKETBRAIN_DIFF_SNAPSHOT','Invalid index prefix length.');
+   if(spatial&&![null,32].includes(prefixLength))throw error('ROCKETBRAIN_DIFF_SNAPSHOT','SPATIAL prefix lengths are prohibited; catalog32 is an internal MBR width.');
+   const expression=item.expression==null?undefined:text(item.expression,'index expression',8192);
+   if(expression!==undefined&&(!expression.trim()||item.name!=null))throw error('ROCKETBRAIN_DIFF_SNAPSHOT','An index part must have either a column or an expression.');
+   return {name:item.name==null?null:name(item.name),ordinal:i+1,prefixLength:spatial?32:prefixLength,
+    collation:spatial&&item.collation==null?'A':nullableText(item.collation,'index collation',8),...(expression!==undefined&&{expression})};
+  })};
 }
 function foreignKey(value){return {name:name(value.name),referencedSchema:name(value.referencedSchema),referencedTable:name(value.referencedTable),onUpdate:nullableText(value.onUpdate,'FK update rule',40),onDelete:nullableText(value.onDelete,'FK delete rule',40),columns:list(value.columns,'foreign-key columns',LIMITS.columnsPerTable).map((item,i)=>({name:name(item.name),referencedColumn:name(item.referencedColumn),ordinal:i+1}))};}
 function table(value){
@@ -84,7 +95,16 @@ async function captureSchema(db,{tables,includeStoredObjects=false}={}){
    try{checks=(await readCatalog("SELECT tc.CONSTRAINT_NAME,cc.CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS cc JOIN information_schema.TABLE_CONSTRAINTS tc ON BINARY tc.CONSTRAINT_SCHEMA=BINARY cc.CONSTRAINT_SCHEMA AND BINARY tc.CONSTRAINT_NAME=BINARY cc.CONSTRAINT_NAME WHERE BINARY tc.TABLE_SCHEMA=BINARY ? AND BINARY tc.TABLE_NAME=BINARY ? AND tc.CONSTRAINT_TYPE='CHECK' ORDER BY tc.CONSTRAINT_NAME",[server.database,item.name])).map(([name,expression])=>({name,expression}));}catch{coverage.checks='unavailable';}
    try{partitions=await readCatalog('SELECT PARTITION_NAME,PARTITION_METHOD,PARTITION_EXPRESSION,SUBPARTITION_METHOD,SUBPARTITION_EXPRESSION FROM information_schema.PARTITIONS WHERE BINARY TABLE_SCHEMA=BINARY ? AND BINARY TABLE_NAME=BINARY ? AND PARTITION_NAME IS NOT NULL ORDER BY PARTITION_ORDINAL_POSITION,SUBPARTITION_ORDINAL_POSITION',[server.database,item.name]);}catch{coverage.partitions='unavailable';}
   }
-  const indexes=[];try{for(const [name,nonUnique,ordinal,column,prefixLength,type,collation,comment]of await readCatalog('SELECT INDEX_NAME,NON_UNIQUE,SEQ_IN_INDEX,COLUMN_NAME,SUB_PART,INDEX_TYPE,COLLATION,INDEX_COMMENT FROM information_schema.STATISTICS WHERE BINARY TABLE_SCHEMA=BINARY ? AND BINARY TABLE_NAME=BINARY ? ORDER BY INDEX_NAME,SEQ_IN_INDEX',[server.database,item.name])){let index=indexes.find(i=>i.name===name);if(!index)indexes.push(index={name,unique:Number(nonUnique)===0,primaryKey:name==='PRIMARY',type,comment:comment||'',columns:[]});index.columns.push({name:column,ordinal:Number(ordinal),prefixLength,collation});}}catch{coverage.indexes='unavailable';}
+  const indexes=[];try{
+   const expressions=functional.supportsExpressionParts(server)?',EXPRESSION':'';
+   const rows=await readCatalog('SELECT INDEX_NAME,NON_UNIQUE,SEQ_IN_INDEX,COLUMN_NAME,SUB_PART,INDEX_TYPE,COLLATION,INDEX_COMMENT'+expressions+
+    ' FROM information_schema.STATISTICS WHERE BINARY TABLE_SCHEMA=BINARY ? AND BINARY TABLE_NAME=BINARY ? ORDER BY INDEX_NAME,SEQ_IN_INDEX',[server.database,item.name]);
+   for(const [name,nonUnique,ordinal,column,prefixLength,type,collation,comment,expression]of rows){
+    let index=indexes.find(i=>i.name===name);
+    if(!index)indexes.push(index={name,unique:Number(nonUnique)===0,primaryKey:name==='PRIMARY',type,comment:comment||'',columns:[]});
+    index.columns.push({name:column,ordinal:Number(ordinal),prefixLength,collation,...(expression!=null&&{expression})});
+   }
+  }catch{coverage.indexes='unavailable';}
   const foreignKeys=[];try{for(const [constraint,column,ordinal,referencedSchema,referencedTable,referencedColumn,onUpdate,onDelete]of await readCatalog('SELECT k.CONSTRAINT_NAME,k.COLUMN_NAME,k.ORDINAL_POSITION,k.REFERENCED_TABLE_SCHEMA,k.REFERENCED_TABLE_NAME,k.REFERENCED_COLUMN_NAME,r.UPDATE_RULE,r.DELETE_RULE FROM information_schema.KEY_COLUMN_USAGE k LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON BINARY r.CONSTRAINT_SCHEMA=BINARY k.CONSTRAINT_SCHEMA AND BINARY r.TABLE_NAME=BINARY k.TABLE_NAME AND BINARY r.CONSTRAINT_NAME=BINARY k.CONSTRAINT_NAME WHERE BINARY k.TABLE_SCHEMA=BINARY ? AND BINARY k.TABLE_NAME=BINARY ? AND k.REFERENCED_TABLE_NAME IS NOT NULL ORDER BY k.CONSTRAINT_NAME,k.ORDINAL_POSITION',[server.database,item.name])){let fk=foreignKeys.find(f=>f.name===constraint);if(!fk)foreignKeys.push(fk={name:constraint,referencedSchema,referencedTable,onUpdate,onDelete,columns:[]});fk.columns.push({name:column,referencedColumn,ordinal:Number(ordinal)});}}catch{coverage.foreignKeys='unavailable';}
   const supportedStorage=item.kind==='view'||String(base[2]).toUpperCase()==='INNODB';const object={...item,engine:base[2],collation:base[3],comment:supportedStorage?base[4]||'':'',rowFormat:base[5],createOptions:supportedStorage?base[6]||'':'',charset:base[7],createSql,columns:cols.map(([name,type,nullable,defaultValue,key,extra,ordinal,comment,charset,collation,generationExpression])=>({name,type,nullable:nullable==='YES',defaultValue:server.dialect==='mariadb'&&defaultValue==='NULL'?null:defaultValue,key,extra,ordinal:Number(ordinal),comment,charset,collation,generationExpression,...(observedSrs&&/^(?:geometry|point|linestring|polygon|multipoint|multilinestring|multipolygon|geometrycollection|geomcollection)$/i.test(type)?{srsId:observedSrs.get(name)==null?null:Number(observedSrs.get(name))}:{})})),indexes,foreignKeys,checks,partitions};if(!cols.length)throw error('ROCKETBRAIN_DIFF_VISIBILITY','The object columns are not visible. Capture a narrower accessible scope.');capturedBytes+=Buffer.byteLength(JSON.stringify(object));if(capturedBytes>LIMITS.snapshotBytes)throw error('ROCKETBRAIN_DIFF_LIMIT','Schema snapshot exceeds 8 MiB. Narrow the table selection.');definitions.push(object);
  }
@@ -105,7 +125,9 @@ function columnSql(c,server,{existingTable=false,inheritedCharset}={}){
 }
 function indexSql(index,table,{adding=false,server}={}){const spatial=spatialIndex.render(index,table,server,{quote,quoteLiteral});if(spatial)return spatial;
  if(index.type!=='BTREE'||index.columns.length===0||adding&&(index.unique||index.primaryKey))throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Only new ordinary non-unique BTREE indexes are planned on existing tables.');
- const cols=index.columns.map(col=>{const field=table.columns.find(c=>c.name===col.name);if(!field)throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Expression or unresolved index columns require separate planning.');let sql=quote(field.name);if(col.prefixLength!==null){if(!Number.isInteger(col.prefixLength)||col.prefixLength<1||col.prefixLength>65535)throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Invalid index prefix.');sql+='('+col.prefixLength+')';}if(col.collation==='D')sql+=' DESC';else if(col.collation!==null&&col.collation!=='A')throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Unknown index ordering.');return sql;});
+ if(adding&&functional.hasExpression(index))throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Review expression key changes through the table designer.');
+ functional.checkIndex(index,table,server);
+ const cols=index.columns.map(col=>{if(col.expression!==undefined)return functional.expressionPart(col,table.columns);const field=table.columns.find(c=>c.name===col.name);if(!field)throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Expression or unresolved index columns require separate planning.');let sql=quote(field.name);if(col.prefixLength!==null){if(!Number.isInteger(col.prefixLength)||col.prefixLength<1||col.prefixLength>65535)throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Invalid index prefix.');sql+='('+col.prefixLength+')';}if(col.collation==='D')sql+=' DESC';else if(col.collation!==null&&col.collation!=='A')throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','Unknown index ordering.');return sql;});
  return (index.primaryKey?'PRIMARY KEY':(index.unique?'UNIQUE KEY ':'KEY ')+quote(index.name))+' ('+cols.join(', ')+')'+(index.comment?' COMMENT '+quoteLiteral(index.comment,server):'');
 }
 function simpleTable(t){if(t.kind!=='table'||String(t.engine).toUpperCase()!=='INNODB'||t.foreignKeys.length||t.checks.length||t.partitions.length||t.createOptions&& !/^row_format=(?:DYNAMIC|COMPACT|REDUNDANT|COMPRESSED)$/i.test(t.createOptions)||/\b(?:INVISIBLE|IGNORED|FULLTEXT|ENCRYPTION|TABLESPACE)\b/i.test(t.createSql))throw error('ROCKETBRAIN_DIFF_UNSUPPORTED','This table contains dependencies or storage/expression features outside additive migration planning.');}
