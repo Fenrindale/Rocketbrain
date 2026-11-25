@@ -314,6 +314,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Manage Workspace DuckDB Extension**에서 공식 `tpch`·`tpcds` 확장의 설치·업데이트·사용·제거를 관리합니다. 다운받은 파일은 DuckDB로 서명과 실행 호환성을 확인한 뒤 워크스페이스 전용 저장소에 둡니다. 활성화한 확장은 현재 DB 접속에 적용되며, 사용자 SQL의 외부 파일 접근 차단은 유지합니다.
 - **Add JDBC Driver**에서 별도 JDK와 공급사 JAR를 사용합니다. 드라이버 클래스와 SHA-256을 검토해 승인하고, **Manage JDBC Profiles**로 연결한 뒤 카탈로그와 읽기 쿼리를 사용할 수 있습니다. [사용자 지정 JDBC 드라이버 문서](docs/jdbc-drivers.md)
 - SSH 연결 프로필에서 **Use one agent identity**를 선택하면 로컬 에이전트의 named pipe 또는 Unix socket과 OpenSSH Ed25519 공개 키 파일을 지정할 수 있습니다. 시스템 OpenSSH는 검증한 known_hosts와 선택한 키를 사용합니다. 연결 테스트에 공개 키 지문을 표시하며, 저장한 공개 키 파일이 바뀌면 프로필을 다시 검증합니다. 로컬 에이전트 주소와 키 파일 경로는 공유 프로필에서 제외합니다.
+- SSH 프로필에서 **SSH password** 또는 **Encrypted OpenSSH private key**를 선택할 수 있습니다. 관리자가 별도로 알려준 서버 호스트 키의 `SHA256:…` 지문을 입력하세요. 연결할 때마다 입력한 SSH 비밀번호와 키 암호는 저장하거나 내보내지 않습니다. 암호화 키에는 OpenSSH 형식의 AES·bcrypt 키 파일을 사용합니다. [OpenSSH 호스트 키 지문](https://man.openbsd.org/ssh-keygen.1)
 - 연결 프로필에는 TCP, Unix 도메인 소켓, Windows 명명된 파이프 중 실행 환경과 맞는 전송을 선택합니다. 공유 프로필에는 비밀번호와 로컬 경로를 담지 않으며, 가져온 로컬 연결의 주소는 해당 컴퓨터에서 입력합니다.
 - **Save Database Metadata for Offline Use**로 카탈로그의 테이블·뷰와 열을 작업 공간에 저장합니다. 연결을 끊고 **Open Cached Database Metadata**를 선택하면 캡처 시각과 함께 SQL 완성에 사용합니다. 같은 연결로 돌아오면 현재 구조를 확인하고 바뀐 캡처를 무효화합니다.
 - **New Federated SELECT**에서 `source1`과 `source2`의 테이블을 참조하고 **Run Federated SELECT**에서 저장한 연결을 하나씩 선택합니다. 정수 키의 INNER 또는 LEFT JOIN을 지원합니다. 결과에서 출처별 투영 열, 서버에 전송한 필터와 가져온 행 수를 볼 수 있습니다. 각 서버는 별도의 읽기 시점을 사용합니다.

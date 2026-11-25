@@ -60,7 +60,8 @@ function writeRuntimeNotices() {
     }
     packages.push({ info, folder, files });
     for (const dependency of Object.keys(info.dependencies || {}).sort()) visit(dependency, resolved);
-    for (const dependency of Object.keys(info.optionalDependencies || {}).sort()) visit(dependency, resolved, true);
+    // The SSH client bundle uses the JavaScript implementation without optional native addons.
+    if (info.name !== 'ssh2') for (const dependency of Object.keys(info.optionalDependencies || {}).sort()) visit(dependency, resolved, true);
   }
   for (const dependency of Object.keys(manifest.dependencies || {}).sort()) visit(dependency, manifestPath);
   packages.sort((a, b) => a.info.name.localeCompare(b.info.name) || a.info.version.localeCompare(b.info.version));

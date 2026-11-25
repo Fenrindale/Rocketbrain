@@ -2683,6 +2683,7 @@
     "protobufjs": "7.6.6",
     "saxes": "6.0.0",
     "sql.js": "1.13.0",
+    "ssh2": "1.17.0",
     "vscode-languageclient": "11.0.0",
     "ws": "8.23.0",
     "yaml": "2.9.1",
@@ -2692,7 +2693,6 @@
     "@vscode/test-electron": "2.5.2",
     "@vscode/vsce": "3.6.2",
     "esbuild": "0.25.11",
-    "graphql": "16.15.0",
-    "ssh2": "1.17.0"
+    "graphql": "16.15.0"
   }
 }

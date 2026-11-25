@@ -3,6 +3,7 @@ const path=require('node:path'),net=require('node:net'),crypto=require('node:cry
 const {connectionSecurity,bindConnectionResource,identifyConnection,dnsName}=require('./connection-security');
 const {openTunnel}=require('./connection-tunnel');
 const { agentSelection } = require('./connection-ssh-agent');
+const { userAuthModes, hostFingerprint, credentialFor } = require('./connection-ssh-credentials');
 const { normalizeLocalTransport, transportKey } = require('./local-transport');
 const { normalizeRdsIam, validateRdsIamRoute } = require('./rds-iam');
 const { normalizeWriteProtection } = require('./write-protection');
@@ -15,6 +16,7 @@ const persistedProfileOnFailure=error=>savedFailures.get(error)||null;
 const KEY='rocketbrain.database.profiles.v1',SCOPE='rocketbrain.database.secretScope.v1',MAX=32;
 const isPasswordFree=profile=>profile?.auth?.kind==='password-free';
 const usesRdsIam=profile=>profile?.auth?.kind==='aws-rds-iam';
+const profileRequiresSshCredential = profile => userAuthModes.has(profile?.ssh?.authentication);
 const fail=message=>Object.assign(new Error(message),{code:'ROCKETBRAIN_PROFILE'}),clone=structuredClone;
 function exact(value,keys){if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(key=>!keys.includes(key)))throw fail('The connection profile contains unsupported fields. Keep passwords outside the profile.');}
 function text(value,label,max,optional=false){if(optional&&(value===undefined||value===''))return'';if(typeof value!=='string'||!value.trim()||value.length>max||/[\0\r\n]/.test(value))throw fail('Enter a valid '+label+'.');return value.trim();}
@@ -79,10 +81,26 @@ function normalizeProfile(value,{allowUnconfigured=false}={}){
  const color=value.color||'none';if(!['none','red','orange','yellow','green','blue','purple'].includes(color))throw fail('Choose a supported connection color.');
  const p={id,name:text(value.name,'connection name',120),group:text(value.group,'group',80,true),color,...route,user:text(value.user,'database user',128),database:text(value.database,'database schema',64),tls:{mode:'disabled'},ssh:null};
  p.tls=normalizeProfileTls(value.tls,host,allowUnconfigured);
- if(value.ssh){exact(value.ssh,['host','port','user','knownHostsPath','privateKeyPath','agent']);const sshHost=text(value.ssh.host,'SSH host',253);if(!dnsName(sshHost)&&!net.isIP(sshHost))throw fail('Use a DNS name or IP address for SSH.');p.ssh={host:sshHost,port:port(value.ssh.port,22),user:text(value.ssh.user,'SSH user',128),knownHostsPath:localPath(value.ssh.knownHostsPath,'verified known_hosts',false),privateKeyPath:localPath(value.ssh.privateKeyPath,'SSH key')};
-  if (value.ssh.agent !== undefined) {
-   if (p.ssh.privateKeyPath) throw fail('Choose either a selected SSH agent identity or a private-key file.');
-   p.ssh.agent = agentSelection(value.ssh.agent);
+ if (value.ssh) {
+  const ssh = value.ssh;
+  exact(ssh, ['host','port','user','knownHostsPath','privateKeyPath','agent','authentication','hostFingerprint']);
+  const sshHost = text(ssh.host, 'SSH host', 253);
+  if (!dnsName(sshHost) && !net.isIP(sshHost)) throw fail('Use a DNS name or IP address for SSH.');
+  p.ssh = { host: sshHost, port: port(ssh.port, 22), user: text(ssh.user, 'SSH user', 128) };
+  if (ssh.authentication !== undefined) {
+   if (!userAuthModes.has(ssh.authentication) || ssh.agent !== undefined || ssh.knownHostsPath ||
+       ssh.authentication === 'password' && ssh.privateKeyPath) throw fail('Choose only one SSH authentication method and its matching host verification.');
+   p.ssh.authentication = ssh.authentication;
+   p.ssh.hostFingerprint = hostFingerprint(ssh.hostFingerprint);
+   if (ssh.authentication === 'encrypted-key') p.ssh.privateKeyPath = localPath(ssh.privateKeyPath, 'encrypted SSH key', false);
+  } else {
+   if (ssh.hostFingerprint !== undefined) throw fail('Select the system OpenSSH known_hosts file for key or agent authentication.');
+   p.ssh.knownHostsPath = localPath(ssh.knownHostsPath, 'verified known_hosts', false);
+   p.ssh.privateKeyPath = localPath(ssh.privateKeyPath, 'SSH key');
+   if (ssh.agent !== undefined) {
+    if (p.ssh.privateKeyPath) throw fail('Choose either a selected SSH agent identity or a private-key file.');
+    p.ssh.agent = agentSelection(ssh.agent);
+   }
   }
  }
  if(isPasswordFree(value)){
@@ -147,7 +165,8 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   if(record?.rememberPassword&&stored===undefined)throw fail('The saved database password is unavailable. Enter it again or change the authentication mode.');
   return stored??'';
  }
- async function prepare(profile,pass,signal,{forceReadOnly=false,clientIdentityPassphrase,trustStorePassphrase,expectedAgentFingerprint}={}){
+ async function prepare(profile,pass,signal,{forceReadOnly=false,clientIdentityPassphrase,trustStorePassphrase,sshCredential,expectedAgentFingerprint}={}){
+  const credential = credentialFor(profile.ssh?.authentication, sshCredential);
   if(profile.transport&&!profile.transport.address)throw fail('Edit this profile and enter the local socket path or pipe name before connecting.');
   if(usesRdsIam(profile)&&(!profile.auth.source||!profile.tls.caPath))throw fail('Select the local AWS credential source and RDS CA bundle before connecting.');
   const route=profile.transport?{transport:profile.transport}:{host:profile.host,port:profile.port};
@@ -181,7 +200,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    ...(profile.auth?{authentication:profile.auth.kind}:{}),
    ...(profile.writeProtection?{writeProtection:profile.writeProtection}:{}),
    connectionKey:require('./result-layouts').tableLayoutConnectionKey(config,profile)};
-  let tunnel;if(profile.ssh){tunnel=await createTunnel(profile.ssh,{host:profile.host,port:profile.port},{cancellation:signal,expectedAgentFingerprint,onExit:()=>events.emit('change')});return{config:bindConnectionResource(config,{endpoint:tunnel.endpoint,dispose:tunnel.dispose,profile:info}),dispose:tunnel.dispose,agentFingerprint:tunnel.agentFingerprint};}
+  let tunnel;if(profile.ssh){tunnel=await createTunnel(profile.ssh,{host:profile.host,port:profile.port},{cancellation:signal,expectedAgentFingerprint,...(credential!==undefined&&{credential}),onExit:()=>events.emit('change')});return{config:bindConnectionResource(config,{endpoint:tunnel.endpoint,dispose:tunnel.dispose,profile:info}),dispose:tunnel.dispose,agentFingerprint:tunnel.agentFingerprint};}
   return{config:identifyConnection(config,info),dispose:async()=>{}};
  }
  function savedAgentFingerprint(record) {
@@ -192,7 +211,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   }
   return fingerprint;
  }
- async function verify(profile,pass,signal,{schemas=false,clientIdentityPassphrase,trustStorePassphrase,expectedAgentFingerprint}={}){let prepared,service;try{prepared=await prepare(profile,pass,signal,{clientIdentityPassphrase,trustStorePassphrase,expectedAgentFingerprint});service=createService(prepared.config);const metadata=await service.metadata();const info=await service._metadataQuery('SELECT VERSION(), DATABASE(), CURRENT_USER()');const tls=await service._metadataQuery("SHOW SESSION STATUS LIKE 'Ssl_cipher'");const cipher=String(tls.rows[0]?.[1]||'');if(profile.tls.mode==='verify'&&!cipher)throw fail('The server did not confirm an encrypted TLS session.');const tlsPeer=profile.tls.mode==='verify'?service.serverTlsEvidence?.():null;const result={connected:true,...(tlsPeer&&{tlsPeer}),database:metadata.database,serverVersion:String(info.rows[0]?.[0]||''),currentUser:String(info.rows[0]?.[2]||''),tables:metadata.tables.length,views:metadata.views.length,tls:profile.tls.mode==='verify',cipher:cipher||null,ssh:Boolean(profile.ssh),...(profileUsesJksTrust(profile)&&{serverTrust:"jks"}),...(prepared.agentFingerprint&&{sshAgentFingerprint:prepared.agentFingerprint}),...(profile.transport&&{transport:{kind:profile.transport.kind}})};if(schemas){const available=await service._metadataQuery('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME LIMIT 200');result.schemas=available.rows.map(row=>String(row[0]));}return result;}finally{try{await service?.dispose();}finally{await prepared?.dispose();}}}
+ async function verify(profile,pass,signal,{schemas=false,clientIdentityPassphrase,trustStorePassphrase,sshCredential,expectedAgentFingerprint}={}){let prepared,service;try{prepared=await prepare(profile,pass,signal,{clientIdentityPassphrase,trustStorePassphrase,sshCredential,expectedAgentFingerprint});service=createService(prepared.config);const metadata=await service.metadata();const info=await service._metadataQuery('SELECT VERSION(), DATABASE(), CURRENT_USER()');const tls=await service._metadataQuery("SHOW SESSION STATUS LIKE 'Ssl_cipher'");const cipher=String(tls.rows[0]?.[1]||'');if(profile.tls.mode==='verify'&&!cipher)throw fail('The server did not confirm an encrypted TLS session.');const tlsPeer=profile.tls.mode==='verify'?service.serverTlsEvidence?.():null;const result={connected:true,...(tlsPeer&&{tlsPeer}),database:metadata.database,serverVersion:String(info.rows[0]?.[0]||''),currentUser:String(info.rows[0]?.[2]||''),tables:metadata.tables.length,views:metadata.views.length,tls:profile.tls.mode==='verify',cipher:cipher||null,ssh:Boolean(profile.ssh),...(profileUsesJksTrust(profile)&&{serverTrust:"jks"}),...(prepared.agentFingerprint&&{sshAgentFingerprint:prepared.agentFingerprint}),...(profile.transport&&{transport:{kind:profile.transport.kind}})};if(schemas){const available=await service._metadataQuery('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME LIMIT 200');result.schemas=available.rows.map(row=>String(row[0]));}return result;}finally{try{await service?.dispose();}finally{await prepared?.dispose();}}}
  async function persist(next,credentialChanges=[]){await state.update(SCOPE,secretScope);const before=[];try{for(const change of credentialChanges){const key=secretKey(change.id),old=await secrets.get(key);before.push({key,old});if(change.value===undefined)await secrets.delete(key);else await secrets.store(key,change.value);}await state.update(KEY,[...next.values()].map(value=>clone(value)));}catch(error){for(const saved of before.reverse())try{if(saved.old===undefined)await secrets.delete(saved.key);else await secrets.store(saved.key,saved.old);}catch{}throw fail('The profile or credential could not be saved. Previous profile metadata is retained.');}records.clear();for(const [id,value]of next)records.set(id,value);revision++;events.emit('change');}
  function decodeProfiles(input) {
   exact(input,['format','version','credentialsIncluded','profiles']);
@@ -208,7 +227,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
        ['caPath','trustStorePath','certPath','keyPath','pfxPath'].some(field => Object.hasOwn(value.tls, field)))) {
     throw fail('JKS truststore exports require format 7. Select local files after import.');
    }
-   if(value?.ssh)throw fail('Re-enter verified SSH host/key paths locally before importing an SSH profile.');
+   if(value?.ssh)throw fail('Re-enter the SSH authentication and host verification details locally before importing an SSH profile.');
    if(value?.transport&&(input.version===1||Object.hasOwn(value.transport,'address')))throw fail('Re-enter local socket paths and pipe names in the connection editor after importing.');
    if(isPasswordFree(value)){
     if(input.version<8)throw fail('Password-free profiles require profile export format 8.');
@@ -231,7 +250,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     if(!record||record.revision!==input.revision||record.profile.tls.mode!=='verify')throw fail('Choose the current saved profile with verified TLS enabled.');
     const pass=await credentials(record.profile,input.password);
     const observed=await verify(record.profile,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,
-     trustStorePassphrase:input.trustStorePassphrase,expectedAgentFingerprint:savedAgentFingerprint(record)});
+     trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});
     guard(ticket);
     if(!observed.tlsPeer)throw fail('The verified connection did not expose a complete server TLS identity.');
     const previous=record.observed?.tlsPeer||null;
@@ -259,7 +278,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     let prepared,transferred=false;
     try{
      prepared=await prepare(record.profile,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,
-      trustStorePassphrase:input.trustStorePassphrase,expectedAgentFingerprint:savedAgentFingerprint(record)});
+      trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});
      guard(ticket);
      if(review.expiresAt<=Date.now())throw fail('The TLS trust review expired. Review the profile again.');
      if(caFingerprint(prepared.config.ssl)!==review.observed.tlsPeer.caMaterialSha256)throw fail('The selected CA material changed after review. Review it again.');
@@ -275,9 +294,9 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    });
   },
   onDidChange(listener){events.on('change',listener);return{dispose(){events.off('change',listener);}};},
-  test(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),pass=await credentials(p,input.password),result=await verify(p,pass,signal,{schemas:true,clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase});guard(ticket);return result;});},
-  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);requireClosedProfileConsoles(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&(JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection)||JSON.stringify(previous.profile.sessionLifecycle)!==JSON.stringify(p.sessionLifecycle)))throw fail('Disconnect this profile before changing its write protection or session lifecycle.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&isPasswordFree(p))throw fail('Password-free profiles cannot save a database password.');if(remember&&usesRdsIam(p))throw fail('RDS IAM profiles use temporary tokens without saving a database password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase});else if(profileUsesJksTrust(p))throw fail('Verify the selected JKS truststore before saving.');else if(p.ssh?.agent)throw fail('Verify the selected SSH agent identity before saving.');else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,expectedAgentFingerprint:savedAgentFingerprint(record)});trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
-  connect(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const effective=clone(record.profile);if(input.database!==undefined)effective.database=text(input.database,'schema',64);const pass=await credentials(effective,input.password);let prepared,transferred=false;try{prepared=await prepare(effective,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,expectedAgentFingerprint:savedAgentFingerprint(record)});guard(ticket);await connect(prepared.config);transferred=true;guard(ticket);return{connected:true,profile:clone(effective),credentialSaved:record.rememberPassword};}finally{if(!transferred)await prepared?.dispose();}});},
+  test(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),pass=await credentials(p,input.password),result=await verify(p,pass,signal,{schemas:true,clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential});guard(ticket);return result;});},
+  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);requireClosedProfileConsoles(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&(JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection)||JSON.stringify(previous.profile.sessionLifecycle)!==JSON.stringify(p.sessionLifecycle)))throw fail('Disconnect this profile before changing its write protection or session lifecycle.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&isPasswordFree(p))throw fail('Password-free profiles cannot save a database password.');if(remember&&usesRdsIam(p))throw fail('RDS IAM profiles use temporary tokens without saving a database password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential});else if(profileUsesJksTrust(p))throw fail('Verify the selected JKS truststore before saving.');else if(p.ssh?.agent)throw fail('Verify the selected SSH agent identity before saving.');else if(profileRequiresSshCredential(p))throw fail('Verify the selected SSH authentication and pinned host key before saving.');else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
+  connect(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const effective=clone(record.profile);if(input.database!==undefined)effective.database=text(input.database,'schema',64);const pass=await credentials(effective,input.password);let prepared,transferred=false;try{prepared=await prepare(effective,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});guard(ticket);await connect(prepared.config);transferred=true;guard(ticket);return{connected:true,profile:clone(effective),credentialSaved:record.rememberPassword};}finally{if(!transferred)await prepared?.dispose();}});},
   openDedicatedConsole(request) {
    const input = clone(request);
    return run(async (ticket, signal) => {
@@ -285,7 +304,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     const record = records.get(input.id);
     if (!record || input.revision !== record.revision) throw fail('The saved profile changed. Choose it again.');
     const pass = await credentials(record.profile, input.password);
-    const prepared = await prepare(record.profile, pass, signal, {clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,expectedAgentFingerprint:savedAgentFingerprint(record)});
+    const prepared = await prepare(record.profile, pass, signal, {clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});
     let transferred = false;
     try {
      guard(ticket);
@@ -311,7 +330,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     return dto(record);
    });
   },
-  schemas(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const pass=await credentials(record.profile,input.password),result=await verify(record.profile,pass,signal,{schemas:true,clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,expectedAgentFingerprint:savedAgentFingerprint(record)});guard(ticket);return result.schemas;});},
+  schemas(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const pass=await credentials(record.profile,input.password),result=await verify(record.profile,pass,signal,{schemas:true,clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});guard(ticket);return result.schemas;});},
   federatedSelect(request) {
    const input = clone(request);
    return run(async (ticket, signal) => {
@@ -321,13 +340,13 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     const chosen = input.sources.map(source => {
      const record = records.get(source?.id);
      if (!record || record.revision !== source.revision) throw fail('A selected profile changed. Choose both sources again.');
-     return { record, password: source.password, clientIdentityPassphrase:source.clientIdentityPassphrase, trustStorePassphrase:source.trustStorePassphrase };
+     return { record, password: source.password, clientIdentityPassphrase:source.clientIdentityPassphrase, trustStorePassphrase:source.trustStorePassphrase, sshCredential:source.sshCredential };
     });
     const opened = [];
     try {
-     for (const { record, password, clientIdentityPassphrase, trustStorePassphrase } of chosen) {
+     for (const { record, password, clientIdentityPassphrase, trustStorePassphrase, sshCredential } of chosen) {
       const pass = await credentials(record.profile, password);
-      const resource = await prepare(record.profile, pass, signal, {clientIdentityPassphrase,trustStorePassphrase,expectedAgentFingerprint:savedAgentFingerprint(record)});
+      const resource = await prepare(record.profile, pass, signal, {clientIdentityPassphrase,trustStorePassphrase,sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});
       const item = { resource };
       opened.push(item);
       item.service = createService(resource.config);
@@ -355,7 +374,8 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    const profiles=list().map(({profile})=>{
     const p=clone(profile);delete p.id;
     if(p.tls.mode==='verify')p.tls={mode:'verify',serverName:p.tls.serverName,...(p.tls.clientIdentity&&{clientIdentity:p.tls.clientIdentity}),...(profileUsesJksTrust(p)&&{serverTrust:'jks'})};
-    if(p.ssh)p.ssh={host:p.ssh.host,port:p.ssh.port,user:p.ssh.user,requiresLocalKeyAndKnownHosts:true};
+    if(p.ssh)p.ssh={host:p.ssh.host,port:p.ssh.port,user:p.ssh.user,...(profileRequiresSshCredential(p)?
+      {authentication:p.ssh.authentication,requiresLocalHostFingerprint:true}:{requiresLocalKeyAndKnownHosts:true})};
     if(p.transport)p.transport={kind:p.transport.kind};
     if(usesRdsIam(p))p.auth={kind:p.auth.kind,region:p.auth.region};
     return p;
@@ -408,12 +428,13 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   if (!record || record.revision !== binding.revision) throw fail('The saved source profile changed. Choose the source and save a new comparison.');
   if (profileRequiresClientPassphrase(record.profile)) throw fail('This comparison opens its saved source in the background. Choose a source without an interactive client identity passphrase.');
   if (profileUsesJksTrust(record.profile)) throw fail('Choose a saved comparison source that connects without a JKS truststore passphrase.');
+  if (profileRequiresSshCredential(record.profile)) throw fail('Choose a saved comparison source that connects without an interactive SSH credential.');
   return record;
  };
  Object.defineProperty(api, 'datasetProfileSource', { value: {
   list() {
    trusted();
-   return list().filter(({profile}) => !profileRequiresClientPassphrase(profile) && !profileUsesJksTrust(profile)).map(({ id, revision, profile, observed }) => ({ id, revision, label: profile.name,
+   return list().filter(({profile}) => !profileRequiresClientPassphrase(profile) && !profileUsesJksTrust(profile) && !profileRequiresSshCredential(profile)).map(({ id, revision, profile, observed }) => ({ id, revision, label: profile.name,
     description: [profile.group, profile.database, observed?.serverVersion].filter(Boolean).join(' · ') }));
   },
   assertCurrent(binding) { datasetProfile(binding); },
@@ -440,4 +461,4 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
  } });
  return api;
 }
-module.exports={normalizeProfile,createConnectionProfiles,persistedProfileOnFailure,profileRequiresClientPassphrase,profileUsesJksTrust};
+module.exports={normalizeProfile,createConnectionProfiles,persistedProfileOnFailure,profileRequiresClientPassphrase,profileUsesJksTrust,profileRequiresSshCredential};
