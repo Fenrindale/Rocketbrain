@@ -148,11 +148,13 @@ function registerJavaDebugger(vscode, api, output, request) {
       const uri = vscode.window.activeTextEditor?.document.uri || vscode.workspace.workspaceFolders?.[0]?.uri;
       if (uri) folder = vscode.workspace.getWorkspaceFolder(uri);
     }
+    // An external JVM is already running its own bytecode. Attaching is
+    // independent of local editor saves, including unrelated untitled editors.
     return vscode.debug.startDebugging(folder, {
       type: DEBUG_TYPE, request: 'attach', name: name || 'Attach to Java PID ' + pid,
       processId: pid, projectName, sourcePaths,
       ...(reviewed ? { [PROCESS_SELECTION]: { pid, startedAt: reviewed.startedAt, hostName: reviewed.hostName, port: reviewed.port } } : {})
-    });
+    }, { suppressSaveBeforeStart: true });
   }
   async function hotCodeReplace(sessionId) {
     ensureTrusted();

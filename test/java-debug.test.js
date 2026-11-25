@@ -11,7 +11,7 @@ const { independentJavaExecutable, resolveDebugBundles } = require('../src/java/
 function setup(trusted = true, port = 40001) {
   const handlers = {}, calls = [], errors = []; const disposable = { dispose() {} };
   class Emitter { constructor() { this.listeners = new Set(); this.event = callback => { this.listeners.add(callback); return { dispose: () => this.listeners.delete(callback) }; }; } fire(value) { for (const callback of this.listeners) callback(value); } dispose() { this.listeners.clear(); } }
-  const vscode = { workspace: { isTrusted: trusted, textDocuments: [] }, window: { showErrorMessage: message => errors.push(message) }, commands: { registerCommand: () => disposable }, debug: { registerDebugConfigurationProvider(type, provider) { handlers.provider = provider; return disposable; }, registerDebugAdapterDescriptorFactory(type, factory) { handlers.factory = factory; return disposable; }, onDidStartDebugSession: () => disposable, onDidTerminateDebugSession: () => disposable, stopDebugging: async () => {} }, EventEmitter: Emitter, DebugAdapterInlineImplementation: class { constructor(implementation) { this.implementation = implementation; } } };
+  const vscode = { workspace: { isTrusted: trusted, textDocuments: [] }, window: { showErrorMessage: message => errors.push(message) }, commands: { registerCommand: () => disposable }, debug: { registerDebugConfigurationProvider(type, provider) { handlers.provider = provider; return disposable; }, registerDebugAdapterDescriptorFactory(type, factory) { handlers.factory = factory; return disposable; }, onDidStartDebugSession: () => disposable, onDidTerminateDebugSession: () => disposable, stopDebugging: async () => {}, startDebugging: async (scope, configuration, options) => { calls.push({ scope, configuration, options }); return true; } }, EventEmitter: Emitter, DebugAdapterInlineImplementation: class { constructor(implementation) { this.implementation = implementation; } } };
   const api = { start: async () => calls.push('start'), getState: () => ({ debugBundlePath: '/independent/pinned.jar' }), executeWorkspaceCommand: async (command, ...args) => { calls.push({ command, args }); return command === 'vscode.java.startDebugSession' ? port : {}; } };
   const controller = registerJavaDebugger(vscode, api, { appendLine() {} });
   return { ...handlers, controller, calls, errors };
@@ -25,6 +25,25 @@ test('Java debugger blocks untrusted attach and cancellation before engine execu
   const cancelled = setup();
   assert.equal(await cancelled.provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'launch', mainClass: 'example.Main' }, { isCancellationRequested: true }), undefined);
   assert.equal(cancelled.calls.length, 0); cancelled.controller.dispose();
+});
+
+test('Attaching to an already running local JVM bypasses the editor save dialog and retains the reviewed identity', async () => {
+  const restricted = setup(false);
+  await assert.rejects(() => restricted.controller.processes.attach(870, { folder: {} }), /Trust this workspace/);
+  assert.equal(restricted.calls.length, 0);
+  restricted.controller.dispose();
+  const { controller, calls } = setup();
+  const folder = { name: 'spring-fixture' };
+  const target = { pid: 870, startedAt: 1795610598078, hostName: '127.0.0.1', port: 50110 };
+  assert.equal(await controller.processes.attach({ ...target, label: 'fixture.jar' }, { folder, projectName: 'fixture' }), true);
+  const [{ configuration, options, scope }] = calls;
+  assert.strictEqual(scope, folder);
+  assert.deepEqual(options, { suppressSaveBeforeStart: true });
+  assert.equal(configuration.request, 'attach');
+  assert.equal(configuration.processId, target.pid);
+  assert.equal(configuration.projectName, 'fixture');
+  assert.deepEqual(configuration.__rocketbrainJavaProcessSelection, target);
+  controller.dispose();
 });
 
 test('Java debugger validates attach ports and directly asks its own language engine for a loopback DAP port', async t => {
