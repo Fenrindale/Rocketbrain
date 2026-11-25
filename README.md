@@ -39,6 +39,8 @@ pnpm run package
 2. 명령 팔레트에서 **Rocketbrain: Install and Configure Independent Java Engine**을 실행합니다. 고정된 공개 구성요소의 출처와 체크섬을 확인하고 확장 전용 폴더에 설치합니다. 현재 설치 도구는 Eclipse JDT LS 1.63.0과 독립 Temurin JDK 25 계열을 사용합니다.
 3. **Java Projects**에서 가져온 소스 루트·패키지·라이브러리를 확인합니다. Maven 작업에는 별도 Maven 설치와 `rocketbrain.java.mavenHome` 설정이 필요합니다.
 
+Java 중단점에서 **Restart Java Stack Frame**으로 현재 정지한 스레드의 프레임을 선택해 메서드를 다시 실행할 수 있습니다. 이미 수행된 부수 효과는 그대로 남습니다. **Inspect Java Local Value**는 지역 배열과 표준 `ArrayList`를 페이지로 보여주고, 최대 256 Ki UTF-16 단위의 문자열을 원문 그대로 표시합니다. [Java 스택 프레임과 변수 뷰어](docs/java-frame-debugging.md)
+
 Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map Workspace**로 배포판과 Linux 경로를 확인합니다. **Review and Run WSL Workspace Build**에서 프로젝트 경로와 명령을 확인한 뒤 배포판의 Maven 또는 Gradle을 실행합니다. 배포판 안에 Linux JDK와 `/usr/bin/mvn` 또는 `/usr/bin/gradle`이 필요합니다. **Cancel Managed WSL Build**로 실행한 빌드를 중단할 수 있습니다.
 
 `rocketbrain.localCodeModel.endpoint`와 `.model`에는 로컬 모델 서버 주소와 모델 이름을 지정합니다. **Ask Local Code Model**은 선택한 코드에 대한 응답을 엽니다. **Request a Reviewed Local Edit**로 변경 내용을 비교하고, 검토한 편집은 **Apply Reviewed Local Edit**로 적용합니다.
@@ -252,6 +254,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 비어 있는 SQL 절에서 카탈로그 기준 필드 목록을 완성합니다. SELECT에는 현재 범위의 열, INSERT에는 자동 생성 열을 제외한 쓰기 열, GROUP BY에는 SELECT에서 확인한 직접 참조 열을 제안합니다.
 - 편집기는 바깥쪽 `WHERE`가 없는 `UPDATE`와 `DELETE`를 표시합니다. 쓰기 콘솔과 스크립트 실행은 이 문장이 대상 행 전체에 미칠 수 있는 영향을 검토하고 승인한 뒤 진행합니다.
 - **Review SQL Script**는 독립된 `DELIMITER` 줄 사이에 있는 `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE TRIGGER`의 `BEGIN … END` 블록을 한 문장으로 검토합니다. 실행은 쓰기 콘솔에서 DDL의 암시적 커밋을 승인한 뒤 진행합니다. `DELIMITER ;`로 돌아오면 일반 문장에 바인딩 값을 사용할 수 있습니다. 저장 프로그램 본문의 동적 SQL, 세션 제어와 매개변수 바인딩은 지원 범위 밖입니다.
+- `DELIMITER`가 있는 SQL 파일에서 **Run Selected SQL or Current Statement**를 실행하면 서버의 SQL 모드로 커서 아래 문장이나 선택한 전체 복합 문장의 범위를 구합니다. 복합 DDL 검토에는 그 문장 하나가 표시됩니다.
 - **Preview SQL with a Virtual Schema**는 로컬 UTF-8 DDL 파일 또는 관찰한 DB 카탈로그를 바탕으로 현재 SQL 문서의 테이블·뷰와 열 변경을 순서대로 분석합니다. 편집기의 완성·진단에만 반영합니다. 파일을 수정한 뒤에는 다시 선택해 캡처하고, **Exit Virtual SQL Schema Preview**로 종료합니다.
 - **Edit Embedded SQL or JSON**은 Java 문자열·텍스트 블록, MyBatis의 정적 SQL 또는 SQL 안의 JSON을 해당 언어 편집기로 엽니다. SQL 편집에서는 연결한 DB의 열 완성과 정의 이동을 사용할 수 있습니다. **Review and Apply Embedded Source Edit**에서 원본 범위의 diff를 확인하고 적용합니다.
 - **Create Native Database Dump**와 **Review and Restore Native Dump**에서 설치한 MySQL 또는 MariaDB 클라이언트를 선택합니다. 로컬 연결의 InnoDB 테이블을 내보내고, 검토한 백업 파일을 원본과 다른 빈 스키마에 복원합니다. 함께 참조하는 FK 테이블은 같은 백업에 포함합니다.
@@ -274,6 +277,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - `@EmbeddedId`의 명시적 `@AttributeOverride`와 `@AttributeOverrides`를 물리 열에 맞춰 해석합니다. 단일 PK 부모의 FK가 자식의 복합 키 중 한 멤버를 구성하면 `@MapsId("멤버")`를 검토할 수 있습니다. 자식 연관 필드가 공유 키를 쓰고, 나머지 로컬 키 열의 매핑을 유지합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
 - **Open Database Object Source**는 연결 계정에 보이는 스키마와 객체의 `SHOW CREATE` 원문을 읽기 전용 SQL 문서로 엽니다. DB 트리에서 바로 열거나 현재 객체의 원문을 새로 고칠 수 있습니다.
+- **Review Stored Procedure Call**은 현재 DB에서 정의가 보이는 독립 프로시저를 찾아 계정, 실제 정의와 `IN` 파라미터 타입을 검토합니다. 확인 후 별도 연결에서 한 번만 실행하며, 결과 집합을 각각 읽기 전용 그리드로 다시 열 수 있습니다. 최대 32개 입력과 결과 집합 8개까지 처리합니다. DB 권한은 서버가 적용하며, 쓰기 보호 프로필은 호출을 거부합니다. MariaDB에서는 호출 전후 정의를 비교합니다. 호출 중 다른 세션이 정의를 바꿀 수 있고, 프로시저가 직접 커밋한 변경은 돌이킬 수 없습니다.
 - **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.

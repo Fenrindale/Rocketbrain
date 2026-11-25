@@ -464,6 +464,20 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   });
   command('rocketbrain.runQuery', async () => {
     const editor = vscode.window.activeTextEditor;
+    if (state.mysql && editor?.document.languageId === 'sql' &&
+        /^\uFEFF?[ \t]*DELIMITER(?=[ \t\r]|$)/im.test(editor.document.getText())) {
+      const {document,selection}=editor;
+      const version=document.version;
+      const epoch=state.epoch;
+      const result=await vscode.commands.executeCommand('rocketbrain.sql.runClientStatement', {
+        uri:document.uri.toString(),version,offset:document.offsetAt(selection.active),
+        ...(!selection.isEmpty && {selection:{start:document.offsetAt(selection.start),end:document.offsetAt(selection.end)}})
+      });
+      if (!result?.useDirectSelection) return result;
+      if (document.isClosed || document.version !== version) throw Error('The selected SQL changed. Select it again.');
+      if (state.epoch !== epoch) throw Error('The SQL connection changed. Select the statement again.');
+      return runSql(document.getText(selection),document,{userQuery:true});
+    }
     return runSql(selectedSql(editor), editor.document,{userQuery:true});
   });
   command('rocketbrain.openTable', async name => {

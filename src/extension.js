@@ -67,6 +67,8 @@ async function activate(context) {
   context.subscriptions.push(dbAdmin);
   const lazyCatalog=require('./db/lazy-catalog-vscode').registerLazyCatalog(context,vscode,{database});
   const objectSources = require('./db/object-source-vscode').registerObjectSources(vscode, { database });
+  const routineCalls = require('./db/routine-call-vscode').registerRoutineCalls(vscode, { database });
+  context.subscriptions.push(routineCalls);
   const schemaCatalog = require('./db/schema-catalog-vscode').registerSchemaCatalog(context, vscode, { database, objectSources });
   const databaseSearch = require('./db/unified-search-vscode').registerUnifiedSearch(context, vscode, { database, objectSources, schemaCatalog });
   const explainPlans=require('./db/explain-plan-vscode').registerExplainPlans(context,vscode,{database});
@@ -177,7 +179,7 @@ async function activate(context) {
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
   const wsl = require('./remote/wsl-vscode').registerWslWorkbench(vscode);
   context.subscriptions.push(wsl);
-  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

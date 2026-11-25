@@ -1,6 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const mysql=require('mysql2/promise'),{MysqlService}=require('../src/db/mysql');
+const {clientStatementAt}=require('../src/db/sql-format-script');
 const configFile=process.env.ROCKETBRAIN_TEST_MYSQL_CONFIG||process.env.ROCKETBRAIN_MYSQL_TEST_CONFIG;
 let config;if(configFile){const owner=JSON.parse(fs.readFileSync(path.join(path.dirname(configFile),'owner.json'),'utf8'));if(!['RocketbrainDisposableMariaDbFixture-v1','RocketbrainDisposableOracleMysqlFixture-v1'].includes(owner.kind))throw new Error('Script write tests require an owned disposable database.');config=JSON.parse(fs.readFileSync(configFile));if(config.host!=='127.0.0.1'||config.database!=='rocketbrain_fixture')throw new Error('Script tests refuse a non-fixture database.');}
 const records=[],q=name=>'`'+name.replaceAll('`','``')+'`',pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -65,6 +66,26 @@ live('LIVE SCRIPT: reviewed delimiter batches create compound procedures, functi
  }finally{
   for(const [type,name]of [['TRIGGER',trigger],['FUNCTION',func],['PROCEDURE',proc]])await actor.query('DROP '+type+' IF EXISTS '+name);
  }
+}));
+live('LIVE SCRIPT: cursor inside a custom delimiter sends one complete statement',()=>fixture(async({db,actor,table})=>{
+ const procedure=q(table+'_at');
+ const script=['INSERT INTO '+q(table)+" (id,label) VALUES(1,'before');",'DELIMITER //',
+  'CREATE PROCEDURE '+procedure+"() BEGIN SELECT 'returns // exact'; SELECT 8; END//",
+  'DELIMITER ;','INSERT INTO '+q(table)+" (id,label) VALUES(2,'after');"].join('\n');
+ try {
+  await db.setReadOnly(false);
+  const observed=await db.describeScript('SELECT 1');
+  const selected=clientStatementAt(script,script.indexOf('SELECT 8'),observed);
+  const plan=await db.previewScript(selected.sql);
+  assert.equal(plan.statementCount,1);
+  assert.equal(plan.statements[0].program,'PROCEDURE');
+  const outcome=await db.runScript({reviewId:plan.reviewId,allowImplicitCommit:true});
+  assert.equal(outcome.completed,1);
+  assert.equal(Number((await actor.query('SELECT COUNT(*) AS n FROM '+q(table)))[0][0].n),0);
+  const [returns]=await actor.query('CALL '+procedure+'()');
+  assert.deepEqual(returns.slice(0,2).map(rows=>Object.values(rows[0]).map(String)),[['returns // exact'],['8']]);
+  records.push({case:'cursor-delimiter-selection',selectedOnly:true,adjacentWritesSkipped:true,typedProgram:true});
+ } finally { await actor.query('DROP PROCEDURE IF EXISTS '+procedure); }
 }));
 live('LIVE SCRIPT: runtime errors stop after acknowledged autocommit writes without false atomicity',()=>fixture(async({db,actor,table})=>{
  await db.setReadOnly(false);const plan=await db.previewScript('INSERT INTO '+q(table)+" (id,label) VALUES(1,'acknowledged');SELECT missing_column FROM "+q(table)+';INSERT INTO '+q(table)+" (id,label) VALUES(2,'not-run');"),result=await db.runScript({reviewId:plan.reviewId});

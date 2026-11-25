@@ -45,7 +45,7 @@ async function runJavaExceptionChecks(api, vscode, checks) {
       ?.find(item => item.mainClass === fixture.mainClass), 45000);
     const empty = { exceptionTypes: [], allowClasses: [], skipClasses: [] };
     const modes = {};
-    assert.equal(api.java.getState().debugBuild, '0.53.1.rocketbrain3');
+    assert.match(api.java.getState().debugBuild, /^0\.53\.1\.rocketbrain[34]$/);
     for (const mode of ['caught', 'uncaught', 'multiple']) {
       const filter = mode === 'uncaught' ? 'uncaught' : 'caught';
       const policy = mode === 'multiple' ? {

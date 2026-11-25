@@ -1,6 +1,8 @@
 'use strict';
 const crypto=require('node:crypto');
 const { createParameterPresets, presetSignature } = require('./parameter-presets');
+const { clientStatementAt, selectedClientStatement } = require('./sql-format-script');
+const { LIMITS } = require('./sql-script');
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
 
 function registerSqlScripts(context,vscode,{database}={}) {
@@ -22,10 +24,37 @@ function registerSqlScripts(context,vscode,{database}={}) {
     return {document,uri:document.uri.toString(),version:document.version,hash:digest(text),sql,start,end};
   }
   function assertFrame(saved){trusted();if(saved.document.isClosed||saved.document.version!==saved.version||digest(saved.document.getText())!==saved.hash)throw new Error('The SQL source changed after preparation. Prepare it again.');}
-  async function describe(document,{range}={}){
-    const saved=frame(document,range),value=await database.describeSqlScript(saved.sql,{document,inspectParameters:Boolean(presets)});assertFrame(saved);
+  async function describeFrame(saved, previous) {
+    const value=await database.describeSqlScript(saved.sql,{document:saved.document,inspectParameters:Boolean(presets)});
+    assertFrame(saved);
+    if (previous && (value.connectionId !== previous.connectionId || value.connectionEpoch !== previous.connectionEpoch ||
+        value.serverConnectionId !== previous.serverConnectionId || value.sessionId !== previous.sessionId ||
+        JSON.stringify(value.sqlMode) !== JSON.stringify(previous.sqlMode))) {
+      throw Error('The console connection or SQL mode changed. Select the statement again.');
+    }
     const id=crypto.randomUUID();bounded(descriptions);descriptions.set(id,{...saved,description:structuredClone(value),expiresAt:Date.now()+120000});
     return {id,...structuredClone(value),sourceVersion:saved.version,sourceSqlHash:digest(saved.sql)};
+  }
+  async function describe(document,{range}={}) {
+    return describeFrame(frame(document,range));
+  }
+
+  async function describeCurrent(document, offset, range) {
+    if (range && document?.languageId === 'sql' && Buffer.byteLength(document.getText()) > LIMITS.sqlBytes) return;
+    const saved = frame(document);
+    const observed = await database.describeSqlScript('SELECT 1', { document });
+    assertFrame(saved);
+    const options = {sqlMode:observed.sqlMode,dialect:observed.dialect};
+    let selected;
+    if (range) {
+      try { selected = selectedClientStatement(saved.sql,range,options); }
+      catch { return; }
+      if (!selected) return;
+    } else {
+      selected = clientStatementAt(saved.sql,offset,options);
+    }
+    const result = await describeFrame({ ...saved, ...selected },observed);
+    return { ...result, editorRange:{start:selected.start,end:selected.end}, compound:selected.compound };
   }
   function currentDescription(id) {
     const saved = descriptions.get(id);
@@ -173,10 +202,14 @@ function registerSqlScripts(context,vscode,{database}={}) {
     }
     return result;
   }
-  async function prepareActive() {
+  async function prepareActive(current) {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.languageId !== 'sql') throw Error('Open SQL to prepare a script or selection.');
-    const description = await api.describe(editor.document, { range: editor.selection.isEmpty ? undefined : editor.selection });
+    if (current && (editor.document.uri.toString() !== current.uri || editor.document.version !== current.version)) {
+      throw Error('The selected SQL editor changed. Select the statement again.');
+    }
+    const description = current ? await api.describeCurrent(editor.document,current.offset,current.selection) :
+      await api.describe(editor.document, { range: editor.selection.isEmpty ? undefined : editor.selection });
     return { editor, description };
   }
   async function savePresetCommand() {
@@ -209,9 +242,10 @@ function registerSqlScripts(context,vscode,{database}={}) {
     if (removed) for (const [reviewId, review] of reviews) if (review.preset?.id === id) discardPresetReview(reviewId);
     return removed;
   }
-  async function command(reviewOnly=false){
+  async function command(reviewOnly=false,current){
     try{
-      const { editor, description } = await prepareActive();
+      const { editor, description } = await prepareActive(current);
+      if (!description && current?.selection) return {useDirectSelection:true};
       const matches = api.matchingPresets(description.id);
       let selected;
       if (matches.length) {
@@ -254,6 +288,7 @@ function registerSqlScripts(context,vscode,{database}={}) {
     const choices=[];for(const [id,cached]of runs)for(const statement of cached.report.statements)if(statement.result&&!statement.result.resultOmitted)choices.push({label:'Run '+id+' · statement '+(statement.index+1),description:statement.sql.slice(0,90),id,index:statement.index});
     const selected=await vscode.window.showQuickPick(choices,{title:'Open retained statement result · no SQL rerun'});if(selected)return api.openStatement(selected.id,selected.index);
   }));
+  subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runClientStatement', current=>command(false,current ?? {})));
   const tracked=fn=>(...args)=>{const work=fn(...args);operations.add(work);void work.finally(()=>operations.delete(work)).catch(()=>{});return work;};
   for (const [id, action] of [['rocketbrain.sql.saveParameterPreset', savePresetCommand], ['rocketbrain.sql.removeParameterPreset', removePresetCommand]]) {
     subscriptions.push(vscode.commands.registerCommand(id, () => action().catch(error => vscode.window.showErrorMessage(error.message))));
@@ -267,7 +302,8 @@ function registerSqlScripts(context,vscode,{database}={}) {
       else reviews.delete(id);
     }
   }));
-  const api={describe:tracked(describe),preview:tracked((id,parameters,options)=>preview(id,parameters,options)),run:tracked(run),openStatement:tracked(openStatement),
+  const api={describe:tracked(describe),describeCurrent:tracked(describeCurrent),
+    preview:tracked((id,parameters,options)=>preview(id,parameters,options)),run:tracked(run),openStatement:tracked(openStatement),
     matchingPresets,savePreset:tracked(savePreset),previewPreset:tracked(previewPreset),
     removePreset:tracked(removePreset),
     async dispose(){closed=true;for(const controller of controllers)controller.abort();await Promise.allSettled([...operations]);descriptions.clear();reviews.clear();runs.clear();priorValues.clear();for(const item of subscriptions)item.dispose();}};return api;

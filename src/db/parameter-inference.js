@@ -139,4 +139,4 @@ async function inferScriptParameters(script, database, readColumns) {
   return { parameterHints, parameterEvidence: createHash('sha256').update(JSON.stringify(observations)).digest('hex') };
 }
 
-module.exports = { inferScriptParameters };
+module.exports = { inferScriptParameters, typeKind };

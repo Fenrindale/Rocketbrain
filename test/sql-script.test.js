@@ -1,8 +1,28 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),{EventEmitter}=require('node:events');
 const {analyzeScript,bindScript,typedParameter,publicScript,LIMITS}=require('../src/db/sql-script');
+const {clientStatementAt,selectedClientStatement}=require('../src/db/sql-format-script');
 const {MysqlService}=require('../src/db/mysql');
 const options={sqlMode:[],readOnly:true},text=value=>({kind:'text',value});
+
+test('cursor selection isolates the exact client SQL statement and excludes directive rows', () => {
+ const sql=['SELECT 1;', 'DELIMITER //',
+  "CREATE PROCEDURE p() BEGIN SELECT 'a // :?'; SELECT 2; END//",
+  'DELIMITER ;', 'SELECT :bound;'].join('\r\n');
+ const at=(text)=>clientStatementAt(sql,sql.indexOf(text),{sqlMode:[],dialect:'mysql'});
+ const program=at('SELECT 2');
+ assert.equal(program.compound,true);
+ assert.equal(sql.slice(program.start,program.end),"CREATE PROCEDURE p() BEGIN SELECT 'a // :?'; SELECT 2; END//");
+ assert.equal(analyzeScript(program.sql,{...options,readOnly:false}).statements.length,1);
+ const start=sql.indexOf('CREATE PROCEDURE'),end=program.end;
+ assert.deepEqual(selectedClientStatement(sql,{start,end},options),program);
+ assert.deepEqual(selectedClientStatement(sql,{start,end:end-2},options),program);
+ assert.equal(selectedClientStatement(sql,{start:start+2,end},options),undefined);
+ assert.equal(selectedClientStatement(sql,{start:0,end},options),undefined);
+ assert.deepEqual(analyzeScript(at(':bound').sql,options).parameterDefinitions.map(parameter=>parameter.key),['bound']);
+ assert.throws(()=>at('DELIMITER //'),/outside the DELIMITER directives/);
+ assert.throws(()=>clientStatementAt(sql,sql.length+1,options),/inside a SQL statement/);
+});
 
 test('delimiter directives leave literal markers, labels and later parameter positions intact', () => {
  const sql=[

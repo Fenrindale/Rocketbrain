@@ -1,5 +1,5 @@
 {
-  "version": "0.60.0",
+  "version": "0.61.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,32 +30,32 @@
     }
   },
   "summary": {
-    "implemented": 74,
-    "partial": 127,
+    "implemented": 75,
+    "partial": 126,
     "not-implemented": 0,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 69.7,
+    "percent": 69.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-079",
-    "DG-016",
-    "DG-028",
+    "IDEA-080",
+    "DG-024",
+    "DG-038",
     "DG-039",
-    "DG-043",
+    "DG-044",
     "DG-045"
   ],
   "expandedFeatures": [
-    "IDEA-079",
-    "DG-016",
-    "DG-028",
+    "IDEA-080",
+    "DG-024",
+    "DG-038",
     "DG-039",
-    "DG-043",
+    "DG-044",
     "DG-045"
   ],
   "boundsReaffirmedFeatures": [],
@@ -2478,8 +2478,8 @@
       "verification": {
         "state": "v0.60-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.60.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2501,24 +2501,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Watch·표현식 평가·타입 검사된 변수/식 수정과 실제 Spring entity 관찰을 검증했다.",
+      "scope": "중단된 Java 스택에서 검토한 호출 프레임을 재시작한다. 직접 JDI 읽기로 배열과 표준 ArrayList를 페이지 단위로 열고 제한 내 문자열을 원문으로 표시한다.",
       "remaining": [
-        "프레임 재시작·큰 컬렉션/긴 문자열 전용 화면·Kotlin 평가가 남는다."
+        "Kotlin 평가와 일반·사용자 정의 컬렉션 값 탐색이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.61-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 일반 Java 실제 JVM의 중단점·예외·watch/값 수정·step·수동 HCR과 실제 Spring/JPA attach 표본. 다른 언어·모든 JVM 조합은 제외한다.",
+        "testedScope": "두 실제 Spring DB의 설치 환경에서 프레임 재진입과 이전 부수 효과 보존, 1,201개 배열과 301개 리스트, 14,010 코드 단위의 Unicode 문자열을 확인했다.",
         "publicEvidence": [
-          "src/java/debug.js",
-          "src/java/debug-adapter.js",
-          "test/java-debug-advanced-host.js",
-          "test/java-debug-spring-host.js"
+          "src/java/debug-frames.js",
+          "src/java/debug-local-values.js",
+          "runtime/java-debug/LocalValueInspection.java",
+          "test/java-debug-frames-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4186,8 +4186,8 @@
       "verification": {
         "state": "v0.60-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.60.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4423,23 +4423,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "인덱스·루틴·트리거의 일부 descriptor를 카탈로그로 읽는다.",
+      "scope": "계정이 읽을 수 있는 프로시저 정의와 IN 매개변수를 확인한다. 검토 후 타입을 지정해 호출하고 결과 집합을 각각 별도 그리드에 보관한다.",
       "remaining": [
-        "본문 탐색·실행/배포·MariaDB package 전용 도구가 없다."
+        "OUT·INOUT, MariaDB 패키지 호출, 모든 루틴·트리거 및 이벤트의 편집·배포는 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.61-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "testedScope": "두 실제 엔진에서 정밀 BIGINT·DECIMAL 입력과 세 결과 집합, 중복 열 이름·빈 결과 및 검토 재사용과 변경 거부를 확인했다.",
         "publicEvidence": [
-          "src/database-workbench.js",
-          "src/db/mysql.js",
-          "src/db/metadata.js"
+          "src/db/routine-call.js",
+          "src/db/routine-call-vscode.js",
+          "src/db/routine-call-stream.js",
+          "test/routine-call-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4554,8 +4555,8 @@
       "verification": {
         "state": "v0.60-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.60.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4862,27 +4863,25 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "현재 카탈로그에 바인딩한 지원 SELECT의 물리 table/column 참조와 로컬 별칭·CTE 참조를 찾고 VS Code ReferencesProvider에 연결한다. 선택한 로컬 SQL 파일 범위를 스캔해 파일별 위치와 분석 범위·미확정 이유를 표시한다.",
+      "scope": "선택 SQL·Java 소스 폴더의 정적 SQL 위치와 단일 테이블 INSERT·UPDATE·DELETE의 열 읽기·쓰기를 구분한다.",
       "remaining": [
-        "선택 SQL root 범위에 한정하며 비SELECT·불완전/미지원 문법·Java 문자열/임베디드·동적 SQL과 전체 의존성 그래프는 남는다. 최대200파일·파일128KiB·합계8MiB이며 미확정 파일이 있으면 완전한 소스 Rename 계획을 거부한다."
+        "다중 테이블 쓰기, INSERT SELECT, 런타임으로 만들어진 SQL과 완전한 의존성 그래프가 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.61-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 연결한 양DB 카탈로그와 여러 SQL 파일에서 물리 table/column의 스코프·별칭 가리기·CTE/derived 참조를 대조한다. 문자열/주석 보존, 파일 집합/버전/디스크/카탈로그 변경 거부와 미지원 파일 범위를 네이티브 API에서 확인한다.",
+        "testedScope": "실제 Spring과 MySQL·MariaDB에서 JDBC 텍스트 블록·정적 문자열 결합을 실행하고 SQL·Java 사용처의 원본 위치를 검증했다. 교차 스키마 쓰기는 후속 읽기와 롤백으로 확인했다.",
         "publicEvidence": [
-          "src/db/sql-project.js",
-          "src/db/sql-vscode.js",
-          "src/db/sql-analysis.js",
-          "test/sql-project.test.js",
-          "test/sql-project-vscode.test.js",
-          "test/sql-project-runtime.test.js",
-          "test/sql-project-host.js"
+          "src/db/java-sql-usages.js",
+          "src/db/sql-usage-sources.js",
+          "src/db/sql-dml-usages.js",
+          "test/sql-java-usages-host.js",
+          "test/sql-dml-usages-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4896,23 +4895,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "해석된 SQL 테이블·뷰·열·루틴 참조에서 읽기 전용 서버 DDL의 정확한 선언으로 이동한다. 빠른 정보는 이미 관찰한 카탈로그를 사용한다.",
+      "scope": "INSERT의 명시적 열, 단일 테이블 UPDATE·DELETE의 입력과 필터를 실제 대상 DDL의 선언과 연결한다. 빠른 정보에는 읽기·쓰기 역할과 관찰된 타입을 표시한다.",
       "remaining": [
-        "동적 SQL과 일반 DML 전체, 작업 공간의 교차 언어 사용처 탐색이 남아 있다."
+        "복수 테이블과 일부 공급자별 절·동적 SQL은 해석 범위 밖이다."
       ],
       "verification": {
-        "state": "v0.60-installed-coverage",
+        "state": "v0.61-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 서버에서 교차 스키마 동명 객체, 뷰 출력 별칭, 루틴, 외부 DDL 변경 뒤 새 스냅샷과 권한 거부를 검증했다. 로컬 CTE는 편집기 안에서 이동한다.",
+        "testedScope": "두 실제 서버에서 동명 로컬·원격 테이블을 구분해 INSERT·UPDATE·DELETE의 열과 읽기·쓰기 역할을 확인하고 정확한 교차 스키마 DDL로 이동했다.",
         "publicEvidence": [
+          "src/db/sql-dml-usages.js",
           "src/db/sql-live-navigation.js",
-          "src/db/sql-ddl-location.js",
-          "test/sql-live-navigation-host.js"
+          "test/sql-dml-usages-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5024,8 +5023,8 @@
       "verification": {
         "state": "v0.60-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.60.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5045,26 +5044,27 @@
       "category": "쿼리 실행·세션",
       "feature": "현재 문장·선택 SQL 실행",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "현재 문장·선택 SQL을 문자열/주석 경계를 구분해 실행한다.",
+      "scope": "각 문장 또는 선택 SQL을 실행한다. 지원하는 DELIMITER 스크립트의 커서 위치나 완전히 선택한 BEGIN–END DDL은 연결의 SQL 모드로 분리해 한 문장만 검토·실행한다.",
       "remaining": [
-        "DELIMITER routine·복합 script 실행과 전체 dialect 경계가 남는다."
+        "복합 DDL은 DELIMITER로 구분된 프로시저·함수·트리거 생성 범위다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.61-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 0.7의 SQL 경계·정책·flat SELECT 카탈로그 완성 표본. 신규 복잡 SELECT의 검증 범위는 override 근거를 따른다.",
+        "testedScope": "실제 두 Spring DB의 설치 SQL 편집기에서 일반 커서 실행과 복합 문장 전체 선택, 지시문 위치와 불완전 선택 거부, 인접 DDL 제외를 확인했다.",
         "publicEvidence": [
-          "src/db/completion.js",
-          "src/db/sql-policy.js",
-          "src/database-workbench.js"
+          "src/database-workbench.js",
+          "src/db/sql-format-script.js",
+          "src/db/sql-script-vscode.js",
+          "test/sql-current-statement-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5078,24 +5078,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "DELIMITER 사이의 BEGIN–END 프로시저·함수·트리거 생성을 한 문장으로 분리한다. DDL을 명시적으로 승인한 뒤 실행한다. 이후 일반 SQL의 typed 바인딩과 문장별 결과를 제공한다.",
+      "scope": "스크립트의 DELIMITER 실행에 더해 전용 명령에 IN 전용 프로시저 호출 검토와 여러 결과 그리드를 제공한다.",
       "remaining": [
-        "저장 프로그램 호출·이벤트·패키지와 스크립트 내 트랜잭션 제어는 지원 범위 밖이다."
+        "일반 스크립트 사이의 CALL과 임의 트랜잭션 제어는 남아 있다."
       ],
       "verification": {
-        "state": "v0.60-installed-coverage",
+        "state": "v0.61-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 엔진에서 리터럴 안의 구분자 보존, 프로시저·함수·트리거 생성 및 효과, 암시적 커밋 승인, 기존 트랜잭션 중 거부, 이후의 정확한 바인딩과 보관 결과를 확인했다.",
+        "testedScope": "실제 두 서버에서 동일 호출 검토가 한 번만 적용되고 이미 캡처한 결과를 다시 열 때 호출을 반복하지 않음을 확인했다.",
         "publicEvidence": [
-          "src/db/sql-format-script.js",
           "src/db/sql-script.js",
-          "test/sql-script.integration.test.js",
-          "test/sql-script-host.js"
+          "src/db/routine-call.js",
+          "test/routine-call-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6675,43 +6674,33 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "3b7dcc07ad3ff356ff4f406a5fe3ba8e435453f1257d0824194b940ad4eaecf6",
-    "sourceManifestSha256": "9ce3e270dc42f40d70d75deeafef1c60ed32db517debcf162de961415bbb47a9",
+    "vsixSha256": "6ce2d5a695de058f227cd5282417860ede5d7a9b6f7b63982fd3bd80d527a148",
+    "sourceManifestSha256": "09e988c03a527adbc073b4195ee714d021591be2e3bcfba3f251449765f0a17b",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 6
+        "featureGroups": 5
       },
       {
         "engine": "mariadb",
-        "featureGroups": 6
+        "featureGroups": 5
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "DG-016",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-028",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-043",
+      "id": "DG-044",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1494,
-    "pass": 1409,
+    "tests": 1512,
+    "pass": 1426,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 85,
+    "skipped": 86,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

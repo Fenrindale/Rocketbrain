@@ -17,7 +17,7 @@ JUnit Platform 6.0.3, TestNG 7.11.0 and JaCoCo 0.8.16 are separately provisioned
 JUnit, TestNG, JaCoCo and their bundled/shaded components are not included in this VSIX. Rocketbrain's own Java test-launcher source is embedded and compiled with an independent JDK25 or newer.
 The native Testing API integration reports actual JUnit/TestNG identifiers and measured run coverage. An explicit serial profile measures per-test execution intervals and separately unattributed shared/configuration intervals; background/async causal exclusivity is not claimed. Test debugging controls its own suspended Windows JVM with OS-verified listener ownership and its own marked independent DAP session. JPMS test launching remains unsupported.
 Complex SQL source analysis is bounded and uses observed catalog/session metadata. It never executes the analyzed query and does not establish complete SQL syntax or execution validity.
-Minimal loopback and generated-proxy source-path patches are built locally; modified sources, notices and hashes are retained with the installed runtime.
+The independent debugger is built locally with loopback, generated source path, exception request and direct JDI local value patches. The installed runtime retains the modified sources, notices and hashes.
 Spring assistance combines a conservative source model with separately labeled explicit Actuator observations.
 JPA source/query/catalog analysis remains scoped to supported mappings and syntax.
 Scoped JPQL path binding does not establish complete syntax, result types or query validity.

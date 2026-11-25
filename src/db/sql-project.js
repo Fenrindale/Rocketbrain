@@ -38,7 +38,8 @@ function analyzeProjectDocument(text,catalog,options={}){
   if(split.statements.length>100)unknown.push({reason:'SQL project files are limited to 100 statements.'});
   for(const part of split.statements.slice(0,100)){
     const source=text.slice(part.start,part.end);if(onlyTrivia(source))continue;
-    const model=analyzeSql(source,changed?{tables:[],views:[]}:catalog,changed?{...options,catalogComplete:false,sqlMode:undefined}:options);
+    const dml=options.dmlUsages&&!changed?require('./sql-dml-usages').analyzeDmlUsage(source,catalog,options,options.joinTables):undefined;
+    const model=dml||analyzeSql(source,changed?{tables:[],views:[]}:catalog,changed?{...options,catalogComplete:false,sqlMode:undefined}:options);
     const reasons=model.coverage.unknown.map(v=>v.reason);if(model.state==='invalid')reasons.push(...model.diagnostics.map(d=>d.message));if(precedenceUncertain(model))reasons.push('GROUP BY/HAVING projection alias conflicts with a FROM column; name precedence is not established.');
     if(changed)reasons.push('An earlier statement may change schema/session resolution.');
     const known=model.state==='known'&&!changed&&!precedenceUncertain(model);
@@ -50,10 +51,13 @@ function analyzeProjectDocument(text,catalog,options={}){
   return {text,hash:hash(text),state:unknown.length?'partial':'known',statements,unknown,executedSql:false};
 }
 function referencesInDocument(report,target,options={}){
-  return report.statements.filter(s=>s.known).flatMap(s=>s.model.references.filter(ref=>!ref.implicit&&affectedReference(ref,target,options)).map(ref=>({start:s.start+ref.start,end:s.start+ref.end,range:sourceRange(report.text,s.start+ref.start,s.start+ref.end),kind:ref.kind,name:ref.name,editEligible:ref.kind!=='wildcard',correlated:Boolean(ref.correlated),target})));
+  return report.statements.filter(s=>s.known).flatMap(s=>s.model.references.filter(ref=>!ref.implicit&&affectedReference(ref,target,options)).map(ref=>({start:s.start+ref.start,end:s.start+ref.end,range:sourceRange(report.text,s.start+ref.start,s.start+ref.end),kind:ref.kind,name:ref.name,editEligible:ref.kind!=='wildcard'&&!ref.command,
+    ...(ref.usage&&{usage:ref.usage,command:ref.command}),correlated:Boolean(ref.correlated),target})));
 }
 function targetAtDocument(report,offset,options={}){
-  const statement=report.statements.find(s=>offset>=s.start&&offset<s.end);if(!statement?.known)return null;
+  const statement=report.statements.find(s=>offset>=s.start&&offset<s.end);
+  if(!statement?.known)return statement?.model.pending?.length&&statement.model.possibleTokens.some(s=>offset>=statement.start+s.start&&offset<statement.start+s.end)
+    ? {kind:'pending-dml',endpoints:statement.model.pending} : null;
   const local=offset-statement.start;if(statement.model._nonCode?.some(s=>local>=s.start&&local<s.end))return null;
   const ref=statement.model.references.find(r=>!r.implicit&&local>=r.start&&local<r.end);if(!ref)return null;
   if(ref.definition&&(['relation-definition','cte-definition','cte-column-definition','projection-definition','projection'].includes(ref.kind)||ref.renamePhysicalColumn===false||ref.kind==='relation'))return {kind:'local',statement,definition:ref.definition,reference:ref};

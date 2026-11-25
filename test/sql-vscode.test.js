@@ -120,3 +120,30 @@ test('SQL Definition opens scoped paths on demand and keeps hover and cached sco
     assert.equal(graphReads + ddlReads, 4);
   } finally { h.api.dispose(); }
 });
+
+test('DML providers keep local aliases local and use live scoped DDL for remote write/read columns', async () => {
+  const source='UPDATE archive.people AS p SET p.id = p.id + ? WHERE p.id > ?';
+  const snapshot = {...catalog,tables:[{...catalog.tables[0],kind:'table'}]};
+  const visible={schema:'archive',name:'people',kind:'table',columns:[{name:'id',type:'int',nullable:false}]};
+  let read=0, ddl=0;
+  const h=host(source, async()=>snapshot, {
+    catalogSnapshot:()=>snapshot,
+    joinCatalog:async input=>{read++;assert.deepEqual(input,{endpoints:[{schema:'archive',table:'people'}],includeEdges:false});return{tables:[visible]};},
+    objectDefinition:async target=>{ddl++;assert.deepEqual(target.object,{schema:'archive',name:'people',kind:'table'});return{uri:'remote-source',usage:target.usage};}
+  });
+  try{
+    const position=(first)=>h.doc.positionAt((first?source.indexOf('p.id'):source.lastIndexOf('p.id'))+3);
+    const dfn=at=>h.providers.definition.provideDefinition(h.doc,at,{});
+    assert.deepEqual(await dfn(position(true)),[{uri:'remote-source',usage:'write'}]);
+    assert.deepEqual(await dfn(position(false)),[{uri:'remote-source',usage:'read'}]);
+    const hover=h.providers.hover.provideHover(h.doc,position(false)).contents[0].value;
+    assert.match(hover,/UPDATE read reference · table column archive\.people\.id/);
+    assert.equal(read,2);
+    assert.equal(ddl,2);
+    const alias=h.doc.positionAt(source.indexOf('p.id'));
+    const [local]=await dfn(alias);
+    assert.equal(local.uri,h.doc.uri);
+    assert.equal(local.range.start.character,source.indexOf('AS p')+3);
+    assert.equal(ddl,2);
+  }finally{h.api.dispose();}
+});

@@ -1,25 +1,25 @@
 {
-  "version": "0.60.0",
-  "verifiedAt": "2026-11-25T13:59:35.811Z",
+  "version": "0.61.0",
+  "verifiedAt": "2026-11-25T14:08:51.733Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.60.0.vsix",
-    "sha256": "3b7dcc07ad3ff356ff4f406a5fe3ba8e435453f1257d0824194b940ad4eaecf6",
-    "bytes": 3212411,
-    "files": 19
+    "name": "rocketbrain-0.61.0.vsix",
+    "sha256": "6ce2d5a695de058f227cd5282417860ede5d7a9b6f7b63982fd3bd80d527a148",
+    "bytes": 3238019,
+    "files": 20
   },
   "source": {
-    "frozenPublicInputs": 1682,
-    "inputVectorSha256": "9ce3e270dc42f40d70d75deeafef1c60ed32db517debcf162de961415bbb47a9",
+    "frozenPublicInputs": 1705,
+    "inputVectorSha256": "09e988c03a527adbc073b4195ee714d021591be2e3bcfba3f251449765f0a17b",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1494,
-    "pass": 1409,
+    "tests": 1512,
+    "pass": 1426,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 85,
+    "skipped": 86,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,30 +29,26 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 6,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "writeProtection",
+          "group": "javaFrames",
           "checks": 1
         },
         {
-          "group": "scopedJoins",
+          "group": "javaSqlUsages",
           "checks": 1
         },
         {
-          "group": "delimiter",
+          "group": "currentSql",
           "checks": 1
         },
         {
-          "group": "asyncTrace",
+          "group": "dmlSources",
           "checks": 1
         },
         {
-          "group": "liveDefinitions",
-          "checks": 1
-        },
-        {
-          "group": "parameterPresets",
+          "group": "routineCalls",
           "checks": 1
         }
       ],
@@ -67,30 +63,26 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 6,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "writeProtection",
+          "group": "javaFrames",
           "checks": 1
         },
         {
-          "group": "scopedJoins",
+          "group": "javaSqlUsages",
           "checks": 1
         },
         {
-          "group": "delimiter",
+          "group": "currentSql",
           "checks": 1
         },
         {
-          "group": "asyncTrace",
+          "group": "dmlSources",
           "checks": 1
         },
         {
-          "group": "liveDefinitions",
-          "checks": 1
-        },
-        {
-          "group": "parameterPresets",
+          "group": "routineCalls",
           "checks": 1
         }
       ],
@@ -101,91 +93,82 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-079": {
-      "scope": "설치 확장에서 제공한 소스 도우미를 실제 Spring 프로젝트에 복사해 두 스레드의 작업 제출과 실행을 연결했다. 중단된 프레임의 원래 소스로 이동하고 계측 없는 프레임을 거부했다.",
+    "IDEA-080": {
+      "scope": "두 실제 Spring DB의 설치 환경에서 프레임 재진입과 이전 부수 효과 보존, 1,201개 배열과 301개 리스트, 14,010 코드 단위의 Unicode 문자열을 확인했다.",
       "runtimeGroups": [
-        "asyncTrace"
+        "javaFrames"
       ]
     },
-    "DG-016": {
-      "scope": "두 실제 Spring DB에서 연결·그리드·SQL 스크립트 보호, 동시 트리거·외래 키 변경 차단, 자동 커밋 뒤 새 외래 키의 영향 반영, 수동 롤백과 명시적 커밋을 검증했다.",
+    "DG-024": {
+      "scope": "두 실제 엔진에서 정밀 BIGINT·DECIMAL 입력과 세 결과 집합, 중복 열 이름·빈 결과 및 검토 재사용과 변경 거부를 확인했다.",
       "runtimeGroups": [
-        "writeProtection"
+        "routineCalls"
       ]
     },
-    "DG-028": {
-      "scope": "두 실제 엔진에서 Spring 테이블, CTE·파생 열 별칭, 중첩된 교차 스키마 복합 외래 키와 가상 관계로 완성한 JOIN을 실행했다. 인접 문장 유지와 가상 관계 삭제 뒤 제안 제거를 확인했다.",
+    "DG-038": {
+      "scope": "실제 Spring과 MySQL·MariaDB에서 JDBC 텍스트 블록·정적 문자열 결합을 실행하고 SQL·Java 사용처의 원본 위치를 검증했다. 교차 스키마 쓰기는 후속 읽기와 롤백으로 확인했다.",
       "runtimeGroups": [
-        "scopedJoins"
+        "javaSqlUsages",
+        "dmlSources"
       ]
     },
     "DG-039": {
-      "scope": "두 서버에서 교차 스키마 동명 객체, 뷰 출력 별칭, 루틴, 외부 DDL 변경 뒤 새 스냅샷과 권한 거부를 검증했다. 로컬 CTE는 편집기 안에서 이동한다.",
+      "scope": "두 실제 서버에서 동명 로컬·원격 테이블을 구분해 INSERT·UPDATE·DELETE의 열과 읽기·쓰기 역할을 확인하고 정확한 교차 스키마 DDL로 이동했다.",
       "runtimeGroups": [
-        "liveDefinitions"
+        "dmlSources"
       ]
     },
-    "DG-043": {
-      "scope": "두 실제 Spring DB에서 정확한 BIGINT·DECIMAL 값으로 저장과 검토를 수행했다. 다른 계정·프로필 및 타입이나 SQL 변경 뒤 재사용을 거부하고 명시적 승인 뒤 실행하는지 확인했다.",
+    "DG-044": {
+      "scope": "실제 두 Spring DB의 설치 SQL 편집기에서 일반 커서 실행과 복합 문장 전체 선택, 지시문 위치와 불완전 선택 거부, 인접 DDL 제외를 확인했다.",
       "runtimeGroups": [
-        "parameterPresets"
+        "currentSql"
       ]
     },
     "DG-045": {
-      "scope": "두 실제 엔진에서 리터럴 안의 구분자 보존, 프로시저·함수·트리거 생성 및 효과, 암시적 커밋 승인, 기존 트랜잭션 중 거부, 이후의 정확한 바인딩과 보관 결과를 확인했다.",
+      "scope": "실제 두 서버에서 동일 호출 검토가 한 번만 적용되고 이미 캡처한 결과를 다시 열 때 호출을 반복하지 않음을 확인했다.",
       "runtimeGroups": [
-        "delimiter"
+        "routineCalls"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 349,
+    "sourceCorrespondences": 357,
     "sourceConfidence": "inferred",
-    "archiveEntries": 19,
+    "archiveEntries": 20,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 74,
-      "partial": 127,
+      "implemented": 75,
+      "partial": 126,
       "not-implemented": 0,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 150.5,
-    "previousWeightedPoints": 149,
+    "weightedPoints": 151,
+    "previousWeightedPoints": 150.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 69.7,
+    "referencePercent": 69.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "DG-016",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-028",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-043",
+        "id": "DG-044",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "보호된 SQL 쓰기는 의존성과 물리 세션 상태를 확인한 InnoDB 경로에 한한다.",
-    "Java 비동기 스택은 Java 21 이상에서 도우미로 감싼 작업을 대상으로 한다.",
+    "Java 값 뷰어는 새 독립 디버거와 확인된 JDI 타입을 사용한다.",
+    "MySQL은 호출 트랜잭션 중 프로시저 정의를 고정했다. MariaDB는 호출 전후 정의를 확인하고 드리프트와 서버 커밋 상태를 보고한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Java 프레임 재시작과 큰 배열·문자열 탐색",
-    "Java 문자열에 내장된 SQL의 의미적 사용처",
-    "SQL 편집기에서 DELIMITER 문장 단위 검토와 실행"
+    "TestNG 중복 행과 재시도 단위 재실행",
+    "Hibernate 요청별 N+1 감지",
+    "Java 상수 추출과 SQL DML 열 자동 완성"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

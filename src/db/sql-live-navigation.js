@@ -68,6 +68,16 @@ function liveNavigation(text, offset, catalog, options = {}, remote = []) {
   try { tokens = sourceTokens(text, options); }
   catch { return undefined; }
   if (word(tokens[0], 'CALL')) return callTarget(tokens, offset, catalog, options.tableNameCaseSensitive === false);
+  const dml = require('./sql-dml-usages').analyzeDmlUsage(text,catalog,options,remote,tokens);
+  if (dml) {
+    if (dml.pending && dml.possibleTokens.some(token=>currentToken(token,offset))) return {endpoints:dml.pending};
+    if (dml.state !== 'known') return undefined;
+    const ref = dml.references.find(item=>currentToken(item,offset));
+    if (ref?.definition) return {local:ref.definition};
+    const origin = ref?.physicalColumn || ref?.catalog || ref?.physicalTable;
+    const target = origin && tableTarget(origin,catalog,remote);
+    return target && {...target,usage:ref.usage,command:ref.command};
+  }
   if (!word(tokens[0], 'SELECT') && !word(tokens[0], 'WITH')) return undefined;
   const current = tokens.find(token => token.start <= offset && offset < token.end);
   const exactToken = !current || current.kind === 'symbol' ?
@@ -94,7 +104,8 @@ function quickInfo(target, available = false) {
   const { object, member, type, nullable } = target;
   const kind = member ? object.kind + ' column' : ['function', 'procedure'].includes(object.kind) ? 'stored ' + object.kind : object.kind;
   const qualified = [object.schema, object.name, ...(member ? [member.name] : [])].join('.');
-  const summary = kind + ' ' + qualified + (type ? ' · ' + type : '') +
+  const operation = target.usage ? target.command + ' ' + (target.usage === 'write' ? 'write target' : 'read reference') + ' · ' : '';
+  const summary = operation + kind + ' ' + qualified + (type ? ' · ' + type : '') +
     (typeof nullable === 'boolean' ? nullable ? ' · nullable' : ' · NOT NULL' : '');
   return summary + '\n' + (available ? 'DDL was read from the current account. Go to Definition refreshes the source.' :
     'Go to Definition reads server DDL when visible to the current account.');

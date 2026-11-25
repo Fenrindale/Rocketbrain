@@ -5,6 +5,8 @@ const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
 const { createExceptionControls } = require('./debug-exceptions');
 const { createSmartStep, mergeStepFilters } = require('./debug-step');
+const { createFrameRestart } = require('./debug-frames');
+const { createLocalValueInspection } = require('./debug-local-values');
 const { createDebugProcessDiscovery, processId } = require('./debug-processes');
 const DEBUG_TYPE = 'rocketbrain-java';
 const PROCESS_SELECTION = '__rocketbrainJavaProcessSelection';
@@ -66,6 +68,8 @@ function registerJavaDebugger(vscode, api, output, request) {
     hasSessions: () => [...sessions.values()].some(info => info.state !== 'terminated')
   });
   const smartStep = createSmartStep(vscode, { getState: id => sessions.get(id), ensureTrusted });
+  const frames = createFrameRestart(vscode, { getState: id => sessions.get(id), ensureTrusted });
+  const localValues = createLocalValueInspection(vscode, { getState: id => sessions.get(id), ensureTrusted });
   async function resolve(folder, value, token) {
     ensureTrusted();
     const config = { ...value, type: DEBUG_TYPE, name: value.name || 'Rocketbrain Java', request: value.request || 'launch' };
@@ -133,6 +137,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     await exceptions.sync();
     const port = await runReady('vscode.java.startDebugSession'); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Java engine returned an invalid debugger port.');
     const info = record(session);
+    info.debugBuild = api.getState().debugBuild;
     const adapter = new JavaDebugAdapter(vscode, port, message => observe(session, message), output, message => {
       if (message.type !== 'request') return;
       if (resumeCommands.has(message.command)) { info.stopVersion++; info.resuming = message.seq; }
@@ -179,7 +184,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     } catch (error) { info.lastHcrResult = { success: false, error: error.message }; throw error; }
     finally { info.reloading = false; }
   }
-  const disposables = [exceptions, vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, provider), vscode.debug.registerDebugAdapterDescriptorFactory(DEBUG_TYPE, factory), vscode.debug.onDidStartDebugSession(session => { if (session.type === DEBUG_TYPE) record(session); }), vscode.debug.onDidTerminateDebugSession(session => sessions.delete(session.id)), vscode.commands.registerCommand('rocketbrain.java.hotCodeReplace', async sessionId => {
+  const disposables = [exceptions, localValues, vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, provider), vscode.debug.registerDebugAdapterDescriptorFactory(DEBUG_TYPE, factory), vscode.debug.onDidStartDebugSession(session => { if (session.type === DEBUG_TYPE) record(session); }), vscode.debug.onDidTerminateDebugSession(session => sessions.delete(session.id)), vscode.commands.registerCommand('rocketbrain.java.hotCodeReplace', async sessionId => {
     try { return await hotCodeReplace(typeof sessionId === 'string' ? sessionId : undefined); }
     catch (error) { output.appendLine(error.message); void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return { success: false, error: error.message }; }
   }), vscode.commands.registerCommand('rocketbrain.java.debug', async () => {
@@ -188,6 +193,8 @@ function registerJavaDebugger(vscode, api, output, request) {
   }),
   breakpointCommand('rocketbrain.java.configureExceptionBreakpoints', () => exceptions.edit()),
   breakpointCommand('rocketbrain.java.smartStepInto', () => smartStep.choose()),
+  breakpointCommand('rocketbrain.java.restartStackFrame', () => frames.choose()),
+  breakpointCommand('rocketbrain.java.inspectLocalValue', () => localValues.choose()),
   breakpointCommand('rocketbrain.java.attachProcess', async () => {
     const candidates = await vscode.window.withProgress({
       location: vscode.ProgressLocation.Notification, title: 'Finding local Java debug processes', cancellable: true
@@ -210,7 +217,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     })),{title:'Add Java Inline Breakpoints',canPickMany:true});
     if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
-  return { breakpoints, exceptions, smartStep, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
+  return { breakpoints, exceptions, smartStep, frames, localValues, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
     getState(sessionId) {
       const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id);
       return info ? { state: info.state, threadId: info.threadId, stopVersion: info.stopVersion, resuming: info.resuming,

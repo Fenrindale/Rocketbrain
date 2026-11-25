@@ -30,6 +30,8 @@ async function build() {
   fs.mkdirSync('dist', { recursive: true });
   fs.mkdirSync(path.join('dist', 'java-async'), { recursive: true });
   fs.copyFileSync(path.join(__dirname, '../runtime/java-async/src/rocketbrain/async/TaskTrace.java'), path.join('dist', 'java-async', 'TaskTrace.java'));
+  fs.mkdirSync(path.join('dist', 'java-debug'), { recursive: true });
+  fs.copyFileSync(path.join(__dirname, '../runtime/java-debug/LocalValueInspection.java'), path.join('dist', 'java-debug', 'LocalValueInspection.java'));
   await esbuild.build({ entryPoints: ['scripts/java-quality-gate.js'], outfile: 'dist/java-quality-gate.js', bundle: true, platform: 'node', target: 'node20' });
   await esbuild.build({ entryPoints: ['scripts/ide-mcp-server.js'], outfile: 'dist/ide-mcp-server.js', bundle: true, platform: 'node', target: 'node20' });
   await esbuild.build({ entryPoints: ['src/extension.js'], outfile: 'dist/extension.js', bundle: true, platform: 'node', target: 'node20', external: ['vscode'], sourcemap: false });

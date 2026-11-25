@@ -18,6 +18,9 @@ const { SchemaRecovery } = require('./schema-recovery');
 const { SchemaApplier } = require('./schema-apply');
 const scriptEngine=require('./sql-script');
 const { inferScriptParameters } = require('./parameter-inference');
+const routineCall = require('./routine-call');
+const { contextOf: objectSourceContext } = require('./object-source');
+const { collectRoutineResults } = require('./routine-call-stream');
 const {randomUUID}=require('node:crypto');
 const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTimeout } = require('./rds-iam');
 const { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope } = require('./write-protection');
@@ -361,6 +364,107 @@ class MysqlService {
     });
   }
   discardScript(reviewId){return this._scriptReviews.delete(reviewId);}
+  async listProcedureCalls(options) {
+    const query = (sql, values) => this._metadataQuery(sql, values);
+    return routineCall.listProcedures(query, await objectSourceContext(query), options);
+  }
+  async _withRoutineSession(action, { write = false, guard = () => true, signal } = {}) {
+    if (write && this._writeProtection) {
+      throw protectionError('Procedure calls are unavailable on a read-only or table-protected profile because their effects cannot be verified.');
+    }
+    const id = 'routine-' + randomUUID();
+    const check = () => {
+      if (signal?.aborted) throw routineCall.fail('CANCELLED', 'The procedure operation was cancelled.');
+      if (!guard()) throw routineCall.fail('STALE', 'The procedure connection changed. Prepare a new review.');
+    };
+    const cancel = () => { if (this._sessions.has(id)) void this.cancel(id).catch(() => {}); };
+    check();
+    signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      await this.openSession(id, { readOnly: !write });
+      const session = this._session(id);
+      const query = async (sql, values = []) => {
+        check();
+        const result = await this._stream(session, sql, values, { maxRows: 35, timeoutMs: 5000 }, false,
+          { category: 'metadata', operation: operationOf(sql) });
+        if (result.truncated) throw routineCall.fail('METADATA', 'The procedure definition exceeds its review limit.');
+        return result;
+      };
+      return await action(session, query, check);
+    } finally {
+      signal?.removeEventListener('abort', cancel);
+      if (!this._disposed) await this.closeSession(id);
+    }
+  }
+  inspectProcedureCall(target, options) {
+    return this._withRoutineSession(async (session, query) => routineCall.observeProcedure(query, await objectSourceContext(query), target), options);
+  }
+  async runProcedureCall(review, inputs, { guard, signal, maxRows = 500, timeoutMs = 10000 } = {}) {
+    const bounded = limits({ maxRows, timeoutMs });
+    return this._withRoutineSession(async (session, query, check) => {
+      let invoked = false, committed = false;
+      try {
+        const context = await objectSourceContext(query);
+        this._observe(session, await this._control(session, 'START TRANSACTION READ WRITE', bounded.timeoutMs));
+        const before = await routineCall.observeProcedure(query, context, review.object);
+        if (before.fingerprint !== review.fingerprint) throw routineCall.fail('STALE', 'The server account, procedure definition or input signature changed. Prepare a new review.');
+        await this._refreshState(session);
+        if (!session.inTransaction) throw routineCall.fail('TRANSACTION', 'The reviewed call could not start an isolated transaction.');
+        const { values } = routineCall.bindProcedure(before.parameters, inputs);
+        check();
+        invoked = true;
+        const report = await this._executeProcedure(session, before.sql, values, bounded);
+        this._observe(session, report);
+        // MariaDB SHOW CREATE does not lock the routine. Recheck after the call before committing any caller-owned work.
+        if (context.dialect === 'mariadb') {
+          const after = await routineCall.observeProcedure(query, context, review.object);
+          if (after.fingerprint !== before.fingerprint) throw routineCall.fail('STALE', 'The procedure definition or session context changed during the call.');
+        }
+        check();
+        if (session.inTransaction) {
+          this._observe(session, await this._control(session, 'COMMIT', bounded.timeoutMs));
+          if (session.inTransaction) throw routineCall.fail('TRANSACTION', 'The procedure commit could not be confirmed.');
+          committed = true;
+        }
+        return { ...report, state: 'completed', callerTransactionCommitted: committed,
+          definitionCheck: context.dialect === 'mysql' ? 'transaction-pinned' : 'before-and-after',
+          sessionId: session.id, sql: before.sql };
+      } catch (error) {
+        if (session.connected) {
+          try { this._observe(session, await this._control(session, 'ROLLBACK', bounded.timeoutMs)); }
+          catch (rollbackError) { this._lose(session, rollbackError, invoked); }
+        }
+        if (!invoked) throw error;
+        throw Object.assign(routineCall.fail('EXECUTION', error.message + ' The call may have applied effects. Verify the database before any retry.'),
+          { causeCode: error.code, possibleEffects: true, committed });
+      }
+    }, { guard, signal, write: true });
+  }
+  _executeProcedure(session, sql, values, { maxRows, timeoutMs }) {
+    return new Promise((resolve, reject) => {
+      if (!session.connected) { reject(routineCall.fail('SESSION', 'The procedure connection was lost.')); return; }
+      let finished = false, reportOutcome;
+      const finish = (error, result) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        if (session.active === active) session.active = null;
+        try { reportOutcome?.(outcomeOf(error && (error.code || true), false)); } catch { /* Activity is independent. */ }
+        if (error) reject(safeError(error)); else resolve(result);
+      };
+      const active = { mayWrite: true, abort: finish };
+      session.active = active;
+      const stop = error => this._lose(session, error, true);
+      const timer = setTimeout(() => stop(routineCall.fail('TIMEOUT', 'The procedure exceeded its time limit and its connection was closed.')), timeoutMs);
+      try {
+        try { reportOutcome = this._reportActivity?.(session, { category: 'procedure', operation: 'CALL' }); } catch { /* Activity is independent. */ }
+        const command = session.connection.execute({ sql, values, rowsAsArray: true });
+        collectRoutineResults(command, { maxRows, convertCell: cellValue, stop, finish: (error, result) => {
+          if (error?.fatal) stop(safeError(error)); else finish(error, result);
+        } });
+      } catch (error) { finish(error); }
+    });
+  }
   async _protectScript(session, script, context) {
     if (!this._writeProtection) return;
     const targets = new Map();

@@ -4,11 +4,11 @@ const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
 
 const MAX_ENTRIES = 400;
-const categories = Object.freeze({ query: 'SQL console', script: 'SQL script', metadata: 'Metadata' });
+const categories = Object.freeze({ query: 'SQL console', script: 'SQL script', procedure: 'Stored procedure', metadata: 'Metadata' });
 const statuses = Object.freeze({ running: 'Running', succeeded: 'Succeeded', failed: 'Failed',
   cancelled: 'Cancelled', timeout: 'Timed out', limited: 'Result limit' });
 const operations = new Set(['SELECT', 'WITH', 'EXPLAIN', 'ANALYZE', 'SHOW', 'DESCRIBE', 'DESC', 'INSERT', 'UPDATE', 'DELETE',
-  'REPLACE', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'SET']);
+  'REPLACE', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'SET', 'CALL']);
 
 function operationOf(sql) {
   const first = typeof sql === 'string' ? /^\s*([A-Za-z]+)\b/.exec(sql)?.[1]?.toUpperCase() : undefined;
@@ -16,9 +16,9 @@ function operationOf(sql) {
 }
 
 function outcomeOf(code, truncated = false) {
-  if (truncated || code === 'ROCKETBRAIN_RESULT_LIMIT') return 'limited';
-  if (code === 'ROCKETBRAIN_CANCELLED') return 'cancelled';
-  if (['ROCKETBRAIN_TIMEOUT', 'ER_QUERY_TIMEOUT', 'ER_STATEMENT_TIMEOUT'].includes(code)) return 'timeout';
+  if (truncated || ['ROCKETBRAIN_RESULT_LIMIT', 'ROCKETBRAIN_ROUTINE_RESULT_LIMIT'].includes(code)) return 'limited';
+  if (['ROCKETBRAIN_CANCELLED', 'ROCKETBRAIN_ROUTINE_CANCELLED'].includes(code)) return 'cancelled';
+  if (['ROCKETBRAIN_TIMEOUT', 'ROCKETBRAIN_ROUTINE_TIMEOUT', 'ER_QUERY_TIMEOUT', 'ER_STATEMENT_TIMEOUT'].includes(code)) return 'timeout';
   return code ? 'failed' : 'succeeded';
 }
 
