@@ -106,8 +106,7 @@ async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome
   if (!path.isAbsolute(storageRoot || '')) throw fail('Kotlin language support needs a local extension storage directory.');
   const identity=createHash('sha256').update(home+'\0'+project+'\0'+jdk).digest('hex').slice(0,20);
   const storage=path.join(storageRoot,'ktlsp',identity);
-  await fs.mkdir(storage,{recursive:true});
-  const env={...process.env,JAVA_HOME:jdk,KLS_HOME:await fs.realpath(storage)};
+  const env={...process.env,JAVA_HOME:jdk};
   for (const key of ['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','KOTLIN_LANGUAGE_SERVER_OPTS']) delete env[key];
   if (gradleHome) {
     if (!path.isAbsolute(gradleHome)) throw fail('Use an absolute Gradle installation path for Kotlin support.');
@@ -122,6 +121,15 @@ async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome
     env.GRADLE_USER_HOME=await fs.realpath(gradleUserHome);
   }
   const overlay=await windowsOverlay(jdk,command,library,env);
+  // The open server's SQLite driver fails on deep Windows VS Code profile paths.
+  const localStorage=overlay.file && storage.length>200 ? path.join(path.dirname(overlay.file),'cache') : storage;
+  try {
+    await fs.mkdir(localStorage,{recursive:true});
+    env.KLS_HOME=await fs.realpath(localStorage);
+  } catch (error) {
+    await overlay.dispose();
+    throw error;
+  }
   const classpath=[overlay.file,path.join(library,'*')].filter(Boolean).join(path.delimiter);
   return {command,args:['-Dfile.encoding=UTF-8','-DkotlinLanguageServer.version='+VERSION,'-Xmx1536m','-XX:ActiveProcessorCount=4',
     '-cp',classpath,'org.javacs.kt.MainKt'],options:{cwd:project,env,windowsHide:true},

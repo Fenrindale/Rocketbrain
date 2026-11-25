@@ -42,8 +42,10 @@ test('open ktlsp on a compiled Gradle JVM fixture serves typed completion, defin
     windowsHide:true,timeout:110000,maxBuffer:3*1024*1024});
   assert.match(built.stdout,/BUILD SUCCESSFUL/);
   assert.ok((await fs.stat(path.join(root,'build/classes/kotlin/main/editor/fixture/Invoice.class'))).size>200);
-  const launch=await kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome,storageRoot:path.join(owned,'language-data'),root});
+  const storageRoot=path.join(owned,'vscode-profile-'.padEnd(80,'a'),'workspaceStorage-'.padEnd(80,'a'),'rocketbrain-local.rocketbrain');
+  const launch=await kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome,storageRoot,root});
   assert.equal(launch.windowsPathAdapter,process.platform==='win32');
+  if (process.platform==='win32') assert.ok(launch.options.env.KLS_HOME.length<storageRoot.length);
   const lsp=new StdioLsp(launch);
   const entry=path.join(root,'src/main/kotlin/editor/fixture/OrderSummary.kt');
   const target=path.join(root,'src/main/kotlin/editor/fixture/Invoice.kt');
@@ -56,6 +58,7 @@ test('open ktlsp on a compiled Gradle JVM fixture serves typed completion, defin
       workspaceFolders:[{uri:rootUri,name:'kotlin-editor'}],capabilities:{workspace:{configuration:true,workspaceFolders:true},
         textDocument:{completion:{completionItem:{snippetSupport:false}},hover:{contentFormat:['markdown','plaintext']}}}},90000);
     assert.ok(init.capabilities.completionProvider && init.capabilities.definitionProvider && init.capabilities.hoverProvider);
+    assert.ok((await fs.stat(path.join(launch.options.env.KLS_HOME,'kls_database.db'))).isFile());
     lsp.notify('initialized',{});
     lsp.notify('textDocument/didOpen',{textDocument:{uri,languageId:'kotlin',version:1,text:realSource}});
     const definition=await until(async()=>{
