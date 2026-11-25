@@ -2,6 +2,7 @@
 
 // A bounded SELECT binder. It never sends SQL or loads server/provider code.
 const { isJsonFunction, checkJsonFunction, checkPath, literalValue } = require('./sql-json-expressions');
+const { createWindowAnalysis, windowReturn, windowOnly, isAggregate } = require('./sql-window-expressions');
 const LIMITS={bytes:128*1024,tokens:24000,scopes:256,depth:32,columns:2048};
 const CLAUSES=new Set(['FROM','WHERE','GROUP','HAVING','ORDER','LIMIT','WINDOW','INTO','FOR','LOCK','PROCEDURE','QUALIFY']);
 const RESERVED=new Set(('SELECT FROM WHERE AS DISTINCT ALL JOIN INNER OUTER LEFT RIGHT CROSS FULL NATURAL LATERAL ON USING GROUP BY HAVING ORDER ASC DESC LIMIT OFFSET UNION INTERSECT EXCEPT WITH RECURSIVE AND OR XOR NOT IS NULL TRUE FALSE UNKNOWN IN EXISTS BETWEEN LIKE REGEXP RLIKE ESCAPE CASE WHEN THEN ELSE END OVER PARTITION ROWS RANGE GROUPS UNBOUNDED PRECEDING FOLLOWING CURRENT ROW ASC DESC COLLATE DIV MOD FOR UPDATE LOCK SHARE MODE SQL_CALC_FOUND_ROWS STRAIGHT_JOIN HIGH_PRIORITY LOW_PRIORITY SQL_SMALL_RESULT SQL_BIG_RESULT SQL_BUFFER_RESULT SQL_NO_CACHE INTO OUTFILE DUMPFILE WINDOW QUALIFY SEPARATOR BOTH LEADING TRAILING FROM RETURNING').split(' '));
@@ -88,6 +89,8 @@ function analyzeSql(text,catalog=[],options={}){
     if(catalogComplete&&!scope.partial&&!uncertain)issue('sql.name.column','Unknown column '+name+'.',at);else unknown('Column or expression symbol '+name+' is not resolved in the supported grammar/catalog.',at.start);return UNKNOWN();
   };
   const mergeTypes=types=>{const unique=[...new Set(types.map(t=>t.family).filter(f=>f!=='null'))];if(!unique.length)return family('null',{nullable:true});if(unique.length===1)return {...types.find(t=>t.family===unique[0]),nullable:types.some(t=>t.nullable||t.family==='null')};if(unique.every(f=>['integer','decimal','floating'].includes(f)))return family(unique.includes('floating')?'floating':unique.includes('decimal')?'decimal':'integer');unknown('Result type depends on server coercion/collation rules.');return UNKNOWN();};
+  const windows=createWindowAnalysis({tokens:token,top,split,id,span,expression,dialect:model.dialect,issue,unknown,
+    reference:ref,supported});
   let parseQuery;
   function expression(a,b,scope,context={}){
     while(token[a]?.value==='('&&token[a].close===b-1){a++;b--;}
@@ -133,20 +136,31 @@ function analyzeSql(text,catalog=[],options={}){
         }
         if(token[i+1]?.value==='('){const close=token[i+1].close;if(close===undefined||close>=b){unknown('Incomplete function call.',t.start);return UNKNOWN();}const args=split(i+2,close).filter(([x,y])=>x<y);let argTypes=[];
           if(['COUNT','LOWER','UPPER','LCASE','UCASE','LENGTH','CHAR_LENGTH','CHARACTER_LENGTH','SUM','AVG','MIN','MAX','ABS'].includes(t.upper)&&args.length!==1)issue('sql.function.arity',t.value+' requires exactly one argument in this supported form.',t);
+          const over=close+1<b && token[close+1].upper==='OVER';
+          const argContext=over?{...context,windowClause:'WINDOW argument'}:context;
           if(t.upper==='EXTRACT'){const from=top(i+2,close,(v,n)=>v.upper==='FROM'?n:undefined);if(from!==undefined){expression(from+1,close,scope,context);atoms.push(family(token[i+2]?.upper==='SECOND'?'decimal':'integer'));}else{unknown('Incomplete EXTRACT form.',t.start);atoms.push(UNKNOWN());}}
-          else if(['CAST','CONVERT'].includes(t.upper)){let as=top(i+2,close,(v,n)=>v.upper==='AS'?n:undefined);if(as!==undefined){argTypes=[expression(i+2,as,scope,context)];const target=token[as+1]?.upper;if(TYPE_WORDS.has(target))atoms.push(dbType(target==='SIGNED'||target==='UNSIGNED'?'bigint':target.toLowerCase()));else{unknown('Unsupported CAST target.',t.start);atoms.push(UNKNOWN());}}else{unknown('CONVERT/CAST form is outside the supported subset.',t.start);for(const [x,y]of args)expression(x,y,scope,context);atoms.push(UNKNOWN());}}
+          else if(['CAST','CONVERT'].includes(t.upper)){let as=top(i+2,close,(v,n)=>v.upper==='AS'?n:undefined);if(as!==undefined){argTypes=[expression(i+2,as,scope,context)];const target=token[as+1]?.upper;if(TYPE_WORDS.has(target))atoms.push(dbType(target==='SIGNED'||target==='UNSIGNED'?'bigint':target.toLowerCase()));else{unknown('Unsupported CAST target.',t.start);atoms.push(UNKNOWN());}}else{unknown('CONVERT/CAST form is outside the supported subset.',t.start);for(const [x,y]of args)expression(x,y,scope,argContext);atoms.push(UNKNOWN());}}
+          else if (windowOnly(t.upper)) {
+            const slots=i+2===close?[]:split(i+2,close);
+            const values=slots.map(([start,end])=>start===end?{empty:true}:{start,end,type:expression(start,end,scope,argContext)});
+            const modifier=token[close+1]?.upper;
+            if (!over && (close+1<b && ['RESPECT','IGNORE'].includes(modifier) || modifier==='FROM' && ['FIRST','LAST'].includes(token[close+2]?.upper))) {
+              unknown('Window function modifiers need server validation.',token[close+1].start);
+            } else if (!over) issue('sql.window.required',t.value+' requires an OVER clause.',t);
+            atoms.push(windowReturn(t.upper,t,values,{dialect:model.dialect,tokens:token,issue,unknown}));
+          }
           else if (isJsonFunction(t.upper)) {
             const slots = i+2===close ? [] : split(i+2,close);
             const values = slots.map(([x,y])=>{
               if (x===y) return {empty:true};
-              expression(x,y,scope,context);
+              expression(x,y,scope,argContext);
               while (token[x]?.value==='(' && token[x].close===y-1) {x++;y--;}
               return {location:span(x,y),literal:y===x+1 ? token[x] : undefined};
             });
             atoms.push(checkJsonFunction(t.upper,t,values,{source:text,dialect:model.dialect,serverVersion:options.serverVersion||catalog?.serverVersion,sqlMode:options.sqlMode,issue,unknown}));
             supported.add('json-function-expression');
           }
-          else{argTypes=args.map(([x,y])=>token[x]?.value==='*'&&y===x+1?family('wildcard'):expression(x,y,scope,{...context,uncertain:context.uncertain||!KNOWN_FUNCTIONS.has(t.upper)}));
+          else{argTypes=args.map(([x,y])=>token[x]?.value==='*'&&y===x+1?family('wildcard'):expression(x,y,scope,{...argContext,uncertain:context.uncertain||!KNOWN_FUNCTIONS.has(t.upper)}));
             if(t.upper==='COUNT')atoms.push(family('integer',{nullable:false}));
             else if(['ROW_NUMBER','RANK','DENSE_RANK','LENGTH','CHAR_LENGTH','CHARACTER_LENGTH','LOCATE','INSTR'].includes(t.upper))atoms.push(family('integer'));
             else if(['LOWER','UPPER','LCASE','UCASE','CONCAT','CONCAT_WS','SUBSTRING','SUBSTR','TRIM','REPLACE'].includes(t.upper))atoms.push(family('string'));
@@ -154,7 +168,13 @@ function analyzeSql(text,catalog=[],options={}){
             else if(['MIN','MAX','NULLIF'].includes(t.upper))atoms.push({...mergeTypes(argTypes),nullable:true});
             else if(['ABS','COALESCE','IFNULL','GREATEST','LEAST'].includes(t.upper))atoms.push(mergeTypes(argTypes));
             else{unknown('Function '+t.value+' has no static return contract.',t.start);atoms.push(UNKNOWN());}
-          }supported.add('function-traversal');i=close;continue;
+          }
+          if (over && isAggregate(t.upper) && token[i+2]?.upper==='DISTINCT') {
+            issue('sql.window.distinct','DISTINCT aggregates are not supported as window functions.',token[i+2]);
+          }
+          i=over?windows.apply(t.upper,close+1,b,scope,context):close;
+          supported.add('function-traversal');
+          continue;
         }
         if(TYPE_WORDS.has(t.upper)&&token[i-1]?.upper==='AS')continue;
         const parts=[t];while(token[i+1]?.value==='.'&&(id(token[i+2])||token[i+2]?.value==='*')){parts.push(token[i+2]);i+=2;}
@@ -238,6 +258,9 @@ function analyzeSql(text,catalog=[],options={}){
     let projectionStart=a+1;while(['DISTINCT','DISTINCTROW','ALL'].includes(token[projectionStart]?.upper))projectionStart++;
     const clauses=[];top(projectionStart,b,(t,i)=>{if(CLAUSES.has(t.upper))clauses.push({kind:t.upper,start:i});});
     const fromClause=clauses.find(c=>c.kind==='FROM');if(fromClause){const end=clauses.find(c=>c.start>fromClause.start)?.start??b;from(scope,fromClause.start+1,end,ctes);}
+    for (const [index,clause] of clauses.entries()) {
+      if (clause.kind==='WINDOW') windows.declare(clause.start+1,clauses[index+1]?.start??b,scope);
+    }
     const projectionEnd=clauses[0]?.start??b;
     for(const [x,y]of split(projectionStart,projectionEnd)){
       if(x>=y){unknown('Incomplete projection.',token[x]?.start);continue;}let end=y,alias=null;const as=top(x,y,(t,i)=>t.upper==='AS'?i:undefined);
@@ -250,8 +273,8 @@ function analyzeSql(text,catalog=[],options={}){
       if(!definition){definition={start:last.end,end:last.end};ref({start:last.end,end:last.end},'implicit-projection-definition',name,type,definition,{scopeId:scope.id,implicit:true,physicalColumn,renamePhysicalColumn});}
       scope.projections.push({name,type,definition,...span(x,y),physicalColumn,...(sourceRef&&joinOrigin(sourceRef)),renamePhysicalColumn});if(alias)ref(alias,'projection-definition',name,type,{start:alias.start,end:alias.end},{scopeId:scope.id,physicalColumn,renamePhysicalColumn:false});
     }
-    for(const [x,y]of scope.predicates)expression(x,y,scope);
-    for(let n=0;n<clauses.length;n++){const c=clauses[n],end=clauses[n+1]?.start??b;if(c.kind==='FROM')continue;if(['WHERE','HAVING'].includes(c.kind))expression(c.start+1,end,scope,{projectionAlias:c.kind==='HAVING',projectionClause:c.kind});else if(['GROUP','ORDER'].includes(c.kind)){const start=token[c.start+1]?.upper==='BY'?c.start+2:c.start+1;for(const [x,y]of split(start,end))expression(x,y,scope,{projectionAlias:true,projectionClause:c.kind});}else if(c.kind!=='LIMIT')unknown('Clause '+c.kind+' is outside complete static checking.',token[c.start].start);}
+    for(const [x,y]of scope.predicates)expression(x,y,scope,{windowClause:'JOIN'});
+    for(let n=0;n<clauses.length;n++){const c=clauses[n],end=clauses[n+1]?.start??b;if(c.kind==='FROM'||c.kind==='WINDOW')continue;if(['WHERE','HAVING'].includes(c.kind))expression(c.start+1,end,scope,{projectionAlias:c.kind==='HAVING',projectionClause:c.kind,windowClause:c.kind});else if(['GROUP','ORDER'].includes(c.kind)){const start=token[c.start+1]?.upper==='BY'?c.start+2:c.start+1;for(const [x,y]of split(start,end))expression(x,y,scope,{projectionAlias:true,projectionClause:c.kind,windowClause:c.kind});}else if(c.kind!=='LIMIT')unknown('Clause '+c.kind+' is outside complete static checking.',token[c.start].start);}
     scope.complete=!scope.partial&&scope.relations.every(r=>r.complete)&&scope.projections.every(p=>p.type.family!=='unknown');supported.add('select-projection');return scope;
   }
   parseQuery=(a,b,parent,ctes,depth=0)=>{
