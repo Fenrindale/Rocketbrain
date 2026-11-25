@@ -85,7 +85,9 @@ async function runHttpResponseChecks(api,vscode,checks) {
   const config=JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG,'utf8'));
   assert.equal(config.dbEngine,process.env.ROCKETBRAIN_TEST_MYSQL_ENGINE);
   const root=vscode.workspace.workspaceFolders[0].uri.fsPath;
-  assert.equal(path.relative(root,config.projectPath),'');
+  for (const name of ['build.gradle','settings.gradle']) {
+    assert.deepEqual(await fs.readFile(path.join(root,name)),await fs.readFile(path.join(config.projectPath,name)));
+  }
   const file=path.join(root,'rb-response-checks-'+randomUUID()+'.http');
   const uri=vscode.Uri.file(file);
   const proof=await exerciseHttpResponseChecks(config,async contents=>{

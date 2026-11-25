@@ -107,7 +107,7 @@ async function runMysqlNativeVectorChecks(api, vscode, checks) {
       assert.equal(report.serverVersion, version);
       assert.equal(report.database, database);
       await assert.rejects(api.dbConnections.test({ profile, password: randomBytes(32).toString('hex') }),
-        error => error?.code === 'ER_ACCESS_DENIED_ERROR' || /access denied/i.test(error?.message ?? ''));
+        { code: 'ROCKETBRAIN_PROFILE', message: /connection could not be verified/i });
     },
     async select(sql, prepared) {
       const document = await vscode.workspace.openTextDocument({ language: 'sql', content: sql + ';' });
