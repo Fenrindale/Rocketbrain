@@ -53,7 +53,11 @@ async function runJavaLibrarySourceChecks(api,vscode,checks) {
     assert.match(original,/\* 3/);
     assert.match(original,/> 20/);
     assert.doesNotMatch(original,/exact comment/);
-    assert.equal(await editor.edit(builder=>builder.insert(new vscode.Position(0,0),'probe')),false);
+    assert.equal(vscode.window.activeTextEditor,editor);
+    editor.selection=new vscode.Selection(0,0,0,0);
+    await vscode.commands.executeCommand('type',{text:'probe'});
+    assert.equal(virtual.getText(),original);
+    assert.equal(virtual.isDirty,false);
     const reviewed=await service.reviewSource(inspected,fixture.sources);
     assert.equal(reviewed.entry,fixture.entry);
     const attached=await service.setAttachment(inspected,reviewed);

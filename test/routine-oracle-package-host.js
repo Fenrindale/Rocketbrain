@@ -143,6 +143,8 @@ async function runOraclePackageChecks(api, vscode, checks) {
     },
     openResult: target => vscode.commands.executeCommand('rocketbrain.db.openProcedureResult', target)
   });
+  if (Array.isArray(checks)) checks.push('The installed routine review exercised the selected engine’s package support and standalone fallback against Spring JDBC.');
+  return checks.oraclePackageCalls;
 }
 
 module.exports = { runOraclePackageChecks, verifyPackageWorkflow };
