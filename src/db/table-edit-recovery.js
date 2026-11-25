@@ -126,8 +126,8 @@ function registerGridReviewRecovery(context, vscode, tableEditor, results, comma
     return (await vscode.window.showQuickPick(items, { title }))?.item;
   }
   command('rocketbrain.results.saveEditReview', async () => {
-    const items = results.history.filter(record => record.review && tableEditor.contexts.has(record.id))
-      .map(record => ({ label: record.table, description: record.tabName, record }));
+    const items = results.history.filter(record => record.review && record.result?.edit?.table && tableEditor.contexts.has(record.id))
+      .map(record => ({ label: record.result.edit.table, description: record.tabName, record }));
     if (!items.length) throw Error('Review the current table edits before saving them.');
     const chosen = await vscode.window.showQuickPick(items, { title: 'Save Table Edit Review' });
     if (!chosen) return;
@@ -143,9 +143,9 @@ function registerGridReviewRecovery(context, vscode, tableEditor, results, comma
   command('rocketbrain.results.stageEditReview', async () => {
     const chosen = await choose('Stage Saved Table Edit Review');
     if (!chosen) return;
-    const grids = results.history.filter(record => record.table === chosen.table && record.result?.edit?.canEdit &&
+    const grids = results.history.filter(record => record.result?.edit?.table === chosen.table && record.result.edit.canEdit &&
       !record.readOnly && tableEditor.contexts.has(record.id))
-      .map(record => ({ label: record.tabName || record.table, description: record.source, id: record.id }));
+      .map(record => ({ label: record.tabName || record.result.edit.table, description: record.source, id: record.id }));
     if (!grids.length) throw Error('Open the matching table and enable editing on its current page.');
     const selected = await vscode.window.showQuickPick(grids, { title: 'Choose the Matching Editable Grid' });
     if (selected) return stage(chosen.id, selected.id);

@@ -40,7 +40,7 @@ async function currentRows(actor, table) {
 async function openGrid(api, vscode, name) {
   await vscode.commands.executeCommand('rocketbrain.openTable', name);
   const opened = api.results().at(-1);
-  assert.equal(opened?.table, name);
+  assert.equal(opened?.result?.edit?.table, name, opened?.error);
   await api.tableAction(opened.id, { type: 'enableEdit' });
   const record = api.results().find(row => row.id === opened.id);
   assert.equal(record.readOnly, false, record.editError);
