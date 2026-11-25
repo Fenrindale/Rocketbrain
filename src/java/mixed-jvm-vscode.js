@@ -1,9 +1,10 @@
 'use strict';
 
 const path = require('node:path');
-const { analyzeMixedClasses,assertMixedCurrent,snapshotMixedSources } = require('./mixed-jvm-index');
+const { analyzeMixedClasses,assertMixedCurrent,normalizeMixedText,snapshotMixedSources } = require('./mixed-jvm-index');
 const { definitionForCompiledReference } = require('./mixed-jvm-symbols');
 const { cancelled,fail,inside } = require('./workbench-model');
+const { rangeAt } = require('../spring/java');
 
 const COMMANDS = Object.freeze({
   build:'rocketbrain.java.mixed.build',
@@ -69,18 +70,21 @@ function registerMixedJvmWorkbench(vscode,{trusted,java,ensureProject,getProject
     if (!index || java.getState().runtimeIdentity !== index.runtimeIdentity ||
         !getProjects().some(item => item.uri === index.project.uri)) return undefined;
     const use = index.sources.files.find(source => !path.relative(source.file,root));
-    if (use.text !== document.getText()) return undefined;
+    const editorText = document.getText();
+    if (use.text !== normalizeMixedText(editorText)) return undefined;
     assertMixedCurrent(index,cancellation);
-    const target = definitionForCompiledReference(index,{file:root,offset:document.offsetAt(position)});
+    const offset = normalizeMixedText(editorText.slice(0,document.offsetAt(position))).length;
+    const target = definitionForCompiledReference(index,{file:root,offset});
     if (!target) return undefined;
     const uri = vscode.Uri.file(target.file), targetDocument = await vscode.workspace.openTextDocument(uri);
     const original = index.sources.files.find(source => source.file === target.file);
     trusted();
     if (!sourceUri(uri) || document.isClosed || document.isDirty || document.version !== version ||
-        targetDocument.isClosed || targetDocument.isDirty || targetDocument.getText() !== original.text ||
+        targetDocument.isClosed || targetDocument.isDirty || normalizeMixedText(targetDocument.getText()) !== original.text ||
         cancelled(cancellation)) throw fail('A source or editor changed after the mixed JVM build.');
     assertMixedCurrent(index,cancellation);
-    return {...target,uri,selection:new vscode.Range(targetDocument.positionAt(target.range.start),targetDocument.positionAt(target.range.end))};
+    const {start,end} = rangeAt(original.text,target.range.start,target.range.end);
+    return {...target,uri,selection:new vscode.Range(start.line,start.character,end.line,end.character)};
   }
 
   async function selectProject() {

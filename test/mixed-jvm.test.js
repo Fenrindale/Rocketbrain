@@ -10,7 +10,7 @@ const { promisify } = require('node:util');
 const { test } = require('node:test');
 const { packageName,collectProjects } = require('../src/java/workbench-model');
 const { BuildTasks } = require('../src/java/workbench-tasks');
-const { analyzeMixedClasses,assertMixedCurrent,snapshotMixedSources } = require('../src/java/mixed-jvm-index');
+const { analyzeMixedClasses,assertMixedCurrent,normalizeMixedText,snapshotMixedSources } = require('../src/java/mixed-jvm-index');
 const { definitionForCompiledReference } = require('../src/java/mixed-jvm-symbols');
 const { copyMixedProject,mixedFile,EXPECTED } = require('./helpers/mixed-jvm-fixture');
 
@@ -43,6 +43,22 @@ test('mixed workbench includes Kotlin packages even when JDT reports only Java r
 test('bundled mixed class reader matches auditable JDK source',async () => {
   assert.equal(require('../src/java/mixed-jvm-classfile-source.json'),
     await fs.readFile(path.resolve(__dirname,'../runtime/java-mixed/MixedClassInspector.java'),'utf8'));
+});
+
+test('mixed JVM snapshots normalize editor EOL while preserving raw file identity',async t => {
+  const root = await temporary('rb-mixed-eol-');
+  t.after(() => fs.rm(root,{recursive:true,force:true}));
+  await copyMixedProject(root,'gradle');
+  const project = {root,tool:'gradle'}, file = mixedFile(root,'JavaApplication.java');
+  const lf = normalizeMixedText(await fs.readFile(file,'utf8'));
+  const mixed = lf.replace('\n','\r\n');
+  await fs.writeFile(file,mixed);
+  const raw = snapshotMixedSources(project);
+  assert.equal(raw.files.find(item => item.file === file).text,lf);
+  await fs.writeFile(file,lf);
+  const rewritten = snapshotMixedSources(project);
+  assert.equal(rewritten.files.find(item => item.file === file).text,lf);
+  assert.notEqual(rewritten.fingerprint,raw.fingerprint);
 });
 
 test('Gradle and Maven compile/test actual Java and Kotlin and resolve compiled bidirectional source references',
@@ -87,7 +103,7 @@ test('Gradle and Maven compile/test actual Java and Kotlin and resolve compiled 
       const indexed = await analyzeMixedClasses({project:snapshot,sources:saved,javaHome});
       const targets = [];
       for (const expected of EXPECTED) {
-        const file = mixedFile(folder,expected.source), source = await fs.readFile(file,'utf8');
+        const file = mixedFile(folder,expected.source), source = normalizeMixedText(await fs.readFile(file,'utf8'));
         const marker = source.indexOf(expected.marker);
         assert.ok(marker >= 0);
         const observed = definitionForCompiledReference(indexed,{file,offset:marker+expected.advance});
@@ -95,7 +111,7 @@ test('Gradle and Maven compile/test actual Java and Kotlin and resolve compiled 
         assert.equal(observed.member,expected.member);
         assert.equal(observed.descriptor,expected.descriptor);
         assert.equal(observed.kind,expected.kind);
-        assert.equal((await fs.readFile(observed.file,'utf8')).slice(observed.range.start,observed.range.end),expected.anchor);
+        assert.equal(normalizeMixedText(await fs.readFile(observed.file,'utf8')).slice(observed.range.start,observed.range.end),expected.anchor);
         targets.push({from:expected.source,to:expected.target,kind:expected.kind,member:expected.member,descriptor:expected.descriptor});
       }
       const duplicate = saved.files.find(file => file.file.endsWith('JavaApplication.java'));
@@ -104,9 +120,9 @@ test('Gradle and Maven compile/test actual Java and Kotlin and resolve compiled 
       } : file)}};
       assert.throws(() => definitionForCompiledReference(synthetic,{file:duplicate.file,offset:duplicate.text.indexOf('transform(number)')+1}),/one matching compiled call/);
       const stale = mixedFile(folder,'KotlinGateway.kt');
+      const original = await fs.readFile(stale);
       await fs.appendFile(stale,'// changed after build\n');
       assert.throws(() => assertMixedCurrent(indexed),/source, build or output files changed/);
-      const original = saved.files.find(file => file.file === stale).text;
       await fs.writeFile(stale,original);
       assertMixedCurrent(indexed);
       const classRoot = path.join(folder,tool === 'gradle' ? 'build/classes/java/main' : 'target/classes');

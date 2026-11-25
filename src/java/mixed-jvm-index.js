@@ -15,6 +15,7 @@ const run = promisify(execFile);
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const MAIN_SOURCES = ['src/main/java','src/main/kotlin'];
 const CLASS_PATHS = {gradle:['build/classes/java/main','build/classes/kotlin/main'],maven:['target/classes']};
+const normalizeMixedText = text => text.replace(/\r\n/g,'\n');
 
 function inspectFiles(project,roots,accept,{count,bytes:budget,cancellation}) {
   const found = [];
@@ -58,7 +59,7 @@ function inspectFiles(project,roots,accept,{count,bytes:budget,cancellation}) {
 function mixedSources(project,cancellation) {
   const files = inspectFiles(project,MAIN_SOURCES,name => /\.(?:kt|java)$/.test(name),{count:240,bytes:8*1024*1024,cancellation});
   return files.map(({file,bytes,sha}) => {
-    const text = new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+    const text = normalizeMixedText(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
     const language = file.endsWith('.kt') ? 'kotlin' : 'java';
     const pkg = packageName(text,language);
     return {file,text,sha,language,package:pkg};
@@ -153,4 +154,4 @@ function assertMixedCurrent(index,cancellation) {
   }
 }
 
-module.exports = { snapshotMixedSources,analyzeMixedClasses,assertMixedCurrent };
+module.exports = { normalizeMixedText,snapshotMixedSources,analyzeMixedClasses,assertMixedCurrent };
