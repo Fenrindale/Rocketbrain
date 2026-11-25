@@ -70,13 +70,13 @@ async function runVueWorkbenchChecks(api, vscode, checks) {
     for (const [key, value] of Object.entries(values)) await settings.update(key, value, vscode.ConfigurationTarget.Workspace);
     const commands = await vscode.commands.getCommands(true);
     for (const name of ['checkProject', 'startDevServer', 'stopDevServer']) assert.ok(commands.includes('rocketbrain.vue.' + name));
-    assert.equal((await api.vue.inspect(uri)).root, root);
+    assert.equal(path.relative((await api.vue.inspect(uri)).root, root), '');
     const source = document.getText();
     const location = async offset => (await vscode.commands.executeCommand('vscode.executeDefinitionProvider', uri, document.positionAt(offset)))[0];
     const component = await location(source.indexOf('<CountBadge') + 3);
-    assert.equal((component.targetUri ?? component.uri).fsPath, path.join(root, 'src', 'CountBadge.vue'));
+    assert.equal(path.relative((component.targetUri ?? component.uri).fsPath, path.join(root, 'src', 'CountBadge.vue')), '');
     const binding = await location(source.indexOf('{{ count') + 4);
-    assert.equal((binding.targetUri ?? binding.uri).fsPath, uri.fsPath);
+    assert.equal(path.relative((binding.targetUri ?? binding.uri).fsPath, uri.fsPath), '');
     const range = binding.targetSelectionRange ?? binding.range;
     assert.equal(document.getText(range), 'count');
     const report = await verifyVueWorkbench(root, node);
