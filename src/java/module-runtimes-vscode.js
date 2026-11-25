@@ -1,7 +1,7 @@
 'use strict';
 
 const { local } = require('./workbench-model');
-const { reviewModuleRuntimes } = require('./module-runtimes');
+const { reviewModuleRuntimes,maxReportedPaths } = require('./module-runtimes');
 
 const keys = [
   'org.eclipse.jdt.ls.core.outputPath','org.eclipse.jdt.ls.core.vm.location','org.eclipse.jdt.core.compiler.source',
@@ -33,6 +33,9 @@ function createRuntimeReview(vscode,{trusted,java,ensureProject,request,config,s
     const paths = await request('java.project.getClasspaths',[project.uri,{scope:'runtime'}],cancellation);
     if (!observed || !Array.isArray(paths?.classpaths) || !Array.isArray(paths.modulepaths)) {
       throw Error('Refresh the imported Java module before reviewing its runtime.');
+    }
+    if (paths.classpaths.length+paths.modulepaths.length+1>maxReportedPaths) {
+      throw Error('The Java provider reported more than 5,000 runtime paths.');
     }
     const outputPaths = [...new Set([observed[keys[0]],...paths.classpaths,...paths.modulepaths].flatMap(value=>{
       try { return [local(value)]; } catch { return []; }

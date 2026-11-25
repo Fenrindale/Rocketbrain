@@ -78,13 +78,19 @@ test('Gradle toolchains compile and launch an actual interdependent Java 8, 17, 
   assert.equal(wrong.recommended,null);
   assert.match(wrong.warnings[0],/target Java 25.*target is Java 17/u);
   const project={root:preview.root,uri:pathToFileURL(preview.root).href,name:preview.name,jdk:jdk(25)};
+  const archives=Array.from({length:132},(_,index)=>path.join(preview.root,'library-'+index+'.jar'));
+  await Promise.all(archives.map(archive=>fs.writeFile(archive,'')));
+  const externalOutput=modern.output;
   const saved={id:'runtime-preview',projectUri:project.uri,mainClass:preview.main,projectName:project.name,
     name:'Owned preview run',args:['existing'],vmArgs:['-ea']};
   const controller=createRuntimeReview({}, {trusted(){},java:{getState:()=>({javaHome:jdk(25),runtimeIdentity:'owned'})},
-    ensureProject:async()=>project,request:async command=>command==='java.project.getSettings'?{}:{classpaths:[preview.output],modulepaths:[]},
+    ensureProject:async()=>project,request:async command=>command==='java.project.getSettings'?{}:
+      {classpaths:[preview.output,...archives],modulepaths:[externalOutput]},
     config:()=>({get:()=>runtimes.map(item=>({path:item.home,name:item.label}))}),getConfiguration:()=>saved,
     save:async (replacement,verify)=>{await verify();return replacement;}});
   const inspected=await controller.inspect({projectUri:project.uri});
+  assert.deepEqual(inspected.output.roots,[path.relative(preview.root,preview.output)]);
+  assert.equal(inspected.output.minimum,21);
   const select=enablePreview=>controller.apply(inspected,{configurationId:saved.id,home:jdk(21),enablePreview});
   await assert.rejects(select(false),/Explicitly enable preview/u);
   assert.deepEqual((await select(true)).vmArgs,['-ea','--enable-preview']);

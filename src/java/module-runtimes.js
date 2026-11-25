@@ -11,6 +11,7 @@ const { independentJavaExecutable } = require('./debug-runtime');
 const run = promisify(execFile);
 const binary = process.platform === 'win32' ? 'java.exe' : 'java';
 const maxClasses = 5000, maxEntries = 15000;
+const maxReportedPaths = 5000, maxOutputRoots = 128;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 function javaFeature(value) {
@@ -52,8 +53,11 @@ async function moduleOutput({ root, outputPaths = [], cancellation }) {
   const physical = await fs.realpath(root);
   const roots = [];
   for (const item of outputPaths) {
+    assertActive(cancellation);
     const dir = await localOutput(physical,item);
-    if (dir && !roots.some(found => !path.relative(found,dir))) roots.push(dir);
+    if (!dir || roots.some(found => !path.relative(found,dir))) continue;
+    if (roots.length >= maxOutputRoots) throw Error('Review at most 128 physical Java output directories per module.');
+    roots.push(dir);
   }
   roots.sort();
   const files = new Map();
@@ -131,8 +135,11 @@ function compatibility(runtime, output) {
 }
 
 async function reviewModuleRuntimes({ root, outputPaths, preferredHome, candidates, settings = {}, cancellation }={}) {
-  if (!Array.isArray(candidates) || candidates.length>16 || !Array.isArray(outputPaths) || outputPaths.length>128) {
+  if (!Array.isArray(candidates) || candidates.length>16) {
     throw Error('Review a bounded Java module and up to sixteen configured runtimes.');
+  }
+  if (!Array.isArray(outputPaths) || outputPaths.length>maxReportedPaths) {
+    throw Error('The Java provider reported more than 5,000 runtime paths or returned an invalid path list.');
   }
   const output = await moduleOutput({root,outputPaths,cancellation}), observed = [], seen = new Set();
   for (const candidate of candidates) {
@@ -161,4 +168,4 @@ async function reviewModuleRuntimes({ root, outputPaths, preferredHome, candidat
     recommended:observed.find(item=>usable.has(item.state))?.home??null,warnings};
 }
 
-module.exports = {javaFeature,classVersion,moduleOutput,probeJavaHome,compatibility,reviewModuleRuntimes};
+module.exports = {javaFeature,classVersion,moduleOutput,probeJavaHome,compatibility,reviewModuleRuntimes,maxReportedPaths};
