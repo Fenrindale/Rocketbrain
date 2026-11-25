@@ -7,12 +7,17 @@ const crypto = require('node:crypto');
 const { pipeline } = require('node:stream/promises');
 const { runProcess, WORKSPACE } = require('./integration-db-runtime');
 const VERSION = '8.4.13';
-const NAME = 'mysql-' + VERSION + '-winx64.zip';
-const SOURCE = 'https://cdn.mysql.com/Downloads/MySQL-8.4/' + NAME;
-const CHECKSUM_SOURCE = 'https://dev.mysql.com/downloads/mysql/8.4.html?os=3';
-const MD5 = '7b94489d5524dea9b27097068bea25a8';
-const SHA256 = 'e9cd98b1d23f122987b1afca26ad942efec5891481103d48ae3cde237fa3ea54';
-const CACHE = path.join(WORKSPACE, 'research', 'implementation', 'runtimes', 'mysql-' + VERSION);
+const MYSQL9_VERSION = '9.7.4.1';
+const PINNED = new Map([
+  [VERSION, { family: '8.4', asOf: '2026-11-12', md5: '7b94489d5524dea9b27097068bea25a8',
+    sha256: 'e9cd98b1d23f122987b1afca26ad942efec5891481103d48ae3cde237fa3ea54' }],
+  [MYSQL9_VERSION, { family: '9.7', asOf: '2026-11-26', md5: 'a00c88c6c714867dcfaa2733d1ef2c5d',
+    sha256: '1989c9a63674c01b0851523f6eaf21f1f4e233e678858423b5b9b6a24420b546' }]
+]);
+const archiveName = version => 'mysql-' + version + '-winx64.zip';
+const sourceOf = (version, family) => 'https://cdn.mysql.com/Downloads/MySQL-' + family + '/' + archiveName(version);
+const SOURCE = sourceOf(VERSION, PINNED.get(VERSION).family);
+const SHA256 = PINNED.get(VERSION).sha256;
 async function digest(file, algorithm) {
   const hash = crypto.createHash(algorithm);
   for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
@@ -32,23 +37,29 @@ function download(url, redirects = 0) {
     request.on('error', reject);
   });
 }
-let pending;
-async function ensureMysqlRuntime() {
+const pending = new Map();
+async function ensureMysqlRuntime(version = VERSION) {
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('This pinned fixture supports Windows x64 only.');
-  if (pending) return pending;
-  pending = (async () => {
-    await fsp.mkdir(CACHE, { recursive: true });
-    const archive = path.join(CACHE, NAME);
+  const pinned = PINNED.get(version);
+  if (!pinned) throw new Error('Choose a pinned MySQL test runtime.');
+  if (pending.has(version)) return pending.get(version);
+  const task = (async () => {
+    const { asOf, family, md5, sha256 } = pinned;
+    const source = sourceOf(version, family);
+    const cache = path.join(WORKSPACE, 'research', 'implementation', 'runtimes', 'mysql-' + version);
+    await fsp.mkdir(cache, { recursive: true });
+    const archive = path.join(cache, archiveName(version));
     if (!fs.existsSync(archive)) {
       const partial = archive + '.' + crypto.randomUUID() + '.partial';
       try {
-        await pipeline(await download(SOURCE), fs.createWriteStream(partial, { flags: 'wx' }));
-        if (await digest(partial, 'sha256') !== SHA256 || await digest(partial, 'md5') !== MD5) throw new Error('Official MySQL archive checksum mismatch.');
+        await pipeline(await download(source), fs.createWriteStream(partial, { flags: 'wx' }));
+        if (await digest(partial, 'sha256') !== sha256 || await digest(partial, 'md5') !== md5) throw new Error('Official MySQL archive checksum mismatch.');
         await fsp.rename(partial, archive);
       } catch (error) { await fsp.unlink(partial).catch(() => {}); throw error; }
     }
-    if (await digest(archive, 'sha256') !== SHA256 || await digest(archive, 'md5') !== MD5) throw new Error('Cached MySQL archive checksum mismatch.');
-    const extracted = path.join(CACHE, 'extracted'), home = path.join(extracted, 'mysql-' + VERSION + '-winx64');
+    const actualSha256 = await digest(archive, 'sha256'), actualMd5 = await digest(archive, 'md5');
+    if (actualSha256 !== sha256 || actualMd5 !== md5) throw new Error('Cached MySQL archive checksum mismatch.');
+    const extracted = path.join(cache, 'extracted'), home = path.join(extracted, 'mysql-' + version + '-winx64');
     const server = path.join(home, 'bin', 'mysqld.exe');
     if (!fs.existsSync(server)) {
       const quote = value => "'" + value.replaceAll("'", "''") + "'";
@@ -56,15 +67,16 @@ async function ensureMysqlRuntime() {
       await runProcess('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory(' + quote(archive) + ', ' + quote(extracted) + ')']);
     }
     if (!fs.existsSync(server)) throw new Error('Portable MySQL server is missing.');
-    const result = { asOf: '2026-11-12', distribution: 'Oracle MySQL Community Server', version: VERSION,
-      source: SOURCE, checksumSource: CHECKSUM_SOURCE, publishedMd5: MD5, actualMd5: await digest(archive, 'md5'),
-      pinnedSha256: SHA256, actualSha256: await digest(archive, 'sha256'), bytes: (await fsp.stat(archive)).size,
+    const result = { asOf, distribution: 'Oracle MySQL Community Server', version,
+      source, checksumSource: 'https://dev.mysql.com/downloads/mysql/' + family + '.html?os=3', publishedMd5: md5, actualMd5,
+      pinnedSha256: sha256, actualSha256, bytes: (await fsp.stat(archive)).size,
       home, server, windowsServiceInstalled: false, globalInstall: false, bundledInVsix: false,
       verification: 'Official HTTPS ZIP; publisher page MD5 matched, SHA-256 computed from that download and pinned. OpenPGP signature not verified.',
       license: 'GPL-2.0 MySQL server is an isolated verification tool, not linked into or redistributed inside Rocketbrain.' };
-    await fsp.writeFile(path.join(CACHE, 'source.json'), JSON.stringify(result, null, 2) + '\n');
+    await fsp.writeFile(path.join(cache, 'source.json'), JSON.stringify(result, null, 2) + '\n');
     return result;
-  })().catch(error => { pending = undefined; throw error; });
-  return pending;
+  })().catch(error => { pending.delete(version); throw error; });
+  pending.set(version, task);
+  return task;
 }
-module.exports = { ensureMysqlRuntime, WORKSPACE, VERSION, SOURCE, SHA256 };
+module.exports = { ensureMysqlRuntime, WORKSPACE, VERSION, MYSQL9_VERSION, SOURCE, SHA256 };

@@ -12,6 +12,7 @@ const { readJoinCatalog } = require('./join-catalog');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
 const { localDriverOptions } = require('./local-transport');
 const { geometryType, preserveGeometry, captureGeometry } = require('./result-map');
+const { vectorType, vectorResultText } = require('./vector-result');
 const { TableEditor } = require('./grid');
 const { SchemaRenamer } = require('./schema-rename');
 const { SchemaRecovery } = require('./schema-recovery');
@@ -108,6 +109,10 @@ function cellValue(value) {
   if (typeof value === 'bigint') return value.toString();
   if (['string', 'number', 'boolean'].includes(typeof value)) return value;
   return JSON.stringify(value);
+}
+function preserveNativeResult(field, next) {
+  // Use the protocol NULL marker and original float32 bytes for native VECTOR fields.
+  return field.type === 'VECTOR' ? field.buffer() : preserveGeometry(field, next);
 }
 function newSession(id, readOnly, database) {
   return { id, readOnly, database, autocommit: true, inTransaction: false, transactionState: 'idle',
@@ -1014,7 +1019,7 @@ class MysqlService {
       };
       try {
         // Binary-protocol binding avoids SQL_MODE-dependent value escaping.
-        const options = { sql, rowsAsArray: true, typeCast: preserveGeometry };
+        const options = { sql, rowsAsArray: true, typeCast: preserveNativeResult };
         const query = values.length ? session.connection.execute({ ...options, values })
           : session.connection.query(options);
         reportOutcome = this._activity(session, activity || driverActivity(sql));
@@ -1040,7 +1045,9 @@ class MysqlService {
           const cells = {};
           try {
             normalized = row.map((value, column) => {
-              const geometry = result.fields[column]?.type === geometryType ? captureGeometry(value) : undefined;
+              const type = result.fields[column]?.type;
+              if (type === vectorType) return vectorResultText(value);
+              const geometry = type === geometryType ? captureGeometry(value) : undefined;
               if (!geometry) return cellValue(value);
               cells[column] = geometry.observation;
               return geometry.display;
