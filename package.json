@@ -379,6 +379,12 @@
         "icon": "$(search)"
       },
       {
+        "command": "rocketbrain.gitWorktree.context",
+        "title": "Manage Git Worktree Context",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && workspaceFolderCount > 0"
+      },
+      {
         "command": "rocketbrain.recentFiles",
         "title": "Recent Files",
         "category": "Rocketbrain"
