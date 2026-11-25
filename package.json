@@ -68,6 +68,9 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
+      { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
+      { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
       { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
@@ -1385,6 +1388,14 @@
         "rocketbrain.python.path": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Absolute path to the Python interpreter for local source inspection, tasks and debugpy."
+        },
+        "rocketbrain.localCodeModel.endpoint": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Numeric loopback URL ending in /v1/chat/completions for the local chat server."
+        },
+        "rocketbrain.localCodeModel.model": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Model name exposed by the configured local chat server."
         },
         "rocketbrain.sql.analysis.resolutionScopes": {
           "type": "array",

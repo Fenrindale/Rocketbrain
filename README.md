@@ -39,6 +39,8 @@ pnpm run package
 2. 명령 팔레트에서 **Rocketbrain: Install and Configure Independent Java Engine**을 실행합니다. 고정된 공개 구성요소의 출처와 체크섬을 확인하고 확장 전용 폴더에 설치합니다. 현재 설치 도구는 Eclipse JDT LS 1.63.0과 독립 Temurin JDK 25 계열을 사용합니다.
 3. **Java Projects**에서 가져온 소스 루트·패키지·라이브러리를 확인합니다. Maven 작업에는 별도 Maven 설치와 `rocketbrain.java.mavenHome` 설정이 필요합니다.
 
+`rocketbrain.localCodeModel.endpoint`와 `.model`에는 로컬 모델 서버 주소와 모델 이름을 지정합니다. **Ask Local Code Model**은 선택한 코드에 대한 응답을 엽니다. **Request a Reviewed Local Edit**로 변경 내용을 비교하고, 검토한 편집은 **Apply Reviewed Local Edit**로 적용합니다.
+
 표준 `src/main/resources`의 FXML에서 Outline을 볼 수 있습니다. 컨트롤러, 이벤트 메서드, `fx:id` 필드와 같은 모듈에 있는 포함 파일·리소스는 정의로 이동할 수 있습니다. **Run or Package JavaFX Application**에서 JavaFX Maven 플러그인이 구성된 모듈을 선택해 앱을 실행하거나 `jlink` 런타임 이미지를 만들 수 있습니다.
 
 **Audit Maven Dependencies with OSV**는 선택한 Maven 모듈의 실제 의존성 트리를 해석합니다. OSV로 전송할 패키지 이름·버전을 직접 선택하면 직접·전이 의존 경로와 조회 시각, 등록된 권고 ID를 보고서에 표시합니다. [OSV API](https://google.github.io/osv.dev/post-v1-querybatch/)
