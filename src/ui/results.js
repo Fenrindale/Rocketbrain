@@ -2,6 +2,7 @@
 (() => {
   const vscode = acquireVsCodeApi();
   let history = [], currentId = null, editingCell = null, requestSequence = 0;
+  let renderedWindow, scrollTop = 0;
   const drafts = new Map(), browseForms = new Map(),bulkForms=new Map(), layouts = new Map();
   const charts = new Map();
   const maps = new Map();
@@ -34,7 +35,10 @@
       item = { modelId: key, lastApplied: record.lastAppliedReviewId, updates: new Map(), deletes: new Set(), inserts: [], next: 0, revision: 0 };
       drafts.set(record.id, item);
     }
-    if (item.pendingRequestId && record.editResponseId === item.pendingRequestId) item.pendingRequestId = undefined;
+    if (item.pendingRequestId && record.editResponseId === item.pendingRequestId) {
+      item.pendingRequestId = undefined;
+      item.pendingScrollMode = undefined;
+    }
     return item;
   }
   function persist() {
@@ -56,7 +60,9 @@
     if (item.pendingRequestId || record.editBusy) return;
     const requestId=`${record.id}:${Date.now()}:${++requestSequence}`,message={type,id:record.id,requestId,draftRevision:item.revision,...payload};
     if(new TextEncoder().encode(JSON.stringify(message)).length>1100000){record.editError='This request exceeds the table input limit. Use a smaller batch; no data was staged.';render();return;}
-    item.pendingRequestId = requestId; persist(); render();
+    item.pendingRequestId = requestId;
+    if (type === 'setContinuousScroll') item.pendingScrollMode = payload.enabled;
+    persist(); render();
     vscode.postMessage(message);
   }
   function changed(record) {
@@ -186,12 +192,17 @@
     const blocked = Boolean(pending || localChanges || (!browse.keyset && session?.inTransaction) || session?.transactionState === 'unknown');
     $('page-previous').disabled = blocked || !browse.pageable || !browse.hasPrevious;
     $('page-next').disabled = blocked || !browse.pageable || browse.hasNext !== true || (!browse.keyset && browse.page >= 2000);
+    $('continuous-scroll-choice').hidden = !browse.keyset;
+    $('continuous-scroll').checked = item.pendingScrollMode ?? Boolean(browse.window);
+    $('continuous-scroll').disabled = blocked;
     $('page-size').disabled = blocked;
     $('page-size').value = String(browse.pageSize);
     if (!$('page-size').value) {
       const option = document.createElement('option'); option.value = option.textContent = String(browse.pageSize); $('page-size').append(option); $('page-size').value = option.value;
     }
-    $('page-label').textContent = `Page ${browse.page + 1} · ${result.rowCount} rows` + (browse.keyset ? ' · Read snapshot' : '');
+    const range = browse.window;
+    $('page-label').textContent = (range && range.firstPage !== range.lastPage ? `Pages ${range.firstPage + 1}–${range.lastPage + 1}` : `Page ${(range?.firstPage ?? browse.page) + 1}`) +
+      ` · ${result.rowCount} rows` + (browse.keyset ? ' · Read snapshot' : '');
     $('browse-options').disabled = Boolean(pending); $('browse-options').setAttribute('aria-expanded', String(form.expanded));
     $('browse-form').hidden = !form.expanded;
     const scalar = model.columns.filter(column => !['binary', 'json', 'unsupported'].includes(column.kind));
@@ -206,7 +217,11 @@
     renderSortPresets(record, form, blocked);
     renderFilterPresets(record, form, blocked);
     $('apply-browse').disabled = $('clear-browse').disabled = blocked;
-    $('browse-status').textContent = localChanges ? 'Apply or discard staged changes before changing pages, sorting or filters.' : session?.inTransaction ? 'Commit or roll back the current transaction before changing pages, sorting or filters.' : !browse.pageable ? 'First page only: this table has no primary key.' : 'Server-side results. Concurrent data changes may move rows between pages.';
+    $('browse-status').textContent = localChanges ? 'Apply or discard staged changes before changing pages, sorting or filters.'
+      : range ? 'Scroll to load the next or previous rows in this snapshot. Copy and export use the retained rows.'
+      : browse.keyset ? 'Pages share a single read-only table snapshot.'
+      : session?.inTransaction ? 'Commit or roll back the current transaction before changing pages, sorting or filters.'
+      : !browse.pageable ? 'First page only: this table has no primary key.' : 'Server-side results. Concurrent data changes may move rows between pages.';
   }
   function renderSortRules(sortOptions, scalar, form, blocked, select, remove) {
     const columns = sortOptions?.columns || scalar;
@@ -485,7 +500,7 @@
     return layout;
   }
 
-  const rowNumber = (result, index) => (result.browse?.page || 0) * (result.browse?.pageSize || 0) + index + 1;
+  const rowNumber = (result, index) => (result.browse?.window?.firstPage ?? result.browse?.page ?? 0) * (result.browse?.pageSize || 0) + index + 1;
   const columnWidth = (layout, index) => layout.widths[index] || 180;
   const columnOrder = layout => [true, false].flatMap(pinned => layout.order.filter(index => layout.pinned.has(index) === pinned));
 
@@ -826,7 +841,8 @@
       return;
     }
     const analysis = chart.analysis, grid = $('grid');
-    const coverage = analysis.page === undefined ? 'captured rows' : 'captured rows on table page ' + analysis.page;
+    const coverage = analysis.page === undefined ? 'captured rows' : analysis.lastPage > analysis.page
+      ? `captured rows on table pages ${analysis.page}–${analysis.lastPage}` : 'captured rows on table page ' + analysis.page;
     const partial = analysis.truncated || analysis.hasPrevious || (analysis.page !== undefined && analysis.hasNext !== false);
     $('chart-status').textContent = analysis.rows + ' ' + coverage + ' · ' + analysis.groups.length + ' plotted categories' +
       (partial ? ' · preview can omit other rows' : '') +
@@ -1381,6 +1397,7 @@
     for (const [rowIndex, row] of rows.entries()) {
       const tr = body.insertRow();
       tr.dataset.resultRowIndex = rowIndex;
+      if (result.browse?.window) tr.dataset.snapshotRow = row.number;
       tr.onpointerdown = tr.onfocusin = () => { layout.row = rowIndex; };
       if (row.deleted) tr.className = 'deleted';
       if (row.inserted) tr.classList.add('inserted');
@@ -1411,6 +1428,10 @@
 
   function render() {
     const active = current();
+    const grid = $('grid'), windowId = active?.result?.browse?.window?.id;
+    const anchor = renderedWindow === windowId && windowId ? visibleScrollAnchor(grid) : null;
+    renderedWindow = undefined;
+    grid.removeAttribute('tabindex');
     if (active) currentId = active.id;
     const origin = active?.relatedOrigin;
     const source = origin && history.find(record => {
@@ -1431,13 +1452,14 @@
     chartObserver = undefined;
     mapObserver?.disconnect();
     mapObserver = undefined;
-    $('grid').replaceChildren();
+    grid.replaceChildren();
     $('chart-tools').hidden = true;
     $('compare-tools').hidden = true;
     const exportable = Boolean(active?.state === 'done' && active.result?.columns.length && !active.editBusy &&
       !active.hasDraft && !active.review && !active.sessionState?.outcomeUnknown && !draft(active).pendingRequestId);
     $('copy').disabled = $('export').disabled = $('export-format').disabled = !exportable;
     $('copy').title = $('export').title = 'Use all captured rows and columns, including hidden columns.';
+    if (windowId) $('copy').title = $('export').title = 'Use all rows and columns in the retained scroll window.';
     $('result-view').disabled = true;
     $('result-layout').hidden = $('result-column-panel').hidden = true;
     renderExportAction(active);
@@ -1474,7 +1496,15 @@
     const columns = renderResultLayout(active, layout, rows, { busy, needsDraftView });
     renderBrowse(active, result);
     renderBulk(active);
-    if (layout.mode === 'grid') renderGrid(active, result, rows, enabled, layout, columns);
+    if (layout.mode === 'grid') {
+      renderGrid(active, result, rows, enabled, layout, columns);
+      if (windowId) {
+        grid.tabIndex = 0;
+        renderedWindow = windowId;
+        restoreScrollAnchor(grid, anchor);
+        scrollTop = grid.scrollTop;
+      }
+    }
     else if (layout.mode === 'record') renderRecord(active, rows[layout.row], columns, enabled);
     else {
       $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('bulk-panel').hidden = true;
@@ -1492,6 +1522,29 @@
     $('status').textContent = `${result.columns.length ? `${result.rowCount} rows` : `${result.affectedRows || 0} rows affected`}${result.truncated ? ' · limit reached, more rows available' : ''}   ·   ${Number(result.durationMs).toFixed(1)} ms   ·   ${mode}${transaction}${result.warningCount ? ` · ${result.warningCount} warnings` : ''}`;
     if (!rows.length) $('message').textContent = result.columns.length ? 'Query completed. No rows returned.' : `Statement completed. ${result.affectedRows || 0} rows affected.`;
     if (result.state?.needsReconnect) $('message').textContent += ' Session closed; reconnect explicitly before running another statement.';
+  }
+
+  function visibleScrollAnchor(grid) {
+    const top = grid.getBoundingClientRect().top;
+    const edge = top + (grid.querySelector('thead')?.getBoundingClientRect().height || 0);
+    const row = [...grid.querySelectorAll('[data-snapshot-row]')].find(item => item.getBoundingClientRect().bottom > edge);
+    return row ? { row: row.dataset.snapshotRow, offset: row.getBoundingClientRect().top - top, left: grid.scrollLeft } : null;
+  }
+
+  function restoreScrollAnchor(grid, anchor) {
+    if (!anchor) return;
+    const row = grid.querySelector('[data-snapshot-row="' + anchor.row + '"]');
+    if (row) grid.scrollTop += row.getBoundingClientRect().top - grid.getBoundingClientRect().top - anchor.offset;
+    grid.scrollLeft = anchor.left;
+  }
+
+  function moveScroll(direction, nearEdge = false) {
+    const record = current();
+    if (!record?.result?.browse?.window || renderedWindow !== record.result.browse.window.id) return;
+    const forward = direction === 'next', grid = $('grid');
+    const edge = forward ? grid.scrollHeight - grid.clientHeight - grid.scrollTop : grid.scrollTop;
+    if ($('page-' + direction).disabled || (nearEdge && edge > 112)) return;
+    send('scrollTable', { direction, modelId: record.result.edit.modelId });
   }
   window.addEventListener('message', event => {
     if (event.data?.type === 'activateResult') {
@@ -1762,8 +1815,34 @@
     send('openScriptStatement',{index,...(resultSet!==undefined&&{resultSet})});
   };
   function browse(page, size) { const record = current(), query = record?.result?.edit?.query; if (query) send('browseTable', { query: { ...query, page, pageSize: size ?? query.pageSize } }); }
-  $('page-previous').onclick = () => browse(current().result.browse.page - 1);
-  $('page-next').onclick = () => browse(current().result.browse.page + 1);
+  const movePage = direction => {
+    const view = current().result.browse;
+    if (view.window) {
+      if (renderedWindow === view.window.id) moveScroll(direction);
+      else send('scrollTable', { direction, modelId: current().result.edit.modelId });
+    } else browse(view.page + (direction === 'next' ? 1 : -1));
+  };
+  $('page-previous').onclick = () => movePage('previous');
+  $('page-next').onclick = () => movePage('next');
+  $('continuous-scroll').onchange = () => send('setContinuousScroll', {
+    enabled: $('continuous-scroll').checked, modelId: current().result.edit.modelId
+  });
+  $('grid').addEventListener('scroll', () => {
+    const top = $('grid').scrollTop, direction = top > scrollTop ? 'next' : 'previous';
+    const moved = top !== scrollTop;
+    scrollTop = top;
+    if (moved) moveScroll(direction, true);
+  }, { passive: true });
+  $('grid').addEventListener('wheel', event => {
+    if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && !event.ctrlKey && !event.shiftKey) {
+      moveScroll(event.deltaY > 0 ? 'next' : 'previous', true);
+    }
+  }, { passive: true });
+  $('grid').addEventListener('keydown', event => {
+    if (event.target !== $('grid')) return;
+    if (['PageDown', 'ArrowDown', 'End'].includes(event.key)) moveScroll('next', true);
+    else if (['PageUp', 'ArrowUp', 'Home'].includes(event.key)) moveScroll('previous', true);
+  });
   $('page-size').onchange = () => browse(0, Number($('page-size').value));
   $('browse-options').onclick = () => { const form = browseForms.get(current()?.id); if (form) { form.expanded = !form.expanded; render(); } };
   $('browse-form').onsubmit = event => { event.preventDefault(); const record = current(), form = browseForms.get(record?.id); if (form) send('browseTable', { query: { page: 0, pageSize: record.result.browse.pageSize, sort: form.sort, filters: filterInput(form.filters) } }); };

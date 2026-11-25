@@ -54,6 +54,12 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
     inspection.argumentCount>=-1&&inspection.argumentCount<=16&&sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)){
     query.push('methodInline',inspection.uri,String(inspection.start),String(inspection.end),String(inspection.argumentCount));
   }
+  else if(inspection.kind==='methodExtract'&&Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&
+    inspection.start>=0&&inspection.end>inspection.start&&inspection.end-inspection.start<=32768&&validIdentifier(inspection.name)&&
+    Number.isSafeInteger(inspection.callOffset)&&inspection.callOffset>=-1&&sources.some(item=>item.uri===inspection.uri&&
+      inspection.end<=item.text.length&&inspection.callOffset<item.text.length)){
+    query.push('methodExtract',inspection.uri,String(inspection.start),String(inspection.end),inspection.name,String(inspection.callOffset));
+  }
   else if(inspection.kind==='dataflow'&&Number.isSafeInteger(inspection.offset)&&inspection.offset>=0&&
     sources.some(item=>item.uri===inspection.uri&&inspection.offset<item.text.length))query.push('dataflow',inspection.uri,String(inspection.offset));
   else if(inspection.kind==='typeStructure'&&['inherited','nested'].includes(inspection.group)&&Number.isSafeInteger(inspection.offset)&&

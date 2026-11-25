@@ -120,6 +120,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     catch (error) { const message = error instanceof Error ? error.message : String(error); output.appendLine(message); await vscode.window.showErrorMessage(`Rocketbrain: ${message}`); }
     finally { updateStatus(); }
   }));
+  const resultSnapshots=require('./db/result-snapshots').registerResultSnapshots(context,vscode,results,command);
   const dataExtractors = require('./db/data-extractor-vscode').registerDataExtractors(context, vscode, command, results);
   async function verifySavedMetadata(db, id, catalog, current) {
     try {
@@ -918,7 +919,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     nativeDumps,
     queryDemo: sql => state.mysql ? Promise.reject(new Error('Demo checks require the demo connection.')) : state.db.query(sql),
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
-    exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination),
+    exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination), resultSnapshots,
     dataExtractors,
     analyzeResult: (id, options) => results.analyzeSnapshot(id, options),
     mapResult: (id, column, revision) => structuredClone(results.mapSnapshot(id, column, revision)),

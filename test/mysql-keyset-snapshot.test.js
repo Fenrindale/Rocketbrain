@@ -26,6 +26,28 @@ test('keyset continuation uses exact casts and nullable mixed directions',() => 
     {sort:[{column:'rank_value',direction:'asc',nulls:'last'}]},'schema',false,{},[]), /default-ordered scalar/);
 });
 
+test('ENUM and 64-bit SET selectors bind exact engine positions while reserving private projection names', () => {
+  const columns = [
+    columnDefinition(['id', 'bigint unsigned', 'NO', null, 'PRI', '']),
+    columnDefinition(['priority', "enum('zeta','','alpha')", 'YES', null, '', '']),
+    columnDefinition(['bits', "set('a','b')", 'YES', null, '', '']),
+    columnDefinition(['__rb_grid_seek_0', 'varchar(30)', 'YES', null, '', ''])
+  ];
+  const definition = { name: 'choices', columns };
+  const input = { sort: [{ column: 'priority', direction: 'asc' }, { column: 'bits', direction: 'desc' }] };
+  const plan = browseQuery(definition, input, 'schema', false, {}, ['0', '-9223372036854775807', '9007199254740993'], false, 'mysql');
+  assert.deepEqual(plan.cursorColumns, ['__rb_grid_seek_1', '__rb_grid_seek_2']);
+  assert.match(plan.sql, /CAST\(`priority` AS UNSIGNED\) AS `__rb_grid_seek_1`,CAST\(`bits` AS SIGNED\) AS `__rb_grid_seek_2`/u);
+  assert.match(plan.sql, /CAST\(`bits` AS SIGNED\) < CAST\(\? AS SIGNED\)/u);
+  assert.match(plan.sql, /ORDER BY CAST\(`priority` AS UNSIGNED\) ASC,CAST\(`bits` AS SIGNED\) DESC/);
+  assert.ok(plan.parameters.includes('-9223372036854775807'));
+  const maria = browseQuery(definition, input, 'schema', false, {}, ['2', '18446744073709551615', '9007199254740993'], true, 'mariadb');
+  assert.match(maria.sql, /ORDER BY CAST\(`priority` AS UNSIGNED\) DESC,CAST\(`bits` AS UNSIGNED\) ASC/u);
+  assert.ok(maria.parameters.includes('18446744073709551615'));
+  assert.throws(() => browseQuery(definition, input, 'schema', false, {}, ['0', '18446744073709551615', '9007199254740993'], false, 'mysql'), /invalid/u);
+  assert.throws(() => browseQuery(definition, input, 'schema', false, {}, []), /Observe the database engine/u);
+});
+
 async function ownedGridFixture() {
   const configPath=process.env.ROCKETBRAIN_MYSQL_TEST_CONFIG;
   const spring=JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG,'utf8'));

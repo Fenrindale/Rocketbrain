@@ -1,25 +1,25 @@
 {
-  "version": "0.71.0",
-  "verifiedAt": "2026-11-25T17:10:13.129Z",
+  "version": "0.72.0",
+  "verifiedAt": "2026-11-25T17:19:42.878Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.71.0.vsix",
-    "sha256": "fe88b0b47113693742d1447463fbd43c7021d58b55def1becbbb1f485e99d3d0",
-    "bytes": 3403507,
+    "name": "rocketbrain-0.72.0.vsix",
+    "sha256": "4c46df55ecff2cedea47e75dad0b2dbb635358cc640e2c26260e65d156881877",
+    "bytes": 3414732,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1883,
-    "inputVectorSha256": "4a7f129e94038631ed1f2676bb0e748f02d1504a30830b921cefc48dc5d65752",
+    "frozenPublicInputs": 1901,
+    "inputVectorSha256": "f4b665cb503f782551946588a9d7c636ca0ca81740161971901501832011371b",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1620,
-    "pass": 1521,
+    "tests": 1630,
+    "pass": 1530,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 99,
+    "skipped": 100,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaCustomSam",
+          "group": "javaExtractMethod",
           "checks": 1
         },
         {
-          "group": "springSecurityTrace",
+          "group": "springMavenBom",
           "checks": 1
         },
         {
-          "group": "sqlScriptCall",
+          "group": "gridContinuous",
           "checks": 1
         },
         {
-          "group": "databasePrincipal",
+          "group": "resultSnapshots",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaCustomSam",
+          "group": "javaExtractMethod",
           "checks": 1
         },
         {
-          "group": "springSecurityTrace",
+          "group": "springMavenBom",
           "checks": 1
         },
         {
-          "group": "sqlScriptCall",
+          "group": "gridContinuous",
           "checks": 1
         },
         {
-          "group": "databasePrincipal",
+          "group": "resultSnapshots",
           "checks": 1
         }
       ],
@@ -85,65 +85,71 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-034": {
-      "scope": "두 Spring 환경에서 직접 정의한 제네릭 SAM의 상속 타입을 해결했다. 두 캡처 선언 및 String·Object 오버로드를 보존하고 상태 보유 계약과 식별 동작을 거절했다. 버퍼 적용과 Undo를 확인했다.",
+    "IDEA-026": {
+      "scope": "두 실제 Spring 작업 공간에서 확인된 예외와 타입 매개변수가 있는 문장 네 개를 추출했다. 정확한 바인딩, 이름 충돌과 캡처 쓰기 거부, 버퍼 적용과 Undo를 확인했다.",
       "runtimeGroups": [
-        "javaCustomSam"
+        "javaExtractMethod"
       ]
     },
-    "IDEA-064": {
-      "scope": "두 실제 Spring Security 앱에서 401·401·403·200·200 응답, 최초 매칭 체인과 실행 필터, 조기 종료, 32개 이력, 기본 비활성화와 연결 종료 시 닫기를 확인했다.",
+    "IDEA-052": {
+      "scope": "Maven 실제 빌드로 MySQL과 MariaDB 드라이버를 각각 해결하고 생성한 Spring Boot 앱의 JDBC 결과를 확인했다. 정확한 POM 적용, Undo·Redo, 오래된 소스와 직접 관리 버전 보호를 검증했다.",
       "runtimeGroups": [
-        "springSecurityTrace"
+        "springMavenBom"
       ]
     },
-    "DG-045": {
-      "scope": "두 DB에서 SQL 자료형과 53비트 한계 밖의 값을 보존하고 같은 물리 세션에서 두 CALL 결과를 따로 열었다. 검토 후 변경된 루틴 정의를 거절했다.",
+    "DG-059": {
+      "scope": "두 DB의 실제 정렬 21행과 전후 스크롤 순서를 비교했다. NULL, 선언되지 않은 빈 ENUM, 64비트 SET과 53비트 한계 밖의 기본 키를 보존했다. 제한된 페이지 창, 내부 커서 열 숨김, 오래된 요청과 외부 동시 변경의 격리를 확인했다.",
       "runtimeGroups": [
-        "sqlScriptCall"
+        "gridContinuous"
       ]
     },
-    "DG-080": {
-      "scope": "두 DB에 직접 만든 계정으로 인용 문자와 Unicode가 포함된 암호를 사용해 로그인했다. 별도 객체 권한이 없음을 확인하고 엔진별 역할 식별, 검토 재사용 거부, 보호 프로필 거부와 변경 후 실제 Spring 읽기를 확인했다.",
+    "DG-094": {
+      "scope": "두 DB 결과를 별도 VS Code 프로세스에서 큰 정수·정밀 DECIMAL·바이너리·NULL·Unicode까지 복원했다. 원래 세션 없이 열고 읽기 전용 모델, 재실행 방지와 보관본 제거를 확인했다.",
       "runtimeGroups": [
-        "databasePrincipal"
+        "resultSnapshots"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 403,
+    "sourceCorrespondences": 407,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 88,
-      "partial": 114,
+      "implemented": 89,
+      "partial": 113,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 157,
+    "weightedPoints": 157.5,
     "previousWeightedPoints": 157,
     "targetWeightedPoints": 216,
-    "referencePercent": 72.7,
+    "referencePercent": 72.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
-    "stateChanges": []
+    "stateChanges": [
+      {
+        "id": "DG-059",
+        "before": "partial",
+        "after": "implemented"
+      }
+    ]
   },
   "limits": [
-    "Java 변환은 캡처와 오버로드의 실제 바인딩을 보존할 수 있는 지역 변수의 람다와 익명 클래스를 지원한다.",
-    "Spring Security 추적은 설정으로 켠 Servlet 체인의 요청별 선택과 필터 실행을 보여 준다. 값과 신원은 저장하지 않는다.",
-    "스크립트 CALL은 검토한 같은 스키마의 읽기 전용 IN 프로시저를 대상으로 한다.",
-    "계정 생성은 기본 객체 권한을 부여하지 않는다. 역할 작성의 계정 표현과 기본 관리 권한은 엔진별 동작을 따른다.",
+    "Java 추출은 값을 반환하는 이름 있는 클래스의 메서드 끝 연속 문장을 지원한다. 복합 외부 흐름과 캡처 쓰기는 거절한다.",
+    "Spring 의존성 편집은 직접 선택한 Boot BOM을 대상으로 하며 복합 Maven 관리와 Gradle 카탈로그는 별도다.",
+    "연속 스크롤과 키셋 페이지는 기본 키가 있는 읽기 전용 InnoDB 스냅샷에 적용한다.",
+    "조회 결과는 사용자가 선택한 행 표본을 로컬에 보관한다. 범위는 최대 500행·256열·1 MiB다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Java의 여러 문장 Extract Method와 Spring Maven BOM 기반 의존성 추가",
-    "실제 DB 결과 그리드의 별도 프로세스 복원과 읽기 전용 그리드 연속 스크롤",
-    "언어별 의미적 선택 확대·축소와 로컬 DuckDB 데이터 파일 탐색"
+    "Java·Kotlin·SQL의 의미 기반 순방향 및 역방향 선택",
+    "Spring 메서드 인가와 역할 계층을 실제 호출에서 추적",
+    "DuckDB CSV·Parquet와 확장 수명주기, DB 활동 기록 범위와 보관"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

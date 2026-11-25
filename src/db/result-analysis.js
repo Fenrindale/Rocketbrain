@@ -140,7 +140,9 @@ function analyzeResult(result, options = {}) {
     category: category === null ? perRow ? 'Row number' : 'All rows' : result.columns[category],
     measure: operation === 'count' ? null : result.columns[measure],
     truncated: Boolean(result.truncated),
-    ...(result.browse && { page: result.browse.page + 1, hasPrevious: result.browse.hasPrevious, hasNext: result.browse.hasNext }),
+    ...(result.browse && { page: result.browse.page + 1,
+      ...(result.browse.window && { lastPage: result.browse.window.lastPage + 1 }),
+      hasPrevious: result.browse.hasPrevious, hasNext: result.browse.hasNext }),
     ...(result.state?.inTransaction && { uncommitted: true }),
     axis: { minimum: format(low), maximum: format(high), zero: position(rational(zero)) },
     groups: results.map(row => ({ ...row, value: format(row.value), position: position(row.value) }))
