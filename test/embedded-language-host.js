@@ -37,7 +37,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 public final class ${name} {
     public static void main(String[] args) throws Exception {
         String statement = """
-            WITH people AS (SELECT p.id, p.display_name FROM rb_spring_person p)
+            WITH people AS (SELECT p.id, p.display_name AS display_name FROM rb_spring_person p)
             SELECT a.display_name FROM people a WHERE a.id > ?
             """;
         var source = new DriverManagerDataSource(System.getenv("RB_EMBEDDED_JDBC_URL"),
@@ -93,8 +93,11 @@ public final class ${name} {
     const completion = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', javaSql.uri, javaSql.positionAt(completionOffset));
     assert.ok(completion.items.some(item => item.label === 'display_name'));
     const definition = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', javaSql.uri, javaSql.positionAt(completionOffset + 3));
-    assert.ok(definition.some(location => ((location.targetUri || location.uri)?.toString() === javaSql.uri.toString()) &&
-      javaSql.getText(location.targetSelectionRange || location.range).includes('display_name')));
+    assert.ok(definition.some(location => {
+      const found = location.targetSelectionRange || location.range;
+      return (location.targetUri || location.uri)?.toString() === javaSql.uri.toString() &&
+        javaSql.offsetAt(found.start) === content.indexOf('AS display_name') + 3 && javaSql.getText(found) === 'display_name';
+    }));
     await change(javaSql, content.replace('a.id > ?', 'a.id < ?'));
     const javaPlan = service.prepare(javaSql);
     assert.ok(javaPlan.before.startsWith('"""') && javaPlan.after.includes('a.id < ?'));
