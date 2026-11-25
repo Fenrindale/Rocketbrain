@@ -65,7 +65,8 @@ function jsonExport(result) {
       originalTable: field.originalTable, schema: field.schema } : { name, kind: 'unknown' };
   });
   const metadata = { columns, rowCount: result.rows.length, truncated: result.truncated === true,
-    ...(result.browse ? { page: result.browse.page + 1, pageSize: result.browse.pageSize, hasNext: result.browse.hasNext } : {}) };
+    ...(result.browse ? { page: result.browse.page + 1, pageSize: result.browse.pageSize, hasNext: result.browse.hasNext,
+      ...(result.browse.window && { lastPage: result.browse.window.lastPage + 1 }) } : {}) };
   const heading = JSON.stringify(metadata, null, 2).replace(/\n}$/, ',\n  "rows": [\n');
   const row = values => '    [' + values.map(value => typeof value === 'number' ? numberText(value) : JSON.stringify(value)).join(', ') + ']';
   return joinRows(heading, result.rows, row, ',\n', '\n  ]\n}\n');
@@ -121,7 +122,10 @@ function insertExport(result, target) {
   }
   const kinds = result.fields.map(columnKind);
   const insert = 'INSERT INTO ' + table + ' (' + columns.map(identifier).join(', ') + ') VALUES (';
-  const page = result.browse ? ' (table page ' + (result.browse.page + 1) + ')' : '';
+  const { browse } = result;
+  const page = !browse ? '' : browse.window?.lastPage > browse.page
+    ? ' (table pages ' + (browse.page + 1) + '–' + (browse.window.lastPage + 1) + ')'
+    : ' (table page ' + (browse.page + 1) + ')';
   const note = '-- ' + result.rows.length + ' captured result rows' + page + '. Review against the destination schema before running.\n';
   const partial = result.truncated || (result.browse && (result.browse.hasPrevious || result.browse.hasNext !== false));
   const limit = partial ? '-- The preview may omit rows.\n' : '';

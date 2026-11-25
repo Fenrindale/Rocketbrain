@@ -2,6 +2,7 @@
 const {randomUUID}=require('node:crypto');
 const {parseDelimited,planPaste,planImport,planDuplicate}=require('./db/grid-bulk');
 const {inspectXlsx,sheetToImport}=require('./db/grid-xlsx');
+const continuousGrid = require('./db/grid-window');
 
 function browsingQuery(query) {
   if (!query || typeof query !== 'object' || Array.isArray(query) ||
@@ -54,6 +55,7 @@ class TableEditor {
       this._context(id);
       if (this._record(id).closing) throw new Error('The table snapshot is being closed.');
       context.keysetId = opened.id;
+      context.sessionId = opened.result.state.id;
       context.query = opened.result.edit.query;
       this.results.finish(id, opened.result);
       this.results.editState(id, { sql: opened.result.browse.sql });
@@ -120,14 +122,47 @@ class TableEditor {
       : context.db.previewTable(context.table, options);
   }
   async _load(id, context, message, query = context.query) {
-    const result = await this._preview(context, query);
+    let result = await this._preview(context, query);
     if (context.keysetId) this._context(id);
     context.query = result.edit?.query || query;
+    if (context.scroll) {
+      context.scroll = continuousGrid.start(result);
+      result = continuousGrid.present(context.scroll, result);
+    }
     this._retain(context, result);
     this.results.finish(id, result);
     context.bulkSource=undefined;
     context.xlsxWorkbook=undefined;
     this.results.editState(id, { readOnly: result.state.readOnly, review: undefined,hasDraft:false,draftRevision:0,bulkSource:undefined,xlsxWorkbook:undefined,bulkDraft:undefined,editMessage: message, editError: undefined, ...(result.browse?.sql ? { sql: result.browse.sql } : {}) });
+  }
+  async _scroll(id, context, record, message) {
+    const page = record.result, window = context.scroll;
+    if (message.modelId !== page.edit.modelId) throw Error('The snapshot window changed. Retry the navigation.');
+    if (message.type === 'setContinuousScroll') {
+      if (typeof message.enabled !== 'boolean') throw Error('Choose paged or continuous browsing.');
+      if (message.enabled === Boolean(window)) return;
+      if (message.enabled) {
+        context.scroll = continuousGrid.start(page);
+        this.results.finish(id, continuousGrid.present(context.scroll, page));
+      } else {
+        const single = await this._preview(context, context.query);
+        this._context(id);
+        context.scroll = undefined;
+        this.results.finish(id, single);
+      }
+      return;
+    }
+    const { direction } = message;
+    if (!window || !['previous', 'next'].includes(direction)) throw Error('Enable continuous scrolling in the current snapshot first.');
+    const forward = direction === 'next', edge = forward ? window.pages.at(-1) : window.pages[0];
+    if (forward ? !edge.hasNext : !edge.hasPrevious) return;
+    const query = { ...context.query, page: edge.page + (forward ? 1 : -1) };
+    const result = await context.db.readKeysetPage(context.keysetId, query, edge.page);
+    this._context(id);
+    context.scroll = continuousGrid.extend(window, result, direction);
+    context.query = result.edit.query;
+    this.results.finish(id, continuousGrid.present(context.scroll, result));
+    this.results.editState(id, { sql: result.browse.sql });
   }
   async stageDatasetChanges(id, { changes, modelId, draftRevision, requestId, assertFresh }) {
     const context = this._context(id), record = this._record(id);
@@ -158,16 +193,18 @@ class TableEditor {
   }
   async handle(id, message) {
     let context, locked = false, completed;
+    const scrolling = ['setContinuousScroll', 'scrollTable'].includes(message.type);
     try {
       context = this._context(id);
       const record = this._record(id);
       if (record.closing) throw new Error('This result is being closed.');
       if (!record.result?.edit) throw new Error('Only an explicit table preview can be edited.');
       if (context.keysetId) {
-        if (!['browseTable', 'reloadTable'].includes(message.type)) throw new Error('This table snapshot is read-only.');
+        if (!scrolling && !['browseTable', 'reloadTable'].includes(message.type)) throw new Error('This table snapshot is read-only.');
         if (record.editBusy) throw new Error('Wait for the current table page.');
         locked = true;
         this.results.editState(id, { editBusy: true, editError: undefined, editMessage: undefined });
+        if (scrolling) { await this._scroll(id, context, record, message); return; }
         const query = message.type === 'browseTable' ? browsingQuery(message.query) : { ...context.query, page: 0 };
         await this._load(id, context, 'Page read from the current consistent snapshot.', query);
         return;
@@ -263,7 +300,11 @@ class TableEditor {
       try { session = error.state || (context && context.db.getSessionState(context.sessionId)); } catch { /* Closed connection. */ }
       const detail = (completed ? completed + ' Refresh failed: ' : '') + (error.message || String(error)) + (error.priorTransactionRolledBack ? ' The server rolled back the entire previous transaction, including changes outside this grid apply.' : '');
       this.results.editState(id, { editError: detail, review: undefined, ...(session ? { sessionState: session, readOnly: session.readOnly } : {}), editExpired: !context || this.connection().epoch !== context.epoch });
-    } finally { if (locked) this.results.editState(id, { editBusy: false, editResponseId: message.requestId }); this.onStatus(); }
+    } finally {
+      if (locked) this.results.editState(id, { editBusy: false, editResponseId: message.requestId });
+      else if (scrolling && message.requestId) this.results.editState(id, { editResponseId: message.requestId });
+      this.onStatus();
+    }
   }
   dispose() { for (const id of this.contexts.keys()) this.forget(id); }
 }

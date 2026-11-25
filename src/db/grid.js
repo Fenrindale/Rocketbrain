@@ -119,7 +119,18 @@ function equalRows(left, right) {
   return left.length === right.length && left.every((value, i) => value === right[i]);
 }
 const MAX_PAGE = 2000;
-function keysetValue(column, value) {
+const choiceType = /^(enum|set)\(/i;
+function keysetValue(column, value, cast) {
+  const choice = choiceType.exec(column.type);
+  if (choice) {
+    const ordinal = String(value), signed = cast === 'SIGNED';
+    const minimum = signed ? -9223372036854775808n : 0n;
+    const maximum = choice[1].toLowerCase() === 'enum' ? 65535n : signed ? 9223372036854775807n : 18446744073709551615n;
+    if (!/^-?\d{1,20}$/u.test(ordinal) || BigInt(ordinal) < minimum || BigInt(ordinal) > maximum) {
+      throw fail('ROCKETBRAIN_GRID_QUERY', 'The observed ENUM or SET continuation value is invalid.');
+    }
+    return { sql: 'CAST(? AS ' + (signed ? 'SIGNED' : 'UNSIGNED') + ')', parameter: ordinal };
+  }
   const { parameter } = typedCell(value === null ? null : String(value), column);
   if (column.kind === 'integer') {
     return { sql: /\bunsigned\b/i.test(column.type) ? 'CAST(? AS UNSIGNED)' : 'CAST(? AS SIGNED)', parameter };
@@ -131,11 +142,28 @@ function keysetValue(column, value) {
   }
   return { sql: '?', parameter: column.kind === 'float' ? Number(parameter) : parameter };
 }
+const keyExpression = ({ column, cursorAlias, cursorCast }) => cursorAlias ? 'CAST(' + quote(column) + ' AS ' + cursorCast + ')' : quote(column);
+
+function keysetOrder(order, columns, dialect) {
+  const names = new Set([...columns.keys()].map(name => name.toLowerCase()));
+  let index = 0;
+  return order.map(item => {
+    const type = choiceType.exec(columns.get(item.column).type)?.[1].toLowerCase();
+    if (!type) return item;
+    if (!['mysql', 'mariadb'].includes(dialect)) throw fail('ROCKETBRAIN_GRID_QUERY', 'Observe the database engine before sorting ENUM or SET keys.');
+    let cursorAlias;
+    do { cursorAlias = '__rb_grid_seek_' + index++; } while (names.has(cursorAlias));
+    names.add(cursorAlias);
+    // Preserve the native SET order, including the high bit. Direct casts avoid floating-point coercion by arithmetic.
+    return { ...item, cursorAlias, cursorCast: type === 'set' && dialect === 'mysql' ? 'SIGNED' : 'UNSIGNED' };
+  });
+}
+
 function keysetAfter(order, columns, anchor) {
   if (anchor.length !== order.length) throw fail('ROCKETBRAIN_GRID_QUERY', 'The keyset position no longer matches the sort.');
   const alternatives = [], parameters = [], prefix = [], previous = [];
-  for (const [index, { column, direction }] of order.entries()) {
-    const name = quote(column), value = anchor[index];
+  for (const [index, item] of order.entries()) {
+    const { column, direction } = item, name = keyExpression(item), value = anchor[index];
     if (value === null) {
       if (direction === 'asc') {
         alternatives.push('(' + [...prefix, name + ' IS NOT NULL'].join(' AND ') + ')');
@@ -144,7 +172,7 @@ function keysetAfter(order, columns, anchor) {
       prefix.push(name + ' IS NULL');
       continue;
     }
-    const bound = keysetValue(columns.get(column), value);
+    const bound = keysetValue(columns.get(column), value, item.cursorCast);
     const condition = direction === 'asc' ? name + ' > ' + bound.sql
       : '(' + name + ' < ' + bound.sql + ' OR ' + name + ' IS NULL)';
     alternatives.push('(' + [...prefix, condition].join(' AND ') + ')');
@@ -155,7 +183,7 @@ function keysetAfter(order, columns, anchor) {
   return { sql: alternatives.length ? '(' + alternatives.join(' OR ') + ')' : '0 = 1', parameters };
 }
 /** Compile only catalog-backed identifiers and explicitly typed bound values. */
-function browseQuery(definition, input = {}, schema, related = false, collations = {}, cursor, reverse = false) {
+function browseQuery(definition, input = {}, schema, related = false, collations = {}, cursor, reverse = false, dialect) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose table paging, sorting and filter options.');
   if (Object.keys(input).some(key => !['page', 'pageSize', 'maxRows', 'sort', 'filters', 'sessionId'].includes(key))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Unsupported table browsing option.');
   const page = input.page ?? 0, pageSize = input.pageSize ?? input.maxRows ?? 200;
@@ -167,9 +195,9 @@ function browseQuery(definition, input = {}, schema, related = false, collations
   if (!Array.isArray(input.sort || []) || (input.sort || []).length > 8 || !Array.isArray(input.filters || []) || (input.filters || []).length > 20) throw fail('ROCKETBRAIN_GRID_QUERY', 'Use at most 8 sort columns and 20 filters.');
   const { sort, order, fragments } = compileGridSort(definition.columns, input.sort || [], collations);
   if (cursor && (!pk.length || order.some(({ column, nulls, expression, collation }) => {
-    const { type, kind } = columns.get(column);
+    const { kind } = columns.get(column);
     return nulls !== undefined || expression !== undefined || collation !== undefined ||
-      ['json', 'unsupported'].includes(kind) || /^(?:enum|set)\b/i.test(type);
+      ['json', 'unsupported'].includes(kind);
   }))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose a primary-key table and default-ordered scalar columns for keyset browsing.');
   const operators = { eq: '=', ne: '<>', lt: '<', lte: '<=', gt: '>', gte: '>=' };
   let conditions = 0, groups = 0;
@@ -223,17 +251,20 @@ function browseQuery(definition, input = {}, schema, related = false, collations
     filters.push(compiled.filter);
   }
   if (Buffer.byteLength(JSON.stringify(filters), 'utf8') > 65536) throw fail('ROCKETBRAIN_GRID_QUERY', 'Combined table filters exceed 64 KiB.');
-  const scanOrder = reverse ? order.map(({ column, direction }) => ({ column, direction: direction === 'asc' ? 'desc' : 'asc' })) : order;
+  const seekOrder = cursor ? keysetOrder(order, columns, dialect) : order;
+  const scanOrder = reverse ? seekOrder.map(item => ({ ...item, direction: item.direction === 'asc' ? 'desc' : 'asc' })) : seekOrder;
   if (cursor?.length) {
     const seek = keysetAfter(scanOrder, columns, cursor);
     where.push(seek.sql);
     parameters.push(...seek.parameters);
   }
-  const orderBy = reverse ? scanOrder.map(item => quote(item.column) + ' ' + item.direction.toUpperCase()) : fragments;
-  const sql = 'SELECT ' + definition.columns.map(column => quote(column.name)).join(',') + ' FROM ' + quote(schema) + '.' + quote(definition.name)
+  const orderBy = cursor ? scanOrder.map(item => keyExpression(item) + ' ' + item.direction.toUpperCase()) : fragments;
+  const hidden = seekOrder.filter(item => item.cursorAlias);
+  const selected = definition.columns.map(column => quote(column.name)).concat(hidden.map(item => keyExpression(item) + ' AS ' + quote(item.cursorAlias)));
+  const sql = 'SELECT ' + selected.join(',') + ' FROM ' + quote(schema) + '.' + quote(definition.name)
     + (where.length ? ' WHERE ' + where.join(' AND ') : '') + (orderBy.length ? ' ORDER BY ' + orderBy.join(',') : '')
     + ' LIMIT ' + (pageSize + 1) + (cursor ? '' : ' OFFSET ' + (page * pageSize));
-  return { sql, parameters, page, pageSize, order, query: { page, pageSize, sort, filters }, pageable: pk.length > 0,
+  return { sql, parameters, page, pageSize, order, ...(cursor && { seekOrder, cursorColumns: hidden.map(item => item.cursorAlias) }), query: { page, pageSize, sort, filters }, pageable: pk.length > 0,
     consistency: pk.length ? 'Offset pages use explicit ordering plus primary-key tiebreakers. Concurrent inserts, deletes or sort-value changes may move rows between pages; no cross-page snapshot is implied.' : 'No primary key is visible. Only the first page is available; tied rows have no stable cross-page order.' };
 }
 
@@ -244,20 +275,24 @@ class TableEditor {
   async openKeysetBrowser(name, options = {}) {
     if (this.keysetBrowsers.size >= 8) throw fail('ROCKETBRAIN_GRID_QUERY', 'Close an existing table snapshot before opening another.');
     const id = randomUUID(), sessionId = 'keyset:' + id, schema = this.db._options.database;
-    const browser = { sessionId, schema, name, page: 0 };
+    const browser = { sessionId, schema, name, page: 0, anchors: new Map() };
     this.keysetBrowsers.set(id, browser);
     try {
       const definition = await this.definition(name, schema);
       if (definition.kind !== 'BASE TABLE' || String(definition.engine).toUpperCase() !== 'INNODB') {
         throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose an InnoDB table for a consistent snapshot.');
       }
-      browseQuery(definition, { ...options, page: 0 }, schema, false, {}, []);
       await this.db.openSession(sessionId, { readOnly: true });
       await this.db.setTransactionIsolation('REPEATABLE READ', { sessionId });
       const transaction = await this.db._transaction('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY',
         { sessionId }, { requireIdle: true });
       browser.definition = definition;
       browser.connectionId = transaction.connectionId;
+      const session = this.db._session(sessionId);
+      const engine = await this.db._enqueue(session, () => this._read(session, 'SELECT VERSION()', [], 1));
+      const version = engine.rows[0]?.[0];
+      if (typeof version !== 'string' || !/^\d+\.\d+/u.test(version)) throw fail('ROCKETBRAIN_GRID_QUERY', 'The database engine for the read snapshot could not be observed.');
+      browser.dialect = /mariadb/i.test(version) ? 'mariadb' : 'mysql';
       const result = await this.readKeysetPage(id, { ...options, page: 0 });
       if (fingerprint(definition) !== fingerprint(await this.definition(name, schema))) {
         throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The table changed while opening its read snapshot.');
@@ -268,7 +303,7 @@ class TableEditor {
       throw error;
     }
   }
-  async readKeysetPage(id, options = {}) {
+  async readKeysetPage(id, options = {}, adjacentTo) {
     const browser = this.keysetBrowsers.get(id);
     if (!browser?.definition) throw fail('ROCKETBRAIN_GRID_QUERY', 'Open a current table snapshot.');
     const { definition, sessionId, schema } = browser;
@@ -277,38 +312,51 @@ class TableEditor {
       if (!session.readOnly || !session.inTransaction || session.connectionId !== browser.connectionId ||
           this.keysetBrowsers.get(id) !== browser) throw fail('ROCKETBRAIN_GRID_STALE', 'The table snapshot ended. Open it again.');
       const page = options.page ?? 0;
-      if (!Number.isSafeInteger(page) || page < 0 || (page !== 0 && Math.abs(page - browser.page) > 1)) {
+      const from = adjacentTo ?? browser.page;
+      const anchor = browser.anchors.get(from);
+      if (!Number.isSafeInteger(page) || page < 0 || (adjacentTo !== undefined && (!anchor || Math.abs(page - from) !== 1)) ||
+          (page !== 0 && Math.abs(page - from) > 1)) {
         throw fail('ROCKETBRAIN_GRID_QUERY', 'Move through the snapshot one page at a time.');
       }
-      const first = browseQuery(definition, { ...options, page: 0 }, schema, false, {}, []);
+      const first = browseQuery(definition, { ...options, page: 0 }, schema, false, {}, [], false, browser.dialect);
       const signature = JSON.stringify(first.query);
       let cursor=[], reverse=false;
+      if ((page > 0 || adjacentTo !== undefined) && signature !== browser.signature) {
+        throw fail('ROCKETBRAIN_GRID_QUERY', 'Open the first page after changing size, sorting or filters.');
+      }
       if (page > 0) {
-        if (signature !== browser.signature) {
-          throw fail('ROCKETBRAIN_GRID_QUERY', 'Open the first page after changing size, sorting or filters.');
-        }
-        if (page === browser.page) ({ cursor, reverse } = browser.position);
-        else if (page < browser.page) { cursor = browser.first; reverse = true; }
-        else if (browser.hasNext) cursor = browser.last;
+        if (page === from) ({ cursor, reverse } = anchor.position);
+        else if (page < from) { cursor = anchor.first; reverse = true; }
+        else if (anchor.hasNext) cursor = anchor.last;
         else throw fail('ROCKETBRAIN_GRID_QUERY', 'The current snapshot has no next page.');
       }
-      const plan = cursor.length ? browseQuery(definition, first.query, schema, false, {}, cursor, reverse) : first;
+      const plan = cursor.length ? browseQuery(definition, first.query, schema, false, {}, cursor, reverse, browser.dialect) : first;
       const result = await this._read(session, plan.sql, plan.parameters, plan.pageSize + 1);
       if (result.truncated || !session.inTransaction || !session.connected || this.keysetBrowsers.get(id) !== browser) {
         throw fail('ROCKETBRAIN_GRID_STALE', 'The table snapshot ended or the page exceeded the byte limit. Open a fresh snapshot.');
       }
-      if (result.columns.length !== definition.columns.length ||
-          result.columns.some((column,index) => column !== definition.columns[index].name)) {
+      const visible = definition.columns.map(column => column.name), expected = [...visible, ...plan.cursorColumns];
+      if (!equalRows(result.columns, expected)) {
         throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The table column projection changed during keyset browsing.');
       }
       const extra = result.rows.length > plan.pageSize;
       result.rows = result.rows.slice(0, plan.pageSize);
       if (reverse) result.rows.reverse();
       result.rowCount = result.rows.length;
-      const key = row => row ? plan.order.map(item => row[result.columns.indexOf(item.column)]) : [];
+      if (result.spatial) result.spatial = result.spatial.filter(item => item.row < result.rowCount)
+        .map(item => reverse ? { ...item, row: result.rowCount - 1 - item.row } : item);
+      const key = row => row ? plan.seekOrder.map(item => row[expected.indexOf(item.cursorAlias || item.column)]) : [];
       const hasNext = reverse || extra, hasPrevious = reverse ? extra : page > 0;
-      browser.first = key(result.rows[0]); browser.last = key(result.rows.at(-1));
-      browser.position = { cursor,reverse }; browser.hasNext = hasNext; browser.signature = signature; browser.page = page;
+      if (signature !== browser.signature) browser.anchors.clear();
+      browser.anchors.delete(page);
+      browser.anchors.set(page, { first: key(result.rows[0]), last: key(result.rows.at(-1)), hasNext, position: { cursor, reverse } });
+      while (browser.anchors.size > 8) browser.anchors.delete(browser.anchors.keys().next().value);
+      browser.signature = signature; browser.page = page;
+      if (plan.cursorColumns.length) {
+        result.columns = visible;
+        result.fields = result.fields?.slice(0, visible.length);
+        result.rows = result.rows.map(row => row.slice(0, visible.length));
+      }
       const query = { ...plan.query, page };
       const reason = 'This read-only page belongs to an InnoDB consistent snapshot.';
       result.state = this.db._state(session);
