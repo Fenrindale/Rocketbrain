@@ -709,6 +709,7 @@
       { "command": "rocketbrain.java.extractField", "title": "Extract Java Field", "category": "Rocketbrain", "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.inlineMethod", "title": "Inline Java Method Call", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.extractMethod", "title": "Extract Java Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.addTypeImport", "title": "Add Java Type Import", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.editor.expandSelection", "title": "Expand Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.shrinkSelection", "title": "Shrink Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       {
