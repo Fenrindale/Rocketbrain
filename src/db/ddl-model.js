@@ -379,13 +379,15 @@ function liveScriptAction(source, lexicalIssues) {
     lexicalIssues.some(issue=>issue.reason.startsWith('Executable comments'));
 }
 
-function analyzeLiveDdlScript(text,seed,split=statementRanges(text,seed)) {
+function analyzeLiveDdlScript(text,seed,split) {
+  if (!scriptCatalogSupported(seed)) return null;
+  split ||= statementRanges(text,{...seed,documentSqlModes:true});
   const changesContext=part=>liveScriptAction(text.slice(part.start,part.end),
     split.unknown.filter(issue=>issue.start>=part.start&&issue.start<part.end));
-  if (!scriptCatalogSupported(seed) || !split.statements.some(changesContext)) return null;
+  if (!split.statements.some(changesContext)) return null;
   const options={dialect:seed.dialect,database:seed.database,tableNameCaseSensitive:seed.tableNameCaseSensitive,sqlMode:seed.sqlMode};
   let catalog=seed,contextMayChange=false,uncertain=split.statements.length>100 || split.unknown.some(issue=>issue.start===undefined);
-  const changes=[],issues=[];
+  const changes=[],issues=[],modeTransitions=[];
   const statements=split.statements.slice(0,100).map(part=>{
     const source=text.slice(part.start,part.end),priorContextChange=contextMayChange;
     const statement={...part,priorContextChange,scriptShadow:priorContextChange&&!uncertain};
@@ -393,6 +395,11 @@ function analyzeLiveDdlScript(text,seed,split=statementRanges(text,seed)) {
     if (changesContext(part)) {
       contextMayChange=true;
       if (!uncertain) try {
+        if (part.modeTransition) {
+          catalog={...catalog,sqlMode:part.modeTransition};
+          modeTransitions.push({start:part.modeStart,end:part.end,sqlMode:part.modeTransition});
+          return {...statement,model:{state:'known',text:source,diagnostics:[],references:[],projections:[],executedSql:false,validityVerified:false}};
+        }
         if (!/;\s*$/u.test(source)) throw Error('Complete this DDL statement before modeling later statements.');
         const applied=applyDdl(source,catalog,null,{automatic:true});
         if (!applied) throw Error('This command may change the connection context outside the script catalog.');
@@ -406,15 +413,15 @@ function analyzeLiveDdlScript(text,seed,split=statementRanges(text,seed)) {
     }
     if (uncertain) {
       const model=analyzeSql(source,null,{...options,sqlMode:undefined,catalogComplete:false});
-      return {...statement,model,scriptShadow:false,contextUncertain:true};
+      return {start:part.start,end:part.end,priorContextChange,model,scriptShadow:false,contextUncertain:true};
     }
     const analysisSource=statement.scriptShadow?scriptIndexes.maskModeledHint(source,catalog):source;
-    statement.model=analyzeSql(analysisSource,catalog,{...options,catalogComplete:true});
+    statement.model=analyzeSql(analysisSource,catalog,{...options,sqlMode:part.sqlMode??options.sqlMode,catalogComplete:true});
     statement.model.text=source;
     return statement;
   });
-  return {statements,contextMayChange,changes,unknown:[...split.unknown,...issues],
+  return {statements,contextMayChange,changes,modeTransitions,unknown:[...split.unknown,...issues],
     state:statements.some(part=>part.model.state==='invalid')?'invalid':uncertain||statements.some(part=>part.model.state==='unknown')?'unknown':'known'};
 }
 
-module.exports={applyDdl,emptySchema,parseSchema,analyzeDdlScript,analyzeLiveDdlScript};
+module.exports={applyDdl,emptySchema,parseSchema,analyzeDdlScript,analyzeLiveDdlScript,scriptCatalogSupported};

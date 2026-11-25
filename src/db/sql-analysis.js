@@ -4,6 +4,7 @@
 const { isJsonFunction, checkJsonFunction, checkPath, literalValue } = require('./sql-json-expressions');
 const { createWindowAnalysis, windowReturn, windowOnly, isAggregate } = require('./sql-window-expressions');
 const { bitwiseExpression, bitCount } = require('./sql-bitwise-expressions');
+const { documentModeTracker } = require('./sql-document-modes');
 const LIMITS={bytes:128*1024,tokens:24000,scopes:256,depth:32,columns:2048};
 const CLAUSES=new Set(['FROM','WHERE','GROUP','HAVING','ORDER','LIMIT','WINDOW','INTO','FOR','LOCK','PROCEDURE','QUALIFY']);
 const RESERVED=new Set(('SELECT FROM WHERE AS DISTINCT ALL JOIN INNER OUTER LEFT RIGHT CROSS FULL NATURAL LATERAL ON USING GROUP BY HAVING ORDER ASC DESC LIMIT OFFSET UNION INTERSECT EXCEPT WITH RECURSIVE AND OR XOR NOT IS NULL TRUE FALSE UNKNOWN IN EXISTS BETWEEN LIKE REGEXP RLIKE ESCAPE CASE WHEN THEN ELSE END OVER PARTITION ROWS RANGE GROUPS UNBOUNDED PRECEDING FOLLOWING CURRENT ROW ASC DESC COLLATE DIV MOD FOR UPDATE LOCK SHARE MODE SQL_CALC_FOUND_ROWS STRAIGHT_JOIN HIGH_PRIORITY LOW_PRIORITY SQL_SMALL_RESULT SQL_BIG_RESULT SQL_BUFFER_RESULT SQL_NO_CACHE INTO OUTFILE DUMPFILE WINDOW QUALIFY SEPARATOR BOTH LEADING TRAILING FROM RETURNING').split(' '));
@@ -17,23 +18,29 @@ const UNKNOWN=()=>family('unknown');
 function dbType(value){const base=/^[a-z]+/i.exec(value||'')?.[0].toLowerCase();return family(/^(tinyint|smallint|mediumint|int|integer|bigint|year)$/.test(base)?'integer':/^(decimal|numeric)$/.test(base)?'decimal':/^(double|float|real)$/.test(base)?'floating':/^(char|varchar|tinytext|text|mediumtext|longtext|enum|set)$/.test(base)?'string':/^(binary|varbinary|tinyblob|blob|mediumblob|longblob|bit)$/.test(base)?'binary':/^(date|time|datetime|timestamp)$/.test(base)?'temporal':base==='json'?'json':'unknown',{dbType:value});}
 function position(text,offset){const before=text.slice(0,offset).split('\n');return {line:before.length-1,character:before.at(-1).length};}
 function sourceRange(text,start,end){return {start:position(text,start),end:position(text,end)};}
-function lex(text,options,unknown,nonCode){
-  const tokens=[];let i=0;
-  const modes=Array.isArray(options.sqlMode)?new Set(options.sqlMode.map(x=>String(x).toUpperCase())):null;
+function lex(text,options,unknown,nonCode,endStatement){
+  const tokens=[];let i=0,depth=0;
+  let modes=Array.isArray(options.sqlMode)?new Set(options.sqlMode.map(x=>String(x).toUpperCase())):null;
   while(i<text.length){const c=text[i];if(/\s|\uFEFF/.test(c)){i++;continue;}
     if(c==='#'||text.startsWith('--',i)&&/\s/.test(text[i+2]||' ')){const end=text.indexOf('\n',i);nonCode.push({start:i,end:end<0?text.length:end});i=end<0?text.length:end+1;continue;}
     if(text.startsWith('/*',i)){const start=i,end=text.indexOf('*/',i+2);nonCode.push({start,end:end<0?text.length:end+2});if(end<0){unknown('Unclosed comment.',start);break;}if(/^\/\*(?:!|[mM]!)/.test(text.slice(i)))unknown('Executable comments require server SQL-mode/version interpretation.',i);i=end+2;continue;}
     const start=i;
     if(c==="'"||c==='"'||c===QUOTE){const identifier=c===QUOTE||c==='"'&&modes?.has('ANSI_QUOTES');if(c==='"'&&!modes)unknown('Double-quoted SQL depends on ANSI_QUOTES; supply the observed sqlMode.',i);let value='',closed=false;i++;
-      for(;i<text.length;){if(text[i]===c){if(text[i+1]===c){value+=c;i+=2;continue;}closed=true;i++;break;}if(text[i]==='\\'&&c!==QUOTE){if(!modes)unknown('Backslash escaping depends on NO_BACKSLASH_ESCAPES; supply sqlMode.',i);if(!modes?.has('NO_BACKSLASH_ESCAPES')&&i+1<text.length){value+=text[i+1];i+=2;continue;}}value+=text[i++];}
+      for(;i<text.length;){if(text[i]===c){if(text[i+1]===c){value+=c;i+=2;continue;}closed=true;i++;break;}if(text[i]==='\\'&&!identifier){if(!modes)unknown('Backslash escaping depends on NO_BACKSLASH_ESCAPES; supply sqlMode.',i);if(!modes?.has('NO_BACKSLASH_ESCAPES')&&i+1<text.length){value+=text[i+1];i+=2;continue;}}value+=text[i++];}
       if(!closed)unknown('Unclosed quoted token.',start);if(!identifier)nonCode.push({start,end:i});tokens.push({kind:identifier?'identifier':'string',value,start,end:i,quoted:identifier});
     }else if(/[\p{L}_$]/u.test(c)){i++;while(i<text.length&&/[\p{L}\p{N}_$]/u.test(text[i]))i++;const value=text.slice(start,i);tokens.push({kind:'word',value,upper:value.toUpperCase(),start,end:i});}
     else if(/\d/.test(c)||c==='.'&&/\d/.test(text[i+1]||'')){const match=/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/.exec(text.slice(i));i+=match[0].length;tokens.push({kind:'number',value:match[0],start,end:i});}
     else if(c==='@'||c==='?'||c===':'&&!options.formatLayout){i++;while(i<text.length&&/[\p{L}\p{N}_$.@]/u.test(text[i]))i++;tokens.push({kind:'parameter',value:text.slice(start,i),start,end:i});}
-    else{const op=['<=>','->>','!=','<>','>=','<=','||','&&',':=','->','<<','>>'].find(op=>text.startsWith(op,i));i+=op?op.length:1;tokens.push({kind:'symbol',value:op||c,upper:op||c,start,end:i});}
+    else{const op=['<=>','->>','!=','<>','>=','<=','||','&&',':=','->','<<','>>'].find(op=>text.startsWith(op,i));i+=op?op.length:1;tokens.push({kind:'symbol',value:op||c,upper:op||c,start,end:i});
+      if(endStatement){
+        if(c==='(')depth++;
+        else if(c===')'){if(depth)depth--;else unknown('Unbalanced closing parenthesis.',start);}
+        else if(c===';'&&!depth){const next=endStatement(tokens,i,true);if(next)modes=new Set(next);}
+      }
+    }
     if(tokens.length>=LIMITS.tokens){unknown('SQL token limit reached.',i);break;}
   }
-  const stack=[];for(let n=0;n<tokens.length;n++){if(tokens[n].kind!=='symbol')continue;if(tokens[n].value==='(')stack.push(n);else if(tokens[n].value===')'){const open=stack.pop();if(open===undefined)unknown('Unbalanced closing parenthesis.',tokens[n].start);else{tokens[open].close=n;tokens[n].open=open;}}}for(const n of stack)unknown('Unclosed parenthesis.',tokens[n].start);
+  const stack=[];for(let n=0;n<tokens.length;n++){if(tokens[n].kind!=='symbol')continue;if(tokens[n].value==='(')stack.push(n);else if(tokens[n].value===')'){const open=stack.pop();if(open===undefined){if(!endStatement)unknown('Unbalanced closing parenthesis.',tokens[n].start);}else{tokens[open].close=n;tokens[n].open=open;}}}for(const n of stack)unknown('Unclosed parenthesis.',tokens[n].start);
   return tokens;
 }
 function analyzeSql(text,catalog=[],options={}){
@@ -368,6 +375,12 @@ function definitionsAt(model,offset,{skipImplicit=false}={}){const ref=model.ref
 function hoverAt(model,offset){const ref=model.references.find(r=>offset>=r.start&&offset<=r.end);if(!ref)return null;return [ref.kind+': '+ref.name,ref.type?.dbType||ref.type?.family,ref.catalog?JSON.stringify(ref.catalog):null,ref.correlated?'Correlated outer-scope reference':null,'Static SELECT model; execution validity is unverified.'].filter(Boolean).join('\n');}
 function statementRanges(text,options={}){
   const unknown=[],statements=[];if(typeof text!=='string'||Buffer.byteLength(text)>LIMITS.bytes||text.includes('\0'))return {statements,unknown:[{reason:'SQL document exceeds limits or contains NUL.'}]};
+  if(options.documentSqlModes&&Array.isArray(options.sqlMode)){
+    const endStatement=documentModeTracker(text,options.sqlMode,unknown,statements);
+    const tokens=lex(text,options,(reason,start)=>unknown.push({reason,start}),[],endStatement);
+    endStatement(tokens,text.length,false);
+    return {statements,unknown};
+  }
   const tokens=lex(text,options,(reason,start)=>unknown.push({reason,start}),[]);let start=0;
   for(const t of tokens)if(t.kind==='symbol'&&t.value===';'){if(text.slice(start,t.end).trim())statements.push({start,end:t.end});start=t.end;}
   if(text.slice(start).trim())statements.push({start,end:text.length});return {statements,unknown};
