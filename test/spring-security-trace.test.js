@@ -62,3 +62,46 @@ test('observer uses one authenticated GET for a trace; the native view rejects s
     assert.equal(panel,undefined);
   }finally{view.close();client.dispose();await new Promise(resolve=>host.close(resolve));}
 });
+
+test('method decisions keep phase, source and allowlisted roles separate from request authorization',()=>{
+  const event={phase:'after',manager:'fixture.Policy',delegateManager:null,owner:'fixture.Service',method:'read',
+    parameterTypes:['java.lang.String','byte[]'],decision:'denied',decisionSource:'framework-result',
+    roleSources:['role-hierarchy'],checkedRoles:['ROLE_FIXTURE_VIEWER'],matchedRoles:[]};
+  const data={...structuredClone(report),methodTraceEnabled:true,roleDisclosureEnabled:true,
+    hooks:[...report.hooks,'method-before','method-after','method-roles']};
+  data.traces[0].methodCoverage='observed';
+  data.traces[0].methodDecisions=[{...event,principal:'private-principal',argument:'private-argument',expression:'private-expression'}];
+  const normalized=normalizeSecurityTrace(data);
+  assert.deepEqual(normalized.traces[0].methodDecisions,[event]);
+  assert.equal(normalized.traces[0].authorizationDecision,'unobserved');
+  assert.doesNotMatch(JSON.stringify(normalized),/private-principal|private-argument|private-expression/);
+  const html=renderSecurityTrace(normalized);
+  assert.match(html,/Method authorization[\s\S]*fixture\.Service\.read[\s\S]*After invocation[\s\S]*denied[\s\S]*Spring role hierarchy · Compared ROLE_FIXTURE_VIEWER/);
+  assert.doesNotMatch(html,/<script/);
+  const malformed=[
+    value=>value.roleDisclosureEnabled=false,
+    value=>value.traces[0].methodCoverage='disabled',
+    value=>value.traces[0].methodDecisions=Array.from({length:9},()=>event),
+    value=>value.traces[0].methodDecisions[0].matchedRoles=['ROLE_PRIVATE'],
+    value=>value.traces[0].methodDecisions[0].decisionSource='no-result',
+    value=>value.traces[0].methodDecisions[0].checkedRoles=['<img>'],
+    value=>value.traces[0].methodDecisions[0].roleSources=[],
+    value=>value.hooks=value.hooks.filter(hook=>hook!=='method-after')
+  ];
+  for(const corrupt of malformed){
+    const invalid=structuredClone(data);
+    corrupt(invalid);
+    assert.throws(()=>normalizeSecurityTrace(invalid),/Unsupported/);
+  }
+  const redacted=structuredClone(data);
+  redacted.roleDisclosureEnabled=false;
+  redacted.traces[0].methodDecisions[0].checkedRoles=[];
+  const redactedDisplay=renderSecurityTrace(normalizeSecurityTrace(redacted));
+  assert.match(redactedDisplay,/Role labels hidden/);
+  assert.doesNotMatch(redactedDisplay,/ROLE_FIXTURE_VIEWER/);
+  const waiting=structuredClone(data);
+  waiting.traces[0].methodCoverage='unavailable';
+  waiting.traces[0].methodDecisions=[];
+  waiting.hooks=report.hooks;
+  assert.match(renderSecurityTrace(normalizeSecurityTrace(waiting)),/Supported method interceptors are unavailable/);
+});

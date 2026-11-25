@@ -32,6 +32,7 @@ public final class SecurityTraceRuntime {
         final List<Map<String,Object>> matches=new ArrayList<>();
         final List<Object> configured=new ArrayList<>();
         final List<String> entered=new ArrayList<>();
+        final MethodSecurityTrace methods=MethodSecurityTrace.enabled()?new MethodSecurityTrace():null;
         Candidate pending;
         int depth=1;
         boolean incomplete, selectionSeen;
@@ -121,8 +122,22 @@ public final class SecurityTraceRuntime {
             report.put("selectedChain",trace.matches.stream().filter(item->Boolean.TRUE.equals(item.get("matched"))).map(item->item.get("index")).findFirst().orElse(null));
             report.put("configured",trace.configured.stream().map(SecurityTraceRuntime::className).toList());
             report.put("entered",trace.entered);report.put("authorizationDecision",trace.decision==null?"unobserved":trace.decision?"granted":"denied");
+            if(trace.methods!=null){
+                report.put("methodCoverage",methodCoverage(trace,asynchronous));
+                report.put("methodDecisions",trace.methods.snapshot());
+            }
             retain(report);
         }catch(Throwable ignored){}
+    }
+    private static synchronized String methodCoverage(Trace trace,boolean asynchronous){
+        if(trace.methods==null)return "disabled";
+        boolean before=hooks.contains("method-before"), after=hooks.contains("method-after");
+        if(!before&&!after)return "unavailable";
+        return before&&after&&!asynchronous&&!trace.incomplete&&!trace.methods.incomplete()?"observed":"partial";
+    }
+    static MethodSecurityTrace methodTrace(){
+        if(!MethodSecurityTrace.enabled())return null;
+        Trace trace=outer();return trace==null?null:trace.methods;
     }
     private static Trace outer(){Trace trace=current.get();return trace!=null&&trace.depth==1?trace:null;}
     private static Object servlet(Object value,String api,String method)throws ReflectiveOperationException {
@@ -140,7 +155,13 @@ public final class SecurityTraceRuntime {
         if(recent.size()==MAX_SAMPLES){recent.removeFirst();dropped++;}recent.addLast(report);
     }
     static synchronized Map<String,Object> snapshot(){
-        return Map.of("enabled",enabled,"state",!enabled?"disabled":hooks.contains("proxy")?"ready":"waiting",
-            "hooks",List.copyOf(hooks),"dropped",dropped,"traces",List.copyOf(recent));
+        Map<String,Object> report=new LinkedHashMap<>(Map.of("enabled",enabled,
+            "state",!enabled?"disabled":hooks.contains("proxy")?"ready":"waiting",
+            "hooks",List.copyOf(hooks),"dropped",dropped,"traces",List.copyOf(recent)));
+        if(MethodSecurityTrace.enabled()){
+            report.put("methodTraceEnabled",true);
+            report.put("roleDisclosureEnabled",MethodSecurityTrace.roleDisclosureEnabled());
+        }
+        return report;
     }
 }

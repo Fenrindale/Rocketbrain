@@ -5,6 +5,29 @@ const VIEW='rocketbrain.spring.securityTrace', TITLE='Spring Security Filter Tra
 const safe=value=>String(value).replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[character]);
 const short=value=>value?value.split('.').at(-1):'Type unavailable';
 
+const roleSourceLabels={'role-hierarchy':'Spring role hierarchy','direct-authorities':'Direct authorities','custom-hierarchy':'Custom role hierarchy'};
+const decisionSourceLabels={'no-result':'Manager abstained','framework-result':'Spring authorization result',
+  'manager-threw-denial':'Manager raised authorization denied','incomplete':'Decision unavailable'};
+
+function renderMethodDecisions(trace, disclosure) {
+  if(!trace.methodCoverage||trace.methodCoverage==='disabled')return '';
+  const coverage=trace.methodCoverage==='partial'?'<p>Partial method evidence for this request.</p>':'';
+  const rows=trace.methodDecisions.map(event=>{
+    const target=event.owner&&event.method?event.owner+'.'+event.method+(event.parameterTypes===null?'':'('+event.parameterTypes.join(', ')+')'):'Method target unavailable';
+    const sources=event.roleSources.map(source=>roleSourceLabels[source]).join(', ');
+    const roles=disclosure
+      ?(event.checkedRoles.length?' · Compared '+event.checkedRoles.join(', ')+(event.matchedRoles.length?' · Matched '+event.matchedRoles.join(', '):''):'')
+      :(sources?' · Role labels hidden':'');
+    return '<tr><td>'+safe(target)+'</td><td>'+safe(event.phase==='before'?'Before invocation':'After invocation')+'</td><td>'+
+      safe(event.decision+' · '+decisionSourceLabels[event.decisionSource])+'</td><td>'+safe(event.delegateManager?event.manager+' → '+event.delegateManager:event.manager||'Manager unavailable')+
+      '</td><td>'+safe((sources||'No standard role comparison observed')+roles)+'</td></tr>';
+  }).join('');
+  const empty=trace.methodCoverage==='unavailable'?'Supported method interceptors are unavailable.':'No method decision was captured.';
+  return '<section><h2>Method authorization</h2>'+coverage+(rows?
+    '<table><thead><tr><th>Method</th><th>Phase</th><th>Decision</th><th>Manager</th><th>Authority evidence</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    :'<p>'+empty+'</p>')+'</section>';
+}
+
 function renderSecurityTrace(report) {
   const nonce=randomBytes(16).toString('base64');
   const summary=report.state==='disabled'?'The application must start with securityTrace enabled in the observer configuration.'
@@ -20,7 +43,7 @@ function renderSecurityTrace(report) {
       (trace.status===null?'Status unavailable':'HTTP '+trace.status)+' · '+trace.durationMs+' ms</summary><p>'+safe(outcome)+
       (trace.coverage==='partial'?' · Partial trace':'')+(trace.completed?'':' · Filter chain threw')+'</p><div class="paths"><section><h2>Chain match order</h2>'+
       (matches?'<ol>'+matches+'</ol>':'<p>No matcher result recorded</p>')+'</section><section><h2>Filter order</h2>'+(stages?'<table><thead><tr><th>Filter class</th><th>Execution</th></tr></thead><tbody>'+stages+
-      '</tbody></table>':'<p>No selected filters recorded</p>')+'</section></div></details>';
+      '</tbody></table>':'<p>No selected filters recorded</p>')+'</section></div>'+renderMethodDecisions(trace,report.roleDisclosureEnabled)+'</details>';
   }).join('');
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'"><title>${TITLE}</title>
