@@ -26,7 +26,7 @@ function publicPath(name) {
   if (/^src\/.+\.(?:js|cjs|json|css)$/.test(name)) return true;
   if (/^runtime\/.+\.java$/.test(name)) return true;
   if (name === 'test/fixtures/refactoring-v24-package/src/main/resources/fixture/packagev24/payload/nested/rows.csv') return true;
-  if (/^test\/.+\.(?:js|cjs|java|json|xml|properties|sql|gradle|txt|css|ya?ml)$/.test(name)) return true;
+  if (/^test\/.+\.(?:js|cjs|java|kt|json|xml|properties|sql|gradle|txt|css|ya?ml)$/.test(name)) return true;
   if (/^test\/fixtures\/[^\0]+\/src\/(?:main|test)\/resources\/META-INF\/services\/[A-Za-z_$][\w.$]*$/.test(name)) return true;
   if (/^scripts\/[^/]+\.(?:js|ps1)$/.test(name) && !/^scripts\/(?:record-v|observe-reference\.)/.test(name)) return true;
   if (/^docs\/.+\.(?:md|json)$/.test(name)) return true;

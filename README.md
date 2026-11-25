@@ -54,6 +54,7 @@ pnpm run package
 17. **Manage Git Changelists**에서 변경 파일을 이름 있는 작업 목록에 배정합니다. 목록에 편집 위치와 실행 구성 선택을 기록해 복원할 수 있습니다. 복원 후 실행 구성은 VS Code의 Run and Debug에서 시작할 수 있습니다.
 18. **Convert Java Lambda, Anonymous Class or Loop**에서 지역 SAM 변수와 지원하는 배열 합산 루프의 변환을 검토합니다. 적용 전에 Javac로 참조 연결을 확인합니다.
 19. **Trace Java Stream Values**에서 `Stream.of` 또는 `List.of(...).stream()`부터 `toList()`까지 선택합니다. 독립 JDK에서 `filter`, `map`, `flatMap`, `limit`의 실제 값 흐름을 실행하고 **Go to Java Stream Stage**로 원본 단계에 이동합니다.
+20. **Build and Index Mixed JVM Sources**로 가져온 Gradle·Maven 혼합 프로젝트의 표준 main 소스를 빌드하고 인덱싱합니다. Java Projects에서 Kotlin 파일을 열고, 한 줄에서 대상을 식별할 수 있는 호출·getter·상위 클래스에 **Go to Mixed JVM Declaration**을 사용합니다. 소스나 컴파일 결과가 바뀌면 다시 인덱싱합니다. Gradle `application` 프로젝트는 **Run Mixed Gradle Application**에서 실행합니다.
 
 **Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다. 필터 순서·매처·권한 목록은 앱의 보안 구성에서 확인합니다.
 
@@ -69,6 +70,24 @@ node /path/to/java-quality-gate.js --repo . --revision "$COMMIT_SHA" \
 `--profile`로 편집기의 Java 검사 프로필과 같은 형식의 JSON 하나를 사용합니다. 기본 검사는 빈 `catch`·`finally`, 빈 `if` 문장, 중복 `import`입니다. 선택한 커밋의 추적된 Java 파일을 검사하고, 새 발견이 임계값 이상이면 SARIF를 저장한 뒤 종료 코드 `1`을 반환합니다. 통과는 `0`, 입력이나 검사 실패는 `2`입니다. `--baseline`으로 이전 Rocketbrain SARIF를 지정하면 보고서의 정책과 기록된 조상 커밋을 다시 검사합니다. `--output -`는 표준 출력으로 보냅니다.
 
 **Open Java Quality Gate Report**에서 SARIF를 고르면 새 문제와 기존 문제를 확인할 수 있습니다. 선택한 항목은 보고서의 커밋에서 직접 읽은 Java 소스를 읽기 전용으로 열고 발견 범위를 선택합니다.
+
+### 로컬 MCP 도구
+
+VSIX에서 `extension/dist/ide-mcp-server.js`를 추출하고, 같은 계정의 MCP 클라이언트가 Node.js 20 이상으로 실행하게 설정합니다. VS Code의 `.vscode/mcp.json`에서는 다음 구성을 사용할 수 있습니다.
+
+```json
+{
+  "servers": {
+    "rocketbrain": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/ide-mcp-server.js", "--workspace", "${workspaceFolder}", "--allow-tool", "project_inventory"]
+    }
+  }
+}
+```
+
+`--workspace`로 허용한 로컬 폴더와 `--allow-tool`에 지정한 도구가 이 프로세스의 접근 범위를 정합니다. `project_inventory`는 소스 개수와 빌드 파일의 상대 경로를 읽습니다. `java_quality`는 로컬 Git 커밋의 Java 검사 결과를 제공하고, `sql_structure`는 입력한 MySQL·MariaDB SELECT를 DB 연결 없이 분석합니다. 추가 도구마다 `--allow-tool`을 반복합니다. 서버는 표준 입출력만 사용하며 결과 수·크기와 실행 시간을 제한합니다.
 
 ### HTTP, GraphQL, WebSocket 요청과 OpenAPI
 

@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.49.0",
+  "version": "0.50.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -24,6 +24,7 @@
     "onView:rocketbrain.results",
     "onView:rocketbrain.analysis",
     "onLanguage:java",
+    "onLanguage:kotlin",
     "onLanguage:duckdb-sql",
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
@@ -52,13 +53,17 @@
         "extensions": [".http", ".rest"]
       },
       { "id": "duckdb-sql", "aliases": ["DuckDB SQL"], "extensions": [".duckdb.sql"] },
-      { "id": "rocketbrain-jdbc", "aliases": ["Rocketbrain JDBC SQL"], "extensions": [".jdbc.sql"] }
+      { "id": "rocketbrain-jdbc", "aliases": ["Rocketbrain JDBC SQL"], "extensions": [".jdbc.sql"] },
+      { "id": "kotlin", "aliases": ["Kotlin"], "extensions": [".kt"] }
     ],
     "grammars": [
       { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" },
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
+      { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.traceStream", "title": "Trace Java Stream Values", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java && editorHasSelection" },
       { "command": "rocketbrain.java.navigateStreamStage", "title": "Go to Java Stream Stage", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-java-stream" },
       { "command": "rocketbrain.deploy.reviewWebDav", "title": "Review WebDAV Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -80,6 +85,11 @@
       { "command": "rocketbrain.duckdb.browse", "title": "Browse DuckDB Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.functions", "title": "Find DuckDB Functions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.close", "title": "Close Local DuckDB", "category": "Rocketbrain", "enablement": "rocketbrain.duckdbConnected" },
+      { "command": "rocketbrain.mongodb.open", "title": "Connect to Local MongoDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.mongodb.browse", "title": "Browse MongoDB Collections", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
+      { "command": "rocketbrain.mongodb.newFind", "title": "New MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
+      { "command": "rocketbrain.mongodb.run", "title": "Run Read-Only MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected && editorLangId == json" },
+      { "command": "rocketbrain.mongodb.close", "title": "Close MongoDB Connection", "category": "Rocketbrain", "enablement": "rocketbrain.mongoConnected" },
       { "command": "rocketbrain.jdbc.addDriver", "title": "Add JDBC Driver", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jdbc.profiles", "title": "Manage JDBC Profiles", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jdbc.newQuery", "title": "New JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
@@ -1762,6 +1772,7 @@
   "dependencies": {
     "@grpc/grpc-js": "1.14.7",
     "@grpc/proto-loader": "0.8.1",
+    "mongodb": "7.9.1",
     "mysql2": "3.24.6",
     "protobufjs": "7.6.6",
     "saxes": "6.0.0",

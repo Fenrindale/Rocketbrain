@@ -1,5 +1,5 @@
 {
-  "version": "0.49.0",
+  "version": "0.50.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 64,
-    "partial": 110,
-    "not-implemented": 27,
+    "implemented": 65,
+    "partial": 111,
+    "not-implemented": 25,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 61.1,
+    "percent": 61.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-111",
-    "DG-003",
-    "DG-074"
+    "IDEA-043",
+    "IDEA-117",
+    "DG-003"
   ],
   "expandedFeatures": [
-    "IDEA-111",
-    "DG-003",
-    "DG-074"
+    "IDEA-043",
+    "IDEA-117",
+    "DG-003"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1378,25 +1378,27 @@
       "category": "JVM 언어·프로젝트",
       "feature": "Java와 Kotlin 혼합 프로젝트",
       "priority": "P0",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Kotlin 언어 엔진과 Java/Kotlin 혼합 프로젝트 통합이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "Java Projects에서 Maven·Gradle Kotlin/JVM 소스를 탐색하고, 빌드한 JVM 참조를 사용해 Java와 Kotlin 사이의 호출, 오버로드, getter, 상속 선언으로 이동한다. Gradle 애플리케이션 실행을 연결한다.",
       "remaining": [
-        "교차 언어 완성·참조·빌드·리팩터링이 필요하다."
+        "교차 언어 이름 변경, Kotlin nullability 및 일반 언어 서버 기능이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.50-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "Kotlin 2.3.20 혼합 프로젝트를 Maven·Gradle에서 컴파일하고 JUnit과 양방향 선언 이동을 실행했다. 실제 Gradle 실행 결과와 소스 또는 클래스 변경 이후 이전 링크 거부를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/mixed-jvm-index.js",
+          "src/java/mixed-jvm-vscode.js",
+          "runtime/java-mixed/MixedClassInspector.java",
+          "test/mixed-jvm-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3423,8 +3425,8 @@
       "verification": {
         "state": "v0.49-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.49.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3588,25 +3590,27 @@
       "category": "설정·확장·AI",
       "feature": "IDE 기능을 MCP 도구로 제공",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Rocketbrain IDE 기능을 외부 MCP 도구로 제공하지 않는다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "독립 stdio MCP 서버에서 프로젝트 인벤토리, Git 리비전 Java 품질 분석, MySQL·MariaDB 정적 SQL 구조 분석을 제공한다. 작업 공간과 허용 도구를 실행 인수로 지정한다.",
       "remaining": [
-        "도구 계약·인증·권한·결과/취소 수명주기가 필요하다."
+        "추가 편집기 동작과 네트워크 전송 방식은 별도 지원이 필요하다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.50-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "패키지의 stdio 실행 파일을 공식 MCP 클라이언트와 두 프로토콜 버전에서 사용했다. 실제 Spring 인벤토리, 소스 검사, SQL 구조, 도구 권한 및 취소를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "scripts/ide-mcp-server.js",
+          "src/mcp/stdio-server.js",
+          "src/mcp/workspace-tools.js",
+          "test/ide-mcp-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3779,23 +3783,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "MySQL·MariaDB 연결에 더해 승인한 pgJDBC로 PostgreSQL 스키마, 테이블·뷰·물리화 뷰와 타입을 탐색한다. PostgreSQL SQL과 읽기 트랜잭션·취소를 제공한다.",
+      "scope": "MySQL·MariaDB와 PostgreSQL 조회에 더해, 인증된 로컬 MongoDB의 허용된 데이터베이스·컬렉션·뷰를 탐색하고 필터·투영·정렬이 있는 bounded find를 BSON Extended JSON으로 읽는다.",
       "remaining": [
-        "PostgreSQL 편집·실행 계획, 다른 SQL DB와 문서형 DB의 전용 기능이 필요하다."
+        "PostgreSQL 편집·실행 계획, 다른 SQL DB 전용 엔진, MongoDB 원격 연결·집계·편집이 남아 있다."
       ],
       "verification": {
-        "state": "v0.49-installed-coverage",
+        "state": "v0.50-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 PostgreSQL 17.12와 pgJDBC 42.7.14에서 BIGINT·NUMERIC·BYTEA·JSONB·배열, CTE·달러 인용·JSON 연산자, 서버 읽기 제약 및 활성 쿼리 취소를 확인했다.",
+        "testedScope": "MongoDB Community 8.0.38과 Node 드라이버 7.9.1에서 SCRAM 인증, 카탈로그 권한, BSON 타입, 행·바이트 제한, 취소 후 재조회 및 서버의 쓰기 거부를 확인했다. PostgreSQL 검증은 v0.49에 보존했다.",
         "publicEvidence": [
-          "src/db/postgresql-jdbc.js",
-          "runtime/jdbc/DriverWorker.java",
-          "test/postgresql-jdbc-host.js"
+          "docs/mongodb.md",
+          "src/db/mongodb.js",
+          "src/db/mongodb-vscode.js",
+          "test/mongodb-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5978,8 +5983,8 @@
       "verification": {
         "state": "v0.49-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.49.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6657,8 +6662,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "3fdb84d8abe7ef099697dd7f853d62a4d1dc26a1b9dc5a71d8b6dff37e7f9a7b",
-    "sourceManifestSha256": "4c1c3fb113469f24c6b30ee878a41de1e40b0493b3cf8198aa034640cacbe236",
+    "vsixSha256": "e0c0c4acbb5edd347856b5d0e8c41fdc43766a4d5852f9a7e289c3b9647a4af6",
+    "sourceManifestSha256": "9d00e93819baaeefc8d79f968436d17099774dbdd62d9d864d40854ded9ccdc1",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6672,28 +6677,23 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-111",
+      "id": "IDEA-043",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "DG-003",
+      "id": "IDEA-117",
       "before": "not-implemented",
-      "after": "partial"
-    },
-    {
-      "id": "DG-074",
-      "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1354,
-    "pass": 1291,
+    "tests": 1363,
+    "pass": 1299,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 63,
+    "skipped": 64,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

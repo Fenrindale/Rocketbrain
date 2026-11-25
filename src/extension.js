@@ -47,6 +47,7 @@ async function activate(context) {
     document=>sqlAnalysis?.virtualActive(document));
   activeDatabase=database;
   const duckdb = require('./db/duckdb-vscode').registerDuckDb(context, vscode);
+  const mongoDb = require('./db/mongodb-vscode').registerMongoDb(context, vscode);
   const jdbc = require('./db/jdbc-vscode').registerJdbc(vscode, context);
   const embeddedLanguage = require('./db/embedded-language-vscode').registerEmbeddedLanguage(vscode, { catalogSnapshot: database.catalogSnapshot });
   context.subscriptions.push(embeddedLanguage);
@@ -142,7 +143,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, duckdb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists, federation };
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists, federation };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

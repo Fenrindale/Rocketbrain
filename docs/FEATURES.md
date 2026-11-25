@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.49.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.50.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 64 |
-| 부분 구현 | 110 |
-| 미구현 | 27 |
+| 구현 | 65 |
+| 부분 구현 | 111 |
+| 미구현 | 25 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **61.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **61.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.49에서는 PostgreSQL 전용 JDBC, WebDAV 배포 검토, 뷰·루틴·트리거가 포함된 네이티브 복원을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 130.5점에서 132점으로 바뀌었다.
+v0.50에서는 로컬 IDE MCP, 혼합 Java·Kotlin 프로젝트 탐색, 인증된 MongoDB 읽기를 검증했다. 상태가 바뀐 항목은 2개이고 가중 점수는 132점에서 133.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -63,7 +63,7 @@ v0.49에서는 PostgreSQL 전용 JDBC, WebDAV 배포 검토, 뷰·루틴·트리
 | IDEA-040 | IntelliJ IDEA | 의존성 취약점·취약 API 사용 분석 | 미구현 |
 | IDEA-041 | IntelliJ IDEA | Qodana·CI 품질 게이트 연결 | 구현 |
 | IDEA-042 | IntelliJ IDEA | Java 버전·JDK·언어 수준 | 부분 구현 |
-| IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 미구현 |
+| IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 부분 구현 |
 | IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 미구현 |
 | IDEA-045 | IntelliJ IDEA | Kotlin Multiplatform·Compose 개발 | 미구현 |
 | IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 미구현 |
@@ -137,7 +137,7 @@ v0.49에서는 PostgreSQL 전용 JDBC, WebDAV 배포 검토, 뷰·루틴·트리
 | IDEA-114 | IntelliJ IDEA | 플러그인 설치·호환·갱신 | VS Code 재사용 |
 | IDEA-115 | IntelliJ IDEA | AI 완성·채팅·프로젝트 문맥 | 미구현 |
 | IDEA-116 | IntelliJ IDEA | Air·ACP 에이전트·병렬 작업 | 미구현 |
-| IDEA-117 | IntelliJ IDEA | IDE 기능을 MCP 도구로 제공 | 미구현 |
+| IDEA-117 | IntelliJ IDEA | IDE 기능을 MCP 도구로 제공 | 구현 |
 | IDEA-118 | IntelliJ IDEA | 프로젝트 신뢰·제한 모드 | 구현 |
 | IDEA-119 | IntelliJ IDEA | 문자열 안 SQL/정규식/HTML 언어 주입 | 부분 구현 |
 | IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 미구현 |

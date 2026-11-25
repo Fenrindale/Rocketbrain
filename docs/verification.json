@@ -1,25 +1,25 @@
 {
-  "version": "0.49.0",
-  "verifiedAt": "2026-11-25T09:55:57.337Z",
+  "version": "0.50.0",
+  "verifiedAt": "2026-11-25T10:24:25.151Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.49.0.vsix",
-    "bytes": 2197417,
-    "sha256": "3fdb84d8abe7ef099697dd7f853d62a4d1dc26a1b9dc5a71d8b6dff37e7f9a7b",
-    "files": 16
+    "name": "rocketbrain-0.50.0.vsix",
+    "bytes": 2562228,
+    "sha256": "e0c0c4acbb5edd347856b5d0e8c41fdc43766a4d5852f9a7e289c3b9647a4af6",
+    "files": 17
   },
   "source": {
-    "frozenPublicInputs": 1354,
-    "inputVectorSha256": "4c1c3fb113469f24c6b30ee878a41de1e40b0493b3cf8198aa034640cacbe236",
+    "frozenPublicInputs": 1383,
+    "inputVectorSha256": "9d00e93819baaeefc8d79f968436d17099774dbdd62d9d864d40854ded9ccdc1",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1354,
-    "pass": 1291,
+    "tests": 1363,
+    "pass": 1299,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 63,
+    "skipped": 64,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,15 +32,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "postgres",
+          "group": "mcp",
           "checks": 1
         },
         {
-          "group": "webdav",
+          "group": "kotlin",
           "checks": 1
         },
         {
-          "group": "dumpGraph",
+          "group": "mongo",
           "checks": 1
         }
       ],
@@ -58,15 +58,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "postgres",
+          "group": "mcp",
           "checks": 1
         },
         {
-          "group": "webdav",
+          "group": "kotlin",
           "checks": 1
         },
         {
-          "group": "dumpGraph",
+          "group": "mongo",
           "checks": 1
         }
       ],
@@ -77,74 +77,69 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-111": {
-      "scope": "실제 루프백 WebDAV 서버에서 매핑, 제외, 에디터 diff, 유니코드 경로의 바이너리 업로드, 원격이 바뀐 뒤 HTTP 412 충돌을 확인했다.",
+    "IDEA-043": {
+      "scope": "Kotlin 2.3.20 혼합 프로젝트를 Maven·Gradle에서 컴파일하고 JUnit과 양방향 선언 이동을 실행했다. 실제 Gradle 실행 결과와 소스 또는 클래스 변경 이후 이전 링크 거부를 확인했다.",
       "runtimeGroups": [
-        "webdav"
+        "kotlin"
+      ]
+    },
+    "IDEA-117": {
+      "scope": "패키지의 stdio 실행 파일을 공식 MCP 클라이언트와 두 프로토콜 버전에서 사용했다. 실제 Spring 인벤토리, 소스 검사, SQL 구조, 도구 권한 및 취소를 확인했다.",
+      "runtimeGroups": [
+        "mcp"
       ]
     },
     "DG-003": {
-      "scope": "실제 PostgreSQL 17.12와 pgJDBC 42.7.14에서 BIGINT·NUMERIC·BYTEA·JSONB·배열, CTE·달러 인용·JSON 연산자, 서버 읽기 제약 및 활성 쿼리 취소를 확인했다.",
+      "scope": "MongoDB Community 8.0.38과 Node 드라이버 7.9.1에서 SCRAM 인증, 카탈로그 권한, BSON 타입, 행·바이트 제한, 취소 후 재조회 및 서버의 쓰기 거부를 확인했다. PostgreSQL 검증은 v0.49에 보존했다.",
       "runtimeGroups": [
-        "postgres"
-      ]
-    },
-    "DG-074": {
-      "scope": "두 실제 DB에서 일곱 객체를 복원하고 중첩 뷰와 함수 실행, 트리거 순서 및 프로시저 호출을 확인했다. 스키마를 넘는 참조와 다른 콜레이션을 거부했다.",
-      "runtimeGroups": [
-        "dumpGraph"
+        "mongo"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 264,
+    "sourceCorrespondences": 271,
     "sourceConfidence": "inferred",
-    "archiveEntries": 16,
+    "archiveEntries": 17,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 64,
-      "partial": 110,
-      "not-implemented": 27,
+      "implemented": 65,
+      "partial": 111,
+      "not-implemented": 25,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 132,
-    "previousWeightedPoints": 130.5,
+    "weightedPoints": 133.5,
+    "previousWeightedPoints": 132,
     "targetWeightedPoints": 216,
-    "referencePercent": 61.1,
+    "referencePercent": 61.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-111",
+        "id": "IDEA-043",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "DG-003",
+        "id": "IDEA-117",
         "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-074",
-        "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "PostgreSQL은 사용자 승인 pgJDBC로 한 스키마를 연결·조회한다. 편집과 계획 분석은 추가 범위다.",
-    "WebDAV는 강한 ETag를 사용하는 기존 원격 폴더에 새 파일·변경 파일을 배포한다. SFTP와 FTPS는 별도 지원이 필요하다.",
-    "네이티브 객체 백업은 같은 서버의 다른 빈 스키마와 같은 유효 계정, 일치하는 스키마 기본값으로 복원한다.",
+    "MCP는 명시적으로 허용한 로컬 도구를 stdio에서 제공한다. 데이터베이스 연결과 데이터 쿼리는 별도 범위다.",
+    "혼합 JVM 탐색은 빌드한 클래스 파일과 프로젝트 소스에 근거한다. Kotlin 리팩터링과 nullability 분석은 남아 있다.",
+    "MongoDB는 로컬 읽기 역할을 사용한다. 쓰기, 집계, 원격 접근은 별도 지원이 필요하다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "혼합 Java·Kotlin 빌드와 양방향 탐색",
-    "Rocketbrain 소스·SQL 분석 기능을 제공하는 로컬 MCP 서버",
-    "MongoDB 카탈로그와 형식 보존 읽기"
+    "GitHub PR·GitLab MR 검토와 변경 줄 초안",
+    "Groovy·Spock 실행과 JavaFX FXML 탐색·패키징",
+    "MySQL·MariaDB 저장 프로그램과 DELIMITER SQL 포맷"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
