@@ -369,6 +369,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 일반 SQL 편집기에서 스크립트에 선언한 열과 InnoDB 보조 인덱스의 변화를 뒤 문장의 자동 완성과 진단에 반영합니다. 열 추가·이름 변경·삭제와 단순 인덱스 추가·이름 변경·삭제를 지원합니다. 모델을 적용할 때 DB에 DDL을 보내지 않습니다. SQL 모드 변경이나 모델링 범위 밖의 문장이 나타나면 이후 문장의 이름 추론을 중단합니다. [MySQL ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html), [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
 - **Review and Stream a Large Data Import**에서 일반 XLSX와 Strict OOXML XLSX의 워크시트를 선택해 가져옵니다. 검토 문서에 형식을 표시하고 공유 문자열, 저장된 숫자 정밀도, 날짜, NULL과 빈 텍스트를 읽습니다. 선택한 열을 검토하고, 수식은 명시적으로 선택한 저장 결과를 사용합니다. 전송 후 같은 트랜잭션에서 커밋하거나 롤백합니다.
 - 같은 흐름에서 UTF-8과 BOM이 있는 UTF-16LE·UTF-16BE CSV·TSV를 가져옵니다. 검토 문서에서 인코딩을 확인할 수 있으며, 잘못된 바이트나 검토 이후 바뀐 원본은 가져올 수 없습니다.
+- InnoDB 가져오기에서 기본 키나 고유 키가 충돌하면 전체를 롤백하거나, 충돌한 행만 건너뛸 수 있습니다. 검토 문서에 선택을 표시하고, 실행 보고서에 삽입과 중복 건너뛰기 건수를 따로 기록합니다. 삽입에 성공한 행은 명시적으로 커밋할 때까지 다른 세션에서 보이지 않습니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.
 - **Open Consistent Table Snapshot**은 기본 키가 있는 InnoDB 테이블을 별도 읽기 전용 트랜잭션에서 엽니다. 다음·이전 페이지는 정렬 값과 기본 키를 기준으로 서버에서 읽습니다. 탭을 닫으면 스냅샷 연결이 해제됩니다.
 - 이 결과 그리드에서 **Continuous scroll**을 켜면 위·아래로 이동할 때 인접 페이지를 읽습니다. 최근 페이지를 최대 4개, 합계 1,000행과 4 MiB 범위로 보관하며 단일 페이지는 기존 결과 한도를 따릅니다. 복사와 내보내기는 현재 보관한 행을 사용합니다. `ENUM`은 서버 멤버 순서로, `SET`은 각 엔진의 64비트 정렬 순서로 비교하며 셀에는 원래 값이 표시됩니다.
