@@ -58,8 +58,8 @@ function smartStepFixture(base) {
 async function exerciseSmartStep({ fixture, service, session, first, proceed, frame }) {
   assert.equal((await frame(first)).line, fixture.line('TARGET_GATE'));
   const selection = await service.inspect(session);
-  const integer = selection.targets.find(item => /choose\(4\)/.test(item.label));
-  const string = selection.targets.find(item => /choose\("abc"\)/.test(item.label));
+  const integer = selection.targets.find(item => item.label === 'choose(4)');
+  const string = selection.targets.find(item => item.label === 'choose("abc")');
   assert.ok(integer && string, JSON.stringify(selection.targets));
   assert.notEqual(integer.id, string.id);
   assert.ok(integer.column < string.column);
