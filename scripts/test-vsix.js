@@ -14,8 +14,9 @@ const expected = new Set(['[Content_Types].xml', 'extension.vsixmanifest', ...[
   'package.json', 'readme.md', 'NOTICE.txt', 'THIRD-PARTY-LICENSES.txt',
   'dist/java-quality-gate.js', 'dist/ide-mcp-server.js',
   'dist/extension.js', 'dist/worker.js', 'dist/sql-wasm.wasm', 'dist/results.js', 'dist/results.css',
+  'dist/java-async/TaskTrace.java', 'dist/java-debug/LocalValueInspection.java',
   'themes/rocketbrain-dark.json', 'media/rocketbrain.svg', 'media/duckdb.tmLanguage.json', 'media/jdbc.tmLanguage.json',
-  'media/scala.tmLanguage.json'
+  'media/scala.tmLanguage.json', 'media/jpql.tmLanguage.json'
 ].map(file => `extension/${file}`)]);
 
 async function extract() {

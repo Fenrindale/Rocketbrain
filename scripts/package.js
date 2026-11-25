@@ -95,7 +95,7 @@ async function verifyArchive(archive, vsceManifest) {
     'dist/extension.js', 'dist/worker.js', 'dist/sql-wasm.wasm', 'dist/results.js', 'dist/results.css',
     'dist/java-async/TaskTrace.java',
     'dist/java-debug/LocalValueInspection.java',
-    'themes/rocketbrain-dark.json', 'media/rocketbrain.svg', 'media/duckdb.tmLanguage.json', 'media/jdbc.tmLanguage.json', 'media/scala.tmLanguage.json',
+    'themes/rocketbrain-dark.json', 'media/rocketbrain.svg', 'media/duckdb.tmLanguage.json', 'media/jdbc.tmLanguage.json', 'media/scala.tmLanguage.json', 'media/jpql.tmLanguage.json',
   ];
   const allowed = new Set(['[content_types].xml', 'extension.vsixmanifest', ...requiredPayloads.map((file) => `extension/${file.toLowerCase()}`)]);
   const seen = new Set();

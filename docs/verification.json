@@ -1,25 +1,25 @@
 {
-  "version": "0.63.0",
-  "verifiedAt": "2026-11-25T14:51:17.309Z",
+  "version": "0.64.0",
+  "verifiedAt": "2026-11-25T15:17:40.812Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.63.0.vsix",
-    "sha256": "405985a1a30056ccce766860d278624eacf47ae3ac2861461ad0fadc2a87b512",
-    "bytes": 3268693,
-    "files": 20
+    "name": "rocketbrain-0.64.0.vsix",
+    "sha256": "d3f22ebd48818fa6cb0ccec3095e8a342c32ab81172de39fb9eb23e219b054e3",
+    "bytes": 3290484,
+    "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1743,
-    "inputVectorSha256": "e320813b8d58b1d31e484c76034305ef663e356ffe9b48395dfc7d870c91929a",
+    "frozenPublicInputs": 1764,
+    "inputVectorSha256": "6d088d3cc7731b01095304097a86b3682065df48449c324c5877e888c2dd2b58",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1537,
-    "pass": 1447,
+    "tests": 1546,
+    "pass": 1454,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 90,
+    "skipped": 92,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,26 +29,22 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 5,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "javaNavigation",
+          "group": "namedExtraction",
           "checks": 1
         },
         {
-          "group": "kotlinNavigation",
+          "group": "jpqlConsole",
           "checks": 1
         },
         {
-          "group": "springEndpoints",
+          "group": "dedicatedConsole",
           "checks": 1
         },
         {
-          "group": "sharedConsole",
-          "checks": 1
-        },
-        {
-          "group": "functionDeployment",
+          "group": "routinePackage",
           "checks": 1
         }
       ],
@@ -63,26 +59,22 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 5,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "javaNavigation",
+          "group": "namedExtraction",
           "checks": 1
         },
         {
-          "group": "kotlinNavigation",
+          "group": "jpqlConsole",
           "checks": 1
         },
         {
-          "group": "springEndpoints",
+          "group": "dedicatedConsole",
           "checks": 1
         },
         {
-          "group": "sharedConsole",
-          "checks": 1
-        },
-        {
-          "group": "functionDeployment",
+          "group": "routinePackage",
           "checks": 1
         }
       ],
@@ -93,70 +85,74 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-015": {
-      "scope": "두 실제 Spring DB의 설치 환경에서 Java 오버로드의 여러 구현, 상위 메서드와 JDK 소스, 대상 변경 거부, Kotlin 수신 타입별 동명 확장 함수 선언 두 곳을 확인했다.",
+    "IDEA-025": {
+      "scope": "두 Spring DB 설치 환경에서 실제 JDT 지역 변수·필드 선언, 이름 충돌과 오래된 계획 차단, 사용처 2·3개, 한 버퍼 편집·Undo·디스크 보존을 확인했다. 기존 상수 흐름은 컴파일러 회귀 검사에 포함했다.",
       "runtimeGroups": [
-        "javaNavigation",
-        "kotlinNavigation"
+        "namedExtraction"
       ]
     },
-    "IDEA-065": {
-      "scope": "MySQL과 MariaDB의 실제 Spring MVC·WebFlux에서 경로 세 개와 Feign 호출 두 개가 일치했다. 잘못된 메서드와 Accept는 404이며 계산 경로는 소스에서 미해결로 남았다.",
+    "IDEA-060": {
+      "scope": "실제 Spring·Hibernate 7.4.13과 두 DB의 설치판에서 정확한 Long·NULL, 이름·위치 바인딩, 집계와 행 한도, 7개 거부 사례와 읽기 전용 쓰기 차단을 확인했다.",
       "runtimeGroups": [
-        "springEndpoints"
+        "jpqlConsole"
+      ]
+    },
+    "DG-024": {
+      "scope": "MariaDB 설치본에서 두 원문과 두 공개 멤버, 승인된 프로시저의 정확한 출력·결과 세트, 변경 거부 및 그리드 재개방을 확인했다. MySQL은 패키지 경로를 차단하고 기존 typed 출력 호출을 유지했다.",
+      "runtimeGroups": [
+        "routinePackage"
       ]
     },
     "DG-047": {
-      "scope": "두 실제 DB에서 동일 물리 세션과 미커밋 변경 공유, 별도 SQL·카탈로그 연결, 다른 편집기에서 커밋·롤백, 탭을 닫아도 트랜잭션 유지와 세션 종료 뒤 모두 분리를 확인했다.",
+      "scope": "두 실제 DB의 설치판에서 같은 이름의 두 스키마 테이블과 별도 연결을 구분했다. 카탈로그 연결 해제 뒤 전용 트랜잭션을 유지했고 권한 보호·롤백·종료된 세션의 재사용 거부를 확인했다.",
       "runtimeGroups": [
-        "sharedConsole"
-      ]
-    },
-    "DG-081": {
-      "scope": "두 실제 DB의 설치 환경에서 이전 원문 탐색, 지원 밖 서브쿼리와 교차 스키마 종속 뷰 거부, 실제 컴파일·교체와 권한·문맥 보존, 재접속 뒤 원본 복구를 확인했다.",
-      "runtimeGroups": [
-        "functionDeployment"
+        "dedicatedConsole"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 364,
+    "sourceCorrespondences": 370,
     "sourceConfidence": "inferred",
-    "archiveEntries": 20,
+    "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 76,
-      "partial": 125,
+      "implemented": 78,
+      "partial": 123,
       "not-implemented": 0,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 151.5,
-    "previousWeightedPoints": 151,
+    "weightedPoints": 152.5,
+    "previousWeightedPoints": 151.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 70.1,
+    "referencePercent": 70.6,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-015",
+        "id": "IDEA-025",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-047",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "소스에 정적으로 나타난 Spring WebFlux 경로와 Feign 선언을 탐색하며 계산된 경로와 사용자 계약은 미해결로 표시한다.",
-    "숫자형 저장 함수 교체는 비원자적이다. 호출 중지와 별도 승인 조건에서 컴파일·권한 비교와 원본 복구를 제공한다.",
+    "Java 이름 지정은 확인된 JDT 지역 변수·필드 추출의 단일 위치에 적용한다. 기존 JDT 작업은 기본 검토 흐름으로 연다.",
+    "전용 SQL 콘솔은 프로필에 연결된 단일 SQL 실행과 트랜잭션을 제공한다. 카탈로그·검토 스크립트와 EXPLAIN에는 활성 연결을 사용한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "여러 저장 프로필의 전용 SQL 세션과 활성 카탈로그 분리",
-    "JPQL 읽기 전용 실행 콘솔, Java 변수·필드 추출 명명",
-    "MariaDB 패키지 공개 프로시저 탐색과 검토 호출"
+    "Hibernate 콘솔의 CTE·집합 연산·파생 관계와 소스 타입 검사",
+    "Java·Kotlin·Spring 사용처 검색과 저장 프로필 세션 수명주기",
+    "루틴·트리거를 포함한 의존 순서 스키마 DDL 내보내기"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

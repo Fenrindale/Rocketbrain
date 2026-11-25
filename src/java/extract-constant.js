@@ -8,14 +8,14 @@ const KIND = 'refactor.extract.constant';
 const declarationPrefix = /^([ \t]*)private[ \t]+static[ \t]+final[ \t]+(boolean|byte|short|char|int|long|float|double|(?:java\.lang\.)?String)[ \t]+$/;
 const qualifiedType = type => type === 'String' ? 'java.lang.String' : type;
 
-function constantPlacement(response, { text, selection, version, type, belongsToSource }) {
+function linkedExtraction(response, { text, version, belongsToSource }) {
   const edit = response?.edit;
   const rename = response?.command;
   const mark = Array.isArray(rename?.arguments) ? rename.arguments[0] : undefined;
   if (!edit || Object.keys(edit.changeAnnotations || {}).length || rename?.command !== 'java.action.rename' ||
       rename.arguments.length !== 1 || !belongsToSource(mark?.uri) || !Number.isSafeInteger(mark.offset) ||
       !Number.isSafeInteger(mark.length) || mark.offset <= 0 || mark.length <= 0 || mark.length > 120) {
-    throw Error('JDT did not propose a local constant declaration for this expression.');
+    throw Error('JDT did not propose an extraction with a bound name for this expression.');
   }
   const operations = [...(edit.documentChanges || []),...Object.entries(edit.changes || {}).map(([uri,edits]) => ({textDocument:{uri},edits}))];
   const [operation] = operations;
@@ -23,14 +23,20 @@ function constantPlacement(response, { text, selection, version, type, belongsTo
       operation.textDocument.version != null && operation.textDocument.version !== version ||
       !Array.isArray(operation.edits) || !operation.edits.length || operation.edits.length > 100 ||
       operation.edits.some(change => change.annotationId !== undefined)) {
-    throw Error('Extract Constant requires one bounded Java source edit from JDT.');
+    throw Error('Extraction requires one bounded Java source edit from JDT.');
   }
   const proposed = editedText(text,operation.edits);
   const name = proposed.slice(mark.offset,mark.offset + mark.length);
-  const insertionOffset = proposed.lastIndexOf('\n',mark.offset - 1) + 1;
-  const prefix = declarationPrefix.exec(proposed.slice(insertionOffset,mark.offset));
-  if (!validIdentifier(name) || !prefix || qualifiedType(prefix[2]) !== type ||
-      !/^[ \t]*=/.test(proposed.slice(mark.offset + mark.length)) || insertionOffset >= selection.start ||
+  if (!validIdentifier(name)) throw Error('The JDT extraction did not provide a valid Java name.');
+  return {proposed,name,offset:mark.offset};
+}
+
+function constantPlacement(response, { text, selection, version, type, belongsToSource }) {
+  const {proposed,name,offset} = linkedExtraction(response,{text,version,belongsToSource});
+  const insertionOffset = proposed.lastIndexOf('\n',offset - 1) + 1;
+  const prefix = declarationPrefix.exec(proposed.slice(insertionOffset,offset));
+  if (!prefix || qualifiedType(prefix[2]) !== type ||
+      !/^[ \t]*=/.test(proposed.slice(offset + name.length)) || insertionOffset >= selection.start ||
       proposed.slice(0,insertionOffset) !== text.slice(0,insertionOffset)) {
     throw Error('JDT did not identify an unambiguous constant declaration before the selected use.');
   }
@@ -64,4 +70,4 @@ function confirmConstant(proof, inspection, placement, change) {
   }
 }
 
-module.exports = { KIND,constantPlacement,validateConstantName,constantChange,confirmConstant };
+module.exports = { KIND,linkedExtraction,constantPlacement,validateConstantName,constantChange,confirmConstant };

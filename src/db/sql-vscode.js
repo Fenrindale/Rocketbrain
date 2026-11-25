@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {fileURLToPath}=require('node:url');
 const { inspectDmlScope } = require('./sql-dml-scope');
+const { isProfileConsole } = require('./profile-console-files');
 
 function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output,joinCatalog,joinLogicalRelationships,objectDefinition}={}) {
   const collection=vscode.languages.createDiagnosticCollection('rocketbrain-sql');
@@ -42,7 +43,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   function analyzeDocument(document){
     if(disposed||!config().get('enabled',true)||document.languageId!=='sql')return {state:'disabled',statements:[]};
-    if(require('./federated-select').isFederatedDocument(document)){collection.delete(document.uri);return {state:'disabled',statements:[]};}
+    if(isProfileConsole(document)||require('./federated-select').isFederatedDocument(document)){collection.delete(document.uri);return {state:'disabled',statements:[]};}
     const key=document.uri.toString(),previous=cache.get(key);
     let preview=vscode.workspace.isTrusted?ddlPreviews.get(key):null;
     const configured=preview?null:configuredScope(document);
@@ -182,6 +183,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   const textHash=text=>require('node:crypto').createHash('sha256').update(text).digest('hex');
   function renameSnapshot(document,position,token){
     if(disposed||document.isClosed)throw new Error('SQL rename document is closed.');
+    if(isProfileConsole(document))throw Error('Use the active database console for SQL rename.');
     if(token?.isCancellationRequested)throw new Error('SQL rename was cancelled.');
     if(!vscode.workspace.isTrusted)throw new Error('Trust the workspace before renaming SQL symbols.');
     if(virtualActive(document))throw new Error('Exit the virtual DDL preview before renaming SQL symbols.');
@@ -348,7 +350,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     return {report,selected:projectEngine().targetAtDocument(report,offset,observed),embedded:false};
   }
   function catalogTargetAt(document,position){
-    if(virtualActive(document))return null;
+    if(isProfileConsole(document)||virtualActive(document))return null;
     projectTrusted();const target=usageTarget(document,position)?.selected;
     return !target||['local','pending-dml'].includes(target.kind)?null:target;
   }
@@ -379,7 +381,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   async function catalogRenameEdit(id,token,validationOptions={}){await validateCatalogRename(id,token,validationOptions);return buildCatalogEdit(projectPlans.get(typeof id==='string'?id:id?.id),validationOptions);}
   async function provideReferences(document,position,context={},token){
-    if(!config().get('enabled',true)||virtualActive(document)||!metadata||metadata.cachedMetadata||!vscode.workspace.isTrusted)return [];
+    if(!config().get('enabled',true)||isProfileConsole(document)||virtualActive(document)||!metadata||metadata.cachedMetadata||!vscode.workspace.isTrusted)return [];
     projectTrusted(token);
     const version=document.version,generation=epoch;
     let usage=usageTarget(document,position);
@@ -457,7 +459,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {provideCompletionItems(document,position){const scope=locate(document,position);if(!scope)return [];return engine().completionsAt(scope.model,scope.offset).map(value=>{const item=new vscode.CompletionItem(value.label,value.kind==='column'?vscode.CompletionItemKind.Field:vscode.CompletionItemKind.Struct);item.detail=metadata?.cachedMetadata&&!virtualActive(document)?'Cached metadata · '+value.detail:value.detail;item.insertText=value.insertText||value.label;return item;});}},'.'));
   subscriptions.push(vscode.languages.registerCompletionItemProvider({language:'sql'}, {
     async provideCompletionItems(document,position,token) {
-      if(disposed||!vscode.workspace.isTrusted||!config().get('enabled',true)||!metadata||virtualActive(document)||require('./federated-select').isFederatedDocument(document))return [];
+      if(disposed||!vscode.workspace.isTrusted||!config().get('enabled',true)||!metadata||isProfileConsole(document)||virtualActive(document)||require('./federated-select').isFederatedDocument(document))return [];
       const text = document.getText(), offset = document.offsetAt(position), observed = options();
       const snapshot = metadata, version = document.version, generation = epoch;
       const current = () => !disposed && !token?.isCancellationRequested && !document.isClosed && document.version === version &&

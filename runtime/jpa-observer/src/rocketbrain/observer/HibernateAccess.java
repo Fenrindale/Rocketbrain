@@ -307,7 +307,7 @@ public final class HibernateAccess {
     }
     private static Throwable unwrap(Throwable value) { int depth = 0; while (value instanceof InvocationTargetException e && e.getCause() != null && depth++ < 16) value = e.getCause(); return value; }
     static Object optional(Object receiver, String name, Object... args) { try { return receiver == null ? null : invoke(receiver, name, args); } catch (Throwable ignored) { return null; } }
-    private static Object invoke(Object receiver, String name, Object... args) throws Throwable {
+    static Object invoke(Object receiver, String name, Object... args) throws Throwable {
         if (receiver == null) throw new NoSuchMethodException(name);
         Method chosen = null;
         for (Method method : receiver.getClass().getMethods()) {

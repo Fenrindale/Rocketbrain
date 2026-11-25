@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.63.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.64.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 76 |
-| 부분 구현 | 125 |
+| 구현 | 78 |
+| 부분 구현 | 123 |
 | 미구현 | 0 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **70.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **70.6%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.63에서는 Java·Kotlin 선언 탐색과 Spring WebFlux·Feign 경로, 공유 SQL 세션과 숫자 스칼라 함수의 검토 배포·복구를 검증했다. 상태가 바뀐 항목은 1개이고 가중 점수는 151점에서 151.5점으로 바뀌었다.
+v0.64에서는 Java 변수·필드 추출 이름 지정, Hibernate JPQL 콘솔, 다중 프로필 전용 세션과 MariaDB 패키지 검사·호출을 검증했다. 상태가 바뀐 항목은 2개이고 가중 점수는 151.5점에서 152.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -45,7 +45,7 @@ v0.63에서는 Java·Kotlin 선언 탐색과 Spring WebFlux·Feign 경로, 공�
 | IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 부분 구현 |
 | IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 부분 구현 |
 | IDEA-024 | IntelliJ IDEA | 기호·패키지 이름 변경 | 부분 구현 |
-| IDEA-025 | IntelliJ IDEA | 변수·상수·필드 추출 | 부분 구현 |
+| IDEA-025 | IntelliJ IDEA | 변수·상수·필드 추출 | 구현 |
 | IDEA-026 | IntelliJ IDEA | 메서드 추출 | 부분 구현 |
 | IDEA-027 | IntelliJ IDEA | 변수·메서드 인라인 | 부분 구현 |
 | IDEA-028 | IntelliJ IDEA | 클래스·멤버 이동 | 부분 구현 |
@@ -187,7 +187,7 @@ v0.63에서는 Java·Kotlin 선언 탐색과 Spring WebFlux·Feign 경로, 공�
 | DG-044 | DataGrip | 현재 문장·선택 SQL 실행 | 구현 |
 | DG-045 | DataGrip | 전체 스크립트·batch·오류 처리 | 부분 구현 |
 | DG-046 | DataGrip | 같은 세션·temporary table 상태 유지 | 구현 |
-| DG-047 | DataGrip | 세션 공유·전용·introspection 분리 | 부분 구현 |
+| DG-047 | DataGrip | 세션 공유·전용·introspection 분리 | 구현 |
 | DG-048 | DataGrip | 수동 commit/rollback·auto-commit 전환 | 구현 |
 | DG-049 | DataGrip | 트랜잭션 격리 수준 선택 | 구현 |
 | DG-050 | DataGrip | 실행 취소·connection 종료 | 구현 |
