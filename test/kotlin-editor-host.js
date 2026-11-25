@@ -60,7 +60,8 @@ async function runKotlinEditorChecks(api,vscode,checks) {
     const anchor=reference.range||reference.targetSelectionRange;
     assert.equal(anchor.start.line,3);
     const hover=await vscode.commands.executeCommand('vscode.executeHoverProvider',document.uri,position);
-    assert.match(JSON.stringify(hover),/number: String/);
+    const hoverText=hover.flatMap(item=>item.contents).map(content=>typeof content==='string'?content:content.value).join('\n');
+    assert.match(hoverText,/number: String/);
     await replaceBuffer(source.replace('invoice.number','invoice.num'));
     const complete=await until(async()=>{
       const response=await vscode.commands.executeCommand('vscode.executeCompletionItemProvider',document.uri,at('invoice.num',11));
