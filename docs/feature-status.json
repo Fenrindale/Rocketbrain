@@ -1,5 +1,5 @@
 {
-  "version": "0.89.0",
+  "version": "0.90.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 125,
-    "partial": 77,
+    "implemented": 127,
+    "partial": 75,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 81.3,
+    "percent": 81.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-027",
-    "DG-075",
-    "DG-080"
+    "IDEA-003",
+    "IDEA-007",
+    "DG-010",
+    "DG-027"
   ],
   "expandedFeatures": [
-    "IDEA-027",
-    "DG-075",
-    "DG-080"
+    "IDEA-003",
+    "IDEA-007",
+    "DG-010",
+    "DG-027"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -118,25 +120,23 @@
       "category": "작업 공간·편집기",
       "feature": "Search Everywhere 통합 검색",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "파일·기호·명령을 검색하는 자체 진입점이 있다.",
-      "remaining": [
-        "설정·Git·외부 객체의 통합 순위와 원본 Search Everywhere 전체 동작은 남는다."
-      ],
+      "scope": "한 검색 화면에서 파일·언어 기호·실행 가능한 명령·설정 키·로컬 Git 리비전을 비교해 탐색한다. 활성 MySQL/MariaDB 스키마 객체를 별도 검색 모드에서 연다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.90-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 파일·기호·명령 검색과 최근 파일의 구현/기존 검증 범위. 패키지·모듈 논리 탐색은 제외한다.",
+        "testedScope": "설치판에서 실제 Spring Java 기호와 원문, 설정과 명령, 동일 검색의 파일·로컬 커밋, 브랜치 리비전, 실제 DB 객체의 원문을 열었다. 파일·설정·Git 인덱스는 보존했고 연결을 끊은 DB 결과 열기를 거부했다.",
         "publicEvidence": [
-          "src/navigation.js",
-          "src/extension.js"
+          "src/navigation-index.js",
+          "test/search-everywhere-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -236,24 +236,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "자체 JDT LS 연결로 실제 Java 타입 완성을 제공하고 네이티브 편집기에서 검증했다.",
+      "scope": "기본 JDT 완성에 컴파일러 예상 타입에 맞는 Java 값 제안을 추가한다. 기존 선언과 오버로드 바인딩을 재검증한 뒤 한 번에 입력하고 Undo로 되돌린다.",
       "remaining": [
-        "제네릭·Stream·오버로드·불완전 코드 및 모든 Spring 주입 문맥의 완성 비교는 남는다."
+        "동적 Spring 주입 후보와 일반 미완성 코드의 추가 문맥은 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.90-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "testedScope": "실제 Spring 프로젝트에서 미완성 Stream 람다의 제네릭 예상 타입과 지정한 값의 정확한 바인딩을 확인했다. Java 컴파일 결과와 두 DB의 JDBC 동일 결과, 변경·위조 거부와 한 번의 Undo를 확인했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "runtime/java-signature/src/rocketbrain/signature/ExpectedCompletion.java",
+          "test/java-expected-completion-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -826,8 +824,8 @@
       "verification": {
         "state": "v0.89-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.89.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3920,21 +3918,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 시스템 OpenSSH와 사전 검증한 known_hosts·키 파일로 소유 loopback 포워드를 열어 실제 TLS SQL에 연결한다. 취소·종료는 해당 터널의 리스너만 정리한다.",
+      "scope": "검증된 호스트 키와 키 파일에 더해 로컬 SSH agent의 두 후보 중 지문이 일치하는 한 키를 선택한다. 현재 TLS 기준으로 실제 SQL에 연결하며 터널 수명주기와 오류를 다룬다.",
       "remaining": [
-        "TOFU/host-key 자동 수락과 SSH 비밀번호·agent/암호화 키의 대화형 인증은 지원·검증하지 않는다.",
-        "임의 원격 플랫폼·jump 구성·모든 SSH 환경과 네이티브 폼의 SSH 접속은 남는다."
+        "SSH 비밀번호와 대화형 키 암호, 점프 호스트 조합 및 POSIX agent의 실제 서버 검증은 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.90-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 양DB와 OpenSSH 경로에서 올바른 키/host 검증·잘못된 키·취소 및 소유 리스너 종료를 확인한다.",
-        "publicEvidence": [],
+        "testedScope": "Windows OpenSSH의 실제 agent에서 선택 키 한 개만 인증에 사용했다. 두 설치판에서 키·TLS 이름·호스트 키 변경을 거부하고 같은 Spring DB의 암호화 SQL과 전용 포워드 종료를 확인했다.",
+        "publicEvidence": [
+          "src/db/connection-ssh-agent.js",
+          "test/ssh-agent-selection-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -4423,22 +4423,20 @@
       "category": "SQL 의미 분석·편집",
       "feature": "schema-aware 이름·열 완성",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "카탈로그와 중첩·상관 SELECT, CTE·derived scope에 따라 열을 완성한다. 단일 대상 INSERT·UPDATE·DELETE에서 실제 테이블 타입을 표시하고 쓰기 열과 필터 열을 구분한다.",
-      "remaining": [
-        "복수 테이블 변경, 일부 공급자별 문법과 전체 재귀·실행 유효성 분석이 남아 있다."
-      ],
+      "scope": "관찰한 스키마와 이름 범위를 이용해 SELECT·CTE·하위 쿼리와 단일 변경문을 완성한다. 조인 UPDATE의 쓰기 열·필터와 두 명시적 다중 DELETE 문법의 정확한 대상 별칭을 구분한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.62-installed-coverage",
+        "state": "v0.90-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.62.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 두 DB의 VS Code 자동 완성에서 교차 스키마 동명 테이블의 별칭과 열 타입, 생성 열의 쓰기 제외와 필터 포함, 복합 변경 구문의 열 제안 제외를 확인했다.",
+        "testedScope": "설치판에서 각 DB의 실제 다섯 완성 문장을 실행하고 롤백했다. 인식한 두 쓰기 소유자와 생성 열·중복 또는 모호한 별칭의 거부를 확인했다.",
         "publicEvidence": [
           "src/db/sql-dml-completion.js",
           "test/sql-dml-completion-host.js"
@@ -5885,8 +5883,8 @@
       "verification": {
         "state": "v0.89-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.89.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6035,8 +6033,8 @@
       "verification": {
         "state": "v0.89-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.89.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6528,8 +6526,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "a2cd7b308f8599648f51244f3151fc0ee22343d75dd6c5c923e8ddbbe9cf7124",
-    "sourceManifestSha256": "bbe74657640a8ea4a59db045367f50181c3a948db48708ff43836d74b3ed7daa",
+    "vsixSha256": "60e3be1134f8dbc81ed8a382c27e5506f9ce4ff1a6628de605533c655135a2f0",
+    "sourceManifestSha256": "01e7f94732843a0414d24ef02e3ad3a331cf91d356901722886bb1f3065729ff",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6543,23 +6541,23 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-027",
+      "id": "IDEA-003",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-075",
+      "id": "DG-027",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1790,
-    "pass": 1659,
+    "tests": 1803,
+    "pass": 1669,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 131,
+    "skipped": 134,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

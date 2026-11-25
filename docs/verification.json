@@ -1,25 +1,25 @@
 {
-  "version": "0.89.0",
-  "verifiedAt": "2026-11-25T21:49:11.510Z",
+  "version": "0.90.0",
+  "verifiedAt": "2026-11-25T22:14:30.184Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.89.0.vsix",
-    "sha256": "a2cd7b308f8599648f51244f3151fc0ee22343d75dd6c5c923e8ddbbe9cf7124",
-    "bytes": 3687208,
+    "name": "rocketbrain-0.90.0.vsix",
+    "sha256": "60e3be1134f8dbc81ed8a382c27e5506f9ce4ff1a6628de605533c655135a2f0",
+    "bytes": 3698740,
     "files": 22
   },
   "source": {
-    "frozenPublicInputs": 2147,
-    "inputVectorSha256": "bbe74657640a8ea4a59db045367f50181c3a948db48708ff43836d74b3ed7daa",
+    "frozenPublicInputs": 2162,
+    "inputVectorSha256": "01e7f94732843a0414d24ef02e3ad3a331cf91d356901722886bb1f3065729ff",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1790,
-    "pass": 1659,
+    "tests": 1803,
+    "pass": 1669,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 131,
+    "skipped": 134,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaInstanceInline",
+          "group": "javaExpectedCompletion",
           "checks": 1
         },
         {
-          "group": "passwordRotation",
+          "group": "sshAgentSelection",
           "checks": 1
         },
         {
-          "group": "savedResultComparison",
+          "group": "sqlJoinedDmlCompletion",
           "checks": 1
         },
         {
-          "group": "datasetBatch",
+          "group": "searchEverywhere",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaInstanceInline",
+          "group": "javaExpectedCompletion",
           "checks": 1
         },
         {
-          "group": "passwordRotation",
+          "group": "sshAgentSelection",
           "checks": 1
         },
         {
-          "group": "savedResultComparison",
+          "group": "sqlJoinedDmlCompletion",
           "checks": 1
         },
         {
-          "group": "datasetBatch",
+          "group": "searchEverywhere",
           "checks": 1
         }
       ],
@@ -85,70 +85,83 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-027": {
-      "scope": "실제 두 Spring JDK 설치판에서 암시적·명시적 this와 생성한 수신자의 결과를 대조했다. 네 실행 출력, 인수의 부작용 순서, 무효화 검사와 한 번의 Undo를 확인했다.",
+    "IDEA-003": {
+      "scope": "설치판에서 실제 Spring Java 기호와 원문, 설정과 명령, 동일 검색의 파일·로컬 커밋, 브랜치 리비전, 실제 DB 객체의 원문을 열었다. 파일·설정·Git 인덱스는 보존했고 연결을 끊은 DB 결과 열기를 거부했다.",
       "runtimeGroups": [
-        "javaInstanceInline"
+        "searchEverywhere"
       ]
     },
-    "DG-075": {
-      "scope": "두 설치판에서 정확한 복합 키·NULL·타입과 중복 별칭·키 처리, 500행 캡처 한도, 양쪽 분류를 확인했다. 테이블 묶음에서 취소와 스키마 변경 후 부분 결과, 원본 행 보존을 검증했다.",
+    "IDEA-007": {
+      "scope": "실제 Spring 프로젝트에서 미완성 Stream 람다의 제네릭 예상 타입과 지정한 값의 정확한 바인딩을 확인했다. Java 컴파일 결과와 두 DB의 JDBC 동일 결과, 변경·위조 거부와 한 번의 Undo를 확인했다.",
       "runtimeGroups": [
-        "savedResultComparison",
-        "datasetBatch"
+        "javaExpectedCompletion"
       ]
     },
-    "DG-080": {
-      "scope": "두 DB 설치판에서 이전 암호의 새 연결 거부·새 암호 연결, 열린 세션·기본 역할·TLS 정책 보존과 바뀐 계정 거부를 확인했다.",
+    "DG-010": {
+      "scope": "Windows OpenSSH의 실제 agent에서 선택 키 한 개만 인증에 사용했다. 두 설치판에서 키·TLS 이름·호스트 키 변경을 거부하고 같은 Spring DB의 암호화 SQL과 전용 포워드 종료를 확인했다.",
       "runtimeGroups": [
-        "passwordRotation"
+        "sshAgentSelection"
+      ]
+    },
+    "DG-027": {
+      "scope": "설치판에서 각 DB의 실제 다섯 완성 문장을 실행하고 롤백했다. 인식한 두 쓰기 소유자와 생성 열·중복 또는 모호한 별칭의 거부를 확인했다.",
+      "runtimeGroups": [
+        "sqlJoinedDmlCompletion"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 470,
+    "sourceCorrespondences": 474,
     "sourceConfidence": "inferred",
     "archiveEntries": 22,
     "archiveConfidence": "observed"
   },
+  "nativePayloadEquivalence": {
+    "files": 22,
+    "testedArchiveSha256": "a604859f513ce83893b656cbc417a16c6d0323e37d25dc32e3eccd5b35a23e11",
+    "testedInputVectorSha256": "4ed4a337534b09183abef70ef3569d25d8e4144b36606ec405ed85d8fb4c59cb",
+    "onlySourceChanges": [
+      "test/ssh-agent-selection.test.js"
+    ]
+  },
   "progress": {
     "counts": {
-      "implemented": 125,
-      "partial": 77,
+      "implemented": 127,
+      "partial": 75,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 175.5,
-    "previousWeightedPoints": 174.5,
+    "weightedPoints": 176.5,
+    "previousWeightedPoints": 175.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 81.3,
+    "referencePercent": 81.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-027",
+        "id": "IDEA-003",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-075",
+        "id": "DG-027",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "인스턴스 메서드는 바인딩을 확인한 같은 클래스의 private 호출에 적용한다. null 가능성과 처리할 수 없는 본문은 거부한다.",
-    "저장 결과 비교는 캡처한 행의 읽기 전용 보고서다. 비교 묶음은 각 테이블 쌍에서 별도 스냅샷을 사용한다. 데이터 변경은 개별 비교의 승인 흐름에서 검토한다.",
-    "새 DB 암호를 적용하려면 계정 상태와 검증된 전송을 확인해야 한다. 복합 인증 방식과 일부 권한 정책은 다른 범위다.",
+    "Java 완성은 예상 참조 타입을 컴파일러가 확인할 수 있는 지역 초기화식, 반환식과 람다 식에 적용한다.",
+    "검색에서 Git은 열려 있는 작업 공간의 제한된 로컬 저장소와 최근 로컬 리비전을 조사한다. DB 검색은 현재 연결의 관찰된 스키마를 대상으로 한다.",
+    "SQL 쓰기 열 후보는 확인된 대상과 열에만 적용한다. 실행 권한과 서버 구문 확인은 실제 서버가 담당한다.",
+    "SSH는 직접 로컬 agent 소켓 또는 Windows 파이프와 선택한 공개 키를 사용한다. 검증된 known_hosts와 기존 TLS 설정을 적용한다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "미완성 Java 식의 예상 타입으로 값 완성",
-    "검색에서 Git·설정·실제 DB 객체 탐색",
-    "조인 SQL 변경문 자동완성, 선택한 SSH agent 키 연결"
+    "Java 모듈의 빌드 출력과 8·17·21·25 JDK 선택",
+    "JKS 서버 CA와 명시적인 암호 없는 DB 연결"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

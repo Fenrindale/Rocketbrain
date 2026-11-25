@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.89.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.90.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,22 +8,22 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 125 |
-| 부분 구현 | 77 |
+| 구현 | 127 |
+| 부분 구현 | 75 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **81.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **81.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.89에서는 Java private 인스턴스 호출을 평가 순서를 보존하며 인라인하고, 저장 쿼리와 비교 묶음을 열며, 기존 DB 계정의 암호를 검토한 뒤 교체한다. 상태가 바뀐 항목은 2개이고 가중 점수는 174.5점에서 175.5점으로 바뀌었다.
+v0.90에서는 미완성 Java 값을 예상 타입으로 완성하고, 파일·Java 기호·명령·설정·Git과 활성 DB를 검색한다. SQL 조인 변경문의 열·대상을 완성하고 한 SSH agent 키를 선택한다. 상태가 바뀐 항목은 2개이고 가중 점수는 175.5점에서 176.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
 | IDEA-001 | IntelliJ IDEA | IDE 전체 배치·도킹·네이티브 화면 | 호스트 구조 제약 |
 | IDEA-002 | IntelliJ IDEA | 프로젝트·패키지·모듈 탐색 | 부분 구현 |
-| IDEA-003 | IntelliJ IDEA | Search Everywhere 통합 검색 | 부분 구현 |
+| IDEA-003 | IntelliJ IDEA | Search Everywhere 통합 검색 | 구현 |
 | IDEA-004 | IntelliJ IDEA | 최근 파일·편집 위치·뒤로/앞으로 | VS Code 재사용 |
 | IDEA-005 | IntelliJ IDEA | 다중 커서·열 선택·일괄 편집 | VS Code 재사용 |
 | IDEA-006 | IntelliJ IDEA | 의미 기반 선택 확장·축소 | 구현 |
@@ -167,7 +167,7 @@ v0.89에서는 Java private 인스턴스 호출을 평가 순서를 보존하며
 | DG-024 | DataGrip | 루틴·인덱스·트리거·MariaDB package | 부분 구현 |
 | DG-025 | DataGrip | 실제 FK 없는 관계 정의 | 구현 |
 | DG-026 | DataGrip | virtual view·virtual column | 구현 |
-| DG-027 | DataGrip | schema-aware 이름·열 완성 | 부분 구현 |
+| DG-027 | DataGrip | schema-aware 이름·열 완성 | 구현 |
 | DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 구현 |
 | DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 구현 |
 | DG-030 | DataGrip | alias·약어·함수 구문 완성 | 구현 |

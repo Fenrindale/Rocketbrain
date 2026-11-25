@@ -44,6 +44,12 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   else if(inspection.kind==='conversion'&&sources.some(item=>item.uri===inspection.uri))query.push('conversion',inspection.uri);
   else if(inspection.kind==='cleanup'&&['plan','verify'].includes(inspection.stage)&&
     sources.some(item=>item.uri===inspection.uri))query.push('cleanup',inspection.uri,inspection.stage);
+  else if(inspection.kind==='expectedCompletion'&&['plan','verify'].includes(inspection.stage)&&
+    Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&inspection.start>=0&&
+    inspection.end>inspection.start&&inspection.end-inspection.start<=128&&
+    sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)){
+    query.push('expectedCompletion',inspection.uri,String(inspection.start),String(inspection.end),inspection.stage);
+  }
   else if(inspection.kind==='constant'&&Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&inspection.start>=0&&
     inspection.end>inspection.start&&inspection.end-inspection.start<=4096&&sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)&&
     (inspection.name===undefined||validIdentifier(inspection.name)))query.push('constant',inspection.uri,String(inspection.start),String(inspection.end),inspection.name||'');

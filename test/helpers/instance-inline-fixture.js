@@ -79,7 +79,7 @@ async function springJdbcClasspath(classpathFile, engine) {
   return entries;
 }
 
-async function runInstanceInline({ javaHome, file, binaryDirectory, className, classpath = [], config, engine }) {
+async function runJavaFixture({ javaHome, file, binaryDirectory, className, classpath = [], config, engine, jdbcPrefix = 'RB_INLINE' }) {
   const tool = name => path.join(javaHome, 'bin', name + (process.platform === 'win32' ? '.exe' : ''));
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) =>
     !/^(?:CLASSPATH|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|JDK_JAVA_OPTIONS|JDK_JAVAC_OPTIONS)$/iu.test(name)));
@@ -88,10 +88,10 @@ async function runInstanceInline({ javaHome, file, binaryDirectory, className, c
     assert.equal(config.host, '127.0.0.1');
     assert.ok(Number.isInteger(config.port) && config.port > 0 && config.port < 65536);
     assert.match(config.database, /^[a-z_]+$/u);
-    env.RB_INLINE_JDBC_URL = 'jdbc:' + engine + '://127.0.0.1:' + config.port + '/' + config.database +
+    env[jdbcPrefix+'_JDBC_URL'] = 'jdbc:' + engine + '://127.0.0.1:' + config.port + '/' + config.database +
       (engine === 'mysql' ? '?allowPublicKeyRetrieval=true&sslMode=DISABLED' : '');
-    env.RB_INLINE_JDBC_USER = config.user;
-    env.RB_INLINE_JDBC_PASSWORD = config.password;
+    env[jdbcPrefix+'_JDBC_USER'] = config.user;
+    env[jdbcPrefix+'_JDBC_PASSWORD'] = config.password;
   }
   const compile = await execute(tool('javac'), ['-proc:none', '-encoding', 'UTF-8',
     ...(classpath.length ? ['-classpath',classpath.join(path.delimiter)] : []),'-d',binaryDirectory,file], {env,timeoutMs:30000});
@@ -104,4 +104,4 @@ async function runInstanceInline({ javaHome, file, binaryDirectory, className, c
   return {engine,server,output:result};
 }
 
-module.exports = { instanceInlineFixture, springJdbcClasspath, runInstanceInline };
+module.exports = { instanceInlineFixture, springJdbcClasspath, runInstanceInline:runJavaFixture,runJavaFixture };
