@@ -193,6 +193,8 @@ GET {{host}}/actuator/health
 
 **Create Java Client from OpenAPI**로 선택한 작업을 Java 11 이상에서 쓸 수 있는 편집 가능한 클라이언트로 생성합니다. 기본 직렬화의 경로·쿼리·헤더·쿠키 값과 JSON 요청 본문을 지원합니다. 호출자가 서비스 주소와 인증 헤더를 전달하고, 응답은 상태·헤더와 원본 바이트를 제공합니다.
 
+OpenAPI 작업 미리보기는 JSON 요청·응답의 중첩 필드, 필수 항목, 배열, 재귀 참조 및 `allOf`·`oneOf`·`anyOf` 구조를 표시합니다. 서로 호환되는 객체 `allOf`는 필드를 합쳐 볼 수 있습니다. HTTP 초안은 문서에 명시된 본문 예제를 사용합니다.
+
 `GRAPHQL` 본문은 GraphQL 문서나 `query`, `variables`, `operationName`을 담은 JSON입니다. **Send HTTP Request**로 실행하면 HTTP 상태와 GraphQL 오류 수를 확인할 수 있습니다. **Inspect GraphQL Endpoint Schema**는 선택한 엔드포인트에서 인트로스펙션을 요청합니다.
 
 ```http

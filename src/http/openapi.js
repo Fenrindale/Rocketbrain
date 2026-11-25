@@ -1,5 +1,7 @@
 'use strict';
 
+const {schemaDescriptions}=require('./openapi-schema-shapes');
+
 const methods=['get','head','post','put','patch','delete','options'];
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const owns=(value,key)=>object(value)&&Object.hasOwn(value,key);
@@ -158,6 +160,7 @@ function analyzeOpenApi(text,{format='json',sourceId='entry',loadReference}={}) 
     throw Error('Use an OpenAPI 3.0 or 3.1 description with info and paths.');
   }
   const resolve=referenceResolver(document,sourceId,Buffer.byteLength(text),loadReference);
+  const describe=schemaDescriptions(resolve);
   const entries=Object.entries(document.paths).filter(([path])=>!path.startsWith('x-'));
   if (entries.length>256) throw Error('OpenAPI preview is limited to 256 paths.');
   const operations=[],diagnostics=[];
@@ -199,16 +202,31 @@ function analyzeOpenApi(text,{format='json',sourceId='entry',loadReference}={}) 
         const body=request?.value;
         const jsonBody=body?.content?.['application/json'];
         let example=jsonBody?.example;
-        if (example===undefined&&object(jsonBody?.schema)) {
-          const schema=resolve(jsonBody.schema,request.frame,{schema:true}).value;
-          example=schema.example ?? (Array.isArray(schema.examples)?schema.examples[0]:undefined);
+        let requestSchema;
+        if (jsonBody?.schema!==undefined) {
+          try {
+            requestSchema=describe(jsonBody.schema,request.frame);
+            if (example===undefined&&object(jsonBody.schema)) {
+              const schema=resolve(jsonBody.schema,request.frame,{schema:true}).value;
+              example=owns(schema,'example')?schema.example:Array.isArray(schema.examples)?schema.examples[0]:undefined;
+            }
+          } catch (error) { diagnose(path,error.message,method); }
         }
         const statuses=Object.keys(entry.responses).filter(key=>/^[1-5](?:\d\d|XX)$/.test(key)||key==='default');
         if (!statuses.length) throw Error('The operation must declare at least one response status.');
+        const responseBodies=[];
+        for (const status of statuses.slice(0,12)) {
+          try {
+            const response=resolve(entry.responses[status],frame);
+            const schema=response.value.content?.['application/json']?.schema;
+            if (schema!==undefined) responseBodies.push({status,schema:describe(schema,response.frame)});
+          } catch (error) { diagnose(path,error.message,method); }
+        }
         operations.push({key:method.toUpperCase()+' '+path,method:method.toUpperCase(),path,id,
           summary:typeof entry.summary==='string'?entry.summary.slice(0,180):'',
           parameters:[...parameters.values()],statuses,servers:serverUrls(entry.servers ?? pathItem.servers ?? document.servers),
-          requestBody:body?{required:body.required===true,json:object(jsonBody),example}:null,
+          requestBody:body?{required:body.required===true,json:object(jsonBody),example,...(requestSchema&&{schema:requestSchema})}:null,
+          ...(responseBodies.length&&{responseBodies}),
           security:(entry.security ?? document.security)?.length>0 });
         if (id) ids.add(id);
         if (operations.length>512) throw Error('OpenAPI preview is limited to 512 operations.');
@@ -246,7 +264,8 @@ function requestTemplate(operation, baseVariable='baseUrl') {
   if (success) settings.push('# @expect status '+success);
   const lines=[...settings,operation.method+' '+url,...header.map(item=>item.name+': {{header_'+item.name+'}}')];
   if (operation.requestBody?.json&&!['GET','HEAD'].includes(operation.method)) {
-    lines.push('Content-Type: application/json','',JSON.stringify(operation.requestBody.example ?? {},null,2));
+    const example=operation.requestBody.example;
+    lines.push('Content-Type: application/json','',JSON.stringify(example===undefined?{}:example,null,2));
   }
   const result=lines.join('\n')+'\n';
   if (Buffer.byteLength(result)>128*1024) throw Error('The HTTP template exceeds 128 KiB.');

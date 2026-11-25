@@ -5,6 +5,7 @@ const path=require('node:path');
 const {isDeepStrictEqual}=require('node:util');
 const { analyzeOpenApi,requestTemplate } = require('./openapi');
 const { javaClientSource }=require('./openapi-java-client');
+const {schemaLines}=require('./openapi-schema-shapes');
 
 const fileLimit=1024*1024;
 const formatFor=file=>/\.ya?ml$/i.test(file)?'yaml':/\.json$/i.test(file)?'json':undefined;
@@ -57,6 +58,21 @@ function workspaceReferences(vscode,document,format) {
   }};
 }
 
+function operationDetails(operation) {
+  return [
+    operation.key,
+    ...(operation.summary?['',operation.summary]:[]),
+    '',
+    'Declared responses  '+operation.statuses.join(', '),
+    'Security requirement  '+(operation.security?'declared':'none observed'),
+    ...operation.servers.map(server=>'Server  '+server),
+    '',
+    ...operation.parameters.map(item=>[item.in,item.name,item.type,item.required?'required':'optional'].join('  ')),
+    ...(operation.requestBody?.schema?['','JSON request',...schemaLines(operation.requestBody.schema)]:[]),
+    ...(operation.responseBodies??[]).flatMap(({status,schema})=>['','JSON response '+status,...schemaLines(schema)])
+  ].join('\n')+'\n';
+}
+
 function registerOpenApiTools(context,vscode) {
   const collection=vscode.languages.createDiagnosticCollection('rocketbrain-openapi');
   let disposed=false;
@@ -83,11 +99,13 @@ function registerOpenApiTools(context,vscode) {
     }));
     return report;
   }
-  function createRequest(document,key) {
+  function observedOperation(document,key) {
     const operation=analyze(document).operations.find(item=>item.key===key);
     if (!operation) throw Error('Choose an observed OpenAPI operation.');
-    return requestTemplate(operation);
+    return operation;
   }
+  const createRequest=(document,key)=>requestTemplate(observedOperation(document,key));
+  const previewText=(document,key)=>operationDetails(observedOperation(document,key));
   function createJavaClient(document,keys,options) {
     const byKey=new Map(analyze(document).operations.map(operation=>[operation.key,operation]));
     if (!Array.isArray(keys)||new Set(keys).size!==keys.length||keys.some(key=>!byKey.has(key))) {
@@ -117,17 +135,7 @@ function registerOpenApiTools(context,vscode) {
   async function preview() {
     const operation=await choose();
     if (!operation)return;
-    const details=[
-      operation.key,
-      ...(operation.summary?['',operation.summary]:[]),
-      '',
-      'Declared responses  '+operation.statuses.join(', '),
-      'Security requirement  '+(operation.security?'declared':'none observed'),
-      ...operation.servers.map(server=>'Server  '+server),
-      '',
-      ...operation.parameters.map(item=>[item.in,item.name,item.type,item.required?'required':'optional'].join('  '))
-    ].join('\n');
-    const document=await vscode.workspace.openTextDocument({language:'plaintext',content:details+'\n'});
+    const document=await vscode.workspace.openTextDocument({language:'plaintext',content:operationDetails(operation)});
     await vscode.window.showTextDocument(document,{preview:true});
     return operation;
   }
@@ -162,7 +170,7 @@ function registerOpenApiTools(context,vscode) {
     vscode.workspace.onDidCloseTextDocument(document=>collection.delete(document.uri)),
     vscode.workspace.onDidChangeTextDocument(event=>collection.delete(event.document.uri))
   ];
-  return {analyze,createRequest,createJavaClient,dispose(){
+  return {analyze,createRequest,createJavaClient,previewText,dispose(){
     if(disposed)return;
     disposed=true;
     for(const subscription of subscriptions)subscription.dispose();
