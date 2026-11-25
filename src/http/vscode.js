@@ -1,8 +1,30 @@
 'use strict';
 
 const { createHash } = require('node:crypto');
+const fs = require('node:fs/promises');
+const path = require('node:path');
 const { requestAt,resolveRequest,sendRequest } = require('./client');
 const { websocketWorkbench } = require('./websocket');
+
+async function readProto(folder,value) {
+  const parts=value.split('/');
+  if (!/\.proto$/i.test(value) || value.length>512 || parts.some(part=>!part || ['.','..'].includes(part) || /[\\:\x00-\x1f\x7f]/.test(part))) {
+    throw Error('Use a workspace-relative Proto path, such as api/example.proto.');
+  }
+  try {
+    const root=await fs.realpath(folder.uri.fsPath), source=await fs.realpath(path.join(root,...parts));
+    const relative=path.relative(root,source);
+    if (!relative || path.isAbsolute(relative) || relative==='..' || relative.startsWith('..'+path.sep)) throw Error();
+    const handle=await fs.open(source,'r');
+    try {
+      if (!(await handle.stat()).isFile()) throw Error();
+      const body=Buffer.alloc(128*1024+1);
+      const {bytesRead}=await handle.read(body,0,body.length,0);
+      if (bytesRead===body.length) throw Error();
+      return new TextDecoder('utf-8',{fatal:true}).decode(body.subarray(0,bytesRead));
+    } finally { await handle.close(); }
+  } catch { throw Error('Open a readable UTF-8 .proto file inside this workspace, up to 128 KiB.'); }
+}
 
 const language = 'rocketbrain-http';
 const validName = /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/;
@@ -86,12 +108,13 @@ function registerHttpTools(context, vscode) {
     else await context.secrets.delete(secretKey(key,name,secret));
   }
   async function run(document,offset,{signal,schema=false}={}) {
-    const { key }=workspace(document), savedVersion=document.version, chosen=currentEnvironment(document,key);
+    const { key,folder }=workspace(document), savedVersion=document.version, chosen=currentEnvironment(document,key);
     const request=requestAt(document.getText(),offset);
     const controller=new AbortController();
     running.add(controller);
     try {
       const ready=await resolveRequest(request,chosen.values,name=>context.secrets.get(secretKey(key,chosen.name,name)),{schema});
+      const proto=ready.method==='GRPC' ? await readProto(folder,ready.proto) : undefined;
       const now=currentEnvironment(document,key);
       if (workspace(document).key!==key || document.version!==savedVersion || now.name!==chosen.name ||
           JSON.stringify(now.values)!==JSON.stringify(chosen.values)) {
@@ -102,6 +125,7 @@ function registerHttpTools(context, vscode) {
         const webSocket=await connections.connect(ready,{signal:bounded,owner:key,environment:chosen.name});
         return { environment:chosen.name,webSocket };
       }
+      if (ready.method==='GRPC') return { environment:chosen.name,...await require('./grpc').sendGrpc(ready,proto,{signal:bounded}) };
       const response=await sendRequest(ready,{signal:bounded});
       return { environment:chosen.name,...response };
     } finally {
@@ -172,6 +196,14 @@ function registerHttpTools(context, vscode) {
     trust();
     if (response.webSocket) {
       showTranscript(response.webSocket);
+      return response;
+    }
+    if (response.grpc) {
+      output.clear();
+      output.appendLine('gRPC '+response.grpc.method+' · '+response.grpc.mode+' · '+response.durationMs+' ms');
+      output.appendLine(response.grpc.sent+' sent · '+response.grpc.received+' received');
+      output.appendLine(response.body);
+      output.show(true);
       return response;
     }
     const passed=response.assertions.filter(item=>item.passed).length;

@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.46.0",
+  "version": "0.47.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -25,6 +25,7 @@
     "onView:rocketbrain.analysis",
     "onLanguage:java",
     "onLanguage:duckdb-sql",
+    "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
@@ -50,10 +51,12 @@
         "aliases": ["Rocketbrain HTTP", "HTTP"],
         "extensions": [".http", ".rest"]
       },
-      { "id": "duckdb-sql", "aliases": ["DuckDB SQL"], "extensions": [".duckdb.sql"] }
+      { "id": "duckdb-sql", "aliases": ["DuckDB SQL"], "extensions": [".duckdb.sql"] },
+      { "id": "rocketbrain-jdbc", "aliases": ["Rocketbrain JDBC SQL"], "extensions": [".jdbc.sql"] }
     ],
     "grammars": [
-      { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" }
+      { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" },
+      { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
       { "command": "rocketbrain.db.newDataExtractor", "title": "Create Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -71,12 +74,19 @@
       { "command": "rocketbrain.duckdb.browse", "title": "Browse DuckDB Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.functions", "title": "Find DuckDB Functions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.close", "title": "Close Local DuckDB", "category": "Rocketbrain", "enablement": "rocketbrain.duckdbConnected" },
+      { "command": "rocketbrain.jdbc.addDriver", "title": "Add JDBC Driver", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jdbc.profiles", "title": "Manage JDBC Profiles", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jdbc.newQuery", "title": "New JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
+      { "command": "rocketbrain.jdbc.run", "title": "Run JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected && editorLangId == rocketbrain-jdbc", "icon": "$(play)" },
+      { "command": "rocketbrain.jdbc.browse", "title": "Browse JDBC Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
+      { "command": "rocketbrain.jdbc.close", "title": "Close JDBC Connection", "category": "Rocketbrain", "enablement": "rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.sqlNotebook.create", "title": "New SQL Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.sqlNotebook.pinResult", "title": "Pin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
       { "command": "rocketbrain.sqlNotebook.unpinResult", "title": "Unpin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
       { "command": "rocketbrain.java.structuralSearch", "title": "Search or Replace Java Structure", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.beanGraph", "title": "Show Spring Bean Dependency Graph", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeHealth", "title": "Open Spring Actuator Health", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.runtimeSecurity", "title": "Inspect Spring Security Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.cacheMetadata", "title": "Save Database Metadata for Offline Use", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.openCachedMetadata", "title": "Open Cached Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && !rocketbrain.mysqlConnected" },
@@ -961,6 +971,11 @@
       ],
       "editor/title": [
         {
+          "command": "rocketbrain.jdbc.run",
+          "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.jdbcConnected && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
           "command": "rocketbrain.db.refreshObjectSource",
           "when": "resourceScheme == rocketbrain-object-source && rocketbrain.mysqlConnected && isWorkspaceTrusted",
           "group": "navigation"
@@ -1722,7 +1737,10 @@
     "test:mysql": "node scripts/integration-mysql.js run --test --test-concurrency=1 test/*.test.js test/integration/*.test.js"
   },
   "dependencies": {
+    "@grpc/grpc-js": "1.14.7",
+    "@grpc/proto-loader": "0.8.1",
     "mysql2": "3.24.6",
+    "protobufjs": "7.6.6",
     "saxes": "6.0.0",
     "sql.js": "1.13.0",
     "vscode-languageclient": "11.0.0",

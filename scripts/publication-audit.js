@@ -21,6 +21,7 @@ function publicPath(name) {
   if (/(?:^|\/)(?:node_modules|dist|target|build|bin|\.gradle|\.idea|\.settings|\.git)(?:\/|$)/i.test(name)) return false;
   if (/(?:^|\/)(?:\.env(?:\..*)?|\.classpath|\.project|application-local\.[^/]+|connection[^/]*\.local\.json)$/i.test(name)) return false;
   if (top.has(name)) return true;
+  if (name === 'media/jdbc.tmLanguage.json') return true;
   if (name.includes('/.vscode/')) return false;
   if (/^src\/.+\.(?:js|cjs|json|css)$/.test(name)) return true;
   if (/^runtime\/.+\.java$/.test(name)) return true;

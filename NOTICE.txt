@@ -8,6 +8,7 @@ Craft Anything was used locally through its CLI for investigation and build evid
 Original project code: redistribution license not yet selected by the owner.
 Third-party runtime component notices are in THIRD-PARTY-LICENSES.txt.
 The WebSocket client uses ws 8.23.0 under the MIT license. graphql 16.15.0 is used by the owned integration fixture and is excluded from the VSIX. The DuckDB workflow calls a separately installed official DuckDB CLI 1.5.6 or later in read-only safe mode. The DuckDB executable is excluded from the VSIX.
+The gRPC workbench bundles @grpc/grpc-js 1.14.7, @grpc/proto-loader 0.8.1 and protobufjs 7.6.6. Exact runtime license texts and notices are in THIRD-PARTY-LICENSES.txt. The JDBC workbench runs an approved local vendor driver JAR in a separate installed JDK process. Vendor JDBC JARs and the Spring Security verification fixture are excluded from the VSIX.
 The SQLite offline demonstration is not a MySQL/MariaDB compatibility implementation.
 Eclipse JDT Language Server and the standalone JDK are separately provisioned open-source components.
 Their binaries are not included in this VSIX; their source, hashes and notices are recorded by the setup process.

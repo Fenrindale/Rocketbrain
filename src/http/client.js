@@ -72,8 +72,8 @@ function requestAt(text, offset) {
       if (!content) continue;
       const values = /^([A-Za-z]+)[ \t]+(\S+)(?:[ \t]+HTTP\/1\.[01])?$/.exec(content);
       const method = values?.[1].toUpperCase();
-      if (!methods.has(method) && method!=='GRAPHQL' && method!=='WEBSOCKET') {
-        throw Error('Start the request with an HTTP method, GRAPHQL or WEBSOCKET followed by a URL.');
+      if (!methods.has(method) && !['GRAPHQL','WEBSOCKET','GRPC'].includes(method)) {
+        throw Error('Start the request with an HTTP method, GRAPHQL, WEBSOCKET or GRPC followed by a URL.');
       }
       requestLine = { method,url:values[2] };
       marker = selected.start + line.index;
@@ -165,7 +165,7 @@ async function graphQLBody(body, expand) {
 }
 
 async function resolveRequest(request, environment, readSecret, {schema=false}={}) {
-  const graphQL=request.method==='GRAPHQL', webSocket=request.method==='WEBSOCKET';
+  const graphQL=request.method==='GRAPHQL', webSocket=request.method==='WEBSOCKET', grpc=request.method==='GRPC';
   if (schema && !graphQL) throw Error('Select a GRAPHQL request to inspect its schema.');
   const secrets = new Map();
   const values = new Map(Object.entries(environment || {}));
@@ -204,15 +204,19 @@ async function resolveRequest(request, environment, readSecret, {schema=false}={
   }
   const expandedUrl = await expand(request.url,false);
   let url;
-  const allowedProtocols=webSocket?['ws:','wss:']:['http:','https:'];
-  const permittedUrl=webSocket?'WebSocket ws:// or wss://':'HTTP or HTTPS';
+  const allowedProtocols=grpc?['grpc:','grpcs:']:webSocket?['ws:','wss:']:['http:','https:'];
+  const permittedUrl=grpc?'gRPC grpc:// or grpcs://':webSocket?'WebSocket ws:// or wss://':'HTTP or HTTPS';
   try { url=new URL(expandedUrl); } catch { throw Error('Use a complete '+permittedUrl+' URL.'); }
   if (!allowedProtocols.includes(url.protocol) || !url.hostname || url.username || url.password || url.hash ||
       /[\r\n\t]|\{\{|\}\}/.test(expandedUrl)) throw Error('Use a '+permittedUrl+' URL without user information, fragments or unresolved variables.');
   const headers = {};
-  let protocols=[];
+  let protocols=[], proto;
   for (const [name,value] of request.headers) {
     const key=name.toLowerCase();
+    if (grpc && key==='proto') {
+      proto=await expand(value,false);
+      continue;
+    }
     if (webSocket && key.startsWith('sec-websocket-')) {
       if (key!=='sec-websocket-protocol') throw Error('The WebSocket client controls its handshake headers.');
       const resolved=await expand(value,false);
@@ -254,6 +258,11 @@ async function resolveRequest(request, environment, readSecret, {schema=false}={
   const redactions = patterns.length ? new RegExp(patterns.join('|'),'g') : null;
   const redact = value => redactions ? String(value).replace(redactions,'[redacted]') : String(value);
   const ready={ method:request.method,url,headers,body,assertions:request.assertions,redact };
+  if (grpc) {
+    if (!proto) throw Error('Set the Proto header to a .proto file in this workspace.');
+    if (request.assertions.length) throw Error('HTTP assertions require an HTTP response.');
+    return { ...ready,proto };
+  }
   if (webSocket) return { ...ready,protocols };
   if (graphQL) return { ...ready,method:'POST',assertions:schema?[]:request.assertions,graphql:schema?'schema':'operation' };
   return ready;
