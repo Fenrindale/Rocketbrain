@@ -110,4 +110,70 @@ async function loadSource(query, context, object = {}) {
     source, settings, rowDataIncluded: false };
 }
 
-module.exports = { contextOf, listNames, loadSource };
+// Descendant names use their owning object's SHOW CREATE definition.
+const members = [
+  { kind: 'column', from: 'COLUMNS m JOIN information_schema.TABLES t ON ' +
+    'CAST(t.TABLE_SCHEMA AS BINARY)=CAST(m.TABLE_SCHEMA AS BINARY) AND CAST(t.TABLE_NAME AS BINARY)=CAST(m.TABLE_NAME AS BINARY)',
+  name: 'm.COLUMN_NAME', ownerKind: "CASE WHEN t.TABLE_TYPE='VIEW' THEN 'view' ELSE 'table' END",
+  filter: "t.TABLE_TYPE IN ('BASE TABLE','SYSTEM VERSIONED','VIEW')" },
+  { kind: 'index', from: 'STATISTICS m', name: 'm.INDEX_NAME', ownerKind: "'table'", distinct: true },
+  { kind: 'constraint', from: 'TABLE_CONSTRAINTS m', name: 'm.CONSTRAINT_NAME', ownerKind: "'table'" }
+];
+
+function literalLike(term) {
+  return '%' + term.toLowerCase().replace(/[=%_]/g, value => '=' + value) + '%';
+}
+
+async function searchInventory(query, context, { schemas, term, limit = 200 } = {}) {
+  if (!Array.isArray(schemas) || !schemas.length || schemas.length > 8 || new Set(schemas).size !== schemas.length ||
+      !Number.isInteger(limit) || limit < 1 || limit > 200 ||
+      term !== undefined && (typeof term !== 'string' || !term.length || term.length > 128 || /[\x00-\x1f\x7f]/.test(term))) {
+    throw error('SEARCH', 'Choose one to eight visible schemas and a bounded search term.');
+  }
+  const scope = schemas.map(schema => identifier(schema, { table: true }));
+  const parameters = [];
+  function statement({ kind, from, schema, name, filter, owner, ownerKind, distinct }) {
+    const clauses = ['CAST(' + schema + ' AS BINARY) IN (' + scope.map(() => 'CAST(? AS BINARY)').join(',') + ')'];
+    parameters.push(...scope);
+    if (filter) clauses.push(filter);
+    if (term !== undefined) {
+      const qualified = [...new Set([schema, owner, name].filter(Boolean))].join(',');
+      clauses.push("(CAST(LOWER(" + name + ") AS BINARY) LIKE CAST(? AS BINARY) ESCAPE '=' OR " +
+        "CAST(LOWER(CONCAT_WS('.', " + qualified + ")) AS BINARY) LIKE CAST(? AS BINARY) ESCAPE '=')");
+      const pattern = literalLike(term);
+      parameters.push(pattern, pattern);
+    }
+    const textName = expression => 'CONVERT(' + expression + ' USING utf8mb4) COLLATE utf8mb4_bin';
+    return 'SELECT ' + (distinct ? 'DISTINCT ' : '') + textName(schema) + ' AS schema_id,' +
+      textName(name) + " AS object_name,'" + kind + "' AS object_kind," + textName(owner ?? 'NULL') +
+      ' AS owner_name,' + (ownerKind ?? 'NULL') + ' AS owner_kind FROM information_schema.' + from +
+      ' WHERE ' + clauses.join(' AND ');
+  }
+
+  const statements = [...definitions].filter(([, definition]) => !definition.mariaOnly || context.mariaExtended)
+    .map(([kind, definition]) => statement({ kind, from: definition.catalog, schema: definition.schemaColumn,
+      name: definition.nameColumn, filter: definition.filter }));
+  if (term !== undefined) for (const member of members) {
+    statements.push(statement({ ...member, schema: 'm.TABLE_SCHEMA', owner: 'm.TABLE_NAME' }));
+  }
+  const { rows } = await query('SELECT schema_id,object_name,object_kind,owner_name,owner_kind FROM (' +
+    statements.join(' UNION ALL ') + ') AS searchable ORDER BY CAST(schema_id AS BINARY),object_kind,' +
+    'CAST(object_name AS BINARY),CAST(owner_name AS BINARY) LIMIT ' + (limit + 1), parameters);
+  const items = [];
+  let unsupported = 0;
+  for (const [schemaValue, nameValue, kind, owner, ownerKind] of rows.slice(0, limit)) {
+    try {
+      const schema = identifier(schemaValue, { table: true });
+      const name = identifier(nameValue);
+      const target = { schema, name, kind };
+      if (owner != null) {
+        if (!['table', 'view'].includes(ownerKind) || !members.some(member => member.kind === kind)) throw Error();
+        target.owner = { schema, name: identifier(owner, { table: true }), kind: ownerKind };
+      } else kindDefinition(kind, context);
+      items.push(target);
+    } catch { unsupported++; }
+  }
+  return { items, limited: rows.length > limit, unsupported };
+}
+
+module.exports = { contextOf, listNames, loadSource, searchInventory };

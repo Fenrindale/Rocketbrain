@@ -1,0 +1,9 @@
+# Unified SQL search
+
+Run **Rocketbrain: Search SQL Files, Database Objects and DDL** from the command palette or the Databases view. Enter a literal name or text fragment. Choose the workspace, the active database schema, or up to eight account-visible schemas. The database names-only mode skips loading DDL. Search works on local SQL files when no database is connected.
+
+- **SQL Files** matches workspace-relative names and paths. **SQL File Content** searches local `.sql` files and open editor buffers and selects the matching text. The disk reader supports UTF-8 and UTF-16 with a byte order mark.
+- **Database Object Names** matches schemas, tables, views, routines, triggers, events, columns, indexes and constraints. MariaDB sequences, packages and package bodies appear when the server exposes them. Choose a member to open the definition of its owning table or view.
+- **Live DDL Content** searches actual `SHOW CREATE` output visible to the connected account and opens the exact matching span in the read-only source editor. Search checks that the definition still matches before opening it. [MySQL SHOW CREATE TABLE](https://dev.mysql.com/doc/refman/8.4/en/show-create-table.html), [MariaDB SHOW CREATE VIEW](https://mariadb.com/docs/server/reference/sql-statements/administrative-sql-statements/show/show-create-view)
+
+**Show Search Coverage** lists the selected and unavailable schemas, unread definitions, file and result limits. The search excludes generated/vendor directories and paths leaving the workspace. It scans up to 250 files, 256 KiB per file, and 8 MiB of file content. It inspects up to 120 readable definition candidates, with a 4 MiB DDL budget and time limit. The result shows up to three occurrences per source and 150 entries per group. Database visibility follows the selected connection's server privileges.

@@ -231,6 +231,7 @@
       { "command": "rocketbrain.sql.saveQuery", "title": "Save SQL Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.searchSources", "title": "Search SQL Files, Database Objects and DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(search)" },
       { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.draft", "title": "Draft SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
@@ -1024,6 +1025,7 @@
         { "command": "rocketbrain.kubernetes.connect", "when": "view == rocketbrain.kubernetes", "group": "navigation@1" },
         { "command": "rocketbrain.kubernetes.refresh", "when": "view == rocketbrain.kubernetes", "group": "navigation@2" },
         { "command": "rocketbrain.kubernetes.disconnect", "when": "view == rocketbrain.kubernetes", "group": "navigation@3" },
+        { "command": "rocketbrain.db.searchSources", "when": "view == rocketbrain.databases", "group": "navigation@1" },
         {
           "command": "rocketbrain.schema.exportDdl",
           "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
