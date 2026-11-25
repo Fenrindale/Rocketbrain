@@ -31,7 +31,11 @@ test('Java debugger validates attach ports and directly asks its own language en
   const sockets = new Set(), server = net.createServer(socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); t.after(async () => { for (const socket of sockets) socket.destroy(); await new Promise(resolve => server.close(resolve)); });
   const { provider, factory, controller, calls, errors } = setup(true, server.address().port);
-  assert.equal(await provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'attach', port: 70000 }), undefined); assert.match(errors[0], /TCP port/); assert.equal(calls.length, 0);
+  assert.equal(await provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'attach', processId: 12, port: 5005 }), undefined);
+  assert.match(errors.at(-1), /either a local process ID or a host and port/);
+  assert.equal(await provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'attach', processId: 'x' }), undefined);
+  assert.match(errors.at(-1), /positive local Java process ID/);
+  assert.equal(await provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'attach', port: 70000 }), undefined); assert.match(errors.at(-1), /TCP port/); assert.equal(calls.length, 0);
   const resolved = await provider.resolveDebugConfigurationWithSubstitutedVariables(undefined, { request: 'attach', port: 5005 }); assert.equal(resolved.hostName, '127.0.0.1');
   const adapter = await factory.createDebugAdapterDescriptor({ id: 'unit', type: 'rocketbrain-java' }); assert.ok(adapter.implementation); assert.equal(calls.at(-1).command, 'vscode.java.startDebugSession'); adapter.implementation.dispose();
   await assert.rejects(() => controller.hotCodeReplace(), /Pause/);

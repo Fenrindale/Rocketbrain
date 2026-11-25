@@ -80,6 +80,7 @@
     ],
     "commands": [
       { "command": "rocketbrain.java.smartStepInto", "title": "Step Into a Java Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
+      { "command": "rocketbrain.java.attachProcess", "title": "Attach to Local Java Process", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.openTableSnapshot", "title": "Open Consistent Table Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.attach", "title": "Open SSH Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
@@ -1461,11 +1462,13 @@
             }
           },
           "attach": {
-            "required": [
-              "hostName",
-              "port"
-            ],
             "properties": {
+              "processId": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295,
+                "description": "Windows process ID of a Java JVM already listening for JDWP on 127.0.0.1. Use this field without hostName or port."
+              },
               "hostName": {
                 "type": "string",
                 "default": "127.0.0.1"
