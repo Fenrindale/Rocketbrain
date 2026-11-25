@@ -85,37 +85,50 @@ async function runSqlColumnOriginChecks(api, vscode, checks) {
   const commands = await vscode.commands.getCommands(true);
   for (const name of ['goToColumnOrigin', 'explainColumnOrigin']) assert.ok(commands.includes('rocketbrain.sql.' + name));
   const editors = new Map();
+  const workspace = vscode.workspace.workspaceFolders[0].uri.fsPath;
+  const suffix = randomBytes(8).toString('hex');
+  const files = [];
   async function editor(text) {
-    if (!editors.has(text)) editors.set(text, await vscode.workspace.openTextDocument({language:'sql', content:text}));
+    if (!editors.has(text)) {
+      const file = path.join(workspace, 'rb-origin-' + suffix + '-' + editors.size + '.sql');
+      await fs.writeFile(file, text, {flag:'wx'});
+      files.push(file);
+      editors.set(text, await vscode.workspace.openTextDocument(vscode.Uri.file(file)));
+    }
     return editors.get(text);
   }
-  checks.sqlColumnOrigin = await verifyColumnOrigin(runtime, {
-    connect: config => api.connectMysql(config),
-    async resolve(text, offset) {
-      const document = await editor(text);
-      return api.sqlAnalysis.resolveColumnOrigin(document, document.positionAt(offset));
-    },
-    async anchor(result) {
-      const document = await vscode.workspace.openTextDocument(result.location.uri);
-      assert.equal(document.uri.scheme, 'rocketbrain-object-source');
-      return document.getText(result.location.range).replaceAll(String.fromCharCode(96), '');
-    },
-    async assertLocalAndHover(text, offset, result) {
-      const document = await editor(text), position = document.positionAt(offset);
-      const definitions = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', document.uri, position);
-      assert.ok(definitions.some(item => (item.uri ?? item.targetUri).toString() === document.uri.toString()));
-      const hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider', document.uri, position);
-      const markdown = hovers.flatMap(hover => hover.contents.map(item => item.value ?? item)).join('\n');
-      assert.ok(markdown.includes(result.chain[1].object.name));
-    },
-    async probe() {
-      const response = await fetch(runtime.baseUrl + '/probe/testing-state', {signal:AbortSignal.timeout(5000)});
-      assert.ok(response.ok);
-      return response.json();
-    }
-  });
-  if (Array.isArray(checks)) checks.push("The installed SQL origin commands resolved the exact physical column from live view metadata.");
-  return checks.sqlColumnOrigin;
+  try {
+    checks.sqlColumnOrigin = await verifyColumnOrigin(runtime, {
+      connect: config => api.connectMysql(config),
+      async resolve(text, offset) {
+        const document = await editor(text);
+        return api.sqlAnalysis.resolveColumnOrigin(document, document.positionAt(offset));
+      },
+      async anchor(result) {
+        const document = await vscode.workspace.openTextDocument(result.location.uri);
+        assert.equal(document.uri.scheme, 'rocketbrain-object-source');
+        return document.getText(result.location.range).replaceAll(String.fromCharCode(96), '');
+      },
+      async assertLocalAndHover(text, offset, result) {
+        const document = await editor(text), position = document.positionAt(offset);
+        const definitions = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', document.uri, position);
+        assert.ok(definitions.some(item => (item.uri ?? item.targetUri).toString() === document.uri.toString()));
+        const hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider', document.uri, position);
+        const markdown = hovers.flatMap(hover => hover.contents.map(item => item.value ?? item)).join('\n');
+        const label = new vscode.MarkdownString().appendText(result.chain[1].object.name).value;
+        assert.ok(markdown.includes(label), 'The native hover shows the verified inner view.');
+      },
+      async probe() {
+        const response = await fetch(runtime.baseUrl + '/probe/testing-state', {signal:AbortSignal.timeout(5000)});
+        assert.ok(response.ok);
+        return response.json();
+      }
+    });
+    if (Array.isArray(checks)) checks.push('The installed SQL origin commands resolved the exact physical column from live view metadata.');
+    return checks.sqlColumnOrigin;
+  } finally {
+    await Promise.all(files.map(file => fs.rm(file, {force:true})));
+  }
 }
 
 module.exports = { runSqlColumnOriginChecks, verifyColumnOrigin };
