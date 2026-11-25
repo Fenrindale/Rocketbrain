@@ -18,6 +18,10 @@ From the JDBC editor, run **Estimate PostgreSQL Query Plan** for a statement suc
 
 The planner runs in a verified read-only transaction and captures estimates only. Use an owned, trusted server and schema with a dedicated SELECT account. The capture checks visible heap metadata and holds an access-share lock. It refuses observed views, inheritance, row-security policies, check constraints, expression statistics and custom or expression indexes. Coordinate concurrent schema changes with the schema owner.
 
+For reviewed cell editing, add a separate PostgreSQL profile and select **Allow reviewed PostgreSQL cell edits**. This profile still uses read-only JDBC query and estimate sessions. Open **Open PostgreSQL Table Grid** for a supported table with one integer primary key, then choose a text or integer cell. The grid previews at most 100 rows and the first column shows the row key. The confirmation shows the key and the exact old and new value. Commit applies one cell in its own transaction and rechecks the table metadata and complete row version. PostgreSQL must grant the connection account SELECT and UPDATE for the table. Table features that can cause indirect writes, such as triggers and generated columns, are outside this grid.
+
+Open a fresh grid after five minutes. If the row or its schema changed, the reviewed update is refused. If the client loses the receipt while committing, reopen the grid and confirm the current value before submitting another edit.
+
 pgJDBC uses the [BSD 2-Clause license](https://jdbc.postgresql.org/license/). Install it separately. The VS Code extension bundles neither the driver nor PostgreSQL server binaries.
 
 ## Runtime bounds

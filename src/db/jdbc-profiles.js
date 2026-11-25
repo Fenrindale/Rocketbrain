@@ -5,9 +5,11 @@ const path = require('node:path');
 const { examineJdbcDriver, runJdbc, credentials, classpathFingerprint, maxLibraries } = require('./jdbc');
 const { postgresqlRoute, postgresJdbcUrl } = require('./postgresql-jdbc');
 const { comparePostgreSqlPlans } = require('./postgresql-plan');
+const { gridNames, gridCell } = require('./postgresql-grid');
 
 const key = 'rocketbrain.jdbc.profiles.v1';
 const approvalLifetime = 5 * 60 * 1000;
+const gridLifetime = 5 * 60 * 1000;
 const maxVersions = 8;
 const fail = message => Object.assign(Error(message), { code: 'ROCKETBRAIN_JDBC_PROFILE' });
 const validId = value => typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value);
@@ -46,6 +48,7 @@ function profile(item, legacy) {
     catch { return null; }
     if (versions.some(entry => entry.driverClass !== 'org.postgresql.Driver')) return null;
   }
+  if (item.postgresqlGridEditing === true && result.postgresql) result.postgresqlGridEditing = true;
   return result;
 }
 
@@ -55,6 +58,8 @@ function view(item) { return structuredClone({ ...selected(item), ...item }); }
 function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
   const approvals = new Map();
   const captures = new Map();
+  const grids = new Map();
+  const edits = new Map();
   let active, operation, disposed = false;
   function trusted() {
     if (disposed || !isTrusted()) throw fail('Trust the workspace before using custom JDBC profiles.');
@@ -65,6 +70,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
       saved.profiles.map(item => profile(item, saved.version === 1)).filter(Boolean) : [];
   }
   const persist = items => state.update(key, { version: 2, profiles: items });
+  function clearSessionWork() { captures.clear(); grids.clear(); edits.clear(); }
   async function run(action, signal) {
     trusted();
     if (operation) throw fail('Finish the current JDBC operation first.');
@@ -84,28 +90,31 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
     if (!active) throw fail('Open a saved JDBC connection first.');
     const saved = profiles().find(item => item.id === active.profile.id);
     if (!saved || saved.selectedVersion !== active.profile.selectedVersion || selected(saved).classpathFingerprint !== active.profile.classpathFingerprint ||
+        saved.postgresqlGridEditing !== active.profile.postgresqlGridEditing ||
         JSON.stringify(saved.postgresql) !== JSON.stringify(active.profile.postgresql)) {
       active = undefined;
-      captures.clear();
+      clearSessionWork();
       throw fail('The approved JDBC version changed. Reopen the saved profile.');
     }
     return active;
   }
-  function prepare(target, { name, jar, driverClass, libraries, postgresql }, signal) {
+  function prepare(target, { name, jar, driverClass, libraries, postgresql, postgresqlGridEditing }, signal) {
     return run(async cancellation => {
       if (!validName(name)) throw fail('Enter a JDBC profile or version name up to 80 characters.');
       const current = target && profiles().find(item => item.id === target);
       if (target && !current) throw fail('Select a current approved JDBC profile.');
       const route = target ? current.postgresql : postgresql === undefined ? undefined : postgresqlRoute(postgresql);
       if (route && driverClass !== 'org.postgresql.Driver') throw fail('Use the official PostgreSQL JDBC driver class for this profile.');
+      const gridEditing = target ? current.postgresqlGridEditing === true : postgresqlGridEditing === true;
+      if (gridEditing && !route) throw fail('Reviewed grid editing requires an explicitly approved PostgreSQL profile.');
       const data = await examineJdbcDriver(jar, driverClass, cancellation, libraries);
       trusted();
       if (cancellation.aborted) throw fail('The JDBC operation was cancelled.');
       const id = randomUUID(), proposal = { id, name: name.trim(), ...data };
       for (const [saved, value] of approvals) if (value.expires <= Date.now()) approvals.delete(saved);
       while (approvals.size >= 8) approvals.delete(approvals.keys().next().value);
-      approvals.set(id, { expires: Date.now() + approvalLifetime, target, proposal, route });
-      return structuredClone({ ...proposal, ...(route && { postgresql: route }) });
+      approvals.set(id, { expires: Date.now() + approvalLifetime, target, proposal, route, gridEditing });
+      return structuredClone({ ...proposal, ...(route && { postgresql: route }), ...(gridEditing && { postgresqlGridEditing: true }) });
     }, signal);
   }
 
@@ -126,11 +135,12 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
     },
     save(id, approved) {
       return run(async () => {
-        const { proposal, route } = approval(id, approved, false), catalog = profiles();
+        const { proposal, route, gridEditing } = approval(id, approved, false), catalog = profiles();
         if (catalog.length >= 20) throw fail('Remove a JDBC profile before adding another.');
         if (catalog.some(item => item.name.toLowerCase() === proposal.name.toLowerCase())) throw fail('Choose a unique JDBC profile name.');
         const item = { id: proposal.id, name: proposal.name, selectedVersion: proposal.id,
-          versions: [{ ...proposal, name: 'Initial driver' }], ...(route && { postgresql: route }) };
+          versions: [{ ...proposal, name: 'Initial driver' }], ...(route && { postgresql: route }),
+          ...(gridEditing && { postgresqlGridEditing: true }) };
         await persist([...catalog, item]);
         approvals.delete(id);
         return view(item);
@@ -157,7 +167,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
         item.selectedVersion = versionId;
         await persist(catalog);
         if (active?.profile.id === id) active = undefined;
-        if (!active) captures.clear();
+        if (!active) clearSessionWork();
         return view(item);
       });
     },
@@ -176,7 +186,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
       return run(async () => {
         await persist(profiles().filter(item => item.id !== id));
         if (active?.profile.id === id) active = undefined;
-        if (!active) captures.clear();
+        if (!active) clearSessionWork();
       });
     },
     open(id, input, { signal } = {}) {
@@ -189,7 +199,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
         trusted();
         if (cancellation.aborted) throw fail('The JDBC operation was cancelled.');
         active = { profile, credential, catalog };
-        captures.clear();
+        clearSessionWork();
         return structuredClone(catalog);
       }, signal);
     },
@@ -238,7 +248,62 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
       if (left === right) throw fail('Choose two different PostgreSQL estimates.');
       return comparePostgreSqlPlans(this.postgreSqlPlanCapture(left), this.postgreSqlPlanCapture(right));
     },
-    close() { operation?.abort(); active = undefined; captures.clear(); },
+    supportsPostgreSqlGrid() { return Boolean(isTrusted() && active?.profile.postgresqlGridEditing); },
+    previewPostgreSqlGrid(table, { signal } = {}) {
+      return run(async cancellation => {
+        const connection = current(), { profile, credential, catalog } = connection;
+        gridNames(profile, table);
+        if (!catalog.objects.some(item => item.schema === profile.postgresql.schema && item.name === table &&
+            ['TABLE', 'BASE TABLE'].includes(item.kind))) throw fail('Choose an observed table from the approved PostgreSQL catalog.');
+        const preview = await runJdbc({ javaHome: getJavaHome(), profile, credential, operation: 'grid-read', grid: { table }, signal: cancellation });
+        trusted();
+        if (cancellation.aborted || current() !== connection) throw fail('The PostgreSQL preview was cancelled.');
+        const result = { ...preview, id: randomUUID(), table, database: profile.postgresql.database, schema: profile.postgresql.schema };
+        if (grids.size >= 4) grids.delete(grids.keys().next().value);
+        grids.set(result.id, { result, expires: Date.now() + gridLifetime });
+        return structuredClone(result);
+      }, signal);
+    },
+    preparePostgreSqlGridEdit(gridId, rowIndex, fieldIndex, value) {
+      trusted();
+      const connection = current(), { profile } = connection;
+      const entry = grids.get(gridId);
+      if (!entry || entry.expires <= Date.now()) throw fail('Reload the PostgreSQL grid before reviewing a cell change.');
+      const grid = entry.result, row = grid.rows[rowIndex], column = grid.columns[fieldIndex];
+      gridNames(profile, grid.table);
+      if (!row || !column || fieldIndex === 0 || !Number.isInteger(rowIndex) || !Number.isInteger(fieldIndex)) {
+        throw fail('Choose an observed non-key cell and reload the grid if needed.');
+      }
+      const original = gridCell(row.values[fieldIndex], column), replacement = gridCell(value, column);
+      if (original === replacement) throw fail('Enter a changed PostgreSQL value.');
+      const edit = { id: randomUUID(), gridId, table: grid.table, schema: grid.schema, database: grid.database, relation: grid.relation,
+        rowVersion: row.version, identity: { column: grid.columns[0].name, type: grid.columns[0].type,
+          number: grid.columns[0].number, value: row.values[0] },
+        column, original, replacement };
+      while (edits.size >= 8) edits.delete(edits.keys().next().value);
+      edits.set(edit.id, { edit, expires: Date.now() + 120000 });
+      return structuredClone(edit);
+    },
+    applyPostgreSqlGridEdit(id, approved, { signal } = {}) {
+      let dispatched = false;
+      return run(async cancellation => {
+        const { profile, credential } = current(), record = edits.get(id);
+        const preview = record && grids.get(record.edit.gridId);
+        if (approved !== true || !preview || preview.expires <= Date.now() || record.expires <= Date.now()) {
+          throw fail('Review this PostgreSQL cell edit again before applying it.');
+        }
+        gridNames(profile, record.edit.table);
+        if (cancellation.aborted) throw fail('The PostgreSQL edit was cancelled.');
+        edits.delete(id);
+        grids.delete(record.edit.gridId);
+        dispatched = true;
+        return runJdbc({ javaHome: getJavaHome(), profile, credential, operation: 'grid-update', grid: record.edit, signal: cancellation });
+      }, signal).catch(cause => {
+        if (!dispatched || ['ROCKETBRAIN_JDBC_GRID_STALE', 'ROCKETBRAIN_JDBC_GRID_SCOPE', 'ROCKETBRAIN_JDBC_JAR'].includes(cause.code)) throw cause;
+        throw fail(cause.message + ' Reload the row to confirm the result of this edit before submitting another.');
+      });
+    },
+    close() { operation?.abort(); active = undefined; clearSessionWork(); },
     dispose() { this.close(); disposed = true; approvals.clear(); }
   };
 }

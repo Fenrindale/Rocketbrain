@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.jar.JarFile;
@@ -413,6 +414,189 @@ class DriverWorker {
         } finally { connection.rollback(); }
     }
 
+    private static final class PostgresGrid {
+        private record Field(String name, String type, boolean nullable, int number, int typeModifier) { }
+        private record Grid(String relation, List<Field> fields) { }
+        private static final List<String> INTEGERS = List.of("int2", "int4", "int8");
+        private static final int ROWS = 100;
+
+        private static SQLException scope() { return new SQLException("Unsupported PostgreSQL grid scope", "RB007"); }
+        private static SQLException stale() { return new SQLException("PostgreSQL grid snapshot changed", "RB008"); }
+
+        private static Grid inspect(Connection connection, String schema, String table) throws Exception {
+            String relation;
+            try { relation = planRelation(connection, schema, table); }
+            catch (SQLException error) {
+                if ("RB006".equals(error.getSQLState())) throw scope();
+                throw error;
+            }
+            try (PreparedStatement guard = connection.prepareStatement("""
+                SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t WHERE t.tgrelid=r.oid)
+                  AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid=r.oid AND NOT a.attisdropped AND a.attgenerated<>'')
+                FROM pg_catalog.pg_class r WHERE r.oid=?::pg_catalog.oid
+                """)) {
+                guard.setQueryTimeout(5);
+                guard.setString(1, relation);
+                try (ResultSet result = guard.executeQuery()) {
+                    if (!result.next() || !result.getBoolean(1)) throw scope();
+                }
+            }
+
+            String primary;
+            try (PreparedStatement key = connection.prepareStatement("""
+                SELECT a.attname FROM pg_catalog.pg_index i
+                JOIN pg_catalog.pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=i.indkey[0]
+                WHERE i.indrelid=?::pg_catalog.oid AND i.indisprimary AND i.indisvalid
+                  AND i.indnkeyatts=1 AND i.indimmediate AND a.attnotnull
+                """)) {
+                key.setQueryTimeout(5);
+                key.setString(1, relation);
+                try (ResultSet result = key.executeQuery()) {
+                    if (!result.next()) throw scope();
+                    primary = result.getString(1);
+                }
+            }
+
+            Field identity = null;
+            var fields = new ArrayList<Field>();
+            try (PreparedStatement columns = connection.prepareStatement("""
+                SELECT a.attname,t.typname,NOT a.attnotnull,a.attidentity,a.attnum,a.atttypmod
+                FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_type t ON t.oid=a.atttypid
+                WHERE a.attrelid=?::pg_catalog.oid AND a.attnum>0 AND NOT a.attisdropped AND a.attgenerated=''
+                  AND t.typnamespace='pg_catalog'::regnamespace AND t.oid<16384 AND t.typtype='b'
+                  AND t.typname IN ('int2','int4','int8','text','varchar')
+                ORDER BY a.attnum
+                """)) {
+                columns.setQueryTimeout(5);
+                columns.setString(1, relation);
+                try (ResultSet result = columns.executeQuery()) {
+                    while (result.next()) {
+                        String name = result.getString(1), type = result.getString(2);
+                        if (!name.matches("[a-z_][a-z0-9_]{0,62}")) continue;
+                        var field = new Field(name, type, result.getBoolean(3), result.getInt(5), result.getInt(6));
+                        if (name.equals(primary) && INTEGERS.contains(type)) identity = field;
+                        else if (!name.equals(primary) && result.getString(4).isEmpty()) fields.add(field);
+                    }
+                }
+            }
+            if (identity == null || fields.isEmpty() || fields.size() > 31) throw scope();
+            fields.addFirst(identity);
+            return new Grid(relation, fields);
+        }
+
+        private static void configure(Statement statement) throws SQLException {
+            statement.setQueryTimeout(5);
+            statement.execute("SET LOCAL search_path=pg_catalog,pg_temp");
+            statement.execute("SET LOCAL row_security=off");
+            statement.execute("SET LOCAL constraint_exclusion=off");
+        }
+
+        private static void activate(Statement statement) throws SQLException {
+            synchronized (ACTIVE) {
+                if (cancelled) throw new SQLException("Cancelled", "57014");
+                ACTIVE.set(statement);
+            }
+        }
+
+        private static void read(Connection connection, DatabaseMetaData metadata, String schema, String table,
+                String qualified) throws Exception {
+            readOnly(connection, metadata);
+            try (Statement statement = connection.createStatement()) {
+                configure(statement);
+                Grid before = inspect(connection, schema, table);
+                statement.execute("LOCK TABLE ONLY " + qualified + " IN ACCESS SHARE MODE NOWAIT");
+                Grid grid = inspect(connection, schema, table);
+                if (!before.equals(grid)) throw stale();
+                var projection = new ArrayList<String>();
+                for (Field field : grid.fields()) projection.add(planIdentifier(field.name()));
+                emit("G", grid.relation());
+                for (Field field : grid.fields()) emit("F", field.name(), field.type(), Boolean.toString(field.nullable()),
+                    Integer.toString(field.number()), Integer.toString(field.typeModifier()));
+                activate(statement);
+                try (ResultSet result = statement.executeQuery("SELECT xmin::pg_catalog.text, " + String.join(", ", projection) +
+                        " FROM ONLY " + qualified + " ORDER BY " + projection.getFirst() + " LIMIT " + (ROWS + 1))) {
+                    int rows = 0;
+                    while (result.next()) {
+                        if (++rows > ROWS) break;
+                        String[] values = new String[grid.fields().size() + 1];
+                        for (int i = 0; i < values.length; i++) values[i] = readText(result, i + 1);
+                        emit("R", values);
+                    }
+                    emit("D", Boolean.toString(rows > ROWS));
+                } finally { ACTIVE.set(null); }
+                if (!grid.equals(inspect(connection, schema, table))) throw stale();
+            } finally { connection.rollback(); }
+        }
+
+        private static String nullable(String present, String value) throws SQLException {
+            if ("1".equals(present) && value.getBytes(StandardCharsets.UTF_8).length <= 8192) return value;
+            if ("0".equals(present) && value.isEmpty()) return null;
+            throw scope();
+        }
+
+        private static void update(Connection connection, String schema, String table, String qualified,
+                String fieldName, String encoded) throws Exception {
+            String[] review = encoded.split("\\x00", -1);
+            if (review.length != 14 || !review[0].matches("[0-9]{1,10}") || !review[1].matches("[0-9]{1,10}")) throw scope();
+            String original = nullable(review[7], review[8]), replacement = nullable(review[9], review[10]);
+            if (Objects.equals(original, replacement)) throw scope();
+            connection.setAutoCommit(false);
+            boolean committed = false;
+            try (Statement setup = connection.createStatement()) {
+                configure(setup);
+                try (ResultSet setting = setup.executeQuery("SHOW transaction_read_only")) {
+                    if (!setting.next() || !"off".equals(setting.getString(1))) throw scope();
+                }
+                // SHARE ROW EXCLUSIVE blocks writers, schema changes and concurrent index builds while the reviewed row is checked.
+                setup.execute("LOCK TABLE ONLY " + qualified + " IN SHARE ROW EXCLUSIVE MODE NOWAIT");
+                Grid grid = inspect(connection, schema, table);
+                Field identity = grid.fields().getFirst();
+                if (!grid.relation().equals(review[0]) || !identity.name().equals(review[2]) || !identity.type().equals(review[3]) ||
+                        !Integer.toString(identity.number()).equals(review[11]) ||
+                        identity.name().equals(fieldName)) throw stale();
+                Field field = grid.fields().stream().filter(item -> item.name().equals(fieldName)).findFirst().orElseThrow(PostgresGrid::stale);
+                if (!field.type().equals(review[5]) || !Boolean.toString(field.nullable()).equals(review[6]) ||
+                        !Integer.toString(field.number()).equals(review[12]) || !Integer.toString(field.typeModifier()).equals(review[13]) ||
+                        (!field.nullable() && (original == null || replacement == null))) throw stale();
+                String quoted = planIdentifier(fieldName), primary = planIdentifier(identity.name());
+                String sql = "UPDATE ONLY " + qualified + " SET " + quoted + "=?::pg_catalog." + field.type() +
+                    " WHERE " + primary + " OPERATOR(pg_catalog.=) ?::pg_catalog." + identity.type() +
+                    " AND xmin::pg_catalog.text=? AND " + quoted +
+                    "::pg_catalog.text COLLATE pg_catalog.\"C\" IS NOT DISTINCT FROM ?::pg_catalog.text" +
+                    " RETURNING " + primary + "::pg_catalog.text, " + quoted + "::pg_catalog.text";
+                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                    statement.setQueryTimeout(5);
+                    statement.setString(1, replacement);
+                    statement.setString(2, review[4]);
+                    statement.setString(3, review[1]);
+                    statement.setString(4, original);
+                    activate(statement);
+                    try (ResultSet result = statement.executeQuery()) {
+                        if (!result.next() || !review[4].equals(result.getString(1)) ||
+                                !Objects.equals(replacement, result.getString(2)) || result.next()) throw stale();
+                    } finally { ACTIVE.set(null); }
+                }
+                synchronized (ACTIVE) {
+                    if (cancelled) throw new SQLException("Cancelled", "57014");
+                }
+                connection.commit();
+                committed = true;
+                emit("U", review[4], replacement);
+            } finally {
+                if (!committed) connection.rollback();
+            }
+        }
+
+        static void run(Connection connection, DatabaseMetaData metadata, String expectedSchema, String schema, String table,
+                String field, String encoded, boolean writing) throws Exception {
+            if (!isPostgres(metadata) || metadata.getDatabaseMajorVersion() < 14 || !schema.equals(expectedSchema) ||
+                    schema.startsWith("pg_") || schema.equals("information_schema")) throw scope();
+            String qualified = planIdentifier(schema) + "." + planIdentifier(table);
+            if (writing) update(connection, schema, table, qualified, field, encoded);
+            else read(connection, metadata, schema, table, qualified);
+        }
+    }
+
     public static void main(String[] args) {
         var in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         try (var ignored = new PrintStream(OutputStream.nullOutputStream())) {
@@ -456,6 +640,8 @@ class DriverWorker {
                         case "describe" -> describe(metadata, catalog, schema, object);
                         case "query" -> query(connection, metadata, sql, maxRows);
                         case "plan" -> estimatedPlan(connection, metadata, expectedSchema, catalog, schema, object, sql);
+                        case "grid-read", "grid-update" -> PostgresGrid.run(connection, metadata, expectedSchema,
+                            catalog, schema, object, sql, "grid-update".equals(operation));
                         default -> throw new Exception("Protocol operation invalid");
                     }
                 }

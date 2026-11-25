@@ -5,6 +5,7 @@ const { createJdbcProfiles } = require('./jdbc-profiles');
 const { maxLibraries } = require('./jdbc');
 const { postgresqlRoute } = require('./postgresql-jdbc');
 const { renderPostgreSqlPlan } = require('./postgresql-plan');
+const { openPostgreSqlGrid } = require('./postgresql-grid-vscode');
 
 const language = 'rocketbrain-jdbc';
 const scheme = 'rocketbrain-jdbc-output';
@@ -13,13 +14,14 @@ function registerJdbc(vscode, context) {
   const api = createJdbcProfiles({ state: context.workspaceState, isTrusted: () => vscode.workspace.isTrusted,
     getJavaHome: () => vscode.workspace.getConfiguration('rocketbrain.java').get('javaHome') });
   const output = new Map();
-  const command = (name, fn) => context.subscriptions.push(vscode.commands.registerCommand('rocketbrain.jdbc.' + name, async () => {
-    try { return await fn(); }
+  const command = (name, fn) => context.subscriptions.push(vscode.commands.registerCommand('rocketbrain.jdbc.' + name, async (...args) => {
+    try { return await fn(...args); }
     catch (cause) {
       if (cause.code !== 'ROCKETBRAIN_JDBC_CANCELLED') void vscode.window.showErrorMessage('Rocketbrain JDBC: ' + cause.message);
     } finally {
       void vscode.commands.executeCommand('setContext', 'rocketbrain.jdbcConnected', Boolean(api.active()));
       void vscode.commands.executeCommand('setContext', 'rocketbrain.postgreSqlPlans', api.supportsPostgreSqlPlans());
+      void vscode.commands.executeCommand('setContext', 'rocketbrain.postgreSqlGrid', api.supportsPostgreSqlGrid());
     }
   }));
   context.subscriptions.push(api, vscode.workspace.registerTextDocumentContentProvider(scheme, {
@@ -105,7 +107,9 @@ function registerJdbc(vscode, context) {
       (index ? 'Library ' + index : 'Driver') + ' · ' + item.jar + '\nSHA-256 ' + item.sha256);
     return await vscode.window.showWarningMessage('Allow these JDBC artifacts to execute under your account?',
       { modal: true, detail: [plan.driverClass, 'Classpath SHA-256 ' + plan.classpathFingerprint,
-        ...identity, 'Use artifacts you trust. The JVM uses your account permissions and the credentials you supply.'].join('\n\n') }, action) === action;
+        ...identity, ...(plan.postgresqlGridEditing ? ['Reviewed PostgreSQL cell edits enabled for ' +
+          plan.postgresql.database + '.' + plan.postgresql.schema + ' at ' + plan.postgresql.host + ':' + plan.postgresql.port] : []),
+        'Use artifacts you trust. The JVM uses your account permissions and the credentials you supply.'].join('\n\n') }, action) === action;
   }
 
   async function manageVersions(profile) {
@@ -137,6 +141,10 @@ function registerJdbc(vscode, context) {
     if (kind === 'PostgreSQL') {
       draft.postgresql = await choosePostgreSqlRoute();
       if (!draft.postgresql) return;
+      const mode = await vscode.window.showQuickPick(['Read-only queries and estimates', 'Allow reviewed PostgreSQL cell edits'],
+        { title: 'Approve PostgreSQL Profile Capabilities' });
+      if (!mode) return;
+      draft.postgresqlGridEditing = mode === 'Allow reviewed PostgreSQL cell edits';
     }
     const plan = await progress('Reviewing JDBC Driver JARs', signal => api.prepare(draft, { signal }));
     if (await approve(plan)) return api.save(plan.id, true);
@@ -198,6 +206,7 @@ function registerJdbc(vscode, context) {
     if (!right) return;
     return show('postgresql-estimated-plan-comparison.json', api.comparePostgreSqlPlans(left.id, right.id));
   });
+  command('openPostgreSqlGrid', table => openPostgreSqlGrid({ vscode, api, progress, table }));
   command('browse', async () => {
     const catalog = api.catalog();
     const rows = catalog.objects.map((item, index) => ({ index, label: [item.catalog, item.schema, item.name].filter(Boolean).join('.'), description: item.kind }));
