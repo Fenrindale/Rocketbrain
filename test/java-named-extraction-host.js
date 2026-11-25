@@ -45,7 +45,7 @@ async function runJavaNamedExtractionChecks(api,vscode,checks) {
     assert.equal(local.type,'int');
     assert.equal(field.owner,'fixture.boot.'+fixture.className);
     for (const name of ['input','otherField','inheritedValue']) {
-      await assert.rejects(service.prepareValueExtraction(field,{name}),/conflicts with an existing symbol/);
+      await assert.rejects(service.prepareValueExtraction(field,{name}),/conflicts with an existing (?:source or inherited )?symbol/);
     }
     const localPlan = await service.prepareValueExtraction(local,{name:'chosenLocal'});
     const staleField = await service.prepareValueExtraction(field,{name:'staleField'});
