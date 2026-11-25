@@ -13,7 +13,7 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   const navigationCache=new Map();
   const engine=()=>require('./sql-analysis');
   const config=()=>vscode.workspace.getConfiguration('rocketbrain.sql.analysis');
-  function invalidate(){epoch++;request++;metadata=null;cache.clear();navigationCache.clear();collection.clear();if(!disposed)events.fire();}
+  function invalidate(){epoch++;request++;metadata=null;lastProjectReport=null;cache.clear();navigationCache.clear();collection.clear();if(!disposed)events.fire();}
   function options(){return {dialect:metadata?.dialect||'mysql',database:metadata?.database,catalogComplete:Boolean(metadata?.coverage?.tables==='loaded'&&metadata?.coverage?.columns==='loaded'),tableNameCaseSensitive:metadata?.tableNameCaseSensitive,sqlMode:metadata?.sqlMode};}
   function configuredScope(document){
     if(!vscode.workspace.isTrusted||document.uri.scheme!=='file')return null;
@@ -217,79 +217,134 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   function projectRoots(scanOptions={}){
     const folders=(vscode.workspace.workspaceFolders||[]).filter(f=>f.uri.scheme==='file').map(f=>f.uri.fsPath);
     if(!folders.length)throw new Error('Open a local workspace before inspecting SQL project references.');
-    const configured=scanOptions.scope?.roots??vscode.workspace.getConfiguration('rocketbrain.sql.project').get('roots',[]);
-    if(!Array.isArray(configured)||configured.length>20)throw new Error('Configure at most20 local SQL query roots.');
-    const selected=configured.length?configured:folders;
-    return [...new Set(selected.map(raw=>{
-      if(typeof raw!=='string'||!raw||raw.includes('\0'))throw new Error('Use local SQL query-root paths.');
-      if(!path.isAbsolute(raw)&&!raw.startsWith('file:')&&folders.length!==1)throw new Error('Use absolute SQL query-root paths in a multi-folder workspace.');
-      const file=raw.startsWith('file:')?fileURLToPath(raw):path.resolve(folders[0],raw),real=fs.realpathSync(file);
-      if(!folders.some(root=>inside(root,file)&&inside(fs.realpathSync(root),real))||!fs.statSync(real).isDirectory())throw new Error('SQL query roots and links must stay inside an open local workspace.');
-      return real;
-    }))].sort();
+    const settings=vscode.workspace.getConfiguration('rocketbrain.sql.project');
+    const configured=scanOptions.scope?.roots??settings.get('roots',[]);
+    const configuredJava=scanOptions.scope?.javaRoots??settings.get('javaRoots',[]);
+    function resolve(selected){
+      if(!Array.isArray(selected)||selected.length>20)throw new Error('Configure at most 20 local roots for each SQL source language.');
+      return [...new Set(selected.map(raw=>{
+        if(typeof raw!=='string'||!raw||raw.includes('\0'))throw new Error('Use local SQL source-root paths.');
+        if(!path.isAbsolute(raw)&&!raw.startsWith('file:')&&folders.length!==1)throw new Error('Use absolute SQL source-root paths in a multi-folder workspace.');
+        const file=raw.startsWith('file:')?fileURLToPath(raw):path.resolve(folders[0],raw),real=fs.realpathSync(file);
+        if(!folders.some(root=>inside(root,file)&&inside(fs.realpathSync(root),real))||!fs.statSync(real).isDirectory())throw new Error('SQL source roots and links must stay inside an open local workspace.');
+        return real;
+      }))].sort();
+    }
+    return {roots:resolve(Array.isArray(configured)&&!configured.length?folders:configured),javaRoots:resolve(configuredJava)};
   }
   const projectExclude='**/{node_modules,.git,.vscode-test,test-output,build,target,bin,out,.gradle,dist}/**';
-  async function projectFiles(roots,token){
+  const sourceLanguage=uri=>path.extname(uri.fsPath).toLowerCase()==='.java'?'java':'sql';
+  async function projectFiles({roots,javaRoots},token){
     const found=new Map();let limited=false;
-    for(const root of roots){projectTrusted(token);const pattern=vscode.RelativePattern?new vscode.RelativePattern(root,'**/*.{sql,SQL}'): '**/*.{sql,SQL}';
+    for(const [language,selected] of [['sql',roots],['java',javaRoots]])for(const root of selected){
+      projectTrusted(token);const glob='**/*.{'+language+','+language.toUpperCase()+'}';
+      const pattern=vscode.RelativePattern?new vscode.RelativePattern(root,glob):glob;
       const files=await vscode.workspace.findFiles(pattern,projectExclude,201,token);projectTrusted(token);
       if(files.length>200)limited=true;
-      for(const uri of files){if(uri.scheme!=='file'||!inside(root,uri.fsPath))continue;found.set(uri.toString(),uri);if(found.size>200)limited=true;}
+      for(const uri of files){
+        if(uri.scheme!=='file'||!inside(root,uri.fsPath)||path.extname(uri.fsPath).toLowerCase()!=='.'+language)continue;
+        found.set(uri.toString(),uri);if(found.size>200)limited=true;
+      }
     }
-    return {files:[...found.values()].sort((a,b)=>a.toString().localeCompare(b.toString())),limited};
+    return {files:[...found.values()].sort((a,b)=>Number(sourceLanguage(a)==='java')-Number(sourceLanguage(b)==='java')||
+      a.toString().localeCompare(b.toString())),limited};
   }
   function assertProjectFrame(frame,token,{allowCatalogChange=false}={}){
-    projectTrusted(token);if(frame.projectGeneration!==projectGeneration)throw new Error('SQL query roots or workspace configuration changed. Review the rename again.');
-    if(!allowCatalogChange&&frame.epoch!==epoch)throw new Error('SQL project metadata or connection changed. Review the rename again.');
-    if(frame.database!==metadata.database||frame.dialect!==metadata.dialect)throw new Error('The SQL project database changed. Review the rename again.');
+    projectTrusted(token);if(frame.projectGeneration!==projectGeneration)throw new Error('SQL source roots or workspace configuration changed. Start the source operation again.');
+    if(!allowCatalogChange&&frame.epoch!==epoch)throw new Error('SQL project metadata or connection changed. Start the source operation again.');
+    if(frame.database!==metadata.database||frame.dialect!==metadata.dialect)throw new Error('The SQL project database changed. Start the source operation again.');
   }
   function assertSourceRecord(record){
     const stat=fs.lstatSync(record.file);if(!stat.isFile()||stat.isSymbolicLink()||fs.realpathSync(record.file)!==record.file||stat.size>128*1024||textHash(fs.readFileSync(record.file,'utf8'))!==record.diskHash)throw new Error('SQL source changed on disk. Review the rename again.');
     if(record.document.isClosed||record.document.version!==record.version||textHash(record.document.getText())!==record.hash)throw new Error('SQL source buffer changed. Review the rename again.');
   }
-  async function scanProject(target,token,scanOptions={}){
-    projectTrusted(token);const roots=projectRoots(scanOptions),frame={epoch,projectGeneration,database:metadata.database,dialect:metadata.dialect},observed=structuredClone(metadata),opts=options();
+  async function scanProject(target,token,scanOptions={},forRename=false){
+    projectTrusted(token);const scope=projectRoots(scanOptions),frame={epoch,projectGeneration,database:metadata.database,dialect:metadata.dialect},observed=structuredClone(metadata),opts=options();
     target=projectEngine().normalizeTarget(target,observed,opts);
-    const inventory=await projectFiles(roots,token);assertProjectFrame(frame,token);
+    const inventory=await projectFiles(scope,token);assertProjectFrame(frame,token);
     const documents=[],unknownFiles=[],references=[];let totalBytes=0;
-    if(inventory.limited)unknownFiles.push({reason:'SQL project scanning is limited to200 files.'});
+    let recognizedJavaFragments=0;
+    if(inventory.limited)unknownFiles.push({reason:'SQL usage scanning is limited to 200 files across the selected roots.'});
     for(const uri of inventory.files.slice(0,200)){
       projectTrusted(token);assertProjectFrame(frame,token);
-      if(configuredScope({uri})){
+      const language=sourceLanguage(uri),java=language==='java';
+      if(!java&&configuredScope({uri})){
         unknownFiles.push({uri:uri.toString(),reason:'A local DDL resolution scope supplies this SQL file’s catalog.'});
         continue;
       }
       try{
         const stat=fs.lstatSync(uri.fsPath),real=fs.realpathSync(uri.fsPath);
-        if(!stat.isFile()||stat.isSymbolicLink()||!roots.some(root=>inside(root,real)))throw new Error('SQL files must be regular local files inside the selected query roots.');
+        if(!stat.isFile()||stat.isSymbolicLink()||!(java?scope.javaRoots:scope.roots).some(root=>inside(root,real)))throw new Error('SQL source files must be regular local files inside the selected roots.');
         if(stat.size>128*1024)throw new Error('SQL project files are limited to128KiB.');
         totalBytes+=stat.size;if(totalBytes>8*1024*1024)throw new Error('SQL project scanning is limited to8MiB.');
         const disk=fs.readFileSync(real,'utf8'),document=await vscode.workspace.openTextDocument(uri);assertProjectFrame(frame,token);
         if(document.isClosed)throw new Error('The SQL source document closed during project inspection.');
         const text=document.getText();totalBytes+=Math.max(0,Buffer.byteLength(text)-stat.size);if(totalBytes>8*1024*1024)throw new Error('SQL project scanning is limited to8MiB.');
-        const report=projectEngine().analyzeProjectDocument(text,observed,opts),record={uri:uri.toString(),file:real,document,version:document.version,hash:textHash(text),diskHash:textHash(disk),text,report};documents.push(record);
-        references.push(...projectEngine().referencesInDocument(report,target,opts).map(ref=>({...ref,uri:record.uri})));
-        if(report.unknown.length)unknownFiles.push({uri:record.uri,reasons:report.unknown.slice(0,10),reason:'Not every SQL statement has a supported, resolved binding.'});
+        const record={uri:uri.toString(),file:real,document,version:document.version,hash:textHash(text),diskHash:textHash(disk),text,language};
+        documents.push(record);
+        let usages,unknown;
+        if(java){
+          const embedded=require('./sql-usage-sources'),report=embedded.analyzeJavaUsageDocument(text,observed,opts);
+          const found=embedded.usagesInJava(report,target,opts);
+          usages=found.references;unknown=[...report.unknown,...found.unknown];recognizedJavaFragments+=report.fragments.length;
+        }else{
+          const report=projectEngine().analyzeProjectDocument(text,observed,{...opts,usageParameters:!forRename});
+          usages=projectEngine().referencesInDocument(report,target,opts);unknown=report.unknown;
+        }
+        references.push(...usages.map(ref=>({...ref,uri:record.uri})));
+        if(unknown.length)unknownFiles.push({uri:record.uri,language,unresolvedCount:unknown.length,reasons:unknown.slice(0,10),
+          reason:java?'Some embedded SQL has uncertain binding, source context or source location.':'Some SQL statements have unresolved bindings.'});
       }catch(error){assertProjectFrame(frame,token);unknownFiles.push({uri:uri.toString(),reason:error.message});}
     }
-    const completedInventory=await projectFiles(roots,token);assertProjectFrame(frame,token);if(completedInventory.limited!==inventory.limited||JSON.stringify(completedInventory.files.map(u=>u.toString()))!==JSON.stringify(inventory.files.map(u=>u.toString())))throw new Error('The SQL project file set changed during inspection. Try again.');for(const record of documents)assertSourceRecord(record);
-    const coverage={complete:unknownFiles.length===0,scope:'selected-local-sql-roots',roots,excluded:projectExclude,files:inventory.files.length,analyzedFiles:documents.length,totalBytes,limits:{files:200,fileBytes:128*1024,totalBytes:8*1024*1024},unknownFiles,embeddedSql:'Java strings and other embedded/dynamic SQL are outside this source index.'};
-    return {target,frame,roots,options:opts,metadata:observed,inventory:inventory.files.map(u=>u.toString()),documents,references,coverage};
+    const completedInventory=await projectFiles(scope,token);assertProjectFrame(frame,token);if(completedInventory.limited!==inventory.limited||JSON.stringify(completedInventory.files.map(u=>u.toString()))!==JSON.stringify(inventory.files.map(u=>u.toString())))throw new Error('The SQL project file set changed during inspection. Try again.');for(const record of documents)assertSourceRecord(record);
+    const javaReferences=references.filter(ref=>ref.language==='java').length;
+    const coverage={complete:unknownFiles.length===0,scope:scope.javaRoots.length?'selected-local-sql-and-java-roots':'selected-local-sql-roots',
+      ...scope,excluded:projectExclude,files:inventory.files.length,analyzedFiles:documents.length,totalBytes,
+      limits:{files:200,fileBytes:128*1024,totalBytes:8*1024*1024},unknownFiles,
+      java:{enabled:scope.javaRoots.length>0,analyzedFiles:documents.filter(record=>record.language==='java').length,
+        recognizedFragments:recognizedJavaFragments,references:javaReferences},
+      sourceRenameEligible:unknownFiles.length===0&&javaReferences===0,
+      embeddedSql:'Recognized native Java SQL in selected Java roots. Other embedded languages and runtime strings are outside scope.'};
+    return {target,frame,...scope,options:opts,metadata:observed,inventory:inventory.files.map(u=>u.toString()),documents,references,coverage};
   }
   function publicProjectReport(scan){return structuredClone({target:scan.target,references:scan.references,coverage:scan.coverage,executedSql:false});}
   async function findCatalogReferences(target,token,scanOptions={}){const scan=await scanProject(target,token,scanOptions);return lastProjectReport=publicProjectReport(scan);}
+  function javaReport(document){
+    if(document.uri.scheme!=='file'||sourceLanguage(document.uri)!=='java'||document.isClosed)return null;
+    const configured=vscode.workspace.getConfiguration('rocketbrain.sql.project').get('javaRoots',[]);
+    if(!Array.isArray(configured)||!configured.length)return null;
+    const {javaRoots}=projectRoots();
+    if(!javaRoots.some(root=>inside(root,document.uri.fsPath)))return null;
+    let stat,real;
+    try{stat=fs.lstatSync(document.uri.fsPath);real=fs.realpathSync(document.uri.fsPath);}
+    catch{return null;}
+    if(!stat.isFile()||stat.isSymbolicLink()||stat.size>128*1024||!javaRoots.some(root=>inside(root,real)))return null;
+    const text=document.getText();
+    if(Buffer.byteLength(text)>128*1024)return null;
+    return require('./sql-usage-sources').analyzeJavaUsageDocument(text,metadata,options());
+  }
+  function usageTarget(document,position){
+    const offset=document.offsetAt(position),observed={...options(),usageParameters:true};
+    if(document.languageId==='java'){
+      const report=javaReport(document);
+      return report?{report,selected:require('./sql-usage-sources').targetAtJava(report,offset,observed),embedded:true}:null;
+    }
+    const report=projectEngine().analyzeProjectDocument(document.getText(),metadata,observed);
+    return {report,selected:projectEngine().targetAtDocument(report,offset,observed),embedded:false};
+  }
   function catalogTargetAt(document,position){
     if(virtualActive(document))return null;
-    projectTrusted();const report=projectEngine().analyzeProjectDocument(document.getText(),metadata,options()),target=projectEngine().targetAtDocument(report,document.offsetAt(position),options());
+    projectTrusted();const target=usageTarget(document,position)?.selected;
     return target?.kind==='local'?null:target;
   }
   function buildCatalogEdit(plan,{reviewed=false}={}){
     const edit=new vscode.WorkspaceEdit();for(const record of plan.documents)for(const change of record.changes)edit.replace(vscode.Uri.parse(record.uri),new vscode.Range(record.document.positionAt(change.start),record.document.positionAt(change.end)),change.newText,{label:'Rename physical SQL reference',needsConfirmation:!reviewed});return edit;
   }
   async function planCatalogRename(target,newName,token,scanOptions={}){
-    const scan=await scanProject(target,token,scanOptions);lastProjectReport=publicProjectReport(scan);
+    const scan=await scanProject(target,token,scanOptions,true);lastProjectReport=publicProjectReport(scan);
     if(!scan.coverage.complete)throw Object.assign(new Error('Unsupported, incomplete or excluded-by-limit SQL prevents a complete source rename plan. Select query-only roots or review a database-only rename explicitly.'),{code:'SQL_PROJECT_INCOMPLETE',coverage:scan.coverage});
-    const documents=scan.documents.map(record=>({...record,changes:projectEngine().planCatalogDocumentRename(record.text,scan.metadata,scan.options,scan.target,newName).edits}));
+    if(!scan.coverage.sourceRenameEligible)throw Object.assign(new Error('The selected database object has embedded Java SQL usages. Review those sources separately before renaming.'),{code:'SQL_PROJECT_EMBEDDED_READ_ONLY',coverage:scan.coverage});
+    const documents=scan.documents.map(record=>({...record,changes:record.language==='java'?[]:projectEngine().planCatalogDocumentRename(record.text,scan.metadata,scan.options,scan.target,newName).edits}));
     const plan={id:crypto.randomUUID(),createdAt:Date.now(),...scan,documents,newName};
     for(const [id,value]of projectPlans)if(Date.now()-value.createdAt>120000)projectPlans.delete(id);while(projectPlans.size>=5)projectPlans.delete(projectPlans.keys().next().value);projectPlans.set(plan.id,plan);
     await validateCatalogRename(plan.id,token);
@@ -297,24 +352,25 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   async function validateCatalogRename(id,token,validationOptions={}){
     const plan=projectPlans.get(typeof id==='string'?id:id?.id);if(!plan||Date.now()-plan.createdAt>120000)throw new Error('The SQL source rename plan expired. Review it again.');
-    assertProjectFrame(plan.frame,token,validationOptions);for(const root of plan.roots)if(fs.realpathSync(root)!==root||!fs.statSync(root).isDirectory())throw new Error('SQL query roots changed on disk. Review the rename again.');const inventory=await projectFiles(plan.roots,token);assertProjectFrame(plan.frame,token,validationOptions);
+    assertProjectFrame(plan.frame,token,validationOptions);for(const root of [...plan.roots,...plan.javaRoots])if(fs.realpathSync(root)!==root||!fs.statSync(root).isDirectory())throw new Error('SQL source roots changed on disk. Review the rename again.');const inventory=await projectFiles(plan,token);assertProjectFrame(plan.frame,token,validationOptions);
     if(inventory.limited||JSON.stringify(inventory.files.map(u=>u.toString()))!==JSON.stringify(plan.inventory))throw new Error('The SQL project file set changed. Review the rename again.');
     for(const record of plan.documents){
       assertSourceRecord(record);
       const document=await vscode.workspace.openTextDocument(vscode.Uri.parse(record.uri));assertProjectFrame(plan.frame,token,validationOptions);
       if(document.isClosed||document.version!==record.version||textHash(document.getText())!==record.hash)throw new Error('SQL source buffer changed. Review the rename again.');record.document=document;
     }
-    const finalInventory=await projectFiles(plan.roots,token);assertProjectFrame(plan.frame,token,validationOptions);if(finalInventory.limited||JSON.stringify(finalInventory.files.map(u=>u.toString()))!==JSON.stringify(plan.inventory))throw new Error('The SQL project file set changed. Review the rename again.');for(const record of plan.documents)assertSourceRecord(record);
+    const finalInventory=await projectFiles(plan,token);assertProjectFrame(plan.frame,token,validationOptions);if(finalInventory.limited||JSON.stringify(finalInventory.files.map(u=>u.toString()))!==JSON.stringify(plan.inventory))throw new Error('The SQL project file set changed. Review the rename again.');for(const record of plan.documents)assertSourceRecord(record);
     return {state:'fresh',id:plan.id,documents:plan.documents.length,catalogChangeAllowed:validationOptions.allowCatalogChange===true,rootMustVerifyDatabaseDDL:validationOptions.allowCatalogChange===true};
   }
   async function catalogRenameEdit(id,token,validationOptions={}){await validateCatalogRename(id,token,validationOptions);return buildCatalogEdit(projectPlans.get(typeof id==='string'?id:id?.id),validationOptions);}
   async function provideReferences(document,position,context={},token){
-    if(!config().get('enabled',true)||virtualActive(document)||metadata?.cachedMetadata)return [];
-    projectTrusted(token);const report=projectEngine().analyzeProjectDocument(document.getText(),metadata,options()),selected=projectEngine().targetAtDocument(report,document.offsetAt(position),options());if(!selected)return [];
+    if(!config().get('enabled',true)||virtualActive(document)||!metadata||metadata.cachedMetadata||!vscode.workspace.isTrusted)return [];
+    projectTrusted(token);const version=document.version,usage=usageTarget(document,position),selected=usage?.selected;if(!selected)return [];
     if(selected.kind==='local')return selected.statement.model.references.filter(ref=>!ref.implicit&&ref.start<ref.end&&sameDefinition(ref.definition,selected.definition)&&(context.includeDeclaration||!ref.kind.endsWith('-definition'))).map(ref=>new vscode.Location(document.uri,new vscode.Range(document.positionAt(selected.statement.start+ref.start),document.positionAt(selected.statement.start+ref.end))));
     const found=await findCatalogReferences(selected,token),locations=found.references.map(ref=>new vscode.Location(vscode.Uri.parse(ref.uri),new vscode.Range(ref.range.start,ref.range.end)));
-    if(!found.coverage.complete){vscode.window.setStatusBarMessage?.('SQL references are partial: '+found.coverage.unknownFiles.length+' unsupported or incomplete file(s). Select query-only roots for a complete supported index.',10000);output?.appendLine('SQL project reference coverage: '+JSON.stringify(found.coverage));}
-    if(!found.references.some(ref=>ref.uri===document.uri.toString()))for(const ref of projectEngine().referencesInDocument(report,selected,options()))locations.push(new vscode.Location(document.uri,new vscode.Range(ref.range.start,ref.range.end)));
+    if(document.isClosed||document.version!==version)return [];
+    if(!found.coverage.complete){vscode.window.setStatusBarMessage?.('SQL usages are partial: '+found.coverage.unknownFiles.length+' sources or limits need review. Check the SQL usage coverage report.',10000);output?.appendLine('SQL project reference coverage: '+JSON.stringify(found.coverage));}
+    if(!usage.embedded&&!found.references.some(ref=>ref.uri===document.uri.toString()))for(const ref of projectEngine().referencesInDocument(usage.report,selected,options()))locations.push(new vscode.Location(document.uri,new vscode.Range(ref.range.start,ref.range.end)));
     return locations;
   }
   const sameDefinition=(a,b)=>Boolean(a&&b&&a.start===b.start&&a.end===b.end);
@@ -397,7 +453,8 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   subscriptions.push(vscode.languages.registerDefinitionProvider({language:'sql'}, {provideDefinition}));
   subscriptions.push(vscode.languages.registerHoverProvider({language:'sql'}, {provideHover}));
   if(vscode.languages.registerRenameProvider)subscriptions.push(vscode.languages.registerRenameProvider({language:'sql'},{prepareRename,provideRenameEdits:renameDocument}));
-  if(vscode.languages.registerReferenceProvider)subscriptions.push(vscode.languages.registerReferenceProvider({language:'sql'},{provideReferences}));
+  if(vscode.languages.registerReferenceProvider)subscriptions.push(vscode.languages.registerReferenceProvider(
+    [{language:'sql'},{language:'java',scheme:'file'}],{provideReferences}));
   if(vscode.workspace.onDidOpenTextDocument)subscriptions.push(vscode.workspace.onDidOpenTextDocument(document=>{
     if(document.languageId==='sql'&&configuredScope(document))analyzeDocument(document);
   }));
@@ -430,10 +487,27 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     return report;
   });
   command('rocketbrain.sql.clearDdlPreview',()=>clearDdlPreview(vscode.window.activeTextEditor?.document));
-  command('rocketbrain.sql.findReferences',async()=>{const editor=vscode.window.activeTextEditor;if(!editor||editor.document.languageId!=='sql')throw new Error('Open a SQL document first.');const locations=await provideReferences(editor.document,editor.selection.active,{includeDeclaration:true});await vscode.commands.executeCommand('editor.action.showReferences',editor.document.uri,editor.selection.active,locations);return {references:locations.length,coverage:lastProjectReport?.coverage};});
+  command('rocketbrain.sql.findReferences',async()=>{
+    const editor=vscode.window.activeTextEditor;
+    if(!editor||!['sql','java'].includes(editor.document.languageId))throw new Error('Open SQL or a configured Java source file.');
+    lastProjectReport=null;
+    const locations=await provideReferences(editor.document,editor.selection.active,{includeDeclaration:true});
+    await vscode.commands.executeCommand('editor.action.showReferences',editor.document.uri,editor.selection.active,locations);
+    return {references:locations.length,coverage:lastProjectReport?.coverage};
+  });
+  command('rocketbrain.sql.showUsageCoverage',async()=>{
+    if(!lastProjectReport)throw Error('Run SQL Find References before opening its coverage.');
+    projectTrusted();
+    const report=lastProjectReport;
+    const document=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify({
+      target:report.target,references:report.references.length,coverage:report.coverage
+    },null,2)+'\n'});
+    await vscode.window.showTextDocument(document,{preview:true});
+    return structuredClone(report.coverage);
+  });
   command('rocketbrain.sql.analyze',async()=>{const document=vscode.window.activeTextEditor?.document;if(!document||document.languageId!=='sql')throw new Error('Open a SQL document first.');if(!virtualActive(document)&&!metadata?.cachedMetadata)await refreshMetadata();const report=analyzeDocument(document);output?.appendLine('SQL source analysis: '+report.state+'; '+report.statements.length+' statements. No user query was executed.');return report;});
-  if(vscode.workspace.onDidChangeWorkspaceFolders)subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{projectGeneration++;projectPlans.clear();}));
-  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.project')){projectGeneration++;projectPlans.clear();}}));
+  if(vscode.workspace.onDidChangeWorkspaceFolders)subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{projectGeneration++;projectPlans.clear();lastProjectReport=null;}));
+  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.project')){projectGeneration++;projectPlans.clear();lastProjectReport=null;}}));
   return {analyzeDocument,refreshMetadata,useDdlPreview,clearDdlPreview,virtualActive,prepareRename,renameDocument,findCatalogReferences,catalogTargetAt,planCatalogRename,validateCatalogRename,catalogRenameEdit,projectSnapshot:()=>lastProjectReport?structuredClone(lastProjectReport):null,invalidate,onDidChange:events.event,snapshot:()=>metadata?{database:metadata.database,dialect:metadata.dialect,loadedAt:metadata.loadedAt}:null,dispose(){disposed=true;scopeCache.clear();ddlPreviews.clear();preparedRenames.clear();projectPlans.clear();invalidate();for(const sub of subscriptions)sub.dispose();}};
 }
 module.exports={registerSQLAnalysis};

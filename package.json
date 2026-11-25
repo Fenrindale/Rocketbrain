@@ -640,6 +640,11 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.sql.showUsageCoverage",
+        "title": "Show SQL Usage Coverage",
+        "category": "Rocketbrain"
+      },
+      {
         "command": "rocketbrain.schema.renameTable",
         "title": "Review and Rename Database Table",
         "category": "Rocketbrain"
@@ -2100,6 +2105,12 @@
             "type": "string"
           },
           "description": "Local query folders inside the workspace for bounded semantic .sql reference scans. Empty scans workspace SQL files. Unsupported migrations or SQL are reported as incomplete and block a combined source rename."
+        },
+        "rocketbrain.sql.project.javaRoots": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string" },
+          "description": "Optional local Java source folders inside the workspace for semantic usage searches in recognized native SQL literals. Java matches are read-only."
         },
         "rocketbrain.java.mavenHome": {
           "type": "string",
