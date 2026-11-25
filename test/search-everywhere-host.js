@@ -24,7 +24,8 @@ async function withSearchGitFixture(workspace, baseline, action) {
   const filename = `RBFinder${id}.txt`, subject = `RBFinder${id} original commit`, branch = `rb-${id}-search`;
   const file = path.join(repository, filename);
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^GIT_/i.test(name)));
-  const git = async (...args) => (await run('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args], {
+  const platform = process.platform === 'win32' ? ['-c', 'core.longpaths=true'] : [];
+  const git = async (...args) => (await run('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.autocrlf=false', ...platform, ...args], {
     cwd: repository, env, windowsHide: true, encoding: 'utf8', timeout: 10000
   })).stdout.trim();
   try {

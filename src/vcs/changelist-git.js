@@ -60,7 +60,8 @@ async function gitRead(cwd, args) {
   env.GIT_TERMINAL_PROMPT = '0';
   env.LC_ALL = 'C';
   try {
-    const { stdout } = await run('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', ...args],
+    const platform = process.platform === 'win32' ? ['-c', 'core.longpaths=true'] : [];
+    const { stdout } = await run('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', ...platform, ...args],
       { cwd, env, windowsHide: true, encoding: 'buffer', timeout: 10000, maxBuffer: 4 * 1024 * 1024 });
     return stdout;
   } catch (error) {
