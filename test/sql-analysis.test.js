@@ -1,10 +1,23 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const {analyzeSql,completionsAt,definitionsAt,hoverAt,statementRanges}=require('../src/db/sql-analysis');
+const {missingObjectIntent}=require('../src/db/sql-quick-fixes');
 const catalog={database:'app',coverage:{tables:'loaded',columns:'loaded'},visibility:'current-account',tables:[
   {name:'people',columns:[{name:'id',type:'bigint',nullable:false},{name:'name',type:'varchar(100)',nullable:false},{name:'department_id',type:'bigint',nullable:false}]},
   {name:'departments',columns:[{name:'id',type:'bigint',nullable:false},{name:'name',type:'varchar(80)',nullable:false}]}
 ]};
+test('missing object design intents use the selected statement and only unambiguous live schema targets',()=>{
+  const intent=(source,word,metadata=catalog)=>missingObjectIntent(source,source.lastIndexOf(word),metadata);
+  const absent=intent('SELECT 1; SELECT x.id FROM absent AS x','absent');
+  assert.equal(absent?.missingTable,'absent');
+  const column=intent('SELECT p.extra FROM people p JOIN departments d ON d.id=p.department_id','extra');
+  assert.equal(column?.table,'people');
+  assert.equal(column?.missingColumn,'extra');
+  assert.equal(intent('SELECT extra FROM people p JOIN departments d ON d.id=p.department_id','extra'),null);
+  assert.equal(intent('SELECT * FROM other.absent','absent'),null);
+  assert.equal(intent('WITH local AS (SELECT 1 AS id) SELECT custom FROM local','custom'),null);
+  assert.equal(intent('SELECT extra FROM people','extra',{...catalog,coverage:{columns:'partial',tables:'loaded'}}),null);
+});
 test('CTE chains, explicit output names and derived tables retain local definitions and projection types',()=>{
   const sql='WITH labels(person_id, label) AS (SELECT p.id, p.name FROM people p), chosen AS (SELECT l.person_id, l.label FROM labels l) SELECT d.label FROM (SELECT c.label FROM chosen c WHERE c.person_id > 0) d';
   const m=analyzeSql(sql,catalog);assert.equal(m.state,'known',JSON.stringify(m.coverage));assert.deepEqual(m.projections.map(p=>p.name),['label']);assert.equal(m.projections[0].type.family,'string');

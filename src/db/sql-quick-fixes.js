@@ -72,4 +72,36 @@ function sqlQuickFixes(text,offset,catalog) {
   });
 }
 
-module.exports={sqlQuickFixes};
+function missingObjectIntent(text,offset,catalog) {
+  if (!catalog?.database || catalog.coverage?.tables !== 'loaded' || catalog.coverage?.columns !== 'loaded') return null;
+  const options = { dialect: catalog.dialect, database: catalog.database, catalogComplete: true,
+    sqlMode: catalog.sqlMode, tableNameCaseSensitive: catalog.tableNameCaseSensitive };
+  const split = statementRanges(text, options);
+  const part = split.statements.find(item => offset >= item.start && offset < item.end);
+  if (!part || split.unknown.length) return null;
+  const source = text.slice(part.start, part.end), model = analyzeSql(source, catalog, options);
+  if (model.scopes.length !== 1 || model.scopes[0].partial || model.relations.some(item => item.kind !== 'catalog')) return null;
+  const issue = model.diagnostics.find(item => ['sql.name.table', 'sql.name.column'].includes(item.code) &&
+    offset >= part.start + item.start && offset < part.start + item.end);
+  if (!issue) return null;
+  let tokens;
+  try { tokens = tokenize(source, false, options); } catch { return null; }
+  if (tokens[0]?.upper !== 'SELECT') return null;
+  const at = tokens.findIndex(item => item.start === issue.start && item.end === issue.end), target = tokens[at];
+  if (!id(target) || !target.value || target.value.length > 64 || /^__rb_/i.test(target.value)) return null;
+  const qualifier = tokens[at - 1]?.value === '.' && id(tokens[at - 2]) ? tokens[at - 2].value : null;
+  if (issue.code === 'sql.name.table') {
+    const before = tokens[at - (qualifier ? 3 : 1)];
+    const matchesSchema = catalog.tableNameCaseSensitive ? qualifier === catalog.database : same(qualifier, catalog.database);
+    if (!['FROM', 'JOIN'].includes(before?.upper) || qualifier && !matchesSchema) return null;
+    return { missingTable: target.value, title: 'Design Unresolved Table ' + quote(target.value) };
+  }
+  const relations = model.scopes[0].relations;
+  const choices = qualifier ? relations.filter(item => same(item.alias, qualifier)) : relations;
+  if (choices.length !== 1 || choices[0].catalog?.database !== catalog.database) return null;
+  const table = choices[0].catalog.table;
+  if (!catalog.tables.some(item => item.name === table)) return null;
+  return { table, missingColumn: target.value, title: 'Design Column ' + quote(target.value) + ' on ' + quote(table) };
+}
+
+module.exports={sqlQuickFixes,missingObjectIntent};
