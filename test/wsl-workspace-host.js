@@ -19,9 +19,14 @@ async function runWslChecks(api, vscode, checks) {
   assert.match(distribution, /^RocketbrainFixture-[a-f0-9]{12}$/u);
   const workspace = await fs.realpath(process.env.ROCKETBRAIN_WSL_TEST_WORKSPACE);
   assert.ok(vscode.workspace.isTrusted);
-  const folder = (vscode.workspace.workspaceFolders || []).find(item => item.uri.scheme === 'file'
-    && item.uri.fsPath.toLowerCase() === workspace.toLowerCase());
-  assert.ok(folder, 'The owned Windows WSL fixture must be opened in VS Code.');
+  const folders = (vscode.workspace.workspaceFolders || []).filter(item => item.uri.scheme === 'file');
+  let folder;
+  for (const candidate of folders) {
+    const canonical = await fs.realpath(candidate.uri.fsPath);
+    if (canonical.toLowerCase() === workspace.toLowerCase()) folder = candidate;
+  }
+  assert.ok(folder, 'The owned Windows WSL fixture must be opened in VS Code. Open local folders: '
+    + (folders.map(item => path.basename(item.uri.fsPath)).join(', ') || '(none)'));
   const { wsl } = api;
   const commands = await vscode.commands.getCommands(true);
   for (const id of ['rocketbrain.wsl.distributions', 'rocketbrain.wsl.reviewBuild', 'rocketbrain.wsl.cancelBuild']) assert.ok(commands.includes(id));

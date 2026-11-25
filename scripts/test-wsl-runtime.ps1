@@ -72,7 +72,10 @@ try {
         $proof['vsixBytes'] = (Get-Item -LiteralPath $vsix).Length
         $env:ROCKETBRAIN_WSL_TEST_DISTRIBUTION = $distro
         $env:ROCKETBRAIN_WSL_TEST_WORKSPACE = $workspace
-        $env:ROCKETBRAIN_JAVA_TEST_WORKSPACE = $workspace
+        $workspaceFile = Join-Path $root 'rocketbrain-wsl.code-workspace'
+        @{ folders = @(@{ path = $workspace }) } | ConvertTo-Json -Depth 4 |
+            Set-Content -LiteralPath $workspaceFile -Encoding utf8NoBOM
+        $env:ROCKETBRAIN_JAVA_TEST_WORKSPACE = $workspaceFile
         $env:ROCKETBRAIN_NATIVE_CHECKS = 'wsl-workspace-host'
         $env:ROCKETBRAIN_TEST_OUTPUT = Join-Path $root 'native-workbench.json'
         $editor = & node -e 'require("@vscode/test-electron").downloadAndUnzipVSCode("1.100.3").then(console.log, error => { console.error(error.message); process.exitCode = 1; })'
