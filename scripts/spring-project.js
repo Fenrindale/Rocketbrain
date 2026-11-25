@@ -143,7 +143,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   // Prepare immutable agent artifacts before starting any disposable server.
   const agent=observer?await require('./jpa-observer-build').buildObserver({target:path.join(OUTPUT,'observer'),javaHome:javaHome()}):null;
   if (debug && debugPort === undefined) debugPort = await unusedPort();
-  let db,spawned=false;
+  let db,clientCertificates,spawned=false;
   await fsp.mkdir(INSTANCES, { recursive: true });
   const id = crypto.randomUUID(), folder = path.join(INSTANCES, id), port = await unusedPort();
   let endpointProbePort;
@@ -184,7 +184,13 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     ...(jfrRepository ? ['-XX:FlightRecorderOptions=repository='+jfrRepository] : []),
     ...(debugPort ? ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:' + debugPort] : []), '-cp', classpath, 'fixture.boot.FixtureApplication'];
   const dbOptions={namedPipe:process.env.ROCKETBRAIN_FIXTURE_NAMED_PIPE==='1'};
+  if (process.env.ROCKETBRAIN_ENABLE_DB_CLIENT_IDENTITY_FIXTURE === '1') {
+    clientCertificates = await require('./connection-security-fixture').certificates({protectedIdentity:true,ssh:false});
+    dbOptions.tls = clientCertificates.server;
+  }
   db=engine==='mysql'?await startMysqlFixture(dbOptions):await startMariaFixture(dbOptions);
+  const clientIdentityFixturePath = clientCertificates && await require('../test/helpers/client-identity-fixture')
+    .prepareClientIdentityFixture(db,clientCertificates,path.join(folder,'client-identity.json'));
   const url = engine === 'mysql' ? 'jdbc:mysql://127.0.0.1:' + db.config.port + '/' + db.config.database + '?allowPublicKeyRetrieval=true&sslMode=DISABLED'
     : 'jdbc:mariadb://127.0.0.1:' + db.config.port + '/' + db.config.database;
   let log = '', stopping, child;
@@ -209,7 +215,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
       if (child.pid && child.exitCode === null && child.signalCode === null) throw new Error('Spring fixture did not stop; preserving its evidence.');
       await new Promise(resolve => output.end(resolve));
       await fsp.copyFile(logFile, path.join(OUTPUT, 'last-' + engine + '-application.log'));
-      await db.stop();
+      try { await db.stop(); } finally { await clientCertificates?.remove(); }
       await removeInstance(folder, id);
     })();
     return stopping;
@@ -227,7 +233,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     const configPath = path.join(folder, 'runtime.json');
     const observerConnection=observer?JSON.parse(await fsp.readFile(observerDescriptorFile,'utf8')):null;
     const config = { runtimeUrl, baseUrl, appURL: baseUrl, projectPath: PROJECT, sourcePaths: [path.join(PROJECT, 'src', 'main', 'java')],
-      port, dbEngine: engine, dbConfigPath: db.configPath, processId: child.pid, javaProcessId: child.pid, debugPort: debugPort || null,naming,
+      port, dbEngine: engine, dbConfigPath: db.configPath, ...(clientIdentityFixturePath&&{clientIdentityFixturePath}), processId: child.pid, javaProcessId: child.pid, debugPort: debugPort || null,naming,
       ...(observer?{observerUrl:observerConnection.baseUrl,observerTokenFile}:{}),
       ...(endpointProbePort?{endpointProbeUrl:'http://127.0.0.1:'+endpointProbePort}:{}),
       namingStrategy:naming==='opaque'?{physical:'fixture.boot.OpaquePhysicalNamingStrategy'}:naming==='custom'?{physical:'fixture.boot.FixturePhysicalNamingStrategy',implicit:'fixture.boot.FixtureImplicitNamingStrategy'}:null,
@@ -237,7 +243,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     return { ...config, configPath, db, build, process: child, stop, close: stop };
   } catch (error) { await stop().catch(() => {}); throw error; }
   } catch(error) {
-    if(!spawned){await db?.stop();await removeInstance(folder,id);}
+    if(!spawned){try{await db?.stop();}finally{try{await clientCertificates?.remove();}finally{await removeInstance(folder,id);}}}
     throw error;
   }
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.83.0",
+  "version": "0.84.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 114,
-    "partial": 88,
+    "implemented": 115,
+    "partial": 87,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 78.7,
+    "percent": 78.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-082",
-    "DG-033",
-    "DG-034"
+    "IDEA-026",
+    "IDEA-086",
+    "DG-009",
+    "DG-075"
   ],
   "expandedFeatures": [
-    "IDEA-082",
-    "DG-033",
-    "DG-034"
+    "IDEA-026",
+    "IDEA-086",
+    "DG-009",
+    "DG-075"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -797,21 +799,20 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "선택한 식에 더해 값을 반환하는 메서드의 마지막 연속 문장을 메서드로 추출한다. 캡처 타입과 제네릭, 확인된 예외 및 기존 호출 바인딩을 유지한다.",
+      "scope": "값을 반환하는 마지막 문장에 더해 중간의 중첩 문장과 반복문을 void 도우미 메서드로 추출한다. 컴파일러로 입력 바인딩, 내부 반복 제어와 확인된 예외를 대조한다.",
       "remaining": [
-        "임의 블록·void 메서드 및 제어가 선택 범위를 벗어나는 문장의 추출이 남아 있다."
+        "여러 출력 지역 값의 복원, 외부 변수를 쓰는 일반 문장과 경계를 벗어나는 제어는 남아 있다."
       ],
       "verification": {
-        "state": "v0.72-installed-coverage",
+        "state": "v0.84-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.72.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 Spring 작업 공간에서 확인된 예외와 타입 매개변수가 있는 문장 네 개를 추출했다. 정확한 바인딩, 이름 충돌과 캡처 쓰기 거부, 버퍼 적용과 Undo를 확인했다.",
+        "testedScope": "두 실제 Spring 환경의 설치판에서 중첩 세 문장과 IOException·반복 제어를 포함해 추출했다. 원본 디스크는 유지됐고 한 번의 Undo로 되돌렸다. 범위를 벗어나는 return·continue를 거부했다.",
         "publicEvidence": [
-          "src/java/extract-method.js",
           "runtime/java-signature/src/rocketbrain/signature/ExtractMethodInspector.java",
           "test/java-extract-method-host.js"
         ],
@@ -2516,8 +2517,8 @@
       "verification": {
         "state": "v0.83-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.83.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2622,28 +2623,23 @@
       "category": "테스트·프로파일링",
       "feature": "코드 커버리지·분기·테스트별 커버",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "JaCoCo0.8.16의 실행별 line/branch/method와 소스/클래스 정합성에 더해 JUnit·TestNG의 명시적 serial callback 구간별 probe를 측정한다. 공용 setup은 미귀속으로 보존하고 OR 병합 aggregate와 네이티브 테스트별 상세를 제공한다.",
-      "remaining": [
-        "측정값은 callback 시간 구간의 global probe이며 비동기 코드의 배타적 원인 귀속을 주장하지 않는다. 병렬 겹침 시 테스트별 귀속을 제공하지 않는다. 테스트별 상세는 최대100개·구간은2000개로 제한한다. 정확한 branch source 위치·모든 모듈/에이전트 조합은 남는다."
-      ],
+      "scope": "Java 줄·분기·테스트별 커버리지를 수집한다. 소스와 클래스가 일치하고 실제 바이트코드 분기가 대응하는 if/else는 실행한 가지를 정확한 소스 범위에 표시한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.84-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 JUnit·TestNG의 서로 다른 테스트가 각 RiskPolicy branch를 통과하며 테스트별 covered/missed와 전체 OR 병합을 대조한다. shared configuration·JUnit lifecycle·TestNG BeforeMethod 경계를 구분하고 실제 동시 callback 겹침 시 전체 귀속을 억제한다. 양DB 네이티브 상세는 serial 구간 측정이다.",
+        "testedScope": "두 DB의 Spring 워크스페이스에서 JUnit·TestNG가 반대 가지를 각각 실행한 경우를 확인했다. 전체 집계, 네이티브 원본 위치, 복합 조건의 줄 집계 유지도 검증했다.",
         "publicEvidence": [
-          "runtime/java-testing/src/rocketbrain/testing/PerTestCoverage.java",
-          "src/java/testing/coverage.js",
-          "src/java/testing-vscode.js",
-          "test/testng-testing.test.js",
-          "test/java-testing-host.js"
+          "src/java/testing/coverage-branches.js",
+          "test/java-branch-coverage-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3918,20 +3914,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "일치하는 비암호화 PEM 클라이언트 인증서·키로 REQUIRE X509 계정에 접속하며 CA/DNS 검증을 유지한다. 비밀 키는 내보내기/결과에 포함하지 않는다.",
+      "scope": "MySQL과 MariaDB에서 검증되는 클라이언트 인증서와 암호화 PEM 또는 PKCS#12를 선택한다. 매번 해제 비밀을 입력하고 CA·DNS 인증을 유지한다.",
       "remaining": [
-        "JDBC JKS/PKCS12 truststore와 암호화 키의 대화형 해제·모든 인증서 수명주기 UI는 남는다."
+        "JDBC JKS 신뢰 저장소와 인증서 회전, 다른 공급자 및 플랫폼 조합은 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.84-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 별도 실제 양DB 보안 시험에서 클라이언트 인증서 접속과 누락/키 불일치 거부를 확인한다. 네이티브 폼 접속은 이 mTLS 검증과 구분한다.",
-        "publicEvidence": [],
+        "testedScope": "실제 REQUIRE X509 계정에서 두 형식으로 연결했다. 틀린 암호, CA·DNS, 인증서 누락, 암호화 모드의 평문 키를 거부했다. 내보내기와 결과에서 해제 비밀을 제외했다.",
+        "publicEvidence": [
+          "src/db/client-identity.js",
+          "test/connection-client-identity-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -4634,8 +4633,8 @@
       "verification": {
         "state": "v0.83-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.83.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4664,8 +4663,8 @@
       "verification": {
         "state": "v0.83-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.83.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5909,23 +5908,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "같은 DB 서버의 두 InnoDB 테이블을 일관된 스냅샷에서 복합 키로 비교한다. 열 매핑을 저장하고 다시 적용하며 보고서에서 대상의 변경 가능한 기존 행을 검토한다.",
+      "scope": "같은 DB 서버 비교에 더해 읽기 전용으로 저장한 원본 연결을 현재 활성 대상과 비교한다. 두 서버의 독립 스냅샷에서 정밀 값과 호환 키를 사용하고 대상의 기존 행만 검토한다.",
       "remaining": [
-        "서버 간 비교와 결과 집합 비교, 한쪽에만 있는 행의 삽입·삭제, 전체 서버 일괄 비교가 남아 있다."
+        "한쪽에만 있는 행의 삽입·삭제, 추가 타입, 여러 테이블과 결과 집합의 일괄 비교는 남아 있다."
       ],
       "verification": {
-        "state": "v0.81-installed-coverage",
+        "state": "v0.84-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.81.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 1,555개의 키와 정확한 DECIMAL·NULL 값, 동시 변경에도 유지되는 스냅샷을 확인했다. 저장 후 다시 열었고 대상 행의 커밋과 롤백, 외부 변경이 발생한 행의 거부를 확인했다.",
+        "testedScope": "MySQL에서 MariaDB를, MariaDB에서 MySQL을 원본으로 625개 키씩 읽었다. 동시 변경으로부터 캡처와 정의를 보호하고 연결·프로필 변경 시 거부했다. 활성 대상의 한 행만 검토 후 변경했다.",
         "publicEvidence": [
           "src/db/dataset-workflow.js",
-          "src/db/dataset-workflow-vscode.js",
-          "test/dataset-workflow-host.js"
+          "test/cross-server-dataset-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6559,38 +6557,33 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "2099917c37f840c42f0331e576c55738da5765b8b42a4a5029d2d8ed2009d40a",
-    "sourceManifestSha256": "c9dd9fccff353d195a5ba914f3db1fc6b0b08621ced9d9fe360421a3bf36a98f",
+    "vsixSha256": "c25d0c55a469ff026fe4f41eb23478bd05f629d6b35507c5cd411e61e4b01b86",
+    "sourceManifestSha256": "3b37e12ad786353fe95e5ef01b37019e3bd64ac562666dd9f20a9543ec259c0b",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 3
+        "featureGroups": 4
       },
       {
         "engine": "mariadb",
-        "featureGroups": 3
+        "featureGroups": 4
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-082",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-033",
+      "id": "IDEA-086",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1732,
-    "pass": 1610,
+    "tests": 1738,
+    "pass": 1615,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 122,
+    "skipped": 123,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

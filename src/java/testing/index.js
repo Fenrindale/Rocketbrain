@@ -5,6 +5,7 @@ const {StringDecoder}=require('node:string_decoder');
 const {parseJavaFile}=require('../../spring/java');
 const {provisionTestingRuntime,validateJavaHome,execute,TestingError,ARTIFACTS,sha}=require('./provision');
 const {parseCoverageXml,snapshotInputs,locateSource}=require('./coverage');
+const {readBranchEvidence,applyBranchEvidence}=require('./coverage-branches');
 const LIMITS={classPaths:1000,roots:40,selectors:2000,events:50000,eventBytes:32*1024*1024};
 const isCancelled=value=>Boolean(value?.isCancellationRequested||value?.aborted);
 function absolute(value,label,directory=false){if(typeof value!=='string'||!path.isAbsolute(value)||value.length>4096||value.includes('\0'))throw new TestingError('INVALID_CONFIG',label+' must be an absolute local path.');const real=fs.realpathSync(value);if(directory&&!fs.statSync(real).isDirectory())throw new TestingError('INVALID_CONFIG',label+' must be a directory.');return real;}
@@ -65,7 +66,7 @@ async function classpathJar(config,directory,coverage){
   const result=await execute(path.join(config.javaHome,'bin','jar'+(process.platform==='win32'?'.exe':'')),['--create','--file',jar,'--manifest',manifest],{cwd:directory});if(result.code!==0)throw new TestingError('CLASSPATH_BUILD','Could not create the private testing classpath manifest.');return jar;
 }
 function privateProperties(entries){return Object.entries(entries).map(([key,value])=>key+'='+Buffer.from(String(value),'utf8').toString('base64')).join('\n')+'\n';}
-async function generateCoverage(config,directory,before,onOutput,cancellation){
+async function generateCoverage(config,directory,before,onOutput,cancellation,branchEvidence){
   const execFile=path.join(directory,'jacoco.exec'),xmlFile=path.join(directory,'coverage.xml'),htmlDirectory=path.join(directory,'coverage-html');
   const unavailable=reason=>({state:'unavailable',scope:'run',perTestCoverage:false,execFile,xmlFile,files:[],warnings:[reason]});
   if(!fs.existsSync(execFile))return unavailable('No coverage execution data was saved; cancelled or abruptly terminated JVMs may not run shutdown hooks.');
@@ -74,14 +75,15 @@ async function generateCoverage(config,directory,before,onOutput,cancellation){
   const args=['-jar',config.runtime.jacocoCliJar,'report',execFile,...config.classDirectories.flatMap(file=>['--classfiles',file]),...config.sourceRoots.flatMap(file=>['--sourcefiles',file]),'--encoding','UTF-8','--xml',xmlFile,'--html',htmlDirectory];
   const result=await execute(path.join(config.javaHome,'bin','java'+(process.platform==='win32'?'.exe':'')),args,{cwd:config.workspace,env:config.env,timeoutMs:60000,onOutput,cancellation});
   if(result.code!==0||result.cancelled||/does not match|do not match|Some classes do not match/.test(result.output))return unavailable('Coverage report could not be matched to the current compiled classes. '+result.output.slice(-1500));
-  return parseCoverageXml(await fsp.readFile(xmlFile,'utf8'),{sourceRoots:config.sourceRoots,execFile,xmlFile,htmlDirectory});
+  const coverage = parseCoverageXml(await fsp.readFile(xmlFile,'utf8'),{sourceRoots:config.sourceRoots,execFile,xmlFile,htmlDirectory});
+  return applyBranchEvidence(coverage, branchEvidence);
 }
 async function mergeCoverage(config,directory,cp,inputs,output,cancellation){
   const merge=path.join(directory,'merge-'+crypto.randomUUID()+'.properties'),entries={count:inputs.length,output:pathToFileURL(output).href};inputs.forEach((file,index)=>entries['file.'+index]=pathToFileURL(file).href);await fsp.writeFile(merge,privateProperties(entries),{flag:'wx',mode:0o600});
   const result=await execute(path.join(config.javaHome,'bin','java'+(process.platform==='win32'?'.exe':'')),['-cp',cp,'rocketbrain.testing.CoverageFiles',pathToFileURL(merge).href],{cwd:config.workspace,env:config.env,timeoutMs:60000,cancellation});
   if(result.code!==0||result.cancelled||result.timedOut)throw new TestingError('COVERAGE_MERGE','JaCoCo interval data could not be merged: '+result.output.slice(-1000));
 }
-async function intervalCoverage(config,directory,cp,events,before,options){
+async function intervalCoverage(config,directory,cp,events,before,options,branchEvidence){
   const warnings=['Measurements cover serial global probe intervals, including any background/async work observed in that interval; they do not prove sole causality.',config.framework==='testng'?'TestNG test listener boundaries exclude @BeforeMethod/@AfterMethod; those configurations and shared suite/class lifecycle work are unattributed.':'JUnit test execution intervals include per-test lifecycle; shared class/suite lifecycle and gaps are unattributed.'];
   const scope='test-execution-interval',unavailable=reason=>({state:'unavailable',scope,tests:[],warnings:[...warnings,reason],concurrencyObserved:events.some(event=>event.type==='perTestCoverage'&&event.concurrencyObserved)});
   const records=events.filter(event=>event.type==='coverageWindow'),files=records.map(event=>{if(!/^coverage-window-\d{6}\.exec$/.test(event.file)||event.testId!==null&&typeof event.testId!=='string')throw new TestingError('EVENT_PROTOCOL','Invalid coverage interval record.');return path.join(directory,event.file);});
@@ -90,7 +92,7 @@ async function intervalCoverage(config,directory,cp,events,before,options){
   const groups=new Map();for(const event of records){const key=event.testId??null;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(path.join(directory,event.file));}
   const result={state:'available',scope,tests:[],warnings,concurrencyObserved:false};let count=0;
   for(const [testId,inputs]of groups){if(isCancelled(options.cancellation))return unavailable('Coverage reporting was cancelled.');if(testId!==null&&count++>=100){result.state='partial';if(!warnings.some(w=>w.includes('100 tests')))warnings.push('Per-test detailed reports are limited to 100 tests; complete overall run coverage is retained.');continue;}
-    const report=path.join(directory,'interval-reports',testId===null?'unattributed':String(count).padStart(4,'0'));await fsp.mkdir(report,{recursive:true});await mergeCoverage(config,directory,cp,inputs,path.join(report,'jacoco.exec'),options.cancellation);const coverage=await generateCoverage(config,report,before,options.onOutput,options.cancellation);coverage.scope=testId===null?'unattributed-lifecycle-interval':scope;coverage.perTestCoverage=false;
+    const report=path.join(directory,'interval-reports',testId===null?'unattributed':String(count).padStart(4,'0'));await fsp.mkdir(report,{recursive:true});await mergeCoverage(config,directory,cp,inputs,path.join(report,'jacoco.exec'),options.cancellation);const coverage=await generateCoverage(config,report,before,options.onOutput,options.cancellation,branchEvidence);coverage.scope=testId===null?'unattributed-lifecycle-interval':scope;coverage.perTestCoverage=false;
     if(coverage.state!=='available')return unavailable(coverage.warnings.join(' '));if(testId===null)result.unattributed={coverage};else result.tests.push({testId,coverage});
   }
   if(!result.tests.length)return unavailable('No actual completed test interval was measured.');return result;
@@ -127,8 +129,9 @@ async function perform(mode,input,options={}){
     await readEvents();await readEvents();tail+=decoder.end();if(protocolError)throw protocolError;if(tail.trim())throw new TestingError('EVENT_PROTOCOL','Java testing event file ended mid-record.');
   }finally{clearInterval(poll);externalCancellation?.dispose();}
   const complete=events.findLast(event=>event.type==='complete'),state=execution.cancelled?'cancelled':execution.timedOut||!complete||errors.length||![0,1].includes(execution.code)?'errored':'completed';
-  let intervals;if(perTestCoverage&&state!=='cancelled')try{intervals=await intervalCoverage(config,directory,cp,events,before,options);}catch(error){intervals={state:'unavailable',scope:'test-execution-interval',tests:[],warnings:[error.message],concurrencyObserved:false};}
-  const result={state,mode,tests:[...tests.values()],events,summary:complete?.summary||{},output:execution.output,exitCode:execution.code,timedOut:execution.timedOut,cancelled:execution.cancelled,runDirectory:directory,eventsFile,errors,...(coverage?{coverage:state==='cancelled'?{state:'unavailable',scope:'run',perTestCoverage:false,files:[],warnings:['Run was cancelled; complete coverage was not established.']}:await generateCoverage(config,directory,before,options.onOutput,options.cancellation)}:{})};
+  const branchEvidence=coverage&&state!=='cancelled'?await readBranchEvidence(config,directory,before,options.cancellation):null;
+  let intervals;if(perTestCoverage&&state!=='cancelled')try{intervals=await intervalCoverage(config,directory,cp,events,before,options,branchEvidence);}catch(error){intervals={state:'unavailable',scope:'test-execution-interval',tests:[],warnings:[error.message],concurrencyObserved:false};}
+  const result={state,mode,tests:[...tests.values()],events,summary:complete?.summary||{},output:execution.output,exitCode:execution.code,timedOut:execution.timedOut,cancelled:execution.cancelled,runDirectory:directory,eventsFile,errors,...(coverage?{coverage:state==='cancelled'?{state:'unavailable',scope:'run',perTestCoverage:false,files:[],warnings:['Run was cancelled; complete coverage was not established.']}:await generateCoverage(config,directory,before,options.onOutput,options.cancellation,branchEvidence)}:{})};
   if(perTestCoverage){result.perTestCoverage=intervals||{state:'unavailable',scope:'test-execution-interval',tests:[],warnings:['Run was cancelled.'],concurrencyObserved:false};if(result.coverage)result.coverage.perTestCoverage=['available','partial'].includes(result.perTestCoverage.state);}
   await fsp.writeFile(path.join(directory,'result.json'),JSON.stringify(result,null,2)+'\n',{mode:0o600});return result;
 }

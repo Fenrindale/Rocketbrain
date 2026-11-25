@@ -20,8 +20,28 @@ function connectionSecurity(config){
   if(!dnsName(expected))throw error('For a numeric database address, provide the certificate DNS name as TLS serverName.');
   const secure={rejectUnauthorized:true,verifyIdentity:true,minVersion:'TLSv1.2'};
   if(ssl.ca!==undefined){secure.ca=pem(ssl.ca,'CA certificate');try{new crypto.X509Certificate(secure.ca);}catch{throw error('The CA certificate is not valid PEM X.509.');}}
-  if((ssl.cert!==undefined)!==(ssl.key!==undefined))throw error('Client certificate and private key must be supplied together.');
-  if(ssl.cert!==undefined){secure.cert=pem(ssl.cert,'client certificate');secure.key=pem(ssl.key,'client private key');try{const certificate=new crypto.X509Certificate(secure.cert),key=crypto.createPrivateKey(secure.key);if(!certificate.checkPrivateKey(key))throw error('Client certificate and private key do not match.');}catch{throw error('Use a matching unencrypted PEM client certificate/private-key pair.');}}
+  if ((ssl.cert !== undefined) !== (ssl.key !== undefined)) throw error('Client certificate and private key must be supplied together.');
+  const encrypted = ssl.passphrase !== undefined;
+  if (encrypted && (ssl.key === undefined || typeof ssl.passphrase !== 'string' || !ssl.passphrase ||
+      Buffer.byteLength(ssl.passphrase) > 16384 || ssl.passphrase.includes('\0'))) {
+   throw error('Enter a client identity passphrase for an encrypted private key.');
+  }
+  if (ssl.cert !== undefined) {
+   secure.cert = pem(ssl.cert, 'client certificate');
+   secure.key = pem(ssl.key, 'client private key');
+   if (encrypted && !/-{5}BEGIN ENCRYPTED PRIVATE KEY-{5}|^Proc-Type: 4,ENCRYPTED\r?$/m.test(secure.key)) {
+    throw error('Select an encrypted PEM private key for this client identity.');
+   }
+   try {
+    const certificate = new crypto.X509Certificate(secure.cert);
+    const key = crypto.createPrivateKey({ key: secure.key, passphrase: ssl.passphrase });
+    if (!certificate.checkPrivateKey(key)) throw Error('key mismatch');
+   } catch {
+    throw error(encrypted ? 'Use a matching encrypted client certificate/private-key pair and the correct passphrase.' :
+     'Use a matching unencrypted PEM client certificate/private-key pair.');
+   }
+   if (encrypted) secure.passphrase = ssl.passphrase;
+  }
   options.host=expected;options.ssl=secure;
  }
  const endpoint=resource?.endpoint||(expected!==config.host?{host:config.host,port:config.port??3306}:null);

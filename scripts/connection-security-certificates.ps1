@@ -32,6 +32,11 @@ $ca=New-Authority 'Rocketbrain-v18-Owned-Test-CA'
 $wrong=New-Authority 'Rocketbrain-v18-Untrusted-Test-CA'
 $server=New-Leaf $ServerName '1.3.6.1.5.5.7.3.1' $ca
 $client=New-Leaf 'rb-client' '1.3.6.1.5.5.7.3.2' $ca
+if ($env:ROCKETBRAIN_OWNED_CLIENT_PFX_PASSPHRASE) {
+  $pbe=[System.Security.Cryptography.PbeParameters]::new([System.Security.Cryptography.PbeEncryptionAlgorithm]::Aes256Cbc,$hash,10000)
+  $bundle=$client.Certificate.ExportPkcs12($pbe,$env:ROCKETBRAIN_OWNED_CLIENT_PFX_PASSPHRASE)
+  [IO.File]::WriteAllBytes((Join-Path $target 'client.p12'),$bundle)
+}
 foreach($entry in @(@{Name='ca';Value=$ca},@{Name='wrong-ca';Value=$wrong},@{Name='server';Value=$server},@{Name='client';Value=$client})) {
   [IO.File]::WriteAllText((Join-Path $target ($entry.Name+'.pem')),$entry.Value.Certificate.ExportCertificatePem())
   [IO.File]::WriteAllText((Join-Path $target ($entry.Name+'-key.pem')),$entry.Value.Key.ExportPkcs8PrivateKeyPem())

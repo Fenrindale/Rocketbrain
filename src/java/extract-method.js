@@ -4,7 +4,7 @@ const {validIdentifier}=require('./file-templates');
 const {rangeAt}=require('../spring/java');
 const {editedText}=require('./refactoring');
 
-const BODY_FIELDS=['owner','staticMethod','returnType','sourceTypeParameters','typeNames','throwsTypes','statementCount','selected','bindings'];
+const BODY_FIELDS=['owner','staticMethod','returnsValue','returnType','sourceTypeParameters','typeNames','throwsTypes','statementCount','selected','bindings'];
 const same=(left,right)=>JSON.stringify(left)===JSON.stringify(right);
 const shape=({name,type})=>({name,type});
 
@@ -15,7 +15,7 @@ function validateMethodName(name) {
 function buildMethodExtraction(text,proof,name) {
   if (proof?.error) throw Error(proof.error);
   if (!proof||validateMethodName(name)) throw Error('Select complete Java statements and enter a valid helper name.');
-  const {start,end,methodStart,methodEnd,staticMethod,className,typeNames,sourceReturn,sourceTypeParameters,sourceThrows,captures}=proof;
+  const {start,end,methodStart,methodEnd,staticMethod,className,typeNames,returnsValue,sourceReturn,sourceTypeParameters,sourceThrows,captures}=proof;
   if (![start,end,methodStart,methodEnd].every(Number.isSafeInteger)||methodStart<0||start<=methodStart||end<=start||
       methodEnd<=end||methodEnd>text.length||captures.length>16) throw Error('Extract up to sixteen distinct captured Java variables.');
   const eol=text.includes('\r\n')?'\r\n':'\n';
@@ -34,7 +34,8 @@ function buildMethodExtraction(text,proof,name) {
   const argumentsText=captureNames.join(', ');
   const qualifier=staticMethod?className:'this';
   const call=qualifier+'.'+(typeNames.length?'<'+typeNames.join(', ')+'>':'')+name+'('+argumentsText+')';
-  const invocation='return '+call+';';
+  const prefix=returnsValue?'return ':'';
+  const invocation=prefix+call+';';
   const generics=sourceTypeParameters.length?'<'+sourceTypeParameters.join(', ')+'> ':'';
   const throwsClause=sourceThrows.length?' throws '+sourceThrows.join(', '):'';
   const parameters=captures.map(capture=>capture.type+' '+capture.name).join(', ');
@@ -43,7 +44,7 @@ function buildMethodExtraction(text,proof,name) {
   const helper=methodHead+selected+eol+declarationIndent+'}'+eol;
   const newStart=insertion+invocation.length-selected.length+methodHead.length;
   const edits=[{range:rangeAt(text,start,end),newText:invocation},{range:rangeAt(text,insertion,insertion),newText:helper}];
-  return {edits,text:editedText(text,edits),start:newStart,end:newStart+selected.length,callOffset:start+'return '.length};
+  return {edits,text:editedText(text,edits),start:newStart,end:newStart+selected.length,callOffset:start+prefix.length};
 }
 
 function verifyMethodExtraction(before,after) {

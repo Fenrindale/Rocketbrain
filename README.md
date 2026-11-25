@@ -358,6 +358,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Map** 보기에서 캡처한 결과의 공간 열을 선택해 지도와 원본 행을 탐색합니다. 지리 좌표와 SRID 0 평면 좌표를 별도 보기로 표시합니다.
 - **Compare**에서 두 캡처 결과의 키와 비교 열을 매핑합니다. 일치 행의 변경을 선택해 그리드 초안에 넣습니다. 두 테이블을 필터 없이 전부 캡처했고 동일 타입의 정수 기본 키를 매핑했다면 한쪽에만 있는 행을 삽입 또는 삭제로 선택할 수 있습니다. 각 변경은 SQL 검토를 거쳐 적용하고 커밋합니다.
 - **Save Table Dataset Comparison**으로 활성 연결의 InnoDB 테이블 두 개와 비교 열을 워크스페이스에 저장합니다. **Replay Saved Dataset Comparison**은 같은 읽기 전용 스냅샷에서 정수 기본 키 순서로 테이블당 최대 50,000행을 대조합니다. 보고서에 정확한 집계와 최대 100개 차이 표본을 표시합니다. **Stage Dataset Comparison Changes**는 현재 편집 페이지에서 원래 값과 일치하는 기존 행의 변경을 SQL 검토 초안에 넣습니다.
+- 저장된 연결 프로필을 원본으로 선택하면 별도 MySQL 또는 MariaDB 서버의 InnoDB 테이블도 비교할 수 있습니다. 각 서버의 읽기 전용 스냅샷은 독립적으로 시작되며 보고서에 두 읽기 시작 시각이 표시됩니다. 정수와 DECIMAL의 정밀도 및 부호, VARCHAR의 폭·문자 집합·콜레이션, 바이너리 열의 폭을 확인합니다. 원본 프로필이나 테이블 정의가 바뀌면 재생 시 매핑을 다시 선택해야 합니다.
 - **Capture Table Copy Source**에서 메모리, 임시 스트리밍 또는 **Stream and Save for Resume**을 선택합니다. 스트리밍은 InnoDB 기본 키 순서의 읽기 스냅샷을 최대 100만 행·1 GiB까지 암호화합니다. 재개를 선택한 스냅샷은 작업 공간에 최대 24시간 두고 키는 VS Code Secret Storage에 저장합니다. **Copy Captured Rows**에서 대상을 다시 검토하고 새 트랜잭션에 스테이징한 뒤 **Finish Table Copy**에서 커밋 또는 롤백합니다. 커밋 결과가 불확실한 스냅샷은 재사용이 잠깁니다.
 - **Verify Table Copy Destination**은 새 미확정 커밋 기록의 검토된 대상에서 최대 128개 기본 키와 매핑된 값을 읽기 전용으로 대조합니다. 표본의 현재 상태를 보고하며 재실행 잠금은 유지됩니다.
 - **Show Table Copy Verification History**에서는 최근 점검의 시각·대조 건수·결과를 확인할 수 있습니다. 원본 키나 행 값은 점검 이력에 저장하지 않습니다.
@@ -387,3 +388,5 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 게시 전후의 검사 방법과 재현 범위는 [공개 소스·검증 안내](https://github.com/Fenrindale/Rocketbrain/blob/main/docs/public-source.md)를 따릅니다. 공개 검증 요약은 실제 수행한 버전과 범위만 기록해야 합니다.
 
 프로젝트 자체 코드의 배포 라이선스는 아직 선택되지 않아 `package.json`의 **UNLICENSED**를 유지합니다. 저장소의 공개 설정만으로 별도의 사용·재배포 라이선스가 부여되지는 않습니다. 외부 구성요소에는 각 구성요소의 라이선스가 적용됩니다.
+
+For mutual TLS, select **Verify CA and server identity** in the connection editor, then choose **PEM certificate and encrypted key** or **PKCS#12 identity**. Set the server DNS name and its CA independently from the client files. An encrypted PEM needs the matching certificate and key. A PKCS#12 file needs exactly one private-key identity and a certificate chain, plus an independent JDK 25 or newer configured through **rocketbrain.java.javaHome**. Rocketbrain asks for the client passphrase on each connection attempt and keeps it out of profile exports and Secret Storage. Portable exports preserve the identity type. Select the files again on the destination machine.

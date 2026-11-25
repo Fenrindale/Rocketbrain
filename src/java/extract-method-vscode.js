@@ -83,9 +83,9 @@ function createMethodExtraction(vscode,{
   }),vscode.languages.registerCodeActionsProvider({scheme:'file',language:'java'},{
     provideCodeActions(document,range,context,token) {
       if (disposed||!vscode.workspace.isTrusted||!saved(document)||token.isCancellationRequested||
-          context.only&&!context.only.contains(kind)||range.start.line===range.end.line) return [];
+          context.only&&!context.only.contains(kind)||range.isEmpty) return [];
       const selected=document.getText(range).trim();
-      if (selected.length>32768||!/\breturn\b[\s\S]+;\s*$/.test(selected)) return [];
+      if (selected.length>32768||!/[;}]$/.test(selected)) return [];
       const action=new vscode.CodeAction(TITLE,kind);
       action.command={command:COMMAND,title:TITLE,arguments:[editorAnchor(document,range)]};
       return [action];

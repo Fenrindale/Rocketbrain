@@ -5,6 +5,8 @@ const path = require('node:path');
 async function build() {
   const jdbcWorker = fs.readFileSync(path.join(__dirname, '../runtime/jdbc/DriverWorker.java'), 'utf8');
   fs.writeFileSync(path.join(__dirname, '../src/db/jdbc-worker-source.json'), JSON.stringify(jdbcWorker));
+  const clientIdentity = fs.readFileSync(path.join(__dirname, '../runtime/db-tls/ClientIdentity.java'), 'utf8');
+  fs.writeFileSync(path.join(__dirname, '../src/db/pkcs12-worker-source.json'), JSON.stringify(clientIdentity));
   const mixedClasses = fs.readFileSync(path.join(__dirname, '../runtime/java-mixed/MixedClassInspector.java'), 'utf8');
   fs.writeFileSync(path.join(__dirname, '../src/java/mixed-jvm-classfile-source.json'), JSON.stringify(mixedClasses));
   const groovyConsole = fs.readFileSync(path.join(__dirname, '../runtime/groovy/GroovyConsoleWorker.java'), 'utf8');
@@ -13,6 +15,8 @@ async function build() {
   const sources=Object.fromEntries(fs.readdirSync(sourceDir).filter(name=>name.endsWith('.java')).sort().map(name=>[name,fs.readFileSync(path.join(sourceDir,name),'utf8')]));
   fs.writeFileSync(path.join(__dirname,'../src/jpa/observer-sources.json'),JSON.stringify(sources));
   fs.writeFileSync(path.join(__dirname,'../src/java/testing/launcher-sources.json'),JSON.stringify(require('../src/java/testing/provision').readLauncherSources()));
+  const branchEvidence = fs.readFileSync(path.join(__dirname,'../runtime/java-coverage/BranchEvidence.java'),'utf8');
+  fs.writeFileSync(path.join(__dirname,'../src/java/testing/branch-evidence-source.json'),JSON.stringify(branchEvidence));
   const signatureDirectory=path.join(__dirname,'../runtime/java-signature/src/rocketbrain/signature');
   const signatureSources=Object.fromEntries(fs.readdirSync(signatureDirectory).filter(name=>name.endsWith('.java')).sort().map(name=>[name,fs.readFileSync(path.join(signatureDirectory,name),'utf8')]));
   fs.writeFileSync(path.join(__dirname,'../src/java/signature-compiler-sources.json'),JSON.stringify(signatureSources));

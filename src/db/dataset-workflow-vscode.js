@@ -4,7 +4,7 @@ const { createDatasetWorkflows, limits } = require('./dataset-workflow');
 
 function registerDatasetWorkflows(context, vscode, command, options) {
   const scheme = 'rocketbrain-dataset-workflow';
-  const workflows = createDatasetWorkflows(context.workspaceState, options.withConnection);
+  const workflows = createDatasetWorkflows(context.workspaceState, options.withConnection, options.profileSource);
   let visible;
   const list = () => {
     if (!vscode.workspace.isTrusted) throw Error('Trust this workspace before opening saved dataset comparisons.');
@@ -18,13 +18,15 @@ function registerDatasetWorkflows(context, vscode, command, options) {
   }));
 
   const storedItem = async placeHolder => (await vscode.window.showQuickPick(list().map(item => ({
-    label: item.name, description: `${item.source} → ${item.target}`, item
+    label: item.name, description: `${item.source} → ${item.target}${item.sourceProfile ? ' · separate server' : ''}`, item
   })), { placeHolder }))?.item;
 
   async function replay(id, { cancellation, onProgress } = {}) {
     const report = await workflows.replay(id, { cancellation, onProgress });
     const uri = vscode.Uri.from({ scheme, path: `/${report.id}/Dataset comparison.json` });
-    visible = { uri, report, text: JSON.stringify({ snapshotStartedAt: report.snapshotStartedAt, comparisonCompletedAt: report.created,
+    const timing = report.snapshots ? { workflowName: report.workflowName, snapshotScope: report.snapshotScope, snapshots: report.snapshots }
+      : { snapshotStartedAt: report.snapshotStartedAt };
+    visible = { uri, report, text: JSON.stringify({ ...timing, comparisonCompletedAt: report.created,
       source: report.source, destination: report.target,
       summary: report.summary, omittedDifferences: report.omitted, sample: report.sample }, null, 2) + '\n' };
     const document = await vscode.workspace.openTextDocument(uri);
@@ -36,17 +38,37 @@ function registerDatasetWorkflows(context, vscode, command, options) {
     const names = options.tableNames();
     const target = await vscode.window.showQuickPick(names, { placeHolder: 'Choose the destination table' });
     if (!target) return;
-    const source = await vscode.window.showQuickPick(names.filter(name => name !== target), { placeHolder: 'Choose the source table' });
+    const profiles = workflows.sourceProfiles();
+    const choice = profiles.length ? await vscode.window.showQuickPick([
+      { label: 'Active database schema' }, ...profiles.map(profile => ({ label: profile.label, description: profile.description, profile }))
+    ], { placeHolder: 'Choose the source schema or saved profile on a separate server' }) : {};
+    if (!choice) return;
+    const sourceProfile = choice.profile && { id: choice.profile.id, revision: choice.profile.revision };
+    const sources = sourceProfile ? await workflows.sourceTableNames(sourceProfile) : names.filter(name => name !== target);
+    const source = await vscode.window.showQuickPick(sources, { placeHolder: 'Choose the source table' });
     if (!source) return;
-    const offered = await workflows.inspect({ target, source });
-    const picked = await vscode.window.showQuickPick(offered.payload.map(pair => ({ label: pair.target, pair })), {
-      placeHolder: 'Select matching payload columns for comparison', canPickMany: true
+    const selection = { target, source, ...(sourceProfile && { sourceProfile }) };
+    const offered = await workflows.inspect(selection);
+    const columns = offered.matches ?? offered.payload.map(pair => ({ target: pair.target, sources: [pair.source] }));
+    const picked = await vscode.window.showQuickPick(columns.map(column => ({ label: column.target, column })), {
+      placeHolder: 'Select destination payload columns for comparison', canPickMany: true
     });
     if (!picked?.length) return;
     if (picked.length + offered.keys.length > limits.columns) throw Error('Compare at most 32 mapped columns, including the primary key.');
-    const name = await vscode.window.showInputBox({ title: 'Save Dataset Comparison', prompt: 'Name the table and column mapping', value: `${source} → ${target}` });
+    const mapping = [];
+    for (const { column } of picked) {
+      const used = new Set(mapping.map(pair => pair.source));
+      const choices = column.sources.filter(name => !used.has(name)).sort((a, b) => (b === column.target) - (a === column.target));
+      if (!choices.length) throw Error('Choose a distinct compatible source column for each destination column.');
+      const selected = choices.length === 1 ? choices[0] : await vscode.window.showQuickPick(choices,
+        { placeHolder: `Choose the source column for ${column.target}` });
+      if (!selected) return;
+      mapping.push({ target: column.target, source: selected });
+    }
+    const value = `${choice.profile ? choice.profile.label + ' / ' : ''}${source} → ${target}`.slice(0, 80);
+    const name = await vscode.window.showInputBox({ title: 'Save Dataset Comparison', prompt: 'Name the table and column mapping', value });
     if (name === undefined) return;
-    const id = await workflows.save({ target, source, name, mapping: picked.map(item => item.pair) });
+    const id = await workflows.save({ ...selection, name, mapping });
     await vscode.window.showInformationMessage('Saved the dataset comparison for this workspace. Run it from Replay Saved Dataset Comparison.');
     return id;
   });
@@ -82,7 +104,8 @@ function registerDatasetWorkflows(context, vscode, command, options) {
   });
 
   const remove = id => { list(); return workflows.remove(id); };
-  return { list, inspect: workflows.inspect, save: workflows.save, remove, replay, stage };
+  return { list, inspect: workflows.inspect, save: workflows.save, remove, replay, stage,
+    sourceProfiles: workflows.sourceProfiles, sourceTableNames: workflows.sourceTableNames };
 }
 
 module.exports = { registerDatasetWorkflows };

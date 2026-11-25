@@ -1,25 +1,25 @@
 {
-  "version": "0.83.0",
-  "verifiedAt": "2026-11-25T20:26:02.381Z",
+  "version": "0.84.0",
+  "verifiedAt": "2026-11-25T20:39:47.841Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.83.0.vsix",
-    "sha256": "2099917c37f840c42f0331e576c55738da5765b8b42a4a5029d2d8ed2009d40a",
-    "bytes": 3611575,
+    "name": "rocketbrain-0.84.0.vsix",
+    "sha256": "c25d0c55a469ff026fe4f41eb23478bd05f629d6b35507c5cd411e61e4b01b86",
+    "bytes": 3624763,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 2055,
-    "inputVectorSha256": "c9dd9fccff353d195a5ba914f3db1fc6b0b08621ced9d9fe360421a3bf36a98f",
+    "frozenPublicInputs": 2071,
+    "inputVectorSha256": "3b37e12ad786353fe95e5ef01b37019e3bd64ac562666dd9f20a9543ec259c0b",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1732,
-    "pass": 1610,
+    "tests": 1738,
+    "pass": 1615,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 122,
+    "skipped": 123,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,18 +29,22 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 3,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "advancedStreamTrace",
+          "group": "javaBranchCoverage",
           "checks": 1
         },
         {
-          "group": "sqlCollationChecks",
+          "group": "javaVoidMethod",
           "checks": 1
         },
         {
-          "group": "liveScriptDdl",
+          "group": "crossServerDataset",
+          "checks": 1
+        },
+        {
+          "group": "clientIdentity",
           "checks": 1
         }
       ],
@@ -55,18 +59,22 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 3,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "advancedStreamTrace",
+          "group": "javaBranchCoverage",
           "checks": 1
         },
         {
-          "group": "sqlCollationChecks",
+          "group": "javaVoidMethod",
           "checks": 1
         },
         {
-          "group": "liveScriptDdl",
+          "group": "crossServerDataset",
+          "checks": 1
+        },
+        {
+          "group": "clientIdentity",
           "checks": 1
         }
       ],
@@ -77,69 +85,71 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-082": {
-      "scope": "설치판에서 anyMatch가 네 번째 입력에서 끝나는 사례와 정렬 입력 다섯 건을 확인했다. 순회하지 않은 count 및 Spring Java 원본 선택으로 이동하는 흐름도 검증했다.",
+    "IDEA-026": {
+      "scope": "두 실제 Spring 환경의 설치판에서 중첩 세 문장과 IOException·반복 제어를 포함해 추출했다. 원본 디스크는 유지됐고 한 번의 Undo로 되돌렸다. 범위를 벗어나는 return·continue를 거부했다.",
       "runtimeGroups": [
-        "advancedStreamTrace"
+        "javaVoidMethod"
       ]
     },
-    "DG-033": {
-      "scope": "두 DB에서 열·인덱스 변경 다섯 사례와 정확한 DECIMAL을 실제 DDL 결과와 대조했다. 편집 중 물리 카탈로그 보존, 모드 변경에서 추론 중단, 수정 시 재분석을 확인했다.",
+    "IDEA-086": {
+      "scope": "두 DB의 Spring 워크스페이스에서 JUnit·TestNG가 반대 가지를 각각 실행한 경우를 확인했다. 전체 집계, 네이티브 원본 위치, 복합 조건의 줄 집계 유지도 검증했다.",
       "runtimeGroups": [
-        "liveScriptDdl"
+        "javaBranchCoverage"
       ]
     },
-    "DG-034": {
-      "scope": "두 실제 엔진에서 아홉 진단·정상 대조 사례의 서버 결과와 편집기 범위를 확인했다. 미리보기 전환 중 진단 해제 및 문서 편집 시 갱신을 확인했다.",
+    "DG-009": {
+      "scope": "실제 REQUIRE X509 계정에서 두 형식으로 연결했다. 틀린 암호, CA·DNS, 인증서 누락, 암호화 모드의 평문 키를 거부했다. 내보내기와 결과에서 해제 비밀을 제외했다.",
       "runtimeGroups": [
-        "sqlCollationChecks"
+        "clientIdentity"
+      ]
+    },
+    "DG-075": {
+      "scope": "MySQL에서 MariaDB를, MariaDB에서 MySQL을 원본으로 625개 키씩 읽었다. 동시 변경으로부터 캡처와 정의를 보호하고 연결·프로필 변경 시 거부했다. 활성 대상의 한 행만 검토 후 변경했다.",
+      "runtimeGroups": [
+        "crossServerDataset"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 451,
+    "sourceCorrespondences": 453,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 114,
-      "partial": 88,
+      "implemented": 115,
+      "partial": 87,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 170,
-    "previousWeightedPoints": 169,
+    "weightedPoints": 170.5,
+    "previousWeightedPoints": 170,
     "targetWeightedPoints": 216,
-    "referencePercent": 78.7,
+    "referencePercent": 78.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-082",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-033",
+        "id": "IDEA-086",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Stream 추적은 지원 순차 식에서 실행한다. 병렬 실행과 정지된 임의 JVM 변수의 캡처가 범위에 포함되지 않는다.",
-    "SQL 스크립트는 확인된 서버 모드에서 안전하게 모델링할 수 있는 DDL을 사용하고 모드나 스키마가 불명확해지면 추론을 멈춘다.",
-    "콜레이션은 관찰한 문자 집합과 명시적 비교에서 판정한다. 모호한 타입이나 정합성을 판정하지 않은 비교는 기존 진단을 유지한다.",
+    "분기 위치는 일치하는 소스·클래스 쌍에서 정확히 계산 가능한 if/else에 제공한다. 복합 조건은 집계만 유지한다.",
+    "메서드 추출은 선택 범위 안에서 끝나는 반복 제어와 확인된 예외를 유지한다. 범위 밖으로 전달할 새 지역 값은 이 버전에서 거부한다.",
+    "서버 간 비교는 서로 독립인 두 읽기 스냅샷을 사용하며 검토한 기존 행만 활성 대상에서 편집한다.",
+    "인증서 암호는 연결 시 입력한다. PEM과 PKCS#12를 지원하며 JDBC JKS와 인증서 회전의 전체 흐름은 남아 있다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Java 커버리지의 실제 분기별 소스 위치",
-    "중첩 블록과 반복문을 Java 메서드로 추출",
-    "서버 간 데이터 비교와 암호화 클라이언트 인증서 연결"
+    "Java 정적 멤버 임포트와 여러 추출 결과값 복원",
+    "SQL JSON 함수의 실제 타입·위치 진단",
+    "저장 데이터 비교에서 한쪽에만 있는 행의 추가·삭제 검토"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

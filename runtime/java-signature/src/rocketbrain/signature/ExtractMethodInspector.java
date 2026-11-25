@@ -8,7 +8,7 @@ import javax.lang.model.type.*;
 import javax.lang.model.util.Elements;
 import static rocketbrain.signature.SignatureInspector.object;
 
-/** Proves a trailing sequence and the exact call replacing it using attributed source. */
+/** Proves a statement sequence and the exact call replacing it using attributed source. */
 final class ExtractMethodInspector {
     private final Trees trees;
     private final Elements elements;
@@ -37,39 +37,41 @@ final class ExtractMethodInspector {
                 return super.visitMethod(method,unused);
             }
         }.scan(unit,null);
-        if (paths.size()!=1) return error("Select trailing statements in one ordinary named Java method.");
+        if (paths.size()!=1) return error("Select complete statements in one ordinary named Java method.");
         TreePath path = paths.getFirst();
         MethodTree method = (MethodTree)path.getLeaf();
         if (!(trees.getElement(path) instanceof ExecutableElement declaration) || declaration.getKind()!=ElementKind.METHOD ||
             !(declaration.getEnclosingElement() instanceof TypeElement owner) || owner.getKind()!=ElementKind.CLASS ||
-            !Set.of(NestingKind.TOP_LEVEL,NestingKind.MEMBER).contains(owner.getNestingKind()) ||
-            declaration.getReturnType().getKind()==TypeKind.VOID) {
-            return error("Select a non-void method in an ordinary named Java class.");
+            !Set.of(NestingKind.TOP_LEVEL,NestingKind.MEMBER).contains(owner.getNestingKind())) {
+            return error("Select a method in an ordinary named Java class.");
         }
-        var statements = method.getBody().getStatements();
-        int first=0;
-        while (first<statements.size() && start(statements.get(first))<from) first++;
-        var selected = statements.subList(first,statements.size());
-        if (selected.size()<2 || start(selected.getFirst())!=from || end(selected.getLast())!=to ||
-            !(selected.getLast() instanceof ReturnTree returned) || returned.getExpression()==null) {
-            return error("Select at least two complete trailing statements ending with a return value.");
-        }
+        Selection selection = selection(path,method,from,to);
+        if (selection==null) return error("Select complete trailing statements or a contiguous sequence in one Java block.");
+        var selected = selection.statements();
+        boolean returnsValue = selection.endsMethod() && selected.getLast() instanceof ReturnTree returned &&
+            returned.getExpression()!=null;
+        if (returnsValue && selected.size()<2) return error("Select at least two complete trailing statements ending with a return value.");
         if (callOffset<0 && nameUsed(owner,name)) return error("Choose a new method name unused in the current Java source and its hierarchy.");
+        boolean voidMethod = declaration.getReturnType().getKind()==TypeKind.VOID;
         if (callOffset>=0 && (!declaration.getSimpleName().contentEquals(name) ||
-            !declaration.getModifiers().contains(Modifier.PRIVATE) || first!=0)) {
+            !declaration.getModifiers().contains(Modifier.PRIVATE) || selection.block().getLeaf()!=method.getBody() ||
+            selected.size()!=method.getBody().getStatements().size() || returnsValue==voidMethod)) {
             return error("Javac could not verify the generated private helper.");
         }
-        BodyProof body = new BodyProof(declaration,from,to);
-        TreePath block = new TreePath(path,method.getBody());
+        BodyProof body = new BodyProof(declaration,from,to,returnsValue);
         for (StatementTree statement : selected) {
-            if (body.supports(statement)) body.scan(new TreePath(block,statement),null);
+            if (body.supports(statement)) body.scan(new TreePath(selection.block(),statement),null);
             else body.invalid=true;
         }
-        if (body.invalid) return error("Use local statements and if, return or throw. Captured writes, nonlocal control flow, local types and nested lambdas are unsupported.");
+        if (body.invalid) return error("Use local statements, if, loops or a trailing return. Captured writes, nonlocal control flow, local types and nested lambdas are unsupported.");
+        if (callOffset<0 && usedOutside(path,body.locals.keySet(),from,to)) {
+            return error("The selected statements declare a local value used outside the extraction.");
+        }
         Map<String,Object> result = object("owner",owner.getQualifiedName().toString(),"className",owner.getSimpleName().toString(),
             "method",SignatureInspector.key(declaration),"staticMethod",declaration.getModifiers().contains(Modifier.STATIC),
             "methodEnd",end(method),"methodStart",start(method),"start",from,"end",to,"statementCount",selected.size(),
-            "sourceReturn",source(method.getReturnType()),"returnType",declaration.getReturnType().toString(),
+            "returnsValue",returnsValue,"sourceReturn",returnsValue?source(method.getReturnType()):"void",
+            "returnType",returnsValue?declaration.getReturnType().toString():"void",
             "sourceTypeParameters",method.getTypeParameters().stream().map(this::source).toList(),
             "typeNames",declaration.getTypeParameters().stream().map(parameter->parameter.getSimpleName().toString()).toList(),
             "sourceThrows",method.getThrows().stream().map(this::source).toList(),
@@ -78,9 +80,44 @@ final class ExtractMethodInspector {
             "bindings",body.bindings,"selected",selected.stream().map(Object::toString).toList());
         if (callOffset>=0) {
             result.put("parameters",declaration.getParameters().stream().map(this::variable).toList());
-            result.put("call",call(callOffset,declaration));
+            result.put("call",call(callOffset,declaration,returnsValue));
         }
         return result;
+    }
+
+    private record Selection(TreePath block,List<? extends StatementTree> statements,boolean endsMethod) {}
+
+    private Selection selection(TreePath methodPath,MethodTree method,int from,int to) {
+        List<Selection> matches = new ArrayList<>();
+        new TreePathScanner<Void,Void>() {
+            @Override public Void visitBlock(BlockTree block,Void unused) {
+                if (start(block)>=from || end(block)<=to) return null;
+                var statements=block.getStatements();
+                int first=0;
+                while (first<statements.size() && start(statements.get(first))<from) first++;
+                int last=first;
+                while (last<statements.size() && end(statements.get(last))<=to) last++;
+                if (first<last && start(statements.get(first))==from && end(statements.get(last-1))==to) {
+                    matches.add(new Selection(getCurrentPath(),statements.subList(first,last),
+                        block==method.getBody() && last==statements.size()));
+                }
+                return super.visitBlock(block,unused);
+            }
+        }.scan(new TreePath(methodPath,method.getBody()),null);
+        return matches.size()==1?matches.getFirst():null;
+    }
+
+    private boolean usedOutside(TreePath method,Set<VariableElement> locals,int from,int to) {
+        if (locals.isEmpty()) return false;
+        boolean[] used = {false};
+        new TreePathScanner<Void,Void>() {
+            @Override public Void visitIdentifier(IdentifierTree tree,Void unused) {
+                int offset=start(tree);
+                if ((offset<from || offset>=to) && locals.contains(trees.getElement(getCurrentPath()))) used[0]=true;
+                return super.visitIdentifier(tree,unused);
+            }
+        }.scan(method,null);
+        return used[0];
     }
 
     private Map<String,Object> variable(VariableElement element) {
@@ -107,12 +144,14 @@ final class ExtractMethodInspector {
         return used[0];
     }
 
-    private Map<String,Object> call(int offset, ExecutableElement helper) {
+    private Map<String,Object> call(int offset,ExecutableElement helper,boolean returnsValue) {
         List<Map<String,Object>> calls = new ArrayList<>();
         new TreePathScanner<Void,Void>() {
             @Override public Void visitMethodInvocation(MethodInvocationTree call, Void unused) {
                 TreePath path = getCurrentPath(), parent = path.getParentPath();
-                if (start(call)==offset && helper.equals(trees.getElement(path)) && parent.getLeaf() instanceof ReturnTree) {
+                boolean rightStatement=returnsValue?parent.getLeaf() instanceof ReturnTree:
+                    parent.getLeaf() instanceof ExpressionStatementTree;
+                if (start(call)==offset && rightStatement && helper.equals(trees.getElement(path))) {
                     List<Map<String,Object>> arguments = new ArrayList<>();
                     for (ExpressionTree expression : call.getArguments()) {
                         if (!(expression instanceof IdentifierTree) ||
@@ -133,19 +172,26 @@ final class ExtractMethodInspector {
     }
 
     private final class BodyProof extends TreePathScanner<Void,Void> {
+        private static final Set<Tree.Kind> LOOPS = Set.of(Tree.Kind.FOR_LOOP,Tree.Kind.ENHANCED_FOR_LOOP,
+            Tree.Kind.WHILE_LOOP,Tree.Kind.DO_WHILE_LOOP);
+        private static final Set<Tree.Kind> STATEMENTS = Set.of(Tree.Kind.BLOCK,Tree.Kind.VARIABLE,Tree.Kind.IF,
+            Tree.Kind.RETURN,Tree.Kind.THROW,Tree.Kind.EXPRESSION_STATEMENT,Tree.Kind.FOR_LOOP,
+            Tree.Kind.ENHANCED_FOR_LOOP,Tree.Kind.WHILE_LOOP,Tree.Kind.DO_WHILE_LOOP,Tree.Kind.BREAK,Tree.Kind.CONTINUE);
         final ExecutableElement method;
         final int from, to;
+        final boolean returnsValue;
         final List<String> bindings = new ArrayList<>();
         final Map<VariableElement,Integer> locals = new LinkedHashMap<>(), captures = new LinkedHashMap<>();
         boolean invalid;
 
-        BodyProof(ExecutableElement method,int from,int to) {this.method=method;this.from=from;this.to=to;}
+        BodyProof(ExecutableElement method,int from,int to,boolean returnsValue) {
+            this.method=method;this.from=from;this.to=to;this.returnsValue=returnsValue;
+        }
 
         private boolean supports(Tree tree) {
-            boolean unsupportedStatement = tree instanceof StatementTree &&
-                !Set.of(Tree.Kind.BLOCK,Tree.Kind.VARIABLE,Tree.Kind.IF,Tree.Kind.RETURN,Tree.Kind.THROW,
-                    Tree.Kind.EXPRESSION_STATEMENT).contains(tree.getKind());
-            return !(unsupportedStatement || tree instanceof LambdaExpressionTree || tree instanceof MemberReferenceTree ||
+            boolean unsupportedStatement = tree instanceof StatementTree && !STATEMENTS.contains(tree.getKind());
+            return !(unsupportedStatement || tree instanceof ReturnTree && !returnsValue ||
+                tree instanceof LambdaExpressionTree || tree instanceof MemberReferenceTree ||
                 tree instanceof NewClassTree creation && creation.getClassBody()!=null ||
                 tree instanceof BindingPatternTree);
         }
@@ -162,6 +208,27 @@ final class ExtractMethodInspector {
                 bindings.add("declare:"+local.getSimpleName()+":"+local.asType());
             }
             return super.visitVariable(tree,unused);
+        }
+
+        private boolean insideSelectedLoop(boolean breaking) {
+            for (TreePath path=getCurrentPath().getParentPath(); path!=null; path=path.getParentPath()) {
+                Tree tree=path.getLeaf();
+                if (LOOPS.contains(tree.getKind()) || breaking && tree.getKind()==Tree.Kind.SWITCH) {
+                    return LOOPS.contains(tree.getKind()) && start(tree)>=from && end(tree)<=to;
+                }
+                if (tree instanceof MethodTree || tree instanceof LambdaExpressionTree) return false;
+            }
+            return false;
+        }
+
+        @Override public Void visitBreak(BreakTree statement,Void unused) {
+            invalid|=statement.getLabel()!=null || !insideSelectedLoop(true);
+            return null;
+        }
+
+        @Override public Void visitContinue(ContinueTree statement,Void unused) {
+            invalid|=statement.getLabel()!=null || !insideSelectedLoop(false);
+            return null;
         }
 
         private boolean written(TreePath path) {
