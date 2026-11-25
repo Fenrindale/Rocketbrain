@@ -1,5 +1,5 @@
 {
-  "version": "0.72.0",
+  "version": "0.73.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 89,
-    "partial": 113,
+    "implemented": 92,
+    "partial": 110,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 72.9,
+    "percent": 73.6,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-026",
-    "IDEA-052",
-    "DG-059",
-    "DG-094"
+    "IDEA-006",
+    "IDEA-064",
+    "DG-052",
+    "DG-093"
   ],
   "expandedFeatures": [
-    "IDEA-026",
-    "IDEA-052",
-    "DG-059",
-    "DG-094"
+    "IDEA-006",
+    "IDEA-064",
+    "DG-052",
+    "DG-093"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -207,27 +207,24 @@
       "category": "작업 공간·편집기",
       "feature": "의미 기반 선택 확장·축소",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "VS Code 선택 확장과 JDT의 Java 선택 범위를 활용한다.",
-      "remaining": [
-        "언어별 의미 선택 경계·축소 동작의 개별 검증이 남는다."
-      ],
+      "scope": "Java, Kotlin 및 검증 가능한 SQL 범위에서 식별자 일부부터 상위 구문 또는 선언으로 선택을 확대하고 이전 선택과 방향으로 되돌린다. 여러 커서도 함께 복원한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.73-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "testedScope": "두 실제 Spring 환경의 JDT Java, Kotlin Gradle 서버와 SQL 편집기에서 선택 경계 및 확장·축소를 확인했다. 커서 수와 방향 복원, 수동 이동 시 선택 이력 초기화, 문장 경계 및 원본 보존을 검증했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/semantic-selection-vscode.js",
+          "src/java/semantic-selection.js",
+          "test/semantic-selection-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -819,8 +816,8 @@
       "verification": {
         "state": "v0.72-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.72.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1643,8 +1640,8 @@
       "verification": {
         "state": "v0.72-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.72.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2002,23 +1999,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Actuator의 빈과 감사 이벤트 및 명시적으로 활성화한 Servlet 관찰기의 실제 체인 선택 순서, 필터 실행과 인가 결과를 보여 준다. 관찰기는 요청 값과 사용자 신원을 보관하지 않는다.",
+      "scope": "Servlet 요청의 필터 체인에 더해 실제 메서드 호출 전·후 인가 결정과 역할 계층을 추적한다. 관찰 값의 라벨은 기본으로 숨기며 명시한 역할만 보여 준다.",
       "remaining": [
-        "선언과 실제 권한 출처의 연결, 메서드 보안 및 WebFlux 체인 검증이 남아 있다."
+        "WebFlux, 비동기·사용자 정의 디스패치와 일반 정책의 역추적이 남아 있다."
       ],
       "verification": {
-        "state": "v0.71-installed-coverage",
+        "state": "v0.73-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.71.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 Spring Security 앱에서 401·401·403·200·200 응답, 최초 매칭 체인과 실행 필터, 조기 종료, 32개 이력, 기본 비활성화와 연결 종료 시 닫기를 확인했다.",
+        "testedScope": "두 Spring Security 앱에서 HTTP 필터가 허용해도 메서드 인가가 403을 반환하는 경로를 확인했다. 호출 전·후 거부를 실제 JDBC 횟수로 구분하고 상속 역할 비교, 기본 숨김과 이력 상한을 확인했다.",
         "publicEvidence": [
-          "src/spring/security-trace.js",
-          "runtime/jpa-observer/src/rocketbrain/observer/SecurityTraceRuntime.java",
-          "test/spring-security-trace-host.js"
+          "runtime/jpa-observer/src/rocketbrain/observer/MethodSecurityTrace.java",
+          "test/spring-method-security-host.js",
+          "docs/spring-security-filter-trace.md"
         ],
         "originalProductParityVerified": false
       }
@@ -5245,27 +5242,24 @@
       "category": "쿼리 실행·세션",
       "feature": "전체 SQL 로그·메타데이터 요청 기록",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "선택적으로 드라이버에 전달된 콘솔·스크립트·메타데이터 요청의 분류, 상관 ID, 시각·시간·상태를 로컬 메모리에서 조회한다.",
-      "remaining": [
-        "특수 관리·DDL과 직접 드라이버 제어 전반 및 영속 감사 정책이 남는다."
-      ],
+      "scope": "관리되는 MySQL·MariaDB 콘솔, 카탈로그와 드라이버 작업, 트랜잭션, 검토된 DDL·권한 활동을 한 곳에서 추적한다. 선택한 워크스페이스에서 최근 이력을 로컬에 보관하거나 끄고 비울 수 있다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.33-installed-coverage",
+        "state": "v0.73-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.33.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 JDBC 프로젝트에서 두 서버의 쿼리·바인딩 DML·메타데이터, 취소와 실패를 관찰했다. 리터럴·바인딩 값·연결 설정이 기록에 없음을 확인했다.",
+        "testedScope": "두 실제 DB에서 디자이너 DDL, 암호를 포함하는 승인된 계정 생성, 카탈로그와 세션 작업이 유형만 남기는 것을 확인했다. 메타데이터 호출이 몰려도 최근 제출 변경이 유지됐고 보관 설정, 초기화 및 비활성화를 확인했다.",
         "publicEvidence": [
           "src/db/activity-log.js",
           "src/db/activity-log-vscode.js",
-          "src/db/mysql.js",
-          "test/activity-log-host.js"
+          "test/sql-activity-durable-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5469,8 +5463,8 @@
       "verification": {
         "state": "v0.72-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.72.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6509,27 +6503,25 @@
       "category": "2026.3 추가 범위",
       "feature": "DuckDB dialect·함수·introspection",
       "priority": "P3",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "공식 DuckDB CLI로 로컬 카탈로그의 테이블·뷰·열 타입을 읽고 DuckDB SQL과 함수 완성·Hover를 제공한다. 쿼리 결과에서 큰 정수와 소수값을 정확히 보존한다.",
-      "remaining": [
-        "외부 Parquet·CSV 등의 테이블 읽기와 확장 수명주기는 추가 지원이 필요하다."
-      ],
+      "scope": "공식 DuckDB CLI의 SQL과 실제 카탈로그·함수를 탐색한다. 사용자가 선택한 로컬 CSV·Parquet를 읽기 전용으로 표본 조회하며 공식 서명된 워크스페이스 확장을 설치·활성화·갱신·제거한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.45-installed-coverage",
+        "state": "v0.73-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.45.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "DuckDB 1.5.6과 두 실제 Spring·DB 환경에서 같은 로컬 파일의 FROM-first·QUALIFY, 중첩 타입, 함수 오버로드, 결과 제한과 에디터 동작을 확인했다. 파일 체크섬을 보존했다.",
+        "testedScope": "두 Spring·DB 설치 환경에서 실제 DuckDB 1.5.6의 CSV와 타입 있는 Parquet를 열고 큰 정수, DECIMAL, 중첩 타입을 확인했다. 두 공식 확장을 설치해 읽기 쿼리에서 사용하고 갱신·제거했다. 깊은 Windows 경로, 원본 파일 보존, 일반 쿼리의 외부 파일 접근 차단을 확인했다.",
         "publicEvidence": [
-          "src/db/duckdb-vscode.js",
-          "media/duckdb.tmLanguage.json",
-          "test/duckdb-fixture.js",
-          "test/duckdb-host.js"
+          "src/db/duckdb-cli.js",
+          "src/db/duckdb-extensions.js",
+          "test/duckdb-host.js",
+          "test/duckdb.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6550,8 +6542,8 @@
       "verification": {
         "state": "v0.72-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.72.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6625,8 +6617,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "4c46df55ecff2cedea47e75dad0b2dbb635358cc640e2c26260e65d156881877",
-    "sourceManifestSha256": "f4b665cb503f782551946588a9d7c636ca0ca81740161971901501832011371b",
+    "vsixSha256": "4b0a0d2a45f989dc560020e1f66847bfc294449fc09aaa26b873cc8c816dc295",
+    "sourceManifestSha256": "298741c5e516235cd41f2101eedc8403bfe9d8e2590a63e890b285fbe1ce8b4a",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6640,18 +6632,28 @@
   },
   "stateChanges": [
     {
-      "id": "DG-059",
+      "id": "IDEA-006",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-052",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-093",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1630,
-    "pass": 1530,
+    "tests": 1641,
+    "pass": 1537,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 100,
+    "skipped": 104,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

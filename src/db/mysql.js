@@ -4,7 +4,7 @@ const {SchemaObjectEditor}=require('./object-editor');
 
 const { performance } = require('node:perf_hooks');
 const { validateQuery, validateReadQuery, parameters, tokenize } = require('./sql-policy');
-const { operationOf, outcomeOf } = require('./activity-log');
+const { operationOf, outcomeOf, driverActivity } = require('./activity-log');
 const { readMetadata, attachCheckMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
 const { readCatalogRefresh } = require('./catalog-refresh');
 const { readRelatedCatalog } = require('./related-rows');
@@ -322,22 +322,37 @@ class MysqlService {
       return Promise.reject(protectionError('This connection profile is locked to read-only mode.'));
     }
     return new Promise((resolve, reject) => {
-      let finished = false;
+      let finished = false, reportOutcome, outcome;
       const finish = (error, result) => {
         if (finished) return;
         finished = true; clearTimeout(timer);
         if (session.active === active) session.active = null;
+        outcome = outcomeOf(error && (error.code || true));
+        reportOutcome?.(outcome);
         if (error) reject(safeError(error)); else resolve(result);
       };
       const active = { mayWrite: false, abort: finish };
       session.active = active;
       const timer = setTimeout(() => this._lose(session, fail('ROCKETBRAIN_TIMEOUT', 'The session control timed out. Reconnect explicitly.')), timeoutMs);
-      try { session.connection.query(sql, (error, result) => {
-        if (error?.fatal) this._lose(session, safeError(error));
-        else finish(error, result);
-      }); }
+      try {
+        session.connection.query(sql, (error, result) => {
+          if (error?.fatal) this._lose(session, safeError(error));
+          else finish(error, result);
+        });
+        reportOutcome = this._activity(session, driverActivity(sql));
+        if (finished) reportOutcome?.(outcome);
+      }
       catch (error) { if (error?.fatal) this._lose(session, safeError(error)); else finish(error); }
     });
+  }
+  _activity(session, hint) {
+    try {
+      const finish = this._reportActivity?.(session, hint);
+      if (typeof finish === 'function') return status => {
+        try { finish(status); } catch { /* Activity reporting must never change the database outcome. */ }
+      };
+    } catch { /* A disabled or unavailable log is independent of SQL dispatch. */ }
+    return undefined;
   }
   async _refreshState(session) {
     // mysql2's public streaming SELECT events omit EOF status. DO 0 is a
@@ -553,8 +568,8 @@ class MysqlService {
       const stop = error => this._lose(session, error, mayWrite);
       const timer = setTimeout(() => stop(routineCall.fail('TIMEOUT', 'The procedure exceeded its time limit and its connection was closed.')), timeoutMs);
       try {
-        try { reportOutcome = this._reportActivity?.(session, { category: 'procedure', operation: 'CALL' }); } catch { /* Activity is independent. */ }
         const command = session.connection.execute({ sql, values, rowsAsArray: true });
+        reportOutcome = this._activity(session, { category: 'procedure', operation: 'CALL' });
         collectRoutineResults(command, { maxRows, convertCell: cellValue, stop, finish: (error, result) => {
           if (error?.fatal) stop(safeError(error)); else finish(error, result);
         } });
@@ -782,9 +797,7 @@ class MysqlService {
         const options = { sql, rowsAsArray: true, typeCast: preserveGeometry };
         const query = values.length ? session.connection.execute({ ...options, values })
           : session.connection.query(options);
-        if (activity) {
-          try { reportOutcome = this._reportActivity?.(session, activity); } catch { /* Recording is independent of the query. */ }
-        }
+        reportOutcome = this._activity(session, activity || driverActivity(sql));
         query.on('fields', fields => {
           if (finished || !fields) return;
           result.columns = fields.map(field => String(field.name));

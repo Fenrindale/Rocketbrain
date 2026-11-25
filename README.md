@@ -79,7 +79,7 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 **Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다.
 
-**Inspect Spring Security Filter Trace**는 관찰을 켠 로컬 앱에서 요청별 매처 순서, 선택된 체인, 실제 실행에 들어간 필터와 관찰된 인가 결과를 표시합니다. [Spring Security 추적 설정](docs/spring-security-filter-trace.md)
+**Inspect Spring Security Filter Trace**는 관찰을 켠 로컬 앱에서 요청별 매처 순서, 선택된 체인, 실제 실행에 들어간 필터와 관찰된 인가 결과를 표시합니다. 메서드 추적을 켜면 호출 전·후 판단과 실제 역할 비교 근거도 확인할 수 있습니다. [Spring Security 추적 설정](docs/spring-security-filter-trace.md)
 
 ### Quarkus Maven
 
@@ -273,7 +273,8 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 
 **Track SQL Console as Draft**로 보관을 시작하면 편집 중인 SQL과 선택 영역이 로컬에 갱신됩니다. 닫거나 재시작한 뒤 **Restore SQL Draft**에서 오프라인으로 이어서 편집합니다. [SQL 콘솔 초안 복원](docs/sql-draft-recovery.md)
 
-- **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. 외부 파일 접근과 쓰기는 차단하며 결과는 표본으로 표시합니다.
+- **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. **Preview Local CSV or Parquet with DuckDB**는 직접 선택한 파일 하나의 열 타입과 행 표본을 별도 읽기 작업으로 표시합니다. 일반 쿼리의 외부 파일 접근과 쓰기는 차단합니다. **Inspect DuckDB Extensions**는 현재 바이너리의 설치·로드 상태와 버전을 보여 줍니다.
+- **Manage Workspace DuckDB Extension**에서 공식 `tpch`·`tpcds` 확장의 설치·업데이트·사용·제거를 관리합니다. 다운받은 파일은 DuckDB로 서명과 실행 호환성을 확인한 뒤 워크스페이스 전용 저장소에 둡니다. 활성화한 확장은 현재 DB 접속에 적용되며, 사용자 SQL의 외부 파일 접근 차단은 유지합니다.
 - **Add JDBC Driver**에서 별도 JDK와 공급사 JAR를 사용합니다. 드라이버 클래스와 SHA-256을 검토해 승인하고, **Manage JDBC Profiles**로 연결한 뒤 카탈로그와 읽기 쿼리를 사용할 수 있습니다. [사용자 지정 JDBC 드라이버 문서](docs/jdbc-drivers.md)
 - 연결 프로필에는 TCP, Unix 도메인 소켓, Windows 명명된 파이프 중 실행 환경과 맞는 전송을 선택합니다. 공유 프로필에는 비밀번호와 로컬 경로를 담지 않으며, 가져온 로컬 연결의 주소는 해당 컴퓨터에서 입력합니다.
 - **Save Database Metadata for Offline Use**로 카탈로그의 테이블·뷰와 열을 작업 공간에 저장합니다. 연결을 끊고 **Open Cached Database Metadata**를 선택하면 캡처 시각과 함께 SQL 완성에 사용합니다. 같은 연결로 돌아오면 현재 구조를 확인하고 바뀐 캡처를 무효화합니다.
@@ -301,7 +302,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - 계획 비교에서 한 연산자에 가능한 대응이 여러 개면 후보의 위치와 접근 근거를 볼 수 있습니다. 비교 화면에서 대응을 선택하거나 제외하고 초기화할 수 있습니다.
 - 계획 비교의 **Save review**와 **Load review**는 결정과 두 캡처를 확인하는 정보를 JSON에 저장하고 다시 적용합니다. 작성한 VS Code 프로필에서 저장한 두 측정 시리즈를 같은 순서로 열면 검토를 불러올 수 있습니다.
 - 다른 프로필에서는 저장한 두 측정 시리즈를 같은 순서로 열고 비교 화면의 **Review shared file**에서 받은 검토를 엽니다. 캡처와 후보가 맞으면 항목별로 승인하거나 건너뛸 수 있습니다. 승인한 결정은 받는 프로필의 비교에 함께 적용됩니다.
-- **Show SQL Activity Log**에서 작업 공간의 로컬 기록을 선택적으로 켭니다. 콘솔·스크립트·메타데이터 요청의 상태와 소요 시간이 메모리에 기록되며 SQL 원문·변수 값은 보관하지 않습니다. **Browse Database Object Names**에서는 테이블·뷰 이름을 먼저 읽고 선택한 객체의 열과 인덱스를 조회합니다.
+- **Show SQL Activity Log**에서 MySQL·MariaDB 워크벤치의 콘솔, 메타데이터, DDL, 권한 및 세션 요청을 기록합니다. **Keep history in this workspace**를 선택하면 최근 최대 400개를 다시 열 수 있습니다. 내부 메타데이터와 상태 조회는 최대 100개를 기록하고, 반복 조회가 DDL·권한 변경·콘솔 실행 기록을 밀어내지 않도록 합니다. 재시작 당시 끝나지 않은 요청은 결과 미확인으로 표시합니다. SQL 원문, 변수 값, 연결 설정과 서버 오류 텍스트는 기록에서 제외됩니다. **Browse Database Object Names**에서는 테이블·뷰 이름을 먼저 읽고 선택한 객체의 열과 인덱스를 조회합니다.
 - 결과 탭에 이름을 붙이거나 고정하고, 보관된 스크립트 결과에서 각 문장의 캡처를 다시 엽니다. 테이블 필터는 중첩 AND/OR와 타입별 열 검색을 지원하며, 저장한 조건을 같은 연결·테이블에서 다시 선택할 수 있습니다.
 - **Generate JPA Entity from Table**은 현재 스키마의 열과 기본 키에서 Jakarta Persistence 클래스를 만듭니다. 선택한 외래 키와 같은 프로젝트의 대상 엔티티를 대조해 `@ManyToOne` 또는 `@OneToOne`을 추가할 수 있습니다. 스칼라 필드 또는 연관 필드 중 하나를 쓰기 소유자로 지정하고, 적용 전에 카탈로그와 Java 원본을 다시 확인합니다.
 - 같은 명령에서 기존 자식 엔티티의 명시적 `@ManyToOne` 필드를 확인해 역방향 `@OneToMany(mappedBy)`를 생성합니다. 두 외래 키가 기본 키를 구성하는 연결 테이블에서는 소유 측 `@ManyToMany`를 생성합니다. 검토한 새 엔티티 파일에 적용합니다.

@@ -3,6 +3,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { createExtensionManager } = require('./duckdb-extensions');
 
 const timeoutMs = 12000;
 const resultLimit = 4 * 1024 * 1024;
@@ -10,6 +11,7 @@ const diagnosticLimit = 8192;
 const maxQueryBytes = 64 * 1024;
 const maxColumns = 80;
 const maxCellCharacters = 2048;
+const maxExternalFileBytes = 1024n * 1024n * 1024n;
 const fail = (code, message) => Object.assign(new Error(message), { code: 'ROCKETBRAIN_DUCKDB_' + code });
 const sqlText = value => "decode(from_hex('" + Buffer.from(value, 'utf8').toString('hex') + "'))";
 
@@ -84,16 +86,47 @@ async function localFile(file, description) {
 
 async function fileStamp(file) {
   const info = await fs.stat(file, { bigint: true });
-  return [info.dev, info.ino, info.size, info.mtimeNs].join(':');
+  return stamp(info);
 }
+const stamp = info => [info.dev, info.ino, info.size, info.mtimeNs].join(':');
 
-async function queryRows(client, file, sql, options) {
-  const text = await run(client, ['-batch', '-bail', '-no-init', '-readonly', '-safe', '-json', file], sql + ';\n', options);
+async function readRows(client, args, sql, options) {
+  const text = await run(client, args, sql + ';\n', options);
   try {
     const data = JSON.parse(text.trim());
     if (!Array.isArray(data)) throw Error('not an array');
     return data;
   } catch { throw fail('PROTOCOL', 'The DuckDB client returned an unexpected result.'); }
+}
+
+function resultLimitFor(options) {
+  const maxRows = options.maxRows ?? 200;
+  if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > 500) {
+    throw fail('ROWS', 'Use a DuckDB result limit between one and 500 rows.');
+  }
+  return maxRows;
+}
+
+async function sampleRelation(engine, expression, opts) {
+  const maxRows = resultLimitFor(opts);
+  const schema = await engine('DESCRIBE ' + expression, opts);
+  if (!schema.length || schema.length > maxColumns) throw fail('COLUMNS', 'Select a query with between one and 80 result columns.');
+  const names = schema.map((value, index) => 'c' + index);
+  const expressions = names.map(name => `LEFT(CAST(${name} AS VARCHAR), ${maxCellCharacters + 1}) AS ${name}`);
+  const data = await engine(`WITH rb_result(${names.join(',')}) AS (${expression})
+    SELECT ${expressions.join(',')} FROM rb_result LIMIT ${maxRows + 1}`, opts);
+  let clippedCells = 0;
+  const rows = data.slice(0, maxRows).map(row => names.map(name => {
+    const value = row[name];
+    if (value === null || value === undefined) return null;
+    if (value.length <= maxCellCharacters) return value;
+    const codepoints = Array.from(value);
+    if (codepoints.length <= maxCellCharacters) return value;
+    clippedCells++;
+    return codepoints.slice(0, maxCellCharacters).join('') + '…';
+  }));
+  return { columns: schema.map(column => ({ name: column.column_name, type: column.column_type })),
+    rows, clippedCells, truncated: data.length > maxRows };
 }
 
 async function openDuckDb(clientPath, databasePath, options = {}) {
@@ -104,10 +137,22 @@ async function openDuckDb(clientPath, databasePath, options = {}) {
   const database = await localFile(databasePath, 'DuckDB database');
   const executableStamp = await fileStamp(client);
   const version = versionOf(await run(client, ['-version'], undefined, { ...options, limit: 5000 }));
-  const engine = async (sql, opts) => {
+  const checkClient = async () => {
     if (executableStamp !== await fileStamp(client)) throw fail('VERSION', 'The selected DuckDB client changed. Open the database again.');
+  };
+  const extensions = createExtensionManager({ directory: options.extensionDirectory, version, read: async (args, sql, opts) => {
+    await checkClient();
+    return readRows(client, args, sql, opts);
+  } });
+  const engine = async (sql, opts) => {
+    await checkClient();
     const before = await fileStamp(database);
-    const rows = await queryRows(client, database, sql, opts);
+    const rows = await extensions.withLoad(load => {
+      const args = ['-batch', '-bail', '-no-init', '-readonly'];
+      if (!load) args.push('-safe');
+      const statement = load ? load + ' SET enable_external_access=false; SET lock_configuration=true;\n' + sql : sql;
+      return readRows(client, [...args, '-json', database], statement, opts);
+    });
     if (before !== await fileStamp(database)) throw fail('CHANGED', 'The DuckDB database changed during this inspection. Refresh the query or catalog.');
     return rows;
   };
@@ -155,32 +200,39 @@ async function openDuckDb(clientPath, databasePath, options = {}) {
     if (typeof sql !== 'string' || !sql.trim() || sql.includes('\0') || Buffer.byteLength(sql) > maxQueryBytes) {
       throw fail('INPUT', 'Enter a single DuckDB query up to 64 KiB.');
     }
-    const maxRows = opts.maxRows ?? 200;
-    if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > 500) throw fail('ROWS', 'Use a DuckDB result limit between one and 500 rows.');
     const before = await fileStamp(database);
     const expression = `SELECT * FROM query(${sqlText(sql)})`;
-    const schema = await engine('DESCRIBE ' + expression, opts);
-    if (!schema.length || schema.length > maxColumns) throw fail('COLUMNS', 'Select a query with between one and 80 result columns.');
-    const names = schema.map((value, index) => 'c' + index);
-    const expressions = names.map(name => `LEFT(CAST(${name} AS VARCHAR), ${maxCellCharacters + 1}) AS ${name}`);
-    const data = await engine(`WITH rb_result(${names.join(',')}) AS (${expression})
-      SELECT ${expressions.join(',')} FROM rb_result LIMIT ${maxRows + 1}`, opts);
+    const result = await sampleRelation(engine, expression, opts);
     if (before !== await fileStamp(database)) throw fail('CHANGED', 'The DuckDB schema changed during the query. Run it again.');
-    let clippedCells = 0;
-    const rows = data.slice(0, maxRows).map(row => names.map(name => {
-      const value = row[name];
-      if (value === null || value === undefined) return null;
-      if (value.length <= maxCellCharacters) return value;
-      const codepoints = Array.from(value);
-      if (codepoints.length <= maxCellCharacters) return value;
-      clippedCells++;
-      return codepoints.slice(0, maxCellCharacters).join('') + '…';
-    }));
-    return { columns: schema.map(column => ({ name: column.column_name, type: column.column_type })),
-      rows, clippedCells, truncated: data.length > maxRows };
+    return result;
   }
 
-  return { source: { client, path: database, name: observed.database, version }, catalog, describe, functions, query };
+  async function previewFile(file, opts = {}) {
+    const selected = await localFile(file, 'CSV or Parquet');
+    const kind = path.extname(selected).toLowerCase().slice(1);
+    if (!['csv', 'parquet'].includes(kind) || /[*?\[\]{}]/.test(selected)) {
+      throw fail('PATH', 'Choose one CSV or Parquet file with a path that contains no glob characters.');
+    }
+    const stat = await fs.stat(selected, { bigint: true });
+    if (stat.size === 0n || stat.size > maxExternalFileBytes) throw fail('INPUT', 'Choose a nonempty file up to 1 GiB.');
+    const before = stamp(stat);
+    const fileValue = sqlText(process.platform === 'win32' ? selected.replaceAll('\\', '/') : selected);
+    const setup = `SET autoload_known_extensions=false; SET autoinstall_known_extensions=false;
+      SET threads=2; SET memory_limit='256MB'; SET max_temp_directory_size='0B';
+      SET allowed_paths=[${fileValue}]; SET enable_external_access=false; SET lock_configuration=true;\n`;
+    const isolated = async (sql, options) => {
+      await checkClient();
+      if (before !== await fileStamp(selected)) throw fail('CHANGED', 'The selected data file changed. Choose it again.');
+      return readRows(client, ['-batch', '-bail', '-no-init', '-json', ':memory:'], setup + sql, options);
+    };
+    const relation = kind === 'csv' ? `read_csv(${fileValue}, sample_size=2048)` : `read_parquet(${fileValue})`;
+    const result = await sampleRelation(isolated, 'SELECT * FROM ' + relation, opts);
+    if (before !== await fileStamp(selected)) throw fail('CHANGED', 'The selected data file changed. Choose it again.');
+    return { ...result, name: path.basename(selected), kind };
+  }
+
+  return { source: { client, path: database, name: observed.database, version }, catalog, describe, functions, query, previewFile,
+    extensions: extensions.inventory, manageExtension: extensions.manage };
 }
 
 module.exports = { openDuckDb };

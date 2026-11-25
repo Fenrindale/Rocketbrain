@@ -5,6 +5,7 @@ const { createActivityLog, categories, statuses } = require('./activity-log');
 
 const OPEN_LOG = 'rocketbrain.sql.activityLog';
 const PREFERENCE = 'rocketbrain.sql.activityLog.enabled.v1';
+const HISTORY = 'rocketbrain.sql.activityLog.workspaceHistory.v1';
 
 function logHtml(nonce) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -19,8 +20,8 @@ select{color:var(--vscode-input-foreground);background:var(--vscode-input-backgr
 table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:.4rem .55rem;border-bottom:1px solid var(--vscode-panel-border);white-space:nowrap}thead{background:var(--vscode-editorWidget-background)}tbody tr:hover{background:var(--vscode-list-hoverBackground)}code{font-family:var(--vscode-editor-font-family,monospace)}
 [data-status="failed"],[data-status="timeout"]{color:var(--vscode-errorForeground)}[data-status="cancelled"],[data-status="limited"]{color:var(--vscode-editorWarning-foreground)}.duration{text-align:right;font-variant-numeric:tabular-nums}.message{color:var(--vscode-errorForeground)}
 </style></head><body>
-<header><h1>SQL Activity</h1><div class="controls"><button id="toggle" type="button" disabled>Enable for workspace</button><button id="clear" type="button" disabled>Clear log</button></div></header>
-<p>Records MySQL and MariaDB console, script and metadata requests. SQL text, values and server errors are omitted.</p>
+<header><h1>SQL Activity</h1><div class="controls"><label><input id="persist" type="checkbox" disabled> Keep history in this workspace</label><button id="toggle" type="button" disabled>Enable for workspace</button><button id="clear" type="button" disabled>Clear log</button></div></header>
+<p>Records MySQL and MariaDB console, driver, metadata, session and administration requests. SQL text, values and server errors are omitted.</p>
 <p id="state" role="status">Loading activity…</p><p id="message" class="message" role="alert" hidden></p>
 <div id="filters" class="filters" hidden>
 <label>Category <select id="category"><option value="">All categories</option></select></label>
@@ -32,7 +33,7 @@ table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:.4rem .5
 const host = acquireVsCodeApi();
 const categoryNames = ${JSON.stringify(categories)}, statusNames = ${JSON.stringify(statuses)};
 const state = document.getElementById('state'), message = document.getElementById('message');
-const toggle = document.getElementById('toggle'), clear = document.getElementById('clear');
+const toggle = document.getElementById('toggle'), clear = document.getElementById('clear'), persist = document.getElementById('persist');
 const category = document.getElementById('category'), status = document.getElementById('status'), connection = document.getElementById('connection');
 const filters = document.getElementById('filters'), table = document.getElementById('table'), body = document.querySelector('tbody');
 let snapshot;
@@ -53,6 +54,8 @@ function render() {
   toggle.textContent = enabled ? 'Disable and clear' : 'Enable for workspace';
   toggle.classList.toggle('enable', !enabled);
   toggle.disabled = !available;
+  persist.checked = snapshot.retention === 'workspace';
+  persist.disabled = !available || !enabled;
   clear.disabled = !entries.length;
   filters.hidden = table.hidden = !enabled;
   const names = Object.fromEntries(entries.map(row => [row.connection, shortId(row.connection)]));
@@ -60,8 +63,10 @@ function render() {
   const shown = entries.filter(row => (!category.value || row.category === category.value)
     && (!status.value || row.status === status.value) && (!connection.value || row.connection === connection.value));
   state.textContent = !available ? 'Open a trusted workspace to record SQL activity.' : !enabled ? 'Logging is off.' :
-    shown.length + ' of ' + entries.length + ' requests shown · ' + limit + ' entries maximum in memory' +
-    (dropped ? ' · ' + dropped + ' older requests removed' : '');
+    shown.length + ' of ' + entries.length + ' requests shown · ' + limit + ' entries maximum ' +
+    (snapshot.retention === 'workspace' ? 'in workspace history' : 'in memory') +
+    (dropped ? ' · ' + dropped + ' older requests removed' : '') +
+    (snapshot.persistenceFailure ? ' · Workspace history could not be saved' : '');
   const rows = document.createDocumentFragment();
   for (const row of shown) {
     const item = document.createElement('tr');
@@ -83,6 +88,7 @@ function render() {
 for (const control of [category, status, connection]) control.addEventListener('change', render);
 toggle.addEventListener('click', () => { toggle.disabled = true; host.postMessage({ type: snapshot.enabled ? 'disable' : 'enable' }); });
 clear.addEventListener('click', () => host.postMessage({ type: 'clear' }));
+persist.addEventListener('change', () => { persist.disabled = true; host.postMessage({ type: 'retention', value: persist.checked ? 'workspace' : 'temporary' }); });
 window.addEventListener('message', event => {
   if (event.data?.type === 'snapshot') { snapshot = event.data.value; message.hidden = true; render(); }
   if (event.data?.type === 'error') { message.textContent = event.data.value; message.hidden = false; render(); }
@@ -92,14 +98,33 @@ host.postMessage({ type: 'ready' });
 }
 
 function registerSqlActivity(context, vscode) {
-  let panel, timer, changing = false, disposed = false;
+  const stored = context.workspaceState.get(HISTORY);
+  let keepHistory = stored?.version === 1;
+  let panel, timer, saveTimer, disposePromise, changing = false, disposed = false, persistenceFailure = false;
+  let writes = Promise.resolve();
   const allowed = () => vscode.workspace.isTrusted && Boolean(vscode.workspace.workspaceFile || vscode.workspace.workspaceFolders?.length);
-  const publish = () => panel?.webview.postMessage({ type: 'snapshot', value: log.snapshot() });
-  const log = createActivityLog({ enabled: context.workspaceState.get(PREFERENCE) === true, canRecord: allowed,
+  const snapshot = () => ({ ...log.snapshot(), retention: keepHistory ? 'workspace' : 'temporary', persistenceFailure });
+  const publish = () => panel?.webview.postMessage({ type: 'snapshot', value: snapshot() });
+  const log = createActivityLog({ enabled: context.workspaceState.get(PREFERENCE) === true, canRecord: allowed, history: stored,
     onChange() {
-      if (!panel || timer) return;
-      timer = setTimeout(() => { timer = undefined; void publish(); }, 80);
+      if (panel && !timer) timer = setTimeout(() => { timer = undefined; void publish(); }, 80);
+      if (keepHistory && allowed() && !saveTimer) {
+        saveTimer = setTimeout(() => { void flush().catch(() => {}); }, 150);
+        saveTimer.unref?.();
+      }
     } });
+
+  function flush(remove = false) {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
+    if (!allowed() || (!keepHistory && !remove)) return writes;
+    const { entries, dropped } = log.snapshot();
+    const value = remove ? undefined : { version: 1, entries, dropped };
+    const saving = writes.then(() => context.workspaceState.update(HISTORY, value));
+    writes = saving.then(() => { persistenceFailure = false; }, () => { persistenceFailure = true; });
+    void writes.then(() => publish()).catch(() => {});
+    return saving;
+  }
 
   async function setEnabled(value) {
     if (disposed || !allowed()) throw Error('Open a trusted workspace to manage SQL activity.');
@@ -109,13 +134,33 @@ function registerSqlActivity(context, vscode) {
       if (!value) log.setEnabled(false);
       await context.workspaceState.update(PREFERENCE, value);
       if (!disposed && allowed()) log.setEnabled(value);
-      return log.snapshot();
+      await flush();
+      return snapshot();
     } finally { changing = false; }
+  }
+
+  async function setRetention(value) {
+    if (disposed || !allowed() || !log.snapshot().enabled || changing || !['temporary', 'workspace'].includes(value)) {
+      throw Error('Enable SQL Activity in a trusted workspace before changing its retention.');
+    }
+    const before = keepHistory;
+    keepHistory = value === 'workspace';
+    changing = true;
+    try { await flush(!keepHistory); return snapshot(); }
+    catch (error) { keepHistory = before; throw error; }
+    finally { changing = false; }
+  }
+
+  async function clear() {
+    if (disposed || !allowed()) throw Error('Open a trusted workspace to clear SQL activity.');
+    log.clear();
+    await flush();
+    return snapshot();
   }
 
   function open() {
     if (disposed) throw Error('The SQL Activity view has closed.');
-    if (panel) { panel.reveal(); return log.snapshot(); }
+    if (panel) { panel.reveal(); return snapshot(); }
     const next = vscode.window.createWebviewPanel('rocketbrain.sqlActivity', 'SQL Activity', vscode.ViewColumn.Beside,
       { enableScripts: true, localResourceRoots: [] });
     panel = next;
@@ -124,19 +169,28 @@ function registerSqlActivity(context, vscode) {
       try {
         if (message?.type === 'enable') await setEnabled(true);
         else if (message?.type === 'disable') await setEnabled(false);
-        else if (message?.type === 'clear') log.clear();
+        else if (message?.type === 'clear') await clear();
+        else if (message?.type === 'retention') await setRetention(message.value);
         else if (message?.type !== 'ready') return;
         await publish();
       } catch { await next.webview.postMessage({ type: 'error', value: 'Could not update the workspace activity preference.' }); }
     });
     next.webview.html = logHtml(randomBytes(24).toString('base64'));
-    return log.snapshot();
+    return snapshot();
   }
 
-  function dispose() { disposed = true; clearTimeout(timer); panel?.dispose(); log.dispose(); }
+  function dispose() {
+    if (disposePromise) return disposePromise;
+    disposed = true;
+    clearTimeout(timer);
+    panel?.dispose();
+    disposePromise = flush().catch(() => {});
+    log.dispose();
+    return disposePromise;
+  }
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_LOG, open), { dispose });
-  return { setEnabled, snapshot: log.snapshot, clear: log.clear, createReporter: log.createReporter,
+  return { setEnabled, setRetention, snapshot, clear, flush: () => flush(), createReporter: log.createReporter,
     close() { panel?.dispose(); }, dispose };
 }
 
-module.exports = { registerSqlActivity, logHtml, OPEN_LOG };
+module.exports = { registerSqlActivity, logHtml, OPEN_LOG, HISTORY };

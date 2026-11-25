@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.72.0",
+  "version": "0.73.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -193,6 +193,9 @@
       { "command": "rocketbrain.duckdb.run", "title": "Run Read-Only DuckDB Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected && editorLangId == duckdb-sql" },
       { "command": "rocketbrain.duckdb.browse", "title": "Browse DuckDB Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.functions", "title": "Find DuckDB Functions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
+      { "command": "rocketbrain.duckdb.previewFile", "title": "Preview Local CSV or Parquet with DuckDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
+      { "command": "rocketbrain.duckdb.extensions", "title": "Inspect DuckDB Extensions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
+      { "command": "rocketbrain.duckdb.manageExtension", "title": "Manage Workspace DuckDB Extension", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.close", "title": "Close Local DuckDB", "category": "Rocketbrain", "enablement": "rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.mongodb.open", "title": "Connect to Local MongoDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.mongodb.browse", "title": "Browse MongoDB Collections", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
@@ -706,6 +709,8 @@
       { "command": "rocketbrain.java.extractField", "title": "Extract Java Field", "category": "Rocketbrain", "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.inlineMethod", "title": "Inline Java Method Call", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.extractMethod", "title": "Extract Java Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.editor.expandSelection", "title": "Expand Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
+      { "command": "rocketbrain.editor.shrinkSelection", "title": "Shrink Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       {
         "command": "rocketbrain.java.pullUpMembers",
         "title": "Pull Up Java Members",
@@ -1514,6 +1519,8 @@
       ]
     },
     "keybindings": [
+      { "command": "rocketbrain.editor.expandSelection", "key": "ctrl+k ctrl+shift+right", "mac": "cmd+k cmd+shift+right", "when": "editorTextFocus && isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
+      { "command": "rocketbrain.editor.shrinkSelection", "key": "ctrl+k ctrl+shift+left", "mac": "cmd+k cmd+shift+left", "when": "editorTextFocus && isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       {
         "command": "rocketbrain.runQuery",
         "key": "ctrl+enter",

@@ -6,6 +6,7 @@ const { canonicalValue } = require('./schema-conversion');
 const { boundedProjection } = require('./table-transfer-snapshot');
 const { newSession } = require('./import-stream');
 const { typedCell } = require('./grid');
+const { outcomeOf } = require('./activity-log');
 
 const legacySampleLimit = 32;
 const sampleLimit = 128;
@@ -221,11 +222,18 @@ function fullPageQuery(evidence, columns, types) {
 }
 
 async function inspectPage(db, session, query, values, page, types, check) {
-  const stream = session.connection.execute({ sql: query.sql(page.length), values, rowsAsArray: true }).stream({ highWaterMark: 1 });
+  const command = session.connection.execute({ sql: query.sql(page.length), values, rowsAsArray: true });
+  const report = db._activity?.(session, { category: 'transfer', operation: 'SELECT' });
+  let stream, finished;
+  try { stream = command.stream({ highWaterMark: 1 }); }
+  catch (error) { report?.(outcomeOf(error?.code || true)); throw error; }
   const active = { mayWrite: false, abort: error => stream.destroy(error) };
   session.active = active;
   const timer = setTimeout(() => {
-    if (session.connected) db._lose(session, fail('The destination page exceeded its read time.'));
+    if (session.connected) {
+      finished = 'timeout';
+      db._lose(session, fail('The destination page exceeded its read time.'));
+    }
   }, 15000);
   timer.unref?.();
   let fieldsValid = false, fieldsSeen = false;
@@ -249,10 +257,15 @@ async function inspectPage(db, session, query, values, page, types, check) {
     }
     check();
     if (!fieldsValid) throw fail('The destination page changed during comparison.');
+    finished = 'succeeded';
+  } catch (error) {
+    finished ||= outcomeOf(error?.code || true);
+    throw error;
   } finally {
     clearTimeout(timer);
     if (session.active === active) session.active = null;
     stream.destroy();
+    report?.(finished || 'failed');
   }
   const warnings = await db._stream(session, 'SHOW WARNINGS', [], { maxRows: 1, timeoutMs: 5000 }, false);
   if (warnings.truncated || warnings.rows.length) throw fail('The destination page returned server warnings.');

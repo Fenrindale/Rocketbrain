@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { fixture, verifyDuckDb } = require('./duckdb-fixture');
+const { fixture, verifyDuckDb, verifyFilePreviews, verifyExtensionCycle } = require('./duckdb-fixture');
 
 async function runDuckDbChecks(api, vscode, checks) {
   const binary = process.env.ROCKETBRAIN_DUCKDB_TEST_BIN;
@@ -31,4 +31,24 @@ async function runDuckDbChecks(api, vscode, checks) {
   return result;
 }
 
-module.exports = { runDuckDbChecks };
+async function runDuckDbExternalChecks(api, vscode, checks) {
+  const binary = process.env.ROCKETBRAIN_DUCKDB_TEST_BIN;
+  assert.ok(binary);
+  const commands = await vscode.commands.getCommands(true);
+  for (const action of ['previewFile', 'extensions', 'manageExtension']) assert.ok(commands.includes('rocketbrain.duckdb.' + action));
+  const evidence = await fixture(binary, async file => {
+    const connection=await api.duckdb.open(binary,file.database);
+    try {
+      const preview=await vscode.commands.executeCommand('rocketbrain.duckdb.previewFile',vscode.Uri.file(file.parquet));
+      assert.equal(preview.kind,'parquet');
+      const inventory=await vscode.commands.executeCommand('rocketbrain.duckdb.extensions');
+      assert.ok(inventory.some(row=>row.name==='parquet'&&row.loaded));
+      return { ...await verifyFilePreviews(api.duckdb,file), ...await verifyExtensionCycle(api.duckdb,file),
+        version:connection.version,nativeFilePreview:true,nativeExtensionInventory:true };
+    } finally { await vscode.commands.executeCommand('rocketbrain.duckdb.close'); }
+  });
+  checks.push('The installed extension previewed selected CSV and Parquet data and reproduced a signed DuckDB extension lifecycle in isolated workspace storage.');
+  return evidence;
+}
+
+module.exports = { runDuckDbChecks, runDuckDbExternalChecks };

@@ -38,7 +38,7 @@ async function buildSpringSecurityFixture() {
   return jar;
 }
 
-async function startSpringSecurityFixture(config,{trace=false}={}) {
+async function startSpringSecurityFixture(config,{trace=false,methodTrace=false,traceRoles=[],observerJar}={}) {
   const {home,java}=await javaRuntime();
   const selected=process.env.ROCKETBRAIN_SPRING_SECURITY_JAR ?? jar;
   await fs.access(selected);
@@ -65,13 +65,15 @@ async function startSpringSecurityFixture(config,{trace=false}={}) {
   }
   if(trace){
     const output=path.join(root,'test-output');
-    const {jarPath}=await require('../../scripts/jpa-observer-build').buildObserver({target:path.join(output,'spring-security-observer'),javaHome:home});
+    const jarPath=observerJar??(await require('../../scripts/jpa-observer-build')
+      .buildObserver({target:path.join(output,'spring-security-observer'),javaHome:home})).jarPath;
+    await fs.access(jarPath);
     const directory=await fs.mkdtemp(path.join(output,'spring-security-trace-'));
     const token=randomBytes(32).toString('hex'),tokenFile=path.join(directory,'token'),descriptorFile=path.join(directory,'connection.json'),configFile=path.join(directory,'observer.json');
     traceFiles={directory,token,tokenFile,descriptorFile,configFile};
     try{
       await fs.writeFile(tokenFile,token,{flag:'wx',mode:0o600});
-      await fs.writeFile(configFile,JSON.stringify({tokenFile,descriptorFile,securityTrace:true}),{flag:'wx',mode:0o600});
+      await fs.writeFile(configFile,JSON.stringify({tokenFile,descriptorFile,securityTrace:true,securityMethodTrace:methodTrace,securityTraceRoles:traceRoles}),{flag:'wx',mode:0o600});
       agentArgs=['--add-modules=jdk.httpserver','-javaagent:'+jarPath+'=config='+pathToFileURL(configFile).href];
     }catch(error){await discardTraceFiles();throw error;}
   }
@@ -97,7 +99,7 @@ async function startSpringSecurityFixture(config,{trace=false}={}) {
         const response=await fetch(baseUrl+'/ready',{signal:AbortSignal.timeout(1000)}).catch(()=>null);
         if (response?.ok && (await response.json()).ready===true) {
           const descriptor=traceFiles?JSON.parse(await fs.readFile(traceFiles.descriptorFile,'utf8')):null;
-          if(descriptor&&descriptor.securityTraceEnabled!==true)throw Error('Spring Security tracing was not enabled.');
+          if(descriptor&&(descriptor.securityTraceEnabled!==true||methodTrace&&descriptor.securityMethodTraceEnabled!==true))throw Error('The requested Spring Security tracing was not enabled.');
           return {baseUrl,operator,reviewer,viewer,auth,close,
             ...(descriptor?{observer:{url:descriptor.baseUrl,token:traceFiles.token,processId:descriptor.processId}}:{})};
         }

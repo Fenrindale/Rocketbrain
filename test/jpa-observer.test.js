@@ -33,6 +33,7 @@ test('explicit agent instruments real bytecode returns and throws, enforces bear
     child=spawn(binary('java'),['--add-modules','jdk.httpserver','-javaagent:'+artifact.jarPath+'=config='+require('node:url').pathToFileURL(config).href,'-cp',classes,'Probe'],{windowsHide:true,stdio:['pipe','pipe','pipe']});child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);const exit=new Promise(resolve=>child.once('exit',(code,signal)=>resolve({code,signal})));await until(()=>{if(child.exitCode!==null)throw Error('Observer JVM exited: '+stdout+' '+stderr);return fs.existsSync(descriptorFile)&&stdout.includes('APP_READY');},'observer startup').catch(error=>{throw Error(error.message+' stdout='+stdout+' stderr='+stderr);});const descriptor=JSON.parse(await fs.promises.readFile(descriptorFile,'utf8'));assert.match(descriptor.baseUrl,/^http:\/\/127\.0\.0\.1:\d+$/);assert.ok(!JSON.stringify(descriptor).includes(token));
     const request=(route,options={})=>fetch(descriptor.baseUrl+route,{...options,headers:{Authorization:'Bearer '+token,...options.headers},signal:AbortSignal.timeout(6000)});
     assert.equal(descriptor.securityTraceEnabled,false);
+    assert.equal(descriptor.securityMethodTraceEnabled,false);
     assert.deepEqual(await(await request('/security-trace')).json(),{enabled:false,state:'disabled',hooks:[],dropped:0,traces:[]});
     assert.equal(descriptor.consoleSelectEnabled,false);
     assert.equal(descriptor.consoleFetchSnapshotsEnabled,false);

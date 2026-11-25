@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.72.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.73.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 89 |
-| 부분 구현 | 113 |
+| 구현 | 92 |
+| 부분 구현 | 110 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **72.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **73.6%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.72에서는 Java의 여러 문장 Extract Method, Maven BOM 기반 Spring 의존성 편집, 두 DB의 연속 스크롤 및 조회 결과 보관을 검증했다. 상태가 바뀐 항목은 1개이고 가중 점수는 157점에서 157.5점으로 바뀌었다.
+v0.73에서는 Java·Kotlin·SQL의 의미 선택, Spring 메서드 인가 추적, DuckDB 파일·확장 관리와 DB 활동 기록을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 157.5점에서 159점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -26,7 +26,7 @@ v0.72에서는 Java의 여러 문장 Extract Method, Maven BOM 기반 Spring 의
 | IDEA-003 | IntelliJ IDEA | Search Everywhere 통합 검색 | 부분 구현 |
 | IDEA-004 | IntelliJ IDEA | 최근 파일·편집 위치·뒤로/앞으로 | VS Code 재사용 |
 | IDEA-005 | IntelliJ IDEA | 다중 커서·열 선택·일괄 편집 | VS Code 재사용 |
-| IDEA-006 | IntelliJ IDEA | 의미 기반 선택 확장·축소 | 부분 구현 |
+| IDEA-006 | IntelliJ IDEA | 의미 기반 선택 확장·축소 | 구현 |
 | IDEA-007 | IntelliJ IDEA | 문맥·타입 기반 코드 완성 | 부분 구현 |
 | IDEA-008 | IntelliJ IDEA | 파라미터 정보·빠른 문서 | 부분 구현 |
 | IDEA-009 | IntelliJ IDEA | Live Templates·Postfix 완성 | 구현 |
@@ -192,7 +192,7 @@ v0.72에서는 Java의 여러 문장 Extract Method, Maven BOM 기반 Spring 의
 | DG-049 | DataGrip | 트랜잭션 격리 수준 선택 | 구현 |
 | DG-050 | DataGrip | 실행 취소·connection 종료 | 구현 |
 | DG-051 | DataGrip | 쿼리 이력·검색·재실행 | 구현 |
-| DG-052 | DataGrip | 전체 SQL 로그·메타데이터 요청 기록 | 부분 구현 |
+| DG-052 | DataGrip | 전체 SQL 로그·메타데이터 요청 기록 | 구현 |
 | DG-053 | DataGrip | 즐겨찾기·저장 쿼리·다시 실행 | 구현 |
 | DG-054 | DataGrip | 여러 result set·탭 유지·고정 | 구현 |
 | DG-055 | DataGrip | EXPLAIN 원본·tree/table | 구현 |
@@ -233,7 +233,7 @@ v0.72에서는 Java의 여러 문장 Extract Method, Maven BOM 기반 Spring 의
 | DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 구현 |
 | DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 부분 구현 |
 | DG-092 | DataGrip | 서로 다른 data source의 cross-database SQL | 구현 |
-| DG-093 | DataGrip | DuckDB dialect·함수·introspection | 부분 구현 |
+| DG-093 | DataGrip | DuckDB dialect·함수·introspection | 구현 |
 | DG-094 | DataGrip | 미실행 SQL·최근 파일·Local History 복원 | 부분 구현 |
 | DG-095 | DataGrip | DataGrip 전체 창·도구창의 정확한 배치 | 호스트 구조 제약 |
 | DG-096 | DataGrip | SQL 단축키·명령·결과 panel 이동 | 부분 구현 |
