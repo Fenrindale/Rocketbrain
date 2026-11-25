@@ -2,6 +2,7 @@
 
 const { isDeepStrictEqual } = require('node:util');
 const { jarName } = require('./cookie-jar');
+const { parseClientCredentials,resolveClientCredentials,fetchAccessToken } = require('./oauth-client');
 
 const maxDocumentBytes = 512 * 1024;
 const maxResponseBytes = 2 * 1024 * 1024;
@@ -47,7 +48,7 @@ function requestAt(text, offset) {
   const variables = new Map();
   const derivations = new Map();
   const assertions = [];
-  let requestLine, bodyFile, cookieJar, bodyStart = selected.source.length, marker = 0;
+  let requestLine, bodyFile, cookieJar, oauth, bodyStart = selected.source.length, marker = 0;
   const headers = [];
   for (const line of text.slice(0,ranges[0].end).split(/\r?\n/)) {
     const declaration = /^@([A-Za-z_][A-Za-z0-9_.-]{0,79})\s*=\s*(.*)$/.exec(line);
@@ -59,6 +60,12 @@ function requestAt(text, offset) {
     const raw = line[0].replace(/\r?\n$/, '');
     const content = raw.trim();
     const end = line.index + line[0].length;
+    if (/^#\s*@oauth-client(?:\s|$)/i.test(content)) {
+      const directive=/^#\s*@oauth-client\s+(.+)$/i.exec(content);
+      if (!directive||oauth!==undefined) throw Error('Choose one @oauth-client configuration for this HTTP request.');
+      oauth=parseClientCredentials(directive[1]);
+      continue;
+    }
     if (/^#\s*@cookie-jar(?:\s|$)/i.test(content)) {
       const directive=/^#\s*@cookie-jar\s+(\S+)$/i.exec(content);
       if (!directive||cookieJar!==undefined||!jarName.test(directive[1])) throw Error('Choose one named HTTP cookie jar.');
@@ -130,6 +137,10 @@ function requestAt(text, offset) {
     headers.push([field,raw.slice(separator+1).trim()]);
   }
   if (!requestLine) throw Error('Place the cursor inside a request.');
+  if (oauth!==undefined && (['WEBSOCKET','GRPC'].includes(requestLine.method)||
+      headers.some(([name])=>name.toLowerCase()==='authorization'))) {
+    throw Error('Use @oauth-client with an HTTP request and no explicit Authorization header.');
+  }
   if (cookieJar!==undefined && (['WEBSOCKET','GRPC'].includes(requestLine.method)||
       headers.some(([name])=>name.toLowerCase()==='cookie'))) {
     throw Error('Use @cookie-jar with an HTTP request and no explicit Cookie header.');
@@ -145,7 +156,7 @@ function requestAt(text, offset) {
     throw Error('Open the WebSocket first, then send messages from its workbench commands.');
   }
   return { ...requestLine, headers, body, assertions, variables, derivations, start:marker,
-    ...(bodyFile!==undefined&&{bodyFile}), ...(cookieJar!==undefined&&{cookieJar}) };
+    ...(bodyFile!==undefined&&{bodyFile}), ...(cookieJar!==undefined&&{cookieJar}), ...(oauth&&{oauth}) };
 }
 
 function parseAssertion(source) {
@@ -365,6 +376,7 @@ async function resolveRequest(request, environment, readSecret, {schema=false,re
   }
   else body=await expand(request.body,true);
   if (bytes(body)+bytes(JSON.stringify(headers))>maxDocumentBytes) throw Error('The expanded request exceeds 512 KiB.');
+  const oauth=request.oauth&&await resolveClientCredentials(request.oauth,url,expand);
   const alternatives = new Set();
   for (const secret of secrets.values()) {
     alternatives.add(secret);
@@ -378,7 +390,7 @@ async function resolveRequest(request, environment, readSecret, {schema=false,re
   const redactions = patterns.length ? new RegExp(patterns.join('|'),'g') : null;
   const redact = value => redactions ? String(value).replace(redactions,'[redacted]') : String(value);
   const ready={ method:request.method,url,headers,body,assertions:request.assertions,redact,
-    ...(request.cookieJar!==undefined&&{cookieJar:request.cookieJar}) };
+    ...(request.cookieJar!==undefined&&{cookieJar:request.cookieJar}), ...(oauth&&{oauth}) };
   if (grpc) {
     if (!proto) throw Error('Set the Proto header to a .proto file in this workspace.');
     if (request.assertions.length) throw Error('HTTP assertions require an HTTP response.');
@@ -420,24 +432,41 @@ function jsonValue(value, path) {
   return value;
 }
 
-async function sendRequest(request, { signal,fetcher=fetch,cookieSession } = {}) {
+async function sendRequest(request, { signal,fetcher=fetch,cookieSession,beforeAuthenticatedRequest } = {}) {
   const started = performance.now();
   const timeout = AbortSignal.timeout(15000);
   const bounded = signal?AbortSignal.any([signal,timeout]):timeout;
+  const interrupted=()=>Error(signal?.aborted?'The HTTP request was cancelled.':'The HTTP request timed out.');
+  let token;
+  if (request.oauth) {
+    try { token=await fetchAccessToken(request.oauth,{fetcher,signal:bounded}); }
+    catch(error) { throw bounded.aborted?interrupted():error; }
+    if (bounded.aborted) throw interrupted();
+    await beforeAuthenticatedRequest?.();
+  }
+  const headers={...request.headers};
+  if (cookieSession?.header) headers.Cookie=cookieSession.header;
+  if (token) headers.Authorization='Bearer '+token;
+  if ((token||cookieSession?.header)&&bytes(request.body)+bytes(JSON.stringify(headers))>maxDocumentBytes) {
+    throw Error('The authenticated HTTP request exceeds 512 KiB.');
+  }
   let response, captured;
   try {
-    const headers=cookieSession?.header ? {...request.headers,Cookie:cookieSession.header} : request.headers;
     response=await fetcher(request.url,{
       method:request.method,headers,body:request.body||undefined,
       redirect:'manual',signal:bounded
     });
     captured=await responseBody(response);
   } catch (error) {
-    if (bounded.aborted) throw Error(signal?.aborted?'The HTTP request was cancelled.':'The HTTP request timed out.');
+    if (bounded.aborted) throw interrupted();
     throw Error('Unable to send the HTTP request or read its response.',{cause:error});
   }
   cookieSession?.capture(response.headers.getSetCookie?.()||[]);
-  const redact=value=>cookieSession ? cookieSession.redact(request.redact(value)) : request.redact(value);
+  const redact=value=>{
+    let masked=request.redact(value);
+    if (token) masked=masked.replaceAll(token,'[redacted]').replaceAll(encodeURIComponent(token),'[redacted]');
+    return cookieSession ? cookieSession.redact(masked) : masked;
+  };
   let json;
   if (!captured.truncated && (request.graphql || request.assertions.some(item=>item.kind==='json' || item.kind==='check'))) {
     try { json=JSON.parse(captured.body); } catch { /* JSON assertions cannot pass on a non-JSON body. */ }
@@ -447,11 +476,11 @@ async function sendRequest(request, { signal,fetcher=fetch,cookieSession } = {})
     const actual=kind==='status'?response.status:kind==='header'?response.headers.get(name):jsonValue(json,name);
     return { kind,name,passed:actual!==undefined && isDeepStrictEqual(actual,value) };
   });
-  const headers = [...response.headers].map(([name,value])=>
+  const responseHeaders = [...response.headers].map(([name,value])=>
     [name,responseSecrets.has(name)?'[redacted]':redact(value)]);
-  const result={ status:response.status,headers,assertions,body:redact(captured.body),
+  const result={ status:response.status,headers:responseHeaders,assertions,body:redact(captured.body),
     truncated:captured.truncated,durationMs:Math.round(performance.now()-started),
-    ...(cookieSession&&{cookies:cookieSession.info()}) };
+    ...(cookieSession&&{cookies:cookieSession.info()}), ...(token&&{authenticated:'oauth-client-credentials'}) };
   if (request.graphql) {
     const graphqlResponse=!!json && typeof json==='object' && !Array.isArray(json) &&
       (Object.hasOwn(json,'data') || Array.isArray(json.errors));

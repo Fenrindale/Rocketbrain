@@ -106,9 +106,16 @@ function registerHttpTools(context, vscode) {
       prompt:'Leave empty to clear this secret from the selected environment'});
     if (value===undefined) return;
     if (workspace(document).key!==key || currentEnvironment(document,key).name!==name) throw Error('The HTTP environment changed.');
-    if (Buffer.byteLength(value)>8192) throw Error('HTTP secrets are limited to 8 KiB.');
-    if (value) await context.secrets.store(secretKey(key,name,secret),value);
-    else await context.secrets.delete(secretKey(key,name,secret));
+    return storeSecret(document,{name:secret,value,approved:true});
+  }
+  async function storeSecret(document,{name,value,approved}={}) {
+    const {key}=workspace(document),environment=currentEnvironment(document,key).name;
+    if (approved!==true||typeof name!=='string'||!validName.test(name)||
+        typeof value!=='string'||Buffer.byteLength(value)>8192||value.includes('\0')) {
+      throw Error('Explicitly select an HTTP secret name and a value up to 8 KiB.');
+    }
+    if (value) await context.secrets.store(secretKey(key,environment,name),value);
+    else await context.secrets.delete(secretKey(key,environment,name));
   }
   async function run(document,offset,{signal,schema=false}={}) {
     const { key,folder }=workspace(document), savedVersion=document.version, chosen=currentEnvironment(document,key);
@@ -119,11 +126,14 @@ function registerHttpTools(context, vscode) {
       const ready=await resolveRequest(request,chosen.values,name=>context.secrets.get(secretKey(key,chosen.name,name)),{schema,
         readBodyFile:(file,limit)=>readWorkspaceBodyFile(folder.uri.fsPath,file,limit)});
       const proto=ready.method==='GRPC' ? await readProto(folder,ready.proto) : undefined;
-      const now=currentEnvironment(document,key);
-      if (workspace(document).key!==key || document.version!==savedVersion || now.name!==chosen.name ||
-          JSON.stringify(now.values)!==JSON.stringify(chosen.values)) {
-        throw Error('The request document or environment changed. Review it again.');
-      }
+      const assertFresh=()=>{
+        const now=currentEnvironment(document,key);
+        if (workspace(document).key!==key || document.version!==savedVersion || now.name!==chosen.name ||
+            JSON.stringify(now.values)!==JSON.stringify(chosen.values)) {
+          throw Error('The request document or environment changed. Review it again.');
+        }
+      };
+      assertFresh();
       const bounded=signal?AbortSignal.any([signal,controller.signal]):controller.signal;
       if (ready.method==='WEBSOCKET') {
         const webSocket=await connections.connect(ready,{signal:bounded,owner:key,environment:chosen.name});
@@ -131,7 +141,7 @@ function registerHttpTools(context, vscode) {
       }
       if (ready.method==='GRPC') return { environment:chosen.name,...await require('./grpc').sendGrpc(ready,proto,{signal:bounded}) };
       const cookieSession=ready.cookieJar&&cookies.session(key,chosen.name,ready.cookieJar,ready.url);
-      const response=await sendRequest(ready,{signal:bounded,cookieSession});
+      const response=await sendRequest(ready,{signal:bounded,cookieSession,beforeAuthenticatedRequest:assertFresh});
       return { environment:chosen.name,...response };
     } finally {
       running.delete(controller);
@@ -220,6 +230,7 @@ function registerHttpTools(context, vscode) {
       output.appendLine(kind+' · '+state);
     }
     output.appendLine('HTTP '+response.status+' · '+response.durationMs+' ms · '+response.environment);
+    if (response.authenticated==='oauth-client-credentials') output.appendLine('OAuth client credentials');
     if (response.cookies) output.appendLine('Cookie jar '+response.cookies.name+' · sent '+response.cookies.sent+' · held '+response.cookies.retained);
     if (response.assertions.length) {
       output.appendLine(passed+' / '+response.assertions.length+' assertions passed');
@@ -238,7 +249,7 @@ function registerHttpTools(context, vscode) {
   const subscriptions=[register(ids.run,runEditor),register(ids.environment,selectEnvironment),register(ids.secret,saveSecret),
     register(ids.schema,()=>runEditor(true)),register(ids.websocketSessions,showSessions),
     register(ids.websocketSend,sendMessage),register(ids.websocketClose,closeSocket)];
-  return {run,webSocket,dispose(){
+  return {run,storeSecret,webSocket,dispose(){
     if(disposed)return;
     disposed=true;
     for (const controller of running) controller.abort();
