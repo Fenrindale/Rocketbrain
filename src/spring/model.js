@@ -49,15 +49,17 @@ function qualifier(annotations) { const item = annotation(annotations, 'Qualifie
 function beanAliases(item, fallback) {
   if (!item) return [fallback];
   const values = strings(item, item.attributes.name ? 'name' : 'value');
+  if (item.attributes.name && item.attributes.value && JSON.stringify(values)!==JSON.stringify(strings(item,'value'))) return [];
   return values === null ? [] : values.length ? values : [fallback];
 }
-function makeInjection(file, owner, member, annotations, origin, factoryBeanId, options) {
+function makeInjection(file, owner, member, annotations, origin, factoryBeanId, options, declarationModifiers=[],contextUnresolved=false) {
   const value = annotation(annotations, 'Value');
   return {
     id: `${file.uri}#${member.start}`, uri: file.uri, range: rangeAt(file.text, member.start, member.end), owner: owner.fqn, ownerBeanId: factoryBeanId || `${file.uri}#${owner.start}`, name: member.name, type: member.type,
     qualifier: qualifier(annotations), qualifierPresent: Boolean(annotation(annotations, 'Qualifier') || annotation(annotations, 'Named')),
     required: literal(annotation(annotations, 'Autowired'), 'required', true) !== false,
     origin, parameterNameAvailable: origin === 'field' || Boolean(options.parameterNames),
+    declarationStart:member.declarationStart, declarationModifiers:member.modifiers||declarationModifiers, nameStart:member.start,contextUnresolved,
     expression: value ? literal(value, 'value', undefined) : undefined,
     valueRange: value ? rangeAt(file.text, value.start, value.end) : null,
     qualifierRange: (annotation(annotations, 'Qualifier') || annotation(annotations, 'Named')) ? rangeAt(file.text, (annotation(annotations, 'Qualifier') || annotation(annotations, 'Named')).start, (annotation(annotations, 'Qualifier') || annotation(annotations, 'Named')).end) : null,
@@ -84,6 +86,7 @@ function analyzeSpring(javaFiles, configFiles = [], options = {}) {
       const condition = conditions(type.annotations, config, conditionOptions);
       const bean = { id: `${file.uri}#${type.start}`, name: names[0] || type.name, aliases: names, type: type.fqn, qualifiers: [qualifier(type.annotations)].filter(value => typeof value === 'string'), primary: Boolean(annotation(type.annotations, 'Primary')), fallback: Boolean(annotation(type.annotations, 'Fallback')), uri: file.uri, range: type.range, origin: 'component', ...condition };
       bean.nameUnknown = !names.length;
+      bean.springQualifier=literal(annotation(type.annotations,'Qualifier'),'value',null);
       bean.qualifierUnknown = Boolean(annotation(type.annotations, 'Qualifier') || annotation(type.annotations, 'Named')) && qualifier(type.annotations) === undefined;
       if (!names.length || bean.qualifierUnknown) { bean.state = 'unknown'; bean.reasons.push('Non-literal component name or qualifier'); }
       if (file.issues.length) { bean.state = 'unknown'; bean.reasons.push('This file contains Java constructs outside the supported parser subset'); }
@@ -114,14 +117,18 @@ function analyzeSpring(javaFiles, configFiles = [], options = {}) {
           const methodConditions = conditions(method.annotations, config, conditionOptions);
           const combined = triAnd([{ state: bean.state, reason: bean.reasons.join('; ') }, { state: methodConditions.state, reason: methodConditions.reasons.join('; ') }]);
           factoryId = `${file.uri}#${method.start}`;
-          beans.push({ id: factoryId, name: aliases[0] || method.name, aliases, type: method.type.name, qualifiers: [qualifier(method.annotations)].filter(value => typeof value === 'string'), primary: Boolean(annotation(method.annotations, 'Primary')), fallback: Boolean(annotation(method.annotations, 'Fallback')), uri: file.uri, range: rangeAt(file.text, method.start, method.end), origin: 'factory-method', configuration: type.fqn, ...combined });
+          const autowireCandidate=literal(factory,'autowireCandidate',true), defaultCandidate=literal(factory,'defaultCandidate',true);
+          beans.push({ id: factoryId, name: aliases[0] || method.name, aliases, type: method.type.name, qualifiers: [qualifier(method.annotations)].filter(value => typeof value === 'string'), primary: Boolean(annotation(method.annotations, 'Primary')), fallback: Boolean(annotation(method.annotations, 'Fallback')), uri: file.uri, range: rangeAt(file.text, method.start, method.end), origin: 'factory-method', configuration: type.fqn, autowireCandidate,defaultCandidate, ...combined });
           beans.at(-1).nameUnknown = !aliases.length;
+          beans.at(-1).springQualifier=literal(annotation(method.annotations,'Qualifier'),'value',null);
           beans.at(-1).qualifierUnknown = Boolean(annotation(method.annotations, 'Qualifier') || annotation(method.annotations, 'Named')) && qualifier(method.annotations) === undefined;
           if (!aliases.length || beans.at(-1).qualifierUnknown) { beans.at(-1).state = 'unknown'; beans.at(-1).reasons.push('Non-literal Bean name or qualifier'); }
           if (overloadedFactories.has(method.name)) { beans.at(-1).state = 'unknown'; beans.at(-1).reasons.push('Overloaded Bean factory selection is not modeled'); }
+          if(typeof autowireCandidate!=='boolean'||typeof defaultCandidate!=='boolean'){beans.at(-1).state='unknown';beans.at(-1).reasons.push('Nonliteral Bean eligibility condition');}
         }
         const injectable = factory || annotation(method.annotations, 'Autowired') || annotation(method.annotations, 'Inject') || (method.constructor && constructors.length === 1);
-        if (injectable) for (const parameter of method.parameters) injections.push(makeInjection(file, type, parameter, [...method.annotations.filter(item => item.shortName === 'Autowired'), ...parameter.annotations], factory ? 'factory-parameter' : method.constructor ? 'constructor' : 'method-parameter', factoryId || bean.id, options));
+        const contextUnresolved=!factory&&method.annotations.some(item=>['Qualifier','Named'].includes(item.shortName)||!item.known&&!item.name.startsWith('java.lang.'));
+        if (injectable) for (const parameter of method.parameters) injections.push(makeInjection(file, type, parameter, [...method.annotations.filter(item => item.shortName === 'Autowired'), ...parameter.annotations], factory ? 'factory-parameter' : method.constructor ? 'constructor' : 'method-parameter', factoryId || bean.id, options,method.modifiers,contextUnresolved));
       }
     }
   }
@@ -151,7 +158,8 @@ function analyzeSpring(javaFiles, configFiles = [], options = {}) {
     const optional = simple === 'Optional' || simple === 'ObjectProvider' || !injection.required;
     const requested = collection || ['Optional', 'ObjectProvider'].includes(simple) ? (simple === 'Map' ? ref.arguments[1] : ref.arguments[0])?.name || (ref.array ? ref.name : '') : ref.name;
     if (!requested || injection.qualifierPresent && typeof injection.qualifier !== 'string') { injection.resolution = { state: 'unknown', reason: 'Generic type or qualifier is not a supported literal.', candidates: [] }; continue; }
-    let candidates = beans.filter(bean => bean.state !== 'inactive' && assignable(bean.type, requested) !== false);
+    const qualifierCandidates = beans.filter(bean => bean.state !== 'inactive' && bean.autowireCandidate!==false && assignable(bean.type, requested) !== false);
+    let candidates = qualifierCandidates.filter(bean=>injection.qualifierPresent||bean.defaultCandidate!==false);
     if (injection.qualifierPresent) candidates = candidates.filter(bean => bean.qualifierUnknown || bean.nameUnknown || bean.qualifiers.includes(injection.qualifier) || bean.aliases.includes(injection.qualifier));
     const possible = candidates.filter(bean => bean.state === 'unknown' || assignable(bean.type, requested) === null), active = candidates.filter(bean => bean.state === 'active' && assignable(bean.type, requested) === true);
     const result = { kind: 'bean', requested, candidates: candidates.map(bean => bean.id), selected: [], state: 'unknown' };
@@ -164,7 +172,8 @@ function analyzeSpring(javaFiles, configFiles = [], options = {}) {
       else if (primary.length > 1) chosen = primary;
       else { const regular = chosen.filter(bean => !bean.fallback); if (regular.length) chosen = regular; if (chosen.length > 1 && injection.parameterNameAvailable) { const named = chosen.filter(bean => bean.aliases.includes(injection.name)); if (named.length === 1) chosen = named; } }
       if (chosen.length === 1) { result.state = 'resolved'; result.selected = [chosen[0].id]; result.reason = 'Resolved within the configured local source model.'; }
-      else if (chosen.length > 1) { result.state = 'ambiguous'; result.reason = `Multiple local candidates for ${requested}: ${chosen.map(bean => bean.name).join(', ')}.`; diagnostics(injection, 'spring.bean.ambiguous', result.reason + ' Runtime Bean registration may alter this model.'); }
+      else if (chosen.length > 1) { result.state = 'ambiguous'; result.ambiguous=chosen.map(bean=>bean.id); result.qualifierCandidates=qualifierCandidates.map(bean=>bean.id);
+        result.reason = `Multiple local candidates for ${requested}: ${chosen.map(bean => bean.name).join(', ')}.`; diagnostics(injection, 'spring.bean.ambiguous', result.reason + ' Runtime Bean registration may alter this model.'); }
       else if (optional) { result.state = 'optional'; result.reason = 'No local candidate; this injection is optional.'; }
       else if (closedWorld) { result.state = 'missing'; result.reason = `No candidate for ${requested} in the explicitly closed local model.`; diagnostics(injection, 'spring.bean.missing', result.reason); }
       else { result.reason = `No local candidate for ${requested}; dependency/automatic registrations are outside this model.`; }

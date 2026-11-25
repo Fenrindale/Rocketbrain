@@ -120,7 +120,7 @@ function parameters(tokens, info) {
     const rest = part.slice(i).filter(token => token.text !== 'final');
     const name = rest.at(-1);
     if (name?.kind !== 'id' || rest.length < 2) return null;
-    return { name: name.text, type: typeRef(rest.slice(0, -1), info), annotations, start: name.start, end: name.end };
+    return { name: name.text, type: typeRef(rest.slice(0, -1), info), annotations, start: name.start, end: name.end, declarationStart:part[0].start };
   }).filter(Boolean);
 }
 function parseMembers(tokens, start, end, type, info, issues) {
@@ -142,7 +142,8 @@ function parseMembers(tokens, start, end, type, info, issues) {
       const close = matching(tokens, cursor); if (close < 0 || close > end) { issues.push('Unbalanced method parameters'); break; }
       const name = tokens[cursor - 1];
       const header = tokens.slice(headerStart, cursor - 1).filter(token => !MODIFIERS.has(token.text));
-      if (name?.kind === 'id') methods.push({ name: name.text, constructor: name.text === type.name, type: typeRef(header, info), annotations, parameters: parameters(tokens.slice(cursor + 1, close), info), start: name.start, end: name.end });
+      if (name?.kind === 'id') methods.push({ name: name.text, constructor: name.text === type.name, type: typeRef(header, info), annotations, parameters: parameters(tokens.slice(cursor + 1, close), info), start: name.start, end: name.end,
+        modifiers:tokens.slice(headerStart,cursor-1).filter(token=>MODIFIERS.has(token.text)).map(token=>token.text) });
       let tail = close + 1; while (tail < end && !['{', ';'].includes(tokens[tail].text)) tail++;
       i = tokens[tail]?.text === '{' ? matching(tokens, tail) + 1 : tail + 1;
     } else if (delimiter === '{') {
@@ -151,7 +152,9 @@ function parseMembers(tokens, start, end, type, info, issues) {
       let tail = cursor;
       while (tail < end) { if (tokens[tail].text === ';') break; if (['(', '[', '{'].includes(tokens[tail].text)) { const close = matching(tokens, tail); if (close < 0) break; tail = close; } tail++; }
       const header = tokens.slice(headerStart, cursor).filter(token => !MODIFIERS.has(token.text));
-      if (!header.some(token => token.text === ',') && header.length >= 2 && header.at(-1).kind === 'id') { const name = header.at(-1); fields.push({ name: name.text, type: typeRef(header.slice(0, -1), info), annotations, start: name.start, end: name.end }); }
+      if (!header.some(token => token.text === ',') && header.length >= 2 && header.at(-1).kind === 'id') { const name = header.at(-1); fields.push({ name: name.text, type: typeRef(header.slice(0, -1), info), annotations, start: name.start, end: name.end,
+        declarationStart:annotations[0]?.start??tokens[headerStart].start,
+        modifiers:tokens.slice(headerStart,cursor).filter(token=>MODIFIERS.has(token.text)).map(token=>token.text) }); }
       else if (annotations.length) issues.push('Unsupported annotated field declaration');
       i = tail + 1;
     }
