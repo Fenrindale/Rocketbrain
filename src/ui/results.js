@@ -156,23 +156,39 @@
     const edit = () => openCell(record, rowId, column, value, inserted);
     td.ondblclick = edit;
     td.onkeydown = event => { if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); edit(); } };
-    if(!inserted){td.onfocus=()=>{const form=bulkForm(record);form.anchorRowId=rowId;form.anchorColumn=column.name;};td.onpaste=event=>{if(record.editBusy||draft(record).pendingRequestId||count(draft(record)))return;const value=event.clipboardData?.getData('text/plain');if(typeof value==='string'){event.preventDefault();send('prepareBulk',{operation:'paste',modelId:record.result.edit.modelId,text:value,delimiter:'\t',anchorRowId:rowId,anchorColumn:column.name});}};}
+    if (!inserted) {
+      td.onfocus = () => { const form = bulkForm(record); form.anchorRowId = rowId; form.anchorColumn = column.name; };
+      td.onpaste = event => {
+        if (record.editBusy || draft(record).pendingRequestId || record.review) return;
+        const value = event.clipboardData?.getData('text/plain');
+        if (typeof value !== 'string') return;
+        event.preventDefault();
+        send('prepareBulk', { operation: 'paste', modelId: record.result.edit.modelId, text: value, delimiter: '\t',
+          anchorRowId: rowId, anchorColumn: column.name, ...pasteDraft(record) });
+      };
+    }
+  }
+  function pasteDraft(record) {
+    const item = draft(record);
+    return count(item) ? { localDraft: changes(item) } : {};
   }
   function bulkForm(record){
     const model=record.result?.edit;let form=bulkForms.get(record.id);
-    if(!form||form.modelId!==model?.modelId){form={modelId:model?.modelId,open:false,mode:'paste',format:'text',text:'',delimiter:'\t',hasHeader:true,formulaPolicy:'reject',blankPolicy:'empty',anchorRowId:model?.rowIds[0],anchorColumn:model?.columns.find(c=>c.editable)?.name,mapping:[],nullToken:'\\N',nullEnabled:false};bulkForms.set(record.id,form);}return form;
+    if(!form||form.modelId!==model?.modelId){form={modelId:model?.modelId,open:false,mode:'paste',format:'text',text:'',delimiter:'\t',hasHeader:true,formulaPolicy:'reject',blankPolicy:'empty',anchorRowId:model?.rowIds[0],anchorColumn:model?.columns.find(c=>c.editable)?.name,mapping:[],nullToken:'\\N',nullEnabled:false,acrossPages:false};bulkForms.set(record.id,form);}return form;
   }
   function renderBulk(record){
-    const model=record.result?.edit,form=bulkForm(record),item=draft(record),blocked=Boolean(record.editBusy||item.pendingRequestId||record.editExpired||record.readOnly||count(item)||editingCell?.id===record.id);
+    const model=record.result?.edit,form=bulkForm(record),item=draft(record),blocked=Boolean(record.editBusy||item.pendingRequestId||record.editExpired||record.readOnly||record.review||form.mode!=='paste'&&count(item)||editingCell?.id===record.id);
     $('bulk-panel').hidden=!form.open||!model||record.readOnly;if($('bulk-panel').hidden)return;
     const xlsx=form.format==='xlsx';$('bulk-title').textContent=form.mode==='import'?(xlsx?'Import XLSX rows as staged inserts':'Import rows as staged inserts'):'Paste into loaded cells';$('bulk-header-label').hidden=form.mode!=='import';$('bulk-anchor').hidden=form.mode!=='paste';$('bulk-inspect').hidden=form.mode!=='import';$('xlsx-options').hidden=!xlsx;$('bulk-format-label').hidden=xlsx;$('bulk-null-label').hidden=$('bulk-null-token').hidden=xlsx;$('bulk-text').readOnly=xlsx;$('bulk-text-label').textContent=xlsx?'Preview of the first five data rows (values only)':'Text data';$('bulk-inspect').textContent=xlsx?'Inspect Worksheet and Map Columns':'Inspect Input and Map Columns';
     $('bulk-delimiter').value=form.delimiter===','?'comma':'tab';$('bulk-text').value=form.text;$('bulk-header').checked=form.hasHeader;$('bulk-null-enabled').checked=form.nullEnabled;$('bulk-null-token').value=form.nullToken;
+    $('bulk-across-pages').checked = form.acrossPages;
+    $('bulk-across-pages').disabled = blocked || record.result.browse?.hasNext !== true;
     if(xlsx){options($('xlsx-sheet'),(form.sheets||[]).map(sheet=>({value:sheet.id,label:sheet.name+(sheet.state!=='visible'?' ('+sheet.state+')':'')})),form.sheetId);$('xlsx-formulas').value=form.formulaPolicy;$('xlsx-blanks').value=form.blankPolicy;}
     options($('bulk-row'),(model.rowIds||[]).map((id,index)=>({value:id,label:String(index+1+(record.result.browse?.page||0)*(record.result.browse?.pageSize||0))})),form.anchorRowId);
     options($('bulk-column'),model.columns.filter(c=>c.editable).map(c=>({value:c.name,label:c.name})),form.anchorColumn);
     $('bulk-mapping').replaceChildren();
     if(form.mode==='import'&&form.sourceId)for(const entry of form.mapping){const row=document.createElement('label');row.className='bulk-map';row.append(document.createTextNode((form.headers?.[entry.source]||'Field '+(entry.source+1))+' → '));const select=document.createElement('select');select.setAttribute('aria-label','Map source field '+(entry.source+1));options(select,[{value:'',label:'Ignore this source field'},...model.columns.filter(c=>c.insertable&&!c.generated&&!c.autoIncrement).map(c=>({value:c.name,label:c.name+' · '+c.type}))],entry.target);select.disabled=blocked;select.onchange=()=>{entry.target=select.value||null;};row.append(select);$('bulk-mapping').append(row);}
-    $('bulk-summary').textContent=form.mode==='import'?(form.sourceId?(xlsx?`${form.rowCount} source rows from ${form.sheetName}; ${form.dateSystem} date system, ${form.formulaCount} formula cells. Stored cached results can be stale and are never recalculated. Explicit empty strings remain text; absent blanks use the selected policy. Missing mapped columns use server defaults.`:`${form.rowCount} source rows. Empty text stays empty; only the chosen unquoted token becomes SQL NULL. Missing mapped columns use server defaults.`):'Inspect the input, then explicitly map or ignore each source field.'): 'The rectangle must fit this page and cannot include protected columns. Existing drafts must be applied or discarded first.';
+    $('bulk-summary').textContent=form.mode==='import'?(form.sourceId?(xlsx?`${form.rowCount} source rows from ${form.sheetName}; ${form.dateSystem} date system, ${form.formulaCount} formula cells. Stored cached results can be stale and are never recalculated. Explicit empty strings remain text; absent blanks use the selected policy. Missing mapped columns use server defaults.`:`${form.rowCount} source rows. Empty text stays empty; only the chosen unquoted token becomes SQL NULL. Missing mapped columns use server defaults.`):'Inspect the input, then explicitly map or ignore each source field.'): (form.acrossPages ? 'Following rows are captured in the current server sort and filter order. Check their primary keys in Review SQL before applying.' : 'The rectangle must fit this page.') + ' Protected columns and cells with draft changes cannot be overwritten.';
     for(const id of ['bulk-delimiter','bulk-header','bulk-text','bulk-null-enabled','bulk-row','bulk-column','bulk-inspect','xlsx-sheet','xlsx-formulas','xlsx-blanks'])$(id).disabled=blocked;
     $('bulk-null-token').disabled=blocked||!form.nullEnabled;$('bulk-stage').disabled=blocked||!xlsx&&!form.text||(form.mode==='import'&&!form.sourceId)||form.mode==='paste'&&(!form.anchorRowId||!form.anchorColumn);
   }
@@ -471,7 +487,8 @@
     $('restore-browsing').disabled = blocked || dirty || cellOpen;
     $('add-row').disabled = !enabled || cellOpen || model.insertable === false || count(item) >= 500;
     $('add-row').title = model.insertable === false ? 'A required column cannot be inserted safely.' : 'Stage a new row';
-    for(const id of ['paste-cells','import-text','import-file','import-xlsx'])$(id).disabled=!enabled||dirty||cellOpen||(id!=='paste-cells'&&model.insertable===false);
+    $('paste-cells').disabled = !enabled || cellOpen || Boolean(record.review);
+    for (const id of ['import-text','import-file','import-xlsx']) $(id).disabled = !enabled || dirty || cellOpen || model.insertable === false;
     $('discard').disabled = !dirty || cellOpen || record.editBusy || Boolean(item.pendingRequestId);
     $('review').disabled = !enabled || !dirty || cellOpen;
     $('apply').disabled = !enabled || !record.review || cellOpen;
@@ -1701,7 +1718,23 @@
       if(!record.result?.edit)continue;const model=record.result.edit,form=bulkForm(record),item=draft(record),source=record.bulkSource,bulk=record.bulkDraft;
       const workbook=record.xlsxWorkbook;if(workbook&&workbook.modelId===model.modelId&&workbook.id!==form.workbookId){form.workbookId=workbook.id;form.sheets=workbook.sheets;form.sheetId=workbook.sheets.find(s=>s.state==='visible')?.id||workbook.sheets[0]?.id;form.mode='import';form.format='xlsx';form.open=true;form.text='';form.sourceId=undefined;form.mapping=[];form.formulaPolicy='reject';form.blankPolicy='empty';form.hasHeader=true;}
       if(source&&source.modelId===model.modelId&&source.id!==form.lastSourceId){form.lastSourceId=source.id;form.sourceId=source.id;form.mode='import';form.format=source.format||'text';form.open=true;form.text=source.text;form.delimiter=source.delimiter;form.hasHeader=source.hasHeader;form.headers=source.headers;form.rowCount=source.rowCount;if(source.format==='xlsx')Object.assign(form,{sheetId:source.sheetId,sheetName:source.sheetName,dateSystem:source.dateSystem,formulaCount:source.formulaCount,formulaPolicy:source.formulaPolicy,blankPolicy:source.blankPolicy});form.mapping=Array.from({length:source.width},(_,index)=>({source:index,target:model.columns.find(c=>c.name===source.headers?.[index]&&c.insertable)?.name||null}));}
-      if(bulk&&bulk.id!==item.lastBulk){item.lastBulk=bulk.id;if(bulk.modelId===model.modelId&&bulk.draftRevision===item.revision&&count(item)===0){item.updates=new Map(bulk.updates.map(update=>[update.rowId,update.values]));item.deletes=new Set(bulk.deletes);item.inserts=bulk.inserts.map(insert=>({id:`new-${++item.next}`,values:insert.values}));item.revision++;form.open=false;record.review=undefined;if(bulk.requiredColumns?.length)record.editMessage='Fill required new-row values before Review: '+bulk.requiredColumns.join(', ');vscode.postMessage({type:'draftChanged',id:record.id,modelId:model.modelId,count:count(item),draftRevision:item.revision});}else record.editError='The bulk draft no longer matches this page. Existing local changes were preserved.';}
+      if (bulk && bulk.id !== item.lastBulk) {
+        item.lastBulk = bulk.id;
+        if (bulk.modelId !== model.modelId || bulk.draftRevision !== item.revision || (bulk.baseCount ?? 0) !== count(item)) {
+          record.editError = 'The bulk draft no longer matches this page. Existing local changes were preserved.';
+          continue;
+        }
+        item.updates = new Map(bulk.updates.map(update => [update.rowId, update.values]));
+        if (!bulk.paste) {
+          item.deletes = new Set(bulk.deletes);
+          item.inserts = bulk.inserts.map(insert => ({ id: `new-${++item.next}`, values: insert.values }));
+        }
+        item.revision++;
+        form.open = false;
+        record.review = undefined;
+        if (bulk.requiredColumns?.length) record.editMessage = 'Fill required new-row values before Review: ' + bulk.requiredColumns.join(', ');
+        vscode.postMessage({ type: 'draftChanged', id: record.id, modelId: model.modelId, count: count(item), draftRevision: item.revision });
+      }
     }
     render(); persist();
   });
@@ -1760,17 +1793,25 @@
     if (layout.mode === 'record') layout.row = record.result.rows.length + item.inserts.length - 1;
     changed(record);
   };
-  $('paste-cells').onclick=()=>{const form=bulkForm(current());form.mode='paste';form.format='text';form.open=true;form.sourceId=undefined;render();};
+  $('paste-cells').onclick=()=>{const form=bulkForm(current());form.mode='paste';form.format='text';form.open=true;form.sourceId=undefined;form.acrossPages=false;render();};
   $('import-text').onclick=()=>{const form=bulkForm(current());form.mode='import';form.format='text';form.open=true;form.sourceId=undefined;form.delimiter=',';render();};
   $('import-file').onclick=()=>send('chooseImportFile');
   $('import-xlsx').onclick=()=>send('chooseXlsxFile');
   const bulkInput=()=>{const form=bulkForm(current());if(form.format!=='xlsx'){form.text=$('bulk-text').value;form.delimiter=$('bulk-delimiter').value==='comma'?',':'\t';}form.hasHeader=$('bulk-header').checked;form.sourceId=undefined;$('bulk-stage').disabled=form.mode==='import'||!form.text;};
   $('bulk-text').oninput=bulkInput;$('bulk-delimiter').onchange=()=>{bulkInput();render();};$('bulk-header').onchange=()=>{bulkInput();render();};
   $('bulk-row').onchange=()=>{bulkForm(current()).anchorRowId=$('bulk-row').value;};$('bulk-column').onchange=()=>{bulkForm(current()).anchorColumn=$('bulk-column').value;};
+  $('bulk-across-pages').onchange = () => { bulkForm(current()).acrossPages = $('bulk-across-pages').checked; render(); };
   for(const [id,key]of [['xlsx-sheet','sheetId'],['xlsx-formulas','formulaPolicy'],['xlsx-blanks','blankPolicy']])$(id).onchange=()=>{const form=bulkForm(current());form[key]=$(id).value;form.sourceId=undefined;form.mapping=[];form.text='';render();};
   $('bulk-null-enabled').onchange=()=>{bulkForm(current()).nullEnabled=$('bulk-null-enabled').checked;render();};$('bulk-null-token').oninput=()=>{bulkForm(current()).nullToken=$('bulk-null-token').value;};
   $('bulk-inspect').onclick=()=>{const record=current(),form=bulkForm(record);send(form.format==='xlsx'?'inspectXlsxSheet':'inspectBulk',{modelId:record.result.edit.modelId,...(form.format==='xlsx'?{workbookId:form.workbookId,sheetId:form.sheetId,formulaPolicy:form.formulaPolicy,blankPolicy:form.blankPolicy}:{text:form.text,delimiter:form.delimiter}),hasHeader:form.hasHeader});};
-  $('bulk-form').onsubmit=event=>{event.preventDefault();const record=current(),form=bulkForm(record);send('prepareBulk',{operation:form.mode,modelId:record.result.edit.modelId,text:form.text,delimiter:form.delimiter,sourceId:form.sourceId,mapping:form.mapping,anchorRowId:form.anchorRowId,anchorColumn:form.anchorColumn,...(form.format!=='xlsx'&&form.nullEnabled?{nullToken:form.nullToken}:{})});};
+  $('bulk-form').onsubmit = event => {
+    event.preventDefault();
+    const record = current(), form = bulkForm(record);
+    send('prepareBulk', { operation: form.mode, modelId: record.result.edit.modelId, text: form.text, delimiter: form.delimiter,
+      sourceId: form.sourceId, mapping: form.mapping, anchorRowId: form.anchorRowId, anchorColumn: form.anchorColumn,
+      ...(form.mode === 'paste' && { acrossPages: form.acrossPages, ...pasteDraft(record) }),
+      ...(form.format !== 'xlsx' && form.nullEnabled && { nullToken: form.nullToken }) });
+  };
   $('bulk-cancel').onclick=()=>{bulkForm(current()).open=false;render();};
   $('discard').onclick = () => { const record = current(), item = draft(record); item.updates.clear(); item.deletes.clear(); item.inserts = []; changed(record); };
   $('review').onclick = () => send('reviewChanges', { changes: changes(draft(current())) });

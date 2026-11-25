@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {parseDelimited,planPaste,planImport,planDuplicate}=require('../src/db/grid-bulk');
+const {parseDelimited,planPaste,mergePasteDraft,planImport,planDuplicate}=require('../src/db/grid-bulk');
 const model={canEdit:true,insertable:true,rowIds:['one','two'],columns:[
  {name:'id',type:'bigint unsigned',kind:'integer',primaryKey:true,autoIncrement:true,editable:false,insertable:false,required:false,nullable:false},
  {name:'label',type:'varchar(100)',kind:'text',editable:true,insertable:true,required:true,nullable:false},
@@ -24,6 +24,17 @@ test('CSV rejects malformed quotes, duplicate/empty headers, nonrectangular and 
 test('paste stays rectangular on the loaded page and refuses read-only keys and type errors atomically',()=>{
  const parsed=parseDelimited('first\t1.00000001\nsecond\t2.00000002');const changes=planPaste(model,parsed,{anchorRowId:'one',anchorColumn:'label'});assert.equal(changes.updates.length,2);assert.equal(changes.updates[1].rowId,'two');
  assert.throws(()=>planPaste(model,parsed,{anchorRowId:'two',anchorColumn:'label'}),/rectangle/);assert.throws(()=>planPaste(model,parsed,{anchorRowId:'one',anchorColumn:'id'}),/read-only/);assert.throws(()=>planPaste(model,parseDelimited('first\tnot decimal'),{anchorRowId:'one',anchorColumn:'label'}));
+});
+test('paste merges only disjoint local cells while preserving staged inserts and deletions', () => {
+  const local = { updates: [{ rowId: 'one', values: { note: { kind: 'null' } } }],
+    inserts: [{ values: { label: { kind: 'value', text: 'new row' } } }], deletes: ['two'] };
+  const clipboard = parseDelimited('pasted');
+  const paste = (anchorRowId, anchorColumn) => planPaste(model, clipboard, { anchorRowId, anchorColumn });
+  assert.deepEqual(mergePasteDraft(local, paste('one', 'label')), { ...local,
+    updates: [{ rowId: 'one', values: { note: { kind: 'null' }, label: { kind: 'value', text: 'pasted' } } }] });
+  assert.throws(() => mergePasteDraft(local, paste('one', 'note')), /overlaps a staged cell/);
+  assert.throws(() => mergePasteDraft(local, paste('two', 'label')), /row marked for deletion/);
+  assert.deepEqual(local.updates[0].values, { note: { kind: 'null' } });
 });
 test('column mapping is explicit, ignores only chosen sources and protects required/generated/auto columns',()=>{
  const parsed=parseDelimited('external,ignore\nA,data',{delimiter:',',hasHeader:true});assert.throws(()=>planImport(model,parsed),/explicitly ignore/);

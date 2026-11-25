@@ -236,7 +236,7 @@ class TableEditor {
       if (message.type === 'draftChanged') {
         if(message.modelId!==undefined&&message.modelId!==record.result.edit.modelId)return;
         if (!Number.isInteger(message.count) || message.count < 0 || message.count > 500 || !Number.isInteger(message.draftRevision) || message.draftRevision < 0) throw new Error('Invalid local draft state.');
-        this.results.editState(id, { hasDraft: message.count > 0, draftRevision: message.draftRevision, ...(!record.editBusy ? { review: undefined } : {}) }); return;
+        this.results.editState(id, { hasDraft: message.count > 0, draftCount: message.count, draftRevision: message.draftRevision, ...(!record.editBusy ? { review: undefined } : {}) }); return;
       }
       if (message.type === 'invalidateReview') { if (!record.editBusy) this.results.editState(id, { review: undefined }); return; }
       if (!['enableEdit', 'reviewChanges', 'applyChanges', 'commitChanges', 'rollbackChanges', 'reloadTable', 'browseTable', 'restoreBrowsing','inspectBulk','inspectXlsx','inspectXlsxSheet','prepareBulk'].includes(message.type)) return;
@@ -250,8 +250,9 @@ class TableEditor {
         this._context(id);
         if(['inspectBulk','inspectXlsx','inspectXlsxSheet','prepareBulk'].includes(message.type)){
           const session=context.db.getSessionState(context.sessionId),model=record.result.edit;
+          const paste = message.type === 'prepareBulk' && message.operation === 'paste';
           if(record.readOnly||session.readOnly||!model.canEdit||session.needsReconnect||session.outcomeUnknown)throw new Error('Enable editing on a connected writable table before staging bulk changes.');
-          if(record.hasDraft||record.review)throw new Error('Apply or discard the current local draft before staging a bulk change.');
+          if(record.review||record.hasDraft&&!paste)throw new Error('Apply or discard the current local draft before staging a bulk change.');
           if(message.modelId!==model.modelId||!Number.isInteger(message.draftRevision)||message.draftRevision!== (record.draftRevision||0))throw new Error('The table snapshot or local draft changed. Open the bulk review again.');
           if(message.nullToken!==undefined&&(typeof message.nullToken!=='string'||!message.nullToken||message.nullToken.length>100))throw new Error('Use an explicit nonempty NULL token of at most 100 characters.');
           if(message.type==='inspectXlsx'){
@@ -268,15 +269,42 @@ class TableEditor {
             const source={id:randomUUID(),modelId:model.modelId,text:message.text,delimiter:parsed.delimiter,hasHeader:parsed.hasHeader,headers:parsed.headers,width:parsed.width,rowCount:parsed.rowCount,label:typeof message.label==='string'?message.label.slice(0,200):'Pasted CSV/TSV'};
             context.bulkSource=source;context.xlsxWorkbook=undefined;this.results.editState(id,{bulkSource:source,xlsxWorkbook:undefined,editMessage:'Map source fields, then stage the import. No database changes have been submitted.'});
           }else{
-            let changes;
+            let changes, baseCount = 0;
             if(message.operation==='duplicate')changes=planDuplicate(model,record.result,message.rowId);
-            else if(message.operation==='paste')changes=planPaste(model,parseDelimited(message.text,{delimiter:message.delimiter,hasHeader:false}),message);
+            else if (paste) {
+              const parsed = parseDelimited(message.text, { delimiter: message.delimiter });
+              const draft = message.localDraft ?? { updates: [], inserts: [], deletes: [] };
+              if (!draft || !['updates', 'inserts', 'deletes'].every(key => Array.isArray(draft[key])) ||
+                  message.acrossPages !== undefined && typeof message.acrossPages !== 'boolean') {
+                throw new Error('The paste range or current draft is invalid. Open the paste form again.');
+              }
+              baseCount = draft.updates.length + draft.inserts.length + draft.deletes.length;
+              if (baseCount !== (record.hasDraft ? record.draftCount : 0) || baseCount > 500 ||
+                  Buffer.byteLength(JSON.stringify(draft), 'utf8') > 1024 * 1024) {
+                throw new Error('The current draft changed or exceeds the staging limit. Open the paste form again.');
+              }
+              if (message.acrossPages || baseCount) {
+                const { acrossPages, anchorRowId, anchorColumn, nullToken, modelId } = message;
+                changes = await context.db.stageGridPaste({ sessionId: context.sessionId, modelId, parsed, draft,
+                  acrossPages, anchorRowId, anchorColumn, nullToken });
+                this._context(id);
+                if (record.closing || record.result.edit.modelId !== modelId || record.review ||
+                    message.draftRevision !== (record.draftRevision || 0)) {
+                  throw new Error('The table or local draft changed while capturing paste rows. Existing changes were preserved.');
+                }
+              } else changes = planPaste(model, parsed, message);
+            }
             else if(message.operation==='import'){
               const source=context.bulkSource;if(!source||source.id!==message.sourceId||source.modelId!==model.modelId)throw new Error('Inspect the current import source before staging an import.');
               if(source.format==='xlsx'&&message.nullToken!==undefined)throw new Error('XLSX blank-cell policies are separate from CSV unquoted NULL tokens.');
               changes=planImport(model,source.format==='xlsx'?source.parsed:parseDelimited(source.text,{delimiter:source.delimiter,hasHeader:source.hasHeader}),message);
             }else throw new Error('Choose paste, duplicate or import.');
-            this.results.editState(id,{bulkDraft:{id:randomUUID(),modelId:model.modelId,draftRevision:message.draftRevision,...changes},editMessage:changes.requiredColumns?.length?'Fill required new-row values before Review: '+changes.requiredColumns.join(', '):'Bulk changes validated. Review SQL, Apply, then Commit or Roll Back.'});
+            const range = changes.range;
+            const editMessage = range
+              ? `Rows ${range.firstRow}–${range.lastRow} across pages ${range.firstPage}–${range.lastPage} were staged in server order. Review the captured primary keys before applying.`
+              : changes.requiredColumns?.length ? 'Fill required new-row values before Review: '+changes.requiredColumns.join(', ')
+                : 'Bulk changes validated. Review SQL, Apply, then Commit or Roll Back.';
+            this.results.editState(id,{bulkDraft:{id:randomUUID(),modelId:model.modelId,draftRevision:message.draftRevision,paste,baseCount,...changes},editMessage});
           }
         }else if (message.type === 'restoreBrowsing') {
           if (record.hasDraft || record.review) throw new Error('Apply or discard local drafts before switching to read-only browsing.');
