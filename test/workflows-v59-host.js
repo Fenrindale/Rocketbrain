@@ -17,10 +17,10 @@ exports.run = async (vscode = require('vscode')) => {
   const api=await extension.activate();
   const checks=[],details={},failures=[];
   const groups={
-    schemaCatalog:()=>require('./schema-catalog-host').runSchemaCatalogChecks(api,vscode,checks),
-    gridSort:()=>require('./grid-sort-host').runGridSortChecks(api,vscode,checks),
     processAttach:()=>require('./java-debug-processes-host').runJavaProcessChecks(api,vscode,checks),
     smartStep:()=>require('./java-debug-smart-step-host').runJavaSmartStepChecks(api,vscode,checks),
+    schemaCatalog:()=>require('./schema-catalog-host').runSchemaCatalogChecks(api,vscode,checks),
+    gridSort:()=>require('./grid-sort-host').runGridSortChecks(api,vscode,checks),
     keyset:()=>require('./mysql-keyset-host').runKeysetGridChecks(api,vscode,checks)
   };
   const names=process.env.ROCKETBRAIN_V59_ONLY?.split(',') || Object.keys(groups);
