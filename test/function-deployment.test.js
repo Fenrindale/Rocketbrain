@@ -2,7 +2,8 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { canonical, create, validate } = require('../src/db/object-editor-ddl');
+const { canonical, create, drop, hash, validate } = require('../src/db/object-editor-ddl');
+const { SchemaObjectEditor } = require('../src/db/object-editor');
 const { inspectFunctionDependents } = require('../src/db/object-editor-function');
 
 const functionModel = {
@@ -23,6 +24,18 @@ test('scalar function authoring retains signature, security and definition finge
     assert.throws(() => canonical(functionModel, body));
   }
   assert.throws(() => canonical({ ...functionModel, deterministic: 'NO' }), /deterministic/);
+});
+
+test('durable recovery ties the reviewed object kind to the fingerprinted definitions', () => {
+  const editor = new SchemaObjectEditor({}), definition = canonical(functionModel), grants = { kind: 'function', rows: [] };
+  const server = { currentUser: functionModel.definer, database: functionModel.schema };
+  const record = { id: 'f'.repeat(32), format: 'RocketbrainObjectAuthoring', kind: 'function', name: functionModel.name, server,
+    original: { definition, grants, hash: hash({ definition, grants }) },
+    dependencies: { scope: 'visible-application-schemas', fingerprint: 'a'.repeat(64) } };
+  assert.equal(editor._valid(record, record.id, server), record);
+  assert.throws(() => editor._valid({ ...record, kind: 'view' }, record.id, server), /name or kind changed/);
+  assert.throws(() => editor._valid({ ...record, dependencies: undefined }, record.id, server), /dependency fingerprint changed/);
+  assert.throws(() => drop('other-kind', functionModel.schema, functionModel.name), /supported typed object kind/);
 });
 
 function catalog({ body = 'select 1', event = true } = {}) {
