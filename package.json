@@ -554,6 +554,11 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectPerformance",
+        "title": "Inspect Hibernate Fetch Activity",
+        "category": "Rocketbrain"
+      },
+      {
         "command": "rocketbrain.jpa.observer.validate",
         "title": "Validate Query with Running Hibernate",
         "category": "Rocketbrain"

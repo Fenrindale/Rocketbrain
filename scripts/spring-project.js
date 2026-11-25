@@ -154,7 +154,8 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     observerTokenFile=path.join(folder,'observer.token');observerDescriptorFile=path.join(folder,'observer-connection.json');
     const configFile=path.join(folder,'observer-agent.json');
     await fsp.writeFile(observerTokenFile,crypto.randomBytes(32).toString('hex'),{flag:'wx',mode:0o600});
-    await fsp.writeFile(configFile,JSON.stringify({tokenFile:observerTokenFile,descriptorFile:observerDescriptorFile,port:0,queries:true,validate:true}),{flag:'wx',mode:0o600});
+    await fsp.writeFile(configFile,JSON.stringify({tokenFile:observerTokenFile,descriptorFile:observerDescriptorFile,port:0,queries:true,validate:true,
+      performance:process.env.ROCKETBRAIN_JPA_PERFORMANCE_TEST==='1'}),{flag:'wx',mode:0o600});
     observerArgs=['-javaagent:'+agent.jarPath+'=config='+pathToFileURL(configFile).href];
   }
   const runtimeUrl = 'http://127.0.0.1:' + port + '/actuator', baseUrl = 'http://127.0.0.1:' + port;
