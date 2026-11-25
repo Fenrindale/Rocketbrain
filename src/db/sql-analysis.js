@@ -255,9 +255,36 @@ function analyzeSql(text,catalog=[],options={}){
   Object.defineProperty(model,'_scopes',{value:model._scopes,enumerable:false});return model;
 }
 function scopeAt(model,offset){return (model._scopes||[]).filter(s=>offset>=s.start&&offset<=s.end).sort((a,b)=>b.depth-a.depth||(a.end-a.start)-(b.end-b.start))[0];}
-function completionsAt(model,offset){if(model._nonCode?.some(span=>offset>=span.start&&offset<span.end))return[];const before=model.text.slice(0,offset),match=/(?:([\p{L}_$][\p{L}\p{N}_$]*)\.)?([\p{L}\p{N}_$]*)$/u.exec(before);if(!match)return[];const scope=scopeAt(model,offset);if(!scope)return[];const qualifier=match[1],prefix=match[2].toLowerCase(),relations=[];for(let s=scope;s;s=s.parent){for(const r of s.relations)if(!relations.some(v=>colEqLocal(v.alias,r.alias)))relations.push(r);}
-  let selected=qualifier?relations.filter(r=>colEqLocal(r.alias,qualifier)):relations;const result=[];if(!qualifier){for(const [name,cte]of scope.ctes)if(name.startsWith(prefix))result.push({label:cte.name,kind:'table',detail:'CTE · local query',insertText:quote(cte.name)});}
-  for(const r of selected)for(const c of r.columns)if(c.name.toLowerCase().startsWith(prefix))result.push({label:c.name,kind:'column',detail:r.alias+' · '+(c.type.dbType||c.type.family)+' · '+r.kind,insertText:quote(c.name),table:r.name,type:c.type});return result;
+function completionsAt(model, offset) {
+  if (model._nonCode?.some(span => offset >= span.start && offset < span.end)) return [];
+  const before = model.text.slice(0, offset);
+  const tail = before.slice(-512);
+  const match = /(?:(\x60(?:[^\x60]|\x60\x60)+\x60|"(?:[^"]|"")+"|[\p{L}_$][\p{L}\p{N}_$]*)\.)?([\p{L}\p{N}_$]*)$/u.exec(tail);
+  const scope = scopeAt(model, offset);
+  if (!match || !scope) return [];
+  const start = before.length - tail.length + match.index;
+  let qualifier = match[1];
+  if (qualifier?.[0] === QUOTE || qualifier?.[0] === '"') {
+    if (model._nonCode?.some(span => span.start === start)) return [];
+    const boundary = qualifier[0];
+    qualifier = qualifier.slice(1, -1).replaceAll(boundary + boundary, boundary);
+  }
+  if (!qualifier && before[start - 1] === '.') return [];
+  const prefix = match[2].toLowerCase(), relations = [];
+  for (let current = scope; current; current = current.parent) {
+    for (const relation of current.relations) if (!relations.some(item => colEqLocal(item.alias, relation.alias))) relations.push(relation);
+  }
+  const selected = qualifier ? relations.filter(relation => colEqLocal(relation.alias, qualifier)) : relations;
+  const result = [];
+  if (!qualifier) for (const [name, cte] of scope.ctes) {
+    if (name.startsWith(prefix)) result.push({ label: cte.name, kind: 'table', detail: 'CTE · local query', insertText: quote(cte.name) });
+  }
+  for (const relation of selected) for (const column of relation.columns) {
+    if (column.name.toLowerCase().startsWith(prefix)) result.push({ label: column.name, kind: 'column',
+      detail: relation.alias + ' · ' + (column.type.dbType || column.type.family) + ' · ' + relation.kind,
+      insertText: quote(column.name), table: relation.name, type: column.type });
+  }
+  return result;
 }
 const colEqLocal=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase();
 function definitionsAt(model,offset,{skipImplicit=false}={}){const ref=model.references.find(r=>offset>=r.start&&offset<=r.end&&r.definition&&(!skipImplicit||!r.implicit));return ref?[{...ref.definition,range:sourceRange(model.text,ref.definition.start,ref.definition.end)}]:[];}
@@ -268,12 +295,14 @@ function statementRanges(text,options={}){
   for(const t of tokens)if(t.kind==='symbol'&&t.value===';'){if(text.slice(start,t.end).trim())statements.push({start,end:t.end});start=t.end;}
   if(text.slice(start).trim())statements.push({start,end:text.length});return {statements,unknown};
 }
-function sourceLayout(text,options={}){
+function sourceLayout(text,options={},{allowIncompleteParentheses=false}={}){
   if(typeof text!=='string'||Buffer.byteLength(text)>LIMITS.bytes||text.includes('\0'))throw Error('SQL source exceeds limits or contains NUL.');
   const errors=[],nonCode=[];
-  const tokens=lex(text,options,reason=>errors.push(reason),nonCode);
+  const tokens=lex(text,options,reason=>{
+    if(!allowIncompleteParentheses||reason!=='Unclosed parenthesis.')errors.push(reason);
+  },nonCode);
   if(errors.length)throw Error(errors[0]);
   return {tokens,nonCode};
 }
 const sourceTokens=(text,options)=>sourceLayout(text,options).tokens;
-module.exports={analyzeSql,completionsAt,definitionsAt,hoverAt,statementRanges,sourceTokens,sourceLayout,dbType,sourceRange,LIMITS};
+module.exports={analyzeSql,completionsAt,definitionsAt,hoverAt,statementRanges,sourceTokens,sourceLayout,scopeAt,dbType,sourceRange,LIMITS};
