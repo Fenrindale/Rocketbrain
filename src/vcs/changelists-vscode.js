@@ -5,6 +5,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { inspectRepository, observeChanges, supportedPath, inside, maxChanges } = require('./changelist-git');
 const { createChangelistState, validLabel, maxEditors } = require('./changelist-state');
+const { registerShelf } = require('./shelf-vscode');
 
 const maxFileBytes = 2 * 1024 * 1024;
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -289,7 +290,12 @@ function registerChangelists(context, vscode) {
       try { guard(); return await manage(option); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Git Changelists: ' + error.message); }
     })];
-  return { ...api, dispose() { disposed = true; generation++; for (const item of subscriptions) item.dispose(); } };
+  const shelf=registerShelf(context,vscode,{required,chooseRepository,guard});
+  return { ...api,shelf,dispose() {
+    disposed = true; generation++;
+    for (const item of subscriptions) item.dispose();
+    return shelf.dispose();
+  } };
 }
 
 module.exports = { registerChangelists };
