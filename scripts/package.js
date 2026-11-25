@@ -92,7 +92,7 @@ async function verifyArchive(archive, vsceManifest) {
   const requiredPayloads = [
     'package.json', 'README.md', 'NOTICE.txt', 'THIRD-PARTY-LICENSES.txt',
     'dist/extension.js', 'dist/worker.js', 'dist/sql-wasm.wasm', 'dist/results.js', 'dist/results.css',
-    'themes/rocketbrain-dark.json', 'media/rocketbrain.svg',
+    'themes/rocketbrain-dark.json', 'media/rocketbrain.svg', 'media/duckdb.tmLanguage.json',
   ];
   const allowed = new Set(['[content_types].xml', 'extension.vsixmanifest', ...requiredPayloads.map((file) => `extension/${file.toLowerCase()}`)]);
   const seen = new Set();

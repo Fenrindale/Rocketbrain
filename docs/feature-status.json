@@ -1,5 +1,5 @@
 {
-  "version": "0.44.0",
+  "version": "0.45.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 55,
-    "partial": 106,
-    "not-implemented": 39,
+    "implemented": 56,
+    "partial": 108,
+    "not-implemented": 36,
     "host-provided": 13,
     "unverified": 1,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 56,
+    "percent": 56.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-034",
-    "DG-042",
-    "DG-074"
+    "IDEA-077",
+    "IDEA-104",
+    "DG-093"
   ],
   "expandedFeatures": [
-    "IDEA-034",
-    "DG-042",
-    "DG-074"
+    "IDEA-077",
+    "IDEA-104",
+    "DG-093"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1116,8 +1116,8 @@
       "verification": {
         "state": "v0.44-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.44.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2385,25 +2385,26 @@
       "category": "디버깅",
       "feature": "메서드·필드·행 내부 중단점",
       "priority": "P0",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "메서드·필드 watchpoint·인라인 위치 선택을 전용 UI로 연결하지 않았다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "선택한 Java 호출이나 선언으로부터 정확한 메서드 오버로드와 상속 선언의 중단점을 추가한다. JDI 필드 읽기·쓰기와 검증된 동일 줄 람다 위치를 제공한다.",
       "remaining": [
-        "각 중단점 종류·접근/수정 이벤트·인라인 위치 매핑이 필요하다."
+        "저장된 소스에서 선언들이 다른 행에 있는 범위를 지원한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.45-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 Spring 프로젝트에서 String 오버로드와 상속 선언, 필드 읽기와 쓰기, 같은 줄의 두 람다에 각각 정지했다. Object 오버로드도 중단 없이 실행했으며 JVM 결과는 44였다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/debug-breakpoints.js",
+          "src/java/debug.js",
+          "test/java-debug-breakpoints-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3196,25 +3197,25 @@
       "category": "웹·API·데이터 도구",
       "feature": "GraphQL·gRPC·WebSocket 클라이언트",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "GraphQL/gRPC/WebSocket 전용 클라이언트가 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "HTTP 작업 공간에서 GraphQL 작업·변수 요청, 스키마 조회와 부분 오류를 처리한다. WebSocket 인증·서브프로토콜, 메시지 송수신과 종료를 기록한다.",
       "remaining": [
-        "스키마/프로토콜 탐색·연결·메시지/응답 UI가 필요하다."
+        "gRPC 단항·스트리밍 및 서버 리플렉션, GraphQL 구독과 스키마 기반 완성이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.45-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "독립 루프백 서버에서 실제 GraphQL 실행기·스키마 조회와 토큰을 사용하는 WebSocket, 텍스트·바이너리 프레임, 정상 종료를 확인했다. 같은 테스트를 두 Spring 연결 환경의 설치형 VS Code에서 실행했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/http/vscode.js",
+          "test/api-protocols-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4944,8 +4945,8 @@
       "verification": {
         "state": "v0.44-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.44.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5958,8 +5959,8 @@
       "verification": {
         "state": "v0.44-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.44.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6520,25 +6521,27 @@
       "category": "2026.3 추가 범위",
       "feature": "DuckDB dialect·함수·introspection",
       "priority": "P3",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "DuckDB dialect·드라이버·카탈로그를 연결하지 않았다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "공식 DuckDB CLI로 로컬 카탈로그의 테이블·뷰·열 타입을 읽고 DuckDB SQL과 함수 완성·Hover를 제공한다. 쿼리 결과에서 큰 정수와 소수값을 정확히 보존한다.",
       "remaining": [
-        "함수/형식/파일 데이터·실제 실행 검증이 필요하다."
+        "외부 Parquet·CSV 등의 테이블 읽기와 확장 수명주기는 추가 지원이 필요하다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.45-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "DuckDB 1.5.6과 두 실제 Spring·DB 환경에서 같은 로컬 파일의 FROM-first·QUALIFY, 중첩 타입, 함수 오버로드, 결과 제한과 에디터 동작을 확인했다. 파일 체크섬을 보존했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/duckdb-vscode.js",
+          "media/duckdb.tmLanguage.json",
+          "test/duckdb-fixture.js",
+          "test/duckdb-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6633,8 +6636,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "64ddc41fbcbd677105c08dbb0609ef084ea87a35bf6017bb90ac8ed9262773a8",
-    "sourceManifestSha256": "d6572f4e99a6cffe27e52f10ccf9d74f561bc74493bc6dcc4be6b8aba9619d17",
+    "vsixSha256": "478d015e5f32aa4bac19686ecaa7978f810b2e817311ecb58d498539d59ad1bb",
+    "sourceManifestSha256": "a5410cc241ce3906e446dd52aebced9dcebce96c46a19add52cc41b2f0d40ed9",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6648,28 +6651,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-034",
-      "before": "unverified",
-      "after": "partial"
-    },
-    {
-      "id": "DG-042",
+      "id": "IDEA-077",
       "before": "not-implemented",
       "after": "implemented"
     },
     {
-      "id": "DG-074",
+      "id": "IDEA-104",
+      "before": "not-implemented",
+      "after": "partial"
+    },
+    {
+      "id": "DG-093",
       "before": "not-implemented",
       "after": "partial"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1321,
-    "pass": 1262,
+    "tests": 1330,
+    "pass": 1269,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 59,
+    "skipped": 61,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

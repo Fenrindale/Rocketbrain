@@ -5,6 +5,19 @@ const { isDeepStrictEqual } = require('node:util');
 const maxDocumentBytes = 512 * 1024;
 const maxResponseBytes = 2 * 1024 * 1024;
 const methods = new Set(['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS']);
+const graphQLAccept = 'application/graphql-response+json, application/json';
+const typeReference = depth => 'kind name' + (depth ? ' ofType { '+typeReference(depth-1)+' }' : '');
+const schemaQuery = `query RocketbrainSchema {
+  __schema {
+    queryType { name } mutationType { name } subscriptionType { name }
+    directives { name locations args { name defaultValue type { ${typeReference(6)} } } }
+    types {
+      kind name interfaces { name } possibleTypes { name } enumValues { name }
+      inputFields { name defaultValue type { ${typeReference(6)} } }
+      fields { name type { ${typeReference(6)} } args { name defaultValue type { ${typeReference(6)} } } }
+    }
+  }
+}`;
 const headerPattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const variable = /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/;
 const controlledHeaders = new Set(['host','content-length','connection','transfer-encoding','expect','upgrade']);
@@ -59,7 +72,9 @@ function requestAt(text, offset) {
       if (!content) continue;
       const values = /^([A-Za-z]+)[ \t]+(\S+)(?:[ \t]+HTTP\/1\.[01])?$/.exec(content);
       const method = values?.[1].toUpperCase();
-      if (!methods.has(method)) throw Error('Start the request with a supported HTTP method and a URL.');
+      if (!methods.has(method) && method!=='GRAPHQL' && method!=='WEBSOCKET') {
+        throw Error('Start the request with an HTTP method, GRAPHQL or WEBSOCKET followed by a URL.');
+      }
       requestLine = { method,url:values[2] };
       marker = selected.start + line.index;
       continue;
@@ -80,6 +95,9 @@ function requestAt(text, offset) {
   if (headers.length>40 || assertions.length>32 || variables.size>64) throw Error('Use at most 40 headers, 32 assertions and 64 local variables.');
   const body = selected.source.slice(bodyStart);
   if (body && ['GET','HEAD'].includes(requestLine.method)) throw Error('GET and HEAD requests use no body.');
+  if (requestLine.method==='WEBSOCKET' && (body.trim() || assertions.length)) {
+    throw Error('Open the WebSocket first, then send messages from its workbench commands.');
+  }
   return { ...requestLine, headers, body, assertions, variables, start:marker };
 }
 
@@ -98,7 +116,57 @@ function parseAssertion(source) {
   return { kind,name,value };
 }
 
-async function resolveRequest(request, environment, readSecret) {
+async function graphQLBody(body, expand) {
+  const source=body.trim();
+  if (!source) throw Error('Add a GraphQL operation in the request body.');
+  if (!/^\{\s*"/.test(source)) return JSON.stringify({query:await expand(source,true)});
+  let input;
+  try { input=JSON.parse(source); } catch { throw Error('Use valid JSON for a GraphQL request envelope.'); }
+  if (typeof input.query!=='string' || !input.query.trim() ||
+      Object.keys(input).some(key=>!['query','operationName','variables','extensions'].includes(key))) {
+    throw Error('Use a GraphQL JSON object with a query string and optional operationName, variables and extensions.');
+  }
+  const expanded={query:await expand(input.query,true)};
+  if (input.operationName!==undefined && input.operationName!==null) {
+    const name=typeof input.operationName==='string' ? await expand(input.operationName,false) : '';
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw Error('Use a GraphQL operation name.');
+    expanded.operationName=name;
+  }
+  let count=0, expandedBytes=bytes(expanded.query);
+  async function expandValue(value,depth) {
+    if (++count>4096 || depth>24) throw Error('Reduce nesting or the number of GraphQL input values.');
+    if (typeof value==='string') {
+      const result=await expand(value,true);
+      expandedBytes+=bytes(result);
+      if (expandedBytes>maxDocumentBytes) throw Error('The expanded request exceeds 512 KiB.');
+      return result;
+    }
+    if (Array.isArray(value)) {
+      const result=[];
+      for (const item of value) result.push(await expandValue(item,depth+1));
+      return result;
+    }
+    if (value && typeof value==='object') {
+      const result=Object.create(null);
+      for (const [key,item] of Object.entries(value)) result[key]=await expandValue(item,depth+1);
+      return result;
+    }
+    if (typeof value==='number' && (!Number.isFinite(value) || Number.isInteger(value) && !Number.isSafeInteger(value))) {
+      throw Error('Use an exact GraphQL JSON number or represent a large integer as a string.');
+    }
+    return value;
+  }
+  for (const key of ['variables','extensions']) {
+    if (input[key]===undefined || input[key]===null) continue;
+    if (typeof input[key]!=='object' || Array.isArray(input[key])) throw Error('Use a JSON object for GraphQL '+key+'.');
+    expanded[key]=await expandValue(input[key],0);
+  }
+  return JSON.stringify(expanded);
+}
+
+async function resolveRequest(request, environment, readSecret, {schema=false}={}) {
+  const graphQL=request.method==='GRAPHQL', webSocket=request.method==='WEBSOCKET';
+  if (schema && !graphQL) throw Error('Select a GRAPHQL request to inspect its schema.');
   const secrets = new Map();
   const values = new Map(Object.entries(environment || {}));
   if (values.size>64 || [...values.entries()].some(([name,value])=>!variable.test(name) ||
@@ -136,16 +204,42 @@ async function resolveRequest(request, environment, readSecret) {
   }
   const expandedUrl = await expand(request.url,false);
   let url;
-  try { url=new URL(expandedUrl); } catch { throw Error('Use a complete HTTP or HTTPS URL.'); }
-  if (!['https:','http:'].includes(url.protocol) || !url.hostname || url.username || url.password || url.hash ||
-      /[\r\n\t]|\{\{|\}\}/.test(expandedUrl)) throw Error('Use an HTTP or HTTPS URL without user information, fragments or unresolved variables.');
+  const allowedProtocols=webSocket?['ws:','wss:']:['http:','https:'];
+  const permittedUrl=webSocket?'WebSocket ws:// or wss://':'HTTP or HTTPS';
+  try { url=new URL(expandedUrl); } catch { throw Error('Use a complete '+permittedUrl+' URL.'); }
+  if (!allowedProtocols.includes(url.protocol) || !url.hostname || url.username || url.password || url.hash ||
+      /[\r\n\t]|\{\{|\}\}/.test(expandedUrl)) throw Error('Use a '+permittedUrl+' URL without user information, fragments or unresolved variables.');
   const headers = {};
+  let protocols=[];
   for (const [name,value] of request.headers) {
-    const resolved = await expand(value,true);
+    const key=name.toLowerCase();
+    if (webSocket && key.startsWith('sec-websocket-')) {
+      if (key!=='sec-websocket-protocol') throw Error('The WebSocket client controls its handshake headers.');
+      const resolved=await expand(value,false);
+      protocols=resolved.split(',',17).map(item=>item.trim());
+      if (/[\x00-\x1f\x7f]/.test(resolved) || protocols.length>16 ||
+          protocols.some(item=>!headerPattern.test(item) || item.length>128) || new Set(protocols).size!==protocols.length) {
+        throw Error('Use distinct WebSocket subprotocol names.');
+      }
+      continue;
+    }
+    const resolved=await expand(value,true);
     if (/[\x00-\x1f\x7f]/.test(resolved) || bytes(resolved)>8192) throw Error('A request header has invalid characters or exceeds 8 KiB.');
     Object.defineProperty(headers,name,{value:resolved,enumerable:true});
   }
-  const body = await expand(request.body,true);
+  if (graphQL) {
+    const names=Object.keys(headers).map(name=>name.toLowerCase());
+    const contentType=Object.keys(headers).find(name=>name.toLowerCase()==='content-type');
+    if (!contentType) headers['Content-Type']='application/json';
+    else if (!/^application\/json(?:\s*;\s*charset\s*=\s*"?utf-8"?)?\s*$/i.test(headers[contentType])) {
+      throw Error('Use application/json for GraphQL request bodies.');
+    }
+    if (!names.includes('accept')) headers.Accept=graphQLAccept;
+  }
+  let body;
+  if (schema) body=JSON.stringify({query:schemaQuery,operationName:'RocketbrainSchema'});
+  else if (graphQL) body=await graphQLBody(request.body,expand);
+  else body=await expand(request.body,true);
   if (bytes(body)+bytes(JSON.stringify(headers))>maxDocumentBytes) throw Error('The expanded request exceeds 512 KiB.');
   const alternatives = new Set();
   for (const secret of secrets.values()) {
@@ -159,7 +253,10 @@ async function resolveRequest(request, environment, readSecret) {
   if (patterns.join('').length>65536) throw Error('Reduce the total size of interpolated HTTP secrets.');
   const redactions = patterns.length ? new RegExp(patterns.join('|'),'g') : null;
   const redact = value => redactions ? String(value).replace(redactions,'[redacted]') : String(value);
-  return { method:request.method,url,headers,body,assertions:request.assertions,redact };
+  const ready={ method:request.method,url,headers,body,assertions:request.assertions,redact };
+  if (webSocket) return { ...ready,protocols };
+  if (graphQL) return { ...ready,method:'POST',assertions:schema?[]:request.assertions,graphql:schema?'schema':'operation' };
+  return ready;
 }
 
 async function responseBody(response) {
@@ -209,7 +306,7 @@ async function sendRequest(request, { signal,fetcher=fetch } = {}) {
     throw Error('Unable to send the HTTP request or read its response.',{cause:error});
   }
   let json;
-  if (!captured.truncated && request.assertions.some(item=>item.kind==='json')) {
+  if (!captured.truncated && (request.graphql || request.assertions.some(item=>item.kind==='json'))) {
     try { json=JSON.parse(captured.body); } catch { /* JSON assertions cannot pass on a non-JSON body. */ }
   }
   const assertions=request.assertions.map(({kind,name,value})=>{
@@ -218,8 +315,15 @@ async function sendRequest(request, { signal,fetcher=fetch } = {}) {
   });
   const headers = [...response.headers].map(([name,value])=>
     [name,responseSecrets.has(name)?'[redacted]':request.redact(value)]);
-  return { status:response.status,headers,assertions,body:request.redact(captured.body),
+  const result={ status:response.status,headers,assertions,body:request.redact(captured.body),
     truncated:captured.truncated,durationMs:Math.round(performance.now()-started) };
+  if (request.graphql) {
+    const graphqlResponse=!!json && typeof json==='object' && !Array.isArray(json) &&
+      (Object.hasOwn(json,'data') || Array.isArray(json.errors));
+    result.graphql={ kind:request.graphql,graphqlResponse,hasData:graphqlResponse && Object.hasOwn(json,'data'),
+      errors:Array.isArray(json?.errors)?json.errors.length:0 };
+  }
+  return result;
 }
 
 module.exports = { requestAt, resolveRequest, sendRequest };

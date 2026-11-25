@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.44.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.45.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 55 |
-| 부분 구현 | 106 |
-| 미구현 | 39 |
+| 구현 | 56 |
+| 부분 구현 | 108 |
+| 미구현 | 36 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 1 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **56%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **56.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.44에서는 Java 구문 변환, 문자열 속 SQL·JSON 편집, MySQL·MariaDB 네이티브 백업·복원을 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 119점에서 121점으로 바뀌었다.
+v0.45에서는 Java 고급 중단점, DuckDB 방언·탐색, GraphQL과 WebSocket 클라이언트를 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 121점에서 123점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -97,7 +97,7 @@ v0.44에서는 Java 구문 변환, 문자열 속 SQL·JSON 편집, MySQL·MariaD
 | IDEA-074 | IntelliJ IDEA | 복수 서비스·Compound·실행 순서 | VS Code 재사용 |
 | IDEA-075 | IntelliJ IDEA | JVM 시작·프로세스/원격 연결 | 부분 구현 |
 | IDEA-076 | IntelliJ IDEA | 조건·적중 횟수·로그 중단점 | 구현 |
-| IDEA-077 | IntelliJ IDEA | 메서드·필드·행 내부 중단점 | 미구현 |
+| IDEA-077 | IntelliJ IDEA | 메서드·필드·행 내부 중단점 | 구현 |
 | IDEA-078 | IntelliJ IDEA | 예외 종류·Caught/Uncaught 필터 | 부분 구현 |
 | IDEA-079 | IntelliJ IDEA | Smart Step·라이브러리 필터·비동기 스택 | 부분 구현 |
 | IDEA-080 | IntelliJ IDEA | 표현식 평가·Watch·변수 수정·프레임 | 부분 구현 |
@@ -124,7 +124,7 @@ v0.44에서는 Java 구문 변환, 문자열 속 SQL·JSON 편집, MySQL·MariaD
 | IDEA-101 | IntelliJ IDEA | 내장 터미널·셸·세션 | VS Code 재사용 |
 | IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 부분 구현 |
 | IDEA-103 | IntelliJ IDEA | OpenAPI·Swagger 편집·미리보기·코드 생성 | 부분 구현 |
-| IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 미구현 |
+| IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 부분 구현 |
 | IDEA-105 | IntelliJ IDEA | IDE 안의 DB 연결·SQL·데이터 편집 | 부분 구현 |
 | IDEA-106 | IntelliJ IDEA | JavaScript·TypeScript·Node/브라우저 디버그 | VS Code 재사용 |
 | IDEA-107 | IntelliJ IDEA | React·Angular·Vue 프레임워크 | 미구현 |
@@ -233,7 +233,7 @@ v0.44에서는 Java 구문 변환, 문자열 속 SQL·JSON 편집, MySQL·MariaD
 | DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 미구현 |
 | DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 미구현 |
 | DG-092 | DataGrip | 서로 다른 data source의 cross-database SQL | 미구현 |
-| DG-093 | DataGrip | DuckDB dialect·함수·introspection | 미구현 |
+| DG-093 | DataGrip | DuckDB dialect·함수·introspection | 부분 구현 |
 | DG-094 | DataGrip | 미실행 SQL·최근 파일·Local History 복원 | 부분 구현 |
 | DG-095 | DataGrip | DataGrip 전체 창·도구창의 정확한 배치 | 호스트 구조 제약 |
 | DG-096 | DataGrip | SQL 단축키·명령·결과 panel 이동 | 부분 구현 |

@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.44.0",
+  "version": "0.45.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -24,6 +24,7 @@
     "onView:rocketbrain.results",
     "onView:rocketbrain.analysis",
     "onLanguage:java",
+    "onLanguage:duckdb-sql",
     "onDebug:rocketbrain-java",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
@@ -48,7 +49,11 @@
         "id": "rocketbrain-http",
         "aliases": ["Rocketbrain HTTP", "HTTP"],
         "extensions": [".http", ".rest"]
-      }
+      },
+      { "id": "duckdb-sql", "aliases": ["DuckDB SQL"], "extensions": [".duckdb.sql"] }
+    ],
+    "grammars": [
+      { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" }
     ],
     "commands": [
       { "command": "rocketbrain.vcs.changelists", "title": "Manage Git Changelists", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -56,6 +61,12 @@
       { "command": "rocketbrain.sql.applyEmbedded", "title": "Review and Apply Embedded Source Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == untitled && (editorLangId == sql || editorLangId == json)" },
       { "command": "rocketbrain.db.nativeDump", "title": "Create Native Database Dump", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.nativeRestore", "title": "Review and Restore Native Dump", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.duckdb.open", "title": "Open Local DuckDB Read-Only", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.duckdb.newQuery", "title": "New DuckDB Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
+      { "command": "rocketbrain.duckdb.run", "title": "Run Read-Only DuckDB Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected && editorLangId == duckdb-sql" },
+      { "command": "rocketbrain.duckdb.browse", "title": "Browse DuckDB Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
+      { "command": "rocketbrain.duckdb.functions", "title": "Find DuckDB Functions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
+      { "command": "rocketbrain.duckdb.close", "title": "Close Local DuckDB", "category": "Rocketbrain", "enablement": "rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.sqlNotebook.create", "title": "New SQL Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.sqlNotebook.pinResult", "title": "Pin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
       { "command": "rocketbrain.sqlNotebook.unpinResult", "title": "Unpin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
@@ -128,6 +139,10 @@
       { "command": "rocketbrain.data.transfer", "title": "Copy Captured Rows", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.data.finishTransfer", "title": "Finish Table Copy", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.http.run", "title": "Send HTTP Request", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted", "icon": "$(play)" },
+      { "command": "rocketbrain.http.graphqlSchema", "title": "Inspect GraphQL Endpoint Schema", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
+      { "command": "rocketbrain.http.websocketSessions", "title": "View WebSocket Transcript", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
+      { "command": "rocketbrain.http.websocketSend", "title": "Send WebSocket Message", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
+      { "command": "rocketbrain.http.websocketClose", "title": "Close WebSocket Connection", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
       { "command": "rocketbrain.http.environment", "title": "Select HTTP Environment", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
       { "command": "rocketbrain.http.saveSecret", "title": "Set HTTP Environment Secret", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
       { "command": "rocketbrain.openapi.inspect", "title": "Inspect OpenAPI JSON", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc" },
@@ -226,6 +241,18 @@
         "title": "Apply Hot Code Replace",
         "category": "Rocketbrain",
         "icon": "$(debug-restart)"
+      },
+      {
+        "command": "rocketbrain.java.addMethodBreakpoint",
+        "title": "Add Java Method Breakpoint",
+        "category": "Rocketbrain",
+        "enablement": "editorLangId == java && isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.addInlineBreakpoints",
+        "title": "Add Java Inline Breakpoints",
+        "category": "Rocketbrain",
+        "enablement": "editorLangId == java && isWorkspaceTrusted && inDebugMode"
       },
       {
         "command": "rocketbrain.spring.endpoints",
@@ -1694,12 +1721,14 @@
     "saxes": "6.0.0",
     "sql.js": "1.13.0",
     "vscode-languageclient": "11.0.0",
+    "ws": "8.23.0",
     "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@vscode/test-electron": "2.5.2",
     "@vscode/vsce": "3.6.2",
     "esbuild": "0.25.11",
+    "graphql": "16.15.0",
     "ssh2": "1.17.0"
   }
 }

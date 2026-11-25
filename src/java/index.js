@@ -96,14 +96,14 @@ function registerJavaFeatures(context, vscode) {
       return disposing;
     }
   };
-  debuggerController = registerJavaDebugger(vscode, api, output);
-  api.debug = debuggerController;
-  subscriptions.push(debuggerController);
   const refactoringRequest=async(method,params,cancellation)=>{
     if(!['textDocument/codeAction','codeAction/resolve','textDocument/documentSymbol','textDocument/definition','textDocument/references','workspace/willRenameFiles','java/getChangeSignatureInfo','java/getRefactorEdit','java/move','java/getMoveDestinations'].includes(method)&&!(method==='workspace/executeCommand'&&['java.project.getClasspaths','java.project.getSettings','java.project.getAll'].includes(params?.command)))throw new Error('Unsupported Java refactoring request.');
     await api.start();if(!vscode.workspace.isTrusted||!client||state.state!=='running')throw new Error('Start Java support in a trusted workspace before refactoring.');
     return client.sendRequest(method,params,...(cancellation?[cancellation]:[]));
   };
+  debuggerController = registerJavaDebugger(vscode,api,output,refactoringRequest);
+  api.debug = debuggerController;
+  subscriptions.push(debuggerController);
   api.refactoring=require('./refactoring').registerJavaRefactoring(context,vscode,{request:refactoringRequest});
   subscriptions.push(api.refactoring);
   api.interfaceRefactoring={

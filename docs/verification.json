@@ -1,25 +1,25 @@
 {
-  "version": "0.44.0",
-  "verifiedAt": "2026-11-25T08:52:15.821Z",
+  "version": "0.45.0",
+  "verifiedAt": "2026-11-25T09:04:21.202Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.44.0.vsix",
-    "bytes": 1919515,
-    "sha256": "64ddc41fbcbd677105c08dbb0609ef084ea87a35bf6017bb90ac8ed9262773a8",
-    "files": 13
+    "name": "rocketbrain-0.45.0.vsix",
+    "bytes": 1958406,
+    "sha256": "478d015e5f32aa4bac19686ecaa7978f810b2e817311ecb58d498539d59ad1bb",
+    "files": 14
   },
   "source": {
-    "frozenPublicInputs": 1267,
-    "inputVectorSha256": "d6572f4e99a6cffe27e52f10ccf9d74f561bc74493bc6dcc4be6b8aba9619d17",
+    "frozenPublicInputs": 1282,
+    "inputVectorSha256": "a5410cc241ce3906e446dd52aebced9dcebce96c46a19add52cc41b2f0d40ed9",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1321,
-    "pass": 1262,
+    "tests": 1330,
+    "pass": 1269,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 59,
+    "skipped": 61,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,15 +32,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "conversion",
+          "group": "duckdb",
           "checks": 1
         },
         {
-          "group": "embedded",
+          "group": "breakpoints",
           "checks": 1
         },
         {
-          "group": "dump",
+          "group": "protocols",
           "checks": 1
         }
       ],
@@ -58,15 +58,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "conversion",
+          "group": "duckdb",
           "checks": 1
         },
         {
-          "group": "embedded",
+          "group": "breakpoints",
           "checks": 1
         },
         {
-          "group": "dump",
+          "group": "protocols",
           "checks": 1
         }
       ],
@@ -77,90 +77,74 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-034": {
-      "scope": "실제 Spring 작업 공간 두 곳에서 JDT와 Javac로 세 가지 변환을 검증했다. 객체 동일성을 비교하는 예제와 배열을 변경하는 루프 및 오래된 검토를 거부하고 각 변경 뒤 Spring 빌드를 확인했다.",
+    "IDEA-077": {
+      "scope": "실제 Spring 프로젝트에서 String 오버로드와 상속 선언, 필드 읽기와 쓰기, 같은 줄의 두 람다에 각각 정지했다. Object 오버로드도 중단 없이 실행했으며 JVM 결과는 44였다.",
       "runtimeGroups": [
-        "conversion"
+        "breakpoints"
       ]
     },
-    "DG-042": {
-      "scope": "두 DB의 실제 Spring 작업 공간에서 원본 범위, SQL 완성·정의, 오래된 검토 거부를 검증했다. 반영한 SQL을 Spring JDBC와 MyBatis로 실행했고, 따옴표와 역슬래시를 포함한 JSON을 실제 서버에서 읽었다.",
+    "IDEA-104": {
+      "scope": "독립 루프백 서버에서 실제 GraphQL 실행기·스키마 조회와 토큰을 사용하는 WebSocket, 텍스트·바이너리 프레임, 정상 종료를 확인했다. 같은 테스트를 두 Spring 연결 환경의 설치형 VS Code에서 실행했다.",
       "runtimeGroups": [
-        "embedded"
+        "protocols"
       ]
     },
-    "DG-074": {
-      "scope": "두 실제 DB에서 공급사 도구로 FK, BIGINT, DECIMAL, 바이너리, 줄바꿈이 포함된 텍스트를 복원했다. 변경된 파일, 덮어쓰기, 원본 데이터베이스, 비어 있지 않은 대상을 거부했다.",
+    "DG-093": {
+      "scope": "DuckDB 1.5.6과 두 실제 Spring·DB 환경에서 같은 로컬 파일의 FROM-first·QUALIFY, 중첩 타입, 함수 오버로드, 결과 제한과 에디터 동작을 확인했다. 파일 체크섬을 보존했다.",
       "runtimeGroups": [
-        "dump"
+        "duckdb"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 239,
+    "sourceCorrespondences": 243,
     "sourceConfidence": "inferred",
-    "archiveEntries": 13,
+    "archiveEntries": 14,
     "archiveConfidence": "observed"
-  },
-  "unixTransport": {
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45573055748",
-    "head": "cbd643ae09604fc2ed33ac6d9daf1327fd87eb85",
-    "unchangedInputs": [
-      ".github/workflows/unix-db-transport.yml",
-      "scripts/test-unix-db-transport.js",
-      "src/db/local-transport.js",
-      "src/db/mysql.js",
-      "src/db/connection-profiles.js",
-      "src/db/connection-security.js",
-      "src/db/result-layouts.js",
-      "src/db/metadata.js",
-      "src/db/sql-policy.js",
-      "pnpm-lock.yaml"
-    ]
   },
   "progress": {
     "counts": {
-      "implemented": 55,
-      "partial": 106,
-      "not-implemented": 39,
+      "implemented": 56,
+      "partial": 108,
+      "not-implemented": 36,
       "host-provided": 13,
       "unverified": 1,
       "platform-limited": 2
     },
-    "weightedPoints": 121,
-    "previousWeightedPoints": 119,
+    "weightedPoints": 123,
+    "previousWeightedPoints": 121,
     "targetWeightedPoints": 216,
-    "referencePercent": 56,
+    "referencePercent": 56.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-034",
-        "before": "unverified",
-        "after": "partial"
-      },
-      {
-        "id": "DG-042",
+        "id": "IDEA-077",
         "before": "not-implemented",
         "after": "implemented"
       },
       {
-        "id": "DG-074",
+        "id": "IDEA-104",
+        "before": "not-implemented",
+        "after": "partial"
+      },
+      {
+        "id": "DG-093",
         "before": "not-implemented",
         "after": "partial"
       }
     ]
   },
   "limits": [
-    "Java 변환은 소유권과 참조를 확인할 수 있는 플랫폼 SAM 지역 변수와 배열 합산 루프를 대상으로 한다.",
-    "네이티브 덤프는 직접 연결된 로컬 InnoDB 테이블을 원본과 다른 빈 스키마에 복원한다. 루틴과 트리거는 별도 지원이 필요하다.",
-    "정적 MyBatis SQL을 편집한다. 동적 태그와 매퍼 파라미터는 원본 컨텍스트에서 처리해야 한다.",
+    "Java 메서드 중단점은 저장된 접근 가능 소스의 줄별 선언을 대상으로 한다.",
+    "DuckDB는 사용자 지정 공식 CLI에서 로컬 .duckdb 파일을 읽는다. 외부 파일 읽기와 확장 설치·로드는 추가 지원이 필요하다.",
+    "GraphQL 요청·스키마 조회와 WebSocket 메시지 흐름을 지원한다. gRPC와 GraphQL 구독은 남아 있다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "메서드 오버로드·필드·행 내부 Java 중단점",
-    "DuckDB 방언과 로컬 카탈로그·함수 탐색",
-    "GraphQL과 WebSocket 요청·응답 작업 흐름"
+    "정확한 Git 커밋과 기준선을 사용하는 Java CI 품질 게이트",
+    "사용자 데이터 추출기와 서로 다른 MySQL·MariaDB 서버를 조인하는 SELECT",
+    "어노테이션 처리·Lombok 생성 심볼"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
