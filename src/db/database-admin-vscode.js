@@ -263,15 +263,16 @@ function registerDatabaseAdmin(context, vscode, { database }) {
   async function openRoleMembershipReview(reviewId) {
     const { plan } = reviewed('role-membership', reviewId), { identity, graph, positiveGrants, defaults, policy } = plan.before;
     const describe = list => list.length ? list.map(role => describeAccount(role) + (role.adminOption ? ' · ADMIN OPTION' : '')).join(', ') : '(none)';
-    const grants = Object.entries(positiveGrants).flatMap(([scope, value]) =>
+    const grants = observed => Object.entries(observed).flatMap(([scope, value]) =>
       ['-- ' + scope + ' grants · ' + value.visibility, ...value.entries.map(entry => '-- ' + privilegeText(entry))]);
-    return show(['-- Reviewed direct role membership', '-- Executing account ' + text(identity.currentUser),
+    return show(['-- Reviewed direct role membership', '-- Executing account ' + text(identity.currentUser) + ' · direct ADMIN OPTION observed',
       '-- Before · ' + describe(plan.before.membership), '-- Expected · ' + describe(plan.expected),
       '-- Reviewed account defaults · ' + describe(defaults),
       ...(identity.dialect === 'mysql' ? ['-- Activate all assigned roles on login · ' + (policy.automaticActivation ? 'yes' : 'no')] : []),
       '-- Explicit inherited role paths observed · ' + graph.roles.length,
       ...graph.edges.map(edge => '-- ' + text(describeAccount(edge.member)) + ' → ' + text(describeAccount(edge.role))),
-      ...grants,
+      '-- Observed grants of ' + text(describeAccount(plan.target.role)), ...grants(positiveGrants),
+      ...graph.roles.flatMap(role => ['-- Observed grants inherited from ' + text(describeAccount(role.identity)), ...grants(role.privileges)]),
       '-- This statement changes membership immediately. Session activation and other grants determine actual access.',
       ...(plan.target.withAdmin ? ['-- ADMIN OPTION permits this account to delegate the reviewed role.'] : []),
       '', plan.sql + ';'].join('\n'), 'role-membership.sql', reviewId);

@@ -65,7 +65,7 @@ async function verifyRoleMembership(runtime, descriptor, adapter) {
     assert.equal(ordinary.sql, 'GRANT ' + selected + " TO '" + guest.user + "'@'" + guest.host + "'");
     assert.equal(ordinary.credentialsIncluded, false);
     assert.ok(!JSON.stringify(ordinary).includes(guest.password));
-    await adapter.assertReview?.(ordinary, membership.leaf);
+    await adapter.assertReview?.(ordinary, membership.leaf, membership.table);
     await assert.rejects(adapter.apply({reviewId:ordinary.reviewId}), /Approve the exact/);
     const granted = await apply(ordinary);
     assert.equal(granted.state, 'verified');
@@ -121,7 +121,7 @@ async function runRoleMembershipChecks(api, vscode, checks) {
     checks.roleMembership = await verifyRoleMembership(runtime, process.env.ROCKETBRAIN_DBADMIN_TEST_CONFIG, {
       connect: config => api.connectMysql(config), options: admin.listRoleMembershipOptions,
       prepare: admin.prepareRoleMembership, apply: admin.applyRoleMembership,
-      async assertReview(review, inherited) {
+      async assertReview(review, inherited, table) {
         const details = await admin.openRoleMembershipReview(review.reviewId);
         const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(details.documentUri));
         assert.equal(document.uri.scheme, 'rocketbrain-db-admin');
@@ -129,6 +129,7 @@ async function runRoleMembershipChecks(api, vscode, checks) {
         assert.match(document.getText(), /Reviewed direct role membership/);
         assert.ok(document.getText().includes(review.sql));
         assert.ok(document.getText().includes(inherited));
+        assert.ok(document.getText().includes(table));
       },
       async probe() {
         const response = await fetch(runtime.baseUrl + '/probe/testing-state', {signal:AbortSignal.timeout(5000)});
