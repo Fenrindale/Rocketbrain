@@ -433,3 +433,5 @@ For a named MySQL or MariaDB profile, choose **No password** only when the serve
 Use **Review Database TLS Trust and Reconnect** on a saved MySQL or MariaDB profile with verified TLS. Compare the last saved TLS observation with the current certificate, issuer, expiry and loaded CA material. Approve to reconnect with that exact observed certificate. A changed certificate or CA file requires a fresh review.
 
 Use **Review Database Account Lock or Unlock** for an exact MySQL or MariaDB account. The review shows its current authentication and role policy and lists views, routines, triggers and events that name it as their definer. Rocketbrain requires observable server-wide inventory before applying. The lock controls fresh logins. Already authenticated sessions stay connected and stored objects keep their definers.
+
+**Review MariaDB Package Call** supports matching public Oracle-mode function signatures with scalar OUT and IN OUT parameters. Review the typed inputs, invocation and stored sources together. The dedicated read-only session captures the return value and output parameters in separate results, then rolls back.

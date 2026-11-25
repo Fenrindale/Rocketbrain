@@ -647,15 +647,34 @@ class MysqlService {
         const context = await objectSourceContext(query);
         const before = await routineCall.observeProcedure(query, context, review.object);
         if (before.fingerprint !== review.fingerprint) throw routineCall.fail('STALE', 'The package function definition or input signature changed. Prepare a new review.');
-        const { values } = routineCall.bindProcedure(before.parameters, inputs);
+        const { callValues, variableValues, initializeSql, outputs } = routineCall.sessionArguments(before, inputs);
         this._observe(session, await this._control(session, 'START TRANSACTION READ ONLY', bounded.timeoutMs));
         await this._refreshState(session);
         if (!session.readOnly || !session.inTransaction) throw routineCall.fail('TRANSACTION', 'The package function could not start an isolated read-only transaction.');
+        const capture = (sql, values, operation) => {
+          check();
+          return this._stream(session, sql, values, bounded, false, { category: 'procedure', operation });
+        };
+        if (initializeSql) await capture(initializeSql, variableValues, 'SET');
         check();
         invoked = true;
-        const result = await this._stream(session, before.sql, values, bounded, false, { category: 'procedure', operation: 'SELECT' });
+        const invocation = await capture(before.sql, callValues, before.returnSql ? 'SET' : 'SELECT');
+        if (before.returnSql && (invocation.truncated || invocation.columns.length || invocation.rows.length)) {
+          throw routineCall.fail('FUNCTION_RESULT', 'The package function assignment returned an unexpected result set.');
+        }
+        const result = before.returnSql ? await capture(before.returnSql, [], 'SELECT') : invocation;
         if (result.truncated || result.columns.length !== 1 || result.columns[0] !== 'return_value' || result.rows.length !== 1 || result.rows[0].length !== 1)
           throw routineCall.fail('FUNCTION_RESULT', 'The package function did not return one scalar value.');
+        const outputParameters = await routineCall.readProcedureOutputs(sql => capture(sql, [], 'SELECT'), outputs);
+        if (before.returnSql) {
+          result.rows[0][0] = routineCall.exactOutput(before.returns.kind, result.rows[0][0], 'package function return');
+          result.warningCount += invocation.warningCount;
+          result.durationMs += invocation.durationMs;
+        }
+        const resultBytes = Buffer.byteLength(JSON.stringify({ columns: result.columns, fields: result.fields, rows: result.rows,
+          ...(outputParameters.length && { outputParameters }) }));
+        if (outputParameters.length && resultBytes > maxRoutineResultBytes) throw routineCall.fail('RESULT_LIMIT',
+          'The scalar return and output parameters together exceed the 4 MiB limit.');
         const after = await routineCall.observeProcedure(query, await objectSourceContext(query), review.object);
         if (after.fingerprint !== before.fingerprint) throw routineCall.fail('STALE', 'The package function definition or session context changed during invocation.');
         await this._refreshState(session);
@@ -663,8 +682,7 @@ class MysqlService {
         check();
         this._observe(session, await this._control(session, 'ROLLBACK', bounded.timeoutMs));
         if (session.inTransaction) throw routineCall.fail('TRANSACTION', 'The package function rollback could not be confirmed.');
-        return { ...result, resultSets: [result], outputParameters: [], totalRows: 1,
-          resultBytes: Buffer.byteLength(JSON.stringify({ columns: result.columns, fields: result.fields, rows: result.rows })),
+        return { ...result, resultSets: [result], outputParameters, totalRows: 1, resultBytes,
           returns: before.returns, state: 'completed', callerTransactionCommitted: false, readOnlyInvocation: true,
           definitionCheck: 'before-and-after', sessionId: session.id, sql: before.sql };
       } catch (error) {
