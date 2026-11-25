@@ -1,25 +1,25 @@
 {
-  "version": "0.56.0",
-  "verifiedAt": "2026-11-25T12:26:14.498Z",
+  "version": "0.57.0",
+  "verifiedAt": "2026-11-25T12:42:17.950Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.56.0.vsix",
-    "sha256": "46a441b466e91d064ee1fe09b618f2d0b88f1939609885681a969bc769b4a892",
-    "bytes": 3128921,
+    "name": "rocketbrain-0.57.0.vsix",
+    "sha256": "ac0a1ded9f6755726ac6628a1578e4fe6785a3e18e2659e22bce2a5b8b276433",
+    "bytes": 3148230,
     "files": 18
   },
   "source": {
-    "frozenPublicInputs": 1590,
-    "inputVectorSha256": "54a273510205988654f953c784182cdecc6cf18aa2d97b616c90ad92477b3aa2",
+    "frozenPublicInputs": 1623,
+    "inputVectorSha256": "781f4017b9d7b9d5b87262e408f532d7340165fcae78fa2f58982ddfc03042d7",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1435,
-    "pass": 1357,
+    "tests": 1446,
+    "pass": 1366,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 78,
+    "skipped": 80,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,15 +32,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "acp",
+          "group": "kubernetes",
           "checks": 1
         },
         {
-          "group": "docker",
+          "group": "devcontainer",
           "checks": 1
         },
         {
-          "group": "coroutines",
+          "group": "wsl",
           "checks": 1
         }
       ],
@@ -58,15 +58,15 @@
       "groupCount": 3,
       "groups": [
         {
-          "group": "acp",
+          "group": "kubernetes",
           "checks": 1
         },
         {
-          "group": "docker",
+          "group": "devcontainer",
           "checks": 1
         },
         {
-          "group": "coroutines",
+          "group": "wsl",
           "checks": 1
         }
       ],
@@ -77,102 +77,118 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-083": {
-      "scope": "Kotlin 2.4.21과 공식 kotlinx-coroutines-debug 1.11.0에서 실행 중과 일시 중단된 두 코루틴, 생성·관찰 프레임 및 연결 해제 뒤 JVM 유지와 소유 프로브 종료를 확인했다.",
+    "IDEA-097": {
+      "scope": "GitHub의 Windows 시험 호스트가 실제 WSL 1 Ubuntu에서 설치 VSIX를 열었다. OpenJDK 21, Maven 3.8.7, Gradle 9.1.0으로 동일 Spring 구성을 컴파일하고 변경된 계획 거절과 취소 뒤 배포판 유지를 확인했다.",
       "runtimeGroups": [
-        "coroutines"
+        "wsl"
       ]
     },
-    "IDEA-099": {
-      "scope": "Ubuntu의 실제 Docker 28.0.4와 Compose 2.38.2에서 레지스트리 매니페스트, 컨테이너 수명주기 및 두 DB를 사용한 Spring Compose 복구를 확인했다. Windows VS Code에서는 설치형 트리와 명령을 확인했다.",
+    "IDEA-098": {
+      "scope": "실제 Ubuntu Docker와 공식 CLI 0.91.0에서 두 구성의 마운트·초기화·환경·인수와 종료 코드, 정확한 컨테이너 정지를 확인했다. 설치한 Windows VS Code의 다섯 명령과 빈 세션 제어도 확인했다.",
       "runtimeGroups": [
-        "docker"
+        "devcontainer"
       ]
     },
-    "IDEA-116": {
-      "scope": "공식 ACP SDK 2.12.0의 독립 프로세스 둘이 교대로 도착하는 요청에서 동시 실행, 텍스트 청크, 권한 거절, 결과 비교를 실제 프로토콜로 확인했다. 취소는 별도 실제 피어 시험에서 확인했다.",
+    "IDEA-100": {
+      "scope": "실제 kind Kubernetes 1.36.4에서 두 컨테이너 로그, Helm 릴리스 리비전과 컨텍스트 고정, RBAC 범위 거부를 확인했다. 설치 VS Code에서 탐색 트리와 다섯 명령을 확인했다.",
       "runtimeGroups": [
-        "acp"
+        "kubernetes"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 326,
+    "sourceCorrespondences": 332,
     "sourceConfidence": "inferred",
     "archiveEntries": 18,
     "archiveConfidence": "observed"
   },
-  "nativePayloadEquivalence": {
-    "files": 18,
-    "testedArchiveSha256": "90d44ed425a03f878d1403870591810cc82f42aa5b6f215cf04049d6e0d808ff",
-    "testedInputVectorSha256": "1a693218e0b68a2b2d1f09d53735e454fc91e3a7e7dbca72af656dcef19ba4cd",
-    "onlySourceChanges": [
-      "test/docker-workbench-host.js"
-    ]
-  },
   "hostedRuntime": {
-    "docker": {
+    "kubernetes": {
       "platform": "Ubuntu 24.04",
-      "runUrl": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45610037775",
-      "commit": "6eba6edc92a3e40a624cc0569c9911e4ebc77ff6",
-      "bothDatabaseEngines": [
-        "MySQL 8.4.13",
-        "MariaDB 11.4.8"
+      "runUrl": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45610037909",
+      "commit": "5b8384849cd7bd0cfd358e4aba60721f230b29d8",
+      "kubernetes": "1.36.4",
+      "helmReleaseRevision": 1,
+      "verifiedSourceFiles": [
+        "src/infra/kubernetes.js",
+        "src/infra/kubernetes-vscode.js"
+      ]
+    },
+    "devcontainer": {
+      "platform": "Ubuntu 24.04",
+      "runUrl": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45612010519",
+      "commit": "2b1e1d1cff24b9d6be9ef71e9290f63018b73ccb",
+      "cli": "0.91.0",
+      "verifiedVariants": [
+        "image",
+        "dockerfile"
       ],
       "verifiedSourceFiles": [
-        "src/docker/workbench.js",
-        "src/docker/vscode.js",
-        "scripts/test-docker-spring-workbench.js"
-      ],
-      "artifactReportSha256": {
-        "mysql": "e9c9619ff29f0e47f0620c9bd922b4b7d74ed97520c5fde17dee82f4e9725a20",
-        "mariadb": "edb5b35543aced2f0206c86ed0bb5704a975ccbf33c49a5127d4f9a96712e90b"
-      }
+        "src/devcontainer/runtime.js",
+        "src/devcontainer/vscode.js",
+        "test/devcontainer.test.js",
+        ".github/workflows/devcontainer-runtime.yml",
+        "test/fixtures/devcontainer/tooling/package-lock.json"
+      ]
+    },
+    "wsl": {
+      "platform": "Windows Server 2025 hosted WSL 1",
+      "runUrl": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45614548634",
+      "commit": "a7a447b1ab030fa5e850c5513bb568969e243b7e",
+      "reportedPackageSha256": "12ac3c40ecfc9c62dc315b12bf56bd55dd5e2f4205ed37d761d76827d6f97f49",
+      "nativeVscode": "1.100.3",
+      "verifiedSourceFiles": [
+        "src/remote/wsl-workspace.js",
+        "src/remote/wsl-vscode.js",
+        "test/wsl-workspace-host.js",
+        "scripts/test-wsl-runtime.ps1"
+      ]
     }
   },
   "progress": {
     "counts": {
       "implemented": 67,
-      "partial": 131,
-      "not-implemented": 3,
+      "partial": 134,
+      "not-implemented": 0,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 145.5,
-    "previousWeightedPoints": 144,
+    "weightedPoints": 147,
+    "previousWeightedPoints": 145.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 67.4,
+    "referencePercent": 68.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-083",
+        "id": "IDEA-097",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-099",
+        "id": "IDEA-098",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-116",
+        "id": "IDEA-100",
         "before": "not-implemented",
         "after": "partial"
       }
     ]
   },
   "limits": [
-    "코루틴 스냅샷은 로컬 JVM을 시작할 때 연결한 프로브를 사용한다. 부모 작업 그래프와 디버거 프레임 전환이 남아 있다.",
-    "Docker는 선택한 컨텍스트의 컨테이너·이미지와 Compose 프로젝트를 보여 준다. 이미지 빌드·푸시, 복합 Compose 수정과 레지스트리 관리가 남아 있다.",
-    "ACP는 명시한 로컬 ACP v1 프로그램의 단일 요청과 응답 비교를 지원한다. 세션 복구와 작업 공간 전체 변경 검토는 다음 범위다.",
+    "Kubernetes는 고정된 컨텍스트에서 선언한 읽기 권한을 사용한다. 클러스터 변경과 Helm 설치·업그레이드는 남아 있다.",
+    "Dev Container는 이미지나 Dockerfile로 정의한 단일 관리 컨테이너를 사용한다. Compose 개발 환경, 포트 전달과 원격 디버깅이 남아 있다.",
+    "WSL 1에서 Windows 작업 폴더의 Maven·Gradle 빌드를 확인했다. WSL 2와 원격 JDT·디버거 연결은 미검증이다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Kubernetes 컨텍스트 및 Helm 읽기 전용 탐색",
-    "Dev Container 구성과 수명주기",
-    "WSL 배포판과 프로젝트 빌드 작업"
+    "DB 객체·DDL·작업 공간 SQL 파일 통합 검색",
+    "카탈로그 객체 단위 새로고침과 실패 복구",
+    "Java 예외 중단점의 타입과 발생 위치 필터",
+    "읽기 스냅샷과 키셋 기반 결과 페이지"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -86,6 +86,7 @@ async function activate(context) {
   context.subscriptions.push(codeModel);
   const docker = require('./docker/vscode').registerDockerWorkbench(vscode);
   context.subscriptions.push(docker);
+  const kubernetes = require('./infra/kubernetes-vscode').registerKubernetesExplorer(context, vscode);
   const java = registerJavaFeatures(context, vscode);
   const javaFx = require('./java/javafx-vscode').registerJavaFx(vscode, { java });
   java.fx = javaFx;
@@ -140,6 +141,8 @@ async function activate(context) {
   const python = require('./python/python-vscode').registerPython(vscode);
   const vue = require('./web/vue-vscode').registerVueWorkbench(context, vscode);
   context.subscriptions.push(python);
+  const devContainers = require('./devcontainer/vscode').registerDevContainers(context, vscode);
+  context.subscriptions.push(devContainers);
   const schemaComparison=require('./db/schema-diff-vscode').registerSchemaComparison(context,vscode,{
     capture:options=>database.captureSchemaSnapshot(options),
     prepare:request=>database.previewSchemaMigration(request),
@@ -163,7 +166,9 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, federation };
+  const wsl = require('./remote/wsl-vscode').registerWslWorkbench(vscode);
+  context.subscriptions.push(wsl);
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

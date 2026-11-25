@@ -1,0 +1,7 @@
+{
+  "name": "Rocketbrain Dev Container Dockerfile",
+  "build": { "dockerfile": "Containerfile.txt", "context": "." },
+  "remoteEnv": { "ROCKETBRAIN_CONTAINER_FIXTURE": "managed-build" },
+  "waitFor": "postCreateCommand",
+  "postCreateCommand": ["sh", "-c", "printf 'ready-build' > /tmp/rocketbrain-devcontainer-ready"]
+}

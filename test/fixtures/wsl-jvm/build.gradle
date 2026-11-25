@@ -1,0 +1,17 @@
+plugins { id 'java' }
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation 'org.springframework:spring-context:7.0.10'
+}
+
+tasks.register('cancellationProbe') {
+    doLast {
+        file('cancel-started').text = 'started'
+        Thread.sleep(120_000)
+        file('cancel-finished').text = 'finished'
+    }
+}
+
+tasks.named('build') { dependsOn('cancellationProbe') }

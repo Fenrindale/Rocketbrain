@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.56.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.57.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -9,15 +9,15 @@
 | 판정 | 항목 수 |
 | --- | ---: |
 | 구현 | 67 |
-| 부분 구현 | 131 |
-| 미구현 | 3 |
+| 부분 구현 | 134 |
+| 미구현 | 0 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **67.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **68.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.56에서는 Kotlin 코루틴 상태·생성 스택, Docker Compose 관리, 병렬 ACP 응답 검토를 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 144점에서 145.5점으로 바뀌었다.
+v0.57에서는 Kubernetes·Helm 탐색, Dev Container 수명주기와 WSL 작업 공간 빌드를 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 145.5점에서 147점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -117,10 +117,10 @@ v0.56에서는 Kotlin 코루틴 상태·생성 스택, Docker Compose 관리, �
 | IDEA-094 | IntelliJ IDEA | Git Worktree·작업별 프로젝트 설정 | 부분 구현 |
 | IDEA-095 | IntelliJ IDEA | GitHub PR·GitLab MR 리뷰 | 부분 구현 |
 | IDEA-096 | IntelliJ IDEA | SSH 원격 개발 | 부분 구현 |
-| IDEA-097 | IntelliJ IDEA | WSL 실행·개발 | 미구현 |
-| IDEA-098 | IntelliJ IDEA | Dev Container 환경 | 미구현 |
+| IDEA-097 | IntelliJ IDEA | WSL 실행·개발 | 부분 구현 |
+| IDEA-098 | IntelliJ IDEA | Dev Container 환경 | 부분 구현 |
 | IDEA-099 | IntelliJ IDEA | Docker·Compose·Registry 관리 | 부분 구현 |
-| IDEA-100 | IntelliJ IDEA | Kubernetes·Helm·클러스터 탐색 | 미구현 |
+| IDEA-100 | IntelliJ IDEA | Kubernetes·Helm·클러스터 탐색 | 부분 구현 |
 | IDEA-101 | IntelliJ IDEA | 내장 터미널·셸·세션 | VS Code 재사용 |
 | IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 부분 구현 |
 | IDEA-103 | IntelliJ IDEA | OpenAPI·Swagger 편집·미리보기·코드 생성 | 부분 구현 |

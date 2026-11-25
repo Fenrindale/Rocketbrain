@@ -1,5 +1,5 @@
 {
-  "version": "0.56.0",
+  "version": "0.57.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -31,26 +31,26 @@
   },
   "summary": {
     "implemented": 67,
-    "partial": 131,
-    "not-implemented": 3,
+    "partial": 134,
+    "not-implemented": 0,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 67.4,
+    "percent": 68.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-083",
-    "IDEA-099",
-    "IDEA-116"
+    "IDEA-097",
+    "IDEA-098",
+    "IDEA-100"
   ],
   "expandedFeatures": [
-    "IDEA-083",
-    "IDEA-099",
-    "IDEA-116"
+    "IDEA-097",
+    "IDEA-098",
+    "IDEA-100"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -2596,8 +2596,8 @@
       "verification": {
         "state": "v0.56-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.56.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3011,25 +3011,26 @@
       "category": "원격·컨테이너",
       "feature": "WSL 실행·개발",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Rocketbrain 전용 WSL 엔진 실행·경로 변환 검증이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "WSL 배포판을 나열하고 로컬 Windows 작업 폴더를 Linux에 매핑한다. 검토한 Maven·Gradle 작업을 실행하고 Rocketbrain이 소유한 프로세스를 취소한다.",
       "remaining": [
-        "Windows/WSL JDK·경로·프로세스·디버그 통합이 필요하다."
+        "WSL 2, Linux 전용 작업 폴더의 원격 편집 및 JDT·디버거 연결이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.57-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "GitHub의 Windows 시험 호스트가 실제 WSL 1 Ubuntu에서 설치 VSIX를 열었다. OpenJDK 21, Maven 3.8.7, Gradle 9.1.0으로 동일 Spring 구성을 컴파일하고 변경된 계획 거절과 취소 뒤 배포판 유지를 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/remote/wsl-workspace.js",
+          "src/remote/wsl-vscode.js",
+          "test/wsl-workspace-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3040,25 +3041,26 @@
       "category": "원격·컨테이너",
       "feature": "Dev Container 환경",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Dev Container 환경 관리·원격 엔진 연결이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "공개 Dev Container CLI로 로컬 구성의 이미지나 Dockerfile을 읽고 단일 관리 컨테이너를 시작한다. 작업 폴더에서 명령을 실행하고 소유 확인 뒤 그 컨테이너를 중지한다.",
       "remaining": [
-        "컨테이너 구성·빌드·마운트·디버깅 수명주기가 필요하다."
+        "Compose, 포트 전달, 컨테이너 언어 서버·디버거 연결이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.57-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 Ubuntu Docker와 공식 CLI 0.91.0에서 두 구성의 마운트·초기화·환경·인수와 종료 코드, 정확한 컨테이너 정지를 확인했다. 설치한 Windows VS Code의 다섯 명령과 빈 세션 제어도 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/devcontainer/runtime.js",
+          "src/devcontainer/vscode.js",
+          "test/devcontainer-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3079,8 +3081,8 @@
       "verification": {
         "state": "v0.56-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.56.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3099,25 +3101,26 @@
       "category": "원격·컨테이너",
       "feature": "Kubernetes·Helm·클러스터 탐색",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Kubernetes·Helm 탐색·배포 도구가 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "검토한 kubeconfig의 고정 컨텍스트에서 네임스페이스, Deployment, Service, Pod, 개별 컨테이너 로그와 Helm 릴리스를 읽는다.",
       "remaining": [
-        "context·리소스·로그·포트 전달·배포 관리가 필요하다."
+        "리소스 변경, Helm 배포 제어, 복합 자격 증명 제공자 연결이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.57-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 kind Kubernetes 1.36.4에서 두 컨테이너 로그, Helm 릴리스 리비전과 컨텍스트 고정, RBAC 범위 거부를 확인했다. 설치 VS Code에서 탐색 트리와 다섯 명령을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/infra/kubernetes.js",
+          "src/infra/kubernetes-vscode.js",
+          "test/kubernetes-explorer-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3586,8 +3589,8 @@
       "verification": {
         "state": "v0.56-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.56.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6678,8 +6681,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "46a441b466e91d064ee1fe09b618f2d0b88f1939609885681a969bc769b4a892",
-    "sourceManifestSha256": "54a273510205988654f953c784182cdecc6cf18aa2d97b616c90ad92477b3aa2",
+    "vsixSha256": "ac0a1ded9f6755726ac6628a1578e4fe6785a3e18e2659e22bce2a5b8b276433",
+    "sourceManifestSha256": "781f4017b9d7b9d5b87262e408f532d7340165fcae78fa2f58982ddfc03042d7",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6693,28 +6696,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-083",
+      "id": "IDEA-097",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-099",
+      "id": "IDEA-098",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-116",
+      "id": "IDEA-100",
       "before": "not-implemented",
       "after": "partial"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1435,
-    "pass": 1357,
+    "tests": 1446,
+    "pass": 1366,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 78,
+    "skipped": 80,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"
