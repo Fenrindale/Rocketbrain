@@ -56,6 +56,10 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   }
   else if(inspection.kind==='dataflow'&&Number.isSafeInteger(inspection.offset)&&inspection.offset>=0&&
     sources.some(item=>item.uri===inspection.uri&&inspection.offset<item.text.length))query.push('dataflow',inspection.uri,String(inspection.offset));
+  else if(inspection.kind==='typeStructure'&&['inherited','nested'].includes(inspection.group)&&Number.isSafeInteger(inspection.offset)&&
+    inspection.offset>=0&&sources.some(item=>item.uri===inspection.uri&&inspection.offset<=item.text.length)){
+    query.push('typeStructure',inspection.uri,String(inspection.offset),inspection.group);
+  }
   else if(inspection.kind==='structural'&&(inspection.uri===undefined||sources.some(item=>item.uri===inspection.uri))){
     const {mode,pattern,replacement,constraints}=structuralQuery(inspection);
     const encode=text=>Buffer.from(text,'utf8').toString('base64');

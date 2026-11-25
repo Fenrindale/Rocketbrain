@@ -1,5 +1,5 @@
 {
-  "version": "0.69.0",
+  "version": "0.70.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 86,
-    "partial": 115,
+    "implemented": 88,
+    "partial": 114,
     "not-implemented": 0,
-    "host-provided": 13,
+    "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 72.5,
+    "percent": 72.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-027",
-    "IDEA-062",
-    "DG-036",
-    "DG-078"
+    "IDEA-019",
+    "IDEA-060",
+    "DG-082",
+    "DG-094"
   ],
   "expandedFeatures": [
-    "IDEA-027",
-    "IDEA-062",
-    "DG-036",
-    "DG-078"
+    "IDEA-019",
+    "IDEA-060",
+    "DG-082",
+    "DG-094"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -596,26 +596,24 @@
       "category": "탐색·구조 분석",
       "feature": "Structure·현재 파일 기호",
       "priority": "P1",
-      "status": "host-provided",
-      "label": "VS Code 재사용",
-      "delivery": "vscode-core",
-      "scope": "JDT와 Kotlin의 현재 소스 선언을 검증해 VS Code Outline과 File Structure에서 탐색한다. 타입·함수·필드 필터와 중첩·오버로드로 정확한 선언을 선택한다.",
-      "remaining": [
-        "상속 멤버와 익명·람다 선언의 별도 그룹 탐색이 남아 있다."
-      ],
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "Java·Kotlin 파일의 타입·함수·필드 구조를 탐색한다. Java는 상속 제네릭 시그니처, 중첩·지역·익명 타입과 실제 선언을 연결하며 저장된 대상의 변경을 검증한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.68-installed-coverage",
+        "state": "v0.70-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.68.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 설치 환경에서 Java 필드 190개, 중첩 레코드, 두 오버로드, 현재 메서드와 저장 전 갱신을 확인했다. Kotlin은 companion·백틱 이름·오버로드를 확인했다.",
+        "testedScope": "두 Spring 환경에서 제네릭 상속 멤버와 복합 필드 위치, 바이너리 항목, 이름 있는 중첩·지역 타입과 익명 타입 두 개, 변경 선언 거부를 실제 버퍼에서 확인했다.",
         "publicEvidence": [
-          "src/java/file-structure.js",
           "src/java/file-structure-vscode.js",
-          "test/file-structure-host.js"
+          "src/java/typed-file-structure.js",
+          "test/java-inherited-structure-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -852,8 +850,8 @@
       "verification": {
         "state": "v0.69-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.69.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1883,23 +1881,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Hibernate JPQL/HQL 콘솔이 검토한 스칼라 쿼리와 단일 직접 INNER·LEFT JOIN FETCH를 읽기 전용으로 실행한다. 결과의 엔티티와 연관 필드를 펼치고 매핑 선언을 연다.",
+      "scope": "읽기 전용 Hibernate JPQL/HQL 콘솔이 엔티티의 직접 연관관계 세 개까지 한 번의 조회로 펼친다. 하나의 Bag·List와 to-one 또는 검증된 두 표준 Set을 지원한다.",
       "remaining": [
-        "다중 경로·다중 연관 fetch, 일반 엔티티 투영, 컬렉션 매개변수와 다른 provider 실행이 남아 있다."
+        "중첩·연쇄 경로, 일반 엔티티 반환, 사용자 정의 매핑 및 다른 provider가 남아 있다."
       ],
       "verification": {
-        "state": "v0.67-installed-coverage",
+        "state": "v0.70-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.67.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 DB의 Hibernate 7.4.13에서 정의로 이동하고 단일 준비 SELECT와 롤백을 확인했다. nullable 연관과 빈 컬렉션을 구분하고 16개 하위 항목 미리보기, 최대 루트 및 물리 행 한도, 콜백·다형 로드의 실행 전 거부를 검증했다.",
+        "testedScope": "두 실제 DB에서 nullable to-one 두 개와 Bag의 중복을 보존했다. 두 Set의 물리 조인 일곱 행, 512행 초과 거부, 반복·중첩·병렬 Bag의 실행 전 거부, 읽기 전용 롤백을 확인했다.",
         "publicEvidence": [
           "runtime/jpa-observer/src/rocketbrain/observer/ConsoleFetchSnapshot.java",
           "src/jpa/vscode.js",
-          "test/jpql-fetch-snapshot-host.js"
+          "test/jpql-multi-fetch-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1950,8 +1948,8 @@
       "verification": {
         "state": "v0.69-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.69.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4768,8 +4766,8 @@
       "verification": {
         "state": "v0.69-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.69.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6075,8 +6073,8 @@
       "verification": {
         "state": "v0.69-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.69.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6183,26 +6181,24 @@
       "category": "스키마 비교·이행",
       "feature": "서로 다른 서버 schema/object 구조 diff",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "서버 스냅샷에서 테이블·뷰와 보이는 프로시저·함수·트리거·이벤트를 비교한다. 원문 및 생성 문맥의 읽기 전용 diff를 열고 가려진 정의와 비교 가능한 차이를 표시한다.",
-      "remaining": [
-        "권한과 행 데이터, 소유자·이름 대소문자 무시 옵션, 가려진 정의의 의미 비교가 남아 있다."
-      ],
+      "scope": "두 실제 서버의 테이블·열·인덱스·FK·뷰와 관찰한 저장 객체를 비교한다. 확인한 이름의 대소문자와 생성 헤더의 DEFINER 옵션을 독립 적용하고 정확한 DDL diff를 열 수 있다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.68-installed-coverage",
+        "state": "v0.70-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.68.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "각 엔진에서 별개의 실제 두 서버의 저장 객체 일곱 개를 대조했다. 본문과 생성 문맥, 트리거 순서, 이벤트 시간대, EXECUTE 전용 계정의 가려진 정의를 확인했다. 변조한 스냅샷과 저장 DDL 적용을 거부했다.",
+        "testedScope": "각 엔진의 별개 서버 두 대에서 정확·대소문자 접기와 DEFINER 옵션을 조합했다. 본문 문자열·SQL SECURITY와 원본 스냅샷 지문을 보존하고 DDL 권한과 라이브 변경이 발생하지 않음을 확인했다.",
         "publicEvidence": [
-          "src/db/schema-stored-diff.js",
+          "src/db/schema-diff-options.js",
           "src/db/schema-diff-vscode.js",
-          "test/schema-stored-diff-host.js"
+          "test/schema-compare-options-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6551,23 +6547,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "명시적으로 추적한 미실행 SQL과 선택 영역을 워크스페이스 로컬에 체크포인트로 보관한다. 별도 VS Code 프로세스에서 오프라인으로 복원해 계속 편집할 수 있다.",
+      "scope": "로컬 SQL 초안의 명시 체크포인트와 최신 원문을 비교한다. 이전 버전을 원본과 독립된 오프라인 편집기로 복원하며 최신 초안은 유지한다.",
       "remaining": [
-        "여러 버전의 타임라인과 결과·그리드 초안 맥락을 연결한 복원이 남아 있다."
+        "결과·편집 검토를 포함한 범위와 실제 DB 재바인딩이 남아 있다."
       ],
       "verification": {
-        "state": "v0.68-installed-coverage",
+        "state": "v0.70-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.68.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "각 실제 Spring DB에서 VS Code를 닫기 전에 미저장 CRLF SQL을 보관하고 별도 호스트 PID에서 텍스트와 역방향 선택을 그대로 복원했다. 오프라인 실행은 거부했고 연결한 콘솔에 복사해 실제 결과를 확인했다.",
+        "testedScope": "두 DB에서 별도 VS Code 프로세스의 체크포인트 두 개, 읽기 전용 diff, CRLF와 선택 영역, 원본 유지, 변경 후 오래된 검토 거부를 확인했다.",
         "publicEvidence": [
           "src/db/console-drafts.js",
-          "src/database-workbench.js",
-          "test/console-drafts-host.js"
+          "docs/sql-draft-recovery.md",
+          "test/console-draft-history-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6633,8 +6629,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "668af94a28eeb4a87d7ca4a9ef66638245d503edb584ec897097809c4d3cded7",
-    "sourceManifestSha256": "91147a5950b37f0796e4258e84a7a29efa5235b16bf5eee334ba53b70b8725d4",
+    "vsixSha256": "d025699964ff9a1bf02788ccd99b3cfeeaa0ba2167cba92d0262f988741c26bc",
+    "sourceManifestSha256": "83b93010ad3dc04fa057d84522028aa0931510f56271c03be0e89393a64a9c56",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6648,18 +6644,23 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-062",
+      "id": "IDEA-019",
+      "before": "host-provided",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-082",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1600,
-    "pass": 1502,
+    "tests": 1610,
+    "pass": 1511,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 98,
+    "skipped": 99,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

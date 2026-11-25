@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.69.0",
+  "version": "0.70.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -567,6 +567,12 @@
         "enablement": "isWorkspaceTrusted && editorLangId == sql"
       },
       {
+        "command": "rocketbrain.sqlDraft.history",
+        "title": "Browse SQL Draft Checkpoints",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.sqlDraft.remove",
         "title": "Remove SQL Draft",
         "category": "Rocketbrain",
@@ -758,6 +764,18 @@
         "command": "rocketbrain.schema.compareSnapshot",
         "title": "Compare Current Database with Schema Snapshot",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.compareSnapshotWithOptions",
+        "title": "Compare Schema Snapshot with Options",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected"
+      },
+      {
+        "command": "rocketbrain.schema.openComparedDefinition",
+        "title": "Open Compared Table or View DDL",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.schema.saveSnapshotWithStoredObjects",

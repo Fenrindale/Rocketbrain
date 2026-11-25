@@ -138,3 +138,50 @@ test('managed fetch preview validates nested typed rows and distinguishes an emp
     }
   }finally{client.dispose();await new Promise(resolve=>host.close(resolve));}
 });
+
+test('multiple fetch paths preserve reviewing order, set identity and the shared physical row budget',async()=>{
+  const owner='fixture.Person';
+  const association=(name,collection,linked)=>({association:name,path:owner+'.'+name,targetType:'fixture.Related',toMany:!!collection,
+    columns:[{alias:'id',javaType:'java.lang.Long'}],...(collection?{collection}:{}),linked:[linked]});
+  const left=association('leftSet','SET',{state:'loaded',rows:[['1'],['2']],hasMore:false});
+  const right=association('rightSet','SET',{state:'loaded',rows:[['2'],['3'],['4']],hasMore:false});
+  const note=association('note',null,{state:'null',rows:[],hasMore:false});
+  const roots={rootType:owner,maxRoots:25,maxChildren:16};
+  const described={...description,fetchSnapshots:{...roots,associations:[left,right,note].map(({linked,...path})=>path)}};
+  const executed={...result,fetchSnapshots:{...roots,joinedRows:6,associations:[left,right,note]}};
+  let response=executed;
+  const server=http.createServer((req,res)=>{
+    req.resume();res.setHeader('Content-Type','application/json');
+    res.end(JSON.stringify(req.url==='/console/describe'?described:response));
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const client=new ObserverClient({url:'http://127.0.0.1:'+server.address().port,token:'e'.repeat(48)});
+  const query='select p from Person p left join fetch p.leftSet left join fetch p.rightSet left join fetch p.note where p.id >= :floor';
+  const run=()=>client.select(query,FACTORY,{':floor':'1'},25);
+  try{
+    assert.deepEqual((await client.describeSelect(query,FACTORY)).fetchSnapshots,described.fetchSnapshots);
+    const valid=await run();
+    assert.deepEqual(valid.fetchSnapshots,executed.fetchSnapshots);
+    const html=htmlForResult(valid,query);
+    assert.match(html,/<span>leftSet<\/span>[\s\S]*<span>rightSet<\/span>[\s\S]*<span>note<\/span>/);
+    assert.match(html,/6 joined rows/);
+    assert.match(html,/<em>NULL<\/em>/);
+    for(const invalid of [ report=>report.fetchSnapshots.joinedRows=5,
+      report=>report.fetchSnapshots.associations[0].linked[0].rows[1]=['1'],
+      report=>report.fetchSnapshots.associations[0].collection='BAG',
+      report=>report.fetchSnapshots.associations[1]=report.fetchSnapshots.associations[0],
+      report=>report.fetchSnapshot=left ]){
+      response=structuredClone(executed);invalid(response);
+      await assert.rejects(run,error=>error.code==='INVALID_SCHEMA');
+    }
+
+    const registered=new Map();
+    let changed;
+    registerJpaConsole({window:{}},{command:(key,fn)=>registered.set(key,fn),target:()=>({factories:[{id:FACTORY}],assertCurrent(){},
+      client:{async describeSelect(){return described;},async select(){return changed;}}})});
+    changed=structuredClone(executed);
+    changed.fetchSnapshots.associations.reverse();
+    await assert.rejects(()=>registered.get('rocketbrain.jpa.console.run')({query,factoryId:FACTORY,values:{':floor':'1'},approved:true}),
+      error=>error.code==='STALE');
+  }finally{client.dispose();await new Promise(resolve=>server.close(resolve));}
+});

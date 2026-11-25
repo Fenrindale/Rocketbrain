@@ -225,7 +225,7 @@ Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후�
 
 **Find JVM & Spring Usages**는 현재 파일, 해당 워크스페이스 폴더 또는 전체 워크스페이스에서 사용처를 찾습니다. Java와 Kotlin의 의미 기반 참조, Spring XML의 Bean 클래스, 정적 설정 플레이스홀더를 골라 정확한 소스 위치로 이동합니다. [사용처 검색 범위](docs/java-symbol-navigation.md#find-usages)
 
-**File Structure**로 현재 Java·Kotlin 파일의 타입, 함수, 필드를 검색하고 중첩 선언이나 원하는 오버로드로 이동합니다. VS Code Outline에도 같은 소스 위치 검사를 적용합니다. [파일 구조 탐색](docs/java-symbol-navigation.md#file-structure)
+**File Structure**로 현재 Java·Kotlin 파일의 타입, 함수, 필드를 검색하고 중첩 선언이나 원하는 오버로드로 이동합니다. 가져온 Java 프로젝트에서는 상속 멤버와 익명·지역 타입도 확인할 수 있습니다. VS Code Outline에도 소스 위치 검사를 적용합니다. [파일 구조 탐색](docs/java-symbol-navigation.md#file-structure)
 
 Java·Kotlin의 **Format Document**와 **Format Selection**은 상위 폴더와 현재 폴더의 `.editorconfig`를 적용합니다. **Preview Java Formatting**과 **Preview Kotlin Formatting**으로 변경 내용을 검토할 수 있습니다. Kotlin 포맷은 여러 줄 문자열 내용을 보존하며, LF·CRLF 변환은 문서 전체에 적용합니다. [Java·Kotlin 포맷 설정](docs/java-formatting.md)
 
@@ -331,6 +331,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Open Schema Diagram**에서 실제 FK와 저장 연결의 워크스페이스 가상 FK를 탐색합니다. 노드 위치를 저장하거나 JSON으로 교환하고 PNG로 내보낼 수 있습니다.
 - **Save Schema DDL**에서 InnoDB 테이블, 외래 키, 지원하는 뷰, SQL/PSM 프로시저, 결정적 숫자 함수, 트리거의 복원 순서를 검토하고 Git으로 추적할 SQL 파일을 저장합니다. 선택 모드에서는 대상 테이블에 연결된 트리거와 호출하는 프로시저를 포함합니다. 확인할 수 없는 본문, 동적 SQL, 교차 스키마 참조, 순서를 확인할 수 없는 트리거는 생략 이유를 표시합니다. 저장 직전에 서버 정의를 다시 비교합니다. 파일에는 행 데이터, 권한, 이벤트, 시퀀스와 패키지를 포함하지 않습니다. 복원할 때는 동일한 이름과 기본 콜레이션의 빈 스키마와 원래 DEFINER 계정을 준비하고 호환되는 UTF-8 MySQL·MariaDB 클라이언트에서 파일을 검토한 뒤 실행합니다.
 - **Save Schema Snapshot with Stored Objects**로 프로시저, 함수, 트리거, 이벤트의 관찰 가능한 원문과 생성 설정을 스냅샷에 저장합니다. 다른 연결에서 **Compare Current Database with Schema Snapshot**을 실행해 같은 이름·종류의 원문과 설정을 비교하고 **Open Stored Object Diff**에서 나란히 엽니다. 보이지 않는 원문과 한쪽 계정에만 보이는 객체는 미확정으로 표시합니다. 비교 결과는 검토용이며 저장 객체 배포나 SQL 의미 동등성을 판단하는 데 사용하지 않습니다.
+- **Compare Schema Snapshot with Options**에서 식별자의 정확한 철자 또는 ASCII 대소문자 무시와 CREATE 헤더의 DEFINER 계정 포함 여부를 각각 선택합니다. 비교 보고서에 양쪽 엔진의 테이블 이름 규칙과 모호한 이름을 표시합니다. **Open Compared Table or View DDL**에서 비교에 사용한 원문을 열 수 있습니다. SQL SECURITY, 본문과 리터럴은 비교에 포함하며, 변경을 적용하려면 일반 스키마 비교에서 다시 검토합니다.
 - 테이블 디자이너에서 NULL을 허용하는 부호 있는 정수·DECIMAL 생성 열을 추가하거나 수정할 수 있습니다. 앞에 선언된 일반 숫자 열을 참조해 괄호와 `+`, `-`, `*` 표현식을 작성하고 Virtual 또는 Stored를 선택합니다. MySQL은 `STORED`, MariaDB는 `PERSISTENT`로 검토합니다. 기존 테이블을 재구성할 때 일반 열만 복사하고 서버가 계산한 결과를 확인합니다. 함수·서브쿼리·생성 열 연쇄 참조·생성 열의 인덱스나 외래 키·일반 열과 생성 열 사이의 변환에는 별도 검토가 필요합니다.
 
 테이블 설계와 기존 뷰·프로시저 원문 편집은 검토·명시적 적용 흐름을 제공합니다. 서버 검증에는 DDL 권한이 필요할 수 있습니다. MySQL/MariaDB DDL과 객체 교체에는 비원자적인 단계가 있으므로 표시된 범위·복구 조건·미완료 트랜잭션을 확인하세요. 모호한 결과를 자동 재실행하지 않습니다.

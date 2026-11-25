@@ -1,25 +1,25 @@
 {
-  "version": "0.69.0",
-  "verifiedAt": "2026-11-25T16:38:06.112Z",
+  "version": "0.70.0",
+  "verifiedAt": "2026-11-25T16:45:39.292Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.69.0.vsix",
-    "sha256": "668af94a28eeb4a87d7ca4a9ef66638245d503edb584ec897097809c4d3cded7",
-    "bytes": 3378899,
+    "name": "rocketbrain-0.70.0.vsix",
+    "sha256": "d025699964ff9a1bf02788ccd99b3cfeeaa0ba2167cba92d0262f988741c26bc",
+    "bytes": 3391287,
     "files": 21
   },
   "source": {
-    "frozenPublicInputs": 1854,
-    "inputVectorSha256": "91147a5950b37f0796e4258e84a7a29efa5235b16bf5eee334ba53b70b8725d4",
+    "frozenPublicInputs": 1867,
+    "inputVectorSha256": "83b93010ad3dc04fa057d84522028aa0931510f56271c03be0e89393a64a9c56",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1600,
-    "pass": 1502,
+    "tests": 1610,
+    "pass": 1511,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 98,
+    "skipped": 99,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaInline",
+          "group": "javaInherited",
           "checks": 1
         },
         {
-          "group": "jpaDiagram",
+          "group": "jpaMultiFetch",
           "checks": 1
         },
         {
-          "group": "sqlJoinFix",
+          "group": "schemaOptions",
           "checks": 1
         },
         {
-          "group": "generatedColumns",
+          "group": "sqlDraftHistory",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaInline",
+          "group": "javaInherited",
           "checks": 1
         },
         {
-          "group": "jpaDiagram",
+          "group": "jpaMultiFetch",
           "checks": 1
         },
         {
-          "group": "sqlJoinFix",
+          "group": "schemaOptions",
           "checks": 1
         },
         {
-          "group": "generatedColumns",
+          "group": "sqlDraftHistory",
           "checks": 1
         }
       ],
@@ -85,70 +85,76 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-027": {
-      "scope": "두 Spring DB 환경에서 선택한 오버로드만 바꾸고, 중복 사용과 미사용을 포함한 인자 세 개를 순서대로 평가했다. 중첩 호출과 변경된 검토 거부, VS Code Undo와 원본 디스크 보존을 확인했다.",
+    "IDEA-019": {
+      "scope": "두 Spring 환경에서 제네릭 상속 멤버와 복합 필드 위치, 바이너리 항목, 이름 있는 중첩·지역 타입과 익명 타입 두 개, 변경 선언 거부를 실제 버퍼에서 확인했다.",
       "runtimeGroups": [
-        "javaInline"
+        "javaInherited"
       ]
     },
-    "IDEA-062": {
-      "scope": "각 실제 DB에서 기본 Hibernate 팩터리의 엔티티 21개와 관계 13개를 확인했다. 두 번째 팩터리와 중복 엔티티를 분리하고 실제 FK와 소스 위치, Canvas 렌더링 및 위치 복원, 연결 종료를 확인했다.",
+    "IDEA-060": {
+      "scope": "두 실제 DB에서 nullable to-one 두 개와 Bag의 중복을 보존했다. 두 Set의 물리 조인 일곱 행, 512행 초과 거부, 반복·중첩·병렬 Bag의 실행 전 거부, 읽기 전용 롤백을 확인했다.",
       "runtimeGroups": [
-        "jpaDiagram"
+        "jpaMultiFetch"
       ]
     },
-    "DG-036": {
-      "scope": "두 DB에서 복합 키로 정확한 테넌트 행만 조회했다. 편집된 SQL, 이미 작성한 ON과 외부에서 삭제한 FK는 적용을 거절했다. 앞 문장과 기존 별칭·WHERE를 보존했다.",
+    "DG-082": {
+      "scope": "각 엔진의 별개 서버 두 대에서 정확·대소문자 접기와 DEFINER 옵션을 조합했다. 본문 문자열·SQL SECURITY와 원본 스냅샷 지문을 보존하고 DDL 권한과 라이브 변경이 발생하지 않음을 확인했다.",
       "runtimeGroups": [
-        "sqlJoinFix"
+        "schemaOptions"
       ]
     },
-    "DG-078": {
-      "scope": "MySQL STORED·MariaDB PERSISTENT 및 양쪽 VIRTUAL을 검증했다. 53비트 한계 밖 DECIMAL의 정밀도·NULL·재계산, 안전하지 않은 표현식·직접 쓰기 거부, 원본 복원과 오버플로 시 게시 중단을 확인했다.",
+    "DG-094": {
+      "scope": "두 DB에서 별도 VS Code 프로세스의 체크포인트 두 개, 읽기 전용 diff, CRLF와 선택 영역, 원본 유지, 변경 후 오래된 검토 거부를 확인했다.",
       "runtimeGroups": [
-        "generatedColumns"
+        "sqlDraftHistory"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 397,
+    "sourceCorrespondences": 399,
     "sourceConfidence": "inferred",
     "archiveEntries": 21,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 86,
-      "partial": 115,
+      "implemented": 88,
+      "partial": 114,
       "not-implemented": 0,
-      "host-provided": 13,
+      "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 156.5,
-    "previousWeightedPoints": 156,
+    "weightedPoints": 157,
+    "previousWeightedPoints": 156.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 72.5,
+    "referencePercent": 72.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-062",
+        "id": "IDEA-019",
+        "before": "host-provided",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-082",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "선택한 단순 같은 클래스 private static 메서드 호출을 인라인한다. 다형 호출과 일반 메서드 본문 분석은 남아 있다.",
-    "JPA 관계도의 위치·표시 설정은 워크스페이스에 저장한다. 매핑 원문은 선언 위치에서 편집한다.",
-    "JOIN 빠른 수정은 확인한 두 실테이블의 비어 있는 조인 절에 실제 FK 열을 삽입한다. 생성 열은 현재 제한된 숫자 표현식을 지원한다.",
+    "Java 상속·익명 타입 탐색은 가져온 프로젝트의 의미 분석을 사용한다. 바이너리 선언에서 확인할 수 있는 소스가 없으면 목록에 표시한다.",
+    "Hibernate는 검토한 직접 연관 경로 세 개까지 실행한다. 두 컬렉션은 표준 Set과 정확한 키를 확인한 경우에 허용한다.",
+    "스키마 비교 옵션은 이름과 DEFINER를 비교에 반영한다. 이 옵션으로 만든 비교는 마이그레이션 승인을 부여하지 않는다.",
+    "SQL 초안은 명시 저장한 버전의 텍스트를 복원한다. 라이브 결과와 변경 검토의 복원이 남아 있다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "상속 멤버·익명 타입의 Java File Structure 탐색",
-    "Hibernate 다중 직접 연관 FETCH JOIN과 복수 결과",
-    "서버 간 스키마 비교의 이름·소유자 옵션과 SQL 초안 버전 복원"
+    "사용자 정의 함수형 인터페이스의 람다·익명 클래스 변환",
+    "실제 요청의 Spring Security 필터 체인과 실행 순서",
+    "읽기 전용 스크립트의 CALL과 캡처한 결과 재열기, DB 계정·역할 생성 검토"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

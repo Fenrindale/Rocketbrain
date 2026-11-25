@@ -44,7 +44,7 @@ async function verify({ config,token }) {
       return scopes.length===2;
     },'The optional second Hibernate factory did not start');
     const model=modelFor(config);
-    assert.equal(observed.agentVersion,'0.12.0');
+    assert.equal(observed.agentVersion,require('../scripts/jpa-observer-build').VERSION);
     const localPerson=model.entities.find(item=>item.fqn===person);
     const scope=chooseScope(scopes,model,localPerson.uri), snapshot=buildDiagram(model,scope);
     const secondary=scopes.find(item=>item.key!==scope.key);

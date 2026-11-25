@@ -86,7 +86,7 @@ final class ConsoleQuery {
         description.put("columns",columns);
         description.put("parameters",parameters.stream().map(parameter->Map.of("key",parameter.key(),"javaType",parameter.javaType())).toList());
         description.put("sqlExecuted",false);
-        if(fetch!=null)description.put("fetchSnapshot",fetch.describe());
+        if(fetch!=null)fetch.describeInto(description);
         return new Prepared(text,List.copyOf(columns),List.copyOf(parameters),description,fetch);
     }
 

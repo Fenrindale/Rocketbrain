@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.69.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.70.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 86 |
-| 부분 구현 | 115 |
+| 구현 | 88 |
+| 부분 구현 | 114 |
 | 미구현 | 0 |
-| VS Code 재사용 | 13 |
+| VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **72.5%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **72.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.69에서는 선택한 Java 호출 인라인, JPA 관계도와 자동 Persistence Unit 선택, 실제 FK 기반 JOIN 수정, 테이블 디자이너의 생성 열을 검증했다. 상태가 바뀐 항목은 1개이고 가중 점수는 156점에서 156.5점으로 바뀌었다.
+v0.70에서는 Java 상속·익명 타입 탐색, Hibernate 다중 직접 연관 조회, 스키마 비교 옵션, SQL 초안의 이전 버전 복원을 검증했다. 상태가 바뀐 항목은 2개이고 가중 점수는 156.5점에서 157점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -39,7 +39,7 @@ v0.69에서는 선택한 Java 호출 인라인, JPA 관계도와 자동 Persiste
 | IDEA-016 | IntelliJ IDEA | Find Usages·참조 탐색 | 구현 |
 | IDEA-017 | IntelliJ IDEA | 호출 계층 | 구현 |
 | IDEA-018 | IntelliJ IDEA | 타입·상속 계층 | 구현 |
-| IDEA-019 | IntelliJ IDEA | Structure·현재 파일 기호 | VS Code 재사용 |
+| IDEA-019 | IntelliJ IDEA | Structure·현재 파일 기호 | 구현 |
 | IDEA-020 | IntelliJ IDEA | 정적 Data Flow to/from Here | 부분 구현 |
 | IDEA-021 | IntelliJ IDEA | 구조 검색·치환 | 구현 |
 | IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 부분 구현 |
@@ -222,7 +222,7 @@ v0.69에서는 선택한 Java 호출 인라인, JPA 관계도와 자동 Persiste
 | DG-079 | DataGrip | PK·FK·index·제약조건 편집 | 부분 구현 |
 | DG-080 | DataGrip | 사용자·역할·권한 관리 | 부분 구현 |
 | DG-081 | DataGrip | routine·view source 수정·deploy | 부분 구현 |
-| DG-082 | DataGrip | 서로 다른 서버 schema/object 구조 diff | 부분 구현 |
+| DG-082 | DataGrip | 서로 다른 서버 schema/object 구조 diff | 구현 |
 | DG-083 | DataGrip | 선택 변경의 migration DDL 생성·검토·실행 | 부분 구현 |
 | DG-084 | DataGrip | DDL 파일을 가상 DB 의미 모델로 사용 | 구현 |
 | DG-085 | DataGrip | DB schema→정렬된 DDL 파일·VCS | 구현 |
