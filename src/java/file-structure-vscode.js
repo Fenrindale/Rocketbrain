@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const {GROUPS,normalizeStructure,filterStructure,currentSymbol} = require('./file-structure');
+const {JAVA_GROUPS} = require('./typed-file-structure');
 
 const COMMAND='rocketbrain.java.fileStructure';
 const MAX_SOURCE_BYTES=2*1024*1024;
@@ -10,7 +11,14 @@ const KINDS=['File','Module','Namespace','Package','Class','Method','Property','
 
 function registerFileStructure(vscode,{java,readJava,output}) {
   const reviews=new WeakMap();
-  let disposed=false;
+  const typedReviews=new WeakSet();
+  let disposed=false,typedService;
+
+  function registerJavaInspection(service) {
+    if (disposed||typedService) throw Error('Java File Structure is already registered or closed.');
+    typedService=service;
+    return {dispose(){if(typedService===service)typedService=undefined;}};
+  }
 
   function available(document) {
     const uri=document?.uri;
@@ -79,6 +87,12 @@ function registerFileStructure(vscode,{java,readJava,output}) {
 
   async function inspect({document,position,group='all',cancellation}={}) {
     if (!available(document)) throw Error('Open a trusted Java or Kotlin workspace source.');
+    if (Object.hasOwn(JAVA_GROUPS,group)) {
+      if (document.languageId!=='java'||!typedService) throw Error('Choose a Java source for compiler File Structure.');
+      const result=await typedService.inspect({document,position,group,cancellation});
+      typedReviews.add(result);
+      return result;
+    }
     const started=await (document.languageId==='java'?java.start():java.kotlinEditor.start({document}));
     if (started.state!=='running') throw Error(started.message || 'Start the language server to inspect this file.');
     const record=await read(document,cancellation), {rows,stats,positionOffset}=record.symbols;
@@ -92,6 +106,7 @@ function registerFileStructure(vscode,{java,readJava,output}) {
   }
 
   async function reveal(result,id) {
+    if (typedService&&typedReviews.has(result)) return typedService.reveal(result,id);
     const record=reviews.get(result);
     if (!record || !Number.isSafeInteger(id) || !result.members.some(item=>item.id===id)) throw Error('Select a known file structure member.');
     const {document,version,text}=record;
@@ -107,7 +122,8 @@ function registerFileStructure(vscode,{java,readJava,output}) {
       const editor=vscode.window.activeTextEditor;
       if (!available(editor?.document)) throw Error('Open a trusted Java or Kotlin workspace source.');
       const {document}=editor, {active:position}=editor.selection, {version}=document,text=document.getText();
-      const scope=await vscode.window.showQuickPick(Object.entries(GROUPS).map(([group,label])=>({group,label})),{title:'File Structure'});
+      const groups=document.languageId==='java'&&typedService?{...GROUPS,...JAVA_GROUPS}:GROUPS;
+      const scope=await vscode.window.showQuickPick(Object.entries(groups).map(([group,label])=>({group,label})),{title:'File Structure'});
       if (!scope) return;
       anchored(document,version,text);
       const report=await vscode.window.withProgress({title:'Read File Structure',location:vscode.ProgressLocation.Notification,cancellable:true},
@@ -117,20 +133,21 @@ function registerFileStructure(vscode,{java,readJava,output}) {
         return report;
       }
       const items=report.members.map(member=>({
-        label:member.label+member.signature,description:member.kind+' · line '+(member.range.start.line+1),
+        label:member.label+member.signature,description:member.kind+(member.range?' · line '+(member.range.start.line+1):' · source unavailable'),
         detail:[member.path,member.detail].filter(Boolean).join(' · '),member
       }));
       const current=items.find(item=>item.member.id===report.currentId);
       if (current) {items.splice(items.indexOf(current),1);items.unshift(current);}
       const limited=report.stats.limited?' · Result limit reached':'';
-      const picked=await vscode.window.showQuickPick(items,{title:path.basename(document.uri.fsPath)+' · '+GROUPS[scope.group]+limited,
+      const picked=await vscode.window.showQuickPick(items,{title:(report.type||path.basename(document.uri.fsPath))+' · '+groups[scope.group]+limited,
         matchOnDescription:true,matchOnDetail:true});
-      if (picked) await reveal(report,picked.member.id);
+      if (picked?.member.range) await reveal(report,picked.member.id);
+      else if (picked) void vscode.window.showInformationMessage('The declaration source is unavailable in the analyzed Java project.');
       return report;
     } catch (error) { if (!disposed) void vscode.window.showErrorMessage('Rocketbrain: '+error.message); return null; }
   });
 
-  return {outline,inspect,reveal,dispose(){disposed=true;action.dispose();}};
+  return {outline,inspect,reveal,registerJavaInspection,dispose(){disposed=true;typedService=undefined;action.dispose();}};
 }
 
 module.exports = {registerFileStructure};

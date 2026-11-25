@@ -15,6 +15,7 @@ const { createJavaConversion } = require('./java-conversion-vscode');
 const { createConstantExtraction } = require('./extract-constant-vscode');
 const { createValueExtraction } = require('./extract-value-vscode');
 const { createMethodInline } = require('./inline-method-vscode');
+const { createTypedFileStructure } = require('./typed-file-structure');
 
 const COMMANDS = Object.freeze({
   diagram:'rocketbrain.java.showClassDiagram', flow:'rocketbrain.java.traceDataFlow',
@@ -447,6 +448,13 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const inline = createMethodInline(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
   });
+  const typedStructure = createTypedFileStructure(vscode,{
+    java,assertReady,projects,findProject,classSources,compile,snapshot,assertUnchangedSourceSnapshots
+  });
+  const structureRegistration = java.structure.registerJavaInspection({
+    inspect:options => managed(() => typedStructure.inspect(options)),
+    reveal:(report,id) => managed(() => typedStructure.reveal(report,id))
+  });
   const constantPreparation = java.refactoring.registerConstantPreparation(async options => {
     const report = await constant.inspect(options);
     return constant.prepare(report,{cancellation:options.cancellation});
@@ -480,6 +488,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       streamTrace.dispose();
       constantPreparation.dispose();
       inline.dispose();
+      structureRegistration.dispose();
       for (const entry of [...panels,...commands]) entry.dispose();
       stopping = Promise.allSettled(active).then(() => {});
       return stopping;
