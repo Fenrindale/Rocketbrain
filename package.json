@@ -529,6 +529,12 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.openSharedConsole",
+        "title": "Open Shared SQL Console",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && editorLangId == sql"
+      },
+      {
         "command": "rocketbrain.jpa.observer.prepare",
         "title": "Prepare Independent JPA Observer Agent",
         "category": "Rocketbrain"
@@ -1045,6 +1051,11 @@
         { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }
       ],
       "editor/context": [
+        {
+          "command": "rocketbrain.openSharedConsole",
+          "when": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "navigation"
+        },
         {
           "command": "rocketbrain.java.generateMembers",
           "when": "editorLangId == java && isWorkspaceTrusted",
