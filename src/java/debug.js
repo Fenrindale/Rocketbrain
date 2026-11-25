@@ -2,9 +2,10 @@
 const path = require('node:path');
 const { independentJavaExecutable, argumentString } = require('./debug-runtime');
 const { JavaDebugAdapter } = require('./debug-adapter');
+const { createJavaBreakpointTools } = require('./debug-breakpoints');
 const DEBUG_TYPE = 'rocketbrain-java';
 
-function registerJavaDebugger(vscode, api, output) {
+function registerJavaDebugger(vscode, api, output, request) {
   const sessions = new Map(); let disposed = false;
   function record(session) {
     if (!sessions.has(session.id)) sessions.set(session.id, { session, state: 'starting', buildVersion: 0, appliedVersion: 0, hcrEvents: [] });
@@ -25,6 +26,18 @@ function registerJavaDebugger(vscode, api, output) {
     }
   }
   const ensureTrusted = () => { if (disposed) throw new Error('Java debugger is disposed.'); if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before running or attaching Java code.'); };
+  const breakpoints = createJavaBreakpointTools(vscode,{
+    request,ensureTrusted,isSupported:session => session.type === DEBUG_TYPE &&
+      sessions.get(session.id)?.capabilities?.supportsBreakpointLocationsRequest === true
+  });
+  const activeSelection = () => {
+    const editor = vscode.window.activeTextEditor;
+    return {document:editor?.document,position:editor?.selection.active};
+  };
+  const breakpointCommand = (id,action) => vscode.commands.registerCommand(id,async () => {
+    try { return await action(); }
+    catch (error) { void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return undefined; }
+  });
   const run = async (command, ...args) => {
     ensureTrusted(); await api.start();
     if (!api.getState().debugBundlePath) throw new Error('Install the Rocketbrain Java engine to configure its public Java debug bundle, or set rocketbrain.java.debugBundlePath.');
@@ -114,8 +127,16 @@ function registerJavaDebugger(vscode, api, output) {
   }), vscode.commands.registerCommand('rocketbrain.java.debug', async () => {
     try { ensureTrusted(); const uri = vscode.window.activeTextEditor?.document.uri || vscode.workspace.workspaceFolders?.[0]?.uri; return await vscode.debug.startDebugging(uri ? vscode.workspace.getWorkspaceFolder(uri) : undefined, { type: DEBUG_TYPE, name: 'Rocketbrain: Debug Java main', request: 'launch', mainClass: '${file}' }); }
     catch (error) { void vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`); return false; }
+  }),
+  breakpointCommand('rocketbrain.java.addMethodBreakpoint',() => breakpoints.addMethod(activeSelection())),
+  breakpointCommand('rocketbrain.java.addInlineBreakpoints',async () => {
+    const report = await breakpoints.inspectInline(activeSelection());
+    const chosen = await vscode.window.showQuickPick(report.choices.map(choice => ({
+      ...choice,description:'Column '+choice.column
+    })),{title:'Add Java Inline Breakpoints',canPickMany:true});
+    if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
-  return { hotCodeReplace, getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; }, async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); }, dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
+  return { breakpoints,hotCodeReplace, getState(sessionId) { const info = sessions.get(sessionId || vscode.debug.activeDebugSession?.id); return info ? { state: info.state, buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents], lastHcrResult: info.lastHcrResult } : undefined; }, async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); }, dispose() { disposed = true; void this.stopSessions(); for (const item of disposables) item.dispose(); } };
 }
 
 module.exports = { DEBUG_TYPE, registerJavaDebugger };

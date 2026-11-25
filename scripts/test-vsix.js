@@ -13,7 +13,7 @@ const destination = fs.mkdtempSync(path.join(parent, `${manifest.version}-`));
 const expected = new Set(['[Content_Types].xml', 'extension.vsixmanifest', ...[
   'package.json', 'readme.md', 'NOTICE.txt', 'THIRD-PARTY-LICENSES.txt',
   'dist/extension.js', 'dist/worker.js', 'dist/sql-wasm.wasm', 'dist/results.js', 'dist/results.css',
-  'themes/rocketbrain-dark.json', 'media/rocketbrain.svg'
+  'themes/rocketbrain-dark.json', 'media/rocketbrain.svg', 'media/duckdb.tmLanguage.json'
 ].map(file => `extension/${file}`)]);
 
 async function extract() {

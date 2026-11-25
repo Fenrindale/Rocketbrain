@@ -54,7 +54,7 @@ pnpm run package
 17. **Manage Git Changelists**에서 변경 파일을 이름 있는 작업 목록에 배정합니다. 목록에 편집 위치와 실행 구성 선택을 기록해 복원할 수 있습니다. 복원 후 실행 구성은 VS Code의 Run and Debug에서 시작할 수 있습니다.
 18. **Convert Java Lambda, Anonymous Class or Loop**에서 지역 SAM 변수와 지원하는 배열 합산 루프의 변환을 검토합니다. 적용 전에 Javac로 참조 연결을 확인합니다.
 
-### HTTP 요청과 OpenAPI
+### HTTP, GraphQL, WebSocket 요청과 OpenAPI
 
 `.http` 파일에서 요청에 커서를 두고 **Send HTTP Request**를 실행합니다. `###`로 여러 요청을 구분하고, `@name = value` 또는 `rocketbrain.http.environments`에서 변수를 정의합니다. **Set HTTP Environment Secret**으로 저장한 값은 헤더나 본문에서 `{{secret.name}}`으로 참조합니다.
 
@@ -67,9 +67,29 @@ GET {{host}}/actuator/health
 
 응답 상태, 헤더, JSON 경로의 예상값을 확인합니다. **Inspect OpenAPI JSON**은 OpenAPI 3.0·3.1 문서의 작업과 로컬 참조를 살핍니다. **Create HTTP Request from OpenAPI JSON**으로 편집할 요청 초안을 만들고, 환경과 필요한 매개변수를 채운 뒤 실행합니다.
 
+`GRAPHQL` 본문은 GraphQL 문서나 `query`, `variables`, `operationName`을 담은 JSON입니다. **Send HTTP Request**로 실행하면 HTTP 상태와 GraphQL 오류 수를 확인할 수 있습니다. **Inspect GraphQL Endpoint Schema**는 선택한 엔드포인트에서 인트로스펙션을 요청합니다.
+
+```http
+GRAPHQL http://127.0.0.1:8080/graphql
+
+query { books { title } }
+
+### WebSocket
+WEBSOCKET ws://127.0.0.1:8080/events
+Sec-WebSocket-Protocol: example.events
+```
+
+`WEBSOCKET` 요청을 실행해 연결을 열고 **Send WebSocket Message**로 텍스트를 보냅니다. **View WebSocket Transcript**에서 수신 텍스트, 바이너리 바이트 수, 연결 상태를 확인하고 **Close WebSocket Connection**으로 종료합니다. 연결과 메시지 이력은 확장 실행 중에만 메모리에 보관됩니다.
+
 기존 독립 런타임을 사용할 때는 `rocketbrain.java.javaHome`, `rocketbrain.java.serverPath`, 필요한 디버그 번들을 설정합니다. 서버용 JDK와 프로젝트용 JDK는 별개이며 프로젝트 JDK는 `rocketbrain.java.projectJdks`로 선택합니다. 원본 IDE의 내장 JBR은 거부합니다.
 
 Java 프로젝트 가져오기와 빌드는 프로젝트 코드를 실행할 수 있습니다. 신뢰한 프로젝트만 열고, 명시적인 동기화·빌드·실행·생성/의존성 적용 단계의 안내를 확인하세요. 최초 가져오기와 일반 Java 소스 자동 빌드도 신뢰한 작업 공간에서 수행됩니다. DB 연결 환경 값과 저장한 실행 환경 값은 Secret Storage를 사용합니다.
+
+### Java 중단점
+
+- Java 메서드 선언 또는 호출 이름에 커서를 두고 **Add Java Method Breakpoint**를 실행합니다. JDT가 선택한 오버로드나 상속 메서드의 실제 선언에 중단점을 추가합니다. 작업 공간의 저장된 소스에서 각 메서드 선언을 별도 줄에 둡니다.
+- 디버그 세션에서 일반 중단점을 검증한 줄에 커서를 두고 **Add Java Inline Breakpoints**를 실행합니다. 디버거가 반환한 위치 중 멈출 람다를 선택합니다.
+- 멈춘 세션의 **변수**에서 객체의 필드를 펼칩니다. 필드 메뉴에서 읽기, 쓰기 또는 읽기·쓰기에 중단점을 설정합니다.
 
 ## 검토하는 Java 리팩터링
 
@@ -97,6 +117,7 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
 
+- **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. 외부 파일 접근과 쓰기는 차단하며 결과는 표본으로 표시합니다.
 - 연결 프로필에는 TCP, Unix 도메인 소켓, Windows 명명된 파이프 중 실행 환경과 맞는 전송을 선택합니다. 공유 프로필에는 비밀번호와 로컬 경로를 담지 않으며, 가져온 로컬 연결의 주소는 해당 컴퓨터에서 입력합니다.
 - **Save Database Metadata for Offline Use**로 카탈로그의 테이블·뷰와 열을 작업 공간에 저장합니다. 연결을 끊고 **Open Cached Database Metadata**를 선택하면 캡처 시각과 함께 SQL 완성에 사용합니다. 같은 연결로 돌아오면 현재 구조를 확인하고 바뀐 캡처를 무효화합니다.
 - **Set SQL Session Isolation**은 열린 SQL 콘솔의 연결에 격리 수준을 적용하고 서버 값을 다시 확인합니다. 트랜잭션과 검토 중인 그리드 초안이 있으면 먼저 정리해야 합니다.

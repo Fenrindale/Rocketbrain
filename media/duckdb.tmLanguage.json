@@ -1,0 +1,11 @@
+{
+  "name": "DuckDB SQL",
+  "scopeName": "source.duckdb-sql",
+  "patterns": [
+    {
+      "name": "keyword.other.duckdb-sql",
+      "match": "(?i)\\b(ASOF|EXCLUDE|PIVOT|QUALIFY|SUMMARIZE|UNPIVOT|POSITIONAL)\\b"
+    },
+    { "include": "source.sql" }
+  ]
+}

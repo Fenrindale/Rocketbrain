@@ -2,15 +2,30 @@
 
 const { createHash } = require('node:crypto');
 const { requestAt,resolveRequest,sendRequest } = require('./client');
+const { websocketWorkbench } = require('./websocket');
 
 const language = 'rocketbrain-http';
 const validName = /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/;
-const ids = { run:'rocketbrain.http.run', environment:'rocketbrain.http.environment', secret:'rocketbrain.http.saveSecret' };
+const ids = {
+  run:'rocketbrain.http.run',environment:'rocketbrain.http.environment',secret:'rocketbrain.http.saveSecret',
+  schema:'rocketbrain.http.graphqlSchema',websocketSessions:'rocketbrain.http.websocketSessions',
+  websocketSend:'rocketbrain.http.websocketSend',websocketClose:'rocketbrain.http.websocketClose'
+};
 
 function registerHttpTools(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain HTTP');
+  const transcript = vscode.window.createOutputChannel('Rocketbrain WebSocket');
   const running = new Set();
-  let disposed = false;
+  let disposed=false, selectedSession, pendingRender, renderTimer;
+  const connections=websocketWorkbench(session=>{
+    if (disposed || selectedSession!==session.id) return;
+    pendingRender=session;
+    if (!renderTimer) renderTimer=setTimeout(()=>{
+      renderTimer=undefined;
+      if (pendingRender?.id===selectedSession) renderTranscript(pendingRender);
+      pendingRender=undefined;
+    },80);
+  });
   function trust() {
     if (disposed || !vscode.workspace.isTrusted) throw Error('Open a trusted workspace before sending HTTP requests.');
   }
@@ -70,41 +85,103 @@ function registerHttpTools(context, vscode) {
     if (value) await context.secrets.store(secretKey(key,name,secret),value);
     else await context.secrets.delete(secretKey(key,name,secret));
   }
-  async function run(document,offset,{signal}={}) {
+  async function run(document,offset,{signal,schema=false}={}) {
     const { key }=workspace(document), savedVersion=document.version, chosen=currentEnvironment(document,key);
     const request=requestAt(document.getText(),offset);
     const controller=new AbortController();
     running.add(controller);
     try {
-      const ready=await resolveRequest(request,chosen.values,name=>context.secrets.get(secretKey(key,chosen.name,name)));
+      const ready=await resolveRequest(request,chosen.values,name=>context.secrets.get(secretKey(key,chosen.name,name)),{schema});
       const now=currentEnvironment(document,key);
       if (workspace(document).key!==key || document.version!==savedVersion || now.name!==chosen.name ||
           JSON.stringify(now.values)!==JSON.stringify(chosen.values)) {
         throw Error('The request document or environment changed. Review it again.');
       }
-      const response=await sendRequest(ready,{signal:signal?AbortSignal.any([signal,controller.signal]):controller.signal});
+      const bounded=signal?AbortSignal.any([signal,controller.signal]):controller.signal;
+      if (ready.method==='WEBSOCKET') {
+        const webSocket=await connections.connect(ready,{signal:bounded,owner:key,environment:chosen.name});
+        return { environment:chosen.name,webSocket };
+      }
+      const response=await sendRequest(ready,{signal:bounded});
       return { environment:chosen.name,...response };
     } finally {
       running.delete(controller);
     }
   }
-  async function runEditor() {
+  function renderTranscript(session) {
+    transcript.clear();
+    transcript.appendLine('WebSocket '+session.state+' · '+session.endpoint+' · '+session.environment);
+    if (session.protocol) transcript.appendLine('Subprotocol '+session.protocol);
+    if (session.closeCode!==undefined) transcript.appendLine('Close '+session.closeCode+(session.closeReason?' · '+session.closeReason:''));
+    if (session.error) transcript.appendLine(session.error);
+    if (session.dropped) transcript.appendLine(session.dropped+' earlier messages omitted.');
+    for (const message of session.messages) {
+      transcript.appendLine((message.direction==='in'?'Received ':'Sent ')+message.kind+' · '+message.size+' bytes');
+      if (message.text!==null) transcript.appendLine(message.text+(message.truncated?'…':''));
+    }
+  }
+  function showTranscript(session) {
+    selectedSession=session.id;
+    renderTranscript(session);
+    transcript.show(true);
+  }
+  const webSocket = {
+    list(document) { return connections.list(workspace(document).key); },
+    get(document,id) { return connections.get(id,workspace(document).key); },
+    send(document,id,text) { return connections.send(id,workspace(document).key,text); },
+    close(document,id) { return connections.close(id,workspace(document).key); }
+  };
+  async function chooseConnection(document, title, openOnly) {
+    const sessions=webSocket.list(document).filter(item=>!openOnly || item.state==='open');
+    if (!sessions.length) throw Error(openOnly?'Open a WEBSOCKET request first.':'No WebSocket connections in this workspace.');
+    const choices=sessions.map(session=>({label:session.endpoint,description:session.state+' · '+session.environment,
+      detail:session.protocol || undefined,id:session.id}));
+    return (await vscode.window.showQuickPick(choices,{title}))?.id;
+  }
+  async function showSessions() {
+    const document=activeDocument();
+    const id=await chooseConnection(document,'View WebSocket Transcript',false);
+    if (id) showTranscript(webSocket.get(document,id));
+  }
+  async function sendMessage() {
+    const document=activeDocument();
+    const id=await chooseConnection(document,'Send WebSocket Message',true);
+    if (!id) return;
+    const text=await vscode.window.showInputBox({title:'Send WebSocket Text Message'});
+    if (text!==undefined) showTranscript(await webSocket.send(document,id,text));
+  }
+  async function closeSocket() {
+    const document=activeDocument();
+    const id=await chooseConnection(document,'Close WebSocket Connection',true);
+    if (id) showTranscript(webSocket.close(document,id));
+  }
+  async function runEditor(schema=false) {
     const editor=vscode.window.activeTextEditor;
     workspace(editor?.document);
     const response=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,
-      title:'Sending HTTP Request',cancellable:true},async(_,token)=>{
+      title:schema?'Inspecting GraphQL Schema':'Running API Request',cancellable:true},async(_,token)=>{
       const controller=new AbortController();
       const subscription=token.onCancellationRequested(()=>controller.abort());
       try {
         if (token.isCancellationRequested) controller.abort();
-        return await run(editor.document,editor.document.offsetAt(editor.selection.active),{signal:controller.signal});
+        return await run(editor.document,editor.document.offsetAt(editor.selection.active),{signal:controller.signal,schema});
       } finally {
         subscription.dispose();
       }
     });
     trust();
+    if (response.webSocket) {
+      showTranscript(response.webSocket);
+      return response;
+    }
     const passed=response.assertions.filter(item=>item.passed).length;
     output.clear();
+    if (response.graphql) {
+      const kind=response.graphql.kind==='schema'?'GraphQL Schema':'GraphQL Operation';
+      const state=response.graphql.graphqlResponse ? response.graphql.errors+' GraphQL errors'
+        : response.truncated?'Response truncated':'No GraphQL response envelope';
+      output.appendLine(kind+' · '+state);
+    }
     output.appendLine('HTTP '+response.status+' · '+response.durationMs+' ms · '+response.environment);
     if (response.assertions.length) {
       output.appendLine(passed+' / '+response.assertions.length+' assertions passed');
@@ -120,13 +197,18 @@ function registerHttpTools(context, vscode) {
     try { return await action(); }
     catch (error) { if(!disposed) await vscode.window.showErrorMessage('Rocketbrain HTTP: '+error.message); }
   });
-  const subscriptions=[register(ids.run,runEditor),register(ids.environment,selectEnvironment),register(ids.secret,saveSecret)];
-  return {run,dispose(){
+  const subscriptions=[register(ids.run,runEditor),register(ids.environment,selectEnvironment),register(ids.secret,saveSecret),
+    register(ids.schema,()=>runEditor(true)),register(ids.websocketSessions,showSessions),
+    register(ids.websocketSend,sendMessage),register(ids.websocketClose,closeSocket)];
+  return {run,webSocket,dispose(){
     if(disposed)return;
     disposed=true;
     for (const controller of running) controller.abort();
+    connections.dispose();
+    clearTimeout(renderTimer);
     for (const subscription of subscriptions) subscription.dispose();
     output.dispose();
+    transcript.dispose();
   }};
 }
 

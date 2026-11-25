@@ -46,6 +46,7 @@ async function activate(context) {
   const database = await require("./database-workbench").registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree,
     document=>sqlAnalysis?.virtualActive(document));
   activeDatabase=database;
+  const duckdb = require('./db/duckdb-vscode').registerDuckDb(context, vscode);
   const embeddedLanguage = require('./db/embedded-language-vscode').registerEmbeddedLanguage(vscode, { catalogSnapshot: database.catalogSnapshot });
   context.subscriptions.push(embeddedLanguage);
   const dbConnections=require('./db/connection-profiles-vscode').registerConnectionProfiles(context,vscode,{database});activeDbConnections=dbConnections;
@@ -136,7 +137,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists };
+  return { ...database, duckdb, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;
