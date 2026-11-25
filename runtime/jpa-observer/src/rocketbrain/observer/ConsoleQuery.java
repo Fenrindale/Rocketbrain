@@ -39,25 +39,32 @@ final class ConsoleQuery {
         String key() { return name != null ? ":" + name : "?" + position; }
         Object selector() { return name != null ? name : position; }
     }
-    record Prepared(String query,List<Map<String,Object>> columns,List<Parameter> parameters,Map<String,Object> description) {}
+    record Prepared(String query,List<Map<String,Object>> columns,List<Parameter> parameters,Map<String,Object> description,ConsoleFetchSnapshot.Plan fetch) {
+        Prepared(String query,List<Map<String,Object>> columns,List<Parameter> parameters,Map<String,Object> description) {
+            this(query,columns,parameters,description,null);
+        }
+    }
+    record Shape(ConsoleSelectShape graph,ConsoleFetchSnapshot.Clause fetch) {}
     record Bound(Parameter parameter,Object value,Class<?> javaType) {}
     static final class Refusal extends IllegalArgumentException {
         final String code;
         Refusal(String code) { super(code); this.code = code; }
     }
 
-    static Prepared describe(Object factory,String text) {
-        ConsoleSelectShape shape=inspect(text,false);
+    static Prepared describe(Object factory,String text,boolean fetchEnabled) {
+        Shape shape=inspect(text,false,fetchEnabled);
         Map<String,Object> semantic;
+        ConsoleFetchSnapshot.Plan fetch=null;
         try {
             Object statement=HibernateAccess.translate(factory,text);
             semantic=HibernateAccess.describeStatement(statement);
-            if (shape.advanced()) ConsoleSqmShape.assertCompatible(statement);
+            if (shape.graph().advanced()) ConsoleSqmShape.assertCompatible(statement);
+            if (shape.fetch()!=null) fetch=ConsoleFetchSnapshot.inspect(factory,statement,shape.fetch());
         } catch(Refusal rejected) { throw rejected; }
         catch(Throwable failure) { throw new Refusal("provider_validation_failed"); }
         if (!"known".equals(semantic.get("state"))) throw new Refusal("provider_validation_failed");
         if (!"select".equals(semantic.get("statementKind"))) throw new Refusal("select_required");
-        List<Map<String,Object>> columns = descriptors(semantic.get("selectionTypes"),MAX_COLUMNS);
+        List<Map<String,Object>> columns = fetch==null?descriptors(semantic.get("selectionTypes"),MAX_COLUMNS):fetch.owner().columns();
         if (columns.isEmpty()) throw new Refusal("scalar_projection_required");
         for (Map<String,Object> column : columns) {
             if (!(column.get("javaType") instanceof String type) || !SAFE_TYPES.contains(type)) throw new Refusal("scalar_projection_required");
@@ -79,7 +86,8 @@ final class ConsoleQuery {
         description.put("columns",columns);
         description.put("parameters",parameters.stream().map(parameter->Map.of("key",parameter.key(),"javaType",parameter.javaType())).toList());
         description.put("sqlExecuted",false);
-        return new Prepared(text,List.copyOf(columns),List.copyOf(parameters),description);
+        if(fetch!=null)description.put("fetchSnapshot",fetch.describe());
+        return new Prepared(text,List.copyOf(columns),List.copyOf(parameters),description,fetch);
     }
 
     static List<Bound> bind(Prepared prepared,Object input) {
@@ -142,7 +150,9 @@ final class ConsoleQuery {
         };
     }
 
-    static ConsoleSelectShape inspect(String text,boolean sql) {
+    static Shape inspect(String text,boolean sql) { return inspect(text,sql,false); }
+
+    static Shape inspect(String text,boolean sql,boolean fetchEnabled) {
         int limit = sql ? 16384 : MAX_QUERY;
         String refusal = sql ? "rendered_sql_not_allowed" : "unsupported_select_shape";
         if (text==null || text.length()>limit || text.contains("--") || text.contains("/*") || text.contains("*/"))
@@ -159,50 +169,65 @@ final class ConsoleQuery {
         }
         if (end!=text.length() || tokens.size()<4) throw new Refusal(refusal);
         ConsoleSelectShape shape=ConsoleSelectShape.parse(tokens,sql,refusal);
+        ConsoleFetchSnapshot.Clause fetch=null;
+        if(!sql && tokens.contains("fetch")){
+            if(!fetchEnabled)throw new Refusal("fetch_snapshot_disabled");
+            fetch=ConsoleFetchSnapshot.clause(tokens);
+            if(fetch==null)throw new Refusal("unsupported_fetch_shape");
+        }
         for(int i=0;i<tokens.size();i++) {
             String token=tokens.get(i);
             boolean named = i>0 && tokens.get(i-1).equals(":");
             if (token.startsWith("`") && !sql || token.equals(":") && sql ||
-                !named && BLOCKED.contains(token) && !(sql && token.equals("limit"))) throw new Refusal(refusal);
+                !named && BLOCKED.contains(token) && !(sql && token.equals("limit")) && !(fetch!=null && token.equals("fetch"))) throw new Refusal(refusal);
             if (i+1<tokens.size() && tokens.get(i+1).equals("(") &&
                 (Character.isLetter(token.charAt(0)) || token.startsWith("_") || token.startsWith("`"))) {
                 if (!shape.structuralParenthesis(i+1) && (!GROUPS.contains(token) && !FUNCTIONS.contains(token) || i>0 && tokens.get(i-1).equals(".")))
                     throw new Refusal(refusal);
             }
         }
-        return shape;
+        return new Shape(shape,fetch);
     }
 
     static boolean safeType(String type) { return type!=null && SAFE_TYPES.contains(type); }
 
     static Map<String,Object> rows(Prepared prepared,List<?> values,int maximum) {
         List<List<Object>> rows = new ArrayList<>();
-        long bytes = 0;
+        ResultBudget budget = new ResultBudget();
         for (Object row : values) {
             if (rows.size()>=maximum) break;
             Object[] cells = row instanceof Object[] tuple ? tuple : new Object[]{row};
             if (cells.length!=prepared.columns().size()) throw new Refusal("unsupported_result_shape");
             List<Object> encoded = new ArrayList<>();
             for (int i=0;i<cells.length;i++) {
-                Object value = cells[i];
-                String expected = (String)prepared.columns().get(i).get("javaType");
-                if (value!=null && !value.getClass().getName().equals(expected)) throw new Refusal("unsupported_result_shape");
-                Object wire = value==null || value instanceof Boolean ? value : value.toString();
-                if (wire instanceof String text) {
-                    if (text.length()>4096) throw new Refusal("result_cell_limit");
-                    bytes += 6L*text.getBytes(StandardCharsets.UTF_8).length+4;
-                } else bytes+=8;
-                if (bytes>MAX_RESULT_BYTES) throw new Refusal("result_payload_limit");
-                encoded.add(wire);
+                encoded.add(budget.scalar(cells[i],(String)prepared.columns().get(i).get("javaType")));
             }
             rows.add(encoded);
         }
+        return completed(prepared.columns(),rows,values.size()>maximum);
+    }
+
+    static Map<String,Object> completed(List<Map<String,Object>> columns,List<List<Object>> rows,boolean hasMore) {
         Map<String,Object> response = new LinkedHashMap<>();
-        response.put("state","executed"); response.put("columns",prepared.columns()); response.put("rows",rows);
-        response.put("rowCount",rows.size()); response.put("hasMore",values.size()>maximum);
+        response.put("state","executed"); response.put("columns",columns); response.put("rows",rows);
+        response.put("rowCount",rows.size()); response.put("hasMore",hasMore);
         response.put("queryExecuted",true); response.put("sqlExecuted",true); response.put("databaseReadOnlyTransaction",true);
         response.put("rolledBack",true); response.put("boundParameterValuesRetained",false);
         return response;
+    }
+
+    static final class ResultBudget {
+        private long bytes;
+        Object scalar(Object value,String expected) {
+            if(value!=null && !value.getClass().getName().equals(expected))throw new Refusal("unsupported_result_shape");
+            Object wire=value==null || value instanceof Boolean?value:value.toString();
+            if(wire instanceof String text) {
+                if(text.length()>4096)throw new Refusal("result_cell_limit");
+                bytes+=6L*text.getBytes(StandardCharsets.UTF_8).length+4;
+            } else bytes+=8;
+            if(bytes>MAX_RESULT_BYTES)throw new Refusal("result_payload_limit");
+            return wire;
+        }
     }
 
     private static List<Map<String,Object>> descriptors(Object value,int limit) {

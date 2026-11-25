@@ -22,24 +22,52 @@ function consoleResponse(result,factoryId,state,limit=100) {
     if (typeof result.code!=='string' || !/^[a-z_]{1,64}$/.test(result.code)) return invalid();
     return {state:result.state,code:result.code};
   }
-  if (result.state!==state || result.factoryId!==factoryId || !Array.isArray(result.columns) || !result.columns.length ||
-      result.columns.length>16 || result.columns.some(item=>!item || !consoleTypes.has(item.javaType) ||
+  function readColumns(values,maximum){
+    if (!Array.isArray(values) || !values.length || values.length>maximum || values.some(item=>!item || !consoleTypes.has(item.javaType) ||
       (item.alias!==undefined && (typeof item.alias!=='string' || item.alias.length>256)))) return invalid();
-  const columns=result.columns.map(({alias,javaType})=>({alias:alias||null,javaType}));
+    return values.map(({alias,javaType})=>({alias:alias||null,javaType}));
+  }
+  function scalarRows(rows,columns,maximum){
+    return Array.isArray(rows) && rows.length<=maximum && rows.every(row=>Array.isArray(row) && row.length===columns.length &&
+      row.every((value,index)=>value===null || (columns[index].javaType==='java.lang.Boolean'
+        ? typeof value==='boolean' : typeof value==='string' && value.length<=4096)));
+  }
+  if (result.state!==state || result.factoryId!==factoryId) return invalid();
+  const columns=readColumns(result.columns,16);
+  const fetched=result.fetchSnapshot;
+  let fetchSnapshot;
+  if(fetched!==undefined){
+    if(!fetched || typeof fetched!=='object' || columns.length>8 ||
+      ![fetched.rootType,fetched.targetType,fetched.association].every(value=>typeof value==='string'&&value.length<=256&&/^[\w.$]+$/u.test(value)) ||
+      fetched.path!==fetched.rootType+'.'+fetched.association || typeof fetched.toMany!=='boolean' ||
+      fetched.maxRoots!==25 || fetched.maxChildren!==16) return invalid();
+    fetchSnapshot={rootType:fetched.rootType,targetType:fetched.targetType,association:fetched.association,path:fetched.path,
+      toMany:fetched.toMany,maxRoots:fetched.maxRoots,maxChildren:fetched.maxChildren,columns:readColumns(fetched.columns,8)};
+  }
   if (state==='described') {
     if (result.sqlExecuted!==false || !Array.isArray(result.parameters) || result.parameters.length>16 ||
         result.parameters.some(item=>!item || typeof item.key!=='string' || !consoleKey.test(item.key) || !consoleTypes.has(item.javaType)) ||
         new Set(result.parameters.map(item=>item.key)).size!==result.parameters.length) return invalid();
-    return {state,factoryId,columns,parameters:result.parameters.map(({key,javaType})=>({key,javaType})),sqlExecuted:false};
+    return {state,factoryId,columns,parameters:result.parameters.map(({key,javaType})=>({key,javaType})),sqlExecuted:false,...(fetchSnapshot?{fetchSnapshot}:{})};
   }
   if (result.sqlExecuted!==true || result.queryExecuted!==true || result.databaseReadOnlyTransaction!==true ||
       result.boundParameterValuesRetained!==false || result.rolledBack!==true ||
-      !Array.isArray(result.rows) || result.rows.length>limit || result.rowCount!==result.rows.length ||
-      typeof result.hasMore!=='boolean' || result.rows.some(row=>!Array.isArray(row) || row.length!==columns.length ||
-        row.some((value,index)=>value!==null && (columns[index].javaType==='java.lang.Boolean'
-          ? typeof value!=='boolean' : typeof value!=='string' || value.length>4096)))) return invalid();
+      !scalarRows(result.rows,columns,fetchSnapshot?Math.min(limit,fetchSnapshot.maxRoots):limit) ||
+      result.rowCount!==result.rows.length || typeof result.hasMore!=='boolean') return invalid();
+  if(fetchSnapshot){
+    if(!Number.isInteger(fetched.joinedRows)||fetched.joinedRows<result.rowCount||fetched.joinedRows>512||
+      !Array.isArray(fetched.linked)||fetched.linked.length!==result.rowCount)return invalid();
+    fetchSnapshot.joinedRows=fetched.joinedRows;
+    fetchSnapshot.linked=fetched.linked.map(item=>{
+      if(!item||typeof item.hasMore!=='boolean'||!scalarRows(item.rows,fetchSnapshot.columns,fetched.toMany?fetched.maxChildren:1))return invalid();
+      if(fetched.toMany){
+        if(item.state!=='loaded'||(item.hasMore&&item.rows.length!==fetched.maxChildren))return invalid();
+      }else if(item.hasMore||(item.state==='null'?item.rows.length!==0:item.state!=='loaded'||item.rows.length!==1))return invalid();
+      return {state:item.state,rows:item.rows,hasMore:item.hasMore};
+    });
+  }
   return {state,factoryId,columns,rows:result.rows,rowCount:result.rowCount,hasMore:result.hasMore,sqlExecuted:true,
-    databaseReadOnlyTransaction:true,rolledBack:true,boundParameterValuesRetained:false};
+    databaseReadOnlyTransaction:true,rolledBack:true,boundParameterValuesRetained:false,...(fetchSnapshot?{fetchSnapshot}:{})};
 }
 const emptySnapshot = () => ({ state: 'disconnected', factories: [], events: [], fetchedAt: null, sameSourceRevisionVerified: false });
 function normalize(value, token, stripControls=true) {

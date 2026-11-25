@@ -4,10 +4,12 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Inheritance;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.PostLoad;
 import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,7 +66,52 @@ class PerformanceOwner {
 @Table(name="rb_perf_item")
 class PerformanceItem {
     @Id Long id;
+    String snapshotLabel;
     @ManyToOne(fetch=FetchType.LAZY)
     @JoinColumn(name="owner_id",nullable=false)
     PerformanceOwner owner;
+
+    public String getSnapshotLabel() {
+        throw new IllegalStateException("The active field mapping must not use this getter");
+    }
+}
+
+@Entity
+@Table(name="rb_fetch_snapshot_optional")
+class FetchSnapshotOptional {
+    @Id Long id;
+    Boolean enabled;
+    @ManyToOne(fetch=FetchType.LAZY)
+    @JoinColumn(name="owner_id")
+    PerformanceOwner owner;
+}
+
+@Entity
+@Table(name="rb_fetch_snapshot_callback")
+class FetchSnapshotCallback {
+    @Id Long id;
+    @ManyToOne(fetch=FetchType.LAZY)
+    @JoinColumn(name="owner_id")
+    PerformanceOwner owner;
+
+    @PostLoad void rejectObserverCapture() {
+        throw new IllegalStateException("Fetching this callback fixture must be rejected before hydration");
+    }
+}
+
+@Entity
+@Inheritance
+@Table(name="rb_fetch_snapshot_polymorphic")
+class FetchSnapshotPolymorphic {
+    @Id Long id;
+    @ManyToOne(fetch=FetchType.LAZY)
+    @JoinColumn(name="owner_id")
+    PerformanceOwner owner;
+}
+
+@Entity
+class FetchSnapshotPolymorphicSubclass extends FetchSnapshotPolymorphic {
+    @PostLoad void rejectObserverCapture() {
+        throw new IllegalStateException("Fetching through the polymorphic root must be rejected before hydration");
+    }
 }

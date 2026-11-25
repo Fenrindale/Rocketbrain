@@ -15,7 +15,7 @@ test('the JPQL console inspects rendered SELECTs and bounds typed JDBC inputs',{
   const target=await fs.promises.mkdtemp(path.resolve('test-output/.observer-console-policy-'));
   const root=path.resolve('runtime/jpa-observer');
   try{
-    const classes=['HibernateAccess','ConsoleQuery','ConsoleSelectShape','ConsoleSqmShape'].map(name=>path.join(root,'src/rocketbrain/observer',name+'.java'));
+    const classes=['HibernateAccess','ConsoleQuery','ConsoleSelectShape','ConsoleSqmShape','ConsoleFetchSnapshot'].map(name=>path.join(root,'src/rocketbrain/observer',name+'.java'));
     run('javac',['--release','25','-d',target,...classes,path.join(root,'test/rocketbrain/observer/ConsoleQueryTest.java')]);
     run('java',['-cp',target,'rocketbrain.observer.ConsoleQueryTest']);
   }finally{await fs.promises.rm(target,{recursive:true,force:true});}
@@ -33,6 +33,7 @@ test('explicit agent instruments real bytecode returns and throws, enforces bear
     child=spawn(binary('java'),['--add-modules','jdk.httpserver','-javaagent:'+artifact.jarPath+'=config='+require('node:url').pathToFileURL(config).href,'-cp',classes,'Probe'],{windowsHide:true,stdio:['pipe','pipe','pipe']});child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);const exit=new Promise(resolve=>child.once('exit',(code,signal)=>resolve({code,signal})));await until(()=>{if(child.exitCode!==null)throw Error('Observer JVM exited: '+stdout+' '+stderr);return fs.existsSync(descriptorFile)&&stdout.includes('APP_READY');},'observer startup').catch(error=>{throw Error(error.message+' stdout='+stdout+' stderr='+stderr);});const descriptor=JSON.parse(await fs.promises.readFile(descriptorFile,'utf8'));assert.match(descriptor.baseUrl,/^http:\/\/127\.0\.0\.1:\d+$/);assert.ok(!JSON.stringify(descriptor).includes(token));
     const request=(route,options={})=>fetch(descriptor.baseUrl+route,{...options,headers:{Authorization:'Bearer '+token,...options.headers},signal:AbortSignal.timeout(6000)});
     assert.equal(descriptor.consoleSelectEnabled,false);
+    assert.equal(descriptor.consoleFetchSnapshotsEnabled,false);
     assert.equal((await request('/console/select',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,403);
     assert.equal((await fetch(descriptor.baseUrl+'/snapshot')).status,401);assert.equal((await request('/snapshot',{headers:{Authorization:'Bearer wrong'}})).status,401);assert.equal((await request('/snapshot',{headers:{Origin:'https://example.invalid'}})).status,403);
     let snapshot=await(await request('/snapshot')).json();assert.equal(snapshot.state,'waiting');assert.deepEqual(snapshot.events,[]);assert.equal((await request('/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'select thing'})})).status,409);
