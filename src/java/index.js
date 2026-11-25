@@ -52,6 +52,25 @@ function registerJavaFeatures(context, vscode) {
         outputChannel: output,
         initializationOptions: { bundles: launch.bundles, workspaceFolders: (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.toString()), settings, extendedClientCapabilities: { progressReportProvider: true, classFileContentsSupport: true, overrideMethodsPromptSupport: false, hashCodeEqualsPromptSupport: false, advancedOrganizeImportsSupport: false,advancedExtractRefactoringSupport:false } },
         synchronize: { fileEvents: watcher },
+        middleware: {
+          async provideCodeActions(document,range,context,token,provide) {
+            const version = document.version;
+            const actions = await provide(document,range,context,token);
+            if (document.isClosed || document.version !== version || token.isCancellationRequested) return [];
+            const position = point => ({line:point.line,character:point.character});
+            return actions?.map(action => {
+              if (action.kind?.value !== 'refactor.extract.constant') return action;
+              const reviewed = new vscode.CodeAction('Extract Java Constant…',action.kind);
+              reviewed.disabled = action.disabled;
+              reviewed.command = { command:'rocketbrain.java.extractConstant',title:reviewed.title,
+                arguments:[{uri:document.uri.toString(),range:{start:position(range.start),end:position(range.end)},version}] };
+              return reviewed;
+            });
+          },
+          resolveCodeAction(item,token,resolve) {
+            return item.command?.command === 'rocketbrain.java.extractConstant' ? item : resolve(item,token);
+          }
+        },
         errorHandler: { error: () => ({ action: ErrorAction.Continue }), closed: () => { if (!disposed) { client = undefined; update('error', 'Java server exited. Check Rocketbrain Java output, then restart.'); } return { action: CloseAction.DoNotRestart }; } },
         markdown: { isTrusted: false }
       });
@@ -116,6 +135,9 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(debuggerController, api.debug.asyncTrace);
   api.refactoring=require('./refactoring').registerJavaRefactoring(context,vscode,{request:refactoringRequest});
   subscriptions.push(api.refactoring);
+  api.constantRefactoring=(params,cancellation)=>refactoringRequest('java/getRefactorEdit',{
+    command:'extractConstant',context:params,options:{tabSize:4,insertSpaces:true},commandArguments:[]
+  },cancellation);
   api.interfaceRefactoring={
     async members(params,cancellation){
       await api.start();

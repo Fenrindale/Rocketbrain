@@ -218,6 +218,8 @@ TestNG 데이터 공급자의 동일한 스칼라 값도 관찰된 행 위치로
 
 Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후와 파일 작업을 검토한 뒤 적용합니다. 텍스트 편집과 클래스 이동에는 VS Code Undo를 사용합니다. Safe Delete로 지운 파일은 **Restore Deleted Java File**에서 복원합니다. 검토 뒤 원본·참조·리소스가 바뀌면 다시 검토해야 합니다.
 
+**Extract Java Constant**는 선택한 컴파일 상수식을 `private static final` 필드로 추출합니다. 이름과 선언 위치를 확인한 뒤 선택한 한 곳만 바꿉니다. [Java 상수 추출](docs/java-extract-constant.md)
+
 | 명령 | 지원 범위 | 추가 분석이 필요한 범위 |
 |---|---|---|
 | **Move Java Class File / Move Java Class Across Projects** | 같은 소스 루트의 클래스 이동. Gradle 복합 조건과 Maven 리액터의 부모·중첩 BOM·속성 프로필을 분석한다. 기본 로컬 Maven 저장소의 외부 부모·BOM도 좌표와 SHA-256을 검증해 가시성 계산에 포함한다 | 사용자 지정 저장소 배치, 원격 확인, SNAPSHOT·복합 외부 POM, 전이 의존성 중재, 의존 관계 자동 변경 |

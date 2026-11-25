@@ -625,6 +625,12 @@
         "enablement": "editorLangId == java && isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.java.extractConstant",
+        "title": "Extract Java Constant",
+        "category": "Rocketbrain",
+        "enablement": "editorLangId == java && editorHasSelection && isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.pullUpMembers",
         "title": "Pull Up Java Members",
         "category": "Rocketbrain",

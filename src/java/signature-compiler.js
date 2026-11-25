@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto'),{spawn}=require('node:child_process'),yauzl=require('yauzl');
 const helpers=require('./signature-compiler-sources.json');
 const {structuralQuery}=require('./structural-search');
+const {validIdentifier}=require('./file-templates');
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const plugin=/^(?:META-INF\/versions\/[^/]+\/)?META-INF\/services\/com\.sun\.source\.util\.Plugin$/i;
 const crcTable=Array.from({length:256},(_,n)=>{for(let k=0;k<8;k++)n=n&1?0xedb88320^(n>>>1):n>>>1;return n>>>0;});
@@ -36,6 +37,9 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
  if(inspection){
   if(['diagram','check','hierarchy'].includes(inspection.kind))query.push(inspection.kind);
   else if(inspection.kind==='conversion'&&sources.some(item=>item.uri===inspection.uri))query.push('conversion',inspection.uri);
+  else if(inspection.kind==='constant'&&Number.isSafeInteger(inspection.start)&&Number.isSafeInteger(inspection.end)&&inspection.start>=0&&
+    inspection.end>inspection.start&&inspection.end-inspection.start<=4096&&sources.some(item=>item.uri===inspection.uri&&inspection.end<=item.text.length)&&
+    (inspection.name===undefined||validIdentifier(inspection.name)))query.push('constant',inspection.uri,String(inspection.start),String(inspection.end),inspection.name||'');
   else if(inspection.kind==='dataflow'&&Number.isSafeInteger(inspection.offset)&&inspection.offset>=0&&
     sources.some(item=>item.uri===inspection.uri&&inspection.offset<item.text.length))query.push('dataflow',inspection.uri,String(inspection.offset));
   else if(inspection.kind==='structural'&&(inspection.uri===undefined||sources.some(item=>item.uri===inspection.uri))){
@@ -50,7 +54,7 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
  const descriptors=sources.filter(source=>source.uri.toLowerCase().endsWith('/module-info.java'));
  if(namedModule!==true&&descriptors.length||namedModule===true&&(descriptors.length!==1||!Array.isArray(classpath)||classpath.length||release<9))throw Error('Compiler module inspection requires one reviewed module descriptor and no additional dependencies.');
  if(sources.reduce((n,s)=>n+Buffer.byteLength(s.text),0)>8*1024*1024)throw Error('Compiler source inspection exceeds8MiB.');if(!Array.isArray(classpath)||classpath.length>250)throw Error('Compiler classpath entry limit exceeded.');const snapshot=snapshotClasspath(javaHome,classpath),jarMetadata=new Map();for(const entry of snapshot.entries)if(entry.toLowerCase().endsWith('.jar'))jarMetadata.set(entry,await inspectCompilerJar(entry,manifestLimit));snapshot.validate();
- const parent=path.resolve(storagePath||path.join(os.tmpdir(),'rocketbrain-signature-compiler')),kind='RocketbrainSignatureCompiler-v20';fs.mkdirSync(parent,{recursive:true});const parentReal=fs.realpathSync(parent),folder=fs.mkdtempSync(path.join(parentReal,'inspection-')),id=crypto.randomUUID();fs.writeFileSync(path.join(folder,'owner.json'),JSON.stringify({kind,id}));const source=path.join(folder,'rocketbrain','signature','SignatureInspector.java'),list=path.join(folder,'sources.tsv'),cp=path.join(folder,'classpath.txt'),empty=path.join(folder,'empty-providers');fs.mkdirSync(empty);fs.mkdirSync(path.dirname(source),{recursive:true});for(const name of ['SignatureInspector.java','StructuralSearch.java','HierarchyInspector.java','ConversionInspector.java'])fs.writeFileSync(path.join(path.dirname(source),name),helpers[name]);fs.writeFileSync(cp,snapshot.entries.join(path.delimiter));fs.writeFileSync(list,sources.map(s=>s.uri+'\t'+Buffer.from(s.text).toString('base64')).join('\n'));
+ const parent=path.resolve(storagePath||path.join(os.tmpdir(),'rocketbrain-signature-compiler')),kind='RocketbrainSignatureCompiler-v20';fs.mkdirSync(parent,{recursive:true});const parentReal=fs.realpathSync(parent),folder=fs.mkdtempSync(path.join(parentReal,'inspection-')),id=crypto.randomUUID();fs.writeFileSync(path.join(folder,'owner.json'),JSON.stringify({kind,id}));const source=path.join(folder,'rocketbrain','signature','SignatureInspector.java'),list=path.join(folder,'sources.tsv'),cp=path.join(folder,'classpath.txt'),empty=path.join(folder,'empty-providers');fs.mkdirSync(empty);fs.mkdirSync(path.dirname(source),{recursive:true});for(const [name,text]of Object.entries(helpers))fs.writeFileSync(path.join(path.dirname(source),name),text);fs.writeFileSync(cp,snapshot.entries.join(path.delimiter));fs.writeFileSync(list,sources.map(s=>s.uri+'\t'+Buffer.from(s.text).toString('base64')).join('\n'));
  const env={...process.env};for(const name of Object.keys(env))if(['JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS','CLASSPATH','JAVA_OPTIONS'].includes(name.toUpperCase()))delete env[name];let exited=false,child,exit;
  try{
   const effective=[];for(const [index,entry]of snapshot.entries.entries()){if(jarMetadata.get(entry)?.sanitized){const output=path.join(folder,'classpath-'+index+'.jar');await sanitizeCompilerJar(entry,output);effective.push(output);}else effective.push(entry);}fs.writeFileSync(cp,effective.join(path.delimiter));snapshot.validate();
