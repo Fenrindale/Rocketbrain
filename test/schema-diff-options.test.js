@@ -114,11 +114,12 @@ test('projected stored comparison keeps raw account source and reports collision
 
 test('catalog capture uses exact qualified metadata predicates for physical case-sensitive lookup', async () => {
   const calls = [];
+  let mode = 0;
   const db = { async _metadataQuery(sql, values) {
     calls.push(sql);
-    const rows = sql.startsWith('SELECT VERSION()') ? [['8.4.13', 'loopback', 3306, 1, 0, '', 'fixture@localhost', 'one']]
+    const rows = sql.startsWith('SELECT VERSION()') ? [['8.4.13', 'loopback', 3306, 1, mode, '', 'fixture@localhost', 'one']]
       : sql.includes('@@server_uuid') ? [['owned-server']]
-      : sql.startsWith('SELECT TABLE_NAME') ? [['PEOPLE', 'BASE TABLE'], ['people', 'BASE TABLE']]
+      : sql.startsWith('SELECT TABLE_NAME') ? [...(mode === 0 ? [['PEOPLE', 'BASE TABLE']] : []), ['people', 'BASE TABLE']]
       : sql.startsWith('SELECT t.TABLE_NAME') ? [[values[1], 'BASE TABLE', 'InnoDB', 'utf8mb4_bin', '', 'Dynamic', '', 'utf8mb4']]
       : sql.startsWith('SELECT COLUMN_NAME') ? [[values[1] === 'PEOPLE' ? 'upper_id' : 'lower_id', 'int', 'NO', null, '', '', 1, '', null, null, '']]
       : sql.startsWith('SHOW CREATE') ? [['', sql.replace('SHOW CREATE TABLE `one`.', 'CREATE TABLE ') + ' (`id` int) ENGINE=InnoDB']]
@@ -130,4 +131,11 @@ test('catalog capture uses exact qualified metadata predicates for physical case
   const catalog = calls.filter(sql => sql.includes('information_schema.'));
   assert.ok(catalog.every(sql => /BINARY (?:t\.|tc\.|k\.)?TABLE_SCHEMA=BINARY \?/u.test(sql)));
   assert.ok(catalog.filter(sql => !sql.startsWith('SELECT TABLE_NAME,TABLE_TYPE')).every(sql => /BINARY (?:t\.|tc\.|k\.)?TABLE_NAME=BINARY \?/u.test(sql)));
+  for (mode of [1, 2]) {
+    calls.length = 0;
+    const scoped = await captureSchema(db, { tables: ['people'] });
+    assert.equal(scoped.server.tableNameCaseSensitive, false);
+    assert.ok(calls.some(sql => sql.includes('TABLE_SCHEMA=? AND TABLE_NAME IN (?)')));
+    assert.ok(calls.filter(sql => sql.includes('information_schema.')).every(sql => !sql.includes('BINARY ')));
+  }
 });
