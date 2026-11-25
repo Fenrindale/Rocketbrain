@@ -23,6 +23,7 @@ class ResultsView {
     this.comparisons = new WeakMap();
     this.queryEditors = new WeakMap();
     this.focusQueryEditor = focusQueryEditor;
+    this.selectedResultId = undefined;
     this.viewReady = false;
     this.focusRequested = false;
     this.resultSequence = 0;
@@ -68,9 +69,13 @@ class ResultsView {
         return;
       }
       if (msg.type === 'focusQueryEditor') {
-        const record = this.history.find(item => item.id === msg.id && !item.closing);
-        const editor = record && this.queryEditors.get(record);
-        if (editor) await this.focusQueryEditor?.(editor);
+        if (this.view === view && Number.isSafeInteger(msg.id)) await this.returnToQuery(msg.id);
+        return;
+      }
+      if (msg.type === 'selectResult') {
+        if (this.view === view && this.history.some(item => item.id === msg.id && !item.closing)) {
+          this.selectedResultId = msg.id;
+        }
         return;
       }
       const record = this.history.find(h => h.id === msg.id);
@@ -201,8 +206,14 @@ class ResultsView {
     this.view?.show(false);
     await this.postFocus();
   }
-  async returnToQuery() {
-    if (this.viewReady && this.view) await this.view.webview.postMessage({ type: 'returnToQuery' });
+  activeResult() {
+    return this.history.find(record => record.id === this.selectedResultId && !record.closing)
+      ?? this.history.findLast(record => !record.closing);
+  }
+  async returnToQuery(id = this.activeResult()?.id) {
+    const record = this.history.find(item => item.id === id && !item.closing);
+    const editor = record && this.queryEditors.get(record);
+    if (editor) return this.focusQueryEditor?.(editor);
   }
   begin(sql, source, { readOnly = true, sessionId, tableLayoutConnection, table, scriptCapture, relatedOrigin, queryEditor } = {}) {
     while (this.history.length >= 8) {
@@ -216,7 +227,11 @@ class ResultsView {
     if (queryEditor) this.queryEditors.set(record, queryEditor);
     const key = resultTableKey(tableLayoutConnection, table);
     if (key) this.layoutKeys.set(record, { key, table });
-    this.history.push(record); this.send(); return record.id;
+    const active = this.activeResult();
+    this.history.push(record);
+    this.selectedResultId = active?.result?.edit && !active.readOnly ? active.id : record.id;
+    this.send();
+    return record.id;
   }
   protectedResult(record) { return Boolean(record.state === 'running' || record.editBusy || record.hasDraft || record.review || record.result?.edit && !record.readOnly || record.sessionState?.outcomeUnknown); }
   setResultTab(id, { name, pinned } = {}) {
@@ -235,8 +250,11 @@ class ResultsView {
       record.scriptCapture.index===index&&record.scriptCapture.resultSet===resultSet)?.id;
   }
   activateResult(id, selection) {
-    if (this.hasResult(id)) return this.view?.webview.postMessage({ type: 'activateResult', id,
-      ...(selection ? { modelId: selection.modelId, rowId: selection.rowId } : {}) });
+    if (this.history.some(record => record.id === id && !record.closing)) {
+      this.selectedResultId = id;
+      return this.view?.webview.postMessage({ type: 'activateResult', id,
+        ...(selection ? { modelId: selection.modelId, rowId: selection.rowId } : {}) });
+    }
   }
   exportable(record) {
     return Boolean(record?.state === 'done' && record.result?.columns.length && this.history.includes(record) && !record.closing &&
@@ -378,7 +396,7 @@ class ResultsView {
         ...(record.result.browse && { filterPresets: this.filters.list(key, record.result.edit.columns) }),
         ...(record.result.browse?.sortOptions && { sortPresets: this.sorts.list(key, record.result.edit.columns, record.result.browse.sortOptions) }) } : record;
     });
-    this.view.webview.postMessage({ type: 'results', history });
+    this.view.webview.postMessage({ type: 'results', history, selectedResultId: this.activeResult()?.id });
   }
 }
 module.exports = { ResultsView };

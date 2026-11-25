@@ -1491,6 +1491,7 @@
       button.disabled = Boolean(editingCell && record.id !== editingCell.id);
       button.onclick = () => {
         currentId = record.id;
+        vscode.postMessage({ type: 'selectResult', id: currentId });
         render();
         focusResultTab($(button.id));
       };
@@ -1633,10 +1634,6 @@
       else focusResultTab(resultTabs().find(button => button.getAttribute('aria-selected') === 'true'));
       return;
     }
-    if (event.data?.type === 'returnToQuery') {
-      returnToQuery();
-      return;
-    }
     if (event.data?.type === 'activateResult') {
       const { id, rowId, modelId } = event.data;
       const record = history.find(item => item.id === id);
@@ -1650,6 +1647,8 @@
         currentId = id;
         render();
         if (row >= 0) $('grid').querySelector('[data-result-row-index="' + row + '"]')?.scrollIntoView?.({ block: 'nearest' });
+      } else if (editingCell && editingCell.id !== id) {
+        vscode.postMessage({ type: 'selectResult', id: editingCell.id });
       }
       return;
     }
@@ -1686,7 +1685,10 @@
     if (event.data?.type !== 'results' || !Array.isArray(event.data.history)) return;
     const previous = history.at(-1)?.id, keepEditor = editingCell || current()?.result?.edit && !current().readOnly; history = event.data.history;
     if (editingCell && history.find(record => record.id === editingCell.id)?.result?.edit?.modelId !== editingCell.modelId) { editingCell = null; $('cell-editor').hidden = true; }
-    if (history.at(-1)?.id !== previous && !keepEditor) currentId = history.at(-1)?.id;
+    if (!keepEditor) {
+      if (history.some(record => record.id === event.data.selectedResultId)) currentId = event.data.selectedResultId;
+      else if (history.at(-1)?.id !== previous) currentId = history.at(-1)?.id;
+    }
     for (const id of drafts.keys()) if (!history.some(record => record.id === id)) drafts.delete(id);
     for (const id of browseForms.keys()) if (!history.some(record => record.id === id)) browseForms.delete(id);
     for(const id of bulkForms.keys())if(!history.some(record=>record.id===id))bulkForms.delete(id);

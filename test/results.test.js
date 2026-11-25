@@ -704,9 +704,11 @@ test('query result tabs support manual keyboard activation and route focus to th
   await page.exposeFunction('__keyboardHost', message => receive(message));
   await page.evaluate(() => {
     window.__focusReturns = 0;
+    window.__selectedResult = undefined;
     window.acquireVsCodeApi = () => ({ postMessage: async message => {
       await window.__keyboardHost(message);
       if (message.type === 'focusQueryEditor') window.__focusReturns++;
+      if (message.type === 'selectResult') window.__selectedResult = message.id;
     } });
   });
   await page.setContent(fakeView.webview.html);
@@ -728,10 +730,10 @@ test('query result tabs support manual keyboard activation and route focus to th
   await page.keyboard.press('Space');
   assert.equal(await tabs.nth(0).getAttribute('aria-selected'), 'true');
   assert.equal(await page.getByRole('tabpanel', { name: 'Result ' + first }).getAttribute('id'), 'result-content');
+  await page.waitForFunction(id => window.__selectedResult === id, first);
   await host.returnToQuery();
-  await page.waitForFunction(() => window.__focusReturns === 1);
   await page.locator('#focus-query-editor').click();
-  await page.waitForFunction(() => window.__focusReturns === 2);
+  await page.waitForFunction(() => window.__focusReturns === 1);
   assert.deepEqual(sources, [{ uri: 'file:/first.sql', viewColumn: 1 }, { uri: 'file:/first.sql', viewColumn: 1 }]);
   await tabs.nth(0).focus();
   await page.keyboard.press('ArrowLeft');
@@ -741,4 +743,21 @@ test('query result tabs support manual keyboard activation and route focus to th
   await page.keyboard.press('Tab');
   assert.equal(await page.locator(':focus').getAttribute('role'), 'tabpanel');
   assert.deepEqual(errors, []);
+});
+
+test('the selected result can return to its query while the result view reloads', async () => {
+  const sources = [];
+  const view = new ResultsView({}, { workspaceState: { get() {} } }, {
+    focusQueryEditor: source => sources.push(source)
+  });
+  const first = { uri: 'file:/first.sql', viewColumn: 1 };
+  const second = { uri: 'file:/second.sql', viewColumn: 2 };
+  const firstId = view.begin('SELECT 1', 'MySQL', { queryEditor: first });
+  const secondId = view.begin('SELECT 2', 'MariaDB', { queryEditor: second });
+  await view.returnToQuery();
+  await view.activateResult(firstId);
+  await view.returnToQuery();
+  await view.activateResult(secondId);
+  await view.returnToQuery();
+  assert.deepEqual(sources, [second, first, second]);
 });
