@@ -7,7 +7,7 @@ const { createResultFilters, filterName } = require('./db/result-filters');
 const { createResultSorts, sortPresetName } = require('./db/result-sorts');
 const { analyzeResult, numericColumns } = require('./db/result-analysis');
 const { mapResult, mapColumns } = require('./db/result-map');
-const { compareDatasets: compareCaptures, selectUpdates } = require('./db/dataset-comparison');
+const { compareDatasets: compareCaptures, selectDatasetChanges } = require('./db/dataset-comparison');
 const tabActions = new Set(['closeResult', 'renameResult', 'setResultPin']);
 function resultName(value) {
   if (typeof value !== 'string' || value.length > 80 || /[\x00-\x1f\x7f]/.test(value)) {
@@ -251,7 +251,7 @@ class ResultsView {
     };
     assertFresh();
     if (!this.datasetAction) throw Error('Open an editable table to stage synchronization.');
-    const changes = selectUpdates(saved.comparison, rows);
+    const changes = selectDatasetChanges(saved.comparison, rows);
     await this.datasetAction(id, { changes, modelId, draftRevision, requestId, assertFresh });
     if (this.comparisons.get(target) === saved) this.comparisons.delete(target);
   }

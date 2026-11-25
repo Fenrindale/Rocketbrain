@@ -931,6 +931,11 @@
   const comparisonPageSize = 24;
   function renderComparisonTable(form, allowStage) {
     const report = form.report, table = document.createElement('table');
+    if (!report.oneSidedChanges && (report.summary.targetOnly || report.summary.sourceOnly)) {
+      const scope = document.createElement('p');
+      scope.textContent = 'Compare complete unfiltered tables with matching integer primary keys to stage inserts or deletes.';
+      $('grid').append(scope);
+    }
     table.className = 'comparison-data';
     const head = table.createTHead().insertRow(), body = table.createTBody();
     for (const label of ['Stage', 'Matched key', 'Change', 'Mapped differences']) {
@@ -954,7 +959,9 @@
         selected.append(check);
       }
       presentValue(key, JSON.stringify(item.key));
-      presentValue(change, { changed: 'Different', 'target-only': 'Destination capture only', 'source-only': 'Source capture only' }[item.state]);
+      const stateLabel = { changed: 'Different', 'target-only': 'Destination capture only', 'source-only': 'Source capture only' }[item.state];
+      const operationLabel = { update: 'Update', insert: 'Insert', delete: 'Delete' }[item.operation];
+      presentValue(change, operationLabel ? stateLabel + ' · ' + operationLabel : stateLabel);
       const detail = row.insertCell();
       if (item.reason) detail.title = item.reason;
       if (item.fields?.length) {
@@ -1014,6 +1021,7 @@
     const pendingDraft = target.bulkDraft?.modelId === target.result.edit?.modelId &&
       target.bulkDraft?.draftRevision === (target.draftRevision || 0);
     const allowStage = !busy && !target.readOnly && !pendingDraft && !source?.sessionState?.inTransaction && Boolean(report?.stageableRows);
+    $('compare-stage').textContent = report?.oneSidedChanges ? 'Stage Selected Changes' : 'Stage Selected Updates';
     $('compare-stage').disabled = !allowStage || !form.selected.size;
     if (form.error) { $('compare-status').textContent = form.error; return; }
     if (!report) {

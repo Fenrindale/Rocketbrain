@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { compareDatasets, selectUpdates } = require('../src/db/dataset-comparison');
+const { compareDatasets, selectDatasetChanges } = require('../src/db/dataset-comparison');
 const { ResultsView } = require('../src/results');
 
 const columns = [
@@ -38,13 +38,13 @@ test('exact typed dataset comparison maps composite keys by ordinal and preserve
     ['9007199254.12345678', '9007199254.12345679'], ['0xCAFE', '0x00ff'], ['NULL', null]
   ]);
   assert.equal(compared.report.stageableRows, 1);
-  assert.deepEqual(selectUpdates(compared, [0]), {
+  assert.deepEqual(selectDatasetChanges(compared, [0]), {
     deletes: [], inserts: [], updates: [{ rowId: 'row-a', values: {
       amount: { kind: 'value', text: '9007199254.12345679' }, payload: { kind: 'value', text: '0x00ff' }, note: { kind: 'null' }
     } }]
   });
-  assert.throws(() => selectUpdates(compared, [1]), /eligible matched rows/);
-  assert.throws(() => selectUpdates(compared, [0, 0]), /distinct eligible/);
+  assert.throws(() => selectDatasetChanges(compared, [1]), /eligible rows/);
+  assert.throws(() => selectDatasetChanges(compared, [0, 0]), /distinct eligible/);
 });
 
 test('comparison rejects key collisions, NULL keys and unsafe coercions before reconciliation', () => {
@@ -75,6 +75,34 @@ test('only a current captured pair can stage a bounded reviewed selection with t
   await assert.rejects(view.stageDatasetComparison(a, input), /changed.*Compare again/);
   comparison = view.compareDatasets(a, b, map);
   await view.stageDatasetComparison(a, { ...input, reviewId: comparison.reviewId });
-  assert.deepEqual(calls, [{ id: a, changes: selectUpdates(compareDatasets(target, source, map), [0]) }]);
+  assert.deepEqual(calls, [{ id: a, changes: selectDatasetChanges(compareDatasets(target, source, map), [0]) }]);
   await assert.rejects(view.stageDatasetComparison(a, { ...input, reviewId: comparison.reviewId }), /Compare the current/);
+});
+
+test('complete table captures support selected membership changes with physical integer primary keys', () => {
+  const meta = [{ name:'id',kind:'integer',type:'bigint unsigned',primaryKey:true,required:true,insertable:true },
+    { name:'label',kind:'text',type:'varchar(40)',editable:true,insertable:true,nullable:true },
+    { name:'derived',kind:'integer',type:'int',insertable:false }];
+  const captured = (table,rows) => ({ columns:meta.map(item=>item.name), rows,
+    browse:{ page:0,hasPrevious:false,hasNext:false,filters:[] },
+    edit:{ table,columns:meta,rowIds:rows.map((_,index)=>table+index),canEdit:true,insertable:true } });
+  const destination = captured('destination', [['1','original','9'],['2','remove','4']]);
+  const origin = captured('origin', [['1',null,'9'],['3','added','5']]);
+  const mapping = [0,1,2].map(index=>({source:index,target:index,key:index===0}));
+  const result = compareDatasets(destination,origin,mapping);
+  assert.equal(result.report.oneSidedChanges,true);
+  assert.deepEqual(result.report.rows.map(row=>row.operation),['update','delete','insert']);
+  assert.deepEqual(selectDatasetChanges(result,[0,1,2]), {
+    updates:[{rowId:'destination0',values:{label:{kind:'null'}}}], deletes:['destination1'],
+    inserts:[{values:{id:{kind:'value',text:'3'},label:{kind:'value',text:'added'}}}]
+  });
+  for (const incomplete of [{...origin,browse:{...origin.browse,hasNext:true}},
+      {...origin,browse:{...origin.browse,filters:[{column:'label'}]}},
+      {...origin,edit:undefined,fields:[{type:8},{type:253},{type:3}]}]) {
+    const comparison = compareDatasets(destination,incomplete,mapping);
+    assert.equal(comparison.report.oneSidedChanges,false);
+    assert.deepEqual(comparison.report.rows.map(row=>row.operation),['update',undefined,undefined]);
+  }
+  const incompatible = { ...origin,edit:{...origin.edit,columns:[{...meta[0],type:'bigint'},...meta.slice(1)]} };
+  assert.equal(compareDatasets(destination,incompatible,mapping).report.oneSidedChanges,false);
 });

@@ -83,12 +83,43 @@ function stagedUpdate(target, row, changes) {
   const entries = changes.map(change => {
     const column = target.edit.columns[change.targetIndex];
     if (!column?.editable) throw Error('A changed destination column is protected.');
-    const value = change.source === null ? { kind: 'null' } :
-      { kind: 'value', text: Object.is(change.source, -0) ? '-0' : String(change.source) };
-    typedCell(value, column);
-    return [column.name, value];
+    return [column.name, capturedCell(change.source, column)];
   });
   return { rowId: target.edit.rowIds[row.index], values: Object.fromEntries(entries) };
+}
+
+function capturedCell(raw, column) {
+  const value = raw === null ? { kind: 'null' } : { kind: 'value', text: Object.is(raw, -0) ? '-0' : String(raw) };
+  typedCell(value, column);
+  return value;
+}
+
+function matchingPrimaryKey(result, pairs, side) {
+  const columns = result.edit?.columns;
+  const key = columns?.flatMap((column, index) => column.primaryKey ? [index] : []) || [];
+  return key.length === pairs.length && pairs.every(pair => key.includes(pair[side]));
+}
+
+function completeTable(result) {
+  const browse = result.browse;
+  return Boolean(result.edit?.table && browse && browse.page === 0 && Array.isArray(browse.filters) &&
+    browse.filters.length === 0 && browse.hasNext === false && browse.hasPrevious === false && !result.truncated);
+}
+
+function stagedInsert(target, row, mapped, keyPairs) {
+  if (!target.edit.insertable || keyPairs.some(pair => !target.edit.columns[pair.target].insertable)) {
+    throw Error('The destination requires generated or unsupported primary-key values.');
+  }
+  const columns = target.edit.columns;
+  const mappedByTarget = new Map(mapped.map(pair => [pair.target,pair]));
+  if (columns.some((column,index) => column.required && !mappedByTarget.has(index))) {
+    throw Error('Map every required destination column before staging an insert.');
+  }
+  const entries = mapped.filter(pair=>columns[pair.target].insertable).map(pair=>{
+    const column = columns[pair.target];
+    return [column.name, capturedCell(row.row[pair.source],column)];
+  });
+  return {values:Object.fromEntries(entries)};
 }
 
 function coverage(result) {
@@ -106,14 +137,22 @@ function compareDatasets(target, source, pairs) {
   const mapped = mappings(target, source, pairs);
   const keyPairs = mapped.filter(pair => pair.key);
   const left = rowIndex(target, mapped, 'target'), right = rowIndex(source, mapped, 'source');
-  const primaryKey = target.edit?.columns?.flatMap((column, index) => column.primaryKey ? [index] : []) || [];
-  const editable = target.edit?.canEdit && primaryKey.length === keyPairs.length && keyPairs.every(pair => primaryKey.includes(pair.target));
+  const editable = target.edit?.canEdit && matchingPrimaryKey(target,keyPairs,'target');
+  const oneSided = editable && completeTable(target) && completeTable(source) && matchingPrimaryKey(source,keyPairs,'source') &&
+    keyPairs.every(pair=>{
+      const left = target.edit.columns[pair.target], right = source.edit.columns[pair.source];
+      return left.kind === 'integer' && right.kind === 'integer' && left.type.toLowerCase() === right.type.toLowerCase();
+    });
   const summary = { equal: 0, changed: 0, targetOnly: 0, sourceOnly: 0 };
-  const rows = [], updates = new Map();
+  const rows = [], operations = new Map();
   let bytes = 0;
-  function add(entry, update) {
+  function add(entry, type, value) {
     entry.index = rows.length;
-    if (update) updates.set(entry.index, update);
+    if (value !== undefined) {
+      entry.canStage = true;
+      entry.operation = type;
+      operations.set(entry.index,{type,value});
+    }
     bytes += Buffer.byteLength(JSON.stringify(entry));
     if (bytes > limits.reportBytes) throw Error('The captured differences exceed the 8 MiB report limit. Compare smaller results.');
     rows.push(entry);
@@ -122,7 +161,7 @@ function compareDatasets(target, source, pairs) {
     const other = right.get(key);
     if (!other) {
       summary.targetOnly++;
-      add({ key: row.key, state: 'target-only' });
+      add({ key: row.key, state: 'target-only' },'delete',oneSided ? target.edit.rowIds[row.index] : undefined);
       continue;
     }
     const changes = detail(row, other, mapped);
@@ -133,26 +172,37 @@ function compareDatasets(target, source, pairs) {
       try { update = stagedUpdate(target, row, changes); }
       catch (error) { reason = error.message; }
     }
-    add({ key: row.key, state: 'changed', fields: changes, canStage: Boolean(update), ...(reason && { reason }) }, update);
+    add({ key: row.key, state: 'changed', fields: changes, canStage: Boolean(update), ...(reason && { reason }) }, 'update', update);
   }
   for (const [key, row] of right) if (!left.has(key)) {
     summary.sourceOnly++;
-    add({ key: row.key, state: 'source-only' });
+    let insert, reason;
+    if (oneSided) {
+      try { insert = stagedInsert(target,row,mapped,keyPairs); }
+      catch (error) { reason = error.message; }
+    }
+    add({ key: row.key, state: 'source-only', ...(reason && {reason}) }, 'insert', insert);
   }
-  return { report: { mapped, summary, rows, target: coverage(target), source: coverage(source), stageableRows: updates.size }, updates };
+  return { report: { mapped, summary, rows, target: coverage(target), source: coverage(source), stageableRows: operations.size,
+    oneSidedChanges: Boolean(oneSided) }, operations };
 }
 
-function selectUpdates(comparison, indices) {
+function selectDatasetChanges(comparison, indices) {
   if (!Array.isArray(indices) || !indices.length || indices.length > limits.draftRows || new Set(indices).size !== indices.length ||
-      indices.some(index => !Number.isInteger(index) || !comparison.updates.has(index))) {
-    throw Error('Select distinct eligible matched rows from the current comparison.');
+      indices.some(index => !Number.isInteger(index) || !comparison.operations.has(index))) {
+    throw Error('Select distinct eligible rows from the current comparison.');
   }
-  const updates = indices.map(index => comparison.updates.get(index));
-  const rows = new Set(updates.map(update => update.rowId));
-  if (rows.has(undefined) || rows.size !== updates.length) throw Error('These rows do not have distinct retained target identities.');
-  const changes = { updates, deletes: [], inserts: [] };
+  const changes = { updates: [], deletes: [], inserts: [] };
+  for (const index of indices) {
+    const {type,value} = comparison.operations.get(index);
+    changes[type + 's'].push(value);
+  }
+  const identities = [...changes.updates.map(update=>update.rowId),...changes.deletes];
+  if (identities.some(id=>typeof id!=='string') || new Set(identities).size !== identities.length) {
+    throw Error('These rows do not have distinct retained target identities.');
+  }
   if (Buffer.byteLength(JSON.stringify(changes)) > limits.draftBytes) throw Error('Select at most 1 MiB of staged values at a time.');
   return changes;
 }
 
-module.exports = { compareDatasets, selectUpdates };
+module.exports = { compareDatasets, selectDatasetChanges };
