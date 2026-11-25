@@ -25,6 +25,7 @@ const { collectRoutineResults, maxBytes: maxRoutineResultBytes } = require('./ro
 const {randomUUID}=require('node:crypto');
 const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTimeout } = require('./rds-iam');
 const { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope } = require('./write-protection');
+const { sessionLifecycle, initializationStatements } = require('./session-lifecycle');
 const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 const METADATA_ID = '__rocketbrain_metadata__';
 const MAX_PROTECTED_DEPENDENCIES = 128;
@@ -118,8 +119,10 @@ function newSession(id, readOnly, database) {
  * The SQL policy is not a sandbox for privileged server UDFs.
  */
 class MysqlService {
-  constructor(config, { createConnection, reportActivity, mintIamToken } = {}) {
+  constructor(config, { createConnection, reportActivity, reportSession, mintIamToken } = {}) {
     this._options = connectionOptions(config);
+    this._sessionLifecycle = sessionLifecycle(config.sessionLifecycle);
+    this._initialization = this._sessionLifecycle ? initializationStatements(this._sessionLifecycle.initialSql) : [];
     this._writeProtection = normalizeWriteProtection(config.writeProtection);
     const security = require('./connection-security').connectionSecurity(config);Object.assign(this._options,security.options);this._connectionCleanup=security.dispose;
     if (config.auth !== undefined) {
@@ -134,6 +137,7 @@ class MysqlService {
     this._defaultReadOnly = this._writeProtection?.connectionReadOnly || config.readOnly !== false;
     this._createConnection = createConnection || (options => require('mysql2').createConnection(options));
     this._reportActivity = reportActivity;
+    this._reportSession = reportSession;
     this._sessions = new Map([['default', newSession('default', this._defaultReadOnly, this._options.database)]]);
     this._metadataSession = newSession(METADATA_ID, true, this._options.database);
     this._catalogConnections = new WeakMap();
@@ -160,7 +164,9 @@ class MysqlService {
   _state(session) {
     const { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect } = session;
     return { id, readOnly, autocommit, inTransaction, transactionState, transactionIsolation, connected, connectionId, database, outcomeUnknown, needsReconnect, busy: Boolean(session.active||session.scriptRunning),
-      ...(this._writeProtection && { writeProtection: structuredClone(this._writeProtection) }) };
+      ...(this._writeProtection && { writeProtection: structuredClone(this._writeProtection) }),
+      ...(session.lifecycle && { lifecycle: { initializedStatements: session.lifecycle.initializedStatements,
+        keepAliveChecks: session.lifecycle.keepAliveChecks, disconnectedByIdleTimeout: session.lifecycle.disconnectedByIdleTimeout } }) };
   }
   getSessionState(id = 'default') { return this._state(this._session(id)); }
   async openSession(id, { readOnly = this._defaultReadOnly } = {}) {
@@ -174,9 +180,11 @@ class MysqlService {
     } else if (session.readOnly !== readOnly) throw new Error('Use setReadOnly to change an existing console mode explicitly.');
     return this._enqueue(session, async () => { await this._ensureConnection(session); return this._state(session); });
   }
-  _enqueue(session, operation, { allowReconnect = false } = {}) {
+  _enqueue(session, operation, { allowReconnect = false, lifecycleProbe = false } = {}) {
     this._assertOpen();
     if((this._schemaApplier?.applying||this._schemaRecovery?.applying||this._schemaDesigner?.applying||this._objectEditor?.applying)&&this._sessions.get(session.id)===session)throw fail('ROCKETBRAIN_SCHEMA_BUSY','Wait for the reviewed schema application before using this console.');
+    const managed = this._sessionLifecycle && this._sessions.get(session.id) === session;
+    if (managed && !lifecycleProbe) this._clearSessionTimers(session);
     session.pendingOperations=(session.pendingOperations||0)+1;
     const cancellationVersion = session.cancellationVersion;
     const pending = session.queue.then(async () => {
@@ -188,7 +196,12 @@ class MysqlService {
       if (session.needsReconnect && !allowReconnect) throw fail('ROCKETBRAIN_RECONNECT_REQUIRED', 'This console lost its server session. Reconnect explicitly; temporary tables, variables and uncommitted changes cannot be restored.', { state: this._state(session) });
       return operation();
     });
-    const tracked=pending.finally(()=>{session.pendingOperations--;});
+    const tracked=pending.finally(()=>{
+      session.pendingOperations--;
+      if (!managed || !session.lifecycle || session.pendingOperations) return;
+      if (!lifecycleProbe) session.lifecycle.lastUserActivity = performance.now();
+      this._scheduleSessionTimers(session);
+    });
     session.queue = tracked.catch(() => {});
     return tracked;
   }
@@ -199,6 +212,7 @@ class MysqlService {
     session.transactionState = session.inTransaction ? 'active' : 'idle';
   }
   _lose(session, reason, mayWrite = false, abort = true) {
+    this._clearSessionTimers(session);
     const connection = session.connection, active = session.active;
     session.outcomeUnknown ||= !session.readOnly && (Boolean(session.inTransaction) || mayWrite || Boolean(active?.mayWrite));
     session.connection = null; session.connected = false; session.connectionId = null;
@@ -206,6 +220,50 @@ class MysqlService {
     session.needsReconnect = true; session.inTransaction = null; session.transactionState = 'unknown';
     if (connection) connection.destroy();
     if (abort && active) active.abort(reason);
+  }
+  _clearSessionTimers(session) {
+    const timer = session.lifecycle;
+    if (!timer) return;
+    clearTimeout(timer.keepAlive);
+    clearTimeout(timer.idle);
+    timer.keepAlive = timer.idle = undefined;
+  }
+  _scheduleSessionTimers(session) {
+    if (this._disposed || session.closed || !session.connected || session.needsReconnect || this._sessions.get(session.id) !== session) return;
+    const timer = session.lifecycle, connection = session.connection;
+    const usable = () => !this._disposed && !session.closed && session.connection === connection && !session.pendingOperations && !session.active;
+    const idle = () => usable() && !session.inTransaction && session.autocommit && !session.outcomeUnknown;
+    const { keepAliveSeconds, idleSeconds } = this._sessionLifecycle;
+    if (idleSeconds && idle() && !timer.idle) {
+      const remaining = idleSeconds * 1000 - (performance.now() - timer.lastUserActivity);
+      timer.idle = setTimeout(() => {
+        timer.idle = undefined;
+        if (!idle()) return;
+        const error = fail('ROCKETBRAIN_IDLE_TIMEOUT', 'This idle console disconnected. Reconnect to open a fresh session.');
+        this._editor.invalidate(session.id);
+        this._lose(session, error);
+        session.inTransaction = false;
+        session.transactionState = 'idle';
+        timer.disconnectedByIdleTimeout = true;
+        this._reportSession?.();
+      }, Math.max(1, remaining)).unref();
+    }
+    if (keepAliveSeconds && !timer.keepAlive) {
+      timer.keepAlive = setTimeout(async () => {
+        timer.keepAlive = undefined;
+        if (!usable()) return;
+        try {
+          await this._enqueue(session, async () => {
+            this._observe(session, await this._control(session, 'DO 0'));
+            timer.keepAliveChecks++;
+          }, { lifecycleProbe: true });
+        } catch (error) {
+          if (session.connection !== connection) return;
+          if (error.code === 'ROCKETBRAIN_SCHEMA_BUSY') this._scheduleSessionTimers(session);
+          else this._lose(session, error);
+        }
+      }, keepAliveSeconds * 1000).unref();
+    }
   }
   async _ensureConnection(session) {
     requireConnectionMode(this._writeProtection, session.readOnly);
@@ -245,6 +303,15 @@ class MysqlService {
     });
     try {
       await this._control(session, 'SET SESSION TRANSACTION ' + (session.readOnly ? 'READ ONLY' : 'READ WRITE'));
+      if (this._sessionLifecycle) {
+        session.lifecycle = { lastUserActivity: performance.now(), initializedStatements: 0, keepAliveChecks: 0,
+          disconnectedByIdleTimeout: false };
+        for (const sql of this._initialization) {
+          try { await this._control(session, sql); }
+          catch (error) { throw fail('ROCKETBRAIN_SESSION_INITIALIZATION', 'The server rejected a reviewed session initialization setting (' + error.code + ').'); }
+          session.lifecycle.initializedStatements++;
+        }
+      }
       await this._refreshState(session);
     } catch (error) { this._lose(session, error); throw error; }
   }

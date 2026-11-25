@@ -94,7 +94,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const binding = existingBinding(document);
     const session = (state.mysql || dedicated) && binding ? consoleDatabase(binding.id).getSessionState(binding.id) : null;
     const shared = session && linkedEditors(binding.id).length > 1;
-    const mode = streamTransactions.size ? 'import waiting for Commit or Roll Back' : session ? session.needsReconnect ? 'disconnected · reconnect required' : `${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}${session.inTransaction ? ' · transaction active' : ''}${session.transactionIsolation ? ' · ' + session.transactionIsolation.toLowerCase() : ''}` : dedicated ? 'profile session closed' : state.mysql ? 'new console · read only' : 'SQLite demo';
+    const mode = streamTransactions.size ? 'import waiting for Commit or Roll Back' : session ? session.needsReconnect ? (session.lifecycle?.disconnectedByIdleTimeout ? 'idle timeout · reconnect required' : 'disconnected · reconnect required') : `${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}${session.inTransaction ? ' · transaction active' : ''}${session.transactionIsolation ? ' · ' + session.transactionIsolation.toLowerCase() : ''}` : dedicated ? 'profile session closed' : state.mysql ? 'new console · read only' : 'SQLite demo';
     const cached = !dedicated && state.offlineMetadata?.provenance;
     const label = dedicated && !binding ? 'Dedicated profile' : consoleLabel(binding?.id);
     status.text = cached ? '$(database) Rocketbrain · ' + cached.database + ' · cached metadata' :
@@ -288,7 +288,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if (!vscode.workspace.isTrusted) throw connectionError('Trust this workspace before connecting to a database.');
     if (state.running.size || state.connecting.size || state.switching) throw connectionError('Wait for the current database operation first.');
     const expectedEpoch = state.epoch;
-    const next = new MysqlService(config, { reportActivity: activityLog.createReporter() }); state.candidates.add(next);
+    const next = new MysqlService(config, { reportActivity: activityLog.createReporter(), reportSession: updateStatus }); state.candidates.add(next);
     try {
       const metadata = await next.metadata();
       const schema = [...metadata.tables,...metadata.views];
@@ -394,7 +394,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const profile = require('./db/connection-security').connectionProfile(config);
     if (!profile?.id) throw connectionError('Choose a saved database profile.');
     const label = profile.name + ' · ' + config.database;
-    const db = new MysqlService(config, { reportActivity: activityLog.createReporter() });
+    const db = new MysqlService(config, { reportActivity: activityLog.createReporter(), reportSession: updateStatus });
     const epoch = ++sequence, id = 'profile-console-' + epoch;
     const record = { db, epoch, label, profile: { id: profile.id, name: profile.name, database: config.database } };
     state.connecting.add(id);
@@ -1177,6 +1177,10 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     async controlConsoleSession(sessionId,action) {
       if(!linkedEditors(sessionId).length||!['begin','commit','rollback'].includes(action))throw new Error('Choose a managed transaction control for an existing console.');
       return withSession(sessionId,(id, db)=>db[action]({sessionId:id}));
+    },
+    reconnectConsoleSession(sessionId) {
+      if (!linkedEditors(sessionId).length) throw Error('Choose an existing console to reconnect.');
+      return withSession(sessionId, (id, db) => db.reconnect(id));
     },
     async previewSchemaRename(request) {
       if(exclusiveDatabaseWork())throw new Error('Finish the schema operation or pending import transaction before preparing a rename.');
