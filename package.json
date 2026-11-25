@@ -215,6 +215,7 @@
       { "command": "rocketbrain.mongodb.run", "title": "Run Read-Only MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected && editorLangId == json" },
       { "command": "rocketbrain.mongodb.newAggregation", "title": "New MongoDB Aggregation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
       { "command": "rocketbrain.mongodb.runAggregation", "title": "Run Read-Only MongoDB Aggregation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected && editorLangId == json" },
+      { "command": "rocketbrain.mongodb.editDocumentField", "title": "Review MongoDB Document Field Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoEditable" },
       { "command": "rocketbrain.mongodb.close", "title": "Close MongoDB Connection", "category": "Rocketbrain", "enablement": "rocketbrain.mongoConnected" },
       { "command": "rocketbrain.jdbc.addDriver", "title": "Add JDBC Driver", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jdbc.profiles", "title": "Manage JDBC Profiles", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },

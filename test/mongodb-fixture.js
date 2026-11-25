@@ -26,7 +26,7 @@ function fixtureClient(port, auth, tls) {
     ...(tls && { tls: true, tlsCAFile: tls.caPath, family: 4 }) });
 }
 
-async function startMongoFixture(bin, { tls } = {}) {
+async function startMongoFixture(bin, { tls, edits = false } = {}) {
   if (!path.isAbsolute(bin) || !/^mongod(?:\.exe)?$/i.test(path.basename(bin))) {
     throw Error('Select the absolute mongod executable path for the disposable fixture.');
   }
@@ -63,6 +63,7 @@ async function startMongoFixture(bin, { tls } = {}) {
     await fs.mkdir(data);
     const adminAuth = { username: 'rb_fixture_admin', password: randomBytes(32).toString('base64url') };
     const readerAuth = { username: 'rb_fixture_reader', password: randomBytes(32).toString('base64url') };
+    const writerAuth = edits ? { username: 'rb_fixture_editor', password: randomBytes(32).toString('base64url') } : null;
     child = spawn(bin, ['--auth', '--bind_ip', '127.0.0.1', '--port', String(port), '--dbpath', data,
       '--logpath', log, '--setParameter', 'diagnosticDataCollectionEnabled=false', '--wiredTigerCacheSizeGB', '0.25',
       ...(tls ? ['--tlsMode', 'requireTLS', '--tlsCertificateKeyFile', tls.serverPem, '--tlsCAFile', tls.caPath,
@@ -99,6 +100,8 @@ async function startMongoFixture(bin, { tls } = {}) {
     const build = await administrator.db('admin').command({ buildInfo: 1 });
     await administrator.db('admin').command({ createUser: readerAuth.username, pwd: readerAuth.password,
       mechanisms: ['SCRAM-SHA-256'], roles: [sample.database, sample.extra].map(db => ({ db, role: 'read' })) });
+    if (writerAuth) await administrator.db('admin').command({ createUser: writerAuth.username, pwd: writerAuth.password,
+      mechanisms: ['SCRAM-SHA-256'], roles: [{ db: sample.database, role: 'readWrite' }] });
 
     const source = administrator.db(sample.database);
     await source.collection(sample.collection).insertMany([
@@ -111,6 +114,8 @@ async function startMongoFixture(bin, { tls } = {}) {
     await source.collection('wide').insertOne({ text: 'a'.repeat(270000) });
     await source.collection('budget').insertMany(Array.from({ length: 7 }, (_, index) => ({ index, text: 'z'.repeat(200000) })));
     await source.collection('stale_target').insertOne({ generation: 1 });
+    const editObjectId = new BSON.ObjectId(sample.id), editCollection = source.collection('edit_identity');
+    if (edits) await editCollection.insertOne({ _id: editObjectId, name: 'original' });
     await administrator.db(sample.extra).collection('nested').insertOne({ n: 1 });
     await administrator.db(sample.hidden).collection('secret').insertOne({ n: 2 });
     const config = { host: '127.0.0.1', port, authSource: 'admin', ...readerAuth };
@@ -135,8 +140,28 @@ async function startMongoFixture(bin, { tls } = {}) {
       } catch (error) { return error.code === 361; }
       finally { await reader.close(); }
     }
+    const editFixture = edits && {
+      config: { ...config, ...writerAuth },
+      collection: 'edit_identity',
+      updateObservedField: (field, value) => source.collection(sample.collection).updateOne({ _id: editObjectId }, { $set: { [field]: value } }),
+      changeValidator: () => source.command({ collMod: sample.collection, validator: { rank: { $type: 'int' } } }),
+      async replaceSameDocumentCollection() {
+        await editCollection.drop();
+        await editCollection.insertOne({ _id: editObjectId, name: 'original' });
+      },
+      async rejectOldCollectionUuid(uuid) {
+        const writer = fixtureClient(port, writerAuth, tls);
+        try {
+          const result = await writer.db(sample.database).command({ update: editCollection.collectionName,
+            collectionUUID: new BSON.UUID(uuid), updates: [{ q: { _id: editObjectId, name: 'original' },
+              u: { $set: { name: 'must-not-write' } }, multi: false, upsert: false }], writeConcern: { w: 1, j: true } });
+          return result.writeErrors?.[0]?.code === 361;
+        } catch (error) { return error.code === 361; }
+        finally { await writer.close(); }
+      }
+    };
     return { sample, config, version: build.version, readerWriteDenied, replaceAggregationTarget,
-      readerRejectsStaleAggregationIdentity, stop };
+      readerRejectsStaleAggregationIdentity, ...(editFixture && { editFixture }), stop };
   } catch (error) {
     await stop();
     const reason = error?.code ? ' (driver code ' + error.code + ')' : '';

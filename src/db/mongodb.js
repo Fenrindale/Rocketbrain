@@ -1,7 +1,7 @@
 'use strict';
 
 const { MongoClient, BSON } = require('mongodb');
-const { createHash, X509Certificate } = require('node:crypto');
+const { createHash, randomUUID, X509Certificate } = require('node:crypto');
 const fs = require('node:fs/promises');
 const { isIP } = require('node:net');
 const path = require('node:path');
@@ -14,12 +14,16 @@ const maxDocuments = 200;
 const maxCatalogEntries = 200;
 const maxTimeMS = 5000;
 const maxCaBytes = 64 * 1024;
+const maxEditBytes = 8192;
+const editLifetime = 2 * 60 * 1000;
 const maxStages = 16;
 const reserved = new Set(['__proto__', 'prototype', 'constructor']);
 const queryKeys = new Set(['database', 'collection', 'filter', 'projection', 'sort', 'limit']);
 const aggregateKeys = new Set(['database', 'collection', 'collectionId', 'pipeline', 'limit']);
 const accumulators = new Set(['$sum', '$min', '$max', '$avg', '$first', '$last']);
 const uuidPattern = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+const editableField = /^[a-z_][a-z0-9_]{0,79}$/i;
+const objectIdPattern = /^[a-f0-9]{24}$/i;
 const comparisons = new Set(['$eq', '$ne', '$lt', '$lte', '$gt', '$gte']);
 const logicalOperators = new Set(['$and', '$or', '$nor']);
 const decimal = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$/;
@@ -76,7 +80,8 @@ function mongoTarget(options) {
   }
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new MongoDbError('Use a MongoDB port from 1 to 65535.');
   if (!validText(username, 256) || !validText(password, 2048)) throw new MongoDbError('Supply a MongoDB username and password.');
-  return { host, port, authSource: databaseName(authSource), username, password, ...(tls && { tls: { ...tls } }) };
+  return { host, port, authSource: databaseName(authSource), username, password, ...(tls && { tls: { ...tls } }),
+    ...(options?.reviewedEdits === true && { reviewedEdits: true }) };
 }
 
 async function readMongoCa(caPath, signal) {
@@ -341,6 +346,38 @@ function parseMongoAggregation(source) {
   return { ...target, collectionId: input.collectionId.toLowerCase(), pipeline, limit };
 }
 
+function mongoScalar(value) {
+  if (value === null) return { type: 'null', value };
+  if (typeof value === 'boolean') return { type: 'bool', value };
+  if (value instanceof BSON.Int32) return { type: 'int', value };
+  if (value instanceof BSON.Long && value._bsontype === 'Long') return { type: 'long', value };
+  if (typeof value === 'string' && Buffer.byteLength(value) <= maxEditBytes && !value.includes('\0') &&
+      Buffer.from(value).toString('utf8') === value) return { type: 'string', value };
+  return null;
+}
+
+function parseMongoEditValue(source) {
+  const invalid = () => new MongoDbError('Enter one JSON string, boolean, null or canonical BSON integer value.');
+  if (typeof source !== 'string' || Buffer.byteLength(source) > maxEditBytes + 128) throw invalid();
+  let value;
+  try { value = JSON.parse(source); }
+  catch { throw invalid(); }
+  if (typeof value === 'number' || (plainObject(value) &&
+      (!typedLiteral(value) || !Object.keys(value).every(key => key === '$numberInt' || key === '$numberLong')))) throw invalid();
+  const scalar = mongoScalar(plainObject(value) ? BSON.EJSON.deserialize(value, { relaxed: false }) : value);
+  if (!scalar) throw invalid();
+  return scalar;
+}
+
+function previewValue(scalar) {
+  return BSON.EJSON.serialize({ value: scalar.value }, { relaxed: false }).value;
+}
+
+function noEdit(message) { return new MongoDbError(message, 'ROCKETBRAIN_MONGO_EDIT'); }
+function staleEdit() {
+  return new MongoDbError('The MongoDB field or collection changed. Inspect the current document and review it again.', 'ROCKETBRAIN_MONGO_STALE');
+}
+
 function safeError(error, signal) {
   if (signal?.aborted) return new MongoDbError('MongoDB operation cancelled or timed out.', 'ROCKETBRAIN_MONGO_CANCELLED');
   if (error instanceof MongoDbError) return error;
@@ -388,7 +425,7 @@ async function collectDocuments(cursor, limit) {
   return { documents, encoding: 'canonical-extended-json', truncated: truncated ?? null };
 }
 
-async function observeAggregationTarget(db, collection, signal) {
+async function observeCollection(db, collection, signal) {
   const cursor = db.listCollections({ name: collection }, { nameOnly: false, batchSize: 2, maxTimeMS, signal });
   try {
     const item = await cursor.next();
@@ -397,7 +434,32 @@ async function observeAggregationTarget(db, collection, signal) {
         !(id instanceof BSON.Binary) || id.sub_type !== BSON.Binary.SUBTYPE_UUID || id.length() !== 16) {
       throw new MongoDbError('Choose an ordinary MongoDB collection with visible identity metadata.', 'ROCKETBRAIN_MONGO_AGGREGATE_SCOPE');
     }
-    return new BSON.UUID(id.buffer.subarray(0, 16));
+    return { uuid: new BSON.UUID(id.buffer.subarray(0, 16)), options: item.options ?? {},
+      settingsSha256: createHash('sha256').update(BSON.serialize({ options: item.options ?? {}, idIndex: item.idIndex ?? null })).digest('hex') };
+  } finally { await closeCursor(cursor); }
+}
+
+async function readEditableDocument(db, target, identity, signal) {
+  const { uuid, settingsSha256, options } = await observeCollection(db, target.collection, signal);
+  if (options.capped || options.timeseries || options.encryptedFields || options.clusteredIndex) {
+    throw noEdit('Choose an ordinary collection for a reviewed edit.');
+  }
+  const cursor = db.runCursorCommand({ aggregate: target.collection, collectionUUID: uuid,
+    pipeline: [{ $match: { _id: identity } }, { $limit: 1 }], cursor: { batchSize: 1 }, maxTimeMS, allowDiskUse: false },
+  { promoteValues: false, signal });
+  try {
+    const document = await cursor.next();
+    if (!document || !(document._id instanceof BSON.ObjectId) || !document._id.equals(identity) ||
+        BSON.calculateObjectSize(document) > maxDocumentBytes) throw noEdit('Choose a visible ObjectId document within the editable size limit.');
+    const fields = new Map();
+    for (const [name, value] of Object.entries(document)) {
+      if (name === '_id' || reserved.has(name) || !editableField.test(name)) continue;
+      const scalar = mongoScalar(value);
+      if (scalar) fields.set(name, scalar);
+      if (fields.size >= 64) break;
+    }
+    if (!fields.size) throw noEdit('The document has no supported top-level scalar fields.');
+    return { ...target, uuid, settingsSha256, identity, fields };
   } finally { await closeCursor(cursor); }
 }
 
@@ -413,7 +475,7 @@ async function collectCatalog(cursor) {
 }
 
 async function openMongoDb(configuration, { signal } = {}) {
-  const { host, port, authSource, username, password, tls } = mongoTarget(configuration);
+  const { host, port, authSource, username, password, tls, reviewedEdits } = mongoTarget(configuration);
   const endpoint = `mongodb://${isIP(host) === 6 ? '[' + host + ']' : host}:${port}`;
   let secureContext;
   if (tls) {
@@ -425,14 +487,18 @@ async function openMongoDb(configuration, { signal } = {}) {
   const client = new MongoClient(endpoint, { auth: { username, password }, authSource,
     authMechanism: 'SCRAM-SHA-256', directConnection: true, appName: 'Rocketbrain',
     serverSelectionTimeoutMS: maxTimeMS, connectTimeoutMS: maxTimeMS, socketTimeoutMS: 8000,
-    waitQueueTimeoutMS: maxTimeMS, maxPoolSize: 2, retryReads: false, ...(secureContext && {
+    waitQueueTimeoutMS: maxTimeMS, maxPoolSize: 2, retryReads: false, retryWrites: false, ...(secureContext && {
       tls: true, secureContext, tlsAllowInvalidCertificates: false, tlsAllowInvalidHostnames: false
     }) });
   const lifetime = new AbortController();
+  const editSnapshots = new Map();
+  const editReviews = new Map();
   let running = false;
   let closing;
   function close() {
     lifetime.abort();
+    editSnapshots.clear();
+    editReviews.clear();
     closing ??= client.close();
     return closing;
   }
@@ -464,8 +530,70 @@ async function openMongoDb(configuration, { signal } = {}) {
     finally { running = false; }
   }
 
+  function requireEditApproval() {
+    if (!reviewedEdits || lifetime.signal.aborted) throw noEdit('Open a MongoDB connection explicitly approved for reviewed field edits.');
+  }
+
+  function keepReview(map, id, value) {
+    while (map.size >= 8) map.delete(map.keys().next().value);
+    map.set(id, { ...value, expires: Date.now() + editLifetime });
+  }
+
+  function prepareEdit(snapshotId, field, newValue) {
+    requireEditApproval();
+    const snapshot = editSnapshots.get(snapshotId);
+    const before = snapshot?.fields.get(field);
+    if (!snapshot || snapshot.expires <= Date.now() || !before) throw noEdit('Inspect the current MongoDB document and select an observed editable field.');
+    const after = parseMongoEditValue(newValue);
+    const previous = previewValue(before), replacement = previewValue(after);
+    if (JSON.stringify(previous) === JSON.stringify(replacement)) throw noEdit('Enter a changed BSON value.');
+    const id = randomUUID();
+    keepReview(editReviews, id, { snapshotId, field, before, after });
+    return { id, database: snapshot.database, collection: snapshot.collection, collectionId: snapshot.uuid.toHexString(),
+      objectId: snapshot.identity.toHexString(), field, before: previous, after: replacement, beforeType: before.type, afterType: after.type };
+  }
+
+  function applyEdit(id, approved, options) {
+    let dispatched = false;
+    return use(async request => {
+      requireEditApproval();
+      const review = editReviews.get(id), snapshot = review && editSnapshots.get(review.snapshotId);
+      if (approved !== true || !snapshot || review.expires <= Date.now() || snapshot.expires <= Date.now()) {
+        throw noEdit('Inspect and explicitly approve the exact current MongoDB edit.');
+      }
+      editReviews.delete(id);
+      editSnapshots.delete(review.snapshotId);
+      const db = client.db(snapshot.database);
+      const live = await observeCollection(db, snapshot.collection, request);
+      if (!live.uuid.equals(snapshot.uuid) || live.settingsSha256 !== snapshot.settingsSha256) throw staleEdit();
+      request.throwIfAborted();
+      const current = '$' + review.field;
+      const query = { _id: snapshot.identity, $expr: { $and: [
+        { $eq: [{ $type: current }, review.before.type] }, { $eq: [current, { $literal: review.before.value }] }
+      ] } };
+      dispatched = true;
+      const response = await db.command({ update: snapshot.collection, collectionUUID: snapshot.uuid,
+        updates: [{ q: query, u: { $set: { [review.field]: review.after.value } }, collation: { locale: 'simple' }, multi: false, upsert: false }],
+        ordered: true, bypassDocumentValidation: false, writeConcern: { w: 1, j: true }, maxTimeMS }, { signal: request });
+      const error = response.writeErrors?.[0];
+      if (error?.code === 361 || response.n === 0 && !error && !response.writeConcernError) throw staleEdit();
+      if (error) throw new MongoDbError('MongoDB declined the reviewed field update.', 'ROCKETBRAIN_MONGO_EDIT_REFUSED');
+      if (response.writeConcernError || response.n !== 1 || response.nModified !== 1 || response.upserted?.length) {
+        throw new MongoDbError('MongoDB did not confirm the single-field write.', 'ROCKETBRAIN_MONGO_EDIT_UNCONFIRMED');
+      }
+      return { acknowledged: true, objectId: snapshot.identity.toHexString(), field: review.field,
+        value: previewValue(review.after), type: review.after.type };
+    }, options).catch(error => {
+      if (error.code === 'ROCKETBRAIN_MONGO_STALE') throw staleEdit();
+      if (!dispatched || ['ROCKETBRAIN_MONGO_FORBIDDEN', 'ROCKETBRAIN_MONGO_EDIT_REFUSED'].includes(error.code)) throw error;
+      throw new MongoDbError('MongoDB did not confirm the result. Inspect the current document before making another edit.',
+        'ROCKETBRAIN_MONGO_EDIT_UNCONFIRMED');
+    });
+  }
+
   return {
-    source: Object.freeze({ host, port, authSource, ...(tls && { transport: 'tls-verified', caSha256: tls.caSha256 }) }),
+    source: Object.freeze({ host, port, authSource, ...(tls && { transport: 'tls-verified', caSha256: tls.caSha256 }),
+      ...(reviewedEdits && { reviewedEdits: true }) }),
     close,
     databases: options => use(async request => {
       const { databases } = await client.db('admin').command({ listDatabases: 1, authorizedDatabases: true, nameOnly: true, maxTimeMS },
@@ -486,13 +614,13 @@ async function openMongoDb(configuration, { signal } = {}) {
     }, options),
     inspectAggregation: (input, options) => use(async request => {
       const target = aggregationTarget(input);
-      const uuid = await observeAggregationTarget(client.db(target.database), target.collection, request);
+      const { uuid } = await observeCollection(client.db(target.database), target.collection, request);
       return { ...target, collectionId: uuid.toHexString() };
     }, options),
     aggregate: (source, options) => use(async request => {
       const { database, collection, collectionId, pipeline, limit } = parseMongoAggregation(source);
       const db = client.db(database);
-      const uuid = await observeAggregationTarget(db, collection, request);
+      const { uuid } = await observeCollection(db, collection, request);
       if (uuid.toHexString() !== collectionId) {
         throw new MongoDbError('The selected MongoDB collection changed. Open a new aggregation editor.', 'ROCKETBRAIN_MONGO_STALE');
       }
@@ -500,8 +628,20 @@ async function openMongoDb(configuration, { signal } = {}) {
         cursor: { batchSize: 10 }, maxTimeMS, allowDiskUse: false }, { promoteValues: false, signal: request }).setBatchSize(10);
       return { database, collection, collectionId, kind: 'aggregation', stages: pipeline.map(stage => Object.keys(stage)[0]),
         ...await collectDocuments(cursor, limit) };
-    }, options)
+    }, options),
+    inspectDocumentEdit: (input, options) => use(async request => {
+      requireEditApproval();
+      const target = aggregationTarget(input);
+      if (typeof input.objectId !== 'string' || !objectIdPattern.test(input.objectId)) throw noEdit('Enter the document ObjectId from Find.');
+      const snapshot = await readEditableDocument(client.db(target.database), target, new BSON.ObjectId(input.objectId), request);
+      const id = randomUUID();
+      keepReview(editSnapshots, id, snapshot);
+      return { ...target, id, objectId: snapshot.identity.toHexString(), collectionId: snapshot.uuid.toHexString(),
+        fields: [...snapshot.fields].map(([name, scalar]) => ({ name, type: scalar.type, value: previewValue(scalar) })) };
+    }, options),
+    prepareEdit,
+    applyEdit
   };
 }
 
-module.exports = { openMongoDb, parseMongoFind, parseMongoAggregation, mongoTarget, inspectMongoTlsCa, MongoDbError };
+module.exports = { openMongoDb, parseMongoFind, parseMongoAggregation, parseMongoEditValue, mongoTarget, inspectMongoTlsCa, MongoDbError };

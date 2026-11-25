@@ -26,6 +26,10 @@ Run **New MongoDB Aggregation** and select an ordinary collection. The editor re
 
 The bounded pipeline supports `$match`, `$project`, `$group`, `$sort`, `$limit` and `$count`. For example, `{ "$group": { "_id": "$category", "total": { "$sum": "$amount" }, "count": { "$sum": 1 } } }` groups documents by category. Use ordinary field references and the existing Extended JSON filter types. Up to 16 stages use the same read and preview budgets as Find. The built-in `read` role exposes the required collection metadata. The server checks the UUID with the query. The workflow was verified on MongoDB 8.0.38 and handles a single ordinary collection. Views, other collection sources, scripting and write stages are outside its scope.
 
+To edit one existing field, explicitly enable **Allow reviewed single-field document edits** for the MongoDB connection. Your account needs permission to update the collection. Run **Review MongoDB Document Field Edit**, choose an ordinary collection and enter the document's ObjectId from Find. Select an observed top-level field and review its original BSON type and the new value. Editable values cover JSON strings, booleans, null and canonical `$numberInt` and `$numberLong` values. Each review applies once and expires after two minutes.
+
+The update pins the collection UUID, ObjectId and exact original field type and value. It checks the observed collection settings before sending the update and preserves MongoDB's document validation. A failed guard leaves the field untouched. If the connection drops while waiting for a write receipt, reopen Find and check the current document before making another edit.
+
 The official MongoDB Node.js driver is distributed under Apache-2.0 with its dependency notices included in the VSIX. MongoDB Community Server is a separately obtained SSPL component. The portable vendor runtime used for verification is outside the VSIX. [MongoDB licensing](https://www.mongodb.com/legal/licensing/community-edition)
 
 ## Disposable actual-server verification
