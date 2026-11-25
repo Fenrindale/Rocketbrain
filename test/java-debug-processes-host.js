@@ -49,6 +49,7 @@ async function runJavaProcessChecks(api, vscode, checks) {
   const ended = new Set();
   const endListener = vscode.debug.onDidTerminateDebugSession(session => ended.add(session.id));
   const sessionName = 'Managed PID fixture ' + className;
+  const draftText = '-- Unsaved PID attach regression ' + className + '\nSELECT 1;\n';
   const tracker = vscode.debug.registerDebugAdapterTrackerFactory(`rocketbrain-java`, {
     createDebugAdapterTracker(session) {
       if (session.configuration.name !== sessionName) return undefined;
@@ -68,7 +69,7 @@ async function runJavaProcessChecks(api, vscode, checks) {
     }
   });
   const breakpoint = new vscode.SourceBreakpoint(new vscode.Location(source, new vscode.Position(fixture.line - 1, 0)), true);
-  let started, nonDebug, created = false, detached = false;
+  let started, nonDebug, draft, created = false, detached = false;
   try {
     await fs.writeFile(file, fixture.source, { flag: 'wx' });
     created = true;
@@ -89,6 +90,12 @@ async function runJavaProcessChecks(api, vscode, checks) {
     assert.ok(!listed.some(row => row.pid === nonDebug.target.pid));
     assert.doesNotMatch(JSON.stringify(listed), /fixture-private-argument/);
     await bounded('stale-pid', () => assert.rejects(service.resolve({ ...picked, startedAt: picked.startedAt + 1 }), /changed/), 40000);
+    await bounded('owned-sql-draft', async () => {
+      draft = await vscode.workspace.openTextDocument({ language: 'sql', content: draftText });
+      await vscode.window.showTextDocument(draft, { preview: false, preserveFocus: false });
+      assert.strictEqual(vscode.window.activeTextEditor?.document, draft);
+      assert.ok(draft.isUntitled && draft.isDirty);
+    }, 10000);
     vscode.debug.addBreakpoints([breakpoint]);
     assert.equal(await bounded('start-debugging', () => service.attach(picked, { folder: vscode.workspace.getWorkspaceFolder(source),
       projectName: main.projectName, name: sessionName }), 50000), true);
@@ -96,6 +103,8 @@ async function runJavaProcessChecks(api, vscode, checks) {
       until(() => events.find(item => item.event === 'stopped' && item.body.reason === 'breakpoint'), 35000), 36000);
     const session = sessions.get(halt.sessionId);
     assert.ok(session);
+    assert.ok(draft.isUntitled && draft.isDirty);
+    assert.equal(draft.getText().replace(/\r\n/g, '\n'), draftText);
     assert.equal(session.configuration.hostName, '127.0.0.1');
     assert.equal(session.configuration.port, port);
     assert.equal(session.configuration.processId, undefined);
@@ -120,10 +129,10 @@ async function runJavaProcessChecks(api, vscode, checks) {
     await bounded('owned-fixture-exit', () => started.leave(), 10000);
     await bounded('exited-pid', () => assert.rejects(service.resolve(picked), /does not have a verified local JDWP listener/), 40000);
     const jdbc = await bounded('jdbc-readback', jdbcReadback, 30000);
-    checks.push('Discovered the dynamically assigned port of a Spring-workspace JVM, rejected a normal listener and stale process identity, hit a native Java breakpoint and detached while the process kept running.');
+    checks.push('Discovered a Spring-workspace JVM, rejected an ordinary listener and stale PID, then hit a native breakpoint and detached without saving an unrelated SQL draft or stopping the JVM.');
     return { springWorkspace: true, jdbc, pidResolved: true, dynamicallyAssignedPort: true,
       normalSocketExcluded: true, staleIdentityRefused: true, exitedTargetRefused: true,
-      breakpoint: { line: fixture.line, watched: 73 }, detachedProcessSurvived: true };
+      breakpoint: { line: fixture.line, watched: 73 }, detachedProcessSurvived: true, unrelatedSqlDraftPreserved: true };
   } finally {
     vscode.debug.removeBreakpoints([breakpoint]);
     if (!detached) {
@@ -132,8 +141,19 @@ async function runJavaProcessChecks(api, vscode, checks) {
     }
     tracker.dispose();
     endListener.dispose();
-    try { await bounded('fixture-cleanup', () => Promise.all([started?.leave(), nonDebug?.leave()]), 12000); }
-    finally { if (created) await fs.rm(file, { force: true }); }
+    try {
+      if (draft && !draft.isClosed) await bounded('owned-sql-draft-cleanup', async () => {
+        assert.ok(draft.isUntitled);
+        assert.equal(draft.getText().replace(/\r\n/g, '\n'), draftText);
+        await vscode.window.showTextDocument(draft, { preview: false, preserveFocus: false });
+        assert.strictEqual(vscode.window.activeTextEditor?.document, draft);
+        await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+        await until(() => draft.isClosed, 4500);
+      }, 10000);
+    } finally {
+      try { await bounded('fixture-cleanup', () => Promise.all([started?.leave(), nonDebug?.leave()]), 12000); }
+      finally { if (created) await fs.rm(file, { force: true }); }
+    }
   }
 }
 
