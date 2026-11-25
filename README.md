@@ -278,6 +278,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **Format SQL**은 현재 문서나 선택한 SQL에서 절의 줄 배치와 들여쓰기를 정리합니다. **Insert SQL Template**은 활성 카탈로그의 테이블·열을 넣으며, 알 수 없는 이름과 모호한 열에는 확인한 빠른 수정을 제공합니다.
 - 비어 있는 SQL 절에서 카탈로그 기준 필드 목록을 완성합니다. SELECT에는 현재 범위의 열, INSERT에는 자동 생성 열을 제외한 쓰기 열, GROUP BY에는 SELECT에서 확인한 직접 참조 열을 제안합니다.
 - 편집기는 바깥쪽 `WHERE`가 없는 `UPDATE`와 `DELETE`를 표시합니다. 쓰기 콘솔과 스크립트 실행은 이 문장이 대상 행 전체에 미칠 수 있는 영향을 검토하고 승인한 뒤 진행합니다.
+- 활성 MySQL/MariaDB 연결의 SQL 편집기에서 두 실테이블을 지정한 `JOIN`의 대상이나 비어 있는 `ON`에 커서를 놓습니다. **Complete JOIN using …** 빠른 수정은 실제 FK의 모든 열을 순서대로 삽입합니다. 선택 뒤 소스나 관계가 바뀌면 다시 선택합니다.
 - **Review SQL Script**는 독립된 `DELIMITER` 줄 사이에 있는 `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE TRIGGER`의 `BEGIN … END` 블록을 한 문장으로 검토합니다. 실행은 쓰기 콘솔에서 DDL의 암시적 커밋을 승인한 뒤 진행합니다. `DELIMITER ;`로 돌아오면 일반 문장에 바인딩 값을 사용할 수 있습니다. 저장 프로그램 본문의 동적 SQL, 세션 제어와 매개변수 바인딩은 지원 범위 밖입니다.
 - `DELIMITER`가 있는 SQL 파일에서 **Run Selected SQL or Current Statement**를 실행하면 서버의 SQL 모드로 커서 아래 문장이나 선택한 전체 복합 문장의 범위를 구합니다. 복합 DDL 검토에는 그 문장 하나가 표시됩니다.
 - SQL 편집기는 단일 테이블 INSERT 열 목록, UPDATE의 SET, UPDATE·DELETE의 WHERE에서 관찰한 열 이름과 서버 타입을 제안합니다. 스키마를 명시하면 그 테이블을 확인합니다. 자동 증가·생성 열은 쓰기 제안에서 제외합니다.

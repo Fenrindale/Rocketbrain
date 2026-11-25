@@ -3,6 +3,8 @@
 const { formatSql }=require('./sql-format');
 const { templates,resolveTemplate }=require('./sql-templates');
 const { sqlQuickFixes }=require('./sql-quick-fixes');
+const { sqlJoinFixes }=require('./sql-join-fixes');
+const { isProfileConsole }=require('./profile-console-files');
 
 function registerSqlEditing(context,vscode,{database,sqlAnalysis}) {
   let disposed=false;
@@ -73,6 +75,17 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis}) {
     catch(error){if(!disposed)await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}
   });
   const fixCommand='rocketbrain.sql.applyReviewedQuickFix';
+  const joinFixCommand='rocketbrain.sql.applyJoinQuickFix';
+  const joinIdentity=()=>JSON.stringify(database.liveCatalogIdentity());
+  async function joinActions(document,offset,cancellation) {
+    const catalog=database.liveCatalogSnapshot(),identity=joinIdentity(),version=document.version;
+    if(!catalog||!identity||identity==='null'||isProfileConsole(document))return [];
+    const current=()=>!disposed&&!cancellation?.isCancellationRequested&&vscode.workspace.isTrusted&&
+      !document.isClosed&&document.version===version&&joinIdentity()===identity&&!sqlAnalysis?.virtualActive(document);
+    if(!current())return [];
+    const fixes=await sqlJoinFixes(document.getText(),offset,catalog,database.joinCompletionCatalog);
+    return current()?fixes.map(fix=>({...fix,identity,version})):[];
+  }
   const subscriptions=[
     command('rocketbrain.sql.format',formatEditor),
     command('rocketbrain.sql.insertTemplate',chooseTemplate),
@@ -87,17 +100,35 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis}) {
       change.replace(document.uri,new vscode.Range(document.positionAt(fix.start),document.positionAt(fix.end)),fix.replacement);
       return vscode.workspace.applyEdit(change);
     }),
+    vscode.commands.registerCommand(joinFixCommand,async frame=>{
+      const document=vscode.workspace.textDocuments.find(item=>item.uri.toString()===frame?.uri);
+      if(!document||!Number.isSafeInteger(frame.offset)||frame.version!==document.version||frame.identity!==joinIdentity())return false;
+      const verified=(await joinActions(document,frame.offset)).find(item=>item.title===frame.title&&item.replacement===frame.replacement&&item.start===frame.start);
+      if(!verified||verified.version!==frame.version||verified.identity!==frame.identity||document.version!==frame.version)return false;
+      const edit=new vscode.WorkspaceEdit(),at=document.positionAt(verified.start);
+      edit.insert(document.uri,at,verified.replacement);
+      return vscode.workspace.applyEdit(edit);
+    }),
     vscode.languages.registerCodeActionsProvider({language:'sql'},
-      {provideCodeActions(document,range){
+      {async provideCodeActions(document,range,_context,cancellation){
         if(disposed||!vscode.workspace.isTrusted||sqlAnalysis?.virtualActive(document))return [];
         const catalog=database.catalogSnapshot(),offset=document.offsetAt(range.start);
-        return sqlQuickFixes(document.getText(),offset,catalog).map(fix=>{
+        const nameActions=sqlQuickFixes(document.getText(),offset,catalog).map(fix=>{
           const action=new vscode.CodeAction('Use '+fix.replacement,vscode.CodeActionKind.QuickFix);
           action.command={command:fixCommand,title:action.title,arguments:[{
             uri:document.uri.toString(),version:document.version,revision:catalog.revision,offset,replacement:fix.replacement
           }]};
           return action;
         });
+        const joins=await joinActions(document,offset,cancellation);
+        return [...nameActions,...joins.map(fix=>{
+          const action=new vscode.CodeAction(fix.title,vscode.CodeActionKind.QuickFix);
+          action.command={command:joinFixCommand,title:action.title,arguments:[{
+            uri:document.uri.toString(),offset,title:fix.title,replacement:fix.replacement,start:fix.start,
+            version:fix.version,identity:fix.identity
+          }]};
+          return action;
+        })];
       }},{providedCodeActionKinds:[vscode.CodeActionKind.QuickFix]}),
     vscode.languages.registerDocumentFormattingEditProvider({language:'sql'},{
       provideDocumentFormattingEdits(document,options){try{return edits(document,whole(document),options);}catch{return [];}}
