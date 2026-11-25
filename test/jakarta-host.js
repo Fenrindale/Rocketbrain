@@ -7,14 +7,14 @@ const { importedSpring,jdbcReadback } = require('./java-source-analysis-host');
 
 const fixture=path.join(__dirname,'fixtures','java','jakarta-war');
 
-async function waitFor(action,timeout) {
+async function waitFor(action,timeout,message) {
   const end=Date.now()+timeout;
   while (Date.now()<end) {
     const value=action();
     if (value) return value;
     await new Promise(resolve => setTimeout(resolve,150));
   }
-  throw Error('The owned Tomcat debugger did not report its servlet breakpoint.');
+  throw Error(message);
 }
 
 async function get(url,timeout=6000) {
@@ -78,17 +78,36 @@ async function runJakartaChecks(api,vscode,checks) {
     vscode.debug.addBreakpoints([breakpoint]);
     const sessions=new Map(), events=[];
     tracker=vscode.debug.registerDebugAdapterTrackerFactory('rocketbrain-java',{createDebugAdapterTracker(session){
-      sessions.set(session.id,session);
-      return {onDidSendMessage(message) {
-        if (message.type==='event' && message.event==='stopped') events.push({id:session.id,...message.body});
-      }};
+      const state={session,sourceRequests:new Set(),sourceResponse:null,configurationResponse:null};
+      sessions.set(session.id,state);
+      return {
+        onWillReceiveMessage(message) {
+          if (message.type!=='request' || message.command!=='setBreakpoints') return;
+          const sourcePath=message.arguments?.source?.path;
+          if (typeof sourcePath==='string' && !path.relative(sourcePath,source.fsPath)) state.sourceRequests.add(message.seq);
+        },
+        onDidSendMessage(message) {
+          if (message.type==='event' && message.event==='stopped') events.push({id:session.id,...message.body});
+          if (message.type!=='response') return;
+          if (message.command==='setBreakpoints' && state.sourceRequests.has(message.request_seq)) state.sourceResponse=message;
+          if (message.command==='configurationDone') state.configurationResponse=message;
+        }
+      };
     }});
     const debug=await service.debug({...input,expectedSha256:managed.sha256,allowDeploy:true});
-    const session=sessions.get(debug.sessionId);
-    assert.ok(session);
+    const debugState=sessions.get(debug.sessionId);
+    assert.ok(debugState);
+    const {session}=debugState;
+    await waitFor(() => debugState.sourceResponse && debugState.configurationResponse,20000,
+      'The VS Code debug adapter did not acknowledge the servlet breakpoint and configuration.');
+    const sourceBreakpoint=debugState.sourceResponse.body?.breakpoints?.[0];
+    assert.ok(debugState.sourceResponse.success && sourceBreakpoint && debugState.configurationResponse.success,
+      debugState.sourceResponse.message || debugState.configurationResponse.message || 'The Java adapter rejected its configuration.');
     request=get(debug.url+'/ping',60000);
     request.catch(() => {});
-    const stopped=await waitFor(() => events.find(event => event.id===session.id && event.reason==='breakpoint'),50000);
+    const stopped=await waitFor(() => events.find(event => event.id===session.id && event.reason==='breakpoint'),50000,
+      'The owned Tomcat debugger did not report its servlet breakpoint (adapter reported ' +
+      (sourceBreakpoint.verified ? 'verified' : String(sourceBreakpoint.message || 'pending').slice(0,160)) + ').');
     const stack=await session.customRequest('stackTrace',{threadId:stopped.threadId});
     const frame=stack.stackFrames[0];
     assert.match(frame.name,/PingServlet\.doGet/);
