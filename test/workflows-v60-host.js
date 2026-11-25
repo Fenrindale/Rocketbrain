@@ -18,11 +18,21 @@ exports.run = async (vscode = require('vscode')) => {
   const checks=[],details={},failures=[];
   const groups={
     asyncTrace:()=>require('./java-async-trace-host').runJavaAsyncTraceChecks(api,vscode,checks),
-    writeProtection:()=>require('./write-protection-host').runWriteProtectionChecks(api,vscode,checks),
+    async writeProtection() {
+      const receipt={};
+      await require('./write-protection-host').runWriteProtectionChecks(api,vscode,receipt);
+      checks.push('Profile and table protection held through reviewed writes and competing DDL.');
+      return receipt.writeProtection;
+    },
     scopedJoins:()=>require('./db-scoped-joins-host').runScopedJoinChecks(api,vscode,checks),
     delimiter:()=>require('./sql-script-host').runDelimiterScriptChecks(api,vscode,checks),
     liveDefinitions:()=>require('./sql-live-navigation-host').runSqlLiveDefinitionChecks(api,vscode,checks),
-    parameterPresets:()=>require('./parameter-presets-host').runParameterPresetChecks(api,vscode,checks)
+    async parameterPresets() {
+      const receipt={};
+      await require('./parameter-presets-host').runParameterPresetChecks(api,vscode,receipt);
+      checks.push('Saved typed parameters retained their account, SQL, and column-type scope through a fresh review.');
+      return receipt.parameterPresets;
+    }
   };
   const names=process.env.ROCKETBRAIN_V60_ONLY?.split(',') || Object.keys(groups);
   assert.ok(names.length && names.every(name=>Object.hasOwn(groups,name)) && new Set(names).size===names.length);
