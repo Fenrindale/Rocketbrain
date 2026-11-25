@@ -28,7 +28,13 @@ public final class ConsoleQueryTest {
         blocked("select p.id from Person p where p.name = 'example'",false,"unsupported_select_shape");
         blocked("select o from Person o join fetch o.department",false,"fetch_snapshot_disabled");
         var fetch=ConsoleQuery.inspect("select distinct o from Person as o left outer join fetch o.department where o.id = :one",false,true).fetch();
-        if(!fetch.kind().equals("LEFT") || !fetch.attribute().equals("department"))throw new AssertionError("Expected exact FETCH path");
+        if(!fetch.paths().equals(List.of(new ConsoleFetchSnapshot.Path("department","LEFT"))))throw new AssertionError("Expected exact FETCH path");
+        var multiple=ConsoleQuery.inspect("select o from Person o left join fetch o.department inner join fetch o.manager join fetch o.phones order by o.id",false,true).fetch();
+        if(!multiple.paths().equals(List.of(new ConsoleFetchSnapshot.Path("department","LEFT"),new ConsoleFetchSnapshot.Path("manager","INNER"),new ConsoleFetchSnapshot.Path("phones","INNER"))))
+            throw new AssertionError("FETCH paths and join types must retain review order");
+        refusal(()->ConsoleQuery.inspect("select o from Person o join fetch o.department join fetch o.department",false,true),"unsupported_fetch_shape");
+        refusal(()->ConsoleQuery.inspect("select o from Person o join fetch o.a join fetch o.b join fetch o.c join fetch o.d",false,true),"unsupported_fetch_shape");
+        refusal(()->ConsoleQuery.inspect("select o from Person o join fetch o.department d join fetch d.employees",false,true),"unsupported_fetch_shape");
         refusal(()->ConsoleQuery.inspect("select o from Person o join fetch o.department d",false,true),"unsupported_fetch_shape");
         refusal(()->ConsoleQuery.inspect("select o from Person o join fetch o.department.name",false,true),"unsupported_fetch_shape");
         refusal(()->ConsoleQuery.inspect("select o from Person o join fetch o.department where o.id in (select p.id from Person p)",false,true),"unsupported_fetch_shape");

@@ -8,42 +8,76 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** Inspects a single Hibernate fetch path and reads only provider-confirmed field state. */
+/** Inspects direct Hibernate fetch paths and reads only provider-confirmed field state. */
 final class ConsoleFetchSnapshot {
     static final int MAX_ROOTS=25, MAX_CHILDREN=16, MAX_JOINED_ROWS=512;
-    private static final int MAX_FIELDS=8;
+    private static final int MAX_FIELDS=8, MAX_ASSOCIATIONS=3;
     private static final String SELECT="org.hibernate.query.sqm.tree.select.";
     private static final String COLLECTION="org.hibernate.collection.spi.";
     private static final String FIELD_ERROR="unsupported_fetch_mapping";
     private static final Set<String> ASSOC=Set.of("ONE_TO_MANY","MANY_TO_MANY","ONE_TO_ONE","MANY_TO_ONE");
     private static final Set<String> RAW_COLLECTION=Set.of("java.util.ArrayList","java.util.LinkedList","java.util.HashSet","java.util.LinkedHashSet");
+    private static final Map<String,String> STANDARD_COLLECTIONS=Map.of(
+        "org.hibernate.collection.internal.StandardBagSemantics","BAG", "org.hibernate.type.BagType","BAG",
+        "org.hibernate.collection.internal.StandardListSemantics","LIST", "org.hibernate.type.ListType","LIST",
+        "org.hibernate.collection.internal.StandardSetSemantics","SET", "org.hibernate.type.SetType","SET",
+        "org.hibernate.collection.internal.StandardOrderedSetSemantics","ORDERED_SET", "org.hibernate.type.OrderedSetType","ORDERED_SET");
+    private static final Set<String> EXACT_SET_IDS=Set.of("java.lang.Long","java.lang.Integer","java.lang.Short","java.lang.Byte","java.lang.String","java.util.UUID");
     private static final Set<String> FIELD_GETTERS=Set.of("org.hibernate.property.access.spi.GetterFieldImpl","org.hibernate.property.access.spi.EnhancedGetterFieldImpl");
     private static final Set<String> INSTANTIATORS=Set.of("org.hibernate.metamodel.internal.EntityInstantiatorPojoStandard","org.hibernate.metamodel.internal.EntityInstantiatorPojoOptimized");
     private static final Set<String> PERSISTERS=Set.of("org.hibernate.persister.entity.SingleTableEntityPersister",
         "org.hibernate.persister.entity.JoinedSubclassEntityPersister","org.hibernate.persister.entity.UnionSubclassEntityPersister");
+    private static final Set<String> COLLECTION_PERSISTERS=Set.of("org.hibernate.persister.collection.OneToManyPersister","org.hibernate.persister.collection.BasicCollectionPersister");
     private static final Set<String> BASIC_TYPES=Set.of("org.hibernate.type.internal.BasicTypeImpl","org.hibernate.type.internal.NamedBasicTypeImpl",
         "org.hibernate.type.internal.ImmutableNamedBasicTypeImpl","org.hibernate.type.internal.PrimitiveBasicTypeImpl");
     private static final Map<String,String> WRAPPERS=Map.of(COLLECTION+"PersistentBag","collection",COLLECTION+"PersistentList","list",COLLECTION+"PersistentSet","set");
     private static final Map<String,String> BOXES=Map.of("long","java.lang.Long","int","java.lang.Integer","short","java.lang.Short","byte","java.lang.Byte",
         "boolean","java.lang.Boolean","double","java.lang.Double","float","java.lang.Float");
 
-    record Clause(String projection,String attribute,String kind) {}
+    record Path(String attribute,String kind) {}
+    record Clause(String projection,List<Path> paths) {}
     record Cell(String name,String javaType,Field field,boolean id) {
         Map<String,Object> column(){return Map.of("alias",name,"javaType",javaType);}
     }
     record Entity(Class<?> type,List<Cell> fields) {
         List<Map<String,Object>> columns(){return fields.stream().map(Cell::column).toList();}
     }
-    record Plan(Entity owner,Field association,Entity target,boolean toMany,Method isInitialized,Method wasPropertyInitialized) {
-        Map<String,Object> describe(){
-            return Map.of("rootType",owner.type().getName(),"association",association.getName(),"path",owner.type().getName()+'.'+association.getName(),
-                "targetType",target.type().getName(),"toMany",toMany,"columns",target.columns(),"maxRoots",MAX_ROOTS,"maxChildren",MAX_CHILDREN);
+    record MappedPath(Field field,Class<?> type,String collection) {}
+    record Association(Field field,Entity target,String collection) {
+        boolean toMany(){return collection!=null;}
+        Map<String,Object> describe(String owner,boolean includeCollection){
+            Map<String,Object> description=new LinkedHashMap<>(Map.of("association",field.getName(),"path",owner+'.'+field.getName(),
+                "targetType",target.type().getName(),"toMany",toMany(),"columns",target.columns()));
+            if(includeCollection && toMany())description.put("collection",collection);
+            return description;
+        }
+    }
+    record Plan(Entity owner,List<Association> associations,boolean parallelSets,Method isInitialized,Method wasPropertyInitialized) {
+        void describeInto(Map<String,Object> response){ describeInto(response,List.of(),0); }
+        void describeInto(Map<String,Object> response,List<List<Map<String,Object>>> linked,int joinedRows){
+            String root=owner.type().getName();
+            Map<String,Object> description=new LinkedHashMap<>(Map.of("rootType",root,"maxRoots",MAX_ROOTS,"maxChildren",MAX_CHILDREN));
+            if(!linked.isEmpty())description.put("joinedRows",joinedRows);
+            if(associations.size()==1){
+                description.putAll(associations.getFirst().describe(root,false));
+                if(!linked.isEmpty())description.put("linked",linked.getFirst());
+                response.put("fetchSnapshot",description);
+                return;
+            }
+            List<Map<String,Object>> paths=new ArrayList<>();
+            for(int index=0;index<associations.size();index++){
+                Map<String,Object> entry=associations.get(index).describe(root,true);
+                if(!linked.isEmpty())entry.put("linked",linked.get(index));
+                paths.add(entry);
+            }
+            description.put("associations",paths);
+            response.put("fetchSnapshots",description);
         }
     }
 
@@ -51,24 +85,29 @@ final class ConsoleFetchSnapshot {
 
     static Clause clause(List<String> words) {
         long fetches=words.stream().filter("fetch"::equals).count();
-        if(fetches!=1 || !at(words,0).equals("select") || words.stream().filter("select"::equals).count()!=1) return null;
+        if(fetches<1 || fetches>MAX_ASSOCIATIONS || !at(words,0).equals("select") || words.stream().filter("select"::equals).count()!=1) return null;
         int index=at(words,1).equals("distinct")?2:1;
         String alias=at(words,index++);
         if(!name(alias) || !at(words,index++).equals("from") || !name(at(words,index++))) return null;
         while(at(words,index).equals(".") && name(at(words,index+1))) index+=2;
         if(at(words,index).equals("as"))index++;
         if(!at(words,index++).equals(alias))return null;
-        String kind="INNER";
-        if(at(words,index).equals("left")) {
-            kind="LEFT"; index++;
-            if(at(words,index).equals("outer"))index++;
-        } else if(at(words,index).equals("inner")) index++;
-        if(!at(words,index++).equals("join") || !at(words,index++).equals("fetch") ||
-            !at(words,index++).equals(alias) || !at(words,index++).equals("."))return null;
-        String attribute=at(words,index++);
-        if(!name(attribute) || index<words.size() && !Set.of("where","order").contains(at(words,index)))return null;
-        if(words.stream().filter("join"::equals).count()!=1)return null;
-        return new Clause(alias,attribute,kind);
+        List<Path> paths=new ArrayList<>();
+        Set<String> names=new HashSet<>();
+        while(index<words.size() && !Set.of("where","order").contains(at(words,index))){
+            String kind="INNER";
+            if(at(words,index).equals("left")) {
+                kind="LEFT"; index++;
+                if(at(words,index).equals("outer"))index++;
+            } else if(at(words,index).equals("inner")) index++;
+            if(!at(words,index++).equals("join") || !at(words,index++).equals("fetch") ||
+                !at(words,index++).equals(alias) || !at(words,index++).equals("."))return null;
+            String attribute=at(words,index++);
+            if(!name(attribute) || !names.add(attribute))return null;
+            paths.add(new Path(attribute,kind));
+        }
+        if(paths.size()!=fetches || words.stream().filter("join"::equals).count()!=fetches)return null;
+        return new Clause(alias,List.copyOf(paths));
     }
 
     static Plan inspect(Object factory,Object statement,Clause clause) throws Throwable {
@@ -85,26 +124,68 @@ final class ConsoleFetchSnapshot {
         Object selection=one(invoke(invoke(spec,"getSelectClause"),"getSelections"));
         if(invoke(selection,"getSelectableNode")!=root || !(invoke(root,"getExplicitAlias") instanceof String alias) ||
             !alias.equalsIgnoreCase(clause.projection()))throw new ConsoleQuery.Refusal("unsupported_fetch_shape");
-        Object join=one(invoke(root,"getSqmJoins"));
-        if(!Boolean.TRUE.equals(invoke(join,"isFetched")) || !clause.kind().equals(((Enum<?>)invoke(join,"getSqmJoinType")).name()) ||
-            !items(invoke(join,"getSqmJoins"),0).isEmpty()) throw new ConsoleQuery.Refusal("unsupported_fetch_shape");
-        Object attribute=invoke(join,"getAttribute");
-        String name=(String)invoke(attribute,"getName");
-        if(!name.equalsIgnoreCase(clause.attribute()) || !Boolean.TRUE.equals(invoke(attribute,"isAssociation")) ||
-            !ASSOC.contains(((Enum<?>)invoke(attribute,"getPersistentAttributeType")).name()))
-            throw new ConsoleQuery.Refusal("unsupported_fetch_shape");
-        boolean many=Boolean.TRUE.equals(invoke(attribute,"isCollection"));
         Class<?> ownerClass=(Class<?>)invoke(invoke(root,"getModel"),"getJavaType");
-        Class<?> targetClass=(Class<?>)invoke(many?invoke(attribute,"getElementType"):attribute,"getJavaType");
-        Field member=field(attribute,ownerClass);
-        if(many && !Set.of(Collection.class,List.class,Set.class).contains(member.getType()) ||
-            !many && member.getType()!=targetClass) throw new ConsoleQuery.Refusal(FIELD_ERROR);
+        Object mappings=invoke(factory,"getMappingMetamodel");
+        Object persister=invoke(mappings,"getEntityDescriptor",ownerClass);
+        if(!PERSISTERS.contains(persister.getClass().getName()))throw new ConsoleQuery.Refusal(FIELD_ERROR);
+        List<Object> joins=new ArrayList<>(items(invoke(root,"getSqmJoins"),MAX_ASSOCIATIONS));
+        if(joins.size()!=clause.paths().size())throw new ConsoleQuery.Refusal("unsupported_fetch_shape");
+        List<MappedPath> paths=new ArrayList<>();
+        Set<String> requested=new HashSet<>();
+        for(int index=0;index<joins.size();index++){
+            MappedPath path=mappedPath(joins.get(index),clause.paths().get(index),ownerClass,persister);
+            paths.add(path);
+            if(!requested.add(path.field().getName()))throw new ConsoleQuery.Refusal("unsupported_fetch_shape");
+        }
+        List<MappedPath> collections=paths.stream().filter(path->path.collection()!=null).toList();
+        boolean parallel=collections.size()>1;
+        if(parallel && (collections.size()!=2 || collections.stream().anyMatch(path->!path.collection().equals("SET"))))
+            throw new ConsoleQuery.Refusal("fetch_parallel_collections");
         Object events=invoke(factory,"getEventEngine");
         requireDefaultListeners(events,loader,"PRE_LOAD","DefaultPreLoadEventListener");
         requireDefaultListeners(events,loader,"POST_LOAD","DefaultPostLoadEventListener");
+        Entity owner=entity(factory,events,ownerClass,loader,requested);
+        List<Association> associations=new ArrayList<>();
+        Map<Class<?>,Entity> targets=new LinkedHashMap<>();
+        for(MappedPath path:paths){
+            Entity target=targets.get(path.type());
+            if(target==null){target=entity(factory,events,path.type(),loader,Set.of());targets.put(path.type(),target);}
+            if(parallel && path.collection()!=null && !EXACT_SET_IDS.contains(target.fields().getFirst().javaType()))
+                throw new ConsoleQuery.Refusal("fetch_set_identity");
+            associations.add(new Association(path.field(),target,path.collection()));
+        }
         Class<?> hibernate=Class.forName("org.hibernate.Hibernate",false,loader);
-        return new Plan(entity(factory,events,ownerClass,loader,name),member,entity(factory,events,targetClass,loader,null),many,
+        return new Plan(owner,List.copyOf(associations),parallel,
             hibernate.getMethod("isInitialized",Object.class),hibernate.getMethod("isPropertyInitialized",Object.class,String.class));
+    }
+
+    private static MappedPath mappedPath(Object join,Path path,Class<?> owner,Object persister) throws Throwable {
+        if(!Boolean.TRUE.equals(invoke(join,"isFetched")) || !path.kind().equals(((Enum<?>)invoke(join,"getSqmJoinType")).name()) ||
+            !items(invoke(join,"getSqmJoins"),0).isEmpty()) throw new ConsoleQuery.Refusal("unsupported_fetch_shape");
+        Object attribute=invoke(join,"getAttribute");
+        String name=(String)invoke(attribute,"getName");
+        if(!name.equalsIgnoreCase(path.attribute()) || !Boolean.TRUE.equals(invoke(attribute,"isAssociation")) ||
+            !ASSOC.contains(((Enum<?>)invoke(attribute,"getPersistentAttributeType")).name()))
+            throw new ConsoleQuery.Refusal("unsupported_fetch_shape");
+        boolean many=Boolean.TRUE.equals(invoke(attribute,"isCollection"));
+        Class<?> target=(Class<?>)invoke(many?invoke(attribute,"getElementType"):attribute,"getJavaType");
+        Field member=field(attribute,owner);
+        if(!many){
+            if(member.getType()!=target)throw new ConsoleQuery.Refusal(FIELD_ERROR);
+            return new MappedPath(member,target,null);
+        }
+        if(!Set.of(Collection.class,List.class,Set.class).contains(member.getType()))throw new ConsoleQuery.Refusal(FIELD_ERROR);
+        Object part=invoke(persister,"findAttributeMapping",name);
+        Object collection=invoke(part,"getCollectionDescriptor");
+        if(!COLLECTION_PERSISTERS.contains(collection.getClass().getName()))throw new ConsoleQuery.Refusal(FIELD_ERROR);
+        Object semantics=invoke(collection,"getCollectionSemantics");
+        // Hibernate's standard boot resolver also wraps its own built-in collection types.
+        if(semantics.getClass().getName().equals("org.hibernate.collection.internal.CustomCollectionTypeSemantics"))
+            semantics=invoke(semantics,"getCollectionType");
+        String classification=STANDARD_COLLECTIONS.get(semantics.getClass().getName());
+        if(classification==null || !classification.equals(((Enum<?>)invoke(semantics,"getCollectionClassification")).name()))
+            throw new ConsoleQuery.Refusal(FIELD_ERROR);
+        return new MappedPath(member,target,classification);
     }
 
     private static void requireDefaultListeners(Object events,ClassLoader loader,String event,String listener) throws Throwable {
@@ -117,7 +198,7 @@ final class ConsoleFetchSnapshot {
                 throw new ConsoleQuery.Refusal("custom_fetch_lifecycle");
     }
 
-    private static Entity entity(Object factory,Object events,Class<?> type,ClassLoader loader,String requestedAssociation) throws Throwable {
+    private static Entity entity(Object factory,Object events,Class<?> type,ClassLoader loader,Set<String> requestedAssociations) throws Throwable {
         Object callback=Class.forName("org.hibernate.jpa.event.spi.CallbackType",false,loader).getField("POST_LOAD").get(null);
         Object registry=invoke(events,"getCallbackRegistry");
         if(!Boolean.FALSE.equals(invoke(registry,"hasRegisteredCallbacks",type,callback)))
@@ -137,7 +218,7 @@ final class ConsoleFetchSnapshot {
             if(ASSOC.contains(classification)){
                 Object part=invoke(persister,"findAttributeMapping",name);
                 requireFieldMapping(part,member);
-                if(!name.equals(requestedAssociation) && !"DELAYED".equals(((Enum<?>)invoke(invoke(part,"getMappedFetchOptions"),"getTiming")).name()))
+                if(!requestedAssociations.contains(name) && !"DELAYED".equals(((Enum<?>)invoke(invoke(part,"getMappedFetchOptions"),"getTiming")).name()))
                     throw new ConsoleQuery.Refusal("additional_eager_fetch");
                 continue;
             }
@@ -176,53 +257,69 @@ final class ConsoleFetchSnapshot {
     static Map<String,Object> rows(Plan plan,List<?> values,int limit,int joinedRows) throws ReflectiveOperationException {
         var budget=new ConsoleQuery.ResultBudget();
         List<List<Object>> roots=new ArrayList<>();
-        List<Map<String,Object>> linked=new ArrayList<>();
+        List<List<Map<String,Object>>> linked=new ArrayList<>();
+        for(Association ignored:plan.associations())linked.add(new ArrayList<>());
         for(Object root:values){
             if(roots.size()>=limit)break;
             roots.add(cells(plan,plan.owner(),root,budget));
-            Field field=plan.association();
-            initialized(plan,root,field.getName());
-            Object association=field.get(root);
-            if(!plan.toMany()){
-                linked.add(Map.of("state",association==null?"null":"loaded","rows",association==null?List.of():List.of(cells(plan,plan.target(),association,budget)),"hasMore",false));
-                continue;
-            }
-            Collection<?> children=collection(plan,association);
-            List<List<Object>> items=new ArrayList<>();
-            for(Object child:children){
-                if(items.size()>=MAX_CHILDREN)break;
-                items.add(cells(plan,plan.target(),child,budget));
-            }
-            linked.add(Map.of("state","loaded","rows",items,"hasMore",children.size()>MAX_CHILDREN));
+            for(int index=0;index<plan.associations().size();index++)
+                linked.get(index).add(linked(plan,plan.associations().get(index),root,budget));
         }
         Map<String,Object> response=ConsoleQuery.completed(plan.owner().columns(),roots,values.size()>limit);
-        Map<String,Object> fetch=new LinkedHashMap<>(plan.describe());
-        fetch.put("linked",linked); fetch.put("joinedRows",joinedRows);
-        response.put("fetchSnapshot",fetch);
+        plan.describeInto(response,linked,joinedRows);
         return response;
+    }
+
+    private static Map<String,Object> linked(Plan plan,Association path,Object root,ConsoleQuery.ResultBudget budget) throws ReflectiveOperationException {
+        Field field=path.field();
+        initialized(plan,root,field.getName());
+        Object value=field.get(root);
+        if(!path.toMany())return Map.of("state",value==null?"null":"loaded","rows",value==null?List.of():List.of(cells(plan,path.target(),value,budget)),"hasMore",false);
+        Collection<?> children=collection(plan,value);
+        List<List<Object>> items=new ArrayList<>();
+        Set<Object> identities=plan.parallelSets()?new HashSet<>():null;
+        for(Object child:children){
+            if(identities!=null)requireUniqueId(plan,path.target(),child,identities);
+            if(items.size()<MAX_CHILDREN)items.add(cells(plan,path.target(),child,budget));
+            else if(identities==null)break;
+        }
+        return Map.of("state","loaded","rows",items,"hasMore",children.size()>MAX_CHILDREN);
+    }
+
+    private static void requireUniqueId(Plan plan,Entity target,Object child,Set<Object> identities) throws ReflectiveOperationException {
+        exactEntity(plan,target,child);
+        Cell id=target.fields().getFirst();
+        initialized(plan,child,id.field().getName());
+        Object value=id.field().get(child);
+        if(value==null || !value.getClass().getName().equals(id.javaType()) || (value instanceof String text && text.length()>4096) || !identities.add(value))
+            throw new ConsoleQuery.Refusal("fetch_set_identity");
     }
 
     private static Collection<?> collection(Plan plan,Object value) throws ReflectiveOperationException {
         if(value==null || !Boolean.TRUE.equals(plan.isInitialized().invoke(null,value)))throw new ConsoleQuery.Refusal("fetch_not_initialized");
-        String wrapper=WRAPPERS.get(value.getClass().getName());
-        if(wrapper==null) throw new ConsoleQuery.Refusal(FIELD_ERROR);
+        String className=value.getClass().getName(), wrapper=WRAPPERS.get(className);
+        if(wrapper==null || plan.parallelSets() && !className.equals(COLLECTION+"PersistentSet"))throw new ConsoleQuery.Refusal(FIELD_ERROR);
         Field backing=value.getClass().getDeclaredField(wrapper);
         if(!backing.trySetAccessible())throw new ConsoleQuery.Refusal(FIELD_ERROR);
         Object raw=backing.get(value);
-        if(!(raw instanceof Collection<?> items) || !RAW_COLLECTION.contains(raw.getClass().getName()))
+        if(!(raw instanceof Collection<?> items) || !RAW_COLLECTION.contains(raw.getClass().getName()) || plan.parallelSets() && !(raw instanceof Set<?>))
             throw new ConsoleQuery.Refusal(FIELD_ERROR);
         return items;
     }
 
     private static List<Object> cells(Plan plan,Entity entity,Object value,ConsoleQuery.ResultBudget budget) throws ReflectiveOperationException {
-        if(value==null || value.getClass()!=entity.type() || !Boolean.TRUE.equals(plan.isInitialized().invoke(null,value)))
-            throw new ConsoleQuery.Refusal("fetch_not_initialized");
+        exactEntity(plan,entity,value);
         List<Object> cells=new ArrayList<>();
         for(Cell cell:entity.fields()){
             initialized(plan,value,cell.field().getName());
             cells.add(budget.scalar(cell.field().get(value),cell.javaType()));
         }
         return cells;
+    }
+
+    private static void exactEntity(Plan plan,Entity entity,Object value) throws ReflectiveOperationException {
+        if(value==null || value.getClass()!=entity.type() || !Boolean.TRUE.equals(plan.isInitialized().invoke(null,value)))
+            throw new ConsoleQuery.Refusal("fetch_not_initialized");
     }
 
     private static void initialized(Plan plan,Object value,String field) throws ReflectiveOperationException {

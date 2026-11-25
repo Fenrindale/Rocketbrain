@@ -10,17 +10,21 @@ With Hibernate 7.4, the console also supports nonrecursive CTEs, uncorrelated de
 
 General entity projections, custom functions, collection bindings, recursive CTEs, lateral relations, set operations inside predicate subqueries, and native or modifying SQL are outside the scalar execution scope. The separate semantic validator can analyze some of those forms without executing SQL.
 
-## Review one fetched association
+## Review fetched associations
 
-Set `consoleFetchSnapshots` to `true` alongside `consoleSelect` to enable managed fetch snapshots. This setting is off by default. Select one managed root alias and one direct `INNER JOIN FETCH` or `LEFT JOIN FETCH` association. This query uses a left fetch join.
+Set `consoleFetchSnapshots` to `true` alongside `consoleSelect` to enable managed fetch snapshots. This setting is off by default. Select one managed root alias and up to three distinct direct associations with `INNER JOIN FETCH` or `LEFT JOIN FETCH`.
 
 ```hql
-select o from Owner o left join fetch o.items where o.id >= :first order by o.id
+select o from Owner o
+left join fetch o.items left join fetch o.manager
+where o.id >= :first order by o.id
 ```
 
-The review identifies the loaded association path. Results show the root's typed fields and a nested preview of the fetched association. A null to-one association and an empty collection have distinct displays. The snapshot reads only initialized field-mapped state. It uses ordinary Hibernate hydration with standard, concrete entity mappings and skips polymorphic loads, large object fields, custom property access, converters, load callbacks, and extra eager fetch mappings. A second SQL statement is refused by the JDBC gate.
+The review lists each requested association path in order. Results show the root's typed fields and a separate nested preview for each association. A null to-one association and an empty collection have distinct displays. The snapshot reads only initialized field-mapped state. It uses ordinary Hibernate hydration with standard, concrete entity mappings and skips polymorphic loads, large object fields, custom property access, converters, load callbacks, and extra eager fetch mappings. A second SQL statement is refused by the JDBC gate.
 
-Each fetch snapshot is limited to 25 roots, 16 displayed children per root and 512 joined JDBC rows. The view marks preview limits. An oversized joined result is rejected in full so a partially loaded relationship is never displayed as complete.
+Fetch one collection alongside to-one associations, or fetch two associations mapped as standard Hibernate sets with supported unique entity identifiers. The set previews preserve the two collections independently after Hibernate hydrates the Cartesian result. A single fetched bag preserves legitimate duplicates. Queries with parallel bags or lists, nested fetch paths, fetched aliases, and repeated fetch paths are refused. [Hibernate association fetching](https://docs.hibernate.org/orm/7.4/querylanguage/html_single/#explicit-association-joins)
+
+Each fetch snapshot is limited to 25 roots and 16 displayed children per association and root. All associations share a 512-row JDBC budget for physical joined rows and the same result payload limit. The view marks preview limits. An oversized joined result is rejected in full so a partially loaded relationship is never displayed as complete.
 
 The execution path accepts only standard MySQL and MariaDB Hibernate dialects with an ordinary non-tenant connection pool. Each run uses an isolated Hibernate session on a leased connection, starts a database-enforced read-only transaction, permits one reviewed prepared SELECT, and rolls back before returning results. It caps results at 100 rows and 16 columns, with a three-second JDBC statement timeout. Execution uses the selected application’s trusted Hibernate mappings and database privileges. Use a development application and account appropriate for the data being read.
 

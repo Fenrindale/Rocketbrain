@@ -8,6 +8,8 @@ const consoleTypes = new Set(['java.lang.String','java.lang.Long','java.lang.Int
   'java.lang.Double','java.lang.Float','java.math.BigDecimal','java.math.BigInteger','java.time.LocalDate','java.time.LocalTime',
   'java.time.LocalDateTime','java.time.Instant','java.util.UUID']);
 const consoleKey = /^(:[A-Za-z_][A-Za-z0-9_]{0,63}|\?(?:[1-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-6]))$/;
+const collectionKinds = new Set(['BAG','LIST','SET','ORDERED_SET']);
+const setIdTypes = new Set(['java.lang.Long','java.lang.Integer','java.lang.Short','java.lang.Byte','java.lang.String','java.util.UUID']);
 
 function consoleInput(query,factoryId) {
   if (typeof query!=='string' || !query.trim() || query.length>4096 || Buffer.byteLength(query)>16384 || query.includes('\0'))
@@ -32,42 +34,74 @@ function consoleResponse(result,factoryId,state,limit=100) {
       row.every((value,index)=>value===null || (columns[index].javaType==='java.lang.Boolean'
         ? typeof value==='boolean' : typeof value==='string' && value.length<=4096)));
   }
+  function typeName(value){return typeof value==='string'&&value.length<=256&&/^[\w.$]+$/u.test(value);}
+  function association(raw,rootType,namedCollections){
+    if(!raw || !typeName(raw.targetType) || !typeName(raw.association) || raw.path!==rootType+'.'+raw.association ||
+      typeof raw.toMany!=='boolean' || namedCollections&&(raw.toMany?!collectionKinds.has(raw.collection):raw.collection!==undefined)) return invalid();
+    return {targetType:raw.targetType,association:raw.association,path:raw.path,toMany:raw.toMany,
+      columns:readColumns(raw.columns,8),...(namedCollections&&raw.toMany?{collection:raw.collection}:{})};
+  }
+  function linked(raw,definition){
+    if(!Array.isArray(raw.linked)||raw.linked.length!==result.rowCount) return invalid();
+    return raw.linked.map(item=>{
+      if(!item||typeof item.hasMore!=='boolean'||!scalarRows(item.rows,definition.columns,definition.toMany?16:1)) return invalid();
+      if(definition.toMany){
+        if(item.state!=='loaded'||(item.hasMore&&item.rows.length!==16)) return invalid();
+      }else if(item.hasMore||(item.state==='null'?item.rows.length!==0:item.state!=='loaded'||item.rows.length!==1)) return invalid();
+      return {state:item.state,rows:item.rows,hasMore:item.hasMore};
+    });
+  }
   if (result.state!==state || result.factoryId!==factoryId) return invalid();
   const columns=readColumns(result.columns,16);
-  const fetched=result.fetchSnapshot;
-  let fetchSnapshot;
-  if(fetched!==undefined){
-    if(!fetched || typeof fetched!=='object' || columns.length>8 ||
-      ![fetched.rootType,fetched.targetType,fetched.association].every(value=>typeof value==='string'&&value.length<=256&&/^[\w.$]+$/u.test(value)) ||
-      fetched.path!==fetched.rootType+'.'+fetched.association || typeof fetched.toMany!=='boolean' ||
-      fetched.maxRoots!==25 || fetched.maxChildren!==16) return invalid();
-    fetchSnapshot={rootType:fetched.rootType,targetType:fetched.targetType,association:fetched.association,path:fetched.path,
-      toMany:fetched.toMany,maxRoots:fetched.maxRoots,maxChildren:fetched.maxChildren,columns:readColumns(fetched.columns,8)};
+  const singular=result.fetchSnapshot!==undefined, plural=result.fetchSnapshots!==undefined;
+  if(singular&&plural)return invalid();
+  const fetched=singular?result.fetchSnapshot:result.fetchSnapshots;
+  let fetch={}, associations=[], sources=[], parallel=[];
+  if(singular||plural){
+    if(!fetched || !typeName(fetched.rootType) || columns.length>8 || fetched.maxRoots!==25 || fetched.maxChildren!==16) return invalid();
+    if(plural&&(!Array.isArray(fetched.associations)||fetched.associations.length<2||fetched.associations.length>3))return invalid();
+    sources=singular?[fetched]:fetched.associations;
+    associations=sources.map(item=>association(item,fetched.rootType,plural));
+    if(new Set(associations.map(item=>item.path)).size!==associations.length) return invalid();
+    const collections=associations.filter(item=>item.toMany);
+    if(collections.length>1){
+      if(collections.length!==2 || collections.some(item=>item.collection!=='SET'||!setIdTypes.has(item.columns[0].javaType))) return invalid();
+      parallel=collections;
+    }
+    const root={rootType:fetched.rootType,maxRoots:25,maxChildren:16};
+    fetch=singular?{fetchSnapshot:{...root,...associations[0]}}:{fetchSnapshots:{...root,associations}};
   }
   if (state==='described') {
     if (result.sqlExecuted!==false || !Array.isArray(result.parameters) || result.parameters.length>16 ||
         result.parameters.some(item=>!item || typeof item.key!=='string' || !consoleKey.test(item.key) || !consoleTypes.has(item.javaType)) ||
         new Set(result.parameters.map(item=>item.key)).size!==result.parameters.length) return invalid();
-    return {state,factoryId,columns,parameters:result.parameters.map(({key,javaType})=>({key,javaType})),sqlExecuted:false,...(fetchSnapshot?{fetchSnapshot}:{})};
+    return {state,factoryId,columns,parameters:result.parameters.map(({key,javaType})=>({key,javaType})),sqlExecuted:false,...fetch};
   }
   if (result.sqlExecuted!==true || result.queryExecuted!==true || result.databaseReadOnlyTransaction!==true ||
       result.boundParameterValuesRetained!==false || result.rolledBack!==true ||
-      !scalarRows(result.rows,columns,fetchSnapshot?Math.min(limit,fetchSnapshot.maxRoots):limit) ||
+      !scalarRows(result.rows,columns,associations.length?Math.min(limit,25):limit) ||
       result.rowCount!==result.rows.length || typeof result.hasMore!=='boolean') return invalid();
-  if(fetchSnapshot){
-    if(!Number.isInteger(fetched.joinedRows)||fetched.joinedRows<result.rowCount||fetched.joinedRows>512||
-      !Array.isArray(fetched.linked)||fetched.linked.length!==result.rowCount)return invalid();
-    fetchSnapshot.joinedRows=fetched.joinedRows;
-    fetchSnapshot.linked=fetched.linked.map(item=>{
-      if(!item||typeof item.hasMore!=='boolean'||!scalarRows(item.rows,fetchSnapshot.columns,fetched.toMany?fetched.maxChildren:1))return invalid();
-      if(fetched.toMany){
-        if(item.state!=='loaded'||(item.hasMore&&item.rows.length!==fetched.maxChildren))return invalid();
-      }else if(item.hasMore||(item.state==='null'?item.rows.length!==0:item.state!=='loaded'||item.rows.length!==1))return invalid();
-      return {state:item.state,rows:item.rows,hasMore:item.hasMore};
-    });
+  if(associations.length){
+    if(!Number.isInteger(fetched.joinedRows)||fetched.joinedRows<result.rowCount||fetched.joinedRows>512)return invalid();
+    for(const [index,item] of associations.entries())item.linked=linked(sources[index],item);
+    if(parallel.length){
+      let minimumRows=0;
+      for(let index=0;index<result.rowCount;index++){
+        let product=1;
+        for(const item of parallel){
+          const ids=item.linked[index].rows.map(row=>row[0]);
+          if(ids.includes(null)||new Set(ids).size!==ids.length)return invalid();
+          product*=Math.max(1,ids.length);
+        }
+        minimumRows+=product;
+      }
+      if(fetched.joinedRows<minimumRows)return invalid();
+    }
+    if(singular)Object.assign(fetch.fetchSnapshot,{joinedRows:fetched.joinedRows,linked:associations[0].linked});
+    else fetch.fetchSnapshots.joinedRows=fetched.joinedRows;
   }
   return {state,factoryId,columns,rows:result.rows,rowCount:result.rowCount,hasMore:result.hasMore,sqlExecuted:true,
-    databaseReadOnlyTransaction:true,rolledBack:true,boundParameterValuesRetained:false,...(fetchSnapshot?{fetchSnapshot}:{})};
+    databaseReadOnlyTransaction:true,rolledBack:true,boundParameterValuesRetained:false,...fetch};
 }
 const emptySnapshot = () => ({ state: 'disconnected', factories: [], events: [], fetchedAt: null, sameSourceRevisionVerified: false });
 function normalize(value, token, stripControls=true) {
