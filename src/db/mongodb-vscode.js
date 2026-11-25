@@ -1,6 +1,6 @@
 'use strict';
 
-const { MongoDbError, openMongoDb, parseMongoFind, parseMongoAggregation } = require('./mongodb');
+const { MongoDbError, openMongoDb, parseMongoFind, parseMongoAggregation, inspectMongoTlsCa } = require('./mongodb');
 
 const resultScheme = 'rocketbrain-mongodb-result';
 const commandPrefix = 'rocketbrain.mongodb.';
@@ -61,7 +61,7 @@ function registerMongoDb(context, vscode) {
   async function use(method, args) {
     trusted();
     const connection = selected;
-    if (!connection) throw new MongoDbError('Connect to a local MongoDB instance first.');
+    if (!connection) throw new MongoDbError('Connect to a MongoDB server first.');
     const result = await connection[method](...args);
     trusted();
     if (selected !== connection) throw new MongoDbError('The MongoDB connection changed.', 'ROCKETBRAIN_MONGO_CANCELLED');
@@ -131,7 +131,7 @@ function registerMongoDb(context, vscode) {
 
   async function newFind(target) {
     trusted();
-    if (!selected) throw new MongoDbError('Connect to a local MongoDB instance first.');
+    if (!selected) throw new MongoDbError('Connect to a MongoDB server first.');
     target ??= await pickCollection();
     if (!target) return;
     const source = JSON.stringify({ database: target.database, collection: target.collection, filter: {}, limit: 50 }, null, 2);
@@ -141,7 +141,7 @@ function registerMongoDb(context, vscode) {
 
   async function newAggregation(target) {
     trusted();
-    if (!selected) throw new MongoDbError('Connect to a local MongoDB instance first.');
+    if (!selected) throw new MongoDbError('Connect to a MongoDB server first.');
     target ??= await pickCollection(true);
     if (!target) return;
     const observed = await progress('Inspecting MongoDB Collection Identity', options => api.inspectAggregation(target, options));
@@ -174,20 +174,37 @@ function registerMongoDb(context, vscode) {
 
   command('open', async () => {
     trusted();
-    const host = await vscode.window.showQuickPick(['127.0.0.1', '::1'], { title: 'Local MongoDB Address' });
+    const mode = await vscode.window.showQuickPick([{ label: 'Verify TLS with a PEM CA', tls: true },
+      { label: 'Local numeric loopback', tls: false }], { title: 'MongoDB Connection Security' });
+    if (!mode) return;
+    const host = mode.tls ? (await vscode.window.showInputBox({ title: 'MongoDB Server DNS Name or IP Address', value: 'localhost' }))?.trim() :
+      await vscode.window.showQuickPick(['127.0.0.1', '::1'], { title: 'Local MongoDB Address' });
     if (!host) return;
     const port = await vscode.window.showInputBox({ title: 'MongoDB Port', value: '27017',
       validateInput: value => /^\d{1,5}$/.test(value) && +value >= 1 && +value <= 65535 ? undefined : 'Enter a port from 1 to 65535.' });
     if (!port) return;
     const authSource = await vscode.window.showInputBox({ title: 'Authentication Database', value: 'admin' });
     if (authSource === undefined) return;
+    let tls;
+    if (mode.tls) {
+      const [file] = await vscode.window.showOpenDialog({ title: 'Select the MongoDB CA Certificate File',
+        filters: { 'PEM certificates': ['pem', 'crt', 'cer'] } }) || [];
+      if (file?.scheme !== 'file' || file.authority) return;
+      const ca = await progress('Inspecting MongoDB CA Certificates', options => inspectMongoTlsCa(file.fsPath, options));
+      const action = 'Approve MongoDB Trust';
+      const accepted = await vscode.window.showWarningMessage('Verify this MongoDB endpoint using the reviewed CA file?',
+        { modal: true, detail: [host + ' · port ' + port, file.fsPath, 'File SHA-256 ' + ca.sha256, ...ca.fingerprints].join('\n') }, action);
+      if (accepted !== action) return;
+      tls = { caPath: file.fsPath, caSha256: ca.sha256 };
+    }
     const username = await vscode.window.showInputBox({ title: 'MongoDB Username' });
     if (username === undefined) return;
     const password = await vscode.window.showInputBox({ title: 'MongoDB Password', password: true,
       prompt: 'The password is used for this connection session.' });
     if (password === undefined) return;
-    const source = await progress('Connecting to Local MongoDB', options => open({ host, port: Number(port), authSource, username, password }, options));
-    await vscode.window.showInformationMessage('Connected to local MongoDB. Use Browse MongoDB Collections to open a find editor.');
+    const source = await progress('Connecting to MongoDB', options => open({ host, port: Number(port), authSource, username, password, tls }, options));
+    void vscode.window.showInformationMessage('MongoDB connected to ' + source.host + (source.transport === 'tls-verified' ? ' with verified TLS.' :
+      ' on the local loopback interface.'));
     return source;
   });
   command('close', close);

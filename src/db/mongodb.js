@@ -1,6 +1,11 @@
 'use strict';
 
 const { MongoClient, BSON } = require('mongodb');
+const { createHash, X509Certificate } = require('node:crypto');
+const fs = require('node:fs/promises');
+const { isIP } = require('node:net');
+const path = require('node:path');
+const { createSecureContext } = require('node:tls');
 
 const maxQueryBytes = 64 * 1024;
 const maxDocumentBytes = 256 * 1024;
@@ -8,6 +13,7 @@ const maxPreviewBytes = 1024 * 1024;
 const maxDocuments = 200;
 const maxCatalogEntries = 200;
 const maxTimeMS = 5000;
+const maxCaBytes = 64 * 1024;
 const maxStages = 16;
 const reserved = new Set(['__proto__', 'prototype', 'constructor']);
 const queryKeys = new Set(['database', 'collection', 'filter', 'projection', 'sort', 'limit']);
@@ -18,6 +24,11 @@ const comparisons = new Set(['$eq', '$ne', '$lt', '$lte', '$gt', '$gte']);
 const logicalOperators = new Set(['$and', '$or', '$nor']);
 const decimal = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$/;
 const integer = /^-?(?:0|[1-9]\d*)$/;
+const dnsLabel = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+const certificatesPattern = /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g;
+const tlsIdentityErrors = new Set(['ERR_TLS_CERT_ALTNAME_INVALID', 'CERT_HAS_EXPIRED', 'CERT_NOT_YET_VALID', 'CERT_REVOKED',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT']);
 
 class MongoDbError extends Error {
   constructor(message, code = 'ROCKETBRAIN_MONGO_INPUT') {
@@ -45,12 +56,66 @@ function collectionName(value) {
   return value;
 }
 
+function localCaPath(value) {
+  return validText(value, 4096) && path.isAbsolute(value) && !/^[\\/]{2}/.test(value);
+}
+
 function mongoTarget(options) {
   const { host = '127.0.0.1', port = 27017, authSource = 'admin', username, password } = options ?? {};
-  if (host !== '127.0.0.1' && host !== '::1') throw new MongoDbError('Use a numeric loopback MongoDB address, 127.0.0.1 or ::1.');
+  const tls = options?.tls;
+  if (tls !== undefined) {
+    if (!validText(host, 253) || host.includes('%') || !(isIP(host) || host.split('.').every(item => dnsLabel.test(item)))) {
+      throw new MongoDbError('Enter the MongoDB server DNS name or IP address from its certificate.');
+    }
+    if (!exactShape(tls, ['caPath', 'caSha256']) || !localCaPath(tls.caPath) ||
+        typeof tls.caSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(tls.caSha256)) {
+      throw new MongoDbError('Review the exact local MongoDB CA certificate file before connecting.');
+    }
+  } else if (host !== '127.0.0.1' && host !== '::1') {
+    throw new MongoDbError('Use a numeric loopback MongoDB address, 127.0.0.1 or ::1, or review a verified TLS connection.');
+  }
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new MongoDbError('Use a MongoDB port from 1 to 65535.');
   if (!validText(username, 256) || !validText(password, 2048)) throw new MongoDbError('Supply a MongoDB username and password.');
-  return { host, port, authSource: databaseName(authSource), username, password };
+  return { host, port, authSource: databaseName(authSource), username, password, ...(tls && { tls: { ...tls } }) };
+}
+
+async function readMongoCa(caPath, signal) {
+  const invalid = () => new MongoDbError('Choose a local PEM file containing up to eight public CA certificates and at most 64 KiB.',
+    'ROCKETBRAIN_MONGO_TLS_CA');
+  if (!localCaPath(caPath)) throw invalid();
+  let file;
+  const buffer = Buffer.alloc(maxCaBytes + 1);
+  let total = 0;
+  try {
+    const resolved = await fs.realpath(caPath);
+    if (!localCaPath(resolved)) throw invalid();
+    file = await fs.open(resolved, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.size < 1 || stat.size > maxCaBytes) throw invalid();
+    while (total <= maxCaBytes) {
+      if (signal?.aborted) throw new MongoDbError('MongoDB operation cancelled.', 'ROCKETBRAIN_MONGO_CANCELLED');
+      const { bytesRead } = await file.read(buffer, total, buffer.length - total);
+      if (!bytesRead) break;
+      total += bytesRead;
+    }
+    if (total < 1 || total > maxCaBytes) throw invalid();
+  } catch (error) {
+    if (error instanceof MongoDbError) throw error;
+    throw invalid();
+  } finally { await file?.close(); }
+  const raw = buffer.subarray(0, total), pem = raw.toString('utf8'), entries = pem.match(certificatesPattern);
+  if (!entries?.length || entries.length > 8 || pem.replace(certificatesPattern, '').trim()) throw invalid();
+  try {
+    const certificates = entries.map(entry => new X509Certificate(entry));
+    if (certificates.some(cert => !cert.ca)) throw invalid();
+    return { entries, sha256: createHash('sha256').update(raw).digest('hex'),
+      fingerprints: certificates.map(cert => cert.fingerprint256) };
+  } catch { throw invalid(); }
+}
+
+async function inspectMongoTlsCa(caPath, { signal } = {}) {
+  const { sha256, fingerprints } = await readMongoCa(caPath, signal);
+  return { sha256, fingerprints };
 }
 
 function fieldName(key) {
@@ -279,13 +344,18 @@ function parseMongoAggregation(source) {
 function safeError(error, signal) {
   if (signal?.aborted) return new MongoDbError('MongoDB operation cancelled or timed out.', 'ROCKETBRAIN_MONGO_CANCELLED');
   if (error instanceof MongoDbError) return error;
+  for (let cause = error, depth = 0; cause && depth < 5; cause = cause.cause, depth++) {
+    if (tlsIdentityErrors.has(cause.code)) {
+      return new MongoDbError('MongoDB did not verify the server certificate or its host name.', 'ROCKETBRAIN_MONGO_TLS_IDENTITY');
+    }
+  }
   const code = error?.code instanceof BSON.Int32 ? error.code.valueOf() : error?.code;
   switch (code) {
     case 13: return new MongoDbError('The MongoDB account cannot read this database or collection.', 'ROCKETBRAIN_MONGO_FORBIDDEN');
     case 18: return new MongoDbError('MongoDB rejected the connection credentials.', 'ROCKETBRAIN_MONGO_AUTH');
     case 50: return new MongoDbError('MongoDB reached the read time limit.', 'ROCKETBRAIN_MONGO_TIMEOUT');
     case 361: return new MongoDbError('The selected MongoDB collection changed. Open a new aggregation editor.', 'ROCKETBRAIN_MONGO_STALE');
-    default: return new MongoDbError('MongoDB could not complete the read. Check the local server and query settings.', 'ROCKETBRAIN_MONGO_READ');
+    default: return new MongoDbError('MongoDB could not complete the operation. Check the server and connection or query settings.', 'ROCKETBRAIN_MONGO_READ');
   }
 }
 
@@ -343,12 +413,21 @@ async function collectCatalog(cursor) {
 }
 
 async function openMongoDb(configuration, { signal } = {}) {
-  const { host, port, authSource, username, password } = mongoTarget(configuration);
-  const endpoint = `mongodb://${host === '::1' ? '[::1]' : host}:${port}`;
+  const { host, port, authSource, username, password, tls } = mongoTarget(configuration);
+  const endpoint = `mongodb://${isIP(host) === 6 ? '[' + host + ']' : host}:${port}`;
+  let secureContext;
+  if (tls) {
+    const ca = await readMongoCa(tls.caPath, signal);
+    if (ca.sha256 !== tls.caSha256) throw new MongoDbError('The MongoDB CA changed after approval. Review the current certificate file.',
+      'ROCKETBRAIN_MONGO_TLS_CA_CHANGED');
+    secureContext = createSecureContext({ ca: ca.entries, minVersion: 'TLSv1.2' });
+  }
   const client = new MongoClient(endpoint, { auth: { username, password }, authSource,
     authMechanism: 'SCRAM-SHA-256', directConnection: true, appName: 'Rocketbrain',
     serverSelectionTimeoutMS: maxTimeMS, connectTimeoutMS: maxTimeMS, socketTimeoutMS: 8000,
-    waitQueueTimeoutMS: maxTimeMS, maxPoolSize: 2, retryReads: false });
+    waitQueueTimeoutMS: maxTimeMS, maxPoolSize: 2, retryReads: false, ...(secureContext && {
+      tls: true, secureContext, tlsAllowInvalidCertificates: false, tlsAllowInvalidHostnames: false
+    }) });
   const lifetime = new AbortController();
   let running = false;
   let closing;
@@ -386,7 +465,7 @@ async function openMongoDb(configuration, { signal } = {}) {
   }
 
   return {
-    source: Object.freeze({ host, port, authSource }),
+    source: Object.freeze({ host, port, authSource, ...(tls && { transport: 'tls-verified', caSha256: tls.caSha256 }) }),
     close,
     databases: options => use(async request => {
       const { databases } = await client.db('admin').command({ listDatabases: 1, authorizedDatabases: true, nameOnly: true, maxTimeMS },
@@ -425,4 +504,4 @@ async function openMongoDb(configuration, { signal } = {}) {
   };
 }
 
-module.exports = { openMongoDb, parseMongoFind, parseMongoAggregation, mongoTarget, MongoDbError };
+module.exports = { openMongoDb, parseMongoFind, parseMongoAggregation, mongoTarget, inspectMongoTlsCa, MongoDbError };

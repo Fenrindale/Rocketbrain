@@ -1,6 +1,8 @@
-# Local MongoDB document workbench
+# MongoDB document workbench
 
-Run **Rocketbrain: Connect to Local MongoDB** from the VS Code Command Palette. Enter the numeric loopback address, port, authentication database and SCRAM-SHA-256 credentials. Loopback points to the host running the Rocketbrain extension. Credentials are held for the connection session. A MongoDB account with the built-in `read` role can use the workbench for its authorized databases.
+Run **Rocketbrain: Connect to MongoDB** from the VS Code Command Palette. Choose **Verify TLS with a PEM CA** for a direct endpoint. Enter the DNS name or IP address from the server certificate, its port and authentication database. Choose the local public CA file and review its SHA-256 value before entering the SCRAM-SHA-256 credentials. Rocketbrain verifies the CA chain and the server name using TLS 1.2 or later. If the CA file changes after review or the certificate fails verification, the connection ends before queries can run.
+
+The **Local numeric loopback** mode connects to `127.0.0.1` or `::1` on the host running the extension. Credentials are held for the connection session. The workbench accepts a direct server endpoint and a MongoDB account with the built-in `read` role for its authorized databases. DNS seed lists, client certificates and multiple-server topologies are outside this connector's scope.
 
 Run **Rocketbrain: Browse MongoDB Collections** to choose an authorized database and a collection or view. This opens a JSON find editor. Save the editor with a `.mongo.json` suffix to reuse the query after reconnecting. **Rocketbrain: Run Read-Only MongoDB Find** opens a read-only JSON preview beside the query. The preview reports whether a row count or byte budget stopped the read. Closing the MongoDB connection clears retained previews.
 
@@ -18,7 +20,7 @@ Run **Rocketbrain: Browse MongoDB Collections** to choose an authorized database
 }
 ```
 
-Filters accept equality, comparisons, `$in`, `$nin`, `$exists`, `$and`, `$or` and `$nor`. Canonical Extended JSON literals support ObjectId, numeric BSON types, dates and binary values. Results preserve native BSON types in canonical Extended JSON, including integers beyond the JavaScript safe integer range. The query cap is 64 KiB, with up to 200 returned documents, a 256 KiB document budget, a 1 MiB preview budget and a five-second server read limit. The connection targets one loopback server.
+Filters accept equality, comparisons, `$in`, `$nin`, `$exists`, `$and`, `$or` and `$nor`. Canonical Extended JSON literals support ObjectId, numeric BSON types, dates and binary values. Results preserve native BSON types in canonical Extended JSON, including integers beyond the JavaScript safe integer range. The query cap is 64 KiB, with up to 200 returned documents, a 256 KiB document budget, a 1 MiB preview budget and a five-second server read limit.
 
 Run **New MongoDB Aggregation** and select an ordinary collection. The editor records the current collection UUID, its database, the pipeline and the preview limit. Edit the pipeline and run **Run Read-Only MongoDB Aggregation** to open the typed preview. Save it as `.mongo-aggregate.json` to reuse the pipeline against the same collection. A collection recreated with the same name needs a new editor to use its new UUID.
 

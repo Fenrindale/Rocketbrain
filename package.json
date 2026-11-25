@@ -209,7 +209,7 @@
       { "command": "rocketbrain.duckdb.extensions", "title": "Inspect DuckDB Extensions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.manageExtension", "title": "Manage Workspace DuckDB Extension", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.close", "title": "Close Local DuckDB", "category": "Rocketbrain", "enablement": "rocketbrain.duckdbConnected" },
-      { "command": "rocketbrain.mongodb.open", "title": "Connect to Local MongoDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.mongodb.open", "title": "Connect to MongoDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.mongodb.browse", "title": "Browse MongoDB Collections", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
       { "command": "rocketbrain.mongodb.newFind", "title": "New MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
       { "command": "rocketbrain.mongodb.run", "title": "Run Read-Only MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected && editorLangId == json" },

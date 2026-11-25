@@ -20,12 +20,13 @@ async function freePort() {
   return port;
 }
 
-function fixtureClient(port, auth) {
-  return new MongoClient('mongodb://127.0.0.1:' + port, { directConnection: true, auth, authSource: 'admin',
-    authMechanism: auth && 'SCRAM-SHA-256', serverSelectionTimeoutMS: 1500, socketTimeoutMS: 4000, maxPoolSize: 1, retryWrites: false });
+function fixtureClient(port, auth, tls) {
+  return new MongoClient('mongodb://' + (tls?.host || '127.0.0.1') + ':' + port, { directConnection: true, auth, authSource: 'admin',
+    authMechanism: auth && 'SCRAM-SHA-256', serverSelectionTimeoutMS: 1500, socketTimeoutMS: 4000, maxPoolSize: 1, retryWrites: false,
+    ...(tls && { tls: true, tlsCAFile: tls.caPath, family: 4 }) });
 }
 
-async function startMongoFixture(bin) {
+async function startMongoFixture(bin, { tls } = {}) {
   if (!path.isAbsolute(bin) || !/^mongod(?:\.exe)?$/i.test(path.basename(bin))) {
     throw Error('Select the absolute mongod executable path for the disposable fixture.');
   }
@@ -63,7 +64,9 @@ async function startMongoFixture(bin) {
     const adminAuth = { username: 'rb_fixture_admin', password: randomBytes(32).toString('base64url') };
     const readerAuth = { username: 'rb_fixture_reader', password: randomBytes(32).toString('base64url') };
     child = spawn(bin, ['--auth', '--bind_ip', '127.0.0.1', '--port', String(port), '--dbpath', data,
-      '--logpath', log, '--setParameter', 'diagnosticDataCollectionEnabled=false', '--wiredTigerCacheSizeGB', '0.25'],
+      '--logpath', log, '--setParameter', 'diagnosticDataCollectionEnabled=false', '--wiredTigerCacheSizeGB', '0.25',
+      ...(tls ? ['--tlsMode', 'requireTLS', '--tlsCertificateKeyFile', tls.serverPem, '--tlsCAFile', tls.caPath,
+        '--tlsAllowConnectionsWithoutCertificates'] : [])],
     { windowsHide: true, shell: false, stdio: 'ignore' });
     exited = new Promise(resolve => {
       child.once('error', error => { exitState = error.code ?? 'start-failure'; resolve(); });
@@ -76,14 +79,22 @@ async function startMongoFixture(bin) {
       if (lines.includes('Waiting for connections')) { listening = true; break; }
       await delay(100);
     }
-    if (!listening || exitState) throw Error(`The owned MongoDB test child failed to listen (${exitState ?? 'time limit'}).`);
-    const bootstrap = fixtureClient(port);
+    if (!listening || exitState) {
+      const messages = (await fs.readFile(log, 'utf8').catch(() => '')).split(/\r?\n/).flatMap(line => {
+        try {
+          const entry = JSON.parse(line);
+          return ['E', 'F'].includes(entry.s) ? [entry.msg, entry.attr?.error?.errmsg].filter(value => typeof value === 'string') : [];
+        } catch { return []; }
+      });
+      throw Error(`The owned MongoDB test child failed to listen (${exitState ?? 'time limit'}). ${messages.join(' ').slice(-800)}`);
+    }
+    const bootstrap = fixtureClient(port, undefined, tls);
     try {
       // MongoDB's localhost exception permits only this first user on the new auth-enabled data directory.
       await bootstrap.db('admin').command({ createUser: adminAuth.username, pwd: adminAuth.password,
         roles: ['root'], mechanisms: ['SCRAM-SHA-256'] });
     } finally { await bootstrap.close(); }
-    administrator = await fixtureClient(port, adminAuth).connect();
+    administrator = await fixtureClient(port, adminAuth, tls).connect();
     adminReady = true;
     const build = await administrator.db('admin').command({ buildInfo: 1 });
     await administrator.db('admin').command({ createUser: readerAuth.username, pwd: readerAuth.password,
@@ -104,7 +115,7 @@ async function startMongoFixture(bin) {
     await administrator.db(sample.hidden).collection('secret').insertOne({ n: 2 });
     const config = { host: '127.0.0.1', port, authSource: 'admin', ...readerAuth };
     async function readerWriteDenied() {
-      const reader = fixtureClient(port, readerAuth);
+      const reader = fixtureClient(port, readerAuth, tls);
       try {
         await reader.db(sample.database).collection(sample.collection).insertOne({ rank: 100 });
         return false;
@@ -116,7 +127,7 @@ async function startMongoFixture(bin) {
       await source.collection('stale_target').insertOne({ generation: 2 });
     }
     async function readerRejectsStaleAggregationIdentity(uuid) {
-      const reader = fixtureClient(port, readerAuth);
+      const reader = fixtureClient(port, readerAuth, tls);
       try {
         await reader.db(sample.database).command({ aggregate: 'stale_target', collectionUUID: new BSON.UUID(uuid),
           pipeline: [{ $match: {} }], cursor: {}, allowDiskUse: false });
