@@ -78,17 +78,18 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
   const joinFixCommand='rocketbrain.sql.applyJoinQuickFix';
   const missingCommand='rocketbrain.sql.designMissingObject';
   const joinIdentity=()=>JSON.stringify(database.liveCatalogIdentity());
+  const projected=(document,offset)=>sqlAnalysis?.virtualActive(document)||sqlAnalysis?.scriptContextAt?.(document,offset);
   function objectAction(document,offset) {
     const catalog=database.liveCatalogSnapshot();
     if (!openDesigner||disposed||!vscode.workspace.isTrusted||!catalog||document.isClosed||
-        isProfileConsole(document)||sqlAnalysis?.virtualActive(document)) return null;
+        isProfileConsole(document)||projected(document,offset)) return null;
     return missingObjectIntent(document.getText(),offset,catalog);
   }
   async function joinActions(document,offset,cancellation) {
     const catalog=database.liveCatalogSnapshot(),identity=joinIdentity(),version=document.version;
     if(!catalog||!identity||identity==='null'||isProfileConsole(document))return [];
     const current=()=>!disposed&&!cancellation?.isCancellationRequested&&vscode.workspace.isTrusted&&
-      !document.isClosed&&document.version===version&&joinIdentity()===identity&&!sqlAnalysis?.virtualActive(document);
+      !document.isClosed&&document.version===version&&joinIdentity()===identity&&!projected(document,offset);
     if(!current())return [];
     const fixes=await sqlJoinFixes(document.getText(),offset,catalog,database.joinCompletionCatalog);
     return current()?fixes.map(fix=>({...fix,identity,version})):[];
@@ -100,7 +101,7 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
       if(disposed||!vscode.workspace.isTrusted)return;
       const document=vscode.workspace.textDocuments.find(item=>item.uri.toString()===frame?.uri);
       const catalog=database.catalogSnapshot();
-      if(!document||document.isClosed||sqlAnalysis?.virtualActive(document)||document.version!==frame.version||catalog?.revision!==frame.revision)return;
+      if(!document||document.isClosed||projected(document,frame.offset)||document.version!==frame.version||catalog?.revision!==frame.revision)return;
       const fix=sqlQuickFixes(document.getText(),frame.offset,catalog).find(item=>item.replacement===frame.replacement);
       if(!fix)return;
       const change=new vscode.WorkspaceEdit();
@@ -120,7 +121,7 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
       const document=vscode.workspace.textDocuments.find(item=>item.uri.toString()===frame?.uri);
       if (!document||!Number.isSafeInteger(frame.offset)) return false;
       const current=()=>!disposed&&vscode.workspace.isTrusted&&!document.isClosed&&
-        document.version===frame.version&&joinIdentity()===frame.identity&&!sqlAnalysis?.virtualActive(document);
+        document.version===frame.version&&joinIdentity()===frame.identity&&!projected(document,frame.offset);
       if (!current()) return false;
       const verified=objectAction(document,frame.offset);
       if (!verified||verified.title!==frame.title) return false;
@@ -131,8 +132,9 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
     }),
     vscode.languages.registerCodeActionsProvider({language:'sql'},
       {async provideCodeActions(document,range,_context,cancellation){
-        if(disposed||!vscode.workspace.isTrusted||sqlAnalysis?.virtualActive(document))return [];
-        const catalog=database.catalogSnapshot(),offset=document.offsetAt(range.start);
+        const offset=document.offsetAt(range.start);
+        if(disposed||!vscode.workspace.isTrusted||projected(document,offset))return [];
+        const catalog=database.catalogSnapshot();
         const nameActions=sqlQuickFixes(document.getText(),offset,catalog).map(fix=>{
           const action=new vscode.CodeAction('Use '+fix.replacement,vscode.CodeActionKind.QuickFix);
           action.command={command:fixCommand,title:action.title,arguments:[{
