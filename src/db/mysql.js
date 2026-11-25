@@ -17,6 +17,7 @@ const { SchemaRenamer } = require('./schema-rename');
 const { SchemaRecovery } = require('./schema-recovery');
 const { SchemaApplier } = require('./schema-apply');
 const scriptEngine=require('./sql-script');
+const { inferScriptParameters } = require('./parameter-inference');
 const {randomUUID}=require('node:crypto');
 const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTimeout } = require('./rds-iam');
 const { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope } = require('./write-protection');
@@ -306,12 +307,41 @@ class MysqlService {
     await this._refreshState(session);
     return {sqlMode,serverVersion:version,dialect:/mariadb/i.test(version)?'mariadb':'mysql',database,serverConnectionId:String(connectionId),connectionId:session.connectionId};
   }
-  async describeScript(sql,{sessionId='default'}={}){
+  async _observeParameterContext(session, script, context) {
+    if (!script.parameterDefinitions.length) return {};
+    const observed = await this._stream(session, 'SELECT CURRENT_USER(), CURRENT_ROLE(), @@hostname, @@port, @@server_id, @@session.time_zone, @@session.collation_connection',
+      [], { maxRows: 1, timeoutMs: 5000 }, false, { category: 'metadata', operation: 'SELECT' });
+    const actor = observed.rows[0];
+    if (observed.truncated || observed.rows.length !== 1 || actor.length !== 7 ||
+      typeof actor[0] !== 'string' || !actor[0] || typeof actor[2] !== 'string' || !actor[2]) {
+      throw fail('ROCKETBRAIN_SCRIPT_CONTEXT', 'The current server and account could not be observed for SQL parameter presets.');
+    }
+    const hints = await inferScriptParameters(script, context.database, async (schema, table) => {
+      const result = await this._metadataQuery(
+        "SELECT c.COLUMN_NAME,c.COLUMN_TYPE,c.IS_NULLABLE,c.CHARACTER_SET_NAME,c.COLLATION_NAME FROM information_schema.COLUMNS c JOIN information_schema.TABLES t ON BINARY t.TABLE_SCHEMA=BINARY c.TABLE_SCHEMA AND BINARY t.TABLE_NAME=BINARY c.TABLE_NAME WHERE BINARY c.TABLE_SCHEMA=BINARY ? AND BINARY c.TABLE_NAME=BINARY ? AND t.TABLE_TYPE='BASE TABLE' ORDER BY c.ORDINAL_POSITION",
+        [schema, table]);
+      return result.rows;
+    });
+    return { ...hints, parameterAccountScope: scriptEngine.digest(JSON.stringify([context.dialect, context.database, actor])) };
+  }
+  async _checkPresetContext(session, script, context, expected) {
+    const observed = await this._observeParameterContext(session, script, context);
+    if (!expected?.accountScope || observed.parameterAccountScope !== expected.accountScope ||
+      observed.parameterEvidence !== expected.evidence) {
+      throw fail('ROCKETBRAIN_SCRIPT_STALE', 'The database account or parameter column metadata changed. Review the selected preset again.');
+    }
+  }
+  async describeScript(sql,{sessionId='default',inspectParameters=false}={}){
     const session=this._session(sessionId);
     return this._enqueue(session,async()=>{
       const context=await this._scriptContext(session),script=scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly});
       await this._protectScript(session, script, context);
-      return structuredClone({...scriptEngine.publicScript(script),...context,sessionId,state:this._state(session)});
+      let parameterContext = {};
+      if (inspectParameters) {
+        try { parameterContext = await this._observeParameterContext(session, script, context); }
+        catch (error) { if (!session.connected || session.needsReconnect) throw error; }
+      }
+      return structuredClone({...scriptEngine.publicScript(script),...context,...parameterContext,sessionId,state:this._state(session)});
     });
   }
   async previewScript(sql,options={}){
@@ -320,10 +350,12 @@ class MysqlService {
     return this._enqueue(session,async()=>{
       const context=await this._scriptContext(session),script=scriptEngine.bindScript(scriptEngine.analyzeScript(sql,{sqlMode:context.sqlMode,readOnly:session.readOnly}),options.parameters);
       await this._protectScript(session, script, context);
+      const presetContext = options.presetContext ? { ...options.presetContext } : undefined;
+      if (presetContext) await this._checkPresetContext(session, script, context, presetContext);
       if(script.requiresImplicitCommitApproval&&session.inTransaction)throw fail('ROCKETBRAIN_SCRIPT_TRANSACTION','Commit or roll back the existing transaction before reviewing a DDL script.');
       for(const [id,review]of this._scriptReviews)if(Date.now()>review.expiresAt)this._scriptReviews.delete(id);
       while(this._scriptReviews.size>=scriptEngine.LIMITS.reviews)this._scriptReviews.delete(this._scriptReviews.keys().next().value);
-      const reviewId=randomUUID(),state=this._state(session),review={reviewId,script,context,state,session,sessionId:session.id,cancellationVersion:session.cancellationVersion,expiresAt:Date.now()+scriptEngine.LIMITS.reviewLifetimeMs,bounded,totalTimeoutMs};
+      const reviewId=randomUUID(),state=this._state(session),review={reviewId,script,context,state,session,sessionId:session.id,cancellationVersion:session.cancellationVersion,expiresAt:Date.now()+scriptEngine.LIMITS.reviewLifetimeMs,bounded,totalTimeoutMs,presetContext};
       this._scriptReviews.set(reviewId,review);
       return structuredClone({...scriptEngine.publicScript(script),...context,reviewId,sessionId:session.id,readOnly:state.readOnly,autocommit:state.autocommit,expiresAt:review.expiresAt,scriptHash:scriptEngine.digest(sql),state,stopOnError:true,autoRetried:false,warnings:[...(script.requiresImplicitCommitApproval?['DDL may implicitly commit earlier statements in this script. It is not transactionally undoable.']:[]),'Preflight checks boundaries, execution policy and parameter types; it does not prove all statements are valid on this server.','A script is not an atomic transaction; completed statements are never retried automatically.']});
     });
@@ -355,6 +387,12 @@ class MysqlService {
       const stateKeys=['readOnly','autocommit','inTransaction','transactionState','connectionId','needsReconnect','outcomeUnknown'];
       if(review.session!==session||session.cancellationVersion!==review.cancellationVersion||stateKeys.some(key=>state[key]!==review.state[key])||JSON.stringify(context)!==JSON.stringify(review.context))throw fail('ROCKETBRAIN_SCRIPT_STALE','The console connection, transaction mode or SQL mode changed after script review. Review again.');
       await this._protectScript(session, review.script, context);
+      if (review.presetContext) {
+        await this._checkPresetContext(session, review.script, context, review.presetContext);
+        if (cancelled() || session.cancellationVersion !== review.cancellationVersion || Date.now() > review.expiresAt) {
+          throw fail('ROCKETBRAIN_SCRIPT_STALE', 'The saved parameter review changed before execution. Review again.');
+        }
+      }
       if(review.script.requiresImplicitCommitApproval&&session.inTransaction)throw fail('ROCKETBRAIN_SCRIPT_TRANSACTION','An existing transaction must be explicitly finished before DDL script execution.');
       this._scriptReviews.delete(reviewId);
       session.scriptRunning=true;

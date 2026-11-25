@@ -665,6 +665,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.sql.saveParameterPreset",
+        "title": "Save SQL Parameter Preset",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.sql.removeParameterPreset",
+        "title": "Remove SQL Parameter Preset",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.sql.openScriptResult",
         "title": "Open Retained Script Statement Result",
         "category": "Rocketbrain"

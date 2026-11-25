@@ -884,15 +884,24 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       return { documentUri: document.uri.toString(), resultId };
     },
     tableAction: (id, message) => tableEditor.handle(id, message),
-    async describeSqlScript(sql,{document=currentDocument()}={}) {
+    async describeSqlScript(sql,{document=currentDocument(),inspectParameters=false}={}) {
       if(!state.mysql)throw new Error('Connect to MySQL or MariaDB before running a SQL script.');
       const binding=await bind(document);assertBinding(document,binding);
-      return withSession(binding.id,async()=>({...await state.db.describeScript(sql,{sessionId:binding.id}),connectionEpoch:state.epoch,documentUri:document.uri.toString()}));
+      return withSession(binding.id, async () => {
+        const described = await state.db.describeScript(sql, { sessionId: binding.id, inspectParameters });
+        assertBinding(document, binding);
+        const scope = described.parameterAccountScope && state.tableLayoutConnection;
+        const parameterScope = scope ? require('./db/sql-script').digest(JSON.stringify([
+          state.tableLayoutConnection, described.parameterAccountScope
+        ])) : undefined;
+        return { ...described, connectionEpoch: binding.epoch, documentUri: document.uri.toString(),
+          ...(parameterScope && { parameterScope }) };
+      });
     },
-    async previewSqlScript(sql,{document=currentDocument(),parameters,connectionEpoch,maxRows,timeoutMs,totalTimeoutMs}={}) {
+    async previewSqlScript(sql,{document=currentDocument(),parameters,connectionEpoch,maxRows,timeoutMs,totalTimeoutMs,presetContext}={}) {
       if(!state.mysql||connectionEpoch!==undefined&&connectionEpoch!==state.epoch)throw new Error('The database connection changed. Prepare the script again.');
       const binding=await bind(document);assertBinding(document,binding);
-      return withSession(binding.id,async()=>({...await state.db.previewScript(sql,{sessionId:binding.id,parameters,maxRows,timeoutMs,totalTimeoutMs}),connectionEpoch:state.epoch,documentUri:document.uri.toString()}));
+      return withSession(binding.id,async()=>({...await state.db.previewScript(sql,{sessionId:binding.id,parameters,maxRows,timeoutMs,totalTimeoutMs,presetContext}),connectionEpoch:state.epoch,documentUri:document.uri.toString()}));
     },
     async runSqlScript(request) {
       if(!state.mysql||request.connectionEpoch!==state.epoch)throw new Error('The database connection changed. Preview the script again.');
@@ -901,6 +910,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       const db=state.db;return withSession(binding.id,()=>db.runScript({reviewId:request.reviewId,
         allowImplicitCommit:request.allowImplicitCommit===true,allowUnboundedDml:request.allowUnboundedDml===true,
         cancellation:request.cancellation}));
+    },
+    discardSqlScript(reviewId, connectionEpoch) {
+      return state.mysql && state.epoch === connectionEpoch ? state.db.discardScript(reviewId) : false;
     },
     async captureSchemaSnapshot(options={}) {
       if(!vscode.workspace.isTrusted||!state.mysql||state.disposed||state.switching)throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');

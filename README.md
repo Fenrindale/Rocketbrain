@@ -236,6 +236,8 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 
 보호 설정이 적용된 쓰기는 같은 InnoDB 트랜잭션에서 대상 테이블과 보호 테이블로 연쇄 변경을 전달할 수 있는 의존성의 메타데이터 잠금을 유지합니다. 자동 커밋 모드에서 쓰기 검증을 위해 자동으로 시작한 트랜잭션은 쓰기마다 끝납니다. 사용자가 시작한 트랜잭션과 수동 커밋 모드에서는 **Commit** 또는 **Roll Back**까지 잠금이 유지됩니다.
 
+**Save SQL Parameter Preset**은 선택한 SQL의 typed parameter 값을 VS Code Secret Storage에 저장합니다. SQL 실행에서 저장값을 선택하면 연결과 서버 계정, SQL 원문, 파라미터 정의와 관찰한 열 타입이 일치하는지 확인하고 실행 전에 검토를 받습니다. 단일 테이블의 열과 파라미터를 비교하는 SELECT와 열을 명시한 INSERT에는 확인한 열 타입을 제안합니다. **Remove SQL Parameter Preset**에서 저장값을 삭제할 수 있습니다.
+
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
 
 - **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. 외부 파일 접근과 쓰기는 차단하며 결과는 표본으로 표시합니다.
