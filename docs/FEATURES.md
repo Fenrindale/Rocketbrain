@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.45.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.46.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 56 |
+| 구현 | 59 |
 | 부분 구현 | 108 |
-| 미구현 | 36 |
+| 미구현 | 33 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 1 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **56.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **58.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.45에서는 Java 고급 중단점, DuckDB 방언·탐색, GraphQL과 WebSocket 클라이언트를 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 121점에서 123점으로 바뀌었다.
+v0.46에서는 Git 커밋 기준 Java CI 품질 게이트, 사용자 데이터 추출, 서버 간 SELECT를 독립 구현하고 검증했다. 상태가 바뀐 항목은 3개이고 가중 점수는 123점에서 126점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -61,7 +61,7 @@ v0.45에서는 Java 고급 중단점, DuckDB 방언·탐색, GraphQL과 WebSocke
 | IDEA-038 | IntelliJ IDEA | 프로젝트 검사·스코프·심각도 프로필 | 구현 |
 | IDEA-039 | IntelliJ IDEA | 중복 코드 감지 | 구현 |
 | IDEA-040 | IntelliJ IDEA | 의존성 취약점·취약 API 사용 분석 | 미구현 |
-| IDEA-041 | IntelliJ IDEA | Qodana·CI 품질 게이트 연결 | 미구현 |
+| IDEA-041 | IntelliJ IDEA | Qodana·CI 품질 게이트 연결 | 구현 |
 | IDEA-042 | IntelliJ IDEA | Java 버전·JDK·언어 수준 | 부분 구현 |
 | IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 미구현 |
 | IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 미구현 |
@@ -211,7 +211,7 @@ v0.45에서는 Java 고급 중단점, DuckDB 방언·탐색, GraphQL과 WebSocke
 | DG-068 | DataGrip | 컬럼 고정·숨김·순서·폭 조절 | 구현 |
 | DG-069 | DataGrip | CSV/TSV·clipboard 내보내기 | 구현 |
 | DG-070 | DataGrip | INSERT/JSON/Excel 등 출력 형식 | 구현 |
-| DG-071 | DataGrip | 사용자 data extractor 스크립트 | 미구현 |
+| DG-071 | DataGrip | 사용자 data extractor 스크립트 | 구현 |
 | DG-072 | DataGrip | CSV/Excel import·column/type mapping | 부분 구현 |
 | DG-073 | DataGrip | 다른 DB/table로 데이터 복사 | 구현 |
 | DG-074 | DataGrip | native dump·restore 도구 통합 | 부분 구현 |
@@ -232,7 +232,7 @@ v0.45에서는 Java 고급 중단점, DuckDB 방언·탐색, GraphQL과 WebSocke
 | DG-089 | DataGrip | schema 문맥의 자연어 SQL·설명 | 미구현 |
 | DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 미구현 |
 | DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 미구현 |
-| DG-092 | DataGrip | 서로 다른 data source의 cross-database SQL | 미구현 |
+| DG-092 | DataGrip | 서로 다른 data source의 cross-database SQL | 구현 |
 | DG-093 | DataGrip | DuckDB dialect·함수·introspection | 부분 구현 |
 | DG-094 | DataGrip | 미실행 SQL·최근 파일·Local History 복원 | 부분 구현 |
 | DG-095 | DataGrip | DataGrip 전체 창·도구창의 정확한 배치 | 호스트 구조 제약 |

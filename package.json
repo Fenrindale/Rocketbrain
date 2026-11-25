@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.45.0",
+  "version": "0.46.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -56,6 +56,10 @@
       { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.db.newDataExtractor", "title": "Create Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.exportWithExtractor", "title": "Export with Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.newFederatedSelect", "title": "New Federated SELECT", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.runFederatedSelect", "title": "Run Federated SELECT", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.vcs.changelists", "title": "Manage Git Changelists", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.editEmbedded", "title": "Edit Embedded SQL or JSON", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == xml || editorLangId == sql)" },
       { "command": "rocketbrain.sql.applyEmbedded", "title": "Review and Apply Embedded Source Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == untitled && (editorLangId == sql || editorLangId == json)" },
@@ -130,6 +134,7 @@
       { "command": "rocketbrain.java.inspectProject", "title": "Run Java Inspection Profile", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.findJavaDuplicates", "title": "Find Duplicate Java Code", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.clearProjectInspections", "title": "Clear Java Project Inspections", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.openQualityReport", "title": "Open Java Quality Gate Report", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jpa.generateEntity", "title": "Generate JPA Entity from Table", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.systemCatalog", "title": "Browse Database System Catalog", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.db.inspectAccess", "title": "Inspect Database Account Access", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },

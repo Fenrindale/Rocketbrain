@@ -33,7 +33,7 @@ class ResultsView {
     const script = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.js'));
     const style = view.webview.asWebviewUri(v.Uri.joinPath(root, 'results.css'));
     view.webview.html = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${style}"><title>Query Results</title></head><body>
-<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option><option value="compare">Compare</option><option value="map" disabled>Map</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option></select><button id="export" disabled>Export CSV</button><button id="pin-result" aria-pressed="false" disabled>Pin Result</button><button id="rename-result" disabled>Rename Result</button><button id="close-result">Close Result</button></header>
+<header><div class="brand">QUERY RESULTS</div><div id="source">Offline demo · SQLite</div><span class="spacer"></span><label for="result-view">View</label><select id="result-view" disabled><option value="grid">Grid</option><option value="record">Record</option><option value="tree">Tree</option><option value="text">Text</option><option value="transpose">Transpose</option><option value="chart">Chart</option><option value="compare">Compare</option><option value="map" disabled>Map</option></select><button id="copy" disabled>Copy TSV</button><label for="export-format">Format</label><select id="export-format" disabled><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">Excel XLSX</option><option value="insert">SQL INSERT</option><option value="extractor">Custom Extractor</option></select><button id="export" disabled>Export CSV</button><button id="pin-result" aria-pressed="false" disabled>Pin Result</button><button id="rename-result" disabled>Rename Result</button><button id="close-result">Close Result</button></header>
 <nav id="tabs" aria-label="Query result history"></nav>
 <section id="script-result-sets" aria-label="Captured statement results" hidden><label>Statement result <select id="script-result-selection"></select></label><button id="open-script-statement" type="button">Open Captured Statement</button></section>
 <div id="message" role="status" aria-live="polite">Run SQL from the editor with Ctrl+Enter.</div>
@@ -132,6 +132,11 @@ class ResultsView {
         if (!this.exportable(record) || record.chart.revision !== msg.revision) throw Error('The result changed while choosing a file. Choose it again.');
         await v.workspace.fs.writeFile(target, Buffer.from(JSON.stringify(analysis, null, 2) + '\n', 'utf8'));
       } else if (msg.type === 'export') {
+        if (msg.format === 'extractor') {
+          if (!this.exportable(record)) throw Error('Select completed result rows before running an extractor.');
+          await v.commands.executeCommand('rocketbrain.db.exportWithExtractor', record.id);
+          return;
+        }
         const result = record.result;
         const { data, label, extension } = this.exportSnapshot(record.id, msg.format, msg.destination);
         const target = await v.window.showSaveDialog({ defaultUri: v.Uri.file('query-results.' + extension), filters: { [label]: [extension] },

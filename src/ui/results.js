@@ -1323,7 +1323,7 @@
   function renderExportAction(record) {
     const format = $('export-format').value;
     const labels = { csv: 'CSV', json: 'JSON', xlsx: 'XLSX', insert: 'INSERT' };
-    $('export').textContent = 'Export ' + labels[format];
+    $('export').textContent = format === 'extractor' ? 'Export with Extractor' : 'Export ' + labels[format];
     const result = record?.result;
     const blocked = $('export').disabled || !result || insertExport?.id !== record.id ||
       insertExport?.modelId !== result.edit?.modelId || format !== 'insert';

@@ -1,5 +1,5 @@
 {
-  "version": "0.45.0",
+  "version": "0.46.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,27 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 56,
+    "implemented": 59,
     "partial": 108,
-    "not-implemented": 36,
+    "not-implemented": 33,
     "host-provided": 13,
     "unverified": 1,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 56.9,
+    "percent": 58.3,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-077",
-    "IDEA-104",
-    "DG-093"
+    "IDEA-041",
+    "DG-071",
+    "DG-092"
   ],
   "expandedFeatures": [
-    "IDEA-077",
-    "IDEA-104",
-    "DG-093"
+    "IDEA-041",
+    "DG-071",
+    "DG-092"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1321,25 +1321,27 @@
       "category": "검사·품질·보안",
       "feature": "Qodana·CI 품질 게이트 연결",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Qodana/자체 CI 품질 게이트 연동이 없다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "패키지의 Node CLI가 정확한 Git 커밋의 Java 소스를 검사하고 기준선 대비 새 문제를 SARIF로 기록한다. CI는 새 문제의 심각도에 따라 실패할 수 있고 편집기는 그 커밋의 읽기 전용 위치를 연다.",
       "remaining": [
-        "검사 결과 교환·기준선·빌드 차단 정책 연결이 필요하다."
+        "규칙 카탈로그와 자체 운영 CI 정책 오케스트레이션을 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.46-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "두 실제 Spring 작업 공간에서 별도 Git 커밋과 기준선을 만들고 새 문제·기존 문제·회복된 문제 한 건씩, CLI 종료 코드 및 원본 커밋의 읽기 전용 위치를 검증했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "scripts/java-quality-gate.js",
+          "src/java/quality-gate.js",
+          "src/java/quality-gate-vscode.js",
+          "test/java-quality-gate-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2395,8 +2397,8 @@
       "verification": {
         "state": "v0.45-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.45.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3207,8 +3209,8 @@
       "verification": {
         "state": "v0.45-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.45.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5847,25 +5849,27 @@
       "category": "가져오기·내보내기",
       "feature": "사용자 data extractor 스크립트",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "사용자 data extractor 스크립트 실행이 없다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "사용자 정의 추출기에서 캡처된 DB 결과의 스키마·타입·열·행을 읽어 자체 형식으로 스트리밍한다. 전체 출력의 바이트 수와 SHA-256을 검토한 후 다른 파일로 저장한다.",
       "remaining": [
-        "실행 권한·타입 API·자원 제한·결과 검토가 필요하다."
+        "무제한 서버 커서에서 직접 이어서 출력하고 스크립트 형식을 넓힌다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.46-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "두 실제 DB의 캡처된 결과에서 BIGINT, DECIMAL, 바이너리, 한글, NULL과 정확한 합계를 같은 339바이트로 내보냈다. VS Code 미리보기와 전체 출력의 동일성을 검증했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "docs/data-extractors.md",
+          "src/db/data-extractor.js",
+          "src/db/data-extractor-vscode.js",
+          "test/data-extractor-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6492,25 +6496,27 @@
       "category": "2026.3 추가 범위",
       "feature": "서로 다른 data source의 cross-database SQL",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "서로 다른 데이터 소스의 cross-database 질의 엔진이 없다.",
+      "status": "implemented",
+      "label": "구현",
+      "delivery": "rocketbrain",
+      "scope": "서로 다른 두 저장 연결에서 SELECT의 열·필터를 읽기 전용으로 서버에 보내고, 정수 키를 사용한 INNER·LEFT JOIN을 로컬에서 실행한다. 출처별 필터, 투영 열과 읽은 행 수를 표시한다.",
       "remaining": [
-        "연결 간 조인·타입/권한·전송/실행 정책이 필요하다."
+        "복합·문자열 키, 여러 테이블, 정렬·집계, LEFT JOIN 오른쪽 WHERE를 확장한다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.46-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 MySQL과 MariaDB 사이에서 53비트를 넘는 키, 중복, NULL 및 바인딩된 필터에 따른 입력 수를 검증했다. 활성 연결 상태를 보존했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/federated-select.js",
+          "src/db/federated-select-vscode.js",
+          "src/db/connection-profiles.js",
+          "test/federated-select-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6531,8 +6537,8 @@
       "verification": {
         "state": "v0.45-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.45.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6636,8 +6642,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "478d015e5f32aa4bac19686ecaa7978f810b2e817311ecb58d498539d59ad1bb",
-    "sourceManifestSha256": "a5410cc241ce3906e446dd52aebced9dcebce96c46a19add52cc41b2f0d40ed9",
+    "vsixSha256": "cf710eb26e8f59d5b81692fdf4426772acc894e165ac3750ba708750fedaa84b",
+    "sourceManifestSha256": "39f2f9989501e60c12bfacc547bc8dfa34e53cbdf1a324ca202df6c7c9fc7e33",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6651,25 +6657,25 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-077",
+      "id": "IDEA-041",
       "before": "not-implemented",
       "after": "implemented"
     },
     {
-      "id": "IDEA-104",
+      "id": "DG-071",
       "before": "not-implemented",
-      "after": "partial"
+      "after": "implemented"
     },
     {
-      "id": "DG-093",
+      "id": "DG-092",
       "before": "not-implemented",
-      "after": "partial"
+      "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1330,
-    "pass": 1269,
+    "tests": 1337,
+    "pass": 1276,
     "fail": 0,
     "cancelled": 0,
     "skipped": 61,

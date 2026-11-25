@@ -13,7 +13,7 @@ const BUILTINS = [
   { name:'Java application sources',include:['**/src/main/java/**/*.java'] }
 ];
 
-function globPattern(glob) {
+function globPattern(glob,caseSensitive) {
   if (typeof glob !== 'string' || !glob.length || glob.length > 160 ||
       glob.startsWith('/') || /[\\:\0\r\n{}\[\]]/.test(glob) ||
       glob.split('/').some(part => !part || ['.','..'].includes(part) || part.includes('**') && part !== '**') ||
@@ -30,10 +30,10 @@ function globPattern(glob) {
     } else if (char === '?') chunks.push('[^/]');
     else chunks.push(char.replace(/[.+()^$|]/g, '\\$&'));
   }
-  return new RegExp('^' + chunks.join('') + '$', process.platform === 'win32' ? 'iu' : 'u');
+  return new RegExp('^' + chunks.join('') + '$',caseSensitive?'u':'iu');
 }
 
-function inspectionProfile(value) {
+function inspectionProfile(value,{caseSensitive=process.platform!=='win32'}={}) {
   if (!value || typeof value.name !== 'string' || !value.name.trim() || value.name.length > 80 || /[\r\n\0]/.test(value.name)) {
     throw Error('Every Java inspection profile needs a short name.');
   }
@@ -41,7 +41,8 @@ function inspectionProfile(value) {
   if (!Array.isArray(include) || !include.length || include.length > 12 || !Array.isArray(exclude) || exclude.length > 12) {
     throw Error('Use 1 to 12 include globs and up to 12 exclude globs per inspection profile.');
   }
-  const includePatterns = include.map(globPattern), excludePatterns = exclude.map(globPattern);
+  const includePatterns=include.map(glob=>globPattern(glob,caseSensitive));
+  const excludePatterns=exclude.map(glob=>globPattern(glob,caseSensitive));
   const selected = value.rules ?? {};
   if (!selected || typeof selected !== 'object' || Array.isArray(selected) ||
       Object.keys(selected).some(id => !Object.hasOwn(RULES,id) || !SEVERITIES.has(selected[id]))) {
