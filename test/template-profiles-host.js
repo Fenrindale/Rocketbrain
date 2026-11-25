@@ -6,7 +6,7 @@ const path=require('node:path');
 const {randomBytes}=require('node:crypto');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
-const {fileURLToPath}=require('node:url');
+const {fileURLToPath,pathToFileURL}=require('node:url');
 const {template,profile}=require('./helpers/template-profile-fixture');
 const {importedSpring,jdbcReadback}=require('./java-source-analysis-host');
 
@@ -22,11 +22,15 @@ async function runCompiledTemplate(api,project,name){
     assert.ok(path.isAbsolute(file)&&!file.startsWith('\\')&&!/[\x00-\x1f]/u.test(file));
     return file;
   });
-  const candidates=await Promise.all(classpaths.map(async directory=>{
-    try{
-      if(!(await fs.stat(directory)).isDirectory())return null;
-      return await fs.realpath(path.join(directory,'fixture','boot',name+'.class'));
-    }catch(error){
+  const directoryFlags=await Promise.all(classpaths.map(async entry=>{
+    try{return (await fs.stat(entry)).isDirectory();}catch(error){
+      if(error.code!=='ENOENT')throw error;
+      return false;
+    }
+  }));
+  const candidates=await Promise.all(classpaths.map(async (directory,index)=>{
+    if(!directoryFlags[index])return null;
+    try{return await fs.realpath(path.join(directory,'fixture','boot',name+'.class'));}catch(error){
       if(!['ENOENT','ENOTDIR'].includes(error.code))throw error;
       return null;
     }
@@ -41,23 +45,30 @@ async function runCompiledTemplate(api,project,name){
   const release=await fs.readFile(path.join(runtime.javaHome,'release'),'utf8');
   assert.match(release,/JAVA_VERSION="25\./u);
   assert.doesNotMatch(release,/JetBrains|JBR/iu);
-  const java=path.join(runtime.javaHome,'bin',process.platform==='win32'?'java.exe':'java');
+  const tool=name=>path.join(runtime.javaHome,'bin',name+(process.platform==='win32'?'.exe':''));
   const sandbox=await fs.mkdtemp(path.join(project.root,'.rb-template-probe-'));
-  const source=path.join(sandbox,'RbTemplateProbe.java'), argumentsFile=path.join(sandbox,'java.args');
+  const files=['RbTemplateProbe.java','java.args','classpath.mf','classpath.jar'];
+  const [source,argumentsFile,manifest]=files.map(file=>path.join(sandbox,file));
   try{
     await fs.writeFile(source,'public class RbTemplateProbe { public static void main(String[] args) {\n'+
       'System.out.println(fixture.boot.'+name+'.class.isAnnotationPresent(org.springframework.stereotype.Component.class));\n'+
       'System.out.println(fixture.boot.'+name+'.outputValue());\n}}\n',{flag:'wx'});
-    const args=['-Dfile.encoding=UTF-8','-Dstdout.encoding=UTF-8','-cp',classpaths.join(path.delimiter),'RbTemplateProbe.java'];
-    const payload=args.map(value=>JSON.stringify(value)).join('\n')+'\n';
-    assert.ok(Buffer.byteLength(payload,'utf8')<=512*1024);
-    await fs.writeFile(argumentsFile,payload,{flag:'wx'});
-    const {stdout}=await run(java,['@java.args'],{cwd:sandbox,encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:1024*1024});
+    // Local file URLs preserve the observed JDT order and keep native Windows argfiles ASCII.
+    const urls=classpaths.map((entry,index)=>pathToFileURL(directoryFlags[index]?entry+path.sep:entry).href);
+    const value='Class-Path: '+urls.join(' ');
+    assert.ok(value.length<=512*1024&&/^[\x20-\x7e]+$/u.test(value));
+    const lines=['Manifest-Version: 1.0',value.slice(0,70)];
+    for(let offset=70;offset<value.length;offset+=69)lines.push(' '+value.slice(offset,offset+69));
+    await fs.writeFile(manifest,lines.join('\r\n')+'\r\n\r\n',{flag:'wx'});
+    const options={cwd:sandbox,encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:1024*1024};
+    await run(tool('jar'),['--create','--file','classpath.jar','--manifest','classpath.mf'],options);
+    const args=['-Dfile.encoding=UTF-8','-Dstdout.encoding=UTF-8','-cp','classpath.jar','RbTemplateProbe.java'];
+    await fs.writeFile(argumentsFile,args.join('\n')+'\n',{flag:'wx'});
+    const {stdout}=await run(tool('java'),['@java.args'],options);
     assert.equal(stdout.replaceAll('\r',''),'true\n가나다 "quoted":12\n');
     return classpaths.length;
   }finally{
-    await fs.rm(argumentsFile,{force:true});
-    await fs.rm(source,{force:true});
+    for(const file of files)await fs.rm(path.join(sandbox,file),{force:true});
     await fs.rmdir(sandbox);
   }
 }
