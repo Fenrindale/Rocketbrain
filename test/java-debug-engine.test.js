@@ -7,14 +7,16 @@ const { pathToFileURL } = require('node:url');
 const { spawn, spawnSync } = require('node:child_process');
 const net = require('node:net');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
-const { resolveDebugBundles, DEBUG_BUILD } = require('../src/java/debug-runtime');
+const { resolveDebugBundle } = require('../src/java/debug-runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { DapClient, freePort } = require('./java-debug-dap');
 
 test('independent Java debug bundle launches and attaches real JVMs with breakpoints, stack, variables, step and continue', { skip: !process.env.ROCKETBRAIN_JAVA_TEST_CONFIG, timeout: 300000 }, async t => {
   const runtime = JSON.parse(fs.readFileSync(process.env.ROCKETBRAIN_JAVA_TEST_CONFIG, 'utf8')); const config = runtime.settings || runtime;
   const javaHome = runtime.javaHome || config['rocketbrain.java.javaHome'], serverPath = runtime.serverPath || config['rocketbrain.java.serverPath'];
-  const bundles = resolveDebugBundles(config['rocketbrain.java.debugBundlePath'], serverPath); assert.equal(bundles.length, 1, 'Provision the debug bundle before this integration test.');
+  const debugBundle = resolveDebugBundle(config['rocketbrain.java.debugBundlePath'], serverPath);
+  assert.ok(debugBundle, 'Provision the debug bundle before this integration test.');
+  const bundles = [debugBundle.path];
   const root = path.resolve(__dirname, 'fixtures/java/maven'), rootUri = pathToFileURL(root).href;
   const lsp = new StdioLsp(resolveLaunch({ javaHome, serverPath, storagePath: path.resolve(__dirname, '../test-output/java-debug-engine-loopback') })); let lspClosed = false; t.after(() => lspClosed ? undefined : lsp.close());
   const initialized = await lsp.request('initialize', { processId: process.pid, rootUri, workspaceFolders: [{ uri: rootUri, name: 'java-debug-fixture' }], capabilities: { workspace: { configuration: true } }, initializationOptions: { bundles, workspaceFolders: [rootUri], settings: serverSettings([{ name: 'JavaSE-25', path: javaHome, default: true }]) } }, 90000); lsp.notify('initialized', {});
@@ -57,6 +59,6 @@ test('independent Java debug bundle launches and attaches real JVMs with breakpo
   await exercise('attach', { name: 'Rocketbrain raw attach', type: 'rocketbrain-java', hostName: '127.0.0.1', port, projectName: main.projectName, sourcePaths: [] });
   await lsp.close(); lspClosed = true;
   for (const debugPort of debugPorts) await until(() => new Promise(resolve => { const socket = net.connect({ host: '127.0.0.1', port: debugPort }); socket.once('connect', () => { socket.destroy(); resolve(false); }); socket.once('error', () => resolve(true)); socket.setTimeout(500, () => { socket.destroy(); resolve(false); }); }), 10000);
-  const evidence = { engine: `Microsoft java-debug ${DEBUG_BUILD}`, bundle: bundles[0], javaExec, main, modulePaths, classPaths, checks: reports, debugPortsClosedAfterShutdown: true, originalIdeRequired: false, marketplaceExtensionRequired: false };
+  const evidence = { engine: 'Microsoft java-debug ' + debugBundle.build, bundle: bundles[0], javaExec, main, modulePaths, classPaths, checks: reports, debugPortsClosedAfterShutdown: true, originalIdeRequired: false, marketplaceExtensionRequired: false };
   fs.writeFileSync(path.resolve(__dirname, '../test-output/java-debug-engine.json'), JSON.stringify(evidence, null, 2) + '\n');
 });

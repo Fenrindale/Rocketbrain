@@ -3,7 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { DEBUG_VERSION, DEBUG_BUILD, DEBUG_FILE, DEBUG_SHA256, DEBUG_URL, UPSTREAM_FILE, UPSTREAM_SHA256, resolveDebugBundles, independentJavaExecutable } = require('../src/java/debug-runtime');
-const { buildPatchedBundle, SOURCE_COMMIT, SOURCE_URL, SOURCE_SHA256, CORE_SOURCE_URL, CORE_SOURCE_SHA256, LICENSE_URL, LICENSE_SHA256, PATCH_NOTICE } = require('./java-debug-patch');
+const { buildPatchedBundle, SOURCE_COMMIT, SOURCE_URL, SOURCE_SHA256, CORE_SOURCE_URL, CORE_SOURCE_SHA256,
+  EXCEPTION_SOURCE_URL, EXCEPTION_SOURCE_SHA256, LICENSE_URL, LICENSE_SHA256, PATCH_NOTICE } = require('./java-debug-patch');
 const SOURCE_JAR_SHA256 = 'a5b3e47a5b524f6bdd0d5cedb3a29bdfac52fa2d4b8ebd725167bc74e65fea53';
 const CORE_SOURCE_JAR_SHA256 = 'a4716e849e8cd2d8207dae15b42c9a0c6605a1a1d98ee489e8c193cbf3fb9aa0';
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -31,19 +32,21 @@ async function provisionDebugger(target, progress = () => {}, { javaHome, server
     await download(DEBUG_URL, UPSTREAM_SHA256, upstreamJar);
     await download(sourceJarUrl, SOURCE_JAR_SHA256, sourceJar);
     await download(coreSourceJarUrl, CORE_SOURCE_JAR_SHA256, coreSourceJar);
-    progress('Building the loopback DAP server and generated-source stack trace patches with the independent JDK.');
+    progress('Building the loopback DAP server, generated-source stack trace and exception request patches.');
     const build = await buildPatchedBundle({ target, javaHome, serverPath: serverPath || path.join(path.dirname(target), 'jdtls-1.63.0'), upstreamJar, sourceJar, coreSourceJar, outputJar: file });
     if (build.sha256 !== DEBUG_SHA256) throw new Error(`Java debug local build does not match the reproducible ${DEBUG_BUILD} artifact (${build.sha256}).`);
     await fs.promises.writeFile(path.join(target, 'build.json'), JSON.stringify(build, null, 2) + '\n');
   }
   resolveDebugBundles(file);
   const source = {
-    name: 'Microsoft Java Debug Server with Rocketbrain loopback and generated-source patches', version: DEBUG_BUILD,
+    name: 'Microsoft Java Debug Server with Rocketbrain loopback, generated-source and exception request patches', version: DEBUG_BUILD,
     upstream: { version: DEBUG_VERSION, url: DEBUG_URL, sha256: UPSTREAM_SHA256, sourceJarUrl, sourceJarSha256: SOURCE_JAR_SHA256, coreSourceJarUrl, coreSourceJarSha256: CORE_SOURCE_JAR_SHA256, sourceCommit: SOURCE_COMMIT, source: `https://github.com/microsoft/java-debug/tree/${SOURCE_COMMIT}` },
     artifact: { file: DEBUG_FILE, sha256: DEBUG_SHA256, locallyBuilt: true, signed: false },
-    patch: { name: 'loopback-and-generated-source-v2', sourceUrl: SOURCE_URL, sourceSha256: SOURCE_SHA256, coreSourceUrl: CORE_SOURCE_URL, coreSourceSha256: CORE_SOURCE_SHA256, notice: PATCH_NOTICE },
+    patch: { name: 'loopback-generated-source-exception-requests-v3', sourceUrl: SOURCE_URL, sourceSha256: SOURCE_SHA256,
+      coreSourceUrl: CORE_SOURCE_URL, coreSourceSha256: CORE_SOURCE_SHA256, exceptionSourceUrl: EXCEPTION_SOURCE_URL,
+      exceptionSourceSha256: EXCEPTION_SOURCE_SHA256, notice: PATCH_NOTICE },
     license: 'EPL-1.0 (release LICENSE.txt and artifact Bundle-License); other upstream source files retain their own EPL notices', licenseUrl: LICENSE_URL, licenseSha256: LICENSE_SHA256,
-    verification: 'Upstream binary, plugin/core source JARs and source-file SHA-256 are pinned. A JDK compiler rebuilds JavaDebugServer and its anonymous classes plus AdapterUtils with --release 11, against the verified JDT distribution dependencies. Rebuilt core and plugin JARs have fixed entry timestamps, retained licenses/source/patch notice, no upstream signature metadata, and a separately pinned plugin SHA-256.',
+    verification: 'Upstream binary, plugin/core source JARs and source-file SHA-256 are pinned. A JDK compiler rebuilds JavaDebugServer and its anonymous classes, AdapterUtils and DebugSession with --release 11 against verified dependencies. Rebuilt JARs have fixed entry timestamps, retained licenses, source and patch notice, and a separately pinned plugin SHA-256.',
     includedComponents: [{ name: 'Microsoft java-debug core', version: DEBUG_VERSION }, { name: 'Apache Commons IO', version: '2.11.0', license: 'Apache-2.0' }, { name: 'RxJava', version: '2.2.21', license: 'Apache-2.0' }, { name: 'Reactive Streams', version: '1.0.4', license: 'CC0-1.0' }],
     integration: 'JDT LS initializationOptions.bundles; Rocketbrain owns the DAP client/provider. The DAP server listens only on 127.0.0.1. No Java Marketplace extension or original IDE is required.'
   };

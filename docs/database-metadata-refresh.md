@@ -1,0 +1,9 @@
+# Database metadata refresh
+
+Use **Refresh Workspace and Schema** for a full MySQL or MariaDB catalog. In the Databases tree, right-click a table or view for **Refresh Selected Database Objects**. The command palette can select up to 12 objects from the current catalog. **Refresh Changed Database Objects** looks for added, changed, and no-longer-visible objects across the active schema.
+
+An incremental refresh reads object identities and available definition signatures. On its first run after a full refresh it reads details for objects without a previous signature. Later runs retain unchanged objects and reread the columns, indexes, foreign keys and check constraints of changed objects. It also refreshes account-visible trigger and routine metadata. A definition withheld by the server uses repeated structural reads and is reported separately. [MySQL check metadata](https://dev.mysql.com/doc/refman/8.4/en/information-schema-check-constraints-table.html), [MariaDB check metadata](https://mariadb.com/docs/server/reference/system-tables/information-schema/information-schema-tables/information-schema-check_constraints-table)
+
+The catalog keeps a failed object's last known structure and marks it in the tree while merging successful objects. The catalog reports incomplete coverage until affected objects can be reread. A partial refresh invalidates a saved offline snapshot when verified metadata no longer matches its saved fields or connection identity. Use a full refresh after the metadata session reconnects, or to verify and update the age of a saved snapshot.
+
+Incremental refresh covers up to 120 visible tables and views in the active schema. Visibility follows the connected account. Requests use a 30-second inspection budget and a 32 MiB merged catalog limit. Metadata reads reconcile observed identities and definitions but do not lock against external DDL. Row values and temporary objects remain outside the metadata refresh.

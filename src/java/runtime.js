@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { resolveDebugBundles } = require('./debug-runtime');
+const { resolveDebugBundle } = require('./debug-runtime');
 const { stageLombokAgent } = require('./annotation-processing');
 
 function absoluteDirectory(value, label) {
@@ -35,7 +35,8 @@ function resolveLaunch(options) {
     throw new Error('Trust the workspace before enabling Java editor annotation processing.');
   }
   const lombok = stageLombokAgent(options.lombokJar,options.storagePath);
-  const bundles = resolveDebugBundles(options.debugBundlePath, serverPath);
+  const debugBundle = resolveDebugBundle(options.debugBundlePath, serverPath);
+  const bundles = debugBundle ? [debugBundle.path] : [];
   const fileHash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
   const core = fs.readdirSync(plugins).filter(name => /^org\.eclipse\.jdt\.ls\.core_.*\.jar$/.test(name));
   // OSGi state and JDT/Buildship metadata must use the same engine identity.
@@ -46,7 +47,7 @@ function resolveLaunch(options) {
     template: fileHash(path.join(template, 'config.ini')),
     launcher: { name: launchers[0], sha256: fileHash(path.join(plugins, launchers[0])) },
     core: core.map(name => ({ name, sha256: fileHash(path.join(plugins, name)) })),
-    bundles: bundles.map(file => ({ path: file, sha256: fileHash(file) })),
+    bundles: debugBundle ? [{ path: debugBundle.path, sha256: debugBundle.sha256 }] : [],
     gradleUserHome: process.env.GRADLE_USER_HOME || '', importRuntime: options.cacheContext || null,
     processors: {gradle:gradleAnnotationProcessing,lombok:lombok?.sha256 || null}
   })).digest('hex').slice(0, 20);
@@ -62,7 +63,7 @@ function resolveLaunch(options) {
     command,
     args: ['-Declipse.application=org.eclipse.jdt.ls.core.id1', '-Dosgi.bundles.defaultStartLevel=4', '-Declipse.product=org.eclipse.jdt.ls.core.product', '-Dlog.level=WARNING', '-Xmx1G', '--add-modules=ALL-SYSTEM', '--add-opens', 'java.base/java.util=ALL-UNNAMED', '--add-opens', 'java.base/java.lang=ALL-UNNAMED', ...(lombok ? ['-javaagent:'+lombok.file] : []), '-jar', path.join(plugins, launchers[0]), '-configuration', configuration, '-data', data],
     options: { cwd: serverPath, env, windowsHide: true },
-    javaHome, serverPath, configuration, data, identity, bundles,
+    javaHome, serverPath, configuration, data, identity, bundles, debugBuild: debugBundle?.build,
     annotationProcessing: {gradle:gradleAnnotationProcessing,maven:'project',lombok:lombok && {version:lombok.version,sha256:lombok.sha256}}
   };
 }

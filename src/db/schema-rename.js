@@ -24,9 +24,49 @@ function ddlFor(schema,target,{dialect}={}){
   return target.kind==='table'?{sql:'RENAME TABLE '+table+' TO '+quote(schema)+'.'+quote(target.newName),reverseSql:'RENAME TABLE '+quote(schema)+'.'+quote(target.newName)+' TO '+table}:{sql:'ALTER TABLE '+table+' RENAME COLUMN '+quote(target.column)+' TO '+quote(target.newName),reverseSql:'ALTER TABLE '+table+' RENAME COLUMN '+quote(target.newName)+' TO '+quote(target.column)};
 }
 // Ignore the volatile AUTO_INCREMENT counter, never quoted column defaults or comments.
-function stableCreate(sql){
-  let out='',quoted='',depth=0;
-  for(let i=0;i<sql.length;){const c=sql[i];if(quoted){out+=c;i++;if(c==='\\'&&i<sql.length){out+=sql[i++];continue;}if(c===quoted){if(sql[i]===quoted)out+=sql[i++];else quoted='';}continue;}if(c==='`'||c==='\''||c==='"'){quoted=c;out+=c;i++;continue;}if(sql.startsWith('/*',i)){const end=sql.indexOf('*/',i+2),next=end<0?sql.length:end+2;out+=sql.slice(i,next);i=next;continue;}if(c==='(')depth++;if(c===')')depth--;if(depth===0){const match=/^AUTO_INCREMENT\s*=\s*\d+/i.exec(sql.slice(i));if(match&&!/[\w$]/.test(sql[i-1]||'')){out+='AUTO_INCREMENT=<counter>';i+=match[0].length;continue;}}out+=c;i++;}return out;
+function stableCreate(sql, { omitCounter = false } = {}) {
+  let out = '', quoted = '', depth = 0;
+  for (let index = 0; index < sql.length;) {
+    const char = sql[index];
+    if (quoted) {
+      out += char;
+      index++;
+      if (char === '\\' && index < sql.length) out += sql[index++];
+      else if (char === quoted) {
+        if (sql[index] === quoted) out += sql[index++];
+        else quoted = '';
+      }
+      continue;
+    }
+    if (["'", '"', '`'].includes(char)) {
+      quoted = char;
+      out += char;
+      index++;
+      continue;
+    }
+    if (sql.startsWith('/*', index)) {
+      const end = sql.indexOf('*/', index + 2);
+      const next = end < 0 ? sql.length : end + 2;
+      out += sql.slice(index, next);
+      index = next;
+      continue;
+    }
+    if (char === '(') depth++;
+    if (char === ')') depth--;
+    if (depth === 0 && /[aA]/.test(char) && !/[\w$]/.test(sql[index - 1] || '')) {
+      const match = /^AUTO_INCREMENT\s*=\s*\d+/i.exec(sql.slice(index));
+      if (match) {
+        index += match[0].length;
+        if (!omitCounter) out += 'AUTO_INCREMENT=<counter>';
+        else if (sql[index] === ' ') index++;
+        else if (out.endsWith(' ')) out = out.slice(0, -1);
+        continue;
+      }
+    }
+    out += char;
+    index++;
+  }
+  return out;
 }
 function mentions(text,name){
   const lower=String(text).toLowerCase(),target=folded(name),escaped=target.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');

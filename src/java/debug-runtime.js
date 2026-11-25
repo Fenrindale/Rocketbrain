@@ -5,23 +5,33 @@ const crypto = require('node:crypto');
 
 // Public Maven Central JDT bundle, independent of any Marketplace VSIX.
 const DEBUG_VERSION = '0.53.1';
-const DEBUG_BUILD = `${DEBUG_VERSION}.rocketbrain2`;
+const DEBUG_BUILD = DEBUG_VERSION + '.rocketbrain3';
+const LEGACY_BUILD = DEBUG_VERSION + '.rocketbrain2';
 const UPSTREAM_FILE = `com.microsoft.java.debug.plugin-${DEBUG_VERSION}.jar`;
 const UPSTREAM_SHA256 = '4f4778d452a6a0665536f43ce4e32403a24be6593336b80dc85a322912859e24';
 const DEBUG_URL = `https://repo.maven.apache.org/maven2/com/microsoft/java/com.microsoft.java.debug.plugin/${DEBUG_VERSION}/${UPSTREAM_FILE}`;
 const DEBUG_FILE = `com.microsoft.java.debug.plugin-${DEBUG_BUILD}.jar`;
-const DEBUG_SHA256 = 'dd70e3cf8dc599c7a91b0c01efa86aa7bcf7677e3924ab4c4012e85895ab8605';
+const DEBUG_SHA256 = '48225381bae43e320041096e1996e4d519614a018d1eaac19341ac66686a26f8';
+const LEGACY_SHA256 = 'dd70e3cf8dc599c7a91b0c01efa86aa7bcf7677e3924ab4c4012e85895ab8605';
 
-function resolveDebugBundles(value, serverPath) {
-  const candidate = value || (serverPath && path.join(path.dirname(serverPath), 'java-debug', DEBUG_FILE));
-  if (!candidate || (!value && !fs.existsSync(candidate))) return [];
+function resolveDebugBundle(value, serverPath) {
+  const defaults = serverPath && path.join(path.dirname(serverPath), 'java-debug');
+  const candidate = value || (defaults && [DEBUG_FILE, 'com.microsoft.java.debug.plugin-' + LEGACY_BUILD + '.jar']
+    .map(name => path.join(defaults, name)).find(file => fs.existsSync(file)));
+  if (!candidate) return undefined;
   if (!path.isAbsolute(candidate)) throw new Error('rocketbrain.java.debugBundlePath must be an absolute JAR path.');
   const file = fs.realpathSync(candidate);
   const stat = fs.statSync(file);
   if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error('Java debug bundle is not a regular JAR within the supported size.');
   const checksum = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-  if (checksum !== DEBUG_SHA256) throw new Error(`Java debug bundle must match Rocketbrain's pinned loopback-only build ${DEBUG_BUILD}. Run the Java engine installer.`);
-  return [file];
+  const build = checksum === DEBUG_SHA256 ? DEBUG_BUILD : checksum === LEGACY_SHA256 ? LEGACY_BUILD : undefined;
+  if (!build) throw new Error('Java debug bundle must match a pinned Rocketbrain loopback-only build. Run the Java engine installer.');
+  return { path: file, sha256: checksum, build };
+}
+
+function resolveDebugBundles(value, serverPath) {
+  const bundle = resolveDebugBundle(value, serverPath);
+  return bundle ? [bundle.path] : [];
 }
 
 function independentJavaExecutable(value) {
@@ -42,4 +52,5 @@ function argumentString(value, platform = process.platform) {
   return value.map(item => platform === 'win32' ? '"' + item.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1') + '"' : '"' + item.replace(/[\\"]/g, '\\$&') + '"').join(' ');
 }
 
-module.exports = { DEBUG_VERSION, DEBUG_BUILD, DEBUG_FILE, DEBUG_SHA256, DEBUG_URL, UPSTREAM_FILE, UPSTREAM_SHA256, resolveDebugBundles, independentJavaExecutable, argumentString };
+module.exports = { DEBUG_VERSION, DEBUG_BUILD, DEBUG_FILE, DEBUG_SHA256, DEBUG_URL, UPSTREAM_FILE, UPSTREAM_SHA256,
+  resolveDebugBundle, resolveDebugBundles, independentJavaExecutable, argumentString };

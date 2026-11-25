@@ -2,6 +2,8 @@
 
 const { randomUUID } = require('node:crypto');
 const { contextOf, listNames, loadSource } = require('./object-source');
+const { searchDatabaseText, textHash } = require('./unified-search');
+const { sourceTokens } = require('./sql-analysis');
 
 const scheme = 'rocketbrain-object-source';
 const maxDocuments = 16;
@@ -16,15 +18,17 @@ function registerObjectSources(vscode, { database }) {
     if (frame !== generation) throw Error('The metadata connection changed. Browse object source again.');
   }
 
-  function inspect(action, frame = generation) {
+  function inspect(action, frame = generation, assertActive = () => {}) {
     check(frame);
     return database.withDatabaseAdmin(async lease => {
       let connection;
       const query = async (sql, values) => {
         check(frame);
+        assertActive();
         if (!lease.guard()) throw Error('The metadata connection changed. Browse object source again.');
         const result = await lease.db._metadataQuery(sql, values);
         check(frame);
+        assertActive();
         const current = lease.db._metadataSession.connection;
         if (!lease.guard() || !current || connection && current !== connection) {
           throw Error('The metadata connection changed. Browse object source again.');
@@ -49,11 +53,14 @@ function registerObjectSources(vscode, { database }) {
     changed.fire(previous.uri);
   }
 
-  async function open(object, frame = generation) {
+  async function open(object, frame = generation, navigation) {
     const { value, epoch } = await inspect((query, context) => loadSource(query, context, object), frame);
     check(frame);
+    if (navigation?.hash && textHash(value.source) !== navigation.hash) throw Error('The database definition changed. Search again.');
+    const anchor = navigation?.member ? memberLocation(value, navigation.member) : navigation?.span;
     const identity = JSON.stringify(value.object);
-    const existing = [...documents.values()].find(item => item.epoch === epoch && item.identity === identity);
+    const existing = [...documents.values()].find(item => item.epoch === epoch && item.identity === identity &&
+      (!navigation || item.source === value.source));
     if (existing) {
       existing.source = value.source;
       changed.fire(existing.uri);
@@ -67,7 +74,8 @@ function registerObjectSources(vscode, { database }) {
     }
     const document = await vscode.workspace.openTextDocument(uri);
     check(frame);
-    await vscode.window.showTextDocument(document, { preview: false });
+    const selection = anchor ? new vscode.Range(document.positionAt(anchor.start), document.positionAt(anchor.end)) : undefined;
+    await vscode.window.showTextDocument(document, { preview: false, ...(selection && { selection }) });
     check(frame);
     return { ...value, documentUri: key };
   }
@@ -146,6 +154,16 @@ function registerObjectSources(vscode, { database }) {
     listSchemas: options => list({ ...options, kind: 'schema' }),
     listObjects: options => list(options),
     open,
+    search(options, assertActive = () => {}) {
+      return inspect((query, context) => searchDatabaseText(query, context, options, assertActive), generation, assertActive)
+        .then(({ value }) => value);
+    },
+    openSearchResult(result) {
+      if (result.type === 'database-ddl') {
+        return open(result.object, generation, { hash: result.hash, span: { start: result.start, end: result.end } });
+      }
+      return open(result.object.owner ?? result.object, generation, result.object.owner ? { member: result.object } : undefined);
+    },
     refresh,
     dispose() {
       if (disposed) return;
@@ -156,4 +174,26 @@ function registerObjectSources(vscode, { database }) {
   };
 }
 
-module.exports = { registerObjectSources };
+function memberLocation(loaded, member) {
+  try {
+    const options = { dialect: loaded.dialect, sqlMode: String(loaded.settings?.sql_mode ?? '').split(',').filter(Boolean) };
+    const tokens = sourceTokens(loaded.source, options);
+    let depth = 0, viewBody = false;
+    for (const [index, token] of tokens.entries()) {
+      const previous = tokens[index - 1];
+      if (token.kind === 'symbol' && token.value === '(') depth++;
+      if (token.kind === 'symbol' && token.value === ')') depth--;
+      if (loaded.object.kind === 'view' && token.upper === 'AS') viewBody = true;
+      if (!['word', 'identifier'].includes(token.kind) || token.value !== member.name &&
+          !(member.name === 'PRIMARY' && token.upper === 'PRIMARY')) continue;
+      const located = member.kind === 'column' && (viewBody || depth === 1 && ['(', ','].includes(previous?.value)) ||
+        member.kind === 'index' && depth === 1 && (['KEY', 'INDEX'].includes(previous?.upper) || token.upper === 'PRIMARY') ||
+        member.kind === 'constraint' && depth === 1 && (previous?.upper === 'CONSTRAINT' || token.upper === 'PRIMARY' ||
+          ['KEY', 'INDEX'].includes(previous?.upper));
+      if (located) return { start: token.start, end: token.end };
+    }
+  } catch {}
+  return undefined;
+}
+
+module.exports = { registerObjectSources, memberLocation };

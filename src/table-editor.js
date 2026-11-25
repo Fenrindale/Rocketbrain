@@ -3,6 +3,15 @@ const {randomUUID}=require('node:crypto');
 const {parseDelimited,planPaste,planImport,planDuplicate}=require('./db/grid-bulk');
 const {inspectXlsx,sheetToImport}=require('./db/grid-xlsx');
 
+function browsingQuery(query) {
+  if (!query || typeof query !== 'object' || Array.isArray(query) ||
+      Buffer.byteLength(JSON.stringify(query), 'utf8') > 70000 ||
+      Object.keys(query).some(key => !['page', 'pageSize', 'sort', 'filters'].includes(key))) {
+    throw new Error('Invalid table browsing options.');
+  }
+  return query;
+}
+
 /** Owns the server-side association between a result tab and a table snapshot. */
 class TableEditor {
   constructor({ results, connection, withSession, trusted, onStatus = () => {} }) {
@@ -21,6 +30,7 @@ class TableEditor {
     return record;
   }
   _retain(context, result) {
+    if (context.keysetId) return;
     const modelId = result.edit?.modelId;
     if (!modelId || modelId === context.modelId) return;
     context.db.retainTableSnapshot({ sessionId: context.sessionId, modelId });
@@ -29,7 +39,31 @@ class TableEditor {
   }
   forget(id) {
     const context = this.contexts.get(id); this.contexts.delete(id);
+    if (context?.keysetId) void context.db.closeKeysetBrowser(context.keysetId).catch(() => {});
     if (context?.modelId) { try { context.db.releaseTableSnapshot({ sessionId: context.sessionId, modelId: context.modelId }); } catch { /* Disposed connection. */ } }
+  }
+  async openKeyset({ table, options = {} }) {
+    const current = this.connection();
+    if (!current.mysql || !this.trusted()) throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');
+    const id = this.results.begin('Read-only InnoDB table snapshot', current.label + ' · ' + table, { table, readOnly: true });
+    const context = { db:current.db,epoch:current.epoch,table,query:options };
+    this.contexts.set(id, context);
+    let opened;
+    try {
+      opened = await context.db.openKeysetBrowser(table, options);
+      this._context(id);
+      if (this._record(id).closing) throw new Error('The table snapshot is being closed.');
+      context.keysetId = opened.id;
+      context.query = opened.result.edit.query;
+      this.results.finish(id, opened.result);
+      this.results.editState(id, { sql: opened.result.browse.sql });
+    } catch (error) {
+      if (opened) await context.db.closeKeysetBrowser(opened.id);
+      this.forget(id);
+      this.results.finish(id, undefined, error.message, error.state);
+      throw error;
+    } finally { this.onStatus(); }
+    return id;
   }
   async open({ table, sessionId, sql, filters = [], relation }) {
     const current = this.connection();
@@ -79,6 +113,7 @@ class TableEditor {
   }
 
   _preview(context, query) {
+    if (context.keysetId) return context.db.readKeysetPage(context.keysetId, query);
     const options = { sessionId: context.sessionId, ...query };
     return context.relation ? context.db.previewRelatedTable({ schema: context.relation.schema, table: context.table,
       keys: context.relation.keys }, options)
@@ -86,6 +121,7 @@ class TableEditor {
   }
   async _load(id, context, message, query = context.query) {
     const result = await this._preview(context, query);
+    if (context.keysetId) this._context(id);
     context.query = result.edit?.query || query;
     this._retain(context, result);
     this.results.finish(id, result);
@@ -127,6 +163,15 @@ class TableEditor {
       const record = this._record(id);
       if (record.closing) throw new Error('This result is being closed.');
       if (!record.result?.edit) throw new Error('Only an explicit table preview can be edited.');
+      if (context.keysetId) {
+        if (!['browseTable', 'reloadTable'].includes(message.type)) throw new Error('This table snapshot is read-only.');
+        if (record.editBusy) throw new Error('Wait for the current table page.');
+        locked = true;
+        this.results.editState(id, { editBusy: true, editError: undefined, editMessage: undefined });
+        const query = message.type === 'browseTable' ? browsingQuery(message.query) : { ...context.query, page: 0 };
+        await this._load(id, context, 'Page read from the current consistent snapshot.', query);
+        return;
+      }
       if (message.type === 'draftChanged') {
         if(message.modelId!==undefined&&message.modelId!==record.result.edit.modelId)return;
         if (!Number.isInteger(message.count) || message.count < 0 || message.count > 500 || !Number.isInteger(message.draftRevision) || message.draftRevision < 0) throw new Error('Invalid local draft state.');
@@ -182,8 +227,7 @@ class TableEditor {
         } else if (message.type === 'browseTable') {
           const session = context.db.getSessionState(context.sessionId);
           if (record.hasDraft || record.review || session.inTransaction || session.outcomeUnknown || session.needsReconnect || session.transactionState === 'unknown') throw new Error('Apply or discard local drafts, then commit or roll back the transaction before changing pages, sorting or filters.');
-          if (!message.query || typeof message.query !== 'object' || Array.isArray(message.query) || Buffer.byteLength(JSON.stringify(message.query), 'utf8') > 70000 || Object.keys(message.query).some(key => !['page', 'pageSize', 'sort', 'filters'].includes(key))) throw new Error('Invalid table browsing options.');
-          await this._load(id, context, 'Server page, sorting and filters refreshed. Concurrent database changes may move rows between pages.', message.query);
+          await this._load(id, context, 'Server page, sorting and filters refreshed. Concurrent database changes may move rows between pages.', browsingQuery(message.query));
         } else if (message.type === 'enableEdit') {
           await context.db.setReadOnly(false, { sessionId: context.sessionId });
           await context.db.setAutocommit(false, { sessionId: context.sessionId });

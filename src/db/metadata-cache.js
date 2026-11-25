@@ -170,6 +170,35 @@ function createMetadataCache(state, { isTrusted, now = () => new Date().toISOStr
         return 'matched';
       });
     },
+    revalidateObjects(id, identity, source, observations, current) {
+      return mutate(async () => {
+        guard();
+        if (!current() || !isHash(identity) || source?.semanticContextObserved !== true) return 'unverified';
+        const entries = read(), item = entries.find(entry => entry.id === id);
+        if (!item) return 'absent';
+        const nameKey = name => item.catalog.tableNameCaseSensitive ? name : name.toLowerCase();
+        const savedObjects = new Map([...item.catalog.tables, ...item.catalog.views].map(object => [nameKey(object.name), object]));
+        let differs = item.identity !== identity;
+        if (!differs) for (const { name, object } of observations) {
+          let projection;
+          if (object) {
+            try {
+              const partial = projectCatalog({ ...source, tables: object.kind === 'table' ? [object] : [],
+                views: object.kind === 'view' ? [object] : [] });
+              projection = partial.tables[0] ?? partial.views[0];
+            } catch { continue; }
+            if (!projection) continue;
+          }
+          if (JSON.stringify(savedObjects.get(nameKey(name))) !== JSON.stringify(projection)) {
+            differs = true;
+            break;
+          }
+        }
+        if (!current() || !differs) return 'unverified';
+        await save(entries.filter(entry => entry !== item));
+        return 'invalidated';
+      });
+    },
     remove(id, fingerprint) {
       return mutate(async () => {
         const entries = read(), item = entries.find(entry => entry.id === id);

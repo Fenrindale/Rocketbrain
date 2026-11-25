@@ -117,8 +117,43 @@ function equalRows(left, right) {
   return left.length === right.length && left.every((value, i) => value === right[i]);
 }
 const MAX_PAGE = 2000;
+function keysetValue(column, value) {
+  const { parameter } = typedCell(value === null ? null : String(value), column);
+  if (column.kind === 'integer') {
+    return { sql: /\bunsigned\b/i.test(column.type) ? 'CAST(? AS UNSIGNED)' : 'CAST(? AS SIGNED)', parameter };
+  }
+  if (column.kind === 'decimal') {
+    const precision = /^(?:decimal|numeric)\((\d{1,2}),(\d{1,2})\)/i.exec(column.type);
+    if (!precision) throw fail('ROCKETBRAIN_GRID_QUERY', 'A decimal sort column needs observed precision and scale.');
+    return { sql: 'CAST(? AS DECIMAL(' + precision[1] + ',' + precision[2] + '))', parameter };
+  }
+  return { sql: '?', parameter: column.kind === 'float' ? Number(parameter) : parameter };
+}
+function keysetAfter(order, columns, anchor) {
+  if (anchor.length !== order.length) throw fail('ROCKETBRAIN_GRID_QUERY', 'The keyset position no longer matches the sort.');
+  const alternatives = [], parameters = [], prefix = [], previous = [];
+  for (const [index, { column, direction }] of order.entries()) {
+    const name = quote(column), value = anchor[index];
+    if (value === null) {
+      if (direction === 'asc') {
+        alternatives.push('(' + [...prefix, name + ' IS NOT NULL'].join(' AND ') + ')');
+        parameters.push(...previous);
+      }
+      prefix.push(name + ' IS NULL');
+      continue;
+    }
+    const bound = keysetValue(columns.get(column), value);
+    const condition = direction === 'asc' ? name + ' > ' + bound.sql
+      : '(' + name + ' < ' + bound.sql + ' OR ' + name + ' IS NULL)';
+    alternatives.push('(' + [...prefix, condition].join(' AND ') + ')');
+    parameters.push(...previous, bound.parameter);
+    prefix.push(name + ' <=> ' + bound.sql);
+    previous.push(bound.parameter);
+  }
+  return { sql: alternatives.length ? '(' + alternatives.join(' OR ') + ')' : '0 = 1', parameters };
+}
 /** Compile only catalog-backed identifiers and explicitly typed bound values. */
-function browseQuery(definition, input = {}, schema, related = false) {
+function browseQuery(definition, input = {}, schema, related = false, cursor, reverse = false) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose table paging, sorting and filter options.');
   if (Object.keys(input).some(key => !['page', 'pageSize', 'maxRows', 'sort', 'filters', 'sessionId'].includes(key))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Unsupported table browsing option.');
   const page = input.page ?? 0, pageSize = input.pageSize ?? input.maxRows ?? 200;
@@ -135,6 +170,10 @@ function browseQuery(definition, input = {}, schema, related = false) {
   }
   const sort = order.map(item => ({ ...item }));
   for (const column of pk) if (!used.has(column.name)) order.push({ column: column.name, direction: 'asc' });
+  if (cursor && (!pk.length || order.some(({ column }) => {
+    const { type, kind } = columns.get(column);
+    return ['json', 'unsupported'].includes(kind) || /^(?:enum|set)\b/i.test(type);
+  }))) throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose a primary-key table and sort columns with comparable scalar values for keyset browsing.');
   const operators = { eq: '=', ne: '<>', lt: '<', lte: '<=', gt: '>', gte: '>=' };
   let conditions = 0, groups = 0;
   function buildFilter(item, depth) {
@@ -187,15 +226,107 @@ function browseQuery(definition, input = {}, schema, related = false) {
     filters.push(compiled.filter);
   }
   if (Buffer.byteLength(JSON.stringify(filters), 'utf8') > 65536) throw fail('ROCKETBRAIN_GRID_QUERY', 'Combined table filters exceed 64 KiB.');
+  const scanOrder = reverse ? order.map(({ column, direction }) => ({ column, direction: direction === 'asc' ? 'desc' : 'asc' })) : order;
+  if (cursor?.length) {
+    const seek = keysetAfter(scanOrder, columns, cursor);
+    where.push(seek.sql);
+    parameters.push(...seek.parameters);
+  }
   const sql = 'SELECT ' + definition.columns.map(column => quote(column.name)).join(',') + ' FROM ' + quote(schema) + '.' + quote(definition.name)
-    + (where.length ? ' WHERE ' + where.join(' AND ') : '') + (order.length ? ' ORDER BY ' + order.map(item => quote(item.column) + ' ' + item.direction.toUpperCase()).join(',') : '')
-    + ' LIMIT ' + (pageSize + 1) + ' OFFSET ' + (page * pageSize);
+    + (where.length ? ' WHERE ' + where.join(' AND ') : '') + (scanOrder.length ? ' ORDER BY ' + scanOrder.map(item => quote(item.column) + ' ' + item.direction.toUpperCase()).join(',') : '')
+    + ' LIMIT ' + (pageSize + 1) + (cursor ? '' : ' OFFSET ' + (page * pageSize));
   return { sql, parameters, page, pageSize, order, query: { page, pageSize, sort, filters }, pageable: pk.length > 0,
     consistency: pk.length ? 'Offset pages use explicit ordering plus primary-key tiebreakers. Concurrent inserts, deletes or sort-value changes may move rows between pages; no cross-page snapshot is implied.' : 'No primary key is visible. Only the first page is available; tied rows have no stable cross-page order.' };
 }
 
 class TableEditor {
-  constructor(database) { this.db = database; this.models = new Map(); this.reviews = new Map(); }
+  constructor(database) {
+    this.db = database; this.models = new Map(); this.reviews = new Map(); this.keysetBrowsers = new Map();
+  }
+  async openKeysetBrowser(name, options = {}) {
+    if (this.keysetBrowsers.size >= 8) throw fail('ROCKETBRAIN_GRID_QUERY', 'Close an existing table snapshot before opening another.');
+    const id = randomUUID(), sessionId = 'keyset:' + id, schema = this.db._options.database;
+    const browser = { sessionId, schema, name, page: 0 };
+    this.keysetBrowsers.set(id, browser);
+    try {
+      const definition = await this.definition(name, schema);
+      if (definition.kind !== 'BASE TABLE' || String(definition.engine).toUpperCase() !== 'INNODB') {
+        throw fail('ROCKETBRAIN_GRID_QUERY', 'Choose an InnoDB table for a consistent snapshot.');
+      }
+      browseQuery(definition, { ...options, page: 0 }, schema, false, []);
+      await this.db.openSession(sessionId, { readOnly: true });
+      await this.db.setTransactionIsolation('REPEATABLE READ', { sessionId });
+      const transaction = await this.db._transaction('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY',
+        { sessionId }, { requireIdle: true });
+      browser.definition = definition;
+      browser.connectionId = transaction.connectionId;
+      const result = await this.readKeysetPage(id, { ...options, page: 0 });
+      if (fingerprint(definition) !== fingerprint(await this.definition(name, schema))) {
+        throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The table changed while opening its read snapshot.');
+      }
+      return { id, result };
+    } catch (error) {
+      await this.closeKeysetBrowser(id);
+      throw error;
+    }
+  }
+  async readKeysetPage(id, options = {}) {
+    const browser = this.keysetBrowsers.get(id);
+    if (!browser?.definition) throw fail('ROCKETBRAIN_GRID_QUERY', 'Open a current table snapshot.');
+    const { definition, sessionId, schema } = browser;
+    const session = this.db._session(sessionId);
+    return this.db._enqueue(session, async () => {
+      if (!session.readOnly || !session.inTransaction || session.connectionId !== browser.connectionId ||
+          this.keysetBrowsers.get(id) !== browser) throw fail('ROCKETBRAIN_GRID_STALE', 'The table snapshot ended. Open it again.');
+      const page = options.page ?? 0;
+      if (!Number.isSafeInteger(page) || page < 0 || (page !== 0 && Math.abs(page - browser.page) > 1)) {
+        throw fail('ROCKETBRAIN_GRID_QUERY', 'Move through the snapshot one page at a time.');
+      }
+      const first = browseQuery(definition, { ...options, page: 0 }, schema, false, []);
+      const signature = JSON.stringify(first.query);
+      let cursor=[], reverse=false;
+      if (page > 0) {
+        if (signature !== browser.signature) {
+          throw fail('ROCKETBRAIN_GRID_QUERY', 'Open the first page after changing size, sorting or filters.');
+        }
+        if (page === browser.page) ({ cursor, reverse } = browser.position);
+        else if (page < browser.page) { cursor = browser.first; reverse = true; }
+        else if (browser.hasNext) cursor = browser.last;
+        else throw fail('ROCKETBRAIN_GRID_QUERY', 'The current snapshot has no next page.');
+      }
+      const plan = cursor.length ? browseQuery(definition, first.query, schema, false, cursor, reverse) : first;
+      const result = await this._read(session, plan.sql, plan.parameters, plan.pageSize + 1);
+      if (result.truncated || !session.inTransaction || !session.connected || this.keysetBrowsers.get(id) !== browser) {
+        throw fail('ROCKETBRAIN_GRID_STALE', 'The table snapshot ended or the page exceeded the byte limit. Open a fresh snapshot.');
+      }
+      if (result.columns.length !== definition.columns.length ||
+          result.columns.some((column,index) => column !== definition.columns[index].name)) {
+        throw fail('ROCKETBRAIN_GRID_SCHEMA_CHANGED', 'The table column projection changed during keyset browsing.');
+      }
+      const extra = result.rows.length > plan.pageSize;
+      result.rows = result.rows.slice(0, plan.pageSize);
+      if (reverse) result.rows.reverse();
+      result.rowCount = result.rows.length;
+      const key = row => row ? plan.order.map(item => row[result.columns.indexOf(item.column)]) : [];
+      const hasNext = reverse || extra, hasPrevious = reverse ? extra : page > 0;
+      browser.first = key(result.rows[0]); browser.last = key(result.rows.at(-1));
+      browser.position = { cursor,reverse }; browser.hasNext = hasNext; browser.signature = signature; browser.page = page;
+      const query = { ...plan.query, page };
+      const reason = 'This read-only page belongs to an InnoDB consistent snapshot.';
+      result.state = this.db._state(session);
+      result.browse = { ...query, order: plan.order, hasNext, hasPrevious,
+        pageable: true, sql: plan.sql, consistency: reason, totalRows: null, keyset: true };
+      result.edit = { modelId: randomUUID(), table: browser.name, query, columns: definition.columns, canEdit: false, reason,
+        rowIds: result.rows.map(() => randomUUID()), hasMorePossible: hasNext, insertable: false };
+      return result;
+    });
+  }
+  async closeKeysetBrowser(id) {
+    const browser = this.keysetBrowsers.get(id);
+    if (!browser) return;
+    this.keysetBrowsers.delete(id);
+    await this.db.closeSession(browser.sessionId);
+  }
   retainTableSnapshot({ sessionId = 'default', modelId } = {}) {
     this._prune();
     const session = this.db._session(sessionId), model = this.models.get(modelId);

@@ -30,11 +30,16 @@ class SchemaTree {
       const root = new vscode.TreeItem(this.state.label, vscode.TreeItemCollapsibleState.Expanded);
       root.kind = 'database'; root.iconPath = new vscode.ThemeIcon('database'); root.description = this.state.mysql ? 'MySQL / MariaDB · console sessions' : 'SQLite · sample data'; return [root];
     }
-    if (parent.kind === 'database') return this.state.schema.map(table => {
-      const item = new vscode.TreeItem(table.name, vscode.TreeItemCollapsibleState.Collapsed);
-      item.kind = 'table'; item.contextValue='rocketbrain.table'; item.table = table; item.iconPath = new vscode.ThemeIcon('table'); item.description = `${table.columns.length} columns`;
-      item.command = { command: 'rocketbrain.openTable', title: 'Preview Table', arguments: [table.name] }; return item;
-    });
+    if (parent.kind === 'database') {
+      const stale = new Map((this.state.metadata?.refresh?.staleObjects ?? []).map(item => [item.name, item.reason]));
+      return this.state.schema.map(table => {
+        const item = new vscode.TreeItem(table.name, vscode.TreeItemCollapsibleState.Collapsed);
+        item.kind = 'table'; item.contextValue='rocketbrain.table'; item.table = table; item.iconPath = new vscode.ThemeIcon('table');
+        item.description = `${table.columns.length} columns` + (stale.has(table.name) ? ' · last known' : '');
+        if (stale.has(table.name)) item.tooltip = stale.get(table.name);
+        item.command = { command: 'rocketbrain.openTable', title: 'Preview Table', arguments: [table.name] }; return item;
+      });
+    }
     return (parent.table?.columns || []).map(col => { const item = new vscode.TreeItem(col.name); item.description = col.type + (col.primaryKey ? ' · PK' : ''); item.iconPath = new vscode.ThemeIcon(col.primaryKey ? 'key' : 'symbol-field'); return item; });
   }
   refresh() { this.events.fire(); }
@@ -62,6 +67,7 @@ async function activate(context) {
   context.subscriptions.push(dbAdmin);
   const lazyCatalog=require('./db/lazy-catalog-vscode').registerLazyCatalog(context,vscode,{database});
   const objectSources = require('./db/object-source-vscode').registerObjectSources(vscode, { database });
+  const databaseSearch = require('./db/unified-search-vscode').registerUnifiedSearch(context, vscode, { database, objectSources });
   const explainPlans=require('./db/explain-plan-vscode').registerExplainPlans(context,vscode,{database});
   const localSqlAssistant = require('./db/local-sql-assistant-vscode').registerLocalSqlAssistant(context, vscode, database);
   const sqlProposalReview = require('./db/sql-proposal-review-vscode').registerSqlProposalReview(context, vscode, database);
@@ -168,7 +174,7 @@ async function activate(context) {
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
   const wsl = require('./remote/wsl-vscode').registerWslWorkbench(vscode);
   context.subscriptions.push(wsl);
-  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

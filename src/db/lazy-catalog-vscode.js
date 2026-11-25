@@ -44,6 +44,14 @@ function registerLazyCatalog(context,vscode,{database}){
     });
   }
 
+  function refresh(id, index) {
+    const offer = offers.get(id), item = offer?.items[index];
+    if (!item || offer.frame !== generation || disposed || !vscode.workspace.isTrusted) {
+      throw Error('Choose an object from the current catalog page.');
+    }
+    return database.refreshObjects({ names: [item.name] });
+  }
+
   async function show(result){
     const uri=vscode.Uri.from({scheme,path:'/object-'+randomUUID()+'.txt'});
     const lines=[result.schema+'.'+result.name,result.kind+(result.engine?' · '+result.engine:''),
@@ -86,7 +94,7 @@ function registerLazyCatalog(context,vscode,{database}){
     vscode.workspace.onDidCloseTextDocument(doc=>documents.delete(doc.uri.toString())),
     database.onDidChangeDatabase(()=>{generation++;offers.clear();})
   ];
-  return {list,inspect,dispose(){
+  return {list,inspect,refresh,dispose(){
     if(disposed)return;
     disposed=true;offers.clear();documents.clear();
     for(const subscription of subscriptions)subscription.dispose();

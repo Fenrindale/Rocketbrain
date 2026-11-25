@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.57.0",
+  "version": "0.58.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -78,6 +78,7 @@
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.openTableSnapshot", "title": "Open Consistent Table Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.attach", "title": "Open SSH Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
       { "command": "rocketbrain.sshWorkspace.refresh", "title": "Refresh SSH Files", "category": "Rocketbrain", "icon": "$(refresh)" },
@@ -90,6 +91,7 @@
       { "command": "rocketbrain.docker.lifecycle", "title": "Manage Docker Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.compose", "title": "Inspect Compose Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.manifest", "title": "Inspect Registry Manifest", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.configureExceptionBreakpoints", "title": "Configure Java Exception Breakpoints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
@@ -231,6 +233,7 @@
       { "command": "rocketbrain.sql.saveQuery", "title": "Save SQL Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.searchSources", "title": "Search SQL Files, Database Objects and DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(search)" },
       { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.draft", "title": "Draft SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
@@ -253,6 +256,8 @@
       { "command": "rocketbrain.jpa.reviewExistingRelationship", "title": "Review JPA Relationship Between Existing Entities", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.sql.activityLog", "title": "Show SQL Activity Log", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.browseObjectNames", "title": "Browse Database Object Names", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.refreshObjectMetadata", "title": "Refresh Selected Database Objects", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.refreshIncrementalMetadata", "title": "Refresh Changed Database Objects", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "icon": "$(sync)" },
       { "command": "rocketbrain.java.showClassDiagram", "title": "Show Java Class Diagram", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.traceDataFlow", "title": "Trace Java Local Value", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.previewDdl", "title": "Preview SQL with a Virtual Schema", "category": "Rocketbrain", "enablement": "editorLangId == sql && isWorkspaceTrusted" },
@@ -1013,6 +1018,7 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.db.refreshIncrementalMetadata", "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "navigation@2" },
         { "command": "rocketbrain.sshWorkspace.attach", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.sshWorkspace.refresh", "when": "view == rocketbrain.sshWorkspace", "group": "navigation@2" },
         { "command": "rocketbrain.sshWorkspace.close", "when": "view == rocketbrain.sshWorkspace", "group": "setup@1" },
@@ -1024,6 +1030,7 @@
         { "command": "rocketbrain.kubernetes.connect", "when": "view == rocketbrain.kubernetes", "group": "navigation@1" },
         { "command": "rocketbrain.kubernetes.refresh", "when": "view == rocketbrain.kubernetes", "group": "navigation@2" },
         { "command": "rocketbrain.kubernetes.disconnect", "when": "view == rocketbrain.kubernetes", "group": "navigation@3" },
+        { "command": "rocketbrain.db.searchSources", "when": "view == rocketbrain.databases", "group": "navigation@1" },
         {
           "command": "rocketbrain.schema.exportDdl",
           "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted",
@@ -1188,6 +1195,8 @@
         }
       ],
       "view/item/context": [
+        { "command": "rocketbrain.db.refreshObjectMetadata", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "schema" },
+        { "command": "rocketbrain.openTableSnapshot", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
         { "command": "rocketbrain.docker.lifecycle", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.docker.logs", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
@@ -1766,6 +1775,18 @@
           ],
           "default": "manual",
           "description": "Allow explicitly triggered Java Hot Code Replace; no automatic source edits or code replacement."
+        },
+        "rocketbrain.java.exceptionBreakpoints": {
+          "type": "object",
+          "default": {},
+          "scope": "window",
+          "additionalProperties": false,
+          "description": "Exception type and throw-site filters shared by Java debug sessions in this window. Use Caught or Uncaught in Run and Debug to enable the breakpoints.",
+          "properties": {
+            "exceptionTypes": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Exact Java binary names. Includes subtypes. An empty list matches all exception types." },
+            "allowClasses": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Throw-site class names or prefix/suffix wildcard patterns. Every listed pattern must match." },
+            "skipClasses": { "type": "array", "items": { "type": "string" }, "maxItems": 24, "description": "Throw-site class names or prefix/suffix wildcard patterns to exclude." }
+          }
         },
         "rocketbrain.java.projectJdks": {
           "type": "array",

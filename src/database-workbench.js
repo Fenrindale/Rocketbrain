@@ -11,6 +11,7 @@ const { relatedRowsFromObservation } = require('./db/related-rows');
 const { logicalKey, scopeKey, logicalEdges } = require('./db/schema-erd');
 const { tableLayoutConnectionKey } = require('./db/result-layouts');
 const { createMetadataCache, observeCatalogIdentity } = require('./db/metadata-cache');
+const { runCatalogOperation } = require('./db/catalog-refresh');
 const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
 
 async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree, isVirtualSqlPreview = () => false) {
@@ -18,6 +19,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const output = vscode.window.createOutputChannel('Rocketbrain');
   const state = { db: new DatabaseService(), schema: [], metadata:null, profile:null, tableLayoutConnection:undefined, label: 'Offline demo', mysql: false, running: new Set(), connecting: new Set(), switching: false, disposed: false, candidates: new Set(), epoch: 0 };
   const metadataCache = createMetadataCache(context.workspaceState, { isTrusted: () => vscode.workspace.isTrusted && !state.disposed });
+  let catalogFingerprints = new Map();
   const cacheScheme = 'rocketbrain-offline-db-metadata';
   const analysisMetadata = () => (vscode.workspace.isTrusted ? state.offlineMetadata?.catalog : undefined) || state.metadata;
   const offlineDocumentsChanged = new vscode.EventEmitter();
@@ -52,7 +54,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   function reconcileStreamTransactions(){let removed=false;for(const [id,saved]of streamTransactions){if(!streamManagers.get(saved.db)?.hasPendingTransaction(id)){streamTransactions.delete(id);removed=true;}}if(removed&&!streamTransactions.size)state.running.delete('stream-import');}
   const exclusiveDatabaseWork=()=>{
     reconcileStreamTransactions();
-    return ['schema-migration','stream-import','table-transfer','database-admin','native-dump'].some(key=>state.running.has(key));
+    return ['schema-migration','stream-import','table-transfer','database-admin','native-dump','metadata-refresh'].some(key=>state.running.has(key));
   };
   const databaseGuard=(db,epoch)=>()=>vscode.workspace.isTrusted&&!state.disposed&&!state.switching&&state.db===db&&state.epoch===epoch;
   function assertExclusiveReady(){reconcileStreamTransactions();if(!vscode.workspace.isTrusted||!state.mysql||state.disposed||state.switching)throw new Error('Connect to MySQL or MariaDB in a trusted workspace first.');if(state.running.size||state.connecting.size)throw new Error('Finish the current database operation or pending import transaction first.');}
@@ -88,14 +90,13 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     } catch { output.appendLine('The saved metadata could not be checked against the live connection.'); }
   }
   async function captureOfflineMetadata() {
-    assertExclusiveReady();
-    const { db, epoch, tableLayoutConnection } = state;
-    const current = databaseGuard(db, epoch);
-    const catalog = await db.metadata();
-    const identity = await observeCatalogIdentity(db, catalog);
-    const saved = await metadataCache.capture(tableLayoutConnection, identity, catalog, current);
-    refreshOfflineDocuments(saved.id);
-    return saved;
+    return readCatalogOperation(async ({ db, current, id }) => {
+      const catalog = await db.metadata();
+      const identity = await observeCatalogIdentity(db, catalog);
+      const saved = await metadataCache.capture(id, identity, catalog, current);
+      refreshOfflineDocuments(saved.id);
+      return saved;
+    }, true);
   }
   function publishOfflineSelection(value) {
     state.offlineMetadata = value;
@@ -179,17 +180,45 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     }
   });
   require('./db/native-dump-vscode').registerNativeDumpCommands(vscode, command, nativeDumps);
-  async function refreshSchema() {
-    if(exclusiveDatabaseWork())throw new Error('Finish the schema operation or pending import transaction before refreshing metadata.');
-    if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before reading database metadata.');
-    const { epoch, db } = state;
-    const metadata=state.mysql?await db.metadata():null;
-    const schema = metadata?[...metadata.tables,...metadata.views]:await db.schema();
-    if (epoch === state.epoch && !state.disposed) {
-      state.schema = schema; state.metadata = metadata; schemaTree.refresh();
-      connectionEvents.fire({ epoch: state.epoch, mysql: state.mysql, metadata: analysisMetadata() });
-      if (metadata) await verifySavedMetadata(db, state.tableLayoutConnection, metadata, databaseGuard(db, epoch));
-    }
+  async function readCatalogOperation(action, needsMysql = false) {
+    return runCatalogOperation(state, action, {
+      needsMysql, trusted: () => vscode.workspace.isTrusted, busy: exclusiveDatabaseWork, assertReady: assertExclusiveReady, updateStatus
+    });
+  }
+  function publishCatalog(metadata, schema) {
+    state.schema = schema;
+    state.metadata = metadata;
+    schemaTree.refresh();
+    connectionEvents.fire({ epoch: state.epoch, mysql: state.mysql, metadata: analysisMetadata() });
+  }
+  function refreshSchema() {
+    return readCatalogOperation(async ({ db, mysql, id, current, assertCurrent }) => {
+      const metadata = mysql ? await db.metadata() : null;
+      const schema = metadata ? [...metadata.tables, ...metadata.views] : await db.schema();
+      assertCurrent();
+      catalogFingerprints.clear();
+      publishCatalog(metadata, schema);
+      if (metadata) await verifySavedMetadata(db, id, metadata, () => current() && state.metadata === metadata);
+    });
+  }
+  function refreshLiveObjects(names) {
+    return readCatalogOperation(async ({ db, id, before, current, assertCurrent }) => {
+      const { catalog, report, fingerprints, processed } = await db.refreshCatalog({
+        before, names, fingerprints: catalogFingerprints, assertCurrent
+      });
+      assertCurrent();
+      catalogFingerprints = fingerprints;
+      publishCatalog(catalog, [...catalog.tables, ...catalog.views]);
+      if (id && metadataCache.has(id)) {
+        try {
+          const identity = await observeCatalogIdentity(db, catalog);
+          if (await metadataCache.revalidateObjects(id, identity, catalog, processed, () => current() && state.metadata === catalog) === 'invalidated') {
+            refreshOfflineDocuments(id);
+          }
+        } catch { output.appendLine('The saved metadata could not be checked against the refreshed objects.'); }
+      }
+      return report;
+    }, true);
   }
   const connectionError=message=>Object.assign(new Error(message),{code:'ROCKETBRAIN_CONNECTION_CONTEXT'});
   function pendingTableDraft(){return results.history.some(record=>tableEditor.contexts.has(record.id)&&(record.hasDraft||record.review||record.bulkDraft||record.editBusy));}
@@ -214,6 +243,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       if (state.disposed || (mysql&&!vscode.workspace.isTrusted)) throw connectionError('The workspace closed or trust changed while connecting.');
       const previous = state.db;
       state.epoch++; state.db = next; state.schema = knownSchema; state.metadata=metadata;state.label = label; state.mysql = mysql;state.profile=profile;
+      catalogFingerprints.clear();
       state.tableLayoutConnection = tableLayoutConnection;
       state.offlineMetadata = undefined;
       connectionEvents.fire({ epoch: state.epoch, label: state.label, mysql,metadata });
@@ -235,7 +265,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       const endpoint = require('./db/local-transport').transportLabel(config.transport) || config.host;
       await switchDatabase(next, profile ? profile.name+' · '+config.database : `${config.database} @ ${endpoint}`,
         true, schema, expectedEpoch, metadata, profile, layoutConnection);
-      await verifySavedMetadata(next, layoutConnection, metadata, databaseGuard(next, expectedEpoch + 1));
+      const current = databaseGuard(next, expectedEpoch + 1);
+      await verifySavedMetadata(next, layoutConnection, metadata, () => current() && state.metadata === metadata);
     }
     catch (error) { if (state.db !== next) await next.dispose(); throw error; }
     finally { state.candidates.delete(next); }
@@ -443,7 +474,49 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       await tableEditor.open({ table: name, sessionId: binding.id, sql });
     } else await runSql(sql, editor.document);
   });
+  async function openTableSnapshot(name, options) {
+    if (!state.mysql || state.offlineMetadata || state.switching || !vscode.workspace.isTrusted) {
+      throw Error('Connect to MySQL or MariaDB in a trusted workspace before opening a table snapshot.');
+    }
+    if (!state.schema.some(table => table.name === name && table.kind === 'table')) {
+      throw Error('Choose a table from the active database.');
+    }
+    const { db, epoch } = state;
+    await results.show();
+    if (state.db !== db || state.epoch !== epoch || state.switching) throw Error('The active database changed. Open the table snapshot again.');
+    return tableEditor.openKeyset({ table: name, options });
+  }
+  command('rocketbrain.openTableSnapshot', async item => {
+    const name = typeof item === 'string' ? item : item?.table?.name;
+    const selected = name ?? await vscode.window.showQuickPick(state.schema.filter(table => table.kind === 'table').map(table => table.name),
+      { title: 'Choose a Table for a Read Snapshot' });
+    if (selected) return openTableSnapshot(selected);
+  });
   command('rocketbrain.refresh', async () => { project.refresh(); await refreshSchema(); });
+  function describeRefresh(report) {
+    const detail = report.refreshed.length + ' refreshed · ' + report.unchanged.length + ' unchanged · ' +
+      (report.removedFromView.length + report.notVisible.length) + ' not visible to this account';
+    if (report.failed.length || !report.triggerMetadataAvailable || report.routineMetadataAvailable === false) {
+      const problems = report.failed.map(item => item.name).slice(0, 12).join(', ');
+      void vscode.window.showWarningMessage('Metadata refresh · ' + detail + ' · coverage incomplete' + (problems ? ' · ' + problems : ''));
+    } else if (report.definitionsUnavailable.length) {
+      void vscode.window.showInformationMessage('Metadata refresh · ' + detail + ' · some source definitions were unavailable');
+    } else void vscode.window.showInformationMessage('Metadata refresh · ' + detail);
+    return report;
+  }
+  command('rocketbrain.db.refreshIncrementalMetadata', async () => describeRefresh(await refreshLiveObjects()));
+  command('rocketbrain.db.refreshObjectMetadata', async input => {
+    let names = input?.table?.name ? [input.table.name] : input?.names;
+    if (!names) {
+      const epoch = state.epoch;
+      const chosen = await vscode.window.showQuickPick(state.schema.map(object => ({ label: object.name, description: object.kind })),
+        { title: 'Refresh Selected Table or View Metadata', canPickMany: true });
+      if (!chosen?.length) return;
+      if (epoch !== state.epoch) throw Error('The connection changed. Choose the objects again.');
+      names = chosen.map(item => item.label);
+    }
+    return describeRefresh(await refreshLiveObjects(names));
+  });
   const useDemo = async () => {
     const next = new DatabaseService(); state.candidates.add(next);
     try { await switchDatabase(next, 'Offline demo', false); }
@@ -585,6 +658,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     schema: () => structuredClone(state.schema),
     catalogSnapshot:()=>analysisMetadata()?structuredClone(analysisMetadata()):null,
     liveCatalogSnapshot:()=>state.mysql&&!state.offlineMetadata&&state.metadata?structuredClone(state.metadata):null,
+    refreshObjects: ({ names } = {}) => {
+      if (!names) throw Error('Select tables or views to refresh.');
+      return refreshLiveObjects(names);
+    },
+    refreshIncremental: () => refreshLiveObjects(),
     cachedMetadata: {
       list: metadataCache.list, capture: captureOfflineMetadata, open: openOfflineMetadata,
       close: closeOfflineMetadata, remove: removeOfflineMetadata
@@ -878,6 +956,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     saveResultFilter: (id, modelId, name) => results.saveFilterPreset(id, modelId, name),
     removeResultFilter: (id, modelId, name) => results.removeFilterPreset(id, modelId, name),
     showResults:()=>results.show(),
+    openTableSnapshot,
     async configureConsoleSession(sessionId,{readOnly,autocommit}={}) {
       if(![...bindings.values()].some(binding=>binding.id===sessionId))throw new Error('Unknown SQL console.');
       return withSession(sessionId,async()=>{if(readOnly!==undefined)await state.db.setReadOnly(readOnly,{sessionId});if(autocommit!==undefined)await state.db.setAutocommit(autocommit,{sessionId});return state.db.getSessionState(sessionId);});
