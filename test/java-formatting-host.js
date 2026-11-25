@@ -46,16 +46,23 @@ async function runJavaFormattingChecks(api,vscode,checks) {
     assertFormat(rangePlan.documents[0].after,rangePlan.formatting.options,{range:true});
     const nativeRange = await vscode.commands.executeCommand('vscode.executeFormatRangeProvider',mixedDoc.uri,range,documentOptions);
     assert.equal(editedText(original,nativeRange),rangePlan.documents[0].after);
-    const undo = async () => {
-      await vscode.window.showTextDocument(mixedDoc,{preview:false});
+    const undo = async stage => {
+      await vscode.window.showTextDocument(mixedDoc,{preview:false,preserveFocus:false});
+      await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+      assert.equal(vscode.window.activeTextEditor?.document,mixedDoc);
       await vscode.commands.executeCommand('undo');
-      await until(()=>mixedDoc.getText()===original,10000);
+      try { await until(()=>mixedDoc.getText()===original,10000); }
+      catch {
+        const observed=mixedDoc.getText();
+        throw Error(`Undo after ${stage} did not restore the original Java buffer (EOL ${mixedDoc.eol}, dirty ${mixedDoc.isDirty}, `+
+          `length ${observed.length}/${original.length}, text apart from line endings ${observed.replace(/\r\n/g,'\n')===original}).`);
+      }
       assert.equal(mixedDoc.eol,vscode.EndOfLine.LF);
       assert.equal(mixedDoc.isDirty,false);
     };
     assert.equal((await api.java.refactoring.apply(rangePlan.id)).state,'applied');
     assert.equal(mixedDoc.eol,vscode.EndOfLine.LF);
-    await undo();
+    await undo('reviewed range');
 
     const full = await service.prepare({document:mixedDoc,options:documentOptions});
     assert.equal(full.formatting.endOfLine,'crlf');
@@ -67,12 +74,12 @@ async function runJavaFormattingChecks(api,vscode,checks) {
     assert.equal(mixedDoc.eol,vscode.EndOfLine.CRLF);
     assert.equal(mixedDoc.getText(),full.documents[0].after);
     assert.equal(await fs.readFile(mixedDoc.uri.fsPath,'utf8'),original);
-    await undo();
+    await undo('reviewed document');
 
     await vscode.commands.executeCommand('editor.action.formatDocument');
     await until(()=>mixedDoc.getText()===full.documents[0].after,10000);
     assert.equal(mixedDoc.eol,vscode.EndOfLine.CRLF);
-    await undo();
+    await undo('native document formatter');
 
     const stale = await service.prepare({document:mixedDoc,options:documentOptions});
     await fs.writeFile(nestedConfig,savedNested.replace('tab_width=4','tab_width=8'));
