@@ -779,6 +779,7 @@
       { "command": "rocketbrain.java.addTypeImport", "title": "Add Java Type Import", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.addStaticMemberImport", "title": "Add Java Static Member Import", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.cleanUpFile", "title": "Review Java File Cleanup", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.completeExpectedValue", "title": "Complete Java Value by Expected Type", "category": "Rocketbrain", "enablement": "editorLangId == java && resourceScheme == file && isWorkspaceTrusted" },
       { "command": "rocketbrain.editor.expandSelection", "title": "Expand Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.shrinkSelection", "title": "Shrink Semantic Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.quickDocumentation", "title": "Quick Code Documentation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId =~ /^(java|kotlin)$/" },
@@ -1295,6 +1296,11 @@
           "command": "rocketbrain.java.cleanUpFile",
           "when": "editorLangId == java && resourceScheme == file && isWorkspaceTrusted",
           "group": "refactor"
+        },
+        {
+          "command": "rocketbrain.java.completeExpectedValue",
+          "when": "editorLangId == java && resourceScheme == file && isWorkspaceTrusted",
+          "group": "1_modification"
         },
         {
           "command": "rocketbrain.java.callHierarchy",
