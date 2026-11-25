@@ -114,6 +114,12 @@ Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를
 
 검증한 릴리스 ZIP의 SHA-256은 `27d33f2879d12076174741488721896098e8494f5d906f99ef1c85d6159d42b7`입니다. Windows에서는 Unicode 프로젝트 경로의 진단을 위해 임시 호환 JAR를 생성합니다. 실행 전 서버와 컴파일러 JAR의 SHA-256을 확인합니다.
 
+### 로컬 ACP 에이전트 비교
+
+사용자 설정 `rocketbrain.acp.agents`에 신뢰하는 ACP v1 실행 파일과 인수를 등록합니다. **Compare Local ACP Agent Replies**로 두 개 또는 세 개를 선택한 뒤 동일한 요청을 보냅니다. 각 프로그램은 선택한 작업 폴더와 현재 사용자의 OS 권한으로 실행됩니다. 에디터는 ACP 파일·터미널 요청과 권한 부여를 거절합니다.
+
+**Review Local ACP Agent Replies**는 한 응답을 텍스트로 열거나 두 응답을 VS Code 차이 보기에서 비교합니다. 실행 중에는 진행 알림에서 세션을 취소할 수 있습니다.
+
 ### Java CI 품질 게이트
 
 VSIX의 `extension/dist/java-quality-gate.js`를 추출하거나 소스의 `scripts/java-quality-gate.js`를 실행합니다. Node.js 20 이상과 Git이 있는 CI에서 대상 저장소와 기준선 커밋을 로컬로 준비합니다.

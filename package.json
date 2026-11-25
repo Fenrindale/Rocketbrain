@@ -79,6 +79,8 @@
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
       { "command": "rocketbrain.sshWorkspace.refresh", "title": "Refresh SSH Files", "category": "Rocketbrain", "icon": "$(refresh)" },
       { "command": "rocketbrain.sshWorkspace.upload", "title": "Review Local File Upload to SSH", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.acp.compare", "title": "Compare Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.acp.review", "title": "Review Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
@@ -1438,6 +1440,23 @@
               "knownHostsPath": { "type": "string", "description": "Absolute local path to the verified OpenSSH known_hosts file." },
               "privateKeyPath": { "type": "string", "description": "Absolute local key path. Omit to use OpenSSH agent or default identities." },
               "python": { "enum": ["python3", "python", "py -3"], "default": "python3" }
+            }
+          }
+        },
+        "rocketbrain.acp.agents": {
+          "type": "array",
+          "scope": "machine",
+          "default": [],
+          "maxItems": 20,
+          "description": "Trusted local stable ACP v1 stdio programs configured by the user.",
+          "items": {
+            "type": "object",
+            "required": ["label", "executable"],
+            "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string", "maxLength": 80 },
+              "executable": { "type": "string", "description": "Absolute path to a trusted agent executable." },
+              "args": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
             }
           }
         },
