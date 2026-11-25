@@ -217,6 +217,8 @@ Java 프로젝트 가져오기와 빌드는 프로젝트 코드를 실행할 수
 
 Maven에서 `maven-compiler-plugin`의 `annotationProcessorPaths`에 프로세서를 선언하고, 편집 중에도 처리하려면 `m2e.apt.activation`을 `jdt_apt`로 설정합니다. Gradle에서는 `annotationProcessor` 의존성을 선언하고 사용자 설정 `rocketbrain.java.annotationProcessing.gradleEnabled`를 켜면 가져올 때 JDT가 해당 프로세서 구성을 동기화합니다. 이미 프로젝트가 관리하는 Eclipse APT 설정은 프로젝트 파일에서 관리합니다.
 
+신뢰한 작업 공간에서 **Rocketbrain: Configure Java Null Checks**를 실행해 프로젝트에 있는 JSpecify, Eclipse, Spring, JetBrains 또는 사용자 정의 애너테이션을 선택할 수 있습니다. 설정은 `rocketbrain.java.nullChecks`에 저장되고, 가져온 Java 프로젝트에서 해당 애너테이션을 찾으면 JDT가 Problems 패널에 null 진단을 표시합니다. JDT는 선택한 검사 설정을 Eclipse 프로젝트 환경 설정에도 반영할 수 있습니다. 닫히지 않은 리소스는 JDT의 컴파일러 진단으로 확인할 수 있습니다. Kotlin Gradle 프로젝트의 nullable 호출은 독립 Kotlin 언어 서버가 진단합니다.
+
 Lombok이 생성하는 멤버를 편집기에서 사용하려면 사용자 설정 `rocketbrain.java.annotationProcessing.lombokJar`에 [공식 Lombok 1.18.48 JAR](https://repo.maven.apache.org/maven2/org/projectlombok/lombok/1.18.48/lombok-1.18.48.jar)의 절대 경로를 지정합니다. 신뢰한 작업 공간에서 확장이 SHA-256을 확인하고 별도 JDT 저장소에 준비합니다. 빌드에서도 Lombok 버전과 프로세서 의존성을 선언합니다. Lombok getter를 MapStruct에서 참조하는 예제는 `lombok-mapstruct-binding`을 함께 사용합니다.
 
 ### TestNG 호출 선택과 재시도

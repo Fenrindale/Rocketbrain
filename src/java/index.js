@@ -6,12 +6,14 @@ const { registerJavaDebugger } = require('./debug');
 const { ACTIONS,namedAction,editorAnchor } = require('./extraction-actions');
 const { registerJavaFormatting } = require('./format-vscode');
 const { registerFileStructure } = require('./file-structure-vscode');
+const { resolveNullChecks, nullCheckUpdates } = require('./null-checks');
+const { configureNullChecks } = require('./null-checks-vscode');
 
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 29);
   status.command = 'rocketbrain.javaSupport';
-  let client, debuggerController, disposing, disposed = false, configuring = false, installing = false, pending = Promise.resolve();
+  let client, lastSettings, debuggerController, disposing, disposed = false, configuring = false, installing = false, pending = Promise.resolve();
   let state = { state: 'stopped', message: 'Java server is stopped.' };
   const subscriptions = [output, status];
   const spring = registerSpringFeatures(vscode, context, output, { verifiedLocalPid: session => debuggerController?.verifiedLocalPid(session) });
@@ -22,10 +24,29 @@ function registerJavaFeatures(context, vscode) {
     status.tooltip = message; status.show(); output.appendLine(`${next}: ${message}`);
   }
   const serial = action => { const run = pending.then(action, action); pending = run.catch(() => {}); return run; };
+  function readNullChecks(config) {
+    const selected=config.get('nullChecks');
+    try { return resolveNullChecks(selected); }
+    catch(error) {
+      output.appendLine(`Java null checks are disabled: ${error.message}`);
+      return resolveNullChecks();
+    }
+  }
+  async function syncNullChecks() {
+    if(!client?.isRunning()||!lastSettings||disposed||!vscode.workspace.isTrusted)return;
+    const server=client,{profile,...nullAnalysis}=readNullChecks(vscode.workspace.getConfiguration('rocketbrain.java'));
+    const next={java:{...lastSettings.java,compile:{...lastSettings.java.compile,nullAnalysis}}};
+    for(const settings of nullCheckUpdates(lastSettings,next)) {
+      await server.sendNotification('workspace/didChangeConfiguration',{settings});
+      if(client!==server)return;
+      lastSettings=settings;
+    }
+    state={...state,nullChecks:profile};
+  }
   async function stopNow() {
     await api.workbench?.stop();
     await debuggerController?.stopSessions();
-    const previous = client; client = undefined;
+    const previous = client; client = undefined; lastSettings = undefined;
     if (previous) await previous.stop(5000).catch(error => output.appendLine(`Java shutdown: ${error.message}`));
     if (!disposed) update('stopped', 'Java server is stopped.');
   }
@@ -47,6 +68,8 @@ function registerJavaFeatures(context, vscode) {
       const extractInterfaceReplaceUsages = config.get('extractInterface.replaceUsages', false) === true;
       const settings = serverSettings(config.get('projectJdks', []), { gradleHome: config.get('gradleHome'),
         gradleJavaHome: config.get('gradleJavaHome'),extractInterfaceReplaceUsages,gradleAnnotationProcessing });
+      const {profile:nullChecks,...nullAnalysis}=readNullChecks(config);
+      settings.java.compile.nullAnalysis=nullAnalysis;
       const { LanguageClient, ErrorAction, CloseAction } = require('vscode-languageclient/node');
       const watcher = vscode.workspace.createFileSystemWatcher('**/{*.java,pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,gradle.properties}');
       subscriptions.push(watcher);
@@ -85,23 +108,24 @@ function registerJavaFeatures(context, vscode) {
             return Object.values(ACTIONS).some(action => action.command === item.command?.command) ? item : resolve(item,token);
           }
         },
-        errorHandler: { error: () => ({ action: ErrorAction.Continue }), closed: () => { if (!disposed) { client = undefined; update('error', 'Java server exited. Check Rocketbrain Java output, then restart.'); } return { action: CloseAction.DoNotRestart }; } },
+        errorHandler: { error: () => ({ action: ErrorAction.Continue }), closed: () => { if (!disposed) { client = undefined; lastSettings = undefined; update('error', 'Java server exited. Check Rocketbrain Java output, then restart.'); } return { action: CloseAction.DoNotRestart }; } },
         markdown: { isTrusted: false }
       });
       state = { ...state, serverPath: launch.serverPath, javaHome: launch.javaHome, debugBundlePath: launch.bundles[0], debugBuild: launch.debugBuild, runtimeIdentity: launch.identity,
-        workspaceData: launch.data,extractInterfaceReplaceUsages,annotationProcessing:launch.annotationProcessing };
+        workspaceData: launch.data,extractInterfaceReplaceUsages,annotationProcessing:launch.annotationProcessing,nullChecks };
       client = next; update('starting', 'Starting the independent Eclipse JDT Language Server.');
       next.onNotification('language/status', event => { if (event.type === 'Error') output.appendLine(`JDT LS: ${event.message}`); else output.appendLine(`JDT LS ${event.type}: ${event.message}`); });
       next.onNotification('language/progressReport', event => { status.tooltip = `Java: ${event.task || ''} ${event.subTask || ''}`; });
       await next.start();
       await next.sendNotification('workspace/didChangeConfiguration', { settings });
+      lastSettings=settings;
       const processing = launch.annotationProcessing;
       output.appendLine('Java editor annotation processing: Maven follows the POM, Gradle processor sync '+
         (processing.gradle ? 'enabled' : 'disabled')+', Lombok editor agent '+(processing.lombok?.version || 'disabled')+'.');
       update('running', 'Eclipse JDT LS is connected. Java completion, diagnostics, navigation and rename use this engine. Spring endpoints/settings currently use Rocketbrain source analysis, not Spring LS.');
       api.codeHints?.refresh();
     } catch (error) {
-      const failed = client; client = undefined;
+      const failed = client; client = undefined; lastSettings = undefined;
       if (failed) await failed.stop(1000).catch(() => {});
       update('error', error.message); throw error;
     }
@@ -302,6 +326,12 @@ function registerJavaFeatures(context, vscode) {
     else if (selected?.action === 'endpoints') await vscode.commands.executeCommand('rocketbrain.spring.endpoints');
   }));
   subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => { void api.start().catch(error => output.appendLine(error.message)); }));
+  subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.configureNullChecks',()=>{
+    return configureNullChecks(vscode).catch(error=>{void vscode.window.showErrorMessage(error.message);});
+  }));
+  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{
+    if(event.affectsConfiguration('rocketbrain.java.nullChecks'))void serial(syncNullChecks).catch(error=>output.appendLine(error.message));
+  }));
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
   update('stopped', 'Java server is stopped.');
   void api.start().catch(error => output.appendLine(error.message));
