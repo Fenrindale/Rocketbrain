@@ -203,6 +203,7 @@ function registerJavaFeatures(context, vscode) {
   api.typeImportActions=(textDocument,range,diagnostic,cancellation)=>refactoringRequest('textDocument/codeAction',{
     textDocument,range,context:{diagnostics:[diagnostic],only:['quickfix']}
   },cancellation);
+  api.resolveTypeImportAction=(action,cancellation)=>refactoringRequest('codeAction/resolve',action,cancellation);
   api.valueExtraction=(kind,params,cancellation)=>{
     if(!['local','field'].includes(kind))throw Error('Choose Java local variable or field extraction.');
     return refactoringRequest('java/getRefactorEdit',{

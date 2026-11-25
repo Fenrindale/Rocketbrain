@@ -13,11 +13,11 @@ const {analyzeJavaSources}=require('../src/java/signature-compiler');
 const {typeImportDraft}=require('../src/java/type-import');
 const {staticImportFixture}=require('./helpers/java-static-import-fixture');
 const {StdioLsp,until}=require('./helpers/stdio-lsp');
-const {problems,staticImportCandidates,staticImportSelection,confirmUnresolvedStaticMember,verifyStaticImport}=require('../src/java/static-import');
+const {problems,staticImportCandidates,staticImportSelection,resolveStaticImportActions,confirmUnresolvedStaticMember,verifyStaticImport}=require('../src/java/static-import');
 
 const configured=process.env.ROCKETBRAIN_JAVA_TEST_CONFIG,run=promisify(execFile);
 
-test('static import candidates are taken only from bounded JDT edits to the selected source',()=>{
+test('static import candidates are taken only from bounded JDT edits to the selected source',async()=>{
   const uri=pathToFileURL(path.resolve('Member.java')).href,other=pathToFileURL(path.resolve('Other.java')).href;
   const source='package fixture;\nclass Member { int n=max(2,4); }\n', offset=source.indexOf('max');
   const selected=staticImportSelection(source,offset+1,offset+1);
@@ -26,6 +26,14 @@ test('static import candidates are taken only from bounded JDT edits to the sele
   assert.deepEqual(staticImportCandidates([candidate(uri),candidate(other)],source,uri,'max'),['java.lang.Math.max']);
   assert.deepEqual(staticImportCandidates([{...candidate(uri),command:{command:'execute'}}],source,uri,'max'),[]);
   assert.deepEqual(staticImportCandidates([{...candidate(uri),edit:{documentChanges:[{kind:'rename'}]}}],source,uri,'max'),[]);
+  const lazy={...candidate(uri),edit:undefined,data:{requestId:'1',proposalId:'0'}};
+  let resolved=0;
+  const actions=await resolveStaticImportActions([lazy,{...lazy,command:{command:'doNotExecute'}},
+    {...lazy,title:"Add static import for 'Math.min'"}], 'max',async seen=>{
+    assert.equal(seen,lazy);resolved++;return candidate(uri);
+  });
+  assert.equal(resolved,1);
+  assert.deepEqual(staticImportCandidates(actions,source,uri,'max'),['java.lang.Math.max']);
   const diagnostics=[{uri,start:offset,end:offset+3,code:'compiler.err.cant.resolve.location.args'}];
   const uses=confirmUnresolvedStaticMember(source,selected,uri,diagnostics);
   const draft=typeImportDraft(source,selected,'java.lang.Math.max',uses,{staticMember:true});
@@ -60,7 +68,7 @@ test('pinned JDT proposes static methods and fields, and Javac proves exact over
     });
     await lsp.request('initialize',{processId:process.pid,rootUri,rootPath:project,workspaceFolders:[{uri:rootUri,name:'Static Import'}],
       capabilities:{workspace:{configuration:true,workspaceFolders:true,workspaceEdit:{documentChanges:true}},textDocument:{
-        codeAction:{codeActionLiteralSupport:{codeActionKind:{valueSet:['quickfix']}},resolveSupport:{properties:['edit']}}
+        codeAction:{codeActionLiteralSupport:{codeActionKind:{valueSet:['quickfix']}},dataSupport:true,resolveSupport:{properties:['edit']}}
       }},initializationOptions:{workspaceFolders:[rootUri],settings}},65000);
     lsp.notify('initialized',{});lsp.notify('workspace/didChangeConfiguration',{settings});
     for(const [kind,name,token,fqn,expected] of [
@@ -75,8 +83,13 @@ test('pinned JDT proposes static methods and fields, and Javac proves exact over
       const start=text.indexOf(token),selected=staticImportSelection(text,start,start+token.length);
       const diagnostic=await until(()=>lsp.notifications.filter(event=>event.method==='textDocument/publishDiagnostics'&&event.params.uri.endsWith('/'+name+'.java'))
         .flatMap(event=>event.params.diagnostics).find(item=>problems.has(String(item.code))&&item.message.includes(token)),65000);
-      const actions=await lsp.request('textDocument/codeAction',{textDocument:{uri},range:diagnostic.range,context:{diagnostics:[diagnostic],only:['quickfix']}});
-      const candidates=staticImportCandidates(actions,text,uri,token);
+      const {range,code,source,message}=diagnostic;
+      const actions=await lsp.request('textDocument/codeAction',{textDocument:{uri},range,context:{diagnostics:[{
+        range,code,source,message,severity:1
+      }],only:['quickfix']}});
+      if(kind!=='explicit')assert.ok(actions.some(action=>action.data&&!action.edit&&action.title.startsWith('Add static import')),JSON.stringify(actions));
+      const resolved=await resolveStaticImportActions(actions,token,action=>lsp.request('codeAction/resolve',action));
+      const candidates=staticImportCandidates(resolved,text,uri,token);
       if(kind==='explicit')assert.deepEqual(candidates,[]);
       else assert.ok(candidates.includes(fqn),JSON.stringify({candidates,actions:actions?.map(item=>item.title)}));
       if(kind==='method')assert.ok(candidates.includes('java.lang.StrictMath.max'),JSON.stringify(candidates));

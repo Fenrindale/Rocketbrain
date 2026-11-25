@@ -4,7 +4,7 @@ const path=require('node:path');
 const {editorAnchor,selectedExtraction}=require('./extraction-actions');
 const {protocolRange}=require('./format-edits');
 const {UNDEFINED_TYPE,qualified,typeImportCandidates,typeImportSelection,confirmUnresolvedType,typeImportDraft,verifyTypeImport}=require('./type-import');
-const {problems,staticImportSelection,staticImportCandidates,confirmUnresolvedStaticMember,verifyStaticImport}=require('./static-import');
+const {problems,staticImportSelection,staticImportCandidates,resolveStaticImportActions,confirmUnresolvedStaticMember,verifyStaticImport}=require('./static-import');
 const normalize=text=>text.replace(/\r\n/g,'\n');
 
 function createTypeImport(vscode,{
@@ -47,7 +47,9 @@ function createTypeImport(vscode,{
       range:diagnosticRange,severity:1,code:diagnosticCode(diagnostic),source:'Java',message:diagnostic.message
     },cancellation);
     checkAnchor(cancellation);
-    const candidates=staticMember?staticImportCandidates(raw,text,current.uri,selection.name):typeImportCandidates(raw,selection.name);
+    const actions=staticMember?await resolveStaticImportActions(raw,selection.name,action=>java.resolveTypeImportAction(action,cancellation)):raw;
+    checkAnchor(cancellation);
+    const candidates=staticMember?staticImportCandidates(actions,text,current.uri,selection.name):typeImportCandidates(actions,selection.name);
     if(!staticMember&&!candidates.length)throw Error('The Java engine did not find an import for the selected type.');
     const report=Object.freeze({name:selection.name,candidates:Object.freeze(candidates)});
     records.set(report,{document,version,text,current,state,project,selection,checkAnchor});

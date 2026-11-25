@@ -58,12 +58,26 @@ function actionEdits(edit, uri) {
   return edits.length <= 200 ? edits : null;
 }
 
+function importLabel(action, name) {
+  if (action?.disabled || action?.kind !== 'quickfix' || action.command || typeof action.title !== 'string') return '';
+  const label = /^Add static import for ['‘]([^'’]+)['’]$/.exec(action.title)?.[1];
+  return qualified(label) && label.split('.').at(-1) === name ? label : '';
+}
+
+async function resolveStaticImportActions(actions, name, resolve) {
+  const imports = (Array.isArray(actions) ? actions : []).slice(0, 100).filter(action => importLabel(action, name)).slice(0, 32);
+  return Promise.all(imports.map(async action => {
+    if (action.edit || !action.data) return action;
+    const resolved = await resolve(action);
+    return resolved?.title === action.title && importLabel(resolved, name) ? resolved : null;
+  }));
+}
+
 function staticImportCandidates(actions, text, uri, name) {
   const previous = new Set(staticImports(text)), candidates = new Set();
   for (const action of (Array.isArray(actions) ? actions : []).slice(0, 100)) {
-    if (action?.disabled || action?.kind !== 'quickfix' || action.command || typeof action.title !== 'string') continue;
-    const label = /^Add static import for ['‘]([^'’]+)['’]$/.exec(action.title)?.[1];
-    if (!qualified(label) || label.split('.').at(-1) !== name) continue;
+    const label = importLabel(action, name);
+    if (!label) continue;
     const edits = actionEdits(action.edit, uri);
     if (!edits) continue;
     let next;
@@ -99,4 +113,4 @@ function verifyStaticImport(proof, fqn, draft) {
   return { kind: proof.bindings[0].kind, signatures: [...new Set(proof.bindings.map(binding => binding.signature))] };
 }
 
-module.exports = { problems, staticImportSelection, staticImportCandidates, confirmUnresolvedStaticMember, verifyStaticImport };
+module.exports = { problems, staticImportSelection, staticImportCandidates, resolveStaticImportActions, confirmUnresolvedStaticMember, verifyStaticImport };
