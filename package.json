@@ -305,6 +305,7 @@
       { "command": "rocketbrain.openapi.inspect", "title": "Inspect OpenAPI JSON", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc" },
       { "command": "rocketbrain.openapi.createRequest", "title": "Create HTTP Request from OpenAPI JSON", "category": "Rocketbrain", "enablement": "editorLangId == json || editorLangId == jsonc" },
       { "command": "rocketbrain.schema.diagram", "title": "Open Schema Diagram", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.schema.logicalAcrossSchemas", "title": "Manage Cross-Schema Logical Relationships", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.schema.exportDdl", "title": "Save Schema DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       {
         "command": "rocketbrain.openConsole",
