@@ -22,6 +22,7 @@
     "onView:rocketbrain.project",
     "onView:rocketbrain.docker",
     "onView:rocketbrain.databases",
+    "onView:rocketbrain.schemaCatalog",
     "onView:rocketbrain.results",
     "onView:rocketbrain.analysis",
     "onView:rocketbrain.sshWorkspace",
@@ -234,6 +235,10 @@
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.searchSources", "title": "Search SQL Files, Database Objects and DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(search)" },
+      { "command": "rocketbrain.schemaCatalog.select", "title": "Choose Catalog Schemas", "category": "Rocketbrain", "icon": "$(list-selection)", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.schemaCatalog.refresh", "title": "Refresh Schema Catalog", "category": "Rocketbrain", "icon": "$(refresh)", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.schemaCatalog.hide", "title": "Hide This Catalog Object", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.schemaCatalog.restore", "title": "Restore Hidden Catalog Object", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.draft", "title": "Draft SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
@@ -940,6 +945,12 @@
           "name": "Database"
         },
         {
+          "id": "rocketbrain.schemaCatalog",
+          "name": "Schema Catalog",
+          "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "visibility": "collapsed"
+        },
+        {
           "id": "rocketbrain.analysis",
           "name": "Spring & JPA Analysis"
         },
@@ -978,6 +989,11 @@
       ]
     },
     "viewsWelcome": [
+      {
+        "view": "rocketbrain.schemaCatalog",
+        "contents": "[Choose Catalog Schemas](command:rocketbrain.schemaCatalog.select)",
+        "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted"
+      },
       {
         "view": "rocketbrain.kotlinCoroutines",
         "contents": "[Prepare JVM Probe](command:rocketbrain.coroutines.prepare)\n[Connect Local Probe](command:rocketbrain.coroutines.connect)",
@@ -1018,6 +1034,9 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.schemaCatalog.select", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@1" },
+        { "command": "rocketbrain.schemaCatalog.refresh", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@2" },
+        { "command": "rocketbrain.schemaCatalog.restore", "when": "view == rocketbrain.schemaCatalog", "group": "catalog" },
         { "command": "rocketbrain.db.refreshIncrementalMetadata", "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "navigation@2" },
         { "command": "rocketbrain.sshWorkspace.attach", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.sshWorkspace.refresh", "when": "view == rocketbrain.sshWorkspace", "group": "navigation@2" },
@@ -1195,6 +1214,7 @@
         }
       ],
       "view/item/context": [
+        { "command": "rocketbrain.schemaCatalog.hide", "when": "view == rocketbrain.schemaCatalog && viewItem == rocketbrain.schemaCatalogObject", "group": "catalog" },
         { "command": "rocketbrain.db.refreshObjectMetadata", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "schema" },
         { "command": "rocketbrain.openTableSnapshot", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
