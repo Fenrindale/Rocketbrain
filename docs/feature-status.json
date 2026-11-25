@@ -1,5 +1,5 @@
 {
-  "version": "0.53.0",
+  "version": "0.54.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -31,30 +31,28 @@
   },
   "summary": {
     "implemented": 67,
-    "partial": 120,
-    "not-implemented": 14,
+    "partial": 124,
+    "not-implemented": 10,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 64.8,
+    "percent": 65.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-067",
-    "IDEA-068",
-    "IDEA-109",
-    "IDEA-110",
-    "DG-012"
+    "IDEA-045",
+    "IDEA-046",
+    "IDEA-115",
+    "DG-089"
   ],
   "expandedFeatures": [
-    "IDEA-067",
-    "IDEA-068",
-    "IDEA-109",
-    "IDEA-110",
-    "DG-012"
+    "IDEA-045",
+    "IDEA-046",
+    "IDEA-115",
+    "DG-089"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1443,25 +1441,26 @@
       "category": "JVM 언어·프로젝트",
       "feature": "Kotlin Multiplatform·Compose 개발",
       "priority": "P3",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "KMP·Compose 전용 프로젝트/분석 도구가 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "Gradle 빌드에서 Kotlin Multiplatform 소스 세트와 JVM·JS 타깃을 읽고 컴파일, 실행, 테스트한다. 컴파일 뒤 제한된 스칼라 함수·속성의 expect와 actual 선언을 양방향으로 연다.",
       "remaining": [
-        "플랫폼 소스셋·Compose 미리보기·빌드 통합이 필요하다."
+        "Compose 미리보기·갱신, Android·iOS·Native, 복합 제네릭과 expect 클래스 지원이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.54-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "Kotlin 2.4.21과 Gradle 9.7.0에서 JVM과 Node 타깃의 앱 출력, 각 2개 테스트, 오버로드와 속성 선언 이동을 실제 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/kmp-gradle.js",
+          "src/java/kmp-workbench.js",
+          "test/kotlin-multiplatform-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1472,25 +1471,26 @@
       "category": "JVM 언어·프로젝트",
       "feature": "Scala·sbt 개발",
       "priority": "P3",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Scala/sbt 엔진과 작업 UI가 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "sbt 멀티프로젝트를 검색하고 프로젝트별 컴파일·테스트·실행을 지원한다. Scala 3 SemanticDB를 이용해 실제로 해석된 오버로드 선언으로 이동한다.",
       "remaining": [
-        "Scala 언어·sbt import/실행·디버깅 통합이 필요하다."
+        "Scala 2 지원, 추가 언어 서버 편집 기능과 Scala 디버깅이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.54-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "공식 sbt 1.13.1과 Scala 3.9.0에서 Java·Scala가 혼합된 앱, MUnit 테스트 2개, 서로 다른 오버로드와 변경된 소스 차단을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/java/scala-sbt.js",
+          "src/java/scala-semanticdb.js",
+          "test/scala-sbt-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2123,8 +2123,8 @@
       "verification": {
         "state": "v0.53-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.53.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2153,8 +2153,8 @@
       "verification": {
         "state": "v0.53-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.53.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3376,8 +3376,8 @@
       "verification": {
         "state": "v0.53-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.53.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3406,8 +3406,8 @@
       "verification": {
         "state": "v0.53-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.53.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3543,25 +3543,26 @@
       "category": "설정·확장·AI",
       "feature": "AI 완성·채팅·프로젝트 문맥",
       "priority": "P2",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "Rocketbrain 자체 AI 완성·채팅·프로젝트 문맥 엔진이 없다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "로컬 모델이 선택한 코드에 답하고 교체할 텍스트를 제안한다. VS Code 차이 보기에서 검토한 뒤 일회성 변경을 적용한다.",
       "remaining": [
-        "모델 연결·권한·문맥 선택·생성 결과 적용이 필요하다."
+        "자동완성과 여러 파일의 프로젝트 문맥, 장기 대화가 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.54-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "llama.cpp의 실제 Qwen2.5-Coder에서 선택한 Java 명령문의 반환값 42를 답하고 43으로 바꾸는 차이를 검토·적용했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/ai/editor-model.js",
+          "src/ai/editor-model-vscode.js",
+          "test/editor-model-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4062,8 +4063,8 @@
       "verification": {
         "state": "v0.53-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.53.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6437,25 +6438,26 @@
       "category": "AI·도구 연결",
       "feature": "schema 문맥의 자연어 SQL·설명",
       "priority": "P1",
-      "status": "not-implemented",
-      "label": "미구현",
-      "delivery": "none",
-      "scope": "schema 문맥의 자연어 SQL/설명 AI를 구현하지 않았다.",
+      "status": "partial",
+      "label": "부분 구현",
+      "delivery": "rocketbrain",
+      "scope": "사용자가 지정한 테이블과 열의 구조를 로컬 모델 요청에 첨부한다. 읽기 SQL 초안과 리터럴을 가린 SQL 설명을 편집기에서 검토할 수 있다.",
       "remaining": [
-        "모델 연결·문맥/데이터 권한·SQL 검토·출처가 필요하다."
+        "대화형 스키마 탐색과 복잡한 다중 테이블 모델 정확도 검증이 남아 있다."
       ],
       "verification": {
-        "state": "source-audit",
+        "state": "v0.54-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 명령·소스 inventory에서 자체 구현 연결이 없음을 감사했다. 실행 성공을 주장하지 않는다.",
+        "testedScope": "실제 Qwen2.5-Coder와 두 DB의 Spring 스키마에서 검토한 SQL 초안을 수동 실행해 기준 쿼리의 두 행과 일치함을 확인했다.",
         "publicEvidence": [
-          "package.json",
-          "src/extension.js"
+          "src/db/local-sql-assistant.js",
+          "src/db/local-sql-assistant-vscode.js",
+          "test/local-sql-assistant-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6671,53 +6673,48 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "21df5dcbaa5f5a682660d49198d912d64c19c6a5414ab351321d0d0e25b2e3e4",
-    "sourceManifestSha256": "177d01b40909093ac8a2e3cf726e4b547444fdd71c9efb87fc1820865d6261f6",
+    "vsixSha256": "dc38ddb74240822b3591bcfa3a54b64fcd2b231c2aa900bbc2998162f0aaa4e5",
+    "sourceManifestSha256": "e65450bbb90614f2f468debf753281fc9cd0c501b9f18d9846b0e06633628746",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 5
+        "featureGroups": 4
       },
       {
         "engine": "mariadb",
-        "featureGroups": 5
+        "featureGroups": 4
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-067",
+      "id": "IDEA-045",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-068",
+      "id": "IDEA-046",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-109",
+      "id": "IDEA-115",
       "before": "not-implemented",
       "after": "partial"
     },
     {
-      "id": "IDEA-110",
-      "before": "not-implemented",
-      "after": "partial"
-    },
-    {
-      "id": "DG-012",
+      "id": "DG-089",
       "before": "not-implemented",
       "after": "partial"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1403,
-    "pass": 1331,
+    "tests": 1417,
+    "pass": 1343,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 72,
+    "skipped": 74,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

@@ -584,6 +584,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     dispose:disposeDatabase,disconnectMysql:useDemo,activityLog,activeConnectionProfile:()=>state.profile?structuredClone(state.profile):null,
     schema: () => structuredClone(state.schema),
     catalogSnapshot:()=>analysisMetadata()?structuredClone(analysisMetadata()):null,
+    liveCatalogSnapshot:()=>state.mysql&&!state.offlineMetadata&&state.metadata?structuredClone(state.metadata):null,
     cachedMetadata: {
       list: metadataCache.list, capture: captureOfflineMetadata, open: openOfflineMetadata,
       close: closeOfflineMetadata, remove: removeOfflineMetadata

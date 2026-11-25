@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-25 기준 Rocketbrain 0.53.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-25 기준 Rocketbrain 0.54.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -9,15 +9,15 @@
 | 판정 | 항목 수 |
 | --- | ---: |
 | 구현 | 67 |
-| 부분 구현 | 120 |
-| 미구현 | 14 |
+| 부분 구현 | 124 |
+| 미구현 | 10 |
 | VS Code 재사용 | 13 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **64.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **65.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.53에서는 Micronaut, Jakarta WAR, 로컬 Python·Jupyter와 AWS RDS MySQL IAM 인증 경로를 검증했다. 상태가 바뀐 항목은 5개이고 가중 점수는 137.5점에서 140점으로 바뀌었다.
+v0.54에서는 Scala·sbt, Kotlin Multiplatform의 JVM·JavaScript 개발 흐름과 로컬 모델 기반 코드·SQL 검토를 검증했다. 상태가 바뀐 항목은 4개이고 가중 점수는 140점에서 142점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -65,8 +65,8 @@ v0.53에서는 Micronaut, Jakarta WAR, 로컬 Python·Jupyter와 AWS RDS MySQL I
 | IDEA-042 | IntelliJ IDEA | Java 버전·JDK·언어 수준 | 부분 구현 |
 | IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 부분 구현 |
 | IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 미구현 |
-| IDEA-045 | IntelliJ IDEA | Kotlin Multiplatform·Compose 개발 | 미구현 |
-| IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 미구현 |
+| IDEA-045 | IntelliJ IDEA | Kotlin Multiplatform·Compose 개발 | 부분 구현 |
+| IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 부분 구현 |
 | IDEA-047 | IntelliJ IDEA | Groovy·Spock·콘솔 | 부분 구현 |
 | IDEA-048 | IntelliJ IDEA | 외부 라이브러리 소스·바이트코드 디컴파일 | 부분 구현 |
 | IDEA-049 | IntelliJ IDEA | Scratch·JShell 실험 코드 | 구현 |
@@ -135,7 +135,7 @@ v0.53에서는 Micronaut, Jakarta WAR, 로컬 Python·Jupyter와 AWS RDS MySQL I
 | IDEA-112 | IntelliJ IDEA | 설정·스타일·프로필 동기화 | VS Code 재사용 |
 | IDEA-113 | IntelliJ IDEA | IDE 키맵·동작 컨텍스트·테마 | 부분 구현 |
 | IDEA-114 | IntelliJ IDEA | 플러그인 설치·호환·갱신 | VS Code 재사용 |
-| IDEA-115 | IntelliJ IDEA | AI 완성·채팅·프로젝트 문맥 | 미구현 |
+| IDEA-115 | IntelliJ IDEA | AI 완성·채팅·프로젝트 문맥 | 부분 구현 |
 | IDEA-116 | IntelliJ IDEA | Air·ACP 에이전트·병렬 작업 | 미구현 |
 | IDEA-117 | IntelliJ IDEA | IDE 기능을 MCP 도구로 제공 | 구현 |
 | IDEA-118 | IntelliJ IDEA | 프로젝트 신뢰·제한 모드 | 구현 |
@@ -229,7 +229,7 @@ v0.53에서는 Micronaut, Jakarta WAR, 로컬 Python·Jupyter와 AWS RDS MySQL I
 | DG-086 | DataGrip | live schema ERD 생성·관계 탐색 | 구현 |
 | DG-087 | DataGrip | diagram 출력·레이아웃 보존 | 구현 |
 | DG-088 | DataGrip | SQL 파일 Git·diff·변경 검토 | VS Code 재사용 |
-| DG-089 | DataGrip | schema 문맥의 자연어 SQL·설명 | 미구현 |
+| DG-089 | DataGrip | schema 문맥의 자연어 SQL·설명 | 부분 구현 |
 | DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 구현 |
 | DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 미구현 |
 | DG-092 | DataGrip | 서로 다른 data source의 cross-database SQL | 구현 |

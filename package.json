@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.53.0",
+  "version": "0.54.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -27,6 +27,7 @@
     "onLanguage:kotlin",
     "onLanguage:groovy",
     "onLanguage:python",
+    "onLanguage:scala",
     "onLanguage:duckdb-sql",
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
@@ -34,6 +35,7 @@
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
+    "workspaceContains:**/build.sbt",
     "onView:rocketbrain.javaProjects",
     "onView:rocketbrain.connections",
     "onNotebook:rocketbrain-sql-notebook",
@@ -53,6 +55,7 @@
       { "type": "rocketbrain-jupyter", "displayName": "Rocketbrain Jupyter Notebook", "selector": [{ "filenamePattern": "*.ipynb" }] }
     ],
     "languages": [
+      { "id": "scala", "aliases": ["Scala", "scala"], "extensions": [".scala", ".sbt"] },
       {
         "id": "rocketbrain-http",
         "aliases": ["Rocketbrain HTTP", "HTTP"],
@@ -64,10 +67,14 @@
       { "id": "groovy", "aliases": ["Groovy"], "extensions": [".groovy"] }
     ],
     "grammars": [
+      { "language": "scala", "scopeName": "source.scala", "path": "./media/scala.tmLanguage.json" },
       { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" },
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
+      { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
+      { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
       { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
@@ -92,6 +99,18 @@
       { "command": "rocketbrain.micronaut.run", "title": "Build and Run Micronaut", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.test", "title": "Run Micronaut Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.stop", "title": "Stop Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.discover", "title": "Discover sbt Projects", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.compile", "title": "Compile and Index Scala", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.test", "title": "Run sbt Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.run", "title": "Run sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.definition", "title": "Open Compiled Scala Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == scala" },
+      { "command": "rocketbrain.scala.stop", "title": "Stop sbt Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.inspect", "title": "Inspect Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.compile", "title": "Compile Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.test", "title": "Test Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.run", "title": "Run Kotlin Multiplatform Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
+      { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -171,6 +190,8 @@
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
+      { "command": "rocketbrain.localSqlAssistant.draft", "title": "Draft SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
+      { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
       { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.measurePlan", "title": "Measure SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.comparePlans", "title": "Compare Captured SQL Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1384,6 +1405,14 @@
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Absolute path to the Python interpreter for local source inspection, tasks and debugpy."
         },
+        "rocketbrain.localCodeModel.endpoint": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Numeric loopback URL ending in /v1/chat/completions for the local chat server."
+        },
+        "rocketbrain.localCodeModel.model": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Model name exposed by the configured local chat server."
+        },
         "rocketbrain.sql.analysis.resolutionScopes": {
           "type": "array",
           "default": [],
@@ -1438,6 +1467,18 @@
           "enum": ["preserve", "upper", "lower"],
           "default": "preserve",
           "description": "Change the case of recognized statement, clause and stored-program block keywords. Identifier and literal spelling stays exact."
+        },
+        "rocketbrain.localSqlAssistant.endpoint": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "Explicit loopback HTTP Chat Completions URL for a local SQL model, such as http://127.0.0.1:8080/v1/chat/completions. Requests require review and confirmation."
+        },
+        "rocketbrain.localSqlAssistant.model": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "Model identifier or alias served by the configured local endpoint."
         },
         "rocketbrain.sql.templates": {
           "type": "array",
@@ -1843,6 +1884,42 @@
           "default": "",
           "scope": "machine",
           "description": "Absolute directory of an independently installed Apache Tomcat 11 distribution for local Jakarta WAR deployments."
+        },
+        "rocketbrain.scala.sbtLauncher": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to the official sbt 1.13.1 launcher JAR for explicit Scala builds."
+        },
+        "rocketbrain.scala.cacheDirectory": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional absolute directory for the Rocketbrain sbt boot and dependency caches. Uses extension storage by default."
+        },
+        "rocketbrain.scala.repositoryConfig": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional absolute path to your sbt repository override configuration for managed tasks."
+        },
+        "rocketbrain.kotlin.gradleHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional independent Gradle installation for Kotlin Multiplatform actions. Falls back to the Java Gradle installation."
+        },
+        "rocketbrain.kotlin.gradleUserHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional Gradle user home used by Rocketbrain Kotlin Multiplatform tasks."
+        },
+        "rocketbrain.kotlin.nodeHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional standalone Node.js directory prepended to the Kotlin Gradle task environment when a project uses a system Node.js."
         },
         "rocketbrain.spring.initializr.endpoint": {
           "type": "string",

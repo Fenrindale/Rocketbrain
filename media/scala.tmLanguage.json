@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Scala",
+  "scopeName": "source.scala",
+  "patterns": [
+    { "name": "comment.line.double-slash.scala", "begin": "//", "end": "$" },
+    { "include": "#blockComment" },
+    { "name": "string.quoted.triple.scala", "begin": "\"\"\"", "end": "\"\"\"" },
+    { "name": "string.quoted.double.scala", "begin": "\"", "end": "\"|$", "patterns": [ { "name": "constant.character.escape.scala", "match": "\\\\." } ] },
+    { "name": "string.quoted.single.scala", "match": "'(?:[^'\\\\]|\\\\.)'" },
+    { "name": "keyword.control.scala", "match": "\\b(?:as|case|catch|do|else|end|finally|for|if|match|new|return|then|throw|try|while|yield)\\b" },
+    { "name": "storage.type.scala", "match": "\\b(?:class|def|enum|extension|given|import|object|opaque|package|trait|type|val|var)\\b" },
+    { "name": "storage.modifier.scala", "match": "\\b(?:abstract|derives|erased|export|extends|final|implicit|inline|into|lazy|open|override|private|protected|sealed|super|this|transparent|using|with)\\b" },
+    { "name": "constant.language.scala", "match": "\\b(?:false|null|true)\\b" },
+    { "name": "constant.numeric.scala", "match": "\\b(?:0[xX][0-9A-Fa-f_]+|[0-9][0-9_]*(?:\\.[0-9][0-9_]*)?)(?:[lLfFdD])?\\b" }
+  ],
+  "repository": {
+    "blockComment": { "name": "comment.block.scala", "begin": "/\\*", "end": "\\*/", "patterns": [ { "include": "#blockComment" } ] }
+  }
+}

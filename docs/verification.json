@@ -1,25 +1,25 @@
 {
-  "version": "0.53.0",
-  "verifiedAt": "2026-11-25T11:39:03.852Z",
+  "version": "0.54.0",
+  "verifiedAt": "2026-11-25T12:03:58.599Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.53.0.vsix",
-    "bytes": 3056911,
-    "sha256": "21df5dcbaa5f5a682660d49198d912d64c19c6a5414ab351321d0d0e25b2e3e4",
-    "files": 17
+    "name": "rocketbrain-0.54.0.vsix",
+    "sha256": "dc38ddb74240822b3591bcfa3a54b64fcd2b231c2aa900bbc2998162f0aaa4e5",
+    "bytes": 3086786,
+    "files": 18
   },
   "source": {
-    "frozenPublicInputs": 1487,
-    "inputVectorSha256": "177d01b40909093ac8a2e3cf726e4b547444fdd71c9efb87fc1820865d6261f6",
+    "frozenPublicInputs": 1525,
+    "inputVectorSha256": "e65450bbb90614f2f468debf753281fc9cd0c501b9f18d9846b0e06633628746",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1403,
-    "pass": 1331,
+    "tests": 1417,
+    "pass": 1343,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 72,
+    "skipped": 74,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,26 +29,22 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 5,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "python",
+          "group": "sql",
           "checks": 1
         },
         {
-          "group": "jupyter",
+          "group": "editor",
           "checks": 1
         },
         {
-          "group": "rds",
+          "group": "scala",
           "checks": 1
         },
         {
-          "group": "micronaut",
-          "checks": 1
-        },
-        {
-          "group": "jakarta",
+          "group": "kmp",
           "checks": 1
         }
       ],
@@ -63,26 +59,22 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 5,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "python",
+          "group": "sql",
           "checks": 1
         },
         {
-          "group": "jupyter",
+          "group": "editor",
           "checks": 1
         },
         {
-          "group": "rds",
+          "group": "scala",
           "checks": 1
         },
         {
-          "group": "micronaut",
-          "checks": 1
-        },
-        {
-          "group": "jakarta",
+          "group": "kmp",
           "checks": 1
         }
       ],
@@ -93,97 +85,95 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-067": {
-      "scope": "Micronaut 5.2.8의 실제 HTTP 테스트 2개, 생성된 Bean 정의, properties와 YAML 선언 이동, dev·test 환경 응답과 소유 리스너 종료를 확인했다.",
+    "IDEA-045": {
+      "scope": "Kotlin 2.4.21과 Gradle 9.7.0에서 JVM과 Node 타깃의 앱 출력, 각 2개 테스트, 오버로드와 속성 선언 이동을 실제 확인했다.",
       "runtimeGroups": [
-        "micronaut"
+        "kmp"
       ]
     },
-    "IDEA-068": {
-      "scope": "Tomcat 11.0.29에서 실제 Servlet·JSP HTTP 응답과 Servlet 선언의 중단점·재개를 확인했다. 디버거 연결 해제 후에도 앱이 응답했고 배포 종료 뒤 포트가 닫혔다.",
+    "IDEA-046": {
+      "scope": "공식 sbt 1.13.1과 Scala 3.9.0에서 Java·Scala가 혼합된 앱, MUnit 테스트 2개, 서로 다른 오버로드와 변경된 소스 차단을 확인했다.",
       "runtimeGroups": [
-        "jakarta"
+        "scala"
       ]
     },
-    "IDEA-109": {
-      "scope": "Python 3.12.14에서 AST 위치를 확인하고 실제 debugpy 1.8.22로 3번째 줄에서 멈춰 지역 변수를 읽고 4번째 줄로 이동했다.",
+    "IDEA-115": {
+      "scope": "llama.cpp의 실제 Qwen2.5-Coder에서 선택한 Java 명령문의 반환값 42를 답하고 43으로 바꾸는 차이를 검토·적용했다.",
       "runtimeGroups": [
-        "python"
+        "editor"
       ]
     },
-    "IDEA-110": {
-      "scope": "실제 ipykernel 7.2.0으로 두 셀 사이의 상태를 전달하고 결과를 저장했다. nbformat 5.10.4가 파일을 검증했으며 실행 중 취소도 별도 확인했다.",
+    "DG-089": {
+      "scope": "실제 Qwen2.5-Coder와 두 DB의 Spring 스키마에서 검토한 SQL 초안을 수동 실행해 기준 쿼리의 두 행과 일치함을 확인했다.",
       "runtimeGroups": [
-        "jupyter"
-      ]
-    },
-    "DG-012": {
-      "scope": "공식 AWS CLI의 합성 SigV4 서명과 실제 로컬 TLS 토큰 교환, 재연결·잘못된 호스트와 인증서 거부를 확인했다. MySQL과 MariaDB 서버에서는 별도 TLS 회귀 검증을 수행했다.",
-      "runtimeGroups": [
-        "rds"
+        "sql"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 297,
+    "sourceCorrespondences": 309,
     "sourceConfidence": "inferred",
-    "archiveEntries": 17,
+    "archiveEntries": 18,
     "archiveConfidence": "observed"
+  },
+  "nativePayloadEquivalence": {
+    "files": 18,
+    "testedArchiveSha256": "e18296db44dd989afceb1d23a0d9614da64e35a881604ca5dfff80293c5a4696",
+    "testedInputVectorSha256": "17d1f618b7cf0bbbb575ef49c9a1a6d906664cf7d0c6e3b85dd973bef66cc04c",
+    "onlySourceChanges": [
+      "scripts/publication-audit.js",
+      "scripts/test-vsix.js"
+    ]
   },
   "progress": {
     "counts": {
       "implemented": 67,
-      "partial": 120,
-      "not-implemented": 14,
+      "partial": 124,
+      "not-implemented": 10,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 140,
-    "previousWeightedPoints": 137.5,
+    "weightedPoints": 142,
+    "previousWeightedPoints": 140,
     "targetWeightedPoints": 216,
-    "referencePercent": 64.8,
+    "referencePercent": 65.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-067",
+        "id": "IDEA-045",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-068",
+        "id": "IDEA-046",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-109",
+        "id": "IDEA-115",
         "before": "not-implemented",
         "after": "partial"
       },
       {
-        "id": "IDEA-110",
-        "before": "not-implemented",
-        "after": "partial"
-      },
-      {
-        "id": "DG-012",
+        "id": "DG-089",
         "before": "not-implemented",
         "after": "partial"
       }
     ]
   },
   "limits": [
-    "Micronaut는 Maven과 정적인 설정·주입 모델을 지원한다. Gradle, 핫 리로드와 AOT 분석은 남아 있다.",
-    "Jakarta 배포는 로컬 Tomcat의 Servlet·JSP에 적용한다. 원격 서버, 복수 앱과 전체 Jakarta EE 서버 기능은 별도 범위다.",
-    "Python은 로컬 인터프리터의 AST와 debugpy를 사용한다. Jupyter는 로컬 ipykernel 셀을 실행하고 저장한다.",
-    "AWS RDS IAM은 합성 자격 증명으로 서명·TLS·토큰 교환을 검증했다. 실제 AWS RDS 계정에서의 로그인은 미검증이다.",
-    "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장에서 이 두 행을 제외한 산술상 상한은 214/216점이다."
+    "Scala 선언 이동은 Scala 3이 생성한 SemanticDB에 기반한다. Scala 2와 상시 언어 서버 지원이 남아 있다.",
+    "Kotlin Multiplatform의 대상은 JVM과 Node.js다. Compose, Android, iOS, 네이티브 타깃의 실행은 별도 범위다.",
+    "로컬 코드 모델은 명시한 선택 범위와 제안 검토를 지원한다. 인라인 완성과 프로젝트 전체 문맥이 남아 있다.",
+    "로컬 SQL 모델은 사용자가 선택한 스키마를 이용해 읽기 쿼리 초안을 작성하고 설명한다. 실행은 사용자가 편집기에서 선택한다.",
+    "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "Scala·sbt 프로젝트와 컴파일러 기반 선언 탐색",
-    "Kotlin Multiplatform의 JVM·JavaScript 소스 세트와 실행",
-    "실제 로컬 모델을 사용하는 SQL 초안과 코드 검토"
+    "Kotlin JVM 기본 편집과 Vue 프로젝트 진단·실행",
+    "SSH 원격 파일 탐색과 검토 기반 갱신",
+    "여러 로컬 SQL 제안의 비교와 승인"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
