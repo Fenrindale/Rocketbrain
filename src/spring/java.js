@@ -7,6 +7,8 @@ const KNOWN = {
   Autowired: 'org.springframework.beans.factory.annotation.Autowired', Qualifier: 'org.springframework.beans.factory.annotation.Qualifier', Value: 'org.springframework.beans.factory.annotation.Value',
   ConfigurationProperties: 'org.springframework.boot.context.properties.ConfigurationProperties', EnableConfigurationProperties: 'org.springframework.boot.context.properties.EnableConfigurationProperties', SpringBootApplication: 'org.springframework.boot.autoconfigure.SpringBootApplication',
   ConditionalOnProperty: 'org.springframework.boot.autoconfigure.condition.ConditionalOnProperty', ConditionalOnBean: 'org.springframework.boot.autoconfigure.condition.ConditionalOnBean', ConditionalOnMissingBean: 'org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean', ConditionalOnClass: 'org.springframework.boot.autoconfigure.condition.ConditionalOnClass', ConditionalOnExpression: 'org.springframework.boot.autoconfigure.condition.ConditionalOnExpression',
+  FeignClient: 'org.springframework.cloud.openfeign.FeignClient', RouterFunction: 'org.springframework.web.reactive.function.server.RouterFunction',
+  RequestMapping: 'org.springframework.web.bind.annotation.RequestMapping', GetMapping: 'org.springframework.web.bind.annotation.GetMapping', PostMapping: 'org.springframework.web.bind.annotation.PostMapping', PutMapping: 'org.springframework.web.bind.annotation.PutMapping', DeleteMapping: 'org.springframework.web.bind.annotation.DeleteMapping', PatchMapping: 'org.springframework.web.bind.annotation.PatchMapping',
   Inject: 'jakarta.inject.Inject', Named: 'jakarta.inject.Named'
 };
 
@@ -157,8 +159,10 @@ function parseMembers(tokens, start, end, type, info, issues) {
   }
   return { fields, methods };
 }
-function parseJavaFile(file) {
-  const { tokens, issues } = lexJava(file.text);
+function parseJavaFile(file) { return parseJavaTokens(file,lexJava(file.text)); }
+
+function parseJavaTokens(file, lexical) {
+  const { tokens } = lexical, issues = [...lexical.issues];
   const info = { packageName: '', imports: {}, wildcards: [] }, types = [];
   let i = 0, pending = [];
   while (i < tokens.length) {
@@ -189,4 +193,4 @@ function parseJavaFile(file) {
   return { ...file, ...info, types, issues: [...new Set(issues)] };
 }
 
-module.exports = { parseJavaFile, lexJava, strings, literal, annotation, rangeAt, positionAt, typeRef, KNOWN };
+module.exports = { parseJavaFile, parseJavaTokens, lexJava, matching, splitTop, strings, literal, annotation, rangeAt, positionAt, typeRef, KNOWN };

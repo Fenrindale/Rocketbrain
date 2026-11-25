@@ -1,6 +1,9 @@
 'use strict';
 const { registerSemanticSpring } = require('../spring/vscode');
 const { registerRuntimeSpring } = require('../spring/runtime-vscode');
+const { parseEndpointContracts, mappingPaths } = require('../spring/endpoint-contracts');
+const { lexJava, splitTop } = require('../spring/java');
+const ENDPOINT_KINDS = { mvc: 'MVC server', webflux: 'WebFlux server', feign: 'Feign client' };
 
 const BASIC_PROPERTIES = [
   ['server.port', 'java.lang.Integer', '8080', 'HTTP server port.'],
@@ -43,14 +46,18 @@ function positionAt(text, offset) {
 }
 
 function literalPaths(args) {
-  const keyed = /\b(?:value|path)\s*=\s*(\{[^}]*\}|"(?:\\.|[^"\\])*")/.exec(args);
-  const expr = keyed ? keyed[1] : args.trim();
-  if (!expr) return [''];
-  if (!/^(?:"(?:\\.|[^"\\])*"|\{\s*(?:"(?:\\.|[^"\\])*"\s*,?\s*)*\})$/.test(expr)) return [];
-  return [...expr.matchAll(/"((?:\\.|[^"\\])*)"/g)].map(match => match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+  const {tokens,issues} = lexJava(args), attributes = Object.create(null);
+  if (issues.length) return [];
+  for (const entry of splitTop(tokens)) {
+    if (!entry.length) continue;
+    if (entry[0].kind === 'id' && entry[1]?.text === '=') attributes[entry[0].text] = entry.slice(2);
+    else attributes.value = entry;
+  }
+  return mappingPaths({attributes}) || [];
 }
 
-function parseSpringEndpoints(source, uri = '') {
+function parseSpringEndpoints(source, uri = '', showUnresolved = false) {
+  if (!/\b(?:RestController|Controller)\b/.test(source)) return [];
   const text = javaCodeMask(source);
   const classes = [...text.matchAll(/\b(?:class|record|interface|enum)\s+(\w+)/g)];
   // Multi-type/nested source requires a real Java AST. Skip it instead of inventing a class path.
@@ -90,6 +97,12 @@ function parseSpringEndpoints(source, uri = '') {
     const method = /^\s*(?:(?:public|protected|private|static|final|synchronized|abstract|default)\s+)*[\w.$<>?,\[\] \t]+?\s+(\w+)\s*\(/.exec(methodTail);
     if (!method) continue;
     const methods = annotation.name === 'RequestMapping' ? [...annotation.args.matchAll(/RequestMethod\.(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|TRACE)/g)].map(entry => entry[1]) : [annotation.name.replace('Mapping', '').toUpperCase()];
+    if (showUnresolved && (!bases.length || !paths.length)) {
+      endpoints.push({ name:'Unresolved MVC mapping', path:null, methods, method:method[1], containerName:classMatch[1], uri,
+        kind:'mvc', state:'unresolved', reason:'Controller mapping path is computed or unresolved.',
+        range:{start:positionAt(source,annotation.start),end:positionAt(source,annotation.end)} });
+      continue;
+    }
     for (const base of bases) for (const route of paths) {
       const routePath = ('/' + base + '/' + route).replace(/\/+/g, '/').replace(/\/$/, '') || '/';
       const start = positionAt(source, annotation.start);
@@ -97,6 +110,17 @@ function parseSpringEndpoints(source, uri = '') {
     }
   }
   return endpoints;
+}
+
+function sourceEndpoints(text, uri) {
+  return [
+    ...parseSpringEndpoints(text, uri, true).map(item => ({kind:'mvc',state:'declared',...item})),
+    ...parseEndpointContracts(text, uri)
+  ];
+}
+
+function endpointDescription(item) {
+  return [ENDPOINT_KINDS[item.kind],item.containerName+'.'+item.method,item.reason || (item.constrained ? 'Additional request conditions' : '')].filter(Boolean).join(' · ');
 }
 
 function metadataProperties(json, origin) {
@@ -138,25 +162,28 @@ function registerSpringFeatures(vscode, context, output) {
     }
     return [...result.values()];
   }
-  async function endpoints() {
+  async function endpoints(token) {
     if (!enabled()) return [];
     const uris = await vscode.workspace.findFiles('**/*.java', '**/{node_modules,.git,.idea,target,build}/**', 2000);
     const result = [];
     for (const uri of uris) {
+      if (token?.isCancellationRequested) return [];
       try {
-        const open = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString());
+        const uriString = uri.toString();
+        const open = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uriString);
         let text;
         if (open) text = open.getText();
         else {
           const stat = await vscode.workspace.fs.stat(uri);
           if (stat.size > 1024 * 1024) continue;
-          const key = `${uri.toString()}|${stat.mtime}|${stat.size}`;
-          if (cache.has(key)) { result.push(...cache.get(key)); continue; }
+          const key = stat.mtime+'|'+stat.size;
+          const previous = cache.get(uriString);
+          if (previous?.key === key) { result.push(...previous.items); continue; }
           text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
-          const items = parseSpringEndpoints(text, uri.toString());
-          cache.set(key, items); result.push(...items); continue;
+          const items = sourceEndpoints(text, uriString);
+          cache.set(uriString, {key,items}); result.push(...items); continue;
         }
-        result.push(...parseSpringEndpoints(text, uri.toString()));
+        if (text.length <= 1024 * 1024) result.push(...sourceEndpoints(text, uriString));
       } catch (error) { output.appendLine(`Spring endpoint scan: ${error.message}`); }
     }
     return result;
@@ -191,20 +218,31 @@ function registerSpringFeatures(vscode, context, output) {
   }, '.', '-'));
   subscriptions.push(vscode.languages.registerWorkspaceSymbolProvider({
     async provideWorkspaceSymbols(query, token) {
-      const items = await endpoints();
+      const items = await endpoints(token);
       if (token.isCancellationRequested) return [];
       const needle = query.replace(/^@\//, '/').toLowerCase();
-      return items.filter(item => `${item.name} ${item.containerName} ${item.method}`.toLowerCase().includes(needle)).map(item => new vscode.SymbolInformation(item.name, vscode.SymbolKind.Method, item.containerName, new vscode.Location(vscode.Uri.parse(item.uri), new vscode.Range(item.range.start.line, item.range.start.character, item.range.end.line, item.range.end.character))));
+      return items.filter(item => (item.name+' '+endpointDescription(item)).toLowerCase().includes(needle)).map(item => new vscode.SymbolInformation(item.name, vscode.SymbolKind.Method, item.containerName, new vscode.Location(vscode.Uri.parse(item.uri), new vscode.Range(item.range.start.line, item.range.start.character, item.range.end.line, item.range.end.character))));
     }
   }));
-  subscriptions.push(vscode.commands.registerCommand('rocketbrain.spring.endpoints', async () => {
+  subscriptions.push(vscode.commands.registerCommand('rocketbrain.spring.endpoints', async (endpoint) => {
     const items = await endpoints();
-    const selected = await vscode.window.showQuickPick(items.map(item => ({ label: item.name, description: `${item.containerName}.${item.method}`, detail: vscode.workspace.asRelativePath(vscode.Uri.parse(item.uri)), endpoint: item })), { title: 'Spring endpoints · source literals only', matchOnDescription: true, placeHolder: items.length ? 'Select a mapping' : 'No literal controller mappings found' });
-    if (selected) { const item = selected.endpoint; await vscode.window.showTextDocument(vscode.Uri.parse(item.uri), { selection: new vscode.Range(item.range.start.line, item.range.start.character, item.range.end.line, item.range.end.character) }); }
+    let item;
+    if (endpoint) {
+      item = items.find(candidate => candidate.uri === endpoint.uri && candidate.kind === endpoint.kind &&
+        candidate.path === endpoint.path && candidate.method === endpoint.method &&
+        candidate.range.start.line === endpoint.range?.start?.line && candidate.range.start.character === endpoint.range?.start?.character);
+    } else {
+      const selected = await vscode.window.showQuickPick(items.map(item => ({label:item.name,description:endpointDescription(item),detail:vscode.workspace.asRelativePath(vscode.Uri.parse(item.uri)),endpoint:item})),
+        {title:'Spring endpoints · source declarations',matchOnDescription:true,matchOnDetail:true,placeHolder:items.length ? 'Select a server mapping or client contract' : 'No Spring route declarations found'});
+      item = selected?.endpoint;
+    }
+    if (!item) return;
+    await vscode.window.showTextDocument(vscode.Uri.parse(item.uri), { selection: new vscode.Range(item.range.start.line, item.range.start.character, item.range.end.line, item.range.end.character) });
+    return item;
   }));
   subscriptions.push(vscode.workspace.onDidChangeTextDocument(invalidate), vscode.workspace.onDidCreateFiles(invalidate), vscode.workspace.onDidDeleteFiles(invalidate), vscode.workspace.onDidRenameFiles(invalidate));
   return { endpoints, properties, analyze: semantic.analyze, snapshot: semantic.snapshot, definitions: semantic.definitions, refresh: semantic.refresh,
     beanGraph:semantic.beanGraph,runtime, dispose() { for (const item of subscriptions) item.dispose(); cache.clear(); } };
 }
 
-module.exports = { parseSpringEndpoints, metadataProperties, yamlPrefix, registerSpringFeatures };
+module.exports = { parseSpringEndpoints, sourceEndpoints, metadataProperties, yamlPrefix, registerSpringFeatures };

@@ -129,6 +129,20 @@ function registerJavaFeatures(context, vscode) {
     await api.start();if(!vscode.workspace.isTrusted||!client||state.state!=='running')throw new Error('Start Java support in a trusted workspace before refactoring.');
     return client.sendRequest(method,params,...(cancellation?[cancellation]:[]));
   };
+  api.navigationLocations=async(kind,position,cancellation)=>{
+    const methods={declaration:'textDocument/definition',type:'textDocument/typeDefinition',
+      implementation:'textDocument/implementation',super:'java/findLinks'};
+    if(!Object.hasOwn(methods,kind))throw Error('Choose a supported Java navigation relation.');
+    await api.start();
+    if(!vscode.workspace.isTrusted||!client||state.state!=='running'||cancellation?.isCancellationRequested){
+      throw Error('Start the independent Java language server in a trusted workspace.');
+    }
+    const server=client;
+    const parameters=kind==='super'?{type:'superImplementation',position}:position;
+    const locations=await server.sendRequest(methods[kind],parameters,...(cancellation?[cancellation]:[]));
+    if(client!==server||!vscode.workspace.isTrusted)throw Error('The Java language server changed during navigation.');
+    return locations;
+  };
   debuggerController = registerJavaDebugger(vscode,api,output,refactoringRequest);
   api.debug = debuggerController;
   api.debug.asyncTrace = require('./async-trace-vscode').registerJavaAsyncTrace(context, vscode, debuggerController);

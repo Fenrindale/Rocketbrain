@@ -13,7 +13,7 @@ An independent VS Code workbench for Java/Spring and MySQL/MariaDB. Support is d
 | Java | 독립 JDT LS의 언어 기능, 프로젝트·패키지 탐색, Maven/Gradle 빌드, 저장한 Run/Debug 구성, 검토 후 리팩터링 적용 | 모든 JDK·빌드 형태·복합 프로젝트를 검증한 것은 아닙니다. |
 | 디버거·테스트 | Java launch/attach, 중단점·Watch·수동 Hot Code Replace, JUnit/TestNG 탐색·실행·디버깅, JVM 커버리지 | JVM 구조 변경, 모든 TestNG 확장, 다른 운영체제의 테스트 디버깅은 별도 범위입니다. |
 | Spring·JPA | 소스 기반 Bean·설정·HTTP mapping·JPQL 분석, 선택한 실행 앱의 Actuator·Hibernate 관찰과 소스 비교 | 임의 Java·SpEL·provider 코드를 정적으로 실행하거나 모든 동적 경로의 결과를 보장하지 않습니다. |
-| DB·SQL | 연결 프로필·TLS·SSH, 지속 세션·트랜잭션, SQL 작성·실행·분석, 결과 그리드 편집·가져오기, 테이블 설계·객체 원문 편집, 스키마 비교·복구 | 동시에 여러 활성 연결, 모든 SQL 문법·객체 작성 형식·타입 변환, 서버 간 원자적 DDL은 완성되지 않았습니다. |
+| DB·SQL | 연결 프로필·TLS·SSH, 독립·공유 콘솔 세션과 트랜잭션, SQL 작성·실행·분석, 결과 그리드 편집·가져오기, 테이블 설계·객체 원문 편집, 스키마 비교·복구 | 동시에 여러 활성 연결, 모든 SQL 문법·객체 작성 형식·타입 변환, 서버 간 원자적 DDL은 완성되지 않았습니다. |
 | VS Code 통합 | 기본 편집기·탐색·검색·Undo, 프로젝트/DB 트리, 분석·결과 화면 | 원본 IDE의 모든 화면과 작업별 사용성·대규모 성능 동등성을 뜻하지 않습니다. |
 
 설치된 JetBrains 제품의 엔진·코드·복사한 화면 자산·내장 JBR을 사용하거나 배포하지 않습니다. 별도 JetBrains 구독이나 다른 Marketplace 확장을 요구하지 않습니다. 사용하는 공개 구성요소의 조건과 고지문은 [NOTICE](https://github.com/Fenrindale/Rocketbrain/blob/main/NOTICE.txt) 및 [third-party/licenses](https://github.com/Fenrindale/Rocketbrain/tree/main/third-party/licenses)에 보존합니다.
@@ -218,6 +218,8 @@ TestNG 데이터 공급자의 동일한 스칼라 값도 관찰된 행 위치로
 
 Java 선언을 선택하고 명령 팔레트를 사용합니다. 변경 전후와 파일 작업을 검토한 뒤 적용합니다. 텍스트 편집과 클래스 이동에는 VS Code Undo를 사용합니다. Safe Delete로 지운 파일은 **Restore Deleted Java File**에서 복원합니다. 검토 뒤 원본·참조·리소스가 바뀌면 다시 검토해야 합니다.
 
+**Go to Code Target**으로 Java 선언·타입·구현·상위 메서드로 이동합니다. 대상이 여러 개면 파일과 줄을 골라 열 수 있습니다. Kotlin 엔진을 구성한 Gradle 프로젝트에서는 수신 객체 타입에 맞는 확장 함수 선언으로 이동합니다. [코드 탐색](docs/java-symbol-navigation.md)
+
 **Extract Java Constant**는 선택한 컴파일 상수식을 `private static final` 필드로 추출합니다. 이름과 선언 위치를 확인한 뒤 선택한 한 곳만 바꿉니다. [Java 상수 추출](docs/java-extract-constant.md)
 
 | 명령 | 지원 범위 | 추가 분석이 필요한 범위 |
@@ -247,6 +249,8 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 **Save SQL Parameter Preset**은 선택한 SQL의 typed parameter 값을 VS Code Secret Storage에 저장합니다. SQL 실행에서 저장값을 선택하면 연결과 서버 계정, SQL 원문, 파라미터 정의와 관찰한 열 타입이 일치하는지 확인하고 실행 전에 검토를 받습니다. 단일 테이블의 열과 파라미터를 비교하는 SELECT와 열을 명시한 INSERT에는 확인한 열 타입을 제안합니다. **Remove SQL Parameter Preset**에서 저장값을 삭제할 수 있습니다.
 
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
+
+**Open SQL Console**은 읽기 전용 전용 세션을 엽니다. 기존 SQL 편집기에서 **Open Shared SQL Console**을 실행하면 같은 서버 연결과 트랜잭션을 사용하는 새 편집기가 열립니다. 두 편집기에서 쓰기 모드, 커밋과 롤백이 공유됩니다. 편집기를 닫아도 트랜잭션은 남습니다. **Manage Console Sessions**에서 연결된 편집기 수를 확인하고 공유 세션을 한 번에 종료합니다.
 
 - **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. 외부 파일 접근과 쓰기는 차단하며 결과는 표본으로 표시합니다.
 - **Add JDBC Driver**에서 별도 JDK와 공급사 JAR를 사용합니다. 드라이버 클래스와 SHA-256을 검토해 승인하고, **Manage JDBC Profiles**로 연결한 뒤 카탈로그와 읽기 쿼리를 사용할 수 있습니다. [사용자 지정 JDBC 드라이버 문서](docs/jdbc-drivers.md)
@@ -284,6 +288,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - `@EmbeddedId`의 명시적 `@AttributeOverride`와 `@AttributeOverrides`를 물리 열에 맞춰 해석합니다. 단일 PK 부모의 FK가 자식의 복합 키 중 한 멤버를 구성하면 `@MapsId("멤버")`를 검토할 수 있습니다. 자식 연관 필드가 공유 키를 쓰고, 나머지 로컬 키 열의 매핑을 유지합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
 - **Open Database Object Source**는 연결 계정에 보이는 스키마와 객체의 `SHOW CREATE` 원문을 읽기 전용 SQL 문서로 엽니다. DB 트리에서 바로 열거나 현재 객체의 원문을 새로 고칠 수 있습니다.
+- **Open Database Source for Editing**에서는 기존의 결정적 `NO SQL` 스칼라 함수 중 숫자형 매개변수와 단일 `RETURN` 식을 편집할 수 있습니다. 원래 시그니처·소유자·보안·권한을 비교하고 검증용 객체를 컴파일한 뒤 실제 교체 SQL을 검토합니다. 앱 스키마의 의존 정의를 읽을 수 없거나 다른 객체의 참조·동적 SQL이 관찰되면 교체를 막습니다. `DROP`과 `CREATE` 사이에는 함수가 잠시 없어지므로 호출과 외부 스키마 변경을 중지해야 합니다. 보관된 원본은 검증된 상태에서 복원할 수 있습니다.
 - **Review Stored Procedure Call**은 현재 DB에서 정의가 보이는 독립 프로시저를 찾아 계정, 실제 정의와 `IN`·`OUT`·`INOUT` 파라미터를 검토합니다. 확인 후 별도 연결에서 한 번만 실행하며, 결과 집합과 출력 파라미터를 각각 읽기 전용 그리드로 열 수 있습니다. 최대 32개 파라미터와 결과 집합 8개까지 처리합니다. DB 권한은 서버가 적용하며, 쓰기 보호 프로필은 호출을 거부합니다. MariaDB에서는 호출 전후 정의를 비교합니다. 호출 중 다른 세션이 정의를 바꿀 수 있고, 프로시저가 직접 커밋한 변경은 돌이킬 수 없습니다.
 - **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.

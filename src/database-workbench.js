@@ -51,6 +51,26 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   status.command = 'rocketbrain.sessionStatus'; status.show();
   const currentDocument = () => vscode.window.activeTextEditor?.document;
   const existingBinding = () => bindings.get(currentDocument()?.uri.toString());
+  const openEditorUris = () => new Set(vscode.window.tabGroups.all.flatMap(group =>
+    group.tabs.map(tab => tab.input?.uri?.toString()).filter(Boolean)));
+  function consoleSessions() {
+    if (!state.mysql) return [];
+    const sessions = new Map();
+    const open = openEditorUris();
+    for (const [uri, binding] of bindings) {
+      let session = sessions.get(binding.id);
+      if (!session) {
+        session = { ...state.db.getSessionState(binding.id), editorCount: 0, openEditors: 0 };
+        sessions.set(binding.id, session);
+      }
+      session.editorCount++;
+      if (open.has(uri)) session.openEditors++;
+    }
+    return [...sessions.values()].map(session => ({ ...session, editorClosed: session.openEditors === 0 }));
+  }
+  function linkedEditors(id) {
+    return [...bindings.values()].filter(binding => binding.id === id);
+  }
   function reconcileStreamTransactions(){let removed=false;for(const [id,saved]of streamTransactions){if(!streamManagers.get(saved.db)?.hasPendingTransaction(id)){streamTransactions.delete(id);removed=true;}}if(removed&&!streamTransactions.size)state.running.delete('stream-import');}
   const exclusiveDatabaseWork=()=>{
     reconcileStreamTransactions();
@@ -64,13 +84,14 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   function updateStatus() {
     const binding = existingBinding();
     const session = state.mysql && binding ? state.db.getSessionState(binding.id) : null;
+    const shared = session && linkedEditors(binding.id).length > 1;
     const mode = streamTransactions.size ? 'import waiting for Commit or Roll Back' : session ? session.needsReconnect ? 'disconnected · reconnect required' : `${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}${session.inTransaction ? ' · transaction active' : ''}${session.transactionIsolation ? ' · ' + session.transactionIsolation.toLowerCase() : ''}` : state.mysql ? 'new console · read only' : 'SQLite demo';
     const cached = state.offlineMetadata?.provenance;
     status.text = cached ? '$(database) Rocketbrain · ' + cached.database + ' · cached metadata' :
-      `${state.running.size ? '$(sync~spin)' : '$(database)'} Rocketbrain · ${binding?.id || state.label} · ${mode}`;
+      `${state.running.size ? '$(sync~spin)' : '$(database)'} Rocketbrain · ${binding?.id || state.label}${shared ? ' · shared' : ''} · ${mode}`;
     status.command=streamTransactions.size?'rocketbrain.import.stream':cached?'rocketbrain.db.openCachedMetadata':'rocketbrain.sessionStatus';
     status.tooltip = cached ? 'Offline analysis · captured ' + cached.capturedAt + '\nConnect to use live SQL.' :
-      `${state.label}\n${mode}\n${streamTransactions.size?'Click to Commit or Roll Back the pending streamed import.':'Each SQL editor uses its own database session. Click for session details.'}`;
+      `${state.label}\n${mode}\n${streamTransactions.size ? 'Click to Commit or Roll Back the pending streamed import.' : shared ? 'All linked editors use this session and its transaction. Click for session details.' : 'Click for session details.'}`;
     void vscode.commands.executeCommand('setContext', 'rocketbrain.mysqlConnected', state.mysql);
     void vscode.commands.executeCommand('setContext', 'rocketbrain.offlineMetadataActive', Boolean(cached));
     void vscode.commands.executeCommand('setContext', 'rocketbrain.sqlRunning', state.running.size > 0);
@@ -322,6 +343,39 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const editor = await vscode.window.showTextDocument(document, { preview: false });
     await bind(document); return editor;
   }
+  async function openSharedConsole(source) {
+    if (!state.mysql) throw Error('Connect to MySQL or MariaDB before opening a shared console.');
+    if (!source || source.isClosed || source.languageId !== 'sql' || isVirtualSqlPreview(source)) {
+      throw Error('Open the SQL console whose session you want to share.');
+    }
+    const binding = await bind(source);
+    assertBinding(source, binding);
+    return withSession(binding.id, async id => {
+      const session = state.db.getSessionState(id);
+      if (!session.connected || session.needsReconnect || session.outcomeUnknown) {
+        throw Error('Resolve the console connection or its uncertain transaction before sharing it.');
+      }
+      const document = await vscode.workspace.openTextDocument({ language: 'sql', content:
+        `-- Shares ${id} and its transaction with the source console.\nSELECT CONNECTION_ID() AS connection_id;\n` });
+      assertBinding(source, binding);
+      if (source.isClosed || document.isClosed || !vscode.workspace.isTrusted || state.db.getSessionState(id).connectionId !== session.connectionId) {
+        throw Error('The source console changed. Open a shared console again.');
+      }
+      const key = document.uri.toString();
+      if (bindings.has(key)) throw Error('The new console already has a session.');
+      bindings.set(key, { id, epoch: binding.epoch });
+      try {
+        return await vscode.window.showTextDocument(document, { preview: false });
+      } catch (error) {
+        bindings.delete(key);
+        throw error;
+      }
+    });
+  }
+  async function closeConsoleBindings(id) {
+    await state.db.closeSession(id);
+    for (const [key, binding] of bindings) if (binding.id === id) bindings.delete(key);
+  }
   function savedLogicalRelationships(database) {
     const scope = scopeKey({ database }, state.profile);
     const saved = scope && context.workspaceState.get(logicalKey, []);
@@ -462,6 +516,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const editor = await openSql(sql); await results.show();
     await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
   });
+  command('rocketbrain.openSharedConsole', () => openSharedConsole(currentDocument()));
   command('rocketbrain.runQuery', async () => {
     const editor = vscode.window.activeTextEditor;
     if (state.mysql && editor?.document.languageId === 'sql' &&
@@ -561,32 +616,34 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       return;
     }
     const binding = existingBinding();
-    const session = state.mysql && binding ? state.db.getSessionState(binding.id) : null;
+    const session = state.mysql && binding ? consoleSessions().find(item => item.id === binding.id) : null;
     output.appendLine(JSON.stringify({ source: state.label, console: binding?.id, ...(session || { readOnly: true, engine: state.mysql ? 'MySQL/MariaDB — open a console' : 'SQLite demo' }) }, null, 2));
     output.show(true);
   });
   command('rocketbrain.manageSessions', async () => {
     if (!state.mysql) throw new Error('Connect to MySQL or MariaDB first.');
     const epoch = state.epoch;
-    const sessions = [...bindings.entries()].map(([key, binding]) => {
-      const session = state.db.getSessionState(binding.id);
-      return { label: binding.id, description: `${binding.documentClosed ? 'editor closed · ' : ''}${session.readOnly ? 'read only' : 'writes'}${session.inTransaction ? ' · transaction active' : ''}${session.outcomeUnknown ? ' · outcome unknown' : ''}${session.needsReconnect ? ' · reconnect required' : ''}`, key, binding };
-    });
+    const sessions = consoleSessions().map(session => ({
+      label: session.id,
+      description: `${session.editorCount > 1 ? session.openEditors + ' open / ' + session.editorCount + ' linked editors · ' : session.editorClosed ? 'editor closed · ' : ''}${session.readOnly ? 'read only' : 'writes'}${session.inTransaction ? ' · transaction active' : ''}${session.outcomeUnknown ? ' · outcome unknown' : ''}${session.needsReconnect ? ' · reconnect required' : ''}`
+    }));
     const selected = await vscode.window.showQuickPick(sessions, { title: 'Rocketbrain · Console Sessions', placeHolder: 'Closed editors retain their sessions until you explicitly close them.' });
     if (!selected) return;
-    if (epoch !== state.epoch || state.disposed) throw new Error('The connection changed. Open the session list again.');
-    await withSession(selected.binding.id, async id => {
+    if (epoch !== state.epoch || state.disposed || !linkedEditors(selected.label).length) throw new Error('The connection or session changed. Open the session list again.');
+    await withSession(selected.label, async id => {
       const action = await vscode.window.showQuickPick(['Show State', 'Commit', 'Roll Back', 'Close Session'], { title: id });
       if (action === 'Show State') { output.appendLine(JSON.stringify(state.db.getSessionState(id), null, 2)); output.show(true); }
       else if (action === 'Commit') await state.db.commit({ sessionId: id });
       else if (action === 'Roll Back') await state.db.rollback({ sessionId: id });
       else if (action === 'Close Session') {
         const session = state.db.getSessionState(id);
-        if (session.inTransaction || session.outcomeUnknown) {
-          const accepted = await vscode.window.showWarningMessage('Closing loses this session and rolls back uncommitted work. A previously interrupted write may already have committed; closing does not resolve its outcome.', { modal: true }, 'Close Session');
+        const editorCount = linkedEditors(id).length;
+        if (session.inTransaction || session.outcomeUnknown || editorCount > 1) {
+          const detail = editorCount > 1 ? `This closes the session for all ${editorCount} linked editors. ` : '';
+          const accepted = await vscode.window.showWarningMessage(detail + 'Closing loses this session and rolls back uncommitted work. A previously interrupted write may already have committed; closing does not resolve its outcome.', { modal: true }, 'Close Session');
           if (accepted !== 'Close Session') return;
         }
-        await state.db.closeSession(id); bindings.delete(selected.key);
+        await closeConsoleBindings(id);
       }
     });
   });
@@ -637,8 +694,10 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       if (state.mysql) {
         // A document close is not consent to discard a database transaction.
         binding.documentClosed = true;
-        output.appendLine(`${binding.id}: editor closed; server session retained. Use Manage Console Sessions to commit, roll back or close it.`);
-        if (state.db.getSessionState(binding.id).inTransaction) void vscode.window.showWarningMessage(`${binding.id} retains an open transaction. Use Rocketbrain: Manage Console Sessions to finish it.`);
+        if (!linkedEditors(binding.id).some(member => !member.documentClosed)) {
+          output.appendLine(`${binding.id}: all editors closed; server session retained. Use Manage Console Sessions to commit, roll back or close it.`);
+          if (state.db.getSessionState(binding.id).inTransaction) void vscode.window.showWarningMessage(`${binding.id} retains an open transaction. Use Rocketbrain: Manage Console Sessions to finish it.`);
+        }
       } else bindings.delete(document.uri.toString());
       updateStatus();
     }),
@@ -828,7 +887,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       return records?.length ? logicalEdges(catalog, records) : [];
     },
     sessionState: () => state.mysql && existingBinding() ? state.db.getSessionState(existingBinding().id) : null,
-    sessions: () => state.mysql ? [...bindings.values()].map(binding => ({ ...state.db.getSessionState(binding.id), editorClosed: Boolean(binding.documentClosed) })) : [],
+    sessions: consoleSessions,
     async inspectConsoleIsolation(document = currentDocument()) {
       if (!state.mysql) throw new Error('Connect to MySQL or MariaDB before choosing an isolation level.');
       if (!document || document.isClosed || document.languageId !== 'sql') throw new Error('Open a SQL editor first.');
@@ -1029,9 +1088,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     },
     refreshSchema,
     closeConsoleSession: id => withSession(id, async () => {
-      if (![...bindings.values()].some(binding => binding.id === id)) throw new Error('Unknown console session.');
-      await state.db.closeSession(id);
-      for (const [key, binding] of bindings) if (binding.id === id) bindings.delete(key);
+      if (!linkedEditors(id).length) throw new Error('Unknown console session.');
+      await closeConsoleBindings(id);
     })
   };
 }

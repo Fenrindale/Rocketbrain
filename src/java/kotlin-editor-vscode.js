@@ -123,16 +123,30 @@ function registerKotlinEditor(context,vscode,java) {
     } finally {clearTimeout(timeout);}
   }
 
-  function start({projectUri}={}) {
+  function start({projectUri,document=vscode.window.activeTextEditor?.document}={}) {
     suspended=false;
     return serial(() => {
       trusted();
-      const root=projectUri ? workspacePath(projectUri,roots()) : projectOf(vscode.window.activeTextEditor?.document);
+      const root=projectUri ? workspacePath(projectUri,roots()) : projectOf(document);
       return startNow(root);
     });
   }
 
   function stop() {suspended=true;return serial(stopNow);}
+
+  async function definition(document,position,cancellation) {
+    trusted();
+    const current=active,root=projectOf(document);
+    if (!current||!root||state.state!=='running'||path.relative(current.launch.root,root)||cancellation?.isCancellationRequested) {
+      throw fail('Start Kotlin editing for the current Gradle project.');
+    }
+    const locations=await current.client.sendRequest('textDocument/definition',{
+      textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)},position
+    },...(cancellation?[cancellation]:[]));
+    trusted();
+    if (active!==current) throw fail('The Kotlin language server changed during navigation.');
+    return locations;
+  }
 
   function automatic(document) {
     if (disposed || suspended || !vscode.workspace.isTrusted || !vscode.workspace.getConfiguration('rocketbrain.kotlinEditor').get('serverHome')) return;
@@ -158,7 +172,7 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,getState:()=>({...state}),dispose() {
+  return {start,stop,definition,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;

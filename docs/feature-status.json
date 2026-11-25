@@ -1,5 +1,5 @@
 {
-  "version": "0.62.0",
+  "version": "0.63.0",
   "asOf": "2026-11-25",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,33 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 75,
-    "partial": 126,
+    "implemented": 76,
+    "partial": 125,
     "not-implemented": 0,
     "host-provided": 13,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 69.9,
+    "percent": 70.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-025",
-    "IDEA-063",
-    "IDEA-084",
-    "IDEA-085",
-    "DG-024",
-    "DG-027"
+    "IDEA-015",
+    "IDEA-065",
+    "DG-047",
+    "DG-081"
   ],
   "expandedFeatures": [
-    "IDEA-025",
-    "IDEA-063",
-    "IDEA-084",
-    "IDEA-085",
-    "DG-024",
-    "DG-027"
+    "IDEA-015",
+    "IDEA-065",
+    "DG-047",
+    "DG-081"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -488,27 +484,24 @@
       "category": "탐색·구조 분석",
       "feature": "선언·타입·구현·상위 메서드 이동",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "실제 Java 정의 이동·JDK 소스 열기와 JPQL/설정의 제한된 소스 이동을 검증했다.",
-      "remaining": [
-        "구현·상위 메서드·Kotlin 확장·복수 대상의 전체 이동 비교가 남는다."
-      ],
+      "scope": "JDT의 선언·타입·구현·가장 가까운 상위 메서드를 소스에서 연다. 여러 대상은 이름·위치로 선택하고 JDK 소스를 정확한 범위로 표시한다. Kotlin은 컴파일러가 확인한 타입별 확장 함수 선언을 연다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.63-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "testedScope": "두 실제 Spring DB의 설치 환경에서 Java 오버로드의 여러 구현, 상위 메서드와 JDK 소스, 대상 변경 거부, Kotlin 수신 타입별 동명 확장 함수 선언 두 곳을 확인했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "src/java/navigation-symbols.js",
+          "test/java-symbol-navigation-host.js",
+          "docs/java-symbol-navigation.md"
         ],
         "originalProductParityVerified": false
       }
@@ -806,8 +799,8 @@
       "verification": {
         "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.62.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2005,8 +1998,8 @@
       "verification": {
         "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.62.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2059,24 +2052,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "소스의 literal HTTP mapping 탐색과 실제 Actuator mapping 관찰이 있다.",
+      "scope": "Spring MVC의 HTTP 매핑과 표준 Java WebFlux 함수형 리터럴 경로 및 Spring MVC 스타일 Feign 클라이언트 선언을 구분해 원문 위치를 연다. 워크스페이스 심볼 탐색과 기존 Actuator 관찰을 제공한다.",
       "remaining": [
-        "전체 WebFlux functional route·Feign·동적 경로 분석이 남는다."
+        "임의 동적 경로, Kotlin DSL과 사용자·상속 Feign 계약이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.63-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 Bean/Profile/설정 소스 모델과 실제 Spring fixture 및5개 Actuator metadata endpoint. 설정값·원문 origin은 수집하지 않는다.",
+        "testedScope": "MySQL과 MariaDB의 실제 Spring MVC·WebFlux에서 경로 세 개와 Feign 호출 두 개가 일치했다. 잘못된 메서드와 Accept는 404이며 계산 경로는 소스에서 미해결로 남았다.",
         "publicEvidence": [
-          "src/spring/model.js",
-          "src/spring/vscode.js",
-          "src/spring/runtime-client.js",
-          "src/analysis-tree.js"
+          "src/spring/endpoint-contracts.js",
+          "test/spring-endpoint-contracts-host.js",
+          "docs/spring-endpoint-navigation.md"
         ],
         "originalProductParityVerified": false
       }
@@ -2629,8 +2621,8 @@
       "verification": {
         "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.62.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2658,8 +2650,8 @@
       "verification": {
         "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.62.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4423,8 +4415,8 @@
       "verification": {
         "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.62.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4515,8 +4507,8 @@
       "verification": {
         "state": "v0.62-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.62.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5127,23 +5119,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "각 콘솔은 독립 지속 세션을 가지며 introspection과 편집 연결을 분리한다.",
+      "scope": "각 SQL 콘솔이 전용 지속 세션을 갖고 카탈로그를 별도 연결로 조회한다. 명시적으로 연 공유 편집기는 원본의 물리 연결과 트랜잭션을 사용한다. 세션 목록에서 연결된 편집기 수와 종료 상태를 확인한다.",
       "remaining": [
-        "사용자 지정 세션 공유·다중 data source 전용 세션 UI가 남는다."
+        "여러 저장 프로필에 동시에 전용 SQL 세션을 유지하는 UI가 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.63-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "testedScope": "두 실제 DB에서 동일 물리 세션과 미커밋 변경 공유, 별도 SQL·카탈로그 연결, 다른 편집기에서 커밋·롤백, 탭을 닫아도 트랜잭션 유지와 세션 종료 뒤 모두 분리를 확인했다.",
         "publicEvidence": [
           "src/database-workbench.js",
           "src/db/mysql.js",
-          "src/db/metadata.js"
+          "test/shared-console-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6184,21 +6176,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 뷰 SELECT와 제한된 프로시저 본문을 SQL 편집기로 열고 임시 객체 컴파일·readonly DDL 검토 후 배포한다. 현재 소유자·signature·보안/문자 문맥·권한 지문·typed 원본을 보관하고 재접속 복원을 제공한다.",
+      "scope": "뷰와 제한된 프로시저 외에 결정적 NO SQL 스칼라 함수의 숫자 매개변수와 단일 RETURN 식을 편집한다. 임시 객체로 컴파일하고 소유자·시그니처·보안·권한·의존성을 검토해 승인 후 교체하고 원본을 복구한다.",
       "remaining": [
-        "프로시저 DROP+CREATE는 비원자적이며 이름 부재 구간과 호출 중지에 별도 승인한다. 새 원문 객체·함수/트리거/event·동적 PREPARE/CALL 편집과 일반 루틴 문법은 남는다.",
-        "다른 사용자/불명 권한·비활성 자동 루틴 권한·다른 definer·기존 뷰 출력 열 변경을 거부한다. 변경된 live 상태와 불명 DDL 결과는 조회·guarded 복원으로 다룬다."
+        "트리거·이벤트와 동적 루틴의 원문 편집, 일반 함수 문법 및 원자적 함수 교체가 남아 있다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.63-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 양DB에서 뷰/프로시저 배포·컴파일 오류·버퍼/원문 drift·원본 재접속 복원, DROP/CREATE 직후 응답 손실의 무재시도와 권한 보존/거부를 확인한다. Latin1 초기 café/변경 café2/복원 café의 실제 HEX도 각각 검증했다.",
-        "publicEvidence": [],
+        "testedScope": "두 실제 DB의 설치 환경에서 이전 원문 탐색, 지원 밖 서브쿼리와 교차 스키마 종속 뷰 거부, 실제 컴파일·교체와 권한·문맥 보존, 재접속 뒤 원본 복구를 확인했다.",
+        "publicEvidence": [
+          "src/db/object-editor-function.js",
+          "src/db/object-editor-vscode.js",
+          "test/function-deployment-host.js"
+        ],
         "originalProductParityVerified": false
       }
     },
@@ -6663,8 +6658,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "a1f9f6540d2f88df1aae2dbaa746fc99607d6468e112e61a96b2bba7cc3a091e",
-    "sourceManifestSha256": "529c035c9fa031c4012da7ef7ad4afa8a8b1ed603341248cb9c630ef9477f464",
+    "vsixSha256": "405985a1a30056ccce766860d278624eacf47ae3ac2861461ad0fadc2a87b512",
+    "sourceManifestSha256": "e320813b8d58b1d31e484c76034305ef663e356ffe9b48395dfc7d870c91929a",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6676,14 +6671,20 @@
       }
     ]
   },
-  "stateChanges": [],
+  "stateChanges": [
+    {
+      "id": "IDEA-015",
+      "before": "partial",
+      "after": "implemented"
+    }
+  ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1524,
-    "pass": 1436,
+    "tests": 1537,
+    "pass": 1447,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 88,
+    "skipped": 90,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

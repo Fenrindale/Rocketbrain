@@ -1,25 +1,25 @@
 {
-  "version": "0.62.0",
-  "verifiedAt": "2026-11-25T14:33:57.036Z",
+  "version": "0.63.0",
+  "verifiedAt": "2026-11-25T14:51:17.309Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.62.0.vsix",
-    "sha256": "a1f9f6540d2f88df1aae2dbaa746fc99607d6468e112e61a96b2bba7cc3a091e",
-    "bytes": 3255438,
+    "name": "rocketbrain-0.63.0.vsix",
+    "sha256": "405985a1a30056ccce766860d278624eacf47ae3ac2861461ad0fadc2a87b512",
+    "bytes": 3268693,
     "files": 20
   },
   "source": {
-    "frozenPublicInputs": 1726,
-    "inputVectorSha256": "529c035c9fa031c4012da7ef7ad4afa8a8b1ed603341248cb9c630ef9477f464",
+    "frozenPublicInputs": 1743,
+    "inputVectorSha256": "e320813b8d58b1d31e484c76034305ef663e356ffe9b48395dfc7d870c91929a",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1524,
-    "pass": 1436,
+    "tests": 1537,
+    "pass": 1447,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 88,
+    "skipped": 90,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,23 +32,23 @@
       "groupCount": 5,
       "groups": [
         {
-          "group": "extractConstant",
+          "group": "javaNavigation",
           "checks": 1
         },
         {
-          "group": "testNgInvocations",
+          "group": "kotlinNavigation",
           "checks": 1
         },
         {
-          "group": "dmlColumns",
+          "group": "springEndpoints",
           "checks": 1
         },
         {
-          "group": "hibernateFetch",
+          "group": "sharedConsole",
           "checks": 1
         },
         {
-          "group": "routineOutputs",
+          "group": "functionDeployment",
           "checks": 1
         }
       ],
@@ -66,23 +66,23 @@
       "groupCount": 5,
       "groups": [
         {
-          "group": "extractConstant",
+          "group": "javaNavigation",
           "checks": 1
         },
         {
-          "group": "testNgInvocations",
+          "group": "kotlinNavigation",
           "checks": 1
         },
         {
-          "group": "dmlColumns",
+          "group": "springEndpoints",
           "checks": 1
         },
         {
-          "group": "hibernateFetch",
+          "group": "sharedConsole",
           "checks": 1
         },
         {
-          "group": "routineOutputs",
+          "group": "functionDeployment",
           "checks": 1
         }
       ],
@@ -93,75 +93,70 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-025": {
-      "scope": "두 Spring 설치 환경에서 실제 JDT 배치와 javac 참조 검증, 다른 동일식 보존, 이름 충돌·부수 효과·오래된 계획 거부, 디스크 보존과 한 번의 Undo를 확인했다.",
+    "IDEA-015": {
+      "scope": "두 실제 Spring DB의 설치 환경에서 Java 오버로드의 여러 구현, 상위 메서드와 JDK 소스, 대상 변경 거부, Kotlin 수신 타입별 동명 확장 함수 선언 두 곳을 확인했다.",
       "runtimeGroups": [
-        "extractConstant"
+        "javaNavigation",
+        "kotlinNavigation"
       ]
     },
-    "IDEA-063": {
-      "scope": "Spring MVC와 Hibernate의 두 실제 DB에서 lazy·fetch join·독립 반복 요청의 SELECT를 4·1·4회로 관찰했다. 서로 다른 키 3개를 읽은 첫 요청만 탐지하고 원시 값을 기록하지 않았다.",
+    "IDEA-065": {
+      "scope": "MySQL과 MariaDB의 실제 Spring MVC·WebFlux에서 경로 세 개와 Feign 호출 두 개가 일치했다. 잘못된 메서드와 Accept는 404이며 계산 경로는 소스에서 미해결로 남았다.",
       "runtimeGroups": [
-        "hibernateFetch"
+        "springEndpoints"
       ]
     },
-    "IDEA-084": {
-      "scope": "실제 TestNG 7.11에서 네 논리 호출과 다섯 시도를 관찰했다. 값이 같은 두 번째 데이터 제공자 행 하나를 실행하고 순서가 바뀐 재실행을 거부했다.",
+    "DG-047": {
+      "scope": "두 실제 DB에서 동일 물리 세션과 미커밋 변경 공유, 별도 SQL·카탈로그 연결, 다른 편집기에서 커밋·롤백, 탭을 닫아도 트랜잭션 유지와 세션 종료 뒤 모두 분리를 확인했다.",
       "runtimeGroups": [
-        "testNgInvocations"
+        "sharedConsole"
       ]
     },
-    "IDEA-085": {
-      "scope": "실제 양쪽 Spring DB의 VS Code에서 실패한 논리 호출 하나만 재실행하고 실제 RetryAnalyzer의 최종 실패를 확인했다.",
+    "DG-081": {
+      "scope": "두 실제 DB의 설치 환경에서 이전 원문 탐색, 지원 밖 서브쿼리와 교차 스키마 종속 뷰 거부, 실제 컴파일·교체와 권한·문맥 보존, 재접속 뒤 원본 복구를 확인했다.",
       "runtimeGroups": [
-        "testNgInvocations"
-      ]
-    },
-    "DG-024": {
-      "scope": "두 실제 엔진의 호출 검토에서 최대 unsigned BIGINT와 고정 정밀 DECIMAL, NULL 및 미설정 OUT, 출력만 있는 프로시저와 읽기 전용 출력 그리드를 확인했다.",
-      "runtimeGroups": [
-        "routineOutputs"
-      ]
-    },
-    "DG-027": {
-      "scope": "실제 두 DB의 VS Code 자동 완성에서 교차 스키마 동명 테이블의 별칭과 열 타입, 생성 열의 쓰기 제외와 필터 포함, 복합 변경 구문의 열 제안 제외를 확인했다.",
-      "runtimeGroups": [
-        "dmlColumns"
+        "functionDeployment"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 361,
+    "sourceCorrespondences": 364,
     "sourceConfidence": "inferred",
     "archiveEntries": 20,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 75,
-      "partial": 126,
+      "implemented": 76,
+      "partial": 125,
       "not-implemented": 0,
       "host-provided": 13,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 151,
+    "weightedPoints": 151.5,
     "previousWeightedPoints": 151,
     "targetWeightedPoints": 216,
-    "referencePercent": 69.9,
+    "referencePercent": 70.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
-    "stateChanges": []
+    "stateChanges": [
+      {
+        "id": "IDEA-015",
+        "before": "partial",
+        "after": "implemented"
+      }
+    ]
   },
   "limits": [
-    "Hibernate N+1 판정은 같은 동기 요청·세션의 확인된 단일 키 컬렉션에 적용하며 원시 바인딩 값을 보존하지 않는다.",
-    "프로시저 출력은 MySQL이 트랜잭션으로 정의를 고정하고 MariaDB가 호출 전후 정의와 SQL 모드를 확인하는 경로에서 지원한다.",
+    "소스에 정적으로 나타난 Spring WebFlux 경로와 Feign 선언을 탐색하며 계산된 경로와 사용자 계약은 미해결로 표시한다.",
+    "숫자형 저장 함수 교체는 비원자적이다. 호출 중지와 별도 승인 조건에서 컴파일·권한 비교와 원본 복구를 제공한다.",
     "현행 IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 일반 VS Code 확장의 산술상 상한은 214/216점이다."
   ],
   "next": [
-    "공유 SQL 콘솔의 트랜잭션과 전용 세션",
-    "Spring WebFlux 함수형 라우터와 OpenFeign 선언",
-    "저장 함수 교체 검토와 복구, Java 구현체·상위 선언 탐색"
+    "여러 저장 프로필의 전용 SQL 세션과 활성 카탈로그 분리",
+    "JPQL 읽기 전용 실행 콘솔, Java 변수·필드 추출 명명",
+    "MariaDB 패키지 공개 프로시저 탐색과 검토 호출"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

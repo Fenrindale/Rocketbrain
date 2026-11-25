@@ -1,11 +1,14 @@
 'use strict';
 
 const { workspaceDependencyGraph, localUri, check } = require('./dependency-workspace');
+const { createSymbolNavigation } = require('./navigation-symbols');
 
 const COMMANDS = Object.freeze({
   graph: 'rocketbrain.java.dependencyGraph',
   call: 'rocketbrain.java.callHierarchy',
-  type: 'rocketbrain.java.typeHierarchy'
+  type: 'rocketbrain.java.typeHierarchy',
+  symbols: 'rocketbrain.java.navigateSymbol',
+  super: 'rocketbrain.java.goToSuperMethod'
 });
 const HIERARCHY = {
   call: {
@@ -282,16 +285,21 @@ function registerJavaNavigation(_context, vscode, { java }) {
       }
     });
   }
+  const symbols = createSymbolNavigation(vscode,java,progress);
   const subscriptions = [
     register(COMMANDS.graph, showDependencies),
     register(COMMANDS.call, () => chooseHierarchy('call')),
-    register(COMMANDS.type, () => chooseHierarchy('type'))
+    register(COMMANDS.type, () => chooseHierarchy('type')),
+    register(COMMANDS.symbols, () => symbols.choose()),
+    register(COMMANDS.super, () => symbols.choose('super'))
   ];
   return {
     analyzeDependencies, inspectHierarchy: inspect, openSource, showHierarchyTree,
+    inspectSymbol: symbols.inspect, revealSymbol: symbols.reveal,
     dispose() {
       if (disposed) return;
       disposed = true;
+      symbols.dispose();
       for (const subscription of subscriptions) subscription.dispose();
     }
   };

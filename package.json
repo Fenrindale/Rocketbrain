@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.62.0",
+  "version": "0.63.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -230,6 +230,8 @@
       { "command": "rocketbrain.java.dependencyGraph", "title": "Inspect Java Dependencies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.callHierarchy", "title": "Explore Java Call Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.typeHierarchy", "title": "Explore Java Type Hierarchy", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.navigateSymbol", "title": "Go to Code Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && (editorLangId == java || editorLangId == kotlin)" },
+      { "command": "rocketbrain.java.goToSuperMethod", "title": "Go to Java Super Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.insertLiveTemplate", "title": "Insert Java Live Template", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.generateMembers", "title": "Generate Java Members", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.recordJvmProfile", "title": "Record JVM Profile", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -527,6 +529,12 @@
         "command": "rocketbrain.manageSessions",
         "title": "Manage Console Sessions",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.openSharedConsole",
+        "title": "Open Shared SQL Console",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && editorLangId == sql"
       },
       {
         "command": "rocketbrain.jpa.observer.prepare",
@@ -934,7 +942,7 @@
       },
       {
         "command": "rocketbrain.schema.openObjectSource",
-        "title": "Open View or Procedure Source",
+        "title": "Open Database Source for Editing",
         "category": "Rocketbrain"
       },
       {
@@ -1046,6 +1054,11 @@
       ],
       "editor/context": [
         {
+          "command": "rocketbrain.openSharedConsole",
+          "when": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
           "command": "rocketbrain.java.generateMembers",
           "when": "editorLangId == java && isWorkspaceTrusted",
           "group": "refactor"
@@ -1058,6 +1071,11 @@
         {
           "command": "rocketbrain.java.typeHierarchy",
           "when": "editorLangId == java && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.java.navigateSymbol",
+          "when": "isWorkspaceTrusted && (editorLangId == java || editorLangId == kotlin)",
           "group": "navigation"
         }
       ],
