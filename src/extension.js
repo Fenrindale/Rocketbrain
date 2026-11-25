@@ -76,6 +76,8 @@ async function activate(context) {
   context.subscriptions.push(registerNavigation(vscode, context));
   const changelists = require('./vcs/changelists-vscode').registerChangelists(context, vscode);
   context.subscriptions.push(changelists);
+  const codeReview = require('./vcs/code-review-vscode').registerCodeReview(context,vscode);
+  context.subscriptions.push(codeReview);
   const java = registerJavaFeatures(context, vscode);
   activeJava = java;
   const javaInspections=require('./java/inspections-vscode').registerJavaInspections(context,vscode);
@@ -143,7 +145,7 @@ async function activate(context) {
   });
   activeStreamImports=streamImports;context.subscriptions.push(streamImports);
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
-  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists, federation };
+  return { ...database, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, explainPlans, springProjects, changelists, codeReview, federation };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;
