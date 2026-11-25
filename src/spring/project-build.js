@@ -1,5 +1,6 @@
 'use strict';
 const {SaxesParser}=require('saxes'),{fail,sha}=require('./project-client');
+const {inspectCatalogBuild}=require('./project-gradle-catalog');
 const VERSION=/^\d+\.\d+\.\d+(?:[.\-][A-Za-z0-9.\-]+)?$/;
 function xml(text){if(Buffer.byteLength(text)>1024*1024||/<!DOCTYPE|<!ENTITY|<!\[CDATA\[/i.test(text))throw fail('BUILD','Use a bounded POM without DTD, entities or CDATA.');let nodes=0;const parser=new SaxesParser();parser.on('error',()=>{throw fail('BUILD','The POM is not well-formed XML.');});parser.on('opentag',()=>{if(++nodes>20000)throw fail('BUILD','The POM exceeds its node limit.');});parser.write(text).close();const root={children:[]},stack=[root];let offset=0;while(offset<text.length){const start=text.indexOf('<',offset);if(start<0)break;if(text.startsWith('<!--',start)){const end=text.indexOf('-->',start+4);if(end<0)throw fail('BUILD','Unclosed XML comment.');offset=end+3;continue;}if(text.startsWith('<?',start)){offset=text.indexOf('?>',start+2)+2;continue;}let end=start+1,quote;for(;end<text.length;end++){const c=text[end];if(quote){if(c===quote)quote=null;}else if(c==='"'||c==="'")quote=c;else if(c==='>')break;}const token=text.slice(start,end+1),closing=/^<\//.test(token),name=/^<\/?([A-Za-z_][\w.:-]*)/.exec(token)?.[1];if(!name||name.includes(':'))throw fail('BUILD','Use ordinary unprefixed Maven POM elements.');if(closing){const node=stack.pop();if(node?.name!==name)throw fail('BUILD','Unsupported POM nesting.');node.closeStart=start;node.end=end+1;}else{const node={name,start,openEnd:end+1,children:[]};stack.at(-1).children.push(node);if(/\/\s*>$/.test(token)){node.selfClosing=true;node.closeStart=start+token.lastIndexOf('/');node.end=end+1;}else stack.push(node);}offset=end+1;}if(stack.length!==1||root.children.length!==1||root.children[0].name!=='project')throw fail('BUILD','Select one ordinary Maven project.');return root.children[0];}
 const child=(node,name)=>{const items=node.children.filter(v=>v.name===name);if(items.length>1)throw fail('BUILD','Duplicate build configuration elements are unsupported.');return items[0];};
@@ -76,16 +77,31 @@ function pom(text){
 function tokens(text){if(Buffer.byteLength(text)>1024*1024)throw fail('BUILD','The build file exceeds1MiB.');const result=[];let i=0;while(i<text.length){const c=text[i];if(/\s/.test(c)){i++;continue;}if(text.startsWith('//',i)){i=text.indexOf('\n',i+2);if(i<0)break;continue;}if(text.startsWith('/*',i)){const end=text.indexOf('*/',i+2);if(end<0)throw fail('BUILD','Unclosed build comment.');i=end+2;continue;}if(c==='/'||text.startsWith('$/',i))throw fail('BUILD','Slashy Gradle literals or procedural expressions require manual editing.');if(c==='"'||c==="'"){const start=i,delimiter=text.startsWith(c.repeat(3),i)?c.repeat(3):c;i+=delimiter.length;let value='',escaped=false,closed=false;while(i<text.length){if(text.startsWith(delimiter,i)){i+=delimiter.length;closed=true;break;}if(text[i]==='\\'){escaped=true;value+=text[i++];if(i<text.length)value+=text[i++];}else value+=text[i++];}if(!closed)throw fail('BUILD','Unclosed Gradle string.');result.push({type:'string',value,start,end:i,literal:!escaped&&!value.includes('$')&&delimiter.length===1});continue;}const match=/^[A-Za-z_][\w$]*/.exec(text.slice(i));if(match){result.push({type:'id',value:match[0],start:i,end:i+match[0].length});i+=match[0].length;continue;}result.push({type:'punct',value:c,start:i,end:++i});if(result.length>50000)throw fail('BUILD','The build file exceeds its token limit.');}return result;}
 function activePlugin(ts,start,end,id){let matches=0;for(let i=start;i<end;i++)if(ts[i].value==='id'){let j=i+1;if(ts[j]?.value==='(')j++;if(ts[j]?.type!=='string'||!ts[j].literal||ts[j].value!==id)continue;j++;if(ts[j]?.value===')')j++;if(ts[j]?.value!=='version'||ts[j+1]?.type!=='string'||!ts[j+1].literal||ts[j+2]?.value==='apply')throw fail('BUILD','Use a directly applied literal '+id+' plugin.');matches++;}return matches===1;}
 function gradle(text,kind){const ts=tokens(text),blocks=[];let depth=0;for(let i=0;i<ts.length;i++){const t=ts[i];if(t.value==='{')depth++;else if(t.value==='}')depth--;else if(depth===0&&t.type==='id'&&ts[i+1]?.value==='{'){let d=1,j=i+2;for(;j<ts.length&&d;j++){if(ts[j].value==='{')d++;if(ts[j].value==='}')d--;}if(d)throw fail('BUILD','Unbalanced Gradle block.');blocks.push({name:t.value,start:i+2,end:j-1,closeStart:ts[j-1].start});}if(depth<0)throw fail('BUILD','Unbalanced Gradle braces.');}if(depth)throw fail('BUILD','Unbalanced Gradle braces.');const plugins=blocks.filter(b=>b.name==='plugins'),dependencies=blocks.filter(b=>b.name==='dependencies');if(plugins.length!==1||dependencies.length!==1)throw fail('BUILD','Use one literal plugins block and one direct dependencies block.');const p=plugins[0],boot=[];if(!activePlugin(ts,p.start,p.end,'io.spring.dependency-management')||!activePlugin(ts,p.start,p.end,'org.springframework.boot'))throw fail('BUILD','Use directly applied literal Boot/dependency-management plugins for versionless dependencies.');for(let i=p.start;i<p.end;i++)if(ts[i].value==='id'){let j=i+1;if(ts[j]?.value==='(')j++;if(ts[j]?.type==='string'&&ts[j].literal&&ts[j].value==='org.springframework.boot'){j++;if(ts[j]?.value===')')j++;boot.push(ts[j+1].value);}}if(boot.length!==1||!VERSION.test(boot[0]))throw fail('BUILD','Use one explicit Spring Boot plugin version.');const b=dependencies[0],deps=[],configs=new Set(['implementation','api','runtimeOnly','testImplementation','testRuntimeOnly','compileOnly','annotationProcessor','developmentOnly','testCompileOnly','testAnnotationProcessor']);for(let i=b.start;i<b.end;){const first=ts[i];if(first.value===';'){i++;continue;}if(first.type!=='id'||!configs.has(first.value))throw fail('BUILD','Only direct literal Gradle module dependencies can be edited; catalogs/platforms/projects/closures require manual editing.');let j=i+1,call=ts[j]?.value==='(';if(call)j++;const module=ts[j++];if(module?.type!=='string'||!module.literal||!/^[A-Za-z0-9_.\-]+:[A-Za-z0-9_.\-]+(?::[A-Za-z0-9_.\-]+)?$/.test(module.value))throw fail('BUILD','Use literal Gradle group:artifact[:version] dependencies.');if(call&&ts[j++]?.value!==')')throw fail('BUILD','Unsupported Gradle dependency call.');const end=ts[j-1].end;if(j<b.end&&ts[j].value!==';'&&!/[\r\n]/.test(text.slice(end,ts[j].start)))throw fail('BUILD','Unsupported Gradle dependency expression.');const[groupId,artifactId,version]=module.value.split(':'),scope=first.value.startsWith('test')?'test':first.value==='runtimeOnly'?'runtime':'compile';deps.push({groupId,artifactId,version,scope,configuration:first.value,editable:!version&&['implementation','runtimeOnly','testImplementation'].includes(first.value),start:first.start,end});i=j;}return{kind,bootVersion:boot[0],deps,insertAt:b.closeStart};}
-function inspect(text,filename){return filename==='pom.xml'?pom(text):gradle(text,filename.endsWith('.kts')?'gradle-kotlin':'gradle-groovy');}
+function inspect(text,filename,context){
+ if(filename==='pom.xml')return pom(text);
+ const kind=filename.endsWith('.kts')?'gradle-kotlin':'gradle-groovy';
+ if(context?.versionCatalog!==undefined){
+  const parsed=tokens(text);
+  if(parsed.some((token,index)=>token.type==='id'&&token.value==='libs'&&parsed[index+1]?.value==='.'))
+   return inspectCatalogBuild(text,kind,context,tokens,parsed);
+ }
+ return gradle(text,kind);
+}
 function managed(dep){return!dep.bom&&!dep.repository&&!dep.version&&['compile','runtime','test'].includes(dep.scope)&&(/^(?:spring-boot-starter-)[A-Za-z0-9_.-]+$/.test(dep.artifactId)&&dep.groupId==='org.springframework.boot'||dep.groupId==='com.mysql'&&dep.artifactId==='mysql-connector-j'||dep.groupId==='org.mariadb.jdbc'&&dep.artifactId==='mariadb-java-client');}
 const coordinate=dependency=>dependency.groupId+':'+dependency.artifactId;
 function existingDependencies(model,dependency){return model.deps.filter(item=>coordinate(item)===coordinate(dependency));}
 function localOverride(model,dependency){return model.management?.overrides.find(item=>item.coordinate===coordinate(dependency));}
+function catalogAlias(model,module){
+ const choices=model.catalogLibraries?.filter(item=>item.coordinate===module&&!item.version)||[];
+ return choices.length===1?choices[0]:undefined;
+}
 
 function choices(model,catalog){
  return catalog.dependencies.filter(managed).map(dependency=>{
   const existing=existingDependencies(model,dependency),override=localOverride(model,dependency);
-  return {...dependency,selected:existing.length>0,editable:!override&&(existing.length===0||existing.length===1&&existing[0].editable),
+  const alias=catalogAlias(model,coordinate(dependency)),needsAlias=!!model.catalogLibraries&&!existing.length;
+  return {...dependency,selected:existing.length>0,editable:!override&&(existing.length===1&&existing[0].editable||!existing.length&&(!needsAlias||!!alias)),
+   ...(alias&&{catalogAlias:alias.alias}),
    ...(override?{localManagementVersion:override.version}:{})};
  });
 }
@@ -113,7 +129,11 @@ function change(text,model,catalog,{add=[],remove=[]}={}){
     ...(dep.scope==='compile'?[]:['\t\t\t<scope>'+dep.scope+'</scope>']),'\t\t</dependency>'].join(newline));
   }else{
    const config={compile:'implementation',runtime:'runtimeOnly',test:'testImplementation'}[dep.scope];
-   insert.push('\t'+config+(model.kind==='gradle-kotlin'?'("'+module+'")':" '"+module+"'"));
+   if(model.catalogLibraries){
+    const alias=catalogAlias(model,module);
+    if(!alias)throw fail('DEPENDENCY','Adding this starter needs one existing unversioned catalog alias.');
+    insert.push('\t'+config+'('+alias.accessor+')');
+   }else insert.push('\t'+config+(model.kind==='gradle-kotlin'?'("'+module+'")':" '"+module+"'"));
   }
  }
  if(insert.length){
@@ -124,7 +144,7 @@ function change(text,model,catalog,{add=[],remove=[]}={}){
  }
  let after=text;
  for(const edit of edits.sort((a,b)=>b.start-a.start))after=after.slice(0,edit.start)+edit.text+after.slice(edit.end);
- const checked=inspect(after,model.kind==='maven'?'pom.xml':model.kind==='gradle-kotlin'?'build.gradle.kts':'build.gradle');
+ const checked=inspect(after,model.kind==='maven'?'pom.xml':model.kind==='gradle-kotlin'?'build.gradle.kts':'build.gradle',model.catalogContext);
  if(checked.bootVersion!==model.bootVersion||JSON.stringify(checked.management)!==JSON.stringify(model.management))
   throw fail('BUILD','The Boot management declaration changed unexpectedly.');
  return {after,beforeSha256:sha(Buffer.from(text)),afterSha256:sha(Buffer.from(after)),add:[...add],remove:[...remove],kind:model.kind,bootVersion:model.bootVersion};
