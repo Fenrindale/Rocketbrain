@@ -1438,8 +1438,9 @@
     $('script-result-sets').hidden = !captured?.length;
     if (captured?.length) {
       const procedure = active.result.captureKind === 'procedure';
-      $('script-result-label').textContent = procedure ? 'Procedure result set' : 'Statement result';
-      $('open-script-statement').textContent = procedure ? 'Open Result Set' : 'Open Captured Statement';
+      const outputs = procedure && active.result.procedureOutputAvailable;
+      $('script-result-label').textContent = outputs ? 'Procedure results' : procedure ? 'Procedure result set' : 'Statement result';
+      $('open-script-statement').textContent = outputs ? 'Open Result' : procedure ? 'Open Result Set' : 'Open Captured Statement';
       const prior = statementChoices.get(active.id);
       const selected = captured.some(item => item.index === prior) ? prior : captured[0].index;
       options(statement, captured.map(item => ({ value: String(item.index), label: item.label })), String(selected));

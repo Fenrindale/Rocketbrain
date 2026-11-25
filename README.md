@@ -282,7 +282,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - `@EmbeddedId`의 명시적 `@AttributeOverride`와 `@AttributeOverrides`를 물리 열에 맞춰 해석합니다. 단일 PK 부모의 FK가 자식의 복합 키 중 한 멤버를 구성하면 `@MapsId("멤버")`를 검토할 수 있습니다. 자식 연관 필드가 공유 키를 쓰고, 나머지 로컬 키 열의 매핑을 유지합니다.
 - **Browse Database System Catalog**에서 계정에 보이는 시스템 스키마와 객체·열 정의를 확인합니다. **Inspect Database Account Access**는 직접 부여 항목과 관찰한 역할을 표시합니다. 필요한 권한이 있는 세션에서 **Review Table SELECT Grant or Revoke**로 특정 기존 계정의 한 테이블 SELECT를 검토하고 적용합니다.
 - **Open Database Object Source**는 연결 계정에 보이는 스키마와 객체의 `SHOW CREATE` 원문을 읽기 전용 SQL 문서로 엽니다. DB 트리에서 바로 열거나 현재 객체의 원문을 새로 고칠 수 있습니다.
-- **Review Stored Procedure Call**은 현재 DB에서 정의가 보이는 독립 프로시저를 찾아 계정, 실제 정의와 `IN` 파라미터 타입을 검토합니다. 확인 후 별도 연결에서 한 번만 실행하며, 결과 집합을 각각 읽기 전용 그리드로 다시 열 수 있습니다. 최대 32개 입력과 결과 집합 8개까지 처리합니다. DB 권한은 서버가 적용하며, 쓰기 보호 프로필은 호출을 거부합니다. MariaDB에서는 호출 전후 정의를 비교합니다. 호출 중 다른 세션이 정의를 바꿀 수 있고, 프로시저가 직접 커밋한 변경은 돌이킬 수 없습니다.
+- **Review Stored Procedure Call**은 현재 DB에서 정의가 보이는 독립 프로시저를 찾아 계정, 실제 정의와 `IN`·`OUT`·`INOUT` 파라미터를 검토합니다. 확인 후 별도 연결에서 한 번만 실행하며, 결과 집합과 출력 파라미터를 각각 읽기 전용 그리드로 열 수 있습니다. 최대 32개 파라미터와 결과 집합 8개까지 처리합니다. DB 권한은 서버가 적용하며, 쓰기 보호 프로필은 호출을 거부합니다. MariaDB에서는 호출 전후 정의를 비교합니다. 호출 중 다른 세션이 정의를 바꿀 수 있고, 프로시저가 직접 커밋한 변경은 돌이킬 수 없습니다.
 - **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - 결과 탭은 Grid·Record·Tree·Text·Transpose 보기와 열 레이아웃을 제공합니다. Export는 캡처한 결과 페이지의 전체 열을 CSV, JSON, Excel 또는 검토용 INSERT SQL로 저장합니다.

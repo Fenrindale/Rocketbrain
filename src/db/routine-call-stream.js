@@ -68,9 +68,9 @@ function collectRoutineResults(command, { maxRows, convertCell, stop, finish }) 
     if (!receipt) { failOnce(fail('RESULT', 'The server did not confirm procedure completion.')); return; }
     stopped = true;
     const durationMs = Math.round((performance.now() - started) * 100) / 100;
-    finish(null, { durationMs, resultSets, totalRows, affectedRows: receipt.affectedRows,
+    finish(null, { durationMs, resultSets, totalRows, resultBytes: bytes, affectedRows: receipt.affectedRows,
       warningCount: receipt.warningStatus || 0, serverStatus: receipt.serverStatus });
   });
 }
 
-module.exports = { collectRoutineResults };
+module.exports = { collectRoutineResults, maxBytes };

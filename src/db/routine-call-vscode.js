@@ -52,11 +52,13 @@ function registerRoutineCalls(vscode, { database }) {
     try { review = current(reviews, id); }
     catch { return '-- The procedure review is no longer available.'; }
     const { procedure, kinds } = review;
+    let inputIndex = 0;
+    const parameters = procedure.parameters.map(item => '-- ' + item.mode + ' ' + JSON.stringify(item.name) + ' ' +
+      JSON.stringify(item.type) + (item.mode === 'OUT' ? ' · output only' : ' · ' + kinds[inputIndex++] + ' input kept private'));
     return ['-- Rocketbrain stored procedure review', '-- Account: ' + JSON.stringify(procedure.account),
       '-- Active role: ' + JSON.stringify(procedure.role), '-- Definition fingerprint: ' + procedure.fingerprint,
       '-- Database: ' + JSON.stringify(procedure.object.schema),
-      '-- ' + procedure.sql, ...procedure.parameters.map((item, index) => '-- IN ' + JSON.stringify(item.name) + ' ' +
-        JSON.stringify(item.type) + ' · ' + kinds[index] + ' input kept private'),
+      '-- ' + procedure.sql, ...parameters,
       '-- This approved call can change persistent data and can commit work within its own connection.',
       '-- The server enforces EXECUTE and routine privileges, including its SQL SECURITY mode.',
       ...(procedure.dialect === 'mariadb' ? ['-- MariaDB compares the definition before and after the call. Concurrent DDL can still change the routine.'] : []),
@@ -75,12 +77,17 @@ function registerRoutineCalls(vscode, { database }) {
       }, { write: true });
       const rows = report.resultSets.map((set, index) => [index + 1, set.columns.length, set.rowCount]);
       const scriptStatements = report.resultSets.map((set, index) => ({ index, label: 'Result set ' + (index + 1) + ' · ' + set.rowCount + ' row(s)' }));
+      const outputRows = report.outputParameters.map(({ name, mode, type, value }) => [name, mode, type, value]);
+      const outputGrid = outputRows.length ? { columns: ['Parameter', 'Mode', 'SQL type', 'Value'], rows: outputRows,
+        rowCount: outputRows.length, affectedRows: 0, durationMs: 0, truncated: false } : undefined;
+      if (outputGrid) scriptStatements.push({ index: report.resultSets.length, label: 'Output parameters · ' + outputRows.length });
       for (const existing of captures.keys()) if (!database.scriptResultRetained(existing)) captures.delete(existing);
       if (captures.size >= 8) captures.delete(captures.keys().next().value);
-      captures.set(resultId, { sql, label, resultSets: report.resultSets });
+      captures.set(resultId, { sql, label, resultSets: report.resultSets, outputGrid });
       const summary = { columns: ['Result set', 'Columns', 'Rows'], rows, rowCount: rows.length, affectedRows: report.affectedRows,
-        durationMs: report.durationMs, truncated: false, warningCount: report.warningCount, captureKind: 'procedure', scriptStatements };
-      if (!rows.length) summary.warning = 'The procedure completed without a result set.';
+        durationMs: report.durationMs, truncated: false, warningCount: report.warningCount, captureKind: 'procedure',
+        procedureOutputAvailable: Boolean(outputGrid), scriptStatements };
+      if (!rows.length) summary.warning = outputGrid ? 'The procedure returned output parameters.' : 'The procedure completed without a result set.';
       database.scriptResultFinish(resultId, summary);
       return { resultId, ...structuredClone(report) };
     } catch (error) {
@@ -90,19 +97,21 @@ function registerRoutineCalls(vscode, { database }) {
   }
   async function openResult({ resultId, index } = {}) {
     requireTrusted();
-    const capture = captures.get(resultId), set = capture?.resultSets[index];
+    const capture = captures.get(resultId), isOutput = Boolean(capture && index === capture.resultSets.length);
+    const set = isOutput ? capture.outputGrid : capture?.resultSets[index];
     if (!Number.isInteger(index) || index < 0 || !set || !database.scriptResultRetained(resultId)) {
       throw fail('RESULT', 'Choose a retained result set from the completed procedure.');
     }
     let id = database.scriptStatementResult(resultId, index);
     if (!id) {
-      id = database.scriptResultBegin(capture.sql, capture.label + ' · Result set ' + (index + 1),
+      const suffix = isOutput ? 'Output parameters' : 'Result set ' + (index + 1);
+      id = database.scriptResultBegin(capture.sql, capture.label + ' · ' + suffix,
         { readOnly: true, scriptCapture: { resultId, index } });
       database.scriptResultFinish(id, structuredClone(set));
     }
     await database.showResults();
     await database.activateResult(id);
-    return { resultId: id, index, executedSql: false };
+    return { resultId: id, index, ...(isOutput && { outputParameters: true }), executedSql: false };
   }
   async function chooseProcedure() {
     const prefix = await vscode.window.showInputBox({ title: 'Find a Stored Procedure', prompt: 'Optional name prefix in the connected database' });
@@ -126,8 +135,9 @@ function registerRoutineCalls(vscode, { database }) {
   }
   async function inputValues(parameters) {
     const values = [];
-    for (const { name, kind, type } of parameters) {
-      const title = 'IN ' + name + ' · ' + type;
+    for (const { name, kind, type, mode } of parameters) {
+      if (mode === 'OUT') continue;
+      const title = mode + ' ' + name + ' · ' + type;
       const choice = await vscode.window.showQuickPick(['Enter value', 'SQL NULL'], { title });
       if (!choice) return;
       if (choice === 'SQL NULL') { values.push({ kind: 'null' }); continue; }
@@ -169,7 +179,7 @@ function registerRoutineCalls(vscode, { database }) {
         finally { listener.dispose(); }
       });
       await database.showResults();
-      return { resultId: report.resultId, resultSets: report.resultSets.length };
+      return { resultId: report.resultId, resultSets: report.resultSets.length, outputParameters: report.outputParameters.length };
     } finally {
       drafts.delete(draft.id);
       if (review) reviews.delete(review.id);

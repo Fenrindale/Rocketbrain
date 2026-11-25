@@ -20,7 +20,7 @@ const scriptEngine=require('./sql-script');
 const { inferScriptParameters } = require('./parameter-inference');
 const routineCall = require('./routine-call');
 const { contextOf: objectSourceContext } = require('./object-source');
-const { collectRoutineResults } = require('./routine-call-stream');
+const { collectRoutineResults, maxBytes: maxRoutineResultBytes } = require('./routine-call-stream');
 const {randomUUID}=require('node:crypto');
 const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTimeout } = require('./rds-iam');
 const { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope } = require('./write-protection');
@@ -410,15 +410,20 @@ class MysqlService {
         if (before.fingerprint !== review.fingerprint) throw routineCall.fail('STALE', 'The server account, procedure definition or input signature changed. Prepare a new review.');
         await this._refreshState(session);
         if (!session.inTransaction) throw routineCall.fail('TRANSACTION', 'The reviewed call could not start an isolated transaction.');
-        const { values } = routineCall.bindProcedure(before.parameters, inputs);
+        const { callValues, variableValues, initializeSql, outputs } = routineCall.sessionArguments(before, inputs);
+        if (initializeSql) await query(initializeSql, variableValues);
         check();
         invoked = true;
-        const report = await this._executeProcedure(session, before.sql, values, bounded);
+        const report = await this._executeProcedure(session, before.sql, callValues, bounded);
         this._observe(session, report);
         // MariaDB SHOW CREATE does not lock the routine. Recheck after the call before committing any caller-owned work.
         if (context.dialect === 'mariadb') {
           const after = await routineCall.observeProcedure(query, context, review.object);
           if (after.fingerprint !== before.fingerprint) throw routineCall.fail('STALE', 'The procedure definition or session context changed during the call.');
+        }
+        const outputParameters = await routineCall.readProcedureOutputs(query, outputs);
+        if (outputParameters.length && report.resultBytes + Buffer.byteLength(JSON.stringify(outputParameters)) > maxRoutineResultBytes) {
+          throw routineCall.fail('RESULT_LIMIT', 'The result sets and output parameters together exceed the 4 MiB limit.');
         }
         check();
         if (session.inTransaction) {
@@ -426,7 +431,7 @@ class MysqlService {
           if (session.inTransaction) throw routineCall.fail('TRANSACTION', 'The procedure commit could not be confirmed.');
           committed = true;
         }
-        return { ...report, state: 'completed', callerTransactionCommitted: committed,
+        return { ...report, outputParameters, state: 'completed', callerTransactionCommitted: committed,
           definitionCheck: context.dialect === 'mysql' ? 'transaction-pinned' : 'before-and-after',
           sessionId: session.id, sql: before.sql };
       } catch (error) {

@@ -617,6 +617,21 @@ test('actual result Webview renders database values as text and routes history/c
     await page.getByRole('button', { name: 'Quarterly results', exact: true }).waitFor();
   });
 
+  await t.test('stored procedure result chooser opens output parameters through the procedure route', async () => {
+    const id = host.begin('CALL sample(?, @output)', 'Procedure');
+    host.finish(id, { columns: ['Result set'], rows: [[1]], rowCount: 1, durationMs: 1, captureKind: 'procedure',
+      procedureOutputAvailable: true, scriptStatements: [{ index: 0, label: 'Result set 1 · 1 row(s)' },
+        { index: 1, label: 'Output parameters · 1' }] });
+    await lastPost;
+    await page.getByRole('button', { name: `Result ${id}`, exact: true }).click();
+    const selector = page.getByRole('combobox', { name: 'Procedure results' });
+    assert.deepEqual(await selector.locator('option').allTextContents(), ['Result set 1 · 1 row(s)', 'Output parameters · 1']);
+    await selector.selectOption('1');
+    await page.getByRole('button', { name: 'Open Result', exact: true }).click();
+    await page.waitForFunction(id => window.__completed.some(message => message.type === 'openScriptStatement' && message.id === id), id);
+    assert.deepEqual(statementSelection, { command: 'rocketbrain.db.openProcedureResult', resultId: id, index: 1 });
+  });
+
   await t.test('Webview builds grouped filters from typed column search and reloads an applied named preset', async () => {
     const table = 'preset_table';
     const connection = tableLayoutConnectionKey({ host: 'localhost', database: 'fixture', user: 'reader' });
