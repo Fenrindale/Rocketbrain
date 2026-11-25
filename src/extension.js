@@ -66,7 +66,8 @@ async function activate(context) {
   const dbAdmin=require('./db/database-admin-vscode').registerDatabaseAdmin(context,vscode,{database});
   context.subscriptions.push(dbAdmin);
   const lazyCatalog=require('./db/lazy-catalog-vscode').registerLazyCatalog(context,vscode,{database});
-  const objectSources = require('./db/object-source-vscode').registerObjectSources(vscode, { database });
+  const objectSources = require('./db/object-source-vscode').registerObjectSources(vscode, { database,
+    captureFileUsages: (...args) => sqlAnalysis.captureCatalogFileUsages(...args) });
   const routineCalls = require('./db/routine-call-vscode').registerRoutineCalls(vscode, { database });
   context.subscriptions.push(routineCalls);
   const schemaCatalog = require('./db/schema-catalog-vscode').registerSchemaCatalog(context, vscode, { database, objectSources });

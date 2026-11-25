@@ -3,16 +3,17 @@
 const { randomUUID } = require('node:crypto');
 const { contextOf, listNames, loadSource } = require('./object-source');
 const { searchDatabaseText, textHash } = require('./unified-search');
-const { sourceTokens } = require('./sql-analysis');
+const { sourceTokens, sourceRange } = require('./sql-analysis');
 const { ddlDefinitionLocation } = require('./sql-ddl-location');
 const { isApplicationSchema, limits: viewImpactLimits } = require('./view-impact');
 const { registerViewImpact } = require('./view-impact-vscode');
+const { registerCatalogUsages } = require('./catalog-usages-vscode');
 
 const scheme = 'rocketbrain-object-source';
 const maxDocuments = 16;
 const invalidated = '-- This database source is no longer available on the current connection. Open the object source again.';
 
-function registerObjectSources(vscode, { database }) {
+function registerObjectSources(vscode, { database, captureFileUsages }) {
   const changed = new vscode.EventEmitter(), documents = new Map();
   let generation = 0, disposed = false;
 
@@ -83,9 +84,16 @@ function registerObjectSources(vscode, { database }) {
   async function open(object, frame = generation, navigation) {
     const { value, epoch } = await inspect((query, context) => loadSource(query, context, object), frame);
     if (navigation?.hash && textHash(value.source) !== navigation.hash) throw Error('The database definition changed. Search again.');
+    if (navigation?.settingsHash && textHash(JSON.stringify(value.settings)) !== navigation.settingsHash) {
+      throw Error('The database definition settings changed. Search again.');
+    }
     const anchor = navigation?.member ? memberLocation(value, navigation.member) : navigation?.span;
     const document = await retainDocument(value, epoch, frame, Boolean(navigation));
-    const selection = anchor ? new vscode.Range(document.positionAt(anchor.start), document.positionAt(anchor.end)) : undefined;
+    if (anchor && document.getText().replace(/\r\n/g, '\n') !== value.source.replace(/\r\n/g, '\n')) {
+      throw Error('The observed database source changed in the editor. Search again.');
+    }
+    const positions = anchor && sourceRange(value.source, anchor.start, anchor.end);
+    const selection = positions ? new vscode.Range(positions.start.line, positions.start.character, positions.end.line, positions.end.character) : undefined;
     await vscode.window.showTextDocument(document, { preview: false, ...(selection && { selection }) });
     check(frame);
     return { ...value, documentUri: document.uri.toString() };
@@ -157,9 +165,10 @@ function registerObjectSources(vscode, { database }) {
   }
 
   const viewImpact = registerViewImpact(vscode, { inspect, check, currentFrame: () => generation });
-  async function browseImpact(request) {
-    const frame = generation;
-    if (request?.target) return viewImpact.open(request, frame);
+  const catalogUsages = registerCatalogUsages(vscode, { inspect, check, currentFrame: () => generation, captureFileUsages,
+    openRoutine: (hit, frame) => open(hit.object, frame, { hash: hit.sourceSha256, settingsHash: hit.settingsSha256, span: hit }) });
+  async function chooseImpactRequest(request, frame) {
+    if (request?.target) return request;
     async function schemaPage(after, excluded = []) {
       const page = await list({ kind: 'schema', after }, frame);
       return { ...page, items: page.items.filter(item => isApplicationSchema(item.name) && !excluded.includes(item.name)) };
@@ -189,7 +198,27 @@ function registerObjectSources(vscode, { database }) {
       if (!selected?.item) return;
       schemas.push(selected.item.name);
     }
-    return viewImpact.open({ target, schemas }, frame);
+    return { target, schemas };
+  }
+
+  async function browseImpact(request) {
+    const frame = generation;
+    const selected = await chooseImpactRequest(request, frame);
+    return selected && viewImpact.open(selected, frame);
+  }
+
+  async function browseCatalogUsages(request) {
+    const frame = generation;
+    if (request?.target) return catalogUsages.capture(request, frame);
+    const selected = await chooseImpactRequest(request, frame);
+    if (!selected) return;
+    if (vscode.workspace.workspaceFolders?.some(folder => folder.uri.scheme === 'file')) {
+      const choice = await vscode.window.showQuickPick(['Procedures and local SQL roots', 'Procedures only'], { title: 'Choose usage sources' });
+      check(frame);
+      if (!choice) return;
+      selected.includeFiles = choice === 'Procedures and local SQL roots';
+    }
+    return catalogUsages.browse(selected, frame);
   }
 
   function command(id, action) {
@@ -217,9 +246,11 @@ function registerObjectSources(vscode, { database }) {
       generation++;
       for (const [key, value] of documents) if (!mysql || value.epoch !== epoch) forget(key);
       viewImpact.invalidate(epoch, mysql);
+      catalogUsages.clear();
     }),
     command('rocketbrain.db.openObjectSource', browse),
     command('rocketbrain.db.inspectViewImpact', browseImpact),
+    command('rocketbrain.db.findCatalogUsages', browseCatalogUsages),
     command('rocketbrain.db.refreshObjectSource', refresh)
   ];
 
@@ -228,6 +259,7 @@ function registerObjectSources(vscode, { database }) {
     listObjects: options => list(options),
     open,
     viewImpact: { inspect: viewImpact.inspect, open: viewImpact.open },
+    catalogUsages: { inspect: catalogUsages.capture, open: catalogUsages.open },
     definition,
     columnOrigin,
     search(options, assertActive = () => {}) {
@@ -246,6 +278,7 @@ function registerObjectSources(vscode, { database }) {
       disposed = true;
       documents.clear();
       viewImpact.dispose();
+      catalogUsages.clear();
       for (const subscription of subscriptions) subscription.dispose();
     }
   };
