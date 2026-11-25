@@ -35,8 +35,10 @@ async function verifyDatabasePrincipal(runtime, descriptor, adapter) {
     assert.equal(harness.owner, path.basename(folder));
     assert.equal(harness.sourceConfigPath, runtime.dbConfigPath);
     assert.equal(harness.engine, engine);
-    assert.ok(harness.admin.user.startsWith('rb_acl_writer_'));
-    for (const key of ['host', 'port', 'database']) assert.equal(harness.admin[key], config[key]);
+    assert.ok(harness.admin.user.startsWith('rb_acl_writer_') && harness.guest.user.startsWith('rb_acl_guest_'));
+    for (const principal of [harness.admin, harness.guest]) {
+      for (const key of ['host', 'port', 'database']) assert.equal(principal[key], config[key]);
+    }
     writer = await mysql.createConnection(harness.admin);
     const [[identity]] = await writer.query('SELECT CURRENT_USER() currentUser, VERSION() version');
     assert.equal(identity.version, live.version);
@@ -44,8 +46,18 @@ async function verifyDatabasePrincipal(runtime, descriptor, adapter) {
     const accountFlags = async user => (await writer.execute('SELECT Host,' + (engine === 'mysql' ? 'account_locked' : 'is_role') +
       ' flag FROM mysql.user WHERE BINARY User=BINARY ?', [user]))[0];
     await spring();
+    await writer.query('GRANT SELECT ON `rocketbrain_fixture`.`rb_spring_person` TO ?@?', [harness.guest.user, host]);
+    await adapter.connect(harness.guest);
+    const catalogDenied = error => ['ER_TABLEACCESS_DENIED_ERROR', 'ER_COLUMNACCESS_DENIED_ERROR'].includes(error.code);
+    await assert.rejects(adapter.prepare(guarded), catalogDenied);
     await adapter.connect(config);
-    await assert.rejects(adapter.prepare(guarded));
+    // Cross-schema fixtures can read mysql.user, but the ordinary application account still cannot create accounts.
+    const ordinary = await adapter.prepare(guarded).catch(error => { if (!catalogDenied(error)) throw error; });
+    if (ordinary) {
+      const refused = await adapter.apply({ reviewId: ordinary.reviewId, approved: true, password });
+      assert.equal(refused.state, 'rejected');
+      assert.equal(refused.acknowledged, false);
+    }
     assert.deepEqual(await accountFlags(guarded.user), []);
     await adapter.connect(harness.admin);
     await assert.rejects(adapter.prepare({ ...account, host: '%' }), /explicit account host/);
