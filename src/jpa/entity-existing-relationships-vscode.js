@@ -2,16 +2,17 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { scopedName } = require('../db/metadata');
 const { validIdentifier, contained } = require('../java/file-templates');
 const { buildFingerprint } = require('../java/workbench-model');
 const { analyzeJavaSources } = require('../java/signature-compiler');
 const { captureRelationshipSources, chooseableDeclarations } = require('./entity-relationship-sources');
-const { existingRelationshipSelection, planExistingRelationship } = require('./entity-existing-relationships');
+const { existingRelationshipSelection, planExistingRelationship, relationshipEntities } = require('./entity-existing-relationships');
 
 const COMMAND = 'rocketbrain.jpa.reviewExistingRelationship';
 const warnings = [
-  'This review uses explicit Jakarta annotations and the observed same-schema foreign key. XML and provider remapping require a separate review.',
-  'The inverse collection uses the child relationship named by mappedBy. Review application lifecycle changes separately.'
+  'This review uses explicit Jakarta annotations and observed foreign keys. XML and provider remapping require a separate review.',
+  'The inverse collection uses the owning relationship named by mappedBy. Review application lifecycle changes separately.'
 ];
 
 function registerExistingEntityRelationships(context, vscode, dependencies) {
@@ -42,7 +43,8 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
         throw Error('Choose two existing entities in one imported local Java project.');
       }
       const parser = new TextDecoder('utf-8', { fatal:true, ignoreBOM:true });
-      const files = [selection.child, selection.parent].map(item => {
+      const entities = relationshipEntities(selection);
+      const files = entities.map(item => {
         const uri = vscode.Uri.parse(item.uri);
         const className = item.type.split('.').at(-1);
         if (uri.scheme !== 'file' || uri.authority || uri.query || uri.fragment ||
@@ -66,9 +68,15 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
       }
       guardBuild(project);
       verifySources();
-      const catalog = await database.databaseCatalog();
-      assertTarget(target, cancellation);
-      const planned = planExistingRelationship({ catalog, selection, sources:sources.sources });
+      async function currentPlan(token) {
+        assertTarget(target, token);
+        const catalogs = selection.kind === 'manyToMany' ?
+          { joinProof:await database.relationshipJoinCatalog({ joinSchema:selection.joinSchema, joinTable:selection.joinTable }) } :
+          { catalog:await database.databaseCatalog() };
+        assertTarget(target, token);
+        return planExistingRelationship({ ...catalogs, selection, sources:sources.sources });
+      }
+      const planned = await currentPlan(cancellation);
       const compiler = await compilerScope(project, runtime, cancellation);
       const editedSources = sources.sources.map((source, index) => {
         const edit = planned.edits[index];
@@ -77,7 +85,6 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
       const analyzed = await analyzeJavaSources({ ...compiler, storagePath, sources:editedSources,
         cancellation, manifestLimit:256 * 1024 });
       if (analyzed.errors.length) throw Error('The edited Java sources failed compiler validation: ' + analyzed.errors[0].message);
-      const entities = [selection.child, selection.parent];
       if (planned.edits.some((edit, index) => !analyzed.methods.some(method => method.owner === entities[index].type &&
           method.name === edit.getter && method.returnType === edit.returnType))) {
         throw Error('The compiler could not confirm the generated relationship types.');
@@ -89,11 +96,8 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
         analyzed.validateClasspath();
       };
       const validate = async token => {
-        assertTarget(target, token);
-        const fresh = await database.databaseCatalog();
-        assertTarget(target, token);
         let next;
-        try { next = planExistingRelationship({ catalog:fresh, selection, sources:sources.sources }); } catch {}
+        try { next = await currentPlan(token); } catch { assertTarget(target, token); }
         if (next?.fingerprint !== planned.fingerprint) throw Error('The relationship metadata changed after review. Generate new previews.');
         preApply(token);
       };
@@ -104,7 +108,7 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
           const point = { line:at.line, character:at.character };
           return { textDocument:{ uri:edit.uri, version:doc.version }, edits:[{ range:{ start:point, end:point }, newText:edit.text }] };
         })
-      }, { title:'JPA relationship · ' + selection.foreignKey, kind:'refactor.jpa.bidirectional',
+      }, { title:'JPA relationship · ' + (selection.foreignKey || selection.joinSchema + '.' + selection.joinTable), kind:'refactor.jpa.bidirectional',
         anchorDocument:docs[0], cancellation, validate, preApply, warnings });
       for (const [id, expiresAt] of reviews) if (Date.now() >= expiresAt) reviews.delete(id);
       if (reviews.size >= 10) reviews.delete(reviews.keys().next().value);
@@ -121,41 +125,81 @@ function registerExistingEntityRelationships(context, vscode, dependencies) {
   }
 
   const pick = (items, title) => vscode.window.showQuickPick(items, { title, matchOnDescription:true });
-  async function chooseRelationship() {
-    trusted();
-    const target = database.savedQueryTarget();
+  async function chooseEntity(candidates, table, schema, active, side, fallback) {
+    const eligible = candidates.filter(item => item.table === table && (item.catalog || active) === schema);
+    if (!eligible.length) throw Error('Choose a local Jakarta entity for ' + schema + '.' + table + '. Use an explicit catalog for cross-schema targets.');
+    const candidate = (await pick(eligible.map(item => ({
+      label:item.targetType, description:schema + '.' + item.table, item
+    })), 'JPA Relationship · ' + side + ' entity'))?.item;
+    if (!candidate) return;
+    const property = await vscode.window.showInputBox({ title:'JPA Relationship · ' + side + ' field', value:fallback,
+      validateInput:value => validIdentifier(value) ? undefined : 'Enter a valid Java field name.' });
+    if (property !== undefined) return { uri:candidate.targetUri, type:candidate.targetType, table, property };
+  }
+
+  async function chooseChildRelationship(project, destination) {
     const catalog = await database.databaseCatalog();
-    assertTarget(target);
+    assertTarget(destination);
     if (catalog.coverage.foreignKeys !== 'loaded') throw Error('Refresh the active MySQL or MariaDB foreign-key catalog.');
-    const { projects } = await observedProjects();
-    const project = (await pick(projects.map(item => ({ label:item.name, description:item.root, item })), 'JPA Relationship · Java project'))?.item;
-    if (!project) return;
     const tables = new Set(catalog.tables.map(table => table.name));
     const candidates = chooseableDeclarations(vscode, project, tables).filter(item => !item.catalog || item.catalog === catalog.database);
     const mapped = new Set(candidates.map(item => item.table));
     const choices = catalog.tables.filter(table => table.kind === 'table' && mapped.has(table.name)).flatMap(table =>
       table.foreignKeys.filter(key => key.referencedSchema === catalog.database && key.referencedTable !== table.name &&
-        mapped.has(key.referencedTable) && key.columns.length === 1)
+        mapped.has(key.referencedTable) && key.columns.length > 0)
         .map(key => ({ label:key.name, description:table.name + ' → ' + key.referencedTable, table, key })));
     if (!choices.length) throw Error('No same-schema foreign key with two observed Jakarta entities was found.');
     const choice = await pick(choices, 'JPA Relationship · Child foreign key');
     if (!choice) return;
-    const choose = async (table, side, fallback) => {
-      const candidate = (await pick(candidates.filter(item => item.table === table)
-        .map(item => ({ label:item.targetType, description:item.table, item })), 'JPA Relationship · ' + side + ' entity'))?.item;
-      if (!candidate) return;
-      const property = await vscode.window.showInputBox({ title:'JPA Relationship · ' + side + ' field', value:fallback,
-        validateInput:value => validIdentifier(value) ? undefined : 'Enter a valid Java field name.' });
-      if (property !== undefined) return { uri:candidate.targetUri, type:candidate.targetType, table, property };
-    };
-    const child = await choose(choice.table.name, 'Child', 'parentReference');
+    const child = await chooseEntity(candidates, choice.table.name, catalog.database, catalog.database, 'Child', 'parentReference');
     if (!child) return;
-    const parent = await choose(choice.key.referencedTable, 'Parent', 'relatedChildren');
+    const parent = await chooseEntity(candidates, choice.key.referencedTable, catalog.database, catalog.database, 'Parent', 'relatedChildren');
     if (!parent) return;
+    return { projectUri:project.uri, child, parent, foreignKey:choice.key.name };
+  }
+
+  async function chooseJoinRelationship(project, destination) {
+    const qualified = await vscode.window.showInputBox({ title:'JPA Relationship · Join table',
+      prompt:'Enter the qualified schema.table name on the current MySQL or MariaDB server',
+      validateInput:value => value.split('.').length === 2 && value.split('.').every(scopedName) ?
+        undefined : 'Enter lower-case schema.table identifiers.' });
+    if (!qualified) return;
+    const [joinSchema, joinTable] = qualified.split('.');
+    assertTarget(destination);
+    const proof = await database.relationshipJoinCatalog({ joinSchema, joinTable });
+    assertTarget(destination);
+    const { activeDatabase, join, targets } = proof;
+    const keys = join.tables[0].foreignKeys;
+    const candidates = chooseableDeclarations(vscode, project, new Set(targets.map(item => item.selectedTable)));
+    const ownerKey = (await pick(keys.map(item => ({
+      label:item.name, description:item.referencedSchema + '.' + item.referencedTable, item
+    })), 'JPA Relationship · Owning foreign key'))?.item;
+    if (!ownerKey) return;
+    const targetKey = keys.find(item => item.name !== ownerKey.name);
+    const owner = await chooseEntity(candidates, ownerKey.referencedTable, ownerKey.referencedSchema, activeDatabase, 'Owning', 'relatedEntities');
+    if (!owner) return;
+    const target = await chooseEntity(candidates, targetKey.referencedTable, targetKey.referencedSchema, activeDatabase, 'Inverse', 'relatedOwners');
+    if (!target) return;
+    return { kind:'manyToMany', projectUri:project.uri, joinSchema, joinTable,
+      owner:{ ...owner, schema:ownerKey.referencedSchema }, target:{ ...target, schema:targetKey.referencedSchema },
+      ownerForeignKey:ownerKey.name, targetForeignKey:targetKey.name };
+  }
+
+  async function chooseRelationship() {
+    trusted();
+    const target = database.savedQueryTarget();
+    const style = await pick([{ label:'Many-to-one and one-to-many', kind:'direct' },
+      { label:'Many-to-many through a qualified join table', kind:'join' }], 'JPA Relationship · Mapping');
+    if (!style) return;
+    const { projects } = await observedProjects();
+    const project = (await pick(projects.map(item => ({ label:item.name, description:item.root, item })), 'JPA Relationship · Java project'))?.item;
+    if (!project) return;
+    const selection = style.kind === 'join' ? await chooseJoinRelationship(project, target) : await chooseChildRelationship(project, target);
+    if (!selection) return;
     assertTarget(target);
     const review = await vscode.window.withProgress({ location:vscode.ProgressLocation.Notification,
       title:'Validate both JPA entity changes', cancellable:true }, (_, cancellation) =>
-      prepareExistingRelationship({ projectUri:project.uri, child, parent, foreignKey:choice.key.name, cancellation }));
+      prepareExistingRelationship({ ...selection, cancellation }));
     try { return await java.refactoring.review(review); } finally { reviews.delete(review.id); }
   }
 

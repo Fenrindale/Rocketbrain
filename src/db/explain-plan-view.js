@@ -4,6 +4,48 @@ const escape = input => String(input ?? '').replace(/[&<>"']/g, item => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[item]);
 
+const moveLabels = { 'candidate-move':'Candidate move', moved:'Moved', reviewed:'Reviewed pair' };
+const reviewStyles = `
+  .candidate-review{margin:1rem 0;padding:.65rem;background:var(--vscode-editorWidget-background)}
+  .candidate-review summary{cursor:pointer;font-weight:600}
+  .candidate-review td div{margin:.2rem 0}
+  .candidate-review button{margin:.25rem .35rem .25rem 0;padding:.25rem .55rem;cursor:pointer;border:1px solid transparent;
+    color:var(--vscode-button-secondaryForeground);background:var(--vscode-button-secondaryBackground);font:inherit}
+  .candidate-review button:hover{background:var(--vscode-button-secondaryHoverBackground)}
+  .candidate-review button:focus-visible{outline:2px solid var(--vscode-focusBorder)}
+`;
+
+function candidateReviewHtml(result, nonce) {
+  const review = result.candidateReview;
+  if (!review?.pairs.length) return '';
+  const states = { pending:'Pending', accepted:'Paired', ignored:'Ignored', unavailable:'An operator is paired elsewhere' };
+  const editable = Boolean(result.reviewId);
+  const cell = side => '<strong>' + escape(side.position) + ' · ' + escape(side.name) + '</strong>' +
+    [['Access',side.method], ['Index',side.index], ['Predicate',side.predicate]].filter(([, value]) => value)
+      .map(([label, value]) => '<div>' + label + ' <code>' + escape(value) + '</code></div>').join('');
+  const button = (action, label, pair) => '<button type="button" data-review-action="' + action + '"' +
+    (pair ? ' data-candidate-id="' + escape(pair.id) + '" aria-label="' + escape(label + ' ' +
+      pair.baseline.position + ' with ' + pair.candidate.position) + '"' : '') + '>' + label + '</button>';
+  const rows = review.pairs.map(pair => '<tr><td>' + cell(pair.baseline) + '</td><td>' + cell(pair.candidate) +
+    '</td><td>' + (pair.matching === 'details' ? 'Same decoded operator details' : 'Same table or alias and access method') +
+    '</td><td>' + states[pair.status] + (editable && pair.status === 'pending' ?
+      '<div>' + button('accept', 'Pair', pair) + button('ignore', 'Ignore', pair) + '</div>' : '') + '</td></tr>').join('');
+  const reset = editable && review.pairs.some(pair => pair.status === 'accepted' || pair.status === 'ignored')
+    ? button('reset', 'Reset review') : '';
+  const script = editable ? `<script nonce="${nonce}">
+  const vscode = acquireVsCodeApi();
+  document.getElementById('candidate-review').addEventListener('click', event => {
+    const button = event.target.closest('button[data-review-action]');
+    if (button) vscode.postMessage({type:'review-plan-candidate', action:button.dataset.reviewAction, candidateId:button.dataset.candidateId});
+  });
+  </script>` : '';
+  return '<details id="candidate-review" class="candidate-review" open><summary>Review alternative operator pairs (' +
+    review.pairs.length + ')</summary><p>Choose one pairing per operator. Decisions apply to this comparison.</p>' +
+    (review.limited ? '<p>The display is limited to 60 pairs and eight alternatives per baseline operator.</p>' : '') +
+    reset + '<table><thead><tr><th scope="col">Baseline</th><th scope="col">Candidate</th><th scope="col">Evidence</th>' +
+    '<th scope="col">Review</th></tr></thead><tbody>' + rows + '</tbody></table></details>' + script;
+}
+
 function fields(source, extra = '') {
   return source.map(item => '<span class="field' + extra + '">' + escape(item.label) + ' <strong>' + escape(item.value) + '</strong></span>').join('');
 }
@@ -165,26 +207,29 @@ function comparisonHtml(result, nonce) {
   }
   const rows = result.rows.map(({ state, before, after, alignment, changes = [], baselinePosition, candidatePosition }) => {
     const node = before || after;
-    const moveLabel = alignment === 'candidate-move' ? 'Candidate move' : alignment === 'moved' ? 'Moved' : '';
+    const moveLabel = moveLabels[alignment];
     const label = moveLabel ? moveLabel + (state === 'changed' ? ' · Changed' : '') : status[state];
     return '<tr><th scope="row">' + escape(node.name) + ' <small>Level ' + escape(node.depth + 1) +
       '</small></th><td>' + label + (changes.length ? '<br><small>Paired by table or alias label and access method</small>' : '') +
       '</td><td>' + cell(before, baselinePosition, changes, 'before') + '</td><td>' + cell(after, candidatePosition, changes, 'after') + '</td></tr>';
   }).join('');
   const counts = Object.entries(status).map(([state, label]) => label + ' ' + result.counts[state]).join(' · ') +
-    ' · Moved ' + result.movedCount + ' · Candidate moves ' + result.candidateMoveCount;
+    ' · Moved ' + result.movedCount + ' · Candidate moves ' + result.candidateMoveCount +
+    ' · Reviewed pairs ' + result.reviewedPairCount;
   const warnings = ['baseline', 'candidate'].flatMap(side => (result[side + 'Warnings'] || [])
     .map(message => '<p><strong>' + (side === 'baseline' ? 'Baseline' : 'Candidate') + '</strong> · ' + escape(message) + '</p>')).join('');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <title>Compare SQL plans</title><style nonce="${nonce}">
   body{margin:0;padding:1rem;color:var(--vscode-editor-foreground);background:var(--vscode-editor-background);font:var(--vscode-font-size) var(--vscode-font-family,sans-serif)}
   h1{font-size:1.2rem;margin:0}p,small{color:var(--vscode-descriptionForeground)}table{border-collapse:collapse;width:100%}
   th,td{text-align:left;vertical-align:top;overflow-wrap:anywhere;border-bottom:1px solid var(--vscode-panel-border);padding:.5rem}
   thead{background:var(--vscode-editorWidget-background)}strong{font-weight:600}
+  ${reviewStyles}
 </style></head><body><h1>Compare SQL plans</h1><p>${escape(result.version)} · ${escape(result.database)} ·
 ${result.measured ? 'Measured captures' : 'Optimizer estimates'}</p><p>${escape(counts)}</p>
 <p>Candidate moves use unique table or alias labels and matching access methods. Review alias reuse and the before-and-after access details.</p>${warnings}
+${candidateReviewHtml(result, nonce)}
 <table><thead><tr><th scope="col">Operator</th><th scope="col">State</th><th scope="col">Baseline</th><th scope="col">Candidate</th></tr></thead>
 <tbody>${rows}</tbody></table></body></html>`;
 }
@@ -200,7 +245,7 @@ function seriesHtml(series, plans, nonce) {
   };
   const rows = series.metrics.slice(0, 400).map(item => {
     const row = comparing ? item.baseline || item.candidate : item;
-    const moveLabel = item.alignment === 'candidate-move' ? 'Candidate move' : item.alignment === 'moved' ? 'Moved' : '';
+    const moveLabel = moveLabels[item.alignment];
     const location = comparing && moveLabel
       ? moveLabel + ' ' + item.baselinePosition + ' → ' + item.candidatePosition : 'Level ' + (row.depth + 1);
     const id = '<th scope="row">' + escape(row.name) + ' <small>' + escape(location) + '</small></th>';
@@ -216,7 +261,7 @@ function seriesHtml(series, plans, nonce) {
   const report = comparing
     ? 'Baseline · ' + series.baseline.samples + ' samples, ' + series.baseline.shapes + ' shapes. Candidate · ' +
       series.candidate.samples + ' samples, ' + series.candidate.shapes + ' shapes. Moved operators · ' + series.movedCount +
-      ' · Candidate moves · ' + series.candidateMoveCount
+      ' · Candidate moves · ' + series.candidateMoveCount + ' · Reviewed pairs · ' + series.reviewedPairCount
     : series.totalSamples + ' sequential samples · ' + series.shapes.length + ' decoded plan shapes';
   const details = plans ? '<h2>Raw captures</h2>' + plans.map((plan, index) =>
     '<details><summary>Sample ' + (index + 1) + ' · Shape ' +
@@ -231,17 +276,19 @@ function seriesHtml(series, plans, nonce) {
     '</tbody></table>' + (series.changedAccess.length > 100 ? '<p>Showing the first 100 changed access operators.</p>' : '') : '';
   const title = comparing ? 'Compare SQL measurement series' : 'SQL measurement series';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <title>${title}</title><style nonce="${nonce}">
   body{margin:0;padding:1rem;color:var(--vscode-editor-foreground);background:var(--vscode-editor-background);font:var(--vscode-font-size) var(--vscode-font-family,sans-serif)}
   h1{font-size:1.2rem;margin:0}h2{font-size:1rem}p,small,td span{color:var(--vscode-descriptionForeground)}table{border-collapse:collapse;width:100%}
   th,td{text-align:left;vertical-align:top;overflow-wrap:anywhere;border-bottom:1px solid var(--vscode-panel-border);padding:.5rem}
   thead{background:var(--vscode-editorWidget-background)}strong{font-weight:600}
   details{margin:.45rem 0}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+  ${reviewStyles}
 </style></head><body><h1>${title}</h1><p>${escape(series.version)} · ${escape(series.database)} · ${escape(report)}</p>
 ${series.saved ? '<p>Saved samples carry the server details recorded in the file. Confirm their origin before interpreting the comparison.</p>' : ''}
 ${comparing ? '<p>Candidate moves use stable, unique table or alias labels and matching access methods. Review alias reuse and the access details.</p>' : ''}
 ${warnings.map(warning => '<p>' + escape(warning) + '</p>').join('')}
+${comparing ? candidateReviewHtml(series, nonce) : ''}
 ${access}
 ${series.metrics.length > 400 ? '<p>Showing the first 400 operator metrics.</p>' : ''}
 <table><thead><tr><th scope="col">Operator</th><th scope="col">Metric</th>${comparing ? '<th scope="col">Baseline</th><th scope="col">Candidate</th>' : '<th scope="col">Observed distribution</th>'}</tr></thead>

@@ -5,7 +5,7 @@ const {SchemaObjectEditor}=require('./object-editor');
 const { performance } = require('node:perf_hooks');
 const { validateQuery, validateReadQuery, parameters } = require('./sql-policy');
 const { operationOf, outcomeOf } = require('./activity-log');
-const { readMetadata, readForeignKeyTargetCatalog } = require('./metadata');
+const { readMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog } = require('./metadata');
 const { isolationLevel, serverIsolationLevel } = require('./transaction-isolation');
 const { TableEditor } = require('./grid');
 const { SchemaRenamer } = require('./schema-rename');
@@ -610,17 +610,23 @@ class MysqlService {
     }catch{catalog.semanticContextObserved=false;catalog.warnings.push({area:'semanticContext',message:'Server SQL mode and identifier rules could not be observed.'});}
     return catalog;
   }
-  async relationshipTargetCatalog(request) {
+  async _relationshipCatalog(read, request) {
     this._assertOpen();
     let connection;
     const query = async (sql, values) => {
       const result = await this._metadataQuery(sql, values);
       const active = this._metadataSession.connection;
-      if (!active || connection && connection !== active) throw Error('The metadata session changed while inspecting the foreign key. Inspect again.');
+      if (!active || connection && connection !== active) throw Error('The metadata session changed while inspecting the relationship. Inspect again.');
       connection = active;
       return result;
     };
-    return readForeignKeyTargetCatalog(query, this._options.database, request, ++this._revision);
+    return read(query, this._options.database, request, ++this._revision);
+  }
+  relationshipTargetCatalog(request) {
+    return this._relationshipCatalog(readForeignKeyTargetCatalog, request);
+  }
+  relationshipJoinCatalog(request) {
+    return this._relationshipCatalog(readRelationshipJoinCatalog, request);
   }
   previewTable(name, options) { return this._editor.previewTable(name, options); }
   retainTableSnapshot(binding) { return this._editor.retainTableSnapshot(binding); }

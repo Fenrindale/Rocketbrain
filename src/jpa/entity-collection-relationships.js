@@ -158,4 +158,4 @@ function planCollections({ requests, catalog, table, mapping, owner, ownerSource
   return { relations, fingerprint };
 }
 
-module.exports = { INVERSE, THROUGH, relationshipRequests, planCollections };
+module.exports = { INVERSE, THROUGH, relationshipRequests, planCollections, matchForeignKey, makesUnique };

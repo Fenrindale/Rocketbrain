@@ -168,6 +168,32 @@ test('visual EXPLAIN Webview displays the tree, keyboard filter, rows, cost mark
       body:comparisonHtml(comparePlans(measured,candidate),'test-only') }));
     await page.goto('https://comparison.local/');
     assert.match(await page.locator('tbody').innerText(), /Changed[\s\S]*Observed rows per loop\s+5[\s\S]*Observed rows per loop\s+6/);
+    const line = name => '    -> ' + name + ' (cost=2 rows=8) (actual time=0.001..0.017 rows=5 loops=1)\n';
+    const append = branches => normalizePlan({ ...measured, raw:'-> Append\n' + branches.map(line).join('') });
+    const before = append(['Table scan on p','Table scan on p','Table scan on q','Table scan on r']);
+    const after = append(['Table scan on q','Table scan on r','Table scan on p','Table scan on p']);
+    const pending = comparePlans(before, after);
+    const addressed = pending.candidateReview.pairs[0];
+    const reviewed = comparePlans(before, after, new Map([[addressed.id, 'accepted']]));
+    await page.route('https://review.local/', route => route.fulfill({ contentType:'text/html',
+      body:comparisonHtml({ ...pending, reviewId:'fixture' }, 'test-only') }));
+    await page.route('https://reviewed.local/', route => route.fulfill({ contentType:'text/html',
+      body:comparisonHtml({ ...reviewed, reviewId:'fixture' }, 'test-only') }));
+    await page.goto('https://review.local/');
+    assert.equal(await page.locator('#candidate-review tbody tr').count(), 4);
+    assert.match(await page.locator('#candidate-review').innerText(), /Same decoded operator details/);
+    await page.getByRole('button', { name:'Ignore 1.1 with 1.4', exact:true }).click();
+    await page.getByRole('button', { name:'Pair 1.1 with 1.3', exact:true }).click();
+    assert.deepEqual(await page.evaluate(() => window.messages), [
+      { type:'review-plan-candidate', action:'ignore', candidateId:'2' },
+      { type:'review-plan-candidate', action:'accept', candidateId:'1' }
+    ]);
+    await page.goto('https://reviewed.local/');
+    assert.match(await page.locator('#candidate-review').innerText(), /An operator is paired elsewhere/);
+    await page.getByRole('button', { name:'Reset review', exact:true }).click();
+    assert.deepEqual(await page.evaluate(() => window.messages), [
+      { type:'review-plan-candidate', action:'reset', candidateId:undefined }
+    ]);
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

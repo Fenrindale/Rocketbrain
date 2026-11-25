@@ -394,6 +394,18 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   );
   await refreshSchema(); updateStatus();
   // Deliberate local extension API for integration callers; credentials are never returned or persisted here.
+  async function inspectRelationshipCatalog(request, method) {
+    if (exclusiveDatabaseWork() || !state.mysql || !vscode.workspace.isTrusted) {
+      throw Error('Use a trusted MySQL or MariaDB workspace connection to inspect the relationship.');
+    }
+    const { db, epoch } = state;
+    const current = databaseGuard(db, epoch);
+    if (!current()) throw Error('The database connection is unavailable. Inspect again.');
+    const result = await db[method](request);
+    if (!current()) throw Error('The database changed during relationship inspection. Compare again.');
+    return result;
+  }
+
   return {
     ...require('./db/authoring-facade').authoringFacade({state,assertReady:assertExclusiveReady,pendingDraft:pendingTableDraft,isTrusted:()=>vscode.workspace.isTrusted,sessions:()=>[...bindings.values()].map(binding=>state.db.getSessionState(binding.id)),updateStatus,refresh:refreshAfterSchemaAttempt}),
     dispose:disposeDatabase,disconnectMysql:useDemo,activityLog,activeConnectionProfile:()=>state.profile?structuredClone(state.profile):null,
@@ -520,17 +532,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       if (state.db !== db || state.epoch !== epoch || state.disposed) throw new Error('The database changed during metadata inspection. Compare again.');
       return catalog;
     },
-    async relationshipTargetCatalog(request) {
-      if (exclusiveDatabaseWork() || !state.mysql || !vscode.workspace.isTrusted) {
-        throw Error('Use a trusted MySQL or MariaDB workspace connection to inspect a relationship target.');
-      }
-      const { db, epoch } = state;
-      const current = databaseGuard(db, epoch);
-      if (!current()) throw Error('The database connection is unavailable. Inspect again.');
-      const target = await db.relationshipTargetCatalog(request);
-      if (!current()) throw Error('The database changed during relationship inspection. Compare again.');
-      return target;
-    },
+    relationshipTargetCatalog: request => inspectRelationshipCatalog(request, 'relationshipTargetCatalog'),
+    relationshipJoinCatalog: request => inspectRelationshipCatalog(request, 'relationshipJoinCatalog'),
     sessionState: () => state.mysql && existingBinding() ? state.db.getSessionState(existingBinding().id) : null,
     sessions: () => state.mysql ? [...bindings.values()].map(binding => ({ ...state.db.getSessionState(binding.id), editorClosed: Boolean(binding.documentClosed) })) : [],
     async inspectConsoleIsolation(document = currentDocument()) {

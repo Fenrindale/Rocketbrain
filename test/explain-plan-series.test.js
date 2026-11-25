@@ -110,6 +110,53 @@ test('JSON table comparison detects a changed index and condition on a uniquely 
   ]);
 });
 
+test('ambiguous operators keep their automatic classifications until explicitly paired', () => {
+  const branch = (index, predicate) => '    ' + tree('Index range scan on repeated_access using ' + index + ' over ' + predicate, '2');
+  const filler = '    ' + tree('Table scan on other', '1') + '    ' + tree('Table scan on dept', '1');
+  const before = mysql(tree('Append', '6', branch('ix_first', '(a < 5)') + branch('ix_first', '(a < 7)') + filler));
+  const after = mysql(tree('Append', '6', filler + branch('ix_second', '(b > 9)') + branch('ix_second', '(b > 12)')));
+  const compare = (decisions) => comparePlans(before, after, decisions);
+  const initial = compare();
+  assert.equal(initial.candidateMoveCount, 0);
+  const [chosen, ignored, taken] = initial.candidateReview.pairs;
+  assert.equal(initial.candidateReview.pairs.length, 4);
+  assert.ok(initial.candidateReview.pairs.every(pair => pair.status === 'pending' && pair.matching === 'access'));
+  assert.deepEqual([chosen.baseline.position, chosen.candidate.position, chosen.baseline.index, chosen.candidate.index],
+    ['1.1', '1.3', 'ix_first', 'ix_second']);
+  const decisions = new Map([[chosen.id, 'accepted'], [ignored.id, 'ignored']]);
+  const reviewed = compare(decisions);
+  assert.equal(reviewed.reviewedPairCount, 1);
+  assert.equal(reviewed.movedCount, initial.movedCount);
+  assert.deepEqual(reviewed.candidateReview.pairs.map(pair => pair.status), ['accepted', 'ignored', 'unavailable', 'pending']);
+  const paired = reviewed.rows.find(row => row.alignment === 'reviewed');
+  assert.deepEqual([paired.baselinePosition, paired.candidatePosition], ['1.1', '1.3']);
+  assert.deepEqual(paired.changes.map(change => change.label), ['Index', 'Predicate']);
+  const series = compareSeries(summarizeSeries([before, before]), summarizeSeries([after, after]), decisions);
+  assert.equal(series.reviewedPairCount, 1);
+  assert.ok(series.metrics.some(metric => metric.alignment === 'reviewed' && metric.baseline && metric.candidate));
+  const html = seriesHtml({ ...series, reviewId:'test' }, null, 'test');
+  assert.match(html, /Review alternative operator pairs \(4\)/);
+  assert.match(html, /Reset review/);
+  assert.match(html, /An operator is paired elsewhere/);
+  assert.equal(series.candidateReview.pairs[2].id, taken.id);
+  assert.deepEqual(compare(), initial);
+});
+
+test('ambiguous review limits options and excludes unstable series positions', () => {
+  const repeat = Array.from({ length:12 }, () => '    ' + tree('Table scan on p', '1')).join('');
+  const fillers = Array.from({ length:12 }, (_, index) => '    ' + tree('Table scan on d' + index, '1')).join('');
+  const before = mysql(tree('Append', '24', repeat + fillers));
+  const after = mysql(tree('Append', '24', fillers + repeat));
+  const { candidateReview } = comparePlans(before, after);
+  assert.equal(candidateReview.limited, true);
+  assert.equal(candidateReview.pairs.length, 60);
+  assert.equal(candidateReview.pairs.filter(pair => pair.baseline.position === '1.1').length, 8);
+  assert.ok(candidateReview.pairs.every(pair => pair.matching === 'details'));
+  const partial = mysql(tree('Append', '12', fillers));
+  const report = compareSeries(summarizeSeries([before, partial]), summarizeSeries([after, after]));
+  assert.equal(report.candidateReview.pairs.length, 0);
+});
+
 test('reopening v1 plan archives recomputes untrusted summaries without dispatching SQL', () => {
   const first = mysql(tree('Scan <script>', '9007199254740993'));
   const second = mysql(tree('Scan <script>', '9007199254740994'));

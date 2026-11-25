@@ -224,6 +224,7 @@ function retainedSource(capture, target) {
 
 function createTableTransfer(database, { recovery, history } = {}) {
   const captures = new Map(), targets = new Map(), reviews = new Map(), operations = new Set(), controllers = new Set(), removals = new Set();
+  const verificationReviews = new Map();
   let pending, writingCapture, closed = false;
   const tracked = (action, abortable = false) => (...args) => {
     if (closed) return Promise.reject(fail('Table copy is closed.'));
@@ -338,6 +339,20 @@ function createTableTransfer(database, { recovery, history } = {}) {
       return { ...result, historyRecorded: Boolean(entry) };
     }, true),
     listTransferVerificationHistory: tracked(async ({ captureId } = {}) => history ? history.list(captureId) : []),
+    listTransferVerificationEvidence: tracked(async ({ captureId } = {}) => history ? history.evidence(captureId) : []),
+    prepareTransferVerificationReview: tracked(async ({ captureId } = {}) => {
+      if (!history) throw fail('Verification reviews require storage in a trusted workspace.');
+      const { observation, revision } = await history.currentReview(captureId);
+      const reviewId = randomUUID(), expiresAt = Date.now() + limits.durationMs;
+      bounded(verificationReviews);
+      verificationReviews.set(reviewId, { captureId, revision, expiresAt });
+      return { reviewId, expiresAt, observation };
+    }),
+    recordTransferVerificationReview: tracked(async ({ reviewId, decision } = {}) => {
+      const review = retained(verificationReviews, reviewId, 'verification review');
+      verificationReviews.delete(reviewId);
+      return history.recordReview(review.captureId, review.revision, decision);
+    }),
     inspectDestination: tracked(async ({ captureId, table } = {}) => database.withTableTransfer(async lease => {
       const capture = retained(captures, captureId, 'source snapshot');
       await confirmReady(capture);
@@ -444,7 +459,7 @@ function createTableTransfer(database, { recovery, history } = {}) {
       await Promise.allSettled([...reviews.values()].map(review => review.manager.dispose()));
       for (const id of captures.keys()) discardSource(id);
       await Promise.allSettled(removals);
-      targets.clear(); reviews.clear();
+      targets.clear(); reviews.clear(); verificationReviews.clear();
     }
   };
   return api;

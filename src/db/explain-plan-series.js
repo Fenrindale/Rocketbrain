@@ -56,20 +56,21 @@ function summarizeSeries(plans) {
     const anchor = !item.anchorBlocked && anchorScopes.length === 1 && item.observedSamples === plans.length ?
       item.anchors.get(anchorScopes[0]) : null;
     return { path:item.path, address:item.address, name:item.name, signatures, signature:signatures.length === 1 ? signatures[0] : null,
+      reviewEligible:item.observedSamples === plans.length,
       anchorScopes, anchor };
   });
   return { engine:first.engine, version:first.version, database:first.database, format:first.format, measured:true, operators,
     totalSamples:plans.length, metrics, shapes:[...shapes.values()], warnings:[...warnings] };
 }
 
-function compareSeries(baseline, candidate) {
+function compareSeries(baseline, candidate, decisions) {
   if (!comparablePlans(baseline, candidate)) throw Error('Choose two series from the same server and plan format.');
   function index(series) {
     const index = new Map(series.operators.map(row => [row.path, { ...row, metrics:new Map() }]));
     for (const metric of series.metrics) index.get(metric.path).metrics.set(metric.key, metric);
     return index;
   }
-  const aligned = alignOperators(index(baseline), index(candidate));
+  const { rows:aligned, candidateReview } = alignOperators(index(baseline), index(candidate), decisions);
   const metrics = aligned.flatMap(({ before, after, alignment }) =>
     [...new Set([...(before?.metrics.keys() || []), ...(after?.metrics.keys() || [])])].map(key => ({
       baseline:before?.metrics.get(key) || null, candidate:after?.metrics.get(key) || null,
@@ -81,9 +82,10 @@ function compareSeries(baseline, candidate) {
   }));
   return { baseline:{ samples:baseline.totalSamples, shapes:baseline.shapes.length, warnings:baseline.warnings },
     candidate:{ samples:candidate.totalSamples, shapes:candidate.shapes.length, warnings:candidate.warnings },
-    engine: baseline.engine, version: baseline.version, database: baseline.database, metrics, changedAccess,
+    engine: baseline.engine, version: baseline.version, database: baseline.database, metrics, changedAccess, candidateReview,
     movedCount:aligned.filter(item => item.alignment === 'moved').length,
-    candidateMoveCount:aligned.filter(item => item.alignment === 'candidate-move').length };
+    candidateMoveCount:aligned.filter(item => item.alignment === 'candidate-move').length,
+    reviewedPairCount:aligned.filter(item => item.alignment === 'reviewed').length };
 }
 
 function serializeSamples(series, plans, capturedAt) {

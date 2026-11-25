@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { randomUUID } = require('node:crypto');
-const { createTransferHistory, historyLimits } = require('../src/db/table-transfer-history');
+const { createTransferHistory, historyLimits, publishNewJson } = require('../src/db/table-transfer-history');
 const { createTableTransfer } = require('../src/db/table-transfer');
 
 async function fixture(t) {
@@ -70,4 +70,87 @@ test('verification history preserves concurrent records and bounds age and count
   for (let index = 0; index < historyLimits.entries; index++) await open().append(randomUUID(), observation);
   assert.equal((await open().list()).length, historyLimits.entries);
   assert.equal((await fs.readdir(directory)).length, historyLimits.entries);
+});
+
+test('operator reviews are bound to the observed revision and accept one concurrent decision', async t => {
+  const { directory, open, block } = await fixture(t);
+  const captureId = randomUUID();
+  const history = open();
+  const database = { withTableTransfer() { assert.fail('Operator review contacted the database'); } };
+  const api = createTableTransfer(database, { history });
+  const competing = createTableTransfer(database, { history: open() });
+  await history.append(captureId, observation);
+  const stale = await api.prepareTransferVerificationReview({ captureId });
+  await history.append(captureId, { ...observation, matching: 128, missing: 0, mismatch: 0, status: 'matching' });
+  await assert.rejects(api.recordTransferVerificationReview({ reviewId: stale.reviewId, decision: 'acknowledged' }), /evidence or its review changed/);
+  await assert.rejects(api.recordTransferVerificationReview({ reviewId: stale.reviewId, decision: 'acknowledged' }), /expired/);
+
+  const first = await api.prepareTransferVerificationReview({ captureId });
+  const second = await competing.prepareTransferVerificationReview({ captureId });
+  assert.equal(first.observation.observationId, second.observation.observationId);
+  first.observation.captureId = randomUUID();
+  first.observation.checkedKeys = 0;
+  const results = await Promise.allSettled([
+    api.recordTransferVerificationReview({ reviewId: first.reviewId, decision: 'follow-up-required' }),
+    competing.recordTransferVerificationReview({ reviewId: second.reviewId, decision: 'external-resolution-recorded' })
+  ]);
+  const winners = results.filter(item => item.status === 'fulfilled');
+  assert.equal(winners.length, 1);
+  assert.match(results.find(item => item.status === 'rejected').reason.message, /evidence or its review changed/);
+  const reviewed = winners[0].value;
+  assert.equal(reviewed.captureId, captureId);
+  assert.equal(reviewed.checkedKeys, 128);
+  assert.equal(reviewed.review.historicalCommitConfirmed, false);
+  assert.equal(reviewed.review.replayBlocked, true);
+  await assert.rejects(api.prepareTransferVerificationReview({ captureId }), /already has a review/);
+  const reopened = createTableTransfer(database, { history: open() });
+  const evidence = await reopened.listTransferVerificationEvidence({ captureId });
+  assert.equal(evidence.length, 2);
+  assert.deepEqual(evidence[0], reviewed);
+  assert.equal(evidence[1].review, undefined);
+  assert.ok((await reopened.listTransferVerificationHistory({ captureId })).every(item => !Object.hasOwn(item, 'review')));
+  const files = await fs.readdir(directory);
+  assert.equal(files.filter(file => file.startsWith('review-')).length, 1);
+  assert.ok(!files.some(file => file.endsWith('.tmp')));
+
+  const other = randomUUID();
+  await history.append(other, observation);
+  const invalid = await api.prepareTransferVerificationReview({ captureId: other });
+  await assert.rejects(api.recordTransferVerificationReview({ reviewId: invalid.reviewId, decision: 'commit' }), /review decision/);
+  const waiting = await api.prepareTransferVerificationReview({ captureId: other });
+  block();
+  await assert.rejects(api.recordTransferVerificationReview({ reviewId: waiting.reviewId, decision: 'acknowledged' }), /trusted workspace/);
+  await assert.rejects(reopened.listTransferVerificationEvidence(), /trusted workspace/);
+  await Promise.all([api.dispose(), competing.dispose(), reopened.dispose()]);
+});
+
+test('expired observations prune associated operator decisions and queued reviews', async t => {
+  const { directory, open } = await fixture(t);
+  const history = open(), captureId = randomUUID();
+  await history.append(captureId, observation);
+  const { revision } = await history.currentReview(captureId);
+  await history.recordReview(captureId, revision, 'acknowledged');
+  const [file] = (await fs.readdir(directory)).filter(name => !name.startsWith('review-'));
+  const time = Date.now() - historyLimits.ageMs - 1000;
+  const expired = time + file.slice(13);
+  await fs.rename(path.join(directory, file), path.join(directory, expired));
+  await fs.rename(path.join(directory, 'review-' + file), path.join(directory, 'review-' + expired));
+  assert.deepEqual(await history.evidence(captureId), []);
+  assert.deepEqual(await fs.readdir(directory), []);
+  await assert.rejects(history.recordReview(captureId, revision, 'acknowledged'), /evidence or its review changed/);
+});
+
+test('verification JSON publishing preserves an existing file and drops a rejected staging file', async t => {
+  const { directory, open } = await fixture(t);
+  const captureId = randomUUID();
+  const storage = open();
+  await storage.append(captureId, observation);
+  const target = path.join(directory, 'verification-export.json');
+  await publishNewJson(target, { observations: await storage.evidence() }, () => {});
+  const before = await fs.readFile(target, 'utf8');
+  assert.doesNotMatch(before, /private_|"observationHash"/);
+  await assert.rejects(publishNewJson(target, { fake: true }, () => {}), { code: 'EEXIST' });
+  await assert.rejects(publishNewJson(path.join(directory, 'rejected.json'), { fake: true }, () => { throw Error('Review changed.'); }), /changed/);
+  assert.equal(await fs.readFile(target, 'utf8'), before);
+  assert.ok(!(await fs.readdir(directory)).some(file => file.endsWith('.tmp') || file === 'rejected.json'));
 });

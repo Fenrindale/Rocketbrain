@@ -52,6 +52,39 @@ async function readMetadata(query, database, revision, onlyTable) {
 
 const scopedName = name => typeof name === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(name);
 
+async function readRelationshipJoinCatalog(query, activeDatabase, request = {}, revision) {
+  const { joinSchema, joinTable } = request;
+  if (![activeDatabase, joinSchema, joinTable].every(scopedName)) {
+    throw Error('Choose a lower-case schema and table name for the relationship join table.');
+  }
+  async function table(schema, name, needsForeignKeys) {
+    const catalog = await readMetadata(query, schema, revision, name);
+    const [observed, duplicate] = catalog.tables;
+    const required = ['tables', 'columns', 'indexes', ...(needsForeignKeys ? ['foreignKeys'] : [])];
+    if (!observed || duplicate || observed.name !== name || observed.kind !== 'table' ||
+        !required.every(area => catalog.coverage[area] === 'loaded')) {
+      throw Error('The current connection cannot verify the relationship table ' + schema + '.' + name + '.');
+    }
+    return catalog;
+  }
+  const join = await table(joinSchema, joinTable, true);
+  const joins = join.tables[0].foreignKeys;
+  const endpoints = joins.map(({ referencedSchema, referencedTable }) => [referencedSchema, referencedTable]);
+  const endpointNames = endpoints.map(([schema, name]) => schema + '.' + name);
+  if (endpoints.length !== 2 || endpoints.some(pair => !pair.every(scopedName)) || new Set(endpointNames).size !== 2 ||
+      endpointNames.includes(joinSchema + '.' + joinTable) ||
+      ![joinSchema, ...endpoints.map(([schema]) => schema)].includes(activeDatabase)) {
+    throw Error('Choose a join table with exactly two distinct foreign-key endpoints and an active schema in the relationship.');
+  }
+  const targets = [];
+  for (const [schema, name] of endpoints) targets.push(await table(schema, name, false));
+  const check = await table(joinSchema, joinTable, true);
+  if (JSON.stringify(join.tables[0]) !== JSON.stringify(check.tables[0])) {
+    throw Error('The join table or its foreign keys changed during inspection. Inspect again.');
+  }
+  return { activeDatabase, join, targets };
+}
+
 async function readForeignKeyTargetCatalog(query, sourceDatabase, request = {}, revision) {
   const { table, foreignKey, targetSchema, targetTable } = request;
   if (![sourceDatabase, table, targetSchema, targetTable].every(scopedName) || targetSchema === sourceDatabase ||
@@ -81,4 +114,4 @@ async function readForeignKeyTargetCatalog(query, sourceDatabase, request = {}, 
   return { sourceDatabase, table, foreignKey, targetSchema, targetTable, sourceColumns, catalog };
 }
 
-module.exports = { readMetadata, readForeignKeyTargetCatalog, scopedName };
+module.exports = { readMetadata, readForeignKeyTargetCatalog, readRelationshipJoinCatalog, scopedName };

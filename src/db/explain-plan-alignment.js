@@ -4,6 +4,8 @@ const { createHash } = require('node:crypto');
 
 const PLAN_TEXT_LIMIT = 2048;
 const PATH_TEXT_LIMIT = 4096;
+const REVIEW_LIMIT = 60;
+const ALTERNATIVES_PER_OPERATOR = 8;
 const RELATION = /^[A-Za-z_][A-Za-z0-9_$]*(?:\.[A-Za-z_][A-Za-z0-9_$]*)?$/;
 const TREE_ACCESS = /^((?:Covering )?[Ii]ndex (?:range scan|scan|lookup)|Single-row index lookup|Table scan) on (\S+)(?: using ([A-Za-z_][A-Za-z0-9_$]*)(?: (.+))?)?$/;
 
@@ -24,6 +26,7 @@ function accessAnchor(node) {
     const scope = JSON.stringify(['table', schema || '', table, alias]);
     return {
       scope, key:JSON.stringify([scope, access || '', indexAccess || '']),
+      method:[access, indexAccess].filter(Boolean).join(' / '),
       index:node.tags.filter(tag => tag.label === 'Index').map(tag => tag.value).join(', '),
       predicate:node.expressions.filter(item => /filter|condition/i.test(item.label))
         .map(item => item.value).join('\n')
@@ -33,7 +36,7 @@ function accessAnchor(node) {
     const parts = TREE_ACCESS.exec(node.name);
     if (!parts || !RELATION.test(parts[2]) || (parts[1] !== 'Table scan') !== Boolean(parts[3])) return null;
     const scope = JSON.stringify(['iterator', parts[2]]);
-    return { scope, key:JSON.stringify([scope, parts[1]]), index:parts[3] || '', predicate:parts[4] || '' };
+    return { scope, key:JSON.stringify([scope, parts[1]]), method:parts[1], index:parts[3] || '', predicate:parts[4] || '' };
   }
   return null;
 }
@@ -61,7 +64,7 @@ function indexOperators(plan) {
       entry.anchor = {
         scope:JSON.stringify(['filter', child.anchor.scope]),
         key:JSON.stringify(['filter', child.anchor.key]), relation:child.anchor.scope,
-        index:'', predicate:entry.node.name.slice('Filter: '.length)
+        method:'Filter before ' + child.anchor.method, index:'', predicate:entry.node.name.slice('Filter: '.length)
       };
       if (!child.signature) entry.anchorBlocked = true;
     }
@@ -91,7 +94,59 @@ function accessChanges(before, after) {
   return changes;
 }
 
-function alignOperators(before, after) {
+function reviewKeys(entry) {
+  if (!entry.signature || entry.reviewEligible === false) return [];
+  const keys = ['signature:' + entry.signature];
+  if (entry.anchor && !entry.anchorBlocked) keys.push('access:' + entry.anchor.key);
+  return keys;
+}
+
+function groupedOperators(entries) {
+  const byKey = new Map();
+  for (const entry of entries) for (const key of reviewKeys(entry)) {
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(entry);
+  }
+  return byKey;
+}
+
+function reviewCandidates(before, after) {
+  const leftGroups = groupedOperators(before), rightGroups = groupedOperators(after);
+  const candidates = [];
+  let limited = false;
+  for (const left of before) {
+    const keys = reviewKeys(left);
+    const alternatives = new Map();
+    for (const key of keys) {
+      const leftCount = leftGroups.get(key).length, right = rightGroups.get(key);
+      if (!right) continue;
+      for (const candidate of right) {
+        const existing = alternatives.get(candidate.path);
+        if (existing) { existing.competing ||= leftCount > 1; continue; }
+        alternatives.set(candidate.path, { candidate, matching: key.startsWith('signature:') ? 'details' : 'access',
+          competing:leftCount > 1 });
+        if (alternatives.size > ALTERNATIVES_PER_OPERATOR) break;
+      }
+      if (alternatives.size > ALTERNATIVES_PER_OPERATOR) break;
+    }
+    if (alternatives.size <= 1 && ![...alternatives.values()].some(item => item.competing)) continue;
+    if (alternatives.size > ALTERNATIVES_PER_OPERATOR) limited = true;
+    for (const { candidate, matching } of [...alternatives.values()].slice(0, ALTERNATIVES_PER_OPERATOR)) {
+      if (candidates.length === REVIEW_LIMIT) return { pairs:candidates, limited:true };
+      candidates.push({ id:String(candidates.length + 1), before:left, after:candidate, matching });
+    }
+  }
+  return { pairs:candidates, limited };
+}
+
+function reviewSide(entry) {
+  return {
+    position:entry.address, name:entry.node?.name ?? entry.name,
+    method:entry.anchor?.method, index:entry.anchor?.index, predicate:entry.anchor?.predicate
+  };
+}
+
+function alignOperators(before, after, decisions = new Map()) {
   const matches = new Map(), used = new Set();
   function match(left, right, alignment, changes = []) {
     matches.set(left.path, { before:left, after:right, alignment, changes });
@@ -119,10 +174,25 @@ function alignOperators(before, after) {
     const right = after.get(left.path);
     if (right && !matches.has(left.path) && !used.has(right.path)) match(left, right, 'position');
   }
-  return [
+  const review = reviewCandidates([...before.values()].filter(entry => !matches.has(entry.path)),
+    [...after.values()].filter(entry => !used.has(entry.path)));
+  for (const pair of review.pairs) {
+    const left = pair.before, right = pair.after;
+    if (decisions.get(pair.id) !== 'accepted' || matches.has(left.path) || used.has(right.path)) continue;
+    const changes = left.anchor && right.anchor ? accessChanges(left.anchor, right.anchor) : [];
+    match(left, right, 'reviewed', changes);
+  }
+  const reviewPairs = review.pairs.map(pair => {
+    const accepted = matches.get(pair.before.path)?.after === pair.after;
+    const status = accepted ? 'accepted' : decisions.get(pair.id) === 'ignored' ? 'ignored' :
+      matches.has(pair.before.path) || used.has(pair.after.path) ? 'unavailable' : 'pending';
+    return { id:pair.id, status, matching:pair.matching, baseline:reviewSide(pair.before), candidate:reviewSide(pair.after) };
+  });
+  const rows = [
     ...[...before.values()].map(entry => matches.get(entry.path) || { before:entry, alignment:'unmatched' }),
     ...[...after.values()].filter(entry => !used.has(entry.path)).map(entry => ({ after:entry, alignment:'unmatched' }))
   ];
+  return { rows, candidateReview:{ pairs:reviewPairs, limited:review.limited } };
 }
 
 module.exports = { PLAN_TEXT_LIMIT, indexOperators, alignOperators };

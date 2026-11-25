@@ -1,12 +1,20 @@
 'use strict';
 
+const path = require('node:path');
 const { createTableTransfer } = require('./table-transfer');
 const { createTransferRecovery } = require('./table-transfer-recovery');
-const { createTransferHistory, historyLimits } = require('./table-transfer-history');
+const { createTransferHistory, historyLimits, verificationReviewDecisions, publishNewJson } = require('./table-transfer-history');
 
 const historyCommand = 'rocketbrain.data.transferVerificationHistory';
+const reviewCommand = 'rocketbrain.data.reviewTransferVerification';
+const exportCommand = 'rocketbrain.data.exportTransferVerificationHistory';
 const historyScheme = 'rocketbrain-table-copy-history';
 const statusLabels = { matching: 'Matching', missing: 'Missing keys', mismatch: 'Different values', inconclusive: 'Inconclusive' };
+const reviewDetails = {
+  acknowledged: 'Record that you read the destination observation.',
+  'follow-up-required': 'Flag the observation for further investigation.',
+  'external-resolution-recorded': 'Record that the case was handled outside Rocketbrain.'
+};
 const reasons = {
   'missing-review-evidence': 'This saved transfer has no destination evidence.',
   'primary-key-not-mapped': 'The review did not map every destination primary-key column.',
@@ -21,6 +29,10 @@ function checkSummary(result) {
   const scope = result.coverage === 'all-reviewed-keys' ? 'all reviewed keys' : 'sampled reviewed keys';
   return result.checkedKeys + ' / ' + result.rows + ' keys checked (' + scope + ') · ' +
     result.matching + ' matching · ' + result.missing + ' missing · ' + result.mismatch + ' different.';
+}
+
+function observationDetail(entry) {
+  return entry.reason ? reasons[entry.reason] : checkSummary(entry);
 }
 
 function registerTableTransfer(context, vscode, { database }) {
@@ -89,17 +101,20 @@ function registerTableTransfer(context, vscode, { database }) {
   }));
 
   async function showTransferHistory(captureId) {
-    const entries = await core.listTransferVerificationHistory({ captureId });
+    const entries = await core.listTransferVerificationEvidence({ captureId });
     trusted();
     historyText = [
       'Table Copy Verification History',
       'This workspace retains ' + historyLimits.entries + ' observations for up to ' + historyLimits.ageMs / 86400000 + ' days.',
       'Observations report the destination at the time of each check. Commit history remains unconfirmed and replay stays blocked.',
+      'Use Review Table Copy Verification to record one decision per latest observation. Use Export Table Copy Verification History to save this evidence as JSON.',
       ...(captureId ? ['Capture ' + captureId] : []),
       '',
       ...(entries.length ? entries.flatMap(entry => [
         entry.recordedAt + ' · ' + statusLabels[entry.status] + ' · Capture ' + entry.captureId,
-        entry.reason ? reasons[entry.reason] : checkSummary(entry), ''
+        observationDetail(entry),
+        ...(entry.review ? ['Review · ' + verificationReviewDecisions[entry.review.decision] + ' · ' + entry.review.reviewedAt] : []),
+        ''
       ]) : ['No verification observations are available.'])
     ].join('\n');
     historyChanged.fire(historyUri);
@@ -108,6 +123,67 @@ function registerTableTransfer(context, vscode, { database }) {
     return entries;
   }
   command(historyCommand, () => showTransferHistory());
+
+  async function reviewTransferVerification(captureId) {
+    if (captureId === undefined) {
+      const latest = new Map();
+      for (const entry of await core.listTransferVerificationEvidence()) {
+        if (!latest.has(entry.captureId)) latest.set(entry.captureId, entry);
+      }
+      const choices = [...latest.values()].filter(entry => !entry.review).map(entry => ({
+        label: statusLabels[entry.status] + ' · ' + entry.recordedAt,
+        description: 'Capture ' + entry.captureId,
+        detail: observationDetail(entry),
+        captureId: entry.captureId
+      }));
+      if (!choices.length) throw Error('There are no latest observations awaiting an operator review.');
+      const selected = await vscode.window.showQuickPick(choices, { title: 'Select Verification Evidence to Review' });
+      if (!selected) return;
+      captureId = selected.captureId;
+    }
+    const { reviewId, observation } = await core.prepareTransferVerificationReview({ captureId });
+    const choices = Object.entries(verificationReviewDecisions).map(([decision, label]) => ({ decision, label, detail: reviewDetails[decision] }));
+    const choice = await vscode.window.showQuickPick(choices, {
+      title: 'Verification Review · ' + statusLabels[observation.status] + ' · ' + observation.recordedAt
+    });
+    if (!choice) return;
+    const answer = await vscode.window.showWarningMessage(choice.label + '?', {
+      modal: true,
+      detail: 'Capture ' + captureId + '\n' + observationDetail(observation) +
+        '\nThe decision is recorded with this observation. Commit history remains unconfirmed and replay stays blocked.'
+    }, 'Record Review');
+    if (answer !== 'Record Review') return;
+    trusted();
+    const reviewed = await core.recordTransferVerificationReview({ reviewId, decision: choice.decision });
+    await showTransferHistory(captureId);
+    return reviewed;
+  }
+  command(reviewCommand, () => reviewTransferVerification());
+
+  async function exportTransferVerificationHistory({ uri, captureId } = {}) {
+    trusted();
+    if (uri?.scheme !== 'file' || uri.authority || typeof uri.fsPath !== 'string' ||
+        !path.isAbsolute(uri.fsPath) || path.extname(uri.fsPath).toLowerCase() !== '.json') {
+      throw Error('Choose a local JSON file for the table copy verification history.');
+    }
+    const observations = await core.listTransferVerificationEvidence({ captureId });
+    const report = {
+      format: 'RocketbrainTableCopyVerificationHistory', version: 1, exportedAt: new Date().toISOString(), observations
+    };
+    try { await publishNewJson(uri.fsPath, report, trusted); }
+    catch (error) {
+      if (error.code === 'EEXIST') throw Error('Choose a new file name to preserve the existing export.');
+      throw error;
+    }
+    return { uri: uri.toString(), observations: observations.length, reviewed: observations.filter(item => item.review).length };
+  }
+  command(exportCommand, async () => {
+    const uri = await vscode.window.showSaveDialog({ title: 'Export Table Copy Verification History', filters: { JSON: ['json'] } });
+    if (!uri) return;
+    const result = await exportTransferVerificationHistory({ uri });
+    await vscode.window.showInformationMessage(result.observations + ' table copy verification observations exported.');
+    return result;
+  });
 
   command('rocketbrain.data.captureTransferSource', async item => {
     const selected = item?.table?.name || (await vscode.window.showQuickPick(tableChoices(), { title: 'Select Source Table' }))?.label;
@@ -138,10 +214,11 @@ function registerTableTransfer(context, vscode, { database }) {
     const limit = 'This observes current rows. Commit history remains unconfirmed and replay stays blocked.';
     const details = result.status === 'inconclusive' ? (reasons[result.reason] || reasons['destination-unavailable']) : checkSummary(result);
     const message = destination + details + ' ' + limit + (result.historyRecorded ? '' : ' The local observation could not be saved.');
-    const actions = result.historyRecorded ? ['Show Verification History'] : [];
+    const actions = result.historyRecorded ? ['Review Evidence', 'Show Verification History'] : [];
     const selected = result.status === 'matching' ? await vscode.window.showInformationMessage(message, ...actions)
       : await vscode.window.showWarningMessage(message, ...actions);
-    if (selected === 'Show Verification History') await showTransferHistory(captureId);
+    if (selected === 'Review Evidence') await reviewTransferVerification(captureId);
+    else if (selected === 'Show Verification History') await showTransferHistory(captureId);
     return result;
   }
 
@@ -237,7 +314,7 @@ function registerTableTransfer(context, vscode, { database }) {
     return result;
   });
 
-  return { ...core, async dispose() {
+  return { ...core, exportTransferVerificationHistory, async dispose() {
     if (closed) return;
     closed = true;
     for (const subscription of subscriptions) subscription.dispose();

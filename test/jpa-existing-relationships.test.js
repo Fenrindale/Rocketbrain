@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { readRelationshipJoinCatalog } = require('../src/db/metadata');
 const { existingRelationshipSelection, planExistingRelationship } = require('../src/jpa/entity-existing-relationships');
 
 const database = 'fixture_main', pkg = 'fixture.jpa';
@@ -83,4 +84,147 @@ test('metadata fingerprints record changes to the foreign key table and its inde
   assert.notEqual(first, second);
   child.indexes.push(index('secondary', 'parent_id', false));
   assert.notEqual(plan().fingerprint, second);
+});
+
+function composite() {
+  const sample = fixture();
+  const { child, parent, sources } = sample;
+  parent.columns.push(column('tenant_id', 2, true, false));
+  parent.indexes[0].columns = ['tenant_id', 'id'].map((name, index) => ({ name, ordinal:index + 1, prefixLength:null }));
+  child.columns.push(column('parent_tenant', 3, false, true));
+  child.foreignKeys[0].columns = [
+    { name:'parent_tenant', referencedColumn:'tenant_id', ordinal:1 },
+    { name:'parent_id', referencedColumn:'id', ordinal:2 }
+  ];
+  sources[1].text = sources[1].text.replace('public class Parent', '@IdClass(Parent.Key.class)\npublic class Parent')
+    .replace('private Long id;', `private Long id;
+    @Id @Column(name = "tenant_id") private Long tenant;
+    public static class Key implements java.io.Serializable {
+      public Long id;
+      public Long tenant;
+    }`);
+  return sample;
+}
+
+test('composite existing-entity mappings preserve FK order and one consistent write owner', () => {
+  const { plan, sources } = composite();
+  const association = plan();
+  assert.equal(association.ownership, 'association');
+  assert.match(association.edits[0].text, /@jakarta\.persistence\.JoinColumns/);
+  assert.match(association.edits[0].text, /parent_tenant.*"tenant_id"[\s\S]*parent_id.*"id"/);
+  sources[0].text = sources[0].text.replace('private Long id;',
+    'private Long id; @Column(name = "parent_tenant") private Long parentTenant;');
+  assert.throws(plan, /scalars must map all/);
+  sources[0].text = sources[0].text.replace('private Long parentTenant;',
+    'private Long parentTenant; @Column(name = "parent_id") private Long parentId;');
+  const scalar = plan();
+  assert.equal(scalar.ownership, 'scalar');
+  assert.equal(scalar.edits[0].text.match(/insertable = false, updatable = false/g).length, 2);
+});
+
+test('composite existing-entity plans refuse ID-class mismatch, FK reversal, mixed nullability and unique subkeys', () => {
+  for (const [change, message] of [
+    [sample => { sample.sources[1].text = sample.sources[1].text.replace('public Long tenant;', 'public Integer tenant;'); }, /explicit basic columns/],
+    [sample => { sample.child.foreignKeys[0].columns[0].ordinal = 2; sample.child.foreignKeys[0].columns[1].ordinal = 1; }, /types and order/],
+    [sample => { sample.child.columns[2].nullable = false; }, /same nullability/],
+    [sample => { sample.child.indexes[1].unique = true; }, /non-unique/]
+  ]) {
+    const sample = composite();
+    change(sample);
+    assert.throws(sample.plan, message);
+  }
+});
+
+function joinScenario() {
+  const remote = 'fixture_other';
+  const { parent, sources } = composite();
+  const local = { name:'parent', kind:'table', engine:'InnoDB', columns:[column('id', 1, true, false)],
+    indexes:[index('PRIMARY', 'id')], foreignKeys:[] };
+  const fields = ['owner_id', 'target_tenant', 'target_id'];
+  const bridge = {
+    name:'owner_tag', kind:'table', engine:'InnoDB',
+    columns:fields.map((name, index) => column(name, index + 1, true, false)),
+    indexes:[{ name:'PRIMARY', primaryKey:true, unique:true, columns:fields.map((name, index) =>
+      ({ name, ordinal:index + 1, prefixLength:null })) }],
+    foreignKeys:[
+      { name:'owner_fk', referencedSchema:database, referencedTable:local.name,
+        columns:[{ name:'owner_id', referencedColumn:'id', ordinal:1 }] },
+      { name:'target_fk', referencedSchema:remote, referencedTable:parent.name,
+        columns:[{ name:'target_tenant', referencedColumn:'tenant_id', ordinal:1 },
+          { name:'target_id', referencedColumn:'id', ordinal:2 }] }
+    ]
+  };
+  const coverage = { tables:'loaded', columns:'loaded', indexes:'loaded', foreignKeys:'loaded' };
+  const catalog = (schema, table) => ({ database:schema, scope:'table', selectedTable:table.name, coverage, tables:[table] });
+  const joinProof = { activeDatabase:database, join:catalog(remote, bridge), targets:[catalog(database, local), catalog(remote, parent)] };
+  sources[0] = { uri:uri('Owner'), text:declaration('Owner', local.name, '') };
+  sources[1].text = sources[1].text.replace('@Table(name = "parent")', '@Table(name = "parent", catalog = "' + remote + '")');
+  const request = { kind:'manyToMany', projectUri:'file:///fixture', joinSchema:remote, joinTable:bridge.name,
+    ownerForeignKey:'owner_fk', targetForeignKey:'target_fk',
+    owner:{ uri:uri('Owner'), type:pkg + '.Owner', table:local.name, schema:database, property:'tags' },
+    target:{ uri:uri('Parent'), type:pkg + '.Parent', table:parent.name, schema:remote, property:'owners' } };
+  const plan = () => planExistingRelationship({ joinProof, selection:existingRelationshipSelection(request), sources });
+  return { request, plan, joinProof, remote, bridge, local, parent, sources };
+}
+
+test('qualified join edits resolve same-named endpoints, composite reference columns and exact mappedBy', () => {
+  const { plan, bridge } = joinScenario();
+  const first = plan();
+  assert.equal(first.ownership, 'join-table');
+  assert.match(first.edits[0].text, /catalog = "fixture_other"/);
+  assert.match(first.edits[0].text, /inverseJoinColumns = \{.*target_tenant.*tenant_id[\s\S]*target_id.*"id"/);
+  assert.match(first.edits[1].text, /ManyToMany\(mappedBy = "tags"/);
+  assert.doesNotMatch(first.edits[1].text, /JoinTable/);
+  bridge.indexes.push(index('more_lookup', 'target_tenant', false));
+  assert.notEqual(plan().fingerprint, first.fingerprint);
+});
+
+test('join edits refuse an implicit remote catalog, different endpoints, narrower uniqueness and payload', () => {
+  for (const [change, message] of [
+    [sample => { sample.sources[1].text = sample.sources[1].text.replace(', catalog = "fixture_other"', ''); }, /explicit matching @Table/],
+    [sample => { sample.request.targetForeignKey = 'forged_fk'; }, /exact table/],
+    [sample => { sample.bridge.indexes.push(index('one_per_tenant', 'target_tenant')); }, /narrower uniqueness/],
+    [sample => { sample.bridge.columns.push(column('later_note', 4, false, true)); }, /only the two disjoint/]
+  ]) {
+    const sample = joinScenario();
+    change(sample);
+    assert.throws(sample.plan, message);
+  }
+});
+
+test('join metadata reads only a qualified table and its observed endpoints, and rejects concurrent drift', async () => {
+  const { remote, bridge, local, parent } = joinScenario();
+  const tables = new Map([[database + '.' + local.name, local], [remote + '.' + parent.name, parent],
+    [remote + '.' + bridge.name, bridge]]);
+  const reads = [];
+  let drift = false;
+  async function query(sql, values) {
+    assert.equal(values.length, 2);
+    const name = values.join('.');
+    const table = tables.get(name);
+    assert.ok(table);
+    reads.push(name);
+    if (sql.includes('information_schema.TABLES')) return { rows:[[table.name, 'BASE TABLE', 'InnoDB', null, null]] };
+    if (sql.includes('information_schema.COLUMNS')) {
+      return { rows:table.columns.map(c => [table.name, c.name, c.type, c.nullable ? 'YES' : 'NO', null,
+        c.primaryKey ? 'PRI' : '', c.extra, c.ordinal, null, null, null]) };
+    }
+    if (sql.includes('information_schema.STATISTICS')) {
+      const indexes = drift && table === bridge && reads.filter(value => value === name).length > 4 ?
+        [...table.indexes, index('new_lookup', 'target_tenant', false)] : table.indexes;
+      return { rows:indexes.flatMap(i => i.columns.map(c => [table.name, i.name, i.unique ? 0 : 1,
+        c.ordinal, c.name, c.prefixLength, 'BTREE', 'A'])) };
+    }
+    assert.match(sql, /information_schema\.KEY_COLUMN_USAGE/);
+    return { rows:table.foreignKeys.flatMap(f => f.columns.map(c => [table.name, f.name, c.name, c.ordinal,
+      f.referencedSchema, f.referencedTable, c.referencedColumn, 'RESTRICT', 'RESTRICT'])) };
+  }
+  const request = { joinSchema:remote, joinTable:bridge.name };
+  const result = await readRelationshipJoinCatalog(query, database, request, 2);
+  assert.deepEqual(result.targets.map(item => [item.database, item.selectedTable]), [[database, local.name], [remote, parent.name]]);
+  assert.deepEqual(reads, [remote + '.' + bridge.name, database + '.' + local.name, remote + '.' + parent.name,
+    remote + '.' + bridge.name].flatMap(value => Array(4).fill(value)));
+  reads.length = 0;
+  drift = true;
+  await assert.rejects(readRelationshipJoinCatalog(query, database, request, 3), /changed during inspection/);
 });

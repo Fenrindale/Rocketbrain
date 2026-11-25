@@ -32,7 +32,7 @@ function captureSource(document, selection) {
 }
 
 function registerExplainPlans(context, vscode, { database }) {
-  const panels = new Map(), comparisons = new Set(), reviews = new Map();
+  const panels = new Map(), comparisons = new Map(), reviews = new Map();
   const seriesPanels = new Map(), seriesReviews = new Map();
   let disposed = false, opening = false;
 
@@ -263,24 +263,25 @@ function registerExplainPlans(context, vscode, { database }) {
       Boolean(left.fileName || right.fileName || left.target.key === right.target.key);
   }
 
-  function seriesComparison(leftId, rightId) {
+  function comparableSeries(leftId, rightId) {
     trusted();
     const left = seriesPanels.get(leftId), right = seriesPanels.get(rightId);
     if (!seriesCompatible(left, right)) {
       throw Error('Choose compatible SQL plan series. Live captures require the same connection.');
     }
+    return [left, right];
+  }
+
+  function seriesComparison(leftId, rightId) {
+    const [left, right] = comparableSeries(leftId, rightId);
     return { ...compareSeries(left.series, right.series), saved:Boolean(left.fileName || right.fileName) };
   }
 
   function showSeriesComparison(leftId, rightId) {
-    if (comparisons.size >= 4) throw Error('Close a plan comparison before opening another.');
-    const result = seriesComparison(leftId, rightId);
-    const panel = vscode.window.createWebviewPanel('rocketbrain.comparePlanSeries', 'Compare SQL measurement series', vscode.ViewColumn.Beside,
-      { enableScripts: false, localResourceRoots: [] });
-    comparisons.add(panel);
-    panel.onDidDispose(() => comparisons.delete(panel));
-    panel.webview.html = seriesHtml(result, null, randomBytes(24).toString('base64'));
-    return result;
+    const [left, right] = comparableSeries(leftId, rightId);
+    return openComparison('rocketbrain.comparePlanSeries', 'Compare SQL measurement series', decisions =>
+      ({ ...compareSeries(left.series, right.series, decisions), saved:Boolean(left.fileName || right.fileName) }),
+      (report, nonce) => seriesHtml(report, null, nonce));
   }
 
   function seriesChoices() {
@@ -302,13 +303,17 @@ function registerExplainPlans(context, vscode, { database }) {
     if (right) return showSeriesComparison(left.id, right.id);
   }
 
-  function comparison(leftId, rightId) {
+  function comparableCaptures(leftId, rightId) {
     trusted();
     const left = panels.get(leftId), right = panels.get(rightId);
     if (!left || !right || left === right || left.target.key !== right.target.key) {
       throw Error('Choose two open captures from the same database connection.');
     }
-    return comparePlans(left.report, right.report);
+    return [left.report, right.report];
+  }
+
+  function comparison(leftId, rightId) {
+    return comparePlans(...comparableCaptures(leftId, rightId));
   }
 
   async function chooseComparison() {
@@ -330,14 +335,49 @@ function registerExplainPlans(context, vscode, { database }) {
   }
 
   function showComparison(leftId, rightId) {
+    const [left, right] = comparableCaptures(leftId, rightId);
+    return openComparison('rocketbrain.comparePlans', 'Compare SQL plans',
+      decisions => comparePlans(left, right, decisions), comparisonHtml);
+  }
+
+  function openComparison(viewType, title, compare, render) {
     if (comparisons.size >= 4) throw Error('Close a plan comparison before opening another.');
-    const result = comparison(leftId, rightId);
-    const panel = vscode.window.createWebviewPanel('rocketbrain.comparePlans', 'Compare SQL plans', vscode.ViewColumn.Beside,
-      { enableScripts: false, localResourceRoots: [] });
-    comparisons.add(panel);
-    panel.onDidDispose(() => comparisons.delete(panel));
-    panel.webview.html = comparisonHtml(result, randomBytes(24).toString('base64'));
-    return result;
+    const reviewId = randomUUID(), decisions = new Map(), report = compare(decisions);
+    const enableScripts = report.candidateReview.pairs.length > 0;
+    const panel = vscode.window.createWebviewPanel(viewType, title, vscode.ViewColumn.Beside,
+      { enableScripts, localResourceRoots:[] });
+    const record = { panel, compare, render, decisions, report };
+    comparisons.set(reviewId, record);
+    panel.onDidDispose(() => comparisons.delete(reviewId));
+    if (enableScripts) panel.webview.onDidReceiveMessage(message => {
+      if (message?.type !== 'review-plan-candidate') return;
+      try { updateReview(reviewId, message); }
+      catch (error) { void vscode.window.showErrorMessage(error.message); }
+    });
+    panel.webview.html = render({ ...report, reviewId }, randomBytes(24).toString('base64'));
+    return structuredClone({ ...report, reviewId });
+  }
+
+  function updateReview(reviewId, { action, candidateId } = {}) {
+    trusted();
+    const record = comparisons.get(reviewId);
+    if (!record) throw Error('The SQL plan comparison is closed.');
+    const decisions = new Map(record.decisions);
+    if (action === 'reset') decisions.clear();
+    else if (action === 'accept' || action === 'ignore') {
+      const pair = record.report.candidateReview.pairs.find(item => item.id === candidateId);
+      if (pair?.status !== 'pending') throw Error('Choose an available pair in this SQL plan comparison.');
+      decisions.set(candidateId, action === 'accept' ? 'accepted' : 'ignored');
+    } else throw Error('Choose a SQL plan review action.');
+    const report = record.compare(decisions);
+    record.panel.webview.html = record.render({ ...report, reviewId }, randomBytes(24).toString('base64'));
+    record.decisions = decisions;
+    record.report = report;
+    return report;
+  }
+
+  function reviewComparison(reviewId, action) {
+    return structuredClone({ ...updateReview(reviewId, action), reviewId });
   }
 
   context.subscriptions.push(vscode.commands.registerCommand(VISUAL_EXPLAIN, async () => {
@@ -409,6 +449,7 @@ function registerExplainPlans(context, vscode, { database }) {
   }));
   return { open, revealSource, loadTree, prepareMeasurement, measure, comparison, showComparison, close(id) { panels.get(id)?.panel.dispose(); },
     prepareSeries, measureSeries, getSample, exportSamples, openSavedSamples, seriesComparison, showSeriesComparison,
+    reviewComparison, closeComparison(id) { comparisons.get(id)?.panel.dispose(); },
     closeSeries(id) { seriesPanels.get(id)?.panel.dispose(); },
     dispose() {
       disposed = true;
@@ -416,7 +457,7 @@ function registerExplainPlans(context, vscode, { database }) {
       seriesReviews.clear();
       for (const { panel } of panels.values()) panel.dispose();
       for (const { panel } of seriesPanels.values()) panel.dispose();
-      for (const panel of comparisons) panel.dispose();
+      for (const { panel } of comparisons.values()) panel.dispose();
       panels.clear();
       seriesPanels.clear();
       comparisons.clear();

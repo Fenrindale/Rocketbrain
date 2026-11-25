@@ -64,7 +64,7 @@ async function loseCommitAcknowledgement(api, reviewId, sendCommit) {
   } finally { db._control = original; }
 }
 
-async function runTableTransferVerificationChecks(api, vscode, checks, { expanded = false } = {}) {
+async function runTableTransferVerificationChecks(api, vscode, checks, { expanded = false, onVerification } = {}) {
   const engines = participants(), tools = api.tableTransfer, directions = [];
   const rows = expanded ? 144 : 48;
   const commands = await vscode.commands.getCommands(true);
@@ -114,6 +114,7 @@ async function runTableTransferVerificationChecks(api, vscode, checks, { expande
       assert.equal(matching.comparedMappedColumns, mapping.length);
       assert.ok(!Object.hasOwn(matching, 'samples') && !JSON.stringify(matching).includes(data[0][0]));
       await assert.rejects(tools.resumeSource({ captureId: matchingId }), /previous Commit/);
+      await onVerification?.({ status: 'matching', captureId: matchingId, engine: from.engine });
       await api.connectMysql(from.config);
       const wrongTarget = await tools.verifyUncertainCommit({ captureId: matchingId });
       assert.equal(wrongTarget.reason, 'destination-identity-changed');
@@ -128,10 +129,14 @@ async function runTableTransferVerificationChecks(api, vscode, checks, { expande
       await target.query('ALTER TABLE ' + committedTable + ' ADD COLUMN later_col INTEGER NULL');
       const drift = await tools.verifyUncertainCommit({ captureId: matchingId });
       assert.deepEqual([drift.status, drift.reason], ['inconclusive', 'destination-definition-changed']);
+      await onVerification?.({ status: 'inconclusive', captureId: matchingId, engine: from.engine });
+      assert.equal(await count(committedTable), rows - 1);
+      if (onVerification) await assert.rejects(tools.resumeSource({ captureId: matchingId }), /previous Commit/);
 
       const missingId = await setup(missingTable, false);
       const missing = await tools.verifyUncertainCommit({ captureId: missingId });
       assert.deepEqual([missing.status, missing.matching, missing.missing, missing.mismatch], ['missing', 0, sampleKeys, 0]);
+      await onVerification?.({ status: 'missing', captureId: missingId, engine: from.engine });
       assert.equal(await count(missingTable), 0);
       await assert.rejects(tools.resumeSource({ captureId: missingId }), /previous Commit/);
       assert.ok((await tools.listRecoverableSources()).filter(item => saved.includes(item.id)).every(item => item.recoveryState === 'settlement-unconfirmed'));
