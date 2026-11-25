@@ -34,18 +34,21 @@
     "workspaceContains:**/build.gradle.kts",
     "onView:rocketbrain.javaProjects",
     "onView:rocketbrain.connections",
-    "onNotebook:rocketbrain-sql-notebook"
+    "onNotebook:rocketbrain-sql-notebook",
+    "onNotebook:rocketbrain-jupyter"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
   },
   "contributes": {
     "notebooks": [
-      { "type": "rocketbrain-sql-notebook", "displayName": "Rocketbrain SQL Notebook", "selector": [{ "filenamePattern": "*.rbsql" }] }
+      { "type": "rocketbrain-sql-notebook", "displayName": "Rocketbrain SQL Notebook", "selector": [{ "filenamePattern": "*.rbsql" }] },
+      { "type": "rocketbrain-jupyter", "displayName": "Rocketbrain Jupyter Notebook", "selector": [{ "filenamePattern": "*.ipynb" }] }
     ],
     "languages": [
       {
@@ -73,6 +76,8 @@
       { "command": "rocketbrain.quarkus.startDev", "title": "Start Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.stopDev", "title": "Stop Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.runTests", "title": "Run Quarkus Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
+      { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
       { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1339,6 +1344,10 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.jupyter.pythonPath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to local Python with jupyter_client and ipykernel for explicit notebook execution."
+        },
         "rocketbrain.sql.analysis.resolutionScopes": {
           "type": "array",
           "default": [],
