@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs/promises');
+const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { spawn } = require('node:child_process');
@@ -132,19 +133,19 @@ class GroovyConsole {
   }
 }
 
-async function startGroovyConsole({workspacePath,storagePath,javaHome,gradleHome,groovyJar,workspaceTrusted} = {}) {
+async function startGroovyConsole({workspacePath,javaHome,gradleHome,groovyJar,workspaceTrusted} = {}) {
   if (workspaceTrusted !== true) throw fail('Trust the workspace before executing Groovy code.');
-  if (!path.isAbsolute(workspacePath || '') || !path.isAbsolute(storagePath || '') || !path.isAbsolute(javaHome || '')) {
+  if (!path.isAbsolute(workspacePath || '') || !path.isAbsolute(javaHome || '')) {
     throw fail('Choose a local trusted workspace and configured independent Java runtime.');
   }
   const binary=independentJavaExecutable(path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
   const bytes=await verifiedGroovyJar({groovyJar,gradleHome});
-  await fs.mkdir(storagePath,{recursive:true});
-  const parent=await fs.realpath(storagePath);
+  const parent=await fs.realpath(os.tmpdir());
   const root=await fs.mkdtemp(path.join(parent,'groovy-console-'));
   try {
     const worker=path.join(root,'GroovyConsoleWorker.java'), runtime=path.join(root,GROOVY_JAR);
-    await Promise.all([fs.writeFile(worker,source,{flag:'wx'}),fs.writeFile(runtime,bytes,{flag:'wx'})]);
+    await fs.writeFile(worker,source,{flag:'wx'});
+    await fs.writeFile(runtime,bytes,{flag:'wx'});
     const env={...process.env};
     for (const key of Object.keys(env)) if (['JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS','CLASSPATH'].includes(key.toUpperCase())) delete env[key];
     const child=spawn(binary,['-Xmx192m','-cp',runtime,'--source','25',worker],{

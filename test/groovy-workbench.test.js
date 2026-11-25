@@ -43,11 +43,14 @@ test('Gradle workbench shows Java and Groovy sources admitted by joint source ro
 
 test('real pinned Groovy persists console bindings, evaluates dynamic code, reports errors and limits output',runtime,async t => {
   const {javaHome,gradleHome}=JSON.parse(await fs.readFile(configuration,'utf8'));
-  const root=await temporary(), fixture=await createGroovyFixture(root), storagePath=path.join(root,'storage');
+  const root=await temporary(), fixture=await createGroovyFixture(root);
   t.after(() => fs.rm(root,{recursive:true,force:true,maxRetries:8,retryDelay:150}));
-  const options={workspacePath:fixture,storagePath,javaHome,gradleHome,workspaceTrusted:true};
+  const options={workspacePath:fixture,javaHome,gradleHome,workspaceTrusted:true};
   const first=await startGroovyConsole(options);
+  const firstWorker=path.dirname(first.child.spawnargs.at(-1));
   try {
+    assert.equal(path.dirname(firstWorker),await fs.realpath(os.tmpdir()));
+    assert.match(path.basename(firstWorker),/^groovy-console-/);
     const result=await first.evaluate("word = 'rocket'; word");
     assert.equal(result.value,'rocket');
     const dynamic=await first.evaluate("map = [name: word, points: [1, 2, 3]]; map.name.toUpperCase() + ':' + map.points.sum()");
@@ -69,7 +72,9 @@ test('real pinned Groovy persists console bindings, evaluates dynamic code, repo
     assert.match(run.stdout,/score=20/);
     assert.equal(run.value,'20');
   } finally { await first.dispose(); }
+  await assert.rejects(fs.stat(firstWorker),{code:'ENOENT'});
   const next=await startGroovyConsole(options);
+  const nextWorker=path.dirname(next.child.spawnargs.at(-1));
   try {
     const reset=await next.evaluate('word');
     assert.equal(reset.state,'error');
@@ -82,7 +87,7 @@ test('real pinned Groovy persists console bindings, evaluates dynamic code, repo
     cancel();
     await assert.rejects(evaluation,/cancelled/);
   } finally { await next.dispose(); }
-  assert.deepEqual(await fs.readdir(storagePath),[]);
+  await assert.rejects(fs.stat(nextWorker),{code:'ENOENT'});
 });
 
 test('real Gradle joint compilation and Spock execute three dynamic and Java/Groovy cases',runtime,async t => {

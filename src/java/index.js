@@ -138,7 +138,7 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(api.move,api.memberMove,api.changeSignature,api.safeDelete);
   api.workbench=require('./workbench').registerJavaWorkbench(context,vscode,api,output);
   subscriptions.push(api.workbench);
-  api.groovy=require('./groovy-vscode').registerGroovyWorkbench(context,vscode,api);
+  api.groovy=require('./groovy-vscode').registerGroovyWorkbench(vscode,api);
   api.quarkus=require('./quarkus-vscode').registerQuarkusWorkbench(vscode,api);
   async function installEngine() {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before installing and starting the Java engine.');

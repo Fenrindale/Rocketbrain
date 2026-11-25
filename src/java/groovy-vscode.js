@@ -11,10 +11,9 @@ const COMMANDS = Object.freeze({
   tests:'rocketbrain.groovy.runTests'
 });
 
-function registerGroovyWorkbench(context,vscode,java) {
+function registerGroovyWorkbench(vscode,java) {
   const output = vscode.window.createOutputChannel('Rocketbrain Groovy Console');
   const diagnostics = vscode.languages.createDiagnosticCollection('rocketbrain-groovy');
-  const storagePath = path.join((context.storageUri || context.globalStorageUri).fsPath,'groovy');
   const subscriptions = [output,diagnostics];
   const jobs = new Set(), processes = new Set();
   let console, consoleKey, busy = false, disposed = false, epoch = 0, closing;
@@ -32,7 +31,7 @@ function registerGroovyWorkbench(context,vscode,java) {
 
   function configuration(workingDirectory) {
     const config = vscode.workspace.getConfiguration('rocketbrain.java');
-    return {workspacePath:directory(workingDirectory),storagePath,
+    return {workspacePath:directory(workingDirectory),
       javaHome:config.get('javaHome') || java.getState().javaHome,gradleHome:config.get('gradleHome'),
       groovyJar:config.get('groovyConsoleJar'),workspaceTrusted:vscode.workspace.isTrusted};
   }
@@ -163,7 +162,12 @@ function registerGroovyWorkbench(context,vscode,java) {
   function register(command,action) {
     subscriptions.push(vscode.commands.registerCommand(command,() => track(async () => {
       try { trusted(); return await action(); }
-      catch (error) { await vscode.window.showErrorMessage('Rocketbrain Groovy: '+error.message); return undefined; }
+      catch (error) {
+        const message='Rocketbrain Groovy: '+error.message;
+        output.appendLine(message);
+        void vscode.window.showErrorMessage(message);
+        return undefined;
+      }
     })));
   }
 
