@@ -58,13 +58,13 @@ function verifyReferences(rows, source) {
 async function runJoinedDmlImpactChecks(api,vscode,checks) {
   return fixture(async ({config,left,right,target,source})=>{
     const parent=await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
-    const folder=await fs.mkdtemp(path.join(parent,'rb-joined-impact-')), file=path.join(folder,'impact.sql');
+    const file=path.join(parent,'rb-joined-impact-'+randomBytes(6).toString('hex')+'.sql');
     const settings=vscode.workspace.getConfiguration('rocketbrain.sql.project');
     const previous=settings.inspect('roots')?.globalValue;
     const configuration=vscode.ConfigurationTarget.Global;
     try {
       await fs.writeFile(file,source,{flag:'wx'});
-      await settings.update('roots',[folder],configuration);
+      await settings.update('roots',[parent],configuration);
       await api.connectMysql(config);
       await api.sqlAnalysis.refreshMetadata();
       const report=await api.sqlAnalysis.findCatalogReferences({ kind:'column',database:config.database,table:left,column:'score' });
@@ -85,7 +85,7 @@ async function runJoinedDmlImpactChecks(api,vscode,checks) {
       return {nativeJoinedReferences:true,physicalRoles:true,exactSourceRanges:true,analysisExecutedSql:false};
     } finally {
       try { await settings.update('roots',previous,configuration); await api.disconnectMysql(); }
-      finally { await fs.unlink(file); await fs.rmdir(folder); }
+      finally { await fs.unlink(file); }
     }
   });
 }
