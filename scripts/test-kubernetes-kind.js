@@ -52,10 +52,11 @@ async function verifyKindFixture() {
   const context = (name, cluster) => ({ name, context: { cluster: cluster.name, user: auth.name, namespace } });
   const selectedFile = path.join(folder, 'selected-kubeconfig.json');
   const ambientFile = path.join(folder, 'ambient-kubeconfig.json');
+  const scalerFile = path.join(folder, 'scaler-kubeconfig.json');
   const config = (clusters, contexts) => JSON.stringify({ apiVersion: 'v1', kind: 'Config',
     'current-context': ambient, users: [auth], clusters, contexts });
   const oldAmbient = process.env.KUBECONFIG;
-  let staged;
+  let staged, scaler;
   try {
     await fs.writeFile(selectedFile, config([observed, dead], [context(chosen, observed), context(ambient, dead)]), { mode: 0o600, flag: 'wx' });
     await fs.writeFile(ambientFile, config([dead], [context(ambient, dead)]), { mode: 0o600, flag: 'wx' });
@@ -92,18 +93,52 @@ async function verifyKindFixture() {
     assert.doesNotMatch(sidecarLogs.text, /rocketbrain-primary-log-ready/);
     await assert.rejects(session.resources('pods', otherNamespace), /lacks permission/);
     await assert.rejects(session.podLogs(namespace, { ...pod, uid: 'stale-uid' }, 'main'), /pod or container changed/);
+    const deploymentName = 'rocketbrain-workload';
+    await assert.rejects(session.reviewDeploymentScale(namespace, deploymentName, 0), /lacks permission/);
+    const scalerToken = (await command(['--namespace=' + namespace, 'create', 'token', 'rocketbrain-scaler', '--duration=20m'])).trim();
+    assert.ok(/^[A-Za-z0-9_.-]{40,4096}$/.test(scalerToken));
+    const scaleContext = 'reviewed-scaler';
+    await fs.writeFile(scalerFile, JSON.stringify({
+      apiVersion: 'v1', kind: 'Config', 'current-context': scaleContext, clusters: [observed],
+      users: [{ name: 'scaler', user: { token: scalerToken } }],
+      contexts: [{ name: scaleContext, context: { cluster: observed.name, user: 'scaler', namespace } }]
+    }), { flag: 'wx', mode: 0o600 });
+    scaler = await prepareKubernetesConfig({ file: scalerFile, kubectl, helm });
+    const scaleSession = await scaler.select(scaleContext);
+    const readDesired = async () => Number((await command(['--namespace=' + namespace, 'get', 'deployment', deploymentName,
+      '-o=jsonpath={.spec.replicas}'])).trim());
+    const stale = await scaleSession.reviewDeploymentScale(namespace, deploymentName, 0);
+    assert.equal(await readDesired(), 1);
+    await command(['--namespace=' + namespace, 'annotate', 'deployment', deploymentName, 'rocketbrain/scale-fixture=changed']);
+    await assert.rejects(scaleSession.applyDeploymentScale(stale, { approved: true }), /Deployment changed/);
+    assert.equal(await readDesired(), 1);
+    const reviewed = await scaleSession.reviewDeploymentScale(namespace, deploymentName, 0);
+    await assert.rejects(scaleSession.applyDeploymentScale({ ...reviewed }, { approved: true }), /Approve a current/);
+    await assert.rejects(scaleSession.applyDeploymentScale(reviewed), /Approve a current/);
+    assert.equal(await readDesired(), 1);
+    assert.deepEqual(await scaleSession.applyDeploymentScale(reviewed, { approved: true }), {
+      namespace, name: deploymentName, desired: 0, observed: 0
+    });
+    assert.equal(await readDesired(), 0);
+    await assert.rejects(scaleSession.applyDeploymentScale(reviewed, { approved: true }), /Approve a current/);
+    await command(['--namespace=' + namespace, 'rollout', 'status', 'deployment/' + deploymentName, '--timeout=8s']);
+    const restore = await scaleSession.reviewDeploymentScale(namespace, deploymentName, 1);
+    assert.equal((await scaleSession.applyDeploymentScale(restore, { approved: true })).observed, 1);
+    assert.equal(await readDesired(), 1);
     assert.ok((await fs.readFile(admin)).equals(adminBytes), 'The fixture admin kubeconfig must remain unchanged.');
-    return { kubernetes: version.serverVersion.gitVersion, kubectl: version.clientVersion.gitVersion,
+    return { sourceCommit: process.env.GITHUB_SHA, kubernetes: version.serverVersion.gitVersion, kubectl: version.clientVersion.gitVersion,
       pinnedContext: true, wrongAmbientIgnored: true, sourceChangeIgnored: true, namespaceRows: namespaces.rows.length,
       deploymentReady: true, servicePorts: true, podContainers: 2, scopedLogSnapshots: true,
       stalePodRejected: true, helmReleaseRevision: release.revision, otherNamespaceDenied: true,
-      readerDeleteDenied: true, adminConfigUnchanged: true };
+      readerDeleteDenied: true, adminConfigUnchanged: true,
+      scale: { dryRunPreserved: true, staleRejected: true, approvalRequired: true, changedAndRestored: [1, 0, 1],
+        replayRejected: true, readerDenied: true, singleResourceAccount: true } };
   } finally {
-    try { await staged?.close(); }
+    try { await Promise.all([staged?.close(), scaler?.close()]); }
     finally {
       if (oldAmbient === undefined) delete process.env.KUBECONFIG;
       else process.env.KUBECONFIG = oldAmbient;
-      for (const file of [selectedFile, ambientFile]) await fs.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
+      for (const file of [selectedFile, ambientFile, scalerFile]) await fs.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
     }
   }
 }

@@ -208,6 +208,16 @@ function listProjection(rows, project) {
   return { rows: visible, omitted: Math.max(0, rows.length - visible.length) };
 }
 
+function scaleIdentity(data, namespace, name) {
+  const metadata = data?.metadata;
+  const replicas = data?.spec?.replicas;
+  if (data?.apiVersion !== 'apps/v1' || resourceName(data, 'Deployment', namespace) !== name ||
+      typeof metadata.uid !== 'string' || !/^[a-zA-Z0-9-]{1,128}$/.test(metadata.uid) ||
+      typeof metadata.resourceVersion !== 'string' || !/^[a-zA-Z0-9._:-]{1,128}$/.test(metadata.resourceVersion) ||
+      !Number.isSafeInteger(replicas) || replicas < 0) throw Error('The selected Deployment has an incomplete scale identity.');
+  return { uid: metadata.uid, resourceVersion: metadata.resourceVersion, replicas };
+}
+
 async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = runCli) {
   const source = await readKubeconfig(file);
   const temporary = await fs.realpath(os.tmpdir());
@@ -276,6 +286,17 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
       try { await written; }
       finally { active.delete(written); }
       if (disposed) throw Error('The Kubernetes explorer session is closed.');
+      const scaleReviews = new WeakMap();
+      const readScale = async (namespace, name, externalSignal) => scaleIdentity(
+        await fetchJson(namespace, ['get', 'deployment', name, '-o=json'], 'Deployment scale identity check', externalSignal),
+        namespace, name);
+      const scaleArgs = (name, replicas, previous) => ['scale', 'deployment', name, '--replicas=' + replicas,
+        '--current-replicas=' + previous.replicas, '--resource-version=' + previous.resourceVersion, '-o=name'];
+      const scale = async (namespace, name, replicas, previous, dryRun, externalSignal) => {
+        const response = await configured(namespace, [...scaleArgs(name, replicas, previous), ...(dryRun ? ['--dry-run=server'] : [])],
+          dryRun ? 'Deployment scale preview' : 'Deployment scale', 4096, externalSignal);
+        if (response.trim() !== 'deployment.apps/' + name) throw Error('Could not confirm the scale result. Refresh the Deployment before retrying.');
+      };
       return {
         scope: { ...selected },
         close,
@@ -289,6 +310,30 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
           const operation = resourceKinds[kind] + ' listing';
           const data = await fetchJson(namespace, ['get', kind, '-o=json', '--chunk-size=100'], operation, externalSignal);
           return listProjection(listRows(data), item => describe(item, resourceKinds[kind], namespace));
+        },
+        async reviewDeploymentScale(namespace, name, replicas, externalSignal) {
+          if (!namespaceName(namespace) || !podName(name) || !Number.isSafeInteger(replicas) || replicas < 0 || replicas > 1000) {
+            throw Error('Choose a listed Deployment and a replica count from 0 to 1000.');
+          }
+          const previous = await readScale(namespace, name, externalSignal);
+          if (previous.replicas === replicas) throw Error('The Deployment already has this replica count.');
+          await scale(namespace, name, replicas, previous, true, externalSignal);
+          const review = Object.freeze({ namespace, name, before: previous.replicas, after: replicas, uid: previous.uid,
+            resourceVersion: previous.resourceVersion, expires: Date.now() + 120000 });
+          scaleReviews.set(review, previous);
+          return review;
+        },
+        async applyDeploymentScale(review, { approved, signal: externalSignal } = {}) {
+          const previous = scaleReviews.get(review);
+          if (!previous || Date.now() >= review.expires || approved !== true) throw Error('Approve a current Deployment scale review.');
+          scaleReviews.delete(review);
+          const { namespace, name, after: replicas } = review;
+          const observed = await readScale(namespace, name, externalSignal);
+          if (observed.uid !== previous.uid || observed.resourceVersion !== previous.resourceVersion ||
+              observed.replicas !== previous.replicas) throw Error('The Deployment changed. Refresh and review the new replica count.');
+          await scale(namespace, name, replicas, previous, false, externalSignal);
+          const applied = await readScale(namespace, name, externalSignal);
+          return { namespace, name, desired: replicas, observed: applied.uid === review.uid ? applied.replicas : null };
         },
         async releases(namespace, externalSignal) {
           if (!namespaceName(namespace)) throw Error('Choose a Kubernetes namespace.');

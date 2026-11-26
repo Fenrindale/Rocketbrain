@@ -82,6 +82,7 @@ function registerKubernetesExplorer(context, vscode) {
         visible.contextValue = 'rocketbrain-kube-pod';
         visible.command = { command: prefix + '.podLogs', title: 'Open Pod Logs', arguments: [node] };
       }
+      if (node.type === 'deployments') visible.contextValue = 'rocketbrain-kube-deployment';
       if (node.type === 'scope') visible.iconPath = new vscode.ThemeIcon('cloud');
       return visible;
     }
@@ -210,6 +211,40 @@ function registerKubernetesExplorer(context, vscode) {
     } finally { if (activeLog === operation) activeLog = undefined; }
   }
 
+  async function scaleDeployment(node) {
+    trusted();
+    const cluster = current;
+    if (!cluster) throw Error('Choose a Kubernetes context first.');
+    const { revision: version, namespace } = cluster;
+    const deployments = cluster.results?.deployments?.rows ?? [];
+    const stillCurrent = () => cluster === current && version === cluster.revision;
+    const listed = node ? deployments.find(item => item.name === node.label &&
+      node.type === 'deployments' && node.revision === version) :
+      (await vscode.window.showQuickPick(deployments.map(item => ({ label: item.name, deployment: item })),
+        { title: 'Choose Deployment to Scale' }))?.deployment;
+    if (!listed || !stillCurrent()) return;
+    const value = await vscode.window.showInputBox({ title: 'Desired Deployment Replicas',
+      value: String(listed.desired ?? ''), validateInput: text =>
+        /^(?:0|[1-9]\d{0,2}|1000)$/.test(text) ? undefined : 'Enter a whole number from 0 to 1000.' });
+    if (value === undefined || !stillCurrent()) return;
+    trusted();
+    const review = await cluster.session.reviewDeploymentScale(namespace, listed.name, Number(value));
+    if (!stillCurrent()) return;
+    const scope = cluster.session.scope;
+    const confirm = await vscode.window.showWarningMessage('Scale this Kubernetes Deployment?', { modal: true,
+      detail: [scope.name + ' · ' + scope.server, namespace + '/' + listed.name,
+        'Replicas ' + review.before + ' → ' + review.after,
+        'Server dry-run accepted this change for the reviewed Deployment.'].join('\n') }, 'Scale Deployment');
+    if (confirm !== 'Scale Deployment' || !stillCurrent()) return;
+    trusted();
+    const receipt = await cluster.session.applyDeploymentScale(review, { approved: true });
+    if (current === cluster) await refresh();
+    if (receipt.observed === receipt.desired) {
+      void vscode.window.showInformationMessage(receipt.namespace + '/' + receipt.name + ' now requests ' + receipt.desired + ' replicas.');
+    } else void vscode.window.showWarningMessage('The server accepted the scale request. Check the current Deployment state.');
+    return receipt;
+  }
+
   function publicSnapshot() {
     return current ? structuredClone({ scope: current.session.scope, namespace: current.namespace, results: current.results ?? null }) : null;
   }
@@ -223,7 +258,7 @@ function registerKubernetesExplorer(context, vscode) {
 
   context.subscriptions.push(documents, changed, logsChanged,
     command('connect', connect), command('disconnect', disconnect), command('refresh', refresh),
-    command('namespace', changeNamespace), command('podLogs', showPodLogs),
+    command('namespace', changeNamespace), command('podLogs', showPodLogs), command('scaleDeployment', scaleDeployment),
     { dispose() {
       disposed = true;
       opening?.abort();

@@ -69,3 +69,39 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: rocketbrain-namespace-reader
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rocketbrain-scaler
+  namespace: rocketbrain-observed
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rocketbrain-scaler
+  namespace: rocketbrain-observed
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [rocketbrain-workload]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [deployments/scale]
+    resourceNames: [rocketbrain-workload]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rocketbrain-scaler
+  namespace: rocketbrain-observed
+subjects:
+  - kind: ServiceAccount
+    name: rocketbrain-scaler
+    namespace: rocketbrain-observed
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rocketbrain-scaler
