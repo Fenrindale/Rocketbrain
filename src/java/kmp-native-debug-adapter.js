@@ -60,13 +60,19 @@ function createKotlinNativeDebugAdapter({ review, send, openGdb = startNativeGdb
       const installed = breakpoints.get(record.bkptno);
       const observed = record.reason === 'breakpoint-hit' && exactSource && installed === line;
       const advanced = stepping && exactSource && record.reason === 'end-stepping-range';
+      const signal = /^SIG[A-Z0-9]+$/u.test(record['signal-name'] || '') ? record['signal-name'] : undefined;
+      const rawReason = /^[a-z-]{1,40}$/u.test(record.reason || '') ? record.reason : 'unknown-stop';
+      const breakpoint = integer(record.bkptno);
+      const description = observed || advanced ? undefined : [
+        'GDB ' + rawReason, signal, breakpoint && 'breakpoint ' + breakpoint,
+        line && 'line ' + line, exactSource ? 'reviewed source' : 'source differs from the reviewed Kotlin file'
+      ].filter(Boolean).join(' · ');
       stepping = false;
       if (!thread) throw Error('GDB did not report a single stopped Kotlin/Native thread.');
       pause = { thread, frame: exactSource ? { id: ++handle, line, column: 1, source: sourceFor(review.source),
         name: String(record.frame.func || 'Kotlin').slice(0, 240) } : undefined, scope: ++handle };
       state = 'paused';
-      notify('stopped', { reason: observed ? 'breakpoint' : advanced ? 'step' : 'pause',
-        description: exactSource ? undefined : 'No reviewed Kotlin source is available at this stop.',
+      notify('stopped', { reason: observed ? 'breakpoint' : advanced ? 'step' : signal ? 'exception' : 'pause', description,
         threadId: thread, allThreadsStopped: true });
     } catch (error) {
       notify('output', { category: 'stderr', output: error.message + '\n' });
