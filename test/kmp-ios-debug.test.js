@@ -222,6 +222,10 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
   assert.ok(line > 0);
   const phases = [];
   const service = createKmpIosDebug({ observe(phase, simulator) {
+    if (phase === 'lldb-framework-observation') {
+      t.diagnostic('Owned LLDB framework map: ' + JSON.stringify(simulator));
+      return;
+    }
     phases.push(phase);
     t.diagnostic('iOS fixture: ' + phase);
     if (phase === 'debuggee-launch-refused') return recordLaunchLog(t, simulator, bundleId);
