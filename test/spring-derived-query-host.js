@@ -25,7 +25,8 @@ async function runSpringDerivedQueryChecks(api,vscode,checks) {
   }
   async function hover(document,position) {
     const values = await vscode.commands.executeCommand('vscode.executeHoverProvider',document.uri,position) || [];
-    return values.flatMap(value=>value.contents).map(value=>typeof value==='string'?value:value.value).join('\n');
+    return values.flatMap(value=>value.contents).map(value=>typeof value==='string'?value:value.value)
+      .join('\n').replaceAll('&nbsp;',' ');
   }
   async function reveals(document,position,target,text) {
     const values = await vscode.commands.executeCommand('vscode.executeDefinitionProvider',document.uri,position) || [];
