@@ -10,6 +10,7 @@ const { normalizeWriteProtection } = require('./write-protection');
 const { sessionLifecycle } = require('./session-lifecycle');
 const { caFingerprint, expectReviewedTls } = require('./server-tls-trust');
 const { readClientPem, readPkcs12Identity, clientPassphrase, readJksTrustStore, jksPassphrase } = require('./client-identity');
+const { usesOpenBao, normalizeOpenBao, readOpenBaoPassword } = require('./openbao-credential');
 const savedFailures=new WeakMap();
 const tlsReviewTtlMs=2*60*1000;
 const persistedProfileOnFailure=error=>savedFailures.get(error)||null;
@@ -106,6 +107,8 @@ function normalizeProfile(value,{allowUnconfigured=false}={}){
  if(isPasswordFree(value)){
   exact(value.auth,['kind']);
   p.auth={kind:'password-free'};
+ }else if(usesOpenBao(value)){
+  p.auth=normalizeOpenBao(value.auth,{allowUnconfigured});
  }else if(value.auth!==undefined){
   p.auth=normalizeRdsIam(value.auth,{allowUnconfigured});
   if (profileUsesJksTrust(p)) throw fail('Choose an AWS PEM CA bundle for an RDS IAM profile.');
@@ -147,7 +150,16 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   if(hasProfileConsole(id))throw fail('Close this profile’s dedicated SQL sessions before editing or removing it.');
  }
  async function run(fn){trusted();if(busy)throw fail('Finish the current connection operation first.');busy=true;const ticket=revision,controller=new AbortController();controllers.add(controller);const operation=(async()=>{try{return await fn(ticket,controller.signal);}catch(error){throw sanitized(error);}finally{busy=false;controllers.delete(controller);events.emit('change');}})();operations.add(operation);try{return await operation;}finally{operations.delete(operation);}}
- async function credentials(profile,value){
+ async function credentials(profile,value,{openBaoToken,signal}={}){
+  if(usesOpenBao(profile)){
+   if(!profile.auth.origin)throw fail('Configure the local OpenBao credential reference in the profile editor.');
+   if(value!==undefined&&value!=='')throw fail('This profile reads its password from OpenBao.');
+   const resolved=await readOpenBaoPassword(profile.auth,openBaoToken,signal);
+   trusted();
+   if(signal?.aborted)throw fail('The OpenBao credential read was cancelled.');
+   return resolved;
+  }
+  if(openBaoToken!==undefined)throw fail('Use an OpenBao token only for an OpenBao profile.');
   if(isPasswordFree(profile)){
    if(value!==undefined&&value!=='')throw fail('This profile is set to connect without a database password.');
    return'';
@@ -171,7 +183,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   if(usesRdsIam(profile)&&(!profile.auth.source||!profile.tls.caPath))throw fail('Select the local AWS credential source and RDS CA bundle before connecting.');
   const route=profile.transport?{transport:profile.transport}:{host:profile.host,port:profile.port};
   const config={...route,user:profile.user,database:profile.database,password:pass,readOnly:true,
-   ...(profile.auth?{auth:profile.auth}:{}),...(profile.writeProtection?{writeProtection:profile.writeProtection}:{}),
+   ...(profile.auth&&!usesOpenBao(profile)?{auth:profile.auth}:{}),...(profile.writeProtection?{writeProtection:profile.writeProtection}:{}),
    ...(profile.sessionLifecycle && {sessionLifecycle:profile.sessionLifecycle})};
   if(forceReadOnly)config.writeProtection={...config.writeProtection,connectionReadOnly:true};
   if (profileUsesJksTrust(profile) && !profile.tls.trustStorePath) {
@@ -215,7 +227,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
  async function persist(next,credentialChanges=[]){await state.update(SCOPE,secretScope);const before=[];try{for(const change of credentialChanges){const key=secretKey(change.id),old=await secrets.get(key);before.push({key,old});if(change.value===undefined)await secrets.delete(key);else await secrets.store(key,change.value);}await state.update(KEY,[...next.values()].map(value=>clone(value)));}catch(error){for(const saved of before.reverse())try{if(saved.old===undefined)await secrets.delete(saved.key);else await secrets.store(saved.key,saved.old);}catch{}throw fail('The profile or credential could not be saved. Previous profile metadata is retained.');}records.clear();for(const [id,value]of next)records.set(id,value);revision++;events.emit('change');}
  function decodeProfiles(input) {
   exact(input,['format','version','credentialsIncluded','profiles']);
-  if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3,4,5,6,7,8].includes(input.version)||input.credentialsIncluded!==false||
+  if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3,4,5,6,7,8,9].includes(input.version)||input.credentialsIncluded!==false||
      !Array.isArray(input.profiles)||input.profiles.length>MAX||Buffer.byteLength(JSON.stringify(input))>256*1024) {
    throw fail('Use a credential-free profile export of at most 32 profiles and 256 KiB.');
   }
@@ -229,7 +241,10 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    }
    if(value?.ssh)throw fail('Re-enter the SSH authentication and host verification details locally before importing an SSH profile.');
    if(value?.transport&&(input.version===1||Object.hasOwn(value.transport,'address')))throw fail('Re-enter local socket paths and pipe names in the connection editor after importing.');
-   if(isPasswordFree(value)){
+   if(usesOpenBao(value)){
+    if(input.version<9)throw fail('OpenBao profiles require profile export format 9.');
+    exact(value.auth,['kind']);
+   }else if(isPasswordFree(value)){
     if(input.version<8)throw fail('Password-free profiles require profile export format 8.');
     exact(value.auth,['kind']);
    }else if(value?.auth){
@@ -248,7 +263,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    return run(async(ticket,signal)=>{
     const record=records.get(input.id);
     if(!record||record.revision!==input.revision||record.profile.tls.mode!=='verify')throw fail('Choose the current saved profile with verified TLS enabled.');
-    const pass=await credentials(record.profile,input.password);
+    const pass=await credentials(record.profile,input.password,{openBaoToken:input.openBaoToken,signal});
     const observed=await verify(record.profile,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,
      trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});
     guard(ticket);
@@ -274,7 +289,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     tlsReviews.delete(input.reviewId);
     const record=records.get(input.id);
     if(!record||record.revision!==review.revision||review.expiresAt<=Date.now())throw fail('The TLS trust review changed or expired. Review the profile again.');
-    const pass=await credentials(record.profile,input.password);
+    const pass=await credentials(record.profile,input.password,{openBaoToken:input.openBaoToken,signal});
     let prepared,transferred=false;
     try{
      prepared=await prepare(record.profile,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,
@@ -294,16 +309,16 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    });
   },
   onDidChange(listener){events.on('change',listener);return{dispose(){events.off('change',listener);}};},
-  test(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),pass=await credentials(p,input.password),result=await verify(p,pass,signal,{schemas:true,clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential});guard(ticket);return result;});},
-  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);requireClosedProfileConsoles(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&(JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection)||JSON.stringify(previous.profile.sessionLifecycle)!==JSON.stringify(p.sessionLifecycle)))throw fail('Disconnect this profile before changing its write protection or session lifecycle.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&isPasswordFree(p))throw fail('Password-free profiles cannot save a database password.');if(remember&&usesRdsIam(p))throw fail('RDS IAM profiles use temporary tokens without saving a database password.');const pass=await credentials(p,input.password);let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential});else if(profileUsesJksTrust(p))throw fail('Verify the selected JKS truststore before saving.');else if(p.ssh?.agent)throw fail('Verify the selected SSH agent identity before saving.');else if(profileRequiresSshCredential(p))throw fail('Verify the selected SSH authentication and pinned host key before saving.');else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
-  connect(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const effective=clone(record.profile);if(input.database!==undefined)effective.database=text(input.database,'schema',64);const pass=await credentials(effective,input.password);let prepared,transferred=false;try{prepared=await prepare(effective,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});guard(ticket);await connect(prepared.config);transferred=true;guard(ticket);return{connected:true,profile:clone(effective),credentialSaved:record.rememberPassword};}finally{if(!transferred)await prepared?.dispose();}});},
+  test(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),pass=await credentials(p,input.password,{openBaoToken:input.openBaoToken,signal}),result=await verify(p,pass,signal,{schemas:true,clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential});guard(ticket);return result;});},
+  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);requireClosedProfileConsoles(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&(JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection)||JSON.stringify(previous.profile.sessionLifecycle)!==JSON.stringify(p.sessionLifecycle)))throw fail('Disconnect this profile before changing its write protection or session lifecycle.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&isPasswordFree(p))throw fail('Password-free profiles cannot save a database password.');if(remember&&usesRdsIam(p))throw fail('RDS IAM profiles use temporary tokens without saving a database password.');if(usesOpenBao(p)&&(remember||input.verify===false))throw fail('Verify the OpenBao profile without saving the resolved password.');const pass=await credentials(p,input.password,{openBaoToken:input.openBaoToken,signal});let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential});else if(profileUsesJksTrust(p))throw fail('Verify the selected JKS truststore before saving.');else if(p.ssh?.agent)throw fail('Verify the selected SSH agent identity before saving.');else if(profileRequiresSshCredential(p))throw fail('Verify the selected SSH authentication and pinned host key before saving.');else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
+  connect(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const effective=clone(record.profile);if(input.database!==undefined)effective.database=text(input.database,'schema',64);const pass=await credentials(effective,input.password,{openBaoToken:input.openBaoToken,signal});let prepared,transferred=false;try{prepared=await prepare(effective,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});guard(ticket);await connect(prepared.config);transferred=true;guard(ticket);return{connected:true,profile:clone(effective),credentialSaved:record.rememberPassword};}finally{if(!transferred)await prepared?.dispose();}});},
   openDedicatedConsole(request) {
    const input = clone(request);
    return run(async (ticket, signal) => {
     if (!openProfileConsole) throw fail('Dedicated profile consoles are unavailable.');
     const record = records.get(input.id);
     if (!record || input.revision !== record.revision) throw fail('The saved profile changed. Choose it again.');
-    const pass = await credentials(record.profile, input.password);
+    const pass = await credentials(record.profile, input.password, {openBaoToken:input.openBaoToken,signal});
     const prepared = await prepare(record.profile, pass, signal, {clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});
     let transferred = false;
     try {
@@ -330,7 +345,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     return dto(record);
    });
   },
-  schemas(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const pass=await credentials(record.profile,input.password),result=await verify(record.profile,pass,signal,{schemas:true,clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});guard(ticket);return result.schemas;});},
+  schemas(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const pass=await credentials(record.profile,input.password,{openBaoToken:input.openBaoToken,signal}),result=await verify(record.profile,pass,signal,{schemas:true,clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});guard(ticket);return result.schemas;});},
   federatedSelect(request) {
    const input = clone(request);
    return run(async (ticket, signal) => {
@@ -340,12 +355,12 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     const chosen = input.sources.map(source => {
      const record = records.get(source?.id);
      if (!record || record.revision !== source.revision) throw fail('A selected profile changed. Choose both sources again.');
-     return { record, password: source.password, clientIdentityPassphrase:source.clientIdentityPassphrase, trustStorePassphrase:source.trustStorePassphrase, sshCredential:source.sshCredential };
+     return { record, password: source.password, openBaoToken: source.openBaoToken, clientIdentityPassphrase:source.clientIdentityPassphrase, trustStorePassphrase:source.trustStorePassphrase, sshCredential:source.sshCredential };
     });
     const opened = [];
     try {
-     for (const { record, password, clientIdentityPassphrase, trustStorePassphrase, sshCredential } of chosen) {
-      const pass = await credentials(record.profile, password);
+     for (const { record, password, openBaoToken, clientIdentityPassphrase, trustStorePassphrase, sshCredential } of chosen) {
+      const pass = await credentials(record.profile, password, {openBaoToken,signal});
       const resource = await prepare(record.profile, pass, signal, {clientIdentityPassphrase,trustStorePassphrase,sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});
       const item = { resource };
       opened.push(item);
@@ -378,9 +393,10 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
       {authentication:p.ssh.authentication,requiresLocalHostFingerprint:true}:{requiresLocalKeyAndKnownHosts:true})};
     if(p.transport)p.transport={kind:p.transport.kind};
     if(usesRdsIam(p))p.auth={kind:p.auth.kind,region:p.auth.region};
+    if(usesOpenBao(p))p.auth={kind:p.auth.kind};
     return p;
    });
-   const version=profiles.some(isPasswordFree)?8:profiles.some(profileUsesJksTrust)?7:profiles.some(profileRequiresClientPassphrase)?6:profiles.some(p=>p.sessionLifecycle)?5:profiles.some(p=>p.writeProtection)?4:profiles.some(p=>p.auth)?3:profiles.some(p=>p.transport)?2:1;
+   const version=profiles.some(usesOpenBao)?9:profiles.some(isPasswordFree)?8:profiles.some(profileUsesJksTrust)?7:profiles.some(profileRequiresClientPassphrase)?6:profiles.some(p=>p.sessionLifecycle)?5:profiles.some(p=>p.writeProtection)?4:profiles.some(p=>p.auth)?3:profiles.some(p=>p.transport)?2:1;
    return{format:'RocketbrainConnectionProfiles',version,credentialsIncluded:false,profiles};
   },
   reviewProfileImport(request) {
@@ -429,12 +445,13 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   if (profileRequiresClientPassphrase(record.profile)) throw fail('This comparison opens its saved source in the background. Choose a source without an interactive client identity passphrase.');
   if (profileUsesJksTrust(record.profile)) throw fail('Choose a saved comparison source that connects without a JKS truststore passphrase.');
   if (profileRequiresSshCredential(record.profile)) throw fail('Choose a saved comparison source that connects without an interactive SSH credential.');
+  if (usesOpenBao(record.profile)) throw fail('Choose a background comparison source that can connect without an interactive OpenBao token.');
   return record;
  };
  Object.defineProperty(api, 'datasetProfileSource', { value: {
   list() {
    trusted();
-   return list().filter(({profile}) => !profileRequiresClientPassphrase(profile) && !profileUsesJksTrust(profile) && !profileRequiresSshCredential(profile)).map(({ id, revision, profile, observed }) => ({ id, revision, label: profile.name,
+   return list().filter(({profile}) => !profileRequiresClientPassphrase(profile) && !profileUsesJksTrust(profile) && !profileRequiresSshCredential(profile) && !usesOpenBao(profile)).map(({ id, revision, profile, observed }) => ({ id, revision, label: profile.name,
     description: [profile.group, profile.database, observed?.serverVersion].filter(Boolean).join(' · ') }));
   },
   assertCurrent(binding) { datasetProfile(binding); },
