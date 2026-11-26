@@ -5,14 +5,15 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
+const { nativeTaskRunner } = require('../src/java/workbench-tasks');
 const { test } = require('node:test');
 const { resolveJavaSourceTarget, settingsKeys } = require('../src/java/source-target');
 const { resolveBuildTarget } = require('../src/java/source-target-builds');
 const { registerJavaWorkbench } = require('../src/java/workbench');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
-const { fakeVscode } = require('./java-workbench-fixture');
-const { populateTargets, buildTargets, runTargets } = require('./helpers/java-source-target-fixture');
+const { fakeVscode, fixture } = require('./java-workbench-fixture');
+const { populateTargets, buildTargets, runTargets, executionCases } = require('./helpers/java-source-target-fixture');
 
 const read = async file => JSON.parse(await fs.readFile(file, 'utf8'));
 const url = file => pathToFileURL(file).href;
@@ -21,6 +22,7 @@ const runtimeFile = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
 const classpathFile = process.env.ROCKETBRAIN_SOURCE_TARGET_CLASSPATH;
 const mavenHome = process.env.ROCKETBRAIN_TARGET_MAVEN_HOME;
 const gradleCache = process.env.ROCKETBRAIN_SOURCE_TARGET_GRADLE_CACHE;
+const executeFromSource = process.env.ROCKETBRAIN_SOURCE_TARGET_EXECUTION === '1';
 const environments = ['mysql', 'mariadb'].map(engine => [engine, process.env['ROCKETBRAIN_SOURCE_TARGET_' + engine.toUpperCase() + '_CONFIG']]);
 
 async function owned(t) {
@@ -167,15 +169,107 @@ test('literal Gradle aliases retain source ranges and computed membership omits 
   assert.deepEqual(computed.declarations, []);
 });
 
+test('source build review preserves exact argv, requires approval and invalidates used or stale tickets', async t => {
+  const { directory, root, targets } = await owned(t);
+  const tool = fixture(t);
+  const host = fakeVscode({ ...tool, parent: directory, root, uri: url(root) });
+  const module = path.join(root, 'maven/service'), reactor = path.join(root, 'maven');
+  host.java.requestWorkspaceCommand = async name => {
+    if (name === 'java.project.getAll') return [url(reactor), url(module)];
+    if (name === 'java.project.getClasspaths') return { projectRoot: url(module), classpaths: [], modulepaths: [] };
+    if (name === 'java.project.getSettings') return { [settingsKeys[0]]: [path.join(module, 'src/main/java')],
+      [settingsKeys[3]]: ['org.eclipse.m2e.core.maven2Nature'], [settingsKeys[5]]: tool.javaHome };
+    throw Error('Unexpected metadata command: ' + name);
+  };
+  const workbench = registerJavaWorkbench(host.context, host.vscode, host.java, host.output, { runner: host.runner });
+  try {
+    const actor = workbench.sourceTarget;
+    const inspection = await actor.inspect({ sourceUri: targets.maven });
+    const review = await actor.reviewBuild(inspection.id);
+    assert.equal(host.specs.length, 0);
+    assert.deepEqual(review.args.slice(-6), ['compile', '--file', path.join(reactor, 'pom.xml'), '--projects', 'service', '--also-make']);
+    await assert.rejects(actor.runBuild(review.id), /Approve.*explicitly/u);
+    assert.equal(host.specs.length, 0);
+    const expected = [...review.args];
+    review.args.push('install');
+    const launched = await Promise.allSettled([
+      actor.runBuild(review.id, { allowProjectExecution: true }), actor.runBuild(review.id, { allowProjectExecution: true })
+    ]);
+    assert.equal(launched[0].value.state, 'succeeded');
+    assert.match(launched[1].reason.message, /expired or was already used/u);
+    assert.deepEqual(host.specs[0].args, expected);
+    assert.equal(host.specs[0].cwd, reactor);
+    const staleSibling = await actor.reviewBuild(inspection.id);
+    const dependency = path.join(reactor, 'core/pom.xml'), preserved = await fs.readFile(dependency);
+    await fs.appendFile(dependency, '<!-- sibling build input changed -->\n');
+    try { await assert.rejects(actor.runBuild(staleSibling.id, { allowProjectExecution: true }), /command or inputs changed/u); }
+    finally { await fs.writeFile(dependency, preserved); }
+    const stopped = await actor.reviewBuild(inspection.id);
+    const command = host.java.requestWorkspaceCommand;
+    let entered, resume;
+    const waiting = new Promise(resolve => { entered = resolve; });
+    const gate = new Promise(resolve => { resume = resolve; });
+    host.java.requestWorkspaceCommand = async (name, args) => {
+      if (name === 'java.project.getAll') { entered(); await gate; }
+      return command(name, args);
+    };
+    const refused = assert.rejects(actor.runBuild(stopped.id, { allowProjectExecution: true }), /stopped before launch/u);
+    await waiting;
+    try { await workbench.stop(); }
+    finally { resume(); host.java.requestWorkspaceCommand = command; }
+    await refused;
+    const mavenConfig = path.join(reactor, '.mvn/maven.config'), original = await fs.readFile(mavenConfig);
+    await fs.appendFile(mavenConfig, '--projects\ncore\n');
+    try { await assert.rejects(actor.reviewBuild(inspection.id), /options that can alter the reviewed reactor command/u); }
+    finally { await fs.writeFile(mavenConfig, original); }
+    assert.equal(host.specs.length, 1);
+
+    host.vscode.ProgressLocation = { Notification: 15 };
+    host.vscode.window.withProgress = async (_options, run) => run({}, undefined);
+    host.vscode.window.showQuickPick = async items => items.find(item => item.label === 'Review Compile for This Source');
+    let approved = false;
+    host.vscode.window.showWarningMessage = async (_name, option, answer) => {
+      assert.equal(option.modal, true);
+      assert.match(option.detail, /"--projects",\n  "service"/u);
+      return approved ? answer : undefined;
+    };
+    const open = () => host.commands.get('rocketbrain.java.workbench.sourceTarget')(host.vscode.Uri.parse(targets.maven));
+    assert.equal(await open(), undefined);
+    assert.equal(host.specs.length, 1);
+    approved = true;
+    assert.equal((await open()).state, 'succeeded');
+    assert.equal(host.specs.length, 2);
+    assert.deepEqual(host.specs[1].args, expected);
+  } finally { await workbench.dispose(); }
+});
+
+test('reviewed builds launch the exact process and stop without registering a replayable VS Code task', { timeout: 20000 }, async () => {
+  const output = [];
+  let ready;
+  const started = new Promise(resolve => { ready = resolve; });
+  const runner = nativeTaskRunner({ workspace: { isTrusted: true } }, {
+    output: { append(value) { output.push(value); if (output.join('').includes('ready')) ready(); } }
+  });
+  const spec = { reviewedSourceTarget: true, command: process.execPath, cwd: __dirname, env: process.env,
+    args: ['-e', 'console.log(process.argv[1]);setTimeout(()=>{},30000);', 'ready'],
+    label: 'Owned reviewed child process' };
+  try {
+    const operation = runner.execute(spec, { timeoutMs: 30000 });
+    await Promise.race([started, operation.then(result => assert.fail('Reviewed process exited before output: ' + result.code))]);
+    await runner.stop();
+    assert.equal((await operation).cancelled, true);
+    assert.match(output.join(''), /^ready\r?\n/u);
+  } finally { await runner.dispose(); }
+});
+
 test('actual JDT selects Maven reactor and Gradle composite sources inside one workspace on both Spring DBs', {
   skip: !runtimeFile || !classpathFile || !mavenHome || !gradleCache || !environments.every(([, file]) => file), timeout: 490000
 }, async t => {
   const { directory, root, targets } = await owned(t);
   const runtime = await read(runtimeFile), tools = { javaHome: runtime.javaHome, mavenHome, gradleHome: runtime.gradleHome };
   assert.ok(tools.gradleHome);
-  await buildTargets(root, tools, gradleCache);
+  if (!executeFromSource) await buildTargets(root, tools, gradleCache);
   const configs = await Promise.all(environments.map(async ([engine, file]) => [engine, await read(file)]));
-  const db = (await Promise.all(configs.map(([engine, database]) => runTargets(root, tools, classpathFile, database, engine)))).flat();
   const launch = resolveLaunch({ ...runtime, storagePath: path.join(directory, 'jdt') });
   launch.options.env.GRADLE_USER_HOME = gradleCache;
   const lsp = new StdioLsp(launch);
@@ -202,8 +296,15 @@ test('actual JDT selects Maven reactor and Gradle composite sources inside one w
     }, 160000);
     const host = fakeVscode({ parent: directory, root, uri: url(root), ...tools });
     host.java.requestWorkspaceCommand = request;
-    const ui = presentation(host);
-    const workbench = registerJavaWorkbench(host.context, host.vscode, host.java, host.output, { runner: host.runner });
+    const ui = presentation(host), executed = [];
+    const actual = nativeTaskRunner(host.vscode, { output: host.output });
+    const runner = executeFromSource ? { ...actual, async execute(spec, options) {
+      executed.push({ args: [...spec.args], cwd: spec.cwd });
+      const result = await actual.execute(spec, options);
+      assert.equal(result.code, 0, result.output);
+      return result;
+    } } : host.runner;
+    const workbench = registerJavaWorkbench(host.context, host.vscode, host.java, host.output, { runner });
     try {
       const observations = {};
       for (const [name, sourceUri] of Object.entries(targets)) {
@@ -227,12 +328,36 @@ test('actual JDT selects Maven reactor and Gradle composite sources inside one w
       assert.equal(opened.range.start.line, 2);
       assert.equal(ui.displayed.length, 1);
       assert.equal(host.specs.length, 0);
+      assert.equal(executed.length, 0);
+      const builds = [];
+      if (executeFromSource) {
+        assert.equal(process.env.GRADLE_USER_HOME, gradleCache);
+        for (const [name, folder, selector, task, output] of executionCases) {
+          const file = path.join(root, output);
+          await assert.rejects(fs.access(file), { code: 'ENOENT' });
+          const source = await workbench.sourceTarget.inspect({ sourceUri: targets[name] });
+          const review = await workbench.sourceTarget.reviewBuild(source.id);
+          assert.equal(review.cwd, path.join(root, folder));
+          assert.equal(review.selector, selector);
+          assert.equal(review.task, task);
+          assert.equal(executed.length, builds.length);
+          await assert.rejects(workbench.sourceTarget.runBuild(review.id), /Approve.*explicitly/u);
+          const result = await workbench.sourceTarget.runBuild(review.id, { allowProjectExecution: true });
+          assert.equal(result.state, 'succeeded');
+          assert.deepEqual(executed.at(-1), { cwd: review.cwd, args: review.args });
+          assert.equal((await fs.readFile(file)).readUInt32BE(0), 0xcafebabe);
+          await assert.rejects(workbench.sourceTarget.runBuild(review.id, { allowProjectExecution: true }), /already used/u);
+          builds.push({ selector, task, compiledClass: output, argvVerified: true });
+        }
+      }
+      const db = (await Promise.all(configs.map(([engine, database]) =>
+        runTargets(root, tools, classpathFile, database, engine)))).flat();
       assert.ok(commands.every(item => ['java.project.getAll', 'java.project.getSettings', 'java.project.getClasspaths'].includes(item.command)));
       const proof = { selected: Object.fromEntries(Object.entries(observations).map(([key, value]) => [key, {
         project: path.relative(root, value.projectRoot).split(path.sep).join('/'), provider: value.provider, scope: value.scope,
         buildPath: value.declaredBuild.buildTreePath || value.declaredBuild.projectPath || value.declaredBuild.reactorProject,
         testClasspath: value.classpath.some(file => file.endsWith('junit-jupiter-api-6.1.3.jar'))
-      }])), jdbc: db, readOnlyMetadata: true, openedGradleSourceDeclaration: true };
+      }])), jdbc: db, builds, readOnlyMetadata: true, openedGradleSourceDeclaration: true };
       if (process.env.ROCKETBRAIN_SOURCE_TARGET_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_SOURCE_TARGET_RECEIPT,
         JSON.stringify(proof, null, 2) + '\n');
     } finally { await workbench.dispose(); }

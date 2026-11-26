@@ -133,4 +133,11 @@ async function runTargets(root, tools, classpathFile, database, engine) {
   }));
 }
 
-module.exports = { links, populateTargets, buildTargets, runTargets };
+const executionCases = [
+  ['mavenTest', 'maven', 'service', 'test-compile', 'maven/service/target/test-classes/fixture/maven/Scope.class'],
+  ['includedTest', 'gradle', ':linked-tools:service', ':linked-tools:service:testClasses',
+    'gradle/vendor/service/build/classes/java/test/fixture/linked/Scope.class'],
+  ['gradle', 'gradle', ':workbench', ':workbench:classes', 'gradle/workbench/build/classes/java/main/fixture/gradle/Probe.class']
+];
+
+module.exports = { links, populateTargets, buildTargets, runTargets, executionCases };
