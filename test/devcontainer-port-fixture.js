@@ -68,6 +68,7 @@ async function attachJdwp(forward) {
     assert.match(version, /Java Debug Wire Protocol|JDWP/u);
     await iterator.return();
     assert.ok(!socket.destroyed, 'The owned JDWP session remains connected after its version reply.');
+    socket.resume();
     return { socket, close };
   } catch (error) {
     socket.destroy();
