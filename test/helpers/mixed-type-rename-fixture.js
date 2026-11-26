@@ -34,8 +34,9 @@ async function classpath(root, kind) {
 
 const xmlAttribute = text => text.replace(/\\/gu, '/').replace(/&/gu, '&amp;').replace(/"/gu, '&quot;').replace(/</gu, '&lt;');
 
-async function populate(root, tools) {
+async function populate(root, tools, beforeBuild) {
   await fs.cp(input, root, { recursive: true });
+  await beforeBuild?.();
   await rebuild(root, tools);
   const jars = await classpath(root, 'compile');
   await fs.writeFile(path.join(root, '.project'), '<projectDescription><name>' + xmlAttribute(path.basename(root)) +
