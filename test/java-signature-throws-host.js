@@ -33,14 +33,16 @@ async function runJavaCheckedThrowsChecks(api, vscode, checks) {
     const before = await run();
     const descriptor = vscode.Uri.file(path.join(root, '.project')).toString();
     await api.java.executeWorkspaceCommand('java.project.changeImportedProjects', [descriptor], [], []);
-    document = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(root, sourcePath)));
-    const showSource = () => vscode.window.showTextDocument(document, { preview: false });
-    await showSource();
+    const sourceUri = vscode.Uri.file(path.join(root, sourcePath));
+    // Wait for the imported project before VS Code sends didOpen and creates a working copy.
     projectUri = await until(async () => {
-      const model = await api.java.executeWorkspaceCommand('java.project.getClasspaths', document.uri.toString(), { scope: 'test' });
+      const model = await api.java.executeWorkspaceCommand('java.project.getClasspaths', sourceUri.toString(), { scope: 'test' });
       return model?.projectRoot && path.relative(root, vscode.Uri.parse(model.projectRoot).fsPath) === '' &&
         model.classpaths.some(file => file.endsWith('spring-jdbc-7.0.10.jar')) ? model.projectRoot : undefined;
     }, 100000);
+    document = await vscode.workspace.openTextDocument(sourceUri);
+    const showSource = () => vscode.window.showTextDocument(document, { preview: false });
+    await showSource();
     const signature = api.java.changeSignature;
     const inspect = marker => {
       const { start, end } = selection(document.getText(), marker);

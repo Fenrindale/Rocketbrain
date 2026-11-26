@@ -63,20 +63,23 @@ async function runJavaSourceTargetChecks(api, vscode, checks, { executeFromSourc
     const builds = [];
     if (executeFromSource) {
       assert.equal(path.relative(cache, process.env.GRADLE_USER_HOME), '', 'Use the reviewed Gradle cache for spawned tasks.');
-      for (const [name, folder, selector, task, output] of executionCases) {
+      for (const [name, folder, selector, task, output, receipt] of executionCases) {
         const file = path.join(root, output);
-        await assert.rejects(fs.access(file), { code: 'ENOENT' });
+        const executionReceipt = path.join(root, receipt);
+        // JDT may autobuild class files while importing. Only the reviewed build tool emits this receipt.
+        await assert.rejects(fs.access(executionReceipt), { code: 'ENOENT' });
         const target = await service.inspect({ sourceUri: targets[name] });
         const review = await service.reviewBuild(target.id);
         assert.equal(path.relative(path.join(root, folder), review.cwd), '');
         assert.equal(review.selector, selector);
         assert.equal(review.task, task);
         await assert.rejects(service.runBuild(review.id), /Approve.*explicitly/u);
-        await assert.rejects(fs.access(file), { code: 'ENOENT' });
+        await assert.rejects(fs.access(executionReceipt), { code: 'ENOENT' });
         assert.equal((await service.runBuild(review.id, { allowProjectExecution: true })).state, 'succeeded');
+        assert.ok((await fs.stat(executionReceipt)).size > 0);
         assert.equal((await fs.readFile(file)).readUInt32BE(0), 0xcafebabe);
         await assert.rejects(service.runBuild(review.id, { allowProjectExecution: true }), /already used/u);
-        builds.push({ selector, task, compiledClass: output });
+        builds.push({ selector, task, compiledClass: output, executionReceipt: receipt });
       }
       checks.push('One-use approved task reviews compile the exact Maven reactor and Gradle composite Java components.');
     }
