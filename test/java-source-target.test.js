@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { realpathSync } = require('node:fs');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -9,7 +10,9 @@ const { nativeTaskRunner } = require('../src/java/workbench-tasks');
 const { test } = require('node:test');
 const { resolveJavaSourceTarget, settingsKeys } = require('../src/java/source-target');
 const { resolveBuildTarget } = require('../src/java/source-target-builds');
-const { bindModel } = require('../src/java/gradle-source-model');
+const { bindModel, prepareGradleObservation, observeGradleTarget } = require('../src/java/gradle-source-model');
+const { prepareSourceExecution } = require('../src/java/source-target-execution');
+const { execute } = require('../src/java/testing/provision');
 const { registerJavaWorkbench } = require('../src/java/workbench');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
@@ -247,7 +250,7 @@ test('source build review preserves exact argv, requires approval and invalidate
 
 test('the observed Gradle composite rejects outside, duplicate and guessed source ownership', async t => {
   const { root, directory } = await owned(t);
-  const composite = path.join(root, 'gradle'), included = path.join(composite, 'vendor');
+  const composite = realpathSync.native(path.join(root, 'gradle')), included = path.join(composite, 'vendor');
   const component = path.join(included, 'service'), workbench = path.join(composite, 'workbench');
   const context = { project: { root: composite }, component, files: [
     path.join(composite, 'settings.gradle'), path.join(included, 'settings.gradle.kts'),
@@ -265,6 +268,54 @@ test('the observed Gradle composite rejects outside, duplicate and guessed sourc
   assert.throws(() => bindModel([...rootRecords, { ...includeRecord, buildRoot: directory }], context), /workspace/u);
   assert.throws(() => bindModel([...rootRecords, { ...includeRecord, parent: included }, project], context), /disconnected/u);
   assert.throws(() => bindModel(records, { ...context, component: workbench }), /does not belong/u);
+  if (process.platform === 'win32') {
+    const alternate = value => value && value.replace(/^[A-Z]:/u, drive => drive.toLowerCase());
+    assert.notEqual(alternate(composite), composite);
+    const aliases = records.map(row => row.kind === 'B' ? { ...row, buildRoot: alternate(row.buildRoot), parent: alternate(row.parent) } :
+      { ...row, buildRoot: alternate(row.buildRoot), component: alternate(row.component) });
+    assert.deepEqual(bindModel(aliases, context), model);
+    assert.throws(() => bindModel([...records, aliases.at(-1)], context), /ambiguous/u);
+  }
+
+  const caseVariant = path.join(included, 'SERVICE');
+  try { await fs.mkdir(caseVariant); }
+  catch (error) { if (error.code === 'EEXIST') return; throw error; }
+  const caseFile = path.join(caseVariant, 'build.gradle.kts');
+  await fs.writeFile(caseFile, '');
+  const caseRecord = { kind: 'P', buildRoot: included, component: caseVariant, projectPath: ':SERVICE', treePath: ':observed:SERVICE' };
+  const distinct = bindModel([...records, caseRecord], { ...context, component: caseVariant, files: [...context.files, [caseFile, 'digest']] });
+  assert.equal(distinct.selected.projectRoot, caseVariant);
+  assert.equal(distinct.selected.treePath, caseRecord.treePath);
+});
+
+test('actual Windows Gradle tooling observes and compiles the source reached through a lowercase drive URI', {
+  skip: process.platform !== 'win32' || !runtimeFile || process.env.ROCKETBRAIN_SOURCE_TARGET_NATIVE_CASE !== '1', timeout: 180000
+}, async t => {
+  const { root, directory, targets } = await owned(t);
+  const configured = await read(runtimeFile), tools = { javaHome: configured.javaHome, gradleHome: configured.gradleHome };
+  const native = realpathSync.native(path.join(root, 'gradle'));
+  const lowered = file => file.replace(/^[A-Z]:/u, drive => drive.toLowerCase());
+  const alias = lowered(native);
+  assert.notEqual(alias, native);
+  const settings = path.join(native, 'settings.gradle');
+  const old = await fs.readFile(settings, 'utf8');
+  await fs.writeFile(settings, old.replace("includeBuild('vendor') { name = 'linked-tools' }",
+    "def nameParts = ['verified', 'case']\nincludeBuild('vendor') { name = nameParts.join('-') }"));
+  const component = path.join(alias, 'vendor', 'service');
+  const target = { provider: 'gradle', declaredBuild: { kind: 'gradle' }, sourceRole: 'main', scope: 'runtime',
+    projectRoot: component, sourceRoot: path.join(component, 'src/main/java'), sourceUri: url(lowered(fileURLToPath(targets.included))) };
+  const folders = [url(lowered(realpathSync.native(root)))], saved = () => false;
+  const review = prepareGradleObservation(target, alias, folders, tools, saved);
+  const model = await observeGradleTarget(target, review, folders, saved);
+  assert.equal(review.project.root, native);
+  assert.equal(model.selected.projectRoot, path.join(native, 'vendor', 'service'));
+  assert.equal(model.selected.treePath, ':verified-case:service');
+  const { spec } = prepareSourceExecution(target, folders, tools, saved, model);
+  assert.ok(spec.args.includes(':verified-case:service:classes'));
+  const result = await execute(spec.command, spec.args, { cwd: spec.cwd,
+    env: { ...spec.env, GRADLE_USER_HOME: path.join(directory, 'build-cache') }, timeoutMs: 90000 });
+  assert.equal(result.code, 0, result.output);
+  assert.equal((await fs.readFile(path.join(component, 'build/classes/java/main/fixture/linked/Value.class'))).readUInt32BE(0), 0xcafebabe);
 });
 
 test('reviewed builds launch the exact process and stop without registering a replayable VS Code task', { timeout: 20000 }, async () => {
