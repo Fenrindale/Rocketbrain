@@ -1125,6 +1125,8 @@
         "title": "Inspect and Recover Multi-Server Schema Rebuild",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.javafx.preview", "title": "Preview JavaFX FXML", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceExtname == .fxml" },
+      { "command": "rocketbrain.javafx.refreshPreview", "title": "Refresh JavaFX FXML Preview", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
         "command": "rocketbrain.javafx.build",
         "title": "Run or Package JavaFX Application",

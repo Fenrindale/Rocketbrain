@@ -9,6 +9,8 @@ async function build() {
   fs.writeFileSync(path.join(__dirname, '../src/db/pkcs12-worker-source.json'), JSON.stringify(clientIdentity));
   const mixedClasses = fs.readFileSync(path.join(__dirname, '../runtime/java-mixed/MixedClassInspector.java'), 'utf8');
   fs.writeFileSync(path.join(__dirname, '../src/java/mixed-jvm-classfile-source.json'), JSON.stringify(mixedClasses));
+  const fxmlPreview = fs.readFileSync(path.join(__dirname, '../runtime/javafx-preview/FxmlPreview.java'), 'utf8');
+  fs.writeFileSync(path.join(__dirname, '../src/java/javafx-preview-source.json'), JSON.stringify(fxmlPreview));
   const groovyConsole = fs.readFileSync(path.join(__dirname, '../runtime/groovy/GroovyConsoleWorker.java'), 'utf8');
   fs.writeFileSync(path.join(__dirname, '../src/java/groovy-console-source.json'), JSON.stringify(groovyConsole));
   const groovyReceiver = fs.readFileSync(path.join(__dirname, '../runtime/groovy/GroovyStaticReceiver.java'), 'utf8');

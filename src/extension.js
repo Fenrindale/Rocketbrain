@@ -106,7 +106,7 @@ async function activate(context) {
   const java = registerJavaFeatures(context, vscode);
   const gitWorktrees=require('./vcs/worktree-context-vscode').registerWorktreeContexts(context,vscode,{java,dbConnections});
   context.subscriptions.push(gitWorktrees);
-  const javaFx = require('./java/javafx-vscode').registerJavaFx(vscode, { java });
+  const javaFx = require('./java/javafx-vscode').registerJavaFx(vscode, { java, context });
   java.fx = javaFx;
   context.subscriptions.push(javaFx);
   java.dependencyAdvisories = require('./java/dependency-advisories-vscode').registerDependencyAdvisories(vscode, context);

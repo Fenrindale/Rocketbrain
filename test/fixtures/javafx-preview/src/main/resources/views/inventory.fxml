@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.Pane?>
+<?import javafx.scene.shape.Rectangle?>
+<Pane xmlns="http://javafx.com/javafx/26" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="dev.rocketbrain.fixture.PreviewController" prefWidth="96" prefHeight="72"
+      styleClass="inventory" stylesheets="@theme.css">
+    <children>
+        <Rectangle fx:id="indicator" layoutX="4" layoutY="5" width="24" height="16"
+                   fill="#cc3344" onMouseClicked="#recordClick"/>
+        <fx:include fx:id="status" source="../shared/inset.fxml"/>
+    </children>
+</Pane>

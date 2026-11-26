@@ -5,12 +5,17 @@ const path = require('node:path');
 const { readFxml, resolveFxmlFile } = require('./javafx-fxml');
 const { workspacePath, workspaceRoots } = require('./workbench-model');
 const { buildSpec, nativeTaskRunner } = require('./workbench-tasks');
+const {renderFxmlPreview}=require('./javafx-preview-runtime');
 
-function registerJavaFx(vscode, { java }) {
+const PREVIEW='rocketbrain.javafx.preview',REFRESH='rocketbrain.javafx.refreshPreview';
+const htmlText=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+
+function registerJavaFx(vscode, { java, context }) {
   const selector = { scheme: 'file', pattern: '**/*.fxml' };
   const diagnostics = vscode.languages.createDiagnosticCollection('rocketbrain-fxml');
   const tasks = nativeTaskRunner(vscode);
-  const disposables = [diagnostics];
+  const disposables = [diagnostics],images=new WeakMap();
+  let panel,shown,rendering;
 
   function root(document) {
     if (!vscode.workspace.isTrusted || document.uri.scheme !== 'file') return null;
@@ -80,6 +85,86 @@ function registerJavaFx(vscode, { java }) {
     return tasks.execute(spec, { cancellation });
   }
 
+  const dirty=file=>vscode.workspace.textDocuments.some(document=>!document.isClosed&&document.isDirty&&
+    document.uri.scheme==='file'&&!path.relative(file,document.uri.fsPath));
+
+  async function preview({document=vscode.window.activeTextEditor?.document,width,height,allowPreview,cancellation}={}) {
+    const workspace=document&&root(document);
+    if (!workspace||!document.fileName.endsWith('.fxml')||document.uri.authority||document.isClosed||allowPreview!==true) {
+      throw Error('Choose a saved FXML document for preview in a trusted workspace.');
+    }
+    if (rendering) throw Error('Finish or cancel the current FXML preview.');
+    const file=workspacePath(document.fileName,[workspace],{directory:false});
+    const settings=vscode.workspace.getConfiguration('rocketbrain.java',document.uri);
+    const javaHome=settings.get('javaHome')||java.getState().javaHome;
+    const controller=new AbortController();
+    const cancel=cancellation?.onCancellationRequested?.(()=>controller.abort());
+    if (cancellation?.isCancellationRequested) controller.abort();
+    rendering=controller;
+    try {
+      const {png,report}=await renderFxmlPreview({file,workspace,dirty,javaHome,width,height,
+        storage:path.join(context.globalStorageUri.fsPath,'javafx-preview'),workspaceTrusted:true,allowPreview:true,cancellation:controller.signal});
+      if (!root(document)||document.isDirty||controller.signal.aborted) throw Error('The FXML source changed. Refresh from the saved file.');
+      const receipt=Object.freeze(report);
+      images.set(receipt,{png,uri:document.uri,width:report.width,height:report.height});
+      return receipt;
+    } finally {
+      rendering=undefined;
+      cancel?.dispose();
+    }
+  }
+
+  function showPreview(receipt) {
+    const image=images.get(receipt);
+    if (!vscode.workspace.isTrusted||!image) throw Error('Render the current FXML document before opening its preview.');
+    if (!panel) {
+      const view=vscode.window.createWebviewPanel('rocketbrainFxmlPreview','JavaFX FXML Preview',
+        {viewColumn:vscode.ViewColumn.Beside,preserveFocus:true},
+        {enableScripts:false,localResourceRoots:[],enableCommandUris:[REFRESH]});
+      panel=view;
+      view.onDidDispose(()=>{if(panel===view){panel=undefined;shown=undefined;}});
+    }
+    shown=image;
+    const name=htmlText(path.basename(image.uri.fsPath));
+    const omission=receipt.controllersOmitted||receipt.handlersOmitted
+      ? '<p>Static view · controller and event hookups omitted</p>' : '';
+    panel.webview.html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
+      '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; img-src data:; style-src &#39;unsafe-inline&#39;">'+
+      '<title>JavaFX FXML Preview</title><style>body{padding:18px}h1{font-size:1.2rem}img{max-width:100%;height:auto}'+
+      'a{color:var(--vscode-textLink-foreground)}</style></head><body><h1>'+name+'</h1>'+omission+
+      '<p><a href="command:'+REFRESH+'">Refresh Preview</a></p><img alt="Rendered JavaFX layout" width="'+receipt.width+
+      '" height="'+receipt.height+'" src="data:image/png;base64,'+image.png.toString('base64')+'"></body></html>';
+    return panel;
+  }
+
+  function runPreview(options) {
+    return vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'Render JavaFX FXML Preview',cancellable:true},
+      (_,cancellation)=>preview({...options,allowPreview:true,cancellation}));
+  }
+
+  async function refresh() {
+    const active=shown;
+    if (!active) throw Error('Open a JavaFX FXML preview first.');
+    const document=await vscode.workspace.openTextDocument(active.uri);
+    const receipt=await runPreview({document,width:active.width,height:active.height});
+    if (active===shown) showPreview(receipt);
+    return receipt;
+  }
+
+  function command(name,handler) {
+    disposables.push(vscode.commands.registerCommand(name,async()=>{
+      try {return await handler();}
+      catch (error) {void vscode.window.showErrorMessage(error.message);}
+    }));
+  }
+  command(PREVIEW,async()=>{
+    const receipt=await runPreview({});
+    showPreview(receipt);
+    return receipt;
+  });
+  command(REFRESH,refresh);
+  disposables.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{rendering?.abort();panel?.dispose();}));
+
   disposables.push(vscode.languages.registerDefinitionProvider(selector, { provideDefinition: definitions }));
   disposables.push(vscode.languages.registerDocumentSymbolProvider(selector, {
     provideDocumentSymbols(document) {
@@ -118,7 +203,10 @@ function registerJavaFx(vscode, { java }) {
     }
   }));
 
-  return { definitions, build, async dispose() { await tasks.dispose(); disposables.forEach(item => item.dispose()); } };
+  return { definitions, build, preview, showPreview, refresh, async dispose() {
+    rendering?.abort();panel?.dispose();
+    await tasks.dispose();disposables.forEach(item=>item.dispose());
+  } };
 }
 
 module.exports = { registerJavaFx };
