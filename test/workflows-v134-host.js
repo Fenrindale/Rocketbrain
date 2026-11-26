@@ -21,6 +21,7 @@ exports.run = async (vscode = require('vscode')) => {
     schemaPreparedCte:()=>require('./schema-prepared-cte-host').runPreparedCteChecks(api,vscode,checks),
     kotlinObjectFields:()=>require('./kotlin-watch-expressions-host').runKotlinObjectFieldChecks(api,vscode,checks),
     kotlinMavenEditor:()=>require('./kotlin-maven-editor-host').runKotlinMavenEditorChecks(api,vscode,checks),
+    kotlinMavenReactor:()=>require('./kotlin-maven-reactor-host').runKotlinMavenReactorChecks(api,vscode,checks),
     springParentAuth:()=>require('./spring-parent-authentication-host').runSpringParentAuthenticationChecks(api,vscode,checks),
     springReactiveRegression:()=>require('./spring-reactive-authentication-host').runReactiveAuthenticationChecks(api,vscode,checks),
     micronautGradle:()=>require('./micronaut-gradle-host').runMicronautGradleChecks(api,vscode,checks)
