@@ -24,6 +24,9 @@ exports.run = async (vscode = require('vscode')) => {
     return evidence[name];
   }
   const groups={
+    springMavenImports:()=>require('./spring-maven-imports-host').runSpringMavenImportChecks(api,vscode,checks),
+    sqlFileProfiles:()=>require('./sql-file-profiles-host').runSqlFileProfilesChecks(api,vscode,checks),
+    sftpDeployment:()=>verifyDeployment('sftpDeployment',require('./sftp-deployment-host').runSftpDeploymentChecks),
     namedTestNg:()=>require('./java-testing-named-testng-host').runJavaTestingNamedTestNgChecks(api,vscode,checks),
     javaModuleTests:()=>require('./java-testing-module-path-host').runJavaTestingModulePathChecks(api,vscode,checks),
     ftpsDeployment:()=>verifyDeployment('ftpsDeployment',require('./ftps-deployment-host').runFtpsDeploymentChecks),
