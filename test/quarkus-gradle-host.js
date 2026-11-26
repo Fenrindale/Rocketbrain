@@ -284,6 +284,8 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
       assert.match(frame.name,/FixtureResource\.greeting/u);
       await active.customRequest('continue',{threadId:stopped.threadId});
       assert.equal(await request,'packaged-fixture-ready');
+      vscode.debug.removeBreakpoints([breakpoint]);
+      breakpoint=undefined;
       await verifyServed(session.baseUrl,'packaged');
       await service.stopDev();
       await assertStopped(session.baseUrl);
