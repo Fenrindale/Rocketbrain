@@ -1,0 +1,147 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    objectVersion = 56;
+    objects = {
+        F10000000000000000000001 = {
+            isa = PBXProject;
+            buildConfigurationList = F10000000000000000000010;
+            compatibilityVersion = "Xcode 14.0";
+            developmentRegion = en;
+            knownRegions = (en, Base,);
+            mainGroup = F10000000000000000000003;
+            productRefGroup = F10000000000000000000004;
+            projectDirPath = "";
+            targets = (F10000000000000000000002,);
+        };
+        F10000000000000000000002 = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = F10000000000000000000011;
+            buildPhases = (
+                F10000000000000000000020,
+                F10000000000000000000021,
+                F10000000000000000000022,
+            );
+            buildRules = ();
+            dependencies = ();
+            name = RocketbrainIosFixture;
+            productName = RocketbrainIosFixture;
+            productReference = F10000000000000000000005;
+            productType = "com.apple.product-type.application";
+        };
+        F10000000000000000000003 = {
+            isa = PBXGroup;
+            children = (
+                F10000000000000000000006,
+                F10000000000000000000007,
+                F10000000000000000000008,
+                F10000000000000000000004,
+            );
+            sourceTree = "<group>";
+        };
+        F10000000000000000000004 = {
+            isa = PBXGroup;
+            children = (F10000000000000000000005,);
+            name = Products;
+            sourceTree = "<group>";
+        };
+        F10000000000000000000005 = {
+            isa = PBXFileReference;
+            explicitFileType = wrapper.application;
+            path = RocketbrainIosFixture.app;
+            sourceTree = BUILT_PRODUCTS_DIR;
+        };
+        F10000000000000000000006 = {
+            isa = PBXFileReference;
+            lastKnownFileType = sourcecode.c.objc;
+            path = main.m;
+            sourceTree = "<group>";
+        };
+        F10000000000000000000007 = {
+            isa = PBXFileReference;
+            lastKnownFileType = wrapper.framework;
+            name = RocketbrainProbe.framework;
+            path = build/bin/iosSimulatorArm64/debugFramework/RocketbrainProbe.framework;
+            sourceTree = SOURCE_ROOT;
+        };
+        F10000000000000000000008 = {
+            isa = PBXFileReference;
+            lastKnownFileType = wrapper.framework;
+            name = UIKit.framework;
+            path = System/Library/Frameworks/UIKit.framework;
+            sourceTree = SDKROOT;
+        };
+        F10000000000000000000010 = {
+            isa = XCConfigurationList;
+            buildConfigurations = (F10000000000000000000012,);
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Debug;
+        };
+        F10000000000000000000011 = {
+            isa = XCConfigurationList;
+            buildConfigurations = (F10000000000000000000013,);
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Debug;
+        };
+        F10000000000000000000012 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                ARCHS = arm64;
+                IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+                SDKROOT = iphonesimulator;
+                SUPPORTED_PLATFORMS = iphonesimulator;
+            };
+            name = Debug;
+        };
+        F10000000000000000000013 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                CLANG_ENABLE_OBJC_ARC = YES;
+                CODE_SIGNING_ALLOWED = YES;
+                CODE_SIGNING_REQUIRED = YES;
+                CODE_SIGN_ENTITLEMENTS = Debug.plist;
+                CODE_SIGN_IDENTITY = "-";
+                DEBUG_INFORMATION_FORMAT = dwarf;
+                ENABLE_DEBUG_DYLIB = NO;
+                FRAMEWORK_SEARCH_PATHS = "$(SRCROOT)/build/bin/iosSimulatorArm64/debugFramework";
+                GCC_OPTIMIZATION_LEVEL = 0;
+                INFOPLIST_FILE = Info.plist;
+                LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+                PRODUCT_BUNDLE_IDENTIFIER = org.rocketbrain.fixture.kotlinios;
+                PRODUCT_NAME = RocketbrainIosFixture;
+                TARGETED_DEVICE_FAMILY = 1;
+            };
+            name = Debug;
+        };
+        F10000000000000000000020 = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (F10000000000000000000030,);
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        F10000000000000000000021 = {
+            isa = PBXFrameworksBuildPhase;
+            buildActionMask = 2147483647;
+            files = (F10000000000000000000031, F10000000000000000000032,);
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        F10000000000000000000022 = {
+            isa = PBXCopyFilesBuildPhase;
+            buildActionMask = 2147483647;
+            dstPath = "";
+            dstSubfolderSpec = 10;
+            files = (F10000000000000000000033,);
+            name = "Embed Kotlin framework";
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        F10000000000000000000030 = { isa = PBXBuildFile; fileRef = F10000000000000000000006; };
+        F10000000000000000000031 = { isa = PBXBuildFile; fileRef = F10000000000000000000007; };
+        F10000000000000000000032 = { isa = PBXBuildFile; fileRef = F10000000000000000000008; };
+        F10000000000000000000033 = {
+            isa = PBXBuildFile;
+            fileRef = F10000000000000000000007;
+            settings = { ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy,); };
+        };
+    };
+    rootObject = F10000000000000000000001;
+}

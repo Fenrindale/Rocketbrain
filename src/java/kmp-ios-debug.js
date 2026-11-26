@@ -266,8 +266,17 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
     }
     observe('installed-executable-and-framework-verified');
     validate(record);
-    const pid = launchedPid(await tool('simctl', ['launch', '--wait-for-debugger', id, snapshot.bundleId],
-      { signal, timeout: 90000 }), snapshot.bundleId);
+    let launchOutput;
+    try {
+      launchOutput = await tool('simctl', ['launch', '--wait-for-debugger', id, snapshot.bundleId],
+        { signal, timeout: 90000 });
+    } catch (error) {
+      if (!signal.aborted) {
+        try { await observe('debuggee-launch-refused', id); } catch { /* Preserve the original launch failure. */ }
+      }
+      throw error;
+    }
+    const pid = launchedPid(launchOutput, snapshot.bundleId);
     observe('debuggee-launched');
     const processIdentity = await verifyProcess(tool, pid, executable, signal);
     validate(record);

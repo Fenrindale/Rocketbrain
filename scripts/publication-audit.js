@@ -26,6 +26,7 @@ function publicPath(name) {
   if (name === 'test/fixtures/java/scala-sbt/build.sbt') return true;
   if (name === 'test/fixtures/android-debug/build-apk.sh') return true;
   if (/^test\/fixtures\/kotlin-ios-debug\/(?:build-app\.sh|main\.m|(?:Info|Debug)\.plist)$/.test(name)) return true;
+  if (name === 'test/fixtures/kotlin-ios-debug/Fixture.xcodeproj/project.pbxproj') return true;
   if (/^test\/fixtures\/java\/scala-sbt\/(?:app\/src\/(?:main|test)|core\/src\/main)\/scala\/scalafixture\/(?:Application|ApplicationSuite|Message)\.scala$/.test(name)) return true;
   if (name.includes('/.vscode/')) return false;
   if (/^src\/.+\.(?:js|cjs|json|css)$/.test(name)) return true;
