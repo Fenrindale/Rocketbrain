@@ -113,7 +113,7 @@ async function buildTargets(root, tools, gradleCache) {
   }
 }
 
-async function runTargets(root, tools, classpathFile, database, engine) {
+async function runTargets(root, tools, classpathFile, database, engine, { declareMavenProfile = false } = {}) {
   const { springJdbcClasspath } = require('./instance-inline-fixture');
   const dependencies = await springJdbcClasspath(classpathFile, engine);
   assert.equal(database.host, '127.0.0.1');
@@ -130,8 +130,9 @@ async function runTargets(root, tools, classpathFile, database, engine) {
     ['maven', 'maven/service/target/classes', 'maven/core/target/classes'],
     ['gradle', 'gradle/workbench/build/classes/java/main', 'gradle/vendor/service/build/classes/java/main']
   ];
-  return Promise.all(cases.map(async ([kind, app, library]) => {
-    const result = await execute(java, ['-cp', [path.join(root, app), path.join(root, library), ...dependencies].join(path.delimiter),
+  if (declareMavenProfile) cases.push(['mavenprofile', 'maven-profile/worker/target/profile-output']);
+  return Promise.all(cases.map(async ([kind, ...folders]) => {
+    const result = await execute(java, ['-cp', [...folders.map(folder => path.join(root, folder)), ...dependencies].join(path.delimiter),
       'fixture.' + kind + '.Probe'], { cwd: root, env, timeoutMs: 30000 });
     assert.equal(result.code, 0, result.output);
     const marker = /^RB_TARGET=([^|\r\n]+)\|42$/mu.exec(result.output);
@@ -260,5 +261,78 @@ async function runDeclaredMavenExecution(service, root, source, checkSelection) 
     declarationOpened: true, siblingDriftRejected: true, oneUse: true, exactOutput: true, alternativeOutputAbsent: true };
 }
 
+const profileSlice = 'reviewed-slice';
+const profileExecution = 'profile-slice';
+
+async function populateMavenProfileExecution(root) {
+  const profile = (name, directory, activation = '') =>
+    '<profile><id>' + name + '</id>' + activation + '<build><plugins><plugin>' +
+    '<artifactId>maven-compiler-plugin</artifactId><version>3.15.0</version><executions><execution>' +
+    '<id>' + profileExecution + '</id><phase>none</phase><goals><goal>compile</goal></goals>' +
+    '<configuration><outputDirectory>${project.build.directory}/' + directory + '</outputDirectory></configuration>' +
+    '</execution></executions></plugin></plugins></build></profile>';
+  const profilePom = (name, body, child) => pom(name, body, child)
+    .replaceAll('fixture.targets', 'fixture.profiles').replaceAll('<artifactId>reactor</artifactId>', '<artifactId>profile-reactor</artifactId>');
+  const reactor = profilePom('reactor', '<packaging>pom</packaging><modules><module>worker</module><module>peer</module></modules>' +
+    '<properties><maven.compiler.release>25</maven.compiler.release></properties>');
+  const worker = profilePom('profile-worker', '<dependencies>' + dependency('org.springframework', 'spring-jdbc', '7.0.10') +
+    '</dependencies><profiles>\n' + [
+      profile(profileSlice, 'profile-output'),
+      profile('another-slice', 'alternate-output'),
+      profile('implicit-system', 'implicit-output', '<activation><property><name>java.version</name></property></activation>'),
+      profile('implicit-default', 'default-output', '<activation><activeByDefault>true</activeByDefault></activation>')
+    ].join('\n') + '\n</profiles>', true);
+  const source = 'maven-profile/worker/src/main/java/fixture/mavenprofile/Probe.java';
+  await Promise.all([
+    write(root, 'maven-profile/pom.xml', reactor), write(root, 'maven-profile/.mvn/maven.config', '--offline\n'),
+    write(root, 'maven-profile/worker/pom.xml', worker), write(root, 'maven-profile/peer/pom.xml', profilePom('profile-peer', '', true)),
+    write(root, source, probe('fixture.mavenprofile', '2'))
+  ]);
+  return pathToFileURL(path.join(root, source)).href;
+}
+
+async function runDeclaredMavenProfileExecution(service, root, source, checkSelection) {
+  const worker = path.join(root, 'maven-profile/worker'), pomFile = path.join(worker, 'pom.xml');
+  const target = await service.inspect({ sourceUri: source });
+  assert.equal(target.executedProjectCode, false);
+  assert.equal(target.declaredBuild.reactorProject, 'worker');
+  const choices = await service.listMavenExecutions(target.id);
+  assert.deepEqual(choices.map(item => item.profile.name), [profileSlice, 'another-slice']);
+  assert.equal(new Set(choices.map(item => item.id)).size, 2);
+  const [choice] = choices;
+  const opened = await service.openMavenExecution(target.id, choice.id);
+  assert.equal(opened.declaration.uri, pathToFileURL(pomFile).href);
+  assert.equal(opened.profile.name, profileSlice);
+  checkSelection?.(opened);
+  const createReview = () => service.reviewBuild(target.id, { mavenExecutionId: choice.id });
+  const reviewed = await createReview();
+  assert.equal(reviewed.task, 'org.apache.maven.plugins:maven-compiler-plugin:3.15.0:compile@' + profileExecution);
+  assert.deepEqual(reviewed.mavenExecution.profile.inactive, ['another-slice', 'implicit-system', 'implicit-default']);
+  assert.match(reviewed.mavenExecution.artifacts.pomSha256, /^[0-9a-f]{64}$/u);
+  assert.match(reviewed.mavenExecution.artifacts.jarSha256, /^[0-9a-f]{64}$/u);
+  assert.ok(reviewed.args.includes('--activate-profiles=reviewed-slice,!another-slice,!implicit-system,!implicit-default'));
+  assert.ok(reviewed.args.includes('--offline') && !reviewed.args.includes('--also-make'));
+  await assert.rejects(service.runBuild(reviewed.id), /Approve.*explicitly/u);
+
+  const peer = path.join(root, 'maven-profile/peer/pom.xml');
+  const originalPeer = await fs.readFile(peer, 'utf8');
+  await fs.appendFile(peer, '<!-- drift during reviewed profile -->\n');
+  try {
+    await assert.rejects(service.runBuild(reviewed.id, { allowProjectExecution: true }), /inputs changed/u);
+  } finally { await fs.writeFile(peer, originalPeer); }
+
+  const final = await createReview();
+  assert.equal((await service.runBuild(final.id, { allowProjectExecution: true })).state, 'succeeded');
+  const compiled = path.join(worker, 'target/profile-output/fixture/mavenprofile/Probe.class');
+  assert.equal((await fs.readFile(compiled)).readUInt32BE(0), 0xcafebabe);
+  for (const directory of ['alternate-output', 'implicit-output', 'default-output']) {
+    await assert.rejects(fs.access(path.join(worker, 'target', directory)), { code: 'ENOENT' });
+  }
+  await assert.rejects(service.runBuild(final.id, { allowProjectExecution: true }), /already used/u);
+  return { module: final.selector, profile: final.mavenExecution.profile.name, executionId: final.mavenExecution.executionId,
+    declarationOpened: true, siblingDriftRejected: true, oneUse: true, implicitOutputsAbsent: true, exactOutput: true,
+    compilerArtifactDigests: final.mavenExecution.artifacts };
+}
+
 module.exports = { links, populateTargets, buildTargets, runTargets, executionCases, runObservedGradleComposite,
-  populateMavenSourceExecution, runDeclaredMavenExecution };
+  populateMavenSourceExecution, runDeclaredMavenExecution, populateMavenProfileExecution, runDeclaredMavenProfileExecution };

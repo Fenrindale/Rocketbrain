@@ -206,6 +206,10 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
   async function chooseBuild(id, options) {
     const review = await reviewBuild(id, options);
     const label = 'Run Reviewed Build';
+    const profile = review.mavenExecution?.profile;
+    const activation = profile ? 'Activate Maven profile: ' + profile.name + '\n' +
+      (profile.inactive.length ? 'Other profiles disabled: ' + profile.inactive.join(', ') + '\n' : '') +
+      'Uses the reviewed installation settings and toolchains, and the conventional Maven artifact cache.\n' : '';
     const selected = await vscode.window.showWarningMessage(review.mavenExecution ?
       'Run the selected Maven plugin execution?' : 'Compile the selected Java component?', {
       modal: true,
@@ -214,6 +218,7 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
           'Maven runs the saved plugin configuration for this module. Build dependencies must already be available offline.\n' :
           'Required Gradle task dependencies can also run.\n') +
         (review.gradleModel ? 'Observed settings: ' + review.gradleModel.settingsFile + '\n' : '') +
+        activation +
         'Working directory: ' + review.cwd + '\n' + JSON.stringify([review.command, ...review.args], null, 2)
     }, label);
     if (selected !== label) { reviews.delete(review.id); return; }
@@ -222,10 +227,11 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
 
   async function chooseMavenExecution(id) {
     const executions = await listMavenExecutions(id);
-    if (!executions.length) throw fail('Declare a literal plugin version, execution ID and goal in this Maven module.');
+    if (!executions.length) throw fail('Declare a literal plugin version, execution ID and goal. Profile executions require a manually activated named profile.');
     const choice = await vscode.window.showQuickPick(executions.map(execution => ({
       label: execution.goal + '@' + execution.executionId,
-      description: [execution.group, execution.artifact, execution.version].join(':'),
+      description: [execution.group, execution.artifact, execution.version].join(':') +
+        (execution.profile ? ' · Profile ' + execution.profile.name : ''),
       execution
     })), { title: 'Choose a Declared Maven Execution', matchOnDescription: true });
     if (!choice) return;

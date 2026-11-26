@@ -6,10 +6,11 @@ const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { until } = require('./helpers/stdio-lsp');
 const { populateTargets, buildTargets, runTargets, executionCases, runObservedGradleComposite,
-  populateMavenSourceExecution, runDeclaredMavenExecution } = require('./helpers/java-source-target-fixture');
+  populateMavenSourceExecution, runDeclaredMavenExecution, populateMavenProfileExecution,
+  runDeclaredMavenProfileExecution } = require('./helpers/java-source-target-fixture');
 
 async function runJavaSourceTargetChecks(api, vscode, checks,
-  { executeFromSource = false, observeComposite = false, declareMaven = false } = {}) {
+  { executeFromSource = false, observeComposite = false, declareMaven = false, declareMavenProfile = false } = {}) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const owner = JSON.parse(await fs.readFile(path.join(path.dirname(spring.dbConfigPath), 'owner.json'), 'utf8'));
@@ -25,17 +26,21 @@ async function runJavaSourceTargetChecks(api, vscode, checks,
   try {
     const targets = await populateTargets(root);
     const mavenExecutionSource = declareMaven ? await populateMavenSourceExecution(root) : undefined;
+    const mavenProfileSource = declareMavenProfile ? await populateMavenProfileExecution(root) : undefined;
     await api.java.start();
     const config = vscode.workspace.getConfiguration('rocketbrain.java');
     const tools = { javaHome: api.java.getState().javaHome, gradleHome: config.get('gradleHome'), mavenHome: config.get('mavenHome') };
     const cache = process.env.ROCKETBRAIN_SOURCE_TARGET_GRADLE_CACHE || process.env.GRADLE_USER_HOME;
     assert.ok(cache, 'Use the populated independent Gradle fixture cache.');
     if (!executeFromSource) await buildTargets(root, tools, cache);
-    const files = ['maven/pom.xml', 'gradle/build.gradle'].map(file => vscode.Uri.file(path.join(root, file)).toString());
+    const descriptors = ['maven/pom.xml', 'gradle/build.gradle'];
+    if (declareMavenProfile) descriptors.push('maven-profile/pom.xml');
+    const files = descriptors.map(file => vscode.Uri.file(path.join(root, file)).toString());
     await api.java.executeWorkspaceCommand('java.project.changeImportedProjects', files, [], []);
     const service = api.java.workbench.sourceTarget;
     const selected = ['maven/service', 'gradle/workbench', 'gradle/vendor/service'].map(file => path.join(root, file));
     if (declareMaven) selected.push(path.join(root, 'maven/execution-worker'));
+    if (declareMavenProfile) selected.push(path.join(root, 'maven-profile/worker'));
     await until(async () => {
       imported = (await api.java.executeWorkspaceCommand('java.project.getAll')).filter(uri => {
         try { return inside(fileURLToPath(uri)); } catch { return false; }
@@ -88,19 +93,25 @@ async function runJavaSourceTargetChecks(api, vscode, checks,
       }
       checks.push('One-use approved task reviews compile the exact Maven reactor and Gradle composite Java components.');
     }
-    const jdbc = await runTargets(root, tools, classpath, database, spring.dbEngine);
     const observed = observeComposite ? await runObservedGradleComposite(service, root, targets) : undefined;
     const mavenExecution = declareMaven ? await runDeclaredMavenExecution(service, root, mavenExecutionSource, choice => {
       const editor = vscode.window.activeTextEditor;
       assert.equal(editor.document.uri.toString(), choice.declaration.uri);
       assert.match(editor.document.getText(editor.selection), /<id>second-slice<\/id>/u);
     }) : undefined;
+    const mavenProfile = declareMavenProfile ? await runDeclaredMavenProfileExecution(service, root, mavenProfileSource, choice => {
+      const editor = vscode.window.activeTextEditor;
+      assert.equal(editor.document.uri.toString(), choice.declaration.uri);
+      assert.match(editor.document.getText(editor.selection), /<id>profile-slice<\/id>/u);
+    }) : undefined;
+    const jdbc = await runTargets(root, tools, classpath, database, spring.dbEngine, { declareMavenProfile });
     checks.push('The installed source action distinguishes imported Maven reactor and renamed included Gradle projects and their main and test scopes.');
     checks.push('Opening the report and exact aggregation declaration uses read-only JDT queries. Both built Spring JDBC applications returned 42.');
     if (observed) checks.push('The approved Gradle model binds the computed included-build name and runs the exact reviewed source task.');
     if (mavenExecution) checks.push('A declared Maven execution opened its POM and ran the selected configuration in one reviewed reactor module.');
+    if (mavenProfile) checks.push('The selected explicit Maven profile compiled its Spring JDBC entry while other profile outputs remained absent.');
     return { selected: Object.keys(records), jdbc, builds, exactDeclarationLinks: true, readOnlyInspection: true,
-      ...(observed && { observedComposite: observed }), ...(mavenExecution && { mavenExecution }) };
+      ...(observed && { observedComposite: observed }), ...(mavenExecution && { mavenExecution }), ...(mavenProfile && { mavenProfile }) };
   } finally {
     try {
       const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => {

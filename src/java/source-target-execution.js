@@ -1,5 +1,6 @@
 'use strict';
 
+const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -7,7 +8,7 @@ const M = require('./workbench-model');
 const { pomFacts, gradleSettings } = require('./dependency-builds');
 const { buildSpec } = require('./workbench-tasks');
 const { verifyGradleObservation } = require('./gradle-source-model');
-const { declaredExecutions, reactorParent } = require('./maven-source-execution');
+const { declaredExecutions, namedProfileExecutions, bindMavenProfileRuntime, reactorParent } = require('./maven-source-execution');
 
 const segment = /^[A-Za-z0-9_][\w.-]*$/u;
 const configFiles = ['settings.gradle', 'settings.gradle.kts'];
@@ -34,7 +35,7 @@ function capture(dirty) {
     if (data.length > limit || !tooling && (bytes += data.length) > 8 * 1024 * 1024) {
       throw M.fail('The Java build inputs exceed their review limits.');
     }
-    const item = { path: file, uri: pathToFileURL(file).href, digest: M.hash(data),
+    const item = { path: file, uri: pathToFileURL(file).href, digest: createHash('sha256').update(data).digest('hex'),
       ...(!tooling && { text: new TextDecoder('utf-8', { fatal: true }).decode(data) }) };
     captured.set(file, item);
     return item;
@@ -42,7 +43,7 @@ function capture(dirty) {
   return { read, fingerprint: () => M.hash([...captured].map(([file, item]) => [file, item?.digest ?? null])) };
 }
 
-function mavenReactor(target, root, read) {
+function mavenReactor(target, root, read, allowLeafProfiles = false) {
   const expected = target.declaredBuild.reactorProject;
   if (typeof expected !== 'string' || expected.length > 240 || !expected.split('/').every(value => segment.test(value)) ||
       path.relative(path.resolve(root, expected), target.projectRoot)) {
@@ -68,7 +69,8 @@ function mavenReactor(target, root, read) {
       throw M.fail('Maven module POMs and their extension boundary must be available for review.');
     }
     const model = pomFacts(file);
-    if (model.profiles || model.modules.some(value => !value.split('/').every(part => segment.test(part)))) {
+    const profiledLeaf = allowLeafProfiles && !path.relative(physical, target.projectRoot) && !model.modules.length;
+    if (model.profiles && !profiledLeaf || model.modules.some(value => !value.split('/').every(part => segment.test(part)))) {
       throw M.fail('Profile-dependent or computed Maven reactor modules require separate execution.');
     }
     modules.set(physical, model);
@@ -86,6 +88,7 @@ function executionChoices(target, root, reactor) {
     throw M.fail('Choose a Java source in a leaf Maven reactor module for execution.');
   }
   // Maven may merge parent execution configuration. Only reviewed physical reactor ancestors are accepted.
+  const ancestors = [];
   for (let current = owner, parent = reactorParent(current.file); parent; parent = reactorParent(current.file)) {
     if (!/^(?:\.\.\/)+pom\.xml$/u.test(parent.relative)) {
       throw M.fail('Declared Maven execution review requires conventional local reactor parents.');
@@ -99,9 +102,13 @@ function executionChoices(target, root, reactor) {
         ancestor.gav.version !== parent.version) {
       throw M.fail('The Maven parent does not match a reviewed physical reactor module.');
     }
+    ancestors.push(ancestor.file);
     current = ancestor;
   }
-  return declaredExecutions(owner.file);
+  if (!owner.profiles) return declaredExecutions(owner.file);
+  const lineage = new Set([owner.file, ...ancestors]);
+  const peers = [...modules.values()].map(module => module.file).filter(file => !lineage.has(file));
+  return namedProfileExecutions(owner.file, ancestors, peers);
 }
 
 function listMavenSourceExecutions(target, folders, dirty) {
@@ -109,11 +116,11 @@ function listMavenSourceExecutions(target, folders, dirty) {
   if (selected?.tool !== 'maven') throw M.fail('Select a Java source in an imported Maven reactor module.');
   const root = localPath(selected.root, M.workspaceRoots(folders));
   const { read } = capture(dirty);
-  return executionChoices(target, root, mavenReactor(target, root, read));
+  return executionChoices(target, root, mavenReactor(target, root, read, true));
 }
 
 function reviewedMaven(target, root, read, executionChoice) {
-  const reactor = mavenReactor(target, root, read);
+  const reactor = mavenReactor(target, root, read, executionChoice !== undefined);
   const tail = ['--file', path.join(root, 'pom.xml'), '--projects', reactor.selector];
   if (executionChoice !== undefined) {
     const execution = executionChoices(target, root, reactor).find(choice => choice.id === executionChoice);
@@ -205,12 +212,17 @@ function prepareSourceExecution(target, folders, tools, dirty, observedGradle, e
   toolFile(spec.args[spec.args.indexOf('-cp') + 1]);
   const classworlds = spec.args.find(arg => arg.startsWith('-Dclassworlds.conf='));
   if (classworlds) toolFile(classworlds.slice('-Dclassworlds.conf='.length));
+  let profileRuntime;
   if (details.execution) {
     const home = spec.args.find(arg => arg.startsWith('-Dmaven.home=')).slice('-Dmaven.home='.length);
     const lib = path.join(home, 'lib');
     const core = fs.readdirSync(lib).filter(name => /^maven-core-3\.9\.\d+\.jar$/u.test(name));
     if (core.length !== 1) throw M.fail('Configure one independent Apache Maven 3.9 distribution for declared execution.');
     toolFile(path.join(lib, core[0]));
+    if (details.execution.profile) {
+      profileRuntime = bindMavenProfileRuntime(home, details.execution, read);
+      spec.args.push(...profileRuntime.args);
+    }
   }
   const projectId = M.id('project', target.projectRoot);
   const review = { sourceUri: target.sourceUri, projectRoot: target.projectRoot, tool: selected.tool, scope: target.scope,
@@ -218,7 +230,7 @@ function prepareSourceExecution(target, folders, tools, dirty, observedGradle, e
     ...(observedGradle && { gradleModel: { buildRoot: observedGradle.selected.buildRoot,
       settingsFile: observedGradle.selected.settingsFile, buildCount: observedGradle.buildCount,
       projectCount: observedGradle.projectCount, buildInputs: observedGradle.key, membershipSha256: observedGradle.membershipSha256 } }),
-    ...(details.execution && { mavenExecution: details.execution }),
+    ...(details.execution && { mavenExecution: { ...details.execution, ...(profileRuntime && { artifacts: profileRuntime.artifacts }) } }),
     reactorDependenciesIncluded: selected.tool === 'maven' && !details.execution };
   return { spec, projectId, review, key: M.hash({ review, env: spec.env, files: fingerprint() }) };
 }
