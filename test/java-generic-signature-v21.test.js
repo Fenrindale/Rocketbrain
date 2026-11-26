@@ -5,11 +5,11 @@ const {registerJavaChangeSignature,inspectSemanticFamily,verifySemanticChange,se
 const base=path.resolve('test-output/'+(process.env.ROCKETBRAIN_TEST_REPORT_PREFIX||'v0.21')+'-generic-signature-unit');fs.mkdirSync(base,{recursive:true});
 const enabled=!!process.env.ROCKETBRAIN_JAVA_SIGNATURE_COMPILER_TEST;
 function selection(text,marker){const start=text.indexOf(marker);return {start:{line:0,character:start},end:{line:0,character:start+marker.indexOf('(')}};}
-test('generic source selection requires independent semantic attribution and keeps varargs refused',()=>{
+test('generic source selection requires independent semantic attribution and refuses generic varargs',()=>{
  const text='interface Contract<T extends Number> { T select(T value, int unused); }',uri=pathToFileURL(path.join(base,'Contract.java')).href;
  assert.throws(()=>selectedMethod(text,uri,selection(text,'select(T')),/Generic/);
  assert.equal(selectedMethod(text,uri,selection(text,'select(T'),{advanced:true}).method.parameters[0].type.raw,'T');
- const varargs='class Varargs { static <T> T select(T... values) {return values[0];} }';assert.throws(()=>selectedMethod(varargs,uri,selection(varargs,'select(T'),{advanced:true}),/varargs/);
+ const varargs='class Varargs { static <T> T select(T... values) {return values[0];} }';assert.throws(()=>selectedMethod(varargs,uri,selection(varargs,'select(T'),{advanced:true}),/varargs/i);
 });
 test('Change Signature protects literal Spring extension entrypoints before requesting engine edits or classpaths',async()=>{
  const root=fs.mkdtempSync(path.join(base,'spring-')),file=path.join(root,'IdentityPostProcessor.java'),text='import org.springframework.beans.factory.config.BeanPostProcessor; public final class IdentityPostProcessor implements BeanPostProcessor { public Object postProcessAfterInitialization(Object bean, String name) { return bean; } }';fs.writeFileSync(file,text);fs.writeFileSync(path.join(root,'pom.xml'),'<project/>');const uri={scheme:'file',fsPath:file,query:'',fragment:'',toString:()=>pathToFileURL(file).href},document={uri,languageId:'java',version:1,isClosed:false,getText:()=>text},requests=[],vscode={workspace:{isTrusted:true,textDocuments:[document],getWorkspaceFolder:()=>({uri:{fsPath:root}})},commands:{registerCommand:()=>({dispose(){}})}};

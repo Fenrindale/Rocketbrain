@@ -110,7 +110,7 @@ function assertPlan(plan, operation) {
     documents: plan.documents.length, references: plan.signature.resolvedReferences };
 }
 
-async function populateSignatureReferences(root, classpath) {
+async function populateSignatureReferences(root, classpath, units = sources) {
   const xml = value => value.replaceAll('\\', '/').replaceAll('&', '&amp;').replaceAll('"', '&quot;');
   await fs.mkdir(path.join(root, 'bin'), { recursive: true });
   await fs.mkdir(path.join(root, '.settings'));
@@ -127,7 +127,7 @@ async function populateSignatureReferences(root, classpath) {
     '<classpathentry kind="output" path="bin"/></classpath>', { flag: 'wx' });
   await fs.writeFile(path.join(root, 'build.gradle'), "plugins { id 'java' }\nrepositories { mavenCentral() }\n" +
     "dependencies { implementation 'org.springframework:spring-jdbc:7.0.10' }\n", { flag: 'wx' });
-  for (const [relative, text] of sources) {
+  for (const [relative, text] of units) {
     const file = path.join(root, relative);
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, text, { flag: 'wx' });

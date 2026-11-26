@@ -556,7 +556,15 @@ public final class SignatureInspector {
                     void call(Tree tree, List<? extends ExpressionTree> arguments, boolean constructor) {
                         long start=positions.getStartPosition(unit,tree),end=positions.getEndPosition(unit,tree); Element element=trees.getElement(getCurrentPath());
                         if(start<0 || end<start || !(element instanceof ExecutableElement executable)) return;
-                        calls.add(object("uri",uri,"start",start,"end",end,"methodKey",key(executable),"enclosingKey",current==null?"<initializer>":key(current.element),"ordinal",ordinal++,"constructor",constructor,"resultType",trees.getTypeMirror(getCurrentPath()).toString(),"safeArguments",arguments.stream().allMatch(v->safeArgument(getCurrentPath(),v,trees))));
+                        var report = object("uri",uri,"start",start,"end",end,"methodKey",key(executable),
+                            "enclosingKey",current==null?"<initializer>":key(current.element),"ordinal",ordinal++,"constructor",constructor,
+                            "resultType",trees.getTypeMirror(getCurrentPath()).toString(),
+                            "safeArguments",arguments.stream().allMatch(v->safeArgument(getCurrentPath(),v,trees)));
+                        if (executable.isVarArgs() && trees.getPath(executable) != null) {
+                            var varargs = VarargsCalls.inspect(getCurrentPath(), executable, arguments, trees, types, text);
+                            if (!varargs.isEmpty()) report.put("varargs",varargs);
+                        }
+                        calls.add(report);
                     }
                     public Void visitMethodInvocation(MethodInvocationTree tree, Void p) { call(tree,tree.getArguments(),false); return super.visitMethodInvocation(tree,p); }
                     public Void visitNewClass(NewClassTree tree, Void p) { call(tree,tree.getArguments(),true); return super.visitNewClass(tree,p); }
