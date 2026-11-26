@@ -130,10 +130,23 @@ async function resolveDocker(args, { cwd, signal }) {
   }
 }
 
-function stable(value) {
-  if (Array.isArray(value)) return value.map(stable);
+const mapForms = new Set(['labels', 'annotations', 'environment', 'args']);
+
+function stable(value, field) {
+  if (Array.isArray(value)) {
+    if (mapForms.has(field) && value.every(item => typeof item === 'string')) {
+      const entries = value.map(item => {
+        const separator = item.indexOf('=');
+        return separator < 0 ? [item, null] : [item.slice(0, separator), item.slice(separator + 1)];
+      });
+      if (entries.every(([key]) => key.length) && new Set(entries.map(([key]) => key)).size === entries.length) {
+        return stable(Object.fromEntries(entries));
+      }
+    }
+    return value.map(item => stable(item));
+  }
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]));
+    return Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key], key)]));
   }
   return value;
 }
