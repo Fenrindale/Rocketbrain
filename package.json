@@ -212,9 +212,13 @@
       { "command": "rocketbrain.micronaut.stop", "title": "Stop Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.discover", "title": "Discover sbt Projects", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.compile", "title": "Compile and Index Scala", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.renameIndex", "title": "Index Scala Sources for Rename", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.test", "title": "Run sbt Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.run", "title": "Run sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.debug", "title": "Debug sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.startLanguage", "title": "Start Scala Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.importLanguageBuild", "title": "Import sbt Build for Scala Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.stopLanguage", "title": "Stop Scala Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.definition", "title": "Open Compiled Scala Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == scala" },
       { "command": "rocketbrain.scala.stop", "title": "Stop sbt Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.inspect", "title": "Inspect Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -2955,6 +2959,12 @@
           "default": "",
           "scope": "machine",
           "description": "Optional absolute directory for the Rocketbrain sbt boot and dependency caches. Uses extension storage by default."
+        },
+        "rocketbrain.scala.languageClasspath": {
+          "type": "string",
+          "scope": "application",
+          "default": "",
+          "description": "Absolute classpath.txt produced by the Rocketbrain Metals 1.6.9 runtime provisioner."
         },
         "rocketbrain.scala.repositoryConfig": {
           "type": "string",

@@ -248,4 +248,83 @@ function referencesAt(index,{file,text,position,includeDeclaration=false},cancel
   return targets.map(publicRange).filter(Boolean).map(item=>({symbol,...item}));
 }
 
-module.exports = { semanticDocuments,indexSemanticdb,definitionAt,referencesAt,configSnapshot };
+const scalaKeywords=new Set(('abstract case catch class def do else enum export extends false final finally for forSome given if implicit '+
+  'import inline lazy match new null object opaque open override package private protected return sealed super then this throw trait true '+
+  'try type using val var while with yield').split(' '));
+
+function verifyRenameCoverage(index,original,cancellation) {
+  const identifier=new RegExp('\\b'+original+'\\b');
+  let files=0,entries=0;
+  function visit(folder,inSource,depth) {
+    if (depth>20 || cancelled(cancellation)) throw fail('Scala rename coverage exceeded its limit or was cancelled.');
+    const items=fs.readdirSync(folder,{withFileTypes:true});
+    for(const item of items) {
+      if (++entries>30000) throw fail('Scala rename file coverage exceeds its limit.');
+      if (item.name.startsWith('.') || (EXCLUDED.has(item.name) && item.name!=='src') || item.name==='target') continue;
+      const file=path.join(folder,item.name);
+      if (item.isSymbolicLink() && inSource) throw fail('Scala rename requires physical source files.');
+      if (item.isDirectory()) visit(file,inSource||item.name==='src',depth+1);
+      else if (inSource && item.isFile() && /\.(?:scala|java)$/.test(item.name)) {
+        if (++files>1000) throw fail('Scala rename source file count exceeds its limit.');
+        if (item.name.endsWith('.scala') && !index.documents.has(file)) throw fail('Compile and index all saved Scala sources before renaming.');
+        if (item.name.endsWith('.java') && identifier.test(decode.decode(regular(file,index.root)))) {
+          throw fail('Review Java references to this Scala method before renaming it.');
+        }
+      }
+    }
+  }
+  visit(index.root,false,0);
+}
+
+function renameAt(index,{file,text,position,newName},cancellation) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(newName||'') || scalaKeywords.has(newName)) {
+    throw fail('Choose a plain Scala method name.');
+  }
+  const document=currentDocument(index,file,text,position);
+  if (!document) return undefined;
+  const candidates=document.occurrences.filter(item => (item.role===1 || item.role===2) && coveredOccurrence(item,position));
+  const symbols=[...new Set(candidates.map(item=>item.symbol))];
+  if (symbols.length!==1) return undefined;
+  const [symbol]=symbols, method=/^(.*\.)([A-Za-z_][A-Za-z0-9_]*)\([^)]*\)\.$/.exec(symbol);
+  if (!method || method[2]===newName) return undefined;
+  const [,owner,original]=method;
+  const definitions=index.definitions.get(symbol)||[];
+  const owners=index.definitions.get(owner)||[];
+  const object=owners.length===1 && owners[0];
+  const ownerLine=object && object.document.text.split('\n')[object.range.start.line];
+  if (!ownerLine || !/\bobject\s+[A-Za-z_][A-Za-z0-9_]*\s*[:{]\s*$/.test(ownerLine)) {
+    throw fail('Scala rename supports methods in a standalone object declaration.');
+  }
+  const nextSymbol=owner+newName;
+  if (definitions.length!==1 || [...index.definitions.keys()].some(key=>
+    key.startsWith(nextSymbol) && /^[.(#]/.test(key.slice(nextSymbol.length)))) {
+    throw fail('Scala rename needs one declaration and a fresh name in its owner.');
+  }
+  verifyRenameCoverage(index,original,cancellation);
+  const targets=referencesAt(index,{file,text,position,includeDeclaration:true},cancellation);
+  if (targets.length!==(index.references.get(symbol)?.length||0)+definitions.length) {
+    throw fail('Scala rename could not match every indexed source occurrence.');
+  }
+  const records=new Map([...index.documents.values()].map(record=>[record.uri,record]));
+  const edits={};
+  const seen=new Set();
+  for (const target of targets) {
+    const record=records.get(target.uri);
+    const {start,end}=target.range;
+    if (record?.text.split('\n')[start.line]?.slice(start.character,end.character)!==original) {
+      throw fail('Scala rename encountered a nonliteral source occurrence.');
+    }
+    const key=target.uri+' '+start.line+' '+start.character;
+    if (!seen.has(key)) {
+      seen.add(key);
+      (edits[target.uri]??=[]).push({range:target.range,newText:newName});
+    }
+  }
+  const declared=publicRange(definitions[0]);
+  if (!declared || !edits[declared.uri]?.some(edit=>positionOrder(edit.range.start,declared.range.start)===0)) {
+    throw fail('Scala rename could not match the saved declaration.');
+  }
+  return {changes:edits};
+}
+
+module.exports = { semanticDocuments,indexSemanticdb,definitionAt,referencesAt,renameAt,configSnapshot };

@@ -39,6 +39,7 @@ function launcherCommands(action,projectId,main) {
   if (projectId && !MODULE.test(projectId)) throw fail('Choose an observed sbt project ID.');
   const scope=projectId ? projectId+' / ' : '';
   if (action==='compile' || action==='test') return [scope+action];
+  if (action==='renameIndex' && !projectId) return ['Compile / compile','Test / compile'];
   if (action==='mains') return ['show '+scope+'Compile / discoveredMainClasses'];
   if (typeof main==='string' && main.length<=220 && MAIN.test(main)) {
     if (action==='run') return [scope+'Compile / runMain '+main];

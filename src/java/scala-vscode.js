@@ -6,10 +6,11 @@ const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 const { projectSbt,createSbtRunner,observedProjects,mainClasses } = require('./scala-sbt');
-const { indexSemanticdb,definitionAt,referencesAt,configSnapshot } = require('./scala-semanticdb');
+const { indexSemanticdb,definitionAt,referencesAt,renameAt,configSnapshot } = require('./scala-semanticdb');
 
 const COMMANDS={discover:'rocketbrain.scala.discover',compile:'rocketbrain.scala.compile',test:'rocketbrain.scala.test',
-  run:'rocketbrain.scala.run',debug:'rocketbrain.scala.debug',definition:'rocketbrain.scala.definition',stop:'rocketbrain.scala.stop'};
+  run:'rocketbrain.scala.run',debug:'rocketbrain.scala.debug',definition:'rocketbrain.scala.definition',
+  renameIndex:'rocketbrain.scala.renameIndex',stop:'rocketbrain.scala.stop'};
 const debugType='rocketbrain-scala';
 
 function registerScalaWorkbench(context,vscode,java) {
@@ -85,13 +86,15 @@ function registerScalaWorkbench(context,vscode,java) {
         observed.configs!==JSON.stringify(configSnapshot(root)))) {
       throw fail('Discover current sbt project IDs before choosing a subproject.');
     }
-    if (name==='compile') indexes.delete(root);
+    const createsIndex=name==='compile' || name==='renameIndex';
+    if (createsIndex) indexes.delete(root);
     const result=await task(root,name,options);
-    if (result.state==='succeeded' && name==='compile') {
+    if (result.state==='succeeded' && createsIndex) {
       trusted(options.cancellation);
+      ensureSaved(root);
       const index=indexSemanticdb(root,options.cancellation);
       if (JSON.stringify(index.configs)!==result.configs) throw fail('Scala build files changed during SemanticDB indexing.');
-      remember(indexes,root,index);
+      remember(indexes,root,{...index,renameReady:name==='renameIndex'});
       return {...result,indexedDocuments:index.documents.size};
     }
     if (name==='mains') return {...result,classes:result.state==='succeeded' ? mainClasses(result.output) : []};
@@ -196,6 +199,20 @@ function registerScalaWorkbench(context,vscode,java) {
       .map(codeLocation).filter(Boolean);
   }
 
+  function prepareRenameIndex(options={}) {
+    return selected({...options,projectId:undefined},'renameIndex');
+  }
+
+  function planRename({document,position,newName,root}={},cancellation) {
+    const source=indexedSource(document,cancellation);
+    if (!source) return undefined;
+    if (!source.index?.renameReady || !root || path.relative(root,source.index.root)) {
+      throw fail('Run Index Scala Sources for Rename for the selected build first.');
+    }
+    ensureSaved(source.index.root);
+    return renameAt(source.index,{file:source.file,text:document.getText(),position,newName},cancellation);
+  }
+
   const selector={scheme:'file',language:'scala',pattern:'**/*.scala'};
   subscriptions.push(vscode.languages.registerDefinitionProvider(selector, {
     provideDefinition(document,position,cancellation) {
@@ -282,6 +299,17 @@ function registerScalaWorkbench(context,vscode,java) {
     if (result.state==='succeeded') void vscode.window.showInformationMessage(`Indexed ${result.indexedDocuments} Scala source files from SemanticDB.`);
     return result;
   });
+  register(COMMANDS.renameIndex,async () => {
+    const projectUri=await chooseRoot();
+    if (!projectUri) return;
+    output.show(true);
+    const result=await progress('Index Scala Sources for Rename',
+      cancellation => prepareRenameIndex({projectUri,allowProjectExecution:true,cancellation}));
+    if (result.state==='succeeded') {
+      void vscode.window.showInformationMessage(`Indexed ${result.indexedDocuments} Scala production and test source files for rename.`);
+    }
+    return result;
+  });
   register(COMMANDS.test,async () => {
     const options=await contextFor('Select sbt Project to Test');
     if (options) return progress('Run sbt Tests',cancellation => selected({...options,cancellation},'test'));
@@ -312,7 +340,8 @@ function registerScalaWorkbench(context,vscode,java) {
 
   return {discover:options => track(() => discover(options)),compile:options => track(() => selected(options,'compile')),
     test:options => track(() => selected(options,'test')),mainClasses:options => track(() => selected(options,'mains')),
-    run:options => track(() => runMain(options)),debug:options => track(() => debugMain(options)),definition,references,stop:stopDebug,dispose() {
+    run:options => track(() => runMain(options)),debug:options => track(() => debugMain(options)),
+    prepareRenameIndex:options => track(() => prepareRenameIndex(options)),planRename,definition,references,stop:stopDebug,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {
