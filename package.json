@@ -169,6 +169,8 @@
       { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
+      { "command": "rocketbrain.jupyter.debugCell", "title": "Debug Python Notebook Cell", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && notebookType == rocketbrain-jupyter", "icon": "$(debug-alt)" },
+      { "command": "rocketbrain.jupyter.debugControls", "title": "Python Notebook Debugger Controls", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && notebookType == rocketbrain-jupyter" },
       { "command": "rocketbrain.kubernetes.connect", "title": "Choose Kubernetes Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
       { "command": "rocketbrain.kubernetes.refresh", "title": "Refresh Kubernetes Resources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(refresh)" },
       { "command": "rocketbrain.kubernetes.namespace", "title": "Choose Kubernetes Namespace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1463,6 +1465,7 @@
         { "command": "rocketbrain.spring.debugProperty", "when": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java", "group": "navigation@40" }
       ],
       "notebook/cell/title": [
+        { "command": "rocketbrain.jupyter.debugCell", "when": "isWorkspaceTrusted && notebookType == rocketbrain-jupyter && notebookCellType == code", "group": "inline" },
         { "command": "rocketbrain.sqlNotebook.pinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" },
         { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }
       ],

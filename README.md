@@ -64,6 +64,8 @@ Maven·Gradle 권고 보고서에서 **Inspect Java Advisory Call Sites**로 선
 
 `.ipynb`는 **Rocketbrain Jupyter Notebook**에서 열 수 있습니다. `jupyter_client`와 `ipykernel`이 설치된 Python 실행 파일을 `rocketbrain.jupyter.pythonPath`에 지정하면 셀을 실행하고 커널 세션을 유지할 수 있습니다. 셀 소스, 출력과 Markdown 첨부 파일은 노트북에 저장됩니다. [Jupyter 파일 형식](https://nbformat.readthedocs.io/en/v5.10.0/format_description.html)
 
+같은 Python 환경에 `debugpy`를 설치하면 **Debug Python Notebook Cell**에서 셀의 실행 가능한 줄에 중단점을 설정할 수 있습니다. 멈춘 줄은 상태 표시줄에 표시되고 해당 메뉴에서 지역 변수 조회, 한 줄씩 진행, 계속 실행을 선택할 수 있습니다. 정상적으로 끝난 셀의 출력과 커널 변수는 유지됩니다. 디버깅을 중지하거나 중단점이 걸린 셀을 바꾸면 현재 노트북의 커널이 초기화됩니다. 디버깅은 로컬 Python 커널에서 한 셀씩 최대 3분간 지원합니다.
+
 **Docker** 보기에서 시스템 Docker CLI가 제공하는 컨텍스트를 선택해 컨테이너·이미지·Compose 프로젝트를 탐색할 수 있습니다. 컨테이너 로그와 승인된 시작·중지·재시작, 레지스트리 매니페스트 조회를 제공합니다. [Docker 워크벤치](docs/docker.md)
 
 Dev Container 명령은 이미지나 Dockerfile 구성과 함께 명시한 Docker Compose 파일을 지원합니다. 작업 서비스와 종속 서비스를 검토해 시작한 뒤 명령을 실행할 수 있습니다. 실행 중인 컨테이너의 TCP 포트를 검토해 로컬 루프백으로 연결하고, 열린 포트를 확인하거나 닫을 수 있습니다. [Dev Container 사용 절차](docs/devcontainer.md)

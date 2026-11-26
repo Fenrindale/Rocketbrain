@@ -3,9 +3,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { decodeNotebook, encodeNotebook, marker } = require('../src/python/jupyter-format');
 const { openJupyterKernel } = require('../src/python/jupyter-kernel');
+const { until } = require('./helpers/stdio-lsp');
 
 const vscode = {
   NotebookCellKind: { Markup: 1, Code: 2 },
@@ -76,4 +78,70 @@ test('real ipykernel persists state, projects typed results and cancels a runnin
     } finally { clearTimeout(timer); }
   } finally { await kernel.close(); }
   assert.equal(kernel.stopped, true);
+});
+
+test('real Jupyter debugger holds an exact cell line, steps over, reads locals and resets only its notebook', {
+  skip: !python, timeout: 90000
+}, async context => {
+  const parent = fs.realpathSync(os.tmpdir());
+  const owned = fs.mkdtempSync(path.join(parent, 'rb-jupyter-debug-'));
+  const kernel = openJupyterKernel({ python, directory: owned });
+  const peer = openJupyterKernel({ python, directory: owned });
+  try {
+    assert.equal((await kernel.ready).debugger, true);
+    assert.equal((await kernel.execute('seed = 27')).success, true);
+    assert.equal((await peer.execute('isolated = 83')).success, true);
+    await assert.rejects(kernel.debug('raise RuntimeError("missing breakpoint executed")'), /breakpoint line/);
+    await assert.rejects(kernel.debug('\nraise RuntimeError("wrong breakpoint executed")', 1), /executable Python line/);
+    const pauses = [];
+    const code = 'value = seed\r\ndouble = value * 2\r\nprint(double)';
+    const run = kernel.debug(code, 2, { onDebug: value => pauses.push(value) });
+    void run.catch(() => {});
+    const first = await Promise.race([until(() => pauses[0], 18000), run.then(() => { throw Error('Missing source breakpoint.'); })]);
+    assert.deepEqual(first, { state: 'paused', pause: 1, line: 2, reason: 'breakpoint' });
+    await assert.rejects(kernel.execute('seed = 0'), /Wait for this notebook cell/);
+    await assert.rejects(kernel.debugControl('evaluate', first.pause), /current paused/);
+    const locals = (await kernel.debugControl('locals', first.pause)).variables;
+    assert.deepEqual(locals.find(local => local.name === 'value'), { name: 'value', value: '27', type: 'int' });
+    assert.ok(!locals.some(local => local.name === 'double'));
+    await kernel.debugControl('next', first.pause);
+    const second = await until(() => pauses[1], 10000);
+    assert.deepEqual(second, { state: 'paused', pause: 2, line: 3, reason: 'step' });
+    await assert.rejects(kernel.debugControl('continue', first.pause), /current paused/);
+    assert.deepEqual((await kernel.debugControl('locals', second.pause)).variables.find(local => local.name === 'double'),
+      { name: 'double', value: '54', type: 'int' });
+    await kernel.debugControl('continue', second.pause);
+    const complete = await run;
+    assert.equal(complete.success, true);
+    assert.equal(complete.outputs.map(output => output.text).join(''), '54\n');
+    assert.equal((await kernel.execute('double + 1')).outputs[0].data['text/plain'], '55');
+    const cancellation = new AbortController();
+    let held;
+    const markerFile = path.join(owned, 'continued-unexpectedly.txt');
+    const stopCode = 'from pathlib import Path\nPath(' + JSON.stringify(markerFile) + ').write_text("unexpected")';
+    const stopRun = kernel.debug(stopCode, 2, { cancellation: cancellation.signal, onDebug: event => { held = event; } });
+    void stopRun.catch(() => {});
+    assert.equal((await until(() => held, 18000)).line, 2);
+    cancellation.abort();
+    const stopped = await stopRun;
+    assert.equal(stopped.cancelled, true);
+    assert.equal(stopped.kernelStopped, true);
+    assert.equal(kernel.stopped, true);
+    assert.equal(fs.existsSync(markerFile), false);
+    assert.equal((await peer.execute('isolated')).outputs[0].data['text/plain'], '83');
+    const evidence = { exactBreakpoint: 2, steppedLine: 3, locals: [27, 54], outputPersisted: true,
+      invalidBreakpointRejected: true, stalePauseRejected: true, genericEvaluationRejected: true,
+      cancelledBeforeNextStatement: true, independentKernelPreserved: true };
+    context.diagnostic(JSON.stringify(evidence));
+    if (process.env.ROCKETBRAIN_JUPYTER_DEBUG_RECEIPT) {
+      fs.writeFileSync(process.env.ROCKETBRAIN_JUPYTER_DEBUG_RECEIPT, JSON.stringify(evidence, null, 2) + '\n');
+    }
+  } finally {
+    await Promise.all([kernel.close(), peer.close()]);
+    const actual = fs.realpathSync(owned);
+    assert.equal(actual, owned);
+    assert.equal(path.dirname(actual), parent);
+    assert.match(path.basename(actual), /^rb-jupyter-debug-/u);
+    fs.rmSync(actual, { recursive: true, force: true });
+  }
 });
