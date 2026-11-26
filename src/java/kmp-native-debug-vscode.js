@@ -108,7 +108,7 @@ function registerKotlinNativeDebug(vscode) {
       const [program] = await vscode.window.showOpenDialog({ title: 'Select the Linux x64 Gradle Debug Executable',
         canSelectFiles: true, canSelectMany: false, filters: { 'Kotlin/Native Executable': ['kexe'] } }) || [];
       if (!program) return;
-      const text = await vscode.window.showInputBox({ prompt: 'Application arguments as a JSON string array', value: '[]' });
+      const text = await vscode.window.showInputBox({ prompt: 'Application arguments as a JSON string array of tokens without spaces', value: '[]' });
       if (text === undefined) return;
       return await start(document, program, JSON.parse(text));
     } catch (error) { void vscode.window.showErrorMessage('Rocketbrain Kotlin/Native: ' + error.message); }

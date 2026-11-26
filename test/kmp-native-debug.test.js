@@ -7,7 +7,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
-const { kotlinNativeElf, reviewKotlinNativeLaunch } = require('../src/java/kmp-native-review');
+const { kotlinNativeElf, reviewKotlinNativeLaunch, nativeArgumentList } = require('../src/java/kmp-native-review');
 const { parseMi, quote } = require('../src/java/kmp-native-gdb');
 const { createKotlinNativeDebugAdapter } = require('../src/java/kmp-native-debug-adapter');
 const { registerKotlinNativeDebug } = require('../src/java/kmp-native-debug-vscode');
@@ -40,6 +40,10 @@ test('GDB/MI recognizes structured results and bounded literals', () => {
   assert.throws(() => parseMi('12^done,' + 'x'.repeat(262144)), /record limit/u);
   assert.equal(quote('/tmp/A "quote".kt'), '"/tmp/A \\"quote\\".kt"');
   assert.throws(() => quote('invalid\n-command'), /bounded literal/u);
+  assert.equal(nativeArgumentList(['41','--rocketbrain-fixture=literal*']), '41 --rocketbrain-fixture=literal*');
+  for(const value of ['','has space','"quoted"','with\\escape','bad\n-line']) {
+    assert.throws(()=>nativeArgumentList([value]), /shellless GDB/u);
+  }
 });
 
 test('ELF envelope requires Linux x64 and both embedded DWARF sections', () => {
@@ -158,11 +162,12 @@ test('real Kotlin Native Linux x64 GDB source step resumes both Spring JDBC HTTP
       const seeded = await readProbe(spring.baseUrl,engine);
       const resultFile = path.join(owned,engine+'.txt');
       const port = new URL(spring.baseUrl).port, baseline = path.join(owned,engine+'-baseline.txt');
-      const rawOutput = execFileSync(program,[port,engine,baseline],{encoding:'utf8',timeout:8000});
+      const literal = '--rocketbrain-fixture=literal*';
+      const rawOutput = execFileSync(program,[port,engine,baseline,literal],{encoding:'utf8',timeout:8000});
       assert.match(rawOutput,/\*stopped,reason="exited-normally"/u);
       const expected = '42|spring|2|42|'+seeded.version;
       assert.equal((await fs.readFile(baseline,'utf8')).trim(),expected);
-      const reviewed = reviewKotlinNativeLaunch({workspace,program,source,args:[port,engine,resultFile]});
+      const reviewed = reviewKotlinNativeLaunch({workspace,program,source,args:[port,engine,resultFile,literal]});
       exactArtifact = reviewed;
       assert.equal(await sha256(program),reviewed.artifactSha256);
       assert.equal(await sha256(source),reviewed.sourceSha256);
@@ -205,7 +210,8 @@ test('real Kotlin Native Linux x64 GDB source step resumes both Spring JDBC HTTP
         assert.equal(native,expected);
         assert.ok(!native.includes(dbPassword));
         findings[engine]={...seeded,breakpointLine:line('BREAK_ON_UPDATE'),nextLine:line('STEP_TO_HTTP'),
-          localBefore:41,localAfter:42,exactInferior:true,nativeHttpReadback:true,plainNativeBaseline:true,staleHandleRefused:true,
+          localBefore:41,localAfter:42,exactInferior:true,nativeHttpReadback:true,plainNativeBaseline:true,
+          shelllessLiteralArg:true,staleHandleRefused:true,
           foreignSourceRefused:true,invalidLineRefused:true,ownedProcessClosed:true};
       } finally { await dap.dispose(); }
     }
