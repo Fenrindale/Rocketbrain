@@ -154,7 +154,7 @@ function registerKmpWorkbench(vscode,java) {
         trusted(details.cancellation);
         saved(details.root);
         const folder=vscode.workspace.getWorkspaceFolder(vscode.Uri.file(details.root));
-        const launched=Promise.resolve(vscode.debug.startDebugging(folder,{
+        const launched=Promise.resolve().then(()=>vscode.debug.startDebugging(folder,{
           type:DEBUG_TYPE,request:'attach',name:'Kotlin JVM: '+run.task,...processAttachTarget(run.target),
           sourcePaths:run.sourcePaths,[debugMarker]:token
         },{suppressSaveBeforeStart:true}));
@@ -170,7 +170,7 @@ function registerKmpWorkbench(vscode,java) {
           }
           await delay(100);
         }
-        void run.done.then(()=>finishDebug(record)).catch(error=>output.appendLine(error.message));
+        void run.done.finally(()=>finishDebug(record)).catch(error=>output.appendLine(error.message));
         return {state:'attached',task:run.task,sessionId:record.session.id,pid:run.target.pid,verifiedLoopback:true};
       } catch (error) {
         await finishDebug(record);
@@ -183,6 +183,7 @@ function registerKmpWorkbench(vscode,java) {
     const token=session.configuration[debugMarker];
     const record=pendingDebug.get(token) || (ownedDebug?.token===token ? ownedDebug : undefined);
     if (!record) return undefined;
+    record.session ||= session;
     return {onDidSendMessage(message) {
       if (message.type==='response' && message.command==='attach' && message.success &&
           java.debug.verifiedLocalPid(session)===record.run.target.pid) record.attached=true;
@@ -198,7 +199,7 @@ function registerKmpWorkbench(vscode,java) {
     if (record?.session?.id!==session.id) return;
     record.sessionEnded=true;
     // Give a naturally completed app a moment to publish its Gradle result.
-    void Promise.race([record.run.done,delay(1700)]).then(()=>finishDebug(record)).catch(error=>output.appendLine(error.message));
+    void Promise.race([record.run.done,delay(1700)]).finally(()=>finishDebug(record)).catch(error=>output.appendLine(error.message));
   }));
 
   function composeModel(projectUri) {
