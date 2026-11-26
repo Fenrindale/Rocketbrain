@@ -75,7 +75,7 @@ function registerSshJavaDebug(vscode, command, current, getLocalJava) {
     const [uri] = await vscode.window.showOpenDialog({ title: 'Choose the Corresponding Saved Local Java Source',
       filters: { Java: ['java'] }, canSelectFiles: true, canSelectMany: false }) || [];
     if (uri?.scheme !== 'file') return;
-    const pid = await readInteger('Remote Windows JVM Process ID', 0xffffffff);
+    const pid = await readInteger('Remote JVM Process ID', 0xffffffff);
     if (pid === undefined) return;
     const port = await readInteger('Remote IPv4 Loopback JDWP Port', 65535, '5005');
     if (port === undefined) return;

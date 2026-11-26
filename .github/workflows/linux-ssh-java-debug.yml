@@ -1,0 +1,63 @@
+name: Linux SSH Java debugger ownership
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'verify-linux-ssh-java-*']
+    paths:
+      - '.github/workflows/linux-ssh-java-debug.yml'
+      - 'src/remote/ssh-*.js'
+      - 'src/devcontainer/java-attach.js'
+      - 'test/ssh-java-debug.test.js'
+      - 'test/helpers/ssh-process-fixture.js'
+      - 'test/helpers/java-debug-process-fixture.js'
+      - 'test/fixtures/ssh-process-server.txt'
+  pull_request:
+    paths:
+      - '.github/workflows/linux-ssh-java-debug.yml'
+      - 'src/remote/ssh-*.js'
+      - 'src/devcontainer/java-attach.js'
+      - 'test/ssh-java-debug.test.js'
+      - 'test/helpers/ssh-process-fixture.js'
+      - 'test/helpers/java-debug-process-fixture.js'
+      - 'test/fixtures/ssh-process-server.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-linux-relay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Install the owned SSH test server
+        run: python -m pip install 'asyncssh==2.24.1'
+      - name: Verify Linux proc ownership and actual JDWP through SSH
+        env:
+          ROCKETBRAIN_SSH_DEBUG_TEST_RECEIPT: ${{ runner.temp }}/rocketbrain-linux-ssh-java-debug.json
+        run: |
+          set -euo pipefail
+          ssh -V
+          export ROCKETBRAIN_SSH_PROCESS_TEST_PYTHON="$(command -v python)"
+          export ROCKETBRAIN_SSH_PROCESS_TEST_ASYNCSSH="$(python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+          export ROCKETBRAIN_SSH_PROCESS_TEST_JDK="$(realpath "$JAVA_HOME")"
+          node --test test/ssh-java-debug.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-linux-ssh-java-debug
+          path: ${{ runner.temp }}/rocketbrain-linux-ssh-java-debug.json
+          if-no-files-found: error
+          retention-days: 7

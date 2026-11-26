@@ -131,9 +131,11 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       child.stdin.write(input);
       return child;
     }
-    return collectRuntime(child, info => info.pid === config.pid && info.port === config.port &&
-      Number.isSafeInteger(info.startedAt) && info.startedAt > 0 && /^[a-f0-9]{64}$/.test(info.jdkSha256 || ''),
-    'Verify a same-account Windows JVM, its reported workspace directory and exact IPv4 loopback JDWP listener.',
+    return collectRuntime(child, info => info.pid === config.pid && info.port === config.port && info.platform === config.platform &&
+      Number.isSafeInteger(info.startedAt) && info.startedAt > 0 && /^[a-f0-9]{64}$/.test(info.jdkSha256 || '') &&
+      (config.platform === 'win32' || /^[1-9][0-9]{0,19}$/.test(info.linuxStartTicks || '') &&
+        /^[1-9][0-9]{0,19}$/.test(info.linuxListenerInode || '')),
+    'Verify a same-account JVM, its reported workspace directory and exact IPv4 loopback JDWP listener on Windows or Linux.',
     { input, timeout: 38000 });
   }
 
@@ -152,11 +154,12 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       }
       if (kind === 'debug') {
         const { javaHome, pid, port } = requested || {};
-        if (!rootParts(remoteRoot).drive || !rootParts(javaHome).drive) throw Error('Use a Windows SSH workspace and remote independent JDK 25.');
+        const windows = Boolean(rootParts(remoteRoot).drive);
+        if (Boolean(rootParts(javaHome).drive) !== windows) throw Error('Use a remote JDK 25 path on the same Windows or Linux SSH host.');
         if (!Number.isSafeInteger(pid) || pid < 1 || pid > 0xffffffff || !Number.isInteger(port) || port < 1 || port > 65535) {
           throw Error('Choose an exact remote JVM process ID and debug port.');
         }
-        config = { javaHome, pid, port, root: remoteRoot };
+        config = { platform: windows ? 'win32' : 'linux', javaHome, pid, port, root: remoteRoot };
       }
       await verifyRoot();
       const info = kind === 'debug' ? await debugProcess(config) : config ? await javaRuntime(config) : undefined;
@@ -168,7 +171,7 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       offers.set(token, { kind, config, info, expires: now + 120000 });
       return { token, kind, host: profile.host, port: profile.port ?? 22, user: profile.user, root: remoteRoot,
         ...(kind === 'java' && { jdk: info.jdk, javaHome: config.javaHome, serverPath: config.serverPath }),
-        ...(kind === 'debug' && { javaHome: config.javaHome, pid: info.pid, debugPort: info.port, startedAt: info.startedAt }) };
+        ...(kind === 'debug' && { platform: info.platform, javaHome: config.javaHome, pid: info.pid, debugPort: info.port, startedAt: info.startedAt }) };
     },
     async open(kind, approval) {
       if (closed || approval?.allowRemoteProcess !== true) throw Error('Review and approve the remote workspace process first.');
