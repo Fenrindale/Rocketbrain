@@ -40,7 +40,7 @@ public final class ObserverRuntime {
     private record Origin(String kind,String factoryId){}
     private static final class Frame {int depth=1;final String query,factoryId,origin;final long started=System.nanoTime();Frame(String query,String factoryId,String origin){this.query=query;this.factoryId=factoryId;this.origin=origin;}}
     static synchronized void start(Map<String,Object> config)throws Exception {
-        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","consoleEntityProjections","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace","authenticationProviderTrace","feignContractTrace","springPersistenceContexts","springPersistenceContextPackages","springAutowireTrace","springAutowireTracePackages","jpaTransactionTrace","quarkusConfigOriginKeys");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
+        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","consoleEntityProjections","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace","authenticationProviderTrace","feignContractTrace","springPersistenceContexts","springPersistenceContextPackages","springAutowireTrace","springAutowireTracePackages","jpaTransactionTrace","quarkusConfigOriginKeys","quarkusArcPackages");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
         Path tokenPath=Path.of(requiredText(config,"tokenFile"));if(!tokenPath.isAbsolute()||!Files.isRegularFile(tokenPath,LinkOption.NOFOLLOW_LINKS)||Files.size(tokenPath)>256)throw new IllegalArgumentException("Invalid token file");
         String token=Files.readString(tokenPath,StandardCharsets.UTF_8).trim();if(!token.matches("[A-Za-z0-9_-]{32,128}"))throw new IllegalArgumentException("Invalid bearer token");expectedAuthorization=("Bearer "+token).getBytes(StandardCharsets.US_ASCII);
         queries=flag(config,"queries");validate=flag(config,"validate");consoleSelect=flag(config,"consoleSelect");PerformanceRuntime.configure(flag(config,"performance"));maxEvents=integer(config,"maxEvents",128,1,256);maxQueryChars=integer(config,"maxQueryChars",4096,64,16384);int port=integer(config,"port",0,0,65535);
@@ -48,6 +48,7 @@ public final class ObserverRuntime {
         consoleEntityProjections=flag(config,"consoleEntityProjections")&&consoleSelect;
         AuthenticationProviderTrace.configure(flag(config,"authenticationProviderTrace"));
         QuarkusConfigTrace.configure(config.get("quarkusConfigOriginKeys"));
+        QuarkusArcTrace.configure(config.get("quarkusArcPackages"));
         SecurityTraceRuntime.configure(flag(config,"securityTrace")||AuthenticationProviderTrace.enabled());
         ReactiveSecurityTrace.configure(flag(config,"securityReactiveTrace"));
         FeignContractTrace.configure(flag(config,"feignContractTrace"));
@@ -70,11 +71,12 @@ public final class ObserverRuntime {
         descriptor.put("authenticationProviderTraceEnabled",AuthenticationProviderTrace.enabled());
         descriptor.put("jpaTransactionTraceEnabled",JpaTransactionTrace.enabled());
         descriptor.put("quarkusConfigOriginsEnabled",QuarkusConfigTrace.enabled());
+        descriptor.put("quarkusArcLookupsEnabled",QuarkusArcTrace.enabled());
         if(config.containsKey("descriptorFile")){Path path=Path.of(requiredText(config,"descriptorFile"));if(!path.isAbsolute()||!Files.isDirectory(path.getParent(),LinkOption.NOFOLLOW_LINKS))throw new IllegalArgumentException("Invalid descriptor path");Files.writeString(path,Json.encode(descriptor),StandardCharsets.UTF_8,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);}
         Runtime.getRuntime().addShutdownHook(new Thread(ObserverRuntime::stop,"Rocketbrain observer shutdown"));
         System.out.println("ROCKETBRAIN_JPA_OBSERVER "+Json.encode(descriptor));
     }
-    static synchronized void stop(){if(server!=null){server.stop(0);server=null;}if(executor!=null){executor.shutdownNow();executor=null;}expectedAuthorization=null;PerformanceRuntime.configure(false);MethodSecurityTrace.configure(false,null);AuthenticationProviderTrace.configure(false);SecurityTraceRuntime.configure(false);ReactiveSecurityTrace.configure(false);FeignContractTrace.configure(false);PersistenceContextRuntime.configure(false,null);AutowireRuntime.configure(false,null);JpaTransactionTrace.configure(false);QuarkusConfigTrace.configure(null);}
+    static synchronized void stop(){if(server!=null){server.stop(0);server=null;}if(executor!=null){executor.shutdownNow();executor=null;}expectedAuthorization=null;PerformanceRuntime.configure(false);MethodSecurityTrace.configure(false,null);AuthenticationProviderTrace.configure(false);SecurityTraceRuntime.configure(false);ReactiveSecurityTrace.configure(false);FeignContractTrace.configure(false);PersistenceContextRuntime.configure(false,null);AutowireRuntime.configure(false,null);JpaTransactionTrace.configure(false);QuarkusConfigTrace.configure(null);QuarkusArcTrace.configure(null);}
     private static String requiredText(Map<String,Object> map,String key){Object value=map.get(key);if(!(value instanceof String text)||text.isBlank()||text.length()>8192)throw new IllegalArgumentException("Text option required");return text;}
     private static boolean flag(Map<String,Object> config,String key){Object value=config.get(key);if(value!=null&&!(value instanceof Boolean))throw new IllegalArgumentException("Boolean option required");return Boolean.TRUE.equals(value);}
     private static int integer(Map<String,Object> map,String key,int fallback,int min,int max){Object value=map.getOrDefault(key,(long)fallback);if(!(value instanceof Number number)||number.longValue()<min||number.longValue()>max)throw new IllegalArgumentException("Numeric option outside limits");return number.intValue();}
@@ -121,6 +123,10 @@ public final class ObserverRuntime {
         if(path.equals("/quarkus-config-origins")){
             if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
             reply(exchange,200,QuarkusConfigTrace.snapshot());return;
+        }
+        if(path.equals("/quarkus-arc-lookups")){
+            if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
+            reply(exchange,200,QuarkusArcTrace.snapshot());return;
         }
         if(path.equals("/security-trace")){
             if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}

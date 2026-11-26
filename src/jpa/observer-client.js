@@ -9,6 +9,7 @@ const { attributeTarget, attributeBindingReport } = require('./attribute-binding
 const { factoryId: graphFactoryId, graphRegistry } = require('./entity-graphs');
 const { normalizePersistenceContexts } = require('./persistence-contexts');
 const { normalizeQuarkusConfigOrigins } = require('../java/quarkus-config-origin');
+const { normalizeArcLookups } = require('../java/quarkus-arc-lookups');
 const { normalizeObservedInjection } = require('../spring/observed-injection');
 const { normalizeTransactionTrace } = require('./transaction-trace');
 
@@ -195,6 +196,11 @@ class ObserverClient {
     const payload=await this.#request('quarkus-config-origins');
     try { return normalizeQuarkusConfigOrigins(payload); }
     catch { throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Quarkus configuration origin evidence.'); }
+  }
+  async quarkusArcLookups() {
+    const payload=await this.#request('quarkus-arc-lookups');
+    try {return normalizeArcLookups(payload);}
+    catch {throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Quarkus Arc lookup evidence.');}
   }
   async reactiveSecurityTrace() {
     const payload = await this.#request('reactive-security-trace');

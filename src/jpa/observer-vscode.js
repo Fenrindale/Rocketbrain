@@ -14,14 +14,15 @@ const {registerTransactionTrace} = require('./transaction-trace-vscode');
 const {registerReactiveSecurityTrace} = require('../spring/reactive-security-trace-vscode');
 const {registerFeignContracts}=require('../spring/feign-contract-trace-vscode');
 const {registerQuarkusConfigOrigins}=require('../java/quarkus-config-origin-vscode');
+const {registerArcLookups}=require('../java/quarkus-arc-vscode');
 
 function registerObserver(context,vscode,output,{source}) {
   const events = new vscode.EventEmitter(), subscriptions=[events];
-  let current=emptySnapshot(), client, generation=0, snapshotRequest=0, validationRequest=0, disposed=false, consoleView,securityView,reactiveSecurityView,feignView,transactionView,quarkusView;
+  let current=emptySnapshot(), client, generation=0, snapshotRequest=0, validationRequest=0, disposed=false, consoleView,securityView,reactiveSecurityView,feignView,transactionView,quarkusView,arcView;
   const snapshot=()=>structuredClone(current);
   const performance=()=>summarizePerformance(current.performance);
   const emit=()=>{if(!disposed)events.fire(snapshot());};
-  function clearViews(){consoleView?.clear();securityView?.close();reactiveSecurityView?.close();feignView?.close();transactionView?.close();quarkusView?.close();}
+  function clearViews(){consoleView?.clear();securityView?.close();reactiveSecurityView?.close();feignView?.close();transactionView?.close();quarkusView?.close();arcView?.close();}
   function disconnect(){generation++;snapshotRequest++;client?.dispose();clearViews();client=undefined;current=emptySnapshot();emit();return snapshot();}
   function trusted(){if(disposed)throw new ObserverError('DISPOSED','Observer is closed.');if(!vscode.workspace.isTrusted){disconnect();throw new ObserverError('UNTRUSTED','Trust the workspace before connecting to a provider observer.');}}
   async function inputs(){
@@ -363,6 +364,15 @@ function registerObserver(context,vscode,output,{source}) {
       const report=await connection.client.quarkusConfigOrigins();
       connection.assertCurrent();
       if(report.processId!==processId)throw new ObserverError('STALE','The Quarkus JVM changed. Reconnect before inspecting configuration origins.');
+      return report;
+    }}};
+  }});
+  arcView=registerArcLookups(vscode,{command,target(){
+    const connection=observerViewOptions.target(), processId=current.processId;
+    return {assertCurrent:connection.assertCurrent,client:{async quarkusArcLookups(){
+      const report=await connection.client.quarkusArcLookups();
+      connection.assertCurrent();
+      if(report.processId!==processId)throw new ObserverError('STALE','The Quarkus JVM changed. Reconnect before inspecting Arc lookups.');
       return report;
     }}};
   }});
