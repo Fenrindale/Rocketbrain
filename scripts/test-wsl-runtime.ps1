@@ -1,4 +1,4 @@
-param([switch]$VerifyWorkbench, [switch]$VerifyJavaDebug)
+param([ValidateRange(1,2)][int]$WslVersion = 1, [switch]$VerifyWorkbench, [switch]$VerifyJavaDebug)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -37,10 +37,12 @@ $registered = $false
 
 try {
     Invoke-CheckedDownload $source $archive $sha
-    Invoke-WslFixture @('--import', $distro, $install, $archive, '--version', '1') | Out-Null
+    Invoke-WslFixture @('--import', $distro, $install, $archive, '--version', [string]$WslVersion) | Out-Null
     $registered = $true
     $listing = Invoke-WslFixture @('--list', '--verbose')
-    if ($listing -notmatch ("(?m)" + [Regex]::Escape($distro) + '\s+[^\r\n]+\s+1\s*$')) { throw 'The exact fixture distro did not register as WSL 1.' }
+    if ($listing -notmatch ("(?m)" + [Regex]::Escape($distro) + '\s+[^\r\n]+\s+' + $WslVersion + '\s*$')) {
+        throw "The exact fixture distro did not register as WSL $WslVersion."
+    }
     $kernel = Invoke-WslFixture @('--distribution', $distro, '--exec', '/usr/bin/uname', '-s')
     if ($kernel -ne 'Linux') { throw 'The imported distribution did not start a Linux process.' }
     $linux = Invoke-WslFixture @('--distribution', $distro, '--exec', '/usr/bin/wslpath', '-a', '-u', $workspace)
@@ -49,13 +51,13 @@ try {
     Set-Content -LiteralPath (Join-Path $workspace 'workspace.txt') -Encoding utf8NoBOM -NoNewline -Value 'rocketbrain-wsl-workspace'
     $marker = Invoke-WslFixture @('--distribution', $distro, '--cd', $linux, '--exec', '/usr/bin/cat', 'workspace.txt')
     if ($marker -ne 'rocketbrain-wsl-workspace') { throw 'WSL did not read the existing Windows workspace from the mapped working directory.' }
-    $proof = [ordered]@{ verified = $true; wslVersion = 1; kernel = $kernel; ubuntuRootfsSha256 = $sha; localWorkspaceRoundTrip = $true; linuxWorkingDirectory = $true }
+    $proof = [ordered]@{ verified = $true; wslVersion = $WslVersion; kernel = $kernel; ubuntuRootfsSha256 = $sha; localWorkspaceRoundTrip = $true; linuxWorkingDirectory = $true }
 
     if ($VerifyWorkbench -or $VerifyJavaDebug) {
         Write-Host 'Preparing the disposable Linux JDK and build tools.'
         $command = @('--distribution', $distro, '--exec')
         Invoke-WslFixture ($command + @('/usr/bin/apt-get', 'update', '-q')) | Out-Null
-        Invoke-WslFixture ($command + @('/usr/bin/env', 'DEBIAN_FRONTEND=noninteractive', '/usr/bin/apt-get', 'install', '-y', '-q', '--no-install-recommends', 'openjdk-21-jdk-headless', 'maven', 'unzip', 'python3')) | Out-Null
+        Invoke-WslFixture ($command + @('/usr/bin/env', 'DEBIAN_FRONTEND=noninteractive', '/usr/bin/apt-get', 'install', '-y', '-q', '--no-install-recommends', 'openjdk-21-jdk-headless', 'maven', 'unzip', 'python3', 'git')) | Out-Null
         $gradle = Join-Path $root 'gradle-9.1.0-bin.zip'
         Invoke-CheckedDownload 'https://services.gradle.org/distributions/gradle-9.1.0-bin.zip' $gradle 'a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806'
         $gradleZip = Invoke-WslFixture ($command + @('/usr/bin/wslpath', '-a', '-u', $gradle))
@@ -78,6 +80,9 @@ try {
         $linuxProject = "$linuxFixture/Case Project"
         Invoke-WslFixture ($command + @('/usr/bin/mkdir', '--', $linuxProject)) | Out-Null
         Invoke-WslFixture ($command + @('/usr/bin/cp', '-R', '--', "$linux/.", $linuxProject)) | Out-Null
+        Invoke-WslFixture ($command + @('/usr/bin/git', '-C', $linuxProject, 'init', '-q')) | Out-Null
+        Invoke-WslFixture ($command + @('/usr/bin/git', '-C', $linuxProject, 'add', '--', 'src/main/java/fixture/WslSpringConfiguration.java')) | Out-Null
+        $proof['git'] = Invoke-WslFixture ($command + @('/usr/bin/git', '--version'))
         $linuxUnc = Invoke-WslFixture ($command + @('/usr/bin/wslpath', '-a', '-w', $linuxProject))
         $linuxSuffix = [Regex]::Escape("\$distro" + $linuxProject.Replace('/', '\'))
         if ($linuxUnc -cnotmatch ('^\\\\(?:wsl\.localhost|wsl\$)' + $linuxSuffix + '$')) {

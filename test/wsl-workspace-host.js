@@ -124,6 +124,9 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, j
   assert.ok(bytes.includes(newMarker));
   const linuxObservation = await linuxCommand(distribution, '/usr/bin/sha256sum', '--', linux + '/' + sourceFile);
   assert.equal(linuxObservation.split(/\s/u, 1)[0], createHash('sha256').update(bytes).digest('hex'));
+  const gitDiff = await linuxCommand(distribution, '/usr/bin/git', '-C', linux, 'diff', '--no-ext-diff', '--', sourceFile);
+  assert.ok(gitDiff.split(/\r?\n/u).some(line => line.startsWith('+') && line.includes(newMarker)));
+  assert.ok(gitDiff.split(/\r?\n/u).some(line => line.startsWith('-') && line.includes(oldMarker)));
 
   const pom = vscode.Uri.joinPath(folder.uri, 'pom.xml').fsPath;
   const original = await fs.readFile(pom);
@@ -137,7 +140,8 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, j
   const compiled = 'build/classes/java/main/fixture/WslSpringConfiguration.class';
   await build(options, mapping.windows, 'maven', 'package', jar, /BUILD SUCCESS/u);
   const basic = { openedInWindowsVscode: true, exactDistroAndPath: true, caseMismatchRejected: true,
-    crossDistroRejected: true, editorSavedAndLinuxDigestMatched: true, rejectedChangedDescriptor: true, mavenGoal: 'package' };
+    crossDistroRejected: true, editorSavedAndLinuxDigestMatched: true, linuxGitObservedEditorChange: true,
+    rejectedChangedDescriptor: true, mavenGoal: 'package' };
   if (javaDebugOnly) return { ...basic, javaDebug: await verifyWslDebugger(wsl.javaDebug, vscode, folder, source, document) };
   await build(options, mapping.windows, 'gradle', 'classes', compiled, /BUILD SUCCESSFUL/u);
   for (const produced of [jar, compiled]) await linuxCommand(distribution, '/usr/bin/test', '-s', linux + '/' + produced);
