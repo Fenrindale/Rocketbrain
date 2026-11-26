@@ -8,8 +8,9 @@ const crypto = require('node:crypto');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { independentJavaExecutable } = require('./debug-runtime');
-const { micronautMavenProject,PART } = require('./micronaut-model');
-const { cancelled,fail } = require('./workbench-model');
+const { micronautMavenProject,micronautProject,PART } = require('./micronaut-model');
+const { distribution,physical,matches }=require('./micronaut-distribution');
+const { cancelled,fail,hash } = require('./workbench-model');
 
 const ARCHIVE_LIMIT=256*1024*1024;
 const delay=milliseconds => new Promise(resolve => setTimeout(resolve,milliseconds));
@@ -25,13 +26,12 @@ async function packagedJar(project) {
   return {file:real,artifact:jarName,size:Number(stat.size)};
 }
 
-async function stagedJar(project,base) {
-  const artifact=await packagedJar(project), staged=path.join(base,artifact.artifact);
-  const original=await fsp.stat(artifact.file,{bigint:true});
+async function stagedJar(artifact,base) {
+  const staged=path.join(base,artifact.artifact), original=await physical(artifact.file,'file');
+  if(!matches(original,artifact.identity))throw fail('The Micronaut archive changed since its discovery.');
   await fsp.copyFile(artifact.file,staged,fs.constants.COPYFILE_EXCL);
-  const after=await fsp.lstat(artifact.file,{bigint:true}), copy=await fsp.lstat(staged,{bigint:true});
-  if (['dev','ino','size','mtimeNs','ctimeNs'].some(key => original[key]!==after[key]) ||
-      after.size!==BigInt(artifact.size) || copy.size!==after.size || path.relative(artifact.file,await fsp.realpath(artifact.file))) {
+  const after=await physical(artifact.file,'file'), copy=await physical(staged,'file');
+  if (!matches(original,after) || after.size!==BigInt(artifact.size) || copy.size!==after.size) {
     throw fail('The packaged Micronaut JAR changed during staging. Package it and run again.');
   }
   const hash=crypto.createHash('sha256');
@@ -40,8 +40,30 @@ async function stagedJar(project,base) {
     if (!zipHeader) zipHeader=bytes.subarray(0,4);
     hash.update(bytes);
   }
-  if (zipHeader?.length!==4 || zipHeader.readUInt32BE()!==0x504b0304) throw fail('Micronaut requires an executable Maven JAR archive.');
+  if (zipHeader?.length!==4 || zipHeader.readUInt32BE()!==0x504b0304) throw fail('Micronaut requires a valid JAR archive.');
   return {artifact:artifact.artifact,staged,sha256:hash.digest('hex')};
+}
+
+async function stage(project,base,build,cancelledNow){
+  if(build.tool==='maven'){
+    const archive=await packagedJar(project);
+    const {artifact,staged,sha256}=await stagedJar({...archive,identity:await physical(archive.file,'file')},base);
+    return {artifact,sha256,kind:'maven-jar',launch:['-jar',staged]};
+  }
+  const selected=await distribution(project,build), staged=[];
+  for(const jar of selected.jars){
+    if(cancelledNow())throw fail('Micronaut startup was cancelled.');
+    staged.push(await stagedJar(jar,base));
+  }
+  const cp=staged.map(item=>item.staged).join(path.delimiter);
+  if(cp.length>24000)throw fail('The staged Micronaut classpath exceeds the local JVM command length limit.');
+  const latest=await distribution(project,build);
+  if(latest.jars.length!==selected.jars.length||latest.jars.some((jar,index)=>
+    jar.file!==selected.jars[index].file||!matches(jar.identity,selected.jars[index].identity))){
+    throw fail('The Micronaut Gradle distribution changed during staging. Build again.');
+  }
+  return {artifact:selected.artifact,kind:'gradle-distribution',libraryCount:staged.length,
+    sha256:hash([build.mainClass,staged.map(item=>[item.artifact,item.sha256])]),launch:['-classpath',cp,build.mainClass]};
 }
 
 function reachable(port) {
@@ -96,17 +118,22 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
     return session.release;
   }
 
-  async function processFor(session,{project,javaHome,environment,cancellation}) {
+  async function processFor(session,{project,javaHome,environment,cancellation,buildFingerprint}) {
     const java=independentJavaExecutable(javaHome && path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
+    const reviewed=micronautProject(project);
+    if(buildFingerprint!==undefined&&reviewed.buildFingerprint!==buildFingerprint)throw fail('The Micronaut Gradle build changed. Build again.');
     session.parent=await fsp.realpath(os.tmpdir());
     session.staging=await fsp.mkdtemp(path.join(session.parent,'rb-micronaut-'));
     session.identity=await fsp.lstat(session.staging,{bigint:true});
-    const {artifact,staged,sha256}=await stagedJar(project,session.staging);
-    if (disposed || session.stopping || cancelled(cancellation)) throw fail('Micronaut startup was cancelled.');
+    const cancelledNow=()=>disposed||session.stopping||cancelled(cancellation);
+    const {launch,...artifact}=await stage(project,session.staging,reviewed,cancelledNow);
+    if(reviewed.tool==='gradle'&&micronautProject(project).buildFingerprint!==reviewed.buildFingerprint)
+      throw fail('The Micronaut Gradle build changed during staging. Build again.');
+    if (cancelledNow()) throw fail('Micronaut startup was cancelled.');
     const env={...process.env};
     for (const name of ['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','MICRONAUT_ENVIRONMENTS']) delete env[name];
     const args=['-Dfile.encoding=UTF-8','-Dmicronaut.server.host=127.0.0.1','-Dmicronaut.server.port=-1',
-      '-Dmicronaut.env.deduction=false','-Dmicronaut.environments='+environment,'-jar',staged];
+      '-Dmicronaut.env.deduction=false','-Dmicronaut.environments='+environment,...launch];
     const child=spawn(java,args,{cwd:project.root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
     session.child=child;
     session.done=new Promise(resolve => child.once('close',() => {session.exited=true;resolve();}));
@@ -123,7 +150,7 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
     listen(child.stdout);
     listen(child.stderr);
     void session.done.then(() => {if (session.result) void release(session).catch(error => log(error.message+'\n'));});
-    return {artifact,sha256};
+    return artifact;
   }
 
   async function start(options = {}) {
@@ -143,7 +170,7 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
       const deadline=Date.now()+startupMs;
       while (Date.now()<deadline) {
         if (session.stopping || disposed || cancelled(cancellation)) throw fail('Micronaut startup was cancelled.');
-        if (session.error || session.exited) throw fail('The Micronaut application exited before readiness. Check its output and executable Maven package.');
+        if (session.error || session.exited) throw fail('The Micronaut application exited before readiness. Check its output and built distribution.');
         if (session.port && await reachable(session.port) && !session.exited && !session.stopping && !cancelled(cancellation)) {
           session.result={state:'running',runId:session.id,baseUrl:'http://127.0.0.1:'+session.port,environment,
             projectUri:project.uri,...artifact};

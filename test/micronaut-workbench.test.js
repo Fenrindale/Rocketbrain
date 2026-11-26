@@ -11,6 +11,7 @@ const { promisify } = require('node:util');
 const { buildSpec } = require('../src/java/workbench-tasks');
 const { modelMicronaut,inspectMicronautProject } = require('../src/java/micronaut-model');
 const { createMicronautRuntime,packagedJar } = require('../src/java/micronaut-runtime');
+const { scriptLibraries } = require('../src/java/micronaut-distribution');
 
 const execute=promisify(execFile), fixture=path.join(__dirname,'fixtures','java','micronaut');
 const javaConfig=process.env.ROCKETBRAIN_JAVA_TEST_CONFIG, mavenHome=process.env.ROCKETBRAIN_MAVEN_HOME;
@@ -56,6 +57,44 @@ test('Micronaut recognizes real imported property annotations and nested scalar 
   assert.deepEqual(evidence.configured.map(item => [item.key,item.environment,item.range.start]),[
     ['source.port','dev',{line:1,character:2}]
   ]);
+});
+
+test('Micronaut Gradle resolves explicit application plugin, environment source and literal Kotlin DSL entry',async context=>{
+  const root=path.join(__dirname,'fixtures/java/micronaut-gradle'), project={root,uri:pathToFileURL(root).href,tool:'gradle'};
+  const actual=inspectMicronautProject(project);
+  assert.deepEqual([actual.pluginVersion,actual.platformVersion,actual.distribution,actual.mainClass],
+    ['5.0.2','5.2.8','micronaut-gradle','micronautgradlefixture.Application']);
+  assert.deepEqual(actual.routes.map(item=>item.path),['/rocketbrain/hello','/rocketbrain/jdbc']);
+  assert.deepEqual(actual.settings.map(item=>item.key),['fixture.message']);
+  const parent=await fs.realpath(os.tmpdir()), owned=await fs.mkdtemp(path.join(parent,'rb-mn-model-'));
+  context.after(async()=>{
+    const actual=await fs.realpath(owned);
+    assert.equal(path.relative(parent,path.dirname(actual)),'');
+    assert.match(path.basename(actual),/^rb-mn-model-/u);
+    await fs.rm(actual,{recursive:true,force:true});
+  });
+  const kts={root:owned,uri:pathToFileURL(owned).href,tool:'gradle'}, build=path.join(owned,'build.gradle.kts');
+  const text='// convention stub\nplugins { id("io.micronaut.application") version "5.0.2" }\napplication { mainClass.set("demo.Entry") }';
+  await fs.writeFile(build,text);
+  await fs.writeFile(path.join(owned,'settings.gradle.kts'),'rootProject.name = "demo-ktor"');
+  assert.deepEqual([inspectMicronautProject(kts).distribution,inspectMicronautProject(kts).mainClass],['demo-ktor','demo.Entry']);
+  await fs.writeFile(build,text.replace('version "5.0.2"','version "5.0.2" apply false'));
+  assert.throws(()=>inspectMicronautProject(kts),/literal version/u);
+  await fs.writeFile(build,text.replace('"demo.Entry"','flag'));
+  assert.throws(()=>inspectMicronautProject(kts),/literal mainClass/u);
+});
+
+test('standard Micronaut Gradle launcher projection preserves order and rejects unsafe classpath overrides',()=>{
+  const one=String.raw`%APP_HOME%\lib\app.jar`, two=String.raw`%APP_HOME%\lib\dep-1.0.jar`;
+  const build=assignments=>'set DEFAULT_JVM_OPTS=\r\nset CLASSPATH='+assignments+
+    '\r\nendlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% -classpath "%CLASSPATH%" demo.Entry %* & call :exitWithErrorLevel';
+  const launch=build(one+';'+two);
+  assert.deepEqual(scriptLibraries(launch,'demo.Entry'),['app.jar','dep-1.0.jar']);
+  for(const invalid of [build(one+';'+one),build(one+';'+String.raw`%APP_HOME%\lib\..\outside.jar`),
+    build(one+';%TK%'),launch.replace('demo.Entry','demo.Other'),launch.replace('DEFAULT_JVM_OPTS=','DEFAULT_JVM_OPTS=-Xmx1g'),
+    launch+'\r\nset CLASSPATH='+two]){
+    assert.throws(()=>scriptLibraries(invalid,'demo.Entry'),/Micronaut/u);
+  }
 });
 
 async function request(base,route,kind='text') {

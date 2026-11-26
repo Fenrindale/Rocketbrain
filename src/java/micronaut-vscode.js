@@ -2,12 +2,14 @@
 
 const path = require('node:path');
 const { parseYaml } = require('../spring/configuration');
-const { inspectMicronautProject,micronautMavenProject,CONFIG_FILE,PART } = require('./micronaut-model');
-const { createMicronautRuntime } = require('./micronaut-runtime');
+const { inspectMicronautProject,micronautProject,CONFIG_FILE,PART } = require('./micronaut-model');
+const { createMicronautRuntime,packagedJar } = require('./micronaut-runtime');
+const { distribution }=require('./micronaut-distribution');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 
 const COMMANDS={inspect:'rocketbrain.micronaut.inspect',run:'rocketbrain.micronaut.run',
-  tests:'rocketbrain.micronaut.test',stop:'rocketbrain.micronaut.stop'};
+  tests:'rocketbrain.micronaut.test',build:'rocketbrain.micronaut.build',stop:'rocketbrain.micronaut.stop'};
+const IMPORT='Import the Micronaut 5 Maven or Gradle application in Java Projects first.';
 
 function registerMicronautWorkbench(vscode,java) {
   const output=vscode.window.createOutputChannel('Rocketbrain Micronaut');
@@ -23,7 +25,7 @@ function registerMicronautWorkbench(vscode,java) {
   function roots() {return workspaceRoots(vscode.workspace.workspaceFolders || []);}
   function available() {
     return java.workbench.getSnapshot().projects.filter(project => {
-      try {workspacePath(project.root,roots());micronautMavenProject(project);return true;}
+      try {workspacePath(project.root,roots());micronautProject(project);return true;}
       catch {return false;}
     });
   }
@@ -34,7 +36,7 @@ function registerMicronautWorkbench(vscode,java) {
     trusted(cancellation);
     const root=workspacePath(uri,roots());
     const project=available().find(item => !path.relative(item.root,root));
-    if (!project) throw fail('Import the Micronaut 5 Maven application in Java Projects first.');
+    if (!project) throw fail(IMPORT);
     return project;
   }
 
@@ -44,26 +46,47 @@ function registerMicronautWorkbench(vscode,java) {
 
   function saveNeeded(project) {
     if (vscode.workspace.textDocuments.some(document => document.isDirty && document.uri.scheme==='file' &&
-        inside(project.root,document.uri.fsPath))) throw fail('Save modified Micronaut project files before executing Maven.');
+        inside(project.root,document.uri.fsPath))) throw fail('Save modified Micronaut project files before executing build tasks.');
   }
 
   async function task(project,name,cancellation) {
     saveNeeded(project);
     const options={projectUri:project.uri,allowProjectExecution:true,cancellation};
-    const observed=(await java.workbench.discoverTasks(options)).find(item => item.name===name);
-    if (!observed) throw fail('The Micronaut application has no observed Maven '+name+' task.');
+    const selected=project.tool==='gradle'?':'+name:name;
+    const observed=(await java.workbench.discoverTasks(options)).find(item => item.name===selected);
+    if (!observed) throw fail('The Micronaut application has no observed '+selected+' build task.');
     trusted(cancellation);
     saveNeeded(project);
     return java.workbench.runTask({...options,taskId:observed.id});
   }
 
   async function test({projectUri,allowProjectExecution,cancellation}={}) {
-    if (allowProjectExecution!==true) throw fail('Explicitly choose Micronaut tests before executing Maven.');
+    if (allowProjectExecution!==true) throw fail('Explicitly choose Micronaut tests before executing build tasks.');
     return task(await projectFor(projectUri,cancellation),'test',cancellation);
   }
 
+  async function packageProject(project,cancellation){
+    const reviewed=micronautProject(project), name=reviewed.tool==='gradle'?'installDist':'package';
+    const result=await task(project,name,cancellation);
+    trusted(cancellation);
+    saveNeeded(project);
+    if(result.state!=='succeeded')throw fail('The Micronaut application build did not complete. Check its task terminal.');
+    if(reviewed.tool==='gradle'&&micronautProject(project).buildFingerprint!==reviewed.buildFingerprint)
+      throw fail('The Micronaut Gradle build changed while packaging. Build again.');
+    return {reviewed,result};
+  }
+
+  async function build({projectUri,allowProjectExecution,cancellation}={}){
+    if(allowProjectExecution!==true)throw fail('Explicitly choose a Micronaut build before executing build tasks.');
+    const project=await projectFor(projectUri,cancellation), {reviewed,result}=await packageProject(project,cancellation);
+    const verified=reviewed.tool==='gradle'?await distribution(project,reviewed):await packagedJar(project);
+    trusted(cancellation);
+    return {...result,artifact:verified.artifact,tool:reviewed.tool,
+      ...(verified.jars&&{libraryCount:verified.jars.length})};
+  }
+
   async function run({projectUri,environment='dev',allowProjectExecution,cancellation}={}) {
-    if (allowProjectExecution!==true) throw fail('Explicitly run the Micronaut application before executing Maven.');
+    if (allowProjectExecution!==true) throw fail('Explicitly run the Micronaut application before executing build tasks.');
     trusted(cancellation);
     if (typeof environment!=='string' || !PART.test(environment)) throw fail('Use a literal Micronaut environment name.');
     if (pendingStart || runtime.getState().state!=='stopped') throw fail('Stop the current owned Micronaut application first.');
@@ -75,14 +98,12 @@ function registerMicronautWorkbench(vscode,java) {
     try {
       const signal=controller.signal;
       const project=await projectFor(projectUri,signal);
-      const built=await task(project,'package',signal);
-      trusted(signal);
-      if (built.state!=='succeeded') throw fail('Maven did not package the Micronaut application. Check its task terminal.');
+      const {reviewed}=await packageProject(project,signal);
       const javaHome=project.jdk || vscode.workspace.getConfiguration('rocketbrain.java').get('javaHome') || java.getState().javaHome;
       const result=await runtime.start({project,javaHome,environment,cancellation:signal,allowProjectExecution,
-        workspaceTrusted:vscode.workspace.isTrusted});
+        workspaceTrusted:vscode.workspace.isTrusted,buildFingerprint:reviewed.buildFingerprint});
       output.appendLine(`Micronaut ${environment} · ${result.artifact} · ${result.baseUrl}`);
-      output.appendLine('Application JAR SHA-256: '+result.sha256);
+      output.appendLine('Application artifact SHA-256: '+result.sha256);
       return result;
     } finally {
       pendingStart=undefined;
@@ -169,7 +190,7 @@ function registerMicronautWorkbench(vscode,java) {
     const projects=available().sort((a,b) => b.root.length-a.root.length);
     const active=vscode.window.activeTextEditor?.document.uri;
     const selected=active?.scheme==='file' && projects.find(project => inside(project.root,active.fsPath));
-    if (!projects.length) throw fail('Import the Micronaut 5 Maven application in Java Projects first.');
+    if (!projects.length) throw fail(IMPORT);
     return selected?.uri || (await vscode.window.showQuickPick(projects.map(project => ({label:project.name,uri:project.uri})),
       {title:'Select Micronaut Application'}))?.uri;
   }
@@ -226,10 +247,14 @@ function registerMicronautWorkbench(vscode,java) {
     const projectUri=await choose();
     if (projectUri) return progress('Run Micronaut Tests',cancellation => test({projectUri,allowProjectExecution:true,cancellation}));
   });
+  register(COMMANDS.build,async () => {
+    const projectUri=await choose();
+    if(projectUri)return progress('Build Micronaut Application',cancellation => build({projectUri,allowProjectExecution:true,cancellation}));
+  });
   register(COMMANDS.stop,stop);
 
   return {inspect:options => track(() => inspect(options)),run:options => track(() => run(options)),
-    test:options => track(() => test(options)),getState:runtime.getState,stop,dispose() {
+    test:options => track(() => test(options)),build:options => track(() => build(options)),getState:runtime.getState,stop,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {

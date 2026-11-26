@@ -128,11 +128,13 @@ Quarkus 설정 탐색은 중첩 `ConfigMapping` 인터페이스와 다른 소스
 
 **Debug Jakarta WAR on Tomcat**은 Rocketbrain Java 디버거로 관리 중인 로컬 Tomcat JVM에 연결합니다. 배포에는 선택한 WAR의 별도 임시 복사본과 루프백 포트를 사용합니다. 이 흐름은 로컬 Tomcat 11의 Jakarta Servlet·JSP WAR를 지원합니다.
 
-### Micronaut Maven
+### Micronaut Maven과 Gradle
 
-Micronaut 5 Maven 플랫폼 부모를 선언한 JAR 모듈을 **Java Projects**로 가져옵니다. **Inspect Micronaut Application**에서 타입이 지정된 설정 키, 환경별 설정 파일, HTTP 경로와 생성자 연결의 소스를 엽니다. `application*.properties`에서 키 완성과 선언 이동을 사용하고, 단일 문서 YAML의 스칼라 키에서 선언으로 이동합니다.
+Micronaut 5 Maven JAR 모듈이나 `io.micronaut.application`과 `application.mainClass`를 명시한 Gradle 앱을 **Java Projects**로 가져옵니다. **Inspect Micronaut Application**에서 타입이 지정된 설정 키, 환경별 설정 파일, HTTP 경로와 생성자 연결의 소스를 엽니다. `application*.properties`에서 키 완성과 선언 이동을 사용하고, 단일 문서 YAML의 스칼라 키에서 선언으로 이동합니다.
 
-**Run Micronaut Tests**는 Maven 테스트를 실행합니다. **Build and Run Micronaut**는 선택한 환경으로 실행 가능 JAR를 패키징하고 루프백 주소를 표시합니다. **Stop Micronaut Application**으로 실행 중인 JVM을 종료합니다. 소스 변경을 반영하려면 다시 빌드하고 실행합니다.
+**Run Micronaut Tests**는 가져온 프로젝트의 테스트 작업을 실행합니다. **Build Micronaut Application**은 Maven JAR 또는 Gradle 표준 `installDist` 배포 폴더를 만듭니다. **Build and Run Micronaut**는 선택한 환경으로 독립 JVM을 시작하고 루프백 주소를 표시합니다. Gradle에서는 생성된 표준 런처에서 클래스패스 순서를 읽고 실제 라이브러리를 임시 위치에 복사해 실행합니다. **Stop Micronaut Application**으로 JVM을 종료합니다. 소스 변경은 다시 빌드하고 실행해 반영합니다. [Micronaut Gradle 배포](https://micronaut-projects.github.io/micronaut-gradle-plugin/latest/#_packaging_the_application)
+
+Gradle 앱은 표준 이름의 클래스패스 배포판을 사용하며 JVM에는 선택한 환경과 로컬 서버 설정을 적용합니다. Micronaut 플랫폼 5.2.8, Gradle 플러그인 5.0.2 및 Gradle 9.7.1로 검증했습니다. Windows에서 Gradle 사용자 홈 경로에 비ASCII 문자가 있으면 위의 Gradle 9.7 이상 설정을 적용합니다.
 
 ### Scala · sbt
 
