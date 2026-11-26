@@ -92,6 +92,7 @@
       { "command": "rocketbrain.java.smartStepInto", "title": "Step Into a Java Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.restartStackFrame", "title": "Restart Java Stack Frame", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.inspectLocalValue", "title": "Inspect Java Local Value", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
+      { "command": "rocketbrain.java.setKotlinLocal", "title": "Set Kotlin Local Value", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.attachProcess", "title": "Attach to Local Java Process", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.openTableSnapshot", "title": "Open Consistent Table Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.createDatasetWorkflow", "title": "Save Table Dataset Comparison", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },

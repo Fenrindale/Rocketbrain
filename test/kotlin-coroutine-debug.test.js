@@ -8,7 +8,7 @@ const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { test } = require('node:test');
 const { prepareCoroutineProbe, readCoroutineDescriptor, fetchCoroutineSnapshot, readSnapshot } = require('../src/java/kotlin-coroutine-probe');
-const { COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
+const { COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { DapClient, freePort } = require('./java-debug-dap');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
@@ -40,7 +40,7 @@ test('patched real JDT attaches to a running opted-in JVM, stops only the select
   const runtime = JSON.parse(await fs.readFile(configFile, 'utf8'));
   const javaHome = runtime.javaHome, serverPath = runtime.serverPath;
   const bundle = resolveDebugBundle(runtime.settings?.['rocketbrain.java.debugBundlePath'], serverPath);
-  assert.ok([COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD].includes(bundle?.build));
+  assert.ok([COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD].includes(bundle?.build));
   const parent = await fs.realpath(os.tmpdir()), owned = await fs.mkdtemp(path.join(parent, 'rb-coro-dap-'));
   let lsp;
   t.after(async () => {

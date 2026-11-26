@@ -8,7 +8,7 @@ const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
 const { createFrameRestart } = require('../src/java/debug-frames');
 const { createLocalValueInspection } = require('../src/java/debug-local-values');
-const { DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD } = require('../src/java/debug-runtime');
+const { DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD } = require('../src/java/debug-runtime');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { DapClient } = require('./java-debug-dap');
@@ -109,7 +109,7 @@ test('actual JDT DAP restarts a chosen caller frame in the same JVM and replays 
     const context = { getState: () => state, ensureTrusted() {} };
     const service = createFrameRestart(vscode, context);
     const values = createLocalValueInspection(vscode, context);
-    const inspected = [DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD].includes(launch.debugBuild) ?
+    const inspected = [DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD].includes(launch.debugBuild) ?
       await exerciseLocalValues(values, fixture, session) : undefined;
     if (inspected) {
       assert.deepEqual([...new Set(requests)], ['stackTrace', 'rocketbrain/readJavaValues']);
