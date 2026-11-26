@@ -9,7 +9,7 @@ const { discoverTests, runTests } = require('../src/java/testing');
 const { resolveTestingProjects } = require('../src/java/testing-projects');
 const { execute } = require('../src/java/testing/provision');
 const { allocatePort, waitForOwnedListener } = require('../src/java/testing-debug');
-const { fixtureSource, testModule, testClass, testSource, copyNamedTests, namedTestProfile, jdbcEnvironment } =
+const { fixtureSource, testModule, testClass, testSource, copyNamedTests, discoverCopiedNamedTests, namedTestProfile, jdbcEnvironment } =
   require('./helpers/jpms-testing-fixture');
 
 const runtimePath = process.env.ROCKETBRAIN_TEST_JPMS_RUNTIME_FILE;
@@ -17,6 +17,38 @@ const compiledRoot = process.env.ROCKETBRAIN_TEST_JPMS_COMPILED_ROOT || fixtureS
 const engine = process.env.ROCKETBRAIN_TEST_JPMS_ENGINE;
 const connection = process.env.ROCKETBRAIN_TEST_JPMS_DB_CONFIG;
 const projectUri = file => ({ scheme: 'file', fsPath: file, toString: () => pathToFileURL(file).href });
+
+test('copied named discovery retries watcher notifications only while its inputs stay unchanged', async t => {
+  const workspace = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rb-jpms-watcher-'));
+  t.after(async () => {
+    assert.equal(await fs.realpath(workspace), workspace);
+    assert.ok(path.basename(workspace).startsWith('rb-jpms-watcher-'));
+    await fs.rm(workspace, { recursive: true, force: true });
+  });
+  for (const relative of ['src/main/java/Invoice.java', 'build.gradle', 'settings.gradle', 'build/classes/java/main/Invoice.class',
+    'build/classes/java/test/InvoiceTest.class', 'build/jpms-test-path.txt']) {
+    const file = path.join(workspace, relative);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, relative, { flag: 'wx' });
+  }
+  const profile = { workspace };
+  const transient = new Error('Java sources or configuration changed during discovery. Discover again.');
+  const ready = { state: 'ready' };
+  let calls = 0;
+  assert.equal(await discoverCopiedNamedTests({ async discover(options) {
+    assert.deepEqual(options, { projects: [profile], build: false });
+    if (++calls === 1) throw transient;
+    return ready;
+  } }, profile), ready);
+  assert.equal(calls, 2);
+  const wrongEngine = new Error('Jupiter is unavailable.');
+  await assert.rejects(discoverCopiedNamedTests({ async discover() { throw wrongEngine; } }, profile),
+    error => error === wrongEngine);
+  await assert.rejects(discoverCopiedNamedTests({ async discover() {
+    await fs.appendFile(path.join(workspace, 'src/main/java/Invoice.java'), 'changed');
+    throw transient;
+  } }, profile), /copied named test inputs changed/);
+});
 
 test('a Gradle black-box module discovers and runs reviewed Jupiter tests on Spring JDBC', {
   skip: !runtimePath || !engine || !connection,

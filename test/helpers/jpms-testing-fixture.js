@@ -3,18 +3,53 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
+const { setTimeout: delay } = require('node:timers/promises');
 
 const fixtureSource = path.resolve(__dirname, '../fixtures/java/jpms-testing');
 const testModule = 'fixture.jpms.tests';
 const testClass = testModule + '.InvoiceModuleTest';
 const testSource = 'src/test/java/fixture/jpms/tests/InvoiceModuleTest.java';
+const reviewedInputs = ['src', 'build.gradle', 'settings.gradle', 'build/classes/java/main',
+  'build/classes/java/test', 'build/jpms-test-path.txt'];
 
 async function copyNamedTests(compiledRoot, project) {
-  for (const entry of ['src', 'build.gradle', 'settings.gradle', 'build/classes/java/main',
-    'build/classes/java/test', 'build/jpms-test-path.txt']) {
+  for (const entry of reviewedInputs) {
     const target = path.join(project, entry);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.cp(path.join(compiledRoot, entry), target, { recursive: true, errorOnExist: true, force: false });
+  }
+}
+
+async function discoverCopiedNamedTests(javaTesting, profile) {
+  async function fingerprint() {
+    const digest = createHash('sha256');
+    async function include(relative) {
+      const file = path.join(profile.workspace, relative);
+      const stat = await fs.lstat(file);
+      if (stat.isDirectory()) {
+        for (const entry of (await fs.readdir(file)).sort()) await include(path.join(relative, entry));
+      } else {
+        assert.ok(stat.isFile(), 'Only owned physical fixture files can be reviewed.');
+        digest.update(JSON.stringify([relative, createHash('sha256').update(await fs.readFile(file)).digest('hex')]));
+      }
+    }
+    for (const entry of reviewedInputs) await include(entry);
+    return digest.digest('hex');
+  }
+
+  const expected = await fingerprint();
+  for (const pause of [0, 250, 500, 1000]) {
+    if (pause) await delay(pause);
+    assert.equal(await fingerprint(), expected, 'The copied named test inputs changed during discovery.');
+    try {
+      const found = await javaTesting.discover({ projects: [profile], build: false });
+      assert.equal(await fingerprint(), expected, 'The copied named test inputs changed during discovery.');
+      return found;
+    } catch (error) {
+      // Windows can deliver creation notifications from the copied fixture during discovery.
+      if (error.message !== 'Java sources or configuration changed during discovery. Discover again.' || pause === 1000) throw error;
+    }
   }
 }
 
@@ -42,4 +77,4 @@ function jdbcEnvironment(engine, config) {
   };
 }
 
-module.exports = { fixtureSource, testModule, testClass, testSource, copyNamedTests, namedTestProfile, jdbcEnvironment };
+module.exports = { fixtureSource, testModule, testClass, testSource, copyNamedTests, discoverCopiedNamedTests, namedTestProfile, jdbcEnvironment };

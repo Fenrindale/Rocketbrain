@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { testModule, testSource, copyNamedTests, namedTestProfile, jdbcEnvironment } = require('./helpers/jpms-testing-fixture');
+const { testModule, testSource, copyNamedTests, discoverCopiedNamedTests, namedTestProfile, jdbcEnvironment } = require('./helpers/jpms-testing-fixture');
 
 async function runJavaTestingModulePathChecks(api, vscode, checks) {
   const compiled = process.env.ROCKETBRAIN_TEST_JPMS_COMPILED_ROOT;
@@ -19,7 +19,7 @@ async function runJavaTestingModulePathChecks(api, vscode, checks) {
     await copyNamedTests(compiled, project);
     const profile = await namedTestProfile(project, runtime.javaHome, runtimePath);
     const env = jdbcEnvironment(spring.dbEngine, config);
-    const discovery = await api.javaTesting.discover({ projects: [profile], build: false });
+    const discovery = await discoverCopiedNamedTests(api.javaTesting, profile);
     assert.equal(discovery.projects[0].testModule, testModule);
     assert.equal(api.javaTesting.controller.items.size, 1);
     const selected = discovery.tests.find(test => test.methodName === 'executesSpringJdbc');
