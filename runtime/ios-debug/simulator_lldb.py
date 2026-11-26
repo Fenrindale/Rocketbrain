@@ -49,24 +49,84 @@ def inspect_locals(frame):
     return result
 
 
-def installed_location(target, module, plan):
+def quoted_lldb_path(file):
+    if not os.path.isabs(file) or chr(96) in file or any(ord(char) < 32 for char in file):
+        raise RuntimeError("The reviewed symbol path cannot be passed to LLDB.")
+    return '"' + file.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def load_reviewed_symbols(debugger, target, plan):
+    module = target.AddModule(plan["framework"], "arm64", plan["frameworkUuid"], plan["symbols"])
+    if not module.IsValid() or (module.GetUUIDString() or "").lower() != plan["frameworkUuid"]:
+        raise RuntimeError("LLDB did not load the reviewed Kotlin framework.")
+    if real_file(module.GetSymbolFileSpec()) != os.path.realpath(plan["symbols"]):
+        result = lldb.SBCommandReturnObject()
+        # LLDB binds the symbol file to a target module by the Mach-O UUID.
+        debugger.GetCommandInterpreter().HandleCommand("target symbols add -- " + quoted_lldb_path(plan["symbols"]), result)
+        if not result.Succeeded():
+            raise RuntimeError("LLDB refused the reviewed Kotlin symbols: " + (result.GetError() or "unknown reason")[:400])
+        module = target.FindModule(lldb.SBFileSpec(plan["framework"]))
+    if (not module.IsValid() or (module.GetUUIDString() or "").lower() != plan["frameworkUuid"]
+            or real_file(module.GetFileSpec()) != plan["framework"]
+            or real_file(module.GetSymbolFileSpec()) != os.path.realpath(plan["symbols"])):
+        raise RuntimeError("LLDB did not bind the reviewed symbol file to the exact installed framework.")
+    return module
+
+
+def compiled_addresses(module, plan):
+    candidates = {}
+    file = lldb.SBFileSpec(plan["source"])
+    count = module.GetNumCompileUnits()
+    if count > 4096:
+        raise RuntimeError("The reviewed Kotlin framework exceeds the compile-unit inspection limit.")
+    for unit_index in range(count):
+        unit = module.GetCompileUnitAtIndex(unit_index)
+        start = 0
+        matches = 0
+        while matches < 32:
+            index = unit.FindLineEntryIndex(start, plan["line"], file, True)
+            if index == lldb.LLDB_INVALID_INDEX32:
+                break
+            if index < start or len(candidates) == 32:
+                raise RuntimeError("The exact Kotlin source line has too many generated locations.")
+            start = index + 1
+            matches += 1
+            entry = unit.GetLineEntryAtIndex(index)
+            address = entry.GetStartAddress()
+            if (source_at(entry, plan["source"], plan["line"]) and address.IsValid()
+                    and (address.GetModule().GetUUIDString() or "").lower() == plan["frameworkUuid"]):
+                candidates[address.GetFileAddress()] = address
+        else:
+            raise RuntimeError("The exact Kotlin source line has too many generated locations.")
+    return candidates
+
+
+def exact_address(target, module, plan):
     files = lldb.SBFileSpecList()
     files.Append(module.GetFileSpec())
-    breakpoint = target.BreakpointCreateByLocation(lldb.SBFileSpec(plan["source"]), plan["line"], 0, 0, files, False)
-    exact = []
-    for index in range(breakpoint.GetNumLocations()):
-        location = breakpoint.GetLocationAtIndex(index)
-        address = location.GetAddress()
-        if ((address.GetModule().GetUUIDString() or "").lower() == plan["frameworkUuid"]
-                and source_at(address.GetLineEntry(), plan["source"], plan["line"])):
-            exact.append(location)
-        else:
-            location.SetEnabled(False)
-    # The dynamic framework can still be pending while dyld is waiting for the debugger.
-    # Accept a unique Mach-O-relative DWARF address and verify the live module on the stop.
-    if len(exact) != 1:
-        raise RuntimeError("Expected one DWARF location for the exact reviewed Kotlin source and line.")
-    return breakpoint
+    resolver = target.BreakpointCreateByLocation(lldb.SBFileSpec(plan["source"]), plan["line"], 0, 0, files, False)
+    resolved = resolver.GetNumLocations()
+    candidates = {}
+    try:
+        if resolved > 32:
+            raise RuntimeError("The reviewed Kotlin source line has too many native resolver locations.")
+        for index in range(resolved):
+            address = resolver.GetLocationAtIndex(index).GetAddress()
+            if ((address.GetModule().GetUUIDString() or "").lower() == plan["frameworkUuid"]
+                    and source_at(address.GetLineEntry(), plan["source"], plan["line"])):
+                candidates[address.GetFileAddress()] = address
+    finally:
+        target.BreakpointDelete(resolver.GetID())
+    if not candidates:
+        candidates = compiled_addresses(module, plan)
+    if not candidates:
+        raise RuntimeError("No exact Kotlin DWARF line in the reviewed framework (resolver locations: "
+                           + str(resolved) + ", compile units: " + str(module.GetNumCompileUnits()) + ").")
+    functions = [address.GetFunction() for address in candidates.values()]
+    if (len(candidates) > 1 and (not all(function.IsValid() for function in functions)
+            or len({function.GetStartAddress().GetFileAddress() for function in functions}) != 1)):
+        raise RuntimeError("The Kotlin line maps to distinct native functions; choose an unambiguous source line.")
+    return candidates[min(candidates)]
 
 
 def run(plan):
@@ -88,11 +148,11 @@ def run(plan):
     if not info.IsValid() or real_file(info.GetExecutableFile()) != plan["executable"]:
         raise RuntimeError("LLDB did not observe the reviewed simulator executable.")
     emit("phase", stage="process-verified")
-    module = target.AddModule(plan["framework"], "arm64", plan["frameworkUuid"], plan["symbols"])
-    if not module.IsValid() or (module.GetUUIDString() or "").lower() != plan["frameworkUuid"]:
-        raise RuntimeError("LLDB did not load the reviewed Kotlin framework and dSYM.")
+    module = load_reviewed_symbols(debugger, target, plan)
     emit("phase", stage="module-verified")
-    breakpoint = installed_location(target, module, plan)
+    breakpoint = target.BreakpointCreateBySBAddress(exact_address(target, module, plan))
+    if not breakpoint.IsValid() or breakpoint.GetNumLocations() != 1:
+        raise RuntimeError("LLDB did not bind the exact Mach-O-relative Kotlin breakpoint address.")
     emit("ready")
     checked(process.Continue(), "Could not run the owned simulator app to its Kotlin breakpoint")
     if process.GetState() != lldb.eStateStopped:
