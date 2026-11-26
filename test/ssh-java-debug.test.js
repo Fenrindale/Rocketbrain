@@ -6,12 +6,13 @@ const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
 const { execFile } = require('node:child_process');
-const { EventEmitter } = require('node:events');
+const { EventEmitter, once } = require('node:events');
 const { promisify } = require('node:util');
 const { test } = require('node:test');
 const { connectWorkspace } = require('../src/remote/ssh-workspace');
 const { createSshJavaDebug, localSnapshot } = require('../src/remote/ssh-java-debug');
 const { debugSupervisorInvocation } = require('../src/remote/ssh-java-debug-runtime');
+const { ownership } = require('../src/remote/ssh-java-debug-linux');
 const { pythonCommand } = require('../src/remote/ssh-files-worker');
 const { createManagedJavaAttach, assertManagedAttach } = require('../src/devcontainer/java-attach');
 const { startSshProcessFixture } = require('./helpers/ssh-process-fixture');
@@ -22,6 +23,7 @@ const invoke = promisify(execFile);
 const javaHome = process.env.ROCKETBRAIN_SSH_PROCESS_TEST_JDK;
 const python = process.env.ROCKETBRAIN_SSH_PROCESS_TEST_PYTHON;
 const pythonPackage = process.env.ROCKETBRAIN_SSH_PROCESS_TEST_ASYNCSSH;
+const linux = process.platform === 'linux';
 
 const jdi = String.raw`
 import com.sun.jdi.Bootstrap;
@@ -88,6 +90,27 @@ function connectPort(host, port) {
   });
 }
 
+async function openListener(options, callback) {
+  const server = net.createServer(callback);
+  const listening = once(server, 'listening');
+  server.listen(options);
+  await listening;
+  return server;
+}
+
+function closeListener(server) { return new Promise(resolve => server.close(() => resolve())); }
+
+async function observeRejectedRelay(port) {
+  const socket = net.connect({ host: '127.0.0.1', port });
+  let bytes = 0;
+  try {
+    socket.on('data', chunk => { bytes += chunk.length; });
+    socket.setTimeout(10000, () => socket.destroy(Error('The obsolete relay was not released.')));
+    await once(socket, 'close');
+    return bytes;
+  } finally { socket.destroy(); }
+}
+
 test('SSH Java source mapping derives the package root and the fixed remote command fits Windows OpenSSH', async context => {
   const home = await localTestFolder(context);
   const selected = path.join(home, 'src', 'app', 'fixture', 'Example.java');
@@ -99,6 +122,28 @@ test('SSH Java source mapping derives the package root and the fixed remote comm
   await fs.writeFile(selected, 'package unrelated; class Example {}\n');
   await assert.rejects(localSnapshot(home, selected), /match its Java package/);
   assert.ok(Buffer.byteLength(pythonCommand('py -3', debugSupervisorInvocation({}).program)) < 7800);
+});
+
+test('Linux TCP parser distinguishes exact IPv4, IPv6 competition and an established owned route', { skip: !python }, async () => {
+  const runner = 'import json, socket, struct\n' + ownership + `
+header = "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode"
+four = header + "\\n 0: 0100007F:C001 00000000:0000 0A 0:0 0:0 0 1001 0 87322"
+four += "\\n 1: 0100007F:C001 0100007F:D002 01 0:0 0:0 0 1001 0 87323"
+six = header.replace("rem_address", "remote_address")
+six += "\\n 0: 00000000000000000000000001000000:C001 00000000000000000000000000000000:0000 0A 0:0 0:0 0 1002 0 87324"
+print(json.dumps([list(tcp_rows(four, 8)), list(tcp_rows(six, 32))]))
+try:
+    list(tcp_rows(header + "\\n 0: 01:ZZZZ 00000000:0000 0A 0:0 0:0 0 1001 0 87322", 8))
+except ValueError:
+    pass
+else:
+    raise AssertionError("Malformed TCP address was accepted")
+`;
+  const parsed = await invoke(python, ['-I', '-c', runner], { timeout: 10000, windowsHide: true });
+  assert.deepEqual(JSON.parse(parsed.stdout), [
+    [['0100007F', 49153, '00000000', 0, '0A', 1001, '87322'], ['0100007F', 49153, '0100007F', 53250, '01', 1001, '87323']],
+    [['00000000000000000000000001000000', 49153, '00000000000000000000000000000000', 0, '0A', 1002, '87324']]
+  ]);
 });
 
 test('SSH managed debugger guards its exact route and releases only its own session after source drift', async context => {
@@ -146,13 +191,13 @@ test('SSH managed debugger guards its exact route and releases only its own sess
   } finally { attach.dispose(); }
 });
 
-test('actual Windows SSH JDWP verifies the remote JVM and established socket before a real source stop and detach', {
-  skip: process.platform !== 'win32' || !javaHome || !python || !pythonPackage, timeout: 245000
+test('actual SSH JDWP verifies the remote JVM and established socket before a real source stop and detach', {
+  skip: !['linux', 'win32'].includes(process.platform) || !javaHome || !python || !pythonPackage, timeout: 245000
 }, async context => {
   const owned = await startSshProcessFixture({ python, pythonPackage }, cleanup => context.after(cleanup));
   const home = await localTestFolder(context);
-  const java = path.join(javaHome, 'bin', 'java.exe');
-  const javac = path.join(javaHome, 'bin', 'javac.exe');
+  const java = path.join(javaHome, 'bin', linux ? 'java' : 'java.exe');
+  const javac = path.join(javaHome, 'bin', linux ? 'javac' : 'javac.exe');
   const fixture = processFixture('fixture', 'AttachFixture');
   const relative = path.join('src', 'fixture', 'AttachFixture.java');
   const local = path.join(home, relative);
@@ -163,14 +208,15 @@ test('actual Windows SSH JDWP verifies the remote JVM and established socket bef
   await fs.writeFile(remote, fixture.source, { flag: 'wx' });
   await fs.writeFile(verifier, jdi, { flag: 'wx' });
   await invoke(javac, ['-g', '-d', owned.profile.root, remote], { timeout: 18000, windowsHide: true });
-  let peer, target, plain, outsider, stale, forward;
+  let peer, target, plain, outsider, stale, forward, early;
   try {
     await assert.rejects(connectWorkspace({ ...owned.profile, knownHostsPath: owned.wrongPin }), /Verify the SSH host key/);
     peer = await connectWorkspace(owned.profile);
     const service = createSshJavaDebug({ current: () => peer, trusted() {}, saved() {} });
     target = fixtureJvm(java, peer.root, fixture.mainClass, [peer.root]);
     plain = fixtureJvm(java, peer.root, fixture.mainClass, [peer.root], { debug: false });
-    outsider = fixtureJvm(java, home, fixture.mainClass, [peer.root]);
+    outsider = fixtureJvm(java, home, fixture.mainClass, [peer.root],
+      { vmArgs: linux ? ['-Duser.dir=' + peer.root] : [] });
     stale = fixtureJvm(java, peer.root, fixture.mainClass, [peer.root]);
     const [port, plainPort, outsidePort, stalePort] = await Promise.all([target.readyPort(), plain.readyPort(), outsider.readyPort(), stale.readyPort()]);
     const request = { javaHome, file: local, pid: target.target.pid, port };
@@ -178,15 +224,32 @@ test('actual Windows SSH JDWP verifies the remote JVM and established socket bef
     await assert.rejects(service.review(peer, home, { ...request, port: plainPort }), /exact IPv4 loopback JDWP/);
     await assert.rejects(service.review(peer, home, { ...request, pid: plain.target.pid, port: plainPort }), /exact IPv4 loopback JDWP/);
     await assert.rejects(service.review(peer, home, { ...request, pid: outsider.target.pid, port: outsidePort }), /reported workspace/);
+    if (linux) {
+      const competitor = await openListener({ host: '::1', port, ipv6Only: true }, socket => socket.destroy());
+      try { await assert.rejects(service.review(peer, home, request), /exact IPv4 loopback JDWP/); }
+      finally { await closeListener(competitor); }
+    }
     const old = await service.review(peer, home, { ...request, pid: stale.target.pid, port: stalePort });
+    if (linux) early = await service.open(peer, home, approve(old));
     await stale.leave();
-    await assert.rejects(service.open(peer, home, approve(old)), /did not confirm the reviewed JVM/);
+    if (linux) {
+      let connections = 0;
+      const replacement = await openListener({ host: '127.0.0.1', port: stalePort }, socket => { connections++; socket.destroy(); });
+      try {
+        assert.equal(await observeRejectedRelay(early.localPort), 0);
+        assert.equal(connections, 0);
+      } finally {
+        await early.close();
+        await closeListener(replacement);
+      }
+    } else await assert.rejects(service.open(peer, home, approve(old)), /did not confirm the reviewed JVM/);
     const changed = await service.review(peer, home, request);
     await fs.appendFile(local, '// deliberate source drift\n');
     await assert.rejects(service.open(peer, home, approve(changed)), /exact same Java source/);
     await fs.writeFile(local, fixture.source);
     const review = await service.review(peer, home, request);
     assert.equal(review.pid, target.target.pid);
+    assert.equal(review.platform, process.platform);
     assert.equal(review.debugPort, port);
     assert.equal(review.remoteFile, '/src/fixture/AttachFixture.java');
     await assert.rejects(service.open(peer, home, { token: review.token }), /Approve the current/);
@@ -207,15 +270,20 @@ test('actual Windows SSH JDWP verifies the remote JVM and established socket bef
     await forward.close();
     await assert.rejects(connectPort(forward.host, forward.localPort), { code: 'ECONNREFUSED' });
     assert.equal((await peer.stat('/src/fixture/AttachFixture.java')).kind, 'file');
-    const evidence = { realOpenSshClient: true, asyncssh: owned.asyncssh, verifiedOwnerBeforeAndAfterTcp: true,
+    const evidence = { sourceCommit: process.env.GITHUB_SHA ?? null, platform: process.platform, architecture: process.arch,
+      java: (await invoke(java, ['--version'], { timeout: 9000, windowsHide: true })).stdout.split(/\r?\n/u)[0],
+      realOpenSshClient: true, asyncssh: owned.asyncssh, verifiedOwnerBeforeAndAfterTcp: true,
       sourceBytesAndPackageRoot: true, breakpoint: fixture.line, localValue: 73, targetResumed: true,
       routeReleased: true, existingFileChannelPreserved: true, wrongHostRejected: true, wrongPidAndPlainRejected: true,
-      otherProjectRejected: true, exitedPidRejected: true, sourceDriftRejected: true, oneShot: true };
+      otherProjectRejected: true, exitedPidRejected: true, sourceDriftRejected: true, oneShot: true,
+      ...(linux && { procUidStartAndSocketInode: true, kernelCwdOverridesSpoofedJavaCwd: true,
+        ipv6CompetitorRejected: true, samePortReplacementNeverContacted: true }) };
     context.diagnostic(JSON.stringify(evidence));
     if (process.env.ROCKETBRAIN_SSH_DEBUG_TEST_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_SSH_DEBUG_TEST_RECEIPT,
       JSON.stringify(evidence, null, 2) + '\n');
   } finally {
     await forward?.close();
+    await early?.close();
     await Promise.all([target, plain, outsider, stale].map(child => child?.leave()));
     peer?.close();
   }

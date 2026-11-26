@@ -1,6 +1,7 @@
 'use strict';
 
 const { deflateSync } = require('node:zlib');
+const { ownership: linuxOwnership } = require('./ssh-java-debug-linux');
 
 const probeJava = String.raw`
 import com.sun.tools.attach.VirtualMachine;
@@ -12,8 +13,11 @@ class RocketbrainSshJvm {
         var process = ProcessHandle.of(pid).orElseThrow();
         var identity = process.info();
         var owner = ProcessHandle.current().info().user().orElseThrow();
-        if (!process.isAlive() || !owner.equalsIgnoreCase(identity.user().orElse("")) ||
-                !Path.of(identity.command().orElseThrow()).getFileName().toString().equalsIgnoreCase("java.exe")) {
+        var targetOwner = identity.user().orElse("");
+        var executable = Path.of(identity.command().orElseThrow()).getFileName().toString();
+        boolean windows = System.getProperty("os.name").startsWith("Windows");
+        if (!process.isAlive() || (windows ? !owner.equalsIgnoreCase(targetOwner) || !executable.equalsIgnoreCase("java.exe")
+                                           : !owner.equals(targetOwner) || !executable.equals("java"))) {
             throw new IllegalArgumentException("The reviewed process is not a Java JVM of this account");
         }
         var vm = VirtualMachine.attach(Long.toString(pid));
@@ -30,14 +34,14 @@ class RocketbrainSshJvm {
 }
 `;
 
-const debugSupervisor = String.raw`import ctypes, hashlib, json, os, pathlib, socket, struct, subprocess, sys, tempfile, threading
+const debugSupervisor = String.raw`import ctypes, hashlib, json, os, pathlib, socket, struct, subprocess, sys, tempfile, threading, time
 
 control = sys.stdin.buffer.readline(16385)
 if not control.endswith(b"\n") or len(control) > 16384:
     raise ValueError("The SSH debug request exceeded its input limit")
-mode, root_value, java_value, pid_value, port_value, expected, probe_source = json.loads(control)
-if sys.platform != "win32" or mode not in ("inspect", "relay"):
-    raise ValueError("Use a Windows SSH host for reviewed Java attach")
+mode, platform, root_value, java_value, pid_value, port_value, expected, probe_source = json.loads(control)
+if sys.platform not in ("win32", "linux") or platform != sys.platform or mode not in ("inspect", "relay"):
+    raise ValueError("Use a supported Windows or Linux SSH host for reviewed Java attach")
 if type(pid_value) is not int or not 1 <= pid_value <= 4294967295 or type(port_value) is not int or not 1 <= port_value <= 65535:
     raise ValueError("Choose an exact JVM process ID and debug port")
 pid, port = pid_value, port_value
@@ -51,7 +55,7 @@ def directory(value):
     return item
 
 root, java_home = directory(root_value), directory(java_value)
-java = java_home / "bin" / "java.exe"
+java = java_home / "bin" / ("java.exe" if platform == "win32" else "java")
 release = java_home / "release"
 if java.resolve(strict=True) != java or release.resolve(strict=True) != release:
     raise ValueError("Use a physical independent JDK")
@@ -67,12 +71,13 @@ def fingerprint():
     return digest.hexdigest()
 
 # Windows MIB_TCPROW_OWNER_PID and MIB_TCP6ROW_OWNER_PID have DWORD alignment.
-tcp_table = ctypes.WinDLL("iphlpapi").GetExtendedTcpTable
-kernel = ctypes.WinDLL("kernel32")
-kernel.OpenProcess.restype = ctypes.c_void_p
-kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-kernel.GetProcessTimes.argtypes = [ctypes.c_void_p] * 5
-loopback = int.from_bytes(socket.inet_aton("127.0.0.1"), "little")
+if platform == "win32":
+    tcp_table = ctypes.WinDLL("iphlpapi").GetExtendedTcpTable
+    kernel = ctypes.WinDLL("kernel32")
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel.GetProcessTimes.argtypes = [ctypes.c_void_p] * 5
+    loopback = int.from_bytes(socket.inet_aton("127.0.0.1"), "little")
 
 def rows(family, layout):
     size = ctypes.c_uint32(0)
@@ -101,7 +106,7 @@ def observed_start():
     finally:
         kernel.CloseHandle(process)
 
-def observe(local_client=None):
+def observe_windows(local_client=None):
     state = 2 if local_client is None else 5  # LISTEN, ESTABLISHED
     matched = []
     for status, address, local, remote, other, owner in rows(socket.AF_INET, struct.Struct("<6I")):
@@ -116,9 +121,16 @@ def observe(local_client=None):
         raise ValueError("The port does not belong to the reviewed IPv4 loopback JVM")
     return observed_start()
 
-started = observe()
+${linuxOwnership}
+observe = observe_windows if platform == "win32" else observe_linux
+listener = observe()
 runtime = fingerprint()
-if mode == "relay" and expected != {"jdkSha256": runtime, "startedAt": started}:
+proof = {"jdkSha256": runtime}
+if platform == "linux":
+    proof.update({"linuxStartTicks": listener[0], "linuxListenerInode": listener[1]})
+else:
+    proof["startedAt"] = listener
+if mode == "relay" and any(expected.get(key) != value for key, value in proof.items()):
     raise ValueError("The remote JVM or JDK changed after review")
 
 with tempfile.TemporaryDirectory(prefix="rb-ssh-jdwp-") as owned:
@@ -126,21 +138,26 @@ with tempfile.TemporaryDirectory(prefix="rb-ssh-jdwp-") as owned:
     source.write_text(probe_source, encoding="utf-8")
     result = subprocess.run([str(java), "--add-modules", "jdk.attach", str(source), str(pid), str(port), str(root)],
                             cwd=owned, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=14, check=True)
-    if int(result.stdout.strip()) != started or observe() != started or fingerprint() != runtime:
+    started = int(result.stdout.strip())
+    if started < 1 or platform == "win32" and started != listener or observe() != listener or fingerprint() != runtime:
         raise ValueError("The remote listener or JDK changed during verification")
+proof["startedAt"] = started
+if mode == "relay" and expected != proof:
+    raise ValueError("The given Java process start identity changed after review")
 
 if mode == "inspect":
-    print(json.dumps({"pid": pid, "port": port, "startedAt": started, "jdkSha256": runtime}), flush=True)
+    print(json.dumps({"pid": pid, "port": port, "platform": platform, **proof}), flush=True)
     sys.exit(0)
 
 sys.stdout.buffer.write(b"ROCKETBRAIN_JDWP_PREPARED\n")
 sys.stdout.buffer.flush()
 if os.read(sys.stdin.fileno(), 1) != b"1":
     sys.exit(0)
-if observe() != started:
+if observe() != listener:
     raise ValueError("The reviewed listener changed before opening the socket")
 with socket.create_connection(("127.0.0.1", port), timeout=4) as target:
-    if observe(target.getsockname()[1]) != started:
+    connected = observe(target.getsockname()[1])
+    if platform == "win32" and connected != listener or platform == "linux" and connected[0] != listener[0]:
         raise ValueError("The established socket is not owned by the reviewed remote JVM")
     target.settimeout(None)
     sys.stdout.buffer.write(b"ROCKETBRAIN_JDWP_READY\n")
@@ -172,8 +189,10 @@ const packedProgram = "import base64, zlib\nexec(zlib.decompress(base64.b64decod
   deflateSync(debugSupervisor).toString('base64') + "')))";
 
 function debugSupervisorInvocation(config, expected) {
-  return { program: packedProgram, argv: [expected ? 'relay' : 'inspect', config.root, config.javaHome,
-    config.pid, config.port, expected ? { jdkSha256: expected.jdkSha256, startedAt: expected.startedAt } : null, probeJava] };
+  const proof = expected && { jdkSha256: expected.jdkSha256, startedAt: expected.startedAt,
+    ...(config.platform === 'linux' && { linuxStartTicks: expected.linuxStartTicks, linuxListenerInode: expected.linuxListenerInode }) };
+  return { program: packedProgram, argv: [expected ? 'relay' : 'inspect', config.platform, config.root, config.javaHome,
+    config.pid, config.port, proof || null, probeJava] };
 }
 
 module.exports = { debugSupervisorInvocation };
