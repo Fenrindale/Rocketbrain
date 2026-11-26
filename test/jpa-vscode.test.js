@@ -25,7 +25,8 @@ function fakeWorkspace(catalog,options={}) {
       registerCompletionItemProvider: dispose, registerDefinitionProvider: dispose,registerHoverProvider:(selector,provider)=>{hoverProvider=provider;return dispose();}
     },
     workspace: {
-      isTrusted: true, textDocuments: [], findFiles: async pattern => pattern.includes('orm.xml')?options.mapping?[mappingUri]:[]:[uri],
+      isTrusted: true, textDocuments: [], findFiles: async pattern =>
+        pattern.includes('orm.xml')?(options.mapping?[mappingUri]:[]):(options.findJava?options.findJava(uri):[uri]),
       fs: { stat: async value => {if(value===mappingUri&&options.unreadableMapping)throw new Error('unreadable');return { size: Buffer.byteLength(value===mappingUri?options.mapping:source) };}, readFile: async value => Buffer.from(value===mappingUri?options.mapping:source) },
       getConfiguration: () => ({ get: (key, fallback) => key === 'physicalNaming' ? 'standard' : key==='namingStrategy'?options.namingStrategy||fallback:fallback }),
       onDidChangeTextDocument: changes.event, onDidCreateFiles: dispose, onDidDeleteFiles: dispose,
@@ -37,6 +38,26 @@ function fakeWorkspace(catalog,options={}) {
 }
 const metadata = { database: 'guard', tables: [{ name: 'guard_entity', columns: [{ name: 'id', type: 'bigint', primaryKey: true, nullable: false }] }], views: [] };
 async function reached(predicate) { for (let i = 0; i < 100; i++) { if (predicate()) return; await new Promise(resolve => setImmediate(resolve)); } throw new Error('Metadata callback did not start.'); }
+
+test('refresh waits for the replacement JPA index when an earlier search was invalidated', async t => {
+  const searches=[];
+  const {api,uri}=fakeWorkspace(async()=>metadata,{
+    findJava:()=>new Promise(resolve=>searches.push(resolve))
+  });
+  t.after(()=>api.dispose());
+  await reached(()=>searches.length===1);
+  let returned=false;
+  const refresh=api.refresh().then(model=>{returned=true;return model;});
+  searches[0]([]);
+  await reached(()=>searches.length===2);
+  try {
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(returned,false,'The caller must keep waiting while the refreshed source search runs.');
+  } finally { searches[1]([uri]); }
+  const model=await refresh;
+  assert.equal(model.sourceCoverage.files,1);
+  assert.equal(model.entities[0].fqn,'fixture.Guard');
+});
 
 test('JPA invalidation prevents a delayed database comparison from republishing stale diagnostics', async t => {
   let complete;

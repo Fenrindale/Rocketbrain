@@ -93,7 +93,7 @@ function registerJPAFeatures(context, vscode, { catalog, output } = {}) {
   }
   async function snapshot() {
     if (disposed) return model || analyzeJPA([]);
-    if (pending) { await pending; return dirty ? snapshot() : model; }
+    if (pending) { await pending; return snapshot(); }
     if (model && !dirty) return model;
     const before = revision; dirty = false;
     pending = (async () => {
