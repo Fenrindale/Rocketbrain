@@ -50,6 +50,8 @@ pnpm run package
 
 **Safe Delete**는 지원되는 비공개 생성자의 사용하지 않는 매개변수 이름에서도 실행할 수 있습니다. 선언과 직접 호출에서 해당 인자만 제거하는 편집을 검토합니다. Spring 주입 및 리플렉션 계약, 사용 중인 매개변수, 오버로드, 생성자 참조와 삭제하면 평가 동작이 달라지는 인자는 보호합니다.
 
+**Change Signature → Add Parameter and Keep Old Overload**는 지원되는 공개 정적 메서드에 리터럴 기본값이 있는 마지막 매개변수를 추가합니다. 프로젝트 안의 확인된 직접 호출은 새 서명을 사용하고, 기존 JVM 서명은 같은 클래스의 전달 오버로드로 유지됩니다. 선언과 호출 변경을 함께 검토할 수 있습니다.
+
 **Rename Java Package**는 패키지 디렉터리와 확인된 Java 참조를 한 번에 변경합니다. 단일 JPMS 모듈의 표준 주 소스에서는 `module-info.java`의 비한정 `exports`·`opens`, `uses`, `provides … with`를 같은 검토에서 확인할 수 있습니다. 모듈 이름과 공급자 순서는 유지되며, 이 경로는 `java.base`만 사용하는 일반 모듈을 지원합니다.
 
 **Review Public Java Type Rename**은 공개 Java 클래스의 파일 이름과 확인된 Java 참조를 함께 바꿉니다. 가져온 단일 Gradle JVM 프로젝트에서 Kotlin 편집기를 설정하면, Kotlin의 명시적 import·타입 지정·직접 생성자 호출도 같은 검토에 표시됩니다. 이 혼합 경로는 명시적 공개 생성자 하나가 있는 비제네릭 클래스를 지원하며, Java와 Kotlin의 변경 전후 바인딩을 확인합니다.
