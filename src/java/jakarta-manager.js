@@ -11,6 +11,7 @@ const { pipeline } = require('node:stream/promises');
 const { fail, cancelled, local } = require('./workbench-model');
 const { contextPattern, MAX_WAR_BYTES } = require('./jakarta-war');
 const { hashArchive } = require('./jakarta-tomcat');
+const { createManagerHistory, contextRows, listedVersion, publicVersion, managedActions } = require('./jakarta-manager-history');
 
 const MAX_RESPONSE = 256 * 1024;
 const MAX_CA = 128 * 1024;
@@ -75,9 +76,10 @@ async function authority(caFile) {
   return { ca, caSha256: sha256(bytes), caFile: file };
 }
 
-function managerRequest({ origin, authorization, ca, pin, command, context, archive, update, signal }) {
+function managerRequest({ origin, authorization, ca, pin, command, context, version, archive, update, signal }) {
   const url = new URL('/manager/text/' + command, origin);
   if (context) url.searchParams.set('path', context);
+  if (version) url.searchParams.set('version', version);
   if (update) url.searchParams.set('update', 'true');
   const headers = { Authorization: authorization, Accept: 'text/plain', 'Accept-Language': 'en' };
   if (archive) Object.assign(headers, { 'Content-Type': 'application/octet-stream', 'Content-Length': archive.size });
@@ -134,10 +136,13 @@ function parseList(text) {
   return items;
 }
 
-const visibleApp = ({ context, state, sessions }) => ({ context, state, sessions });
+function visibleApp(item) {
+  const { context, state, sessions } = item, version = publicVersion(item);
+  return { context, state, sessions, ...(version && { version }) };
+}
 function appAt(list, context) {
-  const choices = list.filter(item => item.context === context || item.context.startsWith(context + '##'));
-  if (choices.length > 1 || choices.length && choices[0].context !== context) {
+  const choices = contextRows(list, context);
+  if (choices.length > 1 || choices.length && (choices[0].context !== context || listedVersion(choices[0]) !== undefined)) {
     throw fail('This context uses multiple or parallel deployments. Choose one ordinary context.');
   }
   return choices[0];
@@ -152,23 +157,31 @@ async function withStagedWar(artifact, digest, work) {
   const parent = await fsp.realpath(os.tmpdir());
   const directory = await fsp.mkdtemp(path.join(parent, 'rb-manager-war-'));
   const identity = await fsp.lstat(directory, { bigint: true });
-  try {
-    const file = path.join(directory, 'reviewed.war');
-    await hashArchive(artifact, { expectedSha256: digest, destination: file });
-    return await work({ file, size: artifact.size });
-  } finally {
+  const release = async () => {
     const current = await fsp.realpath(directory), stat = await fsp.lstat(current, { bigint: true });
     if (!samePath(current, directory) || !samePath(path.dirname(current), parent) ||
         !path.basename(current).startsWith('rb-manager-war-') || stat.dev !== identity.dev || stat.ino !== identity.ino) {
       throw fail('The owned Manager upload directory changed before cleanup.');
     }
     await fsp.rm(current, { recursive: true, force: true, maxRetries: 6, retryDelay: 150 });
+  };
+  let retained = false;
+  try {
+    const file = path.join(directory, 'reviewed.war');
+    await hashArchive(artifact, { expectedSha256: digest, destination: file });
+    return await work({ file, size: artifact.size }, () => {
+      retained = true;
+      return { artifact: { file, size: artifact.size, name: artifact.name }, release };
+    });
+  } finally {
+    if (!retained) await release();
   }
 }
 
 function createTomcatManager() {
-  let disposed = false, mutating = false;
+  let disposed = false, mutating, closing;
   const plans = new Map(), attempts = new Set();
+  const history = createManagerHistory();
   function approved(allowed, cancellation) {
     if (disposed || allowed !== true) throw fail('Explicitly approve access to the selected Tomcat Manager endpoint.');
     if (cancelled(cancellation)) throw fail('The Tomcat Manager operation was cancelled.');
@@ -190,7 +203,9 @@ function createTomcatManager() {
 
   async function list(settings, signal, pin) {
     const result = await managerRequest({ ...settings, command: 'list', signal, pin });
-    return { fingerprint: result.fingerprint, applications: parseList(result.text) };
+    const applications = parseList(result.text);
+    const virtualHost = result.text.split(/\r?\n/u, 1)[0].slice('OK - Listed applications for virtual host ['.length, -1);
+    return { fingerprint: result.fingerprint, virtualHost, applications };
   }
 
   async function observe({ origin, username, password, caFile, allowManagerAccess, cancellation } = {}) {
@@ -202,27 +217,41 @@ function createTomcatManager() {
 
   async function review({ origin, username, password, caFile, action, context, artifact, allowManagerAccess, cancellation } = {}) {
     approved(allowManagerAccess, cancellation);
-    if (!['deploy', 'update', 'undeploy'].includes(action)) throw fail('Choose deploy, update or undeploy for one Tomcat context.');
-    if (action !== 'undeploy' && (!artifact?.file || !Number.isSafeInteger(artifact.size) || artifact.size > MAX_WAR_BYTES)) {
+    const managed = managedActions.has(action);
+    if (!managed && !['deploy', 'update', 'undeploy'].includes(action)) throw fail('Choose one supported Tomcat Manager action.');
+    if (action !== 'undeploy' && action !== 'restore' &&
+        (!artifact?.file || !Number.isSafeInteger(artifact.size) || artifact.size < 4 || artifact.size > MAX_WAR_BYTES)) {
       throw fail('Select the Maven WAR artifact to review.');
     }
     const target = managerContext(context), endpoint = managerOrigin(origin), auth = credentials(username, password);
     const verified = await authority(caFile);
     const observed = await attempt(cancellation, signal => list({ origin: endpoint, authorization: auth, ca: verified.ca }, signal));
-    const baseline = appAt(observed.applications, target);
-    if (action === 'deploy' ? baseline : !baseline) {
+    const tracked = managed && history.inspect({ action, origin: endpoint, context: target, username,
+      certificateSha256: observed.fingerprint, caSha256: verified.caSha256, virtualHost: observed.virtualHost }, observed.applications);
+    const baseline = managed ? undefined : appAt(observed.applications, target);
+    if (!managed && (action === 'deploy' ? baseline : !baseline)) {
       throw fail(action === 'deploy' ? 'This context already exists. Review an update explicitly.' : 'The selected context is no longer listed.');
     }
-    const sourceArtifact = action === 'undeploy' ? undefined : artifact;
-    const uploadedSha256 = sourceArtifact && await hashArchive(sourceArtifact);
+    const current = baseline || (tracked?.current && observed.applications.find(item =>
+      item.context === target && item.location === tracked.current.location));
+    const sourceArtifact = action === 'restore' ? tracked.previous.artifact : action === 'undeploy' ? undefined : artifact;
+    if (tracked?.current) await hashArchive(tracked.current.artifact, { expectedSha256: tracked.current.sha256 });
+    if (tracked && action !== 'restore') history.verifyCapacity(sourceArtifact.size);
+    const uploadedSha256 = sourceArtifact && await hashArchive(sourceArtifact, { expectedSha256: tracked?.previous?.sha256 });
+    if (action === 'track-update' && uploadedSha256 === tracked.current.sha256) {
+      throw fail('Select a WAR with different bytes from the latest tracked deployment.');
+    }
     approved(allowManagerAccess, cancellation);
     const plan = { id: randomUUID(), origin: endpoint, context: target, action,
       certificateSha256: observed.fingerprint, expiresAt: Date.now() + PLAN_MS,
-      application: baseline && visibleApp(baseline), ...(sourceArtifact && { artifact: sourceArtifact.name, uploadedSha256 }) };
+      application: current && visibleApp(current), ...(sourceArtifact && { artifact: sourceArtifact.name, uploadedSha256 }),
+      ...(tracked && { nextRevision: tracked.nextRevision, retainedVersions: tracked.revisions.map(revision => revision.version),
+        ...(tracked.current && { currentVersion: tracked.current.version, currentSha256: tracked.current.sha256 }),
+        ...(tracked.previous && { restoreFromVersion: tracked.previous.version }) }) };
     for (const [id, entry] of plans) if (Date.now() >= entry.plan.expiresAt) plans.delete(id);
     if (plans.size >= 8) plans.delete(plans.keys().next().value);
     plans.set(plan.id, { plan, username, caFile: verified.caFile, caSha256: verified.caSha256,
-      baseline: targetIdentity(baseline), artifact: sourceArtifact && { ...sourceArtifact } });
+      baseline: targetIdentity(baseline), artifact: sourceArtifact && { ...sourceArtifact }, tracked });
     return structuredClone(plan);
   }
 
@@ -234,45 +263,66 @@ function createTomcatManager() {
     }
     if (mutating) throw fail('Wait for the current Tomcat Manager operation to finish.');
     const authorization = credentials(username, password);
-    const { plan } = entry, { origin, certificateSha256: pin, action, context, uploadedSha256 } = plan;
+    const { plan, tracked } = entry, { origin, certificateSha256: pin, action, context, uploadedSha256 } = plan;
     plans.delete(reviewId);
-    mutating = true;
+    let finished;
+    mutating = new Promise(resolve => { finished = resolve; });
     try {
       const { ca, caSha256 } = await authority(entry.caFile);
       if (caSha256 !== entry.caSha256) throw fail('The reviewed Tomcat certificate authority changed.');
       const settings = { origin, authorization, ca };
-      return await attempt(cancellation, signal => withStagedWar(entry.artifact, uploadedSha256, async archive => {
+      return await attempt(cancellation, signal => withStagedWar(entry.artifact, uploadedSha256, async (archive, retain) => {
+        if (tracked?.current) await hashArchive(tracked.current.artifact, { expectedSha256: tracked.current.sha256 });
+        if (tracked && action !== 'restore') history.verifyCapacity(archive.size);
         const before = await list(settings, signal, pin);
-        if (entry.baseline !== targetIdentity(appAt(before.applications, context))) {
+        if (tracked) history.beforeUpload(tracked, before);
+        else if (entry.baseline !== targetIdentity(appAt(before.applications, context))) {
           throw fail('The reviewed application state changed. Review the Tomcat context again.');
         }
         approved(allowExecute, signal);
         if (Date.now() >= plan.expiresAt) throw fail('The Tomcat deployment review expired before execution.');
-        const receipt = { origin, action, context, ...(uploadedSha256 && { uploadedSha256 }) };
+        // The server checks listed contexts, so allocate a fresh doc base only at upload.
+        const version = tracked && 'rb' + String(tracked.nextRevision).padStart(3, '0') + '-' + randomUUID().replaceAll('-', '');
+        const receipt = { origin, action, context, ...(uploadedSha256 && { uploadedSha256 }), ...(version && { version }) };
+        const unconfirmed = reason => {
+          if (tracked) history.invalidate(tracked);
+          return { ...receipt, state: 'unconfirmed', reason };
+        };
         try {
           const command = action === 'undeploy' ? 'undeploy' : 'deploy';
-          const result = await managerRequest({ ...settings, signal, pin, command, context, archive, update: action === 'update' });
+          const result = await managerRequest({ ...settings, signal, pin, command, context, version, archive, update: action === 'update' });
           const verb = command === 'deploy' ? 'Deployed' : 'Undeployed';
-          if (result.text.trimEnd() !== `OK - ${verb} application at context path [${context}]`) {
-            return { ...receipt, state: 'unconfirmed', reason: 'manager-response' };
+          const displayPath = version ? context + '##' + version : context;
+          if (result.text.trimEnd() !== `OK - ${verb} application at context path [${displayPath}]`) {
+            return unconfirmed('manager-response');
           }
           const after = await list(settings, signal, pin);
+          if (tracked) {
+            const found = history.confirm(tracked, version, after, uploadedSha256, action === 'restore' ? undefined : retain);
+            if (!found) {
+              return unconfirmed('application-state');
+            }
+            return { ...receipt, state: 'confirmed', application: visibleApp(found) };
+          }
           const found = appAt(after.applications, context);
           if (action === 'undeploy' ? found : found?.state !== 'running') {
-            return { ...receipt, state: 'unconfirmed', reason: 'application-state' };
+            return unconfirmed('application-state');
           }
           return { ...receipt, state: 'confirmed', ...(found && { application: visibleApp(found) }) };
         } catch {
-          return { ...receipt, state: 'unconfirmed', reason: 'response-lost-or-unverifiable' };
+          return unconfirmed('response-lost-or-unverifiable');
         }
       }));
-    } finally { mutating = false; }
+    } finally { mutating = undefined; finished(); }
   }
 
   return { observe, review, execute, dispose() {
+    if (closing) return closing;
     disposed = true;
     plans.clear();
     for (const attempt of attempts) attempt.abort();
+    closing = Promise.resolve(mutating).then(() => history.dispose());
+    return closing;
   } };
 }
 

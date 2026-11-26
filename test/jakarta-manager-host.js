@@ -9,7 +9,7 @@ const { createHash } = require('node:crypto');
 const { registerJakartaWorkbench } = require('../src/java/jakarta-vscode');
 const { buildSpec } = require('../src/java/workbench-tasks');
 const { execute } = require('../src/java/testing/provision');
-const { startOwnedManager, applicationResponse } = require('./helpers/jakarta-manager-fixture');
+const { startOwnedManager, applicationResponse, publishExternalFixtureWar } = require('./helpers/jakarta-manager-fixture');
 const { importedSpring, jdbcReadback } = require('./java-source-analysis-host');
 
 const fixture = path.join(__dirname, 'fixtures/java/jakarta-war');
@@ -52,6 +52,7 @@ async function modulesAt(root) {
             var readable = new String(body.readNBytes(1025), java.nio.charset.StandardCharsets.UTF_8).replaceAll("\\s+", "");
             if (readable.length() >= 1025 || !readable.contains("\"people\":2")) { response.sendError(503); return; }
         } finally { connection.disconnect(); }
+        if ("1".equals(request.getParameter("ownedSession"))) request.getSession().setAttribute("ownedFixture", Boolean.TRUE);
 `;
     await fs.writeFile(source, original.replace(start, jdbc + start).replace('jakarta-servlet:', 'manager-' + name + ':')
       .replace('getServletContext().getMajorVersion()', '"people=2"'));
@@ -70,6 +71,87 @@ async function modulesAt(root) {
 async function expectApp(server, context, name) {
   assert.equal(await applicationResponse(server, context, '/ping'), 'manager-' + name + ':' + context + ':people=2');
   assert.equal(await applicationResponse(server, context, '/page.jsp'), 'manager-' + name + '-jsp:' + context);
+}
+
+async function exerciseRestore(server, { observe, exec, review, archives }) {
+  const context = '/rb-tracked', source = archives.get('first'), updatedSource = archives.get('update');
+  const file = fileURLToPath(source.warUri), bytes = await fs.readFile(file);
+  const updated = await fs.readFile(fileURLToPath(updatedSource.warUri));
+  const digest = data => createHash('sha256').update(data).digest('hex');
+  await assert.rejects(review('restore', '/rb-peer'), /context tracked by this Tomcat Manager session/u);
+  await assert.rejects(review('track-deploy', '/rb-peer', source), /empty Tomcat context/u);
+  const firstPlan = await review('track-deploy', context, source);
+  assert.equal(firstPlan.nextRevision, 1);
+  assert.equal(firstPlan.version, undefined);
+  const first = await exec(firstPlan);
+  assert.match(first.version, /^rb001-[a-f0-9]{32}$/u);
+  assert.equal(first.uploadedSha256, digest(bytes));
+  assert.equal(first.state, 'confirmed');
+  await expectApp(server, context, 'first');
+  await assert.rejects(review('restore', context), /second tracked WAR/u);
+  await assert.rejects(review('update', context, source), /parallel deployments/u);
+  await assert.rejects(review('track-update', context, source), /different bytes/u);
+
+  // A normal Maven rebuild can replace the same target WAR path. The retained
+  // archive must still be the exact deployed bytes, independent of that path.
+  try {
+    await fs.writeFile(file, updated);
+    const stale = await review('track-update', context, source);
+    await fs.writeFile(file, bytes);
+    await assert.rejects(exec(stale), /WAR artifact changed/u);
+    await assert.rejects(exec(stale), /Review the current/u);
+    await fs.writeFile(file, updated);
+    const updatePlan = await review('track-update', context, source);
+    assert.equal(updatePlan.nextRevision, 2);
+    assert.equal(updatePlan.currentVersion, first.version);
+    assert.equal(updatePlan.currentSha256, digest(bytes));
+    assert.equal(updatePlan.uploadedSha256, digest(updated));
+    const update = await exec(updatePlan);
+    assert.equal(update.state, 'confirmed');
+    await expectApp(server, context, 'update');
+    const oldSession = await applicationResponse(server, context, '/ping?ownedSession=1', 200, { captureSession: true });
+    assert.equal(oldSession.body, 'manager-update:' + context + ':people=2');
+    assert.match(oldSession.cookie, /^JSESSIONID=[A-Fa-f\d.]+$/u);
+
+    const restore = await review('restore', context);
+    assert.equal(restore.nextRevision, 3);
+    assert.equal(restore.version, undefined);
+    assert.deepEqual(restore.retainedVersions, [first.version, update.version]);
+    assert.equal(restore.restoreFromVersion, first.version);
+    assert.equal(restore.currentVersion, update.version);
+    assert.equal(restore.application.version, update.version);
+    assert.ok(restore.application.sessions >= 1);
+    assert.equal(restore.currentSha256, digest(updated));
+    assert.equal(restore.uploadedSha256, digest(bytes));
+    await assert.rejects(exec(restore, false), /Explicitly approve/u);
+    const restored = await exec(restore);
+    assert.equal(restored.state, 'confirmed');
+    assert.match(restored.version, /^rb003-[a-f0-9]{32}$/u);
+    assert.equal(restored.application.version, restored.version);
+    assert.equal(restored.uploadedSha256, digest(bytes));
+    await assert.rejects(exec(restore), /Review the current/u);
+    await expectApp(server, context, 'first');
+    assert.equal(await applicationResponse(server, context, '/ping', 200, { cookie: oldSession.cookie }), oldSession.body);
+    const listed = (await observe()).applications.filter(item => item.context === context);
+    assert.deepEqual(listed.map(item => item.version).sort(), [first.version, update.version, restored.version]);
+    assert.ok(listed.find(item => item.version === update.version).sessions >= 1);
+
+    const obsolete = await review('restore', context);
+    assert.equal(obsolete.nextRevision, 4);
+    await publishExternalFixtureWar(server, context, file);
+    await assert.rejects(exec(obsolete), /reviewed live Tomcat versions changed/u);
+    await assert.rejects(exec(obsolete), /Review the current/u);
+    await assert.rejects(review('restore', context), /live Tomcat versions no longer match/u);
+    const after = (await observe()).applications.filter(item => item.context === context);
+    assert.equal(after.length, 4);
+    assert.ok(after.every(item => !item.version?.startsWith('rb004-')));
+    await expectApp(server, context, 'update');
+    await expectApp(server, '/rb-peer', 'peer');
+    return { originalSha256: first.uploadedSha256, currentSha256: update.uploadedSha256,
+      restoredSha256: restored.uploadedSha256, versionsBeforeRestore: 2, versionsAfterRestore: 3,
+      sameSourcePathRebuilt: true, currentBytesRetained: true, freshSessionRestored: true, existingSessionPreserved: true,
+      exactLocalReviewedUpload: true, replayRefused: true, foreignVersionAndOrdinaryContextRefused: true, staleWarRefused: true };
+  } finally { await fs.writeFile(file, bytes); }
 }
 
 async function exercise(api, modules, server) {
@@ -148,6 +230,8 @@ async function exercise(api, modules, server) {
   await assert.rejects(exec(unsafeChange), /Review the current/u);
   await expectApp(server, '/rb-peer', 'peer');
   assert.deepEqual(await jdbcReadback(), jdbc);
+  const trackedRestore = await exerciseRestore(server, { observe, exec, review, archives });
+  assert.deepEqual(await jdbcReadback(), jdbc);
   for (const message of [initial, listed, first, deployed, update, updated, removed, unconfirmed]) {
     const forbidden = [server.password, 'Basic ' + Buffer.from(input.username + ':' + input.password).toString('base64')];
     assert.ok(forbidden.every(secret => !JSON.stringify(message).includes(secret)));
@@ -156,7 +240,7 @@ async function exercise(api, modules, server) {
     verifiedTls: true, unknownCaAndNameRejected: true, badCredentialRejected: true, privateCredentials: true,
     reviewedDeployUpdateUndeploy: true, unequalUploadSha256: true, staleArtifactTrustAndTargetRejected: true,
     replayRejected: true, incompleteVendorResultUnconfirmed: true, peerPreserved: true,
-    servletJspAndSpringJdbc: true, jdbc };
+    servletJspAndSpringJdbc: true, trackedRestore, jdbc };
 }
 
 async function withManager(tools, action) {
@@ -194,6 +278,7 @@ async function runJakartaManagerChecks(api, vscode, checks) {
       }
       const result = await withManager({ javaHome, tomcatHome }, server => exercise(service, modules, server));
       checks.push('The installed Jakarta workbench used the stock Tomcat Manager over verified TLS to deploy, update and undeploy reviewed WARs while the peer continued serving Spring JDBC rows.');
+      checks.push('The Manager restored exact retained WAR bytes as a new parallel version, preserving a previous session and rejecting an externally published version.');
       return { ...result, nativeView: true };
     } finally {
       if (imports.length) await api.java.executeWorkspaceCommand('java.project.changeImportedProjects', [], [], imports);

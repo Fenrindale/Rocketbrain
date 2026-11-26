@@ -2,6 +2,7 @@
 
 const { createTomcatManager, managerOrigin, managerContext } = require('./jakarta-manager');
 const { fail } = require('./workbench-model');
+const artifactActions = new Set(['deploy', 'update', 'track-deploy', 'track-update']);
 
 function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, listWarArtifacts, resolveArtifact, output }) {
   const manager = createTomcatManager();
@@ -9,7 +10,7 @@ function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, 
   async function review(options = {}) {
     trusted(options.cancellation);
     if (options.allowManagerAccess !== true) throw fail('Explicitly approve access to the selected Tomcat Manager endpoint.');
-    const artifact = ['deploy', 'update'].includes(options.action) &&
+    const artifact = artifactActions.has(options.action) &&
       await resolveArtifact(options.projectUri, options.warUri, options.cancellation);
     trusted(options.cancellation);
     return manager.review({ ...options, artifact });
@@ -33,7 +34,10 @@ function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, 
       { label: 'List Remote Applications', action: 'list' },
       { label: 'Deploy a Maven WAR', action: 'deploy' },
       { label: 'Update a Deployed Context', action: 'update' },
-      { label: 'Undeploy a Context', action: 'undeploy' }
+      { label: 'Undeploy a Context', action: 'undeploy' },
+      { label: 'Start Tracking a WAR Deployment', action: 'track-deploy', approve: 'Deploy Tracked WAR' },
+      { label: 'Publish a Tracked WAR Revision', action: 'track-update', approve: 'Publish Revision' },
+      { label: 'Restore the Previous Tracked WAR', action: 'restore', approve: 'Restore Previous WAR' }
     ], { title: 'Tomcat Manager' });
     if (!choice) return;
     const origin = await vscode.window.showInputBox({ title: 'Approved Tomcat HTTPS Origin',
@@ -61,13 +65,14 @@ function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, 
     const { action } = choice;
     if (action === 'list') {
       const found = await withProgress('List Tomcat Applications', cancellation => observe({ ...settings, cancellation }));
-      await vscode.window.showQuickPick(found.applications.map(({ context, state, sessions }) => (
-        { label: context, description: state, detail: sessions + ' active sessions' })), { title: 'Remote Tomcat Applications' });
+      await vscode.window.showQuickPick(found.applications.map(({ context, state, sessions, version }) => (
+        { label: context, description: version || state, detail: state + ' · ' + sessions + ' active sessions' })),
+        { title: 'Remote Tomcat Applications' });
       return found;
     }
 
     let target = {};
-    if (action !== 'undeploy') {
+    if (artifactActions.has(action)) {
       const project = await chooseProject();
       if (!project) return;
       const files = listWarArtifacts(project);
@@ -88,12 +93,23 @@ function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, 
     if (plan.application) details.push(plan.application.state + ' · ' + plan.application.sessions + ' active sessions at review');
     if (action === 'update') details.push('Tomcat removes the current deployment before installing the WAR. A failed update can leave the app unavailable.');
     if (action === 'undeploy') details.push('Tomcat removes the application and its deployment files from this server.');
+    if (plan.nextRevision) {
+      details.push('New Tomcat revision ' + plan.nextRevision);
+      if (plan.currentVersion) details.push('Current tracked version ' + plan.currentVersion, 'Current retained WAR SHA-256 ' + plan.currentSha256);
+      if (plan.restoreFromVersion) details.push('Restore from ' + plan.restoreFromVersion);
+      details.push('New sessions use the latest parallel deployment. Existing sessions may continue on their original versions.',
+        'Restore history and archived WAR files belong to this extension session. Tomcat Manager reports versions and running state.');
+    }
+    const approve = choice.approve || 'Apply Change';
+    const verb = choice.approve ? choice.approve + ' for' : action[0].toUpperCase() + action.slice(1);
     const proceed = await vscode.window.showWarningMessage(
-      `${action[0].toUpperCase() + action.slice(1)} ${plan.context} on the selected Tomcat?`, { modal: true, detail: details.join('\n') }, 'Apply Change');
-    if (proceed !== 'Apply Change') return;
+      `${verb} ${plan.context} on the selected Tomcat?`, { modal: true, detail: details.join('\n') }, approve);
+    if (proceed !== approve) return;
     const receipt = await withProgress('Apply Tomcat Manager Change', cancellation =>
       execute({ reviewId: plan.id, username, password, allowExecute: true, cancellation }));
-    if (receipt.state === 'confirmed') void vscode.window.showInformationMessage(`Tomcat confirmed ${receipt.action} for ${receipt.context}.`);
+    if (receipt.state === 'confirmed') void vscode.window.showInformationMessage(receipt.version
+      ? `Tomcat confirmed ${receipt.context} version ${receipt.version}.`
+      : `Tomcat confirmed ${receipt.action} for ${receipt.context}.`);
     else void vscode.window.showWarningMessage(
       'Tomcat did not confirm the application change. Refresh the application list and check the server before attempting another change.');
     return receipt;

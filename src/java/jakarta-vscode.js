@@ -366,9 +366,14 @@ function registerJakartaWorkbench(vscode,java) {
     getState:backend.getState,dispose() {
       if (closing) return closing;
       disposed=true;
-      remote.dispose();
+      const remoteStopped=remote.dispose();
       closing=(async () => {
-        try {await Promise.all([stop(),wildfly.dispose()]);await backend.dispose();}
+        try {
+          const results=await Promise.allSettled([stop(),wildfly.dispose(),remoteStopped]);
+          await backend.dispose();
+          const failure=results.find(result=>result.status==='rejected');
+          if(failure)throw failure.reason;
+        }
         finally {await Promise.allSettled(jobs);for (const item of subscriptions) item.dispose();}
       })();
       return closing;

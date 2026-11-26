@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { managerOrigin, managerContext, parseList, createTomcatManager } = require('../src/java/jakarta-manager');
+const { createManagerHistory } = require('../src/java/jakarta-manager-history');
 
 test('Manager targets one explicit HTTPS origin and one ordinary application context', () => {
   assert.equal(managerOrigin('https://example.test:8443/'), 'https://example.test:8443');
@@ -33,5 +34,36 @@ test('Manager refuses unapproved access and cancelled execution before contactin
     await assert.rejects(service.execute({ reviewId: 'arbitrary', allowExecute: true, cancellation: AbortSignal.abort() }),
       /operation was cancelled/u);
     await assert.rejects(service.execute({ reviewId: 'arbitrary', allowExecute: true }), /Review the current/u);
-  } finally { service.dispose(); }
+  } finally { await service.dispose(); }
+});
+
+test('tracked history binds live doc bases, host, account and local archive owners', async () => {
+  const history = createManagerHistory(), context = '/orders';
+  const input = { action: 'track-deploy', origin: 'https://example.test', context, username: 'operator',
+    certificateSha256: 'certificate', caSha256: 'authority', virtualHost: 'localhost' };
+  const observed = { virtualHost: 'localhost', applications: [] };
+  const first = history.inspect(input, observed.applications);
+  const version = 'rb001-' + 'a'.repeat(32), nextVersion = 'rb002-' + 'b'.repeat(32);
+  const row = { context, state: 'running', sessions: 0, location: 'orders##' + version };
+  const secondObservation = { ...observed, applications: [row] };
+  let released = 0;
+  try {
+    history.beforeUpload(first, observed);
+    assert.equal(history.confirm(first, version, secondObservation, 'digest',
+      () => ({ artifact: { name: 'orders.war', size: 64 }, release: async () => { released++; } })), row);
+    assert.throws(() => history.beforeUpload(first, observed), /live Tomcat versions changed/u);
+    const update = history.inspect({ ...input, action: 'track-update' }, secondObservation.applications);
+    assert.equal(update.current.sha256, 'digest');
+    assert.equal(update.current.location, row.location);
+    assert.throws(() => history.inspect({ ...input, action: 'track-update', username: 'other' }, [row]),
+      /same endpoint, account and certificate/u);
+    assert.throws(() => history.beforeUpload(update, { ...secondObservation, virtualHost: 'other' }), /live Tomcat versions changed/u);
+    assert.throws(() => history.beforeUpload(update, { ...observed, applications: [{ ...row, location: row.location + '.war' }] }),
+      /live Tomcat versions changed/u);
+    history.beforeUpload(update, { ...observed, applications: [{ ...row, sessions: 3 }] });
+    assert.equal(history.confirm(update, nextVersion, secondObservation, 'other digest', () => assert.fail('premature retention')), undefined);
+    history.invalidate(update);
+    assert.throws(() => history.inspect({ ...input, action: 'restore' }, [row]), /context tracked by this Tomcat Manager session/u);
+  } finally { await history.dispose(); }
+  assert.equal(released, 1);
 });
