@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { jdbcReadback } = require('./java-source-analysis-host');
+const { manifestPath } = require('./helpers/kotlin-native-fixture-cleanup');
 
 exports.run = async (vscode = require('vscode')) => {
   const extension=vscode.extensions.getExtension('rocketbrain-local.rocketbrain');
@@ -13,13 +14,18 @@ exports.run = async (vscode = require('vscode')) => {
   const prefix=process.env.ROCKETBRAIN_TEST_REPORT_PREFIX || 'v0.134';
   assert.match(prefix,/^v0\.134(?:-[a-z0-9-]+)?$/);
   const log=path.resolve(__dirname,'../test-output',`${prefix}-native-${engine}-progress.jsonl`);
+  const fixtureManifest=manifestPath(path.resolve(__dirname,'..'),prefix,engine);
   const mark=(group,state,details={})=>fs.appendFileSync(log,JSON.stringify({group,state,time:new Date().toISOString(),...details})+'\n');
   const api=await extension.activate();
   const checks=[],details={},failures=[];
   const groups={
     schemaPreparedJoin:()=>require('./schema-prepared-join-host').runPreparedJoinChecks(api,vscode,checks),
     schemaPreparedCte:()=>require('./schema-prepared-cte-host').runPreparedCteChecks(api,vscode,checks),
-    kotlinObjectFields:()=>require('./kotlin-watch-expressions-host').runKotlinObjectFieldChecks(api,vscode,checks),
+    kotlinObjectFields:()=>{
+      assert.equal(process.env.ROCKETBRAIN_V134_KOTLIN_FIXTURE_POST_EXIT_CLEANUP,fixtureManifest,
+        'The native runner must register post-exit Kotlin fixture cleanup.');
+      return require('./kotlin-watch-expressions-host').runKotlinObjectFieldChecks(api,vscode,checks,{cleanupManifest:fixtureManifest});
+    },
     kotlinMavenEditor:()=>require('./kotlin-maven-editor-host').runKotlinMavenEditorChecks(api,vscode,checks),
     kotlinMavenReactor:()=>require('./kotlin-maven-reactor-host').runKotlinMavenReactorChecks(api,vscode,checks),
     springParentAuth:()=>require('./spring-parent-authentication-host').runSpringParentAuthenticationChecks(api,vscode,checks),
