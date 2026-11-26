@@ -101,7 +101,7 @@ async function runHeadless(version) {
 async function runScalaDebugChecks(api,vscode,checks,version=scala2) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const config = vscode.workspace.getConfiguration('rocketbrain.scala');
-  const target = vscode.ConfigurationTarget.Workspace;
+  const target = vscode.ConfigurationTarget.Global;
   const changes = [];
   let breakpoint,tracker;
   const service = api.java.scala;
@@ -109,7 +109,7 @@ async function runScalaDebugChecks(api,vscode,checks,version=scala2) {
     for (const [key,value] of Object.entries({sbtLauncher:process.env.ROCKETBRAIN_SBT_LAUNCHER,
       cacheDirectory:process.env.ROCKETBRAIN_SBT_CACHE,repositoryConfig:process.env.ROCKETBRAIN_SBT_REPOSITORIES})) {
       if (!value) continue;
-      changes.push([key,config.inspect(key)?.workspaceValue]);
+      changes.push([key,config.inspect(key)?.globalValue]);
       await config.update(key,value,target);
     }
     return await ownedFixture(workspace,version,async(root,source,line)=>{
