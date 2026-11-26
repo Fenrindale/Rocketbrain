@@ -8,6 +8,38 @@ const { relationshipOptions, projectGrounding, allowedColumn, prepareGroundedReq
 const section = 'rocketbrain.localSqlAssistant';
 const commandId = section + '.grounded';
 
+async function pickGroundedSqlRoute(vscode, catalog) {
+  const edges = relationshipOptions(catalog);
+  const roots = [...new Set(edges.flatMap(edge => [edge.table, edge.parent]))].sort();
+  if (!roots.length) throw Error('No visible in-schema InnoDB foreign-key joins are available.');
+  const root = await vscode.window.showQuickPick(roots, { title: 'Start a Grounded SQL Query', placeHolder: 'Choose the first table' });
+  if (!root) return;
+  const names = new Set([root]);
+  const edgeIds = [];
+  while (names.size < 4) {
+    const options = edges.filter(edge => names.has(edge.table) !== names.has(edge.parent)).map(edge => ({
+      label: `${edge.table} → ${edge.parent}`, description: edge.name,
+      detail: edge.pairs.map(([from, to]) => `${from} = ${to}`).join(' AND '), edge }));
+    if (edgeIds.length) options.unshift({ label: 'Choose Columns', detail: `Use the selected ${names.size} tables` });
+    const choice = await vscode.window.showQuickPick(options, { title: 'Choose the Next Foreign-Key Join', ignoreFocusOut: true });
+    if (!choice) return;
+    if (!choice.edge) break;
+    const { id, table, parent } = choice.edge;
+    edgeIds.push(id);
+    names.add(names.has(table) ? parent : table);
+  }
+  const selections = [];
+  for (const table of names) {
+    const columns = catalog.tables.find(item => item.name === table).columns;
+    const selected = await vscode.window.showQuickPick(columns.filter(column => allowedColumn({ columns }, column.name))
+      .map(column => ({ label: column.name, description: column.type })),
+    { title: 'Share Selected Columns from ' + table, canPickMany: true, ignoreFocusOut: true });
+    if (!selected?.length) return;
+    selections.push({ table, columns: selected.map(column => column.label) });
+  }
+  return { root, edgeIds, selections };
+}
+
 function registerGroundedSqlAssistant(context, vscode, database) {
   const prepared = new Map();
   const proposals = new Map();
@@ -126,38 +158,6 @@ function registerGroundedSqlAssistant(context, vscode, database) {
     return { report, panel };
   }
 
-  async function chooseRoute(catalog) {
-    const edges = relationshipOptions(catalog);
-    const roots = [...new Set(edges.flatMap(edge => [edge.table, edge.parent]))].sort();
-    if (!roots.length) throw Error('No visible in-schema InnoDB foreign-key joins are available.');
-    const root = await vscode.window.showQuickPick(roots, { title: 'Start a Grounded SQL Query', placeHolder: 'Choose the first table' });
-    if (!root) return;
-    const names = new Set([root]);
-    const edgeIds = [];
-    while (names.size < 4) {
-      const options = edges.filter(edge => names.has(edge.table) !== names.has(edge.parent)).map(edge => ({
-        label: `${edge.table} → ${edge.parent}`, description: edge.name,
-        detail: edge.pairs.map(([from, to]) => `${from} = ${to}`).join(' AND '), edge }));
-      if (edgeIds.length) options.unshift({ label: 'Choose Columns', detail: `Use the selected ${names.size} tables` });
-      const choice = await vscode.window.showQuickPick(options, { title: 'Choose the Next Foreign-Key Join', ignoreFocusOut: true });
-      if (!choice) return;
-      if (!choice.edge) break;
-      const { id, table, parent } = choice.edge;
-      edgeIds.push(id);
-      names.add(names.has(table) ? parent : table);
-    }
-    const selections = [];
-    for (const table of names) {
-      const columns = catalog.tables.find(item => item.name === table).columns;
-      const selected = await vscode.window.showQuickPick(columns.filter(column => allowedColumn({ columns }, column.name))
-        .map(column => ({ label: column.name, description: column.type })),
-      { title: 'Share Selected Columns from ' + table, canPickMany: true, ignoreFocusOut: true });
-      if (!selected?.length) return;
-      selections.push({ table, columns: selected.map(column => column.label) });
-    }
-    return { root, edgeIds, selections };
-  }
-
   async function progress(title, action) {
     const controller = new AbortController();
     active = controller;
@@ -177,7 +177,7 @@ function registerGroundedSqlAssistant(context, vscode, database) {
     try {
       const started = capture();
       const catalog = database.liveCatalogSnapshot();
-      const choices = await chooseRoute(catalog);
+      const choices = await pickGroundedSqlRoute(vscode, catalog);
       if (!choices) return;
       let previousId;
       for (;;) {
@@ -219,4 +219,4 @@ function registerGroundedSqlAssistant(context, vscode, database) {
   return { stage, draft, review, inspect, openDraft, openPlan };
 }
 
-module.exports = { registerGroundedSqlAssistant };
+module.exports = { registerGroundedSqlAssistant, pickGroundedSqlRoute };

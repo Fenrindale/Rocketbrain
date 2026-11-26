@@ -1,6 +1,6 @@
 'use strict';
 
-function renderClient() {
+function renderClient(databaseTasks) {
   const host = acquireVsCodeApi();
   const start = document.getElementById('start');
   const status = document.getElementById('status');
@@ -33,7 +33,8 @@ function renderClient() {
     cards.replaceChildren();
     comparison.textContent = '';
     if (!state) {
-      status.textContent = preparing ? 'Choosing requests and schema…' : 'Choose two or three requests to compare.';
+      status.textContent = preparing ? 'Choosing requests and schema…' :
+        databaseTasks ? 'Choose two or three tasks for your configured local ACP agents.' : 'Choose two or three requests to compare.';
       return;
     }
     status.textContent = state.invalidated ? 'Connection, catalog, or model settings changed. Start a review with the current scope.' :
@@ -45,7 +46,8 @@ function renderClient() {
     }
     for (const job of state.jobs) {
       const card = add(cards, 'article', '');
-      add(card, 'h2', 'Proposal ' + job.slot);
+      add(card, 'h2', (databaseTasks ? 'Task ' : 'Proposal ') + job.slot);
+      if (databaseTasks) add(card, 'p', job.agent, 'detail');
       add(card, 'p', labels[job.status], 'job-status').role = 'status';
       if (job.request) add(card, 'p', job.request, 'request');
       if (job.result) {
@@ -59,6 +61,7 @@ function renderClient() {
       if (job.status === 'ready') button(buttons, 'Review SQL', 'accept', state, job);
       if (job.result) button(buttons, 'Reject', 'reject', state, job);
       if (job.status === 'reviewed') button(buttons, 'Open in SQL Editor', 'open', state, job);
+      if (databaseTasks && job.status === 'reviewed') button(buttons, 'Inspect Estimated Plan', 'inspect', state, job);
     }
     if (previous && previous !== 'start') document.getElementById(previous)?.focus();
   }
@@ -70,12 +73,13 @@ function renderClient() {
   host.postMessage({ type: 'ready' });
 }
 
-function proposalReviewHtml(nonce) {
+function proposalReviewHtml(nonce, { databaseTasks = false } = {}) {
+  const title = databaseTasks ? 'Database ACP Task Review' : 'SQL Proposal Review';
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SQL Proposal Review</title>
+<title>${title}</title>
 <style nonce="${nonce}">
 body { color:var(--vscode-foreground); background:var(--vscode-editor-background); padding:24px; }
 header { display:flex; align-items:center; flex-wrap:wrap; gap:13px; }
@@ -94,9 +98,9 @@ button:not(:disabled):hover { background:var(--vscode-button-hoverBackground); }
 button:focus-visible { outline:1px solid var(--vscode-focusBorder); outline-offset:2px; }
 button:disabled { opacity:.55; cursor:default; }
 </style></head><body>
-<header><h1>SQL Proposal Review</h1><button id="start" type="button" disabled>New Review</button></header>
+<header><h1>${title}</h1><button id="start" type="button" disabled>New Review</button></header>
 <p id="status" role="status">Loading review…</p><p id="comparison" aria-live="polite"></p><main id="cards"></main>
-<script nonce="${nonce}">(${renderClient.toString()})();</script>
+<script nonce="${nonce}">(${renderClient.toString()})(${Boolean(databaseTasks)});</script>
 </body></html>`;
 }
 

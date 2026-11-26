@@ -139,11 +139,10 @@ function compileGroundedQuery(scope, plan) {
   return { sql, plan: structuredClone(plan), route: scope.route, tables: scope.names, execution: 'not-run' };
 }
 
-function prepareGroundedRequest({ endpoint, model, context, input, previous }) {
+function prepareGroundedIntent(context, input, previous) {
   if (typeof input !== 'string' || !input.trim() || input.includes('\0') || Buffer.byteLength(input) > 1024) {
     throw bad('Describe the query or refinement in at most 1 KiB.');
   }
-  const target = normalizeLocalChatTarget(endpoint, model);
   const { columns, measures, sort, limit } = previous?.plan ?? {};
   const preview = { ...context.shared, request: input.trim(), ...(previous ? { previousPlan: { columns, measures, sort, limit } } : {}) };
   const array = (items, maxItems) => ({ type: 'array', items, maxItems });
@@ -157,6 +156,12 @@ function prepareGroundedRequest({ endpoint, model, context, input, previous }) {
     'Grouping by columns is automatic when using measures. Sort only by a returned column or a measure formatted as FUNCTION(table.column). ' +
     'Choose limit 100 unless requested. Never output SQL or row values. If the request needs filters, other tables, or cannot be represented, return empty columns and measures. ' +
     'For refinements follow the latest request and retain applicable previousPlan selections.';
+  return { preview, instructions, schema };
+}
+
+function prepareGroundedRequest({ endpoint, model, context, input, previous }) {
+  const target = normalizeLocalChatTarget(endpoint, model);
+  const { preview, instructions, schema } = prepareGroundedIntent(context, input, previous);
   const payload = { temperature: 0, max_tokens: 512, response_format: { type: 'json_schema',
     json_schema: { name: 'rocketbrain_grounded_select', strict: true, schema } }, messages: [{ role: 'system', content: instructions },
     { role: 'user', content: JSON.stringify(preview) }] };
@@ -177,4 +182,4 @@ async function executeGroundedRequest(prepared, { signal } = {}) {
   return compileGroundedQuery(prepared.context, plan);
 }
 
-module.exports = { relationshipOptions, projectGrounding, allowedColumn, compileGroundedQuery, prepareGroundedRequest, executeGroundedRequest };
+module.exports = { relationshipOptions, projectGrounding, allowedColumn, compileGroundedQuery, prepareGroundedIntent, prepareGroundedRequest, executeGroundedRequest };

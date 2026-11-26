@@ -309,6 +309,7 @@
       { "command": "rocketbrain.localSqlAssistant.draft", "title": "Draft SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.grounded", "title": "Explore Schema with Local SQL Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
+      { "command": "rocketbrain.acp.reviewDatabase", "title": "Review Database ACP Tasks", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.compareProposals", "title": "Compare Local SQL Proposals", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.measurePlan", "title": "Measure SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
@@ -2013,6 +2014,20 @@
               "label": { "type": "string", "maxLength": 80 },
               "executable": { "type": "string", "description": "Absolute path to a trusted agent executable." },
               "args": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
+            }
+          }
+        },
+        "rocketbrain.acp.databaseAgents": {
+          "type": "array", "default": [], "scope": "machine-overridable", "maxItems": 20,
+          "description": "Local stable ACP v1 peers for reviewed, read-only database tasks.",
+          "items": {
+            "type": "object", "required": ["label", "executable"], "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string", "maxLength": 80 },
+              "executable": { "type": "string", "description": "Absolute path to the trusted local executable." },
+              "adapter": { "type": "string", "enum": ["stdio", "opencode-local"], "default": "stdio" },
+              "args": { "type": "array", "maxItems": 32, "items": { "type": "string" },
+                "description": "Literal arguments for the stdio adapter." }
             }
           }
         },
