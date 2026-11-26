@@ -13,11 +13,12 @@ function sameSource(raw, file) {
 
 // Own DAP transport: the public Java engine still owns Java/JDI semantics.
 class JavaDebugAdapter {
-  constructor(vscode, port, observe = () => {}, output, observeRequest = () => {}, kotlinSourceLines, verifiedFieldPort) {
+  constructor(vscode, port, observe = () => {}, output, observeRequest = () => {}, sourceLines, verifiedFieldPort, sourceLinePort) {
     this.emitter = new vscode.EventEmitter(); this.onDidSendMessage = this.emitter.event;
     this.buffer = Buffer.alloc(0); this.mutations = new Set(); this.disposed = false; this.observe = observe; this.output = output;
     this.observeRequest = observeRequest;
-    this.kotlinSourceLines=kotlinSourceLines;
+    this.sourceLines=sourceLines;
+    this.sourceLinePort=sourceLinePort;
     this.verifiedFieldPort=verifiedFieldPort;
     this.vscode=vscode;
     this.socket = net.connect({ host: '127.0.0.1', port });
@@ -62,12 +63,22 @@ class JavaDebugAdapter {
       const verifiedPort=this.verifiedFieldPort;
       this.verifiedFieldPort=undefined;
       delete args.rocketbrainLocalKotlinFieldValues;
+      delete args.rocketbrainKotlinSourceLines;
+      delete args.rocketbrainGroovySourceLines;
       if (Number.isInteger(verifiedPort) && args.port===verifiedPort && args.hostName==='127.0.0.1') {
         args.rocketbrainLocalKotlinFieldValues=true;
       }
-      if (this.kotlinSourceLines) args.rocketbrainKotlinSourceLines=this.kotlinSourceLines;
+      if (this.sourceLines && Number.isInteger(this.sourceLinePort) &&
+          args.hostName==='127.0.0.1' && args.port===this.sourceLinePort) {
+        const key=this.sourceLines.format==='RocketbrainGroovySourceLines1'
+          ? 'rocketbrainGroovySourceLines' : 'rocketbrainKotlinSourceLines';
+        args[key]=this.sourceLines;
+      } else {
+        this.sourceLines=undefined;
+      }
+      this.sourceLinePort=undefined;
       outgoing={...message,arguments:args};
-    } else if (this.kotlinSourceLines && message.type==='request' &&
+    } else if (this.sourceLines && message.type==='request' &&
         message.command==='setBreakpoints' && this.vscode.workspace.textDocuments.some(document=>
         document.isDirty && document.uri.scheme==='file' && !document.uri.authority &&
         sameSource(message.arguments?.source?.path,document.uri.fsPath))) {

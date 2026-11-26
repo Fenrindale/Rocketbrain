@@ -1,28 +1,30 @@
 {
-  "version": "0.142.0",
-  "verifiedAt": "2026-11-26T13:42:23.627Z",
+  "version": "0.148.0",
+  "verifiedAt": "2026-11-26T15:08:07.942Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.142.0.vsix",
-    "sha256": "6938f971ba6e6139a2f00926f66336589fbcd788330696e09dd52602d05c7885",
-    "bytes": 4521304,
+    "name": "rocketbrain-0.148.0.vsix",
+    "sha256": "fa9860ccfe0d7a4b8838439e862397a3851e56a652321f81f72cd3a631eaf8db",
+    "bytes": 4593205,
     "files": 32
   },
   "source": {
-    "frozenPublicInputs": 2942,
-    "inputVectorSha256": "56f9ca95f4fb6c4c48cc909154179d100a930d5b21ef8681afb811eb581cd13c",
+    "frozenPublicInputs": 2996,
+    "inputVectorSha256": "391749e85a0442f930546cc8743be1f0fcf0e567b28367f8264941f16a1a9f27",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45828455896",
-    "tests": 2138,
+    "head": "6f3054ce41131fce7c0c762e89dd34544724e574",
+    "run": 45840754853,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45840754853",
+    "tests": 2177,
     "suites": 0,
-    "pass": 1914,
+    "pass": 1950,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 224,
+    "skipped": 227,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,52 +34,67 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 9,
+      "groupCount": 12,
       "groups": [
         {
-          "group": "kotlinFieldValues",
-          "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
-        },
-        {
-          "group": "javaVirtualAsyncTrace",
-          "checks": 1,
-          "origin": "before-gradle-repair-rechecked-harness"
-        },
-        {
-          "group": "micronautMavenDebug",
-          "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
-        },
-        {
-          "group": "micronautGradleDebug",
-          "checks": 1,
-          "origin": "before-gradle-repair-rechecked-harness"
-        },
-        {
-          "group": "wildflyWar",
-          "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
-        },
-        {
-          "group": "observedGradleComposite",
+          "group": "mavenProfile",
           "checks": 1,
           "origin": "final-frozen"
         },
         {
-          "group": "springProviderInjection",
+          "group": "windowsLongJavaLaunch",
           "checks": 1,
-          "origin": "before-gradle-repair-rechecked-harness"
+          "origin": "initial-integrated-candidate"
         },
         {
-          "group": "sshWatch",
+          "group": "azureEntra",
           "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
+          "origin": "initial-integrated-candidate"
         },
         {
-          "group": "sshBatch",
+          "group": "groovySourceDebug",
           "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
+          "origin": "final-frozen"
+        },
+        {
+          "group": "servicePackageRename",
+          "checks": 1,
+          "origin": "final-frozen"
+        },
+        {
+          "group": "privateGenericReference",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
+        },
+        {
+          "group": "kotlinJsDebug",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
+        },
+        {
+          "group": "tomcatRestore",
+          "checks": 1,
+          "origin": "final-frozen"
+        },
+        {
+          "group": "wildflyEar",
+          "checks": 1,
+          "origin": "final-frozen"
+        },
+        {
+          "group": "quarkusInterceptors",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
+        },
+        {
+          "group": "contextActions",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
+        },
+        {
+          "group": "groovyDynamic",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
         }
       ],
       "observations": {
@@ -91,52 +108,67 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 9,
+      "groupCount": 12,
       "groups": [
         {
-          "group": "kotlinFieldValues",
-          "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
-        },
-        {
-          "group": "javaVirtualAsyncTrace",
-          "checks": 1,
-          "origin": "before-gradle-repair-rechecked-harness"
-        },
-        {
-          "group": "micronautMavenDebug",
-          "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
-        },
-        {
-          "group": "micronautGradleDebug",
-          "checks": 1,
-          "origin": "before-gradle-repair-rechecked-harness"
-        },
-        {
-          "group": "wildflyWar",
-          "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
-        },
-        {
-          "group": "observedGradleComposite",
+          "group": "mavenProfile",
           "checks": 1,
           "origin": "final-frozen"
         },
         {
-          "group": "springProviderInjection",
+          "group": "windowsLongJavaLaunch",
           "checks": 1,
-          "origin": "before-gradle-repair-rechecked-harness"
+          "origin": "initial-integrated-candidate"
         },
         {
-          "group": "sshWatch",
+          "group": "azureEntra",
           "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
+          "origin": "initial-integrated-candidate"
         },
         {
-          "group": "sshBatch",
+          "group": "groovySourceDebug",
           "checks": 1,
-          "origin": "before-gradle-repair-original-harness"
+          "origin": "final-frozen"
+        },
+        {
+          "group": "servicePackageRename",
+          "checks": 1,
+          "origin": "final-frozen"
+        },
+        {
+          "group": "privateGenericReference",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
+        },
+        {
+          "group": "kotlinJsDebug",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
+        },
+        {
+          "group": "tomcatRestore",
+          "checks": 1,
+          "origin": "final-frozen"
+        },
+        {
+          "group": "wildflyEar",
+          "checks": 1,
+          "origin": "final-frozen"
+        },
+        {
+          "group": "quarkusInterceptors",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
+        },
+        {
+          "group": "contextActions",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
+        },
+        {
+          "group": "groovyDynamic",
+          "checks": 1,
+          "origin": "initial-integrated-candidate"
         }
       ],
       "observations": {
@@ -146,180 +178,622 @@
     }
   ],
   "nativeCandidateStages": {
-    "earlierArchiveSha256": "7e298ee8c7b82308d63bc09237ea92fa770315c3c879f2b16f1e025926e4ec10",
-    "earlierSourceManifestSha256": "30bbb5f802cd37672138eca4db1a053139f0ddae08a41808d616f5ce4a03ae17",
-    "recheckArchiveSha256": "f7712037cd92f17e44efb38ddc839fe0cb16e2314d4489099cd38f7460ad54df",
-    "recheckSourceManifestSha256": "584c94dbd5ac26cdd1a37e775faa7750596cc141e5e4367c2d8cd0a87da825b6",
-    "harnessChanges": [
-      "test/java-async-trace-host.js"
-    ],
-    "productAndRegressionChanges": [
-      "src/java/gradle-source-model.js",
-      "test/java-source-target.test.js"
-    ],
+    "priorHead": "8f08ba091837a8601105b6502875bcbd253ea668",
+    "finalHead": "6f3054ce41131fce7c0c762e89dd34544724e574",
+    "priorArchiveSha256": "b3f1824a13a2b84794ceac6e06ed7a73dfb64087445ec3d73e9e8d4183490487",
+    "priorSourceManifestSha256": "6bc60b177dbb22bb6d5f1b8a7ea4ea7518b57d0950cd3c3b9e94c41f4cd9e583",
     "changedPayloads": [
       "extension/dist/extension.js"
     ],
+    "sourceChanges": [
+      "src/java/groovy-debug-vscode.js",
+      "src/java/index.js",
+      "src/java/jakarta-manager-vscode.js",
+      "src/java/jakarta-vscode.js",
+      "src/java/workbench-model.js",
+      "src/java/workbench.js",
+      "test/groovy-workbench.test.js",
+      "test/jakarta-manager-host.js",
+      "test/java-source-target-host.js",
+      "test/java-workbench.test.js"
+    ],
     "requiredFinalCandidateGroups": [
-      "observedGradleComposite"
+      "groovySourceDebug",
+      "tomcatRestore",
+      "wildflyEar",
+      "servicePackageRename",
+      "mavenProfile"
     ]
   },
   "vendorRuntime": {
-    "wildflyEar": [
-      {
-        "engine": "mysql",
-        "mode": "source-workbench-stock-vendor-runtime",
-        "reportSha256": "441b91bf30b5f99e4afb543ba17d447623e645a030caf15a63149b715f0f43e0",
-        "sourceCommit": "3e1840ae07a02e765edcd22044f4f4de60ad734e",
-        "databaseVersion": "8.4.13",
-        "jdbc": {
-          "departments": 1,
-          "rolledBackNames": 0,
-          "people": 2
+    "springXmlLifecycle": {
+      "sourceCommit": "ad46e7b99adf753b9299d8e1f1e4f11c99cb5cca",
+      "sha256": "b8d25d4c588ba5e94de7f3d2d9f925087594753bfd1266f2ef7a3df1f689bbd9",
+      "nativeView": false,
+      "sharedCompilerAlsoHasLaterSeparateGroovyAndSignatureChecks": true,
+      "inspected": [
+        {
+          "owner": "fixture.xmlhooks.DependencyXmlBean",
+          "name": "warmFromJar",
+          "attribute": "init-method",
+          "sourceRange": {
+            "start": {
+              "line": 4,
+              "character": 0
+            },
+            "end": {
+              "line": 4,
+              "character": 60
+            }
+          },
+          "xmlRange": {
+            "start": {
+              "line": 6,
+              "character": 23
+            },
+            "end": {
+              "line": 6,
+              "character": 34
+            }
+          },
+          "signature": "fixture.xmlhooks.DependencyXmlBean#warmFromJar()",
+          "entry": "external-assets/entrypoints.xml",
+          "archiveSha256": "ff9fe61ae3caeb4df2f30bd37d44b16b3e70083b2c19629b164135d02698e842",
+          "entrySha256": "ca33df3aaa760c4a8b10e93f046b01a56e6dba27e3f5c947aa547d11a61c3bd4"
         },
-        "version": "42.0.0.Final",
-        "descriptorContext": true,
-        "explicitModulePair": true,
-        "commonContractLib": true,
-        "actualCrossModuleEjb": true,
-        "actualSpringJdbcTemplate": true,
-        "webAndEjbDistinctFromContractClassLoader": true,
-        "originalEarNameAndDigest": true,
-        "oneShotReviewedStagedArchive": true,
-        "contextOverrideRejected": true,
-        "reviewSnapshotIndependent": true,
-        "ownedCleanup": true,
-        "selectedStockUnmodified": true,
-        "fixtureCredentialAbsentFromReceipt": true,
-        "modules": [
-          "inventory-web.war",
-          "inventory-beans.jar"
-        ],
-        "libraries": 10,
-        "nativeView": false
+        {
+          "owner": "fixture.xmlhooks.DependencyXmlBean",
+          "name": "coolFromJar",
+          "attribute": "destroy-method",
+          "sourceRange": {
+            "start": {
+              "line": 4,
+              "character": 0
+            },
+            "end": {
+              "line": 4,
+              "character": 60
+            }
+          },
+          "xmlRange": {
+            "start": {
+              "line": 6,
+              "character": 52
+            },
+            "end": {
+              "line": 6,
+              "character": 63
+            }
+          },
+          "signature": "fixture.xmlhooks.DependencyXmlBean#coolFromJar()",
+          "entry": "external-assets/entrypoints.xml",
+          "archiveSha256": "ff9fe61ae3caeb4df2f30bd37d44b16b3e70083b2c19629b164135d02698e842",
+          "entrySha256": "ca33df3aaa760c4a8b10e93f046b01a56e6dba27e3f5c947aa547d11a61c3bd4"
+        }
+      ],
+      "before": [
+        {
+          "engine": "mysql",
+          "server": "8.4.13",
+          "output": "42:7:77"
+        },
+        {
+          "engine": "mariadb",
+          "server": "11.4.8-MariaDB",
+          "output": "42:7:77"
+        }
+      ],
+      "after": [
+        {
+          "engine": "mysql",
+          "server": "8.4.13",
+          "output": "42:7:77"
+        },
+        {
+          "engine": "mariadb",
+          "server": "11.4.8-MariaDB",
+          "output": "42:7:77"
+        }
+      ],
+      "duplicateRefused": true,
+      "competingOwnerRefused": true,
+      "unsupportedXmlRefused": true,
+      "computedSourceRefused": true,
+      "staleJarRefused": true,
+      "staleClasspathShadowRefused": true,
+      "unreferencedApplied": true,
+      "noProjectCodeDuringReview": true
+    },
+    "micronautRestart": {
+      "sourceCommit": "c2788642ddb234bc4bf00b51c4d2805b081903fd",
+      "sha256": "6501f21adbc3756445f42bad42d44cab3b384d9284ca1d4e98c0977efcdafa5c",
+      "nativeView": false,
+      "framework": {
+        "platform": "Micronaut 5.2.8",
+        "jdk": "Temurin 25.0.5+8",
+        "maven": "Apache Maven 3.9.11",
+        "vsCodeDesktopInstalledRun": false,
+        "integration": "Existing Micronaut workbench API, true Maven/Netty HttpServer, platform loopback PID proof and actual Spring JDBC"
       },
-      {
-        "engine": "mariadb",
-        "mode": "source-workbench-stock-vendor-runtime",
-        "reportSha256": "6b47c233509adaa208c38db56d3a54ca09f5b3e698b4cd48e6609fc57bf3445a",
-        "sourceCommit": "3e1840ae07a02e765edcd22044f4f4de60ad734e",
-        "databaseVersion": "11.4.8-MariaDB",
-        "jdbc": {
-          "people": 2,
-          "rolledBackNames": 0,
-          "departments": 1
+      "paired": [
+        {
+          "sourceCommit": "c2788642ddb234bc4bf00b51c4d2805b081903fd",
+          "engine": "mysql",
+          "version": "8.4.13",
+          "jdbc": {
+            "departments": 1,
+            "rolledBackNames": 0,
+            "people": 2
+          },
+          "oldResponse": "first-owned-build",
+          "newResponse": "second-reviewed-build",
+          "mode": "owned-jvm-restart",
+          "sameEnvironment": true,
+          "exactSavedSources": true,
+          "freshArtifact": true,
+          "ownerVerified": true,
+          "oldAndNewListenerReleased": true,
+          "noOriginalTargetWrite": true,
+          "staleApprovalRejected": true,
+          "failedBuildRetainedOldApp": true,
+          "preCancelledRetainedOldApp": true,
+          "buildCancellationProved": true,
+          "dirtyBufferRejected": true,
+          "oneUseApproval": true,
+          "nextReviewOwnsNewRun": true,
+          "isolatedOwnerReceipt": true,
+          "micronautHttpJdbc": 2,
+          "springJdbcAfterRestart": {
+            "departments": 1,
+            "rolledBackNames": 0,
+            "people": 2
+          }
         },
-        "version": "42.0.0.Final",
-        "descriptorContext": true,
-        "explicitModulePair": true,
-        "commonContractLib": true,
-        "actualCrossModuleEjb": true,
-        "actualSpringJdbcTemplate": true,
-        "webAndEjbDistinctFromContractClassLoader": true,
-        "originalEarNameAndDigest": true,
-        "oneShotReviewedStagedArchive": true,
-        "contextOverrideRejected": true,
-        "reviewSnapshotIndependent": true,
-        "ownedCleanup": true,
-        "selectedStockUnmodified": true,
-        "fixtureCredentialAbsentFromReceipt": true,
-        "modules": [
-          "inventory-web.war",
-          "inventory-beans.jar"
-        ],
-        "libraries": 10,
-        "nativeView": false
-      }
-    ]
+        {
+          "sourceCommit": "c2788642ddb234bc4bf00b51c4d2805b081903fd",
+          "engine": "mariadb",
+          "version": "11.4.8-MariaDB",
+          "jdbc": {
+            "departments": 1,
+            "people": 2,
+            "rolledBackNames": 0
+          },
+          "oldResponse": "first-owned-build",
+          "newResponse": "second-reviewed-build",
+          "mode": "owned-jvm-restart",
+          "sameEnvironment": true,
+          "exactSavedSources": true,
+          "freshArtifact": true,
+          "ownerVerified": true,
+          "oldAndNewListenerReleased": true,
+          "noOriginalTargetWrite": true,
+          "staleApprovalRejected": true,
+          "failedBuildRetainedOldApp": true,
+          "preCancelledRetainedOldApp": true,
+          "buildCancellationProved": true,
+          "dirtyBufferRejected": true,
+          "oneUseApproval": true,
+          "nextReviewOwnsNewRun": true,
+          "isolatedOwnerReceipt": true,
+          "micronautHttpJdbc": 2,
+          "springJdbcAfterRestart": {
+            "departments": 1,
+            "people": 2,
+            "rolledBackNames": 0
+          }
+        }
+      ]
+    },
+    "typedArityReferences": {
+      "sourceCommit": "6f3054ce41131fce7c0c762e89dd34544724e574",
+      "sha256": "3628076d5d9427f17f50f5ddc3379abee8036bca184014689aa51ea4f585ca9d",
+      "nativeView": false,
+      "craftEvidence": "ev_464a0ba1beff267b8fe10217bb6d8b106abe1db3b9c3fca9ee0f4321488b4880",
+      "referenceArray": {
+        "from": "varargs",
+        "to": "array",
+        "componentType": "java.lang.Object",
+        "spreadCalls": 4,
+        "fixedArrayCalls": 4,
+        "adaptedSpreadReferences": 2,
+        "retainedArrayReferences": 1,
+        "verified": true
+      },
+      "primitiveArray": {
+        "from": "varargs",
+        "to": "array",
+        "componentType": "int",
+        "spreadCalls": 2,
+        "fixedArrayCalls": 1,
+        "adaptedSpreadReferences": 1,
+        "retainedArrayReferences": 0,
+        "verified": true
+      },
+      "instanceArray": {
+        "from": "varargs",
+        "to": "array",
+        "componentType": "java.lang.String",
+        "spreadCalls": 0,
+        "fixedArrayCalls": 0,
+        "adaptedSpreadReferences": 1,
+        "retainedArrayReferences": 1,
+        "verified": true
+      },
+      "refusedUnsupportedContracts": [
+        "referenceGuard(String",
+        "receiverGuard(String",
+        "unboundGuard(String",
+        "boxedGuard(int",
+        "inferredGuard(String",
+        "polyGuard(Object"
+      ],
+      "changedOverloadRefused": true,
+      "staleReviewRefused": true,
+      "explicitArrayIdentityAndOrderVerified": true,
+      "realJdtImportedProject": true,
+      "before": [
+        {
+          "engine": "mysql",
+          "server": "8.4.13",
+          "output": "42:A[]/B[x, y]/Csame/D[[shared]]/EN/FN/G[explicit]/Q[r]:ABxyQr:0.3.4:P[a, b]/Z[]/Ksame/LN/7/S[u]:false/T[u]:false/U[shared]:false/V[shared]:true/null-receiver:ABxyQrab"
+        },
+        {
+          "engine": "mariadb",
+          "server": "11.4.8-MariaDB",
+          "output": "42:A[]/B[x, y]/Csame/D[[shared]]/EN/FN/G[explicit]/Q[r]:ABxyQr:0.3.4:P[a, b]/Z[]/Ksame/LN/7/S[u]:false/T[u]:false/U[shared]:false/V[shared]:true/null-receiver:ABxyQrab"
+        }
+      ],
+      "after": [
+        {
+          "engine": "mysql",
+          "server": "8.4.13",
+          "output": "42:A[]/B[x, y]/Csame/D[[shared]]/EN/FN/G[explicit]/Q[r]:ABxyQr:0.3.4:P[a, b]/Z[]/Ksame/LN/7/S[u]:false/T[u]:false/U[shared]:false/V[shared]:true/null-receiver:ABxyQrab"
+        },
+        {
+          "engine": "mariadb",
+          "server": "11.4.8-MariaDB",
+          "output": "42:A[]/B[x, y]/Csame/D[[shared]]/EN/FN/G[explicit]/Q[r]:ABxyQr:0.3.4:P[a, b]/Z[]/Ksame/LN/7/S[u]:false/T[u]:false/U[shared]:false/V[shared]:true/null-receiver:ABxyQrab"
+        }
+      ]
+    }
   },
   "newlyVerified": {
-    "IDEA-053": {
-      "scope": "두 Spring DB 환경의 Spring 7.0.10에서 주입 위치 5곳, 선택된 정의 3곳, 상위 공장 경로, 누락·모호함을 확인했다. 보고서 확인 중 공급자를 재실행하지 않았다.",
+    "IDEA-024": {
+      "scope": "실제 Spring 부팅과 ServiceLoader 공급자 순서를 두 DB에서 비교했다. 설치본의 편집 적용, 실행 취소·다시 실행과 충돌 거부를 검증했다.",
       "runtimeGroups": [
-        "springProviderInjection"
+        "servicePackageRename"
+      ]
+    },
+    "IDEA-029": {
+      "scope": "두 DB에서 제네릭 메서드 참조의 설치본 편집과 적용을 확인했다. 고정 배열·가변 인자 메서드 참조는 최종 소스의 실제 JDT에서 바꾼 뒤 두 Spring JDBC 실행 결과를 비교했다. 설치본에서는 빌드 산출물이 검토 뒤 바뀐 경우 적용을 거부했다.",
+      "runtimeGroups": [
+        "privateGenericReference",
+        "typedArityReferences"
+      ]
+    },
+    "IDEA-030": {
+      "scope": "두 DB의 실제 Spring 실행에서 JAR의 init·destroy 콜백을 확인했다. 소스 작업대에서 해당 콜백을 보호하고 미사용 메서드만 삭제했다.",
+      "runtimeGroups": [
+        "springXmlLifecycle"
+      ]
+    },
+    "IDEA-033": {
+      "scope": "설치본에서 실제 Spring 패키지와 등록 파일, 제네릭 메서드 참조의 적용·실행 취소·다시 실행을 검증했다. 두 DB에서 의미가 보존됐다.",
+      "runtimeGroups": [
+        "servicePackageRename",
+        "privateGenericReference"
+      ]
+    },
+    "IDEA-045": {
+      "scope": "빌드한 Kotlin 소스맵을 실제 Node와 대조했다. 양쪽 DB에서 정확한 중단점, 지역 변수, 재개한 Spring JDBC 응답과 소스 변경 후 정리를 확인했다.",
+      "runtimeGroups": [
+        "kotlinJsDebug"
+      ]
+    },
+    "IDEA-047": {
+      "scope": "실제 Maven·Gradle과 두 DB에서 동적 지역 선언과 JDBC 결과를 확인했다. 설치본에서 Groovy 줄 중단점, 스텝, 지역 변수 및 완성 편집의 실행 취소·다시 실행을 검증했다.",
+      "runtimeGroups": [
+        "groovySourceDebug",
+        "groovyDynamic"
+      ]
+    },
+    "IDEA-066": {
+      "scope": "실제 Quarkus와 Spring JDBC의 두 환경에서 호출 오버로드, 클래스 및 메서드 주석, Nonbinding, 우선순위와 단락 경로를 확인했다.",
+      "runtimeGroups": [
+        "quarkusInterceptors"
       ]
     },
     "IDEA-067": {
-      "scope": "두 Spring DB 환경에서 Maven과 Gradle의 실제 JVM에 각각 연결했다. HTTP 요청에서 Java 줄 중단점과 JDBC 로컬을 확인하고 재개한 후 두 리스너가 닫혔다.",
+      "scope": "실제 Micronaut Maven 앱과 두 DB에서 소스 변경 후 검토한 빌드·재시작과 새 HTTP 응답을 확인했다. 오래된 검토 취소나 컴파일 실패 후 기존 JVM이 유지됐다.",
       "runtimeGroups": [
-        "micronautMavenDebug",
-        "micronautGradleDebug"
+        "micronautRestart"
       ]
     },
     "IDEA-068": {
-      "scope": "설치본에서 실제 WildFly 42 WAR를 두 엔진으로 배포했다. 같은 릴리스의 소스 작업대와 실제 WildFly 42에서 EAR 모듈 간 EJB 호출, Spring JDBC 결과, 소유 프로세스 종료를 두 엔진으로 확인했다. EAR 설치본에서는 JDT의 프로젝트 가져오기가 시간 초과됐다.",
+      "scope": "실제 TLS Tomcat에서 두 DB별 배포와 세션 보존, 이전 WAR의 해시를 확인했다. 실제 WildFly에서 Maven EAR 가져오기와 WAR·EJB 모듈 호출을 설치본으로 검증했다.",
       "runtimeGroups": [
-        "wildflyWar"
+        "tomcatRestore",
+        "wildflyEar"
       ]
     },
     "IDEA-071": {
-      "scope": "실제 JDT와 Gradle로 Windows 편집기와 JVM의 드라이브 문자 대소문자가 다른 경우에도 계산된 포함 서비스 모듈의 testClasses를 실행했다. 형제 스크립트 변경 후 기존 검토가 거부됐고 Maven·Gradle Spring JDBC 결과를 두 엔진에서 확인했다.",
+      "scope": "실제 JDT와 Maven에서 정확한 리액터·EAR·프로필 모듈을 확인하고 검토한 작업을 실행했다. Windows 경로 표기와 각 DB 결과를 대조했다.",
       "runtimeGroups": [
-        "observedGradleComposite"
+        "mavenProfile",
+        "wildflyEar"
       ]
     },
-    "IDEA-079": {
-      "scope": "실제 JVM과 두 DB에서 가상 스레드 두 개와 Executor 경계 한 개의 원본 위치를 찾았다. 작업자와 추적 ID 일치, 추적 없는 스택 거부와 재개한 작업의 JDBC 42 응답을 검증했다.",
+    "IDEA-075": {
+      "scope": "Windows의 일반 명령줄 한도를 넘는 실제 Spring 클래스패스를 인수 파일로 넘겼다. 설치본에서 가상 스레드의 줄 중단점과 실행 재개가 동작하고 JDBC 42 응답을 두 DB에서 확인했다.",
       "runtimeGroups": [
-        "javaVirtualAsyncTrace"
+        "windowsLongJavaLaunch"
       ]
     },
-    "IDEA-080": {
-      "scope": "실제 JDI에서 한글·이모지가 있는 문자열과 Int·Long·Boolean 배열을 수정했다. 두 DB 환경에서 JVM 재개 후 다섯 변경과 다른 인스턴스 보존, 사용자 접근자의 부작용 0을 확인했다.",
+    "IDEA-097": {
+      "scope": "실제 WSL 1·2에서 편집 저장을 Linux 해시와 Git으로 대조했다. Maven·Gradle 빌드와 Spring JVM 디버깅을 확인했다. 별도 WSL 2 설치 검증에서 Windows VS Code와 Spring JDBC가 각각 실제 MySQL과 MariaDB 연결을 확인했다.",
       "runtimeGroups": [
-        "kotlinFieldValues"
+        "wslLinuxProjectsAndDebug"
       ]
     },
-    "IDEA-096": {
-      "scope": "두 환경의 설치된 VS Code에서 SSH 원격 문서 두 개가 외부 변경에 따라 갱신됐다. 검토 전 변경 거부, 부분 전송, 접속 중단 후 재접속 바이트 대조와 JDBC 보존을 확인했다.",
+    "IDEA-113": {
+      "scope": "설치형 VS Code에서 Java 구조 이동, 실제 SQL 결과와 해당 SQL 편집기 복귀, 편집기 상태 변화에 따른 검토 거부를 두 Spring DB 환경에서 확인했다.",
       "runtimeGroups": [
-        "sshWatch",
-        "sshBatch"
+        "contextActions"
+      ]
+    },
+    "DG-012": {
+      "scope": "설치본에서 로컬 계정 메타데이터가 휴대용 프로필에 빠지는 것을 검사했다. 모의 토큰 발급기를 사용한 실제 MySQL TLS 교환과 불일치 거부를 확인했고, 일반 TLS Spring JDBC 연결은 MySQL과 MariaDB에서 각각 동작했다.",
+      "runtimeGroups": [
+        "azureEntra"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 674,
+    "sourceCorrespondences": 696,
     "sourceConfidence": "inferred",
     "archiveEntries": 32,
     "archiveConfidence": "observed"
   },
+  "hostedRuntime": {
+    "wslLinuxProjectsAndDebug": {
+      "nativeView": "Windows VS Code 1.100.3 on isolated GitHub runners",
+      "sourceEquivalence": {
+        "wslPaths": [
+          "src/remote/wsl-java-debug-vscode.js",
+          "src/remote/wsl-java-debug.js",
+          "src/remote/wsl-java-runtime.js",
+          "src/remote/wsl-paths.js",
+          "src/remote/wsl-vscode.js",
+          "src/remote/wsl-workspace.js"
+        ],
+        "databaseSourceUnchangedForWsl2Jdbc": true
+      },
+      "wsl1": {
+        "commit": "6f3054ce41131fce7c0c762e89dd34544724e574",
+        "run": 45840754842,
+        "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45840754842",
+        "wslVersion": 1,
+        "collectedReceiptSha256": "6cf2ce6bac046396c95e5d6116b1bb63927d68bc23083497c8edcbb56e1a7464",
+        "runs": [
+          {
+            "name": "rocketbrain-wsl-workbench",
+            "id": 15128266528,
+            "archiveSha256": "b2a8bc9e52df89945de2a7dcb8a576f8a5d2692819d5f022f6b3fdaf8a3df391",
+            "reportSha256": "5d834f5a77939a8855593b28f527f5130e02641e15696088aea19f20b682cc63",
+            "vsixSha256": "9a228dac844364f9de885f6428ad6466fefff1091f0d8d3040f9c706b6adea89",
+            "native": {
+              "commandCount": 5,
+              "mavenGoal": "package",
+              "gradleGoal": "classes",
+              "compiledSpringConfiguration": true,
+              "workspaceRoundTrip": true,
+              "rejectedOutsideWorkspace": true,
+              "rejectedChangedDescriptor": true,
+              "cancelledManagedBuild": true,
+              "distroStillAvailable": true,
+              "linuxOwned": {
+                "openedInWindowsVscode": true,
+                "exactDistroAndPath": true,
+                "caseMismatchRejected": true,
+                "crossDistroRejected": true,
+                "editorSavedAndLinuxDigestMatched": true,
+                "rejectedChangedDescriptor": true,
+                "mavenGoal": "package",
+                "gradleGoal": "classes",
+                "artifactsObservedFromLinux": true,
+                "compiledEditedSpringConfiguration": true
+              }
+            }
+          },
+          {
+            "name": "rocketbrain-wsl-java-debug",
+            "id": 15127663247,
+            "archiveSha256": "baedcea5cc0035b6e14b694e8d05356c67cdb4b7fb1816283832bd369c22d5d9",
+            "reportSha256": "67c9616795a433a12e372c07340acef5193c76c53c505a8580459ffab873c7a8",
+            "vsixSha256": "66157ec950825894ba077647cae793f14160d5f278c9e56f6eeedf5270c2084f",
+            "native": {
+              "javaDebugOnly": true,
+              "linuxOwned": {
+                "openedInWindowsVscode": true,
+                "exactDistroAndPath": true,
+                "caseMismatchRejected": true,
+                "crossDistroRejected": true,
+                "editorSavedAndLinuxDigestMatched": true,
+                "rejectedChangedDescriptor": true,
+                "mavenGoal": "package",
+                "javaDebug": {
+                  "loopbackManagedDebugger": true,
+                  "exactLinuxSourceBreakpoint": true,
+                  "localValue": 42,
+                  "stepped": true,
+                  "actualSpringProcessResumed": true,
+                  "changedJarRejected": true,
+                  "replayRejected": true
+                }
+              }
+            }
+          }
+        ]
+      },
+      "wsl2": {
+        "commit": "1d5343ca065c93e4890e3e4e50b56b58f04f8b8e",
+        "run": 45837714077,
+        "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45837714077",
+        "wslVersion": 2,
+        "collectedReceiptSha256": "33c43717e8267b4fb684d3b2028bd25de0505976c789e18e2e1ee0576e464c34",
+        "runs": [
+          {
+            "name": "rocketbrain-wsl2-mysql",
+            "id": 15127307111,
+            "archiveSha256": "d5928f270dd47eb4fe721d9d8f73fae92b97f263b2ed84e3c82fd66a3140faaa",
+            "reportSha256": "940f013adde1e1714b20a31c299a62b24bb0c42e6fd82735cee417bef99a2754",
+            "vsixSha256": "eec9b2de667c3bbd02cb5f5f79c660bd9dbd520e91d2fb391ca1714890cd9074",
+            "native": {
+              "javaDebugOnly": true,
+              "linuxOwned": {
+                "openedInWindowsVscode": true,
+                "exactDistroAndPath": true,
+                "caseMismatchRejected": true,
+                "crossDistroRejected": true,
+                "editorSavedAndLinuxDigestMatched": true,
+                "linuxGitObservedEditorChange": true,
+                "rejectedChangedDescriptor": true,
+                "mavenGoal": "package",
+                "javaDebug": {
+                  "loopbackManagedDebugger": true,
+                  "exactLinuxSourceBreakpoint": true,
+                  "localValue": 42,
+                  "stepped": true,
+                  "actualSpringProcessResumed": true,
+                  "changedJarRejected": true,
+                  "replayRejected": true,
+                  "matchedSpringJdbcAndWindowsQuery": {
+                    "score": 42,
+                    "serverVersion": "8.0.46-0ubuntu0.24.04.5",
+                    "reachedFromWindowsVsCode": true
+                  }
+                }
+              }
+            }
+          },
+          {
+            "name": "rocketbrain-wsl2-mariadb",
+            "id": 15127655129,
+            "archiveSha256": "efd3389f667d3d721d395b3d4284581ca62b130a4c67c7633405cf59871b6b92",
+            "reportSha256": "63f1c0aa17cb95ac90c562066fe877f943c721df976f2a36f83d02231b949b72",
+            "vsixSha256": "d2c5ee7908bebcf5d86ede146391077c86f165784427b099b2b48d847f62479c",
+            "native": {
+              "javaDebugOnly": true,
+              "linuxOwned": {
+                "openedInWindowsVscode": true,
+                "exactDistroAndPath": true,
+                "caseMismatchRejected": true,
+                "crossDistroRejected": true,
+                "editorSavedAndLinuxDigestMatched": true,
+                "linuxGitObservedEditorChange": true,
+                "rejectedChangedDescriptor": true,
+                "mavenGoal": "package",
+                "javaDebug": {
+                  "loopbackManagedDebugger": true,
+                  "exactLinuxSourceBreakpoint": true,
+                  "localValue": 42,
+                  "stepped": true,
+                  "actualSpringProcessResumed": true,
+                  "changedJarRejected": true,
+                  "replayRejected": true,
+                  "matchedSpringJdbcAndWindowsQuery": {
+                    "score": 42,
+                    "serverVersion": "10.11.14-MariaDB-0ubuntu0.24.04.1",
+                    "reachedFromWindowsVsCode": true
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "build": {
+          "commit": "f46098dda51d4a85da0f0dad5687a3eb1382bd3d",
+          "run": 45833196897,
+          "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45833196897",
+          "id": 15122859920,
+          "outer": "cad3cab430ca0cbf5d76426c127a422313efb082255179524e4c0a2072c0f570",
+          "sha256": "7cfbe6efa190f374135176ffcf8ed495befb750f0c987c0528b5f1dfbf0cfe1e",
+          "vsixSha256": "259778cb7e349ff8d4c9702fcda9a40aa8d23bce23f56728c6f9d964e6346c3f",
+          "native": {
+            "commandCount": 5,
+            "mavenGoal": "package",
+            "gradleGoal": "classes",
+            "compiledSpringConfiguration": true,
+            "workspaceRoundTrip": true,
+            "rejectedOutsideWorkspace": true,
+            "rejectedChangedDescriptor": true,
+            "cancelledManagedBuild": true,
+            "distroStillAvailable": true,
+            "linuxOwned": {
+              "openedInWindowsVscode": true,
+              "exactDistroAndPath": true,
+              "caseMismatchRejected": true,
+              "crossDistroRejected": true,
+              "editorSavedAndLinuxDigestMatched": true,
+              "linuxGitObservedEditorChange": true,
+              "rejectedChangedDescriptor": true,
+              "mavenGoal": "package",
+              "gradleGoal": "classes",
+              "artifactsObservedFromLinux": true,
+              "compiledEditedSpringConfiguration": true
+            }
+          }
+        },
+        "linuxToWindowsEditorReload": {
+          "verified": false,
+          "reason": "Windows UNC file watcher returned EUNKNOWN on both engine jobs",
+          "commit": "99ba0cfdd9c82fb91bc4095f48887bb121a74361",
+          "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45841015454"
+        }
+      }
+    }
+  },
   "progress": {
     "counts": {
-      "implemented": 184,
-      "partial": 18,
+      "implemented": 186,
+      "partial": 16,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 205,
-    "previousWeightedPoints": 204.5,
+    "weightedPoints": 206,
+    "previousWeightedPoints": 205,
     "targetWeightedPoints": 216,
-    "referencePercent": 94.9,
+    "referencePercent": 95.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-096",
+        "id": "IDEA-047",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-068",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "216개 기능표의 기존 가중치를 유지한다.",
-    "SSH 여러 파일 전송은 파일별 교체와 검토된 연결에서의 사후 확인을 지원한다. 각 파일의 반영 상태를 따로 기록한다.",
-    "WildFly는 검토한 로컬 standalone 서버에서 단일 WAR 또는 선언된 WAR·EJB JAR 쌍의 EAR를 배포한다. 클러스터와 관리 도메인은 별도 범위다.",
-    "Kotlin 필드 편집은 중단된 로컬 JVM의 원시 배열과 일부 문자열을 지원한다. 비동기 호출 탐색은 제공한 소스 도우미가 기록한 경계를 연결한다.",
-    "Windows에서 긴 Java 클래스 경로를 쓴 가상 스레드 검증은 디버그 구성에 shortenCommandLine을 argfile로 지정했다."
+    "216개 기능표의 기존 가중치를 유지한다. 모든 제품의 원본 창 배치와 전체 동등성은 별도 범위다.",
+    "Groovy는 생성자와 반환 타입이 확인된 정적 팩터리의 지역 변수를 지원한다. 임의 메타클래스 변경과 동적 호출 분석은 별도 범위다.",
+    "Tomcat WAR 복구는 확장이 프로필에서 추적한 배포에 적용한다. WildFly는 검토한 로컬 서버와 단일 WAR 또는 선언한 WAR·EJB EAR를 지원한다.",
+    "Azure Entra 인증은 실제 TLS와 MySQL 인증 교환, 모의 토큰 발급기로 검증했다. 실제 Azure 계정 인증은 미검증이다.",
+    "WSL 1은 최종 후보 설치본에서 검증했다. WSL 2의 Linux Git·Spring JDBC 검증은 WSL·DB 소스가 같은 별도 후보에서 수행했다.",
+    "가변 인자 메서드 참조는 최종 소스로 JDT와 실제 두 DB에서 검증했다. 설치본에서는 검토 뒤 클래스 경로가 바뀌어 안전하게 적용을 거부했다."
   ],
   "next": [
-    "Java 패키지 이름 변경과 Spring Boot 자동 구성 등록",
-    "의존성 JAR의 Spring XML 생명주기와 Safe Delete",
-    "Java 소스에서 Maven 플러그인 실행 ID 선택",
-    "Micronaut 소스 변경 후 검토한 JVM 재시작",
-    "WSL Linux 작업 폴더와 빌드, 편집기 컨텍스트별 명령"
+    "WSL 2에서 Linux 외부 변경을 감지하고 검토한 원본을 Windows 편집기에서 다시 열기",
+    "Linux GraalVM의 Quarkus·Micronaut 네이티브 빌드·실행과 Java 도구 화면 검증",
+    "Java에서 바꾼 타입을 Kotlin 호출에 반영하고 Spring XML 부모 빈의 콜백 보호",
+    "Java·Spring·SQL 키보드 프로필, Kotlin 컬렉션 페이지와 Spring Reactor 비동기 호출 검증"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

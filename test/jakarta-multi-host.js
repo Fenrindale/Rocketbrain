@@ -23,17 +23,39 @@ async function modify(file,original,replacement) {
   await fs.writeFile(file,source.replace(original,replacement));
 }
 
-async function ownedModules(directory,run) {
+async function ownedModules(directory,run,{liveAdd=false}={}) {
   const parent=await fs.realpath(directory);
   const real=await fs.mkdtemp(path.join(parent,'rb-jakarta-set-'));
   try {
     const modules=[];
-    for (const name of ['blue','green']) {
+    for (const name of liveAdd ? ['blue','green','gold','broken'] : ['blue','green']) {
       const root=path.join(real,name);
       await fs.cp(fixture,root,{recursive:true,filter:file=>!['target','.project','.classpath','.settings','.mvn'].includes(path.basename(file))});
       await modify(path.join(root,'pom.xml'),'<artifactId>jakarta-war</artifactId>',`<artifactId>jakarta-war-${name}</artifactId>`);
       await modify(path.join(root,'src/main/java/jakartafixture/PingServlet.java'),'jakarta-servlet:',`jakarta-${name}:`);
       await modify(path.join(root,'src/main/webapp/page.jsp'),'jakarta-page:',`jakarta-${name}-page:`);
+      if (name==='gold') {
+        const config=JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG,'utf8'));
+        assert.match(config.baseUrl,/^http:\/\/127\.0\.0\.1:\d+$/u);
+        const servlet=path.join(root,'src/main/java/jakartafixture/PingServlet.java');
+        await modify(servlet,'@WebServlet("/ping")','@WebServlet({"/ping","/jdbc"})');
+        const writer='        response.getWriter().print("jakarta-gold:';
+        await modify(servlet,writer,`        if (request.getServletPath().equals("/jdbc")) {
+            var address = java.net.URI.create("${config.baseUrl}/probe/testing-state").toURL();
+            var connection = address.openConnection();
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            try (var body = connection.getInputStream()) {
+                response.getOutputStream().write(body.readAllBytes());
+            }
+            return;
+        }
+${writer}`);
+      }
+      if (name==='broken') {
+        await modify(path.join(root,'src/main/webapp/WEB-INF/web.xml'),'</web-app>',
+          '  <listener><listener-class>jakartafixture.MissingServletListener</listener-class></listener>\n</web-app>');
+      }
       const repo=process.env.ROCKETBRAIN_JAKARTA_MAVEN_REPO;
       if (repo) {
         await fs.mkdir(path.join(root,'.mvn'));
@@ -125,11 +147,73 @@ async function exercise(service,modules) {
     concurrentRemovalGuard:true,finalContextClosesServer:true,originalWarPreserved:true};
 }
 
-async function runJakartaMultiChecks(api,vscode,checks) {
+async function exerciseAddition(service,modules) {
+  const choices=[];
+  for (const project of modules) {
+    const result=await service.buildWar({projectUri:project.uri,allowProjectExecution:true});
+    assert.equal(result.state,'succeeded');
+    const [{uri:warUri}]=result.artifacts;
+    choices.push({projectUri:project.uri,warUri,context:'rb-'+project.name});
+  }
+  const [blueWar,greenWar,goldWar,brokenWar]=choices;
+  const reviewed=await service.reviewSet({applications:[blueWar,greenWar]});
+  const original=await service.deploySet({applications:reviewed,allowDeploy:true});
+  const [blue,green]=original.applications;
+  const deploymentId=original.deploymentId;
+  const review=choice=>service.reviewAddition({...choice,deploymentId});
+  const add=plan=>service.addApplication({...plan,allowDeploy:true});
+  await assert.rejects(review({...goldWar,context:blueWar.context}),/already in use/u);
+  await assert.rejects(service.reviewAddition({...goldWar,deploymentId:'stale'}),/no longer running/u);
+
+  const unapproved=await review(goldWar);
+  await assert.rejects(service.addApplication(unapproved),/Explicitly confirm/u);
+  const actual=fileURLToPath(goldWar.warUri), bytes=await fs.readFile(actual);
+  try {
+    const changed=Buffer.from(bytes);
+    changed[changed.length-1]^=1;
+    await fs.writeFile(actual,changed);
+    await assert.rejects(add(unapproved),/artifact changed while staging/u);
+  } finally { await fs.writeFile(actual,bytes); }
+  assert.deepEqual(service.getState(),original);
+
+  const broken=await review(brokenWar);
+  await assert.rejects(add(broken),/Tomcat rejected the reviewed WAR/u);
+  await get(original.url+'/'+broken.context+'/ping',404);
+  assert.deepEqual(service.getState(),original);
+  await Promise.all([verifyPeer(blue,'blue'),verifyPeer(green,'green')]);
+
+  const stale=await review({...goldWar,context:'rb-other'});
+  const approved=await review(goldWar);
+  const added=await add(approved);
+  assert.equal(added.state,'added');
+  assert.equal(added.deploymentId,deploymentId);
+  assert.equal(added.running,3);
+  assert.equal(added.application.sha256,checksum(bytes));
+  assert.equal(new URL(added.application.url).origin,original.url);
+  await assert.rejects(add(approved),/Review the current Tomcat WAR/u);
+  await assert.rejects(add(stale),/Review the current Tomcat WAR/u);
+  await Promise.all([verifyPeer(blue,'blue'),verifyPeer(green,'green'),verifyPeer(added.application,'gold')]);
+  assert.deepEqual(JSON.parse(await get(added.application.url+'/jdbc')),await jdbcReadback());
+
+  const removed=await service.undeploy({deploymentId,context:added.application.context,
+    expectedSha256:added.application.sha256,allowUndeploy:true});
+  assert.equal(removed.remaining,2);
+  assert.deepEqual(service.getState(),original);
+  await get(added.application.url+'/ping',404);
+  await Promise.all([verifyPeer(blue,'blue'),verifyPeer(green,'green')]);
+  assert.equal(checksum(await fs.readFile(actual)),approved.expectedSha256);
+  await service.stop();
+  await assert.rejects(fetch(blue.url+'/ping',{signal:AbortSignal.timeout(1200)}));
+  return {serverVersion:original.version,exactReviewedDigest:true,sameDeploymentAndListener:true,addsAndRemovesIndependently:true,
+    reviewStaleAndReplayRefused:true,duplicateAndDriftRejected:true,startFailureLeavesPeersRunning:true,
+    actualSpringReadThroughAddedWar:true,originalArchiveUnchanged:true,ownedListenerClosed:true};
+}
+
+async function runJakartaMultiChecks(api,vscode,checks,{liveAdd=false}={}) {
   const service=api.java.jakarta;
   assert.ok(service.reviewSet&&service.deploySet&&service.undeploy);
   const commands=await vscode.commands.getCommands(true);
-  for (const command of ['deploySet','undeploy']) assert.ok(commands.includes('rocketbrain.jakarta.'+command));
+  for (const command of ['deploySet','undeploy',...(liveAdd?['addApplication']:[])]) assert.ok(commands.includes('rocketbrain.jakarta.'+command));
   const workspace=vscode.workspace.workspaceFolders[0].uri.fsPath;
   await importedSpring(api,workspace);
   const settings=vscode.workspace.getConfiguration('rocketbrain.java');
@@ -150,14 +234,15 @@ async function runJakartaMultiChecks(api,vscode,checks) {
           const imported=await api.java.workbench.resyncProject({projectUri:project.uri,allowProjectExecution:true});
           assert.ok(imported.projects.some(item=>!path.relative(item.root,project.root)&&item.tool==='maven'));
         }
-        const result=await exercise(service,modules);
-        checks.push('Deployed two checksum-reviewed Maven WARs to one local Tomcat, reached both Servlet and JSP routes, and undeployed one context while preserving its peer.');
+        const result=await (liveAdd?exerciseAddition:exercise)(service,modules);
+        checks.push(liveAdd ? 'Added a reviewed WAR to an existing Tomcat, verified real Spring JDBC from the new context, and preserved peers on failure and removal.' :
+          'Deployed two checksum-reviewed Maven WARs to one local Tomcat, reached both Servlet and JSP routes, and undeployed one context while preserving its peer.');
         return {...result,jdbc:await jdbcReadback(),nativeView:true};
       } finally {
         await service.stop();
         await api.java.executeWorkspaceCommand('java.project.changeImportedProjects',[],[],modules.map(item=>item.uri));
       }
-    });
+    },{liveAdd});
   } finally {
     for (const {key,previous} of modified.reverse()) await settings.update(key,previous,vscode.ConfigurationTarget.Global);
   }
@@ -193,18 +278,20 @@ async function headless() {
   const mavenHome=await fs.realpath(process.env.ROCKETBRAIN_MAVEN_HOME);
   const tomcatHome=await fs.realpath(process.env.ROCKETBRAIN_JAKARTA_TOMCAT_HOME);
   const engine=process.env.ROCKETBRAIN_TEST_MYSQL_ENGINE;
+  const liveAdd=process.argv.includes('--live-add');
   const jdbc=await jdbcReadback();
   assert.ok(jdbc&&['mysql','mariadb'].includes(engine));
   const result=await ownedModules(os.tmpdir(),async(modules,root)=>{
     const service=headlessService(modules,root,javaHome,mavenHome,tomcatHome);
-    try {return await exercise(service,modules);}
+    try {return await (liveAdd?exerciseAddition:exercise)(service,modules);}
     finally {await service.dispose();}
-  });
+  },{liveAdd});
   assert.deepEqual(await jdbcReadback(),jdbc);
   return {...result,engine,jdbc,actualMavenBuild:true,nativeView:false};
 }
 
-module.exports={runJakartaMultiChecks};
+const runJakartaTomcatLiveAddChecks=(api,vscode,checks)=>runJakartaMultiChecks(api,vscode,checks,{liveAdd:true});
+module.exports={runJakartaMultiChecks,runJakartaTomcatLiveAddChecks};
 if (require.main===module) headless().then(receipt=>console.log(JSON.stringify(receipt))).catch(error=>{
   console.error(error.stack);
   process.exitCode=1;

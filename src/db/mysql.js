@@ -27,6 +27,7 @@ const { contextOf: objectSourceContext } = require('./object-source');
 const { collectRoutineResults, maxBytes: maxRoutineResultBytes } = require('./routine-call-stream');
 const {randomUUID}=require('node:crypto');
 const { normalizeRdsIam, validateRdsIamRoute, createRdsIamHandshake, handshakeTimeout } = require('./rds-iam');
+const azureEntra = require('./azure-mysql-entra');
 const { normalizeWriteProtection, protectionError, requireConnectionMode, requireStatementScope,verifyCallableScope } = require('./write-protection');
 const { sessionLifecycle, initializationStatements } = require('./session-lifecycle');
 const { observeServerTls, reviewedTls, guardBeforeAuthentication, changedPeer } = require('./server-tls-trust');
@@ -128,7 +129,7 @@ function newSession(id, readOnly, database) {
  * The SQL policy is not a sandbox for privileged server UDFs.
  */
 class MysqlService {
-  constructor(config, { createConnection, reportActivity, reportSession, mintIamToken } = {}) {
+  constructor(config, { createConnection, reportActivity, reportSession, mintIamToken, mintAzureToken } = {}) {
     this._options = connectionOptions(config);
     this._sessionLifecycle = sessionLifecycle(config.sessionLifecycle);
     this._initialization = this._sessionLifecycle ? initializationStatements(this._sessionLifecycle.initialSql) : [];
@@ -139,6 +140,14 @@ class MysqlService {
         throw fail('ROCKETBRAIN_PASSWORD_FREE_ACCOUNT', 'Password-free authentication takes only an explicit database user.');
       }
       this._passwordFreeUser = this._options.user;
+    } else if (azureEntra.usesAzureMysqlEntra(config)) {
+      const auth = azureEntra.normalizeAzureMysqlEntra(config.auth);
+      const { host } = config;
+      azureEntra.validateAzureMysqlRoute(config, config.ssl);
+      if (security.options.stream || config.password) {
+        throw fail(azureEntra.code, 'Use direct verified TLS and the selected Azure CLI account for Microsoft Entra authentication.');
+      }
+      this._azureEntra = () => azureEntra.createAzureMysqlEntraHandshake({ host, auth }, mintAzureToken);
     } else if (config.auth !== undefined) {
       const auth = normalizeRdsIam(config.auth);
       const { host, user, port = 3306 } = config;
@@ -285,11 +294,12 @@ class MysqlService {
     if (session.connection && session.connected) return;
     if (session.needsReconnect) throw fail('ROCKETBRAIN_RECONNECT_REQUIRED', 'Reconnect this console explicitly before running SQL.');
     let connection, tlsGate;
-    const iam = this._rdsIam?.();
-    const connectionError = error => tlsGate?.error ?? iam?.error() ?? safeError(error);
-    // An exact TLS review and IAM both need current peer evidence on each physical connection.
-    const options = iam || this._expectedTls
-      ? { ...this._options, ...iam?.options, ssl: { ...this._options.ssl } } : { ...this._options };
+    const azure = this._azureEntra?.();
+    const tokenAuth = azure || this._rdsIam?.();
+    const connectionError = error => tlsGate?.error ?? tokenAuth?.error() ?? safeError(error);
+    // An exact TLS review or token authentication needs current peer evidence on each physical connection.
+    const options = tokenAuth || this._expectedTls
+      ? { ...this._options, ...tokenAuth?.options, ssl: { ...this._options.ssl } } : { ...this._options };
     try {
       connection = this._createConnection(options);
       session.connection = connection;
@@ -310,13 +320,16 @@ class MysqlService {
       const finish = error => { if (finished) return; finished = true; clearTimeout(timer); if (session.active === active) session.active = null; error ? reject(error) : resolve(); };
       const active = { mayWrite: false, abort: finish };
       session.active = active;
-      const timer = setTimeout(() => this._lose(session, fail('ROCKETBRAIN_TIMEOUT', 'The MySQL connection timed out. Reconnect this console.')), iam ? handshakeTimeout : 5000);
+      const timeout = azure ? azureEntra.handshakeTimeout : tokenAuth ? handshakeTimeout : 5000;
+      const timer = setTimeout(() => this._lose(session, fail('ROCKETBRAIN_TIMEOUT', 'The MySQL connection timed out. Reconnect this console.')), timeout);
       try {
         connection.connect(error => {
           if (finished) return;
           if (error) { this._lose(session, connectionError(error)); return; }
-          if (iam && !iam.sent()) {
-            this._lose(session, fail('ROCKETBRAIN_RDS_IAM', 'The server did not authenticate this connection with the RDS IAM token.'));
+          if (tokenAuth && !tokenAuth.sent()) {
+            this._lose(session, azure
+              ? fail(azureEntra.code, 'The server did not authenticate this connection with a Microsoft Entra token.')
+              : fail('ROCKETBRAIN_RDS_IAM', 'The server did not authenticate this connection with the RDS IAM token.'));
             return;
           }
           session.connected = true; session.connectionId = connection.threadId ?? null; finish();

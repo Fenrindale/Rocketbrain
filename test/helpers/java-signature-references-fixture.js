@@ -12,12 +12,17 @@ const javaPath = name => path.join('src', 'main', 'java', 'fixture', 'sigrefs', 
 const targetPath = javaPath('SignatureTarget');
 const clientPath = javaPath('SignatureClient');
 const negativeTargets = [['mutableRender(String', 'mutable receiver'], ['effectRender(String', 'effectful receiver'],
-  ['boxedConvert(String', 'boxed SAM input']];
+  ['boxedConvert(String', 'boxed SAM input'], ['publicGeneric(T', 'non-private generic method'],
+  ['inferOnly(int', 'generic type proved only by return'], ['widenGeneric(T', 'widened generic return']];
 const operations = [
   { marker: 'staticConvert(String', refs: 1, operation: 'reorder', references: ['SignatureTarget::staticConvert'] },
   { marker: 'SignatureTarget(String', refs: 1, operation: 'add', references: ['SignatureTarget::new'] },
   { marker: 'instanceRender(String', refs: 2, operation: 'reorder',
-    references: ['SignatureTarget::instanceRender', 'this::instanceRender'] }
+    references: ['SignatureTarget::instanceRender', 'this::instanceRender'] },
+  { marker: 'pickText(T', refs: 2, operation: 'reorder', references: ['SignatureTarget::pickText'],
+    generic: ['SignatureTarget.<java.lang.String>pickText', 'SignatureTarget.<java.lang.StringBuilder>pickText'] },
+  { marker: 'pickNumber(T', refs: 1, operation: 'add', references: ['this::pickNumber'],
+    generic: ['this.<java.lang.Integer>pickNumber'] }
 ];
 
 const sources = new Map([
@@ -33,6 +38,24 @@ const sources = new Map([
     '    public String mutableRender(String label, int value) { return prefix + label + value; }',
     '    public String effectRender(String label, int value) { return prefix + label + value; }',
     '    public static String boxedConvert(String label, int value) { return label + value; }',
+    '    private static <T extends CharSequence> T pickText(T value, int amount) { return value; }',
+    '    private static String pickText(Object value, long amount) { return "other-" + amount; }',
+    '    private <T extends Number & Comparable<T>> T pickNumber(T value, int amount) { return value; }',
+    '    public static <T> T publicGeneric(T value, int amount) { return value; }',
+    '    private static <T> T inferOnly(int amount, boolean enabled) { return null; }',
+    '    private static <T> T widenGeneric(T value, int amount) { return value; }',
+    '    public String genericResults(int amount) {',
+    '        Indexed<String> words = SignatureTarget::pickText;',
+    '        Indexed<StringBuilder> mutableText = SignatureTarget::pickText;',
+    '        Indexed<Integer> numbers = (Indexed<Integer>) this::pickNumber;',
+    '        Indexed<String> open = SignatureTarget::publicGeneric;',
+    '        IntFlag<String> resultDriven = SignatureTarget::inferOnly;',
+    '        IntoText wider = SignatureTarget::widenGeneric;',
+    '        return words.pick("word", amount) + "/" + mutableText.pick(new StringBuilder("buffer"), amount)',
+    '            + "/" + numbers.pick(amount, amount) + "/" + pickText((Object) "overload", 7L)',
+    '            + "/" + open.pick("open", amount) + "/" + resultDriven.pick(amount, true) + "/"',
+    '            + wider.pick("wide", amount);',
+    '    }',
     '}', ''
   ].join('\n')],
   [javaPath('Format'), 'package fixture.sigrefs;\npublic interface Format { String apply(String label, int value); }\n'],
@@ -42,6 +65,9 @@ const sources = new Map([
     'public interface Unbound { String apply(SignatureTarget receiver, String label, int value); }', ''
   ].join('\n')],
   [javaPath('Boxed'), 'package fixture.sigrefs;\npublic interface Boxed { String apply(String label, Integer value); }\n'],
+  [javaPath('Indexed'), 'package fixture.sigrefs;\ninterface Indexed<T> { T pick(T value, int amount); }\n'],
+  [javaPath('IntoText'), 'package fixture.sigrefs;\ninterface IntoText { CharSequence pick(String value, int amount); }\n'],
+  [javaPath('IntFlag'), 'package fixture.sigrefs;\ninterface IntFlag<T> { T pick(int amount, boolean enabled); }\n'],
   [clientPath, [
     'package fixture.sigrefs;',
     'import java.util.function.Function;',
@@ -73,13 +99,13 @@ const sources = new Map([
     '            + "/" + bean.inside().apply("T", amount) + "/" + SignatureTarget.staticConvert("D", 3)',
     '            + "/" + retainedLambda.apply(retained.apply(" keep ")) + "/"',
     '            + mutableReference().apply("M", 1) + "/" + effectReference().apply("E", 2) + "/"',
-    '            + boxedReference().apply("Q", 3));',
+    '            + boxedReference().apply("Q", 3) + "/" + bean.genericResults(amount));',
     '    }',
     '}', ''
   ].join('\n')]
 ]);
 
-const expected = 'S4/BU9/BT8/D3/KEEP/xM1/yE2/Q3';
+const expected = 'S4/BU9/BT8/D3/KEEP/xM1/yE2/Q3/word/buffer/4/other-7/open/null/wide';
 
 function selection(text, marker) {
   const start = positionOf(text, marker);
@@ -97,17 +123,25 @@ function nextParameters(info, operation) {
 function assertPlan(plan, operation) {
   assert.equal(plan.signature.adaptedMethodReferences, operation.refs);
   assert.equal(plan.signature.overloadBindingsVerified, true);
-  assert.equal(plan.documents.length, 2);
+  assert.equal(plan.documents.length, operation.generic ? 1 : 2);
   const current = plan.documents.map(doc => doc.after).join('\n');
   for (const token of operation.references) assert.ok(!current.includes(token), token);
   assert.match(current, /\(\s*signatureArgument\d+(?:,\s*signatureArgument\d+)+\)\s*->/u);
-  assert.match(current, /String::strip/u);
-  assert.match(current, /value -> value\.toUpperCase\(java\.util\.Locale\.ROOT\)/u);
-  assert.match(current, /next\(\)::effectRender/u);
-  assert.match(current, /moving::mutableRender/u);
-  assert.match(current, /SignatureTarget::boxedConvert/u);
+  if (operation.generic) {
+    assert.equal(plan.signature.genericContractsVerified, true);
+    for (const token of operation.generic) assert.ok(current.includes(token), token);
+    assert.match(current, /pickText\(\(Object\) "overload", 7L\)/u);
+    assert.match(current, /SignatureTarget::widenGeneric/u);
+  } else {
+    assert.match(current, /String::strip/u);
+    assert.match(current, /value -> value\.toUpperCase\(java\.util\.Locale\.ROOT\)/u);
+    assert.match(current, /next\(\)::effectRender/u);
+    assert.match(current, /moving::mutableRender/u);
+    assert.match(current, /SignatureTarget::boxedConvert/u);
+  }
   return { method: plan.signature.methodName, operation: operation.operation, adapters: operation.refs,
-    documents: plan.documents.length, references: plan.signature.resolvedReferences };
+    documents: plan.documents.length, references: plan.signature.resolvedReferences,
+    ...(operation.generic && { instantiatedCallTypes: operation.generic }) };
 }
 
 async function populateSignatureReferences(root, classpath, units = sources) {

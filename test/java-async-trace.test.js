@@ -8,7 +8,7 @@ const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
 const { createAsyncInspection, parseAsyncTrace, openAsyncTrace } = require('../src/java/async-trace');
-const { argumentString } = require('../src/java/debug-runtime');
+const { argumentString, launchCommandMode } = require('../src/java/debug-runtime');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { DapClient } = require('./java-debug-dap');
@@ -27,7 +27,7 @@ const virtualDatabases = ['mysql', 'mariadb'].map(engine =>
   [engine, process.env['ROCKETBRAIN_JAVA_ASYNC_VIRTUAL_' + engine.toUpperCase() + '_CONFIG']]);
 const virtualClasspath = process.env.ROCKETBRAIN_JAVA_ASYNC_VIRTUAL_CLASSPATH;
 
-async function launchAsyncFixture(lsp, uri, project, source, fixture, trace, markers, env) {
+async function launchAsyncFixture(lsp, uri, project, source, fixture, trace, markers, env, longClasspath = false) {
   const command = (name, ...args) => lsp.request('workspace/executeCommand', { command: name, arguments: args });
   const main = await until(async () => (await command('vscode.java.resolveMainClass', uri))
     ?.find(item => item.mainClass === fixture.mainClass), 65000);
@@ -39,9 +39,17 @@ async function launchAsyncFixture(lsp, uri, project, source, fixture, trace, mar
   try {
     await dap.request('initialize', { adapterID: 'rocketbrain-java', clientID: 'async-trace', linesStartAt1: true,
       columnsStartAt1: true, pathFormat: 'path', supportsVariableType: true, supportsVariablePaging: true });
-    const started = dap.request('launch', { type: 'rocketbrain-java', name: 'Async task tracer',
+    const cmd = { type: 'rocketbrain-java', name: 'Async task tracer',
       mainClass: fixture.mainClass, projectName: main.projectName, classPaths, modulePaths, javaExec, cwd: project,
-      args: argumentString([trace]), console: 'internalConsole', sourcePaths: [], env });
+      args: argumentString([trace]), console: 'internalConsole', sourcePaths: [], env };
+    if (longClasspath && process.platform === 'win32') {
+      // Existing directories make this launch exceed CreateProcessW's ordinary limit.
+      cmd.classPaths = [...classPaths, ...Array(Math.ceil(35000 / project.length)).fill(project)];
+      assert.ok(cmd.classPaths.join(path.delimiter).length > 32767);
+      cmd.shortenCommandLine = launchCommandMode(cmd);
+      assert.equal(cmd.shortenCommandLine, 'argfile');
+    }
+    const started = dap.request('launch', cmd);
     started.catch(() => {});
     await dap.event('initialized', 0, 15000);
     const { breakpoints } = await dap.request('setBreakpoints', { source: { name: path.basename(source), path: source },
@@ -249,7 +257,7 @@ test('a paused virtual Java thread identifies both traced launches and its Compl
       const [trace, wrongId, wrongWorker, strippedWorker] = files;
       let dap;
       try {
-        dap = await launchAsyncFixture(lsp, uri, project, source, fixture, trace, ['UNWRAPPED_STOP', 'VIRTUAL_STOP'], env);
+        dap = await launchAsyncFixture(lsp, uri, project, source, fixture, trace, ['UNWRAPPED_STOP', 'VIRTUAL_STOP'], env, true);
         const first = await dap.event('stopped', 0, 18000);
         const state = { state: 'stopped', threadId: first.threadId, stopVersion: 1 };
         const session = { id: engine, type: 'rocketbrain-java', customRequest: (...args) => dap.request(...args) };

@@ -196,4 +196,4 @@ async function reviewBinaryLifecycle({ analysis, sources, project, candidate, ur
   }
 }
 
-module.exports = { reviewBinaryLifecycle, possibleFactoryAnnotations };
+module.exports = { reviewBinaryLifecycle, possibleFactoryAnnotations, observedClasspath };

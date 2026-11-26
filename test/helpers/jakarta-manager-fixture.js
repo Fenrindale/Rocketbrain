@@ -92,7 +92,7 @@ async function startOwnedManager({ base, javaHome, tomcatHome, springUrl }) {
     while (!exited && Date.now() < deadline) {
       if (output.includes('Server startup in [')) {
         assert.match(output, /Apache Tomcat\/11\.0\.29/u);
-        return { origin: 'https://127.0.0.1:' + port, caFile, username, password, stop };
+        return { origin: 'https://127.0.0.1:' + port, caFile, username, password, applicationBase: applications, stop };
       }
       await new Promise(resolve => setTimeout(resolve, 120));
     }
@@ -103,10 +103,11 @@ async function startOwnedManager({ base, javaHome, tomcatHome, springUrl }) {
   }
 }
 
-async function applicationResponse(manager, context, route, expectedStatus = 200) {
+async function applicationResponse(manager, context, route, expectedStatus = 200, { cookie, captureSession } = {}) {
   const ca = await fs.readFile(manager.caFile);
   return new Promise((resolve, reject) => {
     const request = https.get(manager.origin + context + route, { ca, agent: false, rejectUnauthorized: true,
+      headers: cookie ? { Cookie: cookie } : undefined,
       signal: AbortSignal.timeout(10000) }, response => {
       if (response.statusCode !== expectedStatus) {
         response.resume();
@@ -116,10 +117,38 @@ async function applicationResponse(manager, context, route, expectedStatus = 200
       const parts = [];
       response.on('data', part => parts.push(part));
       response.once('error', reject);
-      response.on('end', () => resolve(Buffer.concat(parts).toString('utf8').trim()));
+      response.on('end', () => {
+        const body = Buffer.concat(parts).toString('utf8').trim();
+        const session = response.headers['set-cookie']?.find(value => value.startsWith('JSESSIONID='))?.split(';', 1)[0];
+        resolve(captureSession ? { body, cookie: session } : body);
+      });
     });
     request.once('error', reject);
   });
 }
 
-module.exports = { startOwnedManager, applicationResponse };
+async function publishExternalFixtureWar(manager, context, file) {
+  assert.match(manager.origin, /^https:\/\/127\.0\.0\.1:\d+$/u);
+  assert.match(context, /^\/rb-[a-z]+$/u);
+  const ca = await fs.readFile(manager.caFile), archive = await fs.readFile(file);
+  const version = 'zz-fixture-external', endpoint = new URL('/manager/text/deploy', manager.origin);
+  endpoint.searchParams.set('path', context);
+  endpoint.searchParams.set('version', version);
+  const result = await new Promise((resolve, reject) => {
+    const request = https.request(endpoint, { method: 'PUT', ca, agent: false, rejectUnauthorized: true,
+      signal: AbortSignal.timeout(30000), headers: { 'Content-Type': 'application/octet-stream',
+        'Content-Length': archive.length, 'Accept-Language': 'en',
+        Authorization: 'Basic ' + Buffer.from(manager.username + ':' + manager.password).toString('base64') }
+    }, response => {
+      const chunks = [];
+      response.on('data', value => chunks.push(value));
+      response.once('error', reject);
+      response.once('end', () => resolve({ status: response.statusCode, body: Buffer.concat(chunks).toString('utf8').trim() }));
+    });
+    request.once('error', reject);
+    request.end(archive);
+  });
+  assert.deepEqual(result, { status: 200, body: `OK - Deployed application at context path [${context}##${version}]` });
+}
+
+module.exports = { startOwnedManager, applicationResponse, publishExternalFixtureWar };

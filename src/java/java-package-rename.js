@@ -10,6 +10,8 @@ const { exactEntries } = require('./java-type-rename');
 const { lexJava, rangeAt } = require('../spring/java');
 const { inside } = require('./testing-projects');
 const scopeApi = require('./move-scope');
+const { planBootImports, conventionalRoots, autoConfiguration } = require('./package-boot-imports');
+const { reviewRenamedPackageServices } = require('./package-rename-services');
 
 const kind = 'refactor.rename.java.package';
 const dynamic = new Set(['forName', 'loadClass', 'ClassLoader', 'getResource', 'getResourceAsStream', 'ServiceLoader',
@@ -121,12 +123,14 @@ function reconciledEngineEdits(edit, sources, expected, oldPackage, newPackage, 
   return { engineFiles: grouped.size, supplemented };
 }
 
-function enforceContracts(sources, oldPackage, moved) {
+function enforceContracts(sources, oldPackage, moved, boot, services) {
   const escaped = oldPackage.replace(/[$.]/gu, character => '\\' + character);
   const qualified = new RegExp('(?<![\\p{L}\\p{N}_$.])' + escaped + '(?=$|[^\\p{L}\\p{N}_$])', 'u');
   const slash = oldPackage.replaceAll('.', '/');
   for (const source of sources) {
+    const id = scopeApi.key(source.file), permitted = boot.allowedAnnotations.get(id);
     if (!source.file.endsWith('.java')) {
+      if (boot.reviewedFiles.has(id) || services?.reviewedFiles.has(source.uri)) continue;
       if (/\.(?:kt|scala|groovy)$/iu.test(source.file) || qualified.test(source.text) || source.text.includes(slash) ||
           qualified.test(path.basename(source.file))) {
         throw Error('A resource, build setting, registration or non-Java source refers to the package.');
@@ -136,10 +140,11 @@ function enforceContracts(sources, oldPackage, moved) {
     const { tokens, issues } = lexJava(source.text);
     if (issues.length || /\bmodule-info\.java$/u.test(source.file)) throw Error('Use ordinary Java sources outside named modules.');
     if (tokens.some((token, index) =>
-      token.kind === 'id' && dynamic.has(token.text) ||
+      token.kind === 'id' && dynamic.has(token.text) &&
+        (token.text !== 'ServiceLoader' || !services?.reviewedClients.has(source.uri)) ||
       ['string', 'text-block'].includes(token.kind) &&
         (qualified.test(token.value ?? token.text) || token.text.includes(slash)) ||
-      moved.has(scopeApi.key(source.file)) && token.text === '@' && !benignAnnotations.has(tokens[index + 1]?.text))) {
+      moved.has(id) && token.text === '@' && !benignAnnotations.has(tokens[index + 1]?.text) && !permitted?.has(token.start))) {
       throw Error('A Java resource, reflection, annotation or framework package contract requires separate review.');
     }
     if ((source.text.match(/\/\*\*[\s\S]*?\*\//gu) || []).some(comment => qualified.test(comment))) {
@@ -238,11 +243,25 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
     const file = path.join(scope.source.root, relative);
     if (fs.existsSync(file)) scope.buildFiles.push(file);
   }
+  const replacements = () => conventionalRoots.map(resources =>
+    path.join(scope.source.root, resources, 'META-INF', 'spring', autoConfiguration + '.replacements'))
+    .filter(file => fs.lstatSync(file, { throwIfNoEntry: false }));
+  const bootReplacementFiles = replacements();
+  scope.buildFiles.push(...bootReplacementFiles);
   function checkResources() {
-    for (const resources of ['src/main/resources', 'src/test/resources']) {
+    for (const resources of conventionalRoots) {
       if (fs.existsSync(path.join(scope.source.root, resources, ...segments))) {
         throw Error('A resource directory shares the Java package name. Review its resource contracts separately.');
       }
+      const relative = path.join(resources, 'META-INF', 'spring', autoConfiguration + '.imports');
+      const registry = path.join(scope.source.root, relative);
+      if (fs.lstatSync(registry, { throwIfNoEntry: false }) &&
+          path.relative(scope.source.root, fs.realpathSync(registry)) !== relative) {
+        throw Error('Use the exact physical Spring Boot imports path and case.');
+      }
+    }
+    if (JSON.stringify(replacements()) !== JSON.stringify(bootReplacementFiles)) {
+      throw Error('The Spring Boot registration resource set changed after review.');
     }
   }
   checkResources();
@@ -276,9 +295,12 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
     checkResources();
     sourceGuard();
   }
-  enforceContracts(sources, oldPackage, moved);
+  const boot = planBootImports({ sources, moved, projectRoot: scope.source.root, oldPackage, newPackage });
+  const services = await reviewRenamedPackageServices({ scope, sources, moved, tree, oldPackage, newPackage,
+    uriFor: file => vscode.Uri.file(file).toString() });
+  enforceContracts(sources, oldPackage, moved, boot, services);
   const analyze = (sources, fqn, other) => analyzeJavaSources({ ...engine, sources, classpath, cancellation,
-    manifestLimit: 256 * 1024, inspection: { kind: 'packageRename', fqn, other } });
+    manifestLimit: 256 * 1024, inspection: { kind: services ? 'packageRenameServices' : 'packageRename', fqn, other } });
   const first = await analyze([...java.values()], oldPackage, newPackage);
   if (first.errors.length) throw Error('Resolve existing Java compiler errors before renaming the package: ' + first.errors[0].message);
   await rejectBinaryPackages(classpath, oldPackage, newPackage, cancellation);
@@ -302,18 +324,28 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
   if (second.errors.length) throw Error('Package Rename would introduce a Java compiler error: ' + second.errors[0].message);
   const after = attributedFiles(second, new Map(prospective.map(source => [uriKey(source.uri), source])), newPackage, prospectiveNames);
   const bindings = verifyBindings(before, after, moved, oldPackage, newPackage);
-  const preApply = () => { checkTree(); first.validateClasspath(); second.validateClasspath(); };
+  services?.verify(first, second, prospective, exact);
+  const preApply = () => { checkTree(); first.validateClasspath(); second.validateClasspath(); services?.validate(); };
   const validate = async token => {
     await scopeApi.validateScope(scope, vscode, send, uri, uri, token || cancellation);
     preApply();
   };
   preApply();
-  const plan = await refactoring.previewWorkspaceEdit({ documentChanges: [...exact, directory] }, {
+  const plan = await refactoring.previewWorkspaceEdit({ documentChanges: [
+    ...exact, ...boot.entries, ...(services?.edits || []), directory, ...(services?.renames || [])
+  ] }, {
     title: 'Rename package ' + oldPackage + ' to ' + newPackage, kind, anchorDocument: document, cancellation,
     allowedResourceOperations: ['rename'], allowedDirectoryRename: directory, validate, preApply,
-    warnings: ['Review the saved Java source tree and its nested packages. Binary and external callers require a separate review.']
+    allowedBootImportsEdits: boot.permissions,
+    allowedServiceEdits: services?.permissions || [],
+    warnings: ['Review the saved Java source tree and its nested packages. Binary and external callers require a separate review.',
+      ...(boot.entries.length ? ['Review the exact Spring Boot imports alongside the Java package. External registrations and public compatibility require a separate review.'] : []),
+      ...(services ? ['Review the exact ServiceLoader filenames and provider lines. Registration order, comments and line endings are preserved.'] : [])]
   });
-  return { ...plan, packageRename: { oldPackage, newPackage, movedFiles: moved.size, editedFiles: exact.length,
+  return { ...plan, packageRename: { oldPackage, newPackage, movedFiles: moved.size,
+    editedFiles: exact.length + boot.entries.length + (services?.edits.length || 0),
+    ...(boot.entries.length && { bootImports: { files: boot.entries.length, registrations: boot.registrations } }),
+    ...(services && { services: services.receipt }),
     bindings, ...observed } };
 }
 

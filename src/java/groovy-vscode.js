@@ -6,6 +6,7 @@ const { startGroovyConsole } = require('./groovy-console');
 const { openSpecification, runSpockSpecification } = require('./spock-specification');
 const { nativeTaskRunner } = require('./workbench-tasks');
 const { createGroovyProjectConsole } = require('./groovy-project-console');
+const { createGroovyApplicationDebugger } = require('./groovy-debug-vscode');
 const { workspaceRoots,workspacePath,inside,cancelled,fail } = require('./workbench-model');
 
 const maxScriptBytes = 64 * 1024;
@@ -28,7 +29,8 @@ const COMMANDS = Object.freeze({
   selection:'rocketbrain.groovy.evaluateSelection', script:'rocketbrain.groovy.runScript',
   tests:'rocketbrain.groovy.runTests', specification:'rocketbrain.groovy.runSpecification', project:'rocketbrain.groovy.projectSelection',
   stopProject:'rocketbrain.groovy.stopProject', members:'rocketbrain.groovy.completeTypedMember',
-  declaration:'rocketbrain.groovy.openTypedMemberDeclaration'
+  declaration:'rocketbrain.groovy.openTypedMemberDeclaration',
+  debug:'rocketbrain.groovy.debugApplication', stopDebug:'rocketbrain.groovy.stopDebugApplication'
 });
 
 function registerGroovyWorkbench(vscode,java,{ specificationRunner } = {}) {
@@ -58,6 +60,7 @@ function registerGroovyWorkbench(vscode,java,{ specificationRunner } = {}) {
   }
 
   const projectConsole = createGroovyProjectConsole(vscode, java, { trusted, configuration, readSavedScript });
+  const applicationDebug = createGroovyApplicationDebugger(vscode, java, { projects, configuration, trusted, output });
 
   async function openWorker(options,ticket) {
     const child = await startGroovyConsole(options);
@@ -312,29 +315,45 @@ function registerGroovyWorkbench(vscode,java,{ specificationRunner } = {}) {
     return show('Groovy project · ' + selected.project.name, receipt);
   });
   register(COMMANDS.stopProject,() => projectConsole.stop());
-  async function typedMember(action) {
+  register(COMMANDS.debug,async () => {
+    const document=vscode.window.activeTextEditor?.document;
+    const plan=await progress('Review Groovy Gradle Application',cancellation => applicationDebug.prepare({document,cancellation}));
+    const approval='Debug Reviewed Application';
+    const accepted=await vscode.window.showWarningMessage('Debug the reviewed Groovy Gradle application?',{
+      modal:true, detail:plan.project+' · '+plan.task+' · '+plan.source+
+        '\nGradle builds the saved code and starts the application with a verified local debugger.'
+    },approval);
+    if (accepted!==approval) return;
+    output.show(true);
+    return progress('Start Groovy JVM Debugger',cancellation => applicationDebug.start({
+      id:plan.id,allowProjectExecution:true,cancellation
+    }));
+  });
+  register(COMMANDS.stopDebug,() => applicationDebug.stop());
+  async function projectMember(action) {
     const editor = vscode.window.activeTextEditor;
-    if (editor?.document.languageId !== 'groovy') throw fail('Open a Groovy source editor to inspect a typed member.');
+    if (editor?.document.languageId !== 'groovy') throw fail('Open a Groovy source editor to inspect a Java member.');
     const { document, selection } = editor, position = selection.active;
     const chosen = await chooseProject();
     if (!chosen) return;
-    const plan = await progress('Inspect Typed Groovy Members', cancellation => projectConsole.members.inspect({
+    const plan = await progress('Inspect Groovy Java Members', cancellation => projectConsole.members.inspect({
       document, position, projectUri: chosen.selected.project.uri, scope: chosen.scope.value, cancellation
     }));
     if (!plan.members.length) throw fail('No attributable public Java methods match this Groovy member prefix.');
     const selected = await vscode.window.showQuickPick(plan.members.map(member => ({
       label: member.name, description: '(' + member.parameters.join(', ') + ')',
       detail: member.owner + ' → ' + member.returnType, member
-    })), { title: action === 'apply' ? 'Complete Typed Groovy Member' : 'Open Typed Groovy Member Declaration' });
-    if (selected) return progress('Verify Typed Groovy Member', cancellation =>
+    })), { title: action === 'apply' ? 'Complete Groovy Java Member' : 'Open Groovy Java Member Declaration' });
+    if (selected) return progress('Verify Groovy Java Member', cancellation =>
       projectConsole.members[action]({ id: plan.id, key: selected.member.key, editor, cancellation }));
   }
-  register(COMMANDS.members,() => typedMember('apply'));
-  register(COMMANDS.declaration,() => typedMember('openDeclaration'));
+  register(COMMANDS.members,() => projectMember('apply'));
+  register(COMMANDS.declaration,() => projectMember('openDeclaration'));
   subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => diagnostics.delete(event.document.uri)));
   if (vscode.workspace.onDidChangeWorkspaceFolders) subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
     void reset().catch(() => {});
     void projectConsole.invalidate().catch(() => {});
+    void applicationDebug.stop().catch(() => {});
     void spockTasks.stop?.().catch(() => {});
     for (const child of processes) void child.dispose().catch(() => {});
   }));
@@ -343,6 +362,8 @@ function registerGroovyWorkbench(vscode,java,{ specificationRunner } = {}) {
     evaluate:options => track(() => evaluate(options)),runScript:options => track(() => runScript(options)),
     runTests:options => track(() => runTests(options)),
     runSpecification:options => track(() => runSpecification(options)),reset,
+    debug:{prepare:options => track(() => applicationDebug.prepare(options)),
+      start:options => track(() => applicationDebug.start(options)),stop:applicationDebug.stop,getState:applicationDebug.getState},
     project:{list:options => track(() => projectConsole.list(options)),review:options => track(() => projectConsole.review(options)),
       show:id => track(() => projectConsole.show(id)),run:options => track(() => projectConsole.run(options)),stop:projectConsole.stop,
       members: {
@@ -356,7 +377,8 @@ function registerGroovyWorkbench(vscode,java,{ specificationRunner } = {}) {
       disposed=true;
       epoch++;
       closing=(async () => {
-        await Promise.allSettled([projectConsole.dispose(), spockTasks.dispose?.(), ...[...processes].map(child => child.dispose())]);
+        await Promise.allSettled([projectConsole.dispose(), applicationDebug.stop(), spockTasks.dispose?.(),
+          ...[...processes].map(child => child.dispose())]);
         await Promise.allSettled(jobs);
         for (const item of subscriptions) item.dispose();
       })();

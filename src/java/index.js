@@ -269,7 +269,8 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(api.delegatedBuild);
   api.groovy=require('./groovy-vscode').registerGroovyWorkbench(vscode,api);
   api.quarkus=require('./quarkus-vscode').registerQuarkusWorkbench(vscode,api);
-  api.jakarta=require('./jakarta-vscode').registerJakartaWorkbench(vscode,api);
+  const profileStorage = context.globalStorageUri?.scheme === 'file' ? context.globalStorageUri.fsPath : context.globalStoragePath;
+  api.jakarta=require('./jakarta-vscode').registerJakartaWorkbench(vscode,api,{storagePath:profileStorage});
   api.micronaut=require('./micronaut-vscode').registerMicronautWorkbench(vscode,api);
   api.scala=require('./scala-vscode').registerScalaWorkbench(context,vscode,api);
   api.scalaEditor=require('./scala-editor-vscode').registerScalaEditor(vscode,api);

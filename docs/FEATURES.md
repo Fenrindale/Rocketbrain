@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.142.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-27 기준 Rocketbrain 0.148.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 184 |
-| 부분 구현 | 18 |
+| 구현 | 186 |
+| 부분 구현 | 16 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **94.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **95.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.142에서는 Kotlin 객체 필드 편집, Java 가상 스레드 비동기 호출 탐색, Micronaut 디버깅, WildFly 배포, Gradle 복합 빌드 모델, Spring 지연 주입 관찰과 SSH 변경 감지·일괄 전송을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 204.5점에서 205점으로 바뀌었다.
+v0.148에서는 동적 Groovy와 Kotlin/JS 디버깅, Maven EAR 가져오기, WSL Java 디버깅, Tomcat WAR 복구와 Spring·Java 리팩터링을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 205점에서 206점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -67,7 +67,7 @@ v0.142에서는 Kotlin 객체 필드 편집, Java 가상 스레드 비동기 호
 | IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 구현 |
 | IDEA-045 | IntelliJ IDEA | Kotlin Multiplatform·Compose 개발 | 부분 구현 |
 | IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 구현 |
-| IDEA-047 | IntelliJ IDEA | Groovy·Spock·콘솔 | 부분 구현 |
+| IDEA-047 | IntelliJ IDEA | Groovy·Spock·콘솔 | 구현 |
 | IDEA-048 | IntelliJ IDEA | 외부 라이브러리 소스·바이트코드 디컴파일 | 구현 |
 | IDEA-049 | IntelliJ IDEA | Scratch·JShell 실험 코드 | 구현 |
 | IDEA-050 | IntelliJ IDEA | 어노테이션 프로세서·Lombok 생성 코드 | 구현 |
@@ -88,7 +88,7 @@ v0.142에서는 Kotlin 객체 필드 편집, Java 가상 스레드 비동기 호
 | IDEA-065 | IntelliJ IDEA | MVC·WebFlux·Feign 엔드포인트 탐색 | 구현 |
 | IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 부분 구현 |
 | IDEA-067 | IntelliJ IDEA | Micronaut 개발 | 부분 구현 |
-| IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 부분 구현 |
+| IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 구현 |
 | IDEA-069 | IntelliJ IDEA | Maven 프로젝트·목표·의존성 | 구현 |
 | IDEA-070 | IntelliJ IDEA | Gradle·Kotlin DSL·Task 탐색 | 구현 |
 | IDEA-071 | IntelliJ IDEA | 모듈·혼합 빌드·프로젝트 인덱스 | 부분 구현 |

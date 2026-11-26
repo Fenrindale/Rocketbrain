@@ -10,11 +10,11 @@ const { registerWildFly } = require('./jakarta-wildfly-vscode');
 
 const MARKER='__rocketbrainJakartaRun';
 const COMMANDS={build:'rocketbrain.jakarta.buildWar',deploy:'rocketbrain.jakarta.deploy',
-  deploySet:'rocketbrain.jakarta.deploySet',undeploy:'rocketbrain.jakarta.undeploy',
+  deploySet:'rocketbrain.jakarta.deploySet',addApplication:'rocketbrain.jakarta.addApplication',undeploy:'rocketbrain.jakarta.undeploy',
   manager:'rocketbrain.jakarta.manager',
   debug:'rocketbrain.jakarta.debug',status:'rocketbrain.jakarta.status',stop:'rocketbrain.jakarta.stop'};
 
-function registerJakartaWorkbench(vscode,java) {
+function registerJakartaWorkbench(vscode,java,{ storageUri, storagePath = storageUri?.scheme === 'file' ? storageUri.fsPath : undefined }={}) {
   const output=vscode.window.createOutputChannel('Rocketbrain Jakarta');
   const backend=createTomcatDeployment({log:chunk => output.append(chunk)});
   const subscriptions=[output], jobs=new Set(), pending=new Map();
@@ -117,6 +117,26 @@ function registerJakartaWorkbench(vscode,java) {
     return receipt;
   }
 
+  async function reviewAddition({deploymentId,projectUri,warUri,context,cancellation}={}) {
+    const project=await projectFor(projectUri,cancellation);
+    saved(project);
+    const artifact=resolveWarArtifact(project,warUri);
+    trusted(cancellation);
+    const review=await backend.reviewAddition({deploymentId,artifact,context,cancellation});
+    return {...review,projectUri:project.uri,warUri:artifact.uri};
+  }
+
+  async function addApplication({deploymentId,projectUri,warUri,token,allowDeploy,cancellation}={}) {
+    if (allowDeploy!==true) throw fail('Explicitly confirm adding the reviewed WAR.');
+    const project=await projectFor(projectUri,cancellation);
+    saved(project);
+    const artifact=resolveWarArtifact(project,warUri);
+    trusted(cancellation);
+    const receipt=await backend.addApplication({deploymentId,artifact,token,allowDeploy,cancellation});
+    output.appendLine(`Added ${receipt.application.context} · ${receipt.application.artifact} · SHA-256 ${receipt.application.sha256}`);
+    return receipt;
+  }
+
   async function undeploy(options) {
     trusted(options?.cancellation);
     const receipt=await backend.undeploy(options);
@@ -205,7 +225,7 @@ function registerJakartaWorkbench(vscode,java) {
       (_progress,cancellation) => action(cancellation));
   }
 
-  const remote=registerJakartaManager(vscode,{trusted,withProgress,chooseProject,listWarArtifacts,output,
+  const remote=registerJakartaManager(vscode,{trusted,withProgress,chooseProject,listWarArtifacts,output,storagePath,
     resolveArtifact:async (projectUri,warUri,cancellation) => resolveWarArtifact(await projectFor(projectUri,cancellation),warUri)});
   register(COMMANDS.manager,remote.command);
   const wildfly=registerWildFly(vscode,{trusted,withProgress,projectFor,chooseProject,saved,output,
@@ -275,6 +295,34 @@ function registerJakartaWorkbench(vscode,java) {
     return withProgress('Deploy Jakarta WAR Set',cancellation => deploySet({applications:reviewed,allowDeploy:true,cancellation}));
   });
 
+  register(COMMANDS.addApplication,async () => {
+    const state=backend.getState();
+    if (!state.applications?.length) throw fail('Start a Jakarta WAR set before adding an application.');
+    if (state.applications.length>=MAX_APPLICATIONS) throw fail('The running Tomcat deployment set is full.');
+    const project=await chooseProject();
+    if (!project) return;
+    const existing=new Set(state.applications.map(app=>app.context.slice(1)));
+    const choices=listWarArtifacts(project).map(artifact=>({label:artifact.name,description:project.name,artifact}));
+    if (!choices.length) throw fail('Build a Maven WAR before adding an application.');
+    const picked=await vscode.window.showQuickPick(choices,{title:'Select a WAR for the Running Tomcat Server'});
+    if (!picked) return;
+    const validate=value=>!contextPattern.test(value) ? 'Use lowercase letters, numbers and hyphens.' :
+      existing.has(value) ? 'This context is already in use.' : undefined;
+    const initial=mavenWarProject(project).context;
+    const context=await vscode.window.showInputBox({title:'New Tomcat Context',value:existing.has(initial)?'':initial,
+      validateInput:validate});
+    if (!context) return;
+    const reviewed=await withProgress('Review Jakarta WAR',cancellation=>reviewAddition({
+      deploymentId:state.deploymentId,projectUri:project.uri,warUri:picked.artifact.uri,context,cancellation}));
+    const detail=`${state.url}/${context}\n${reviewed.artifact}\nSHA-256 ${reviewed.expectedSha256}`;
+    const approved=await vscode.window.showWarningMessage('Add this WAR to the running Tomcat server?',
+      {modal:true,detail},'Add WAR');
+    if (approved!=='Add WAR') return;
+    output.show(true);
+    return vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'Starting Tomcat Application'},
+      ()=>addApplication({...reviewed,allowDeploy:true}));
+  });
+
   async function selectApplication(state,title) {
     return (await vscode.window.showQuickPick(state.applications.map(app => (
       {label:app.context,description:app.artifact,detail:app.url,app})),{title}))?.app;
@@ -313,13 +361,19 @@ function registerJakartaWorkbench(vscode,java) {
       deploy:options=>track(()=>wildfly.deploy(options)),
       status:wildfly.status,stop:()=>track(()=>wildfly.stop())},
     reviewSet:options => track(() => reviewSet(options)),deploySet:options => track(() => deploySet(options)),
+    reviewAddition:options => track(() => reviewAddition(options)),addApplication:options => track(() => addApplication(options)),
     undeploy:options => track(() => undeploy(options)),
     getState:backend.getState,dispose() {
       if (closing) return closing;
       disposed=true;
-      remote.dispose();
+      const remoteStopped=remote.dispose();
       closing=(async () => {
-        try {await Promise.all([stop(),wildfly.dispose()]);await backend.dispose();}
+        try {
+          const results=await Promise.allSettled([stop(),wildfly.dispose(),remoteStopped]);
+          await backend.dispose();
+          const failure=results.find(result=>result.status==='rejected');
+          if(failure)throw failure.reason;
+        }
         finally {await Promise.allSettled(jobs);for (const item of subscriptions) item.dispose();}
       })();
       return closing;

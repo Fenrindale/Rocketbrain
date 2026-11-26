@@ -23,9 +23,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** Resolves only saved Kotlin source lines belonging to one managed JVM compilation. */
+/** Resolves only saved source lines belonging to one managed JVM compilation. */
 public final class KotlinLineBreakpoints {
-    private static final String ARGUMENT = "rocketbrainKotlinSourceLines";
+    private static final String KOTLIN_ARGUMENT = "rocketbrainKotlinSourceLines";
+    private static final String GROOVY_ARGUMENT = "rocketbrainGroovySourceLines";
     private static final int SOURCE_BYTES = 512 * 1024;
     private static final Map<IDebugAdapterContext, Session> SESSIONS =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -40,25 +41,32 @@ public final class KotlinLineBreakpoints {
         if (!"attach".equals(request.command)) return;
         SESSIONS.remove(context);
         if (request.arguments == null || !request.arguments.isJsonObject()) return;
-        JsonElement argument = request.arguments.getAsJsonObject().get(ARGUMENT);
+        var arguments = request.arguments.getAsJsonObject();
+        JsonElement argument = arguments.get(GROOVY_ARGUMENT);
+        boolean groovy = argument != null && !argument.isJsonNull();
+        if (!groovy) argument = arguments.get(KOTLIN_ARGUMENT);
         if (argument == null || argument.isJsonNull()) return;
         var packet = argument.getAsJsonObject();
-        if (!"RocketbrainKmpSourceLines1".equals(string(packet, "format", 32))) throw invalid();
+        var format = groovy ? "RocketbrainGroovySourceLines1" : "RocketbrainKmpSourceLines1";
+        if (!format.equals(string(packet, "format", 32))) throw invalid();
         var files = packet.getAsJsonArray("files");
         if (files == null || files.size() > 240) throw invalid();
-        var session = new Session();
+        var session = new Session(groovy ? ".groovy" : ".kt");
         int total = 0;
         for (JsonElement file : files) {
             var value = file.getAsJsonObject();
             var path = physicalPath(string(value, "file", 2048));
             var name = string(value, "name", 256);
             var hash = hash(value, "sha256", false);
-            if (!name.matches("[a-zA-Z_$][\\w$-]*\\.kt") || !name.equals(path.getFileName().toString())) throw invalid();
+            if (!name.endsWith(session.suffix) ||
+                    !name.substring(0, name.length() - session.suffix.length()).matches("[a-zA-Z_$][\\w$-]*") ||
+                    !name.equals(path.getFileName().toString())) throw invalid();
             var source = new Source(path, name, hash);
             for (var row : value.getAsJsonObject("lines").entrySet()) {
                 if (++total > 40000 || !row.getKey().matches("[1-9]\\d{0,5}")) throw invalid();
                 int line = Integer.parseInt(row.getKey());
                 var site = new Site(source, line, row.getValue().getAsJsonObject());
+                if (groovy && !site.conventionalGroovy()) throw invalid();
                 source.lines.put(line, site);
                 var prior = session.owners.putIfAbsent(site.className(), source);
                 if (prior != null && prior != source) throw invalid();
@@ -71,10 +79,10 @@ public final class KotlinLineBreakpoints {
     public static JavaBreakpointLocation[] locations(IDebugAdapterContext context, String fileName,
             Types.SourceBreakpoint[] requested, Types.SourceBreakpoint[] normalized, boolean sourceModified) {
         var session = SESSIONS.get(context);
-        if (session == null || !fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".kt")) return null;
+        if (session == null || !fileName.toLowerCase(java.util.Locale.ROOT).endsWith(session.suffix)) return null;
         Source source = null;
         try { source = session.files.get(physicalPath(fileName)); } catch (IllegalArgumentException invalidPath) {
-            // An unknown or virtual Kotlin path never resolves in this managed compilation.
+            // Unknown source paths never resolve in this managed compilation.
         }
         boolean clean = source != null && !sourceModified && source.isCurrent();
         var result = new JavaBreakpointLocation[normalized.length];
@@ -123,7 +131,7 @@ public final class KotlinLineBreakpoints {
         }
     }
 
-    private static IllegalArgumentException invalid() { return new IllegalArgumentException("Invalid Kotlin source-line evidence."); }
+    private static IllegalArgumentException invalid() { return new IllegalArgumentException("Invalid owned JVM source-line evidence."); }
 
     private static String string(JsonObject object, String key, int limit) {
         var value = object.get(key);
@@ -152,8 +160,11 @@ public final class KotlinLineBreakpoints {
     }
 
     private static final class Session {
+        final String suffix;
         final Map<Path, Source> files = new HashMap<>();
         final Map<String, Source> owners = new HashMap<>();
+
+        Session(String suffix) { this.suffix = suffix; }
     }
 
     private static final class Source {
@@ -225,6 +236,11 @@ public final class KotlinLineBreakpoints {
 
         public Types.Source clientSource(IDebugAdapterContext context) {
             return new Types.Source(source.name, context.isClientPathsAreUri() ? source.file.toUri().toString() : source.file.toString(), 0);
+        }
+
+        private boolean conventionalGroovy() {
+            return "Java".equals(stratum) && debugHash.isEmpty() &&
+                    className().substring(className().lastIndexOf('.') + 1).concat(".groovy").equals(source.name);
         }
 
         private boolean currentType(ReferenceType type) throws AbsentInformationException {

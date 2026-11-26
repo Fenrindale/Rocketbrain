@@ -56,10 +56,10 @@ async function matchingSource(peer, root, file) {
   return local;
 }
 
-function relayReady(child, marker) {
+function relayReady(child, marker, endpoint) {
   return new Promise((resolve, reject) => {
     let data = Buffer.alloc(0);
-    const unavailable = () => settled(Error('The SSH host did not confirm the reviewed JVM and established socket.'));
+    const unavailable = () => settled(Error(`${endpoint} did not confirm the reviewed JVM and established socket.`));
     const timeout = setTimeout(unavailable, 25000);
     function settled(error) {
       clearTimeout(timeout);
@@ -86,7 +86,7 @@ function relayReady(child, marker) {
   });
 }
 
-async function openSingleJdwpRelay(child, validateSource) {
+async function openSingleJdwpRelay(child, validateSource, { endpoint = 'The SSH host', connectTimeout = 20000 } = {}) {
   const events = new EventEmitter();
   const server = net.createServer();
   let client, waitTimer, closing, invalid = false;
@@ -111,9 +111,9 @@ async function openSingleJdwpRelay(child, validateSource) {
   child.once('close', () => { void close(); });
   child.once('error', () => { void close(); });
   try {
-    await relayReady(child, preparedLine);
+    await relayReady(child, preparedLine, endpoint);
     await validateSource();
-    if (invalid) throw Error('The reviewed SSH debug channel closed.');
+    if (invalid) throw Error('The reviewed Java debug channel closed.');
     server.on('connection', async socket => {
       if (invalid || client) return socket.destroy();
       client = socket;
@@ -123,7 +123,7 @@ async function openSingleJdwpRelay(child, validateSource) {
       socket.on('error', () => { void close(); });
       socket.on('close', () => { void close(); });
       try {
-        const ready = relayReady(child, readyLine);
+        const ready = relayReady(child, readyLine, endpoint);
         child.stdin.write('1');
         await ready;
         if (invalid) return;
@@ -136,8 +136,8 @@ async function openSingleJdwpRelay(child, validateSource) {
       server.listen(0, loopback, () => { server.off('error', reject); resolve(server.address().port); });
     });
     server.on('error', () => { void close(); });
-    if (invalid) throw Error('The reviewed SSH debug channel closed.');
-    waitTimer = setTimeout(() => { void close(); }, 20000);
+    if (invalid) throw Error('The reviewed Java debug channel closed.');
+    waitTimer = setTimeout(() => { void close(); }, connectTimeout);
     waitTimer.unref();
     return { host: loopback, localPort, close,
       isClosed: () => invalid,

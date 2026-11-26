@@ -43,16 +43,41 @@ class JakartaWarHost {
             System.out.printf("rocketbrain-tomcat:%s:%s:%d%n", token, version, port);
             System.out.flush();
 
-            // An extension-owned pipe handles removal and shuts the server down on EOF.
+            // The extension-owned pipe manages contexts and shuts the server down on EOF.
             var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
             String line;
             while ((line = input.readLine()) != null) {
                 if (line.isEmpty()) break;
                 String[] fields = line.split(" ", -1);
-                if (fields.length != 3 || !fields[0].equals("remove") || !fields[1].matches("[a-f0-9-]{36}")) {
+                if (fields.length != 3 || !fields[1].matches("[a-f0-9-]{36}") ||
+                    !fields[2].matches("[a-z][a-z0-9-]{0,47}")) {
                     throw new IllegalArgumentException("Invalid Tomcat management message.");
                 }
                 String name = fields[2];
+                if (fields[0].equals("add")) {
+                    if (applications.containsKey(name) || host.findChild("/" + name) != null) {
+                        throw new IllegalStateException("The reviewed Tomcat context is already in use.");
+                    }
+                    var archive = Path.of(args[0], "war-live-" + fields[1] + ".war");
+                    String disposition = "added";
+                    try {
+                        Context added = server.addWebapp("/" + name, archive.toString());
+                        if (host.findChild(added.getName()) != added || !added.getState().isAvailable()) {
+                            throw new IllegalStateException("The new Tomcat context did not start.");
+                        }
+                        applications.put(name, added);
+                    } catch (RuntimeException failure) {
+                        var incomplete = host.findChild("/" + name);
+                        if (incomplete != null) host.removeChild(incomplete);
+                        if (host.findChild("/" + name) != null) throw failure;
+                        System.err.println("Tomcat rejected the reviewed context " + name + ": " + failure.getMessage());
+                        disposition = "rejected";
+                    }
+                    System.out.printf("rocketbrain-tomcat:%s:%s:%s:%s%n", token, disposition, fields[1], name);
+                    System.out.flush();
+                    continue;
+                }
+                if (!fields[0].equals("remove")) throw new IllegalArgumentException("Invalid Tomcat management operation.");
                 Context app = applications.get(name);
                 if (app == null || host.findChild(app.getName()) != app) {
                     throw new IllegalStateException("The reviewed Tomcat context has changed.");

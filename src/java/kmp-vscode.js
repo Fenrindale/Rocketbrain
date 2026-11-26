@@ -8,6 +8,9 @@ const { nativeTaskRunner } = require('./workbench-tasks');
 const { projectForRoot,loadKmpModel } = require('./kmp-gradle');
 const { runKmpTasks } = require('./kmp-workbench');
 const { startKmpJvmDebug } = require('./kmp-jvm-debug');
+const { jsDebugSelection,snapshotJsInputs } = require('./kmp-js-build');
+const { nodeExecutable } = require('./kmp-js-inspector');
+const { registerKotlinJsDebug } = require('./kmp-js-debug-vscode');
 const { DEBUG_TYPE,KMP_DEBUG_MARKER:debugMarker,processAttachTarget } = require('./debug');
 const { KOTLIN_LINE_BUILDS } = require('./debug-runtime');
 const { definitionForKmp } = require('./kmp-sources');
@@ -17,7 +20,7 @@ const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbe
 
 const COMMANDS={inspect:'rocketbrain.kotlin.multiplatform.inspect',compile:'rocketbrain.kotlin.multiplatform.compile',
   test:'rocketbrain.kotlin.multiplatform.test',run:'rocketbrain.kotlin.multiplatform.run',
-  debug:'rocketbrain.kotlin.multiplatform.debugJvm',
+  debug:'rocketbrain.kotlin.multiplatform.debugJvm',debugJs:'rocketbrain.kotlin.multiplatform.debugJs',
   definition:'rocketbrain.kotlin.multiplatform.definition',stop:'rocketbrain.kotlin.multiplatform.stop',
   preview:'rocketbrain.kotlin.multiplatform.previewCompose',refreshPreview:'rocketbrain.kotlin.multiplatform.refreshComposePreview'};
 
@@ -37,6 +40,7 @@ function registerKmpWorkbench(vscode,java) {
   const runner=nativeTaskRunner(vscode), models=new Map(), indexes=new Map(), subscriptions=[];
   const previewImages=new WeakMap();
   const pendingDebug=new Map(), output=vscode.window.createOutputChannel('Rocketbrain Kotlin JVM Debug');
+  const jsDebug=registerKotlinJsDebug(vscode), reviewedJs=new Map();
   subscriptions.push(output);
   let disposed=false, closing, active, previewPanel, visiblePreview, ownedDebug;
 
@@ -76,7 +80,7 @@ function registerKmpWorkbench(vscode,java) {
     return Promise.resolve().then(async () => {
       if (options.allowProjectExecution!==true) throw fail('Explicitly choose the Kotlin Gradle action before executing the project.');
       trusted(options.cancellation);
-      if (active || ownedDebug) throw fail('Finish or stop the current owned Kotlin Gradle task.');
+      if (active || ownedDebug || jsDebug.active) throw fail('Finish or stop the current owned Kotlin Gradle task.');
       const controller=new AbortController(), provided=options.cancellation, cancel=() => controller.abort();
       const subscription=provided?.onCancellationRequested?.(cancel);
       provided?.addEventListener?.('abort',cancel,{once:true});
@@ -105,6 +109,44 @@ function registerKmpWorkbench(vscode,java) {
   }
 
   function moduleKey(root,modulePath) {return root+'\0'+modulePath;}
+  function prepareJsDebug(options={}) {
+    trusted(options.cancellation);
+    if (active || ownedDebug || jsDebug.active) throw fail('Finish or stop the current owned Kotlin Gradle task.');
+    const root=rootFor(options.projectUri), model=models.get(root);
+    if (!model) throw fail('Inspect the Kotlin Multiplatform Gradle model before choosing a Kotlin/JS target.');
+    saved(root);
+    const selection=jsDebugSelection(model,options.modulePath,options.targetName);
+    const selectedTools=tools(), node=nodeExecutable(selectedTools.nodeHome);
+    const snapshot=snapshotJsInputs(model,selection,options.cancellation);
+    const reviewId=randomUUID();
+    remember(reviewedJs,reviewId,{ root,model,selection,node,tools:JSON.stringify(selectedTools),fingerprint:snapshot.fingerprint,
+      expires:Date.now()+10*60*1000 });
+    return { reviewId,root,modulePath:selection.module.path,target:selection.target.name,
+      task:selection.syncTask,sourceCount:snapshot.files.size };
+  }
+
+  function debugJs(options={}) {
+    return runOwned(options,async details=>{
+      const review=reviewedJs.get(details.reviewId);
+      reviewedJs.delete(details.reviewId);
+      if (!review || review.root!==details.root || review.model!==models.get(details.root) ||
+          review.tools!==JSON.stringify(details.tools) || review.expires<Date.now()) {
+        throw fail('The Kotlin/JS review is unavailable or out of date. Review the target again.');
+      }
+      function validate() {
+        trusted(details.cancellation);
+        saved(details.root);
+        const snapshot=snapshotJsInputs(review.model,review.selection,details.cancellation);
+        if (snapshot.fingerprint!==review.fingerprint || review.tools!==JSON.stringify(tools())) {
+          throw fail('Saved Kotlin or tool settings changed since review. Build and debug again.');
+        }
+        return snapshot;
+      }
+      validate();
+      return jsDebug.start({...details,model:review.model,selection:review.selection,validate,node:review.node});
+    });
+  }
+
 
   function execute(options,action) {
     return runOwned(options,async details => {
@@ -305,6 +347,7 @@ function registerKmpWorkbench(vscode,java) {
     const record=active;
     record?.controller.abort();
     await finishDebug(ownedDebug);
+    await jsDebug.stop();
     await runner.stop();
     if (record?.work) await record.work.catch(()=>{});
     return {state:'stopped'};
@@ -317,7 +360,7 @@ function registerKmpWorkbench(vscode,java) {
     }
   }));
   if (vscode.workspace.onDidChangeWorkspaceFolders) subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
-    models.clear();indexes.clear();
+    models.clear();indexes.clear();reviewedJs.clear();
     previewPanel?.dispose();
     void stop().catch(()=>{});
   }));
@@ -377,8 +420,9 @@ function registerKmpWorkbench(vscode,java) {
     const choice=await chooseModel();
     if (!choice) return;
     const {model,options}=choice;
-    const targetTask=target=>action==='debug' ? target.platform==='jvm' && target.runTask : target[action+'Task'];
-    const single=['run','debug'].includes(action);
+    const targetTask=target=>action==='debug' ? target.platform==='jvm' && target.runTask :
+      action==='debugJs' ? target.platform==='js' && target.runTask : target[action+'Task'];
+    const single=['run','debug','debugJs'].includes(action);
     const modules=model.modules.filter(module => module.targets.some(targetTask));
     if (!modules.length) throw fail('Gradle reported no runnable '+action+' tasks for the supported Kotlin targets.');
     const module=modules.length===1 ? modules[0] : (await vscode.window.showQuickPick(modules.map(item => ({label:item.path,module:item})),
@@ -386,18 +430,27 @@ function registerKmpWorkbench(vscode,java) {
     if (!module) return;
     const targets=module.targets.filter(targetTask).map(target => ({label:target.name,description:target.platform,
       detail:targetTask(target),target,picked:!single}));
-    const items=single ? [await vscode.window.showQuickPick(targets,{title:action==='debug'?'Select Kotlin JVM Debug Target':'Select Kotlin Run Target'})].filter(Boolean)
+    const title=action==='debugJs'?'Select Kotlin/JS Node Debug Target':action==='debug'?'Select Kotlin JVM Debug Target':'Select Kotlin Run Target';
+    const items=single ? [await vscode.window.showQuickPick(targets,{title})].filter(Boolean)
       : await vscode.window.showQuickPick(targets,{title:'Select Kotlin '+action+' Targets',canPickMany:true});
     if (!items?.length) return;
     if (action==='debug') return progress('Debug Kotlin JVM Target',cancellation=>debugJvm({...options,modulePath:module.path,
       targetName:items[0].target.name,cancellation}));
+    if (action==='debugJs') {
+      const review=prepareJsDebug({...options,modulePath:module.path,targetName:items[0].target.name});
+      const choice=await vscode.window.showWarningMessage('Build and debug the selected Kotlin/JS Node program?',{
+        modal:true,detail:review.root+'\n'+review.task+'\n'+review.sourceCount+' saved Kotlin source files. This runs the trusted Gradle build and the generated Node.js application locally.'
+      },'Build and Debug');
+      if (choice!=='Build and Debug') {reviewedJs.delete(review.reviewId);return;}
+      return progress('Build and Debug Kotlin/JS Node Target',cancellation=>debugJs({...options,reviewId:review.reviewId,cancellation}));
+    }
     const result=await progress('Kotlin Multiplatform '+action,cancellation => execute({...options,modulePath:module.path,
       targetNames:items.map(item => item.target.name),cancellation},action));
     if (result.linkedDeclarations!==undefined) void vscode.window.showInformationMessage(`Indexed ${result.linkedDeclarations} Kotlin expect/actual declarations.`);
     return result;
   }
 
-  for (const action of ['compile','test','run','debug']) register(COMMANDS[action],() => chooseTask(action));
+  for (const action of ['compile','test','run','debug','debugJs']) register(COMMANDS[action],() => chooseTask(action));
   register(COMMANDS.definition,async () => {
     const editor=vscode.window.activeTextEditor;
     const targets=editor ? definition({document:editor.document,position:editor.selection.active}) : [];
@@ -426,12 +479,12 @@ function registerKmpWorkbench(vscode,java) {
   register(COMMANDS.stop,stop);
 
   return {inspect,compile:options=>execute(options,'compile'),test:options=>execute(options,'test'),run:options=>execute(options,'run'),
-    debugJvm,definition,composeCandidates,preview,showComposePreview,refreshCompose,stop,dispose() {
+    debugJvm,prepareJsDebug,debugJs,definition,composeCandidates,preview,showComposePreview,refreshCompose,stop,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {
         try {await stop();await runner.dispose();}
-        finally {previewPanel?.dispose();for (const item of subscriptions) item.dispose();}
+        finally {await jsDebug.dispose();previewPanel?.dispose();for (const item of subscriptions) item.dispose();}
       })();
       return closing;
     }};

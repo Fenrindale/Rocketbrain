@@ -5,11 +5,13 @@ const { parseYaml } = require('../spring/configuration');
 const { inspectMicronautProject,micronautProject,snapshotMicronautDebugSources,CONFIG_FILE,PART } = require('./micronaut-model');
 const { createMicronautRuntime,packagedJar } = require('./micronaut-runtime');
 const { createMicronautDebugger } = require('./micronaut-debugger');
+const { createMicronautRestart, captureRestartInputs } = require('./micronaut-restart');
 const { distribution }=require('./micronaut-distribution');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 
 const COMMANDS={inspect:'rocketbrain.micronaut.inspect',run:'rocketbrain.micronaut.run',debug:'rocketbrain.micronaut.debug',
-  tests:'rocketbrain.micronaut.test',build:'rocketbrain.micronaut.build',stop:'rocketbrain.micronaut.stop'};
+  tests:'rocketbrain.micronaut.test',build:'rocketbrain.micronaut.build',stop:'rocketbrain.micronaut.stop',
+  restart:'rocketbrain.micronaut.restart'};
 const IMPORT='Import the Micronaut 5 Maven or Gradle application in Java Projects first.';
 
 function registerMicronautWorkbench(vscode,java) {
@@ -48,6 +50,59 @@ function registerMicronautWorkbench(vscode,java) {
   function saveNeeded(project) {
     if (vscode.workspace.textDocuments.some(document => document.isDirty && document.uri.scheme==='file' &&
         inside(project.root,document.uri.fsPath))) throw fail('Save modified Micronaut project files before executing build tasks.');
+  }
+
+  function tools(project) {
+    const config=vscode.workspace.getConfiguration('rocketbrain.java',vscode.Uri.parse(project.uri));
+    const latest=java.workbench.getSnapshot().projects.find(item => item.uri===project.uri);
+    return {javaHome:latest?.jdk || config.get('javaHome') || java.getState().javaHome,
+      mavenHome:config.get('mavenHome')};
+  }
+
+  function validateRestart(project,cancellation) {
+    trusted(cancellation);
+    if (path.relative(project.root,workspacePath(project.root,roots())) ||
+        !java.workbench.getSnapshot().projects.some(item => item.uri===project.uri && item.tool==='maven')) {
+      throw fail('The reviewed Micronaut Maven module is no longer in the trusted workspace.');
+    }
+    saveNeeded(project);
+  }
+
+  const restart=createMicronautRestart({runtime,currentProject:projectFor,currentTools:tools,validate:validateRestart,
+    log:chunk => output.append(chunk)});
+
+  function observedMavenSources(project,cancellation) {
+    if (project.tool==='maven') {
+      try {return captureRestartInputs(project,cancellation);}
+      catch { /* Existing run supports projects outside the narrower restart scope. */ }
+    }
+  }
+
+  function prepareRestart({cancellation}={}) {
+    trusted(cancellation);
+    if (pendingStart) throw fail('Finish the current Micronaut lifecycle operation first.');
+    return restart.prepare(cancellation);
+  }
+
+  async function applyRestart({reviewId,allowProjectExecution,cancellation}={}) {
+    trusted(cancellation);
+    if (pendingStart) throw fail('Finish the current Micronaut lifecycle operation first.');
+    const controller=new AbortController();
+    pendingStart=controller;
+    const cancel=() => controller.abort();
+    const subscription=cancellation?.onCancellationRequested?.(cancel);
+    cancellation?.addEventListener?.('abort',cancel,{once:true});
+    try {
+      const result=await restart.apply({reviewId,allowProjectExecution,cancellation:controller.signal,
+        authorized:() => trusted(controller.signal)});
+      output.appendLine('Micronaut JVM restarted · '+result.baseUrl);
+      output.appendLine('Application artifact SHA-256: '+result.sha256);
+      return result;
+    } finally {
+      pendingStart=undefined;
+      subscription?.dispose();
+      cancellation?.removeEventListener?.('abort',cancel);
+    }
   }
 
   async function task(project,name,cancellation) {
@@ -100,6 +155,7 @@ function registerMicronautWorkbench(vscode,java) {
     try {
       const signal=controller.signal;
       const project=await projectFor(projectUri,signal);
+      const initialMaven=debug ? undefined : observedMavenSources(project,signal);
       let sources;
       if (debug) {
         await java.start();
@@ -127,6 +183,12 @@ function registerMicronautWorkbench(vscode,java) {
         sessionId=await debuggerControl.attach({project,receipt:result,sourcePaths:sources.sourcePaths,
           cancellation:signal,validate:verify});
       }
+      if (initialMaven) {
+        const saved=observedMavenSources(project,signal);
+        if (saved?.digest===initialMaven.digest && saved.rootKey===initialMaven.rootKey) {
+          restart.remember(result,initialMaven);
+        }
+      }
       output.appendLine(`Micronaut ${environment} · ${result.artifact} · ${result.baseUrl}`);
       output.appendLine('Application artifact SHA-256: '+result.sha256);
       return sessionId?{...result,sessionId}:result;
@@ -145,6 +207,7 @@ function registerMicronautWorkbench(vscode,java) {
 
   async function stop() {
     pendingStart?.abort();
+    restart.forget();
     let receipt;
     try {await debuggerControl?.stop();}
     finally {receipt=await runtime.stop();}
@@ -293,11 +356,31 @@ function registerMicronautWorkbench(vscode,java) {
     const projectUri=await choose();
     if(projectUri)return progress('Build Micronaut Application',cancellation => build({projectUri,allowProjectExecution:true,cancellation}));
   });
+  register(COMMANDS.restart,async () => {
+    const review=await progress('Prepare Micronaut Restart Review',cancellation => prepareRestart({cancellation}));
+    output.appendLine('Micronaut restart review · '+review.name+' · '+review.environment);
+    output.appendLine(review.task+' · '+review.sourceCount+' saved inputs · SHA-256 '+review.sourceDigest);
+    output.appendLine('Current listener: '+review.oldBaseUrl);
+    if (!review.baselineObserved) output.appendLine('Saved inputs are listed without a previous source snapshot.');
+    for (const change of review.changes) output.appendLine(change.action+' '+change.file);
+    output.show(true);
+    const approved='Build and Restart';
+    const confirmed=await vscode.window.showWarningMessage('Build and restart the owned Micronaut application?',{
+      modal:true, detail:'Review the saved files in Rocketbrain Micronaut output. Maven builds a fresh package in a private folder before the current JVM stops. The new JVM can use a different port.'
+    },approved);
+    if (confirmed!==approved) return;
+    const result=await progress('Build and Restart Micronaut',cancellation =>
+      applyRestart({reviewId:review.reviewId,allowProjectExecution:true,cancellation}));
+    void vscode.window.showInformationMessage('Micronaut '+result.environment+' is ready at '+result.baseUrl);
+    return result;
+  });
   register(COMMANDS.stop,stop);
 
   return {inspect:options => track(() => inspect(options)),run:options => track(() => run({...options,debug:false})),
     debug:options => track(() => run({...options,debug:true})),
-    test:options => track(() => test(options)),build:options => track(() => build(options)),getState,stop,dispose() {
+    test:options => track(() => test(options)),build:options => track(() => build(options)),
+    prepareRestart:options => track(() => prepareRestart(options)),restart:options => track(() => applyRestart(options)),
+    getState,stop,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {

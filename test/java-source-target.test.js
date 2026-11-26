@@ -11,13 +11,16 @@ const { test } = require('node:test');
 const { resolveJavaSourceTarget, settingsKeys } = require('../src/java/source-target');
 const { resolveBuildTarget } = require('../src/java/source-target-builds');
 const { bindModel, prepareGradleObservation, observeGradleTarget } = require('../src/java/gradle-source-model');
+const { declaredExecutions, mavenExecutionArgument, namedProfileExecutions, bindMavenProfileRuntime } = require('../src/java/maven-source-execution');
 const { prepareSourceExecution } = require('../src/java/source-target-execution');
 const { execute } = require('../src/java/testing/provision');
 const { registerJavaWorkbench } = require('../src/java/workbench');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { fakeVscode, fixture } = require('./java-workbench-fixture');
-const { populateTargets, buildTargets, runTargets, executionCases, runObservedGradleComposite } = require('./helpers/java-source-target-fixture');
+const { populateTargets, buildTargets, runTargets, executionCases, runObservedGradleComposite,
+  populateMavenSourceExecution, runDeclaredMavenExecution, populateMavenProfileExecution,
+  runDeclaredMavenProfileExecution } = require('./helpers/java-source-target-fixture');
 
 const read = async file => JSON.parse(await fs.readFile(file, 'utf8'));
 const url = file => pathToFileURL(file).href;
@@ -28,6 +31,8 @@ const mavenHome = process.env.ROCKETBRAIN_TARGET_MAVEN_HOME;
 const gradleCache = process.env.ROCKETBRAIN_SOURCE_TARGET_GRADLE_CACHE;
 const executeFromSource = process.env.ROCKETBRAIN_SOURCE_TARGET_EXECUTION === '1';
 const observeComposite = process.env.ROCKETBRAIN_SOURCE_TARGET_GRADLE_MODEL === '1';
+const declareMaven = process.env.ROCKETBRAIN_SOURCE_TARGET_MAVEN_EXECUTION === '1';
+const declareMavenProfile = process.env.ROCKETBRAIN_SOURCE_TARGET_MAVEN_PROFILE === '1';
 const environments = ['mysql', 'mariadb'].map(engine => [engine, process.env['ROCKETBRAIN_SOURCE_TARGET_' + engine.toUpperCase() + '_CONFIG']]);
 
 async function owned(t) {
@@ -318,6 +323,81 @@ test('actual Windows Gradle tooling observes and compiles the source reached thr
   assert.equal((await fs.readFile(path.join(component, 'build/classes/java/main/fixture/linked/Value.class'))).readUInt32BE(0), 0xcafebabe);
 });
 
+test('Maven source execution catalog rejects ambiguous names and excludes unresolved or inherited-only declarations', () => {
+  const one = '<execution><id>exact-name</id><goals><goal>compile</goal></goals></execution>';
+  const plugin = (version, values) => '<plugin><artifactId>maven-compiler-plugin</artifactId><version>' + version +
+    '</version><executions>' + values + '</executions></plugin>';
+  const make = (body, managed = '') => ({ digest: 'model-sha', uri: 'file:///pom.xml',
+    text: '<project xmlns="http://maven.apache.org/POM/4.0.0"><build><plugins>' + body + '</plugins>' +
+      '<pluginManagement><plugins>' + managed + '</plugins></pluginManagement></build></project>' });
+  const [review] = declaredExecutions(make(plugin('3.15.0', one)));
+  assert.equal(review.task, 'org.apache.maven.plugins:maven-compiler-plugin:3.15.0:compile@exact-name');
+  assert.equal(mavenExecutionArgument(review.task), true);
+  assert.equal(mavenExecutionArgument(review.task + ' --projects sibling'), false);
+  assert.equal(mavenExecutionArgument(review.task + '@alternate'), false);
+  assert.throws(() => declaredExecutions(make(plugin('3.15.0', one + one))), /duplicate Maven execution IDs/u);
+  assert.throws(() => declaredExecutions(make(plugin('3.15.0', one) + plugin('3.16.0', one))), /duplicate Maven plugin/u);
+  assert.deepEqual(declaredExecutions(make(plugin('3.15.0-SNAPSHOT', one))), []);
+  assert.deepEqual(declaredExecutions(make(plugin('LATEST', one))), []);
+  assert.deepEqual(declaredExecutions(make('', plugin('3.15.0', one))), []);
+  assert.deepEqual(declaredExecutions(make(plugin('3.15.0', one.replace('exact-name', '')))), []);
+});
+
+test('named Maven profiles bind a distinct execution and exclude automatic or competing declarations', () => {
+  const named = (name, body) => '<profile><id>' + name + '</id>' + body + '</profile>';
+  const build = '<build><plugins><plugin><artifactId>maven-compiler-plugin</artifactId><version>3.15.0</version>' +
+    '<executions><execution><id>exact</id><goals><goal>compile</goal></goals></execution></executions></plugin></plugins></build>';
+  const file = (profiles, other = '') => ({ digest: 'model-sha', uri: 'file:///pom.xml',
+    text: '<project>' + other + '<profiles>' + profiles + '</profiles></project>' });
+  const selected = named('manual', build);
+  const other = named('other', '<activation><activeByDefault>true</activeByDefault></activation>' + build);
+  const choices = namedProfileExecutions(file(selected + other + named('second', build)), []);
+  assert.deepEqual(choices.map(item => item.profile.name), ['manual', 'second']);
+  assert.deepEqual(choices[0].profile.inactive, ['other', 'second']);
+  assert.notEqual(choices[0].id, choices[1].id);
+  assert.equal(choices[0].task, choices[1].task);
+  assert.throws(() => namedProfileExecutions(file(selected + selected), []), /uniquely and literally/u);
+  assert.throws(() => namedProfileExecutions(file(selected + named('bad,name', build)), []), /uniquely and literally/u);
+  assert.throws(() => namedProfileExecutions(file(selected + named('modules', '<modules><module>unknown</module></modules>')), []),
+    /change reactor membership/u);
+  assert.throws(() => namedProfileExecutions(file(selected, build), []), /ID also appears outside/u);
+  assert.throws(() => namedProfileExecutions(file(selected), [{ text: '<project>' + build + '</project>' }]), /ID also appears outside/u);
+  assert.throws(() => namedProfileExecutions(file(selected), [{ text: '<project>' + build.replace('maven-compiler-plugin', '${compiler}') +
+    '</project>' }]), /computed Maven execution identities/u);
+  assert.throws(() => namedProfileExecutions(file(selected.replace('<id>manual', '<id xml:space="preserve"> manual')), []),
+    /whitespace rules/u);
+  assert.throws(() => namedProfileExecutions(file(selected), [], [
+    { text: '<project><profiles xmlns="urn:unobserved">' + other + '</profiles></project>' }
+  ]), /conventional XML namespace/u);
+});
+
+test('named Maven runtime isolates default configuration and binds released plugin artifacts', () => {
+  const root = path.resolve('test-output', 'owned-default-maven-model');
+  const repository = path.join(root, 'repository'), home = path.join(root, 'dist');
+  const settings = path.join(home, 'conf', 'settings.xml'), toolchains = path.join(home, 'conf', 'toolchains.xml');
+  const plugin = path.join(repository, 'org', 'apache', 'maven', 'plugins', 'maven-compiler-plugin', '3.15.0', 'maven-compiler-plugin-3.15.0');
+  const execution = { group: 'org.apache.maven.plugins', artifact: 'maven-compiler-plugin', version: '3.15.0',
+    profile: { name: 'one', inactive: ['implicit'] } };
+  const inputs = new Map([
+    [settings, { text: '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"><profiles><!-- example --></profiles></settings>' }],
+    [toolchains, { text: '<toolchains/>' }], [plugin + '.pom', { digest: 'pom-digest' }], [plugin + '.jar', { digest: 'jar-digest' }]
+  ]);
+  const review = () => bindMavenProfileRuntime(home, execution, file => inputs.get(file), repository);
+  assert.deepEqual(review(), { args: ['--activate-profiles=one,!implicit', '--settings', settings, '--global-settings', settings,
+    '--toolchains', toolchains, '--global-toolchains', toolchains, '-Dmaven.repo.local=' + repository],
+    artifacts: { pomSha256: 'pom-digest', jarSha256: 'jar-digest' } });
+  inputs.set(plugin + '.jar', { digest: 'changed-jar' });
+  assert.equal(review().artifacts.jarSha256, 'changed-jar');
+  inputs.set(settings, { text: '<settings><activeProfiles><activeProfile>implicit</activeProfile></activeProfiles></settings>' });
+  assert.throws(review, /profile-free Maven settings/u);
+  inputs.set(settings, { text: '<settings/>' });
+  inputs.set(toolchains, { text: '<toolchains><toolchain><type>jdk</type></toolchain></toolchains>' });
+  assert.throws(review, /empty toolchains catalog/u);
+  inputs.set(toolchains, { text: '<toolchains/>' });
+  inputs.delete(plugin + '.jar');
+  assert.throws(review, /Cache the exact released Maven plugin/u);
+});
+
 test('reviewed builds launch the exact process and stop without registering a replayable VS Code task', { timeout: 20000 }, async () => {
   const output = [];
   let ready;
@@ -341,6 +421,8 @@ test('actual JDT selects Maven reactor and Gradle composite sources inside one w
   skip: !runtimeFile || !classpathFile || !mavenHome || !gradleCache || !environments.every(([, file]) => file), timeout: 650000
 }, async t => {
   const { directory, root, targets } = await owned(t);
+  const mavenExecutionSource = declareMaven ? await populateMavenSourceExecution(root) : undefined;
+  const mavenProfileSource = declareMavenProfile ? await populateMavenProfileExecution(root) : undefined;
   const runtime = await read(runtimeFile), tools = { javaHome: runtime.javaHome, mavenHome, gradleHome: runtime.gradleHome };
   assert.ok(tools.gradleHome);
   if (!executeFromSource) await buildTargets(root, tools, gradleCache);
@@ -363,6 +445,8 @@ test('actual JDT selects Maven reactor and Gradle composite sources inside one w
       return lsp.request('workspace/executeCommand', { command, arguments: args }, 90000);
     };
     const componentPaths = ['maven/service', 'gradle/workbench', 'gradle/vendor/service'].map(relative => path.join(root, relative));
+    if (declareMaven) componentPaths.push(path.join(root, 'maven/execution-worker'));
+    if (declareMavenProfile) componentPaths.push(path.join(root, 'maven-profile/worker'));
     await until(async () => {
       const found = await request('java.project.getAll', []);
       return componentPaths.every(project => found.some(entry => {
@@ -373,7 +457,7 @@ test('actual JDT selects Maven reactor and Gradle composite sources inside one w
     host.java.requestWorkspaceCommand = request;
     const ui = presentation(host), executed = [];
     const actual = nativeTaskRunner(host.vscode, { output: host.output });
-    const runner = executeFromSource || observeComposite ? { ...actual, async execute(spec, options) {
+    const runner = executeFromSource || observeComposite || declareMaven || declareMavenProfile ? { ...actual, async execute(spec, options) {
       executed.push({ args: [...spec.args], cwd: spec.cwd });
       const result = await actual.execute(spec, options);
       assert.equal(result.code, 0, result.output);
@@ -425,16 +509,18 @@ test('actual JDT selects Maven reactor and Gradle composite sources inside one w
           builds.push({ selector, task, compiledClass: output, argvVerified: true });
         }
       }
-      const db = (await Promise.all(configs.map(([engine, database]) =>
-        runTargets(root, tools, classpathFile, database, engine)))).flat();
       const observedComposite = observeComposite ? await runObservedGradleComposite(workbench.sourceTarget, root, targets) : undefined;
+      const mavenExecution = declareMaven ? await runDeclaredMavenExecution(workbench.sourceTarget, root, mavenExecutionSource) : undefined;
+      const mavenProfile = declareMavenProfile ? await runDeclaredMavenProfileExecution(workbench.sourceTarget, root, mavenProfileSource) : undefined;
+      const db = (await Promise.all(configs.map(([engine, database]) =>
+        runTargets(root, tools, classpathFile, database, engine, { declareMavenProfile })))).flat();
       assert.ok(commands.every(item => ['java.project.getAll', 'java.project.getSettings', 'java.project.getClasspaths'].includes(item.command)));
       const proof = { selected: Object.fromEntries(Object.entries(observations).map(([key, value]) => [key, {
         project: path.relative(root, value.projectRoot).split(path.sep).join('/'), provider: value.provider, scope: value.scope,
         buildPath: value.declaredBuild.buildTreePath || value.declaredBuild.projectPath || value.declaredBuild.reactorProject,
         testClasspath: value.classpath.some(file => file.endsWith('junit-jupiter-api-6.1.3.jar'))
       }])), jdbc: db, builds, readOnlyMetadata: true, openedGradleSourceDeclaration: true,
-        ...(observedComposite && { observedComposite }) };
+        ...(observedComposite && { observedComposite }), ...(mavenExecution && { mavenExecution }), ...(mavenProfile && { mavenProfile }) };
       if (process.env.ROCKETBRAIN_SOURCE_TARGET_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_SOURCE_TARGET_RECEIPT,
         JSON.stringify(proof, null, 2) + '\n');
     } finally { await workbench.dispose(); }

@@ -80,9 +80,9 @@ async function runJavaSignatureReferenceChecks(api, vscode, checks) {
     for (const [marker] of negativeTargets) {
       await assert.rejects(inspect(marker), /Method or constructor references need additional signature adaptation analysis/u);
     }
-    checks.push('Reviewed Change Signature adapts static, constructor, unbound and this-bound references with the same functional interface and callable target.');
+    checks.push('Reviewed Change Signature adapts static, constructor, unbound, this-bound and exact private generic references with the same functional interface and callable target.');
     checks.push('Native Undo and Redo cover each signature and its adapters together. Saved sources preserve the Spring JDBC result.');
-    checks.push('Mutable or effectful bound receivers and a boxed SAM input require a separate review.');
+    checks.push('Mutable or effectful bound receivers, a boxed SAM input and unproved private generic substitutions require a separate review.');
     return { completed, nativeUndo: true, nativeRedo: true, refused: negativeTargets.map(([, label]) => label), spring: baseline };
   } finally {
     try {

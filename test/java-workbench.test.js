@@ -1,5 +1,78 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),M=require('../src/java/workbench-model'),T=require('../src/java/workbench-tasks'),{registerJavaWorkbench,CONFIG_KEY}=require('../src/java/workbench'),F=require('./java-workbench-fixture');
+const {pathToFileURL}=require('node:url');
+
+test('a canonical late-build descriptor remains inside an aliased workspace root',t=>{
+ const f=F.fixture(t),file=path.join(f.root,'pom.xml'),alias=path.join(f.parent,'WORKSP~1');
+ const native=fs.realpathSync.native;
+ t.mock.method(fs.realpathSync,'native',(value,...args)=>native(value===alias?f.root:value,...args));
+ assert.throws(()=>M.workspacePath(file,[alias],{directory:false}),/inside an open local workspace/);
+ assert.equal(M.physicalWorkspacePath(file,[alias],{directory:false}),native(file));
+ assert.throws(()=>M.physicalWorkspacePath(file,[alias]),/inside an open local workspace/);
+ assert.throws(()=>M.physicalWorkspacePath(f.javaHome,[alias]),/inside an open local workspace/);
+});
+
+test('late Maven build-only resync waits for the exact reactor before making Maven tasks available',async t=>{
+ const f=F.fixture(t),s=F.fakeVscode(f);
+ const api=registerJavaWorkbench(s.context,s.vscode,s.java,s.output,{runner:s.runner});
+ t.after(()=>api.dispose());
+ const reactor=path.join(f.root,'ear-reactor'),application=path.join(reactor,'application'),common=path.join(reactor,'common');
+ const unobserved=path.join(f.root,'unobserved'),external=path.join(f.parent,'external-reactor');
+ const malformed=path.join(f.root,'invalid-reactor'),unrelated=path.join(f.root,'unrelated');
+ const wrongMember=path.join(unrelated,'common');
+ for(const [root,packaging] of [[reactor,'pom'],[application,'ear'],[common,'jar'],[unobserved,'pom'],
+  [external,'pom'],[malformed,'pom'],[unrelated,'pom'],[wrongMember,'jar']]){
+  fs.mkdirSync(root,{recursive:true});
+  fs.writeFileSync(path.join(root,'pom.xml'),'<project><artifactId>fixture</artifactId><packaging>'+packaging+'</packaging></project>');
+ }
+ const gav='<groupId>scope</groupId><artifactId>fixture</artifactId><version>1</version>';
+ const rootPom=members=>'<project>'+gav+'<packaging>pom</packaging><modules>'+
+  members.map(name=>'<module>'+name+'</module>').join('')+'</modules></project>';
+ const memberPom=(name,packaging,parent)=>'<project><parent>'+parent+'</parent><artifactId>'+name+
+  '</artifactId><packaging>'+packaging+'</packaging></project>';
+ fs.writeFileSync(path.join(reactor,'pom.xml'),rootPom(['application','common']));
+ fs.writeFileSync(path.join(application,'pom.xml'),memberPom('application','ear',gav));
+ fs.writeFileSync(path.join(common,'pom.xml'),memberPom('common','jar',gav));
+ fs.writeFileSync(path.join(unrelated,'pom.xml'),rootPom(['common']));
+ fs.writeFileSync(path.join(wrongMember,'pom.xml'),memberPom('common','jar',gav.replace('<version>1','<version>2')));
+ fs.writeFileSync(path.join(malformed,'pom.xml'),'<!DOCTYPE project [<!ENTITY env SYSTEM "file:///private">]><project/>');
+ const uri=file=>pathToFileURL(file).href;
+ const requests=s.java.requestWorkspaceCommand;
+ let imports=0,queries=0;
+ s.java.requestWorkspaceCommand=async(name,args)=>{
+  if(name==='java.project.changeImportedProjects')imports++;
+  if(name==='java.project.getAll'&&args[0]?.includeNonJava===true){
+   return [f.uri,uri(application),uri(external),uri(malformed),uri(wrongMember),
+    ...(imports&&++queries>1?[uri(common)]:[])];
+  }
+  if(['java.project.getSettings','java.project.getClasspaths','vscode.java.resolveMainClass'].includes(name)){
+   assert.equal(path.relative(f.root,M.local(args[0])),'');
+  }
+  return requests(name,args);
+ };
+ const updated=await api.resyncProject({projectUri:uri(reactor),allowProjectExecution:true});
+ assert.equal(imports,1);
+ assert.ok(queries>=2);
+ const mutation=s.requests.find(row=>row.name==='java.project.changeImportedProjects');
+ const physical=value=>fs.realpathSync.native(value);
+ assert.deepEqual(mutation.args,[[uri(physical(path.join(reactor,'pom.xml')))],[],[]]);
+ assert.deepEqual(updated.projects.filter(p=>p.buildOnly).map(p=>[p.root,p.packaging]).sort(),
+  [[physical(reactor),'pom'],[physical(application),'ear']].sort());
+ assert.deepEqual(updated.projects.find(p=>p.root===physical(reactor)).reactorMembers,[application,common].map(physical));
+ for(const project of updated.projects.filter(p=>p.buildOnly)){
+  assert.deepEqual(project.sourceRoots,[]);
+  assert.deepEqual(project.libraries,[]);
+  assert.deepEqual(await api.mainClasses({projectUri:project.uri}),[]);
+ }
+ const packageTask=(await api.discoverTasks({projectUri:uri(reactor)})).find(task=>task.name==='package');
+ assert.equal((await api.runTask({projectUri:uri(reactor),taskId:packageTask.id,allowProjectExecution:true})).state,'succeeded');
+ assert.equal(path.relative(s.specs.at(-1).cwd,physical(reactor)),'');
+ fs.writeFileSync(path.join(common,'pom.xml'),memberPom('common','jar',gav+'<relativePath/>'));
+ await assert.rejects(api.runTask({projectUri:uri(reactor),taskId:packageTask.id,allowProjectExecution:true}),/membership changed/);
+ fs.writeFileSync(path.join(common,'pom.xml'),memberPom('common','jar',gav));
+ fs.appendFileSync(path.join(reactor,'pom.xml'),'\n<!-- changed after task discovery -->');
+ await assert.rejects(api.runTask({projectUri:uri(reactor),taskId:packageTask.id,allowProjectExecution:true}),/changed/);
+});
 test('logical source roots use package declarations and observed dependencies without following symlinks',async t=>{const f=F.fixture(t),s=F.fakeVscode(f),outside=path.join(f.parent,'outside');fs.mkdirSync(outside);fs.writeFileSync(path.join(outside,'Secret.java'),'package outside; class Secret {}');fs.symlinkSync(outside,path.join(f.source,'external'),process.platform==='win32'?'junction':'dir');const data=await M.collectProjects({request:s.java.requestWorkspaceCommand,folders:s.vscode.workspace.workspaceFolders});assert.equal(data.projects.length,1);assert.equal(data.projects[0].sourceRoots[0].packages[0].name,'demo');assert.equal(data.sourceFiles,1);assert.equal(data.projects[0].libraries.length,2);assert.equal(M.packageName('/* package fake; */ class X {String text="package other;";}'),'');assert.equal(M.packageName('package a.b; public class X{}'),'a.b');assert.equal(M.packageName('package a. ; class X{}'),null);});
 test('project metadata excludes outside roots and refuses oversized source and malformed classpaths',async t=>{const f=F.fixture(t),s=F.fakeVscode(f),base=s.java.requestWorkspaceCommand;await assert.rejects(M.collectProjects({folders:s.vscode.workspace.workspaceFolders,request:async(name,args)=>name==='java.project.getClasspaths'?{classpaths:'bad',modulepaths:[]}:base(name,args)}),/classpath/);fs.writeFileSync(path.join(f.source,'Large.java'),'x'.repeat(M.LIMITS.fileBytes+1));await assert.rejects(M.collectProjects({folders:s.vscode.workspace.workspaceFolders,request:base}),/1 MiB/);});
 test('logical browsing bounds deep directories even when they contain no Java files',async t=>{const f=F.fixture(t),s=F.fakeVscode(f);fs.mkdirSync(path.join(f.source,...Array(65).fill('d')),{recursive:true});await assert.rejects(M.collectProjects({folders:s.vscode.workspace.workspaceFolders,request:s.java.requestWorkspaceCommand}),/64 directory levels/);});
@@ -10,7 +83,7 @@ test('task discovery and runs require explicit execution and reject a changed bu
 test('managed run metadata excludes secret environment values and stop touches only its marked session',async t=>{const f=F.fixture(t),s=F.fakeVscode(f),api=registerJavaWorkbench(s.context,s.vscode,s.java,s.output,{runner:s.runner});t.after(()=>api.dispose());await api.refresh();const config=await api.saveRunConfiguration({projectUri:f.uri,name:'Daily app',mainClass:'demo.Main',args:['one argument'],env:{DATABASE_PASSWORD:'fixture-private-value'}});assert.equal(JSON.stringify(s.state.get(CONFIG_KEY)).includes('fixture-private-value'),false);assert.equal(JSON.stringify(api.getSnapshot()).includes('fixture-private-value'),false);assert.ok([...s.secrets.values()].some(v=>v.includes('fixture-private-value')));const run=await api.start({configurationId:config.id,debug:false});assert.equal(s.starts[0].options.noDebug,true);assert.equal(s.starts[0].configuration.env.DATABASE_PASSWORD,'fixture-private-value');assert.equal(run.state,'running');await api.stop({runId:run.runId});assert.deepEqual(s.stops,['debug-1']);assert.equal(api.getSnapshot().runs.length,0);});
 test('prelaunch failure prevents JVM launch and restricted/stale context cannot save or resync a configuration',async t=>{const f=F.fixture(t),s=F.fakeVscode(f,{runnerResult:1}),api=registerJavaWorkbench(s.context,s.vscode,s.java,s.output,{runner:s.runner});t.after(()=>api.dispose());await api.refresh();const tasks=await api.discoverTasks({projectUri:f.uri}),config=await api.saveRunConfiguration({projectUri:f.uri,name:'Build first',mainClass:'demo.Main',prelaunchTaskId:tasks.find(t=>t.name==='compile').id});await assert.rejects(api.start({configurationId:config.id}),/prelaunch build failed/);assert.equal(s.starts.length,0);await assert.rejects(api.resyncProject({projectUri:f.uri}),/explicit project/);await api.resyncProject({projectUri:f.uri,allowProjectExecution:true});assert.ok(s.requests.some(r=>r.name==='java.project.changeImportedProjects'));s.vscode.workspace.isTrusted=false;await assert.rejects(api.saveRunConfiguration({projectUri:f.uri,name:'no',mainClass:'demo.Main'}),/Trust/);});
 test('argument and environment bounds preserve quoted values and cannot replace managed launch structure',()=>{assert.deepEqual(M.splitArguments('one "two words" ""'),['one','two words','']);assert.throws(()=>M.splitArguments('"unfinished'),/Close/);assert.throws(()=>M.environment({'bad-name':'x'}),/Invalid/);assert.throws(()=>M.argumentsList(Array(65).fill('a')),/64/);});
-test('resync imports a late configuration in argument1 and updates an observed project in argument2',async t=>{const f=F.fixture(t),s=F.fakeVscode(f),api=registerJavaWorkbench(s.context,s.vscode,s.java,s.output,{runner:s.runner});t.after(()=>api.dispose());const nested=path.join(f.root,'late'),pom=path.join(nested,'pom.xml');fs.mkdirSync(nested);fs.writeFileSync(pom,'<project/>');const original=s.java.requestWorkspaceCommand;let lateImported=false;s.java.requestWorkspaceCommand=async(name,args)=>{const value=await original(name,args);if(name==='java.project.changeImportedProjects'&&args[0].length)lateImported=true;return name==='java.project.getAll'&&lateImported?[...value,require('node:url').pathToFileURL(nested).href]:value;};await api.resyncProject({projectUri:nested,allowProjectExecution:true});const imported=s.requests.filter(r=>r.name==='java.project.changeImportedProjects').at(-1);assert.deepEqual(imported.args,[[require('node:url').pathToFileURL(pom).href],[],[]]);await api.resyncProject({projectUri:process.platform==='win32'?f.uri.replace('file:///C:','file:///c:'):f.uri,allowProjectExecution:true});const updated=s.requests.filter(r=>r.name==='java.project.changeImportedProjects').at(-1);assert.deepEqual(updated.args[0],[]);assert.equal(updated.args[1].length,1);assert.equal(updated.args[2].length,0);});
+test('resync imports a late configuration in argument1 and updates an observed project in argument2',async t=>{const f=F.fixture(t),s=F.fakeVscode(f),api=registerJavaWorkbench(s.context,s.vscode,s.java,s.output,{runner:s.runner});t.after(()=>api.dispose());const nested=path.join(f.root,'late'),pom=path.join(nested,'pom.xml');fs.mkdirSync(nested);fs.writeFileSync(pom,'<project/>');const original=s.java.requestWorkspaceCommand;let lateImported=false;s.java.requestWorkspaceCommand=async(name,args)=>{const value=await original(name,args);if(name==='java.project.changeImportedProjects'&&args[0].length)lateImported=true;return name==='java.project.getAll'&&lateImported?[...value,require('node:url').pathToFileURL(nested).href]:value;};await api.resyncProject({projectUri:nested,allowProjectExecution:true});const imported=s.requests.filter(r=>r.name==='java.project.changeImportedProjects').at(-1);assert.deepEqual(imported.args,[[pathToFileURL(fs.realpathSync.native(pom)).href],[],[]]);await api.resyncProject({projectUri:process.platform==='win32'?f.uri.replace(/^file:\/\/\/([A-Z]):/u,(_,drive)=>'file:///'+drive.toLowerCase()+':'):f.uri,allowProjectExecution:true});const updated=s.requests.filter(r=>r.name==='java.project.changeImportedProjects').at(-1);assert.deepEqual(updated.args[0],[]);assert.equal(updated.args[1].length,1);assert.equal(updated.args[2].length,0);});
 test('native task execution uses only its ProcessExecution handle and cancellation awaits that task end',async()=>{const end=[],ended=[],calls=[],terminated=[];const event=list=>fn=>{list.push(fn);return{dispose(){list.splice(list.indexOf(fn),1);}};};let owned;const vscode={workspace:{isTrusted:true,getWorkspaceFolder:()=>({})},Uri:{parse:x=>x},TaskScope:{Workspace:1},TaskRevealKind:{Always:1},TaskPanelKind:{Dedicated:1},Task:class{constructor(definition,_folder,name,_source,execution){Object.assign(this,{definition,name,execution});}},ProcessExecution:class{constructor(command,args,options){Object.assign(this,{command,args,options});}},tasks:{onDidEndTaskProcess:event(end),onDidEndTask:event(ended),async executeTask(task){calls.push(task);owned={task,terminate(){terminated.push(task.definition.id);for(const fn of [...end])fn({execution:owned,exitCode:-1});}};return owned;}}};const runner=T.nativeTaskRunner(vscode),abort=new AbortController(),pending=runner.execute({projectUri:'file:///project',command:'/independent/java',args:['-cp','tool.jar','Main','compile'],cwd:'/project',env:{SECRET:'private'},label:'compile',tool:'maven'},{cancellation:abort.signal});await Promise.resolve();for(const fn of end)fn({execution:{task:{definition:{id:'unrelated'}}},exitCode:0});abort.abort();const result=await pending;assert.equal(result.cancelled,true);assert.equal(terminated.length,1);assert.equal(calls[0].execution.command,'/independent/java');assert.equal(Object.hasOwn(calls[0].definition,'env'),false);const stopped=new AbortController();stopped.abort();await runner.execute({},{cancellation:stopped.signal});assert.equal(calls.length,1);await runner.dispose();});
 test('workspace changes or Stop during metadata preparation cannot start a later JVM',async t=>{const f=F.fixture(t),s=F.fakeVscode(f),api=registerJavaWorkbench(s.context,s.vscode,s.java,s.output,{runner:s.runner});t.after(()=>api.dispose());await api.refresh();const config=await api.saveRunConfiguration({projectUri:f.uri,name:'Pending',mainClass:'demo.Main'}),original=s.java.requestWorkspaceCommand;let entered,release;const ready=new Promise(r=>{entered=r;}),gate=new Promise(r=>{release=r;});s.java.requestWorkspaceCommand=async(name,args)=>{if(name==='vscode.java.resolveMainClass'){entered();await gate;}return original(name,args);};const pending=api.start({configurationId:config.id});await ready;await api.stop();release();await assert.rejects(pending,/context changed/);assert.equal(s.starts.length,0);});
 test('explicit configuration has one180s deadline and never reuses or extends an ordinary30s metadata refresh',async t=>{t.mock.timers.enable({apis:['setTimeout','Date'],now:0});const f=F.fixture(t),s=F.fakeVscode(f),api=registerJavaWorkbench(s.context,s.vscode,s.java,s.output,{runner:s.runner});t.after(()=>api.dispose());const base=s.java.requestWorkspaceCommand;let blocked=0,seen,ready;const entered=new Promise(r=>{ready=r;});s.java.requestWorkspaceCommand=async(name,args,token)=>{if(name==='java.project.getAll'&&blocked++===0){seen=token;ready();return new Promise(()=>{});}return base(name,args);};const ordinary=api.refresh(),ordinaryFailure=assert.rejects(ordinary,/metadata timed out/);await entered;await api.resyncProject({projectUri:f.uri,allowProjectExecution:true});t.mock.timers.tick(30001);await ordinaryFailure;assert.equal(seen.isCancellationRequested,true);let release,changed;const importing=new Promise(r=>{changed=r;}),gate=new Promise(r=>{release=r;});s.java.requestWorkspaceCommand=async(name,args,token)=>{if(name==='java.project.changeImportedProjects'){changed();await gate;}return base(name,args);};const explicit=api.resyncProject({projectUri:f.uri,allowProjectExecution:true});await importing;t.mock.timers.tick(31000);release();await explicit;assert.equal(s.requests.filter(r=>r.name==='java.project.changeImportedProjects').length,2);let neverReady;const pendingStarted=new Promise(r=>{neverReady=r;});s.java.requestWorkspaceCommand=async(name,args)=>{if(name==='java.project.getAll'){neverReady();return new Promise(()=>{});}return base(name,args);};const expired=api.resyncProject({projectUri:f.uri,allowProjectExecution:true}),expected=assert.rejects(expired,/180-second limit.*may still be running/);await pendingStarted;t.mock.timers.tick(180001);await expected;assert.equal(s.requests.filter(r=>r.name==='java.project.changeImportedProjects').length,2);});

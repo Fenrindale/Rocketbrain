@@ -13,7 +13,7 @@ function below(root, file) {
   return relative === '' || !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep);
 }
 
-function pomFacts(file) {
+function pomTree(file) {
   if (/<!\s*(?:DOCTYPE|ENTITY)/i.test(file.text)) throw Error('XML document type and entity declarations are outside dependency inspection.');
   const parser = new SaxesParser({ xmlns: true });
   const frames = [];
@@ -32,6 +32,11 @@ function pomFacts(file) {
   if (project?.name !== 'project' || !['', 'http://maven.apache.org/POM/4.0.0'].includes(project.namespace)) {
     throw Error('The Maven descriptor does not declare a supported project.');
   }
+  return project;
+}
+
+function pomFacts(file) {
+  const project = pomTree(file);
   const children = (node, name) => node?.children.filter(child => child.name === name && child.namespace === project.namespace) || [];
   const one = (node, name) => {
     const values = children(node, name);
@@ -53,13 +58,15 @@ function pomFacts(file) {
       version: simple.test(version) ? version : '', declaredVersion: version
     };
   }
+  const parent = one(project, 'parent');
   const modules = children(one(project, 'modules'), 'module').filter(module => !module.children.length);
   const dependency = node => ({ ...gav(node), scope: literal(node, 'scope') || 'compile',
     type: literal(node, 'type') || 'jar', classifier: literal(node, 'classifier'),
     range: rangeAt(file.text, Math.max(node.start, 0), node.end) });
   return {
-    file, root: path.dirname(file.path), gav: gav(project, one(project, 'parent')),
-    parent: one(project,'parent') ? gav(one(project,'parent')) : null,
+    file, root: path.dirname(file.path), gav: gav(project, parent),
+    parent: parent ? gav(parent) : null,
+    parentRelativePath: parent ? one(parent,'relativePath') ? literal(parent,'relativePath') : '../pom.xml' : null,
     finalName: literal(one(project,'build'),'finalName'),
     packaging: literal(project, 'packaging') || 'jar',
     modules: modules.map(module => module.text.trim()),
@@ -311,4 +318,4 @@ function buildDescriptors(files) {
   };
 }
 
-module.exports = { buildDescriptors, pomFacts, gradleSettings, gradleDependencies, gradleStatements, fileKey, below };
+module.exports = { buildDescriptors, pomFacts, pomTree, gradleSettings, gradleDependencies, gradleStatements, fileKey, below };

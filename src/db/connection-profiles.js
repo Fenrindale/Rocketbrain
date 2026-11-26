@@ -6,6 +6,7 @@ const { agentSelection } = require('./connection-ssh-agent');
 const { userAuthModes, hostFingerprint, credentialFor } = require('./connection-ssh-credentials');
 const { normalizeLocalTransport, transportKey } = require('./local-transport');
 const { normalizeRdsIam, validateRdsIamRoute } = require('./rds-iam');
+const { usesAzureMysqlEntra, normalizeAzureMysqlEntra, validateAzureMysqlRoute } = require('./azure-mysql-entra');
 const { normalizeWriteProtection } = require('./write-protection');
 const { sessionLifecycle } = require('./session-lifecycle');
 const { caFingerprint, expectReviewedTls } = require('./server-tls-trust');
@@ -109,6 +110,10 @@ function normalizeProfile(value,{allowUnconfigured=false}={}){
   p.auth={kind:'password-free'};
  }else if(usesOpenBao(value)){
   p.auth=normalizeOpenBao(value.auth,{allowUnconfigured});
+ }else if(usesAzureMysqlEntra(value)){
+  p.auth=normalizeAzureMysqlEntra(value.auth,{allowUnconfigured});
+  if(profileUsesJksTrust(p))throw fail('Choose PEM CA roots or default TLS trust for an Azure MySQL Entra profile.');
+  validateAzureMysqlRoute(p,p.tls.mode==='verify'?{serverName:p.tls.serverName,cert:p.tls.certPath,key:p.tls.keyPath,pfx:p.tls.clientIdentity}:undefined);
  }else if(value.auth!==undefined){
   p.auth=normalizeRdsIam(value.auth,{allowUnconfigured});
   if (profileUsesJksTrust(p)) throw fail('Choose an AWS PEM CA bundle for an RDS IAM profile.');
@@ -168,6 +173,10 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    if(value!==undefined&&value!=='')throw fail('An RDS IAM profile uses AWS credentials from the selected source.');
    return'';
   }
+  if(usesAzureMysqlEntra(profile)){
+   if(value!==undefined&&value!=='')throw fail('This profile uses the reviewed Microsoft Entra account without a database password.');
+   return'';
+  }
   const explicit=password(value);
   if(explicit!==undefined)return explicit;
   const record=records.get(profile.id),saved=record?.profile;
@@ -181,6 +190,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   const credential = credentialFor(profile.ssh?.authentication, sshCredential);
   if(profile.transport&&!profile.transport.address)throw fail('Edit this profile and enter the local socket path or pipe name before connecting.');
   if(usesRdsIam(profile)&&(!profile.auth.source||!profile.tls.caPath))throw fail('Select the local AWS credential source and RDS CA bundle before connecting.');
+  if(usesAzureMysqlEntra(profile)&&!profile.auth.account)throw fail('Select and review the local Azure CLI account in the connection editor.');
   const route=profile.transport?{transport:profile.transport}:{host:profile.host,port:profile.port};
   const config={...route,user:profile.user,database:profile.database,password:pass,readOnly:true,
    ...(profile.auth&&!usesOpenBao(profile)?{auth:profile.auth}:{}),...(profile.writeProtection?{writeProtection:profile.writeProtection}:{}),
@@ -227,7 +237,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
  async function persist(next,credentialChanges=[]){await state.update(SCOPE,secretScope);const before=[];try{for(const change of credentialChanges){const key=secretKey(change.id),old=await secrets.get(key);before.push({key,old});if(change.value===undefined)await secrets.delete(key);else await secrets.store(key,change.value);}await state.update(KEY,[...next.values()].map(value=>clone(value)));}catch(error){for(const saved of before.reverse())try{if(saved.old===undefined)await secrets.delete(saved.key);else await secrets.store(saved.key,saved.old);}catch{}throw fail('The profile or credential could not be saved. Previous profile metadata is retained.');}records.clear();for(const [id,value]of next)records.set(id,value);revision++;events.emit('change');}
  function decodeProfiles(input) {
   exact(input,['format','version','credentialsIncluded','profiles']);
-  if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3,4,5,6,7,8,9].includes(input.version)||input.credentialsIncluded!==false||
+  if(input.format!=='RocketbrainConnectionProfiles'||![1,2,3,4,5,6,7,8,9,10].includes(input.version)||input.credentialsIncluded!==false||
      !Array.isArray(input.profiles)||input.profiles.length>MAX||Buffer.byteLength(JSON.stringify(input))>256*1024) {
    throw fail('Use a credential-free profile export of at most 32 profiles and 256 KiB.');
   }
@@ -241,7 +251,11 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
    }
    if(value?.ssh)throw fail('Re-enter the SSH authentication and host verification details locally before importing an SSH profile.');
    if(value?.transport&&(input.version===1||Object.hasOwn(value.transport,'address')))throw fail('Re-enter local socket paths and pipe names in the connection editor after importing.');
-   if(usesOpenBao(value)){
+   if(usesAzureMysqlEntra(value)){
+    if(input.version<10)throw fail('Azure MySQL Entra profiles require profile export format 10.');
+    exact(value.auth,['kind']);
+    if(value.tls?.caPath||value.tls?.certPath||value.tls?.keyPath||value.tls?.pfxPath)throw fail('Select Azure MySQL CA roots locally after importing.');
+   }else if(usesOpenBao(value)){
     if(input.version<9)throw fail('OpenBao profiles require profile export format 9.');
     exact(value.auth,['kind']);
    }else if(isPasswordFree(value)){
@@ -310,7 +324,7 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
   },
   onDidChange(listener){events.on('change',listener);return{dispose(){events.off('change',listener);}};},
   test(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),pass=await credentials(p,input.password,{openBaoToken:input.openBaoToken,signal}),result=await verify(p,pass,signal,{schemas:true,clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential});guard(ticket);return result;});},
-  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);requireClosedProfileConsoles(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&(JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection)||JSON.stringify(previous.profile.sessionLifecycle)!==JSON.stringify(p.sessionLifecycle)))throw fail('Disconnect this profile before changing its write protection or session lifecycle.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&isPasswordFree(p))throw fail('Password-free profiles cannot save a database password.');if(remember&&usesRdsIam(p))throw fail('RDS IAM profiles use temporary tokens without saving a database password.');if(usesOpenBao(p)&&(remember||input.verify===false))throw fail('Verify the OpenBao profile without saving the resolved password.');const pass=await credentials(p,input.password,{openBaoToken:input.openBaoToken,signal});let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential});else if(profileUsesJksTrust(p))throw fail('Verify the selected JKS truststore before saving.');else if(p.ssh?.agent)throw fail('Verify the selected SSH agent identity before saving.');else if(profileRequiresSshCredential(p))throw fail('Verify the selected SSH authentication and pinned host key before saving.');else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
+  save(request){const input=clone(request);return run(async(ticket,signal)=>{const p=normalizeProfile(input.profile),previous=records.get(p.id);requireClosedProfileConsoles(p.id);if(previous&&input.expectedRevision!==previous.revision)throw fail('This profile edit is stale. Reopen it.');if(previous&&getActiveProfile()?.id===p.id&&(JSON.stringify(previous.profile.writeProtection)!==JSON.stringify(p.writeProtection)||JSON.stringify(previous.profile.sessionLifecycle)!==JSON.stringify(p.sessionLifecycle)))throw fail('Disconnect this profile before changing its write protection or session lifecycle.');if(!previous&&records.size>=MAX)throw fail('At most 32 connection profiles are supported.');const remember=input.rememberPassword===true;if(input.rememberPassword!==undefined&&typeof input.rememberPassword!=='boolean')throw fail('Choose whether to remember this password.');if(remember&&isPasswordFree(p))throw fail('Password-free profiles cannot save a database password.');if(remember&&usesRdsIam(p))throw fail('RDS IAM profiles use temporary tokens without saving a database password.');if(remember&&usesAzureMysqlEntra(p))throw fail('Microsoft Entra profiles use temporary tokens without saving a database password.');if(usesOpenBao(p)&&(remember||input.verify===false))throw fail('Verify the OpenBao profile without saving the resolved password.');const pass=await credentials(p,input.password,{openBaoToken:input.openBaoToken,signal});let observed=null;if(input.verify!==false)observed=await verify(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential});else if(profileUsesJksTrust(p))throw fail('Verify the selected JKS truststore before saving.');else if(p.ssh?.agent)throw fail('Verify the selected SSH agent identity before saving.');else if(profileRequiresSshCredential(p))throw fail('Verify the selected SSH authentication and pinned host key before saving.');else if(remember)throw fail('Verify the connection before saving credentials.');guard(ticket);const next=new Map(records),record={profile:p,revision:(previous?.revision||0)+1,rememberPassword:remember,verifiedAt:observed?new Date().toISOString():null,observed};next.set(p.id,record);await persist(next,[{id:p.id,value:remember?pass:undefined}]);if(input.connectAfterSave===true){try{trusted();let prepared,transferred=false;try{prepared=await prepare(p,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});trusted();await connect(prepared.config);transferred=true;trusted();}finally{if(!transferred)await prepared?.dispose();}return{...dto(record),connected:true};}catch(error){const failure=error instanceof Error?error:fail('Connection setup did not finish.');savedFailures.set(failure,Object.freeze({id:p.id,revision:record.revision}));throw failure;}}return dto(record);});},
   connect(request){const input=clone(request);return run(async(ticket,signal)=>{const record=records.get(input.id);if(!record)throw fail('Choose a saved connection.');const effective=clone(record.profile);if(input.database!==undefined)effective.database=text(input.database,'schema',64);const pass=await credentials(effective,input.password,{openBaoToken:input.openBaoToken,signal});let prepared,transferred=false;try{prepared=await prepare(effective,pass,signal,{clientIdentityPassphrase:input.clientIdentityPassphrase,trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});guard(ticket);await connect(prepared.config);transferred=true;guard(ticket);return{connected:true,profile:clone(effective),credentialSaved:record.rememberPassword};}finally{if(!transferred)await prepared?.dispose();}});},
   openDedicatedConsole(request) {
    const input = clone(request);
@@ -393,10 +407,10 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
       {authentication:p.ssh.authentication,requiresLocalHostFingerprint:true}:{requiresLocalKeyAndKnownHosts:true})};
     if(p.transport)p.transport={kind:p.transport.kind};
     if(usesRdsIam(p))p.auth={kind:p.auth.kind,region:p.auth.region};
-    if(usesOpenBao(p))p.auth={kind:p.auth.kind};
+    if(usesOpenBao(p)||usesAzureMysqlEntra(p))p.auth={kind:p.auth.kind};
     return p;
    });
-   const version=profiles.some(usesOpenBao)?9:profiles.some(isPasswordFree)?8:profiles.some(profileUsesJksTrust)?7:profiles.some(profileRequiresClientPassphrase)?6:profiles.some(p=>p.sessionLifecycle)?5:profiles.some(p=>p.writeProtection)?4:profiles.some(p=>p.auth)?3:profiles.some(p=>p.transport)?2:1;
+   const version=profiles.some(usesAzureMysqlEntra)?10:profiles.some(usesOpenBao)?9:profiles.some(isPasswordFree)?8:profiles.some(profileUsesJksTrust)?7:profiles.some(profileRequiresClientPassphrase)?6:profiles.some(p=>p.sessionLifecycle)?5:profiles.some(p=>p.writeProtection)?4:profiles.some(p=>p.auth)?3:profiles.some(p=>p.transport)?2:1;
    return{format:'RocketbrainConnectionProfiles',version,credentialsIncluded:false,profiles};
   },
   reviewProfileImport(request) {

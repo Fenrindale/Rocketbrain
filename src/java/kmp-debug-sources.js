@@ -13,11 +13,11 @@ const { fail,cancelled } = require('./workbench-model');
 
 const invoke=promisify(execFile);
 const names=/^[A-Za-z_$][\w$]*(?:[/.][A-Za-z_$][\w$]*)*$/u;
-const sourceName=/^[A-Za-z_$][\w$-]*\.kt$/u;
+const sourceName={kotlin:/^[A-Za-z_$][\w$-]*\.kt$/u,groovy:/^[A-Za-z_$][\w$]*\.groovy$/u};
 const decode=new TextDecoder('utf-8',{fatal:true});
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
-function kotlinPackage(text) {
+function sourcePackage(text) {
   const {tokens,issues}=lexJava(text);
   if (issues.length) return undefined;
   const index=tokens.findIndex(token=>token.text==='package');
@@ -63,7 +63,7 @@ function sourceMap(text, expected) {
   }};
 }
 
-function classesFromOutput(output,input) {
+function classesFromOutput(output,input,language) {
   const classes=new Map();
   for (const row of output.trimEnd().split(/\r?\n/).filter(Boolean)) {
     const [type,key,...fields]=row.split('\t'), id=Number(key);
@@ -71,10 +71,12 @@ function classesFromOutput(output,input) {
     if (type==='class') {
       const [owner,source,debug]=fields;
       if (fields.length!==3 || classes.has(id) || !names.test(owner) || owner.includes('.') ||
-          !sourceName.test(source) || !/^[0-9A-Za-z+/]*={0,2}$/.test(debug)) throw fail('Unexpected Kotlin class file metadata.');
+          !sourceName[language].test(source) || !/^[0-9A-Za-z+/]*={0,2}$/.test(debug)) throw fail('Unexpected JVM class file metadata.');
       const bytes=Buffer.from(debug,'base64');
       let mapping;
-      try {mapping=sourceMap(decode.decode(bytes),source);} catch {}
+      try {
+        if (language==='kotlin' || bytes.length===0) mapping=sourceMap(decode.decode(bytes),source);
+      } catch {}
       classes.set(id,{owner,source,mapping,debugSha256:bytes.length ? digest(bytes) : '',methods:[]});
       continue;
     }
@@ -88,11 +90,11 @@ function classesFromOutput(output,input) {
   return [...classes.values()];
 }
 
-function buildSourceEvidence(snapshot,binaries) {
+function buildSourceEvidence(snapshot,binaries,language='kotlin') {
   const byName=new Map(), byOwner=new Map();
   for (const source of snapshot.files.values()) {
-    const base=path.basename(source.file), namespace=kotlinPackage(source.text);
-    if (!sourceName.test(base) || namespace===undefined) continue;
+    const base=path.basename(source.file), namespace=sourcePackage(source.text);
+    if (!sourceName[language].test(base) || namespace===undefined) continue;
     const key=namespace+'/'+base;
     if (byName.has(key)) byName.set(key,null);
     else byName.set(key,source);
@@ -106,6 +108,7 @@ function buildSourceEvidence(snapshot,binaries) {
     const separator=owner.lastIndexOf('/');
     const saved=byName.get((separator<0?'':owner.slice(0,separator))+'/'+source);
     if (!saved || !mapping || byOwner.get(owner)!==1) continue;
+    if (language==='groovy' && owner.slice(separator+1)+'.groovy'!==source) continue;
     let evidence=result.get(saved.file);
     if (!evidence) result.set(saved.file,evidence={file:saved.file,sha256:saved.sha256,name:source,lines:{}});
     const lineCount=saved.text.split('\n').length;
@@ -127,7 +130,7 @@ function buildSourceEvidence(snapshot,binaries) {
   for (const evidence of result.values()) {
     for (const [line,location] of Object.entries(evidence.lines)) if (!location) delete evidence.lines[line];
   }
-  return {format:'RocketbrainKmpSourceLines1',files:[...result.values()]};
+  return {format:language==='groovy'?'RocketbrainGroovySourceLines1':'RocketbrainKmpSourceLines1',files:[...result.values()]};
 }
 
 function classFiles(root,dirs) {
@@ -154,7 +157,8 @@ function classFiles(root,dirs) {
   return files;
 }
 
-async function inspectKmpDebugSources({model,module,snapshot,outputs,javaHome,folder,cancellation}) {
+async function inspectKmpDebugSources({model,module,snapshot,outputs,javaHome,folder,cancellation,language='kotlin'}) {
+  if (!Object.hasOwn(sourceName,language)) throw fail('Choose a supported JVM source language.');
   if (cancelled(cancellation) || !path.isAbsolute(javaHome||'')) throw fail('Use the independent Java debugger JDK for Kotlin source verification.');
   const binary=independentJavaExecutable(path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
   const script=[path.join(__dirname,'java-debug','KmpClassLines.java'),path.join(__dirname,'../../runtime/java-debug/KmpClassLines.java')]
@@ -163,12 +167,13 @@ async function inspectKmpDebugSources({model,module,snapshot,outputs,javaHome,fo
   const files=classFiles(module.directory,outputs), list=path.join(folder,'classes.txt');
   await fs.writeFile(list,files.map(item=>Buffer.from(item.file).toString('base64')).join('\n'),{flag:'wx'});
   const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^(_JAVA_OPTIONS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|JDK_JAVAC_OPTIONS|CLASSPATH)$/i.test(key)));
-  const {stdout}=await invoke(binary,['--source','25',script,list],{cwd:folder,env,windowsHide:true,timeout:25000,maxBuffer:8*1024*1024,
+  const {stdout}=await invoke(binary,['--source','25',script,list,...(language==='groovy'?['groovy']:[])],{
+    cwd:folder,env,windowsHide:true,timeout:25000,maxBuffer:8*1024*1024,
     ...(cancellation instanceof AbortSignal&&{signal:cancellation})});
   for (const item of files) {
     if (digest(regular(item.file,model.root,512*1024))!==item.sha256) throw fail('Kotlin compiled output changed during debugger setup.');
   }
-  return buildSourceEvidence(snapshot,classesFromOutput(stdout,files));
+  return buildSourceEvidence(snapshot,classesFromOutput(stdout,files,language),language);
 }
 
 module.exports = { buildSourceEvidence,inspectKmpDebugSources,sourceMap };

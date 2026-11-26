@@ -101,8 +101,8 @@ test('real JDT Change Signature and Javac keep method references callable on bot
     refused.push(label);
   }
   assert.equal(engineEdits.length, count);
-  assert.equal(submitted.length, 3);
-  assert.equal(completed.reduce((sum, check) => sum + check.adapters, 0), 4);
+  assert.equal(submitted.length, operations.length);
+  assert.equal(completed.reduce((sum, check) => sum + check.adapters, 0), 7);
   const receipt = { scope: 'compiler-attributed-method-reference-adapters', completed, refused, staleReviewRefused: true,
     exactSamAndOverloadsVerified: true, unrelatedLambdaAndMethodReferencePreserved: true, bothDbServers: baseline };
   if (process.env.ROCKETBRAIN_SIGNATURE_REF_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_SIGNATURE_REF_RECEIPT,

@@ -99,6 +99,18 @@ final class PackageRenameInspector {
                 return super.visitImport(node, unused);
             }
 
+            @Override public Void visitVariable(VariableTree node, Void unused) {
+                Tree type = node.getType();
+                if (type != null && end(type) < 0) {
+                    // Attribution can populate invisible types for inferred lambda parameters and var.
+                    // Their bindings are checked at the real uses, where the editor has source spans.
+                    scan(node.getModifiers(), unused);
+                    scan(node.getNameExpression(), unused);
+                    return scan(node.getInitializer(), unused);
+                }
+                return super.visitVariable(node, unused);
+            }
+
             @Override public Void visitIdentifier(IdentifierTree node, Void unused) {
                 Element resolved = trees.getElement(getCurrentPath());
                 if (resolved instanceof PackageElement pkg && inside(pkg.getQualifiedName().toString())) span(node, "reference");

@@ -48,6 +48,8 @@ Java 중단점에서 **Restart Java Stack Frame**으로 현재 정지한 스레�
 
 Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map Workspace**로 배포판과 Linux 경로를 확인합니다. **Review and Run WSL Workspace Build**에서 프로젝트 경로와 명령을 확인한 뒤 배포판의 Maven 또는 Gradle을 실행합니다. 배포판 안에 Linux JDK와 `/usr/bin/mvn` 또는 `/usr/bin/gradle`이 필요합니다. **Cancel Managed WSL Build**로 실행한 빌드를 중단할 수 있습니다.
 
+Linux 파일 시스템에 있는 프로젝트는 **Open WSL Project Folder**로 열 수 있습니다. Java 파일을 저장한 뒤 **Review and Debug WSL Java JAR**에서 프로젝트 안의 실행 가능한 JAR를 선택합니다. Rocketbrain은 검토한 소스와 JAR를 다시 확인하고, WSL JVM에 연결해 중단점·한 줄 이동·지역 변수 읽기를 제공합니다. 배포판에는 `/usr/bin/java`와 Python 3.11 이상의 `/usr/bin/python3`가 필요하며, Windows에서는 Rocketbrain의 Java 런타임을 먼저 설정합니다.
+
 `rocketbrain.localCodeModel.endpoint`와 `.model`에는 로컬 모델 서버 주소와 모델 이름을 지정합니다. **Ask Local Code Model**은 선택한 코드에 대한 응답을 엽니다. **Request a Reviewed Local Edit**로 변경 내용을 비교하고, 검토한 편집은 **Apply Reviewed Local Edit**로 적용합니다.
 
 **Start Local Workspace Conversation**에서 같은 신뢰된 로컬 워크스페이스에 저장한 소스 파일 2~4개를 선택합니다. 요청 검토 문서에 선택한 파일의 SHA-256, 모델 주소, 질문과 이전 대화가 표시됩니다. **Send Reviewed Local Model Request**를 실행하여 내용을 확인한 뒤 보내고, **Continue Local Workspace Conversation**으로 최대 네 번까지 이어갑니다. 선택한 파일의 저장본이 바뀌면 새 대화에서 다시 검토합니다. 대화는 현재 창의 메모리에 최대 15분간 남으며, **Close Local Workspace Conversation**으로 닫을 수 있습니다.
@@ -96,6 +98,10 @@ Dev Container 명령은 이미지나 Dockerfile 구성과 함께 명시한 Docke
 20. **Build and Index Mixed JVM Sources**로 가져온 Gradle·Maven 혼합 프로젝트의 표준 main 소스를 빌드하고 인덱싱합니다. Java Projects에서 Kotlin 파일을 열고, 한 줄에서 대상을 식별할 수 있는 호출·getter·상위 클래스에 **Go to Mixed JVM Declaration**을 사용합니다. 소스나 컴파일 결과가 바뀌면 다시 인덱싱합니다. Gradle `application` 프로젝트는 **Run Mixed Gradle Application**에서 실행합니다.
 21. Java Projects에서 Groovy 패키지와 파일을 엽니다. **Run Groovy and Spock Tests**는 가져온 Gradle 프로젝트의 `test` 작업을 실행합니다. **Groovy Console**과 **Evaluate Groovy Selection**은 함께 사용하는 세션에서 변수를 보존하며, **Reset Groovy Console**로 초기화합니다. **Run Groovy Script**는 저장한 파일을 별도 JVM에서 실행하고 구문 오류를 Problems에 표시합니다. 콘솔과 스크립트 실행에는 Gradle 홈에 포함된 Apache Groovy 4.0.28 또는 사용자 설정 `rocketbrain.java.groovyConsoleJar`의 공식 코어 JAR를 사용합니다.
 
+저장한 `src/main/groovy` 클래스에서 **Debug Groovy Gradle Application**을 선택하면, Groovy와 Application 플러그인을 적용한 단일 Gradle 프로젝트의 `:run`을 검토하고 실행합니다. 방금 컴파일한 클래스와 실행 중인 JVM의 바이트코드가 일치하는 줄에 기본 줄 중단점을 적용합니다. 디버그 화면에서 소스와 지역 변수를 확인하고 한 줄씩 진행할 수 있습니다. **Stop Groovy Gradle Application Debugger**로 해당 실행을 종료합니다. Java 엔진을 업데이트해 Groovy 소스 줄을 지원하는 독립 디버그 번들을 설치합니다.
+
+Groovy 편집기에서 **Complete Groovy Java Member** 또는 **Open Groovy Java Member Declaration**을 실행해 프로젝트 Java 메서드를 완성하거나 원본 선언에 이동합니다. 명시적으로 타입을 지정한 지역 변수와 함께, 메서드나 스크립트 처음에 `def service = new Probe()` 또는 `def service = Probe.open()`처럼 선언하고 바로 호출하는 경우도 지원합니다. 인자 없는 생성자와 같은 `final` 타입을 돌려주는 인자 없는 정적 팩터리는 현재 Java 소스와 Maven·Gradle 빌드 산출물의 계약을 대조합니다. 재할당, 별칭·클로저로 전달하거나 소스에서 동적 메타클래스를 조작하는 경우에는 후보를 제공하지 않습니다.
+
 **JPA: Show Entity Relationship Diagram**으로 워크스페이스 선언이나 실행 중인 Hibernate의 엔티티 관계를 엽니다. 엔티티 연결과 매핑 선언을 탐색하고, 카드 위치와 숨김 상태를 워크스페이스에 저장합니다. [JPA 관계도 사용 범위](docs/jpa-relationship-diagram.md)
 
 **Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다.
@@ -138,7 +144,9 @@ Quarkus 설정 탐색은 중첩 `ConfigMapping` 인터페이스와 다른 소스
 
 Micronaut 5 Maven JAR 모듈이나 `io.micronaut.application`과 `application.mainClass`를 명시한 Gradle 앱을 **Java Projects**로 가져옵니다. **Inspect Micronaut Application**에서 타입이 지정된 설정 키, 환경별 설정 파일, HTTP 경로와 생성자 연결의 소스를 엽니다. `application*.properties`에서 키 완성과 선언 이동을 사용하고, 단일 문서 YAML의 스칼라 키에서 선언으로 이동합니다.
 
-**Run Micronaut Tests**는 가져온 프로젝트의 테스트 작업을 실행합니다. **Build Micronaut Application**은 Maven JAR 또는 Gradle 표준 `installDist` 배포 폴더를 만듭니다. **Build and Run Micronaut**는 선택한 환경으로 독립 JVM을 시작하고 루프백 주소를 표시합니다. Gradle에서는 생성된 표준 런처에서 클래스패스 순서를 읽고 실제 라이브러리를 임시 위치에 복사해 실행합니다. **Stop Micronaut Application**으로 JVM을 종료합니다. 소스 변경은 다시 빌드하고 실행해 반영합니다. [Micronaut Gradle 배포](https://micronaut-projects.github.io/micronaut-gradle-plugin/latest/#_packaging_the_application)
+**Run Micronaut Tests**는 가져온 프로젝트의 테스트 작업을 실행합니다. **Build Micronaut Application**은 Maven JAR 또는 Gradle 표준 `installDist` 배포 폴더를 만듭니다. **Build and Run Micronaut**는 선택한 환경으로 독립 JVM을 시작하고 루프백 주소를 표시합니다. Gradle에서는 생성된 표준 런처에서 클래스패스 순서를 읽고 실제 라이브러리를 임시 위치에 복사해 실행합니다. **Stop Micronaut Application**으로 JVM을 종료합니다. [Micronaut Gradle 배포](https://micronaut-projects.github.io/micronaut-gradle-plugin/latest/#_packaging_the_application)
+
+표준 단일 모듈 Maven 앱은 소스를 저장하고 **Review and Restart Micronaut Maven Application**에서 변경 파일을 확인한 뒤 다시 빌드할 수 있습니다. Maven은 검토한 입력의 별도 복사본에서 로컬 저장소의 의존성으로 새 JAR을 만듭니다. 빌드 중 기존 앱은 계속 응답합니다. 성공한 빌드는 현재 루프백 JVM을 종료한 뒤 같은 환경의 새 JVM을 시작하며 주소는 바뀔 수 있습니다. 빌드가 실패하거나 검토 내용이 빌드 전에 달라지면 실행 중인 앱을 계속 사용합니다. 이 경로는 확장이 직접 시작한 Maven 앱의 일반 실행 세션에 적용됩니다.
 
 Gradle 앱은 표준 이름의 클래스패스 배포판을 사용하며 JVM에는 선택한 환경과 로컬 서버 설정을 적용합니다. Micronaut 플랫폼 5.2.8, Gradle 플러그인 5.0.2 및 Gradle 9.7.1로 검증했습니다. Windows에서 Gradle 사용자 홈 경로에 비ASCII 문자가 있으면 위의 Gradle 9.7 이상 설정을 적용합니다.
 
@@ -151,6 +159,8 @@ Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compil
 ### Kotlin Multiplatform
 
 **Inspect Kotlin Multiplatform Targets**에서 Gradle이 구성한 JVM·JavaScript 타깃과 소스셋 의존 관계를 확인합니다. **Compile Kotlin Multiplatform Targets**, **Test Kotlin Multiplatform Targets**, **Run Kotlin Multiplatform Target**은 관찰된 타깃의 컴파일·테스트·실행 작업을 사용합니다. JavaScript 실행과 테스트는 Node.js 타깃을 대상으로 합니다.
+
+**Debug Kotlin Multiplatform JS Node Target**에서 로컬 Kotlin/JS Node 개발 타깃을 선택하고 Gradle 빌드를 승인합니다. `rocketbrain.kotlin.nodeHome`에 독립 Node.js 설치 디렉터리를 지정합니다. 컴파일러가 저장된 Kotlin 소스를 포함해 생성한 맵을 검증한 뒤 `commonMain`과 `jsMain`에서 중단점, 한 줄씩 넘기기, 스택과 지역 변수 읽기, 계속 실행을 지원합니다. 외부 npm 런타임 의존성이 없는 CommonJS 개발 실행 파일을 대상으로 하며, 소스나 빌드 설정을 바꾼 뒤에는 다시 검토합니다. **Stop Kotlin Multiplatform Task** 또는 디버그 중지 버튼으로 해당 Node.js 세션을 종료합니다.
 
 공통 Kotlin UI의 저장된 `commonMain` 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수와 JVM 타깃을 선택할 수 있습니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. 소스를 저장한 뒤 미리보기 패널의 **Refresh Preview**로 같은 타깃을 다시 그립니다.
 
@@ -377,6 +387,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - SSH 프로필에서 **SSH password** 또는 **Encrypted OpenSSH private key**를 선택할 수 있습니다. 관리자가 별도로 알려준 서버 호스트 키의 `SHA256:…` 지문을 입력하세요. 연결할 때마다 입력한 SSH 비밀번호와 키 암호는 저장하거나 내보내지 않습니다. 암호화 키에는 OpenSSH 형식의 AES·bcrypt 키 파일을 사용합니다. [OpenSSH 호스트 키 지문](https://man.openbsd.org/ssh-keygen.1)
 - 연결 프로필에는 TCP, Unix 도메인 소켓, Windows 명명된 파이프 중 실행 환경과 맞는 전송을 선택합니다. 공유 프로필에는 비밀번호와 로컬 경로를 담지 않으며, 가져온 로컬 연결의 주소는 해당 컴퓨터에서 입력합니다.
 - **OpenBao KV v2**는 검토한 경로에서 DB 비밀번호를 읽습니다. 연결할 때 입력한 토큰과 가져온 비밀번호는 저장하지 않으며, 공유 프로필을 가져온 뒤에는 각 작업 공간에서 참조를 구성합니다. [OpenBao 연결 설정](docs/openbao-credentials.md)
+- **Azure MySQL · Microsoft Entra**는 Azure CLI 2.54 이상에 로그인한 AzureCloud 사용자의 계정, 테넌트 및 구독을 연결 프로필에서 검토합니다. Flexible Server의 `<server>.mysql.database.azure.com` 주소와 MySQL 사용자를 입력하세요. 새 연결마다 검증된 TLS에서 토큰을 사용하며, 공유 프로필에는 인증 종류만 내보냅니다. Windows에서 공식 ZIP 설치를 사용할 때는 VS Code를 시작하기 전에 `ROCKETBRAIN_AZURE_CLI_ROOT`에 압축을 푼 경로를 지정하세요. [Microsoft Entra 연결 설정](https://learn.microsoft.com/en-us/azure/mysql/flexible-server/security-how-to-entra)
 - **Save Database Metadata for Offline Use**로 카탈로그의 테이블·뷰와 열을 작업 공간에 저장합니다. 연결을 끊고 **Open Cached Database Metadata**를 선택하면 캡처 시각과 함께 SQL 완성에 사용합니다. 같은 연결로 돌아오면 현재 구조를 확인하고 바뀐 캡처를 무효화합니다.
 - **New Federated SELECT**에서 `source1`과 `source2`의 테이블을 참조하고 **Run Federated SELECT**에서 저장한 연결을 하나씩 선택합니다. 정수 키의 INNER 또는 LEFT JOIN을 지원합니다. 결과에서 출처별 투영 열, 서버에 전송한 필터와 가져온 행 수를 볼 수 있습니다. 각 서버는 별도의 읽기 시점을 사용합니다.
 - **Set SQL Session Isolation**은 열린 SQL 콘솔의 연결에 격리 수준을 적용하고 서버 값을 다시 확인합니다. 트랜잭션과 검토 중인 그리드 초안이 있으면 먼저 정리해야 합니다.

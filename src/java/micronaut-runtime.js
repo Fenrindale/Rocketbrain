@@ -120,7 +120,8 @@ function createMicronautRuntime({log=()=>{},startupMs=90000,checkListener=waitFo
     return session.release;
   }
 
-  async function processFor(session,{project,javaHome,environment,cancellation,buildFingerprint,debug}) {
+  async function processFor(session,{project,javaHome,environment,cancellation,buildFingerprint,debug,
+    expectedArtifactSha256,launchInStaging}) {
     const java=independentJavaExecutable(javaHome && path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
     const reviewed=micronautProject(project);
     if(buildFingerprint!==undefined&&reviewed.buildFingerprint!==buildFingerprint)throw fail('The Micronaut Gradle build changed. Build again.');
@@ -129,6 +130,9 @@ function createMicronautRuntime({log=()=>{},startupMs=90000,checkListener=waitFo
     session.identity=await fsp.lstat(session.staging,{bigint:true});
     const cancelledNow=()=>disposed||session.stopping||cancelled(cancellation);
     const {launch,...artifact}=await stage(project,session.staging,reviewed,cancelledNow);
+    if (expectedArtifactSha256!==undefined && artifact.sha256!==expectedArtifactSha256) {
+      throw fail('The staged Micronaut artifact differs from the reviewed fresh build.');
+    }
     if(reviewed.tool==='gradle'&&micronautProject(project).buildFingerprint!==reviewed.buildFingerprint)
       throw fail('The Micronaut Gradle build changed during staging. Build again.');
     if (cancelledNow()) throw fail('Micronaut startup was cancelled.');
@@ -139,7 +143,7 @@ function createMicronautRuntime({log=()=>{},startupMs=90000,checkListener=waitFo
     const args=[...(debug?['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:0']:[]),
       '-Dfile.encoding=UTF-8','-Dmicronaut.server.host=127.0.0.1','-Dmicronaut.server.port=-1',
       '-Dmicronaut.env.deduction=false','-Dmicronaut.environments='+environment,...launch];
-    const child=spawn(java,args,{cwd:project.root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
+    const child=spawn(java,args,{cwd:launchInStaging ? session.staging : project.root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
     session.child=child;
     session.done=new Promise(resolve => child.once('close',() => {session.exited=true;resolve();}));
     child.once('error',error => {session.error=error;});
@@ -183,8 +187,25 @@ function createMicronautRuntime({log=()=>{},startupMs=90000,checkListener=waitFo
     return verifyListener(session,session.debugPort,cancellation);
   }
 
+  async function verifyHttpTarget({runId,cancellation}={}) {
+    const session=active;
+    if (!session?.result || session.id!==runId) throw fail('Choose the current owned Micronaut HTTP application.');
+    return verifyHttpListener(session,cancellation);
+  }
+
+  async function verifyHttpListener(session,cancellation) {
+    const port=session.port;
+    try {
+      const proof=await verifyListener(session,port,cancellation);
+      if (session.port===port) return proof;
+    } catch {
+      if (cancelled(cancellation)) throw fail('The Micronaut HTTP ownership check was cancelled.');
+    }
+    throw fail('The current Micronaut JVM no longer owns the expected local HTTP listener.');
+  }
+
   async function start(options = {}) {
-    const {project,allowProjectExecution,workspaceTrusted,environment='dev',cancellation,debug=false}=options;
+    const {project,allowProjectExecution,workspaceTrusted,environment='dev',cancellation,debug=false,verifyHttp=false}=options;
     if (disposed || workspaceTrusted!==true || allowProjectExecution!==true) {
       throw fail('Explicitly start the Micronaut application from a trusted workspace.');
     }
@@ -215,6 +236,8 @@ function createMicronautRuntime({log=()=>{},startupMs=90000,checkListener=waitFo
               verifyListener(session,httpPort,cancellation)]);
             if (session.debugPorts.size!==1 || session.port!==httpPort) throw fail('The Micronaut listeners changed during verification.');
             debugProof=Object.freeze({pid:listener.pid,port,address:listener.address,verified:true,httpOwnershipVerified:true});
+          } else if (verifyHttp) {
+            await verifyHttpListener(session,cancellation);
           } else if (!await reachable(session.port)) {
             await delay(160);
             continue;
@@ -240,7 +263,7 @@ function createMicronautRuntime({log=()=>{},startupMs=90000,checkListener=waitFo
     if (!active) return {state:'stopped'};
     return active.result && !active.stopping ? {...active.result} : {state:active.stopping ? 'stopping' : 'starting',runId:active.id};
   }
-  return {start,stop,getState,verifyDebugTarget,async dispose(){disposed=true;await stop();}};
+  return {start,stop,getState,verifyDebugTarget,verifyHttpTarget,async dispose(){disposed=true;await stop();}};
 }
 
 module.exports = { createMicronautRuntime,packagedJar };

@@ -16,14 +16,16 @@ function resultName(value) {
   return value.trim();
 }
 class ResultsView {
-  constructor(vscode, context, { editAction, relatedAction, relatedReturn, datasetAction, resultClosed, focusQueryEditor } = {}) {
+  constructor(vscode, context, { editAction, relatedAction, relatedReturn, datasetAction, resultClosed, focusQueryEditor, canFocusQueryEditor } = {}) {
     this.vscode = vscode; this.context = context; this.history = []; this.view = null; this.sequence = 0;
     this.editAction = editAction; this.relatedAction = relatedAction; this.relatedReturn = relatedReturn; this.resultClosed = resultClosed;
     this.datasetAction = datasetAction;
     this.comparisons = new WeakMap();
     this.queryEditors = new WeakMap();
     this.focusQueryEditor = focusQueryEditor;
+    this.canFocusQueryEditor = canFocusQueryEditor;
     this.selectedResultId = undefined;
+    this.viewGeneration = 0;
     this.viewReady = false;
     this.focusRequested = false;
     this.resultSequence = 0;
@@ -34,6 +36,7 @@ class ResultsView {
   }
   resolveWebviewView(view) {
     this.view = view;
+    this.viewGeneration++;
     this.viewReady = false;
     const v = this.vscode, root = v.Uri.joinPath(this.context.extensionUri, 'dist');
     view.webview.options = { enableScripts: true, localResourceRoots: [root] };
@@ -180,9 +183,7 @@ class ResultsView {
         if (record.result !== result || !this.exportable(record)) throw Error('The result changed while choosing a file. Choose it again.');
         await v.workspace.fs.writeFile(target, data);
       } else if (msg.type === 'copy') {
-        if (!this.exportable(record)) throw Error('Select completed result rows and apply or discard drafts before copying.');
-        const clean = value => spreadsheetText(value).replace(/[\t\r\n]/g, ' ');
-        await v.env.clipboard.writeText([record.result.columns, ...record.result.rows].map(row => row.map(clean).join('\t')).join('\n'));
+        await this.copyResult(record);
       }
       } catch (error) {if(['chooseImportFile','chooseXlsxFile'].includes(msg?.type))this.editState(msg.id,{editError:error.message||String(error),editResponseId:msg.requestId});v.window.showErrorMessage(`Rocketbrain: ${error instanceof Error ? error.message : String(error)}`); }
     }));
@@ -209,6 +210,33 @@ class ResultsView {
   activeResult() {
     return this.history.find(record => record.id === this.selectedResultId && !record.closing)
       ?? this.history.findLast(record => !record.closing);
+  }
+  actionContext() {
+    if (!this.viewReady || !this.view?.visible) return null;
+    const selected = this.activeResult();
+    const editor = selected && this.queryEditors.get(selected);
+    return {
+      view: this.viewGeneration,
+      result: selected?.id,
+      revision: selected?.chart?.revision,
+      copy: this.exportable(selected),
+      source: Boolean(editor && (this.canFocusQueryEditor?.(editor) ?? true))
+    };
+  }
+  requireActionTarget(expected) {
+    const live = this.actionContext();
+    if (!live || !expected || live.view !== expected.view || live.result !== expected.result ||
+        live.revision !== expected.revision || !Number.isSafeInteger(live.result)) {
+      throw Error('The current result changed. Open Context Actions again.');
+    }
+    return this.activeResult();
+  }
+  async copyResult(record) {
+    if (!this.exportable(record)) throw Error('Select completed result rows and apply or discard drafts before copying.');
+    const clean = value => spreadsheetText(value).replace(/[\t\r\n]/gu, ' ');
+    await this.vscode.env.clipboard.writeText([record.result.columns, ...record.result.rows]
+      .map(row => row.map(clean).join('\t')).join('\n'));
+    return { resultId: record.id };
   }
   async returnToQuery(id = this.activeResult()?.id) {
     const record = this.history.find(item => item.id === id && !item.closing);

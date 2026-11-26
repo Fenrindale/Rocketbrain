@@ -415,14 +415,16 @@ public final class SignatureInspector {
     }
 
     public static void main(String[] args) throws Exception {
+        boolean packageServiceBindings = args.length == 7 && args[4].equals("packageRenameServices");
         if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy","attributedDependencies").contains(args[4])) &&
                 !(args.length >= 6 && args.length <= 37 && args[4].equals("advisoryCalls")) &&
                 !(args.length == 7 && args[4].equals("dataflow")) &&
                 !(args.length == 9 && args[4].equals("callFlow")) &&
                 !(args.length == 6 && args[4].equals("conversion")) &&
-                !(args.length == 7 && args[4].equals("groovyMembers")) &&
+                !((args.length == 7 || args.length == 8) && args[4].equals("groovyMembers")) &&
                 !(args.length >= 7 && args.length <= 36 && args[4].equals("parameterNameBindings")) &&
                 !(args.length == 6 && args[4].equals("binaryBeanLifecycle")) &&
+                !(args.length == 8 && args[4].equals("springResourceImports")) &&
                 !(args.length == 9 && args[4].equals("constant")) &&
                 !(args.length == 9 && args[4].equals("extraction")) &&
                 !(args.length == 10 && args[4].equals("methodInline")) &&
@@ -432,6 +434,7 @@ public final class SignatureInspector {
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
                 !(args.length == 7 && args[4].equals("cleanup")) &&
                 !(args.length == 7 && Set.of("typeRename","typeRenameBinary","packageRename").contains(args[4])) &&
+                !packageServiceBindings &&
                 !(args.length == 9 && Set.of("typeImport", "staticImport").contains(args[4])) &&
                 !(args.length == 5 && args[4].equals("check")) &&
                 !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
@@ -462,7 +465,7 @@ public final class SignatureInspector {
             JavacTask task = (JavacTask) compiler.getTask(compilerOutput, files, diagnostics, options, null, sources);
             List<CompilationUnitTree> units = new ArrayList<>(); task.parse().forEach(units::add); task.analyze();
             Trees trees = Trees.instance(task); Elements elements = task.getElements(); Types types=task.getTypes(); SourcePositions positions = trees.getSourcePositions();
-            if (args.length > 4) {
+            if (args.length > 4 && !packageServiceBindings) {
                 System.setOut(new PrintStream(System.out,false,StandardCharsets.UTF_8));
                 var problems = errors(diagnostics);
                 Map<String,Object> report = object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,
@@ -481,6 +484,9 @@ public final class SignatureInspector {
                     }
                     else if (args[4].equals("groovyMembers")) {
                         report.put("groovyMembers", GroovyJavaMembers.inspect(elements, trees, args[5], args[6]));
+                        if (args.length == 8) {
+                            report.put("groovyReceiver", GroovyJavaMembers.receiver(elements, trees, files, args[5], args[7]));
+                        }
                     }
                     else if (args[4].equals("parameterNameBindings")) {
                         report.put("parameterNameBindings", ParameterNameBindings.inspect(task, units,
@@ -489,6 +495,10 @@ public final class SignatureInspector {
                     else if (args[4].equals("binaryBeanLifecycle")) {
                         report.put("binaryBeanLifecycle", new BinaryBeanLifecycle(trees, elements, files, classpath)
                             .inspect(units, args[5]));
+                    }
+                    else if (args[4].equals("springResourceImports")) {
+                        report.put("springResourceImports", new SpringResourceImports(trees, files, classpath)
+                            .inspect(units, args[5], Integer.parseInt(args[6]), args[7]));
                     }
                     else if (args[4].equals("hierarchy")) report.put("hierarchy",new HierarchyInspector(task).inspect(units,byUri));
                     else if (args[4].equals("dataflow")) report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
@@ -605,6 +615,8 @@ public final class SignatureInspector {
                             if (!varargs.isEmpty()) report.put("varargs",varargs);
                         }
                         if (!constructor && executable.getModifiers().contains(Modifier.PRIVATE) && trees.getPath(executable) != null) {
+                            var instantiated = SignatureReferences.instantiatedCall(getCurrentPath(),executable,trees);
+                            if (instantiated != null) report.put("instantiatedCall",instantiated);
                             var consumer = SignatureReturn.consumer(tree,getCurrentPath(),trees,text);
                             if (!consumer.isEmpty()) report.put("returnConsumer",consumer);
                             var arity = VarargsCalls.conversion(getCurrentPath(),executable,trees,types,text);
@@ -619,10 +631,13 @@ public final class SignatureInspector {
                         TreePath member = getCurrentPath();
                         if (trees.getElement(member) instanceof ExecutableElement method) {
                             TypeMirror target = trees.getTypeMirror(member);
-                            references.add(object("uri",uri,"methodKey",key(method),"enclosingKey",enclosingKey(),
+                            var reference = object("uri",uri,"methodKey",key(method),"enclosingKey",enclosingKey(),
                                 "start",positions.getStartPosition(unit,tree),"end",positions.getEndPosition(unit,tree),
                                 "targetType",target==null?null:target.toString(),
-                                "adapter",SignatureReferences.adapter(tree,method,member,trees,types,elements,text)));
+                                "adapter",SignatureReferences.inspect(tree,method,member,trees,types,elements,text,false));
+                            var arity = SignatureReferences.inspect(tree,method,member,trees,types,elements,text,true);
+                            if (arity != null) reference.put("arityConversion",arity);
+                            references.add(reference);
                         }
                         return super.visitMemberReference(tree,p);
                     }
@@ -633,6 +648,19 @@ public final class SignatureInspector {
                         return super.visitLambdaExpression(tree,p);
                     }
                 }.scan(unit,null);
+            }
+            if (packageServiceBindings) {
+                System.setOut(new PrintStream(System.out,false,StandardCharsets.UTF_8));
+                var problems = errors(diagnostics);
+                var report = object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,
+                    "classGenerationEnabled",false,"errors",problems);
+                if (problems.isEmpty()) {
+                    report.put("packageRename",new PackageRenameInspector(task,args[5],args[6]).inspect(units));
+                    report.put("methods",methods.stream().map(method -> method.model).toList());
+                    report.put("calls",calls);
+                }
+                System.out.print(json(report));
+                return;
             }
             List<Map<String,Object>> edges=new ArrayList<>(); Set<String> external=new TreeSet<>();
             for(Method left:methods) {

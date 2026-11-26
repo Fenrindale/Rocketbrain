@@ -11,7 +11,7 @@ function referenceOperators(tokens) {
   return operators;
 }
 
-function adaptSource(original, staged, references, parameters) {
+function adaptSource(original, staged, references, parameters, arrayConversion) {
   const initial = lexJava(original), proposed = lexJava(staged);
   const initialOperators = referenceOperators(initial.tokens), proposedOperators = referenceOperators(proposed.tokens);
   if (initial.issues.length || proposed.issues.length || initialOperators.length !== proposedOperators.length) {
@@ -27,7 +27,7 @@ function adaptSource(original, staged, references, parameters) {
 
   const edits = [];
   for (const reference of references) {
-    const adapter = reference.adapter;
+    const adapter = arrayConversion ? reference.arityConversion : reference.adapter;
     const index = initialOperators.findIndex(at => at >= adapter.qualifierEnd && at + 2 <= reference.end);
     if (index < 0) throw Error('The compiler method reference has no exact source operator.');
     const operator = initialOperators[index];
@@ -41,12 +41,32 @@ function adaptSource(original, staged, references, parameters) {
       throw Error('The selected method reference moved or changed in the Java engine edit.');
     }
     const names = Array.from({length:adapter.arity},freshParameter);
-    const args = parameters.map(parameter => parameter.originalIndex < 0 ? parameter.defaultValue : names[adapter.receiver + parameter.originalIndex]);
     const receiver = adapter.kind === 'unbound' ? names[0] : adapter.qualifier;
-    const selector = adapter.kind === 'constructor' ? 'new ' + receiver : receiver + '.' + adapter.name;
+    const typeArgument = adapter.genericProof ? '<' + adapter.genericProof.typeArgument + '>' : '';
+    const selector = adapter.kind === 'constructor' ? 'new ' + receiver : receiver + '.' + typeArgument + adapter.name;
+    let args, arrayProof, genericProof;
+    if (arrayConversion) {
+      const {fixedCount,component,parameterTypes,returnType}=adapter;
+      const reviewed=names.map((source,index)=>({source,type:parameterTypes[index]}));
+      const fixed=reviewed.slice(0,fixedCount), initializer=reviewed.slice(fixedCount);
+      const arraySource='new '+component+'[] {'+initializer.map(value=>value.source).join(', ')+'}';
+      args=[...names.slice(0,fixedCount),arraySource];
+      arrayProof={fixedCount,component,selector,returnType,initializer,
+        arguments:[...fixed,{source:arraySource,type:component+'[]'}]};
+    } else {
+      args=parameters.map(parameter=>parameter.originalIndex<0?parameter.defaultValue:names[adapter.receiver+parameter.originalIndex]);
+      if (adapter.genericProof) {
+        const {parameterTypes, returnType} = adapter.genericProof;
+        const reordered = parameters.map(({originalIndex,type}) => {
+          if (originalIndex >= 0) return parameterTypes[originalIndex];
+          return ['String','Object'].includes(type) ? 'java.lang.'+type : type;
+        });
+        genericProof = {returnType,parameterTypes:reordered};
+      }
+    }
     const header = '(' + names.join(', ') + ') -> ';
     const call = selector + '(' + args.join(', ') + ')';
-    edits.push({start,end,header,call,reference});
+    edits.push({start,end,header,call,reference,arrayProof,genericProof});
   }
 
   let text = '', cursor = 0;
@@ -55,13 +75,14 @@ function adaptSource(original, staged, references, parameters) {
     text += staged.slice(cursor,edit.start);
     const lambdaStart = text.length, callStart = lambdaStart + edit.header.length;
     text += edit.header + edit.call;
-    adapters.push({...edit.reference,lambdaStart,callStart,callEnd:text.length});
+    adapters.push({...edit.reference,lambdaStart,callStart,callEnd:text.length,
+      arrayProof:edit.arrayProof,genericProof:edit.genericProof});
     cursor = edit.end;
   }
   return {text:text+staged.slice(cursor),adapters};
 }
 
-function adaptSignatureReferences(original, staged, references, parameters) {
+function adaptSignatureReferences(original, staged, references, parameters, {arrayConversion=false}={}) {
   const adapters = [], changed = new Map(), grouped = new Map();
   for (const site of references) {
     const list = grouped.get(site.uri) || [];
@@ -72,7 +93,7 @@ function adaptSignatureReferences(original, staged, references, parameters) {
   for (const source of staged) {
     const sites = grouped.get(source.uri);
     if (!sites?.length) continue;
-    const updated = adaptSource(originals.get(source.uri),source.text,sites,parameters);
+    const updated = adaptSource(originals.get(source.uri),source.text,sites,parameters,arrayConversion);
     changed.set(source.uri,updated.text);
     adapters.push(...updated.adapters);
   }
@@ -90,6 +111,23 @@ function verifyReferenceAdapters(before, after, adapters, mapping) {
     if (calls.length !== 1 || calls[0].methodKey !== binding(entry.methodKey) ||
         lambdas.length !== 1 || lambdas[0].targetType !== entry.targetType) {
       throw Error('The method reference adapter changed its overload or functional interface binding.');
+    }
+    if (entry.genericProof) {
+      const actual = calls[0].instantiatedCall, {parameterTypes,returnType} = entry.genericProof;
+      if (!actual || actual.returnType !== returnType || calls[0].resultType !== returnType ||
+          JSON.stringify(actual.parameterTypes) !== JSON.stringify(parameterTypes)) {
+        throw Error('The generic reference adapter changed the instantiated parameter or return types.');
+      }
+    }
+    if (entry.arrayProof) {
+      const proof=entry.arrayProof, actual=calls[0].arityConversion;
+      const matches=(expected,values)=>Array.isArray(values) && expected.length===values.length &&
+        expected.every((value,index)=>value.source===values[index].source && value.type===values[index].type);
+      if (!actual || actual.mode!=='fixed-array' || actual.selector!==proof.selector || actual.component!==proof.component ||
+          actual.fixedCount!==proof.fixedCount || calls[0].resultType!==proof.returnType ||
+          !matches(proof.arguments,actual.arguments) || !matches(proof.initializer,actual.initializer)) {
+        throw Error('The method reference adapter changed the attributed array arguments or their order.');
+      }
     }
     replacementCalls.add(calls[0]);
     replacementLambdas.add(lambdas[0]);

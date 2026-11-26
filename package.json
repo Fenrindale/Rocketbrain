@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.142.0",
+  "version": "0.148.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -38,6 +38,7 @@
     "onDebug:rocketbrain-java",
     "onDebug:rocketbrain-python",
     "onDebug:rocketbrain-scala",
+    "onDebug:rocketbrain-kotlin-js",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
@@ -172,12 +173,16 @@
       { "command": "rocketbrain.groovy.runSpecification", "title": "Run Selected Spock Specification", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
       { "command": "rocketbrain.groovy.projectSelection", "title": "Review Groovy Selection with Project Classpath", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file && editorHasSelection" },
       { "command": "rocketbrain.groovy.stopProject", "title": "Stop Groovy Project Evaluation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
-      { "command": "rocketbrain.groovy.completeTypedMember", "title": "Complete Typed Groovy Member", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
-      { "command": "rocketbrain.groovy.openTypedMemberDeclaration", "title": "Open Typed Groovy Member Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
+      { "command": "rocketbrain.groovy.debugApplication", "title": "Debug Groovy Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
+      { "command": "rocketbrain.groovy.stopDebugApplication", "title": "Stop Groovy Gradle Application Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.groovy.completeTypedMember", "title": "Complete Groovy Java Member", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
+      { "command": "rocketbrain.groovy.openTypedMemberDeclaration", "title": "Open Groovy Java Member Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
       { "command": "rocketbrain.quarkus.create", "title": "Create Quarkus Maven Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.inspect", "title": "Inspect Quarkus Configuration and Endpoints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.inspectConfigOrigins", "title": "Inspect Quarkus Config Origins", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.inspectArcLookups", "title": "Inspect Quarkus Arc Lookups", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.inspectInterceptors", "title": "Inspect Quarkus CDI Interceptors", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.openInterceptorSource", "title": "Open Observed Quarkus Interceptor Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.openArcProducerSource", "title": "Open Observed Arc Producer Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.startDev", "title": "Start Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.stopDev", "title": "Stop Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -211,6 +216,7 @@
       { "command": "rocketbrain.jakarta.buildWar", "title": "Build Jakarta WAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.deploy", "title": "Deploy Jakarta WAR to Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.deploySet", "title": "Deploy Jakarta WAR Set to Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.addApplication", "title": "Add WAR to Running Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.undeploy", "title": "Undeploy Jakarta Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.manager", "title": "Manage Jakarta Deployments on Remote Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.debug", "title": "Debug Jakarta WAR on Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -225,6 +231,7 @@
       { "command": "rocketbrain.micronaut.debug", "title": "Debug Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.test", "title": "Run Micronaut Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.build", "title": "Build Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.micronaut.restart", "title": "Review and Restart Micronaut Maven Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.stop", "title": "Stop Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.discover", "title": "Discover sbt Projects", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.compile", "title": "Compile and Index Scala", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -243,13 +250,16 @@
       { "command": "rocketbrain.kotlin.multiplatform.test", "title": "Test Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.run", "title": "Run Kotlin Multiplatform Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugJvm", "title": "Debug Kotlin Multiplatform JVM Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.debugJs", "title": "Debug Kotlin Multiplatform JS Node Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.previewCompose", "title": "Preview Kotlin Compose", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.multiplatform.refreshComposePreview", "title": "Refresh Kotlin Compose Preview", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.wsl.distributions", "title": "List WSL Distributions and Map Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
+      { "command": "rocketbrain.wsl.openProject", "title": "Open WSL Project Folder", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.reviewBuild", "title": "Review and Run WSL Workspace Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.cancelBuild", "title": "Cancel Managed WSL Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
+      { "command": "rocketbrain.wsl.debugJava", "title": "Review and Debug WSL Java JAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -526,6 +536,8 @@
         "category": "Rocketbrain",
         "icon": "$(search)"
       },
+      { "command": "rocketbrain.contextActions", "title": "Context Actions", "category": "Rocketbrain" },
+      { "command": "rocketbrain.contextActions.results", "title": "Query Result Actions", "category": "Rocketbrain" },
       {
         "command": "rocketbrain.gitWorktree.context",
         "title": "Manage Git Worktree Context",
@@ -1550,7 +1562,9 @@
         { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }
       ],
       "editor/context": [
+        { "command": "rocketbrain.contextActions", "when": "editorLangId =~ /^(java|kotlin|sql|xml|properties|yaml)$/", "group": "navigation@9" },
         { "command": "rocketbrain.groovy.runSpecification", "when": "editorLangId == groovy && resourceScheme == file && isWorkspaceTrusted", "group": "navigation" },
+        { "command": "rocketbrain.groovy.debugApplication", "when": "editorLangId == groovy && resourceScheme == file && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.sshWorkspace.javaCompile", "when": "editorLangId == java && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.sshWorkspace.mavenBuild", "when": "resourceFilename == pom.xml && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.sshWorkspace.gradleBuild", "when": "resourceFilename == build.gradle && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
@@ -1609,6 +1623,7 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.contextActions.results", "when": "view == rocketbrain.results", "group": "navigation@2" },
         { "command": "rocketbrain.sqlite.open", "when": "view == rocketbrain.databases && isWorkspaceTrusted", "group": "connection@3" },
         { "command": "rocketbrain.sqlite.browse", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && isWorkspaceTrusted", "group": "connection@4" },
         { "command": "rocketbrain.sqlite.chooseEditRuntime", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && isWorkspaceTrusted && rocketbrain.sqliteEditPlatform", "group": "connection@5" },
@@ -1995,6 +2010,9 @@
       ]
     },
     "keybindings": [
+      { "command": "rocketbrain.contextActions", "key": "ctrl+k ctrl+shift+a", "mac": "cmd+k cmd+shift+a", "when": "editorTextFocus && !inQuickOpen && !suggestWidgetVisible", "args": { "surface": "editor" } },
+      { "command": "rocketbrain.contextActions.results", "key": "ctrl+k ctrl+shift+a", "mac": "cmd+k cmd+shift+a", "when": "!editorTextFocus && !inQuickOpen && (focusedView == rocketbrain.results || webviewId == rocketbrain.results)" },
+      { "command": "rocketbrain.contextActions", "key": "ctrl+k ctrl+shift+a", "mac": "cmd+k cmd+shift+a", "when": "!editorTextFocus && !terminalFocus && !inQuickOpen && !(focusedView == rocketbrain.results || webviewId == rocketbrain.results)", "args": { "surface": "workspace" } },
       { "command": "rocketbrain.editor.expandSelection", "key": "ctrl+k ctrl+shift+right", "mac": "cmd+k cmd+shift+right", "when": "editorTextFocus && isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       { "command": "rocketbrain.editor.shrinkSelection", "key": "ctrl+k ctrl+shift+left", "mac": "cmd+k cmd+shift+left", "when": "editorTextFocus && isWorkspaceTrusted && editorLangId =~ /^(java|kotlin|sql|rocketbrain-jdbc)$/" },
       {
@@ -2032,8 +2050,13 @@
         "when": "editorTextFocus && editorHasCodeActionsProvider"
       }
     ],
-    "breakpoints": [{ "language": "scala" }, { "language": "kotlin" }],
+    "breakpoints": [{ "language": "scala" }, { "language": "kotlin" }, { "language": "groovy" }],
     "debuggers": [
+      {
+        "type": "rocketbrain-kotlin-js",
+        "label": "Rocketbrain Kotlin/JS Node",
+        "languages": ["kotlin"]
+      },
       {
         "type": "rocketbrain-scala",
         "label": "Rocketbrain Scala (sbt)",
@@ -2105,6 +2128,12 @@
                   "array"
                 ],
                 "description": "Java virtual machine arguments."
+              },
+              "shortenCommandLine": {
+                "type": "string",
+                "enum": ["auto", "none", "argfile", "jarmanifest"],
+                "default": "auto",
+                "description": "Shorten long Java launch commands. Auto uses a JDK argument file or a JDK 8 classpath manifest on Windows when needed."
               },
               "stopOnEntry": {
                 "type": "boolean",

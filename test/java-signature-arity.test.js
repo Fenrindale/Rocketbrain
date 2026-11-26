@@ -10,7 +10,7 @@ const { registerJavaRefactoring } = require('../src/java/refactoring');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { uri, headlessHost } = require('./helpers/java-signature-jdt-host');
-const { sources, targetPath, unrelatedPath, marker, selection, rejected, primitiveFacts,
+const { sources, targetPath, unrelatedPath, marker, selection, rejected, primitiveFacts, instanceFacts,
   populateArity, runAritySpring, assertArityPlan } = require('./helpers/java-signature-arity-fixture');
 
 const runtimeFile = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
@@ -19,7 +19,7 @@ const engines = ['mysql', 'mariadb'].map(engine => [engine,
   process.env['ROCKETBRAIN_SIGNATURE_VARARGS_' + engine.toUpperCase() + '_CONFIG']]);
 const read = async file => JSON.parse(await fs.readFile(file, 'utf8'));
 
-test('reviewed private varargs conversion preserves saved Spring JDBC behavior and refuses changed overload bindings', {
+test('reviewed private varargs conversion preserves typed method references and saved Spring JDBC behavior', {
   skip: !runtimeFile || !classpathFile || !engines.every(([, file]) => file), timeout: 360000
 }, async t => {
   const parent = await fs.realpath(os.tmpdir());
@@ -91,13 +91,20 @@ test('reviewed private varargs conversion preserves saved Spring JDBC behavior a
   assertArityPlan(primitive, primitivePlan, primitiveFacts);
   assert.equal((await refactoring.apply(primitivePlan.id)).state, 'applied');
   assert.equal(submitted.length, 2);
+  await save();
+  const instance = await inspect('collect(String');
+  const instancePlan = await service.preview(instance.id, { arity: 'array' });
+  assertArityPlan(instance, instancePlan, instanceFacts);
+  assert.equal((await refactoring.apply(instancePlan.id)).state, 'applied');
+  assert.equal(submitted.length, 3);
   assert.equal(nativeEdits, 0);
   await save();
   assert.equal(await fs.readFile(unrelated, 'utf8'), original);
   const after = await run();
   assert.deepEqual(after, before);
   const receipt = { referenceArray: plan.signature.arityConversion, primitiveArray: primitivePlan.signature.arityConversion,
-    methodReferencesRefused: true, genericTailRefused: true, changedOverloadRefused: true, staleReviewRefused: true,
+    instanceArray: instancePlan.signature.arityConversion, refusedUnsupportedContracts: rejected.map(([target])=>target),
+    changedOverloadRefused: true, staleReviewRefused: true,
     explicitArrayIdentityAndOrderVerified: true, realJdtImportedProject: true, before, after };
   if (process.env.ROCKETBRAIN_SIGNATURE_ARITY_RECEIPT) {
     await fs.writeFile(process.env.ROCKETBRAIN_SIGNATURE_ARITY_RECEIPT, JSON.stringify(receipt, null, 2) + '\n');
