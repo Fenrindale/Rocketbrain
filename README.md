@@ -379,6 +379,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - SSH 프로필에서 **SSH password** 또는 **Encrypted OpenSSH private key**를 선택할 수 있습니다. 관리자가 별도로 알려준 서버 호스트 키의 `SHA256:…` 지문을 입력하세요. 연결할 때마다 입력한 SSH 비밀번호와 키 암호는 저장하거나 내보내지 않습니다. 암호화 키에는 OpenSSH 형식의 AES·bcrypt 키 파일을 사용합니다. [OpenSSH 호스트 키 지문](https://man.openbsd.org/ssh-keygen.1)
 - 연결 프로필에는 TCP, Unix 도메인 소켓, Windows 명명된 파이프 중 실행 환경과 맞는 전송을 선택합니다. 공유 프로필에는 비밀번호와 로컬 경로를 담지 않으며, 가져온 로컬 연결의 주소는 해당 컴퓨터에서 입력합니다.
 - **OpenBao KV v2**는 검토한 경로에서 DB 비밀번호를 읽습니다. 연결할 때 입력한 토큰과 가져온 비밀번호는 저장하지 않으며, 공유 프로필을 가져온 뒤에는 각 작업 공간에서 참조를 구성합니다. [OpenBao 연결 설정](docs/openbao-credentials.md)
+- **Azure MySQL · Microsoft Entra**는 Azure CLI 2.54 이상에 로그인한 AzureCloud 사용자의 계정, 테넌트 및 구독을 연결 프로필에서 검토합니다. Flexible Server의 `<server>.mysql.database.azure.com` 주소와 MySQL 사용자를 입력하세요. 새 연결마다 검증된 TLS에서 토큰을 사용하며, 공유 프로필에는 인증 종류만 내보냅니다. Windows에서 공식 ZIP 설치를 사용할 때는 VS Code를 시작하기 전에 `ROCKETBRAIN_AZURE_CLI_ROOT`에 압축을 푼 경로를 지정하세요. [Microsoft Entra 연결 설정](https://learn.microsoft.com/en-us/azure/mysql/flexible-server/security-how-to-entra)
 - **Save Database Metadata for Offline Use**로 카탈로그의 테이블·뷰와 열을 작업 공간에 저장합니다. 연결을 끊고 **Open Cached Database Metadata**를 선택하면 캡처 시각과 함께 SQL 완성에 사용합니다. 같은 연결로 돌아오면 현재 구조를 확인하고 바뀐 캡처를 무효화합니다.
 - **New Federated SELECT**에서 `source1`과 `source2`의 테이블을 참조하고 **Run Federated SELECT**에서 저장한 연결을 하나씩 선택합니다. 정수 키의 INNER 또는 LEFT JOIN을 지원합니다. 결과에서 출처별 투영 열, 서버에 전송한 필터와 가져온 행 수를 볼 수 있습니다. 각 서버는 별도의 읽기 시점을 사용합니다.
 - **Set SQL Session Isolation**은 열린 SQL 콘솔의 연결에 격리 수준을 적용하고 서버 값을 다시 확인합니다. 트랜잭션과 검토 중인 그리드 초안이 있으면 먼저 정리해야 합니다.

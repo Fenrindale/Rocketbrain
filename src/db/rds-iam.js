@@ -158,4 +158,5 @@ function createRdsIamHandshake(target, mint = mintRdsIamToken) {
   return { options: { password: '', authPlugins: { mysql_clear_password } }, sent: () => sent, error: () => error };
 }
 
-module.exports = { kind, validEndpoint, normalizeRdsIam, validateRdsIamRoute, mintRdsIamToken, validateToken, createRdsIamHandshake, handshakeTimeout };
+module.exports = { kind, validEndpoint, normalizeRdsIam, validateRdsIamRoute, mintRdsIamToken, validateToken,
+  createRdsIamHandshake, verifiedSocket, handshakeTimeout };

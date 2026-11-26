@@ -13,40 +13,46 @@ const target = Object.freeze({ host: 'fixture-db.rbtest123456.us-east-1.rds.amaz
   auth: Object.freeze({ kind: 'aws-rds-iam', region: 'us-east-1', source: 'environment' }) });
 const access = 'RBTESTEXAMPLEID', key = 'Rocketbrain-offline-signature-fixture-key', token = 'synthetic/session+test=value';
 
-async function setupIamFixture() {
+async function setupWireTlsFixture(serverName, prefix = 'rb-rds-iam-') {
   const parent = await fs.realpath(os.tmpdir());
-  const folder = await fs.mkdtemp(path.join(parent, 'rb-rds-iam-'));
+  const folder = await fs.mkdtemp(path.join(parent, prefix));
   const marker = randomUUID();
   const owner = path.join(folder, 'owner.json');
   await fs.writeFile(owner, marker, { flag: 'wx' });
-  const credentials = path.join(folder, 'credentials');
-  const config = path.join(folder, 'config');
-  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.toUpperCase().startsWith('AWS_')));
-  Object.assign(env, { AWS_CONFIG_FILE: config, AWS_SHARED_CREDENTIALS_FILE: credentials, AWS_ACCESS_KEY_ID: access,
-    AWS_SECRET_ACCESS_KEY: key, AWS_SESSION_TOKEN: token, AWS_EC2_METADATA_DISABLED: 'true' });
-
   async function close() {
     const resolved = await fs.realpath(folder);
     if (path.dirname(resolved) !== parent || resolved !== folder || await fs.readFile(owner, 'utf8') !== marker) {
-      throw Error('The RDS IAM fixture ownership changed.');
+      throw Error('The TLS protocol fixture ownership changed.');
     }
     await fs.rm(folder, { recursive: true, maxRetries: 3, retryDelay: 100 });
   }
 
   try {
-    await fs.writeFile(credentials, `[fixture-rds]\naws_access_key_id = ${access}\naws_secret_access_key = ${key}\naws_session_token = ${token}\n`, { flag: 'wx' });
-    await fs.writeFile(config, '[profile fixture-rds]\nregion = us-east-1\n', { flag: 'wx' });
     const script = path.resolve(__dirname, '../../scripts/connection-security-certificates.ps1');
     await new Promise((resolve, reject) => {
       const child = spawn(process.env.ROCKETBRAIN_TEST_PWSH || 'pwsh', ['-NoProfile', '-NonInteractive', '-File', script,
-        '-Folder', folder, '-ServerName', target.host], { shell: false, windowsHide: true, stdio: 'ignore', timeout: 12000 });
+        '-Folder', folder, '-ServerName', serverName], { shell: false, windowsHide: true, stdio: 'ignore', timeout: 12000 });
       child.once('error', reject);
       child.once('close', code => code === 0 ? resolve() : reject(Error('The owned TLS certificate fixture could not start.')));
     });
     const read = file => fs.readFile(path.join(folder, file), 'utf8');
-    return { env, folder, caPath: path.join(folder, 'ca.pem'), close, ca: await read('ca.pem'), wrongCa: await read('wrong-ca.pem'),
+    return { folder, caPath: path.join(folder, 'ca.pem'), close, ca: await read('ca.pem'), wrongCa: await read('wrong-ca.pem'),
       cert: await read('server.pem'), privateKey: await read('server-key.pem') };
   } catch (error) { await close(); throw error; }
+}
+
+async function setupIamFixture() {
+  const wire = await setupWireTlsFixture(target.host);
+  const credentials = path.join(wire.folder, 'credentials');
+  const config = path.join(wire.folder, 'config');
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.toUpperCase().startsWith('AWS_')));
+  Object.assign(env, { AWS_CONFIG_FILE: config, AWS_SHARED_CREDENTIALS_FILE: credentials, AWS_ACCESS_KEY_ID: access,
+    AWS_SECRET_ACCESS_KEY: key, AWS_SESSION_TOKEN: token, AWS_EC2_METADATA_DISABLED: 'true' });
+  try {
+    await fs.writeFile(credentials, `[fixture-rds]\naws_access_key_id = ${access}\naws_secret_access_key = ${key}\naws_session_token = ${token}\n`, { flag: 'wx' });
+    await fs.writeFile(config, '[profile fixture-rds]\nregion = us-east-1\n', { flag: 'wx' });
+    return { ...wire, env };
+  } catch (error) { await wire.close(); throw error; }
 }
 
 function send(socket, sequence, payload) {
@@ -90,7 +96,7 @@ function frames(stream, received) {
   return () => stream.off('data', visit);
 }
 
-async function mysqlIamEndpoint(credentials, { secure = true, requestToken = true, verify } = {}) {
+async function mysqlIamEndpoint(credentials, { secure = true, requestToken = true, verify, databaseUser = target.user } = {}) {
   const context = tls.createSecureContext({ cert: credentials.cert, key: credentials.privateKey, minVersion: 'TLSv1.2' });
   const sockets = new Set(), state = { initialEmpty: 0, receivedTokens: 0, accepted: 0, commands: [] };
   const ok = Buffer.from([0, 0, 0, 2, 0, 0, 0]);
@@ -112,7 +118,7 @@ async function mysqlIamEndpoint(credentials, { secure = true, requestToken = tru
         if (phase === 'login') {
           assert.equal(number, 2);
           const usernameEnds = packet.indexOf(0, 32);
-          assert.equal(packet.subarray(32, usernameEnds).toString('utf8'), target.user);
+          assert.equal(packet.subarray(32, usernameEnds).toString('utf8'), databaseUser);
           assert.equal(packet[usernameEnds + 1], 0);
           state.initialEmpty++;
           phase = requestToken ? 'token' : 'query';
@@ -145,4 +151,4 @@ async function mysqlIamEndpoint(credentials, { secure = true, requestToken = tru
     async close() { this.disconnect(); await new Promise(resolve => server.close(resolve)); } };
 }
 
-module.exports = { target, access, key, token, setupIamFixture, mysqlIamEndpoint };
+module.exports = { target, access, key, token, setupWireTlsFixture, setupIamFixture, mysqlIamEndpoint };
