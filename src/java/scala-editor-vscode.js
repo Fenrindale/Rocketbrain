@@ -31,7 +31,7 @@ function validateRename(edit, root, newName) {
 }
 
 function registerScalaEditor(vscode,java) {
-  const output=vscode.window.createOutputChannel('Rocketbrain Scala Language');
+  const output=vscode.window.createOutputChannel('Rocketbrain Scala Language',{log:true});
   const subscriptions=[output];
   let active, disposed=false, serial=Promise.resolve();
 
