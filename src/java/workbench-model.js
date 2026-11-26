@@ -12,12 +12,16 @@ function workspaceRoots(folders){return folders.filter(f=>f?.uri?.scheme==='file
 function buildFingerprint(root){return hash(['pom.xml','build.gradle','build.gradle.kts','settings.gradle','settings.gradle.kts','gradle.properties'].map(name=>{const p=path.join(root,name);if(!fs.existsSync(p))return[name,null];const st=fs.lstatSync(p);if(!st.isFile()||st.isSymbolicLink()||st.size>LIMITS.fileBytes)throw fail('Build files must be bounded regular local files.');return[name,hash(fs.readFileSync(p))];}));}
 const includeNonJavaProjects=Object.freeze([Object.freeze({includeNonJava:true})]);
 
-function projectIdentity(value,roots) {
- const physical=fs.realpathSync.native(workspacePath(value,roots));
+function physicalWorkspacePath(value,roots,{directory=true}={}) {
+ const candidate=local(value),stat=fs.lstatSync(candidate);
+ if(stat.isSymbolicLink())throw fail('Project paths must not be symbolic links.');
+ const physical=fs.realpathSync.native(candidate);
  if(!roots.some(root=>{
   const parent=fs.realpathSync.native(root);
   return physical===parent||physical.startsWith(parent.endsWith(path.sep)?parent:parent+path.sep);
- }))throw fail('The physical project identity must remain inside the reviewed workspace.');
+ })||(directory?!stat.isDirectory():!stat.isFile())){
+  throw fail('Java project/source paths must remain inside an open local workspace.');
+ }
  return physical;
 }
 
@@ -38,7 +42,7 @@ function mavenBuildOnlyPackaging(root) {
 function observedProjectRoots(values,roots) {
  const physical=new Set();
  for(const value of values){
-  try { physical.add(projectIdentity(value,roots)); } catch { /* Other workspace paths are out of scope. */ }
+  try { physical.add(physicalWorkspacePath(value,roots)); } catch { /* Other workspace paths are out of scope. */ }
  }
  return physical;
 }
@@ -51,7 +55,7 @@ function mavenReactorMembers(root,roots) {
  for(const name of reactor.modules){
   if(!/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(name))return;
   let member;
-  try { member=projectIdentity(path.join(root,name),roots); } catch { return; }
+  try { member=physicalWorkspacePath(path.join(root,name),roots); } catch { return; }
   if(path.dirname(member)!==root||members.has(member))return;
   const child=localMavenFacts(member);
   if(child?.parentRelativePath!=='../pom.xml'||['group','artifact','version'].some(key=>child.parent?.[key]!==gav[key]))return;
@@ -63,7 +67,7 @@ function mavenReactorMembers(root,roots) {
 async function collectMavenBuildProjects(projects,roots,request,cancellation) {
  const observed=await request('java.project.getAll',includeNonJavaProjects,cancellation);
  if(!Array.isArray(observed)||observed.length>LIMITS.projects)return;
- const seen=new Set(projects.map(project=>projectIdentity(project.root,roots)));
+ const seen=new Set(projects.map(project=>physicalWorkspacePath(project.root,roots)));
  const physical=observedProjectRoots(observed,roots);
  function add(root,packaging,reactorMembers){
   if(projects.length>=LIMITS.projects)throw fail('Inspect at most 30 imported Java and Maven build projects.');
@@ -83,7 +87,7 @@ async function collectMavenBuildProjects(projects,roots,request,cancellation) {
  for(const root of new Set([...physical].map(member=>path.dirname(member)))){
   if(cancelled(cancellation))throw fail('Java project refresh cancelled.');
   if(seen.has(root))continue;
-  try { if(projectIdentity(root,roots)!==root)continue; } catch { continue; }
+  try { if(physicalWorkspacePath(root,roots)!==root)continue; } catch { continue; }
   const members=mavenReactorMembers(root,roots);
   if(members?.every(member=>physical.has(member)))add(root,'pom',members);
  }
@@ -103,4 +107,4 @@ async function collectProjects({request,folders,cancellation}={}){const roots=wo
 function argumentsList(value=[]){if(!Array.isArray(value)||value.length>LIMITS.arguments||value.some(v=>typeof v!=='string'||v.includes('\0'))||Buffer.byteLength(JSON.stringify(value))>LIMITS.argumentBytes)throw fail('Use at most 64 arguments totaling 8 KiB.');return [...value];}
 function environment(value={}){if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length>LIMITS.environment||Buffer.byteLength(JSON.stringify(value))>LIMITS.environmentBytes)throw fail('Use at most 64 environment variables totaling 64 KiB.');for(const [k,v]of Object.entries(value))if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)||typeof v!=='string'||v.includes('\0'))throw fail('Invalid environment variable.');return{...value};}
 function splitArguments(text){const result=[];let value='',quote=null,active=false;for(let i=0;i<text.length;i++){const c=text[i];if(c==='\\'&&['"',"'",'\\'].includes(text[i+1])){value+=text[++i];active=true;}else if(quote){if(c===quote)quote=null;else value+=c;}else if(c==='"'||c==="'"){quote=c;active=true;}else if(/\s/.test(c)){if(active){result.push(value);value='';active=false;}}else{value+=c;active=true;}}if(quote)throw fail('Close the quoted argument.');if(active)result.push(value);return argumentsList(result);}
-module.exports={LIMITS,fail,hash,id,inside,local,workspacePath,workspaceRoots,buildFingerprint,packageName,collectProjects,argumentsList,environment,splitArguments,cancelled,projectIdentity,mavenBuildOnlyPackaging,mavenReactorMembers,observedProjectRoots,includeNonJavaProjects};
+module.exports={LIMITS,fail,hash,id,inside,local,workspacePath,workspaceRoots,buildFingerprint,packageName,collectProjects,argumentsList,environment,splitArguments,cancelled,physicalWorkspacePath,mavenBuildOnlyPackaging,mavenReactorMembers,observedProjectRoots,includeNonJavaProjects};

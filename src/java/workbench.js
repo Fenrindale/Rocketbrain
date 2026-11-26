@@ -26,12 +26,12 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
    getConfiguration:id=>configurations().find(item=>item.id===id)});
  function project(value){
   let real;
-  try { real=M.projectIdentity(value,roots()); } catch { /* An observed ID can also select a project. */ }
+  try { real=M.physicalWorkspacePath(value,roots()); } catch { /* An observed ID can also select a project. */ }
   const found=snapshot.projects.find(p=>p.id===value||p.uri===value||p.root===value||
    real&&(p.buildOnly?p.root===real:path.relative(p.root,real)===''));
   if(!found)throw M.fail('Choose a currently observed Java project. Refresh the Java Projects view first.');
   const workspace=roots();
-  const current=found.buildOnly?M.projectIdentity(found.root,workspace):M.workspacePath(found.root,workspace);
+  const current=found.buildOnly?M.physicalWorkspacePath(found.root,workspace):M.workspacePath(found.root,workspace);
   if(current!==found.root)throw M.fail('The project path changed after observation.');
   if(found.reactorMembers){
    const members=M.mavenReactorMembers(found.root,workspace);
@@ -153,7 +153,7 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
   if(options?.allowProjectExecution!==true)throw M.fail('Choose explicit project import/update before executing build configuration.');
   if(busy||tasks.running)throw M.fail('Finish the current managed Java operation first.');
   const operation={kind:'explicit-project-configuration',deadline:Date.now()+IMPORT_BUDGET_MS};
-  const workspace=roots(),root=M.projectIdentity(options.projectUri,workspace),uri=pathToFileURL(root).href;
+  const workspace=roots(),root=M.physicalWorkspacePath(options.projectUri,workspace),uri=pathToFileURL(root).href;
   const packaging=M.mavenBuildOnlyPackaging(root);
   const buildIdentity=packaging&&M.buildFingerprint(root);
   const members=packaging==='pom'?M.mavenReactorMembers(root,workspace):undefined;
@@ -172,16 +172,16 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
   const configuration=known?null:['pom.xml','build.gradle','build.gradle.kts','.project']
    .map(name=>path.join(root,name)).find(file=>fs.existsSync(file));
   if(!known&&!configuration)throw M.fail('Choose a Maven, Gradle or Eclipse project with an observed local build configuration.');
-  if(configuration)M.workspacePath(configuration,workspace,{directory:false});
+  const descriptor=configuration&&M.physicalWorkspacePath(configuration,workspace,{directory:false});
   if(buildIdentity&&M.buildFingerprint(root)!==buildIdentity)throw M.fail('The reviewed Maven build descriptor changed.');
-  await request('java.project.changeImportedProjects',[known?[]:[pathToFileURL(configuration).href],updates,[]],options.cancellation,operation);
+  await request('java.project.changeImportedProjects',[descriptor?[pathToFileURL(descriptor).href]:[],updates,[]],options.cancellation,operation);
   if(!known||members){
    while(!(await observed(true)).length)await new Promise(resolve=>setTimeout(resolve,200));
   }
   const result=await refresh({cancellation:options.cancellation},operation);
   if(buildIdentity&&(M.buildFingerprint(root)!==buildIdentity||
      members&&JSON.stringify(M.mavenReactorMembers(root,workspace))!==JSON.stringify(members)||
-     !result.projects.some(project=>M.projectIdentity(project.root,workspace)===root))){
+     !result.projects.some(project=>M.physicalWorkspacePath(project.root,workspace)===root))){
    throw M.fail('The reviewed Maven build project changed or is no longer observed.');
   }
   return result;
