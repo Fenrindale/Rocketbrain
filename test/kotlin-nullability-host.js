@@ -58,7 +58,7 @@ async function runKotlinNullabilityChecks(api, vscode, checks) {
     const observed = [];
     for (const [name, code] of [['checked', 'UPPER_BOUND_VIOLATED'], ['items', 'UNSAFE_CALL'], ['platform', undefined]]) {
       const result = await service.inspect({ document, position: point(name) });
-      assert.equal(result.target.file, javaPath);
+      assert.equal(path.relative(javaPath,result.target.file),'');
       const native = vscode.languages.getDiagnostics(document.uri).filter(item => item.source === 'Rocketbrain JSpecify');
       if (code) assert.ok(native.some(item => item.code === code), name + ' diagnostics');
       else assert.deepEqual(native, []);
