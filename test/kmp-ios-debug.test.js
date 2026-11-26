@@ -10,9 +10,21 @@ const { execFile, execFileSync } = require('node:child_process');
 const { promisify } = require('node:util');
 const { EventEmitter, once } = require('node:events');
 const { setTimeout: delay } = require('node:timers/promises');
-const { armSimulatorBuild, armUuid, bundleDigest, uuid } = require('../src/java/kmp-ios-review');
+const { armSimulatorBuild, armSimulatorEntry, armUuid, bundleDigest, uuid } = require('../src/java/kmp-ios-review');
 const { createKmpIosDebug, launchedPid, observeInstalledContainer } = require('../src/java/kmp-ios-debug');
 const { createKmpIosDebugAdapter } = require('../src/java/kmp-ios-debug-adapter');
+const lcMain = `Load command 0
+  cmd LC_SEGMENT_64
+  segname __TEXT
+  vmaddr 0x100000000
+  vmsize 0x4000
+  fileoff 0
+  filesize 16384
+Load command 1
+  cmd LC_MAIN
+  entryoff 512
+  stacksize 0
+`;
 
 test('iOS review refuses physical iOS, macOS and fat Mach-O debug artifacts', () => {
   armSimulatorBuild('Load command 1\n   cmd LC_BUILD_VERSION\n platform IOSSIMULATOR\n minos 17.0\n');
@@ -23,6 +35,9 @@ test('iOS review refuses physical iOS, macOS and fat Mach-O debug artifacts', ()
   assert.throws(() => armUuid(line + '\n' + line.replace('arm64', 'x86_64')), /stock arm64/);
   assert.equal(launchedPid('test.rb.fixture: 498', 'test.rb.fixture'), 498);
   assert.throws(() => launchedPid('not.rb.fixture: 498', 'test.rb.fixture'), /approved app/);
+  assert.equal(armSimulatorEntry(lcMain), '0x100000200');
+  assert.throws(() => armSimulatorEntry(lcMain.replace('entryoff 512', 'entryoff 17000')), /outside its reviewed/);
+  assert.throws(() => armSimulatorEntry(lcMain + lcMain), /one Mach-O LC_MAIN/);
 });
 
 test('iOS bundle review binds file names and bytes and refuses links', t => {
@@ -83,6 +98,7 @@ test('iOS review denies a replay and cancellation cleans up just the UUID create
       CFBundlePackageType: 'APPL', CFBundleSupportedPlatforms: ['iPhoneSimulator'] });
     if (name === 'vtool') return ' platform IOSSIMULATOR\n';
     if (name === 'dwarfdump') return 'UUID: ' + owned + ' (arm64) ' + args[1] + '\n';
+    if (name === 'otool') return lcMain;
     if (args[0] === 'list') return JSON.stringify({ runtimes: [{ identifier: runtime, isAvailable: true,
       supportedDeviceTypes: [{ identifier: device }] }], devicetypes: [{ identifier: device }],
     devices: { [runtime]: [{ udid: other }, ...(created ? [{ udid: owned }] : [])] } });
@@ -230,10 +246,14 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
     t.diagnostic('iOS fixture: ' + phase);
     if (phase === 'debuggee-launch-refused') return recordLaunchLog(t, simulator, bundleId);
     if (phase === 'source-stop-unobserved') {
-      return simctl(['get_app_container', simulator, bundleId, 'data'], 22000).then(data => {
+      return simctl(['get_app_container', simulator.id, bundleId, 'data'], 22000).then(data => {
         const fixtureResult = path.join(data, 'Library', 'rocketbrain-ios-fixture.txt');
         const wroteResult = fs.existsSync(fixtureResult) && fs.readFileSync(fixtureResult, 'utf8') === 'UIKit Kotlin=42\n';
-        t.diagnostic('Owned UIKit app produced expected sandbox result before debugger stop: ' + wroteResult);
+        t.diagnostic('Owned UIKit app produced expected sandbox result before cleanup: ' + wroteResult);
+        if (wroteResult && Number.isFinite(simulator.timeoutAt)) {
+          t.diagnostic('Owned result mtime precedes debugger timeout: ' +
+            (fs.statSync(fixtureResult).mtimeMs < simulator.timeoutAt - 10));
+        }
       }, error => t.diagnostic('Owned UIKit sandbox result unavailable: ' + String(error.code ?? error.signal).slice(0, 100)));
     }
   } });
@@ -313,7 +333,8 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
   fs.writeFileSync(process.env.ROCKETBRAIN_IOS_SIMULATOR_RECEIPT, JSON.stringify({
     githubSha: process.env.GITHUB_SHA, platform: 'darwin-arm64', xcode: execFileSync('/usr/bin/xcodebuild', ['-version'], { encoding: 'utf8' }).trim(),
     runtime: runtime.id, runtimeVersion: runtime.version, device: device.id, build: 'Kotlin 2.4.21 iosSimulatorArm64 DEBUG framework + UIKit',
-    appSha256: review.appSha256, frameworkSha256: review.frameworkSha256, frameworkUuid: review.frameworkUuid,
+    appSha256: review.appSha256, entryFileAddress: review.entryFileAddress,
+    frameworkSha256: review.frameworkSha256, frameworkUuid: review.frameworkUuid,
     symbolsSha256: review.symbolsSha256, sourceSha256: digest(source), editorBreakpoint: { file: path.basename(source), line,
       stack: stack.body.stackFrames[0].name, local: { name: measured.name, type: measured.type, value: measured.value } },
     resumed: 'UIKit Kotlin=42', staleSourceRefused: true, staleDsymRefused: true, wrongDsymRefused: true, oneShot: true, simulatorRemoved: true,

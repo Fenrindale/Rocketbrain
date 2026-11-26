@@ -83,6 +83,25 @@ function armUuid(output) {
   return row[1].toLowerCase();
 }
 
+function armSimulatorEntry(output) {
+  const commands = output.split(/^Load command [0-9]+\s*$/m);
+  const matching = (name, extra = () => true) => commands.filter(text =>
+    new RegExp('^\\s*cmd\\s+' + name + '\\s*$', 'm').test(text) && extra(text));
+  const entry = matching('LC_MAIN'), text = matching('LC_SEGMENT_64', block => /^\s*segname\s+__TEXT\s*$/m.test(block));
+  if (entry.length !== 1 || text.length !== 1) throw Error('The reviewed iOS app requires one Mach-O LC_MAIN and __TEXT.');
+  const field = (block, name) => {
+    const match = new RegExp('^\\s*' + name + '\\s+(0[xX][a-fA-F0-9]+|[0-9]+)\\s*$', 'm').exec(block);
+    if (!match) throw Error('Mach-O startup metadata lacks ' + name + '.');
+    return BigInt(match[1]);
+  };
+  const offset = field(entry[0], 'entryoff'), file = field(text[0], 'fileoff');
+  const fileSize = field(text[0], 'filesize'), vmSize = field(text[0], 'vmsize');
+  const base = field(text[0], 'vmaddr'), relative = offset - file;
+  if (relative < 0n || relative >= fileSize || relative >= vmSize || (base + relative) % 4n !== 0n ||
+      base + relative >= 0xffffffffffffffffn) throw Error('Mach-O LC_MAIN is outside its reviewed __TEXT bounds.');
+  return '0x' + (base + relative).toString(16);
+}
+
 async function inspectIosReview(input, tool) {
   const root = fs.realpathSync.native(input.root);
   const app = childPath(root, input.app, 'simulator app');
@@ -108,10 +127,12 @@ async function inspectIosReview(input, tool) {
   const framework = childPath(app, path.join(app, 'Frameworks', input.framework, frameworkName), 'Kotlin framework binary');
   const symbols = childPath(dsym, path.join(dsym, 'Contents', 'Resources', 'DWARF', frameworkName), 'Kotlin DWARF file');
   const symbolsSha256 = fileDigest(symbols);
-  const [appUuid, frameworkUuid, symbolsUuid] = await Promise.all([executable, framework, symbols].map(async file => {
+  const uuids = [executable, framework, symbols].map(async file => {
     if (file !== symbols) armSimulatorBuild(await tool('vtool', ['-show-build', file]));
     return armUuid(await tool('dwarfdump', ['--uuid', file]));
-  }));
+  });
+  const [appUuid, frameworkUuid, symbolsUuid, entryFileAddress] =
+    await Promise.all([...uuids, tool('otool', ['-l', executable]).then(armSimulatorEntry)]);
   if (frameworkUuid !== symbolsUuid) throw Error('The dSYM does not match the reviewed Kotlin framework Mach-O UUID.');
   const executableSha256 = fileDigest(executable), frameworkSha256 = fileDigest(framework);
   function validate() {
@@ -123,8 +144,8 @@ async function inspectIosReview(input, tool) {
     }
   }
   validate();
-  return { app, appUuid, bundleId: plist.CFBundleIdentifier, executable, executableSha256, framework, frameworkUuid,
+  return { app, appUuid, entryFileAddress, bundleId: plist.CFBundleIdentifier, executable, executableSha256, framework, frameworkUuid,
     frameworkSha256, symbols, symbolsSha256, appSha256, source, sourceSha256, line: input.line, validate };
 }
 
-module.exports = { inspectIosReview, armUuid, armSimulatorBuild, bundleDigest, fileDigest, uuid, safeName };
+module.exports = { inspectIosReview, armUuid, armSimulatorBuild, armSimulatorEntry, bundleDigest, fileDigest, uuid, safeName };

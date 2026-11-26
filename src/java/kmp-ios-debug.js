@@ -15,6 +15,7 @@ const deviceId = /^com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-[A-Za-z0-9-]
 const workerPrefix = 'ROCKETBRAIN_IOS:';
 const workerStages = new Set(['interpreter-entered', 'target-opened', 'attaching', 'process-verified', 'module-verified',
   'runtime-framework-pending', 'runtime-loader-stopped', 'runtime-framework-mapped',
+  'app-entry-armed', 'app-entry-verified',
   'runtime-breakpoint-resolved', 'runtime-breakpoint-pending', 'process-continue', 'process-continue-returned']);
 const workerPaths = [path.join(__dirname, 'ios-debug', 'simulator_lldb.py'),
   path.join(__dirname, '../../runtime/ios-debug/simulator_lldb.py')];
@@ -159,8 +160,10 @@ function startWorker({ env }, config, observe) {
     let timer;
     return new Promise((resolve, reject) => {
       timer = setTimeout(() => {
+        const error = Error('Xcode LLDB timed out waiting for ' + event + ' after ' + lastStage + '. ' + diagnostics.trim());
+        error.iosTimeoutAt = Date.now();
         child.kill();
-        rejectAll(Error('Xcode LLDB timed out waiting for ' + event + ' after ' + lastStage + '. ' + diagnostics.trim()));
+        rejectAll(error);
       }, timeout);
       waiters.set(event, { resolve, reject });
     }).finally(() => { clearTimeout(timer); waiters.delete(event); });
@@ -299,6 +302,7 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
     if (await verifyProcess(tool, pid, executable, signal) !== processIdentity) throw Error('The reviewed simulator process changed.');
     observe('owned-pid-verified');
     const worker = record.worker = openWorker(record.system, { executable, framework, symbols, pid,
+      appUuid: snapshot.appUuid, entryFileAddress: snapshot.entryFileAddress,
       frameworkUuid: snapshot.frameworkUuid, frameworkSha256: snapshot.frameworkSha256,
       source: snapshot.source, line: snapshot.line, reportMappings: Boolean(observer) }, observe);
     const stopOnCancel = () => { void worker.stop().catch(() => {}); };
@@ -320,7 +324,8 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
           return pause;
         } catch (error) {
           if (!signal.aborted) {
-            try { await observe('source-stop-unobserved', record.id); } catch { /* Preserve the debugger failure. */ }
+            try { await observe('source-stop-unobserved', { id: record.id, timeoutAt: error.iosTimeoutAt }); }
+            catch { /* Preserve the debugger failure. */ }
           }
           await close(record);
           throw error;
@@ -349,7 +354,8 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
       try { return await record.setup; }
       catch (error) {
         if (!record.abort.signal.aborted && record.worker && record.id) {
-          try { await observe('source-stop-unobserved', record.id); } catch { /* Keep the exact LLDB failure. */ }
+          try { await observe('source-stop-unobserved', { id: record.id, timeoutAt: error.iosTimeoutAt }); }
+          catch { /* Keep the exact LLDB failure. */ }
         }
         await close(record);
         throw error;
