@@ -20,6 +20,35 @@ function host(backend,{workspaceState}={}){
   return {api,project,vscode,runs,events,controller,handlers,profiles,uri};
 }
 const testData=[{id:'engine',label:'JUnit',kind:'container'},{id:'template',parentId:'engine',label:'parameterized',kind:'container'},{id:'simple',parentId:'engine',label:'simple',kind:'test'}];
+test('native run keeps a named selection bound to its last reviewed discovery',async()=>{
+  const testModule='fixture.jpms.tests',fingerprint='a'.repeat(64);
+  let discoveries=0,rejectChanged=false;
+  const h=host({
+    async discoverTests(){
+      discoveries++;
+      return {state:'completed',tests:testData,module:{name:testModule,fingerprint}};
+    },
+    async runTests(config,options){
+      assert.equal(config.testModule,testModule);
+      assert.equal(options.moduleReview,fingerprint);
+      assert.deepEqual(options.selectors,[{kind:'uniqueId',value:'simple'}]);
+      if(rejectChanged)throw Object.assign(Error('Build the module and refresh test discovery.'),{code:'STALE_MODULE_TEST'});
+      return {state:'completed',summary:{testsSucceeded:1},module:{name:testModule,fingerprint}};
+    }
+  });
+  try{
+    const project={...h.project,classPath:[],modulePath:[h.project.workspace],testModule};
+    const discovery=await h.api.discover({projects:[project]});
+    const selected=discovery.tests.find(item=>item.id==='simple');
+    const first=await h.api.run({includeIds:[selected.nativeId]});
+    assert.equal(first.projects[0].module.name,testModule);
+    rejectChanged=true;
+    h.events.disk.fire(h.uri(path.join(project.workspace,'src/test/java/Changed.java')));
+    await assert.rejects(h.api.run({includeIds:[selected.nativeId]}),{code:'STALE_MODULE_TEST'});
+    assert.equal(discoveries,1);
+    assert.equal(h.api.snapshot().state,'stale');
+  }finally{await h.api.dispose();}
+});
 test('native Java test integration is offline until discovery and preserves template selections',async()=>{
   let discoveries=0,selection;
   const h=host({discoverTests:async()=>{discoveries++;return{state:'completed',tests:testData};},runTests:async(config,options)=>{selection=options.selectors;return{state:'completed',summary:{succeeded:2}};}});

@@ -2633,12 +2633,11 @@
         "rocketbrain.java.testing.projects": {
           "type": "array",
           "default": [],
-          "description": "Explicit compiled Java test project profiles. Empty resolves imported Maven/Gradle test classpaths through the independent Java language engine.",
+          "description": "Compiled Java test profiles. Empty reads imported Maven or Gradle paths from the independent Java language engine. For a separate named test module, build it before discovery and configure testModule, modulePath, testClassPaths and sourceRoots.",
           "items": {
             "type": "object",
             "required": [
-              "workspace",
-              "classPath"
+              "workspace"
             ],
             "properties": {
               "workspace": {
@@ -2646,6 +2645,18 @@
               },
               "classPath": {
                 "type": "array",
+                "description": "Class path for ordinary JUnit or TestNG discovery.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "testModule": {
+                "type": "string",
+                "description": "JPMS name of the separately compiled JUnit Jupiter 6.0.3 test module."
+              },
+              "modulePath": {
+                "type": "array",
+                "description": "Named test and application output directories plus individual dependency JARs, including the modular Jupiter 6.0.3 runtime artifacts.",
                 "items": {
                   "type": "string"
                 }

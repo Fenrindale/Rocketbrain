@@ -59,19 +59,21 @@ public final class Runner {
         try {
             String mode = value("mode");
             if (!Set.of("discover", "run").contains(mode)) throw new IllegalArgumentException("Unsupported execution mode.");
+            NamedModuleTests named = value("testModule").isEmpty() ? null : NamedModuleTests.open();
             if(value("framework").equals("testng")){exit=TestNgAdapter.execute(mode);}else{
             var builder = LauncherDiscoveryRequestBuilder.request().filters(ClassNameFilter.includeClassNamePatterns(".*"));
             List<DiscoverySelector> selectors = new ArrayList<>();
             for (int index = 0; index < number("selectorCount"); index++) {
                 String kind = value("selector." + index + ".kind"), text = value("selector." + index + ".value");
-                selectors.add(switch (kind) {
+                selectors.add(named==null?switch (kind) {
                     case "uniqueId" -> DiscoverySelectors.selectUniqueId(text);
                     case "class" -> DiscoverySelectors.selectClass(text);
                     case "method" -> DiscoverySelectors.selectMethod(text);
                     case "package" -> DiscoverySelectors.selectPackage(text);
                     default -> throw new IllegalArgumentException("Unsupported selector.");
-                });
+                }:named.selector(kind,text));
             }
+            if (selectors.isEmpty() && named!=null) selectors.add(named.all());
             if (selectors.isEmpty()) {
                 java.util.HashSet<Path> roots = new java.util.HashSet<>();
                 for (int index = 0; index < number("rootCount"); index++) roots.add(Path.of(URI.create(value("root." + index))));
@@ -79,12 +81,17 @@ public final class Runner {
             }
             builder.selectors(selectors);
             List<String> excluded = new ArrayList<>();
-            for (int index = 0; index < number("excludeCount"); index++) excluded.add(value("exclude." + index));
+            for (int index = 0; index < number("excludeCount"); index++) {
+                String id=value("exclude." + index);
+                if(named!=null)named.verifyId(id);
+                excluded.add(id);
+            }
             if (!excluded.isEmpty()) builder.filters((PostDiscoveryFilter) descriptor -> FilterResult.includedIf(excluded.stream().noneMatch(id -> descriptor.getUniqueId().toString().equals(id) || descriptor.getUniqueId().toString().startsWith(id + "/"))));
             for (int index = 0; index < number("parameterCount"); index++) builder.configurationParameter(value("parameter." + index + ".key"), value("parameter." + index + ".value"));
             if(PerTestCoverage.enabled())builder.configurationParameter("junit.jupiter.execution.parallel.enabled","false");
-            Launcher launcher = LauncherFactory.create();
+            Launcher launcher = named==null?LauncherFactory.create():named.launcher();
             TestPlan plan = launcher.discover(builder.build());
+            if(named!=null)named.verifyPlan(plan);
             for (TestIdentifier root : plan.getRoots()) emitPlan(plan, root);
             emit(map("type", "plan", "testsFound", plan.countTestIdentifiers(TestIdentifier::isTest)));
             if (mode.equals("run")) {
@@ -135,10 +142,10 @@ public final class Runner {
             var expected=assertion.getExpected();var actual=assertion.getActual();
             setComparison(result,"opentest4j",expected.getStringRepresentation(),actual.getStringRepresentation(),
                 expected.getType()==null?"null":expected.getType().getTypeName(),actual.getType()==null?"null":actual.getType().getTypeName());
-        } else if(error.getClass()==org.junit.ComparisonFailure.class) {
+        } else if(error.getClass().getName().equals("org.junit.ComparisonFailure") && error.getClass()==org.junit.ComparisonFailure.class) {
             var failure=(org.junit.ComparisonFailure)error;
             setStringComparison(result,"junit4",failure.getExpected(),failure.getActual());
-        } else if(error.getClass()==junit.framework.ComparisonFailure.class) {
+        } else if(error.getClass().getName().equals("junit.framework.ComparisonFailure") && error.getClass()==junit.framework.ComparisonFailure.class) {
             var failure=(junit.framework.ComparisonFailure)error;
             setStringComparison(result,"junit3",failure.getExpected(),failure.getActual());
         } else if(error.getClass()==AssertionError.class) {

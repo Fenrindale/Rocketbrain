@@ -1,0 +1,27 @@
+plugins { id 'java' }
+
+repositories { mavenCentral() }
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(25) }
+    modularity.inferModulePath = true
+}
+
+dependencies {
+    implementation 'org.springframework:spring-jdbc:7.0.10'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:6.0.3'
+    testCompileOnly 'org.apiguardian:apiguardian-api:1.1.2'
+    testRuntimeOnly 'org.apiguardian:apiguardian-api:1.1.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:6.0.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.0.3'
+    testRuntimeOnly 'com.mysql:mysql-connector-j:9.7.0'
+    testRuntimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.5.10'
+}
+
+tasks.register('writeTestModulePath') {
+    dependsOn tasks.compileTestJava
+    doLast {
+        layout.buildDirectory.file('jpms-test-path.txt').get().asFile.text =
+            configurations.testRuntimeClasspath.files.collect { it.absolutePath }.join(System.lineSeparator())
+    }
+}
