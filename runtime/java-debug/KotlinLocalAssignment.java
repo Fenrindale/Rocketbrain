@@ -91,7 +91,7 @@ final class KotlinLocalAssignment {
     }
 
     private static boolean isKotlinSource(String file) { return file.endsWith(".kt") || file.endsWith(".kts"); }
-    private static boolean isName(String name) { return name != null && name.matches("[A-Za-z_][A-Za-z0-9_]{0,127}"); }
+    static boolean isName(String name) { return name != null && name.matches("[A-Za-z_][A-Za-z0-9_]{0,127}"); }
 
     private static String primitiveType(LocalVariable variable) {
         if (variable == null) return null;
@@ -103,7 +103,7 @@ final class KotlinLocalAssignment {
         }
     }
 
-    private static Object scalar(String type, String literal) {
+    static Object scalar(String type, String literal) {
         try {
             if ("Int".equals(type) && literal.matches("-?(0|[1-9][0-9]*)")) return Integer.valueOf(literal);
             if ("Long".equals(type) && literal.matches("-?(0|[1-9][0-9]*)L")) return Long.valueOf(literal.substring(0,literal.length()-1));
@@ -112,18 +112,18 @@ final class KotlinLocalAssignment {
         throw invalid("Enter a Kotlin " + type + " literal. Use an L suffix for Long.");
     }
 
-    private static com.sun.jdi.Value mirror(VirtualMachine vm, Object value) {
+    static com.sun.jdi.Value mirror(VirtualMachine vm, Object value) {
         if (value instanceof Integer) return vm.mirrorOf((int) value);
         if (value instanceof Long) return vm.mirrorOf((long) value);
         return vm.mirrorOf((boolean) value);
     }
 
-    private static String text(JsonObject args, String key) {
+    static String text(JsonObject args, String key) {
         JsonElement node = args == null ? null : args.get(key);
         return node != null && node.isJsonPrimitive() && node.getAsJsonPrimitive().isString() ? node.getAsString() : null;
     }
 
-    private static int frameId(JsonObject args) {
+    static int frameId(JsonObject args) {
         JsonElement node = args.get("frameId");
         if (node == null || !node.isJsonPrimitive() || !node.getAsJsonPrimitive().isNumber()) throw stale();
         try {

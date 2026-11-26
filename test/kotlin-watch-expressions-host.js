@@ -4,17 +4,20 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD } = require('../src/java/debug-runtime');
+const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD } = require('../src/java/debug-runtime');
 const { freePort } = require('./java-debug-dap');
 const { until } = require('./helpers/stdio-lsp');
 const { buildCoroutineFixture } = require('./helpers/coroutine-fixture');
 const { request, breakpointName, launchKotlinWatches, assertKotlinWatchValues, assertIndexedKotlinWatchValues, kotlinWatchJdbcResult } =
   require('./helpers/kotlin-watch-expressions');
 
-async function runKotlinWatchExpressionChecks(api, vscode, checks) {
+const { fieldRequest, assertObservedFields, assertFieldsResumed } = require('./helpers/kotlin-object-fields');
+
+async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields = false) {
   await api.java.start();
   const debugBuild = api.java.getState().debugBuild;
-  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD].includes(debugBuild));
+  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD].includes(debugBuild));
+  if (requireFields) assert.equal(debugBuild, KOTLIN_FIELD_BUILD);
   const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const project = await fs.mkdtemp(path.join(workspace, 'rb-kotlin-expressions-'));
@@ -61,7 +64,7 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks) {
     const values = await assertKotlinWatchValues(send, frame.id);
     const indexed = debugBuild !== WATCH_BUILD ? await assertIndexedKotlinWatchValues(send, frame.id) : undefined;
     let write;
-    if(debugBuild===KOTLIN_LOCAL_WRITE_BUILD){
+    if([KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD].includes(debugBuild)){
       assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.java.setKotlinLocal'));
       const locals=api.java.debug.kotlinLocals;
       const original=await locals.list(session);
@@ -76,15 +79,44 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks) {
       await locals.apply(restore);
       write={nativeCommand:true,changedAndRestored:true,cancelledRefused:true};
     }
+    let fieldResult, staleField;
+    const inspector = api.java.debug.kotlinFields;
+    if (debugBuild === KOTLIN_FIELD_BUILD) {
+      assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.java.inspectKotlinObjectFields'));
+      const objects = await inspector.list(session);
+      const actual = await inspector.inspectFields(objects,'target');
+      assertObservedFields(actual.fields);
+      await assert.rejects(inspector.prepare(actual,'guarded','19'),/writable Kotlin field/u);
+      const cancelled = await inspector.prepare(actual,'count','21');
+      await inspector.cancel(cancelled);
+      await assert.rejects(inspector.apply(cancelled),/Inspect this paused Kotlin object/u);
+      for (const [name,input,before,after] of [['count','59','4','59'],['isOpen','false','true','false'],
+        ['exact','9007199254741035L','9007199254740993','9007199254741035'],['nullable','replacementBox','null','113']]) {
+        const review = await inspector.prepare(actual,name,input);
+        assert.deepEqual([review.receiver,review.name,review.before,review.after],['target',name,before,after]);
+        assert.deepEqual(await inspector.apply(review),{state:'applied',receiver:'target',name,value:after});
+        await assert.rejects(inspector.apply(review),/Inspect this paused Kotlin object/u);
+      }
+      const readback = await inspector.inspectFields(objects,'target');
+      assert.equal(readback.fields.find(field=>field.name==='nullable').value,'113');
+      staleField = await inspector.prepare(readback,'count','77');
+    }
     await send('continue', { threadId: stop.threadId });
-    const application = kotlinWatchJdbcResult(await running.waitFor('Rocketbrain Kotlin JDBC|'), spring.dbEngine);
+    const output = await running.waitFor('Rocketbrain Kotlin JDBC|');
+    const application = kotlinWatchJdbcResult(output, spring.dbEngine);
+    if (staleField) {
+      await assert.rejects(inspector.apply(staleField),/paused Kotlin frame|frame changed/u);
+      await assert.rejects(send(fieldRequest,{action:'fields',frameId:frame.id,receiver:'target'}),/same Kotlin frame suspended/u);
+      fieldResult = {nativeCommand:true,cancelledRefused:true,expiredFrameRefused:true,resumed:assertFieldsResumed(output)};
+      checks.push('The native Kotlin object field inspector reviewed and changed exact primitive and boxed JVM fields. The resumed Spring JDBC application read the chosen object values with zero accessor side effects.');
+    }
     await assert.rejects(send(request, { frameId: frame.id, expression: 'amount' }), /current suspended frame/u);
     await detach();
     checks.push('The native debugger evaluates typed Kotlin Watch, Hover and Debug Console expressions in the paused Spring JDBC stack.');
     checks.push('Unsupported Kotlin assignments and function calls leave the JVM unchanged, and a resumed frame cannot be reused.');
     if (indexed) checks.push('Kotlin Watch reads array and standard JVM list size and indexed values through JDI, with custom getters excluded.');
     if(write)checks.push('The native debugger explicitly reviewed a Kotlin local value, changed it, observed it in Watch and restored it before resume.');
-    return { ...application, frameLine: frame.line, values, indexed, write, staleFrameRefused: true };
+    return { ...application, frameLine: frame.line, values, indexed, write, fieldResult, staleFrameRefused: true };
   } finally {
     vscode.debug.removeBreakpoints([breakpoint]);
     await detach().catch(() => {});
@@ -98,4 +130,6 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks) {
   }
 }
 
-module.exports = { runKotlinWatchExpressionChecks };
+const runKotlinObjectFieldChecks = (api,vscode,checks) => runKotlinWatchExpressionChecks(api,vscode,checks,true);
+
+module.exports = { runKotlinWatchExpressionChecks, runKotlinObjectFieldChecks };

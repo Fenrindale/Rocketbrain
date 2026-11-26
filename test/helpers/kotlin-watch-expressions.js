@@ -35,7 +35,7 @@ async function launchKotlinWatches(fixture, options, port) {
   const jdbc = await jdbcOptions(options);
   return launchCoroutineFixture(fixture, {
     vmArgs: ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:' + port]
-  }, { ...jdbc, mainClass });
+  }, { ...jdbc, mainClass, env: {...jdbc.env, ...(options.fieldSignal ? {RB_KOTLIN_TEST_FIELD_SIGNAL:options.fieldSignal} : {})} });
 }
 
 async function assertKotlinWatchValues(send, frameId) {

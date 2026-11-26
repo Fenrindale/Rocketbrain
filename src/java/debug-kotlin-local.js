@@ -1,13 +1,12 @@
 'use strict';
 
-const { KOTLIN_LOCAL_WRITE_BUILD } = require('./debug-runtime');
+const { KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD } = require('./debug-runtime');
 
 const command = 'rocketbrain/setKotlinLocal';
 const types = new Set(['Int','Long','Boolean']);
 const id = value => Number.isSafeInteger(value) && value > 0;
 
-function createKotlinLocalEditor(vscode, { getState, ensureTrusted }) {
-  const frames = new WeakMap(), pending = new WeakMap();
+function createKotlinFrameGuard(vscode, { getState, ensureTrusted, builds }) {
 
   function current(session) {
     ensureTrusted();
@@ -16,7 +15,7 @@ function createKotlinLocalEditor(vscode, { getState, ensureTrusted }) {
         state?.state !== 'stopped' || state.resuming !== undefined || !id(state.threadId)) {
       throw Error('Focus a paused Kotlin frame in the active Rocketbrain Java session.');
     }
-    if (state.debugBuild !== KOTLIN_LOCAL_WRITE_BUILD) throw Error('Update the Rocketbrain Java debugger to edit Kotlin locals.');
+    if (!builds.includes(state.debugBuild)) throw Error('Update the Rocketbrain Java debugger for this Kotlin frame action.');
     const selection = vscode.debug.activeStackItem;
     const focused = selection?.session?.id === session.id ? selection : undefined;
     if (focused && focused.threadId !== state.threadId) throw Error('Choose a frame on the paused debug thread.');
@@ -33,7 +32,7 @@ function createKotlinLocalEditor(vscode, { getState, ensureTrusted }) {
     }
   }
 
-  async function list(session = vscode.debug.activeDebugSession) {
+  async function inspect(session = vscode.debug.activeDebugSession) {
     const stop = current(session);
     const context = {session,stop};
     const result = await session.customRequest('stackTrace',{threadId:stop.threadId,startFrame:0,levels:stop.focus?32:1});
@@ -42,15 +41,27 @@ function createKotlinLocalEditor(vscode, { getState, ensureTrusted }) {
     if (!Array.isArray(stack) || stack.length>32) throw Error('The Java adapter returned an invalid call stack.');
     const frame = stop.focus ? stack.find(item=>item.id===stop.focus) : stack[0];
     if (!id(frame?.id)) throw Error('Choose a Kotlin frame within the top 32 calls.');
-    const response = await session.customRequest(command,{action:'list',frameId:frame.id});
+    return {...context,frameId:frame.id,frame:String(frame.name||'').slice(0,512)};
+  }
+
+  return {inspect,validate};
+}
+
+function createKotlinLocalEditor(vscode, options) {
+  const {inspect,validate} = createKotlinFrameGuard(vscode,{...options,builds:[KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD]});
+  const frames = new WeakMap(), pending = new WeakMap();
+
+  async function list(session = vscode.debug.activeDebugSession) {
+    const context = await inspect(session);
+    const response = await session.customRequest(command,{action:'list',frameId:context.frameId});
     validate(context);
     const locals = response?.locals;
     if (!Array.isArray(locals) || locals.length>128 || locals.some(local=>!types.has(local?.type)||
         typeof local.name!=='string'||!(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/u).test(local.name))) {
       throw Error('The Kotlin debug adapter returned an invalid local list.');
     }
-    const report = Object.freeze({frame:String(frame.name||'').slice(0,512),locals:Object.freeze(locals.map(value=>Object.freeze({...value})))});
-    frames.set(report,{...context,frameId:frame.id});
+    const report = Object.freeze({frame:context.frame,locals:Object.freeze(locals.map(value=>Object.freeze({...value})))});
+    frames.set(report,context);
     return report;
   }
 
@@ -111,4 +122,4 @@ function createKotlinLocalEditor(vscode, { getState, ensureTrusted }) {
   return {list,prepare,apply,cancel,choose};
 }
 
-module.exports = {createKotlinLocalEditor};
+module.exports = {createKotlinLocalEditor,createKotlinFrameGuard};
