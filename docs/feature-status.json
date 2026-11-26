@@ -1,5 +1,5 @@
 {
-  "version": "0.128.0",
+  "version": "0.130.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -43,16 +43,16 @@
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-029",
+    "IDEA-046",
+    "IDEA-047",
     "IDEA-066",
-    "IDEA-096",
-    "IDEA-109"
+    "IDEA-096"
   ],
   "expandedFeatures": [
-    "IDEA-029",
+    "IDEA-046",
+    "IDEA-047",
     "IDEA-066",
-    "IDEA-096",
-    "IDEA-109"
+    "IDEA-096"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -877,8 +877,8 @@
       "verification": {
         "state": "v0.128-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.128.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1391,23 +1391,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "sbt 멀티프로젝트를 검색하고 프로젝트별 컴파일·테스트·실행을 지원한다. Scala 3 SemanticDB를 이용해 실제로 해석된 오버로드 선언으로 이동한다.",
+      "scope": "Scala 2와 3에 대해 sbt 모듈 컴파일·테스트를 실행하고 컴파일된 SemanticDB 기호를 이용해 오버로드별 선언과 사용처를 찾는다.",
       "remaining": [
-        "Scala 2 지원, 추가 언어 서버 편집 기능과 Scala 디버깅이 남아 있다."
+        "일반 코드 완성·편집 리팩터링과 설치된 Scala 디버거가 남는다."
       ],
       "verification": {
-        "state": "v0.54-installed-coverage",
+        "state": "v0.130-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.54.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "공식 sbt 1.13.1과 Scala 3.9.0에서 Java·Scala가 혼합된 앱, MUnit 테스트 2개, 서로 다른 오버로드와 변경된 소스 차단을 확인했다.",
+        "testedScope": "실제 Scala 2.13.18 및 Scala 3.9.0에서 같은 이름의 두 오버로드를 구분했다. 설치 VS Code에서는 Scala 2의 정의와 사용처를 실제로 확인했다.",
         "publicEvidence": [
-          "src/java/scala-sbt.js",
           "src/java/scala-semanticdb.js",
-          "test/scala-sbt-host.js"
+          "src/java/scala-vscode.js",
+          "test/scala-sbt-host.js",
+          "docs/scala-sbt-navigation.md"
         ],
         "originalProductParityVerified": false
       }
@@ -1421,22 +1422,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Java Projects에서 Groovy 소스를 탐색하고 Gradle의 Spock 사례를 실행한다. 독립 Groovy 콘솔에서 변수를 유지·초기화하고 스크립트의 구문 오류를 파일에 표시한다.",
+      "scope": "선택한 Groovy 코드를 가져온 Java 프로젝트의 런타임·테스트 클래스패스에서 사전 검토 후 실행한다.",
       "remaining": [
-        "Groovy 선언의 일반 정적 완성·리팩터링과 프로젝트 클래스 경로 콘솔이 남아 있다."
+        "Groovy 선언 자체의 정적 완성, 동적 타입 분석 및 리팩터링이 남는다."
       ],
       "verification": {
-        "state": "v0.51-installed-coverage",
+        "state": "v0.130-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.51.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Gradle 9.1과 Groovy 4.0.28에서 Java·Groovy를 함께 컴파일하고 Spock 2.4 테스트 3개, 실제 동적 호출, 구문 오류 위치, 이전 변수 유지·초기화를 확인했다.",
+        "testedScope": "실제 Maven·Gradle 클래스패스에서 복사한 Java 클래스와 Spring JDBC를 사용해 두 DB가 각각 42를 반환했다. 설치 VS Code에서 Maven의 검토와 실행 승인을 확인했다.",
         "publicEvidence": [
-          "src/java/groovy-vscode.js",
-          "test/groovy-spock-host.js"
+          "src/java/groovy-project-console.js",
+          "test/groovy-project-console-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1970,24 +1971,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Quarkus Gradle 프로젝트를 가져오고 테스트·빌드·개발 모드로 실행한다. 패키징된 JVM의 소유 루프백 JDWP 소켓을 확인해 소스 디버거를 연결한다.",
+      "scope": "중첩 Quarkus ConfigMapping 키의 완성과 Java 선언 이동을 제공하고, 선택한 키의 관측된 SmallRye 우선순위와 파일 위치를 표시한다.",
       "remaining": [
-        "동적 Arc CDI와 중첩 Configuration Mapping 범위가 남아 있다.",
-        "설치 VS Code에서 전체 Quarkus Gradle 검증을 다시 확인한다."
+        "동적 Arc CDI, Quarkus Gradle의 설치본 종단, 네이티브 이미지가 남는다."
       ],
       "verification": {
-        "state": "v0.128-installed-coverage",
+        "state": "v0.130-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "별도 실제 Quarkus 3.40.1.2와 Gradle 9.7.1에서 두 DB의 개발·패키지 실행, 테스트 두 건과 소스 중단점 21행을 확인했다. 설치 VS Code 검증은 HTTP 확인 중 시간 초과였다.",
+        "testedScope": "실제 Quarkus 3.40.1.2의 활성 프로필에서 중첩 키의 출처를 확인했다. 원본 값을 표시하거나 사용자 소스를 다시 실행하지 않았다.",
         "publicEvidence": [
-          "src/java/quarkus-dev.js",
-          "src/java/quarkus-vscode.js",
-          "test/quarkus-gradle-host.js"
+          "src/java/quarkus-config-mapping.js",
+          "src/java/quarkus-config-origin.js",
+          "runtime/jpa-observer/src/rocketbrain/observer/QuarkusConfigTrace.java",
+          "test/quarkus-config-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2843,24 +2844,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "승인한 Windows·Linux SSH 작업공간에서 실제 Java 프로세스와 루프백 소켓을 확인하고 소스가 맞는 로컬 편집기에서 디버깅한다.",
+      "scope": "검토한 SSH 작업공간의 Java 소스와 고정 JAR을 원격 JDK에서 컴파일하고, 오류의 실제 소스로 이동한다.",
       "remaining": [
-        "원격 Maven·Gradle 빌드 그래프와 여러 파일의 변경 수명주기가 남아 있다."
+        "원격 Maven·Gradle 빌드 그래프와 여러 파일의 변경 수명주기가 남는다."
       ],
       "verification": {
-        "state": "v0.128-installed-coverage",
+        "state": "v0.130-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Windows·Linux SSH에서 14행에 멈춰 지역 변수 73을 확인했다. 연결을 해제하니 JVM이 재개되고 기존 파일 세션이 유지됐다. 잘못된 소유자와 연결 대상 교체는 거부됐다.",
+        "testedScope": "Windows SSH에서 Spring JAR 5개로 클래스 두 개를 컴파일했다. Linux 실제 원격 JDK에서도 컴파일·진단·취소와 정리를 확인했다.",
         "publicEvidence": [
-          "docs/ssh-workspace.md",
-          "src/remote/ssh-java-debug.js",
-          "src/remote/ssh-java-debug-linux.js",
-          "test/ssh-java-debug-host.js"
+          "src/remote/ssh-java-compile.js",
+          "src/remote/ssh-java-compile-runtime.js",
+          "test/ssh-java-compile-host.js",
+          "docs/ssh-workspace.md"
         ],
         "originalProductParityVerified": false
       }
@@ -3229,8 +3230,8 @@
       "verification": {
         "state": "v0.128-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.128.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6394,36 +6395,30 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "11d23d6d4379a2896709530463bca386b148efa4925c43bee00db327cbaf0ea2",
-    "sourceManifestSha256": "62eea96afa744ac3903ec52d235bcca33d6574b1bcc89215746dda77c4477c02",
+    "vsixSha256": "77864beeb7e42de878e7a76860ac406efe0b4acf9c4e39381f7be3279d4cdc22",
+    "sourceManifestSha256": "56cde81aae67f73dd7a08afa1bc3fa66714b3f7966612fbc04dcd4023d7d0097",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 4
+        "featureGroups": 5
       },
       {
         "engine": "mariadb",
-        "featureGroups": 4
+        "featureGroups": 5
       }
     ]
   },
-  "stateChanges": [
-    {
-      "id": "IDEA-109",
-      "before": "partial",
-      "after": "implemented"
-    }
-  ],
+  "stateChanges": [],
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45769966853",
-    "tests": 2043,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45772287878",
+    "tests": 2052,
     "suites": 0,
-    "pass": 1844,
+    "pass": 1849,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 199,
+    "skipped": 203,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

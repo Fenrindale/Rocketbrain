@@ -26,6 +26,7 @@ public final class Agent {
             if(PerformanceRuntime.enabled())instrumentation.addTransformer(new PerformanceTransformer(instrumentation),false);
             if(SecurityTraceRuntime.enabled())instrumentation.addTransformer(new SecurityTraceTransformer(instrumentation),false);
             if(AuthenticationProviderTrace.enabled())instrumentation.addTransformer(new AuthenticationProviderTrace.Transformer(instrumentation),false);
+            if(QuarkusConfigTrace.enabled())instrumentation.addTransformer(new QuarkusConfigTrace.Transformer(instrumentation),false);
             if(ReactiveSecurityTrace.enabled())instrumentation.addTransformer(new ReactiveSecurityTraceTransformer(),false);
             if(FeignContractTrace.enabled())instrumentation.addTransformer(new FeignContractTrace.Transformer(),false);
             if(PersistenceContextRuntime.enabled())instrumentation.addTransformer(new PersistenceContextTransformer(instrumentation),false);

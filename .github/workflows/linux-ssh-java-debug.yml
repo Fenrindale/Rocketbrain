@@ -9,8 +9,10 @@ on:
       - 'src/remote/ssh-*.js'
       - 'src/devcontainer/java-attach.js'
       - 'test/ssh-java-debug.test.js'
+      - 'test/ssh-java-compile.test.js'
       - 'test/helpers/ssh-process-fixture.js'
       - 'test/helpers/java-debug-process-fixture.js'
+      - 'test/helpers/ssh-java-compile-fixture.js'
       - 'test/fixtures/ssh-process-server.txt'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -21,8 +23,10 @@ on:
       - 'src/remote/ssh-*.js'
       - 'src/devcontainer/java-attach.js'
       - 'test/ssh-java-debug.test.js'
+      - 'test/ssh-java-compile.test.js'
       - 'test/helpers/ssh-process-fixture.js'
       - 'test/helpers/java-debug-process-fixture.js'
+      - 'test/helpers/ssh-java-compile-fixture.js'
       - 'test/fixtures/ssh-process-server.txt'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -60,16 +64,23 @@ jobs:
       - name: Verify Linux proc ownership and actual JDWP through SSH
         env:
           ROCKETBRAIN_SSH_DEBUG_TEST_RECEIPT: ${{ runner.temp }}/rocketbrain-linux-ssh-java-debug.json
+          ROCKETBRAIN_SSH_COMPILE_TEST_RECEIPT: ${{ runner.temp }}/rocketbrain-linux-ssh-java-compile.json
         run: |
           set -euo pipefail
           ssh -V
           export ROCKETBRAIN_SSH_PROCESS_TEST_PYTHON="$(command -v python)"
           export ROCKETBRAIN_SSH_PROCESS_TEST_ASYNCSSH="$(python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
           export ROCKETBRAIN_SSH_PROCESS_TEST_JDK="$(realpath "$JAVA_HOME")"
-          node --test test/ssh-java-debug.test.js
+          node --test test/ssh-java-debug.test.js test/ssh-java-compile.test.js
       - uses: actions/upload-artifact@v4
         with:
           name: rocketbrain-linux-ssh-java-debug
           path: ${{ runner.temp }}/rocketbrain-linux-ssh-java-debug.json
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-linux-ssh-java-compile
+          path: ${{ runner.temp }}/rocketbrain-linux-ssh-java-compile.json
           if-no-files-found: error
           retention-days: 7

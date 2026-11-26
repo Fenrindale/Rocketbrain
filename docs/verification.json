@@ -1,28 +1,28 @@
 {
-  "version": "0.128.0",
-  "verifiedAt": "2026-11-26T07:16:38.412Z",
+  "version": "0.130.0",
+  "verifiedAt": "2026-11-26T07:39:15.239Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.128.0.vsix",
-    "sha256": "11d23d6d4379a2896709530463bca386b148efa4925c43bee00db327cbaf0ea2",
-    "bytes": 4286660,
+    "name": "rocketbrain-0.130.0.vsix",
+    "sha256": "77864beeb7e42de878e7a76860ac406efe0b4acf9c4e39381f7be3279d4cdc22",
+    "bytes": 4307270,
     "files": 26
   },
   "source": {
-    "frozenPublicInputs": 2662,
-    "inputVectorSha256": "62eea96afa744ac3903ec52d235bcca33d6574b1bcc89215746dda77c4477c02",
+    "frozenPublicInputs": 2692,
+    "inputVectorSha256": "56cde81aae67f73dd7a08afa1bc3fa66714b3f7966612fbc04dcd4023d7d0097",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45769966853",
-    "tests": 2043,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45772287878",
+    "tests": 2052,
     "suites": 0,
-    "pass": 1844,
+    "pass": 1849,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 199,
+    "skipped": 203,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,22 +32,26 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "pythonTypes",
+          "group": "scala2References",
           "checks": 1
         },
         {
-          "group": "javaReturnNarrowing",
+          "group": "groovyProjectConsole",
           "checks": 1
         },
         {
-          "group": "javaSignatureAccess",
+          "group": "quarkusConfig",
           "checks": 1
         },
         {
-          "group": "sshJavaDebug",
+          "group": "sshJavaCompile",
+          "checks": 1
+        },
+        {
+          "group": "springJpaTransaction",
           "checks": 1
         }
       ],
@@ -62,22 +66,26 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 4,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "pythonTypes",
+          "group": "scala2References",
           "checks": 1
         },
         {
-          "group": "javaReturnNarrowing",
+          "group": "groovyProjectConsole",
           "checks": 1
         },
         {
-          "group": "javaSignatureAccess",
+          "group": "quarkusConfig",
           "checks": 1
         },
         {
-          "group": "sshJavaDebug",
+          "group": "sshJavaCompile",
+          "checks": 1
+        },
+        {
+          "group": "springJpaTransaction",
           "checks": 1
         }
       ],
@@ -88,149 +96,63 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-029": {
-      "scope": "두 DB에서 직접 호출의 결합과 이전·이후 Spring JDBC가 같았다. 변경과 실행 취소·다시 실행은 선택한 선언에만 적용됐다.",
+    "IDEA-046": {
+      "scope": "실제 Scala 2.13.18 및 Scala 3.9.0에서 같은 이름의 두 오버로드를 구분했다. 설치 VS Code에서는 Scala 2의 정의와 사용처를 실제로 확인했다.",
       "runtimeGroups": [
-        "javaReturnNarrowing",
-        "javaSignatureAccess"
+        "scala2References"
+      ]
+    },
+    "IDEA-047": {
+      "scope": "실제 Maven·Gradle 클래스패스에서 복사한 Java 클래스와 Spring JDBC를 사용해 두 DB가 각각 42를 반환했다. 설치 VS Code에서 Maven의 검토와 실행 승인을 확인했다.",
+      "runtimeGroups": [
+        "groovyProjectConsole"
       ]
     },
     "IDEA-066": {
-      "scope": "별도 실제 Quarkus 3.40.1.2와 Gradle 9.7.1에서 두 DB의 개발·패키지 실행, 테스트 두 건과 소스 중단점 21행을 확인했다. 설치 VS Code 검증은 HTTP 확인 중 시간 초과였다.",
+      "scope": "실제 Quarkus 3.40.1.2의 활성 프로필에서 중첩 키의 출처를 확인했다. 원본 값을 표시하거나 사용자 소스를 다시 실행하지 않았다.",
       "runtimeGroups": [
-        "quarkusGradleHeadless"
+        "quarkusConfig"
       ]
     },
     "IDEA-096": {
-      "scope": "실제 Windows·Linux SSH에서 14행에 멈춰 지역 변수 73을 확인했다. 연결을 해제하니 JVM이 재개되고 기존 파일 세션이 유지됐다. 잘못된 소유자와 연결 대상 교체는 거부됐다.",
+      "scope": "Windows SSH에서 Spring JAR 5개로 클래스 두 개를 컴파일했다. Linux 실제 원격 JDK에서도 컴파일·진단·취소와 정리를 확인했다.",
       "runtimeGroups": [
-        "sshJavaDebug",
-        "linuxSshJavaDebug"
-      ]
-    },
-    "IDEA-109": {
-      "scope": "실제 Pyright 1.1.414와 설치형 편집기에서 타입 오류가 수정 후 사라졌다. 타입 힌트와 완성, 두 파일 이름 변경, 실제 정의 위치를 확인했다.",
-      "runtimeGroups": [
-        "pythonTypes"
+        "sshJavaCompile",
+        "linuxSshJavaCompile"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 607,
+    "sourceCorrespondences": 616,
     "sourceConfidence": "inferred",
     "archiveEntries": 26,
     "archiveConfidence": "observed"
   },
   "hostedRuntime": {
-    "linuxSshJavaDebug": {
-      "run": 45768550228,
-      "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45768550228",
-      "head": "dcc3135d4333bfc16f564def0c645efc8ab78fef",
+    "linuxSshJavaCompile": {
+      "platform": "linux",
+      "run": 45770695479,
+      "job": 139742347616,
+      "origin": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45770695479",
+      "sha256": "000b42d77330024bb5bbf589144497f3d43e59572fa932999f061852cc724124",
       "artifact": {
-        "id": 15092953321,
-        "sha256": "354b25c85455d94d7b7f207e44797ea2f45da4d472d52679a8cd3c5bdfe481e3",
-        "receiptSha256": "b6ae41feaffaac0e3bf720a7e1709c79ada91eb96511ccd588bfc585748f3382"
+        "artifactId": 15093991312,
+        "archivePath": "test-output\\v126-hosted-java-compile.zip",
+        "archiveSha256": "52bc3399a82d64777e559d8b26130f41b5b4d8686fb13515e86003c1006710a4",
+        "receiptPath": "test-output\\v126-hosted-java-compile.json",
+        "receiptSha256": "f9b0179812deda9f553e8350b60d15d73a0a538be3991ffce808b6e1942288a2"
       },
-      "attachedEvidenceSha256": "2c26eca2dd8b780b8cd0a93e7e01884c577f91b4dcb9b5bd4e200d3049724345",
-      "fileCount": 11,
-      "checks": {
-        "sourceCommit": "dcc3135d4333bfc16f564def0c645efc8ab78fef",
-        "platform": "linux",
-        "architecture": "x64",
-        "java": "openjdk 25.0.5.1 2026-11-17 LTS",
-        "realOpenSshClient": true,
-        "asyncssh": "2.24.1",
-        "verifiedOwnerBeforeAndAfterTcp": true,
-        "sourceBytesAndPackageRoot": true,
-        "breakpoint": 14,
-        "localValue": 73,
-        "targetResumed": true,
-        "routeReleased": true,
-        "existingFileChannelPreserved": true,
-        "wrongHostRejected": true,
-        "wrongPidAndPlainRejected": true,
-        "otherProjectRejected": true,
-        "exitedPidRejected": true,
-        "sourceDriftRejected": true,
-        "oneShot": true,
-        "procUidStartAndSocketInode": true,
-        "kernelCwdOverridesSpoofedJavaCwd": true,
-        "ipv6CompetitorRejected": true,
-        "samePortReplacementNeverContacted": true
-      }
-    },
-    "quarkusGradleHeadless": {
-      "origin": "Separate actual JDT/Buildship and DAP runtime",
-      "sourceCommit": "92782bed9316c77e14217fad4fa61e1d823897f6",
-      "receiptSha256": "5aa45a018af2a94d75ef9096d054ac302f7d4c42331427bd33d79ef6a1633dcf",
+      "sourceCommit": "9fa6b080f5aedeefa6dfea472150cebf014307ea",
       "matchedPaths": [
-        "src/java/quarkus-dev.js",
-        "src/java/quarkus-model.js",
-        "src/java/quarkus-vscode.js",
-        "src/java/workbench-model.js",
-        "src/java/testing-debug.js",
-        "test/quarkus-gradle-host.js",
-        "test/fixtures/java/quarkus-gradle"
+        "src/remote/ssh-java-compile.js",
+        "src/remote/ssh-java-compile-runtime.js",
+        "test/ssh-java-compile.test.js",
+        "test/helpers/ssh-java-compile-fixture.js"
       ],
-      "sharedBuildTaskFileChanged": true,
-      "quarkus": "3.40.1.2",
-      "gradle": "9.7.1",
-      "engineRuns": [
-        {
-          "engine": "mysql",
-          "version": "3.40.1.2",
-          "jdbc": {
-            "departments": 1,
-            "rolledBackNames": 0,
-            "people": 2
-          },
-          "tool": "gradle",
-          "realBuildshipImport": true,
-          "buildTask": ":quarkusBuild",
-          "tests": 2,
-          "devProfile": true,
-          "explicitDebugApproval": true,
-          "ownedLoopbackListener": true,
-          "jvmProcessResolved": true,
-          "frame": {
-            "source": "src/main/java/quarkusgradlefixture/FixtureResource.java",
-            "line": 21,
-            "method": "quarkusgradlefixture.FixtureResource.greeting"
-          },
-          "debugPortClosed": true,
-          "detachedAppStillReady": true,
-          "quarkusJdbc": true,
-          "nativeView": false
-        },
-        {
-          "engine": "mariadb",
-          "version": "3.40.1.2",
-          "jdbc": {
-            "people": 2,
-            "rolledBackNames": 0,
-            "departments": 1
-          },
-          "tool": "gradle",
-          "realBuildshipImport": true,
-          "buildTask": ":quarkusBuild",
-          "tests": 2,
-          "devProfile": true,
-          "explicitDebugApproval": true,
-          "ownedLoopbackListener": true,
-          "jvmProcessResolved": true,
-          "frame": {
-            "source": "src/main/java/quarkusgradlefixture/FixtureResource.java",
-            "line": 21,
-            "method": "quarkusgradlefixture.FixtureResource.greeting"
-          },
-          "debugPortClosed": true,
-          "detachedAppStillReady": true,
-          "quarkusJdbc": true,
-          "nativeView": false
-        }
-      ],
-      "nativeScope": "Installed VS Code HTTP checks timed out; the headless receipt is distinct."
+      "classes": 2,
+      "exactCompilerDiagnostic": true,
+      "cancellationCleanup": true
     }
   },
   "progress": {
@@ -243,29 +165,24 @@
       "platform-limited": 2
     },
     "weightedPoints": 201,
-    "previousWeightedPoints": 200.5,
+    "previousWeightedPoints": 201,
     "targetWeightedPoints": 216,
     "referencePercent": 93.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
-    "stateChanges": [
-      {
-        "id": "IDEA-109",
-        "before": "partial",
-        "after": "implemented"
-      }
-    ]
+    "stateChanges": []
   },
   "limits": [
-    "IDEA-001과 DG-095의 전체 창 배치로 인해 현재 채점 상한은 214/216점이다.",
-    "Python 타입 분석은 선택한 신뢰 로컬 워크스페이스에 설치한 오픈소스 Pyright를 사용한다.",
-    "SSH 디버깅은 Windows와 Linux에서 확인한 프로세스와 루프백 포트, 일치하는 로컬 소스 범위다.",
-    "Quarkus Gradle은 별도 실제 런타임과 JDT·DAP에서 검증했다. 설치본 종단 검증의 HTTP 시간 초과가 남아 있다."
+    "IDEA-001과 DG-095의 전체 창 배치는 VS Code 플랫폼의 제한을 받는다. 기존 기준의 이론상 상한은 214/216점이다.",
+    "Scala 사용처는 컴파일한 SemanticDB 범위에 한정한다.",
+    "Groovy 프로젝트 콘솔은 승인한 선택 영역 및 검토한 복사 클래스패스 범위다.",
+    "Quarkus는 선택한 실제 SmallRye 구성 출처의 메타데이터만 표시한다.",
+    "SSH 컴파일은 검토한 모듈 소스·JAR과 전용 임시 디렉터리를 사용한다."
   ],
   "next": [
-    "sbt Scala 2 및 Scala 3의 구분된 오버로드 사용처 조회",
-    "프로젝트 클래스 경로를 사용한 Groovy 콘솔",
-    "실제 Quarkus의 중첩 설정 및 Arc CDI 선택 확인",
-    "승인한 SSH Java 모듈의 원격 컴파일"
+    "Scala 2·3의 실제 소스 중단점과 지역 변수",
+    "Groovy 정적 타입 완성과 Java 오버로드 선언 이동",
+    "Spring 필드·메서드 주입과 Quarkus Arc 동적 조회",
+    "Docker 레지스트리 권한 확인과 Compose 오버라이드 모델 비교"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -4,6 +4,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { setTimeout:delay } = require('node:timers/promises');
 const { inspectQuarkusProject,quarkusProject,profileKey } = require('./quarkus-model');
+const { profileFile } = require('./quarkus-config-mapping');
 const { createQuarkusDev,fastJar } = require('./quarkus-dev');
 const { createQuarkusProject } = require('./quarkus-create');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
@@ -186,9 +187,9 @@ function registerQuarkusWorkbench(vscode,java) {
   function configurationAt(document,position,includePartial) {
     trusted();
     if (!document || document.uri.scheme!=='file' || document.uri.authority ||
-        path.basename(document.uri.fsPath)!=='application.properties') return undefined;
+        profileFile(path.basename(document.uri.fsPath))===null) return undefined;
     const project=available().find(item => !path.relative(document.uri.fsPath,
-      path.join(item.root,'src/main/resources/application.properties')));
+      path.join(item.root,'src/main/resources',path.basename(document.uri.fsPath))));
     if (!project) return undefined;
     const text=document.lineAt(position.line).text;
     const match=/^(\s*)((?:%[A-Za-z][A-Za-z0-9-]{0,45}\.)?)([A-Za-z0-9_.-]*)/.exec(text);
@@ -200,7 +201,7 @@ function registerQuarkusWorkbench(vscode,java) {
     return {key,report,range:new vscode.Range(position.line,start,position.line,end)};
   }
 
-  const properties={scheme:'file',pattern:'**/src/main/resources/application.properties'};
+  const properties={scheme:'file',pattern:'**/src/main/resources/application*.properties'};
   subscriptions.push(vscode.languages.registerCompletionItemProvider(properties,{
     provideCompletionItems(document,position,cancellation) {
       try {
@@ -278,7 +279,8 @@ function registerQuarkusWorkbench(vscode,java) {
     if (!projectUri) return;
     const report=await inspect({projectUri});
     const selected=await vscode.window.showQuickPick([
-      ...report.configuration.map(item => ({label:item.key,description:item.type,source:item.source})),
+      ...report.configuration.map(item => ({label:item.key,description:item.type,
+        detail:item.groups?.join(' → '),source:item.source})),
       ...report.configured.map(item => ({label:(item.profile ? '%'+item.profile+'.' : '')+item.key,
         description:'application.properties',source:item})),
       ...report.endpoints.map(item => ({label:item.verb+' '+item.path,description:item.method,source:item.source})),
