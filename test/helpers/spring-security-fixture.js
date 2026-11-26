@@ -38,7 +38,7 @@ async function buildSpringSecurityFixture() {
   return jar;
 }
 
-async function startSpringSecurityFixture(config,{trace=false,methodTrace=false,traceRoles=[],observerJar}={}) {
+async function startSpringSecurityFixture(config,{trace=false,methodTrace=false,traceRoles=[],authenticationProviderTrace=false,customAuthentication=false,observerJar}={}) {
   const {home,java}=await javaRuntime();
   const selected=process.env.ROCKETBRAIN_SPRING_SECURITY_JAR ?? jar;
   await fs.access(selected);
@@ -56,14 +56,14 @@ async function startSpringSecurityFixture(config,{trace=false,methodTrace=false,
   const env={...process.env,SPRING_DATASOURCE_URL:datasource,SPRING_DATASOURCE_USERNAME:db.user,SPRING_DATASOURCE_PASSWORD:db.password,
     RB_SECURITY_OPERATOR:operator.name,RB_SECURITY_OPERATOR_PASSWORD:operator.password,
     RB_SECURITY_REVIEWER:reviewer.name,RB_SECURITY_REVIEWER_PASSWORD:reviewer.password,
-    RB_SECURITY_VIEWER:viewer.name,RB_SECURITY_VIEWER_PASSWORD:viewer.password};
+    RB_SECURITY_VIEWER:viewer.name,RB_SECURITY_VIEWER_PASSWORD:viewer.password,RB_FIXTURE_CUSTOM_AUTHENTICATION:String(customAuthentication)};
   let traceFiles,agentArgs=[];
   async function discardTraceFiles(){
     if(!traceFiles)return;
     for(const file of [traceFiles.tokenFile,traceFiles.descriptorFile,traceFiles.configFile])await fs.rm(file,{force:true});
     await fs.rmdir(traceFiles.directory);
   }
-  if(trace){
+  if(trace||authenticationProviderTrace){
     const output=path.join(root,'test-output');
     const jarPath=observerJar??(await require('../../scripts/jpa-observer-build')
       .buildObserver({target:path.join(output,'spring-security-observer'),javaHome:home})).jarPath;
@@ -73,7 +73,7 @@ async function startSpringSecurityFixture(config,{trace=false,methodTrace=false,
     traceFiles={directory,token,tokenFile,descriptorFile,configFile};
     try{
       await fs.writeFile(tokenFile,token,{flag:'wx',mode:0o600});
-      await fs.writeFile(configFile,JSON.stringify({tokenFile,descriptorFile,securityTrace:true,securityMethodTrace:methodTrace,securityTraceRoles:traceRoles}),{flag:'wx',mode:0o600});
+      await fs.writeFile(configFile,JSON.stringify({tokenFile,descriptorFile,securityTrace:trace,securityMethodTrace:methodTrace,securityTraceRoles:traceRoles,authenticationProviderTrace}),{flag:'wx',mode:0o600});
       agentArgs=['--add-modules=jdk.httpserver','-javaagent:'+jarPath+'=config='+pathToFileURL(configFile).href];
     }catch(error){await discardTraceFiles();throw error;}
   }
@@ -99,7 +99,8 @@ async function startSpringSecurityFixture(config,{trace=false,methodTrace=false,
         const response=await fetch(baseUrl+'/ready',{signal:AbortSignal.timeout(1000)}).catch(()=>null);
         if (response?.ok && (await response.json()).ready===true) {
           const descriptor=traceFiles?JSON.parse(await fs.readFile(traceFiles.descriptorFile,'utf8')):null;
-          if(descriptor&&(descriptor.securityTraceEnabled!==true||methodTrace&&descriptor.securityMethodTraceEnabled!==true))throw Error('The requested Spring Security tracing was not enabled.');
+          if(descriptor&&(descriptor.securityTraceEnabled!==true||methodTrace&&descriptor.securityMethodTraceEnabled!==true||
+              authenticationProviderTrace&&descriptor.authenticationProviderTraceEnabled!==true))throw Error('The requested Spring Security tracing was not enabled.');
           return {baseUrl,operator,reviewer,viewer,auth,close,
             ...(descriptor?{observer:{url:descriptor.baseUrl,token:traceFiles.token,processId:descriptor.processId}}:{})};
         }

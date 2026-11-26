@@ -25,9 +25,11 @@ public final class Agent {
             instrumentation.addTransformer(new HibernateTransformer(instrumentation),false);
             if(PerformanceRuntime.enabled())instrumentation.addTransformer(new PerformanceTransformer(instrumentation),false);
             if(SecurityTraceRuntime.enabled())instrumentation.addTransformer(new SecurityTraceTransformer(instrumentation),false);
+            if(AuthenticationProviderTrace.enabled())instrumentation.addTransformer(new AuthenticationProviderTrace.Transformer(instrumentation),false);
             if(ReactiveSecurityTrace.enabled())instrumentation.addTransformer(new ReactiveSecurityTraceTransformer(),false);
             if(FeignContractTrace.enabled())instrumentation.addTransformer(new FeignContractTrace.Transformer(),false);
             if(PersistenceContextRuntime.enabled())instrumentation.addTransformer(new PersistenceContextTransformer(instrumentation),false);
+            if(AutowireRuntime.enabled())instrumentation.addTransformer(new AutowireTransformer(instrumentation),false);
         } catch (Throwable failure) {
             // Do not expose token/config contents or abort the user's application.
             System.err.println("ROCKETBRAIN_JPA_OBSERVER_DISABLED "+stage+" "+failure.getClass().getSimpleName());

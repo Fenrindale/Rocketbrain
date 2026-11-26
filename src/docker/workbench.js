@@ -3,6 +3,8 @@
 const { execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { promisify } = require('node:util');
+const path = require('node:path');
+const { localContext, captureBuildContext, stageBuildContext } = require('./image-build-context');
 
 const execute = promisify(execFile);
 const listFormat = '{{json .}}';
@@ -12,6 +14,8 @@ const projectName = /^[a-z0-9][a-z0-9_-]{0,99}$/;
 const registryReference = /^(?:[a-z0-9-]+\.)+[a-z0-9-]+(?::[1-9]\d{0,4})?\/[a-z0-9]+(?:[._/-][a-z0-9]+)*(?::[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}|@sha256:[a-f0-9]{64})$/;
 const endpointPattern = /^(?:unix|npipe|ssh|tcp):\/\/[^\s\x00-\x1f\x7f]{1,240}$/;
 const daemonId = /^[a-zA-Z0-9:-]{16,128}$/;
+const taggedImage = /^(?:[a-z0-9][a-z0-9.-]*(?::[1-9]\d{0,4})?\/)?[a-z0-9]+(?:[._/-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/u;
+const imageId = /^sha256:[a-f0-9]{64}$/u;
 const lifecycle = new Map([['start', new Set(['created', 'exited'])],
   ['stop', new Set(['running'])], ['restart', new Set(['running'])]]);
 
@@ -60,9 +64,10 @@ function containerRows(text) {
   });
 }
 
-function createDockerWorkbench({ run = dockerCli, trusted = () => true } = {}) {
-  let target, current, revision = 0, disposed = false;
+function createDockerWorkbench({ run = dockerCli, trusted = () => true, workspaceRoots = () => [] } = {}) {
+  let target, current, revision = 0, disposed = false, applyingImage = false;
   const reviews = new Map();
+  const imageReviews = new Map();
 
   function assertTrusted() {
     if (disposed || !trusted()) throw Error('Trust the workspace before connecting to Docker.');
@@ -107,6 +112,7 @@ function createDockerWorkbench({ run = dockerCli, trusted = () => true } = {}) {
     target = { ...selected, daemon };
     current = undefined;
     reviews.clear();
+    imageReviews.clear();
     return { ...target };
   }
 
@@ -193,8 +199,96 @@ function createDockerWorkbench({ run = dockerCli, trusted = () => true } = {}) {
     return json((await contextRun(target, ['manifest', 'inspect', reference], { signal })).stdout);
   }
 
+  function reviewReference(reference, remote) {
+    if (typeof reference!=='string' || reference.length>300 || !taggedImage.test(reference)) throw Error('Enter a Docker image name with an explicit tag.');
+    const separator = reference.indexOf('/'), host = separator<0 ? '' : reference.slice(0,separator);
+    if (remote && host!=='localhost' && !host.includes('.') && !host.includes(':')) {
+      throw Error('Enter an explicit registry hostname and image tag for a push.');
+    }
+    if (host.includes(':') && Number(host.split(':')[1])>65535) throw Error('Use a valid Docker registry port.');
+    return reference;
+  }
+
+  // Docker displays its default registry and namespace without the prefix in image ls.
+  function localTag(value) {
+    return value.replace(/^docker\.io\//u,'').replace(/^library\/(?![^:]+\/)/u,'');
+  }
+
+  async function tagIdentity(selected, reference, options) {
+    const output = await contextRun(selected, ['image','ls','--no-trunc','--filter','reference='+reference,'--format',listFormat],options);
+    const matches = rows(output.stdout).filter(item=>localTag(item.Repository+':'+item.Tag)===localTag(reference));
+    if (matches.length>1 || matches.some(item=>!imageId.test(item.ID))) throw Error('Docker returned an ambiguous image tag identity.');
+    return matches[0]?.ID || null;
+  }
+
+  function storeImageReview(selected,action,reference,before,build={}) {
+    const token=randomUUID();
+    imageReviews.clear();
+    imageReviews.set(token,{selected,action,reference,before,...build,expiresAt:Date.now()+90000});
+    return {token,action,reference,before,context:{...selected},...build};
+  }
+
+  async function reviewImageBuild(directory,reference,{signal}={}) {
+    assertTrusted();
+    const selected=target;
+    reference=reviewReference(reference,false);
+    const root=await localContext(directory,workspaceRoots());
+    const inputs=await captureBuildContext(root,{signal});
+    const previous=await tagIdentity(selected,reference,{signal});
+    if (target!==selected) throw Error('The reviewed Docker context changed. Select it again.');
+    return storeImageReview(selected,'build',reference,previous,{root,...inputs});
+  }
+
+  async function reviewImagePush(reference,{signal}={}) {
+    assertTrusted();
+    const selected=target;
+    reference=reviewReference(reference,true);
+    const before=await tagIdentity(selected,reference,{signal});
+    if (!before) throw Error('Build or tag that specific image locally before pushing it.');
+    if (target!==selected) throw Error('The reviewed Docker context changed. Select it again.');
+    return storeImageReview(selected,'push',reference,before);
+  }
+
+  async function applyImage(token,{approved,signal}={}) {
+    const request=imageReviews.get(token);
+    if (approved!==true || !request || request.expiresAt<=Date.now()) throw Error('Approve a current Docker image build or push.');
+    if (applyingImage) throw Error('Another Docker image operation is in progress.');
+    imageReviews.delete(token);
+    applyingImage=true;
+    try { return await executeImageReview(request,signal); }
+    finally { applyingImage=false; }
+  }
+
+  async function executeImageReview(request,signal) {
+    const {selected,action,reference,before}=request;
+    const options={signal,timeout:240000,maxBuffer:1024*1024};
+    async function verifyTag() {
+      if (await tagIdentity(selected,reference,{signal})!==before) throw Error('The Docker image tag changed. Review it again.');
+    }
+    if (action==='build') {
+      await localContext(request.root,workspaceRoots());
+      return stageBuildContext(request.root,request.fingerprint,signal,async stage=>{
+        await verifyTag();
+        await contextRun(selected,['image','build','--file',path.join(stage,'Dockerfile'),'--tag',reference,stage],options);
+        revision++;
+        current=undefined;
+        const image=await tagIdentity(selected,reference,{signal});
+        if (!image) throw Error('Docker returned from the build without the reviewed tag. Refresh the inventory.');
+        return {action,reference,image,fingerprint:request.fingerprint,files:request.files};
+      });
+    }
+    await verifyTag();
+    const result=await contextRun(selected,['image','push',reference],options);
+    revision++;
+    current=undefined;
+    const digests=[...new Set((result.stdout+'\n'+result.stderr).match(/\bdigest: sha256:[0-9a-f]{64}(?=\s|$)/gu)||[])];
+    if (digests.length!==1) throw Error('The registry push returned without one confirmable manifest digest. Inspect the registry before retrying.');
+    return {action,reference,image:before,digest:digests[0].slice('digest: '.length)};
+  }
+
   return { contexts, inspectContext, selectContext, inventory, composeContainers, logs, review, apply, manifest,
-    dispose() { disposed = true; target = current = undefined; reviews.clear(); } };
+    reviewImageBuild,reviewImagePush,applyImage,
+    dispose() { disposed = true; target = current = undefined; reviews.clear(); imageReviews.clear(); } };
 }
 
 module.exports = { createDockerWorkbench, dockerEnvironment };

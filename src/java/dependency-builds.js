@@ -53,6 +53,7 @@ function pomFacts(file) {
       version: simple.test(version) ? version : '', declaredVersion: version
     };
   }
+  const modules = children(one(project, 'modules'), 'module').filter(module => !module.children.length);
   const dependency = node => ({ ...gav(node), scope: literal(node, 'scope') || 'compile',
     type: literal(node, 'type') || 'jar', classifier: literal(node, 'classifier'),
     range: rangeAt(file.text, Math.max(node.start, 0), node.end) });
@@ -61,8 +62,8 @@ function pomFacts(file) {
     parent: one(project,'parent') ? gav(one(project,'parent')) : null,
     finalName: literal(one(project,'build'),'finalName'),
     packaging: literal(project, 'packaging') || 'jar',
-    modules: children(one(project, 'modules'), 'module')
-      .filter(module => !module.children.length).map(module => module.text.trim()),
+    modules: modules.map(module => module.text.trim()),
+    moduleDeclarations: modules.map(module => ({ value: module.text.trim(), range: rangeAt(file.text, module.start, module.end) })),
     profiles: Boolean(one(project, 'profiles')),
     dependencies: children(one(project, 'dependencies'), 'dependency').map(dependency),
     managedDependencies: children(one(one(project, 'dependencyManagement'), 'dependencies'), 'dependency').map(dependency)
@@ -101,16 +102,40 @@ function gradlePath(token) {
     ? ':' + value.replace(/^:/, '') : null;
 }
 
-function gradleSettings(file) {
+function gradleSettings(file, { composite = false } = {}) {
   const { tokens, issues } = lexJava(file.text);
   const statements = gradleStatements(file.text, tokens, file.text.length);
-  const projects = new Map([[':', path.dirname(file.path)]]);
-  const complex = issues.length || statements.some(parts => ![
-    'include', 'rootProject', 'pluginManagement', 'dependencyResolutionManagement', 'enableFeaturePreview'
-  ].includes(parts[0].text)) || statements.some(parts => parts[0].text === 'rootProject' &&
+  const projects = new Map([[':', path.dirname(file.path)]]), declarations = new Map(), includes = [];
+  const membership = new Set(['include', 'rootProject', 'pluginManagement', 'dependencyResolutionManagement', 'enableFeaturePreview']);
+  if (composite) membership.add('includeBuild');
+  const complex = issues.length || statements.some(parts => !membership.has(parts[0].text)) ||
+    statements.some(parts => parts[0].text === 'rootProject' &&
     parts.slice(0, 4).map(token => token.text).join('') !== 'rootProject.name=');
   if (complex) return { projects, limitation: 'Computed Gradle project membership is outside literal descriptor analysis.' };
   for (const statement of statements) {
+    const from = statement[0].start, to = statement.at(-1).end;
+    if (statement[0].text === 'includeBuild') {
+      const parenthesized = statement[1]?.text === '(';
+      const folder = statement[parenthesized ? 2 : 1];
+      const end = parenthesized ? 4 : 2;
+      const suffix = statement.slice(end);
+      const named = suffix.length === 5 && suffix[0].text === '{' && suffix[1].text === 'name' &&
+        suffix[2].text === '=' && suffix[4].text === '}' && ['char', 'string'].includes(suffix[3].kind);
+      const literal = folder && ['char', 'string'].includes(folder.kind) && typeof folder.value === 'string' &&
+        /^(?:[A-Za-z0-9_][\w.-]*\/)*[A-Za-z0-9_][\w.-]*$/u.test(folder.value);
+      const override = named ? suffix[3].value : undefined;
+      if (!literal || parenthesized && statement[3]?.text !== ')' || !named && suffix.length ||
+          named && (typeof override !== 'string' || !/^[A-Za-z0-9_][\w.-]*$/u.test(override))) {
+        return { projects, limitation: 'Computed Gradle included builds are outside literal descriptor analysis.' };
+      }
+      const directory = path.join(path.dirname(file.path), ...folder.value.split('/'));
+      const name = override || path.basename(directory);
+      if (includes.some(item => item.name === name || item.directory === directory)) {
+        return { projects, limitation: 'Duplicate Gradle included build declarations are ambiguous.' };
+      }
+      includes.push({ name, directory, range: rangeAt(file.text, from, to) });
+      continue;
+    }
     if (statement[0].text !== 'include') continue;
     const body = statement[1]?.text === '(' ? statement.slice(2, -1) : statement.slice(1);
     const paths = body.filter((token, index) => index % 2 === 0).map(gradlePath);
@@ -121,10 +146,12 @@ function gradleSettings(file) {
     }
     for (const name of paths) {
       const directory = path.join(path.dirname(file.path), ...name.slice(1).split(':'));
+      if (composite && projects.has(name)) return { projects, limitation: 'Duplicate Gradle project paths are ambiguous.' };
       projects.set(name, directory);
+      if (composite) declarations.set(name, rangeAt(file.text, from, to));
     }
   }
-  return { projects };
+  return { projects, ...(composite && { declarations, includes }) };
 }
 
 const GRADLE_EDGES = new Set([

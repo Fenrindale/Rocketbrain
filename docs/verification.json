@@ -1,25 +1,28 @@
 {
-  "version": "0.119.0",
-  "verifiedAt": "2026-11-26T05:35:12.720Z",
+  "version": "0.122.0",
+  "verifiedAt": "2026-11-26T06:18:11.942Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.119.0.vsix",
-    "sha256": "0c70eb79e212befd6b0f9bde65ffd58f5617a783747be2fdeebce3605c384ee5",
-    "bytes": 4220206,
+    "name": "rocketbrain-0.122.0.vsix",
+    "sha256": "2834fa418eb781a9285892fb7425e4819e313736d8dca0d3b560cf7990fea896",
+    "bytes": 4244066,
     "files": 26
   },
   "source": {
-    "frozenPublicInputs": 2589,
-    "inputVectorSha256": "2e4c0ad2c11ad1abde808b9556646a4d46c4bd10f3a83abda1ab85223e4d1738",
+    "frozenPublicInputs": 2618,
+    "inputVectorSha256": "880eda51abe31709a50886b20798aca395d225d7dc965152b41f908dc4a2d39f",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
-    "node": "v24.22.3",
-    "tests": 2030,
-    "pass": 1856,
+    "node": "v22.23.5",
+    "origin": "GitHub-hosted exact frozen source preview",
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45764694517",
+    "tests": 2025,
+    "suites": 0,
+    "pass": 1833,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 174,
+    "skipped": 192,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,26 +32,30 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 5,
+      "groupCount": 6,
       "groups": [
         {
-          "group": "mavenResolution",
+          "group": "javaLocalProcess",
           "checks": 1
         },
         {
-          "group": "springBinaryLifecycle",
+          "group": "javaVarargs",
           "checks": 1
         },
         {
-          "group": "springPersistenceContexts",
+          "group": "springObservedInjection",
           "checks": 1
         },
         {
-          "group": "kotlinLocalWrite",
+          "group": "springAuthenticationProvider",
           "checks": 1
         },
         {
-          "group": "sshWorkspaceProcesses",
+          "group": "javaSourceTarget",
+          "checks": 1
+        },
+        {
+          "group": "dockerImages",
           "checks": 1
         }
       ],
@@ -63,26 +70,30 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 5,
+      "groupCount": 6,
       "groups": [
         {
-          "group": "mavenResolution",
+          "group": "javaLocalProcess",
           "checks": 1
         },
         {
-          "group": "springBinaryLifecycle",
+          "group": "javaVarargs",
           "checks": 1
         },
         {
-          "group": "springPersistenceContexts",
+          "group": "springObservedInjection",
           "checks": 1
         },
         {
-          "group": "kotlinLocalWrite",
+          "group": "springAuthenticationProvider",
           "checks": 1
         },
         {
-          "group": "sshWorkspaceProcesses",
+          "group": "javaSourceTarget",
+          "checks": 1
+        },
+        {
+          "group": "dockerImages",
           "checks": 1
         }
       ],
@@ -93,84 +104,148 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-030": {
-      "scope": "두 DB에서 실제 Spring이 기본값, 소스별 별칭, 종료 메서드를 실행함을 확인했다. 연결된 메서드는 삭제를 막았고 미사용 메서드는 적용·Undo와 빌드 뒤 동작을 확인했다.",
+    "IDEA-029": {
+      "scope": "두 DB의 Spring 소스에서 가변 인자 호출 8건을 확인했다. 고정 배열 전달 5건과 펼친 인자 전달 3건을 보존하고 적용·실행 취소·다시 실행 뒤 JDBC와 평가 순서를 비교했다.",
       "runtimeGroups": [
-        "springBinaryLifecycle"
+        "javaVarargs"
       ]
     },
-    "IDEA-055": {
-      "scope": "두 DB에서 빈 이름이 같은 서로 다른 팩터리·영속성 단위를 식별했다. 빌드 파일 한 바이트 변경을 검출하고 자식 종료 후 연결을 제거했다.",
+    "IDEA-053": {
+      "scope": "두 DB에서 같은 이름의 컨텍스트를 구분했다. 후보가 선택된 매개변수 두 개와 모호한 매개변수 한 개를 열어 실제 소스와 일치시켰고 조회 중 공급자를 재실행하지 않았다.",
       "runtimeGroups": [
-        "springPersistenceContexts"
+        "springObservedInjection"
       ]
     },
-    "IDEA-069": {
-      "scope": "실제 POM의 두 조합에서 선택된 JAR을 Spring이 로드하고 두 DB의 결과를 읽었다. POM navigation이 의존성 또는 관리 버전 선언을 가리켰다.",
+    "IDEA-064": {
+      "scope": "Spring Security 7.1.2에서 두 DB의 동시 성공·실패, 제공자 순서, 위임, 관리자의 반환과 애플리케이션 예외를 확인했다. 저장된 보고서에서 자격 증명과 요청 값이 제외됐다.",
       "runtimeGroups": [
-        "mavenResolution"
+        "springAuthenticationProvider"
       ]
     },
-    "IDEA-080": {
-      "scope": "검토 승인에서 이전 값을 표시했다. 실제 중단점에서 값을 바꾸어 Watch로 읽고 복구했다. 승인 취소와 이미 재개한 프레임 요청을 거부했다.",
+    "IDEA-071": {
+      "scope": "단일 워크스페이스에서 Maven과 Gradle 소스 다섯 개를 점검했다. 이름이 지정된 Gradle 포함 빌드와 Maven 집계 선언으로 이동했으며, 두 빌드의 Spring JDBC가 두 DB 모두에서 42를 반환했다.",
       "runtimeGroups": [
-        "kotlinLocalWrite"
+        "javaSourceTarget"
       ]
     },
-    "IDEA-096": {
-      "scope": "실제 AsyncSSH와 OpenSSH 및 JDT에서 원격 Java 정의·hover와 터미널 수명주기를 확인했다. Java 세션 종료는 터미널에 영향을 주지 않았다.",
+    "IDEA-075": {
+      "scope": "Windows 설치형 확장에서 살아 있는 JVM의 PID와 실제 중단점을 확인했다. macOS ARM64의 Temurin에서 netstat와 lsof 교차 검증, 소스 중단, 지역 변수 73, 종료하지 않는 연결 해제를 검증했다. Linux 실제 연결 검증은 이전 기록이다.",
       "runtimeGroups": [
-        "sshWorkspaceProcesses"
+        "javaLocalProcess",
+        "macosJavaProcess"
+      ]
+    },
+    "IDEA-099": {
+      "scope": "실제 Engine 28.0.4의 격리된 레지스트리에서 빌드·푸시, 레지스트리 매니페스트 바이트와 이미지 설정을 대조했다. Windows 설치형은 명령과 워크스페이스 신뢰 조건을 확인했다.",
+      "runtimeGroups": [
+        "dockerImages",
+        "dockerRegistry"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 586,
+    "sourceCorrespondences": 593,
     "sourceConfidence": "inferred",
     "archiveEntries": 26,
     "archiveConfidence": "observed"
   },
-  "nativePayloadEquivalence": {
-    "files": 26,
-    "testedArchiveSha256": "8d79c07d8aeffce58d58454635ce724f683e72b4ef4778483f9af77557221cf3",
-    "testedInputVectorSha256": "89d0fa50716b97d73dfbd6f76b7978d9f58e1d08f7ec5be232dfe3b30c622e55",
-    "onlySourceChanges": [
-      "test/kotlin-watch-expressions-host.js"
-    ]
+  "hostedRuntime": {
+    "macosJavaProcess": {
+      "run": 45759271559,
+      "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45759271559",
+      "head": "215cb457813ba052becc15996fa3e8ae35c2bc9d",
+      "artifact": {
+        "id": 15088254290,
+        "bytes": 500,
+        "sha256": "51e63114e57a95a200b0dc0d55048f4186e287ff9d00c7e59c12ef2c5c79b14d",
+        "receiptSha256": "9f69901f47e1dd1cf8f73a912d8dc37fc05215b61bf06bf5959103df44a2c8e7"
+      },
+      "fileCount": 9,
+      "attachedEvidenceSha256": "f7f104a7a3dfbafb2357c6f20ccf4929da7b3eaeb9e21a554cac4484fbbee3b0",
+      "checks": {
+        "sourceCommit": "215cb457813ba052becc15996fa3e8ae35c2bc9d",
+        "platform": "darwin",
+        "architecture": "arm64",
+        "release": "24.6.0",
+        "jdk": "openjdk 25.0.5 2026-10-20 LTS",
+        "exactListenerOwner": true,
+        "tools": [
+          "netstat",
+          "lsof",
+          "HotSpot Attach API",
+          "JDI"
+        ],
+        "normalSocketExcluded": true,
+        "foreignSocketRefused": true,
+        "staleIdentityRefused": true,
+        "mismatchedHostAndPortRefused": true,
+        "cancelledBeforeAttach": true,
+        "stoppedAt": 14,
+        "localValue": 73,
+        "detachedProcessResumed": true,
+        "exitedTargetRefused": true
+      }
+    },
+    "dockerRegistry": {
+      "run": 45760597609,
+      "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45760597609",
+      "head": "c765774528d2861ad59aa598dea5aa914ead97b0",
+      "artifact": {
+        "id": 15090171092,
+        "bytes": 437,
+        "sha256": "f33a50d5725f29eb47b3e83befd88ee55ee4a725f9ca7f8e28180d109a1c9d97",
+        "receiptSha256": "a508a0f55035595a951609eb6617fd401e8dc7efbd2f5d50bc3f8ce6167b0bd5",
+        "craft": "ev_b6275b03bb636d0e05d3be90a8ed19c9f64f53a00b4417dbb61631a2a33bf354",
+        "receiptCraft": "ev_ccbb6e318b2267ce7c30ff71ad1a27a50ee2f706a4ed64ffe501d7ebe2217918"
+      },
+      "fileCount": 5,
+      "attachedEvidenceSha256": "9d0c76ab4d3fbe8ea417a82bbbe357225faf3a933025a38b551e568596a67c98",
+      "checks": {
+        "sourceCommit": "c765774528d2861ad59aa598dea5aa914ead97b0",
+        "digest": "sha256:c7b834a498ed9e0a8bbe58c98732132992b4df13fcae701b429c830daacc17f7",
+        "engine": "28.0.4",
+        "contextFingerprint": "b3469306c1981e349db0a0b26bb01106bcf01504ca937dfa54a894f5b711dfd0",
+        "loopbackRegistry": true,
+        "manifestBytesMatch": true,
+        "imageConfigMatches": true,
+        "reviewedBuild": true,
+        "reviewedPush": true
+      }
+    }
   },
   "progress": {
     "counts": {
-      "implemented": 172,
-      "partial": 30,
+      "implemented": 173,
+      "partial": 29,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 199,
-    "previousWeightedPoints": 198.5,
+    "weightedPoints": 199.5,
+    "previousWeightedPoints": 199,
     "targetWeightedPoints": 216,
-    "referencePercent": 92.1,
+    "referencePercent": 92.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-055",
+        "id": "IDEA-075",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Maven 의존 분석은 검토한 프로젝트에서 고정된 Maven과 공식 dependency 플러그인을 실행한다.",
-    "영속성 빌드 비교는 실제 JVM이 로드한 관리 클래스 바이트 범위다.",
-    "SSH의 Java 소스 경로는 검토한 읽기 전용 작업 폴더 안에 있고, 원격 프로젝트 빌드와 디버거는 별도 과제로 남아 있다.",
-    "IDEA-001과 DG-095의 창 배치에는 호스트 구조 제약이 있다. 현행 가중 상한은 214/216점이다."
+    "IDEA-001과 DG-095의 전체 창 배치를 일반 확장의 공개 API로 교체할 수 없다. 기존 가중 상한은 214/216점이다.",
+    "Docker 엔진 검증은 Linux의 소유 테스트 레지스트리에서 실행했다. Windows에서는 설치형 명령을 확인했다.",
+    "Spring 관찰에 참여하는 사용자 코드를 재실행하지 않는다. 계측 밖의 동작은 별도 범위다."
   ],
   "next": [
-    "가변 인자를 보존하는 Change Signature",
-    "동적 등록 Bean의 실제 생성자 주입을 IDE의 소스 선언과 연결",
-    "SSH 원격 Java 실행·디버거"
+    "Jupyter의 실제 Python 셀 중단점과 스텝",
+    "Kubernetes Deployment 복제본 검토·변경",
+    "확인한 Maven과 Gradle 모듈 단위 빌드",
+    "Spring JPA 트랜잭션 결과 관찰"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

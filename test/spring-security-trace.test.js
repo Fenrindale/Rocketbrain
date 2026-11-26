@@ -5,7 +5,7 @@ const assert=require('node:assert/strict');
 const test=require('node:test');
 const { ObserverClient }=require('../src/jpa/observer-client');
 const { normalizeSecurityTrace }=require('../src/spring/security-trace');
-const { registerSecurityTrace,renderSecurityTrace }=require('../src/spring/security-trace-vscode');
+const { registerSecurityTrace,renderSecurityTrace,renderAuthenticationDecisions }=require('../src/spring/security-trace-vscode');
 
 const short='org.springframework.security.web.authentication.www.BasicAuthenticationFilter';
 const last='org.springframework.security.web.access.intercept.AuthorizationFilter';
@@ -51,7 +51,8 @@ test('observer uses one authenticated GET for a trace; the native view rejects s
     assert.deepEqual(options,{enableScripts:false,localResourceRoots:[],enableCommandUris:false});
     return panel={webview:{},reveal(){},onDidDispose(fn){this.disposeEvent=fn;},dispose(){this.disposeEvent();panel=undefined;}};
   }}};
-  const view=registerSecurityTrace(vscode,{command(_id,fn){open=fn;},target:()=>({client,assertCurrent(){if(stale)throw Error('Reconnected');}})});
+  const view=registerSecurityTrace(vscode,{command(id,fn){if(id==='rocketbrain.spring.securityTrace')open=fn;},
+    target:()=>({client,assertCurrent(){if(stale)throw Error('Reconnected');}})});
   try{
     assert.equal((await open()).view,'rocketbrain.spring.securityTrace');
     assert.deepEqual(requests,[['GET','/security-trace','Bearer '+token]]);
@@ -104,4 +105,42 @@ test('method decisions keep phase, source and allowlisted roles separate from re
   waiting.traces[0].methodDecisions=[];
   waiting.hooks=report.hooks;
   assert.match(renderSecurityTrace(normalizeSecurityTrace(waiting)),/Supported method interceptors are unavailable/);
+});
+
+test('authentication reports only bounded provider provenance and preserves partial parent outcomes',()=>{
+  const data=structuredClone(report), trace=data.traces[0];
+  data.authenticationProviderTraceEnabled=true;
+  data.hooks.push('authentication-provider-manager');
+  trace.authenticationCoverage='observed';
+  trace.authenticationManagers=[{index:1,managerId:'manager-1',managerType:'fixture.ProviderManager',
+    outcome:'returned',selectedProvider:2,delegated:false,parentType:null,complete:true,principal:'private-input',
+    providers:[{index:1,providerType:'fixture.First',outcome:'rejected',exceptionMessage:'private-rejection'},
+      {index:2,providerType:'fixture.Second',outcome:'returned',result:{credentials:'private-result'}}]}];
+  const clean=normalizeSecurityTrace(data);
+  assert.doesNotMatch(JSON.stringify(clean),/private-/);
+  assert.match(renderAuthenticationDecisions(clean),/fixture\.First[\s\S]*Raised an authentication rejection[\s\S]*fixture\.Second[\s\S]*Returned by manager/);
+  assert.doesNotMatch(renderAuthenticationDecisions(clean),/<script|private-/);
+  for(const change of [
+    value=>value.authenticationProviderTraceEnabled=false,
+    value=>value.hooks.pop(),
+    value=>value.traces[0].authenticationCoverage='unobserved',
+    value=>value.traces[0].authenticationManagers=Array(7).fill(trace.authenticationManagers[0]),
+    value=>value.traces[0].authenticationManagers[0].providers=Array(13).fill(trace.authenticationManagers[0].providers[0]),
+    value=>value.traces[0].authenticationManagers[0].providers[0].providerType='<script>',
+    value=>value.traces[0].authenticationManagers[0].selectedProvider=1,
+    value=>value.traces[0].authenticationManagers[0].parentType='fixture.Parent',
+    value=>value.traces[0].authenticationManagers[0].outcome='rejected'
+  ]){
+    const malformed=structuredClone(data);
+    change(malformed);
+    assert.throws(()=>normalizeSecurityTrace(malformed),/Unsupported/);
+  }
+  trace.authenticationCoverage='partial';
+  Object.assign(trace.authenticationManagers[0],{delegated:true,parentType:'fixture.Parent',complete:false,selectedProvider:null,providers:[]});
+  assert.match(renderAuthenticationDecisions(normalizeSecurityTrace(data)),/Partial authentication evidence[\s\S]*Delegated to fixture\.Parent/);
+  data.hooks.pop();
+  trace.authenticationCoverage='unavailable';
+  trace.authenticationManagers=[];
+  assert.match(renderAuthenticationDecisions(normalizeSecurityTrace(data)),/Waiting for a supported Servlet ProviderManager/);
+  assert.match(renderAuthenticationDecisions(report),/authenticationProviderTrace/);
 });

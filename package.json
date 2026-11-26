@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.119.0",
+  "version": "0.122.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -117,6 +117,8 @@
       { "command": "rocketbrain.docker.lifecycle", "title": "Manage Docker Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.compose", "title": "Inspect Compose Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.manifest", "title": "Inspect Registry Manifest", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.buildImage", "title": "Build Docker Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.pushImage", "title": "Push Docker Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.configureExceptionBreakpoints", "title": "Configure Java Exception Breakpoints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
@@ -286,6 +288,7 @@
       { "command": "rocketbrain.spring.runtimeProperty", "title": "Inspect Spring Property Value and Origin", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.debugProperty", "title": "Inspect Spring Property in Active Debug Target", "category": "Rocketbrain", "icon": "$(search)", "enablement": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java" },
       { "command": "rocketbrain.spring.securityTrace", "title": "Inspect Spring Security Filter Trace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.securityTrace.inspectAuthentication", "title": "Inspect Spring Authentication Decisions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.reactiveSecurityTrace", "title": "Inspect Reactive Spring Security Trace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.feignContracts", "title": "Inspect OpenFeign Runtime Contracts", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
@@ -764,6 +767,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectObservedInjection",
+        "title": "Inspect Observed Spring Constructor Injection",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.openObservedInjectionSource",
+        "title": "Open Observed Spring Constructor Parameter",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.inspectPersistenceContexts",
         "title": "Inspect Spring Persistence Contexts",
         "category": "Rocketbrain",
@@ -1140,6 +1155,7 @@
         "title": "Add Java Run Configuration",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.java.workbench.sourceTarget", "title": "Inspect Java Source Build Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java" },
       { "command": "rocketbrain.java.workbench.mavenResolution", "title": "Inspect Maven Dependency Resolution", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.workbench.reviewRuntimes", "title": "Review Java Runtime Compatibility", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.workbench.changeRuntime", "title": "Change Saved Java Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1449,6 +1465,7 @@
         { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }
       ],
       "editor/context": [
+        { "command": "rocketbrain.java.workbench.sourceTarget", "when": "editorLangId == java && resourceScheme == file && isWorkspaceTrusted", "group": "navigation" },
         {
           "command": "rocketbrain.openSharedConsole",
           "when": "editorLangId == sql && (rocketbrain.mysqlConnected || rocketbrain.profileConsole) && isWorkspaceTrusted",
@@ -1715,6 +1732,7 @@
         { "command": "rocketbrain.sshWorkspace.upload", "when": "view == rocketbrain.sshWorkspace && viewItem == rocketbrain.sshFile && isWorkspaceTrusted" },
         { "command": "rocketbrain.docker.lifecycle", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.docker.logs", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
+        { "command": "rocketbrain.docker.pushImage", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.image && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.kubernetes.podLogs", "when": "view == rocketbrain.kubernetes && viewItem == rocketbrain-kube-pod", "group": "inline" },
         {
           "command": "rocketbrain.db.openObjectSource",

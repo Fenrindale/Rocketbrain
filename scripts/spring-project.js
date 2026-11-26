@@ -156,11 +156,13 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   try {
   let observerArgs=[],observerTokenFile,observerDescriptorFile;
   const persistenceContexts=process.env.ROCKETBRAIN_JPA_CONTEXT_TEST==='1';
+  const autowireTrace=process.env.ROCKETBRAIN_SPRING_AUTOWIRE_TRACE_TEST==='1';
   if(observer){
     observerTokenFile=path.join(folder,'observer.token');observerDescriptorFile=path.join(folder,'observer-connection.json');
     const configFile=path.join(folder,'observer-agent.json');
     await fsp.writeFile(observerTokenFile,crypto.randomBytes(32).toString('hex'),{flag:'wx',mode:0o600});
     await fsp.writeFile(configFile,JSON.stringify({tokenFile:observerTokenFile,descriptorFile:observerDescriptorFile,port:0,queries:true,validate:true,
+      springAutowireTrace:autowireTrace,springAutowireTracePackages:autowireTrace?['fixture.boot']:[],
       springPersistenceContexts:persistenceContexts,springPersistenceContextPackages:persistenceContexts?['fixture.boot','fixture.contextchild']:[],
       performance:process.env.ROCKETBRAIN_JPA_PERFORMANCE_TEST==='1',consoleSelect:process.env.ROCKETBRAIN_JPA_CONSOLE_TEST==='1',
       consoleFetchSnapshots:process.env.ROCKETBRAIN_JPA_FETCH_SNAPSHOT_TEST==='1',
@@ -213,7 +215,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   const logFile = path.join(folder, 'application.log');
   const output = fs.createWriteStream(logFile);
   child = spawn(javaExe(), javaArgs, { cwd: PROJECT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env,
-    SERVER_PORT: String(port), SERVER_ADDRESS: '127.0.0.1', SPRING_DATASOURCE_URL: url, SPRING_DATASOURCE_USERNAME: db.config.user, ...propertyProbe, ...contextProbe,
+    SERVER_PORT: String(port), SERVER_ADDRESS: '127.0.0.1', SPRING_DATASOURCE_URL: url, SPRING_DATASOURCE_USERNAME: db.config.user, ...propertyProbe, ...contextProbe, ...(autowireTrace?{FIXTURE_OBSERVED_INJECTION_ENABLED:'true'}:{}),
     ...(endpointProbePort ? {FIXTURE_ENDPOINT_PROBE_PORT: String(endpointProbePort)} : {}),
     ...(process.env.ROCKETBRAIN_JPA_DIAGRAM_TEST==='1' ? {FIXTURE_DIAGRAM_SECOND_FACTORY:'true'} : {}),
     ...(process.env.ROCKETBRAIN_JPA_MULTI_FETCH_TEST==='1' ? {FIXTURE_FETCH_MULTI_ENABLED:'true'} : {}),

@@ -40,16 +40,18 @@ public final class ObserverRuntime {
     private record Origin(String kind,String factoryId){}
     private static final class Frame {int depth=1;final String query,factoryId,origin;final long started=System.nanoTime();Frame(String query,String factoryId,String origin){this.query=query;this.factoryId=factoryId;this.origin=origin;}}
     static synchronized void start(Map<String,Object> config)throws Exception {
-        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","consoleEntityProjections","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace","feignContractTrace","springPersistenceContexts","springPersistenceContextPackages");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
+        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","consoleEntityProjections","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace","authenticationProviderTrace","feignContractTrace","springPersistenceContexts","springPersistenceContextPackages","springAutowireTrace","springAutowireTracePackages");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
         Path tokenPath=Path.of(requiredText(config,"tokenFile"));if(!tokenPath.isAbsolute()||!Files.isRegularFile(tokenPath,LinkOption.NOFOLLOW_LINKS)||Files.size(tokenPath)>256)throw new IllegalArgumentException("Invalid token file");
         String token=Files.readString(tokenPath,StandardCharsets.UTF_8).trim();if(!token.matches("[A-Za-z0-9_-]{32,128}"))throw new IllegalArgumentException("Invalid bearer token");expectedAuthorization=("Bearer "+token).getBytes(StandardCharsets.US_ASCII);
         queries=flag(config,"queries");validate=flag(config,"validate");consoleSelect=flag(config,"consoleSelect");PerformanceRuntime.configure(flag(config,"performance"));maxEvents=integer(config,"maxEvents",128,1,256);maxQueryChars=integer(config,"maxQueryChars",4096,64,16384);int port=integer(config,"port",0,0,65535);
         consoleFetchSnapshots=flag(config,"consoleFetchSnapshots")&&consoleSelect;
         consoleEntityProjections=flag(config,"consoleEntityProjections")&&consoleSelect;
-        SecurityTraceRuntime.configure(flag(config,"securityTrace"));
+        AuthenticationProviderTrace.configure(flag(config,"authenticationProviderTrace"));
+        SecurityTraceRuntime.configure(flag(config,"securityTrace")||AuthenticationProviderTrace.enabled());
         ReactiveSecurityTrace.configure(flag(config,"securityReactiveTrace"));
         FeignContractTrace.configure(flag(config,"feignContractTrace"));
-        PersistenceContextRuntime.configure(flag(config,"springPersistenceContexts"),config.get("springPersistenceContextPackages"));
+        AutowireRuntime.configure(flag(config,"springAutowireTrace"),config.get("springAutowireTracePackages"));
+        PersistenceContextRuntime.configure(flag(config,"springPersistenceContexts")||AutowireRuntime.enabled(),config.get("springPersistenceContextPackages"));
         MethodSecurityTrace.configure(flag(config,"securityMethodTrace")&&SecurityTraceRuntime.enabled(),config.get("securityTraceRoles"));
         HttpServer next=HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"),port),8);
         executor=new ThreadPoolExecutor(2,2,0,TimeUnit.MILLISECONDS,new ArrayBlockingQueue<>(8),r->{Thread thread=new Thread(r,"Rocketbrain JPA observer");thread.setDaemon(true);return thread;},new ThreadPoolExecutor.AbortPolicy());
@@ -63,11 +65,12 @@ public final class ObserverRuntime {
         descriptor.put("securityReactiveTraceEnabled",ReactiveSecurityTrace.enabled());
         descriptor.put("feignContractTraceEnabled",FeignContractTrace.enabled());
         descriptor.put("securityMethodTraceEnabled",MethodSecurityTrace.enabled());
+        descriptor.put("authenticationProviderTraceEnabled",AuthenticationProviderTrace.enabled());
         if(config.containsKey("descriptorFile")){Path path=Path.of(requiredText(config,"descriptorFile"));if(!path.isAbsolute()||!Files.isDirectory(path.getParent(),LinkOption.NOFOLLOW_LINKS))throw new IllegalArgumentException("Invalid descriptor path");Files.writeString(path,Json.encode(descriptor),StandardCharsets.UTF_8,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);}
         Runtime.getRuntime().addShutdownHook(new Thread(ObserverRuntime::stop,"Rocketbrain observer shutdown"));
         System.out.println("ROCKETBRAIN_JPA_OBSERVER "+Json.encode(descriptor));
     }
-    static synchronized void stop(){if(server!=null){server.stop(0);server=null;}if(executor!=null){executor.shutdownNow();executor=null;}expectedAuthorization=null;PerformanceRuntime.configure(false);MethodSecurityTrace.configure(false,null);SecurityTraceRuntime.configure(false);ReactiveSecurityTrace.configure(false);FeignContractTrace.configure(false);PersistenceContextRuntime.configure(false,null);}
+    static synchronized void stop(){if(server!=null){server.stop(0);server=null;}if(executor!=null){executor.shutdownNow();executor=null;}expectedAuthorization=null;PerformanceRuntime.configure(false);MethodSecurityTrace.configure(false,null);AuthenticationProviderTrace.configure(false);SecurityTraceRuntime.configure(false);ReactiveSecurityTrace.configure(false);FeignContractTrace.configure(false);PersistenceContextRuntime.configure(false,null);AutowireRuntime.configure(false,null);}
     private static String requiredText(Map<String,Object> map,String key){Object value=map.get(key);if(!(value instanceof String text)||text.isBlank()||text.length()>8192)throw new IllegalArgumentException("Text option required");return text;}
     private static boolean flag(Map<String,Object> config,String key){Object value=config.get(key);if(value!=null&&!(value instanceof Boolean))throw new IllegalArgumentException("Boolean option required");return Boolean.TRUE.equals(value);}
     private static int integer(Map<String,Object> map,String key,int fallback,int min,int max){Object value=map.getOrDefault(key,(long)fallback);if(!(value instanceof Number number)||number.longValue()<min||number.longValue()>max)throw new IllegalArgumentException("Numeric option outside limits");return number.intValue();}
@@ -101,7 +104,7 @@ public final class ObserverRuntime {
     private static void finish(ThreadLocal<Frame> local,String operation,String state,Map<String,Object> metadata,Throwable error){Frame frame=local.get();if(frame==null)return;if(--frame.depth>0)return;local.remove();Map<String,Object> event=new LinkedHashMap<>();event.put("id",eventIds.incrementAndGet());event.put("at",Instant.now().toString());event.put("operation",operation);event.put("state",state);event.put("origin",frame.origin);event.put("factoryId",frame.factoryId);event.put("query",frame.query);event.put("queryTruncated",frame.query!=null&&frame.query.length()==maxQueryChars);event.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(System.nanoTime()-frame.started));event.put("metadata",metadata);event.put("observerExecutedSql",false);event.put("boundParameterValuesRetained",false);if(error!=null){event.put("errorClass",error.getClass().getName());event.put("message",cut(error.getMessage(),1024));}synchronized(ObserverRuntime.class){if(events.size()>=maxEvents){events.removeFirst();dropped++;}events.addLast(event);}}
     private static Map<String,Object> snapshot(){List<Factory> references;List<Map<String,Object>> captured;List<String> problems,classes;long omitted;synchronized(ObserverRuntime.class){references=List.copyOf(factories);captured=List.copyOf(events);problems=List.copyOf(warnings);classes=List.copyOf(instrumented);omitted=dropped;}
         List<Map<String,Object>> providerMetadata=new ArrayList<>();for(Factory entry:references){Object factory=entry.value.get();if(factory==null)continue;Map<String,Object> item=new LinkedHashMap<>(HibernateAccess.snapshot(factory));item.put("id",entry.id);providerMetadata.add(item);}
-        Map<String,Object> result=new LinkedHashMap<>();result.put("schemaVersion",1);result.put("agentVersion",VERSION);result.put("processId",ProcessHandle.current().pid());result.put("state",providerMetadata.isEmpty()?"waiting":"observed");result.put("capturedAt",Instant.now().toString());result.put("capabilities",Map.of("queries",queries,"validate",validate,"attributeBinding",true,"entityGraphs",true,"springPersistenceContexts",true));result.put("queryEventsEnabled",queries);result.put("semanticValidationEnabled",validate);result.put("consoleSelectEnabled",consoleSelect);result.put("consoleFetchSnapshotsEnabled",consoleFetchSnapshots);result.put("consoleEntityProjectionsEnabled",consoleEntityProjections);result.put("factories",providerMetadata);result.put("performance",PerformanceRuntime.snapshot(classes));result.put("events",captured);result.put("droppedEvents",omitted);result.put("instrumentedClasses",classes);result.put("warnings",problems);result.put("boundParameterValuesRetained",false);result.put("observerExecutedSql",false);return result;
+        Map<String,Object> result=new LinkedHashMap<>();result.put("schemaVersion",1);result.put("agentVersion",VERSION);result.put("processId",ProcessHandle.current().pid());result.put("state",providerMetadata.isEmpty()?"waiting":"observed");result.put("capturedAt",Instant.now().toString());result.put("capabilities",Map.of("queries",queries,"validate",validate,"attributeBinding",true,"entityGraphs",true,"springPersistenceContexts",true,"springAutowireTrace",true));result.put("queryEventsEnabled",queries);result.put("semanticValidationEnabled",validate);result.put("consoleSelectEnabled",consoleSelect);result.put("consoleFetchSnapshotsEnabled",consoleFetchSnapshots);result.put("consoleEntityProjectionsEnabled",consoleEntityProjections);result.put("factories",providerMetadata);result.put("performance",PerformanceRuntime.snapshot(classes));result.put("events",captured);result.put("droppedEvents",omitted);result.put("instrumentedClasses",classes);result.put("warnings",problems);result.put("boundParameterValuesRetained",false);result.put("observerExecutedSql",false);return result;
     }
     private static Object factory(String selected){synchronized(ObserverRuntime.class){List<Factory> live=factories.stream().filter(f->f.value.get()!=null).toList();if(selected==null&&live.size()==1)return live.getFirst().value.get();for(Factory item:live)if(item.id.equals(selected))return item.value.get();return null;}}
     private static void handle(HttpExchange exchange)throws IOException {boolean acquired=false;try {
@@ -122,6 +125,14 @@ public final class ObserverRuntime {
         if(path.equals("/feign-contracts")){
             if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
             reply(exchange,200,FeignContractTrace.snapshot());return;
+        }
+        if(path.equals("/spring-observed-constructor-injection")){
+            if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
+            List<String> classes;
+            synchronized(ObserverRuntime.class){classes=List.copyOf(instrumented);}
+            Map<String,Object> report=new LinkedHashMap<>(AutowireRuntime.snapshot(classes));
+            report.put("processId",ProcessHandle.current().pid());
+            reply(exchange,200,report);return;
         }
         if(path.equals("/spring-persistence-contexts")){
             if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}

@@ -1,0 +1,7 @@
+# Observed Spring constructor injection
+
+Prepare the local JVM observer in a trusted workspace. Enable `springAutowireTrace` and list the application packages in `springAutowireTracePackages` before restarting. Connect to the JVM and run **Inspect Observed Spring Constructor Injection**. Each event identifies the constructor class, parameter index and type signature, requesting Bean, and observed Spring context. Context keys distinguish reused display names.
+
+For a supported constructor resolution, the observer records a selected local Bean definition and any name hint returned by Spring’s resolver. Actual ambiguity is displayed separately. **Open Observed Spring Constructor Parameter** checks a chosen saved Java file for a unique matching declaration and opens the parameter. The source match covers its declaration shape and does not compare source revisions. [Spring qualifier and candidate semantics](https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired-qualifiers.html)
+
+The trace was verified with Spring Framework 7.0.10. It covers ordinary constructor parameters resolved through the observed Bean factory and retains up to 48 events. Field and method injection, ancestor-only definitions, cached or AOT resolution, collection and provider injection have separate coverage. Inspecting retained events does not invoke Bean suppliers or replay dependency resolution. Bean instance values and failure messages are omitted.

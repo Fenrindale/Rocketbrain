@@ -1,5 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
+const { workspaceRoots, workspacePath } = require('../java/workbench-model');
+const { sourceParameter, readObservedSource } = require('../spring/observed-injection');
 const {ObserverClient,ObserverError,emptySnapshot} = require('./observer-client');
 const {validateRuntimeUrl} = require('../spring/runtime-client');
 const {summarizePerformance} = require('./fetch-performance');
@@ -76,6 +78,80 @@ function registerObserver(context,vscode,output,{source}) {
     trusted();const model=await source(),observed=snapshot();
     const entities=model.entities.map(entity=>({fqn:entity.fqn,sourceTable:entity.table?.physicalName||null,sourceState:entity.status,observations:observed.factories.flatMap(factory=>(factory.entities||[]).filter(e=>e.javaType===entity.fqn).map(e=>({factoryId:factory.id,entity:e})))}));
     return {mode:'source-and-runtime-side-by-side',observedAt:observed.fetchedAt,sourceRevision:model.revision,sameSourceRevisionVerified:false,entities};
+  }
+  async function chooseObservedInjection(eventId) {
+    trusted();
+    if (!client) throw new ObserverError('NOT_CONNECTED','Connect a local JVM observer first.');
+    if (current.capabilities?.springAutowireTrace !== true) {
+      throw new ObserverError('UNSUPPORTED_INJECTION','Start an observer that supports Spring constructor injection capture.');
+    }
+    const candidate = client, epoch = generation;
+    function assertCurrent() {
+      trusted();
+      if (candidate!==client || epoch!==generation) throw new ObserverError('STALE','The observer connection changed during inspection.');
+    }
+    const trace = await candidate.observedInjection();
+    assertCurrent();
+    if (trace.processId!==current.processId) throw new ObserverError('STALE','The JVM process changed. Reconnect before inspecting.');
+    if (!trace.events.length && eventId===undefined) {
+      await vscode.window.showInformationMessage(trace.state === 'disabled'
+        ? 'Enable springAutowireTrace and its application packages in the agent startup configuration.'
+        : 'No supported Spring constructor resolutions have been captured.');
+      return;
+    }
+    let event = trace.events.find(value=>value.id===eventId);
+    if (eventId!==undefined && !event) throw new ObserverError('STALE','The constructor resolution is no longer retained.');
+    if (!event) {
+      const item = await vscode.window.showQuickPick([...trace.events].reverse().map(value=>({
+        label:value.site.owner+' · '+(value.site.parameterName||'parameter '+(value.site.parameterIndex+1)),
+        description:[value.state,value.selectedBean,value.context.id,value.context.key].filter(Boolean).join(' · '), value
+      })), {title:'Observed Spring Constructor Injection'});
+      if (!item) return;
+      assertCurrent();
+      event=item.value;
+    }
+    return { candidate,trace,event,assertCurrent };
+  }
+  async function inspectObservedInjection(eventId) {
+    const selection = await chooseObservedInjection(eventId);
+    if (!selection) return;
+    const {trace,event,assertCurrent}=selection;
+    const {events,...metadata}=trace;
+    const report={...metadata,event};
+    const document=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(report,null,2)+'\n'});
+    assertCurrent();
+    await vscode.window.showTextDocument(document,{preview:true});
+    return report;
+  }
+  async function openObservedInjectionSource(options) {
+    const selection=await chooseObservedInjection(options?.eventId);
+    if (!selection) return;
+    const {candidate,trace,event,assertCurrent}=selection;
+    const uri=options?.sourceUri??(await vscode.window.showOpenDialog({canSelectFiles:true,canSelectFolders:false,
+      canSelectMany:false,filters:{Java:['java']},openLabel:'Choose the Constructor Source'}))?.[0];
+    if (!uri) return;
+    assertCurrent();
+    if (uri.scheme!=='file' || !uri.fsPath.endsWith('.java')) throw new ObserverError('INVALID_SOURCE','Choose a local Java source file.');
+    const file=workspacePath(uri.toString(),workspaceRoots(vscode.workspace.workspaceFolders||[]),{directory:false});
+    const saved=await readObservedSource(file);
+    const document=await vscode.workspace.openTextDocument(uri);
+    if (document.isDirty||document.isClosed||document.languageId!=='java'||document.getText()!==saved.text) {
+      throw new ObserverError('INVALID_SOURCE','Save or reload the Java source before navigating.');
+    }
+    const matched=sourceParameter({uri:uri.toString(),text:saved.text},event.site);
+    if (!matched) throw new ObserverError('UNPROVED_SOURCE','The selected file has no unique matching constructor and parameter.');
+    const version=document.version;
+    const latest=await candidate.observedInjection();
+    const rechecked=await readObservedSource(file);
+    assertCurrent();
+    if (latest.processId!==trace.processId||!latest.events.some(value=>value.id===event.id)||
+        rechecked.sha256!==saved.sha256||document.isClosed||document.isDirty||document.version!==version||
+        workspacePath(uri.toString(),workspaceRoots(vscode.workspace.workspaceFolders||[]),{directory:false})!==file) {
+      throw new ObserverError('STALE','The constructor evidence or source changed. Inspect it again.');
+    }
+    const range=new vscode.Range(document.positionAt(matched.start),document.positionAt(matched.end));
+    await vscode.window.showTextDocument(document,{selection:range,preview:false});
+    return {eventId:event.id,uri,parameter:matched.name,range,sameSourceRevisionVerified:false};
   }
   async function inspectPersistenceContexts(options, compare = false) {
     trusted();
@@ -284,8 +360,10 @@ function registerObserver(context,vscode,output,{source}) {
   command('rocketbrain.jpa.observer.inspectAttributeBinding',inspectAttributeBinding);
   command('rocketbrain.jpa.observer.inspectEntityGraph',inspectEntityGraph);
   command('rocketbrain.jpa.observer.inspectPersistenceContexts',()=>inspectPersistenceContexts());
+  command('rocketbrain.jpa.observer.inspectObservedInjection',inspectObservedInjection);
+  command('rocketbrain.jpa.observer.openObservedInjectionSource',openObservedInjectionSource);
   command('rocketbrain.jpa.observer.comparePersistenceBuild',options=>inspectPersistenceContexts(options,true));
   command('rocketbrain.jpa.observer.prepare',async()=>{trusted();const result=await require('./observer-install').prepareObserver(context,vscode);const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(result,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return result;});
-  return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,inspectAttributeBinding,inspectEntityGraph,inspectPersistenceContexts,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
+  return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,inspectAttributeBinding,inspectEntityGraph,inspectPersistenceContexts,inspectObservedInjection,openObservedInjectionSource,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
 }
 module.exports={registerObserver};

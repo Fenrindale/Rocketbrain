@@ -7,6 +7,7 @@ const { execFile } = require('node:child_process');
 const { independentJavaExecutable } = require('./debug-runtime');
 const { waitForOwnedListener } = require('./testing-debug');
 const { readLinuxListeners } = require('./linux-debug-listeners');
+const { readDarwinListeners } = require('./darwin-debug-listeners');
 
 const limit = 32;
 const listenerLimit = 2048;
@@ -135,9 +136,10 @@ async function onCancellation(cancellation, task) {
 }
 
 async function socketOwners(signal) {
-  if (process.platform === 'linux') {
+  if (process.platform === 'linux' || process.platform === 'darwin') {
+    const readListeners = process.platform === 'linux' ? readLinuxListeners : readDarwinListeners;
     const owners = new Map();
-    for (const [port, listener] of await readLinuxListeners({ signal })) {
+    for (const [port, listener] of await readListeners({ signal })) {
       if (!listener.pid) continue;
       const ports = owners.get(listener.pid) || new Set();
       ports.add(port);
@@ -177,7 +179,9 @@ function createDebugProcessDiscovery({ javaHome, trusted } = {}) {
   async function discover(pid, signal) {
     trusted();
     if (signal?.aborted) throw Error('Java process discovery was cancelled.');
-    if (!['win32', 'linux'].includes(process.platform)) throw Error('Local PID discovery verifies listener ownership on Windows and Linux. Enter the JVM host and port for manual attach.');
+    if (!['win32','linux','darwin'].includes(process.platform)) {
+      throw Error('Local PID discovery verifies listener ownership on Windows, Linux and macOS. Enter the JVM host and port for manual attach.');
+    }
     const home = javaHome();
     if (!path.isAbsolute(home || '')) throw Error('Configure the independent Java engine before finding JVMs.');
     const launcher = independentJavaExecutable(path.join(home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java'));
