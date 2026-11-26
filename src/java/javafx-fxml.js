@@ -10,7 +10,7 @@ const memberName = /^[A-Za-z_$][\w$]*$/;
 const qualifiedName = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/;
 const sourceLimit = 512 * 1024;
 
-function readFxml(source) {
+function readFxml(source, { properties = false } = {}) {
   if (typeof source !== 'string' || Buffer.byteLength(source) > sourceLimit) {
     throw Error('Open an FXML file up to 512 KiB.');
   }
@@ -36,6 +36,11 @@ function readFxml(source) {
       spans.set(match[1], { start: offset, end: offset + (match[3] ?? match[4]).length });
     }
     const node = { name: tag.name, start, end: parser.position, children: [] };
+    if (properties) {
+      node.local = tag.local;
+      node.namespace = tag.uri;
+      node.properties = [];
+    }
     const siblings = stack.at(-1)?.children || elements;
     siblings.push(node);
     stack.push(node);
@@ -44,6 +49,7 @@ function readFxml(source) {
       const range = spans.get(attribute.name);
       if (!range) continue;
       const { local, value, uri } = attribute;
+      if (properties && !uri) node.properties.push({ name: local, value, ...range });
       if (fxmlNamespace.test(uri) && local === 'controller' && stack.length === 1 && qualifiedName.test(value)) {
         controller = { kind: 'controller', value, ...range };
         references.push(controller);

@@ -46,4 +46,4 @@ function imageProof(bytes,report,updated=false,moved=false) {
   return {...values,imageSha256:report.imageSha256};
 }
 
-module.exports={fixture,source,stylesheet,changed,imageProof};
+module.exports={fixture,source,stylesheet,changed,imageProof,pixels};

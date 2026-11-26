@@ -2,21 +2,23 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { readFxml, resolveFxmlFile } = require('./javafx-fxml');
 const { inside, cancelled, buildFingerprint, workspacePath, workspaceRoots } = require('./workbench-model');
 const { buildSpec, nativeTaskRunner } = require('./workbench-tasks');
-const {renderFxmlPreview}=require('./javafx-preview-runtime');
 const { readModule, planImage, observeImage } = require('./javafx-gradle-image');
+const { renderFxmlPreview } = require('./javafx-preview-runtime');
+const { captureFxmlPreview } = require('./javafx-preview-fxml');
+const { REFRESH, EDIT, APPLY, DISCARD, commandUris, previewHtml } = require('./javafx-preview-panel');
 
-const PREVIEW='rocketbrain.javafx.preview',REFRESH='rocketbrain.javafx.refreshPreview';
-const htmlText=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const PREVIEW = 'rocketbrain.javafx.preview';
 
 function registerJavaFx(vscode, { java, context }) {
   const selector = { scheme: 'file', pattern: '**/*.fxml' };
   const diagnostics = vscode.languages.createDiagnosticCollection('rocketbrain-fxml');
   const tasks = nativeTaskRunner(vscode);
   const disposables = [diagnostics],images=new WeakMap();
-  let panel,shown,rendering;
+  let panel, shown, rendering, pending, applying;
 
   function root(document) {
     if (!vscode.workspace.isTrusted || document.uri.scheme !== 'file') return null;
@@ -132,7 +134,8 @@ function registerJavaFx(vscode, { java, context }) {
   const dirty=file=>vscode.workspace.textDocuments.some(document=>!document.isClosed&&document.isDirty&&
     document.uri.scheme==='file'&&!path.relative(file,document.uri.fsPath));
 
-  async function preview({document=vscode.window.activeTextEditor?.document,width,height,allowPreview,cancellation}={}) {
+  async function render({document=vscode.window.activeTextEditor?.document,width,height,allowPreview,cancellation}={},
+    { propertyEdit, expectedFingerprint } = {}) {
     const workspace=document&&root(document);
     if (!workspace||!document.fileName.endsWith('.fxml')||document.uri.authority||document.isClosed||allowPreview!==true) {
       throw Error('Choose a saved FXML document for preview in a trusted workspace.');
@@ -142,20 +145,33 @@ function registerJavaFx(vscode, { java, context }) {
     const settings=vscode.workspace.getConfiguration('rocketbrain.java',document.uri);
     const javaHome=settings.get('javaHome')||java.getState().javaHome;
     const controller=new AbortController();
-    const cancel=cancellation?.onCancellationRequested?.(()=>controller.abort());
-    if (cancellation?.isCancellationRequested) controller.abort();
+    const abort = () => controller.abort();
+    const cancel = cancellation?.onCancellationRequested?.(abort);
+    cancellation?.addEventListener?.('abort', abort, {once:true});
+    if (cancellation?.isCancellationRequested || cancellation?.aborted) abort();
     rendering=controller;
     try {
-      const {png,report}=await renderFxmlPreview({file,workspace,dirty,javaHome,width,height,
-        storage:path.join(context.globalStorageUri.fsPath,'javafx-preview'),workspaceTrusted:true,allowPreview:true,cancellation:controller.signal});
+      const {png,report,design}=await renderFxmlPreview({file,workspace,dirty,javaHome,width,height,
+        storage:path.join(context.globalStorageUri.fsPath,'javafx-preview'),workspaceTrusted:true,allowPreview:true,
+        cancellation:controller.signal,propertyEdit,expectedFingerprint});
       if (!root(document)||document.isDirty||controller.signal.aborted) throw Error('The FXML source changed. Refresh from the saved file.');
       const receipt=Object.freeze(report);
-      images.set(receipt,{png,uri:document.uri,width:report.width,height:report.height});
-      return receipt;
+      return {receipt,png,design,file,uri:document.uri,width:report.width,height:report.height};
     } finally {
       rendering=undefined;
       cancel?.dispose();
+      cancellation?.removeEventListener?.('abort', abort);
     }
+  }
+
+  async function preview(options) {
+    const image = await render(options);
+    images.set(image.receipt, image);
+    return image.receipt;
+  }
+
+  function repaint() {
+    if (panel && shown) panel.webview.html = previewHtml(shown, pending);
   }
 
   function showPreview(receipt) {
@@ -164,21 +180,94 @@ function registerJavaFx(vscode, { java, context }) {
     if (!panel) {
       const view=vscode.window.createWebviewPanel('rocketbrainFxmlPreview','JavaFX FXML Preview',
         {viewColumn:vscode.ViewColumn.Beside,preserveFocus:true},
-        {enableScripts:false,localResourceRoots:[],enableCommandUris:[REFRESH]});
+        {enableScripts:false,localResourceRoots:[],enableCommandUris:commandUris});
       panel=view;
-      view.onDidDispose(()=>{if(panel===view){panel=undefined;shown=undefined;}});
+      view.onDidDispose(()=>{
+        if (panel !== view) return;
+        panel = undefined;
+        shown = undefined;
+        pending = undefined;
+        rendering?.abort();
+      });
     }
-    shown=image;
-    const name=htmlText(path.basename(image.uri.fsPath));
-    const omission=receipt.controllersOmitted||receipt.handlersOmitted
-      ? '<p>Static view · controller and event hookups omitted</p>' : '';
-    panel.webview.html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
-      '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; img-src data:; style-src &#39;unsafe-inline&#39;">'+
-      '<title>JavaFX FXML Preview</title><style>body{padding:18px}h1{font-size:1.2rem}img{max-width:100%;height:auto}'+
-      'a{color:var(--vscode-textLink-foreground)}</style></head><body><h1>'+name+'</h1>'+omission+
-      '<p><a href="command:'+REFRESH+'">Refresh Preview</a></p><img alt="Rendered JavaFX layout" width="'+receipt.width+
-      '" height="'+receipt.height+'" src="data:image/png;base64,'+image.png.toString('base64')+'"></body></html>';
+    pending = undefined;
+    shown = { ...image, ticket: randomUUID() };
+    repaint();
     return panel;
+  }
+
+  function checkEditingSource(active, document, version) {
+    const workspace = root(document);
+    if (shown !== active || active.changed || !workspace || document.isClosed || document.isDirty ||
+        document.version !== version || document.getText() !== active.design.sourceText ||
+        path.relative(active.file, workspacePath(document.fileName, [workspace], {directory:false}))) {
+      throw Error('The FXML editor or preview changed. Refresh from the saved file.');
+    }
+    return workspace;
+  }
+
+  async function reviewProperty({ receipt, id, property, value, allowReview, cancellation } = {}) {
+    const active = shown;
+    if (!active || active.receipt !== receipt || allowReview !== true || pending || applying) {
+      throw Error('Choose a property from the current FXML preview.');
+    }
+    const document = await vscode.workspace.openTextDocument(active.uri);
+    const version = document.version;
+    checkEditingSource(active, document, version);
+    const frame = await render({document,width:active.width,height:active.height,allowPreview:true,cancellation}, {
+      propertyEdit: { id, property, value }, expectedFingerprint: active.receipt.resourcesSha256
+    });
+    checkEditingSource(active, document, version);
+    if (pending || applying) throw Error('Finish the current FXML property review.');
+    const { before, after } = frame.design.edit;
+    const review = Object.freeze({ id, property, before, after, proposed: frame.receipt });
+    pending = { active, frame, version, review, ticket: randomUUID() };
+    repaint();
+    return review;
+  }
+
+  async function applyProperty({ review, allowApply } = {}) {
+    if (allowApply !== true || !pending || pending.review !== review || applying) {
+      throw Error('Choose the active FXML property review before applying it.');
+    }
+    const { active, frame, version } = pending;
+    pending = undefined;
+    applying = true;
+    repaint();
+    try {
+      const document = await vscode.workspace.openTextDocument(active.uri);
+      checkEditingSource(active, document, version);
+      const editor = await vscode.window.showTextDocument(document,{preview:false});
+      const workspace = checkEditingSource(active, document, version);
+      const disk = captureFxmlPreview(active.file, workspace, {dirty});
+      if (disk.fingerprint !== active.receipt.resourcesSha256) {
+        throw Error('FXML or CSS changed since preview. Refresh from the saved resource files.');
+      }
+      const edit = frame.design.edit;
+      const changed = await editor.edit(builder => builder.replace(span(document, edit), edit.encoded));
+      if (!changed) throw Error('The FXML editor rejected the reviewed property change.');
+      if (shown === active) shown = { ...active, changed: true };
+      return { id: edit.id, property: edit.property, value: edit.after };
+    } finally {
+      applying = false;
+      repaint();
+    }
+  }
+
+  async function pickProperty(ticket, id) {
+    const active = shown;
+    const target = active?.ticket === ticket && !pending && !applying && !active.changed &&
+      active.design.targets.find(item => item.id === id);
+    if (!target) throw Error('Choose a property from the current FXML preview.');
+    const field = await vscode.window.showQuickPick(target.properties.map(item => ({
+      label: item.name, description: item.value, field: item
+    })), { title: 'Edit ' + target.type + ' · ' + target.id });
+    if (!field) return;
+    const value = await vscode.window.showInputBox({title:'Change ' + field.label,
+      value:field.field.value,ignoreFocusOut:true});
+    if (value === undefined) return;
+    return vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'Render Proposed FXML Change',cancellable:true},
+      (_,cancellation) => reviewProperty({receipt:active.receipt,id,property:field.label,value,allowReview:true,cancellation}));
   }
 
   function runPreview(options) {
@@ -196,8 +285,8 @@ function registerJavaFx(vscode, { java, context }) {
   }
 
   function command(name,handler) {
-    disposables.push(vscode.commands.registerCommand(name,async()=>{
-      try {return await handler();}
+    disposables.push(vscode.commands.registerCommand(name,async(...args)=>{
+      try {return await handler(...args);}
       catch (error) {void vscode.window.showErrorMessage(error.message);}
     }));
   }
@@ -207,6 +296,16 @@ function registerJavaFx(vscode, { java, context }) {
     return receipt;
   });
   command(REFRESH,refresh);
+  command(EDIT,pickProperty);
+  command(APPLY,ticket => {
+    if (!pending || pending.ticket !== ticket) throw Error('The FXML property review changed.');
+    return applyProperty({review:pending.review,allowApply:true});
+  });
+  command(DISCARD,ticket => {
+    if (!pending || pending.ticket !== ticket) throw Error('The FXML property review changed.');
+    pending = undefined;
+    repaint();
+  });
   disposables.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{rendering?.abort();panel?.dispose();}));
 
   disposables.push(vscode.languages.registerDefinitionProvider(selector, { provideDefinition: definitions }));
@@ -261,7 +360,7 @@ function registerJavaFx(vscode, { java, context }) {
     }
   }));
 
-  return { definitions, build, preview, showPreview, refresh, async dispose() {
+  return { definitions, build, preview, showPreview, refresh, reviewProperty, applyProperty, async dispose() {
     rendering?.abort();panel?.dispose();
     await tasks.dispose();disposables.forEach(item=>item.dispose());
   } };

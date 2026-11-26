@@ -54,7 +54,7 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 **Allow Local Inline Completions for This File**은 현재 파일에 한해 커서 주변 코드를 지정한 루프백 모델에 보낼 수 있도록 합니다. Java, Kotlin, JavaScript, TypeScript, Python, SQL 파일을 지원합니다. 커서 앞 최대 1,600개와 뒤 최대 400개의 UTF-16 단위를 보내며, 제안은 VS Code에서 수락할 때 삽입됩니다. 파일을 닫거나 모델 설정을 바꾸면 허용이 만료됩니다. **Stop Local Inline Completions**로 즉시 중지할 수 있습니다.
 
-표준 `src/main/resources`의 FXML에서 Outline을 볼 수 있습니다. 컨트롤러, 이벤트 메서드, `fx:id` 필드와 같은 모듈에 있는 포함 파일·리소스는 정의로 이동할 수 있습니다. **Run or Package JavaFX Application**에서 JavaFX Maven 플러그인이 구성된 모듈을 선택해 앱을 실행하거나 `jlink` 런타임 이미지를 만들 수 있습니다. Windows x64에서는 JDK 24 이상을 연결하고 저장된 FXML에서 **Preview JavaFX FXML**을 실행하면 OpenJFX로 정적 레이아웃을 렌더링합니다. 같은 리소스 폴더의 지원되는 FXML 포함 파일과 정적 CSS를 표시하며, 원본 컨트롤러와 이벤트 선언은 수정하지 않습니다. CSS나 FXML을 저장한 후 **Refresh Preview**로 다시 그립니다.
+표준 `src/main/resources`의 FXML에서 Outline을 볼 수 있습니다. 컨트롤러, 이벤트 메서드, `fx:id` 필드와 같은 모듈에 있는 포함 파일·리소스는 정의로 이동할 수 있습니다. **Run or Package JavaFX Application**에서 JavaFX Maven 플러그인이 구성된 모듈을 선택해 앱을 실행하거나 `jlink` 런타임 이미지를 만들 수 있습니다. Windows x64에서 JDK 24 이상을 연결하고 저장된 FXML에서 **Preview JavaFX FXML**을 실행하면 OpenJFX로 정적 레이아웃과 지원되는 포함 파일·CSS를 표시합니다. 미리보기의 요소나 **Editable elements**에서 원본 문서에 고유한 `fx:id`가 있는 지원 요소를 선택합니다. 이미 지정된 텍스트, 색, 크기, 위치 등의 리터럴을 바꾸고 변경 전후 이미지를 비교한 뒤 **Apply to FXML Editor**를 선택합니다. 컨트롤러, 이벤트, CSS, 포함 파일과 바인딩은 편집 대상에서 제외됩니다. FXML 편집기에서 변경을 저장한 다음 **Refresh Preview**로 다시 그립니다.
 
 **Audit Maven Dependencies with OSV**는 선택한 Maven 모듈의 실제 의존성 트리를 해석합니다. OSV로 전송할 패키지 이름·버전을 직접 선택하면 직접·전이 의존 경로와 조회 시각, 등록된 권고 ID를 보고서에 표시합니다. [OSV API](https://google.github.io/osv.dev/post-v1-querybatch/)
 

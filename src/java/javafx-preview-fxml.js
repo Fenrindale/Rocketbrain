@@ -5,6 +5,7 @@ const path=require('node:path');
 const {createHash}=require('node:crypto');
 const {SaxesParser}=require('saxes');
 const {inside}=require('./workbench-model');
+const {targetsIn,propertyReplacement}=require('./javafx-preview-properties');
 
 const FX=/^https?:\/\/javafx\.com\/fxml(?:\/\d+)?$/u;
 const JAVAFX=/^https?:\/\/javafx\.com\/javafx(?:\/[\d.]+)?$/u;
@@ -83,13 +84,14 @@ function stageName(from,to) {
   return path.relative(path.dirname(from),to).split(path.sep).join('/');
 }
 
-function captureFxmlPreview(file,workspace,{dirty=()=>false}={}) {
+function captureFxmlPreview(file,workspace,{dirty=()=>false,propertyEdit,expectedFingerprint}={}) {
   if (!path.isAbsolute(file)||!path.isAbsolute(workspace)||!inside(workspace,file)||path.extname(file)!=='.fxml') {
     throw Error('Select a saved local FXML document in the trusted workspace.');
   }
   const root=resourceBase(file,workspace);
   const files=new Map(), visiting=new Set();
   let bytes=0,nodes=0,controllers=0,handlers=0;
+  let sourceText, edit, projectedHash;
   function capture(source,suffix) {
     if (visiting.has(source)) throw Error('The FXML preview has a cyclic include.');
     if (files.has(source)) return;
@@ -97,7 +99,16 @@ function captureFxmlPreview(file,workspace,{dirty=()=>false}={}) {
     if (dirty(source)) throw Error('Save the selected FXML and all of its preview resources before rendering.');
     const raw=physical(source,root,suffix==='.css'?128*1024:512*1024);
     if ((bytes+=raw.length)>2*1024*1024) throw Error('The FXML preview resource graph exceeds 2 MiB.');
-    const text=decode.decode(raw);
+    let text=decode.decode(raw);
+    if (source===file) {
+      sourceText=text;
+      if (propertyEdit) {
+        edit=propertyReplacement(text,propertyEdit);
+        text=edit.text;
+        const bom=raw.subarray(0,3).equals(Buffer.from([0xef,0xbb,0xbf]));
+        projectedHash=hash(Buffer.from((bom?'\uFEFF':'')+text));
+      }
+    }
     visiting.add(source);
     try {
       const staged=suffix==='.css'?(css(text),text):projectFxml(text,source);
@@ -181,8 +192,13 @@ function captureFxmlPreview(file,workspace,{dirty=()=>false}={}) {
 
   capture(file,'.fxml');
   const summary={resourceCount:files.size,controllersOmitted:controllers,handlersOmitted:handlers};
-  const fingerprint=hash(JSON.stringify([...files].map(([file,value])=>[file,value.hash]).sort()));
-  return {root,file,files,summary,fingerprint};
+  const record=[...files].map(([file,value])=>[file,value.hash]).sort();
+  const fingerprint=hash(JSON.stringify(record));
+  if (expectedFingerprint!==undefined&&fingerprint!==expectedFingerprint) {
+    throw Error('FXML or CSS changed. Refresh the saved preview before reviewing this edit.');
+  }
+  const effective=edit?hash(JSON.stringify(record.map(([name,digest])=>[name,name===file?projectedHash:digest]))):fingerprint;
+  return {root,file,files,summary,fingerprint,effective,sourceText,edit,targets:targetsIn(edit?.text||sourceText)};
 }
 
 module.exports={captureFxmlPreview};
