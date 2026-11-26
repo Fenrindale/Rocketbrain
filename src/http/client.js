@@ -282,7 +282,7 @@ async function graphQLBody(body, expand) {
   return JSON.stringify(expanded);
 }
 
-async function resolveRequest(request, environment, readSecret, {schema=false,readBodyFile}={}) {
+async function resolveRequest(request, environment, readSecret, {schema=false,readBodyFile,captureValues}={}) {
   const graphQL=request.method==='GRAPHQL', webSocket=request.method==='WEBSOCKET', grpc=request.method==='GRPC';
   if (schema && !graphQL) throw Error('Select a GRAPHQL request to inspect its schema.');
   const secrets = new Map();
@@ -309,6 +309,9 @@ async function resolveRequest(request, environment, readSecret, {schema=false,re
           secrets.set(name,value);
         }
         result += secrets.get(name);
+      } else if (captureValues && name.startsWith('capture.')) {
+        if (!captureValues.has(name)) throw Error('Choose an earlier workflow capture for ' + name + '.');
+        result += captureValues.get(name);
       } else if (request.derivations?.has(name)) {
         const {op,template}=request.derivations.get(name);
         const expanded=await expand(template,false,[...chain,name]);
@@ -490,4 +493,4 @@ async function sendRequest(request, { signal,fetcher=fetch,cookieSession,beforeA
   return result;
 }
 
-module.exports = { requestAt, resolveRequest, sendRequest };
+module.exports = { splitRequests, requestAt, resolveRequest, sendRequest, jsonValue, jsonPathPattern };

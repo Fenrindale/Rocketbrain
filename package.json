@@ -338,6 +338,7 @@
       { "command": "rocketbrain.data.captureTransferSource", "title": "Capture Table Copy Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.data.transfer", "title": "Copy Captured Rows", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.data.finishTransfer", "title": "Finish Table Copy", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.http.runWorkflow", "title": "Run HTTP Workflow", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
       { "command": "rocketbrain.http.run", "title": "Send HTTP Request", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted", "icon": "$(play)" },
       { "command": "rocketbrain.http.graphqlSchema", "title": "Inspect GraphQL Endpoint Schema", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
       { "command": "rocketbrain.http.websocketSessions", "title": "View WebSocket Transcript", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },

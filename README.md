@@ -195,6 +195,8 @@ VSIX에서 `extension/dist/ide-mcp-server.js`를 추출하고, 같은 계정의 
 
 OAuth 2.0 Client Credentials 요청에는 `# @oauth-client {"tokenUrl":"{{issuer}}/token","clientId":"{{clientId}}","clientSecret":"{{secret.service}}","scope":"read"}`를 추가합니다. 비밀값은 **Set HTTP Environment Secret**에 저장합니다. 요청을 실행할 때마다 새 Bearer 토큰을 받아 해당 요청에 사용합니다. 발급·리소스 주소에 HTTPS를 쓰거나 개발용으로 같은 루프백 HTTP origin을 선택합니다. [OAuth 2.0 Client Credentials](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4)
 
+**Run HTTP Workflow**는 `# @step 이름`을 붙인 요청을 최대 8개까지 순서대로 검토하고 실행합니다. `# @capture count $.people`로 응답의 JSON 스칼라를 읽고, 다음 요청의 쿼리·헤더·본문에서 `{{capture.count}}`로 참조합니다. 요청은 검토한 동일 origin과 경로를 사용합니다. HTTP 오류, 실패한 검사 또는 읽을 수 없는 값이 생기면 이후 요청을 건너뜁니다. 값과 쿠키는 해당 실행 동안만 사용하며 실행 결과에는 단계별 상태와 검사만 표시합니다.
+
 gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 기준 `Proto: api/service.proto` 헤더를 사용합니다. 단일 요청은 JSON 객체, 클라이언트 스트림은 객체 배열을 입력합니다. 단항, 서버 스트림, 클라이언트 스트림, 양방향 스트림의 결과를 출력 창에서 확인할 수 있습니다. 현재는 자체 포함 `.proto` 파일을 사용합니다.
 
 **Review WebDAV Deployment**는 `rocketbrain.deploy.webdav`에 정의한 로컬·원격 폴더와 제외 패턴을 사용합니다. **Set WebDAV Password**로 필요한 비밀번호를 저장하고, 파일을 선택해 diff를 검토합니다. **Upload Reviewed WebDAV Files**는 비교한 ETag를 조건으로 전송하고 원격 파일이 바뀌면 충돌을 표시합니다. 기존 원격 폴더의 새 파일과 변경 파일을 업로드할 수 있습니다.
