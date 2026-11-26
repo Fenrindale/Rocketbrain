@@ -37,6 +37,17 @@ public final class SignatureInspector {
     static Map<String, Object> object(Object... values) {
         Map<String, Object> map = new LinkedHashMap<>(); for (int i = 0; i < values.length; i += 2) map.put((String) values[i], values[i + 1]); return map;
     }
+    static String hiddenAccessNest(TypeElement owner) {
+        if (owner.getKind() != ElementKind.CLASS || owner.getNestingKind() != NestingKind.MEMBER ||
+                !owner.getModifiers().containsAll(Set.of(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)) ||
+                !owner.getSuperclass().toString().equals("java.lang.Object") || !owner.getInterfaces().isEmpty()) return null;
+        for (Element current = owner; current instanceof TypeElement type; current = type.getEnclosingElement()) {
+            if (!type.getAnnotationMirrors().isEmpty()) return null;
+            if (type.getNestingKind() == NestingKind.TOP_LEVEL) return type.getQualifiedName().toString();
+            if (type.getNestingKind() != NestingKind.MEMBER) return null;
+        }
+        return null;
+    }
     static List<String> checkedThrownTypes(ExecutableElement method, Types types, Elements elements) {
         if (method.getThrownTypes().isEmpty()) return List.of();
         TypeMirror throwable = elements.getTypeElement("java.lang.Throwable").asType();
@@ -551,6 +562,10 @@ public final class SignatureInspector {
                         method.model = object("key", key(executable), "uri", uri, "owner", owner.getQualifiedName().toString(), "ownerKind", owner.getKind().toString(), "name", name, "constructor", executable.getKind() == ElementKind.CONSTRUCTOR, "start", start, "end", end, "nameStart", method.nameStart, "parameters", method.parameters, "returnType", executable.getReturnType().toString(), "throwsTypes", executable.getThrownTypes().stream().map(Object::toString).toList(), "modifiers", executable.getModifiers().stream().map(Object::toString).sorted().toList(), "annotations", executable.getAnnotationMirrors().stream().map(a -> a.getAnnotationType().toString()).toList(), "generic", !owner.getTypeParameters().isEmpty() || !executable.getTypeParameters().isEmpty(), "varargs", executable.isVarArgs());
                         if (executable.getModifiers().contains(Modifier.PRIVATE)) {
                             method.model.put("checkedThrows", checkedThrownTypes(executable, types, elements));
+                        }
+                        if (tree.getBody() != null) {
+                            var nest = hiddenAccessNest(owner);
+                            if (nest != null) method.model.put("hiddenAccessNest", nest);
                         }
                         var returnContract = SignatureReturn.declaration(executable,tree,getCurrentPath(),trees,types);
                         if (!returnContract.isEmpty()) method.model.put("returnContract",returnContract);
