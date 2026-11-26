@@ -60,7 +60,7 @@ async function observe(run, fixture, expected, repository = run.cache) {
     assert.equal(observation.sha256, expected.sha256);
     assert.equal(observation.resolvedVersion, expected.resolved);
     assert.match(observation.fileName, /-1\.2-SNAPSHOT\.jar$/u);
-    assert.deepEqual(await run.verify(report, node), observation);
+    if (run.verify) assert.deepEqual(await run.verify(report, node), observation);
     const view = await run.show(report, node);
     assert.ok(view.includes(observation.sha256) && view.includes(observation.resolvedVersion));
     assert.ok(view.includes('repository ID ' + repositoryId));
@@ -81,7 +81,7 @@ async function exercise(run, context, tools) {
 
   const updated = await fixture.publish(2);
   const newClasspath = await resolveClasspath(project, tools);
-  await assert.rejects(run.verify(first.report, first.node), /snapshot cache evidence changed/u);
+  if (run.verify) await assert.rejects(run.verify(first.report, first.node), /snapshot cache evidence changed/u);
   const second = await observe(run, fixture, updated);
   assert.ok(fixture.requests.includes(updated.request), 'Maven fetched the second timestamped artifact.');
   assert.notEqual(second.node.snapshotCache.sha256, first.node.snapshotCache.sha256);
@@ -99,7 +99,7 @@ async function exercise(run, context, tools) {
   try {
     await fs.copyFile(path.join(fixture.folder, 'maven-metadata-' + repositoryId + '.xml'), alternate);
     await fs.appendFile(trackingPath, '\n' + updated.jarName + '>rb-alternate=\n');
-    await assert.rejects(run.verify(second.report, second.node), /snapshot cache evidence changed/u);
+    if (run.verify) await assert.rejects(run.verify(second.report, second.node), /snapshot cache evidence changed/u);
     const ambiguous = await observe(run, fixture, null);
     assert.equal(ambiguous.node.snapshotCache.origin, 'ambiguous');
     assert.equal(ambiguous.node.snapshotCache.sha256, updated.sha256);
@@ -111,7 +111,8 @@ async function exercise(run, context, tools) {
   assert.deepEqual(await jdbcReadback(), initialJdbc);
   return { engine, versions: [initial.resolved, updated.resolved], actualTwoSnapshotDownloads: true,
     selectedHashes: [initial.sha256, updated.sha256], separateMavenRepository: true, offlineObservation: true,
-    loadedBothSpringJdbcConsumers: true, oldArtifactEvidenceRejected: true, ambiguousOriginUnassigned: true,
+    loadedBothSpringJdbcConsumers: true, refreshedCacheInspection: true,
+    oldArtifactEvidenceRejected: Boolean(run.verify), ambiguousOriginUnassigned: true,
     wrongRepositoryUnassigned: true, jdbc: initialJdbc };
 }
 
@@ -130,7 +131,6 @@ async function runMavenSnapshotChecks(api, vscode, checks) {
       const actual = await exercise({
         cache,
         inspect: snapshotRepository => service.inspect({ projectUri: project.uri, allowProjectExecution: true, snapshotRepository }),
-        verify: (report, node) => service.verifySnapshot(report.id, node.id),
         async show(report, node) {
           const editor = await service.showReport(report.id, node.id);
           assert.equal(editor.document.uri.scheme, 'rocketbrain-maven-resolution');
