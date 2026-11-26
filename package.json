@@ -188,6 +188,8 @@
       { "command": "rocketbrain.review.draft", "title": "Add Local Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.page", "title": "Navigate Review Pages", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.publishDraft", "title": "Publish Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
+      { "command": "rocketbrain.review.action", "title": "Repository Review Action", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
+      { "command": "rocketbrain.review.refresh", "title": "Refresh Repository Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.discardDraft", "title": "Discard Local Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.token", "title": "Set Repository Review Token", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.traceStream", "title": "Trace Java Stream Values", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java && editorHasSelection" },

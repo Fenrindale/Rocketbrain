@@ -36,6 +36,8 @@ function reviewProfile({provider,repository,endpoint,token}={}) {
 
 const clipped=(value,max)=>typeof value==='string'?value.slice(0,max):'';
 const positive=value=>Number.isSafeInteger(value)&&value>0;
+const discussionId=value=>typeof value==='string'&&/^[a-f0-9]{40,64}$/i.test(value);
+const commentBody=value=>typeof value==='string'&&value.trim()&&value.length<=3000&&value.isWellFormed();
 function requestCard(raw,provider) {
   const github=provider==='github', id=github?raw?.number:raw?.iid;
   const head=github?raw?.head?.sha:raw?.diff_refs?.head_sha||raw?.sha;
@@ -58,13 +60,17 @@ function changedFile(raw,provider) {
     limited:Boolean(raw.too_large||raw.collapsed||typeof patch!=='string'||Buffer.byteLength(patch)>65536)};
 }
 
-function mappedComment(raw,provider) {
+function mappedComment(raw,provider,thread) {
   const github=provider==='github', file=github?raw.path:raw.position?.new_path;
   const line=github?raw.line:raw.position?.new_line;
   const revision=github?raw.commit_id:raw.position?.head_sha;
+  const id=positive(raw.id)?raw.id:null;
+  const threadId=github?(positive(raw.in_reply_to_id)?raw.in_reply_to_id:id):discussionId(thread?.id)?thread.id:null;
+  const editable=Boolean(id&&threadId&&!raw.system&&commentBody(raw.body));
   return {body:clipped(raw.body,3000),author:clipped(github?raw.user?.login:raw.author?.username,120),
     file:file?cleanPath(file):null,line:positive(line)?line:null,head:sha.test(revision||'')?revision.toLowerCase():null,
-    resolved:github?null:Boolean(raw.resolved)};
+    resolved:github?null:Boolean(raw.resolved),
+    ...(editable&&{id,threadId,updated:clipped(raw.updated_at,64)})};
 }
 
 async function jsonResponse(response) {
@@ -85,7 +91,7 @@ async function jsonResponse(response) {
 
 function createReviewClient(input,{fetcher=fetch}={}) {
   const profile=reviewProfile(input), github=profile.provider==='github';
-  async function request(relative,{signal,values,body}={}) {
+  async function request(relative,{signal,values,body,method=body===undefined?'GET':'POST'}={}) {
     const url=new URL(relative,profile.base);
     if(url.origin!==profile.base.origin||!url.pathname.startsWith(profile.base.pathname))throw Error('The request escaped the selected review API.');
     for(const [key,value] of Object.entries(values||{}))url.searchParams.set(key,String(value));
@@ -94,7 +100,7 @@ function createReviewClient(input,{fetcher=fetch}={}) {
       ...(profile.token&&(github?{Authorization:'Bearer '+profile.token}:{'PRIVATE-TOKEN':profile.token}))};
     let response;
     try {
-      response=await fetcher(url,{method:writing?'POST':'GET',headers,redirect:'error',
+      response=await fetcher(url,{method,headers,redirect:'error',
         ...(writing&&{body:JSON.stringify(body)}),signal:signal?AbortSignal.any([deadline,signal]):deadline});
     } catch {
       if(writing) throw uncertainPublication();
@@ -137,11 +143,12 @@ function createReviewClient(input,{fetcher=fetch}={}) {
     if(!Array.isArray(files.value)||files.value.length>pageSize||!Array.isArray(comments.value)||comments.value.length>pageSize) {
       throw Error('The review server returned an invalid files or comments page.');
     }
-    const notes=(github?comments.value:comments.value.flatMap(item=>Array.isArray(item.notes)?item.notes:[]));
+    const notes=github?comments.value.map(note=>[note]):comments.value.flatMap(thread=>
+      Array.isArray(thread.notes)?thread.notes.map(note=>[note,thread]):[]);
     const parsedFiles=files.value.map(raw=>changedFile(raw,profile.provider));
     const checks=github?pipelines?.value?.check_runs:pipelines?.value;
     return {provider:profile.provider,repository:profile.repository,...after,files:parsedFiles,
-      comments:notes.slice(0,100).map(raw=>mappedComment(raw,profile.provider)),
+      comments:notes.slice(0,100).map(([note,thread])=>mappedComment(note,profile.provider,thread)),
       pipelines:Array.isArray(checks)?checks.slice(0,30).map(check=>({name:clipped(check.name||check.ref,160),
         status:clipped(check.conclusion||check.status,60),id:positive(check.id)?check.id:null})):null,
       linkedIssueNumbers:[...new Set([...after.body.matchAll(/(?:^|\s)#([1-9]\d{0,8})\b/g)].map(match=>Number(match[1])))].slice(0,30),
@@ -213,11 +220,87 @@ function createReviewClient(input,{fetcher=fetch}={}) {
     return {state:'posted',provider:profile.provider,review:current.review,noteId:String(id)};
   }
 
-  return {list,read,preparePublication,submitPublication};
+  const reviewActions=new Map();
+  async function observeAction({action,review,head,base,start=null,commentPage=1,note,body},signal) {
+    if(!['approve','comment','request-changes','reply','edit'].includes(action)||(!github&&action==='request-changes')||
+       (action==='approve'?body!==undefined&&(!github||!commentBody(body)):!commentBody(body))) {
+      throw Error('Choose a supported review action and enter the required text.');
+    }
+    if(!sha.test(head||'')||!sha.test(base||'')||!github&&!sha.test(start||'')) {
+      throw Error('Open the exact review revision before sending an action.');
+    }
+    const current=await read(review,{expectedHead:head,commentPage,signal});
+    if(current.state!==(github?'open':'opened')||current.base!==base||(current.start??null)!==start) {
+      throw Error('The review is closed or its base changed. Inspect the current request.');
+    }
+    if(action==='reply'||action==='edit') {
+      if(!positive(note?.id)) throw Error('Choose a discussion note from the current review.');
+      const latest=current.comments.find(item=>item.id===note.id&&item.threadId===note.threadId);
+      if(!latest||JSON.stringify(latest)!==JSON.stringify(note)) {
+        throw Error('The selected discussion note changed. Refresh the requested page.');
+      }
+    }
+    return {action,review,head,base,start,repository:profile.repository,provider:profile.provider,note,body};
+  }
+
+  async function prepareAction(input,{signal}={}) {
+    if(!profile.token) throw Error('Save a repository review token with write permissions.');
+    const bound=structuredClone(input);
+    const observed=await observeAction(bound,signal);
+    const actionId=randomUUID();
+    for(const [id,entry] of reviewActions) if(entry.expires<Date.now()) reviewActions.delete(id);
+    if(reviewActions.size>=8) reviewActions.delete(reviewActions.keys().next().value);
+    reviewActions.set(actionId,{input:bound,observed,expires:Date.now()+120000});
+    return {actionId,...observed};
+  }
+
+  async function submitAction(actionId,{approved=false,signal,beforeDispatch}={}) {
+    if(approved!==true) throw Error('Explicitly approve the selected review action.');
+    const entry=reviewActions.get(actionId);
+    reviewActions.delete(actionId);
+    if(!entry||entry.expires<Date.now()) throw Error('Prepare a fresh review action.');
+    const current=await observeAction(entry.input,signal);
+    if(JSON.stringify(current)!==JSON.stringify(entry.observed)) throw Error('The approved review action changed.');
+    const {action,review,head,note,body}=current;
+    const stem=profile.api+'/'+review;
+    let route, method='POST', payload, confirmed;
+    if(action==='reply') {
+      route=github?`${stem}/comments/${note.threadId}/replies`:`${stem}/discussions/${note.threadId}/notes`;
+      payload={body};
+      confirmed=value=>positive(value?.id)&&value.body===body&&(!github||value.in_reply_to_id===note.threadId);
+    } else if(action==='edit') {
+      route=github?`${profile.api}/comments/${note.id}`:`${stem}/discussions/${note.threadId}/notes/${note.id}`;
+      method=github?'PATCH':'PUT';
+      payload={body};
+      confirmed=value=>value?.id===note.id&&value.body===body;
+    } else if(github) {
+      const decisions={approve:['APPROVE','APPROVED'],comment:['COMMENT','COMMENTED'],'request-changes':['REQUEST_CHANGES','CHANGES_REQUESTED']};
+      const [event,state]=decisions[action];
+      route=stem+'/reviews';
+      payload={commit_id:head,event,...(body!==undefined&&{body})};
+      confirmed=value=>positive(value?.id)&&value.state===state&&value.commit_id===head&&(body===undefined||value.body===body);
+    } else if(action==='approve') {
+      route=stem+'/approve';
+      payload={sha:head};
+      confirmed=value=>value?.iid===review&&Array.isArray(value.approved_by);
+    } else {
+      route=stem+'/discussions';
+      payload={body};
+      confirmed=value=>discussionId(value?.id)&&value.notes?.[0]?.body===body;
+    }
+    signal?.throwIfAborted();
+    await beforeDispatch?.();
+    signal?.throwIfAborted();
+    const {value}=await request(route,{method,body:payload,signal});
+    if(!confirmed(value)) throw uncertainPublication();
+    return {state:'submitted',provider:profile.provider,review,action};
+  }
+
+  return {list,read,preparePublication,submitPublication,prepareAction,submitAction};
 }
 
 function uncertainPublication() {
-  return Object.assign(new Error('The server did not confirm the comment. Refresh the remote discussion before sending it again.'),
+  return Object.assign(new Error('The server did not confirm the review action. Refresh the remote discussion before sending it again.'),
     {code:'ROCKETBRAIN_REVIEW_PUBLICATION_UNKNOWN'});
 }
 
