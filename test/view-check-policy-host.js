@@ -225,7 +225,9 @@ async function runViewCheckPolicyChecks(api, vscode, checks) {
       async reconnect(){ await api.disconnectMysql(); await api.connectMysql(config); },
       recover:(operationId, opts) => editor.recoverObject(operationId, opts),
       async close(){
-        const tabs=vscode.window.tabGroups.all.flatMap(group=>group.tabs).filter(tab=>docs.has(tab.input?.uri?.toString()));
+        // Fresh object sources are unsaved buffers in the disposable test window.
+        const tabs=vscode.window.tabGroups.all.flatMap(group=>group.tabs).filter(tab=>
+          tab.input?.uri?.scheme!=='untitled' && docs.has(tab.input?.uri?.toString()));
         if(tabs.length)await vscode.window.tabGroups.close(tabs);
         await api.disconnectMysql();
       }

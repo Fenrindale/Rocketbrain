@@ -8,10 +8,15 @@ const {jdbcReadback} = require('./java-source-analysis-host');
 const {derivedFixture} = require('./helpers/spring-derived-query-fixture');
 
 async function runSpringDerivedQueryChecks(api,vscode,checks) {
-  const workspace = vscode.workspace.workspaceFolders[0].uri.fsPath;
+  const folder = vscode.workspace.workspaceFolders[0];
+  const workspace = await fs.realpath(folder.uri.fsPath);
   const suffix = randomBytes(5).toString('hex');
   const fixture = derivedFixture('fixture.boot','RbDerived'+suffix,'rb_derived_'+suffix);
   const own = new Map();
+  const represents = (query,files=own.values()) => {
+    const uri=vscode.Uri.parse(query.uri);
+    return uri.scheme==='file' && [...files].some(file=>!path.relative(file,uri.fsPath));
+  };
   async function open(name) { return vscode.workspace.openTextDocument(vscode.Uri.file(own.get(name))); }
   function at(document,method,part) {
     const start = document.getText().indexOf(method), relative = method.indexOf(part);
@@ -39,14 +44,24 @@ async function runSpringDerivedQueryChecks(api,vscode,checks) {
       await fs.writeFile(file,item.text,{flag:'wx'});
       own.set(item.name,file);
     }
+    const pattern=new vscode.RelativePattern(folder,'src/main/java/fixture/boot/RbDerived'+suffix+'*.java');
+    let discovered=[];
+    for (let count=0; count<10; count++) {
+      discovered=await vscode.workspace.findFiles(pattern,null,own.size+1);
+      if (discovered.length===own.size) break;
+      await new Promise(resolve=>setTimeout(resolve,300));
+    }
+    assert.equal(discovered.length,own.size,'The native source search must find each generated Spring file.');
     repository = await open(fixture.repository);
+    await vscode.window.showTextDocument(repository,{preview:false,preserveFocus:true});
     const location = await open(fixture.location), account = await open(fixture.entity), postal = await open(fixture.postal);
     const missing = await open(fixture.missing);
     const {names} = fixture, model = await api.jpa.refresh();
-    const byName = name => model.queries.find(query=>query.text===name && [...own.values()].some(file=>
-      vscode.Uri.file(file).toString()===query.uri));
+    const byName = name => model.queries.find(query=>query.text===name && represents(query));
     const positive = [names.compound,names.page,names.explicit,names.orderOnly,names.in,names.allCase];
-    assert.deepEqual(positive.map(name=>byName(name)?.status),positive.map(()=>'known'));
+    assert.deepEqual(positive.map(name=>byName(name)?.status),positive.map(()=>'known'),
+      JSON.stringify({coverage:model.sourceCoverage,fixtureQueries:model.queries.filter(query=>represents(query))
+        .slice(0,12).map(query=>[query.text,query.status,query.source])}));
     assert.equal(byName(names.ambiguous).status,'unknown');
     assert.equal(byName(names.missing).status,'invalid');
     await reveals(repository,at(repository,names.compound,'CityAnd'),location,'city');
@@ -71,7 +86,7 @@ async function runSpringDerivedQueryChecks(api,vscode,checks) {
     assert.equal(await vscode.workspace.applyEdit(edited),true);
     const changedName = names.page.replace(/NameAsc$/u,'GhostAsc');
     const updated = await api.jpa.snapshot();
-    const changed = updated.queries.find(query=>query.uri===repository.uri.toString() && query.text===changedName);
+    const changed = updated.queries.find(query=>query.text===changedName && represents(query,[repository.uri.fsPath]));
     assert.equal(changed?.status,'unknown');
     assert.match(changed.reason,/Ghost.*unresolved/u);
     const original = new vscode.WorkspaceEdit();
