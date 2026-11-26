@@ -11,7 +11,7 @@ const net = require('node:net');
 const { promisify } = require('node:util');
 const { test } = require('node:test');
 const { createDevContainers, cliVersion, sessionLabel } = require('../src/devcontainer/runtime');
-const { openFixtureForward, checkHttp, attachJdwp, waitForReleasedPort } = require('./devcontainer-port-fixture');
+const { openFixtureForward, checkHttp, attachJdwp, waitForReleasedPort, fixtureStep } = require('./devcontainer-port-fixture');
 
 const executeFile = promisify(execFile);
 const fixture = path.join(__dirname, 'fixtures', 'devcontainer');
@@ -461,6 +461,7 @@ test('actual local Docker starts image, Dockerfile and Compose Dev Containers an
   try {
     await docker(['build','--label',imageLabel+'='+marker,'--tag',image,'--file','Containerfile.txt','.'],240000);
     imageBuilt=true;
+    context.diagnostic('Owned Java 21 and Python forwarding image built');
     unrelated=await docker(['run','--detach','--label',unrelatedLabel,'ubuntu:24.04','sleep','infinity']);
     assert.match(unrelated,/^[a-f0-9]{64}$/u);
     const composeFile=path.join(root,'compose.yaml');
@@ -475,6 +476,7 @@ test('actual local Docker starts image, Dockerfile and Compose Dev Containers an
     assert.ok(!JSON.stringify(plan).includes('fixture-secret-'+marker));
     assert.equal(plan.compose.signature,undefined);
     started=await service.start(root,approved(plan));
+    context.diagnostic('Reviewed Compose workspace and dependency started');
     recorded=[...sessions.values()][0];
     assert.equal(started.kind,'compose');
     assert.equal(started.workspaceFolder,'/workspaces/compose');
@@ -500,31 +502,32 @@ test('actual local Docker starts image, Dockerfile and Compose Dev Containers an
     }
     const dockerPublishedPorts = JSON.parse(await docker(['inspect','--format','{{json .HostConfig.PortBindings}}',started.id]));
     assert.equal(Object.keys(dockerPublishedPorts ?? {}).length, 0);
-    const http = await openFixtureForward(service, root, 8787);
-    const jdwp = await openFixtureForward(service, root, 5005);
+    const http = await fixtureStep('opening the HTTP forward', () => openFixtureForward(service, root, 8787));
+    const jdwp = await fixtureStep('opening the JDWP forward', () => openFixtureForward(service, root, 5005));
     assert.equal((await service.status(root)).forwards.length, 2);
-    await checkHttp(http);
-    const debuggerClient = await attachJdwp(jdwp);
-    await service.closePort(root, jdwp.id);
-    await debuggerClient.close;
-    await waitForReleasedPort(jdwp);
-    await checkHttp(http);
-    const interrupted = await openFixtureForward(service, root, 5005);
-    const interruptedClient = await attachJdwp(interrupted);
-    await docker(['container','stop','--time','1',started.id]);
-    await interruptedClient.close;
-    await Promise.all([waitForReleasedPort(http), waitForReleasedPort(interrupted)]);
+    await fixtureStep('reading the HTTP service through its forward', () => checkHttp(http));
+    const debuggerClient = await fixtureStep('reading the real JVM JDWP version', () => attachJdwp(jdwp));
+    context.diagnostic('Forwarded HTTP and JDWP each answered');
+    await service.closePort(root, http.id);
+    await fixtureStep('proving independent HTTP listener closure', () => waitForReleasedPort(http));
+    assert.deepEqual((await service.status(root)).forwards, [jdwp]);
+    await fixtureStep('stopping the exact fixture app and observing its active debugger socket close', async () => {
+      await docker(['container','stop','--time','1',started.id]);
+      await debuggerClient.close;
+    });
+    await fixtureStep('proving JDWP listener release after app exit', () => waitForReleasedPort(jdwp));
     assert.deepEqual(await service.forwardedPorts(root), []);
+    context.diagnostic('Individually closed HTTP and observed active JDWP release on app exit');
     await docker(['container','start',started.id]);
-    const resumed = await openFixtureForward(service, root, 8787);
-    await checkHttp(resumed);
+    const resumed = await fixtureStep('opening a fresh forward after restart', () => openFixtureForward(service, root, 8787));
+    await fixtureStep('reading the restarted app through its fresh forward', () => checkHttp(resumed));
     await fs.appendFile(path.join(root,'compose.workspace.yaml'),'\n# changed after start\n');
     await assert.rejects(service.execute(root,['cat','fixture.txt']),/resolved configuration changed/);
     await assert.rejects(service.inspectPort(root,{containerPort:8787}),/reviewed Compose workspace or configuration changed/);
     const stopped=await service.stop(root);
     assert.equal(stopped.state,'stopped');
     assert.ok(stopped.services.every(row=>!row.running));
-    await waitForReleasedPort(resumed);
+    await fixtureStep('proving listener release after managed stop', () => waitForReleasedPort(resumed));
     assert.equal(await docker(['inspect','--format','{{.State.Running}}',unrelated]),'true');
     proof.compose={cliVersion,files:plan.compose.files,appService:plan.compose.service,services:plan.compose.services,
       projectIsolated:true,labelsVerified:true,exactContainerCount:stopped.services.length,
