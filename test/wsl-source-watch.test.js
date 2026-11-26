@@ -51,7 +51,7 @@ test('WSL reader binds physical source scope, fixed tool arguments, bounded UTF-
   await assert.rejects(different.read(scope, source, { verifyWindows: true }), /same WSL source bytes/u);
 });
 
-function testWindow() {
+function testWindow({ removeEmptyGroup = false } = {}) {
   const file = value => ({ scheme: 'file', fsPath: value, toString: () => 'file://' + value });
   const address = file(source);
   let document = { uri: address, version: 1, isDirty: false, isClosed: false, text: 'before\n',
@@ -88,6 +88,10 @@ function testWindow() {
           effects.push(['close', target, preserveFocus]);
           assert.equal(document.isDirty, false);
           group.tabs = [];
+          if (removeEmptyGroup) {
+            vscode.window.tabGroups.all = [peerGroup];
+            peerGroup.viewColumn = group.viewColumn;
+          }
           editors.delete(document);
           document.isClosed = true;
           for (const callback of closeListeners) callback(document);
@@ -174,4 +178,17 @@ test('WSL watch refuses another active tab in the same group and unverified sour
   host.losePath();
   await assert.rejects(host.watcher.reload(plan.token, { approved: true }), /unavailable/u);
   assert.equal(host.effects.some(item => item[0] === 'close'), false);
+});
+
+test('a removed source group reopens beside the focused peer when columns shift', async t => {
+  const host = testWindow({ removeEmptyGroup: true });
+  t.after(() => host.watcher.dispose());
+  await host.watcher.start(host.document);
+  host.change('Linux\n');
+  const plan = await host.watcher.compare();
+  assert.equal((await host.watcher.reload(plan.token, { approved: true })).state, 'reloaded');
+  const reopen = host.effects.find(item => item[0] === 'show').at(-1);
+  assert.equal(reopen.viewColumn, host.vscode.ViewColumn.Beside);
+  assert.equal(reopen.preserveFocus, true);
+  assert.equal(host.vscode.window.activeTextEditor.document, host.peer);
 });
