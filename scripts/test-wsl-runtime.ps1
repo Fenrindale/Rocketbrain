@@ -55,7 +55,7 @@ try {
         Write-Host 'Preparing the disposable Linux JDK and build tools.'
         $command = @('--distribution', $distro, '--exec')
         Invoke-WslFixture ($command + @('/usr/bin/apt-get', 'update', '-q')) | Out-Null
-        Invoke-WslFixture ($command + @('/usr/bin/env', 'DEBIAN_FRONTEND=noninteractive', '/usr/bin/apt-get', 'install', '-y', '-q', '--no-install-recommends', 'openjdk-21-jdk-headless', 'maven', 'unzip')) | Out-Null
+        Invoke-WslFixture ($command + @('/usr/bin/env', 'DEBIAN_FRONTEND=noninteractive', '/usr/bin/apt-get', 'install', '-y', '-q', '--no-install-recommends', 'openjdk-21-jdk-headless', 'maven', 'unzip', 'python3')) | Out-Null
         $gradle = Join-Path $root 'gradle-9.1.0-bin.zip'
         Invoke-CheckedDownload 'https://services.gradle.org/distributions/gradle-9.1.0-bin.zip' $gradle 'a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806'
         $gradleZip = Invoke-WslFixture ($command + @('/usr/bin/wslpath', '-a', '-u', $gradle))
@@ -65,6 +65,10 @@ try {
         $proof['gradle'] = Invoke-WslFixture ($command + @('/usr/bin/gradle', '--version'))
 
         $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+        $javaRuntime = Join-Path $root 'windows-java-runtime'
+        & node (Join-Path $repo 'scripts/java-provision.js') --target $javaRuntime --java-home $env:JAVA_HOME
+        if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the local JDT LS and Java debug adapter fixture.' }
+        $env:ROCKETBRAIN_JAVA_TEST_CONFIG = Join-Path $javaRuntime 'rocketbrain-java-runtime.json'
         Get-ChildItem -LiteralPath (Join-Path $repo 'test/fixtures/wsl-jvm') | Copy-Item -Destination $workspace -Recurse
         $linuxFixture = Invoke-WslFixture ($command + @('/usr/bin/mktemp', '-d', '/tmp/rocketbrain-wsl-XXXXXXXX'))
         if ($linuxFixture -cnotmatch '^/tmp/rocketbrain-wsl-[0-9A-Za-z]{8}$') { throw 'The owned Linux fixture path was not generated.' }

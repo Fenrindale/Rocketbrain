@@ -255,6 +255,7 @@
       { "command": "rocketbrain.wsl.openProject", "title": "Open WSL Project Folder", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.reviewBuild", "title": "Review and Run WSL Workspace Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.cancelBuild", "title": "Cancel Managed WSL Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
+      { "command": "rocketbrain.wsl.debugJava", "title": "Review and Debug WSL Java JAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },

@@ -8,6 +8,7 @@ const path = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
 const { promisify } = require('node:util');
 const { sameWslPath, wslUnc } = require('../src/remote/wsl-paths');
+const { until } = require('./helpers/stdio-lsp');
 
 const execute = promisify(execFile);
 const sourceFile = 'src/main/java/fixture/WslSpringConfiguration.java';
@@ -26,6 +27,61 @@ async function awaitCancellationMarker(file) {
     await delay(200);
   }
   throw Error('Gradle did not reach the cancellation fixture.');
+}
+
+async function verifyWslDebugger(debug, vscode, folder, source, document) {
+  const jar = vscode.Uri.joinPath(folder.uri, 'target', 'spring-workbench-1.0.0-debug.jar');
+  const result = vscode.Uri.joinPath(folder.uri, 'wsl-debug-result.txt');
+  const originalJar = await fs.readFile(jar.fsPath);
+  const stale = await debug.review(source, jar);
+  const approve = item => ({ token: item.token, allowWslJavaDebug: true });
+  try {
+    await fs.appendFile(jar.fsPath, '\n');
+    await assert.rejects(debug.start(source, approve(stale)), /changed after review/u);
+  } finally { await fs.writeFile(jar.fsPath, originalJar); }
+  await assert.rejects(debug.start(source, approve(stale)), /current WSL Java debug launch review/u);
+  await assert.rejects(fs.access(result.fsPath), { code: 'ENOENT' });
+
+  const line = document.getText().split(/\r?\n/u).findIndex(item => item.includes('// DEBUG_GATE'));
+  assert.ok(line > 0);
+  const breakpoint = new vscode.SourceBreakpoint(new vscode.Location(source, new vscode.Position(line, 0)));
+  const events = [];
+  const sessions = new Map();
+  const tracker = vscode.debug.registerDebugAdapterTrackerFactory('rocketbrain-java', { createDebugAdapterTracker(session) {
+    sessions.set(session.id, session);
+    return { onDidSendMessage(message) { if (message.type === 'event') events.push({ session, message }); } };
+  } });
+  vscode.debug.addBreakpoints([breakpoint]);
+  try {
+    const approval = await debug.review(source, jar);
+    assert.equal(approval.jarSha256, createHash('sha256').update(originalJar).digest('hex'));
+    const opened = await debug.start(source, approve(approval));
+    const session = await until(() => sessions.get(opened.sessionId), 20000);
+    const stop = reason => until(() => events.find(item => item.session.id === session.id && item.message.event === 'stopped' &&
+      item.message.body.reason === reason)?.message.body, 50000);
+    const paused = await stop('breakpoint');
+    const stack = (await session.customRequest('stackTrace', { threadId: paused.threadId })).stackFrames;
+    assert.match(stack[0].name, /WslSpringConfiguration\.main/u);
+    assert.equal(stack[0].line, line + 1);
+    assert.ok(sameWslPath(wslUnc(stack[0].source?.path), wslUnc(source.fsPath)));
+    const { scopes } = await session.customRequest('scopes', { frameId: stack[0].id });
+    const variables = await Promise.all(scopes.filter(scope => scope.variablesReference).map(scope =>
+      session.customRequest('variables', { variablesReference: scope.variablesReference })));
+    assert.ok(variables.flatMap(scope => scope.variables).some(entry => entry.name === 'answer' && entry.value === '42'));
+    await session.customRequest('next', { threadId: paused.threadId });
+    const stepped = await stop('step');
+    const stepStack = (await session.customRequest('stackTrace', { threadId: stepped.threadId })).stackFrames;
+    assert.equal(stepStack[0].line, line + 2);
+    vscode.debug.removeBreakpoints([breakpoint]);
+    await session.customRequest('continue', { threadId: stepped.threadId });
+    await until(async () => await fs.readFile(result.fsPath, 'utf8') === 'wsl-spring-linux-verified:42:Linux', 20000);
+    return { loopbackManagedDebugger: true, exactLinuxSourceBreakpoint: true, localValue: 42, stepped: true,
+      actualSpringProcessResumed: true, changedJarRejected: true, replayRejected: true };
+  } finally {
+    vscode.debug.removeBreakpoints([breakpoint]);
+    tracker.dispose();
+    await debug.stop();
+  }
 }
 
 async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build) {
@@ -74,12 +130,13 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build) {
   const jar = 'target/spring-workbench-1.0.0.jar';
   const compiled = 'build/classes/java/main/fixture/WslSpringConfiguration.class';
   await build(options, mapping.windows, 'maven', 'package', jar, /BUILD SUCCESS/u);
+  const javaDebug = await verifyWslDebugger(wsl.javaDebug, vscode, folder, source, document);
   await build(options, mapping.windows, 'gradle', 'classes', compiled, /BUILD SUCCESSFUL/u);
   for (const produced of [jar, compiled]) await linuxCommand(distribution, '/usr/bin/test', '-s', linux + '/' + produced);
   assert.ok((await fs.readFile(path.join(mapping.windows, compiled))).includes('wsl-spring-linux-verified'));
   return { openedInWindowsVscode: true, exactDistroAndPath: true, caseMismatchRejected: true, crossDistroRejected: true,
     editorSavedAndLinuxDigestMatched: true, rejectedChangedDescriptor: true, mavenGoal: 'package', gradleGoal: 'classes',
-    artifactsObservedFromLinux: true, compiledEditedSpringConfiguration: true };
+    artifactsObservedFromLinux: true, compiledEditedSpringConfiguration: true, javaDebug };
 }
 
 async function runWslChecks(api, vscode, checks) {
@@ -97,7 +154,7 @@ async function runWslChecks(api, vscode, checks) {
     + (folders.map(item => path.basename(item.uri.fsPath)).join(', ') || '(none)'));
   const { wsl } = api;
   const commands = await vscode.commands.getCommands(true);
-  for (const id of ['rocketbrain.wsl.distributions', 'rocketbrain.wsl.openProject', 'rocketbrain.wsl.reviewBuild', 'rocketbrain.wsl.cancelBuild']) {
+  for (const id of ['rocketbrain.wsl.distributions', 'rocketbrain.wsl.openProject', 'rocketbrain.wsl.reviewBuild', 'rocketbrain.wsl.cancelBuild', 'rocketbrain.wsl.debugJava']) {
     assert.ok(commands.includes(id), id);
   }
   assert.ok((await wsl.distributions()).includes(distribution));
@@ -143,7 +200,7 @@ async function runWslChecks(api, vscode, checks) {
   }
   assert.deepEqual(await wsl.mapping(distribution, folder.uri), mapping);
   const linuxOwned = await verifyLinuxWorkspace(wsl, vscode, distribution, folders, build);
-  checks.wsl = { commandCount: 4, mavenGoal: 'package', gradleGoal: 'classes', compiledSpringConfiguration: true,
+  checks.wsl = { commandCount: 5, mavenGoal: 'package', gradleGoal: 'classes', compiledSpringConfiguration: true,
     workspaceRoundTrip: true, rejectedOutsideWorkspace: true, rejectedChangedDescriptor: true,
     cancelledManagedBuild: true, distroStillAvailable: true, linuxOwned };
 }

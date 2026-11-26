@@ -6,11 +6,14 @@ const { randomUUID } = require('node:crypto');
 const debugType = 'rocketbrain-java';
 const containerMarker = '__rocketbrainManagedContainerAttach';
 const sshMarker = '__rocketbrainManagedSshAttach';
+const wslMarker = '__rocketbrainManagedWslAttach';
 const routes = {
   container: { marker: containerMarker, approval: 'allowContainerDebugging', targetRoot: 'containerRoot',
     name: 'Rocketbrain: Attach Managed Container JVM', review: 'its managed Dev Container' },
   ssh: { marker: sshMarker, approval: 'allowSshJavaDebug', targetRoot: 'remoteRoot',
-    name: 'Rocketbrain: Attach Reviewed SSH JVM', review: 'its verified SSH workspace' }
+    name: 'Rocketbrain: Attach Reviewed SSH JVM', review: 'its verified SSH workspace' },
+  wsl: { marker: wslMarker, approval: 'allowWslJavaDebug', targetRoot: 'wslRoot',
+    name: 'Rocketbrain: Debug WSL Java', review: 'its reviewed WSL Java launch' }
 };
 const permits = new Map();
 
@@ -93,7 +96,7 @@ function createManagedJavaAttach({ debug, openForward, closeForward, ready, kind
       await ready();
       if (disposed) throw Error('The managed JVM attach service is closed.');
       const forward = await openForward(root, { token: approval.token, allowLoopbackAccess: true,
-        ...(kind === 'ssh' && { sourceFile: approval.sourceFile }) });
+        ...(kind !== 'container' && { sourceFile: approval.sourceFile }) });
       if (disposed || !forward.sourceRoot || !forward[route.targetRoot] || forward.host !== '127.0.0.1' || forward.isClosed?.()) {
         await Promise.resolve().then(() => closeForward(root, forward.id)).catch(() => {});
         throw Error('Use a current reviewed Java attach forward.');
@@ -112,9 +115,10 @@ function createManagedJavaAttach({ debug, openForward, closeForward, ready, kind
           if (!await debug.startDebugging(folder, configuration)) throw Error('VS Code did not start the managed Java attach.');
           return started;
         })(), launchTimeout, 'The managed Java debugger did not start before its local port was released.');
-        if (kind === 'ssh' && (record.released || forward.isClosed?.())) throw Error('The reviewed Java attach channel closed.');
+        if (kind !== 'container' && (record.released || forward.isClosed?.())) throw Error('The reviewed Java attach channel closed.');
         return { state: 'started', sessionId: session.id, sourceRoot: forward.sourceRoot,
-          ...(kind === 'container' ? { containerId: forward.containerId } : { pid: forward.pid, sourceFile: forward.sourceFile }) };
+          ...({ container: { containerId: forward.containerId }, ssh: { pid: forward.pid, sourceFile: forward.sourceFile },
+            wsl: { sourceFile: forward.sourceFile, wslRoot: forward.wslRoot } })[kind] };
       } catch (error) {
         await stop(record);
         throw error;
