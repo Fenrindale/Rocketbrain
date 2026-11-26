@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.100.0",
+  "version": "0.102.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -209,12 +209,13 @@
       { "command": "rocketbrain.duckdb.extensions", "title": "Inspect DuckDB Extensions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.manageExtension", "title": "Manage Workspace DuckDB Extension", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.close", "title": "Close Local DuckDB", "category": "Rocketbrain", "enablement": "rocketbrain.duckdbConnected" },
-      { "command": "rocketbrain.mongodb.open", "title": "Connect to Local MongoDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.mongodb.open", "title": "Connect to MongoDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.mongodb.browse", "title": "Browse MongoDB Collections", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
       { "command": "rocketbrain.mongodb.newFind", "title": "New MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
       { "command": "rocketbrain.mongodb.run", "title": "Run Read-Only MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected && editorLangId == json" },
       { "command": "rocketbrain.mongodb.newAggregation", "title": "New MongoDB Aggregation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
       { "command": "rocketbrain.mongodb.runAggregation", "title": "Run Read-Only MongoDB Aggregation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected && editorLangId == json" },
+      { "command": "rocketbrain.mongodb.editDocumentField", "title": "Review MongoDB Document Field Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoEditable" },
       { "command": "rocketbrain.mongodb.close", "title": "Close MongoDB Connection", "category": "Rocketbrain", "enablement": "rocketbrain.mongoConnected" },
       { "command": "rocketbrain.jdbc.addDriver", "title": "Add JDBC Driver", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jdbc.profiles", "title": "Manage JDBC Profiles", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -268,6 +269,7 @@
       { "command": "rocketbrain.java.fileStructure", "title": "File Structure", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.previewFormatting", "title": "Preview Java Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == java" },
       { "command": "rocketbrain.kotlinEditor.previewFormatting", "title": "Preview Kotlin Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
+      { "command": "rocketbrain.kotlinEditor.previewRename", "title": "Review Kotlin Symbol Rename", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.java.goToSuperMethod", "title": "Go to Java Super Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.insertLiveTemplate", "title": "Insert Java Live Template", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.generateMembers", "title": "Generate Java Members", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
@@ -336,6 +338,7 @@
       { "command": "rocketbrain.data.captureTransferSource", "title": "Capture Table Copy Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.data.transfer", "title": "Copy Captured Rows", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.data.finishTransfer", "title": "Finish Table Copy", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.http.runWorkflow", "title": "Run HTTP Workflow", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
       { "command": "rocketbrain.http.run", "title": "Send HTTP Request", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted", "icon": "$(play)" },
       { "command": "rocketbrain.http.graphqlSchema", "title": "Inspect GraphQL Endpoint Schema", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
       { "command": "rocketbrain.http.websocketSessions", "title": "View WebSocket Transcript", "category": "Rocketbrain", "enablement": "editorLangId == rocketbrain-http && isWorkspaceTrusted" },
@@ -1010,6 +1013,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.java.reviewDelegatedCompile",
+        "title": "Review Delegated Java Compile",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.retryDelegatedCompile",
+        "title": "Review Failed Java Compile Retry",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.workbench.tasks",
         "title": "Choose Build Task",
         "category": "Rocketbrain"
@@ -1635,6 +1650,11 @@
         {
           "command": "rocketbrain.java.workbench.build",
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
+          "group": "project"
+        },
+        {
+          "command": "rocketbrain.java.reviewDelegatedCompile",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject && isWorkspaceTrusted",
           "group": "project"
         },
         {

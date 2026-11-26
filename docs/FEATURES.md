@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.100.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.102.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 150 |
-| 부분 구현 | 52 |
+| 구현 | 155 |
+| 부분 구현 | 47 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **87%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **88.2%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.100에서는 Gradle 카탈로그 starter 편집, MongoDB 집계, HTTP OAuth 2.0과 버전별 RETURNING 지원을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 187.5점에서 188점으로 바뀌었다.
+v0.102에서는 Gradle 복합 작업과 Java 증분 빌드, Kotlin 이름 변경, HTTP 요청 흐름, MongoDB TLS·셀 편집, 루틴의 역할 권한과 OpenBao 자격 증명 연동을 추가했다. 상태가 바뀐 항목은 5개이고 가중 점수는 188점에서 190.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -90,9 +90,9 @@ v0.100에서는 Gradle 카탈로그 starter 편집, MongoDB 집계, HTTP OAuth 2
 | IDEA-067 | IntelliJ IDEA | Micronaut 개발 | 부분 구현 |
 | IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 부분 구현 |
 | IDEA-069 | IntelliJ IDEA | Maven 프로젝트·목표·의존성 | 부분 구현 |
-| IDEA-070 | IntelliJ IDEA | Gradle·Kotlin DSL·Task 탐색 | 부분 구현 |
+| IDEA-070 | IntelliJ IDEA | Gradle·Kotlin DSL·Task 탐색 | 구현 |
 | IDEA-071 | IntelliJ IDEA | 모듈·혼합 빌드·프로젝트 인덱스 | 부분 구현 |
-| IDEA-072 | IntelliJ IDEA | 증분 빌드·빌드 도구 위임 | 부분 구현 |
+| IDEA-072 | IntelliJ IDEA | 증분 빌드·빌드 도구 위임 | 구현 |
 | IDEA-073 | IntelliJ IDEA | 실행 구성·환경·사전 작업·공유 | 구현 |
 | IDEA-074 | IntelliJ IDEA | 복수 서비스·Compound·실행 순서 | VS Code 재사용 |
 | IDEA-075 | IntelliJ IDEA | JVM 시작·프로세스/원격 연결 | 부분 구현 |
@@ -122,7 +122,7 @@ v0.100에서는 Gradle 카탈로그 starter 편집, MongoDB 집계, HTTP OAuth 2
 | IDEA-099 | IntelliJ IDEA | Docker·Compose·Registry 관리 | 부분 구현 |
 | IDEA-100 | IntelliJ IDEA | Kubernetes·Helm·클러스터 탐색 | 부분 구현 |
 | IDEA-101 | IntelliJ IDEA | 내장 터미널·셸·세션 | VS Code 재사용 |
-| IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 부분 구현 |
+| IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 구현 |
 | IDEA-103 | IntelliJ IDEA | OpenAPI·Swagger 편집·미리보기·코드 생성 | 구현 |
 | IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 구현 |
 | IDEA-105 | IntelliJ IDEA | IDE 안의 DB 연결·SQL·데이터 편집 | 부분 구현 |
@@ -147,7 +147,7 @@ v0.100에서는 Gradle 카탈로그 starter 편집, MongoDB 집계, HTTP OAuth 2
 | DG-004 | DataGrip | 사용자 JDBC JAR·드라이버 클래스 추가 | 구현 |
 | DG-005 | DataGrip | 드라이버 버전 교체·추가 라이브러리 | 구현 |
 | DG-006 | DataGrip | 사용자·비밀번호·무인증 모드 | 구현 |
-| DG-007 | DataGrip | 비밀정보 저장·저장하지 않기 | 부분 구현 |
+| DG-007 | DataGrip | 비밀정보 저장·저장하지 않기 | 구현 |
 | DG-008 | DataGrip | TLS CA·호스트 검증 | 구현 |
 | DG-009 | DataGrip | 클라이언트 인증서·truststore | 구현 |
 | DG-010 | DataGrip | SSH 터널·키·agent 인증 | 구현 |
@@ -221,7 +221,7 @@ v0.100에서는 Gradle 카탈로그 starter 편집, MongoDB 집계, HTTP OAuth 2
 | DG-078 | DataGrip | table create/alter 시각 designer | 구현 |
 | DG-079 | DataGrip | PK·FK·index·제약조건 편집 | 구현 |
 | DG-080 | DataGrip | 사용자·역할·권한 관리 | 구현 |
-| DG-081 | DataGrip | routine·view source 수정·deploy | 부분 구현 |
+| DG-081 | DataGrip | routine·view source 수정·deploy | 구현 |
 | DG-082 | DataGrip | 서로 다른 서버 schema/object 구조 diff | 구현 |
 | DG-083 | DataGrip | 선택 변경의 migration DDL 생성·검토·실행 | 부분 구현 |
 | DG-084 | DataGrip | DDL 파일을 가상 DB 의미 모델로 사용 | 구현 |

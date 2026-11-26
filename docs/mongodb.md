@@ -1,6 +1,8 @@
-# Local MongoDB document workbench
+# MongoDB document workbench
 
-Run **Rocketbrain: Connect to Local MongoDB** from the VS Code Command Palette. Enter the numeric loopback address, port, authentication database and SCRAM-SHA-256 credentials. Loopback points to the host running the Rocketbrain extension. Credentials are held for the connection session. A MongoDB account with the built-in `read` role can use the workbench for its authorized databases.
+Run **Rocketbrain: Connect to MongoDB** from the VS Code Command Palette. Choose **Verify TLS with a PEM CA** for a direct endpoint. Enter the DNS name or IP address from the server certificate, its port and authentication database. Choose the local public CA file and review its SHA-256 value before entering the SCRAM-SHA-256 credentials. Rocketbrain verifies the CA chain and the server name using TLS 1.2 or later. If the CA file changes after review or the certificate fails verification, the connection ends before queries can run.
+
+The **Local numeric loopback** mode connects to `127.0.0.1` or `::1` on the host running the extension. Credentials are held for the connection session. The workbench accepts a direct server endpoint and a MongoDB account with the built-in `read` role for its authorized databases. DNS seed lists, client certificates and multiple-server topologies are outside this connector's scope.
 
 Run **Rocketbrain: Browse MongoDB Collections** to choose an authorized database and a collection or view. This opens a JSON find editor. Save the editor with a `.mongo.json` suffix to reuse the query after reconnecting. **Rocketbrain: Run Read-Only MongoDB Find** opens a read-only JSON preview beside the query. The preview reports whether a row count or byte budget stopped the read. Closing the MongoDB connection clears retained previews.
 
@@ -18,11 +20,15 @@ Run **Rocketbrain: Browse MongoDB Collections** to choose an authorized database
 }
 ```
 
-Filters accept equality, comparisons, `$in`, `$nin`, `$exists`, `$and`, `$or` and `$nor`. Canonical Extended JSON literals support ObjectId, numeric BSON types, dates and binary values. Results preserve native BSON types in canonical Extended JSON, including integers beyond the JavaScript safe integer range. The query cap is 64 KiB, with up to 200 returned documents, a 256 KiB document budget, a 1 MiB preview budget and a five-second server read limit. The connection targets one loopback server.
+Filters accept equality, comparisons, `$in`, `$nin`, `$exists`, `$and`, `$or` and `$nor`. Canonical Extended JSON literals support ObjectId, numeric BSON types, dates and binary values. Results preserve native BSON types in canonical Extended JSON, including integers beyond the JavaScript safe integer range. The query cap is 64 KiB, with up to 200 returned documents, a 256 KiB document budget, a 1 MiB preview budget and a five-second server read limit.
 
 Run **New MongoDB Aggregation** and select an ordinary collection. The editor records the current collection UUID, its database, the pipeline and the preview limit. Edit the pipeline and run **Run Read-Only MongoDB Aggregation** to open the typed preview. Save it as `.mongo-aggregate.json` to reuse the pipeline against the same collection. A collection recreated with the same name needs a new editor to use its new UUID.
 
 The bounded pipeline supports `$match`, `$project`, `$group`, `$sort`, `$limit` and `$count`. For example, `{ "$group": { "_id": "$category", "total": { "$sum": "$amount" }, "count": { "$sum": 1 } } }` groups documents by category. Use ordinary field references and the existing Extended JSON filter types. Up to 16 stages use the same read and preview budgets as Find. The built-in `read` role exposes the required collection metadata. The server checks the UUID with the query. The workflow was verified on MongoDB 8.0.38 and handles a single ordinary collection. Views, other collection sources, scripting and write stages are outside its scope.
+
+To edit one existing field, explicitly enable **Allow reviewed single-field document edits** for the MongoDB connection. Your account needs permission to update the collection. Run **Review MongoDB Document Field Edit**, choose an ordinary collection and enter the document's ObjectId from Find. Select an observed top-level field and review its original BSON type and the new value. Editable values cover JSON strings, booleans, null and canonical `$numberInt` and `$numberLong` values. Each review applies once and expires after two minutes.
+
+The update pins the collection UUID, ObjectId and exact original field type and value. It checks the observed collection settings before sending the update and preserves MongoDB's document validation. A failed guard leaves the field untouched. If the connection drops while waiting for a write receipt, reopen Find and check the current document before making another edit.
 
 The official MongoDB Node.js driver is distributed under Apache-2.0 with its dependency notices included in the VSIX. MongoDB Community Server is a separately obtained SSPL component. The portable vendor runtime used for verification is outside the VSIX. [MongoDB licensing](https://www.mongodb.com/legal/licensing/community-edition)
 

@@ -19,6 +19,7 @@ An independent VS Code workbench for Java/Spring and MySQL/MariaDB. Support is d
 **Search Everywhere**는 파일, 워크스페이스 기호, 명령, 설정 키와 로컬 Git 브랜치·커밋을 함께 검색합니다. `#`, `>`, `@`, `%`는 각각 기호, 명령, 설정, Git으로 좁히고 `$`는 활성 MySQL·MariaDB 스키마의 객체를 검색합니다. Git 결과는 선택한 리비전을 읽기 전용으로 보여줍니다. 설정 검색에는 키와 공개 설정 설명을 사용합니다.
 
 **Java Projects**에서 관찰된 main·test·생성 소스와 각각의 빌드 출력 위치를 봅니다. 다른 프로젝트의 출력으로 확인된 의존성 항목을 열면 그 프로젝트로 이동합니다.
+**Discover Build Tasks**는 열린 작업 영역에 있는 Gradle 포함 빌드의 작업을 전체 경로(예: `:library:service:classes`)로 표시합니다. Groovy 및 Kotlin DSL의 실제 작업 모델을 읽으며, 검토한 설정·빌드 파일이 바뀌면 다시 검색한 뒤 작업을 실행해야 합니다.
 
 설치된 JetBrains 제품의 엔진·코드·복사한 화면 자산·내장 JBR을 사용하거나 배포하지 않습니다. 별도 JetBrains 구독이나 다른 Marketplace 확장을 요구하지 않습니다. 사용하는 공개 구성요소의 조건과 고지문은 [NOTICE](https://github.com/Fenrindale/Rocketbrain/blob/main/NOTICE.txt) 및 [third-party/licenses](https://github.com/Fenrindale/Rocketbrain/tree/main/third-party/licenses)에 보존합니다.
 
@@ -194,6 +195,8 @@ VSIX에서 `extension/dist/ide-mcp-server.js`를 추출하고, 같은 계정의 
 
 OAuth 2.0 Client Credentials 요청에는 `# @oauth-client {"tokenUrl":"{{issuer}}/token","clientId":"{{clientId}}","clientSecret":"{{secret.service}}","scope":"read"}`를 추가합니다. 비밀값은 **Set HTTP Environment Secret**에 저장합니다. 요청을 실행할 때마다 새 Bearer 토큰을 받아 해당 요청에 사용합니다. 발급·리소스 주소에 HTTPS를 쓰거나 개발용으로 같은 루프백 HTTP origin을 선택합니다. [OAuth 2.0 Client Credentials](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4)
 
+**Run HTTP Workflow**는 `# @step 이름`을 붙인 요청을 최대 8개까지 순서대로 검토하고 실행합니다. `# @capture count $.people`로 응답의 JSON 스칼라를 읽고, 다음 요청의 쿼리·헤더·본문에서 `{{capture.count}}`로 참조합니다. 요청은 검토한 동일 origin과 경로를 사용합니다. HTTP 오류, 실패한 검사 또는 읽을 수 없는 값이 생기면 이후 요청을 건너뜁니다. 값과 쿠키는 해당 실행 동안만 사용하며 실행 결과에는 단계별 상태와 검사만 표시합니다.
+
 gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 기준 `Proto: api/service.proto` 헤더를 사용합니다. 단일 요청은 JSON 객체, 클라이언트 스트림은 객체 배열을 입력합니다. 단항, 서버 스트림, 클라이언트 스트림, 양방향 스트림의 결과를 출력 창에서 확인할 수 있습니다. 현재는 자체 포함 `.proto` 파일을 사용합니다.
 
 **Review WebDAV Deployment**는 `rocketbrain.deploy.webdav`에 정의한 로컬·원격 폴더와 제외 패턴을 사용합니다. **Set WebDAV Password**로 필요한 비밀번호를 저장하고, 파일을 선택해 diff를 검토합니다. **Upload Reviewed WebDAV Files**는 비교한 ETag를 조건으로 전송하고 원격 파일이 바뀌면 충돌을 표시합니다. 기존 원격 폴더의 새 파일과 변경 파일을 업로드할 수 있습니다.
@@ -322,6 +325,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - SSH 연결 프로필에서 **Use one agent identity**를 선택하면 로컬 에이전트의 named pipe 또는 Unix socket과 OpenSSH Ed25519 공개 키 파일을 지정할 수 있습니다. 시스템 OpenSSH는 검증한 known_hosts와 선택한 키를 사용합니다. 연결 테스트에 공개 키 지문을 표시하며, 저장한 공개 키 파일이 바뀌면 프로필을 다시 검증합니다. 로컬 에이전트 주소와 키 파일 경로는 공유 프로필에서 제외합니다.
 - SSH 프로필에서 **SSH password** 또는 **Encrypted OpenSSH private key**를 선택할 수 있습니다. 관리자가 별도로 알려준 서버 호스트 키의 `SHA256:…` 지문을 입력하세요. 연결할 때마다 입력한 SSH 비밀번호와 키 암호는 저장하거나 내보내지 않습니다. 암호화 키에는 OpenSSH 형식의 AES·bcrypt 키 파일을 사용합니다. [OpenSSH 호스트 키 지문](https://man.openbsd.org/ssh-keygen.1)
 - 연결 프로필에는 TCP, Unix 도메인 소켓, Windows 명명된 파이프 중 실행 환경과 맞는 전송을 선택합니다. 공유 프로필에는 비밀번호와 로컬 경로를 담지 않으며, 가져온 로컬 연결의 주소는 해당 컴퓨터에서 입력합니다.
+- **OpenBao KV v2**는 검토한 경로에서 DB 비밀번호를 읽습니다. 연결할 때 입력한 토큰과 가져온 비밀번호는 저장하지 않으며, 공유 프로필을 가져온 뒤에는 각 작업 공간에서 참조를 구성합니다. [OpenBao 연결 설정](docs/openbao-credentials.md)
 - **Save Database Metadata for Offline Use**로 카탈로그의 테이블·뷰와 열을 작업 공간에 저장합니다. 연결을 끊고 **Open Cached Database Metadata**를 선택하면 캡처 시각과 함께 SQL 완성에 사용합니다. 같은 연결로 돌아오면 현재 구조를 확인하고 바뀐 캡처를 무효화합니다.
 - **New Federated SELECT**에서 `source1`과 `source2`의 테이블을 참조하고 **Run Federated SELECT**에서 저장한 연결을 하나씩 선택합니다. 정수 키의 INNER 또는 LEFT JOIN을 지원합니다. 결과에서 출처별 투영 열, 서버에 전송한 필터와 가져온 행 수를 볼 수 있습니다. 각 서버는 별도의 읽기 시점을 사용합니다.
 - **Set SQL Session Isolation**은 열린 SQL 콘솔의 연결에 격리 수준을 적용하고 서버 값을 다시 확인합니다. 트랜잭션과 검토 중인 그리드 초안이 있으면 먼저 정리해야 합니다.
@@ -459,5 +463,7 @@ Use **Review Database Account Lock or Unlock** for an exact MySQL or MariaDB acc
 **Review MariaDB Package Call** supports matching public Oracle-mode function signatures with scalar OUT and IN OUT parameters. Review the typed inputs, invocation and stored sources together. The dedicated read-only session captures the return value and output parameters in separate results, then rolls back.
 
 A reviewed scalar function replacement can preserve direct EXECUTE grants issued by its owner to named login accounts. The SQL review shows the grants to restore. Stop callers and external schema or grant changes during the non-atomic operation. The retained original supports recovery after an interrupted grant replay.
+
+The same review can preserve an owner-issued `EXECUTE` grant to an observed role. The review shows its explicit nested role assignments and default-role settings. It also identifies supported same-schema `SQL SECURITY INVOKER` views that project the function result from numeric literals or an ordinary numeric base-table input. Deployment and recovery recheck those views and inputs, including their object-level grants. Pause callers and concurrent role, grant and schema changes while the function is replaced. A changed dependency or permission blocks guarded recovery. [MySQL roles](https://dev.mysql.com/doc/refman/8.4/en/roles.html) · [MariaDB role assignments](https://mariadb.com/docs/server/reference/system-tables/the-mysql-database-tables/mysql-roles_mapping-table)
 
 The table designer supports stored generated child columns in reviewed composite foreign keys with restrictive updates. It also accepts an ascending BTREE index that starts with ordinary foreign-key columns and ends with a generated column. Preview checks the selected engine's action rules. Rebuilding copies the input columns and verifies the newly generated values before publishing.

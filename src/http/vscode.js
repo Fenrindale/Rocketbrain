@@ -1,11 +1,12 @@
 'use strict';
 
-const { createHash } = require('node:crypto');
+const { createHash,randomUUID } = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { requestAt,resolveRequest,sendRequest } = require('./client');
 const { readWorkspaceBodyFile } = require('./body-file');
 const { HttpCookieJars } = require('./cookie-jar');
+const { previewWorkflow,runWorkflow } = require('./workflow');
 const { websocketWorkbench } = require('./websocket');
 
 async function readProto(folder,value) {
@@ -31,7 +32,7 @@ async function readProto(folder,value) {
 const language = 'rocketbrain-http';
 const validName = /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/;
 const ids = {
-  run:'rocketbrain.http.run',environment:'rocketbrain.http.environment',secret:'rocketbrain.http.saveSecret',
+  run:'rocketbrain.http.run',workflow:'rocketbrain.http.runWorkflow',environment:'rocketbrain.http.environment',secret:'rocketbrain.http.saveSecret',
   schema:'rocketbrain.http.graphqlSchema',websocketSessions:'rocketbrain.http.websocketSessions',
   websocketSend:'rocketbrain.http.websocketSend',websocketClose:'rocketbrain.http.websocketClose'
 };
@@ -40,6 +41,7 @@ function registerHttpTools(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain HTTP');
   const transcript = vscode.window.createOutputChannel('Rocketbrain WebSocket');
   const running = new Set();
+  const workflows = new Map();
   const cookies = new HttpCookieJars();
   let disposed=false, selectedSession, pendingRender, renderTimer;
   const connections=websocketWorkbench(session=>{
@@ -242,16 +244,98 @@ function registerHttpTools(context, vscode) {
     output.show(true);
     return response;
   }
+  async function reviewWorkflow(document=activeDocument()) {
+    const {key,folder}=workspace(document), version=document.version, chosen=currentEnvironment(document,key);
+    const attachments = new Map();
+    const assertFresh=()=>{
+      const now=currentEnvironment(document,key);
+      if (workspace(document).key!==key || document.version!==version || now.name!==chosen.name ||
+          JSON.stringify(now.values)!==JSON.stringify(chosen.values)) {
+        throw Error('The workflow document or environment changed. Review it again.');
+      }
+    };
+    const plan=await previewWorkflow(document.getText(),chosen.values,{async readBodyFile(file,limit) {
+      const bytes=await readWorkspaceBodyFile(folder.uri.fsPath,file,limit);
+      const hash=createHash('sha256').update(bytes).digest('hex');
+      if (attachments.has(file) && attachments.get(file)!==hash) throw Error('A workflow attachment changed during review.');
+      attachments.set(file,hash);
+      return bytes;
+    }});
+    assertFresh();
+    for(const [id,entry] of workflows) if(entry.expires<Date.now()) workflows.delete(id);
+    if(workflows.size>=8) workflows.delete(workflows.keys().next().value);
+    const id=randomUUID();
+    workflows.set(id,{plan,assertFresh,folder,key,chosen,attachments,expires:Date.now()+120000});
+    return {id,origin:plan.origin,environment:chosen.name,steps:structuredClone(plan.destinations)};
+  }
+  async function executeWorkflow(id,{approved=false,signal}={}) {
+    trust();
+    if (approved!==true) throw Error('Approve the ordered HTTP workflow before running it.');
+    const entry=workflows.get(id);
+    workflows.delete(id);
+    if (!entry || entry.expires<Date.now()) throw Error('Review this HTTP workflow again before running it.');
+    entry.assertFresh();
+    const {plan,assertFresh,folder,key,chosen,attachments}=entry;
+    const controller=new AbortController();
+    running.add(controller);
+    const localCookies=new HttpCookieJars();
+    const bounded=AbortSignal.any([controller.signal,AbortSignal.timeout(90000),...(signal?[signal]:[])]);
+    try {
+      return await runWorkflow(plan,{assertFresh,signal:bounded,
+        prepare:(request,captureValues)=>resolveRequest(request,chosen.values,
+          name=>context.secrets.get(secretKey(key,chosen.name,name)),{captureValues,async readBodyFile(file,limit) {
+            const bytes=await readWorkspaceBodyFile(folder.uri.fsPath,file,limit);
+            if (attachments.get(file)!==createHash('sha256').update(bytes).digest('hex')) {
+              throw Error('A workflow attachment changed. Review the workflow again.');
+            }
+            return bytes;
+          }}),
+        send:ready=>sendRequest(ready,{signal:bounded,
+          cookieSession:ready.cookieJar&&localCookies.session(key,chosen.name,ready.cookieJar,ready.url)})
+      });
+    } finally {
+      running.delete(controller);
+      localCookies.dispose();
+    }
+  }
+  async function runWorkflowEditor() {
+    const review=await reviewWorkflow();
+    const approval='Run Workflow';
+    const detail=review.steps.map(step=>step.name+' · '+step.method+' '+step.path).join('\n');
+    try {
+      if (await vscode.window.showWarningMessage('Send '+review.steps.length+' ordered HTTP requests to '+review.origin+'?',
+        {modal:true,detail},approval)!==approval) return;
+      const result=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,
+        title:'Running HTTP Workflow',cancellable:true},async(_,token)=>{
+        const controller=new AbortController();
+        const subscription=token.onCancellationRequested(()=>controller.abort());
+        try {
+          if(token.isCancellationRequested) controller.abort();
+          return await executeWorkflow(review.id,{approved:true,signal:controller.signal});
+        } finally { subscription.dispose(); }
+      });
+      output.clear();
+      output.appendLine('HTTP workflow '+result.state+' · '+review.environment);
+      for(const step of result.executed) {
+        output.appendLine(step.name+' · HTTP '+step.status+' · '+step.captured+' captured');
+        for(const check of step.checks) output.appendLine((check.passed?'PASS ':'FAIL ')+(check.name||check.kind));
+      }
+      if(result.reason==='capture-invalid') output.appendLine('The workflow stopped because a response capture was unavailable.');
+      output.show(true);
+      return result;
+    } finally { workflows.delete(review.id); }
+  }
   const register=(id,action)=>vscode.commands.registerCommand(id,async()=>{
     try { return await action(); }
     catch (error) { if(!disposed) await vscode.window.showErrorMessage('Rocketbrain HTTP: '+error.message); }
   });
-  const subscriptions=[register(ids.run,runEditor),register(ids.environment,selectEnvironment),register(ids.secret,saveSecret),
+  const subscriptions=[register(ids.run,runEditor),register(ids.workflow,runWorkflowEditor),register(ids.environment,selectEnvironment),register(ids.secret,saveSecret),
     register(ids.schema,()=>runEditor(true)),register(ids.websocketSessions,showSessions),
     register(ids.websocketSend,sendMessage),register(ids.websocketClose,closeSocket)];
-  return {run,storeSecret,webSocket,dispose(){
+  return {run,storeSecret,webSocket,workflow:{review:reviewWorkflow,run:executeWorkflow},dispose(){
     if(disposed)return;
     disposed=true;
+    workflows.clear();
     for (const controller of running) controller.abort();
     connections.dispose();
     cookies.dispose();

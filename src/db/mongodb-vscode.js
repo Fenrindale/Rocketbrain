@@ -1,6 +1,6 @@
 'use strict';
 
-const { MongoDbError, openMongoDb, parseMongoFind, parseMongoAggregation } = require('./mongodb');
+const { MongoDbError, openMongoDb, parseMongoFind, parseMongoAggregation, inspectMongoTlsCa } = require('./mongodb');
 
 const resultScheme = 'rocketbrain-mongodb-result';
 const commandPrefix = 'rocketbrain.mongodb.';
@@ -32,6 +32,7 @@ function registerMongoDb(context, vscode) {
     const old = selected;
     selected = undefined;
     void vscode.commands.executeCommand('setContext', 'rocketbrain.mongoConnected', false);
+    void vscode.commands.executeCommand('setContext', 'rocketbrain.mongoEditable', false);
     await old?.close();
   }
 
@@ -51,6 +52,7 @@ function registerMongoDb(context, vscode) {
       selected = next;
       clearPreviews();
       void vscode.commands.executeCommand('setContext', 'rocketbrain.mongoConnected', true);
+      void vscode.commands.executeCommand('setContext', 'rocketbrain.mongoEditable', next.source.reviewedEdits === true);
       await old?.close().catch(() => {});
       return next.source;
     } finally {
@@ -61,18 +63,26 @@ function registerMongoDb(context, vscode) {
   async function use(method, args) {
     trusted();
     const connection = selected;
-    if (!connection) throw new MongoDbError('Connect to a local MongoDB instance first.');
+    if (!connection) throw new MongoDbError('Connect to a MongoDB server first.');
     const result = await connection[method](...args);
     trusted();
-    if (selected !== connection) throw new MongoDbError('The MongoDB connection changed.', 'ROCKETBRAIN_MONGO_CANCELLED');
+    if (selected !== connection && method !== 'applyEdit') throw new MongoDbError('The MongoDB connection changed.', 'ROCKETBRAIN_MONGO_CANCELLED');
     return result;
+  }
+
+  function prepareEdit(...args) {
+    trusted();
+    if (!selected) throw new MongoDbError('Connect to a MongoDB server first.');
+    return selected.prepareEdit(...args);
   }
 
   const api = { open, close, source: () => vscode.workspace.isTrusted ? selected?.source ?? null : null,
     databases: options => use('databases', [options]), collections: (database, options) => use('collections', [database, options]),
     find: (source, options) => use('find', [source, options]),
     inspectAggregation: (target, options) => use('inspectAggregation', [target, options]),
-    aggregate: (source, options) => use('aggregate', [source, options]) };
+    aggregate: (source, options) => use('aggregate', [source, options]),
+    inspectDocumentEdit: (target, options) => use('inspectDocumentEdit', [target, options]),
+    prepareEdit, applyEdit: (review, approved, options) => use('applyEdit', [review, approved, options]) };
 
   context.subscriptions.push({ dispose: () => { void close().catch(() => {}); } },
     vscode.workspace.onDidCloseTextDocument(document => generatedQueries.delete(document.uri.toString())));
@@ -131,7 +141,7 @@ function registerMongoDb(context, vscode) {
 
   async function newFind(target) {
     trusted();
-    if (!selected) throw new MongoDbError('Connect to a local MongoDB instance first.');
+    if (!selected) throw new MongoDbError('Connect to a MongoDB server first.');
     target ??= await pickCollection();
     if (!target) return;
     const source = JSON.stringify({ database: target.database, collection: target.collection, filter: {}, limit: 50 }, null, 2);
@@ -141,7 +151,7 @@ function registerMongoDb(context, vscode) {
 
   async function newAggregation(target) {
     trusted();
-    if (!selected) throw new MongoDbError('Connect to a local MongoDB instance first.');
+    if (!selected) throw new MongoDbError('Connect to a MongoDB server first.');
     target ??= await pickCollection(true);
     if (!target) return;
     const observed = await progress('Inspecting MongoDB Collection Identity', options => api.inspectAggregation(target, options));
@@ -174,20 +184,48 @@ function registerMongoDb(context, vscode) {
 
   command('open', async () => {
     trusted();
-    const host = await vscode.window.showQuickPick(['127.0.0.1', '::1'], { title: 'Local MongoDB Address' });
+    const mode = await vscode.window.showQuickPick([{ label: 'Verify TLS with a PEM CA', tls: true },
+      { label: 'Local numeric loopback', tls: false }], { title: 'MongoDB Connection Security' });
+    if (!mode) return;
+    const host = mode.tls ? (await vscode.window.showInputBox({ title: 'MongoDB Server DNS Name or IP Address', value: 'localhost' }))?.trim() :
+      await vscode.window.showQuickPick(['127.0.0.1', '::1'], { title: 'Local MongoDB Address' });
     if (!host) return;
     const port = await vscode.window.showInputBox({ title: 'MongoDB Port', value: '27017',
       validateInput: value => /^\d{1,5}$/.test(value) && +value >= 1 && +value <= 65535 ? undefined : 'Enter a port from 1 to 65535.' });
     if (!port) return;
     const authSource = await vscode.window.showInputBox({ title: 'Authentication Database', value: 'admin' });
     if (authSource === undefined) return;
+    let tls;
+    if (mode.tls) {
+      const [file] = await vscode.window.showOpenDialog({ title: 'Select the MongoDB CA Certificate File',
+        filters: { 'PEM certificates': ['pem', 'crt', 'cer'] } }) || [];
+      if (file?.scheme !== 'file' || file.authority) return;
+      const ca = await progress('Inspecting MongoDB CA Certificates', options => inspectMongoTlsCa(file.fsPath, options));
+      const action = 'Approve MongoDB Trust';
+      const accepted = await vscode.window.showWarningMessage('Verify this MongoDB endpoint using the reviewed CA file?',
+        { modal: true, detail: [host + ' · port ' + port, file.fsPath, 'File SHA-256 ' + ca.sha256, ...ca.fingerprints].join('\n') }, action);
+      if (accepted !== action) return;
+      tls = { caPath: file.fsPath, caSha256: ca.sha256 };
+    }
     const username = await vscode.window.showInputBox({ title: 'MongoDB Username' });
     if (username === undefined) return;
     const password = await vscode.window.showInputBox({ title: 'MongoDB Password', password: true,
       prompt: 'The password is used for this connection session.' });
     if (password === undefined) return;
-    const source = await progress('Connecting to Local MongoDB', options => open({ host, port: Number(port), authSource, username, password }, options));
-    await vscode.window.showInformationMessage('Connected to local MongoDB. Use Browse MongoDB Collections to open a find editor.');
+    const access = await vscode.window.showQuickPick([{ label: 'Read-only Find and Aggregation', edits: false },
+      { label: 'Allow reviewed single-field document edits', edits: true }], { title: 'MongoDB Connection Access' });
+    if (!access) return;
+    if (access.edits) {
+      const action = 'Approve Reviewed Edits';
+      const accepted = await vscode.window.showWarningMessage('Allow reviewed MongoDB field edits for this connection session?',
+        { modal: true, detail: [host + ' · port ' + port, 'Authentication database ' + authSource,
+          'MongoDB must grant the account permission to update the chosen collection. Each field change requires its own review.'].join('\n') }, action);
+      if (accepted !== action) return;
+    }
+    const source = await progress('Connecting to MongoDB', options => open({ host, port: Number(port), authSource, username,
+      password, tls, reviewedEdits: access.edits }, options));
+    void vscode.window.showInformationMessage('MongoDB connected to ' + source.host + (source.transport === 'tls-verified' ? ' with verified TLS.' :
+      ' on the local loopback interface.'));
     return source;
   });
   command('close', close);
@@ -203,6 +241,31 @@ function registerMongoDb(context, vscode) {
     const source = queryText('aggregation', '.mongo-aggregate.json');
     const result = await progress('Running Read-Only MongoDB Aggregation', options => api.aggregate(source, options));
     return { ...result, preview: await showResult(result) };
+  });
+  command('editDocumentField', async () => {
+    trusted();
+    if (selected?.source.reviewedEdits !== true) throw new MongoDbError('Open a MongoDB connection approved for reviewed field edits.');
+    const target = await pickCollection(true);
+    if (!target) return;
+    const id = await vscode.window.showInputBox({ title: 'MongoDB Document ObjectId', prompt: 'Copy the 24-character ObjectId from Find' });
+    if (id === undefined) return;
+    const snapshot = await progress('Inspecting MongoDB Document', options => api.inspectDocumentEdit({ ...target, objectId: id.trim() }, options));
+    const field = await vscode.window.showQuickPick(snapshot.fields.map(item => ({
+      label: item.name, description: item.type, detail: JSON.stringify(item.value).slice(0, 180), item
+    })), { title: 'Choose an Observed Document Field' });
+    if (!field) return;
+    const value = await vscode.window.showInputBox({ title: 'New MongoDB BSON Field Value', value: JSON.stringify(field.item.value),
+      prompt: 'Enter one JSON string, boolean, null, or canonical $numberInt or $numberLong object', ignoreFocusOut: true });
+    if (value === undefined) return;
+    const edit = api.prepareEdit(snapshot.id, field.item.name, value);
+    const action = 'Commit MongoDB Field';
+    const accepted = await vscode.window.showWarningMessage('Commit this exact MongoDB field change?',
+      { modal: true, detail: [edit.database + '.' + edit.collection, 'ObjectId ' + edit.objectId, 'Field ' + edit.field,
+        'Before (' + edit.beforeType + ')  ' + JSON.stringify(edit.before), 'After (' + edit.afterType + ')  ' + JSON.stringify(edit.after)].join('\n') }, action);
+    if (accepted !== action) return;
+    const result = await progress('Committing MongoDB Field', options => api.applyEdit(edit.id, true, options));
+    void vscode.window.showInformationMessage('MongoDB confirmed the single-field change.');
+    return result;
   });
 
   return api;

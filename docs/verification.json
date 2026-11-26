@@ -1,25 +1,25 @@
 {
-  "version": "0.100.0",
-  "verifiedAt": "2026-11-26T02:03:20.243Z",
+  "version": "0.102.0",
+  "verifiedAt": "2026-11-26T02:32:33.223Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.100.0.vsix",
-    "sha256": "920a08788c48f73356f3903ddf08e72c634dc9616e9717f35880eef9e27ad527",
-    "bytes": 3959617,
+    "name": "rocketbrain-0.102.0.vsix",
+    "sha256": "0fc1090ba5b582431079e8d8d4e89fad54ca1ba5ece4346abc95f656bc6b203c",
+    "bytes": 3988506,
     "files": 22
   },
   "source": {
-    "frozenPublicInputs": 2309,
-    "inputVectorSha256": "d4327a98b987da012226e25ea21a8ec24cd93dd23be87239b3b87cec93e76d28",
+    "frozenPublicInputs": 2340,
+    "inputVectorSha256": "9662676c1cf4a69ecd29d786997ec6d93f04188106022915846562202fc7f37d",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1921,
-    "pass": 1764,
+    "tests": 1941,
+    "pass": 1782,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 157,
+    "skipped": 159,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,22 +29,38 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 4,
+      "groupCount": 8,
       "groups": [
         {
-          "group": "springGradleCatalog",
+          "group": "gradleCompositeTasks",
           "checks": 1
         },
         {
-          "group": "mongoAggregation",
+          "group": "kotlinRename",
           "checks": 1
         },
         {
-          "group": "httpOAuth",
+          "group": "mongoTls",
           "checks": 1
         },
         {
-          "group": "sqlReturning",
+          "group": "functionRoleDeployment",
+          "checks": 1
+        },
+        {
+          "group": "javaDelegatedBuild",
+          "checks": 1
+        },
+        {
+          "group": "httpWorkflow",
+          "checks": 1
+        },
+        {
+          "group": "mongoEdit",
+          "checks": 1
+        },
+        {
+          "group": "openBaoProfiles",
           "checks": 1
         }
       ],
@@ -59,22 +75,38 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 4,
+      "groupCount": 8,
       "groups": [
         {
-          "group": "springGradleCatalog",
+          "group": "gradleCompositeTasks",
           "checks": 1
         },
         {
-          "group": "mongoAggregation",
+          "group": "kotlinRename",
           "checks": 1
         },
         {
-          "group": "httpOAuth",
+          "group": "mongoTls",
           "checks": 1
         },
         {
-          "group": "sqlReturning",
+          "group": "functionRoleDeployment",
+          "checks": 1
+        },
+        {
+          "group": "javaDelegatedBuild",
+          "checks": 1
+        },
+        {
+          "group": "httpWorkflow",
+          "checks": 1
+        },
+        {
+          "group": "mongoEdit",
+          "checks": 1
+        },
+        {
+          "group": "openBaoProfiles",
           "checks": 1
         }
       ],
@@ -85,69 +117,117 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-052": {
-      "scope": "Gradle 9.1.0과 Spring Boot 4.1.2에서 별칭에 묶인 starter와 JDBC 드라이버, 변경 전후, Undo/Redo와 실제 Boot JAR 실행을 확인했다.",
+    "IDEA-044": {
+      "scope": "충돌과 미저장 변경, 다른 프로젝트 보존 및 네이티브 Undo/Redo를 검증했다.",
       "runtimeGroups": [
-        "springGradleCatalog"
+        "kotlinRename"
+      ]
+    },
+    "IDEA-070": {
+      "scope": "실제 Gradle에서 별칭이 있는 포함 빌드의 서비스 작업과 컴파일을 확인했다. 검토 후 Kotlin 빌드 스크립트가 바뀌면 거부했다.",
+      "runtimeGroups": [
+        "gradleCompositeTasks"
+      ]
+    },
+    "IDEA-072": {
+      "scope": "실제 Spring 프로젝트에서 출력 재사용, 미저장 또는 오래된 검토 거부, 컴파일 실패와 clean 없이 고친 뒤 재시도를 확인했다.",
+      "runtimeGroups": [
+        "javaDelegatedBuild"
       ]
     },
     "IDEA-102": {
-      "scope": "소유 OAuth 시험 서버와 실제 Spring JDBC 응답에서 정확한 폼 인증, 잘못된 자격 증명 거부, Bearer 값 가리기와 설치판 SecretStorage를 확인했다.",
+      "scope": "실제 Spring JDBC 값을 두 번째 요청에 전달했다. 검토가 바뀌거나 필요한 값이 빠지면 이후 요청을 멈췄다.",
       "runtimeGroups": [
-        "httpOAuth"
+        "httpWorkflow"
       ]
     },
     "DG-003": {
-      "scope": "실제 MongoDB 8.0.38에서 저장한 파이프라인과 설치판 편집기, 결과 보존, 재생성된 컬렉션·쓰기·외부 조회 거부를 확인했다.",
+      "scope": "실제 MongoDB 8.0.38에서 TLS와 SCRAM, 64비트 BSON·NULL, 제약 검사, 컬렉션 재생성·편집 충돌 거부를 확인했다.",
       "runtimeGroups": [
-        "mongoAggregation"
+        "mongoTls",
+        "mongoEdit"
       ]
     },
-    "DG-031": {
-      "scope": "MariaDB 11.4.8의 반환 구문 여섯 개와 무효 사례 다섯 개를 실제 실행했다. MySQL 8.4.13의 무효 사례 열한 개, 선언한 ANSI_QUOTES 모드, 설치판 진단 및 반환 열 완성을 확인했다.",
+    "DG-007": {
+      "scope": "OpenBao 2.7.3에서 일회 권한, 실제 DB 암호 회전, 승인 취소와 잘못된 CA 거부, 내보낸 프로필과 저장소에 민감값이 없는 것을 확인했다.",
       "runtimeGroups": [
-        "sqlReturning"
+        "openBaoProfiles"
+      ]
+    },
+    "DG-081": {
+      "scope": "중첩 역할을 적용한 실제 호출자와 거부 대조, 종속 INVOKER 뷰·권한, 재연결 복구 및 검토 후 권한·기본 역할 변경 거부를 확인했다.",
+      "runtimeGroups": [
+        "functionRoleDeployment"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 508,
+    "sourceCorrespondences": 517,
     "sourceConfidence": "inferred",
     "archiveEntries": 22,
     "archiveConfidence": "observed"
   },
+  "nativePayloadEquivalence": {
+    "files": 22,
+    "testedArchiveSha256": "9999fe18324164392a9bf356e79937a16962ee233deee64c7636fafe51d66b9f",
+    "testedInputVectorSha256": "554998bf756b94b485ef814c57d8f4fcf6b4fdc4b20cd556ec10f60ccc566d0a",
+    "onlySourceChanges": [
+      "test/gradle-composite-tasks-host.js"
+    ]
+  },
   "progress": {
     "counts": {
-      "implemented": 150,
-      "partial": 52,
+      "implemented": 155,
+      "partial": 47,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 188,
-    "previousWeightedPoints": 187.5,
+    "weightedPoints": 190.5,
+    "previousWeightedPoints": 188,
     "targetWeightedPoints": 216,
-    "referencePercent": 87,
+    "referencePercent": 88.2,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "DG-031",
+        "id": "IDEA-070",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-072",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-102",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-007",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-081",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "MongoDB 집계는 지원하는 읽기 연산과 선택한 한 컬렉션을 사용한다.",
-    "HTTP OAuth 2.0은 같은 출처의 client credentials를 사용한다.",
-    "SQL 모드는 문서에서 선언값을 확인할 수 있는 범위를 해석한다.",
+    "도구에 등록한 Maven·Gradle 프로젝트의 검토 대상 작업을 빌드한다.",
+    "MongoDB 편집은 별도 승인한 컬렉션의 검토한 한 필드에 적용한다.",
+    "루틴 변경은 검토한 함수·뷰와 관찰한 역할 및 권한에 묶는다.",
     "IDEA-001과 DG-095가 요구하는 창 배치는 일반 VS Code 확장 API의 범위를 벗어난다. 현행 가중 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Gradle Kotlin DSL과 composite 빌드 작업 검토",
-    "Kotlin 이름 변경과 MongoDB TLS, 루틴 역할 배포"
+    "SQLite 파일과 PostgreSQL 실측 계획",
+    "Hibernate 복합 키 조회와 Kotlin 코루틴 디버깅",
+    "로컬 SQL과 ACP의 데이터베이스 작업 검토"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

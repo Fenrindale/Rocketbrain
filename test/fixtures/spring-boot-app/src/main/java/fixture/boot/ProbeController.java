@@ -76,6 +76,11 @@ public class ProbeController {
         }
         return ResponseEntity.ok(Map.of("people", testingState().get("people"), "echo", auth));
     }
+    @GetMapping("/probe/http-workflow/verify")
+    public Map<String,Object> verifyHttpWorkflow(@RequestParam long expected) {
+        long people = ((Number) testingState().get("people")).longValue();
+        return Map.of("people", people, "captureMatches", expected == people);
+    }
     @GetMapping("/probe") public Map<String,Object> probe() {
         Map<String,Object> result = service.probe();
         result.putAll(service.invalidQuery());

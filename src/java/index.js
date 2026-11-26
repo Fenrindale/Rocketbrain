@@ -233,6 +233,8 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(api.move,api.memberMove,api.changeSignature,api.safeDelete);
   api.workbench=require('./workbench').registerJavaWorkbench(context,vscode,api,output);
   subscriptions.push(api.workbench);
+  api.delegatedBuild=require('./delegated-build-vscode').registerDelegatedBuild(vscode,{workbench:api.workbench,output});
+  subscriptions.push(api.delegatedBuild);
   api.groovy=require('./groovy-vscode').registerGroovyWorkbench(vscode,api);
   api.quarkus=require('./quarkus-vscode').registerQuarkusWorkbench(vscode,api);
   api.jakarta=require('./jakarta-vscode').registerJakartaWorkbench(vscode,api);

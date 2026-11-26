@@ -5,6 +5,7 @@ const { loadSource } = require('./object-source');
 const D = require('./schema-designer-ddl');
 const A = require('./schema-trigger-ast');
 const G = require('./schema-dependency-graph');
+const Views = require('./object-editor-function-dependents');
 const { bodyMentions } = require('./schema-programs');
 const { tokenize } = require('./sql-policy');
 
@@ -92,7 +93,7 @@ function eventVisible(grants, schemas) {
   return visibility.has('*') || schemas.every(schema => visibility.has(schema));
 }
 
-async function inspectFunctionDependents(read, definition) {
+async function inspectFunctionDependents(read, definition, { missingRoutine = false } = {}) {
   const grants = await read('SHOW GRANTS');
   await G.grants(async () => grants, definition.schema);
   const schemas = await read('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE BINARY SCHEMA_NAME NOT IN ' + systemSchemas +
@@ -106,7 +107,7 @@ async function inspectFunctionDependents(read, definition) {
     ['trigger', 'TRIGGER_SCHEMA', 'TRIGGER_NAME', 'ACTION_STATEMENT', 'TRIGGERS'],
     ['event', 'EVENT_SCHEMA', 'EVENT_NAME', 'EVENT_DEFINITION', 'EVENTS']
   ];
-  const observed = [];
+  const observed = [], dependentViews = [];
   for (const [kind, schema, name, source, table, routineType] of catalogs) {
     const rows = await read('SELECT ' + [schema, name, source, routineType].filter(Boolean).join(',') + ' FROM information_schema.' + table +
       ' WHERE BINARY ' + schema + ' NOT IN ' + systemSchemas + ' ORDER BY BINARY ' + schema + ',BINARY ' + name +
@@ -118,12 +119,40 @@ async function inspectFunctionDependents(read, definition) {
       if (typeof body !== 'string' || !body || /\b(?:PREPARE|EXECUTE)\b/iu.test(body)) {
         throw fail('Function deployment requires readable static application object definitions. An opaque or dynamic dependency may call this function.');
       }
-      if (bodyMentions(body, definition.name)) throw fail('An observed application object may depend on this function. Use a separate dependency-aware deployment.');
+      if (bodyMentions(body, definition.name)) {
+        if (kind !== 'view' || dependentViews.length >= Views.dependentLimit) {
+          throw fail('An observed application object may depend on this function. Use a separate dependency-aware deployment.');
+        }
+        try {
+          dependentViews.push(await Views.inspectDependentView(read, schemaName, objectName, body, definition, { missingRoutine }));
+        } catch (error) {
+          if (!['ROCKETBRAIN_OBJECT_SOURCE', 'ROCKETBRAIN_DEPENDENCY', 'ROCKETBRAIN_DESIGNER_MODEL', 'ROCKETBRAIN_SCHEMA_NAME'].includes(error.code)) throw error;
+          throw fail('An observed application object may depend on this function. ' + error.message);
+        }
+      }
       observed.push([kind, ...row]);
     }
   }
-  const fingerprint = createHash('sha256').update(JSON.stringify([schemas, observed])).digest('hex');
-  return { scope: 'visible-application-schemas', schemas: schemas.length, objects: observed.length, fingerprint };
+  for (const view of dependentViews) {
+    if (observed.some(([kind, schema, object, body]) =>
+      !(kind === 'view' && schema === view.schema && object === view.name) && bodyMentions(body, view.name))) {
+      throw fail('A downstream object may depend on the reviewed view. Use a separate dependency-aware deployment.');
+    }
+  }
+  const stableDefinitions = observed.map(row => {
+    const [kind, schema, name] = row;
+    const view = kind === 'view' && dependentViews.find(item => item.schema === schema && item.name === name);
+    return view ? [kind, schema, name, view.fingerprint] : row;
+  });
+  const fingerprint = createHash('sha256').update(JSON.stringify([schemas, stableDefinitions])).digest('hex');
+  return { scope: 'visible-application-schemas', schemas: schemas.length, objects: observed.length, fingerprint,
+    ...(dependentViews.length && { dependentViews }) };
 }
 
-module.exports = { scalarFunction, readFunction, inspectFunctionDependents };
+function sameFunctionDependents(observed, retained, { missingRoutine = false } = {}) {
+  if (!missingRoutine || !retained?.dependentViews) return JSON.stringify(observed) === JSON.stringify(retained);
+  return JSON.stringify(observed) === JSON.stringify({ ...retained,
+    dependentViews: retained.dependentViews.map(view => ({ ...view, outputFingerprint: null })) });
+}
+
+module.exports = { scalarFunction, readFunction, inspectFunctionDependents, sameFunctionDependents };

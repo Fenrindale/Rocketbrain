@@ -2,10 +2,13 @@
 
 const {principal}=require('./database-principal-create');
 const {q}=require('./schema-designer-ddl');
+const {observeRoleAccess,validateRoleAccess,rootLimit}=require('./object-editor-role-access');
 const fail=message=>Object.assign(Error(message),{code:'ROCKETBRAIN_OBJECT_EDITOR'});
 const same=(left,right)=>JSON.stringify(left)===JSON.stringify(right);
 const owner=(row,server)=>row[2]+'@'+row[0]===server.currentUser;
 const guestRows=(grants,server)=>(grants?.rows||[]).filter(row=>!owner(row,server));
+const roleHost=server=>server.dialect==='mysql'?'%':'';
+const roleRow=(row,server)=>row[0]===roleHost(server)&&!owner(row,server);
 const locked=()=>fail('Function EXECUTE replay requires direct global or schema EXECUTE with GRANT OPTION.');
 
 async function requireGrantAuthority(read,server) {
@@ -24,6 +27,12 @@ function validateFunctionGrants(grants,server,name) {
   if(grants?.kind!=='function'||grants.automatic!==1||!Array.isArray(grants.rows)||grants.rows.length>33) {
     throw fail('Invalid or oversized retained function grant inventory.');
   }
+  const roles=grants.roleAccess===undefined?[]:grants.roleAccess;
+  if(!Array.isArray(roles)||roles.length>rootLimit||
+     roles.length!==grants.rows.filter(row=>Array.isArray(row)&&roleRow(row,server)).length) {
+    throw fail('The retained function role grant and membership scopes differ.');
+  }
+  const roleIdentities=roles.map(entry=>validateRoleAccess(entry,server.dialect));
   const identities=new Set();
   for(const row of grants.rows) {
     if(!Array.isArray(row)||row.length!==6||row[1]!==server.database||row[3]!==name||row[4]!=='FUNCTION'||
@@ -35,8 +44,10 @@ function validateFunctionGrants(grants,server,name) {
     if(owner(row,server)) {
       if(privileges.some(item=>!['execute','alter routine'].includes(item)))throw fail('The function owner has unsupported object grants.');
     }else{
-      principal({kind:'account',user:row[2],host:row[0]},server.dialect);
-      if(privileges.length!==1||privileges[0]!=='execute')throw fail('Only exact ordinary-account function EXECUTE grants can be preserved.');
+      if(roleRow(row,server)) {
+        if(roleIdentities.filter(role=>role.user===row[2]&&role.host===row[0]).length!==1)throw fail('The retained function role identity changed.');
+      }else principal({kind:'account',user:row[2],host:row[0]},server.dialect);
+      if(privileges.length!==1||privileges[0]!=='execute')throw fail('Only exact direct-account or reviewed-role function EXECUTE grants can be preserved.');
     }
   }
   return grants;
@@ -46,7 +57,15 @@ async function verifyGuests(read,grants,server) {
   const rows=guestRows(grants,server);
   if(!rows.length)return;
   await requireGrantAuthority(read,server);
-  for(const [host,,user] of rows) {
+  for(const row of rows) {
+    const [host,,user]=row;
+    if(roleRow(row,server)) {
+      const current=await observeRoleAccess(read,user,host,server.dialect);
+      if(!grants.roleAccess?.some(expected=>same(expected,current))) {
+        throw fail('A reviewed role, member, default assignment or activation policy changed.');
+      }
+      continue;
+    }
     const mysql=server.dialect==='mysql';
     const accounts=await read("SELECT User,Host,plugin,"+(mysql?'account_locked':'is_role')+
       ' FROM mysql.user WHERE BINARY User=BINARY ? AND BINARY Host=BINARY ? LIMIT 2',[user,host]);
@@ -62,7 +81,12 @@ async function observeFunctionGrants(read,name,server) {
     "WHERE Db=? AND Routine_name=? AND Routine_type='FUNCTION' ORDER BY BINARY Host,BINARY User LIMIT 34",[server.database,name]);
   const automatic=Number((await read('SELECT @@automatic_sp_privileges'))[0]?.[0]);
   if(automatic!==1)throw fail('Routine replacement requires automatic_sp_privileges enabled to recreate the verified own automatic grants.');
-  const grants=validateFunctionGrants({kind:'function',automatic,rows:rows.map(row=>row.slice(0,6))},server,name);
+  const roleRows=rows.filter(row=>roleRow(row,server));
+  if(roleRows.length>rootLimit)throw fail('The function has too many explicitly granted roles to review.');
+  const roleAccess=[];
+  for(const [host,,user] of roleRows)roleAccess.push(await observeRoleAccess(read,user,host,server.dialect));
+  const grants=validateFunctionGrants({kind:'function',automatic,rows:rows.map(row=>row.slice(0,6)),
+    ...(roleAccess.length&&{roleAccess})},server,name);
   if(rows.some(row=>!owner(row,server)&&row[6]!==server.currentUser)) {
     throw fail('Only function EXECUTE grants issued by the executing owner can be preserved.');
   }
@@ -71,7 +95,8 @@ async function observeFunctionGrants(read,name,server) {
 }
 
 function grantSql(row,server) {
-  return 'GRANT EXECUTE ON FUNCTION '+q(server.database)+'.'+q(row[3])+" TO '"+row[2]+"'@'"+row[0]+"'";
+  const target=server.dialect==='mariadb'&&roleRow(row,server)?q(row[2]):"'"+row[2]+"'@'"+row[0]+"'";
+  return 'GRANT EXECUTE ON FUNCTION '+q(server.database)+'.'+q(row[3])+' TO '+target;
 }
 
 function exactSubset(current,expected,server) {
@@ -79,7 +104,8 @@ function exactSubset(current,expected,server) {
      current.grants.automatic!==expected.grants.automatic)return false;
   const actual=current.grants.rows,wanted=expected.grants.rows;
   return same(actual.filter(row=>owner(row,server)),wanted.filter(row=>owner(row,server)))&&
-    actual.every(row=>wanted.some(item=>same(row,item)));
+    actual.every(row=>wanted.some(item=>same(row,item)))&&
+    (current.grants.roleAccess||[]).every(entry=>expected.grants.roleAccess?.some(item=>same(item,entry)));
 }
 
 async function replayExecuteGrants(read,execute,inspect,expected,server) {
@@ -87,8 +113,16 @@ async function replayExecuteGrants(read,execute,inspect,expected,server) {
   if(!exactSubset(before,expected,server))throw fail('The function definition or surviving grants changed before EXECUTE replay.');
   await verifyGuests(read,expected.grants,server);
   for(const item of guestRows(expected.grants,server)) {
-    if(!before.grants.rows.some(row=>same(row,item)))await execute(grantSql(item,server));
+    if(!before.grants.rows.some(row=>same(row,item))) {
+      if(roleRow(item,server)) {
+        const current=await observeRoleAccess(read,item[2],item[0],server.dialect);
+        if(!expected.grants.roleAccess?.some(entry=>same(current,entry)))throw fail('A reviewed role changed before EXECUTE replay.');
+      }
+      await execute(grantSql(item,server));
+    }
   }
 }
 
-module.exports={validateFunctionGrants,observeFunctionGrants,verifyGuests,guestRows,grantSql,exactSubset,replayExecuteGrants};
+const executeAccounts=(grants,server)=>guestRows(grants,server).filter(row=>!roleRow(row,server)).map(([host,,user])=>({host,user}));
+
+module.exports={validateFunctionGrants,observeFunctionGrants,verifyGuests,guestRows,executeAccounts,grantSql,exactSubset,replayExecuteGrants};

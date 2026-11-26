@@ -288,6 +288,9 @@ async function main() {
       const functionGrantConfig = process.env.ROCKETBRAIN_ENABLE_FUNCTION_GRANT_FIXTURE === '1'
         ? await require('../test/helpers/function-grant-fixture').prepareFunctionGrantFixture(fixture)
         : undefined;
+      const functionRoleConfig = process.env.ROCKETBRAIN_ENABLE_FUNCTION_ROLE_FIXTURE === '1'
+        ? await require('../test/helpers/function-role-fixture').prepareFunctionRoleFixture(fixture)
+        : undefined;
       const passwordRotationConfig = process.env.ROCKETBRAIN_ENABLE_PASSWORD_ROTATION_FIXTURE === '1'
         ? await require('../test/helpers/database-password-rotation-fixture').preparePasswordRotationFixture(fixture)
         : undefined;
@@ -307,6 +310,7 @@ async function main() {
           ...(passwordFreeFixture ? { ROCKETBRAIN_PASSWORD_FREE_CONFIG: passwordFreeFixture } : {}),
           ...(accountAccessConfig ? { ROCKETBRAIN_ACCOUNT_ACCESS_CONFIG:accountAccessConfig } : {}),
           ...(functionGrantConfig ? { ROCKETBRAIN_FUNCTION_GRANT_CONFIG:functionGrantConfig } : {}),
+          ...(functionRoleConfig ? { ROCKETBRAIN_FUNCTION_ROLE_CONFIG:functionRoleConfig } : {}),
           ...(fixture.db.crossConfigPath ? { ROCKETBRAIN_SCHEMA_CROSS_CONFIG: fixture.db.crossConfigPath } : {}) } });
         child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
       });

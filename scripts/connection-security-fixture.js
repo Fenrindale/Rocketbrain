@@ -2,7 +2,7 @@
 const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto'),net=require('node:net'),{spawn}=require('node:child_process');
 const ROOT=path.resolve(__dirname,'../test-output/'+(process.env.ROCKETBRAIN_TEST_REPORT_PREFIX||'v0.18')+'-security-fixtures'),KIND='RocketbrainConnectionSecurityFixture-v18';
 function execute(file,args,options={}){return new Promise((resolve,reject)=>{const child=spawn(file,args,{windowsHide:true,shell:false,stdio:['ignore','pipe','pipe'],...options});let output='';const timer=setTimeout(()=>{child.kill();reject(Error('Owned fixture command timed out.'));},30000);child.stdout.on('data',v=>output+=v);child.stderr.on('data',v=>output+=v);child.once('error',e=>{clearTimeout(timer);reject(e);});child.once('exit',code=>{clearTimeout(timer);code===0?resolve(output):reject(Error('Owned fixture command failed: '+output.slice(-4000)));});});}
-async function certificates({ protectedIdentity = false, ssh = true, serverRotation = false } = {}) {
+async function certificates({ protectedIdentity = false, ssh = true, serverRotation = false, serverName = 'rb-db.local' } = {}) {
   await fs.mkdir(ROOT,{recursive:true});
   const id = crypto.randomUUID(), folder = path.join(ROOT,id);
   await fs.mkdir(folder);
@@ -18,7 +18,8 @@ async function certificates({ protectedIdentity = false, ssh = true, serverRotat
   try {
     const passphrase = protectedIdentity ? crypto.randomBytes(24).toString('base64url') : '';
     const pwsh = process.env.ROCKETBRAIN_TEST_PWSH || 'pwsh.exe';
-    await execute(pwsh,['-NoProfile','-NonInteractive','-File',path.resolve(__dirname,'connection-security-certificates.ps1'),'-Folder',folder,...(serverRotation?['-ServerRotation']:[])],{
+    await execute(pwsh,['-NoProfile','-NonInteractive','-File',path.resolve(__dirname,'connection-security-certificates.ps1'),
+      '-Folder',folder,'-ServerName',serverName,...(serverRotation?['-ServerRotation']:[])],{
       env:{...process.env,ROCKETBRAIN_OWNED_CLIENT_PFX_PASSPHRASE:passphrase}
     });
     if (ssh) {
