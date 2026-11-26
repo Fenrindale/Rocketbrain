@@ -70,13 +70,16 @@ def installed_location(target, module, plan):
 
 
 def run(plan):
+    emit("phase", stage="interpreter-entered")
     debugger = lldb.debugger
     debugger.SetAsync(False)
     debugger.HandleCommand("settings set target.load-script-from-symbol-file false")
     target = debugger.CreateTarget(plan["executable"])
     if not target.IsValid():
         raise RuntimeError("Could not open the reviewed simulator Mach-O app.")
+    emit("phase", stage="target-opened")
     error = lldb.SBError()
+    emit("phase", stage="attaching")
     process = target.AttachToProcessWithID(debugger.GetListener(), plan["pid"], error)
     checked(error, "macOS refused stock LLDB attachment to the owned simulator PID")
     if not process.IsValid() or process.GetProcessID() != plan["pid"]:
@@ -84,9 +87,11 @@ def run(plan):
     info = process.GetProcessInfo()
     if not info.IsValid() or real_file(info.GetExecutableFile()) != plan["executable"]:
         raise RuntimeError("LLDB did not observe the reviewed simulator executable.")
+    emit("phase", stage="process-verified")
     module = target.AddModule(plan["framework"], "arm64", plan["frameworkUuid"], plan["symbols"])
     if not module.IsValid() or (module.GetUUIDString() or "").lower() != plan["frameworkUuid"]:
         raise RuntimeError("LLDB did not load the reviewed Kotlin framework and dSYM.")
+    emit("phase", stage="module-verified")
     breakpoint = installed_location(target, module, plan)
     emit("ready")
     checked(process.Continue(), "Could not run the owned simulator app to its Kotlin breakpoint")

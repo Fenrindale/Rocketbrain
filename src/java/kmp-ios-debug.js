@@ -13,6 +13,7 @@ const exec = promisify(execFile);
 const runtimeId = /^com\.apple\.CoreSimulator\.SimRuntime\.iOS-(?:[0-9]+-){1,2}[0-9]+$/;
 const deviceId = /^com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-[A-Za-z0-9-]{1,45}$/;
 const workerPrefix = 'ROCKETBRAIN_IOS:';
+const workerStages = new Set(['interpreter-entered', 'target-opened', 'attaching', 'process-verified', 'module-verified']);
 const workerPaths = [path.join(__dirname, 'ios-debug', 'simulator_lldb.py'),
   path.join(__dirname, '../../runtime/ios-debug/simulator_lldb.py')];
 const execTimedOut = error => error?.killed === true && error?.signal === 'SIGTERM' && error?.code == null;
@@ -92,7 +93,7 @@ async function verifyProcess(tool, pid, executable, signal) {
   return identity.trim();
 }
 
-function startWorker({ env }, config) {
+function startWorker({ env }, config, observe) {
   const worker = workerPaths.find(file => fs.existsSync(file));
   if (!worker) throw Error('The Rocketbrain simulator LLDB session worker is missing.');
   // Xcode LLDB hosts its bundled interpreter, avoiding an unrelated Python ABI or user startup script.
@@ -101,7 +102,7 @@ function startWorker({ env }, config) {
     stdio: ['pipe', 'pipe', 'pipe'], env: { ...env, ROCKETBRAIN_IOS_WORKER: worker,
       ROCKETBRAIN_IOS_PLAN: JSON.stringify(config) }
   });
-  let buffer = '', diagnostics = '', result, failed;
+  let buffer = '', diagnostics = '', result, failed, lastStage = 'spawned';
   const waiters = new Map();
   const events = new Map();
   function rejectAll(error) {
@@ -132,6 +133,11 @@ function startWorker({ env }, config) {
         rejectAll(Error('Xcode LLDB: ' + String(item.message).slice(0, 1200)));
         continue;
       }
+      if (item.event === 'phase' && workerStages.has(item.stage)) {
+        lastStage = item.stage;
+        observe('lldb-' + item.stage);
+        continue;
+      }
       if (!['ready', 'stopped', 'continued'].includes(item.event) || events.has(item.event)) continue;
       events.set(item.event, item);
       waiters.get(item.event)?.resolve(item);
@@ -139,14 +145,17 @@ function startWorker({ env }, config) {
     }
   });
   const done = new Promise(resolve => child.once('close', code => {
-    result = code; rejectAll(Error('Xcode LLDB exited (' + code + '). ' + diagnostics.trim())); resolve();
+    result = code; rejectAll(Error('Xcode LLDB exited (' + code + ') after ' + lastStage + '. ' + diagnostics.trim())); resolve();
   }));
   function expect(event, timeout) {
     if (events.has(event)) return Promise.resolve(events.get(event));
     if (failed) return Promise.reject(failed);
     let timer;
     return new Promise((resolve, reject) => {
-      timer = setTimeout(() => { child.kill(); rejectAll(Error('Xcode LLDB timed out waiting for ' + event + '.')); }, timeout);
+      timer = setTimeout(() => {
+        child.kill();
+        rejectAll(Error('Xcode LLDB timed out waiting for ' + event + ' after ' + lastStage + '. ' + diagnostics.trim()));
+      }, timeout);
       waiters.set(event, { resolve, reject });
     }).finally(() => { clearTimeout(timer); waiters.delete(event); });
   }
@@ -283,8 +292,11 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
     if (await verifyProcess(tool, pid, executable, signal) !== processIdentity) throw Error('The reviewed simulator process changed.');
     observe('owned-pid-verified');
     const worker = record.worker = openWorker(record.system, { executable, framework, symbols, pid,
-      frameworkUuid: snapshot.frameworkUuid, source: snapshot.source, line: snapshot.line });
-    await worker.expect('ready', 35000);
+      frameworkUuid: snapshot.frameworkUuid, source: snapshot.source, line: snapshot.line }, observe);
+    const stopOnCancel = () => { void worker.stop().catch(() => {}); };
+    signal.addEventListener('abort', stopOnCancel, { once: true });
+    try { await worker.expect('ready', 95000); }
+    finally { signal.removeEventListener('abort', stopOnCancel); }
     observe('lldb-breakpoint-bound');
     signal.throwIfAborted();
     let stopped = false, continued = false;
