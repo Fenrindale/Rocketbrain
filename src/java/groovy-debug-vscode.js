@@ -8,7 +8,7 @@ const { GROOVY_DEBUG_MARKER } = require('./debug');
 const { createOwnedJvmDebugger } = require('./micronaut-debugger');
 const { waitForOwnedListener } = require('./testing-debug');
 const { captureGroovyDebugSources, startGroovyApplicationDebug } = require('./groovy-debug');
-const { workspaceRoots, workspacePath, inside, cancelled, fail } = require('./workbench-model');
+const { workspaceRoots, physicalWorkspacePath, inside, cancelled, fail } = require('./workbench-model');
 
 const normalized = value => value.replace(/\r\n?/gu, '\n');
 const toolKey = tools => [tools.javaHome || '',tools.gradleHome || ''].join('\n');
@@ -29,9 +29,11 @@ function createGroovyApplicationDebugger(vscode, java, { projects, configuration
         document.uri?.scheme !== 'file' || document.uri.authority || document.uri.query || document.uri.fragment) {
       throw fail('Open a saved local Groovy source to debug.');
     }
-    const file = workspacePath(document.uri.fsPath, roots(), { directory: false });
+    const workspace = roots();
+    const file = physicalWorkspacePath(document.uri.fsPath, workspace, { directory: false });
+    const root = physicalWorkspacePath(project.root, workspace);
     if (path.relative(file, document.uri.fsPath) ||
-        path.relative(project.root, workspacePath(project.root, roots())) ||
+        path.relative(project.root, root) ||
         !java.workbench.getSnapshot().projects.some(item => item.id === project.id && item.uri === project.uri)) {
       throw fail('Choose the same physical imported Groovy Gradle project.');
     }
@@ -39,9 +41,9 @@ function createGroovyApplicationDebugger(vscode, java, { projects, configuration
     if (vscode.workspace.textDocuments.some(doc => doc.isDirty && doc.uri.scheme === 'file' && inside(project.root, doc.uri.fsPath))) {
       throw fail('Save modified Groovy project files before debugging.');
     }
-    const snapshot = captureGroovyDebugSources(project.root, file, cancellation);
+    const snapshot = captureGroovyDebugSources(root, file, cancellation);
     if (snapshot.files.get(file).text !== normalized(document.getText())) throw fail('The editor no longer matches the saved Groovy source.');
-    return { file, snapshot, tools: configuration(project.root) };
+    return { file, snapshot, project: { ...project, root }, tools: configuration(root) };
   }
 
   async function prepare({ document, projectUri, cancellation } = {}) {
@@ -114,7 +116,7 @@ function createGroovyApplicationDebugger(vscode, java, { projects, configuration
       if (state.debugBuild !== GROOVY_LINE_BUILD || typeof java.debug.registerGroovySourceLines !== 'function') {
         throw fail('Update the independent Rocketbrain Java debugger for managed Groovy source lines.');
       }
-      const run = await startGroovyApplicationDebug({ project, file: inputs.file, tools: inputs.tools,
+      const run = await startGroovyApplicationDebug({ project: inputs.project, file: inputs.file, tools: inputs.tools,
         javaHome: state.javaHome, cancellation: abort.signal, verify: () => verify().snapshot,
         resolveDescendant: java.debug.processes.resolveDescendant, onOutput: chunk => output.append(chunk) });
       record = { id: randomUUID(), run };
@@ -131,7 +133,7 @@ function createGroovyApplicationDebugger(vscode, java, { projects, configuration
         }
       },{ label:'Groovy', marker:GROOVY_DEBUG_MARKER, registerSourceLines:java.debug.registerGroovySourceLines,
         onSessionEnd:endSession });
-      const sessionId = await control.attach({ project, receipt: { runId: record.id, debug: run.target },
+      const sessionId = await control.attach({ project: inputs.project, receipt: { runId: record.id, debug: run.target },
         sourcePaths: run.sourcePaths, sourceLines: run.sourceLines, cancellation: abort.signal, validate: verify });
       return { state:'attached', task:plan.task, sessionId, verifiedLoopback:true,
         sourceLines:run.sourceLines.files.length, pid:run.target.pid, port:run.target.port };

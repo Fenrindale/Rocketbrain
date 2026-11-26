@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { realpathSync } = require('node:fs');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -12,6 +13,7 @@ const { startGroovyConsole,verifiedGroovyJar } = require('../src/java/groovy-con
 const { collectProjects,packageName } = require('../src/java/workbench-model');
 const { BuildTasks } = require('../src/java/workbench-tasks');
 const { createGroovyFixture,scripts } = require('./helpers/groovy-fixture');
+const { createGroovyApplicationDebugger } = require('../src/java/groovy-debug-vscode');
 
 const configuration = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
 const runtime = {skip:!configuration && 'Independent JDK and Gradle are not configured.',timeout:180000};
@@ -39,6 +41,33 @@ test('Gradle workbench shows Java and Groovy sources admitted by joint source ro
   assert.deepEqual(model.projects[0].languages,['groovy','java']);
   const files = model.projects[0].sourceRoots.flatMap(source => source.packages.flatMap(pkg => pkg.files));
   assert.deepEqual(files.map(file => file.name).sort(),['BadgeSpec.groovy','GroovyBadge.groovy','JavaEntry.java']);
+});
+
+test('Groovy application debug resolves a lower-case VS Code drive through the physical Gradle project', {
+  skip: process.platform !== 'win32'
+}, async t => {
+  const root = await temporary();
+  t.after(async () => {
+    assert.equal(path.relative(await fs.realpath(os.tmpdir()), path.dirname(root)), '');
+    assert.match(path.basename(root), /^rb-groovy-check-/u);
+    await fs.rm(root, { recursive: true, force: true });
+  });
+  const fixture = realpathSync.native(await createGroovyFixture(root));
+  const source = path.join(fixture, 'src/main/groovy/groovyfixture/GroovyBadge.groovy');
+  const editorPath = source.replace(/^[A-Z]:/u, drive => drive.toLowerCase());
+  assert.notEqual(source, editorPath);
+  let contents = await fs.readFile(source, 'utf8');
+  const document = { languageId: 'groovy', uri: { scheme: 'file', fsPath: editorPath }, version: 1, getText: () => contents };
+  const project = { id: 'fixture', name: 'fixture', tool: 'gradle', uri: pathToFileURL(fixture).href, root: fixture };
+  const vscode = { workspace: { workspaceFolders: [pathToFileURL(fixture).href], textDocuments: [document] } };
+  const java = { workbench: { getSnapshot: () => ({ projects: [project] }) } };
+  const service = createGroovyApplicationDebugger(vscode, java, { projects: async () => [project], configuration: () => ({}), trusted() {} });
+  const prepared = await service.prepare({ document });
+  assert.equal(prepared.projectUri, project.uri);
+  assert.equal(prepared.source, path.relative(fixture, source));
+  assert.equal(prepared.task, ':run');
+  contents += '\n// changed editor copy';
+  await assert.rejects(service.prepare({ document }), /editor no longer matches/u);
 });
 
 test('real pinned Groovy persists console bindings, evaluates dynamic code, reports errors and limits output',runtime,async t => {
