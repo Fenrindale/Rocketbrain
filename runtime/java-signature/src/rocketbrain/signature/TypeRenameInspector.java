@@ -27,6 +27,7 @@ final class TypeRenameInspector {
         }
         String leaf = target.getSimpleName().toString();
         var spans = new LinkedHashMap<String, Map<String, Object>>();
+        var constructors = new ArrayList<Map<String, Object>>();
         for (var unit : units) {
             String uri = unit.getSourceFile().toUri().toString();
             String text;
@@ -74,6 +75,10 @@ final class TypeRenameInspector {
                         int cursor = text.lastIndexOf('(',boundary-1);
                         while (cursor>start(node) && Character.isWhitespace(text.charAt(cursor-1))) cursor--;
                         record(cursor-leaf.length(),cursor,"constructor");
+                        constructors.add(object("start",start(node),"end",end(node),
+                            "public",constructor.getModifiers().contains(Modifier.PUBLIC),
+                            "varargs",constructor.isVarArgs(),
+                            "typeParameters",constructor.getTypeParameters().size()));
                     }
                     return super.visitMethod(node,unused);
                 }
@@ -85,6 +90,8 @@ final class TypeRenameInspector {
             "declaration",object("uri",owner.getCompilationUnit().getSourceFile().toUri().toString(),
                 "start",positions.getStartPosition(owner.getCompilationUnit(),owner.getLeaf()),
                 "end",positions.getEndPosition(owner.getCompilationUnit(),owner.getLeaf()),
+                "typeParameters",target.getTypeParameters().size(),
+                "constructors",constructors,
                 "annotations",target.getAnnotationMirrors().stream().map(annotation->annotation.getAnnotationType().toString()).toList()),
             "spans",spans.values().stream().toList());
     }

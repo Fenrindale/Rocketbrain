@@ -8,6 +8,7 @@ const { validIdentifier } = require('./file-templates');
 const { editedText } = require('./refactoring');
 const { lexJava, parseJavaFile, rangeAt } = require('../spring/java');
 const { beanClassEdits } = require('./java-type-rename-xml');
+const { hasKotlinMentions, mixedJavaClasspath, boundKotlinSites, validateKotlinProjection } = require('./java-kotlin-type-rename');
 const scopeApi = require('./move-scope');
 
 const KIND = 'refactor.rename.java.type';
@@ -106,7 +107,7 @@ function verifyProspectiveSpans(before, after, rename, delta) {
   }
 }
 
-function classContracts(sources, oldFqn, newFqn) {
+function classContracts(sources, oldFqn, newFqn, { kotlinReview = false } = {}) {
   const oldName = oldFqn.split('.').at(-1);
   const entries = [];
   const permissions = [];
@@ -129,6 +130,7 @@ function classContracts(sources, oldFqn, newFqn) {
       permissions.push({ uri: source.uri, beforeSha256: source.diskHash, afterSha256: scopeApi.digest(after) });
       continue;
     }
+    if (extension === '.kt' && kotlinReview) continue;
     if (path.basename(source.file) === oldFqn || literalClass.test(source.text) ||
         ['.kt', '.groovy', '.scala'].includes(extension) && sourceType.test(source.text)) {
       throw Error('A class registration, configuration or non-Java source needs a separate rename review.');
@@ -138,7 +140,7 @@ function classContracts(sources, oldFqn, newFqn) {
 }
 
 async function prepareJavaTypeRename(deps, { document, position, newName, cancellation }) {
-  const { vscode, request, refactoring, runtime, trusted, synchronizeFiles } = deps;
+  const { vscode, request, refactoring, runtime, trusted, synchronizeFiles, beginKotlin } = deps;
   trusted(cancellation);
   if (document?.languageId !== 'java' || document.uri?.scheme !== 'file' || document.isDirty || document.isClosed ||
       !validIdentifier(newName)) {
@@ -184,12 +186,18 @@ async function prepareJavaTypeRename(deps, { document, position, newName, cancel
   const state = runtime();
   if (!state?.javaHome || !state?.storagePath) throw Error('Configure the independent Java runtime before reviewing a type rename.');
   const java = sources.filter(source => source.file.endsWith('.java'));
-  const classpath = [...new Set(scope.source.classpaths.classpaths)].filter(file => fs.existsSync(file));
+  const kotlin = sources.filter(source=>source.file.endsWith('.kt'));
+  const mixed = hasKotlinMentions(kotlin, oldName);
+  if (mixed && typeof beginKotlin !== 'function') {
+    throw Error('Start the pinned Kotlin editor for this Gradle project before reviewing Java type callers.');
+  }
+  const classpath = mixed ? mixedJavaClasspath(scope, sources, owner) :
+    [...new Set(scope.source.classpaths.classpaths)].filter(file => fs.existsSync(file));
   const analyze = (sources, fqn, other) => analyzeJavaSources({
     ...state, sources, classpath, cancellation, manifestLimit: 256 * 1024, inspection: { kind: 'typeRename', fqn, other }
   });
   guard();
-  const contracts = classContracts(sources, selected.fqn, newFqn);
+  const contracts = classContracts(sources, selected.fqn, newFqn, { kotlinReview:mixed });
   const before = await analyze(java, selected.fqn, newFqn);
   if (before.errors.length) throw Error('Resolve existing Java compile errors before type rename: ' + before.errors[0].message);
   if (before.typeRename?.destinationOccupied) throw Error('A Java class with the destination name is already resolvable.');
@@ -202,16 +210,42 @@ async function prepareJavaTypeRename(deps, { document, position, newName, cancel
   if (before.classpathFingerprint !== after.classpathFingerprint) throw Error('The compiler classpath changed during type rename review.');
   verifyProspectiveSpans(spans, compilerSpans(after, prospective, prospective.find(source => source.uri === rename.newUri), newName),
     rename, newName.length - oldName.length);
+  let kotlinReview;
+  const kotlinEntries = [], kotlinPermissions = [];
+  if (mixed) {
+    const candidate = kotlin.find(source=>hasKotlinMentions([source],oldName));
+    const kotlinDocument = await vscode.workspace.openTextDocument(vscode.Uri.parse(candidate.uri));
+    const active = await beginKotlin(kotlinDocument, cancellation);
+    if (!active?.root || fs.realpathSync.native(active.root) !== fs.realpathSync.native(scope.source.root)) {
+      throw Error('The Kotlin engine resolved a different Java rename project.');
+    }
+    guard();
+    const sites = await boundKotlinSites({ root:active.root, sources, owner, declaration:before.typeRename.declaration,
+      fqn:selected.fqn, newName, runtime:active, cancellation });
+    kotlinEntries.push(...exactEntries(kotlin,sites,newName));
+    const validation = await validateKotlinProjection({ root:active.root, sources, rename, entries:[...entries,...kotlinEntries],
+      fqn:selected.fqn, newFqn, classpath, runtime:active, sites, cancellation });
+    kotlinReview = { sites, validation, check:active.check };
+    for (const entry of kotlinEntries) {
+      const source = kotlin.find(value=>value.uri===entry.textDocument.uri);
+      kotlinPermissions.push({ uri:source.uri, beforeSha256:source.diskHash,
+        afterSha256:scopeApi.digest(editedText(source.text,entry.edits)) });
+    }
+  }
   const preApply = () => {
     guard();
     target();
     before.validateClasspath();
     after.validateClasspath();
+    if (kotlinReview) mixedJavaClasspath(scope, sources, owner);
+    kotlinReview?.check();
+    kotlinReview?.validation.validateRuntime();
   };
   preApply();
-  const plan = await refactoring.previewWorkspaceEdit({ documentChanges: [...entries, ...contracts.entries, rename] }, {
+  const plan = await refactoring.previewWorkspaceEdit({ documentChanges: [...entries, ...kotlinEntries, ...contracts.entries, rename] }, {
     kind: KIND, title: 'Rename public Java class ' + oldName + ' to ' + newName,
     anchorDocument: document, cancellation, allowedResourceOperations: ['rename'], allowedBeanClassEdits: contracts.permissions,
+    allowedJavaTypeKotlinEdits: kotlinPermissions,
     // Opening every dependency a second time can evict unchanged hidden
     // models. The compiler snapshot already pins those dependencies' bytes.
     guards: sources.map(source => initiallyOpen.has(scopeApi.key(source.file)) ? { uri: source.uri } : {
@@ -222,11 +256,14 @@ async function prepareJavaTypeRename(deps, { document, position, newName, cancel
       preApply();
     },
     preApply,
-    warnings: ['The public class name and filename change in this imported project, including the listed literal Spring XML bean classes. Review external consumers, binaries, reflection and generated sources separately.']
+    warnings: ['The public class name and filename change in this imported project, including the listed literal Spring XML bean classes. Review external consumers, binaries, reflection and generated sources separately.',
+      ...(kotlinReview?['The listed Kotlin edits cover exact main-source imports, explicit type positions and direct constructor calls in one imported Gradle project.']:[])]
   });
   return {
     ...plan, typeRename: { oldFqn: selected.fqn, newFqn, attributedSpans: spans.length, ...engine,
       xmlFiles: contracts.entries.length, xmlBeanClasses: contracts.entries.reduce((count, entry) => count + entry.edits.length, 0),
+      ...(kotlinReview&&{kotlinCallers:{files:kotlinEntries.length,sites:kotlinReview.sites.length,
+        constructorBindings:kotlinReview.validation.constructors,compilerVerified:true}}),
       sourceFiles: java.length, beforeErrors: 0, afterErrors: 0 }
   };
 }

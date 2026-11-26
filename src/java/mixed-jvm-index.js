@@ -106,16 +106,13 @@ function parseClasses(output,count) {
   return classes;
 }
 
-async function analyzeMixedClasses({project,sources,javaHome,cancellation}) {
-  const files = compiledClasses(project,cancellation);
-  if (!files.length) throw fail('Build the conventional main output folders before indexing mixed Java/Kotlin classes.');
+async function readMixedClassMetadata(files,javaHome,cancellation) {
   const executable = independentJavaExecutable(path.join(javaHome,'bin',process.platform === 'win32' ? 'java.exe' : 'java'));
   // VS Code's profile/workspace storage can exceed the Windows mkdtemp path limit.
   const parent = await fsp.realpath(os.tmpdir());
   const workspace = await fsp.mkdtemp(path.join(parent,'mixed-classfiles-'));
   const controller = new AbortController();
   const subscription = cancellation?.onCancellationRequested?.(() => controller.abort());
-  const original = fingerprint(files);
   try {
     const program = path.join(workspace,'MixedClassInspector.java'), list = path.join(workspace,'classes.txt');
     const copies = files.map((_,index) => path.join(workspace,index+'.class'));
@@ -131,10 +128,7 @@ async function analyzeMixedClasses({project,sources,javaHome,cancellation}) {
     const {stdout} = await run(executable,['--source','25',program,list],{
       cwd:workspace,env,windowsHide:true,timeout:30000,maxBuffer:8*1024*1024,signal:controller.signal
     });
-    const classes = parseClasses(stdout,files.length);
-    const index = {project,sources,classes,classFingerprint:original};
-    assertMixedCurrent(index,cancellation);
-    return index;
+    return parseClasses(stdout,files.length);
   } finally {
     subscription?.dispose();
     const verified = await fsp.realpath(workspace);
@@ -146,6 +140,21 @@ async function analyzeMixedClasses({project,sources,javaHome,cancellation}) {
   }
 }
 
+async function analyzeMixedClasses({project,sources,javaHome,cancellation}) {
+  const files = compiledClasses(project,cancellation);
+  if (!files.length) throw fail('Build the conventional main output folders before indexing mixed Java/Kotlin classes.');
+  const classes = await readMixedClassMetadata(files,javaHome,cancellation);
+  const index = {project,sources,classes,classFingerprint:fingerprint(files)};
+  assertMixedCurrent(index,cancellation);
+  return index;
+}
+
+async function readStagedKotlinClasses(directory,javaHome,cancellation) {
+  const files = inspectFiles({root:directory},['.'],name=>name.endsWith('.class'),{count:500,bytes:24*1024*1024,cancellation});
+  if (!files.length) throw fail('Kotlin staging did not produce inspectable JVM classes.');
+  return readMixedClassMetadata(files,javaHome,cancellation);
+}
+
 function assertMixedCurrent(index,cancellation) {
   const current = snapshotMixedSources(index.project,cancellation);
   if (current.fingerprint !== index.sources.fingerprint || current.buildFingerprint !== index.sources.buildFingerprint ||
@@ -154,4 +163,4 @@ function assertMixedCurrent(index,cancellation) {
   }
 }
 
-module.exports = { normalizeMixedText,snapshotMixedSources,analyzeMixedClasses,assertMixedCurrent };
+module.exports = { normalizeMixedText,snapshotMixedSources,analyzeMixedClasses,assertMixedCurrent,readStagedKotlinClasses };

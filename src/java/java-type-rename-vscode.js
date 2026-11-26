@@ -5,7 +5,7 @@ const { validIdentifier } = require('./file-templates');
 
 const COMMAND = 'rocketbrain.java.reviewTypeRename';
 
-function registerJavaTypeRename(vscode, { request, refactoring, runtime, synchronizeFiles }) {
+function registerJavaTypeRename(vscode, { request, refactoring, runtime, synchronizeFiles, beginKotlin }) {
   const operations = new Set();
   let closed = false;
   function trusted(token) {
@@ -29,7 +29,7 @@ function registerJavaTypeRename(vscode, { request, refactoring, runtime, synchro
     }
   }
   function prepare(options) {
-    const work = prepareJavaTypeRename({ vscode, request: send, refactoring, runtime, trusted, synchronizeFiles }, options);
+    const work = prepareJavaTypeRename({ vscode, request: send, refactoring, runtime, trusted, synchronizeFiles, beginKotlin }, options);
     operations.add(work);
     void work.finally(() => operations.delete(work)).catch(() => {});
     return work;
@@ -50,7 +50,7 @@ function registerJavaTypeRename(vscode, { request, refactoring, runtime, synchro
       if (newName === undefined) return;
       if (document.isClosed || document.version !== version) throw Error('The Java source changed. Select the class name again.');
       const plan = await vscode.window.withProgress({
-        location: vscode.ProgressLocation.Notification, title: 'Reviewing Java type and Spring XML references', cancellable: true
+        location: vscode.ProgressLocation.Notification, title: 'Reviewing Java type references', cancellable: true
       }, (_, cancellation) => prepare({ document, position: selection.active, newName, cancellation }));
       return await refactoring.review(plan);
     } catch (error) {
