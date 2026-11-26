@@ -1,5 +1,5 @@
 {
-  "version": "0.152.0",
+  "version": "0.154.0",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,31 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 188,
-    "partial": 14,
+    "implemented": 189,
+    "partial": 13,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 95.8,
+    "percent": 96.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-024",
-    "IDEA-030",
-    "IDEA-067",
-    "IDEA-079",
-    "IDEA-097"
+    "IDEA-045",
+    "IDEA-053",
+    "IDEA-066"
   ],
   "expandedFeatures": [
-    "IDEA-024",
-    "IDEA-030",
-    "IDEA-067",
-    "IDEA-079",
-    "IDEA-097"
+    "IDEA-045",
+    "IDEA-053",
+    "IDEA-066"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -726,8 +722,8 @@
       "verification": {
         "state": "v0.152-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.152.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -911,8 +907,8 @@
       "verification": {
         "state": "v0.152-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.152.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1347,23 +1343,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Kotlin Multiplatform의 CommonJS 개발 빌드에서 관리하는 Node 프로세스에 연결해 commonMain·jsMain의 중단점, 스텝, 지역 변수를 제공한다.",
+      "scope": "기존 Kotlin Multiplatform JS 디버깅에 Linux x64 Kotlin/Native 디버그 실행 파일의 소스 중단점, 한 줄 넘기기와 정수 지역 변수 조회를 추가한다.",
       "remaining": [
-        "Android·iOS·Native 디버깅, 외부 npm 런타임 및 일반 expect/actual 타입 계약이 남아 있다."
+        "Android·iOS 디버깅, Compose 미리 보기 범위, 외부 npm 런타임 및 일반 expect/actual 타입 계약이 남아 있다."
       ],
       "verification": {
-        "state": "v0.148-installed-coverage",
+        "state": "v0.154-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.148.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "빌드한 Kotlin 소스맵을 실제 Node와 대조했다. 양쪽 DB에서 정확한 중단점, 지역 변수, 재개한 Spring JDBC 응답과 소스 변경 후 정리를 확인했다.",
+        "testedScope": "별도 Ubuntu에서 실제 Kotlin/Native 2.4.21 실행 파일을 만들고 GDB 15.1로 중단점 68행과 다음 69행을 확인했다. 두 DB에서 지역 변수 41이 42가 됐고 재개 후 Spring HTTP와 JDBC 결과가 일치했다.",
         "publicEvidence": [
-          "src/java/kmp-js-debug-adapter.js",
-          "src/java/kmp-js-source-map.js",
-          "test/kmp-js-debug-host.js"
+          "src/java/kmp-native-debug-adapter.js",
+          "src/java/kmp-native-gdb.js",
+          "test/kmp-native-debug.test.js",
+          ".github/workflows/kotlin-native-linux-debug.yml"
         ],
         "originalProductParityVerified": false
       }
@@ -1581,22 +1578,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "실제 Spring BeanFactory 계층의 즉시 주입과 지연 ObjectProvider·Jakarta Provider 조회 결과를 관찰하고, 해당 주입 위치와 선택된 정의를 탐색한다.",
+      "scope": "기존 Spring BeanFactory 계층 주입 분석에 Gradle·Maven AOT 산출물의 등록·별칭 읽기, 생성 스냅샷 비교 및 정확한 소스 탐색을 추가한다.",
       "remaining": [
-        "AOT에서의 관찰과 임의 사용자 정의 등록·조건의 추적이 남아 있다."
+        "임의 사용자 정의 등록의 전체 추적 및 표준 레이아웃 밖의 AOT 코드는 남아 있다."
       ],
       "verification": {
-        "state": "v0.142-installed-coverage",
+        "state": "v0.154-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.142.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 Spring DB 환경의 Spring 7.0.10에서 주입 위치 5곳, 선택된 정의 3곳, 상위 공장 경로, 누락·모호함을 확인했다. 보고서 확인 중 공급자를 재실행하지 않았다.",
+        "testedScope": "실제 Spring Boot 4.1.2의 Gradle processAot와 bootJar를 실행했다. 두 DB에서 빌드 조건으로 activeProbe를 추가하거나 제거한 결과가 생성 보고서와 일치했다. 별칭과 정확한 @Bean 선언 이동을 확인했다.",
         "publicEvidence": [
-          "test/spring-provider-injection-host.js",
-          "test/spring-autowire-hierarchy-host.js"
+          "src/spring/aot-beans.js",
+          "src/spring/aot-vscode.js",
+          "test/spring-aot-beans.test.js",
+          "test/spring-aot-beans-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1951,26 +1950,25 @@
       "category": "기타 JVM 프레임워크",
       "feature": "Quarkus·MicroProfile",
       "priority": "P3",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "Quarkus 생성·설정·Qute·개발 디버깅과 CDI 관찰에 Linux x64 단일 Maven 앱의 검토된 GraalVM 네이티브 이미지 빌드·실행·중지를 추가한다.",
-      "remaining": [
-        "Gradle 네이티브 빌드, 네이티브 디버깅과 임의 CDI 인터셉터의 정적·생명주기 분석이 남아 있다."
-      ],
+      "scope": "Quarkus 프로젝트 생성, 설정 완성, Qute 및 엔드포인트, 소유 개발 JVM의 소스 디버깅을 제공한다. 앱을 실행한 채 디버거를 분리하고 다시 연결하며, Linux x64 Maven·Gradle GraalVM 이미지도 빌드하고 실행한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.150-vendor-runtime-coverage",
+        "state": "v0.154-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.150.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "별도 Linux 검증에서 실제 Quarkus 3.40.1.2의 ELF를 빌드·실행하고 두 DB에서 Spring 비교 앱과 행 수 및 합계를 대조했다. 빌드 식별과 소유 프로세스 종료를 확인했다.",
+        "testedScope": "실제 Maven·Gradle Quarkus 개발 JVM에서 소스 중단점과 지역 변수를 읽었다. HTTP가 중단된 상태에서 디버거를 분리해 응답을 완료했고, 분리 중 소스를 다시 읽은 뒤 같은 JVM에 연결해 새 값을 확인했다. 두 DB와 Spring을 대조했고 별도 Linux Gradle ELF도 같은 JDBC 값을 반환했다.",
         "publicEvidence": [
+          "src/java/quarkus-vscode.js",
           "src/java/quarkus-native.js",
-          "test/quarkus-native-linux.cjs",
-          ".github/workflows/quarkus-native-linux.yml"
+          "test/quarkus-attachable-dev-host.js",
+          "test/quarkus-native-linux.cjs"
         ],
         "originalProductParityVerified": false
       }
@@ -1989,8 +1987,8 @@
       "verification": {
         "state": "v0.152-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.152.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2344,8 +2342,8 @@
       "verification": {
         "state": "v0.152-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.152.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2861,8 +2859,8 @@
       "verification": {
         "state": "v0.152-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.152.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6367,8 +6365,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "6d72e4ed7c9c5a7009295e35f47d00045c22f3f97035ba7fbbd57a8915f3dfaf",
-    "sourceManifestSha256": "6a0249306feb7178816c268715087ba9438a989eed086573db4280c021a8fb14",
+    "vsixSha256": "be10f6ac990964310e619cb0ef8d62b8c996a38483c04e439b58bc2ba928a73d",
+    "sourceManifestSha256": "e1c4cc7ff19fa93f9a4c5fe268fb10840cd03ec55471ea3f3a70c512f29037d0",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6382,12 +6380,7 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-067",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-097",
+      "id": "IDEA-066",
       "before": "partial",
       "after": "implemented"
     }
@@ -6395,15 +6388,15 @@
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "c81b1ff3f1010ad548f83d83b9fa2162dd8f3af3",
-    "run": 45851084229,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45851084229",
-    "tests": 2202,
+    "head": "90775de802d4796ca0ad831a672b1b6c73c391f5",
+    "run": 45857674773,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45857674773",
+    "tests": 2211,
     "suites": 0,
-    "pass": 1971,
+    "pass": 1978,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 231,
+    "skipped": 233,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

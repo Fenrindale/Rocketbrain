@@ -141,7 +141,9 @@ test('public Java class review updates exact Kotlin constructor and type sites i
     assert.equal(path.dirname(owned), parent);
     await fs.rm(owned, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
   });
-  await populate(root, tools);
+  const staged = path.join(owned, 'staging', 'project');
+  await populate(staged, tools, { deployedRoot: root });
+  await fs.rename(staged, root);
   const databases = await Promise.all(engines.map(async ([engine, file]) => [engine, await load(file)]));
   const before = await Promise.all(databases.map(([engine, config]) => readDatabase(root, tools, config, engine)));
   const rootUri = uri(root).toString();
@@ -170,7 +172,9 @@ test('public Java class review updates exact Kotlin constructor and type sites i
   await until(async () => {
     const model = await java.request('workspace/executeCommand', { command: 'java.project.getClasspaths',
       arguments: [document.uri.toString(), { scope: 'test' }] }, 25000);
-    return model?.classpaths?.some(file => file.endsWith('spring-jdbc-7.0.10.jar'));
+    const kotlinOutput = path.join(root, 'build/classes/kotlin/main');
+    return model?.classpaths?.some(file => file.endsWith('spring-jdbc-7.0.10.jar')) &&
+      model.classpaths.some(file => !path.relative(kotlinOutput, file));
   }, 80000);
   await until(async () => {
     const defs = await kotlinClient.request('textDocument/definition', { textDocument: { uri: kotlinProtocolUri(kotlinDoc.uri.fsPath) },

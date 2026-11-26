@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-27 기준 Rocketbrain 0.152.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-27 기준 Rocketbrain 0.154.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 188 |
-| 부분 구현 | 14 |
+| 구현 | 189 |
+| 부분 구현 | 13 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **95.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **96.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.152에서는 WSL 2에서 Linux 파일 변경을 비교하고 선택한 편집기에 반영한다. Micronaut Gradle 앱 재시작과 Linux Maven 네이티브 실행, Reactor 비동기 호출 추적, JPMS 패키지 이름 변경 및 필드 Safe Delete를 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 206점에서 207점으로 바뀌었다.
+v0.154에서는 Spring AOT 빈 등록 비교, 실행 중인 Quarkus 개발 JVM에 대한 디버거 재연결, Quarkus Gradle GraalVM 실행 및 Linux x64 Kotlin/Native 소스 디버깅을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 207점에서 207.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -86,7 +86,7 @@ v0.152에서는 WSL 2에서 Linux 파일 변경을 비교하고 선택한 편집
 | IDEA-063 | IntelliJ IDEA | Hibernate 디버거·SQL 바인딩·N+1 | 구현 |
 | IDEA-064 | IntelliJ IDEA | Spring Security 런타임 진단 | 구현 |
 | IDEA-065 | IntelliJ IDEA | MVC·WebFlux·Feign 엔드포인트 탐색 | 구현 |
-| IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 부분 구현 |
+| IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 구현 |
 | IDEA-067 | IntelliJ IDEA | Micronaut 개발 | 구현 |
 | IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 구현 |
 | IDEA-069 | IntelliJ IDEA | Maven 프로젝트·목표·의존성 | 구현 |

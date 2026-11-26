@@ -85,6 +85,7 @@ Dev Container 명령은 이미지나 Dockerfile 구성과 함께 명시한 Docke
 **Select Python Interpreter**로 프로젝트 가상환경을 선택합니다. Python Outline과 구문 오류는 해당 인터프리터의 AST에서 얻습니다. **Run Python File**로 저장한 파일을 실행하고 `debugpy`가 설치된 환경에서 **Debug Python File**로 중단점·변수를 볼 수 있습니다. [debugpy](https://github.com/microsoft/debugpy)
 4. **Build Java Project / Choose Build Task**, 저장한 **Run / Debug / Stop** 구성을 사용합니다.
 5. **Create Spring Project**로 공식 Initializr의 Java·Kotlin·Groovy JAR/WAR 프로젝트를 검토하고 생성합니다. **Edit Spring Starters**에서 지원하는 의존성 변경을 검토합니다. [Spring 프로젝트 만들기](docs/spring-initializr-project-forms.md) · [Maven BOM으로 관리하는 스타터](docs/spring-maven-bom-starters.md)
+   **Inspect Spring AOT Beans**에서 Gradle 또는 Maven이 생성한 `__BeanFactoryRegistrations.java`를 열어 빈 이름·별칭과 원본 `@Bean` 위치를 확인합니다. 같은 파일을 다시 검사하면 두 빌드의 등록 목록을 비교할 수 있습니다. [Spring AOT 생성 소스](https://docs.spring.io/spring-framework/reference/core/aot.html)
 6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. Maven·Gradle 및 main·test에 맞는 사용자 템플릿과 저작권 프로필을 선택하고 필요한 변수 값을 입력할 수 있습니다. [Java 파일 템플릿](docs/java-file-templates.md)
 7. **New JShell Scratch**로 저장할 코드를 만들고 **Run JShell Scratch**로 독립 JDK에서 실행합니다. 프로젝트 클래스가 필요하면 실행할 때 관찰된 로컬 클래스 경로를 선택합니다.
 8. **Explore Java Call Hierarchy**와 **Explore Java Type Hierarchy**에서 JDT가 확인한 호출과 상속·구현 관계를 이동합니다. **Inspect Java Dependencies**는 소스 import, 선언된 빌드·모듈과 빌드된 클래스의 의존성을 구분해 순환 경로를 보여줍니다.
@@ -169,6 +170,8 @@ Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compil
 **Inspect Kotlin Multiplatform Targets**에서 Gradle이 구성한 JVM·JavaScript 타깃과 소스셋 의존 관계를 확인합니다. **Compile Kotlin Multiplatform Targets**, **Test Kotlin Multiplatform Targets**, **Run Kotlin Multiplatform Target**은 관찰된 타깃의 컴파일·테스트·실행 작업을 사용합니다. JavaScript 실행과 테스트는 Node.js 타깃을 대상으로 합니다.
 
 **Debug Kotlin Multiplatform JS Node Target**에서 로컬 Kotlin/JS Node 개발 타깃을 선택하고 Gradle 빌드를 승인합니다. `rocketbrain.kotlin.nodeHome`에 독립 Node.js 설치 디렉터리를 지정합니다. 컴파일러가 저장된 Kotlin 소스를 포함해 생성한 맵을 검증한 뒤 `commonMain`과 `jsMain`에서 중단점, 한 줄씩 넘기기, 스택과 지역 변수 읽기, 계속 실행을 지원합니다. 외부 npm 런타임 의존성이 없는 CommonJS 개발 실행 파일을 대상으로 하며, 소스나 빌드 설정을 바꾼 뒤에는 다시 검토합니다. **Stop Kotlin Multiplatform Task** 또는 디버그 중지 버튼으로 해당 Node.js 세션을 종료합니다.
+
+Linux x64 확장 호스트에서는 **Debug Kotlin/Native Executable**에서 로컬 Gradle 디버그 실행 파일을 검토하고 GDB를 시작합니다. 미리 선택한 Kotlin 파일에 중단점을 설정하고, 한 줄 넘기기와 관찰된 32비트 정수 지역 변수를 확인할 수 있습니다. [Kotlin Multiplatform 디버깅](docs/kotlin-multiplatform-debug.md)
 
 공통 Kotlin UI의 저장된 `commonMain` 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수와 JVM 타깃을 선택할 수 있습니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. 소스를 저장한 뒤 미리보기 패널의 **Refresh Preview**로 같은 타깃을 다시 그립니다.
 

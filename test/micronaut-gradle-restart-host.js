@@ -3,6 +3,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const path=require('node:path');
+const {fileURLToPath}=require('node:url');
 const {createHash}=require('node:crypto');
 const {get,assertClosed}=require('./helpers/micronaut-debug-fixture');
 const {withOwnedDatabase,withImportedGradle,copyUnder}=require('./micronaut-gradle-host');
@@ -78,8 +79,11 @@ async function exercise(service,root,projectUri,{observe}={}){
     const good=await service.prepareRestart();
     assert.deepEqual(good.changes,[{file:configFile,action:'modified'}]);
     const result=await apply(good);
-    assert.deepEqual([result.kind,result.mode,result.restartedFrom,result.sourceDigest,result.environment,result.projectUri],
-      ['gradle-distribution','owned-jvm-restart',old.runId,good.sourceDigest,'dev',projectUri]);
+    assert.deepEqual([result.kind,result.mode,result.restartedFrom,result.sourceDigest,result.environment],
+      ['gradle-distribution','owned-jvm-restart',old.runId,good.sourceDigest,'dev']);
+    const [reportedProject, requestedProject] = await Promise.all(
+      [result.projectUri, projectUri].map(uri => fs.realpath(fileURLToPath(uri))));
+    assert.equal(path.relative(reportedProject, requestedProject),'');
     assert.equal(result.previousArtifactSha256,old.sha256);
     assert.equal(result.ownershipVerified,true);
     assert.notEqual(result.sha256,old.sha256);

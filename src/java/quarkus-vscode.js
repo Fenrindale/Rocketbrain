@@ -7,6 +7,7 @@ const { inspectQuarkusProject,quarkusProject,profileKey } = require('./quarkus-m
 const { profileFile } = require('./quarkus-config-mapping');
 const { createQuarkusDev,fastJar } = require('./quarkus-dev');
 const { createQuarkusNative } = require('./quarkus-native');
+const { gradleNativeInputs } = require('./quarkus-native-gradle');
 const { createQuarkusProject } = require('./quarkus-create');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 const { DEBUG_TYPE,processAttachTarget } = require('./debug');
@@ -17,11 +18,12 @@ const COMMANDS = Object.freeze({
   inspect:'rocketbrain.quarkus.inspect', start:'rocketbrain.quarkus.startDev',
   stop:'rocketbrain.quarkus.stopDev', test:'rocketbrain.quarkus.runTests',
   build:'rocketbrain.quarkus.build', debug:'rocketbrain.quarkus.debug', debugDev:'rocketbrain.quarkus.debugDev',
+  startAttachableDev:'rocketbrain.quarkus.startAttachableDev',attachDev:'rocketbrain.quarkus.attachDev',detachDev:'rocketbrain.quarkus.detachDev',
   buildNative:'rocketbrain.quarkus.buildNative',runNative:'rocketbrain.quarkus.runNative'
 });
 
 function registerQuarkusWorkbench(vscode,java) {
-  let disposed=false, closing, busy=false, generation=0, debugSession;
+  let disposed=false, closing, busy=false, generation=0, debugSession, liveDev;
   const subscriptions=[], jobs=new Set(), pending=new Map();
   const output=vscode.window.createOutputChannel('Rocketbrain Quarkus');
   const dev=createQuarkusDev({log:chunk => output.append(chunk),
@@ -74,9 +76,10 @@ function registerQuarkusWorkbench(vscode,java) {
       workspaceTrusted:vscode.workspace.isTrusted,allowProjectExecution,cancellation,debug});
   }
 
-  async function exclusive(options,action,message) {
+  async function exclusive(options,action,message,continueDev=false) {
     if (options.allowProjectExecution!==true) throw fail(message);
-    if (busy||dev.running||native.running||java.workbench.getSnapshot().taskRunning) throw fail('Finish the current Java task or stop the owned Quarkus application.');
+    if (busy||native.running||!continueDev&&(dev.running||java.workbench.getSnapshot().taskRunning))
+      throw fail('Finish the current Java task or stop the owned Quarkus application.');
     const ticket=generation;
     busy=true;
     try {
@@ -113,9 +116,9 @@ function registerQuarkusWorkbench(vscode,java) {
 
   const buildNative=(options={})=>exclusive(options,(project,current)=>{
     const config=vscode.workspace.getConfiguration('rocketbrain.java');
-    return native.build({project,graalvmHome:config.get('quarkusGraalvmHome'),mavenHome:config.get('mavenHome'),
-      cancellation:options.cancellation,current(){current();saved(project);}});
-  },'Explicitly approve the Quarkus native build before executing the Maven module.');
+    return native.build({project,graalvmHome:config.get('quarkusGraalvmHome'),mavenHome:config.get('mavenHome'),gradleHome:config.get('gradleHome'),
+      reviewedSourceDigest:options.reviewedSourceDigest,cancellation:options.cancellation,current(){current();saved(project);}});
+  },'Explicitly approve the Quarkus native build before executing the selected module.');
   const runNative=(options={})=>exclusive(options,(project,current)=>native.start({project,buildId:options.buildId,
     cancellation:options.cancellation,current(){current();saved(project);}}),
   'Explicitly approve running the selected Quarkus native image.');
@@ -132,6 +135,7 @@ function registerQuarkusWorkbench(vscode,java) {
 
   async function stop() {
     generation++;
+    liveDev=undefined;
     const owned=[debugSession,...Array.from(pending.values(),record=>record.session)].filter(Boolean);
     debugSession=undefined;
     const nativeWasRunning=native.running;
@@ -141,20 +145,25 @@ function registerQuarkusWorkbench(vscode,java) {
     return nativeWasRunning?nativeReceipt:receipt;
   }
 
-  const startDebug=(options={},profile='prod')=>exclusive(options,async(project,current)=>{
-    if (profile==='prod') {
-      const result=await task(project,'build',options,current);
-      if (result.state!=='succeeded') throw fail('The Quarkus fast-jar build did not succeed.');
+  async function reviewedProcess(receipt,expected,cancellation) {
+    const candidate=await java.debug.processes.resolve(expected||receipt.debug.pid,cancellation);
+    const proof=await dev.verifyDebugTarget(cancellation);
+    if (candidate.hostName!==proof.address||candidate.pid!==proof.pid||candidate.port!==proof.port||
+        candidate.pid!==receipt.debug.pid||candidate.port!==receipt.debug.port) {
+      throw fail('The observed JDWP address differs from the owned Quarkus listener.');
     }
-    const receipt=await launch(project,options,profile==='dev'?'development':true);
+    return candidate;
+  }
+
+  function rememberLive(receipt,process) {
+    liveDev={receipt:{...receipt,debug:Object.freeze({...receipt.debug}),runId:randomUUID()},process:Object.freeze({...process})};
+    return liveDev;
+  }
+
+  async function attachOwned(project,current,receipt,candidate,options,profile) {
     const key=randomUUID(), record={};
     let timer;
     try {
-      current();
-      const candidate=await java.debug.processes.resolve(receipt.debug.pid,options.cancellation);
-      const proof=await dev.verifyDebugTarget(options.cancellation);
-      if (candidate.hostName!==proof.address||candidate.pid!==proof.pid||candidate.port!==proof.port)
-        throw fail('The observed JDWP address differs from the owned Quarkus listener.');
       current();
       saved(project);
       const began=new Promise(resolve=>{record.resolve=resolve;});
@@ -179,10 +188,89 @@ function registerQuarkusWorkbench(vscode,java) {
       return {...receipt,sessionId:session.id};
     } catch(error) {
       if (record.session) await vscode.debug.stopDebugging(record.session).catch(()=>{});
-      await dev.stop();
       throw error;
     } finally { clearTimeout(timer);pending.delete(key); }
+  }
+
+  const startDebug=(options={},profile='prod')=>exclusive(options,async(project,current)=>{
+    if (profile==='prod') {
+      const result=await task(project,'build',options,current);
+      if (result.state!=='succeeded') throw fail('The Quarkus fast-jar build did not succeed.');
+    }
+    const receipt=await launch(project,options,profile==='dev'?'development':true);
+    try {
+      current();
+      const candidate=await reviewedProcess(receipt,undefined,options.cancellation);
+      current();
+      const chosen=profile==='dev'?rememberLive(receipt,candidate).receipt:receipt;
+      return await attachOwned(project,current,chosen,candidate,options,profile);
+    } catch(error) {
+      liveDev=undefined;
+      await dev.stop();
+      throw error;
+    }
   },'Explicitly choose Quarkus debugging before building and launching the project.');
+
+  const startAttachableDev=(options={})=>exclusive(options,async(project,current)=>{
+    const receipt=await launch(project,options,'development');
+    try {
+      current();
+      const process=await reviewedProcess(receipt,undefined,options.cancellation);
+      current();
+      return {...rememberLive(receipt,process).receipt};
+    } catch(error) { await dev.stop(); throw error; }
+  },'Explicitly start Quarkus dev with a local debug listener.');
+
+  function withLiveDev(options,message,work) {
+    trusted(options.cancellation);
+    if(options.allowProjectExecution!==true)throw fail(message);
+    const owned=liveDev;
+    if(!owned||!dev.running||options.runId&&owned.receipt.runId!==options.runId||
+        options.projectUri&&owned.receipt.projectUri!==options.projectUri) {
+      throw fail('Choose the current owned Quarkus dev JVM with a debug listener.');
+    }
+    return exclusive({...options,projectUri:owned.receipt.projectUri},(project,current)=>{
+      if(owned!==liveDev)throw fail('The owned Quarkus dev JVM changed.');
+      return work(project,current,owned);
+    },message,true);
+  }
+
+  const attachDev=(options={})=>withLiveDev(options,'Explicitly attach to the running Quarkus dev JVM.',async(project,current,owned)=>{
+    if(debugSession)throw fail('Detach the current Quarkus dev debugger before attaching again.');
+    const candidate=await reviewedProcess(owned.receipt,owned.process,options.cancellation);
+    current();
+    return attachOwned(project,current,owned.receipt,candidate,options,'dev');
+  });
+
+  const detachDev=(options={})=>withLiveDev(options,'Explicitly detach the Quarkus dev debugger.',async(_project,current,owned)=>{
+    const session=debugSession;
+    if(!session||options.sessionId&&session.id!==options.sessionId||java.debug.verifiedLocalPid(session)!==owned.process.pid) {
+      throw fail('Choose the current Quarkus dev debugger session to detach.');
+    }
+    let listener,timer;
+    const ended=new Promise(resolve=>{
+      listener=vscode.debug.onDidTerminateDebugSession(candidate=>{ if(candidate.id===session.id)resolve(); });
+    });
+    try {
+      // An attach transport can close before its disconnect response; use the exact terminal event.
+      void session.customRequest('disconnect',{terminateDebuggee:false}).catch(()=>{});
+      await Promise.race([ended,new Promise((_,reject)=>{
+        timer=setTimeout(()=>reject(fail('The Quarkus dev debugger detach did not complete.')),10000);
+      })]);
+    } finally { clearTimeout(timer);listener.dispose(); }
+    current();
+    const deadline=Date.now()+10000;
+    let failure;
+    do {
+      current();
+      try {
+        await reviewedProcess(owned.receipt,owned.process,options.cancellation);
+        return {...owned.receipt,state:'detached',detachedSessionId:session.id};
+      } catch(error) { failure=error; }
+      await delay(200);
+    } while(Date.now()<deadline);
+    throw failure;
+  });
 
   async function create({parent,name,allowProjectWrites,cancellation} = {}) {
     trusted(cancellation);
@@ -326,8 +414,21 @@ function registerQuarkusWorkbench(vscode,java) {
   register(COMMANDS.buildNative,async()=>{
     const projectUri=await choose();
     if(!projectUri)return;
+    const project=await projectFor(projectUri);
+    let reviewedSourceDigest;
+    if(project.tool==='gradle'){
+      saved(project);
+      reviewedSourceDigest=gradleNativeInputs(project);
+      const action='Build Native Image';
+      const approval=await vscode.window.showWarningMessage('Build the selected Quarkus Gradle Native Image?',{
+        modal:true,detail:project.name+' · :quarkusBuild · saved input SHA-256 '+reviewedSourceDigest+
+          '\nGradle runs locally with the configured GraalVM and a private build directory.'
+      },action);
+      if(approval!==action)return;
+    }
     output.show(true);
-    const result=await progress('Build Quarkus Native Image',cancellation=>buildNative({projectUri,allowProjectExecution:true,cancellation}));
+    const result=await progress('Build Quarkus Native Image',cancellation=>buildNative({projectUri,allowProjectExecution:true,
+      reviewedSourceDigest,cancellation}));
     void vscode.window.showInformationMessage('Quarkus native image built at '+result.artifact);
     return result;
   });
@@ -352,6 +453,22 @@ function registerQuarkusWorkbench(vscode,java) {
     return progress('Debug Quarkus Dev Mode',
       cancellation=>startDebug({projectUri,allowProjectExecution:true,cancellation},'dev'));
   });
+  register(COMMANDS.startAttachableDev,async()=>{
+    const projectUri=await choose();
+    if(!projectUri)return;
+    output.show(true);
+    const result=await progress('Start Quarkus Dev with Debug Port',cancellation=>
+      startAttachableDev({projectUri,allowProjectExecution:true,cancellation}));
+    void vscode.window.showInformationMessage('Quarkus dev is ready at '+result.baseUrl+'. Its debugger can be attached when needed.');
+    return result;
+  });
+  register(COMMANDS.attachDev,()=>progress('Attach to Running Quarkus Dev',cancellation=>
+    attachDev({allowProjectExecution:true,cancellation})));
+  register(COMMANDS.detachDev,async()=>{
+    const result=await progress('Detach Quarkus Dev Debugger',cancellation=>detachDev({allowProjectExecution:true,cancellation}));
+    void vscode.window.showInformationMessage('Debugger detached. Quarkus dev is still serving at '+result.baseUrl+'.');
+    return result;
+  });
 
   return {
     create:options => track(() => create(options)),
@@ -359,6 +476,8 @@ function registerQuarkusWorkbench(vscode,java) {
     runTests:options => track(() => tests(options)),build:options=>track(()=>build(options)),
     buildNative:options=>track(()=>buildNative(options)),runNative:options=>track(()=>runNative(options)),
     debug:options=>track(()=>startDebug(options)),debugDev:options=>track(()=>startDebug(options,'dev')),stopDev:stop,
+    startAttachableDev:options=>track(()=>startAttachableDev(options)),attachDev:options=>track(()=>attachDev(options)),
+    detachDev:options=>track(()=>detachDev(options)),
     dispose() {
       if (closing) return closing;
       disposed=true;

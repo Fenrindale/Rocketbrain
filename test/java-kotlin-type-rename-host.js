@@ -40,7 +40,7 @@ async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
     assert.ok(['RocketbrainDisposableMariaDbFixture-v1', 'RocketbrainDisposableOracleMysqlFixture-v1'].includes(ownership.kind));
     const config = JSON.parse(await fs.readFile(spring.dbConfigPath, 'utf8'));
     // Finish the Eclipse descriptors before the native workspace watcher can import the Gradle fixture.
-    await populate(staged, tools);
+    await populate(staged, tools, { deployedRoot: root });
     const physical = await fs.realpath(staged);
     assert.equal(path.relative(physical, staged), '');
     assert.equal(path.relative(path.dirname(physical), preparation), '');
@@ -52,12 +52,14 @@ async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
     await java.start();
     await java.executeWorkspaceCommand('java.project.changeImportedProjects', [vscode.Uri.file(path.join(root, '.project')).toString()], [], []);
     const document = (await show(owner)).document, kt = (await show(kotlin)).document;
-    await open(caller);
+    const javaUse = await open(caller);
     imported = await until(async () => {
       const metadata = await java.executeWorkspaceCommand('java.project.getClasspaths', document.uri.toString(), { scope: 'test' });
       const key = metadata?.projectRoot, physical = key?.startsWith('file:') ? fileURLToPath(key) : key;
+      const kotlinOutput = path.join(root, 'build/classes/kotlin/main');
       return physical && path.isAbsolute(physical) && !path.relative(physical, root) &&
-        metadata.classpaths?.some(file => file.endsWith('spring-jdbc-7.0.10.jar')) ? key : undefined;
+        metadata.classpaths?.some(file => file.endsWith('spring-jdbc-7.0.10.jar')) &&
+        metadata.classpaths.some(file => !path.relative(kotlinOutput, file)) ? key : undefined;
     }, 100000);
     await java.kotlinEditor.start({ document: kt });
     const use = positionOf(kt.getText(), 'domain.Shipment', 8);
@@ -70,6 +72,15 @@ async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
       });
     }, 80000);
     const position = document.positionAt(document.getText().indexOf('class Shipment') + 6);
+    await until(async () => {
+      const references = await java.navigationLocations('references', { textDocument: { uri: document.uri.toString() },
+        position: { line: position.line, character: position.character }, context: { includeDeclaration: true } });
+      const paths = references?.filter(ref => ref.uri?.startsWith('file:')).map(ref => fileURLToPath(ref.uri)) || [];
+      if (!paths.some(file => !path.relative(javaUse.uri.fsPath, file))) {
+        throw Error('JDT has not indexed the saved JavaUsage.java caller for the exact imported mixed project.');
+      }
+      return true;
+    }, 25000);
     plan = await java.typeRename.prepare({ document, position, newName });
     assert.deepEqual(plan.typeRename.kotlinCallers, { files: 1, sites: 4, constructorBindings: 1, compilerVerified: true });
     assert.equal(plan.resourceOperations.length, 1);

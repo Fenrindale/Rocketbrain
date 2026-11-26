@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.152.0",
+  "version": "0.154.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -39,6 +39,7 @@
     "onDebug:rocketbrain-python",
     "onDebug:rocketbrain-scala",
     "onDebug:rocketbrain-kotlin-js",
+    "onDebug:rocketbrain-kotlin-native",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
@@ -193,6 +194,9 @@
       { "command": "rocketbrain.quarkus.runNative", "title": "Run Quarkus Native Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.debug", "title": "Debug Quarkus Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.debugDev", "title": "Debug Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.startAttachableDev", "title": "Start Quarkus Dev with Debug Port", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.attachDev", "title": "Attach to Running Quarkus Dev", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.detachDev", "title": "Detach Quarkus Dev Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.select", "title": "Select Python Interpreter", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.run", "title": "Run Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
       { "command": "rocketbrain.python.debug", "title": "Debug Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
@@ -256,6 +260,7 @@
       { "command": "rocketbrain.kotlin.multiplatform.run", "title": "Run Kotlin Multiplatform Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugJvm", "title": "Debug Kotlin Multiplatform JVM Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugJs", "title": "Debug Kotlin Multiplatform JS Node Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.debugNative", "title": "Debug Kotlin/Native Executable", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.previewCompose", "title": "Preview Kotlin Compose", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
@@ -1320,6 +1325,16 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.spring.inspectAotBeans",
+        "title": "Inspect Spring AOT Beans",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.openAotBeanSource",
+        "title": "Open Spring AOT Bean Source",
+        "category": "Rocketbrain"
+      },
+      {
         "command": "rocketbrain.spring.createProject",
         "title": "Create Spring Project",
         "category": "Rocketbrain"
@@ -2065,6 +2080,11 @@
       {
         "type": "rocketbrain-kotlin-js",
         "label": "Rocketbrain Kotlin/JS Node",
+        "languages": ["kotlin"]
+      },
+      {
+        "type": "rocketbrain-kotlin-native",
+        "label": "Rocketbrain Kotlin/Native (Linux x64)",
         "languages": ["kotlin"]
       },
       {
@@ -3015,7 +3035,7 @@
         "rocketbrain.java.quarkusGraalvmHome": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to an independent Linux GraalVM JDK 25 or newer with Native Image for the Quarkus Maven native build."
+          "description": "Absolute path to an independent Linux GraalVM JDK 25 or newer with Native Image for Quarkus Maven and standalone Gradle native builds."
         },
         "rocketbrain.java.micronautGraalvmHome": {
           "type": "string",
@@ -3094,6 +3114,12 @@
           "default": "",
           "scope": "machine",
           "description": "Optional standalone Node.js directory prepended to the Kotlin Gradle task environment when a project uses a system Node.js."
+        },
+        "rocketbrain.kotlin.nativeGdbPath": {
+          "type": "string",
+          "default": "/usr/bin/gdb",
+          "scope": "machine",
+          "description": "Absolute path to the system GDB used for reviewed Kotlin/Native Linux x64 launches."
         },
         "rocketbrain.spring.initializr.endpoint": {
           "type": "string",

@@ -41,14 +41,14 @@ async function populate(root, tools, beforeBuild) {
   await configureJdt(root);
 }
 
-async function configureJdt(root) {
+async function configureJdt(root, { deployedRoot = root } = {}) {
   const jars = await classpath(root, 'compile');
   await fs.writeFile(path.join(root, '.project'), '<projectDescription><name>' + xmlAttribute(path.basename(root)) +
     '</name><buildSpec><buildCommand><name>org.eclipse.jdt.core.javabuilder</name><arguments/></buildCommand></buildSpec>' +
     '<natures><nature>org.eclipse.jdt.core.javanature</nature></natures></projectDescription>', { flag: 'wx' });
   await fs.writeFile(path.join(root, '.classpath'), '<classpath><classpathentry kind="src" path="src/main/java"/>' +
     '<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>' +
-    [...classes.slice(1).map(value => path.join(root, value)), ...jars].map(value =>
+    [...classes.slice(1).map(value => path.join(deployedRoot, value)), ...jars].map(value =>
       '<classpathentry kind="lib" path="' + xmlAttribute(value) + '"/>').join('') +
     '<classpathentry kind="output" path="bin"/></classpath>', { flag: 'wx' });
 }
