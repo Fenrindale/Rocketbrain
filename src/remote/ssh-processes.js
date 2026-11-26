@@ -13,6 +13,8 @@ const { compileProgram, compileRequest } = require('./ssh-java-compile-runtime')
 const { compileConfig, compileProof, validCompileReview, validCompileResult } = require('./ssh-java-compile');
 const { mavenProgram, mavenRequest } = require('./ssh-maven-runtime');
 const { mavenConfig, mavenProof, validMavenReview, validMavenResult } = require('./ssh-maven');
+const { gradleProgram, gradleRequest } = require('./ssh-gradle-runtime');
+const { gradleConfig, gradleProof, validGradleReview, validGradleResult } = require('./ssh-gradle');
 const { javaSupervisorInvocation } = require('../devcontainer/java-process');
 
 const bytesHash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -185,9 +187,19 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
         cancelMessage: 'The SSH Maven build was cancelled.' });
   }
 
+  function gradleProcess(config, expected, signal) {
+    signal?.throwIfAborted();
+    const input = gradleRequest(config, expected);
+    const child = processFor(expected ? 'gradle' : 'probe', pythonCommand(profile.python, gradleProgram));
+    return collectRuntime(child, expected ? info => validGradleResult(info, config) : info => validGradleReview(info, config),
+      'Verify the reviewed Gradle project, independent runtimes and prepared offline dependency mirror.',
+      { input, signal, keepInput: Boolean(expected), reportRemoteError: true, timeout: expected ? 200000 : 64000,
+        cancelMessage: 'The SSH Gradle build was cancelled.' });
+  }
+
   return {
     async inspect(kind, requested) {
-      if (!['terminal', 'java', 'debug', 'compile', 'maven'].includes(kind)) throw Error('Choose a supported reviewed SSH workspace process.');
+      if (!['terminal', 'java', 'debug', 'compile', 'maven', 'gradle'].includes(kind)) throw Error('Choose a supported reviewed SSH workspace process.');
       rootParts(remoteRoot);
       let config;
       if (kind === 'java') {
@@ -209,11 +221,13 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       }
       if (kind === 'compile') config = compileConfig(remoteRoot, requested);
       if (kind === 'maven') config = mavenConfig(remoteRoot, requested);
+      if (kind === 'gradle') config = gradleConfig(remoteRoot, requested);
       await verifyRoot();
       let info;
       if (kind === 'debug') info = await debugProcess(config);
       else if (kind === 'compile') info = await compileProcess(config);
       else if (kind === 'maven') info = await mavenProcess(config);
+      else if (kind === 'gradle') info = await gradleProcess(config);
       else if (kind === 'java') info = await javaRuntime(config);
       if (closed) throw Error('The SSH workspace closed.');
       const now = Date.now();
@@ -226,7 +240,9 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
         ...(kind === 'debug' && { platform: info.platform, javaHome: config.javaHome, pid: info.pid, debugPort: info.port, startedAt: info.startedAt }),
         ...(kind === 'compile' && { ...info, file: config.file, javaHome: config.javaHome, jars: config.jars }),
         ...(kind === 'maven' && { ...info, file: config.file, javaHome: config.javaHome,
-          mavenHome: config.mavenHome, repository: config.repository }) };
+          mavenHome: config.mavenHome, repository: config.repository }),
+        ...(kind === 'gradle' && { ...info, file: config.file, javaHome: config.javaHome,
+          gradleHome: config.gradleHome, repository: config.repository }) };
     },
     async open(kind, approval) {
       if (closed || approval?.allowRemoteProcess !== true) throw Error('Review and approve the remote workspace process first.');
@@ -239,6 +255,9 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       if (kind === 'maven' && (approval.file !== offer.config.file || approval.task !== offer.config.task)) {
         throw Error('Open the exact remote Maven POM and task that were reviewed.');
       }
+      if (kind === 'gradle' && (approval.file !== offer.config.file || approval.task !== offer.config.task)) {
+        throw Error('Open the exact remote Gradle build file and task that were reviewed.');
+      }
       if (started || active.size >= 3 || [...active.values()].includes(kind)) throw Error('Close the existing SSH workspace process of this kind first.');
       started = true;
       try {
@@ -247,6 +266,7 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
         if (kind === 'debug') return debugProcess(offer.config, offer.info);
         if (kind === 'compile') return compileProcess(offer.config, compileProof(offer.info), approval.signal);
         if (kind === 'maven') return mavenProcess(offer.config, mavenProof(offer.info), approval.signal);
+        if (kind === 'gradle') return gradleProcess(offer.config, gradleProof(offer.info), approval.signal);
         const current = await javaRuntime(offer.config);
         if (current.sha256 !== offer.info.sha256) throw Error('The remote JDK or JDT LS changed after review.');
         await verifyRoot();
@@ -261,7 +281,7 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       closed = true;
       offers.clear();
       for (const [child, kind] of active) {
-        if (kind === 'compile' || kind === 'maven') {
+        if (kind === 'compile' || kind === 'maven' || kind === 'gradle') {
           child.stdin.end();
           const timeout = setTimeout(() => child.kill(), 2200);
           timeout.unref();

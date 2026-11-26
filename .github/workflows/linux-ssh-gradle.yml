@@ -1,0 +1,73 @@
+name: Linux OpenSSH reviewed Gradle tasks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'verify-linux-ssh-gradle-*']
+    paths:
+      - '.github/workflows/linux-ssh-gradle.yml'
+      - 'src/remote/ssh-*.js'
+      - 'test/ssh-gradle.test.js'
+      - 'test/helpers/linux-openssh-fixture.js'
+      - 'test/helpers/ssh-*-fixture.js'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  pull_request:
+    paths:
+      - '.github/workflows/linux-ssh-gradle.yml'
+      - 'src/remote/ssh-*.js'
+      - 'test/ssh-gradle.test.js'
+      - 'test/helpers/linux-openssh-fixture.js'
+      - 'test/helpers/ssh-*-fixture.js'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  reviewed-gradle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked extension dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Fetch and verify the owned Gradle distribution
+        run: |
+          set -euo pipefail
+          test -x /usr/sbin/sshd
+          ssh -V
+          bundle="$RUNNER_TEMP/gradle-9.9.2-bin.zip"
+          curl -fsSL --proto '=https' --retry 2 \
+            https://downloads.gradle.org/distributions/gradle-9.9.2-bin.zip -o "$bundle"
+          printf '%s  %s\n' '971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b' "$bundle" | sha256sum -c -
+          unzip -q "$bundle" -d "$RUNNER_TEMP"
+          echo "ROCKETBRAIN_SSH_GRADLE_TEST_HOME=$RUNNER_TEMP/gradle-9.9.2" >> "$GITHUB_ENV"
+      - name: Execute real Gradle tasks through a private stock OpenSSH daemon
+        env:
+          ROCKETBRAIN_OPENSSH_TEST_SSHD: /usr/sbin/sshd
+          ROCKETBRAIN_SSH_GRADLE_TEST_RECEIPT: ${{ runner.temp }}/rocketbrain-linux-ssh-gradle.json
+        run: |
+          set -euo pipefail
+          export ROCKETBRAIN_SSH_PROCESS_TEST_JDK="$(realpath "$JAVA_HOME")"
+          node --test test/ssh-gradle.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-linux-ssh-gradle
+          path: ${{ runner.temp }}/rocketbrain-linux-ssh-gradle.json
+          if-no-files-found: error
+          retention-days: 7

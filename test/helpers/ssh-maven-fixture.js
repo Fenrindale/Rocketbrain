@@ -56,19 +56,7 @@ async function stageMaven(fixture, tools, configuration, warmedRepository) {
   await fs.writeFile(pom, ordinaryPom);
   await fs.writeFile(source, sourceText);
   await fs.writeFile(testFile, testSource);
-  let database;
-  if (configuration) {
-    const spring = JSON.parse(await fs.readFile(configuration, 'utf8'));
-    const dbHome = path.dirname(await fs.realpath(spring.dbConfigPath));
-    const owner = JSON.parse(await fs.readFile(path.join(dbHome, 'owner.json'), 'utf8'));
-    const marker = { mysql: 'RocketbrainDisposableOracleMysqlFixture-v1', mariadb: 'RocketbrainDisposableMariaDbFixture-v1' };
-    assert.ok(marker[spring.dbEngine]);
-    assert.deepEqual([owner.id, owner.kind], [path.basename(dbHome), marker[spring.dbEngine]]);
-    assert.match(spring.baseUrl, /^http:\/\/127\.0\.0\.1:\d+$/u);
-    database = spring.dbEngine;
-    await fs.mkdir(path.join(module, 'src/test/resources'));
-    await fs.writeFile(path.join(module, 'src/test/resources/owned-spring-url'), spring.baseUrl);
-  }
+  const database = await mountOwnedSpringUrl(module, configuration);
   const repository = path.join(parent, 'maven-repository');
   if (warmedRepository) await fs.cp(await fs.realpath(warmedRepository), repository, { recursive: true });
   else {
@@ -87,4 +75,18 @@ async function stageMaven(fixture, tools, configuration, warmedRepository) {
   return { module, source, testFile, pom, repository, database, virtualPom, virtualSource };
 }
 
-module.exports = { stageMaven, ordinaryPom, testSource, sourceText, virtualPom };
+async function mountOwnedSpringUrl(module, configuration) {
+  if (!configuration) return undefined;
+  const spring = JSON.parse(await fs.readFile(configuration, 'utf8'));
+  const dbHome = path.dirname(await fs.realpath(spring.dbConfigPath));
+  const owner = JSON.parse(await fs.readFile(path.join(dbHome, 'owner.json'), 'utf8'));
+  const marker = { mysql: 'RocketbrainDisposableOracleMysqlFixture-v1', mariadb: 'RocketbrainDisposableMariaDbFixture-v1' };
+  assert.ok(marker[spring.dbEngine]);
+  assert.deepEqual([owner.id, owner.kind], [path.basename(dbHome), marker[spring.dbEngine]]);
+  assert.match(spring.baseUrl, /^http:\/\/127\.0\.0\.1:\d+$/u);
+  await fs.mkdir(path.join(module, 'src/test/resources'));
+  await fs.writeFile(path.join(module, 'src/test/resources/owned-spring-url'), spring.baseUrl);
+  return spring.dbEngine;
+}
+
+module.exports = { stageMaven, ordinaryPom, testSource, sourceText, virtualPom, mountOwnedSpringUrl };
