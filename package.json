@@ -41,6 +41,7 @@
     "onDebug:rocketbrain-scala",
     "onDebug:rocketbrain-kotlin-js",
     "onDebug:rocketbrain-kotlin-native",
+    "onDebug:rocketbrain-kotlin-ios-simulator",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
@@ -263,6 +264,7 @@
       { "command": "rocketbrain.kotlin.multiplatform.debugJvm", "title": "Debug Kotlin Multiplatform JVM Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugJs", "title": "Debug Kotlin Multiplatform JS Node Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugNative", "title": "Debug Kotlin/Native Executable", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.debugIosSimulator", "title": "Debug Kotlin iOS Simulator App", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isMac && !remoteName" },
       { "command": "rocketbrain.kotlin.android.debugApk", "title": "Debug Kotlin Android APK", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.android.continue", "title": "Continue Kotlin Android Breakpoint", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.android.stop", "title": "Stop Kotlin Android Debug", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -2164,6 +2166,11 @@
       {
         "type": "rocketbrain-kotlin-native",
         "label": "Rocketbrain Kotlin/Native (Linux x64)",
+        "languages": ["kotlin"]
+      },
+      {
+        "type": "rocketbrain-kotlin-ios-simulator",
+        "label": "Rocketbrain Kotlin iOS Simulator (Apple Silicon)",
         "languages": ["kotlin"]
       },
       {
