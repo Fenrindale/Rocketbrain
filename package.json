@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.97.0",
+  "version": "0.98.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -218,6 +218,9 @@
       { "command": "rocketbrain.jdbc.profiles", "title": "Manage JDBC Profiles", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jdbc.newQuery", "title": "New JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.jdbc.run", "title": "Run JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected && editorLangId == rocketbrain-jdbc", "icon": "$(play)" },
+      { "command": "rocketbrain.jdbc.estimatePostgreSqlPlan", "title": "Estimate PostgreSQL Query Plan", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans && editorLangId == rocketbrain-jdbc", "icon": "$(graph)" },
+      { "command": "rocketbrain.jdbc.openPostgreSqlPlanJson", "title": "Open Original PostgreSQL Plan JSON", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
+      { "command": "rocketbrain.jdbc.comparePostgreSqlPlans", "title": "Compare PostgreSQL Estimated Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
       { "command": "rocketbrain.jdbc.browse", "title": "Browse JDBC Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.jdbc.close", "title": "Close JDBC Connection", "category": "Rocketbrain", "enablement": "rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.sqlNotebook.create", "title": "New SQL Notebook", "category": "Rocketbrain" },
@@ -1498,6 +1501,11 @@
           "group": "navigation"
         },
         {
+          "command": "rocketbrain.jdbc.estimatePostgreSqlPlan",
+          "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.postgreSqlPlans && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
           "command": "rocketbrain.db.refreshObjectSource",
           "when": "resourceScheme == rocketbrain-object-source && rocketbrain.mysqlConnected && isWorkspaceTrusted",
           "group": "navigation"
@@ -2675,6 +2683,7 @@
     "protobufjs": "7.6.6",
     "saxes": "6.0.0",
     "sql.js": "1.13.0",
+    "ssh2": "1.17.0",
     "vscode-languageclient": "11.0.0",
     "ws": "8.23.0",
     "yaml": "2.9.1",
@@ -2684,7 +2693,6 @@
     "@vscode/test-electron": "2.5.2",
     "@vscode/vsce": "3.6.2",
     "esbuild": "0.25.11",
-    "graphql": "16.15.0",
-    "ssh2": "1.17.0"
+    "graphql": "16.15.0"
   }
 }

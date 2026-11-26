@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.97.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.98.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 146 |
-| 부분 구현 | 56 |
+| 구현 | 148 |
+| 부분 구현 | 54 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **86.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **86.6%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.97에서는 Java 조건에 따른 값 흐름, 실제 코루틴 Job 계층, 교차 스키마 SQL 참조 탐색, MariaDB 릴리스별 시퀀스 검토를 추가했다. 상태가 바뀐 항목은 3개이고 가중 점수는 184.5점에서 186점으로 바뀌었다.
+v0.98에서는 Java 배열·불변 리스트의 향상된 for 변환, HTTP 바이너리 파일 전송, PostgreSQL 예상 실행 계획과 SSH 대화형 인증을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 186점에서 187점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -54,7 +54,7 @@ v0.97에서는 Java 조건에 따른 값 흐름, 실제 코루틴 Job 계층, �
 | IDEA-031 | IntelliJ IDEA | 인터페이스 추출 | 구현 |
 | IDEA-032 | IntelliJ IDEA | 멤버 Pull Up·Push Down | 구현 |
 | IDEA-033 | IntelliJ IDEA | 리팩터링 미리보기·충돌·일괄 undo | 부분 구현 |
-| IDEA-034 | IntelliJ IDEA | 람다·익명 클래스·루프 변환 | 부분 구현 |
+| IDEA-034 | IntelliJ IDEA | 람다·익명 클래스·루프 변환 | 구현 |
 | IDEA-035 | IntelliJ IDEA | 생성자·접근자·equals·delegate 생성 | 구현 |
 | IDEA-036 | IntelliJ IDEA | 실시간 Java/Kotlin 오류·null 검사 | 구현 |
 | IDEA-037 | IntelliJ IDEA | Intention·Quick Fix·코드 정리 | 구현 |
@@ -150,7 +150,7 @@ v0.97에서는 Java 조건에 따른 값 흐름, 실제 코루틴 Job 계층, �
 | DG-007 | DataGrip | 비밀정보 저장·저장하지 않기 | 부분 구현 |
 | DG-008 | DataGrip | TLS CA·호스트 검증 | 구현 |
 | DG-009 | DataGrip | 클라이언트 인증서·truststore | 구현 |
-| DG-010 | DataGrip | SSH 터널·키·agent 인증 | 부분 구현 |
+| DG-010 | DataGrip | SSH 터널·키·agent 인증 | 구현 |
 | DG-011 | DataGrip | Unix socket·Windows named pipe | 구현 |
 | DG-012 | DataGrip | 클라우드 DB 접속·토큰 인증 범위 | 부분 구현 |
 | DG-013 | DataGrip | 초기 SQL·keep-alive·idle timeout | 구현 |

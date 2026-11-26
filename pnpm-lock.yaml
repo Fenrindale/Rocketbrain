@@ -32,6 +32,9 @@ importers:
       sql.js:
         specifier: 1.13.0
         version: 1.13.0
+      ssh2:
+        specifier: 1.17.0
+        version: 1.17.0
       vscode-languageclient:
         specifier: 11.0.0
         version: 11.0.0
@@ -57,9 +60,6 @@ importers:
       graphql:
         specifier: 16.15.0
         version: 16.15.0
-      ssh2:
-        specifier: 1.17.0
-        version: 1.17.0
 
 packages:
 

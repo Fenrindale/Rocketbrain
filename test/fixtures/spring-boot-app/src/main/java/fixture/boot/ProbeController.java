@@ -1,7 +1,11 @@
 package fixture.boot;
 import java.util.*;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.SpringVersion;
@@ -18,6 +22,11 @@ public class ProbeController {
         var em=emf.createEntityManager();
         try{return Map.of("people",em.createQuery("select count(p) from Person p",Long.class).getSingleResult(),"departments",em.createQuery("select count(d) from Department d",Long.class).getSingleResult(),"rolledBackNames",em.createQuery("select count(d) from Department d where d.name = 'Rolled-back test department'",Long.class).getSingleResult());}
         finally{em.close();}
+    }
+    @PostMapping(path="/probe/upload-digest", consumes="application/octet-stream")
+    public Map<String,Object> uploadDigest(@RequestBody byte[] bytes) throws NoSuchAlgorithmException {
+        return Map.of("length", bytes.length, "sha256", HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)),
+                "people", testingState().get("people"));
     }
     @GetMapping("/probe") public Map<String,Object> probe() {
         Map<String,Object> result = service.probe();

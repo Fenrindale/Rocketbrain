@@ -38,7 +38,7 @@ async function build() {
   fs.copyFileSync(path.join(__dirname, '../runtime/java-debug/LocalValueInspection.java'), path.join('dist', 'java-debug', 'LocalValueInspection.java'));
   await esbuild.build({ entryPoints: ['scripts/java-quality-gate.js'], outfile: 'dist/java-quality-gate.js', bundle: true, platform: 'node', target: 'node20' });
   await esbuild.build({ entryPoints: ['scripts/ide-mcp-server.js'], outfile: 'dist/ide-mcp-server.js', bundle: true, platform: 'node', target: 'node20' });
-  await esbuild.build({ entryPoints: ['src/extension.js'], outfile: 'dist/extension.js', bundle: true, platform: 'node', target: 'node20', external: ['vscode'], sourcemap: false });
+  await esbuild.build({ entryPoints: ['src/extension.js'], outfile: 'dist/extension.js', bundle: true, platform: 'node', target: 'node20', external: ['vscode', 'cpu-features', './crypto/build/Release/sshcrypto.node'], sourcemap: false });
   await esbuild.build({ entryPoints: ['src/db/worker.js'], outfile: 'dist/worker.js', bundle: true, platform: 'node', target: 'node20', external: ['sql.js/dist/sql-wasm.wasm'], sourcemap: false });
   fs.copyFileSync(require.resolve('sql.js/dist/sql-wasm.wasm'), 'dist/sql-wasm.wasm');
   for (const file of ['results.js', 'results.css']) fs.copyFileSync(path.join('src/ui', file), path.join('dist', file));

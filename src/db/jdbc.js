@@ -10,6 +10,7 @@ const { pipeline } = require('node:stream/promises');
 const { visitJar } = require('../java/signature-compiler');
 const { validateQuery } = require('./sql-policy');
 const { postgresJdbcUrl, validatePostgreSqlQuery } = require('./postgresql-jdbc');
+const { parsePostgreSqlPlanQuery, normalizePostgreSqlPlan } = require('./postgresql-plan');
 const source = require('./jdbc-worker-source.json');
 
 const jarLimit = 64 * 1024 * 1024;
@@ -149,7 +150,7 @@ function wire(value) { return Buffer.from(String(value), 'utf8').toString('base6
 function response(output, operation) {
   const lines = output.trimEnd().split(/\r?\n/);
   const columns = [], rows = [], objects = [];
-  let connection, truncated;
+  let connection, truncated, plan;
   for (const line of lines) {
     const [marker, type, ...encoded] = line.split('\t');
     if (marker !== protocol) throw fail('PROTOCOL', 'The JDBC driver returned an unsupported response.');
@@ -160,27 +161,33 @@ function response(output, operation) {
       if (fields[0] === 'RB003') throw fail('READ_ONLY', 'The JDBC driver did not accept a read-only connection.');
       if (fields[0] === 'RB004') throw fail('CLASS', 'The approved JDBC driver class must be loaded from its primary JAR.');
       if (fields[0] === 'RB005') throw fail('CONNECTION', 'The connected PostgreSQL database or schema does not match the approved profile.');
+      if (fields[0] === 'RB006') throw fail('PLAN_SCOPE', 'Estimate a visible ordinary PostgreSQL table with built-in columns and an in-range integer filter. Table policies, inheritance and custom planner expressions are outside this workflow.');
       if (fields[0] === 'JDBC0') throw fail('DRIVER', 'The JDBC driver could not be initialized. Check its class and separate dependencies.');
       throw fail('SERVER', 'The JDBC operation failed (SQLSTATE ' + fields[0] + ').');
     }
-    if (type === 'I' && operation === 'catalog' && fields.length === 6) {
+    if (type === 'P' && operation === 'plan' && !plan && fields.length === 3 &&
+        fields[0] && /^\d+$/.test(fields[1] || '') && fields[2]) {
+      const [version, relation, raw] = fields;
+      plan = { version, relation, raw };
+    } else if (type === 'I' && operation === 'catalog' && fields.length === 6) {
       const [product, version, driver, driverVersion, catalog, schema] = fields;
       connection = { product, version, driver, driverVersion, catalog, schema };
     } else if (type === 'T' && operation === 'catalog' && fields.length === 4 && objects.length < 500) {
       const [catalog, schema, name, kind] = fields;
       objects.push({ catalog, schema, name, kind });
-    } else if (type === 'C' && operation !== 'catalog' && fields.length === 6 && columns.length < 250) {
+    } else if (type === 'C' && ['query', 'describe'].includes(operation) && fields.length === 6 && columns.length < 250) {
       const [name, jdbcType, typeName, nullable, precision, scale] = fields;
       columns.push({ name, jdbcType: Number(jdbcType), typeName, nullable: nullable === '1' || nullable === 'YES' ? true :
         nullable === '0' || nullable === 'NO' ? false : null,
       precision: precision === null ? null : Number(precision), scale: scale === null ? null : Number(scale) });
     } else if (type === 'R' && operation === 'query' && rows.length < 500 && fields.length === columns.length) rows.push(fields);
-    else if (type === 'D' && fields.length === 1 && ['true', 'false'].includes(fields[0]) && truncated === undefined) truncated = fields[0] === 'true';
+    else if (type === 'D' && operation !== 'plan' && fields.length === 1 && ['true', 'false'].includes(fields[0]) && truncated === undefined) truncated = fields[0] === 'true';
     else throw fail('PROTOCOL', 'The JDBC driver returned an unsupported response.');
   }
-  if (truncated === undefined || operation === 'catalog' && !connection || operation === 'query' && !columns.length) {
+  if (operation === 'plan' ? !plan : truncated === undefined || operation === 'catalog' && !connection || operation === 'query' && !columns.length) {
     throw fail('PROTOCOL', 'The JDBC driver response is incomplete.');
   }
+  if (operation === 'plan') return plan;
   if (operation === 'catalog') return { connection, objects, truncated };
   return operation === 'query' ? { columns, rows, truncated } : { columns, truncated };
 }
@@ -226,7 +233,7 @@ function execute(java, operation, directory, args, signal) {
 }
 
 async function runJdbc({ javaHome, profile, credential, operation, sql = '', object = {}, maxRows = 200, signal }) {
-  if (!['catalog', 'describe', 'query'].includes(operation)) throw fail('OPERATION', 'Select a supported JDBC operation.');
+  if (!['catalog', 'describe', 'query', 'plan'].includes(operation)) throw fail('OPERATION', 'Select a supported JDBC operation.');
   if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > 500) throw fail('LIMIT', 'Choose a JDBC result size between one and 500 rows.');
   if (!isHash(profile?.sha256)) throw fail('JAR', 'Review the JDBC driver and its exact SHA-256 before connecting.');
   const driver = driverClass(profile.driverClass);
@@ -235,8 +242,14 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
     if (/^jdbc:postgresql:/i.test(auth.url)) validatePostgreSqlQuery(sql);
     else validateQuery(sql, { readOnly: true, allowOptimizerHints: false });
   }
-  const names = [object.catalog ?? '', object.schema ?? '', object.name ?? ''];
-  if (names.some(name => !text(name, 1024)) || operation === 'describe' && !names[2]) throw fail('OBJECT', 'Choose an observed JDBC table or view.');
+  if (operation === 'plan' && (!profile.postgresql || driver !== 'org.postgresql.Driver')) {
+    throw fail('PLAN_SCOPE', 'Open an approved PostgreSQL JDBC profile to estimate a plan.');
+  }
+  const request = operation === 'plan' ? parsePostgreSqlPlanQuery(sql, profile.postgresql.schema) : null;
+  const names = request ? [request.schema, request.table, request.columns.join(',')] : [object.catalog ?? '', object.schema ?? '', object.name ?? ''];
+  if (!request && (names.some(name => !text(name, 1024)) || operation === 'describe' && !names[2])) {
+    throw fail('OBJECT', 'Choose an observed JDBC table or view.');
+  }
   const java = await javaExecutable(javaHome);
   const approved = [profile, ...(Array.isArray(profile.libraries) ? profile.libraries : [])];
   return scratch(async paths => {
@@ -246,9 +259,11 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
       throw fail('JAR', 'The JDBC JAR bytes changed. Review the driver version before launching it.');
     }
     await fs.writeFile(paths.worker, source, { flag: 'wx', mode: 0o600 });
-    return execute(java, operation, paths.folder, [profile.sha256, driver, auth.url, auth.user, auth.password, operation, sql, ...names,
+    const result = await execute(java, operation, paths.folder, [profile.sha256, driver, auth.url, auth.user, auth.password, operation,
+      request ? request.predicate : sql, ...names,
       maxRows, approved.length - 1, ...approved.slice(1).map(item => item.sha256),
       profile.postgresql?.database || '', profile.postgresql?.schema || ''], signal);
+    return request ? normalizePostgreSqlPlan({ ...result, database: profile.postgresql.database, request }) : result;
   });
 }
 

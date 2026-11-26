@@ -28,6 +28,9 @@ import java.util.Enumeration;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.List;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.jar.JarFile;
@@ -295,6 +298,121 @@ class DriverWorker {
         } finally { connection.rollback(); }
     }
 
+    private static SQLException planScope() {
+        return new SQLException("Unsupported PostgreSQL plan scope", "RB006");
+    }
+
+    private static String planIdentifier(String value) throws SQLException {
+        if (!value.matches("[a-z_][a-z0-9_]{0,62}")) throw planScope();
+        return "\"" + value + "\"";
+    }
+
+    private static String planRelation(Connection connection, String schema, String table) throws Exception {
+        String sql = """
+            SELECT c.oid::text
+            FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+            JOIN pg_catalog.pg_am am ON am.oid=c.relam
+            WHERE n.nspname=? AND c.relname=? AND c.relkind='r' AND c.relpersistence='p'
+              AND am.amname='heap' AND NOT c.relrowsecurity AND NOT c.relhasrules AND NOT c.relispartition
+              AND pg_catalog.has_table_privilege(c.oid,'SELECT')
+              AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE c.oid IN (i.inhrelid,i.inhparent))
+              AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k WHERE k.conrelid=c.oid AND k.contype='c')
+              AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_statistic_ext s WHERE s.stxrelid=c.oid AND s.stxexprs IS NOT NULL)
+              AND NOT EXISTS (
+                SELECT 1 FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class ic ON ic.oid=i.indexrelid
+                JOIN pg_catalog.pg_am ia ON ia.oid=ic.relam
+                WHERE i.indrelid=c.oid AND (i.indpred IS NOT NULL OR i.indexprs IS NOT NULL OR ia.amname<>'btree'
+                  OR EXISTS (SELECT 1 FROM pg_catalog.unnest(i.indclass::oid[]) k(oid)
+                    JOIN pg_catalog.pg_opclass o ON o.oid=k.oid
+                    WHERE o.opcnamespace<>'pg_catalog'::regnamespace OR o.oid>=16384)))
+            """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setQueryTimeout(5);
+            statement.setString(1, schema);
+            statement.setString(2, table);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) throw planScope();
+                return result.getString(1);
+            }
+        }
+    }
+
+    private static Map<String, String> planColumns(Connection connection, String relation) throws Exception {
+        var columns = new HashMap<String, String>();
+        try (PreparedStatement statement = connection.prepareStatement("""
+            SELECT a.attname, CASE WHEN t.typnamespace='pg_catalog'::regnamespace AND t.typtype='b'
+              AND t.oid<16384 AND a.attgenerated='' THEN t.typname END
+            FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_type t ON t.oid=a.atttypid
+            WHERE a.attrelid=?::pg_catalog.oid AND a.attnum>0 AND NOT a.attisdropped
+            """)) {
+            statement.setQueryTimeout(5);
+            statement.setString(1, relation);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) columns.put(result.getString(1), result.getString(2));
+            }
+        }
+        return columns;
+    }
+
+    private static void estimatedPlan(Connection connection, DatabaseMetaData metadata, String expectedSchema,
+            String schema, String table, String project, String predicate) throws Exception {
+        if (!isPostgres(metadata) || metadata.getDatabaseMajorVersion() < 14 || !schema.equals(expectedSchema) ||
+                schema.startsWith("pg_") || schema.equals("information_schema")) throw planScope();
+        String qualified = planIdentifier(schema) + "." + planIdentifier(table);
+        var names = List.of(project.split(",", -1));
+        boolean all = names.equals(List.of("*"));
+        if (names.size() > 32 || new HashSet<>(names).size() != names.size()) throw planScope();
+        var projections = new ArrayList<String>();
+        if (!all) for (String name : names) projections.add(planIdentifier(name));
+        String[] filter = predicate.isEmpty() ? new String[0] : predicate.split("=", -1);
+        if (filter.length != 0 && (filter.length != 2 || !filter[1].matches("-?[0-9]{1,19}"))) throw planScope();
+        String filterName = filter.length == 2 ? planIdentifier(filter[0]) : "";
+
+        readOnly(connection, metadata);
+        try (Statement setup = connection.createStatement()) {
+            setup.setQueryTimeout(5);
+            setup.execute("SET LOCAL search_path=pg_catalog,pg_temp");
+            setup.execute("SET LOCAL row_security=off");
+            setup.execute("SET LOCAL constraint_exclusion=off");
+            String relation = planRelation(connection, schema, table);
+            setup.execute("LOCK TABLE ONLY " + qualified + " IN ACCESS SHARE MODE NOWAIT");
+            if (!relation.equals(planRelation(connection, schema, table))) throw planScope();
+            final var columns = planColumns(connection, relation);
+            if (all ? columns.isEmpty() || columns.containsValue(null) : names.stream().anyMatch(name -> columns.get(name) == null)) {
+                throw planScope();
+            }
+            String type = filter.length == 2 ? columns.get(filter[0]) : "";
+            if (filter.length == 2 && (type == null || !List.of("int2", "int4", "int8").contains(type))) throw planScope();
+            String sql = "EXPLAIN (ANALYZE FALSE, VERBOSE TRUE, COSTS TRUE, FORMAT JSON) SELECT " +
+                (all ? "*" : String.join(", ", projections)) + " FROM ONLY " + qualified +
+                (filter.length == 2 ? " WHERE " + filterName + " OPERATOR(pg_catalog.=) ?::pg_catalog." + type : "");
+            String document;
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setQueryTimeout(8);
+                if (filter.length == 2) {
+                    try {
+                        switch (type) {
+                            case "int2" -> statement.setShort(1, Short.parseShort(filter[1]));
+                            case "int4" -> statement.setInt(1, Integer.parseInt(filter[1]));
+                            case "int8" -> statement.setLong(1, Long.parseLong(filter[1]));
+                        }
+                    } catch (NumberFormatException invalid) { throw planScope(); }
+                }
+                synchronized (ACTIVE) {
+                    if (cancelled) throw new SQLException("Cancelled", "57014");
+                    ACTIVE.set(statement);
+                }
+                try (ResultSet result = statement.executeQuery()) {
+                    if (!result.next()) throw planScope();
+                    document = readText(result, 1);
+                    if (document == null || result.next()) throw planScope();
+                } finally { ACTIVE.set(null); }
+            }
+            if (!relation.equals(planRelation(connection, schema, table))) throw planScope();
+            emit("P", metadata.getDatabaseProductVersion(), relation, document);
+        } finally { connection.rollback(); }
+    }
+
     public static void main(String[] args) {
         var in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         try (var ignored = new PrintStream(OutputStream.nullOutputStream())) {
@@ -337,6 +455,7 @@ class DriverWorker {
                         case "catalog" -> catalog(connection, metadata);
                         case "describe" -> describe(metadata, catalog, schema, object);
                         case "query" -> query(connection, metadata, sql, maxRows);
+                        case "plan" -> estimatedPlan(connection, metadata, expectedSchema, catalog, schema, object, sql);
                         default -> throw new Exception("Protocol operation invalid");
                     }
                 }

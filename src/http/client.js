@@ -46,7 +46,7 @@ function requestAt(text, offset) {
   const variables = new Map();
   const derivations = new Map();
   const assertions = [];
-  let requestLine, bodyStart = selected.source.length, marker = 0;
+  let requestLine, bodyFile, bodyStart = selected.source.length, marker = 0;
   const headers = [];
   for (const line of text.slice(0,ranges[0].end).split(/\r?\n/)) {
     const declaration = /^@([A-Za-z_][A-Za-z0-9_.-]{0,79})\s*=\s*(.*)$/.exec(line);
@@ -58,6 +58,15 @@ function requestAt(text, offset) {
     const raw = line[0].replace(/\r?\n$/, '');
     const content = raw.trim();
     const end = line.index + line[0].length;
+    if (/^#\s*@body-file(?:\s|$)/i.test(content)) {
+      const directive=/^#\s*@body-file\s+(.+)$/i.exec(content);
+      if (!directive||bodyFile!==undefined) throw Error('Choose one quoted workspace-relative @body-file path.');
+      try { bodyFile=JSON.parse(directive[1]); } catch { throw Error('Choose a quoted workspace-relative @body-file path.'); }
+      if (typeof bodyFile!=='string'||!bodyFile||bodyFile.length>512) {
+        throw Error('Choose a quoted workspace-relative @body-file path up to 512 characters.');
+      }
+      continue;
+    }
     if (/^#\s*@derive(?:\s|$)/i.test(content)) {
       const definition=/^#\s*@derive\s+(\S+)\s+(url-component|json-string)\s+(.+)$/i.exec(content);
       const [,name,op,source]=definition || [];
@@ -117,11 +126,15 @@ function requestAt(text, offset) {
   if ([...derivations.keys()].some(name=>variables.has(name))) throw Error('Use separate names for local and derived HTTP variables.');
   if (headers.length>40 || assertions.length>32 || variables.size+derivations.size>64) throw Error('Use at most 40 headers, 32 assertions and 64 local variables.');
   const body = selected.source.slice(bodyStart);
+  if (bodyFile!==undefined && (!['POST','PUT','PATCH','DELETE','OPTIONS'].includes(requestLine.method)||body.trim())) {
+    throw Error('Use @body-file with a body-capable HTTP method and an empty inline body.');
+  }
   if (body && ['GET','HEAD'].includes(requestLine.method)) throw Error('GET and HEAD requests use no body.');
   if (requestLine.method==='WEBSOCKET' && (body.trim() || assertions.length)) {
     throw Error('Open the WebSocket first, then send messages from its workbench commands.');
   }
-  return { ...requestLine, headers, body, assertions, variables, derivations, start:marker };
+  return { ...requestLine, headers, body, assertions, variables, derivations, start:marker,
+    ...(bodyFile!==undefined&&{bodyFile}) };
 }
 
 function parseAssertion(source) {
@@ -247,7 +260,7 @@ async function graphQLBody(body, expand) {
   return JSON.stringify(expanded);
 }
 
-async function resolveRequest(request, environment, readSecret, {schema=false}={}) {
+async function resolveRequest(request, environment, readSecret, {schema=false,readBodyFile}={}) {
   const graphQL=request.method==='GRAPHQL', webSocket=request.method==='WEBSOCKET', grpc=request.method==='GRPC';
   if (schema && !graphQL) throw Error('Select a GRAPHQL request to inspect its schema.');
   const secrets = new Map();
@@ -331,6 +344,14 @@ async function resolveRequest(request, environment, readSecret, {schema=false}={
   let body;
   if (schema) body=JSON.stringify({query:schemaQuery,operationName:'RocketbrainSchema'});
   else if (graphQL) body=await graphQLBody(request.body,expand);
+  else if (request.bodyFile!==undefined) {
+    if (!readBodyFile) throw Error('Open this request from a trusted local workspace to attach a body file.');
+    if (!Object.keys(headers).some(name=>name.toLowerCase()==='content-type')) headers['Content-Type']='application/octet-stream';
+    const available=maxDocumentBytes-bytes(JSON.stringify(headers));
+    if (available<0) throw Error('The expanded request exceeds 512 KiB.');
+    body=await readBodyFile(request.bodyFile,available);
+    if (!Buffer.isBuffer(body)) throw Error('The selected request body file did not return exact bytes.');
+  }
   else body=await expand(request.body,true);
   if (bytes(body)+bytes(JSON.stringify(headers))>maxDocumentBytes) throw Error('The expanded request exceeds 512 KiB.');
   const alternatives = new Set();

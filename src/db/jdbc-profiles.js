@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { examineJdbcDriver, runJdbc, credentials, classpathFingerprint, maxLibraries } = require('./jdbc');
 const { postgresqlRoute, postgresJdbcUrl } = require('./postgresql-jdbc');
+const { comparePostgreSqlPlans } = require('./postgresql-plan');
 
 const key = 'rocketbrain.jdbc.profiles.v1';
 const approvalLifetime = 5 * 60 * 1000;
@@ -53,6 +54,7 @@ function view(item) { return structuredClone({ ...selected(item), ...item }); }
 
 function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
   const approvals = new Map();
+  const captures = new Map();
   let active, operation, disposed = false;
   function trusted() {
     if (disposed || !isTrusted()) throw fail('Trust the workspace before using custom JDBC profiles.');
@@ -84,6 +86,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
     if (!saved || saved.selectedVersion !== active.profile.selectedVersion || selected(saved).classpathFingerprint !== active.profile.classpathFingerprint ||
         JSON.stringify(saved.postgresql) !== JSON.stringify(active.profile.postgresql)) {
       active = undefined;
+      captures.clear();
       throw fail('The approved JDBC version changed. Reopen the saved profile.');
     }
     return active;
@@ -154,6 +157,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
         item.selectedVersion = versionId;
         await persist(catalog);
         if (active?.profile.id === id) active = undefined;
+        if (!active) captures.clear();
         return view(item);
       });
     },
@@ -172,6 +176,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
       return run(async () => {
         await persist(profiles().filter(item => item.id !== id));
         if (active?.profile.id === id) active = undefined;
+        if (!active) captures.clear();
       });
     },
     open(id, input, { signal } = {}) {
@@ -184,6 +189,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
         trusted();
         if (cancellation.aborted) throw fail('The JDBC operation was cancelled.');
         active = { profile, credential, catalog };
+        captures.clear();
         return structuredClone(catalog);
       }, signal);
     },
@@ -203,7 +209,36 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
         return runJdbc({ javaHome: getJavaHome(), profile, credential, operation: 'query', sql, maxRows, signal: cancellation });
       }, signal);
     },
-    close() { operation?.abort(); active = undefined; },
+    supportsPostgreSqlPlans() { return Boolean(isTrusted() && active?.profile.postgresql); },
+    estimatePostgreSqlPlan(sql, { signal } = {}) {
+      return run(async cancellation => {
+        const connection = current(), { profile, credential } = connection;
+        const plan = await runJdbc({ javaHome: getJavaHome(), profile, credential, operation: 'plan', sql, signal: cancellation });
+        trusted();
+        if (cancellation.aborted || current() !== connection) throw fail('The PostgreSQL plan capture was cancelled.');
+        const capture = { ...plan, id: randomUUID(), capturedAt: new Date().toISOString() };
+        if (captures.size >= 8) captures.delete(captures.keys().next().value);
+        captures.set(capture.id, capture);
+        return structuredClone(capture);
+      }, signal);
+    },
+    postgreSqlPlanCaptures() {
+      trusted();
+      current();
+      return [...captures.values()].map(({ id, canonicalSql, capturedAt, table }) => ({ id, canonicalSql, capturedAt, table }));
+    },
+    postgreSqlPlanCapture(id) {
+      trusted();
+      current();
+      const capture = captures.get(id);
+      if (!capture) throw fail('Choose a PostgreSQL estimate from the active connection.');
+      return structuredClone(capture);
+    },
+    comparePostgreSqlPlans(left, right) {
+      if (left === right) throw fail('Choose two different PostgreSQL estimates.');
+      return comparePostgreSqlPlans(this.postgreSqlPlanCapture(left), this.postgreSqlPlanCapture(right));
+    },
+    close() { operation?.abort(); active = undefined; captures.clear(); },
     dispose() { this.close(); disposed = true; approvals.clear(); }
   };
 }

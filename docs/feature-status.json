@@ -1,5 +1,5 @@
 {
-  "version": "0.97.0",
+  "version": "0.98.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 146,
-    "partial": 56,
+    "implemented": 148,
+    "partial": 54,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 86.1,
+    "percent": 86.6,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-020",
-    "IDEA-083",
-    "DG-002",
-    "DG-038"
+    "IDEA-034",
+    "IDEA-102",
+    "DG-003",
+    "DG-010"
   ],
   "expandedFeatures": [
-    "IDEA-020",
-    "IDEA-083",
-    "DG-002",
-    "DG-038"
+    "IDEA-034",
+    "IDEA-102",
+    "DG-003",
+    "DG-010"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -610,8 +610,8 @@
       "verification": {
         "state": "v0.97-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.97.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1051,26 +1051,23 @@
       "category": "리팩터링·코드 생성",
       "feature": "람다·익명 클래스·루프 변환",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "플랫폼과 사용자 정의 SAM 지역 변수의 람다·익명 클래스 양방향 변환과 배열 합산 루프 변환을 검토한다. 사용자 정의 제네릭 상속, 캡처 및 정확한 오버로드를 javac로 비교한다.",
-      "remaining": [
-        "일반 루프와 지역 변수 바깥의 참조·객체 정체성 계약이 남아 있다."
-      ],
+      "scope": "컴파일러 검토 결과를 통해 람다·익명 클래스 변환 및 배열·불변 리스트의 안전한 루프 변환을 적용한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.71-installed-coverage",
+        "state": "v0.98-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.71.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 Spring 환경에서 직접 정의한 제네릭 SAM의 상속 타입을 해결했다. 두 캡처 선언 및 String·Object 오버로드를 보존하고 상태 보유 계약과 식별 동작을 거절했다. 버퍼 적용과 Undo를 확인했다.",
+        "testedScope": "네 루프를 VS Code에서 적용한 후 매번 실제 Spring 프로젝트를 빌드했다. 세 개의 안전하지 않은 경우와 저장 전 원본 보존을 확인했다.",
         "publicEvidence": [
-          "src/java/java-conversion.js",
-          "runtime/java-signature/src/rocketbrain/signature/ConversionInspector.java",
-          "test/java-custom-sam-host.js"
+          "test/java-enhanced-iteration-host.js",
+          "test/workflows-v98-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2512,8 +2509,8 @@
       "verification": {
         "state": "v0.97-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.97.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3062,22 +3059,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "HTTP 요청의 URL·JSON 파생값과 논리·범위·존재 조건을 조합해 이름 있는 응답 검사를 실행한다.",
+      "scope": "저장된 작업 영역 파일의 원시 바이트를 HTTP 본문으로 보내고 이름 있는 응답 검사를 실행한다.",
       "remaining": [
-        "바이너리 본문, 쿠키 공유, 인증 프로토콜 협상, 범용 선행·응답 처리 단계가 남는다."
+        "쿠키 세션, 추가 인증과 일반 요청·응답 처리 단계를 확장한다."
       ],
       "verification": {
-        "state": "v0.94-installed-coverage",
+        "state": "v0.98-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.94.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 Spring JDBC 응답에서 URL 경로 파생값을 보내고, 통과한 검사 4개 및 비교 실패·미확정 2개를 분리했다.",
+        "testedScope": "널·비UTF8을 포함한 12바이트, SHA-256, Content-Type 및 실제 JDBC 반환값을 설치판에서 확인했다.",
         "publicEvidence": [
-          "src/http/client.js",
-          "test/http-client-host.js"
+          "test/http-body-file-host.js",
+          "test/workflows-v98-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3664,8 +3661,8 @@
       "verification": {
         "state": "v0.97-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.97.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3686,24 +3683,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "MySQL·MariaDB와 PostgreSQL 조회에 더해, 인증된 로컬 MongoDB의 허용된 데이터베이스·컬렉션·뷰를 탐색하고 필터·투영·정렬이 있는 bounded find를 BSON Extended JSON으로 읽는다.",
+      "scope": "PostgreSQL 실제 세션의 JSON 예상 계획을 표시하고 같은 쿼리에 대한 순차·인덱스 스캔을 비교한다.",
       "remaining": [
-        "PostgreSQL 편집·실행 계획, 다른 SQL DB 전용 엔진, MongoDB 원격 연결·집계·편집이 남아 있다."
+        "PostgreSQL 편집과 실측 계획, 추가 DB 엔진, MongoDB TLS·집계·편집을 확장한다."
       ],
       "verification": {
-        "state": "v0.50-installed-coverage",
+        "state": "v0.98-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.50.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "MongoDB Community 8.0.38과 Node 드라이버 7.9.1에서 SCRAM 인증, 카탈로그 권한, BSON 타입, 행·바이트 제한, 취소 후 재조회 및 서버의 쓰기 거부를 확인했다. PostgreSQL 검증은 v0.49에 보존했다.",
+        "testedScope": "PostgreSQL 17.12와 JDBC 42.7.14에서 읽기 전용 계획, 쿼리 비교, 취소 및 정확한 큰 정수를 검증했다.",
         "publicEvidence": [
-          "docs/mongodb.md",
-          "src/db/mongodb.js",
-          "src/db/mongodb-vscode.js",
-          "test/mongodb-host.js"
+          "test/postgresql-plan-host.js",
+          "test/workflows-v98-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3882,25 +3877,23 @@
       "category": "연결·드라이버",
       "feature": "SSH 터널·키·agent 인증",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "검증된 호스트 키와 키 파일에 더해 로컬 SSH agent의 두 후보 중 지문이 일치하는 한 키를 선택한다. 현재 TLS 기준으로 실제 SQL에 연결하며 터널 수명주기와 오류를 다룬다.",
-      "remaining": [
-        "SSH 비밀번호와 대화형 키 암호, 점프 호스트 조합 및 POSIX agent의 실제 서버 검증은 남아 있다."
-      ],
+      "scope": "고정 호스트 키를 확인한 SSH 터널에서 agent·키 파일·암호화된 키 암호·비밀번호 자격 증명으로 SQL 연결을 연다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.90-installed-coverage",
+        "state": "v0.98-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.90.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Windows OpenSSH의 실제 agent에서 선택 키 한 개만 인증에 사용했다. 두 설치판에서 키·TLS 이름·호스트 키 변경을 거부하고 같은 Spring DB의 암호화 SQL과 전용 포워드 종료를 확인했다.",
+        "testedScope": "두 DB에서 정상 비밀번호·암호화 Ed25519 키, 불일치 지문 시 인증 차단, 내보내기 비밀 제외 및 소유 포워드 정리를 검증했다.",
         "publicEvidence": [
-          "src/db/connection-ssh-agent.js",
-          "test/ssh-agent-selection-host.js"
+          "test/ssh-credential-host.js",
+          "test/workflows-v98-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4709,8 +4702,8 @@
       "verification": {
         "state": "v0.97-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.97.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6461,8 +6454,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "b996050582cbea780abdc2a5d8c780ae3b71ade1c9a84d5644349a65bf6dfb16",
-    "sourceManifestSha256": "bb9e3889e238d60ba05025bb3ef9b213b97da47020b7a8c2f1bb4703dc778c4c",
+    "vsixSha256": "aebdc6c3e7f6402181e4084b17c6e058d39407378cfb589486d27e67bc0e0ecb",
+    "sourceManifestSha256": "3be77137af3f0774a8a8a6c5943cd5162134040574dc2b8da903d8361f01a5b5",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6476,28 +6469,23 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-020",
+      "id": "IDEA-034",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-002",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-038",
+      "id": "DG-010",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1882,
-    "pass": 1731,
+    "tests": 1894,
+    "pass": 1740,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 151,
+    "skipped": 154,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

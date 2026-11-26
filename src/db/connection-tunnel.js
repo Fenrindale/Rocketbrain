@@ -1,14 +1,19 @@
 'use strict';
 const fs=require('node:fs/promises'),path=require('node:path'),net=require('node:net'),{spawn}=require('node:child_process');
 const { prepareAgentIdentity } = require('./connection-ssh-agent');
+const { openPinnedTunnel, userAuthModes, credentialFor } = require('./connection-ssh-credentials');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const fail=message=>Object.assign(new Error(message),{code:'ROCKETBRAIN_SSH'});
 function host(value){if(typeof value!=='string'||value.length>253||!value||value.startsWith('-')||!/^[A-Za-z0-9:.\[\]-]+$/.test(value))throw fail('Use a DNS name or IP address for SSH forwarding.');return value.replace(/^\[|\]$/g,'');}
 function sshOptionPath(value){return '"'+value.replaceAll('\\','/')+'"';}
 async function regularFile(value,label){if(typeof value!=='string'||!path.isAbsolute(value)||value.includes('\0')||/[\r\n"]/.test(value))throw fail('Choose a local absolute '+label+' file.');const target=await fs.realpath(value),stat=await fs.stat(target);if(!stat.isFile()||stat.size>4*1024*1024)throw fail('The '+label+' must be a regular file under 4 MiB.');return target;}
-async function secureSshTarget(ssh){
+function validatedTarget(ssh){
  const target=host(ssh.host),port=ssh.port??22;
  if(!Number.isInteger(port)||port<1||port>65535||typeof ssh.user!=='string'||!ssh.user||ssh.user.length>128||/[\r\n\0]/.test(ssh.user))throw fail('Use a valid SSH port and user.');
+ return { host: target, port, user: ssh.user };
+}
+async function secureSshTarget(ssh){
+ const { host: target, port } = validatedTarget(ssh);
  const knownHosts=await regularFile(ssh.knownHostsPath,'verified known_hosts');
  const key=ssh.privateKeyPath?await regularFile(ssh.privateKeyPath,'SSH private-key'):null;
  const executable=ssh.executable||(process.platform==='win32'?path.join(process.env.SystemRoot||'C:\\Windows','System32','OpenSSH','ssh.exe'):'ssh');
@@ -18,9 +23,15 @@ async function secureSshTarget(ssh){
 }
 async function unusedPort(){return new Promise((resolve,reject)=>{const server=net.createServer();server.once('error',reject);server.listen(0,'127.0.0.1',()=>{const value=server.address().port;server.close(error=>error?reject(error):resolve(value));});});}
 async function accepting(port){return new Promise(resolve=>{const socket=net.connect({host:'127.0.0.1',port});let done=false;const end=value=>{if(done)return;done=true;socket.destroy();resolve(value);};socket.once('connect',()=>end(true));socket.once('error',()=>end(false));socket.setTimeout(150,()=>end(false));});}
-async function openTunnel(ssh,destination,{cancellation,onExit,expectedAgentFingerprint}={}){
+async function openTunnel(ssh,destination,{cancellation,onExit,expectedAgentFingerprint,credential}={}){
  const remote=host(destination.host),remotePort=destination.port??3306;
  if(!Number.isInteger(remotePort)||remotePort<1||remotePort>65535)throw fail('Use a valid database forwarding port.');
+ if (ssh.authentication !== undefined) {
+  if (!userAuthModes.has(ssh.authentication) || ssh.agent || ssh.knownHostsPath || expectedAgentFingerprint !== undefined ||
+      Boolean(ssh.privateKeyPath) !== (ssh.authentication === 'encrypted-key')) throw fail('Choose one SSH authentication method and its matching host verification.');
+  return openPinnedTunnel({ ...ssh, ...validatedTarget(ssh) }, { host: remote, port: remotePort }, { credential, cancellation, onExit });
+ }
+ credentialFor(undefined, credential);
  const sshTarget=await secureSshTarget(ssh);
  if(cancellation?.aborted||cancellation?.isCancellationRequested)throw fail('SSH connection cancelled.');
  if (ssh.agent && ssh.privateKeyPath) throw fail('Choose either a selected SSH agent identity or a private-key file.');

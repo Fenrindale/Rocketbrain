@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { requestAt,resolveRequest,sendRequest } = require('./client');
+const { readWorkspaceBodyFile } = require('./body-file');
 const { websocketWorkbench } = require('./websocket');
 
 async function readProto(folder,value) {
@@ -113,7 +114,8 @@ function registerHttpTools(context, vscode) {
     const controller=new AbortController();
     running.add(controller);
     try {
-      const ready=await resolveRequest(request,chosen.values,name=>context.secrets.get(secretKey(key,chosen.name,name)),{schema});
+      const ready=await resolveRequest(request,chosen.values,name=>context.secrets.get(secretKey(key,chosen.name,name)),{schema,
+        readBodyFile:(file,limit)=>readWorkspaceBodyFile(folder.uri.fsPath,file,limit)});
       const proto=ready.method==='GRPC' ? await readProto(folder,ready.proto) : undefined;
       const now=currentEnvironment(document,key);
       if (workspace(document).key!==key || document.version!==savedVersion || now.name!==chosen.name ||

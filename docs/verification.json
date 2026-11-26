@@ -1,25 +1,25 @@
 {
-  "version": "0.97.0",
-  "verifiedAt": "2026-11-26T00:22:24.141Z",
+  "version": "0.98.0",
+  "verifiedAt": "2026-11-26T00:49:13.417Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.97.0.vsix",
-    "sha256": "b996050582cbea780abdc2a5d8c780ae3b71ade1c9a84d5644349a65bf6dfb16",
-    "bytes": 3774752,
+    "name": "rocketbrain-0.98.0.vsix",
+    "sha256": "aebdc6c3e7f6402181e4084b17c6e058d39407378cfb589486d27e67bc0e0ecb",
+    "bytes": 3915918,
     "files": 22
   },
   "source": {
-    "frozenPublicInputs": 2266,
-    "inputVectorSha256": "bb9e3889e238d60ba05025bb3ef9b213b97da47020b7a8c2f1bb4703dc778c4c",
+    "frozenPublicInputs": 2280,
+    "inputVectorSha256": "3be77137af3f0774a8a8a6c5943cd5162134040574dc2b8da903d8361f01a5b5",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1882,
-    "pass": 1731,
+    "tests": 1894,
+    "pass": 1740,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 151,
+    "skipped": 154,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaBranchFlow",
+          "group": "javaEnhancedIteration",
           "checks": 1
         },
         {
-          "group": "kotlinJobHierarchy",
+          "group": "httpBodyFile",
           "checks": 1
         },
         {
-          "group": "catalogUsages",
+          "group": "postgreSqlEstimatedPlan",
           "checks": 1
         },
         {
-          "group": "mariadbSequenceDetails",
+          "group": "sshCredentials",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaBranchFlow",
+          "group": "javaEnhancedIteration",
           "checks": 1
         },
         {
-          "group": "kotlinJobHierarchy",
+          "group": "httpBodyFile",
           "checks": 1
         },
         {
-          "group": "catalogUsages",
+          "group": "postgreSqlEstimatedPlan",
           "checks": 1
         },
         {
-          "group": "mariadbSequenceDetails",
+          "group": "sshCredentials",
           "checks": 1
         }
       ],
@@ -84,116 +84,85 @@
       }
     }
   ],
-  "additionalInstalledRuntimes": [
-    {
-      "engine": "mariadb",
-      "database": {
-        "version": "10.11.20-MariaDB",
-        "product": "MariaDB Server"
-      },
-      "groups": [
-        "mariadbSequenceDetails"
-      ],
-      "artifactSha256": "44b5db1bb95ff934c0c58bae64c901806033030330d6486ad82f7ecdaf011028",
-      "sourceManifestSha256": "d38a08c591a506e06eed707837e96c2d5842690841865ee81d01c4b9c7f5a929",
-      "origin": "byte-identical-package"
-    },
-    {
-      "engine": "mariadb",
-      "database": {
-        "version": "12.3.4-MariaDB",
-        "product": "MariaDB Server"
-      },
-      "groups": [
-        "mariadbSequenceDetails"
-      ],
-      "artifactSha256": "44b5db1bb95ff934c0c58bae64c901806033030330d6486ad82f7ecdaf011028",
-      "sourceManifestSha256": "d38a08c591a506e06eed707837e96c2d5842690841865ee81d01c4b9c7f5a929",
-      "origin": "byte-identical-package"
-    }
-  ],
   "newlyVerified": {
-    "IDEA-020": {
-      "scope": "두 DB에 연결한 실제 Spring 작업 영역에서 분기 결합과 호출 인자 필터, null 축소, 정확한 조건 위치, 변경 후 재분석을 확인했다.",
+    "IDEA-034": {
+      "scope": "네 루프를 VS Code에서 적용한 후 매번 실제 Spring 프로젝트를 빌드했다. 세 개의 안전하지 않은 경우와 저장 전 원본 보존을 확인했다.",
       "runtimeGroups": [
-        "javaBranchFlow"
+        "javaEnhancedIteration"
       ]
     },
-    "IDEA-083": {
-      "scope": "같은 표시명을 가진 서로 다른 Job을 구분하고 실제 부모·자식 관계를 확인했다. 관찰 도구 분리 후 앱은 계속 실행됐다.",
+    "IDEA-102": {
+      "scope": "널·비UTF8을 포함한 12바이트, SHA-256, Content-Type 및 실제 JDBC 반환값을 설치판에서 확인했다.",
       "runtimeGroups": [
-        "kotlinJobHierarchy"
+        "httpBodyFile"
       ]
     },
-    "DG-002": {
-      "scope": "설치판에서 10.11, 11.4, 12.3의 양·음 증가와 캐시 상태를 확인했다. 12.3에서는 UNSIGNED 고정밀 메타데이터를 확인했고 MySQL은 엔진 전용 경로를 차단했다.",
+    "DG-003": {
+      "scope": "PostgreSQL 17.12와 JDBC 42.7.14에서 읽기 전용 계획, 쿼리 비교, 취소 및 정확한 큰 정수를 검증했다.",
       "runtimeGroups": [
-        "mariadbSequenceDetails"
+        "postgreSqlEstimatedPlan"
       ]
     },
-    "DG-038": {
-      "scope": "동일 이름 개체 구분, 교차 스키마 루틴 두 곳과 SQL 파일 한 곳, 동적/숨은 범위 표시, 원본 또는 SQL 모드 변경 후 탐색 거부를 두 DB에서 확인했다.",
+    "DG-010": {
+      "scope": "두 DB에서 정상 비밀번호·암호화 Ed25519 키, 불일치 지문 시 인증 차단, 내보내기 비밀 제외 및 소유 포워드 정리를 검증했다.",
       "runtimeGroups": [
-        "catalogUsages"
+        "sshCredentials"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 497,
+    "sourceCorrespondences": 500,
     "sourceConfidence": "inferred",
     "archiveEntries": 22,
     "archiveConfidence": "observed"
   },
   "nativePayloadEquivalence": {
     "files": 22,
-    "testedArchiveSha256": "44b5db1bb95ff934c0c58bae64c901806033030330d6486ad82f7ecdaf011028",
-    "testedInputVectorSha256": "d38a08c591a506e06eed707837e96c2d5842690841865ee81d01c4b9c7f5a929",
+    "testedArchiveSha256": "1601865317e8ef153013dac3f97d24e587b0b027858eeaf162d77218aa586b44",
+    "testedInputVectorSha256": "9bd6e6f9eeeb98260a5ddfb157811e912db42a71cdc6d1be53d30908b717d14a",
     "onlySourceChanges": [
-      "test/catalog-usages-host.js"
+      "test/http-body-file-host.js",
+      "test/java-enhanced-iteration-host.js"
     ]
   },
   "progress": {
     "counts": {
-      "implemented": 146,
-      "partial": 56,
+      "implemented": 148,
+      "partial": 54,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 186,
-    "previousWeightedPoints": 184.5,
+    "weightedPoints": 187,
+    "previousWeightedPoints": 186,
     "targetWeightedPoints": 216,
-    "referencePercent": 86.1,
+    "referencePercent": 86.6,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-020",
+        "id": "IDEA-034",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-002",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-038",
+        "id": "DG-010",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java 값 흐름은 컴파일러가 결합한 직접 호출과 지원 분기에 한정한다. 임의 가상 디스패치·힙·예외 흐름은 미해결로 표시한다.",
-    "동적 루틴 본문과 접근할 수 없는 스키마는 확인이 필요한 범위로 표시한다.",
-    "시퀀스 보고서의 캐시 경계는 다음에 배정될 값을 뜻하지 않는다. MySQL에서는 MariaDB 전용 작업을 제한한다.",
+    "루프 변환은 배열과 컴파일러가 확인한 불변 리스트의 순차 위치에 한정한다. 인덱스 의존성과 부작용이 있는 변경은 보류한다.",
+    "HTTP 파일 본문은 신뢰한 현재 작업 영역의 상한 이내 파일을 사용한다.",
+    "PostgreSQL 계획은 읽기 전용 EXPLAIN JSON 예상치다. 실제 실행 통계는 별도 범위다.",
+    "SSH 검증은 독립 호스트 키와 실제 SQL을 연결하는 비밀번호·암호화된 키 및 기존 Windows agent 범위다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Java 향상된 for 흐름과 HTTP 파일 본문",
-    "PostgreSQL 실행 계획과 SSH 인증"
+    "Spring Data 파생 쿼리와 HTTP 세션 쿠키",
+    "PostgreSQL 결과 편집 및 뷰 CHECK OPTION과 권한"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { createJdbcProfiles } = require('./jdbc-profiles');
 const { maxLibraries } = require('./jdbc');
 const { postgresqlRoute } = require('./postgresql-jdbc');
+const { renderPostgreSqlPlan } = require('./postgresql-plan');
 
 const language = 'rocketbrain-jdbc';
 const scheme = 'rocketbrain-jdbc-output';
@@ -15,20 +16,34 @@ function registerJdbc(vscode, context) {
   const command = (name, fn) => context.subscriptions.push(vscode.commands.registerCommand('rocketbrain.jdbc.' + name, async () => {
     try { return await fn(); }
     catch (cause) {
-      if (cause.code !== 'ROCKETBRAIN_JDBC_CANCELLED') await vscode.window.showErrorMessage('Rocketbrain JDBC: ' + cause.message);
-    } finally { void vscode.commands.executeCommand('setContext', 'rocketbrain.jdbcConnected', Boolean(api.active())); }
+      if (cause.code !== 'ROCKETBRAIN_JDBC_CANCELLED') void vscode.window.showErrorMessage('Rocketbrain JDBC: ' + cause.message);
+    } finally {
+      void vscode.commands.executeCommand('setContext', 'rocketbrain.jdbcConnected', Boolean(api.active()));
+      void vscode.commands.executeCommand('setContext', 'rocketbrain.postgreSqlPlans', api.supportsPostgreSqlPlans());
+    }
   }));
   context.subscriptions.push(api, vscode.workspace.registerTextDocumentContentProvider(scheme, {
     provideTextDocumentContent(uri) { return output.get(uri.path.split('/')[1]) || 'This JDBC result has expired.'; }
   }));
 
-  async function show(title, value) {
+  async function show(title, value, text) {
     const id = randomUUID();
     while (output.size >= 8) output.delete(output.keys().next().value);
-    output.set(id, JSON.stringify(value, null, 2));
-    const uri = vscode.Uri.from({ scheme, path: '/' + id + '/' + title + '.json' });
+    output.set(id, text ?? JSON.stringify(value, null, 2));
+    const uri = vscode.Uri.from({ scheme, path: '/' + id + '/' + title });
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri), { preview: true });
     return value;
+  }
+
+  function jdbcSql() {
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.languageId !== language) throw Error('Open a JDBC query editor first.');
+    return editor.selection.isEmpty ? editor.document.getText() : editor.document.getText(editor.selection);
+  }
+
+  function chooseCapture(title, captures) {
+    return vscode.window.showQuickPick(captures.map(item => ({ id: item.id, label: item.table,
+      description: item.capturedAt, detail: item.canonicalSql })), { title });
   }
 
   function progress(title, action) {
@@ -158,10 +173,30 @@ function registerJdbc(vscode, context) {
     return document.uri.toString();
   });
   command('run', async () => {
-    const editor = vscode.window.activeTextEditor;
-    if (editor?.document.languageId !== language) throw Error('Open a JDBC query editor first.');
-    const sql = editor.selection.isEmpty ? editor.document.getText() : editor.document.getText(editor.selection);
-    return show('query-results', await progress('Running JDBC Query', signal => api.query(sql, { signal })));
+    const sql = jdbcSql();
+    return show('query-results.json', await progress('Running JDBC Query', signal => api.query(sql, { signal })));
+  });
+  command('estimatePostgreSqlPlan', async () => {
+    const sql = jdbcSql();
+    const result = await progress('Estimating PostgreSQL Plan', signal => api.estimatePostgreSqlPlan(sql, { signal }));
+    return show('postgresql-estimated-plan.txt', result, renderPostgreSqlPlan(result));
+  });
+  command('openPostgreSqlPlanJson', async () => {
+    const captures = api.postgreSqlPlanCaptures();
+    if (!captures.length) throw Error('Capture a PostgreSQL estimate first.');
+    const selected = await chooseCapture('Open Original PostgreSQL Estimate JSON', captures);
+    if (!selected) return;
+    const result = api.postgreSqlPlanCapture(selected.id);
+    return show('postgresql-estimated-plan.json', result, result.raw);
+  });
+  command('comparePostgreSqlPlans', async () => {
+    const captures = api.postgreSqlPlanCaptures();
+    if (captures.length < 2) throw Error('Capture two PostgreSQL estimates from this connection first.');
+    const left = await chooseCapture('Choose Baseline PostgreSQL Estimate', captures);
+    if (!left) return;
+    const right = await chooseCapture('Choose Candidate PostgreSQL Estimate', captures.filter(item => item.id !== left.id));
+    if (!right) return;
+    return show('postgresql-estimated-plan-comparison.json', api.comparePostgreSqlPlans(left.id, right.id));
   });
   command('browse', async () => {
     const catalog = api.catalog();
@@ -169,7 +204,7 @@ function registerJdbc(vscode, context) {
     const selected = await vscode.window.showQuickPick(rows, { title: 'Browse JDBC Tables and Views',
       placeHolder: catalog.truncated ? 'First 500 objects from the driver' : undefined });
     if (!selected) return;
-    return show('table-columns', await progress('Inspecting JDBC Columns', signal => api.describe(selected.index, { signal })));
+    return show('table-columns.json', await progress('Inspecting JDBC Columns', signal => api.describe(selected.index, { signal })));
   });
   command('close', () => { api.close(); output.clear(); });
   return api;

@@ -52,10 +52,12 @@ final class ConversionInspector {
             }
             @Override public Void visitForLoop(ForLoopTree node, Void unused) {
                 add(indexedLoop(getCurrentPath(), node));
+                add(indexedElements(getCurrentPath(), node));
                 return super.visitForLoop(node, unused);
             }
             @Override public Void visitEnhancedForLoop(EnhancedForLoopTree node, Void unused) {
                 add(enhancedLoop(getCurrentPath(), node));
+                add(enhancedElements(getCurrentPath(), node));
                 return super.visitEnhancedForLoop(node, unused);
             }
         }.scan(unit, null);
@@ -289,5 +291,135 @@ final class ConversionInspector {
         return object("kind", kind, "start", start(loop), "end", end(loop), "cursorStart", start(loop),
             "actionOffset", start(loop) + 1, "array", array.getSimpleName().toString(), "arrayType", array.asType().toString(),
             "accumulator", accumulator.getSimpleName().toString(), "accumulatorType", accumulator.asType().toString());
+    }
+
+    private static boolean listMethod(Element target, String name, int arguments, boolean isStatic) {
+        return target instanceof ExecutableElement method && method.getSimpleName().contentEquals(name) &&
+            method.getParameters().size() == arguments && method.getModifiers().contains(Modifier.STATIC) == isStatic &&
+            method.getEnclosingElement() instanceof TypeElement owner && owner.getQualifiedName().contentEquals("java.util.List");
+    }
+
+    private VariableElement carrier(TreePath parent, Tree expression) {
+        if (!(expression instanceof IdentifierTree) || !(element(parent, expression) instanceof VariableElement variable) ||
+                !local(variable)) return null;
+        return variable.asType() instanceof ArrayType || immutableList(variable) ? variable : null;
+    }
+
+    private boolean immutableList(VariableElement variable) {
+        if (!variable.getModifiers().contains(Modifier.FINAL) ||
+                !(variable.asType() instanceof DeclaredType declared) ||
+                !(declared.asElement() instanceof TypeElement type) || !type.getQualifiedName().contentEquals("java.util.List")) return false;
+        TreePath declaration = trees.getPath(variable);
+        if (declaration == null || !(declaration.getLeaf() instanceof VariableTree local) ||
+                !(local.getInitializer() instanceof MethodInvocationTree initializer)) return false;
+        Element method = element(declaration, initializer);
+        return method instanceof ExecutableElement factory &&
+            (listMethod(factory, "of", factory.getParameters().size(), true) ||
+                listMethod(factory, "copyOf", 1, true));
+    }
+
+    private boolean isAssigned(TreePath use) {
+        TreePath parent = use.getParentPath();
+        while (parent.getLeaf() instanceof ParenthesizedTree) {
+            use = parent;
+            parent = parent.getParentPath();
+        }
+        Tree target = parent.getLeaf();
+        return target instanceof AssignmentTree write && write.getVariable() == use.getLeaf() ||
+            target instanceof CompoundAssignmentTree compound && compound.getVariable() == use.getLeaf();
+    }
+
+    private VariableElement boundCarrier(TreePath condition, ExpressionTree limit) {
+        TreePath bound = path(condition, limit);
+        if (limit instanceof MemberSelectTree length && length.getIdentifier().contentEquals("length")) {
+            VariableElement source = carrier(bound, length.getExpression());
+            return source != null && source.asType() instanceof ArrayType ? source : null;
+        }
+        if (limit instanceof MethodInvocationTree call && call.getArguments().isEmpty() &&
+                call.getMethodSelect() instanceof MemberSelectTree select &&
+                listMethod(trees.getElement(bound), "size", 0, false)) return carrier(path(bound, select), select.getExpression());
+        return null;
+    }
+
+    private boolean readsIndexedElement(TreePath declaration, ExpressionTree initializer, Element arrayOrList, Element index) {
+        if (initializer == null) return false;
+        TreePath access = path(declaration, initializer);
+        if (arrayOrList.asType() instanceof ArrayType) {
+            return initializer instanceof ArrayAccessTree read && arrayOrList.equals(element(access, read.getExpression())) &&
+                index.equals(element(access, read.getIndex()));
+        }
+        return initializer instanceof MethodInvocationTree get && get.getMethodSelect() instanceof MemberSelectTree select &&
+            get.getArguments().size() == 1 && listMethod(trees.getElement(access), "get", 1, false) &&
+            arrayOrList.equals(element(path(access, select), select.getExpression())) && index.equals(element(access, get.getArguments().getFirst()));
+    }
+
+    private static boolean plainBinding(VariableTree tree, Element element) {
+        return local(element) && tree.getModifiers().getAnnotations().isEmpty() &&
+            Set.of(Modifier.FINAL).containsAll(element.getModifiers());
+    }
+
+    private Map<String, Object> indexedElements(TreePath site, ForLoopTree loop) {
+        if (loop.getInitializer().size() != 1 || !(loop.getInitializer().getFirst() instanceof VariableTree variable) ||
+                !(variable.getInitializer() instanceof LiteralTree literal) || !Integer.valueOf(0).equals(literal.getValue()) ||
+                !(loop.getCondition() instanceof BinaryTree less) || less.getKind() != Tree.Kind.LESS_THAN ||
+                loop.getUpdate().size() != 1 || !(loop.getUpdate().getFirst().getExpression() instanceof UnaryTree increment) ||
+                !Set.of(Tree.Kind.POSTFIX_INCREMENT, Tree.Kind.PREFIX_INCREMENT).contains(increment.getKind()) ||
+                !(loop.getStatement() instanceof BlockTree body) || body.getStatements().isEmpty() ||
+                !(body.getStatements().getFirst() instanceof VariableTree alias)) return null;
+        Element index = element(site, variable);
+        TreePath condition = path(site, less), update = path(path(site, loop.getUpdate().getFirst()), increment);
+        VariableElement source = boundCarrier(condition, less.getRightOperand());
+        TreePath aliasPath = path(path(site, body), alias);
+        Element item = trees.getElement(aliasPath);
+        if (!local(index) || index.asType().getKind() != TypeKind.INT || !plainBinding(variable, index) ||
+                !index.equals(element(condition, less.getLeftOperand())) || !index.equals(element(update, increment.getExpression())) ||
+                source == null || !plainBinding(alias, item) || !readsIndexedElement(aliasPath, alias.getInitializer(), source, index) ||
+                references.getOrDefault(index, List.of()).size() != 3) return null;
+        int from = start(loop), to = end(loop), bodyStart = start(body), declarationStart = start(alias), declarationEnd = end(alias);
+        int initializerStart = start(alias.getInitializer());
+        if (from < 0 || to <= from || to - from > 24_000 || bodyStart <= from ||
+                declarationStart <= bodyStart || initializerStart <= declarationStart ||
+                declarationEnd <= initializerStart || declarationEnd >= to || text.charAt(declarationEnd - 1) != ';' ||
+                references.getOrDefault(source, List.of()).stream()
+                    .anyMatch(use -> start(use.getLeaf()) >= bodyStart && start(use.getLeaf()) < to && isAssigned(use))) return null;
+        String header = text.substring(from, bodyStart).stripTrailing(), removed = text.substring(declarationStart, declarationEnd);
+        if (header.contains("//") || header.contains("/*") || removed.contains("//") || removed.contains("/*") || !header.endsWith(")")) return null;
+        String binding = text.substring(declarationStart, initializerStart).stripTrailing();
+        if (!binding.endsWith("=") || binding.contains("@")) return null;
+        binding = binding.substring(0, binding.length() - 1).stripTrailing();
+        String retainedBody = retainedBody(bodyStart, declarationStart, declarationEnd, to);
+        String replacement = "for (" + binding + " : " + source.getSimpleName() + ")" +
+            text.substring(from + header.length(), bodyStart) + retainedBody;
+        Map<String, Object> result = elementLoop("indexed-elements", loop, source, item, retainedBody);
+        result.put("cursorEnd", bodyStart + 1);
+        result.put("newText", replacement);
+        return result;
+    }
+
+    private String retainedBody(int bodyStart, int declarationStart, int declarationEnd, int bodyEnd) {
+        int lineStart = text.lastIndexOf('\n', declarationStart - 1) + 1;
+        int lineEnd = text.indexOf('\n', declarationEnd);
+        if (lineStart > bodyStart && lineEnd >= declarationEnd && lineEnd < bodyEnd &&
+                text.substring(lineStart, declarationStart).isBlank() && text.substring(declarationEnd, lineEnd).isBlank()) {
+            declarationStart = lineStart;
+            declarationEnd = lineEnd + 1;
+        }
+        return text.substring(bodyStart, declarationStart) + text.substring(declarationEnd, bodyEnd);
+    }
+
+    private Map<String, Object> enhancedElements(TreePath site, EnhancedForLoopTree loop) {
+        if (!(loop.getStatement() instanceof BlockTree body) || end(loop) - start(loop) > 24_000) return null;
+        VariableElement source = carrier(site, loop.getExpression());
+        Element item = element(site, loop.getVariable());
+        if (source == null || !plainBinding(loop.getVariable(), item)) return null;
+        return elementLoop("enhanced-elements", loop, source, item, text.substring(start(body), end(body)));
+    }
+
+    private Map<String, Object> elementLoop(String kind, Tree loop, VariableElement source, Element item, String body) {
+        return object("kind", kind, "start", start(loop), "end", end(loop), "cursorStart", start(loop),
+            "carrier", source.getSimpleName().toString(), "carrierType", source.asType().toString(),
+            "iteration", source.asType() instanceof ArrayType ? "array" : "immutable-list",
+            "item", item.getSimpleName().toString(), "itemType", item.asType().toString(),
+            "finalItem", item.getModifiers().contains(Modifier.FINAL), "retainedBody", body);
     }
 }
