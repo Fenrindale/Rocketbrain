@@ -1,0 +1,41 @@
+name: Docker image workbench
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'verify-docker-images-*']
+    paths:
+      - '.github/workflows/docker-image-workbench.yml'
+      - 'src/docker/**'
+      - 'test/docker-images.test.js'
+  pull_request:
+    paths:
+      - '.github/workflows/docker-image-workbench.yml'
+      - 'src/docker/**'
+      - 'test/docker-images.test.js'
+
+permissions:
+  contents: read
+
+jobs:
+  local-registry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build and push to an owned loopback registry
+        env:
+          ROCKETBRAIN_DOCKER_IMAGE_TEST: '1'
+          ROCKETBRAIN_DOCKER_IMAGE_RECEIPT: ${{ runner.temp }}/rocketbrain-docker-image.json
+        run: node --test test/docker-images.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-docker-image
+          path: ${{ runner.temp }}/rocketbrain-docker-image.json
+          if-no-files-found: error
+          retention-days: 7

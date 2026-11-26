@@ -3,7 +3,8 @@
 const { createDockerWorkbench } = require('./workbench');
 
 function registerDockerWorkbench(vscode) {
-  const workbench = createDockerWorkbench({ trusted: () => vscode.workspace.isTrusted });
+  const workbench = createDockerWorkbench({trusted:()=>vscode.workspace.isTrusted,workspaceRoots:()=>
+    (vscode.workspace.workspaceFolders||[]).filter(folder=>folder.uri.scheme==='file'&&!folder.uri.authority).map(folder=>folder.uri.fsPath)});
   const changed = new vscode.EventEmitter();
   const output = vscode.window.createOutputChannel('Rocketbrain Docker');
   const subscriptions = [changed, output];
@@ -137,6 +138,44 @@ function registerDockerWorkbench(vscode) {
     const result = await workbench.manifest(reference, { approved: true, signal });
     const document = await vscode.workspace.openTextDocument({ language: 'json', content: JSON.stringify(result, null, 2) });
     await vscode.window.showTextDocument(document, { preview: false });
+  });
+
+  async function prepareImageReport(review,signal) {
+    let result;
+    try { result=await workbench.applyImage(review.token,{approved:true,signal}); }
+    finally {
+      snapshot=undefined;
+      tree.message='Refresh Docker inventory.';
+      changed.fire(undefined);
+    }
+    const document=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(result,null,2)});
+    await vscode.window.showTextDocument(document,{preview:false});
+    return result;
+  }
+
+  register('rocketbrain.docker.buildImage','Build Docker Image',async (_,signal)=>{
+    const [directory]=await vscode.window.showOpenDialog({canSelectFiles:false,canSelectFolders:true,canSelectMany:false,
+      openLabel:'Choose Build Context'})||[];
+    if(!directory)return;
+    if(directory.scheme!=='file'||directory.authority)throw Error('Choose a local Docker build directory.');
+    const reference=await vscode.window.showInputBox({title:'Tag Docker Image',placeHolder:'sample/app:dev'});
+    if(!reference)return;
+    const review=await workbench.reviewImageBuild(directory.fsPath,reference,{signal});
+    const detail=[review.context.name+' · '+review.context.endpoint,review.root,review.reference,
+      review.files+' files · '+review.bytes+' bytes','sha256:'+review.fingerprint,
+      review.before?'Replace existing image tag '+review.before:undefined].filter(Boolean).join('\n');
+    const choice=await vscode.window.showWarningMessage('Build the reviewed Docker image?',{modal:true,detail},'Build Image');
+    if(choice==='Build Image')return prepareImageReport(review,signal);
+  });
+
+  register('rocketbrain.docker.pushImage','Push Docker Image',async (node,signal)=>{
+    const reference=node?.kind==='image' ? node.label : await vscode.window.showInputBox({title:'Push Docker Image',
+      placeHolder:'registry.example.com/sample/app:dev'});
+    if(!reference)return;
+    const review=await workbench.reviewImagePush(reference,{signal});
+    const detail=[review.context.name+' · '+review.context.endpoint,review.reference,review.before].join('\n');
+    const choice=await vscode.window.showWarningMessage('Push this exact image to the named registry?',{modal:true,detail},'Push Image');
+    if(choice==='Push Image')return prepareImageReport(review,signal);
   });
 
   return { ...workbench, dispose() { workbench.dispose(); subscriptions.forEach(item => item.dispose()); } };
