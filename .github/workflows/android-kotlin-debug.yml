@@ -83,7 +83,7 @@ jobs:
             sleep 2
           done
           "$adb" version
-          "$emulator" -version
+          grep -m1 'Android emulator version' "$RUNNER_TEMP/rocketbrain-android-emulator.log"
           node --test test/android-kotlin-debug.test.js
       - uses: actions/upload-artifact@v4
         with:
