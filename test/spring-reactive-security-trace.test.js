@@ -15,6 +15,58 @@ const baseline = () => ({
   }]
 });
 
+function withAuthentication() {
+  const value = baseline();
+  value.authenticationEnabled = true;
+  value.hooks.push('authentication-manager', 'authentication-delegates');
+  const manager = 'org.springframework.security.authentication.DelegatingReactiveAuthenticationManager';
+  const delegate = 'fixture.LookupManager';
+  Object.assign(value.traces[0], {
+    authenticationLimited: false, authenticationAttempts: [{
+      managerId: 1, managerType: manager, outcome: 'returned', delegateCoverage: 'observed', delegates: [
+        { sequence: 1, parent: 0, managerId: 2, managerType: delegate, outcome: 'empty' },
+        { sequence: 2, parent: 0, managerId: 3, managerType: manager, outcome: 'returned' },
+        { sequence: 3, parent: 2, managerId: 4, managerType: delegate, outcome: 'rejected' },
+        { sequence: 4, parent: 2, managerId: 5, managerType: 'fixture.OtherManager', outcome: 'returned' }
+      ]
+    }]
+  });
+  return value;
+}
+
+test('reactive authentication keeps exact request-local identities, structural parents and outcome metadata', () => {
+  const raw = withAuthentication(), attempt = raw.traces[0].authenticationAttempts[0];
+  attempt.delegates[2].credential = 'private-credential';
+  attempt.delegates[2].message = 'private-exception';
+  const result = normalizeReactiveSecurityTrace(raw), html = renderReactiveSecurityTrace(result);
+  assert.match(html, /Reactive authentication/);
+  assert.match(html, /Manager 4 · fixture\.LookupManager · Authentication rejection · Dispatched by step 2/);
+  assert.match(html, /Authentication result emitted/);
+  for (const secret of ['private-credential', 'private-exception']) {
+    assert.ok(!html.includes(secret));
+    assert.ok(!JSON.stringify(result).includes(secret));
+  }
+  assert.equal(normalizeReactiveSecurityTrace(baseline()).authenticationEnabled, undefined);
+  assert.doesNotMatch(renderReactiveSecurityTrace(normalizeReactiveSecurityTrace(baseline())), /Reactive authentication/);
+});
+
+test('reactive authentication refuses unproved delegate parent and identity claims', () => {
+  const bad = [
+    (raw,attempt) => { attempt.delegates[2].parent = 1; },
+    (raw,attempt) => { attempt.delegates[2].parent = 3; },
+    (raw,attempt) => { attempt.delegates[2].managerId = 1; },
+    (raw,attempt) => { attempt.delegates[2].outcome = 'guessed'; },
+    (raw,attempt) => { attempt.delegates[2].outcome = 'unobserved'; },
+    raw => { raw.authenticationEnabled = false; },
+    raw => { raw.hooks = raw.hooks.filter(hook => hook !== 'authentication-delegates'); }
+  ];
+  for (const mutate of bad) {
+    const raw = withAuthentication();
+    mutate(raw, raw.traces[0].authenticationAttempts[0]);
+    assert.throws(() => normalizeReactiveSecurityTrace(raw), /Invalid reactive security trace/);
+  }
+});
+
 test('reactive trace keeps explicit observation data and renders bounded evidence', () => {
   const raw = baseline();
   raw.token = 'private-token';

@@ -4,6 +4,7 @@ import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -23,28 +24,42 @@ public final class ReactiveSecurityTrace {
     private static final String HTTP = SPRING + "http.";
     private static final String SECURITY = SPRING + "security.";
     private static final String REACTOR = "reactor.core.publisher.";
+    private static final String DELEGATING = SECURITY + "authentication.DelegatingReactiveAuthenticationManager";
     private static final int MAX_MATCHES = 16, MAX_FILTERS = 32, MAX_METHODS = 8, MAX_RECENT = 16;
+    private static final int MAX_AUTHENTICATIONS = 4, MAX_DELEGATES = 12, MAX_MANAGER_IDENTITIES = 32;
     private static final Object KEY = new Object();
+    private static final Object AUTHENTICATION_KEY = new Object();
     private static final AtomicInteger active = new AtomicInteger();
     private static final AtomicLong ids = new AtomicLong();
     private static final Set<String> HOOKS = new LinkedHashSet<>();
     private static final ArrayDeque<Map<String, Object>> RECENT = new ArrayDeque<>();
     private static final Set<String> HTTP_METHODS = Set.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT");
     private static volatile boolean enabled;
+    private static volatile boolean authenticationEnabled;
+    private static volatile boolean delegatesInstalled;
     private static long dropped;
 
     private ReactiveSecurityTrace() {}
 
     static boolean enabled() { return enabled; }
 
-    static synchronized void configure(boolean value) {
+    static boolean authenticationEnabled() { return authenticationEnabled; }
+
+    static void configure(boolean value) { configure(value, false); }
+
+    static synchronized void configure(boolean value, boolean authentication) {
         enabled = value;
+        authenticationEnabled = value && authentication;
+        delegatesInstalled = false;
         HOOKS.clear();
         RECENT.clear();
         dropped = 0;
     }
 
-    static synchronized void instrumented(String hook) { HOOKS.add(hook); }
+    static synchronized void instrumented(String hook) {
+        HOOKS.add(hook);
+        if (hook.equals("authentication-delegates")) delegatesInstalled = true;
+    }
 
     private static synchronized void retain(Map<String, Object> report) {
         if (!enabled) return;
@@ -56,9 +71,11 @@ public final class ReactiveSecurityTrace {
     }
 
     static synchronized Map<String, Object> snapshot() {
-        return Map.of("schemaVersion", 1, "enabled", enabled, "state", !enabled ? "disabled" :
+        Map<String, Object> report = new LinkedHashMap<>(Map.of("schemaVersion", 1, "enabled", enabled, "state", !enabled ? "disabled" :
             HOOKS.contains("proxy") ? "ready" : "waiting", "hooks", List.copyOf(HOOKS), "dropped", dropped,
-            "traces", List.copyOf(RECENT));
+            "traces", List.copyOf(RECENT)));
+        if (authenticationEnabled) report.put("authenticationEnabled", true);
+        return report;
     }
 
     public static Object root(Object publisher, Object exchange) {
@@ -143,6 +160,44 @@ public final class ReactiveSecurityTrace {
         });
     }
 
+    public static Object authentication(Object publisher, Object manager) {
+        if (!authenticationEnabled || manager == null) return publisher;
+        return observed(publisher, false, (reactor, source, trace) -> {
+            AuthenticationAttempt attempt = trace.authentication(manager);
+            return attempt == null ? source : authenticateSignals(reactor, source, trace,
+                new AuthenticationScope(attempt, manager, attempt.root));
+        });
+    }
+
+    public static Object authenticationDelegate(Object publisher, Object dispatcher, Object manager) {
+        if (!authenticationEnabled || manager == null || dispatcher == null) return publisher;
+        return contextual(publisher, false, (reactor, source, context) -> {
+            Trace trace = reactor.trace(context);
+            Object value = reactor.get.invoke(context, AUTHENTICATION_KEY, null);
+            if (trace == null || !(value instanceof AuthenticationScope parent) || parent.manager != dispatcher) return source;
+            AuthenticationStep step = trace.delegate(parent, manager);
+            return step == null ? source : authenticateSignals(reactor, source, trace,
+                new AuthenticationScope(parent.attempt, manager, step));
+        });
+    }
+
+    private static Object authenticateSignals(Operators reactor, Object source, Trace trace, AuthenticationScope scope)
+        throws ReflectiveOperationException {
+        Object success = reactor.monoSuccess.invoke(source, (Consumer<Object>) result -> safely(() ->
+            trace.authenticationOutcome(scope.step, result == null ? "empty" : "returned")));
+        Object failed = reactor.monoError.invoke(success, (Consumer<Throwable>) error -> safely(() -> {
+            Class<?> exception = Class.forName(SECURITY + "core.AuthenticationException", false, scope.manager.getClass().getClassLoader());
+            trace.authenticationOutcome(scope.step, exception.isInstance(error) ? "rejected" : "error");
+        }));
+        Object terminal = reactor.monoCancel.invoke(failed, (Runnable) () -> safely(() ->
+            trace.authenticationOutcome(scope.step, "canceled")));
+        if (!DELEGATING.equals(className(scope.manager))) return terminal;
+        return reactor.contextWrite.invoke(terminal, (Function<Object, Object>) original -> {
+            try { return reactor.put.invoke(original, AUTHENTICATION_KEY, scope); }
+            catch (Throwable ignored) { return original; }
+        });
+    }
+
     private static boolean denial(Throwable error) throws ReflectiveOperationException {
         return Class.forName(SECURITY + "access.AccessDeniedException", false, error.getClass().getClassLoader()).isInstance(error);
     }
@@ -214,7 +269,7 @@ public final class ReactiveSecurityTrace {
     };
 
     private static final class Operators {
-        final Method monoContext, fluxContext, contextWrite, get, put, monoSuccess, monoError, monoFinally, fluxNext, fluxComplete;
+        final Method monoContext, fluxContext, contextWrite, get, put, monoSuccess, monoError, monoFinally, monoCancel, fluxNext, fluxComplete;
 
         Operators(ClassLoader loader) throws ReflectiveOperationException {
             Class<?> mono = Class.forName(REACTOR + "Mono", false, loader);
@@ -229,6 +284,7 @@ public final class ReactiveSecurityTrace {
             monoSuccess = mono.getMethod("doOnSuccess", Consumer.class);
             monoError = mono.getMethod("doOnError", Consumer.class);
             monoFinally = mono.getMethod("doFinally", Consumer.class);
+            monoCancel = mono.getMethod("doOnCancel", Runnable.class);
             fluxNext = flux.getMethod("doOnNext", Consumer.class);
             fluxComplete = flux.getMethod("doOnComplete", Runnable.class);
         }
@@ -262,6 +318,55 @@ public final class ReactiveSecurityTrace {
         Match(Object chain) { this.chain = chain; }
     }
 
+    private record AuthenticationScope(AuthenticationAttempt attempt, Object manager, AuthenticationStep step) {}
+
+    private static final class AuthenticationStep {
+        final int sequence, parent, managerId;
+        final String managerType;
+        String outcome = "unobserved";
+
+        AuthenticationStep(int sequence, int parent, int managerId, String managerType) {
+            this.sequence = sequence;
+            this.parent = parent;
+            this.managerId = managerId;
+            this.managerType = managerType;
+        }
+
+        Map<String, Object> report() {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("sequence", sequence);
+            row.put("parent", parent);
+            row.put("managerId", managerId);
+            row.put("managerType", managerType);
+            row.put("outcome", outcome);
+            return row;
+        }
+    }
+
+    private static final class AuthenticationAttempt {
+        final AuthenticationStep root;
+        final List<AuthenticationStep> delegates = new ArrayList<>();
+        boolean incomplete;
+
+        AuthenticationAttempt(int managerId, String type) {
+            root = new AuthenticationStep(0, 0, managerId, type);
+        }
+
+        Map<String, Object> report() {
+            boolean opaque = !DELEGATING.equals(root.managerType);
+            boolean partial = incomplete || root.outcome.equals("unobserved") ||
+                (!opaque && (!delegatesInstalled || delegates.isEmpty() ||
+                    delegates.stream().anyMatch(step -> step.outcome.equals("unobserved") ||
+                        DELEGATING.equals(step.managerType) && delegates.stream().noneMatch(child -> child.parent == step.sequence))));
+            Map<String, Object> row = new LinkedHashMap<>(root.report());
+            row.remove("sequence");
+            row.remove("parent");
+            row.put("delegateCoverage", partial ? "partial" : opaque ? "opaque" : "observed");
+            row.put("delegates", delegates.stream().map(AuthenticationStep::report).toList());
+            return row;
+        }
+    }
+
     private static final class Trace {
         final long id = ids.incrementAndGet(), started = System.nanoTime();
         final Instant at = Instant.now();
@@ -269,6 +374,9 @@ public final class ReactiveSecurityTrace {
         final List<Match> matches = new ArrayList<>();
         final List<Object> configured = new ArrayList<>();
         final List<Map<String, Object>> methods = new ArrayList<>();
+        final List<AuthenticationAttempt> authentications = new ArrayList<>();
+        final Map<Object, Integer> managerIdentities = new IdentityHashMap<>();
+        boolean authenticationLimited;
         int selected = -1, entered;
         boolean gotConfiguration, incomplete, finished;
         String verification = "unobserved";
@@ -346,6 +454,44 @@ public final class ReactiveSecurityTrace {
             methods.add(event);
         }
 
+        private Integer managerId(Object manager) {
+            Integer id = managerIdentities.get(manager);
+            if (id != null) return id;
+            if (managerIdentities.size() >= MAX_MANAGER_IDENTITIES) return null;
+            id = managerIdentities.size() + 1;
+            managerIdentities.put(manager, id);
+            return id;
+        }
+
+        synchronized AuthenticationAttempt authentication(Object manager) {
+            if (finished) return null;
+            Integer identity = managerId(manager);
+            if (identity == null || authentications.size() >= MAX_AUTHENTICATIONS) {
+                authenticationLimited = true;
+                return null;
+            }
+            AuthenticationAttempt attempt = new AuthenticationAttempt(identity, className(manager));
+            authentications.add(attempt);
+            return attempt;
+        }
+
+        synchronized AuthenticationStep delegate(AuthenticationScope parent, Object manager) {
+            if (finished) return null;
+            AuthenticationAttempt attempt = parent.attempt;
+            Integer identity = managerId(manager);
+            if (identity == null || attempt.delegates.size() >= MAX_DELEGATES) {
+                attempt.incomplete = true;
+                return null;
+            }
+            AuthenticationStep step = new AuthenticationStep(attempt.delegates.size() + 1, parent.step.sequence, identity, className(manager));
+            attempt.delegates.add(step);
+            return step;
+        }
+
+        synchronized void authenticationOutcome(AuthenticationStep step, String outcome) {
+            if (!finished && step.outcome.equals("unobserved")) step.outcome = outcome;
+        }
+
         synchronized Map<String, Object> finish(Integer status, String signal) {
             finished = true;
             Map<String, Object> report = new LinkedHashMap<>();
@@ -372,8 +518,13 @@ public final class ReactiveSecurityTrace {
             report.put("entered", entered);
             report.put("verification", verification);
             report.put("methodDecisions", List.copyOf(methods));
+            if (authenticationEnabled) {
+                report.put("authenticationAttempts", authentications.stream().map(AuthenticationAttempt::report).toList());
+                report.put("authenticationLimited", authenticationLimited);
+            }
             matches.clear();
             configured.clear();
+            managerIdentities.clear();
             return report;
         }
     }

@@ -40,7 +40,7 @@ public final class ObserverRuntime {
     private record Origin(String kind,String factoryId){}
     private static final class Frame {int depth=1;final String query,factoryId,origin;final long started=System.nanoTime();Frame(String query,String factoryId,String origin){this.query=query;this.factoryId=factoryId;this.origin=origin;}}
     static synchronized void start(Map<String,Object> config)throws Exception {
-        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","consoleEntityProjections","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace","authenticationProviderTrace","feignContractTrace","springPersistenceContexts","springPersistenceContextPackages","springAutowireTrace","springAutowireTracePackages","jpaTransactionTrace","quarkusConfigOriginKeys","quarkusArcPackages");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
+        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","consoleEntityProjections","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace","securityReactiveAuthenticationTrace","authenticationProviderTrace","feignContractTrace","springPersistenceContexts","springPersistenceContextPackages","springAutowireTrace","springAutowireTracePackages","jpaTransactionTrace","quarkusConfigOriginKeys","quarkusArcPackages");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
         Path tokenPath=Path.of(requiredText(config,"tokenFile"));if(!tokenPath.isAbsolute()||!Files.isRegularFile(tokenPath,LinkOption.NOFOLLOW_LINKS)||Files.size(tokenPath)>256)throw new IllegalArgumentException("Invalid token file");
         String token=Files.readString(tokenPath,StandardCharsets.UTF_8).trim();if(!token.matches("[A-Za-z0-9_-]{32,128}"))throw new IllegalArgumentException("Invalid bearer token");expectedAuthorization=("Bearer "+token).getBytes(StandardCharsets.US_ASCII);
         queries=flag(config,"queries");validate=flag(config,"validate");consoleSelect=flag(config,"consoleSelect");PerformanceRuntime.configure(flag(config,"performance"));maxEvents=integer(config,"maxEvents",128,1,256);maxQueryChars=integer(config,"maxQueryChars",4096,64,16384);int port=integer(config,"port",0,0,65535);
@@ -50,7 +50,7 @@ public final class ObserverRuntime {
         QuarkusConfigTrace.configure(config.get("quarkusConfigOriginKeys"));
         QuarkusArcTrace.configure(config.get("quarkusArcPackages"));
         SecurityTraceRuntime.configure(flag(config,"securityTrace")||AuthenticationProviderTrace.enabled());
-        ReactiveSecurityTrace.configure(flag(config,"securityReactiveTrace"));
+        ReactiveSecurityTrace.configure(flag(config,"securityReactiveTrace"),flag(config,"securityReactiveAuthenticationTrace"));
         FeignContractTrace.configure(flag(config,"feignContractTrace"));
         JpaTransactionTrace.configure(flag(config,"jpaTransactionTrace"));
         AutowireRuntime.configure(flag(config,"springAutowireTrace"),config.get("springAutowireTracePackages"));
@@ -66,6 +66,7 @@ public final class ObserverRuntime {
         descriptor.put("consoleEntityProjectionsEnabled",consoleEntityProjections);
         descriptor.put("securityTraceEnabled",SecurityTraceRuntime.enabled());
         descriptor.put("securityReactiveTraceEnabled",ReactiveSecurityTrace.enabled());
+        descriptor.put("securityReactiveAuthenticationTraceEnabled",ReactiveSecurityTrace.authenticationEnabled());
         descriptor.put("feignContractTraceEnabled",FeignContractTrace.enabled());
         descriptor.put("securityMethodTraceEnabled",MethodSecurityTrace.enabled());
         descriptor.put("authenticationProviderTraceEnabled",AuthenticationProviderTrace.enabled());

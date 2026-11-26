@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,11 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DelegatingReactiveAuthenticationManager;
+import org.springframework.security.authentication.ReactiveAuthenticationManager;
+import org.springframework.security.authentication.UserDetailsRepositoryReactiveAuthenticationManager;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.MapReactiveUserDetailsService;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.web.server.SecurityWebFilterChain;
@@ -56,9 +62,23 @@ public class ReactiveSecurityFixture {
             .httpBasic(spec -> {})
             .addFilterBefore(new HopFilter(), SecurityWebFiltersOrder.AUTHORIZATION)
             .addFilterAfter(new HopFilter(), SecurityWebFiltersOrder.AUTHORIZATION)
-            .authorizeExchange(exchanges -> exchanges.pathMatchers("/ready").permitAll()
+            .authorizeExchange(exchanges -> exchanges.pathMatchers("/ready", "/review-counters").permitAll()
                 .pathMatchers("/rb/web-denied").hasRole("OPS").anyExchange().authenticated())
             .build();
+    }
+
+    @Bean @Order(0)
+    @ConditionalOnProperty(name="fixture.reactive.auth-review",havingValue="true")
+    SecurityWebFilterChain authenticationReview(ServerHttpSecurity http, MapReactiveUserDetailsService users, AuthenticationProbe probe) {
+        var provider=new UserDetailsRepositoryReactiveAuthenticationManager(users);
+        var nested=new DelegatingReactiveAuthenticationManager(
+            new ProbeDelegate(probe, true), new FixtureProvider(probe, provider));
+        nested.setContinueOnError(true);
+        var dispatcher=new DelegatingReactiveAuthenticationManager(new ProbeDelegate(probe, false), nested);
+        return http.securityMatcher(ServerWebExchangeMatchers.pathMatchers("/auth-observed/**"))
+            .csrf(ServerHttpSecurity.CsrfSpec::disable)
+            .authenticationManager(dispatcher).httpBasic(spec -> {})
+            .authorizeExchange(exchanges -> exchanges.anyExchange().authenticated()).build();
     }
 
     static final class HopFilter implements WebFilter {
@@ -66,12 +86,53 @@ public class ReactiveSecurityFixture {
             return Mono.just(exchange).publishOn(Schedulers.parallel()).flatMap(chain::filter);
         }
     }
+
+    static final class ProbeDelegate implements ReactiveAuthenticationManager {
+        private final AuthenticationProbe probe;
+        private final boolean nested;
+
+        ProbeDelegate(AuthenticationProbe probe, boolean nested) { this.probe=probe; this.nested=nested; }
+
+        @Override public Mono<Authentication> authenticate(Authentication request) {
+            return Mono.<Authentication>defer(() -> {
+                (nested ? probe.nested : probe.first).incrementAndGet();
+                if (nested && request.getName().equals(System.getenv("RB_OPS"))) {
+                    return Mono.error(new BadCredentialsException("fixture-private-reactive-rejection"));
+                }
+                return Mono.empty();
+            }).subscribeOn(Schedulers.parallel());
+        }
+    }
+
+    static final class FixtureProvider implements ReactiveAuthenticationManager {
+        private final AuthenticationProbe probe;
+        private final ReactiveAuthenticationManager provider;
+
+        FixtureProvider(AuthenticationProbe probe, ReactiveAuthenticationManager provider) { this.probe=probe; this.provider=provider; }
+
+        @Override public Mono<Authentication> authenticate(Authentication request) {
+            return Mono.defer(() -> {
+                probe.provider.incrementAndGet();
+                String name=request.getName();
+                if (name.equals(System.getenv("RB_AUTH_UNMATCHED"))) return Mono.empty();
+                if (name.equals(System.getenv("RB_AUTH_ERROR"))) return Mono.error(new IllegalStateException("fixture-private-reactive-error"));
+                return provider.authenticate(request);
+            }).publishOn(Schedulers.parallel());
+        }
+    }
+}
+
+@Service
+class AuthenticationProbe {
+    final AtomicInteger first=new AtomicInteger(), nested=new AtomicInteger(), provider=new AtomicInteger();
+    Map<String,Integer> counts(){return Map.of("first",first.get(),"nested",nested.get(),"provider",provider.get());}
 }
 
 @RestController
 class Requests {
     private final Permissions permissions;
-    Requests(Permissions permissions) { this.permissions = permissions; }
+    private final AuthenticationProbe authentication;
+    Requests(Permissions permissions, AuthenticationProbe authentication) { this.permissions = permissions; this.authentication=authentication; }
 
     @GetMapping("/ready") ResponseEntity<Map<String, Boolean>> ready() { return ResponseEntity.ok(Map.of("ready", true)); }
     @GetMapping("/rb/web-denied") ResponseEntity<Integer> webDenied() { return ResponseEntity.ok(42); }
@@ -86,6 +147,9 @@ class Requests {
 
     @GetMapping("/rb/counters")
     Map<String, Integer> counters() { return permissions.counters(); }
+    @GetMapping("/review-counters") Map<String,Integer> authenticationCounters(){return authentication.counts();}
+    @GetMapping("/auth-observed/read") Mono<Map<String,Object>> authenticationRead(){return permissions.before("fixture-private-reactive-call");}
+    @PostMapping("/auth-observed/read") Mono<Map<String,Object>> authenticationReadPost(){return permissions.before("fixture-private-reactive-call");}
 }
 
 @Service

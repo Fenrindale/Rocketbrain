@@ -43,16 +43,18 @@ async function databaseEnvironment(config) {
   };
 }
 
-async function startReactiveSecurityFixture(config, { enabled = true, observerJar } = {}) {
+async function startReactiveSecurityFixture(config, { enabled = true, authentication = false, authenticationFixture = authentication, observerJar } = {}) {
   const { home, java } = await javaRuntime();
   const app = process.env.ROCKETBRAIN_SPRING_REACTIVE_SECURITY_JAR ?? jar;
   await fs.access(app);
   const db = await databaseEnvironment(config);
   const account = () => ({ name: 'fixture-' + randomUUID(), password: randomUUID() });
-  const ops = account(), viewer = account();
+  const ops = account(), viewer = account(), unmatched = account(), authError = account();
   const authorization = credentials => 'Basic ' + Buffer.from(credentials.name + ':' + credentials.password).toString('base64');
   const env = { ...process.env, RB_JDBC_URL: undefined, RB_JDBC_USER: undefined, RB_JDBC_PASSWORD: undefined, ...db,
-    RB_OPS: ops.name, RB_OPS_PASSWORD: ops.password, RB_VIEWER: viewer.name, RB_VIEWER_PASSWORD: viewer.password };
+    RB_OPS: ops.name, RB_OPS_PASSWORD: ops.password, RB_VIEWER: viewer.name, RB_VIEWER_PASSWORD: viewer.password,
+    RB_AUTH_UNMATCHED: unmatched.name, RB_AUTH_ERROR: authError.name,
+    FIXTURE_REACTIVE_AUTH_REVIEW: String(authenticationFixture) };
   const agent = observerJar ?? (await require('../../scripts/jpa-observer-build')
     .buildObserver({ target: path.join(root, 'test-output', 'reactive-security-observer'), javaHome: home })).jarPath;
   const directory = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rb-reactive-security-'));
@@ -70,7 +72,8 @@ async function startReactiveSecurityFixture(config, { enabled = true, observerJa
   }
   try {
     await fs.writeFile(tokenFile, token, { flag: 'wx', mode: 0o600 });
-    await fs.writeFile(configFile, JSON.stringify({ tokenFile, descriptorFile, securityReactiveTrace: enabled }), { flag: 'wx', mode: 0o600 });
+    await fs.writeFile(configFile, JSON.stringify({ tokenFile, descriptorFile, securityReactiveTrace: enabled,
+      ...(authentication && { securityReactiveAuthenticationTrace: true }) }), { flag: 'wx', mode: 0o600 });
     child = spawn(java, ['--add-modules=jdk.httpserver', '-javaagent:' + agent + '=config=' + pathToFileURL(configFile).href,
       '-jar', app, '--server.port=0', '--server.address=127.0.0.1', '--spring.output.ansi.enabled=never'],
     { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -92,15 +95,16 @@ async function startReactiveSecurityFixture(config, { enabled = true, observerJa
         const result = await fetch(baseUrl + '/ready', { signal: AbortSignal.timeout(1000) }).catch(() => null);
         if (result?.ok && (await result.json()).ready === true) {
           const descriptor = JSON.parse(await fs.readFile(descriptorFile, 'utf8'));
-          if (descriptor.securityReactiveTraceEnabled !== enabled || descriptor.securityTraceEnabled !== false)
+          if (descriptor.securityReactiveTraceEnabled !== enabled || descriptor.securityTraceEnabled !== false ||
+              (descriptor.securityReactiveAuthenticationTraceEnabled === true) !== (enabled && authentication))
             throw Error('The fixture observer did not honor its scoped opt-in.');
-          return { baseUrl, ops, viewer, authorization, close, observer: { url: descriptor.baseUrl, token } };
+          return { baseUrl, ops, viewer, unmatched, authError, authorization, close, observer: { url: descriptor.baseUrl, token } };
         }
       }
       await delay(80);
     }
     for (const secret of [token, db.RB_JDBC_URL, db.RB_JDBC_USER, db.RB_JDBC_PASSWORD,
-      ops.name, ops.password, viewer.name, viewer.password].filter(Boolean)) output = output.replaceAll(secret, '[private]');
+      ...[ops,viewer,unmatched,authError].flatMap(({name,password})=>[name,password])].filter(Boolean)) output = output.replaceAll(secret, '[private]');
     throw Error('The isolated WebFlux fixture did not start. ' + output.slice(-2200));
   } catch (error) {
     await close();
