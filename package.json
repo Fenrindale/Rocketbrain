@@ -1012,6 +1012,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.java.reviewDelegatedCompile",
+        "title": "Review Delegated Java Compile",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.retryDelegatedCompile",
+        "title": "Review Failed Java Compile Retry",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.workbench.tasks",
         "title": "Choose Build Task",
         "category": "Rocketbrain"
@@ -1637,6 +1649,11 @@
         {
           "command": "rocketbrain.java.workbench.build",
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
+          "group": "project"
+        },
+        {
+          "command": "rocketbrain.java.reviewDelegatedCompile",
+          "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject && isWorkspaceTrusted",
           "group": "project"
         },
         {
