@@ -6,16 +6,19 @@ const { nativeTaskRunner } = require('./workbench-tasks');
 const { projectForRoot,loadKmpModel } = require('./kmp-gradle');
 const { runKmpTasks } = require('./kmp-workbench');
 const { definitionForKmp } = require('./kmp-sources');
+const {previewCandidates,renderComposePreview}=require('./kmp-compose-preview');
 const { fileKey } = require('./dependency-builds');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 
 const COMMANDS={inspect:'rocketbrain.kotlin.multiplatform.inspect',compile:'rocketbrain.kotlin.multiplatform.compile',
   test:'rocketbrain.kotlin.multiplatform.test',run:'rocketbrain.kotlin.multiplatform.run',
-  definition:'rocketbrain.kotlin.multiplatform.definition',stop:'rocketbrain.kotlin.multiplatform.stop'};
+  definition:'rocketbrain.kotlin.multiplatform.definition',stop:'rocketbrain.kotlin.multiplatform.stop',
+  preview:'rocketbrain.kotlin.multiplatform.previewCompose',refreshPreview:'rocketbrain.kotlin.multiplatform.refreshComposePreview'};
 
 function registerKmpWorkbench(vscode,java) {
   const runner=nativeTaskRunner(vscode), models=new Map(), indexes=new Map(), subscriptions=[];
-  let disposed=false, closing, active;
+  const previewImages=new WeakMap();
+  let disposed=false, closing, active, previewPanel, visiblePreview;
 
   function trusted(cancellation) {
     if (disposed || !vscode.workspace.isTrusted) throw fail('Trust the local workspace before using Kotlin Multiplatform.');
@@ -98,6 +101,82 @@ function registerKmpWorkbench(vscode,java) {
     });
   }
 
+  function composeModel(projectUri) {
+    const root=rootFor(projectUri),model=models.get(root);
+    if (!model) throw fail('Inspect the Kotlin Multiplatform targets before choosing a Compose preview.');
+    return {root,model};
+  }
+
+  function composeSource(document,root) {
+    if (!document || document.isClosed || document.uri.scheme!=='file'||document.uri.authority||
+        document.languageId!=='kotlin'||!document.uri.fsPath.endsWith('.kt')) {
+      throw fail('Open a saved commonMain Kotlin source file with a Compose preview.');
+    }
+    const file=workspacePath(document.uri.fsPath,[root],{directory:false});
+    if (document.isDirty) throw fail('Save the Compose source before rendering.');
+    return file;
+  }
+
+  function composeCandidates({projectUri,document}) {
+    trusted();
+    const {root,model}=composeModel(projectUri);
+    return previewCandidates(model,composeSource(document,root));
+  }
+
+  function preview(options) {
+    return runOwned(options,async details=>{
+      const {model}=composeModel(details.projectUri);
+      const file=composeSource(details.document,details.root);
+      const {png,report}=await renderComposePreview({...details,model,file});
+      trusted(details.cancellation);
+      saved(details.root);
+      const receipt=Object.freeze(report);
+      previewImages.set(receipt,{png,options:{
+        projectUri:details.projectUri,sourceUri:details.document.uri,modulePath:details.modulePath,
+        targetName:details.targetName,qualified:details.qualified,width:report.width,height:report.height
+      }});
+      return receipt;
+    });
+  }
+
+  function showComposePreview(receipt) {
+    trusted();
+    const subject=previewImages.get(receipt);
+    if (!subject) throw fail('Render the current Compose preview before opening it.');
+    if (!previewPanel) {
+      const panel=vscode.window.createWebviewPanel('rocketbrainComposePreview','Kotlin Compose Preview',
+        {viewColumn:vscode.ViewColumn.Beside,preserveFocus:true},
+        {enableScripts:false,localResourceRoots:[],enableCommandUris:[COMMANDS.refreshPreview]});
+      previewPanel=panel;
+      panel.onDidDispose(()=>{
+        if (previewPanel===panel) {previewPanel=undefined;visiblePreview=undefined;}
+      });
+    }
+    visiblePreview=subject.options;
+    const image=subject.png.toString('base64');
+    // Qualified name and target are bounded compiler/model identifiers; all other content is fixed.
+    previewPanel.webview.html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
+      '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; img-src data:; style-src &#39;unsafe-inline&#39;">'+
+      '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Kotlin Compose Preview</title>'+
+      '<style>body{padding:18px}header{margin-bottom:18px}img{max-width:100%;height:auto;background:var(--vscode-editor-background)}'+
+      'h1{font-size:1.2rem}a{color:var(--vscode-textLink-foreground)}</style></head><body>'+
+      '<header><h1>'+receipt.qualified+'</h1><p>'+receipt.targetName+' · '+receipt.width+' × '+receipt.height+
+      '</p><a href="command:'+COMMANDS.refreshPreview+'">Refresh Preview</a></header>'+
+      '<img alt="Rendered Compose preview" width="'+receipt.width+'" height="'+receipt.height+
+      '" src="data:image/png;base64,'+image+'"></body></html>';
+    return previewPanel;
+  }
+
+  async function refreshCompose() {
+    const selection=visiblePreview;
+    if (!selection) throw fail('Open a Kotlin Compose preview first.');
+    const document=await vscode.workspace.openTextDocument(selection.sourceUri);
+    const receipt=await progress('Refresh Kotlin Compose Preview',cancellation=>preview({...selection,document,
+      allowProjectExecution:true,cancellation}));
+    if (selection===visiblePreview) showComposePreview(receipt);
+    return receipt;
+  }
+
   function definition({document,position}={},cancellation) {
     trusted(cancellation);
     if (!document || document.uri.scheme!=='file' || document.uri.authority || !document.uri.fsPath.endsWith('.kt')) return [];
@@ -133,6 +212,7 @@ function registerKmpWorkbench(vscode,java) {
   }));
   if (vscode.workspace.onDidChangeWorkspaceFolders) subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
     models.clear();indexes.clear();
+    previewPanel?.dispose();
     void stop().catch(()=>{});
   }));
 
@@ -216,15 +296,32 @@ function registerKmpWorkbench(vscode,java) {
       label:item.name,description:item.sourceSet+' · '+item.targets.join(', '),item})),{title:'Select Kotlin Counterpart'}))?.item;
     if (found) return vscode.window.showTextDocument(found.uri,{preview:true,selection:found.range});
   });
+  register(COMMANDS.preview,async()=>{
+    const document=vscode.window.activeTextEditor?.document;
+    if (!document||document.languageId!=='kotlin'||document.isDirty) throw fail('Open a saved commonMain Kotlin file with a Compose preview.');
+    const configuration=await chooseModel();
+    if (!configuration) return;
+    const {options}=configuration;
+    const candidates=composeCandidates({...options,document});
+    if (!candidates.length) throw fail('No supported @Preview and @Composable function was found in this commonMain file.');
+    const selected=await vscode.window.showQuickPick(candidates.map(item=>({label:item.name,
+      description:item.targetName+' · '+item.modulePath,item})),{title:'Choose Kotlin Compose Preview and JVM Target'});
+    if (!selected) return;
+    const {qualified,modulePath,targetName}=selected.item;
+    const receipt=await progress('Render Kotlin Compose Preview',cancellation=>preview({...options,document,qualified,modulePath,targetName,cancellation}));
+    showComposePreview(receipt);
+    return receipt;
+  });
+  register(COMMANDS.refreshPreview,refreshCompose);
   register(COMMANDS.stop,stop);
 
   return {inspect,compile:options=>execute(options,'compile'),test:options=>execute(options,'test'),run:options=>execute(options,'run'),
-    definition,stop,dispose() {
+    definition,composeCandidates,preview,showComposePreview,refreshCompose,stop,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {
         try {await stop();await runner.dispose();}
-        finally {for (const item of subscriptions) item.dispose();}
+        finally {previewPanel?.dispose();for (const item of subscriptions) item.dispose();}
       })();
       return closing;
     }};

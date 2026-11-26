@@ -221,6 +221,8 @@
       { "command": "rocketbrain.kotlin.multiplatform.run", "title": "Run Kotlin Multiplatform Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.previewCompose", "title": "Preview Kotlin Compose", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
+      { "command": "rocketbrain.kotlin.multiplatform.refreshComposePreview", "title": "Refresh Kotlin Compose Preview", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.wsl.distributions", "title": "List WSL Distributions and Map Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.reviewBuild", "title": "Review and Run WSL Workspace Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.cancelBuild", "title": "Cancel Managed WSL Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },

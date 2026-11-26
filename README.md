@@ -146,6 +146,8 @@ Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compil
 
 **Inspect Kotlin Multiplatform Targets**에서 Gradle이 구성한 JVM·JavaScript 타깃과 소스셋 의존 관계를 확인합니다. **Compile Kotlin Multiplatform Targets**, **Test Kotlin Multiplatform Targets**, **Run Kotlin Multiplatform Target**은 관찰된 타깃의 컴파일·테스트·실행 작업을 사용합니다. JavaScript 실행과 테스트는 Node.js 타깃을 대상으로 합니다.
 
+공통 Kotlin UI의 저장된 `commonMain` 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수와 JVM 타깃을 선택할 수 있습니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. 소스를 저장한 뒤 미리보기 패널의 **Refresh Preview**로 같은 타깃을 다시 그립니다.
+
 Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를 시작하지 못하면 `rocketbrain.kotlin.gradleHome`에 Gradle 9.7.0 설치 경로를 지정합니다. 이 설정은 Kotlin Multiplatform 작업에 적용됩니다.
 
 컴파일 뒤 편집기의 **Go to Definition** 또는 **Open Kotlin Expect or Actual Declaration**에서 최상위 함수와 프로퍼티의 단순 스칼라 시그니처를 연결합니다. 공통 `expect`에서 플랫폼별 `actual`을 선택하거나 `actual`에서 원래 선언으로 돌아갈 수 있습니다. 소스나 빌드 구성이 바뀌면 다시 컴파일합니다.
