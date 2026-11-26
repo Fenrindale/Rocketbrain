@@ -53,7 +53,7 @@ function recipes(frame) {
   if (trusted) actions.push(item('rocketbrain.connectMysql', 'Database', 'Choose a MySQL or MariaDB connection.'));
   actions.push(item('rocketbrain.searchEverywhere', 'Navigation', 'Search workspace files, symbols, settings and actions.'));
   if (hasFolders) actions.push(item('rocketbrain.recentFiles', 'Navigation', 'Open a recent workspace file.'));
-  actions.push(item('rocketbrain.keyboardProfile', 'Preferences', 'Preview or export workspace, Java, SQL and debugger shortcuts.'),
+  actions.push(item('rocketbrain.keyboardProfile', 'Preferences', 'Enable, preview or export workspace, Java, SQL and debugger shortcuts.'),
     item('workbench.action.openGlobalKeybindings', 'Preferences', 'Change the keyboard shortcut for Context Actions.',
     { label: 'Open Keyboard Shortcuts' }), item('workbench.action.selectTheme', 'Preferences', 'Choose a VS Code color theme.',
     { label: 'Choose Color Theme' }));

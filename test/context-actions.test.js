@@ -35,7 +35,8 @@ function harness() {
 
 test('Context Actions routes one native chord through distinct editor, results and workspace clauses', () => {
   const { contributes } = require('../package.json');
-  const bindings = contributes.keybindings.filter(item => [mainCommand, resultsCommand].includes(item.command));
+  const bindings = contributes.keybindings.filter(item =>
+    [mainCommand, resultsCommand].includes(item.command) && item.key === 'ctrl+k ctrl+shift+a');
   assert.equal(bindings.length, 3);
   assert.ok(bindings.every(item => item.key === 'ctrl+k ctrl+shift+a' && item.mac === 'cmd+k cmd+shift+a'));
   assert.ok(bindings.some(item => item.command === resultsCommand && item.when.includes('focusedView == rocketbrain.results')));

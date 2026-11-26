@@ -3,6 +3,7 @@ const esbuild = require('esbuild');
 const fs = require('node:fs');
 const path = require('node:path');
 async function build() {
+  require('./keyboard-profile-manifest').assertWorkspaceKeybindings(require('../package.json'));
   const jdbcWorker = fs.readFileSync(path.join(__dirname, '../runtime/jdbc/DriverWorker.java'), 'utf8');
   fs.writeFileSync(path.join(__dirname, '../src/db/jdbc-worker-source.json'), JSON.stringify(jdbcWorker));
   const clientIdentity = fs.readFileSync(path.join(__dirname, '../runtime/db-tls/ClientIdentity.java'), 'utf8');
