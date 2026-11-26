@@ -1,7 +1,7 @@
 'use strict';
 
 const { randomBytes } = require('node:crypto');
-const { DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD } = require('./debug-runtime');
+const { DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD } = require('./debug-runtime');
 
 const command = 'rocketbrain/readJavaValues';
 const pageSize = 100;
@@ -22,7 +22,7 @@ function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
     if (state?.state !== 'stopped' || state.resuming !== undefined || !positiveId(state.threadId)) {
       throw Error('Pause the Java session before reading local values.');
     }
-    if (![DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD].includes(state.debugBuild)) throw Error('Update the Rocketbrain Java engine to read local values without expression evaluation.');
+    if (![DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD].includes(state.debugBuild)) throw Error('Update the Rocketbrain Java engine to read local values without expression evaluation.');
     const focused = vscode.debug.activeStackItem;
     if (focused?.session?.id === session.id && focused.threadId !== state.threadId) {
       throw Error('Select a frame on the Java thread that reported the current stop.');
@@ -50,7 +50,7 @@ function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
     verify(session, stop);
     if (!Array.isArray(data?.values) || data.values.length > 128) throw Error('The Java adapter returned an invalid local-values list.');
     const values = data.values.filter(entry => entry && typeof entry.name === 'string' && entry.name.length > 0 &&
-      entry.name.length <= 256 && ['array', 'arrayList', 'string'].includes(entry.kind) && validLength(entry.length))
+      entry.name.length <= 256 && ['array', 'arrayList', 'list', 'string'].includes(entry.kind) && validLength(entry.length))
       .map(({ name, kind, length, complete }) => Object.freeze({ name, kind, length,
         complete: kind !== 'string' || complete === true && length <= maxString }));
     const report = Object.freeze({ frame: String(frame.name || '').slice(0, 512), values: Object.freeze(values), limited: data.limited === true });
@@ -115,7 +115,7 @@ function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
 
   async function choose() {
     const report = await inspect();
-    if (!report.values.length) throw Error('The paused Java frame has no supported local arrays, ArrayList values or strings.');
+    if (!report.values.length) throw Error('The paused Java frame has no supported local arrays, lists or strings.');
     const picked = await vscode.window.showQuickPick(report.values.map(entry => ({ label: entry.name,
       description: entry.complete ? entry.kind + ' · ' + entry.length : 'String beyond viewer limit' })),
     { title: 'Inspect Java Local Value', placeHolder: report.frame + (report.limited ? ' · First 128 locals' : '') });

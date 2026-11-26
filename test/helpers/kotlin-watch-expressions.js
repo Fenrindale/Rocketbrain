@@ -20,6 +20,16 @@ const expectations = [
   ['enabled || (amount / 0 > 0)', 'true', 'kotlin.Boolean'],
   ['2147483647 + 1', '-2147483648', 'kotlin.Int']
 ];
+const indexedExpectations = [
+  ['numbers[1] + mutable[1]', '49', 'kotlin.Int'],
+  ['numbers.size + captions.size', '5', 'kotlin.Int'],
+  ['(captions[0] ?: "").length', '7', 'kotlin.Int'],
+  ['captions[1] ?: "fallback"', '"fallback"', 'kotlin.String'],
+  ['singleton[0]', 'null', 'kotlin.Nothing?'],
+  ['immutable[0] + immutable[1]', '9007199254740996', 'kotlin.Long'],
+  ['nested[0][1]', '7', 'kotlin.Int'],
+  ['absentList?.size ?: 0', '0', 'kotlin.Int']
+];
 
 async function launchKotlinWatches(fixture, options, port) {
   const jdbc = await jdbcOptions(options);
@@ -43,13 +53,33 @@ async function assertKotlinWatchValues(send, frameId) {
   const consoleValue = await send('evaluate', { frameId, expression: 'amount + 1', context: 'repl' });
   assert.equal(consoleValue.result, '43');
   for (const expression of ['side.mutate()', 'amount = 999', 'amount++', 'caption.hashCode()', 'true || side.mutate() > 0']) {
-    await assert.rejects(send('evaluate', { frameId, expression, context: 'watch' }), /Kotlin scalar watch expression/u);
+    await assert.rejects(send('evaluate', { frameId, expression, context: 'watch' }), /Kotlin (?:scalar )?watch expression/u);
   }
-  await assert.rejects(send('evaluate', { frameId, expression: 'side', context: 'watch' }), /not a supported scalar/u);
+  await assert.rejects(send('evaluate', { frameId, expression: 'side', context: 'watch' }), /supported (?:Kotlin )?scalar/u);
   await assert.rejects(send('evaluate', { frameId, expression: 'absent', context: 'watch' }), /No visible Kotlin local/u);
   await assert.rejects(send('evaluate', { frameId, expression: '42'.repeat(170), context: 'watch' }), /320 characters/u);
   await assert.rejects(send('evaluate', { frameId, expression: 'amount / 0', context: 'watch' }), /division by zero/u);
   return values;
+}
+
+async function assertIndexedKotlinWatchValues(send, frameId) {
+  const values = [];
+  for (const [expression,result,type] of indexedExpectations) {
+    const body = await send('evaluate',{frameId,expression,context:'watch'});
+    assert.deepEqual([body.result,body.type,body.variablesReference],[result,type,0],expression);
+    values.push({expression,result,type});
+  }
+  for (const [expression,message] of [['numbers[2]',/out of range/u],['numbers[-1]',/out of range/u],
+    ['numbers[0L]',/Int index/u],['captions.get(0)',/Kotlin watch expression/u],
+    ['trap.size',/standard JVM list/u],['trap[0]',/standard JVM list/u]]) {
+    await assert.rejects(send('evaluate',{frameId,expression,context:'watch'}),message);
+  }
+  const list = await send('rocketbrain/readJavaValues',{action:'list',frameId});
+  assert.ok(list.values.some(value=>value.name==='captions'&&value.kind==='list'&&value.length===3));
+  assert.ok(!list.values.some(value=>value.name==='trap'));
+  const page = await send('rocketbrain/readJavaValues',{action:'page',frameId,name:'captions',start:0,count:2});
+  assert.deepEqual(page.rows.map(value=>value.display),['receipt','null']);
+  return {values,paged:true,customGetterRefused:true,invalidIndicesRefused:true};
 }
 
 function kotlinWatchJdbcResult(output, engine) {
@@ -62,4 +92,5 @@ function kotlinWatchJdbcResult(output, engine) {
   return { engine, server: match[1], amount: Number(match[2]), sideEffects: Number(match[3]) };
 }
 
-module.exports = { request, breakpointName, launchKotlinWatches, assertKotlinWatchValues, kotlinWatchJdbcResult };
+module.exports = { request, breakpointName, launchKotlinWatches, assertKotlinWatchValues,
+  assertIndexedKotlinWatchValues, kotlinWatchJdbcResult };

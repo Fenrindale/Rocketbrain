@@ -4,16 +4,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { WATCH_BUILD } = require('../src/java/debug-runtime');
+const { WATCH_BUILD, INDEXED_WATCH_BUILD } = require('../src/java/debug-runtime');
 const { freePort } = require('./java-debug-dap');
 const { until } = require('./helpers/stdio-lsp');
 const { buildCoroutineFixture } = require('./helpers/coroutine-fixture');
-const { request, breakpointName, launchKotlinWatches, assertKotlinWatchValues, kotlinWatchJdbcResult } =
+const { request, breakpointName, launchKotlinWatches, assertKotlinWatchValues, assertIndexedKotlinWatchValues, kotlinWatchJdbcResult } =
   require('./helpers/kotlin-watch-expressions');
 
 async function runKotlinWatchExpressionChecks(api, vscode, checks) {
   await api.java.start();
-  assert.equal(api.java.getState().debugBuild, WATCH_BUILD);
+  const debugBuild = api.java.getState().debugBuild;
+  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD].includes(debugBuild));
   const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const project = await fs.mkdtemp(path.join(workspace, 'rb-kotlin-expressions-'));
@@ -58,13 +59,15 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks) {
     assert.equal(path.relative(path.join(sourceRoot, 'coroutinesfixture/KotlinWatchInspection.kt'), frame.source.path), '');
     const send = (method, arguments_) => session.customRequest(method, arguments_);
     const values = await assertKotlinWatchValues(send, frame.id);
+    const indexed = debugBuild === INDEXED_WATCH_BUILD ? await assertIndexedKotlinWatchValues(send, frame.id) : undefined;
     await send('continue', { threadId: stop.threadId });
     const application = kotlinWatchJdbcResult(await running.waitFor('Rocketbrain Kotlin JDBC|'), spring.dbEngine);
     await assert.rejects(send(request, { frameId: frame.id, expression: 'amount' }), /current suspended frame/u);
     await detach();
     checks.push('The native debugger evaluates typed Kotlin Watch, Hover and Debug Console expressions in the paused Spring JDBC stack.');
     checks.push('Unsupported Kotlin assignments and function calls leave the JVM unchanged, and a resumed frame cannot be reused.');
-    return { ...application, frameLine: frame.line, values, staleFrameRefused: true };
+    if (indexed) checks.push('Kotlin Watch reads array and standard JVM list size and indexed values through JDI, with custom getters excluded.');
+    return { ...application, frameLine: frame.line, values, indexed, staleFrameRefused: true };
   } finally {
     vscode.debug.removeBreakpoints([breakpoint]);
     await detach().catch(() => {});

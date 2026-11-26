@@ -18,7 +18,7 @@ import com.sun.jdi.StackFrame;
 import com.sun.jdi.StringReference;
 import com.sun.jdi.Value;
 
-/** Bounded Kotlin scalar expressions over live JDI locals. No debuggee calls. */
+/** Bounded Kotlin expressions over live JDI locals. No debuggee calls. */
 final class KotlinWatchEvaluation {
     static final String REQUEST = "rocketbrain/evaluateKotlinWatch";
     private static final int MAX_EXPRESSION = 320;
@@ -27,7 +27,8 @@ final class KotlinWatchEvaluation {
     private static final Map<IDebugAdapterContext, LinkedHashSet<Integer>> kotlinFrames = new WeakHashMap<>();
 
     private enum Kind {
-        INT("kotlin.Int"), LONG("kotlin.Long"), BOOLEAN("kotlin.Boolean"), STRING("kotlin.String"), NULL("kotlin.Nothing?");
+        INT("kotlin.Int"), LONG("kotlin.Long"), BOOLEAN("kotlin.Boolean"), STRING("kotlin.String"),
+        NULL("kotlin.Nothing?"), INDEXED("");
         final String type;
         Kind(String type) { this.type = type; }
     }
@@ -36,7 +37,10 @@ final class KotlinWatchEvaluation {
         final Kind kind;
         final Object value;
         Scalar(Kind kind, Object value) { this.kind = kind; this.value = value; }
-        String display() { return kind == Kind.STRING ? new JsonPrimitive((String) value).toString() : String.valueOf(value); }
+        String display() {
+            if (kind == Kind.INDEXED) throw invalid("Read a supported collection with .size or an Int index.");
+            return kind == Kind.STRING ? new JsonPrimitive((String) value).toString() : String.valueOf(value);
+        }
         long numeric() {
             if (kind == Kind.INT || kind == Kind.LONG) return ((Number) value).longValue();
             throw invalid("Use an observed Kotlin Int or Long for this operator.");
@@ -122,7 +126,7 @@ final class KotlinWatchEvaluation {
 
     private static IllegalArgumentException invalid(String message) { return new IllegalArgumentException(message); }
     private static IllegalArgumentException syntax() {
-        return invalid("Use a Kotlin scalar watch expression. Calls, assignments, arbitrary properties and interpolation are unsupported.");
+        return invalid("Use a Kotlin watch expression with supported scalars or indexed locals. Calls, assignments, arbitrary properties and interpolation are unsupported.");
     }
 
     private static Scalar observe(StackFrame frame, String name) throws Exception {
@@ -132,12 +136,17 @@ final class KotlinWatchEvaluation {
             throw invalid("The paused Kotlin frame has no visible local variable metadata.");
         }
         if (local == null) throw invalid("No visible Kotlin local named " + name + " at this paused frame.");
-        Value value = frame.getValue(local);
+        return fromJdi(frame.getValue(local));
+    }
+
+    private static Scalar fromJdi(Value value) {
         if (value instanceof ObjectReference && !(value instanceof StringReference)) {
+            var indexed = LocalValueInspection.indexed(value);
+            if (indexed != null) return new Scalar(Kind.INDEXED, indexed);
             ObjectReference object = (ObjectReference) value;
             String type = object.referenceType().name();
             String signature = Map.of("java.lang.Integer", "I", "java.lang.Long", "J", "java.lang.Boolean", "Z").get(type);
-            if (signature == null || object.referenceType().classLoader() != null) throw invalid("This Kotlin local is not a supported scalar value.");
+            if (signature == null || object.referenceType().classLoader() != null) throw invalid("Use a supported Kotlin scalar, array or standard JVM list layout.");
             var field = object.referenceType().fieldByName("value");
             if (field == null || field.isStatic() || !signature.equals(field.signature())) throw invalid("The Kotlin boxed scalar layout is unavailable.");
             value = object.getValue(field);
@@ -151,18 +160,35 @@ final class KotlinWatchEvaluation {
             if (LocalValueInspection.storageUnits(string) > MAX_TEXT) throw invalid("The Kotlin string exceeds 4096 UTF-16 units.");
             return new Scalar(Kind.STRING, string.value());
         }
-        throw invalid("This Kotlin local is not a supported scalar value.");
+        throw invalid("Use a supported Kotlin scalar, array or standard JVM list layout.");
+    }
+
+    private static Scalar indexedElement(Scalar receiver, Scalar index) {
+        if (receiver.kind != Kind.INDEXED || index.kind != Kind.INT) throw invalid("Use an Int index on a supported Kotlin array or list.");
+        var values = (LocalValueInspection.IndexedValue) receiver.value;
+        int at = (Integer) index.value;
+        if (at < 0 || at >= values.length) throw invalid("The Kotlin collection index is out of range.");
+        return fromJdi(values.value(at));
+    }
+
+    private static Scalar property(Scalar receiver, String name, boolean safe) {
+        if (receiver.kind == Kind.NULL && safe) return receiver;
+        if (receiver.kind == Kind.STRING && name.equals("length")) return new Scalar(Kind.INT, ((String) receiver.value).length());
+        if (receiver.kind == Kind.INDEXED && name.equals("size")) {
+            return new Scalar(Kind.INT, ((LocalValueInspection.IndexedValue) receiver.value).length);
+        }
+        throw invalid("Use String.length or .size on a supported Kotlin array or list.");
     }
 
     private static Scalar binary(String operator, Scalar left, Scalar right) {
         if (operator.equals("==") || operator.equals("!=")) {
-            if (left.kind != right.kind && left.kind != Kind.NULL && right.kind != Kind.NULL) {
+            if (left.kind != Kind.NULL && right.kind != Kind.NULL && (left.kind != right.kind || left.kind == Kind.INDEXED)) {
                 throw invalid("Compare Kotlin scalars of the same observed type.");
             }
             boolean equal = java.util.Objects.equals(left.value, right.value);
             return new Scalar(Kind.BOOLEAN, operator.equals("==") ? equal : !equal);
         }
-        if (operator.equals("+") && left.kind == Kind.STRING) {
+        if (operator.equals("+") && left.kind == Kind.STRING && right.kind != Kind.INDEXED) {
             String text = (String) left.value + String.valueOf(right.value);
             if (text.length() > MAX_TEXT) throw invalid("The Kotlin string exceeds 4096 UTF-16 units.");
             return new Scalar(Kind.STRING, text);
@@ -246,16 +272,21 @@ final class KotlinWatchEvaluation {
         }
 
         private Expression postfix() {
-            Expression primary = primary();
-            String access = operator("?.", ".");
-            if (access == null) return primary;
-            if (!"length".equals(identifier())) throw syntax();
-            return frame -> {
-                Scalar value = primary.evaluate(frame);
-                if (value.kind == Kind.NULL && access.equals("?.")) return value;
-                if (value.kind == Kind.STRING) return new Scalar(Kind.INT, ((String) value.value).length());
-                throw invalid("Only String.length and String?.length are supported Kotlin properties.");
-            };
+            Expression result = primary();
+            for (;;) {
+                Expression receiver = result;
+                if (operator("[") != null) {
+                    Expression index = nested(this::or);
+                    if (operator("]") == null) throw syntax();
+                    result = frame -> indexedElement(receiver.evaluate(frame), index.evaluate(frame));
+                } else {
+                    String access = operator("?.", ".");
+                    if (access == null) return result;
+                    String name = identifier();
+                    if (!"length".equals(name) && !"size".equals(name)) throw syntax();
+                    result = frame -> property(receiver.evaluate(frame), name, access.equals("?."));
+                }
+            }
         }
 
         private Expression primary() {

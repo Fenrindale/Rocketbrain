@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { DEBUG_VERSION, WATCH_BUILD: DEBUG_BUILD, WATCH_FILE: DEBUG_FILE, WATCH_SHA256: DEBUG_SHA256,
+const { DEBUG_VERSION, INDEXED_WATCH_BUILD: DEBUG_BUILD, INDEXED_WATCH_FILE: DEBUG_FILE, INDEXED_WATCH_SHA256: DEBUG_SHA256,
   DEBUG_URL, UPSTREAM_FILE, UPSTREAM_SHA256, resolveDebugBundles, independentJavaExecutable } = require('../src/java/debug-runtime');
 const { buildPatchedBundle, SOURCE_COMMIT, SOURCE_URL, SOURCE_SHA256, CORE_SOURCE_URL, CORE_SOURCE_SHA256,
   EXCEPTION_SOURCE_URL, EXCEPTION_SOURCE_SHA256, INSPECTION_SOURCE_URL, INSPECTION_SOURCE_SHA256,
@@ -41,10 +41,10 @@ async function provisionDebugger(target, progress = () => {}, { javaHome, server
   }
   resolveDebugBundles(file);
   const source = {
-    name: 'Microsoft Java Debug Server with Rocketbrain loopback, Java inspection, Kotlin coroutine and scalar watch patches', version: DEBUG_BUILD,
+    name: 'Microsoft Java Debug Server with Rocketbrain loopback, Java inspection, Kotlin coroutine and indexed watch patches', version: DEBUG_BUILD,
     upstream: { version: DEBUG_VERSION, url: DEBUG_URL, sha256: UPSTREAM_SHA256, sourceJarUrl, sourceJarSha256: SOURCE_JAR_SHA256, coreSourceJarUrl, coreSourceJarSha256: CORE_SOURCE_JAR_SHA256, sourceCommit: SOURCE_COMMIT, source: `https://github.com/microsoft/java-debug/tree/${SOURCE_COMMIT}` },
     artifact: { file: DEBUG_FILE, sha256: DEBUG_SHA256, locallyBuilt: true, signed: false },
-    patch: { name: 'loopback-stack-exception-jdi-values-coroutine-kotlin-evaluation-v6', sourceUrl: SOURCE_URL, sourceSha256: SOURCE_SHA256,
+    patch: { name: 'loopback-stack-exception-jdi-values-coroutine-kotlin-evaluation-v7', sourceUrl: SOURCE_URL, sourceSha256: SOURCE_SHA256,
       coreSourceUrl: CORE_SOURCE_URL, coreSourceSha256: CORE_SOURCE_SHA256, exceptionSourceUrl: EXCEPTION_SOURCE_URL,
       exceptionSourceSha256: EXCEPTION_SOURCE_SHA256, inspectionSourceUrl: INSPECTION_SOURCE_URL,
       inspectionSourceSha256: INSPECTION_SOURCE_SHA256, notice: PATCH_NOTICE },
