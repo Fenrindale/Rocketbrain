@@ -38,7 +38,7 @@ test('prepared JOIN rejects implicit cross-table targets, nonportable constructs
     sql.replace('t.id=?', 'l.item=?'), sql.replace('l.item=t.id', 'l.tenant=t.id'),
     sql.replace('l.delta+?', 'ABS(l.delta)+?'), sql.replace('l.delta+?', 'l.delta+? , t.id=?'),
     sql.replace('l.delta+?', 'l.delta+@extra'), sql + ' UNION SELECT 1', sql + '; SELECT 1',
-    sql.replace('ref.lookup', 'app.target'), 'WITH t AS (SELECT 1) ' + sql,
+    sql.replace('ref.lookup', 'app.target'),
   ]) assert.throws(() => inspectPreparedTemplate(proposed, 'app'), /UPDATE JOIN|first table|distinct columns|one statically/u, proposed);
   const template = inspectPreparedTemplate(sql, 'app');
   const cases = [

@@ -9,7 +9,17 @@ const integer = /^(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)(?:\(\d{1,3}\))
 const word = token => token?.kind === 'word' ? token.value.toUpperCase() : undefined;
 const fail = message => Object.assign(new Error(message), { code: 'ROCKETBRAIN_PROGRAM' });
 
-function joinedUpdate(tokens, database) {
+function supportsPreparedCteUpdate(server) {
+  const version = /^(?:5\.5\.5-)?(\d{1,3})\.(\d{1,3})\.\d{1,4}(?:[-+][A-Za-z0-9.+~_-]+)?$/u.exec(server?.version || '');
+  if (!version) return false;
+  const major = Number(version[1]), minor = Number(version[2]);
+  const maria = /mariadb/iu.test(server.version);
+  if (server.dialect === 'mariadb' && maria) return major > 12 || major === 12 && minor >= 3;
+  return server.dialect === 'mysql' && !maria && !server.version.startsWith('5.5.5-') &&
+    (major > 8 || major === 8 && minor >= 4);
+}
+
+function joinedUpdate(tokens, database, withLookup) {
   let cursor = 0;
   const at = keyword => word(tokens[cursor]) === keyword || tokens[cursor]?.value === keyword;
   const take = keyword => {
@@ -21,7 +31,10 @@ function joinedUpdate(tokens, database) {
     if (!token?.name || token.kind === 'user') throw fail('Use explicit table aliases and alias-qualified columns in a prepared UPDATE JOIN.');
     return identifier(token.name, { table: true });
   }
-  function relation() {
+  function relation(requireSchema = false) {
+    if (requireSchema && tokens[cursor + 1]?.value !== '.') {
+      throw fail('Use schema-qualified physical tables for a prepared WITH UPDATE.');
+    }
     const ref = AST.reference(tokens, cursor, database);
     cursor = ref.end;
     take('AS');
@@ -49,11 +62,52 @@ function joinedUpdate(tokens, database) {
     return tokens[cursor + 1]?.value === '.' ? { kind: 'column', ...column() } : value();
   }
 
+  function lookupCte() {
+    take('WITH');
+    if (at('RECURSIVE')) throw fail('Prepared WITH UPDATE supports one nonrecursive lookup CTE.');
+    const cteName = name();
+    take('AS');
+    take('(');
+    take('SELECT');
+    const projected = [];
+    do {
+      if (projected.length) take(',');
+      const source = column();
+      take('AS');
+      const output = name();
+      if (projected.length >= 16 || projected.some(previous => previous.output.toLowerCase() === output.toLowerCase())) {
+        throw fail('A prepared WITH UPDATE CTE can project at most 16 uniquely named columns.');
+      }
+      projected.push({ source, output });
+    } while (at(','));
+    take('FROM');
+    const from = relation(true);
+    if (projected.some(entry => entry.source.alias !== from.alias)) {
+      throw fail('Project only columns of the single physical lookup alias in a prepared WITH UPDATE.');
+    }
+    let filter = null;
+    if (at('WHERE')) {
+      take('WHERE');
+      const field = column();
+      if (field.alias !== from.alias) throw fail('Filter only the physical lookup alias in a prepared WITH UPDATE.');
+      take('=');
+      filter = { column: field.column, value: value() };
+    }
+    take(')');
+    return { name: cteName, from, projections: projected.map(({ source, output }) => ({ column: source.column, output })), filter };
+  }
+
+  const cte = withLookup ? lookupCte() : null;
   take('UPDATE');
-  const target = relation();
+  const target = relation(withLookup);
   if (at('INNER')) take('INNER');
   take('JOIN');
-  const lookup = relation();
+  let lookup;
+  if (cte) {
+    if (name() !== cte.name) throw fail('Join the single explicitly named lookup CTE in a prepared WITH UPDATE.');
+    take('AS');
+    lookup = { table: cte.from.table, alias: name() };
+  } else lookup = relation();
   if (target.alias.toLowerCase() === lookup.alias.toLowerCase() ||
       AST.refKey(target.table).toLowerCase() === AST.refKey(lookup.table).toLowerCase()) {
     throw fail('Use distinct physical tables and distinct aliases in a prepared UPDATE JOIN.');
@@ -92,25 +146,30 @@ function joinedUpdate(tokens, database) {
   const filterValue = value();
   if (cursor !== tokens.length) throw fail('Review one bounded UPDATE JOIN with one assignment and one equality filter.');
   const targets = [target.table, lookup.table].sort((one, two) => AST.refKey(one).localeCompare(AST.refKey(two)));
-  return { format: joinedFormat, formatVersion: 1, target, lookup, keys, assignment: assignment.column, source, adjustment,
+  return { format: joinedFormat, formatVersion: 1, ...(cte && { cte }), target, lookup, keys, assignment: assignment.column, source, adjustment,
     filter: { column: filter.column, value: filterValue }, targets, readTargets: targets, writeTargets: [target.table] };
 }
 
-function inspectPreparedTemplate(text, schema, sqlMode = '') {
+function inspectPreparedTemplate(text, schema, sqlMode = '', server) {
   if (typeof text !== 'string') throw fail('PREPARE source is not a finite resolved string for every analyzed invocation path.');
   if (Buffer.byteLength(text) > valueLimit) throw fail('Prepared SQL template exceeds 64 KiB.');
   const tokens = AST.programLex(text, { sqlMode });
   if (tokens.length > AST.LIMITS.tokens) throw fail('The prepared SQL template exceeds the token limit.');
   if (!tokens.length || tokens.some(token => token.value === ';') ||
-      !['SELECT', 'INSERT', 'UPDATE', 'DELETE'].includes(word(tokens[0]))) {
+      !['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'WITH'].includes(word(tokens[0]))) {
     throw fail('Prepared templates support one statically named SELECT/INSERT/UPDATE/DELETE only.');
   }
+  const withLookup = word(tokens[0]) === 'WITH';
+  if (withLookup && !supportsPreparedCteUpdate(server)) {
+    throw fail('Prepared WITH UPDATE requires observed MySQL 8.4+ or MariaDB 12.3+.');
+  }
   const assignment = tokens.findIndex(token => word(token) === 'SET');
-  const hasJoin = word(tokens[0]) === 'UPDATE' && tokens.slice(1, assignment < 0 ? undefined : assignment).some(token => word(token) === 'JOIN');
-  const ast = hasJoin ? joinedUpdate(tokens, schema) :
+  const joined = withLookup || word(tokens[0]) === 'UPDATE' &&
+    tokens.slice(1, assignment < 0 ? undefined : assignment).some(token => word(token) === 'JOIN');
+  const ast = joined ? joinedUpdate(tokens, schema, withLookup) :
     AST.parseProgram(text, schema, undefined, { kind: 'procedure', sqlMode, parameters: [], allowRows: true, allowDynamic: false, placeholders: true });
   return { text, ast, placeholders: tokens.filter(token => token.value === '?').length,
-    returnsRows: !hasJoin && ast.statements[0].statements.some(node => node.kind === 'select' && !node.into.length) };
+    returnsRows: !joined && ast.statements[0].statements.some(node => node.kind === 'select' && !node.into.length) };
 }
 
 function tableFor(ref, tables) {
@@ -133,14 +192,28 @@ function integerColumn(table, name) {
 
 function validateJoinedUpdate(ast, tables) {
   const target = tableFor(ast.target.table, tables), lookup = tableFor(ast.lookup.table, tables);
-  for (const key of ast.keys) {
+  const projections = new Map();
+  if (ast.cte) {
+    for (const { column, output } of ast.cte.projections) {
+      integerColumn(lookup, column);
+      projections.set(output, column);
+    }
+    if (ast.cte.filter) integerColumn(lookup, ast.cte.filter.column);
+  }
+  const lookupColumn = name => {
+    if (!ast.cte) return name;
+    if (!projections.has(name)) throw fail('The prepared WITH UPDATE must reference an exact CTE output column.');
+    return projections.get(name);
+  };
+  const keys = ast.keys.map(key => ({ target: key.target, lookup: lookupColumn(key.lookup) }));
+  for (const key of keys) {
     const write = integerColumn(target, key.target), read = integerColumn(lookup, key.lookup);
     if (write.type !== read.type || read.entry.nullable !== false) {
       throw fail('A prepared UPDATE JOIN requires matching integer key types and a non-null lookup key.');
     }
   }
-  const lookupNames = new Set(ast.keys.map(key => key.lookup));
-  if (!lookup.indexes?.some(index => index.unique && String(index.type).toUpperCase() === 'BTREE' &&
+  const lookupNames = new Set(keys.map(key => key.lookup));
+  if (lookupNames.size !== keys.length || !lookup.indexes?.some(index => index.unique && String(index.type).toUpperCase() === 'BTREE' &&
       index.columns.length === lookupNames.size && new Set(index.columns.map(column => column.name)).size === lookupNames.size &&
       index.columns.every(column => lookupNames.has(column.name) && column.prefixLength == null && !column.expression))) {
     throw fail('A prepared UPDATE JOIN must match every column of one observed unique lookup key.');
@@ -156,17 +229,18 @@ function validateJoinedUpdate(ast, tables) {
     const tablesByAlias = new Map([[ast.target.alias, target], [ast.lookup.alias, lookup]]);
     const from = tablesByAlias.get(ast.source.alias);
     if (!from) throw fail('Prepared UPDATE JOIN value references need one of the reviewed aliases.');
-    if (integerColumn(from, ast.source.column).type !== write.type) {
+    const sourceColumn = from === lookup ? lookupColumn(ast.source.column) : ast.source.column;
+    if (integerColumn(from, sourceColumn).type !== write.type) {
       throw fail('Use matching integer source and write value types in a prepared UPDATE JOIN.');
     }
   }
 }
 
 function validatePreparedTemplate(template, context) {
-  const compiled = inspectPreparedTemplate(template.text, context.database, context.sqlMode);
+  const compiled = inspectPreparedTemplate(template.text, context.database, context.sqlMode, context.server);
   if (JSON.stringify(template) !== JSON.stringify(compiled)) throw fail('The reviewed prepared template changed.');
   if (compiled.ast.format === joinedFormat) validateJoinedUpdate(compiled.ast, context.tables);
   else AST.validate(compiled.ast, context);
 }
 
-module.exports = { inspectPreparedTemplate, validatePreparedTemplate };
+module.exports = { inspectPreparedTemplate, validatePreparedTemplate, supportsPreparedCteUpdate };
