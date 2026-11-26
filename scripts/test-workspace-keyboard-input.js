@@ -82,7 +82,7 @@ async function run() {
     }
     const settings = {
       'telemetry.telemetryLevel':'off','extensions.autoUpdate':false,'extensions.autoCheckUpdates':false,
-      'workbench.startupEditor':'none','workbench.editor.enablePreview':false,'editor.quickSuggestions':false,
+      'workbench.startupEditor':'none','workbench.editor.enablePreview':false,'editor.quickSuggestions':{comments:'off',strings:'off',other:'off'},
       'editor.suggestOnTriggerCharacters':false,'workbench.localHistory.enabled':false,'files.eol':'\n'
     };
     const settingsFile = path.join(profile,'User','settings.json');
