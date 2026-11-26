@@ -1,8 +1,10 @@
 'use strict';
 
 const path = require('node:path');
+const os = require('node:os');
 const { randomUUID } = require('node:crypto');
 const { inspectMavenResolution, printCoordinate } = require('./maven-resolution');
+const { snapshotNode } = require('./maven-snapshot-cache');
 const { cancelled, fail, inside } = require('./workbench-model');
 
 const scheme = 'rocketbrain-maven-resolution';
@@ -10,6 +12,8 @@ const scheme = 'rocketbrain-maven-resolution';
 function render(report) {
   const lines = ['Maven dependency resolution', printCoordinate(report.root),
     'Maven ' + report.mavenVersion + ' · Maven Dependency Plugin ' + report.dependencyPlugin, ''];
+  if (report.snapshotCache) lines.push('Offline SNAPSHOT cache observation · ' + report.snapshotCache.observedAt,
+    'Checked ' + report.snapshotCache.examined + ' of ' + report.snapshotCache.selected + ' selected snapshots.', '');
   const offsets = new Map();
   for (const node of report.nodes) {
     offsets.set(node.id, lines.length);
@@ -17,6 +21,21 @@ function render(report) {
     const winner = node.winnerId && report.nodes[node.winnerId - 1];
     lines.push('  '.repeat(node.depth) + printCoordinate(node) + ' [' + label + ']' + (node.note ? ' · ' + node.note : '') +
       (winner ? ' · selected ' + printCoordinate(winner) : ''));
+    const cache = node.snapshotCache;
+    if (!cache) continue;
+    const indent = '  '.repeat(node.depth + 1);
+    if (cache.state === 'unavailable') lines.push(indent + cache.reason);
+    else {
+      lines.push(indent + cache.fileName + ' · SHA-256 ' + cache.sha256);
+      if (cache.origin === 'timestamped-cache-match') {
+        lines.push(indent + 'Cache metadata matches ' + cache.resolvedVersion + ' · repository ID ' + cache.repositoryId);
+      } else {
+        const note = { 'local-marker': 'Maven recorded a local-install marker.',
+          ambiguous: 'Multiple cache metadata records match these bytes.',
+          unavailable: 'No timestamped cache metadata matched these bytes.' };
+        lines.push(indent + note[cache.origin]);
+      }
+    }
   }
   return { text: lines.join('\n') + '\n', offsets };
 }
@@ -74,12 +93,12 @@ function registerMavenResolution(vscode, { trusted, ensureProject, getTools, gen
       const dirty = file => vscode.workspace.textDocuments.some(document => document.uri.scheme === 'file' &&
         !document.isClosed && document.isDirty && !path.relative(file, document.uri.fsPath));
       const observed = await inspectMavenResolution({ project, tools, workspaceRoot: scope.uri.fsPath, trusted: guard,
-        dirty, allowProjectExecution: true, cancellation: abort.signal });
+        dirty, allowProjectExecution: true, cancellation: abort.signal, snapshotRepository: options.snapshotRepository });
       guard();
-      const { validate, ...found } = observed, id = randomUUID();
+      const { validate, validateSnapshot, ...found } = observed, id = randomUUID();
       const report = { ...found, id, projectUri: project.uri };
       while (records.size >= 6) records.delete(records.keys().next().value);
-      records.set(id, { report, validate, rendered: render(report) });
+      records.set(id, { report, validate, validateSnapshot, rendered: render(report) });
       return structuredClone(report);
     })();
     ongoing = { abort, operation };
@@ -118,20 +137,37 @@ function registerMavenResolution(vscode, { trusted, ensureProject, getTools, gen
     return structuredClone(link);
   }
 
+  async function verifySnapshot(id, nodeId) {
+    const entry = record(id);
+    if (!entry.validateSnapshot) throw fail('Inspect the selected Maven snapshot cache before verifying its evidence.');
+    await entry.validate();
+    return entry.validateSnapshot(nodeId);
+  }
+
   async function command(arg) {
     const project = await chooseProject(arg);
     if (!project) return;
-    const report = await vscode.window.withProgress({ title: 'Inspect Maven Dependency Resolution',
+    const getReport = (snapshotRepository) => vscode.window.withProgress({ title: 'Inspect Maven Dependency Resolution',
       location: vscode.ProgressLocation.Notification, cancellable: true }, (_progress, cancellation) =>
-      inspect({ projectUri: project.uri, allowProjectExecution: true, cancellation }));
+      inspect({ projectUri: project.uri, allowProjectExecution: true, cancellation, snapshotRepository }));
+    const report = await getReport();
     const noteworthy = report.nodes.filter(node => node.state !== 'selected' || node.managedFrom);
     const picked = await vscode.window.showQuickPick([
       { label: 'Open Dependency Tree', description: report.nodes.length + ' paths', action: 'tree' },
+      ...(report.nodes.some(snapshotNode) ? [{ label: 'Inspect Cached SNAPSHOT Artifacts',
+        description: 'Select the local repository used by Maven', action: 'snapshot' }] : []),
       ...noteworthy.map(node => ({ label: node.group + ':' + node.artifact + ':' + node.version,
         description: node.reason ? 'omitted · ' + node.reason : 'managed from ' + node.managedFrom,
         detail: node.parentId ? 'via ' + printCoordinate(report.nodes[node.parentId - 1]) : 'direct dependency', node }))
     ], { title: 'Maven Dependency Resolution', matchOnDetail: true, matchOnDescription: true });
     if (!picked) return report;
+    if (picked.action === 'snapshot') {
+      const folders = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false,
+        canSelectMany: false, defaultUri: vscode.Uri.file(path.join(os.homedir(), '.m2', 'repository')),
+        title: 'Select the Maven Local Repository', openLabel: 'Inspect Offline' });
+      if (folders?.length) return showReport((await getReport(folders[0].fsPath)).id);
+      return report;
+    }
     if (picked.action) return showReport(report.id);
     const node = picked.node, winner = node.winnerId && report.nodes[node.winnerId - 1];
     const actions = [{ label: 'Reveal Dependency Path', run: () => showReport(report.id, node.id) }];
@@ -143,7 +179,7 @@ function registerMavenResolution(vscode, { trusted, ensureProject, getTools, gen
     return action && action.run();
   }
 
-  return { inspect, command, showReport, openPom, cancel() { ongoing?.abort.abort(); },
+  return { inspect, command, showReport, openPom, verifySnapshot, cancel() { ongoing?.abort.abort(); },
     async dispose() { disposed = true; ongoing?.abort.abort(); await ongoing?.operation.catch(() => {});
       records.clear(); provider?.dispose(); } };
 }

@@ -9,9 +9,11 @@ const { buildSpec } = require('./workbench-tasks');
 const { execute } = require('./testing/provision');
 const { pomFacts } = require('./dependency-builds');
 const { cancelled, fail, inside, workspacePath } = require('./workbench-model');
+const { cacheDirectory, snapshotNode, observeSnapshotCache } = require('./maven-snapshot-cache');
 
 const pluginVersion = '3.11.0';
-const goal = 'org.apache.maven.plugins:maven-dependency-plugin:' + pluginVersion + ':tree';
+const plugin = 'org.apache.maven.plugins:maven-dependency-plugin:' + pluginVersion;
+const goal = plugin + ':tree';
 const limit = 2 * 1024 * 1024;
 const component = /^[A-Za-z0-9_.$+-]{1,180}$/u;
 const knownScopes = new Set(['compile', 'provided', 'runtime', 'test', 'system', 'import']);
@@ -138,12 +140,13 @@ function addPomAnchors(report, descriptors, project) {
 }
 
 async function inspectMavenResolution({ project, tools, workspaceRoot, allowProjectExecution, cancellation,
-  dirty = () => false, trusted, runner = execute }) {
+  snapshotRepository, dirty = () => false, trusted, runner = execute }) {
   trusted();
   if (allowProjectExecution !== true) throw fail('Choose Inspect Maven Dependency Resolution before executing project code.');
   if (project?.tool !== 'maven' || path.relative(project.root, workspacePath(project.root, [workspaceRoot]))) {
     throw fail('Choose an imported local Maven project.');
   }
+  const cache = snapshotRepository === undefined ? undefined : await cacheDirectory(snapshotRepository);
   const descriptors = await descriptorInputs(project, workspaceRoot, dirty);
   if (!descriptors.some(item => !path.relative(item.file, path.join(project.root, 'pom.xml')))) {
     throw fail('Choose the saved Maven POM of the imported project.');
@@ -162,7 +165,7 @@ async function inspectMavenResolution({ project, tools, workspaceRoot, allowProj
     const target = path.join(stage, 'dependency-tree.txt'), spec = buildSpec(project, tools, [goal]);
     const options = { cwd: spec.cwd, env: spec.env, cancellation, timeoutMs: 90000 };
     const args = [...spec.args, '--non-recursive', '--show-version', '-Dstyle.color=never', '-Dverbose=true', '-Dtokens=standard',
-      '-DoutputType=text', '-DoutputEncoding=UTF-8', '-DappendOutput=false', '-DoutputFile=' + target];
+      ...(cache ? ['--offline'] : []), '-DoutputType=text', '-DoutputEncoding=UTF-8', '-DappendOutput=false', '-DoutputFile=' + target];
     const result = await runner(spec.command, args, options);
     await validate();
     if (result.cancelled || result.timedOut || result.code !== 0) {
@@ -173,8 +176,23 @@ async function inspectMavenResolution({ project, tools, workspaceRoot, allowProj
     if (!version) throw fail('Maven did not report the version of the running launcher.');
     const text = new TextDecoder('utf-8', { fatal: true }).decode(await physicalFile(target, limit));
     const report = addPomAnchors(parseMavenResolution(text), descriptors, project);
+    let snapshots;
+    if (cache && report.nodes.some(snapshotNode)) {
+      const list = path.join(stage, 'resolved-artifacts.txt');
+      const resolved = buildSpec(project, tools, [plugin + ':list']);
+      const result = await runner(resolved.command, [...resolved.args, '--non-recursive', '--offline', '-Dstyle.color=never',
+        '-DoutputAbsoluteArtifactFilename=true', '-Dmdep.outputScope=true', '-DoutputEncoding=UTF-8',
+        '-DappendOutput=false', '-DoutputFile=' + list], { ...options, env: resolved.env });
+      await validate();
+      if (result.cancelled || result.timedOut || result.code !== 0) {
+        throw fail('Maven could not list the resolved artifacts offline. Build the project with the selected cache first.');
+      }
+      const artifacts = new TextDecoder('utf-8', { fatal: true }).decode(await physicalFile(list, limit));
+      snapshots = await observeSnapshotCache(report.nodes, artifacts, cache, cancellation);
+    }
     await validate();
-    return { ...report, mavenVersion: version, dependencyPlugin: pluginVersion, validate };
+    return { ...report, mavenVersion: version, dependencyPlugin: pluginVersion, validate,
+      ...(snapshots && { snapshotCache: snapshots.summary, validateSnapshot: snapshots.validate }) };
   } finally {
     const real = await fs.realpath(stage), current = await fs.lstat(real, { bigint: true });
     if (path.relative(stage, real) || path.relative(parent, path.dirname(real)) || !path.basename(real).startsWith('rb-maven-tree-') ||
