@@ -24,8 +24,8 @@ const read=async file=>JSON.parse(await fs.readFile(file,'utf8'));
 
 async function withProject(parent,tool,work){
   parent=await fs.realpath(parent);
-  const root=await fs.mkdtemp(path.join(parent,'rb-quarkus-attach-'));
-  const identity=await fs.lstat(root,{bigint:true});
+  const room=await fs.mkdtemp(path.join(parent,'rb-quarkus-attach-'));
+  const root=path.join(room,'app'),identity=await fs.lstat(room,{bigint:true});
   const gradleFixture=path.join(__dirname,'fixtures/java/quarkus-gradle');
   try{
     await fs.cp(path.join(gradleFixture,'src/main'),path.join(root,'src/main'),{recursive:true});
@@ -39,9 +39,9 @@ async function withProject(parent,tool,work){
     } else {
       for(const name of ['build.gradle','settings.gradle'])await fs.copyFile(path.join(gradleFixture,name),path.join(root,name));
     }
-    return await work(root);
+    return await work(root,room);
   } finally {
-    const real=await fs.realpath(root), current=await fs.lstat(real,{bigint:true});
+    const real=await fs.realpath(room), current=await fs.lstat(real,{bigint:true});
     assert.equal(path.dirname(real),parent);
     assert.match(path.basename(real),/^rb-quarkus-attach-/u);
     assert.deepEqual([current.dev,current.ino],[identity.dev,identity.ino]);
@@ -203,8 +203,8 @@ async function headless(tool){
   const gradleHome=tool==='gradle'?await fs.realpath(process.env.ROCKETBRAIN_QUARKUS_GRADLE_HOME):undefined;
   const tools={javaHome,mavenHome,gradleHome};
   const parent=await fs.realpath(process.env.ROCKETBRAIN_QUARKUS_TEST_OUTPUT||path.resolve('test-output'));
-  return withProject(parent,tool,async root=>{
-    const uri=pathToFileURL(root).href, storage=path.join(root,'.rocketbrain-test-storage');
+  return withProject(parent,tool,async(root,room)=>{
+    const uri=pathToFileURL(root).href, storage=path.join(room,'jdt-storage');
     await fs.mkdir(storage);
     const launch=resolveLaunch({javaHome,serverPath:config.serverPath,storagePath:storage});
     const lsp=new StdioLsp(launch);
