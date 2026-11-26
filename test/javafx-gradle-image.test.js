@@ -74,17 +74,19 @@ test('the JavaFX command validates the selected folder before choosing a build m
   const { root, dispose } = fixture();
   const uri = folder => ({ scheme: 'file', fsPath: folder, toString: () => pathToFileURL(folder).href });
   const handle = { dispose() {} };
-  let command, choicesShown = 0, error;
+  const commands = new Map();
+  let choicesShown = 0, error;
   const vscode = { workspace: { isTrusted: true, workspaceFolders: [{ uri: uri(root) }], textDocuments: [],
+    onDidChangeWorkspaceFolders: () => handle,
     onDidOpenTextDocument: () => handle, onDidSaveTextDocument: () => handle, onDidCloseTextDocument: () => handle },
-  commands: { registerCommand(_id, callback) { command = callback; return handle; } },
+  commands: { registerCommand(id, callback) { commands.set(id, callback); return handle; } },
   languages: { createDiagnosticCollection: () => handle, registerDefinitionProvider: () => handle,
     registerDocumentSymbolProvider: () => handle },
   window: { showOpenDialog: async () => [uri(path.dirname(root))],
     showQuickPick: async () => { choicesShown++; }, showErrorMessage: async value => { error = value; } } };
   const service = registerJavaFx(vscode, { java: {} });
   try {
-    await command();
+    await commands.get('rocketbrain.javafx.build')();
     assert.match(error, /inside an open local workspace/u);
     assert.equal(choicesShown, 0);
   } finally {
