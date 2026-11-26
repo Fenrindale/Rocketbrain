@@ -365,7 +365,17 @@ async function runSqlFileProfilesChecks(api, vscode, checks) {
       } finally {
         try {
           await Promise.all(files.map(file => fs.unlink(file)));
-          if (folder) await fs.rmdir(folder);
+          if (folder) {
+            try { await fs.rmdir(folder); } catch (error) {
+              if (process.platform !== 'win32' || !['EBUSY', 'EPERM'].includes(error.code)) throw error;
+              const physical = await fs.realpath(folder);
+              assert.equal(physical, folder);
+              assert.equal(path.dirname(physical), workspace);
+              assert.match(path.basename(physical), /^rb-sql-file-profiles-[a-zA-Z0-9]+$/);
+              assert.deepEqual(await fs.readdir(physical), []);
+              console.log('Retained the verified empty SQL fixture directory while VS Code released it (' + error.code + ').');
+            }
+          }
         } finally { await spawned?.stop(); }
       }
     }
