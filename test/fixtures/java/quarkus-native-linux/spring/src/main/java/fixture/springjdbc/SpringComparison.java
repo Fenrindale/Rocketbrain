@@ -12,11 +12,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
 
 @SpringBootApplication
 @RestController
 public class SpringComparison {
     private final Map<String, JdbcTemplate> sources = Map.of("mysql", source("MYSQL"), "mariadb", source("MARIADB"));
+    private volatile boolean seeded;
 
     public static void main(String[] args) { SpringApplication.run(SpringComparison.class, args); }
 
@@ -32,11 +34,13 @@ public class SpringComparison {
                 jdbc.update("DELETE FROM rb_native_people");
                 jdbc.update("INSERT INTO rb_native_people(id, points) VALUES(1, 19), (2, 23)");
             }
+            seeded = true;
         };
     }
 
     @GetMapping("/probe/{engine}")
     String rows(@PathVariable String engine) {
+        if (!seeded) throw new ResponseStatusException(SERVICE_UNAVAILABLE);
         JdbcTemplate jdbc = sources.get(engine);
         if (jdbc == null) throw new ResponseStatusException(NOT_FOUND);
         return jdbc.queryForObject("SELECT COUNT(*), SUM(points), VERSION() FROM rb_native_people",

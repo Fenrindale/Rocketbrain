@@ -175,7 +175,7 @@ async function main(){
       springJar:{sha256:await sha256(springOutput),bytes:(await fs.stat(springOutput)).size},
       databases:Object.fromEntries(engines.map((engine,index)=>[engine,{spring:seeded[index],native:native[index]}])),
       managedBuildCommand:true,managedRunCommand:true,nativeProcessAndListenerVerified:true,
-      stoppedAndListenerClosed:true,staleFileRefused:true,wrongBuildRefused:true};
+      stoppedAndListenerClosed:true,staleFileRefused:true,wrongBuildRefused:true,uploadCredentialChecked:true};
     const body=JSON.stringify(receipt,null,2)+'\n';
     assert.ok(!body.includes(password));
     await fs.writeFile(path.join(output,'receipt.json'),body,{flag:'wx'});
