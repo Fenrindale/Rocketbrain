@@ -4,9 +4,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const M = require('./workbench-model');
+const { gradleImageModel } = require('./javafx-gradle-image');
 
 const format = 'RocketbrainGradleTaskCatalog-v1';
 const specification = 'rocketbrain.workbench.output';
+const javafxImagesSpecification = 'rocketbrain.workbench.javafxImages';
 const maximumBuilds = 16;
 const segment = /^[A-Za-z0-9_.-]+$/;
 const qualified = /^:(?:[A-Za-z0-9_.-]+:)*[A-Za-z0-9_.-]+$/;
@@ -20,6 +22,8 @@ import java.security.MessageDigest
 
 def output = System.getProperty('${specification}')
 if (output == null) return
+def includeJavafxImages = System.getProperty('${javafxImagesSpecification}') == 'true'
+${gradleImageModel}
 
 def captured = [:]
 def capture = { File file ->
@@ -50,7 +54,12 @@ gradle.projectsEvaluated {
   projects.each { project ->
     project.tasks.each { task ->
       if (tasks.size() < ${M.LIMITS.tasks + 1}) {
-        tasks << [name: task.path, group: (task.group ?: '').take(100), description: (task.description ?: '').take(512)]
+        def entry = [name: task.path, group: (task.group ?: '').take(100), description: (task.description ?: '').take(512)]
+        if (includeJavafxImages && project == root && gradle.parent == null) {
+          def image = javafxImageModel(project, task)
+          if (image != null) entry.javafxImage = image
+        }
+        tasks << entry
       }
     }
   }
@@ -153,4 +162,4 @@ function verifyInputs(inputs, roots) {
   }
 }
 
-module.exports = { format, specification, gradleInit, loadCatalog, verifyInputs };
+module.exports = { format, specification, javafxImagesSpecification, gradleInit, loadCatalog, verifyInputs };

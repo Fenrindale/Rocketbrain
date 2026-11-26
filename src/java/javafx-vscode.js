@@ -3,9 +3,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { readFxml, resolveFxmlFile } = require('./javafx-fxml');
-const { workspacePath, workspaceRoots } = require('./workbench-model');
+const { inside, cancelled, buildFingerprint, workspacePath, workspaceRoots } = require('./workbench-model');
 const { buildSpec, nativeTaskRunner } = require('./workbench-tasks');
 const {renderFxmlPreview}=require('./javafx-preview-runtime');
+const { readModule, planImage, observeImage } = require('./javafx-gradle-image');
 
 const PREVIEW='rocketbrain.javafx.preview',REFRESH='rocketbrain.javafx.refreshPreview';
 const htmlText=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -67,14 +68,57 @@ function registerJavaFx(vscode, { java, context }) {
     return candidates.filter(symbol => symbol.selectionRange).map(symbol => new vscode.Location(uri, symbol.selectionRange));
   }
 
+  function checkBuildContext(folder, cancellation) {
+    if (!vscode.workspace.isTrusted || cancelled(cancellation)) throw Error('JavaFX build cancelled or workspace trust changed.');
+    workspacePath(folder, workspaceRoots(vscode.workspace.workspaceFolders || []));
+    if (vscode.workspace.textDocuments.some(document => document.isDirty && document.uri.scheme === 'file' &&
+        inside(folder, document.uri.fsPath))) throw Error('Save the JavaFX project files before building its runtime image.');
+  }
+
+  async function gradleImage(projectUri, folder, cancellation) {
+    checkBuildContext(folder, cancellation);
+    const module = readModule(folder), fingerprint = buildFingerprint(folder);
+    const options = { projectUri: projectUri.toString(), cancellation, allowProjectExecution: true };
+    if (!java.workbench.getSnapshot().projects.some(project => !path.relative(folder, project.root))) {
+      await java.workbench.resyncProject(options);
+    }
+    checkBuildContext(folder, cancellation);
+    const discovered = await java.workbench.discoverTasks({ ...options, includeJavafxImages: true });
+    const task = discovered.find(item => item.tool === 'gradle' && item.name === ':jlink' &&
+      item.provenance === 'gradle-observed-task');
+    if (!task?.javafxImage) {
+      throw Error('Select a Gradle application with the OpenJFX and Badass JLink plugins and one local :jlink image.');
+    }
+    checkBuildContext(folder, cancellation);
+    function checkReviewedBuild() {
+      if (buildFingerprint(folder) !== fingerprint || readModule(folder).sha256 !== module.sha256) {
+        throw Error('JavaFX build inputs changed. Review the runtime image again.');
+      }
+    }
+    checkReviewedBuild();
+    const plan = planImage(folder, module, task.javafxImage);
+    const result = await java.workbench.runTask({ ...options, taskId: task.id });
+    if (result.state !== 'succeeded') {
+      return { ...result, code: result.exitCode, cancelled: result.state === 'cancelled' };
+    }
+    checkBuildContext(folder, cancellation);
+    checkReviewedBuild();
+    return { ...result, code: result.exitCode, cancelled: false, image: observeImage(folder, plan) };
+  }
+
   async function build(projectUri, operation, { cancellation, allowProjectExecution } = {}) {
     if (allowProjectExecution !== true || !vscode.workspace.isTrusted || projectUri?.scheme !== 'file') {
-      throw Error('Run JavaFX through an explicit action in a trusted local Maven project.');
+      throw Error('Run JavaFX through an explicit action in a trusted local project.');
     }
     const goals = { run: ['compile', 'javafx:run'], image: ['package', 'javafx:jlink'] };
     if (!Object.hasOwn(goals, operation)) throw Error('Choose a JavaFX run or runtime image task.');
     const roots = workspaceRoots(vscode.workspace.workspaceFolders || []);
     const folder = workspacePath(projectUri.toString(), roots);
+    if (!fs.existsSync(path.join(folder, 'pom.xml')) &&
+        ['build.gradle', 'build.gradle.kts'].some(name => fs.existsSync(path.join(folder, name)))) {
+      if (operation !== 'image') throw Error('Select Build JavaFX Runtime Image for a Gradle application.');
+      return gradleImage(projectUri, folder, cancellation);
+    }
     const pom = workspacePath(path.join(folder, 'pom.xml'), [folder], { directory: false });
     if (fs.statSync(pom).size > 1024 * 1024 || !/\bjavafx-maven-plugin\b/.test(fs.readFileSync(pom, 'utf8'))) {
       throw Error('Select a Maven module that configures the JavaFX Maven plugin.');
@@ -188,16 +232,26 @@ function registerJavaFx(vscode, { java, context }) {
       const active = vscode.window.activeTextEditor?.document.uri;
       const folder = (active && vscode.workspace.getWorkspaceFolder(active)) || vscode.workspace.workspaceFolders?.[0];
       const selection = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true,
-        canSelectMany: false, defaultUri: folder?.uri, title: 'Select JavaFX Maven Module' });
+        canSelectMany: false, defaultUri: folder?.uri, title: 'Select JavaFX Maven or Gradle Project' });
       if (!selection?.length) return;
-      const mode = await vscode.window.showQuickPick([{ label: 'Run JavaFX application', value: 'run' },
-        { label: 'Build JavaFX runtime image', value: 'image' }], { title: 'JavaFX Maven Task' });
+      const item = { label: 'Build JavaFX runtime image', value: 'image' };
+      const choices = fs.existsSync(path.join(selection[0].fsPath, 'pom.xml')) ?
+        [{ label: 'Run JavaFX application', value: 'run' }, item] : [item];
+      const mode = await vscode.window.showQuickPick(choices, { title: 'JavaFX Task' });
       if (!mode) return;
       const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification,
         title: mode.label, cancellable: true }, (_, cancellation) => build(selection[0], mode.value, {
         cancellation, allowProjectExecution: true
       }));
-      if (!result.cancelled && result.code !== 0) await vscode.window.showErrorMessage('JavaFX Maven task failed. See the Rocketbrain task terminal.');
+      if (!result.cancelled && result.code !== 0) await vscode.window.showErrorMessage('JavaFX task failed. See the Rocketbrain task terminal.');
+      if (result.image) {
+        const launcher = vscode.Uri.parse(result.image.launcherUri);
+        const action = await vscode.window.showInformationMessage(
+          'JavaFX image built. Launcher: ' + launcher.fsPath, 'Reveal Image');
+        if (action === 'Reveal Image') {
+          await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.parse(result.image.directoryUri));
+        }
+      }
     } catch (error) {
       await vscode.window.showErrorMessage(error.message);
     }
