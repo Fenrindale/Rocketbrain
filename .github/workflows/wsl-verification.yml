@@ -2,7 +2,7 @@ name: WSL workspace runtime
 
 on:
   push:
-    branches: ['verify-wsl-*']
+    branches: ['verify-wsl-db-*']
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [workbench, java-debug]
+        database: [mysql, mariadb]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,7 +28,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - uses: actions/setup-java@v4
-        if: matrix.scenario == 'java-debug'
         with:
           distribution: temurin
           java-version: '25'
@@ -43,16 +42,11 @@ jobs:
       - name: Verify packaged projects against real WSL 2
         shell: pwsh
         env:
-          ROCKETBRAIN_WSL_SCENARIO: ${{ matrix.scenario }}
-        run: |
-          if ($env:ROCKETBRAIN_WSL_SCENARIO -ceq 'java-debug') {
-            ./scripts/test-wsl-runtime.ps1 -WslVersion 2 -VerifyJavaDebug
-          } else {
-            ./scripts/test-wsl-runtime.ps1 -WslVersion 2 -VerifyWorkbench
-          }
+          ROCKETBRAIN_WSL_DB_ENGINE: ${{ matrix.database }}
+        run: ./scripts/test-wsl-runtime.ps1 -WslVersion 2 -VerifyJavaDebug -Database $env:ROCKETBRAIN_WSL_DB_ENGINE
       - uses: actions/upload-artifact@v4
         with:
-          name: rocketbrain-wsl2-${{ matrix.scenario }}
+          name: rocketbrain-wsl2-${{ matrix.database }}
           path: ${{ runner.temp }}/rocketbrain-wsl-runtime.json
           if-no-files-found: error
           retention-days: 7

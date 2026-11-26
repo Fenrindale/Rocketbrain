@@ -1,4 +1,5 @@
-param([ValidateRange(1,2)][int]$WslVersion = 1, [switch]$VerifyWorkbench, [switch]$VerifyJavaDebug)
+param([ValidateRange(1,2)][int]$WslVersion = 1, [switch]$VerifyWorkbench, [switch]$VerifyJavaDebug,
+    [ValidateSet('mysql','mariadb')][string]$Database)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -22,6 +23,29 @@ function Invoke-CheckedDownload([string]$Remote, [string]$Destination, [string]$
     if ((Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Sha256) {
         throw 'A verification fixture digest differs from its pinned value.'
     }
+}
+
+function Start-OwnedDatabase([string[]]$Command, [string]$Project, [string]$Stage) {
+    if (!$VerifyJavaDebug -or $WslVersion -ne 2) { throw 'This database runs only in the owned hosted WSL 2 fixture.' }
+    $package, $service, $client, $driver, $options = if ($Database -ceq 'mysql') {
+        'mysql-server-8.0', 'mysql', '/usr/bin/mysql', 'com.mysql.cj.jdbc.Driver', 'allowPublicKeyRetrieval=true&sslMode=DISABLED'
+    } else { 'mariadb-server', 'mariadb', '/usr/bin/mariadb', 'org.mariadb.jdbc.Driver', 'sslMode=disable' }
+    Invoke-WslFixture ($Command + @('/usr/bin/env', 'DEBIAN_FRONTEND=noninteractive', '/usr/bin/apt-get', 'install', '-y', '-q', '--no-install-recommends', $package)) | Out-Null
+    Invoke-WslFixture ($Command + @('/usr/sbin/service', $service, 'start')) | Out-Null
+    $version = Invoke-WslFixture ($Command + @($client, '--batch', '--skip-column-names', '--execute', 'SELECT VERSION()'))
+    if (($Database -ceq 'mariadb') -ne ($version -match 'MariaDB')) { throw 'The owned WSL database has an unexpected vendor identity.' }
+    $password = [Guid]::NewGuid().ToString('N')
+    Write-Host "::add-mask::$password"
+    $sql = "CREATE DATABASE rocketbrain_wsl; CREATE TABLE rocketbrain_wsl.probe (score INT NOT NULL); INSERT INTO rocketbrain_wsl.probe VALUES (42); " +
+        "CREATE USER 'rb_wsl_runner'@'127.0.0.1' IDENTIFIED BY '$password'; CREATE USER 'rb_wsl_runner'@'localhost' IDENTIFIED BY '$password'; " +
+        "GRANT SELECT ON rocketbrain_wsl.* TO 'rb_wsl_runner'@'127.0.0.1'; GRANT SELECT ON rocketbrain_wsl.* TO 'rb_wsl_runner'@'localhost';"
+    Invoke-WslFixture ($Command + @($client, '--execute', $sql)) | Out-Null
+    $data = "url=jdbc:${Database}://127.0.0.1:3306/rocketbrain_wsl?$options`nuser=rb_wsl_runner`npassword=$password`ndriver=$driver`n"
+    Invoke-WslFixture ($Command + @('/bin/sh', '-c', 'umask 077; printf "%s" "$2" > "$1"', 'rocketbrain-fixture', "$Project/wsl-fixture-db.properties", $data)) | Out-Null
+    $env:ROCKETBRAIN_WSL_DB_CONFIG = Join-Path $Stage 'wsl-database-test.json'
+    @{ host='127.0.0.1'; port=3306; database='rocketbrain_wsl'; user='rb_wsl_runner'; password=$password; connectTimeout=3500 } |
+        ConvertTo-Json | Set-Content -LiteralPath $env:ROCKETBRAIN_WSL_DB_CONFIG -Encoding utf8NoBOM
+    return @{ engine = $Database; serverVersion = $version }
 }
 
 $suffix = [Guid]::NewGuid().ToString('N').Substring(0, 12)
@@ -92,6 +116,7 @@ try {
         if ((Invoke-WslFixture ($command + @('/usr/bin/wslpath', '-a', '-u', $linuxUnc))) -cne $linuxProject) {
             throw 'The WSL UNC path did not preserve the exact owned Linux project path.'
         }
+        if ($Database) { $proof['database'] = Start-OwnedDatabase $command $linuxProject $root }
 
         $version = (Get-Content -LiteralPath (Join-Path $repo 'package.json') -Raw | ConvertFrom-Json).version
         $vsix = Join-Path $repo "rocketbrain-$version.vsix"
