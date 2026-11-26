@@ -205,6 +205,8 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 
 **Review WebDAV Deployment**는 `rocketbrain.deploy.webdav`에 정의한 로컬·원격 폴더와 제외 패턴을 사용합니다. **Set WebDAV Password**로 필요한 비밀번호를 저장하고, 파일을 선택해 diff를 검토합니다. **Upload Reviewed WebDAV Files**는 비교한 ETag를 조건으로 전송하고 원격 파일이 바뀌면 충돌을 표시합니다. 기존 원격 폴더의 새 파일과 변경 파일을 업로드할 수 있습니다.
 
+**Review SFTP Project Deployment**에서 고정한 SSH 호스트 키로 원격 폴더를 열고, 저장한 파일을 비교하거나 새 폴더를 검토합니다. **Publish Reviewed SFTP Change**는 승인한 경로와 파일 내용을 다시 확인하고 업로드한 바이트를 검증합니다. [SFTP 배포 설정과 검토 절차](docs/sftp-deployment.md)
+
 ```http
 @host = http://127.0.0.1:8080
 # @expect status 200

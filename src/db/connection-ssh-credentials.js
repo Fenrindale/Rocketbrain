@@ -128,7 +128,7 @@ function waitForReady(client, options, signal, verify) {
   });
 }
 
-async function openPinnedTunnel(ssh, destination, { credential, cancellation, onExit } = {}) {
+async function openPinnedSsh(ssh, { credential, cancellation, onExit } = {}) {
   const expected = Buffer.from(hostFingerprint(ssh.hostFingerprint).slice(7), 'base64');
   credential = credentialFor(ssh.authentication, credential);
   if (cancelled(cancellation)) throw fail('SSH connection cancelled.');
@@ -141,35 +141,11 @@ async function openPinnedTunnel(ssh, destination, { credential, cancellation, on
     finally { authentication.fill(0); }
   }
   let acceptedPin, attempted = false, established = false, closed;
-  const client = new Client(), transport = new net.Socket(), sockets = new Set();
+  const client = new Client(), transport = new net.Socket();
   const transportClosed = new Promise(resolve => transport.once('close', resolve));
-  const server = net.createServer({ pauseOnConnect: true }, local => {
-    local.on('error', () => {});
-    if (closed || sockets.size >= maxChannels) { local.destroy(); return; }
-    sockets.add(local);
-    let channel;
-    const timer = setTimeout(() => local.destroy(), timeoutMs);
-    local.once('close', () => { clearTimeout(timer); sockets.delete(local); channel?.destroy(); });
-    try {
-      client.forwardOut('127.0.0.1', local.remotePort, destination.host, destination.port, (error, stream) => {
-        clearTimeout(timer);
-        if (error || closed || local.destroyed) { stream?.destroy(); local.destroy(); return; }
-        channel = stream;
-        channel.on('error', () => local.destroy());
-        channel.once('close', () => local.destroy());
-        local.pipe(channel).pipe(local);
-      });
-    } catch { local.destroy(); }
-  });
-  server.maxConnections = maxChannels;
   function dispose() {
     if (!closed) {
-      const listenerClosed = new Promise(resolve => {
-        if (server.listening) server.close(resolve);
-        else resolve();
-      });
-      closed = Promise.all([transportClosed, listenerClosed]).then(() => undefined);
-      for (const socket of sockets) socket.destroy();
+      closed = transportClosed;
       transport.destroy();
     }
     return closed;
@@ -182,7 +158,6 @@ async function openPinnedTunnel(ssh, destination, { credential, cancellation, on
   transport.on('error', () => {});
   client.on('error', () => { if (established) lost(); });
   client.on('close', () => { if (established) lost(); });
-  server.on('error', () => { if (established) lost(); });
 
   try {
     transport.connect({ host: ssh.host, port: ssh.port });
@@ -208,14 +183,8 @@ async function openPinnedTunnel(ssh, destination, { credential, cancellation, on
       }
     }, cancellation, () => acceptedPin);
     if (!attempted || cancelled(cancellation) || transport.destroyed) throw fail('The selected SSH authentication did not complete.');
-    await new Promise((resolve, reject) => {
-      function onError() { reject(fail('The owned SSH loopback listener could not start.')); }
-      server.once('error', onError);
-      server.listen({ host: '127.0.0.1', port: 0, exclusive: true }, () => { server.removeListener('error', onError); resolve(); });
-    });
-    if (cancelled(cancellation) || transport.destroyed) throw fail('The owned SSH connection closed before forwarding was ready.');
     established = true;
-    return { endpoint: { host: '127.0.0.1', port: server.address().port }, dispose };
+    return { client, open: () => !closed && !transport.destroyed, dispose };
   } catch (error) {
     await dispose();
     if (error?.code === 'ROCKETBRAIN_SSH') throw error;
@@ -223,4 +192,60 @@ async function openPinnedTunnel(ssh, destination, { credential, cancellation, on
   } finally { authentication.fill(0); privateKey = undefined; }
 }
 
-module.exports = { openPinnedTunnel, userAuthModes, hostFingerprint, credentialFor };
+async function openPinnedTunnel(ssh, destination, { credential, cancellation, onExit } = {}) {
+  const sockets = new Set();
+  let established = false, closed;
+  const connection = await openPinnedSsh(ssh, { credential, cancellation, onExit: lost });
+  const server = net.createServer({ pauseOnConnect: true }, local => {
+    local.on('error', () => {});
+    if (closed || sockets.size >= maxChannels) { local.destroy(); return; }
+    sockets.add(local);
+    let channel;
+    const timer = setTimeout(() => local.destroy(), timeoutMs);
+    local.once('close', () => { clearTimeout(timer); sockets.delete(local); channel?.destroy(); });
+    try {
+      connection.client.forwardOut('127.0.0.1', local.remotePort, destination.host, destination.port, (error, stream) => {
+        clearTimeout(timer);
+        if (error || closed || local.destroyed) { stream?.destroy(); local.destroy(); return; }
+        channel = stream;
+        channel.on('error', () => local.destroy());
+        channel.once('close', () => local.destroy());
+        local.pipe(channel).pipe(local);
+      });
+    } catch { local.destroy(); }
+  });
+  server.maxConnections = maxChannels;
+  function dispose() {
+    if (!closed) {
+      const listenerClosed = new Promise(resolve => {
+        if (server.listening) server.close(resolve);
+        else resolve();
+      });
+      closed = Promise.all([connection.dispose(), listenerClosed]).then(() => undefined);
+      for (const socket of sockets) socket.destroy();
+    }
+    return closed;
+  }
+  function lost() {
+    if (!established || closed) return;
+    void dispose();
+    onExit?.();
+  }
+  server.on('error', lost);
+  try {
+    await new Promise((resolve, reject) => {
+      function onError() { reject(fail('The owned SSH loopback listener could not start.')); }
+      server.once('error', onError);
+      server.listen({ host: '127.0.0.1', port: 0, exclusive: true }, () => { server.removeListener('error', onError); resolve(); });
+    });
+    if (cancelled(cancellation) || !connection.open()) throw fail('The owned SSH connection closed before forwarding was ready.');
+    established = true;
+    return { endpoint: { host: '127.0.0.1', port: server.address().port }, dispose };
+  } catch (error) {
+    await dispose();
+    if (error?.code === 'ROCKETBRAIN_SSH') throw error;
+    throw fail('The owned SSH connection could not be established.');
+  }
+}
+
+module.exports = { openPinnedSsh, openPinnedTunnel, userAuthModes, hostFingerprint, credentialFor };

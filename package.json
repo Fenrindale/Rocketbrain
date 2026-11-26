@@ -198,6 +198,9 @@
       { "command": "rocketbrain.deploy.compareWebDav", "title": "Compare WebDAV Deployment File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-webdav-review" },
       { "command": "rocketbrain.deploy.applyWebDav", "title": "Upload Reviewed WebDAV Files", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-webdav-review" },
       { "command": "rocketbrain.deploy.saveWebDavPassword", "title": "Set WebDAV Password", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.deploy.reviewSftp", "title": "Review SFTP Project Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.deploy.compareSftp", "title": "Compare SFTP Deployment File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-sftp-review" },
+      { "command": "rocketbrain.deploy.applySftp", "title": "Publish Reviewed SFTP Change", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-sftp-review" },
       { "command": "rocketbrain.db.newDataExtractor", "title": "Create Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.exportWithExtractor", "title": "Export with Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.newFederatedSelect", "title": "New Federated SELECT", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -2196,6 +2199,24 @@
         "rocketbrain.deploy.webdav.localDirectory": { "type": "string", "default": "", "scope": "resource", "description": "Workspace-relative root for deployment files." },
         "rocketbrain.deploy.webdav.remoteDirectory": { "type": "string", "default": "", "scope": "resource", "description": "Existing folder below the WebDAV endpoint." },
         "rocketbrain.deploy.webdav.exclusions": { "type": "array", "items": { "type": "string" }, "default": [], "scope": "resource", "description": "Relative path patterns to skip when comparing deployment files." },
+        "rocketbrain.deploy.sftp.profiles": {
+          "type": "array", "default": [], "maxItems": 32, "scope": "machine",
+          "description": "Pinned SFTP project deployment routes. Enter a password or encrypted-key passphrase only in the operation prompt.",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["label", "host", "user", "root", "hostFingerprint", "authentication"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "host": { "type": "string", "minLength": 1 },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 22 },
+              "user": { "type": "string", "minLength": 1 },
+              "root": { "type": "string", "pattern": "^/", "description": "Absolute remote SFTP directory." },
+              "hostFingerprint": { "type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$", "description": "Independently verified OpenSSH SHA-256 host-key fingerprint." },
+              "authentication": { "type": "string", "enum": ["password", "encrypted-key"] },
+              "privateKeyPath": { "type": "string", "description": "Absolute local path to the encrypted OpenSSH private key." }
+            }
+          }
+        },
         "rocketbrain.http.environments": {
           "type": "object",
           "scope": "resource",
