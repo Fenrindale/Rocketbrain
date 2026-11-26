@@ -43,8 +43,18 @@ jobs:
           sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?}}"
           tools="$sdk/cmdline-tools/latest/bin"
           image='system-images;android-35;google_apis;x86_64'
+          export ANDROID_USER_HOME="$RUNNER_TEMP/rocketbrain-android-user"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          printf 'ANDROID_USER_HOME=%s\nANDROID_EMULATOR_HOME=%s\nANDROID_AVD_HOME=%s\n' \
+            "$ANDROID_USER_HOME" "$ANDROID_EMULATOR_HOME" "$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           "$tools/sdkmanager" --sdk_root="$sdk" 'platform-tools' 'emulator' 'build-tools;35.0.0' 'platforms;android-35' "$image"
-          printf 'no\n' | "$tools/avdmanager" create avd --name rocketbrain-art-fixture --package "$image"
+          printf 'no\n' | "$tools/avdmanager" create avd --name rocketbrain-art-fixture --package "$image" \
+            --path "$ANDROID_AVD_HOME/rocketbrain-art-fixture.avd"
+          test -f "$ANDROID_AVD_HOME/rocketbrain-art-fixture.ini"
+          test -f "$ANDROID_AVD_HOME/rocketbrain-art-fixture.avd/config.ini"
+          "$sdk/emulator/emulator" -list-avds | grep -Fx rocketbrain-art-fixture
       - name: Build and sign the owned Kotlin APK
         run: |
           set -euo pipefail
