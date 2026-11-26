@@ -4,5 +4,6 @@
   "service": "workspace",
   "runServices": ["workspace"],
   "workspaceFolder": "/workspaces/compose",
+  "overrideCommand": false,
   "postCreateCommand": "printf ready-compose > /tmp/rocketbrain-devcontainer-ready"
 }

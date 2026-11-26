@@ -5,10 +5,13 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { execFile } = require('node:child_process');
+const { execFile, spawn } = require('node:child_process');
+const { once } = require('node:events');
+const net = require('node:net');
 const { promisify } = require('node:util');
 const { test } = require('node:test');
 const { createDevContainers, cliVersion, sessionLabel } = require('../src/devcontainer/runtime');
+const { openFixtureForward, checkHttp, attachJdwp, waitForReleasedPort } = require('./devcontainer-port-fixture');
 
 const executeFile = promisify(execFile);
 const fixture = path.join(__dirname, 'fixtures', 'devcontainer');
@@ -45,9 +48,11 @@ async function modeledService(context, { trusted = true, failAfterCreation = fal
   await fs.writeFile(path.join(packageFolder, 'package.json'), JSON.stringify({ name: '@devcontainers/cli', version: cliVersion }));
   await fs.writeFile(path.join(packageFolder, 'devcontainer.js'), '');
   const sessions = new Map();
-  const state = { running: false, label: undefined, calls: [], host: 'unix:///var/run/docker.sock' };
+  const state = { running: false, label: undefined, calls: [], host: 'unix:///var/run/docker.sock', python: true,
+    trusted, networkMode: 'default', startedAt: '2026-01-01T03:00:00.000Z', workspaceOpen: true };
   const engine = {
-    trusted: () => trusted,
+    trusted: () => state.trusted,
+    workspaceOpen: () => state.workspaceOpen,
     settings: () => ({ cliPath: packageFolder, nodePath: process.execPath, dockerPath: process.execPath }),
     readSession: key => sessions.get(key),
     writeSession: (key, value) => value ? sessions.set(key, value) : sessions.delete(key),
@@ -66,7 +71,11 @@ async function modeledService(context, { trusted = true, failAfterCreation = fal
       if (args[1] === 'exec') return { code: 7, stdout: 'command output\n', stderr: 'command diagnostics\n' };
       if (args[2] === 'ls') return response(state.label ? runningId : '');
       if (args[2] === 'inspect') return response({ Id: runningId, Config: { Labels: { [sessionLabel]: state.label } },
-        State: { Running: state.running } });
+        State: { Running: state.running, StartedAt: state.startedAt }, HostConfig: { NetworkMode: state.networkMode } });
+      if (args[2] === 'exec') {
+        assert.deepEqual(args.slice(3, 9), ['--interactive', runningId, 'python3', '-I', '-S', '-u']);
+        return state.python ? response('') : {code: 1};
+      }
       if (args[2] === 'stop') {
         assert.equal(args.at(-1), runningId);
         state.running = false;
@@ -77,6 +86,84 @@ async function modeledService(context, { trusted = true, failAfterCreation = fal
   };
   return { root, engine, state, service: createDevContainers(engine) };
 }
+
+test('Loopback forwarding relays binary bytes after exact review and closes on a new container generation', { timeout: 15000 }, async context => {
+  const { root, state, engine } = await modeledService(context);
+  let bridges = 0;
+  const service = createDevContainers({ ...engine, startBridge(target, id, port) {
+    assert.equal(target.host, state.host);
+    assert.equal(id, runningId);
+    assert.equal(port, 6789);
+    bridges++;
+    return spawn(process.execPath, ['-e', 'process.stdin.pipe(process.stdout)'], { stdio: ['pipe', 'pipe', 'ignore'] });
+  } });
+  context.after(() => service.dispose());
+  await assert.rejects(service.inspectPort(root, { containerPort: 6789 }), /before forwarding/);
+  await service.start(root, approved(await service.inspect(root)));
+  await assert.rejects(service.inspectPort(root, { containerPort: '6789' }), /container TCP port/);
+  await assert.rejects(service.inspectPort(root, { containerPort: 6789, localPort: 81 }), /local port/);
+  state.networkMode = 'host';
+  await assert.rejects(service.inspectPort(root, { containerPort: 6789 }), /own network namespace/);
+  state.networkMode = 'default';
+  state.python = false;
+  await assert.rejects(service.inspectPort(root, { containerPort: 6789 }), /requires Python 3/);
+  state.python = true;
+  const review = await service.inspectPort(root, { containerPort: 6789 });
+  assert.equal(review.localPort, 0);
+  await assert.rejects(service.forwardPort(root, { token: review.token }), /approve/);
+  const forward = await service.forwardPort(root, { token: review.token, allowLoopbackAccess: true });
+  await assert.rejects(service.forwardPort(root, { token: review.token, allowLoopbackAccess: true }), /current port forwarding review/);
+  assert.deepEqual((await service.status(root)).forwards, [forward]);
+  const socket = net.createConnection({ host: forward.host, port: forward.localPort });
+  await once(socket, 'connect');
+  const payload = Buffer.from([0x00, 0xff, 0x05, 0x0a, 0x11]);
+  socket.write(payload);
+  const [echo] = await once(socket, 'data');
+  assert.deepEqual(echo, payload);
+  assert.equal(bridges, 1);
+  const socketClosed = once(socket, 'close');
+  state.startedAt = '2026-01-01T03:00:03.000Z';
+  await socketClosed;
+  await waitForReleasedPort(forward);
+  assert.deepEqual(await service.forwardedPorts(root), []);
+  const retry = await openFixtureForward(service, root, 6789, forward.localPort);
+  await service.closePort(root, retry.id);
+  await waitForReleasedPort(retry);
+  await assert.rejects(service.closePort(root, retry.id), /current port forward/);
+});
+
+test('Port forwarding rechecks context and source, rejects port collisions and releases on stop and close', { timeout: 15000 }, async context => {
+  const { root, state, service } = await modeledService(context);
+  context.after(() => service.dispose());
+  const input = { containerPort: 5005 };
+  await service.start(root, approved(await service.inspect(root)));
+  const review = await service.inspectPort(root, input);
+  state.host = 'unix:///var/run/other.sock';
+  await assert.rejects(service.forwardPort(root, { token: review.token, allowLoopbackAccess: true }), /selected local Docker route changed/);
+  state.host = 'unix:///var/run/docker.sock';
+  const forward = await openFixtureForward(service, root, 5005);
+  const collision = await service.inspectPort(root, { ...input, localPort: forward.localPort });
+  await assert.rejects(service.forwardPort(root, { token: collision.token, allowLoopbackAccess: true }), /loopback port could not be opened/);
+  assert.deepEqual(await service.forwardedPorts(root), [forward]);
+  const second = await openFixtureForward(service, root, 9000);
+  await service.stop(root);
+  await Promise.all([waitForReleasedPort(forward), waitForReleasedPort(second)]);
+  await service.start(root, approved(await service.inspect(root)));
+  const changed = await service.inspectPort(root, input);
+  const descriptor = path.join(root, '.devcontainer', 'devcontainer.json');
+  await fs.appendFile(descriptor, '\n');
+  await assert.rejects(service.forwardPort(root, { token: changed.token, allowLoopbackAccess: true }), /configuration changed/);
+  await service.stop(root);
+  await service.start(root, approved(await service.inspect(root)));
+  const third = await openFixtureForward(service, root, 5005);
+  state.workspaceOpen = false;
+  await waitForReleasedPort(third);
+  state.workspaceOpen = true;
+  const fourth = await openFixtureForward(service, root, 5005);
+  service.dispose();
+  await waitForReleasedPort(fourth);
+  assert.deepEqual(await service.forwardedPorts(root), []);
+});
 
 async function modeledCompose(context,{partial=false}={}) {
   const {root,owned}=await tempFixture(context,'compose');
@@ -383,15 +470,39 @@ test('actual local Docker starts image, Dockerfile and Compose Dev Containers an
       if(row.service==='workspace')assert.equal(labels[sessionLabel],recorded.session);
       else assert.equal(labels[sessionLabel],undefined);
     }
+    const dockerPublishedPorts = JSON.parse(await docker(['inspect','--format','{{json .HostConfig.PortBindings}}',started.id]));
+    assert.equal(Object.keys(dockerPublishedPorts ?? {}).length, 0);
+    const http = await openFixtureForward(service, root, 8787);
+    const jdwp = await openFixtureForward(service, root, 5005);
+    assert.equal((await service.status(root)).forwards.length, 2);
+    await checkHttp(http);
+    const debuggerClient = await attachJdwp(jdwp);
+    await service.closePort(root, jdwp.id);
+    await debuggerClient.close;
+    await waitForReleasedPort(jdwp);
+    await checkHttp(http);
+    const interrupted = await openFixtureForward(service, root, 5005);
+    const interruptedClient = await attachJdwp(interrupted);
+    await docker(['container','stop','--time','1',started.id]);
+    await interruptedClient.close;
+    await Promise.all([waitForReleasedPort(http), waitForReleasedPort(interrupted)]);
+    assert.deepEqual(await service.forwardedPorts(root), []);
+    await docker(['container','start',started.id]);
+    const resumed = await openFixtureForward(service, root, 8787);
+    await checkHttp(resumed);
     await fs.appendFile(path.join(root,'compose.workspace.yaml'),'\n# changed after start\n');
     await assert.rejects(service.execute(root,['cat','fixture.txt']),/resolved configuration changed/);
+    await assert.rejects(service.inspectPort(root,{containerPort:8787}),/reviewed Compose workspace or configuration changed/);
     const stopped=await service.stop(root);
     assert.equal(stopped.state,'stopped');
     assert.ok(stopped.services.every(row=>!row.running));
+    await waitForReleasedPort(resumed);
     assert.equal(await docker(['inspect','--format','{{.State.Running}}',unrelated]),'true');
     proof.compose={cliVersion,files:plan.compose.files,appService:plan.compose.service,services:plan.compose.services,
       projectIsolated:true,labelsVerified:true,exactContainerCount:stopped.services.length,
-      mountedFile:true,lifecycle: lifecycle.stdout.trim(),dependencyRead:true,sourceDriftRefused:true,stopPreservedUnrelated:true,secretsOmitted:true};
+      mountedFile:true,lifecycle: lifecycle.stdout.trim(),dependencyRead:true,sourceDriftRefused:true,stopPreservedUnrelated:true,secretsOmitted:true,
+      portForwarding:{ realHttp:true, realJdwpVersion:true, ipv4LoopbackOnly:true, dockerPublishedPorts:false, concurrentForwards:2,
+        individualClose:true, releaseOnContainerExit:true, freshReviewAfterRestart:true, releaseOnManagedStop:true, changedComposeRefused:true }};
   } finally {
     try {
       await service.stop(root);
@@ -405,6 +516,7 @@ test('actual local Docker starts image, Dockerfile and Compose Dev Containers an
         await docker(['container','rm',row.id]);
       }
     } finally {
+      service.dispose();
       const unrelatedActual=JSON.parse(await docker(['inspect','--format','{{json .}}',unrelated]));
       assert.equal(unrelatedActual.Id,unrelated);
       assert.equal(unrelatedActual.Config.Labels['rocketbrain.devcontainer.fixture-isolation'],marker);
