@@ -13,7 +13,9 @@ const exec = promisify(execFile);
 const runtimeId = /^com\.apple\.CoreSimulator\.SimRuntime\.iOS-(?:[0-9]+-){1,2}[0-9]+$/;
 const deviceId = /^com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-[A-Za-z0-9-]{1,45}$/;
 const workerPrefix = 'ROCKETBRAIN_IOS:';
-const workerStages = new Set(['interpreter-entered', 'target-opened', 'attaching', 'process-verified', 'module-verified']);
+const workerStages = new Set(['interpreter-entered', 'target-opened', 'attaching', 'process-verified', 'module-verified',
+  'runtime-framework-pending', 'runtime-loader-stopped', 'runtime-framework-mapped',
+  'runtime-breakpoint-resolved', 'runtime-breakpoint-pending', 'process-continue', 'process-continue-returned']);
 const workerPaths = [path.join(__dirname, 'ios-debug', 'simulator_lldb.py'),
   path.join(__dirname, '../../runtime/ios-debug/simulator_lldb.py')];
 const execTimedOut = error => error?.killed === true && error?.signal === 'SIGTERM' && error?.code == null;
@@ -310,7 +312,13 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
           }
           stopped = true;
           return pause;
-        } catch (error) { await close(record); throw error; }
+        } catch (error) {
+          if (!signal.aborted) {
+            try { await observe('source-stop-unobserved', record.id); } catch { /* Preserve the debugger failure. */ }
+          }
+          await close(record);
+          throw error;
+        }
       },
       async resume() {
         validate(record);
@@ -333,7 +341,13 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
       pending = undefined;
       record.setup = launch(record);
       try { return await record.setup; }
-      catch (error) { await close(record); throw error; }
+      catch (error) {
+        if (!record.abort.signal.aborted && record.worker && record.id) {
+          try { await observe('source-stop-unobserved', record.id); } catch { /* Keep the exact LLDB failure. */ }
+        }
+        await close(record);
+        throw error;
+      }
     },
     stop: () => active ? close(active) : Promise.resolve(),
     dispose() { pending = undefined; return this.stop(); }

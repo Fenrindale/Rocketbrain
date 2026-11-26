@@ -55,8 +55,9 @@ def quoted_lldb_path(file):
     return '"' + file.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def load_reviewed_symbols(debugger, target, plan):
-    module = target.AddModule(plan["framework"], "arm64", plan["frameworkUuid"], plan["symbols"])
+def load_reviewed_symbols(debugger, target, plan, module=None):
+    if module is None:
+        module = target.AddModule(plan["framework"], "arm64", plan["frameworkUuid"], plan["symbols"])
     if not module.IsValid() or (module.GetUUIDString() or "").lower() != plan["frameworkUuid"]:
         raise RuntimeError("LLDB did not load the reviewed Kotlin framework.")
     if real_file(module.GetSymbolFileSpec()) != os.path.realpath(plan["symbols"]):
@@ -129,6 +130,73 @@ def exact_address(target, module, plan):
     return candidates[min(candidates)]
 
 
+def live_framework_address(target, plan, file_address):
+    if target.GetNumModules() > 4096:
+        raise RuntimeError("The live simulator module count exceeds the ownership inspection limit.")
+    matches = []
+    for module in target.modules:
+        if ((module.GetUUIDString() or "").lower() != plan["frameworkUuid"]
+                or real_file(module.GetFileSpec()) != plan["framework"]):
+            continue
+        candidate = module.ResolveFileAddress(file_address)
+        if candidate.IsValid() and candidate.GetLoadAddress(target) != lldb.LLDB_INVALID_ADDRESS:
+            matches.append((module, candidate))
+    if len(matches) > 1:
+        raise RuntimeError("More than one runtime module matches the reviewed Kotlin framework.")
+    return matches[0] if matches else None
+
+
+def set_loader_stops(debugger, enabled):
+    result = lldb.SBCommandReturnObject()
+    fixed = "settings set target.process.stop-on-sharedlibrary-events " + ("true" if enabled else "false")
+    debugger.GetCommandInterpreter().HandleCommand(fixed, result)
+    if not result.Succeeded():
+        raise RuntimeError("Stock LLDB could not select the private loader-event mode.")
+
+
+def loader_stop(process):
+    reasons = []
+    for thread in process:
+        reason = thread.GetStopReason()
+        if reason in (lldb.eStopReasonNone, lldb.eStopReasonInvalid):
+            continue
+        description = (thread.GetStopDescription(160) or "").lower()
+        frame = thread.GetFrameAtIndex(0)
+        file = real_file(frame.GetModule().GetFileSpec()) or ""
+        reasons.append(reason == getattr(lldb, "eStopReasonDynamicLoader", -1) or
+                       (reason == lldb.eStopReasonBreakpoint and
+                        ("shared-library-event" in description or file.endswith("/usr/lib/dyld"))))
+    return bool(reasons) and all(reasons)
+
+
+def wait_for_runtime_address(debugger, target, process, plan, compiled):
+    file_address = compiled.GetFileAddress()
+    live = live_framework_address(target, plan, file_address)
+    if live is None:
+        emit("phase", stage="runtime-framework-pending")
+        set_loader_stops(debugger, True)
+        try:
+            for _ in range(16):
+                checked(process.Continue(), "Could not run the owned app to its native loader event")
+                if process.GetState() != lldb.eStateStopped or not loader_stop(process):
+                    raise RuntimeError("The owned simulator app did not stop at a recognized dynamic-loader event.")
+                emit("phase", stage="runtime-loader-stopped")
+                live = live_framework_address(target, plan, file_address)
+                if live is not None:
+                    break
+        finally:
+            set_loader_stops(debugger, False)
+    if live is None:
+        raise RuntimeError("The reviewed Kotlin framework did not map into the owned app at a loader event.")
+    module, _ = live
+    load_reviewed_symbols(debugger, target, plan, module)
+    live = live_framework_address(target, plan, file_address)
+    if live is None or not source_at(live[1].GetLineEntry(), plan["source"], plan["line"]):
+        raise RuntimeError("The live Kotlin address did not match the reviewed framework UUID and exact source.")
+    emit("phase", stage="runtime-framework-mapped")
+    return live[1]
+
+
 def run(plan):
     emit("phase", stage="interpreter-entered")
     debugger = lldb.debugger
@@ -150,11 +218,18 @@ def run(plan):
     emit("phase", stage="process-verified")
     module = load_reviewed_symbols(debugger, target, plan)
     emit("phase", stage="module-verified")
-    breakpoint = target.BreakpointCreateBySBAddress(exact_address(target, module, plan))
+    address = wait_for_runtime_address(debugger, target, process, plan, exact_address(target, module, plan))
+    breakpoint = target.BreakpointCreateBySBAddress(address)
     if not breakpoint.IsValid() or breakpoint.GetNumLocations() != 1:
         raise RuntimeError("LLDB did not bind the exact Mach-O-relative Kotlin breakpoint address.")
+    location = breakpoint.GetLocationAtIndex(0)
+    if location.GetAddress().GetLoadAddress(target) != address.GetLoadAddress(target):
+        raise RuntimeError("LLDB armed a different address from the live reviewed Kotlin breakpoint.")
+    emit("phase", stage="runtime-breakpoint-resolved" if location.IsResolved() else "runtime-breakpoint-pending")
     emit("ready")
+    emit("phase", stage="process-continue")
     checked(process.Continue(), "Could not run the owned simulator app to its Kotlin breakpoint")
+    emit("phase", stage="process-continue-returned")
     if process.GetState() != lldb.eStateStopped:
         raise RuntimeError("The simulator app did not stop at a Kotlin source breakpoint.")
     frames = []

@@ -225,6 +225,13 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
     phases.push(phase);
     t.diagnostic('iOS fixture: ' + phase);
     if (phase === 'debuggee-launch-refused') return recordLaunchLog(t, simulator, bundleId);
+    if (phase === 'source-stop-unobserved') {
+      return simctl(['get_app_container', simulator, bundleId, 'data'], 22000).then(data => {
+        const fixtureResult = path.join(data, 'Library', 'rocketbrain-ios-fixture.txt');
+        const wroteResult = fs.existsSync(fixtureResult) && fs.readFileSync(fixtureResult, 'utf8') === 'UIKit Kotlin=42\n';
+        t.diagnostic('Owned UIKit app produced expected sandbox result before debugger stop: ' + wroteResult);
+      }, error => t.diagnostic('Owned UIKit sandbox result unavailable: ' + String(error.code ?? error.signal).slice(0, 100)));
+    }
   } });
   t.after(() => service.stop());
   const inventory = await service.devices();
