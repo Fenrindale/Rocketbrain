@@ -1,21 +1,28 @@
 'use strict';
 
 const path = require('node:path');
+const fs = require('node:fs');
 const { createDevContainers } = require('./runtime');
+const { registerContainerJava } = require('./java-vscode');
 
-function registerDevContainers(context, vscode) {
+function registerDevContainers(context, vscode, localJava) {
   const settingsByRoot = root => vscode.workspace.getConfiguration('rocketbrain.devcontainer', vscode.Uri.file(root));
   const sessionKey = key => 'rocketbrain.devcontainer.session.' + key;
+  let containerJava;
   const service = createDevContainers({
     trusted: () => vscode.workspace.isTrusted,
-    workspaceOpen: root => vscode.workspace.workspaceFolders?.some(folder =>
-      folder.uri.scheme === 'file' && !path.relative(folder.uri.fsPath, root)),
+    workspaceOpen: root => vscode.workspace.workspaceFolders?.some(folder => {
+      if (folder.uri.scheme !== 'file') return false;
+      try { return !path.relative(fs.realpathSync(folder.uri.fsPath), root); } catch { return false; }
+    }),
     settings: root => {
       const config = settingsByRoot(root);
       return { cliPath: config.get('cliPath'), nodePath: config.get('nodePath'), dockerPath: config.get('dockerPath') };
     },
     readSession: key => context.workspaceState.get(sessionKey(key)),
-    writeSession: (key, value) => context.workspaceState.update(sessionKey(key), value)
+    writeSession: (key, value) => context.workspaceState.update(sessionKey(key), value),
+    onJavaDiagnostics: (...args) => containerJava?.publish(...args),
+    onJavaClosed: root => containerJava?.closed(root)
   });
   const output = vscode.window.createOutputChannel('Rocketbrain Dev Container');
   const registrations = [service, output];
@@ -169,6 +176,8 @@ function registerDevContainers(context, vscode) {
       { placeHolder: 'Choose the local port to close' });
     if (choice) await service.closePort(root, choice.id);
   });
+  containerJava = registerContainerJava(vscode, service, localJava, register, progress, output);
+  registrations.push(containerJava);
 
   function openRoot(input) {
     const fsPath = input?.fsPath || input;
@@ -190,6 +199,13 @@ function registerDevContainers(context, vscode) {
     forwardPort: (root, confirmation) => service.forwardPort(openRoot(root), confirmation),
     forwardedPorts: root => service.forwardedPorts(openRoot(root)),
     closePort: (root, id) => service.closePort(openRoot(root), id),
+    inspectJava: (root, requested) => service.inspectJava(openRoot(root), requested),
+    startJava: (root, confirmation) => containerJava.start(openRoot(root), confirmation),
+    stopJava: root => service.stopJava(openRoot(root)),
+    javaStatus: root => service.javaStatus(openRoot(root)),
+    javaDefinition: (root, document, position) => service.javaDefinition(openRoot(root), document, position),
+    javaHover: (root, document, position) => service.javaHover(openRoot(root), document, position),
+    javaFormat: (root, document, options) => service.javaFormat(openRoot(root), document, options),
     dispose() { for (const subscription of registrations) subscription.dispose(); }
   };
 }

@@ -13,6 +13,14 @@ function absoluteDirectory(value, label) {
   return resolved;
 }
 
+function jdtLaunchArguments({ launcher, configuration, data, javaAgent }) {
+  return ['-Declipse.application=org.eclipse.jdt.ls.core.id1', '-Dosgi.bundles.defaultStartLevel=4',
+    '-Declipse.product=org.eclipse.jdt.ls.core.product', '-Dlog.level=WARNING', '-Xmx1G',
+    '--add-modules=ALL-SYSTEM', '--add-opens', 'java.base/java.util=ALL-UNNAMED',
+    '--add-opens', 'java.base/java.lang=ALL-UNNAMED', ...(javaAgent ? ['-javaagent:' + javaAgent] : []),
+    '-jar', launcher, '-configuration', configuration, '-data', data];
+}
+
 function resolveLaunch(options) {
   const platform = options.platform || process.platform;
   const javaHome = absoluteDirectory(options.javaHome, 'rocketbrain.java.javaHome');
@@ -62,7 +70,7 @@ function resolveLaunch(options) {
   for (const key of ['CLIENT_PORT', 'CLIENT_HOST', 'CLIENT_PIPE', 'SERVER_PORT', 'SERVER_HOST']) delete env[key];
   return {
     command,
-    args: ['-Declipse.application=org.eclipse.jdt.ls.core.id1', '-Dosgi.bundles.defaultStartLevel=4', '-Declipse.product=org.eclipse.jdt.ls.core.product', '-Dlog.level=WARNING', '-Xmx1G', '--add-modules=ALL-SYSTEM', '--add-opens', 'java.base/java.util=ALL-UNNAMED', '--add-opens', 'java.base/java.lang=ALL-UNNAMED', ...(lombok ? ['-javaagent:'+lombok.file] : []), '-jar', path.join(plugins, launchers[0]), '-configuration', configuration, '-data', data],
+    args: jdtLaunchArguments({ launcher: path.join(plugins, launchers[0]), configuration, data, javaAgent: lombok?.file }),
     options: { cwd: serverPath, env, windowsHide: true },
     javaHome, serverPath, configuration, data, identity, bundles, debugBuild: debugBundle?.build,
     annotationProcessing: {gradle:gradleAnnotationProcessing,maven:'project',lombok:lombok && {version:lombok.version,sha256:lombok.sha256}}
@@ -106,4 +114,4 @@ function serverSettings(projectJdks = [], options = {}) {
   };
 }
 
-module.exports = { resolveLaunch, serverSettings };
+module.exports = { resolveLaunch, serverSettings, jdtLaunchArguments };

@@ -13,7 +13,7 @@ function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 29);
   status.command = 'rocketbrain.javaSupport';
-  let client, lastSettings, debuggerController, disposing, disposed = false, configuring = false, installing = false, pending = Promise.resolve();
+  let client, lastSettings, debuggerController, disposing, containerOwner, disposed = false, configuring = false, installing = false, pending = Promise.resolve();
   let state = { state: 'stopped', message: 'Java server is stopped.' };
   const subscriptions = [output, status];
   const spring = registerSpringFeatures(vscode, context, output, { verifiedLocalPid: session => debuggerController?.verifiedLocalPid(session) });
@@ -52,6 +52,10 @@ function registerJavaFeatures(context, vscode) {
   }
   async function startNow() {
     if (disposed || client) return { ...state };
+    if (containerOwner) {
+      update('container', 'The managed container Java session owns editor navigation and diagnostics.');
+      return { ...state };
+    }
     const config = vscode.workspace.getConfiguration('rocketbrain.java');
     if (!config.get('enabled', true)) { update('disabled', 'Enable rocketbrain.java.enabled to start Java support.'); return { ...state }; }
     if (!vscode.workspace.isTrusted) { update('restricted', 'Java project import requires a trusted workspace.'); return { ...state }; }
@@ -140,6 +144,26 @@ function registerJavaFeatures(context, vscode) {
     start: () => serial(startNow),
     stop: () => serial(stopNow),
     restart: () => serial(async () => { await stopNow(); return startNow(); }),
+    suspendForContainer: () => serial(async () => {
+      if (disposed || containerOwner) throw Error('The local Java service already has a container owner.');
+      if (vscode.debug.activeDebugSession) throw Error('Finish the active debug session before switching the Java language engine.');
+      const wasRunning = Boolean(client);
+      const owner = {};
+      containerOwner = owner;
+      try {
+        await stopNow();
+      } catch (error) {
+        containerOwner = undefined;
+        if (wasRunning) void serial(startNow).catch(() => {});
+        throw error;
+      }
+      update('container', 'The managed container Java session owns editor navigation and diagnostics.');
+      return { dispose() {
+        if (containerOwner !== owner) return;
+        containerOwner = undefined;
+        if (wasRunning && !disposed) void serial(startNow).catch(() => {});
+      } };
+    }),
     getState: () => ({ ...state, springMode: 'local-semantic-index', springLimit: 'Local source/configuration model; runtime and custom Conditions remain unknown. This is not the full Spring Language Server.' }),
     executeWorkspaceCommand: async (command, ...args) => {
       await api.start();

@@ -173,7 +173,7 @@ async function activate(context) {
   const python = require('./python/python-vscode').registerPython(vscode);
   const vue = require('./web/vue-vscode').registerVueWorkbench(context, vscode);
   context.subscriptions.push(python);
-  const devContainers = require('./devcontainer/vscode').registerDevContainers(context, vscode);
+  const devContainers = require('./devcontainer/vscode').registerDevContainers(context, vscode, java);
   context.subscriptions.push(devContainers);
   const schemaComparison=require('./db/schema-diff-vscode').registerSchemaComparison(context,vscode,{
     capture:options=>database.captureSchemaSnapshot(options),

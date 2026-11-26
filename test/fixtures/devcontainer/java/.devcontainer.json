@@ -1,0 +1,7 @@
+{
+  "name": "Rocketbrain Managed Java Fixture",
+  "image": "rocketbrain-devcontainer-java:local",
+  "workspaceFolder": "/workspaces/container-java",
+  "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspaces/container-java",
+  "remoteUser": "root"
+}
