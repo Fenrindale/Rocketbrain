@@ -1,25 +1,25 @@
 {
-  "version": "0.111.0",
-  "verifiedAt": "2026-11-26T04:32:57.193Z",
+  "version": "0.113.0",
+  "verifiedAt": "2026-11-26T05:05:51.614Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.111.0.vsix",
-    "sha256": "3680b936619fbcaef95599fbe59f361461376a4733694bd94b1e596570aceb62",
-    "bytes": 4150946,
+    "name": "rocketbrain-0.113.0.vsix",
+    "sha256": "cbdf8c78d7f4fcc202ba4e5b3380e692349476e22305ddb48224fb4ed96dae04",
+    "bytes": 4173274,
     "files": 26
   },
   "source": {
-    "frozenPublicInputs": 2510,
-    "inputVectorSha256": "774583d90f508adfa78ba8f0e0e0bb28aba20026b17a0f640c70c5453a662b47",
+    "frozenPublicInputs": 2532,
+    "inputVectorSha256": "08220a3f46daaeeac72d5928c409dd84c4f56dff2fb54b091f88449d775b7334",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 2003,
-    "pass": 1837,
+    "tests": 2010,
+    "pass": 1842,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 166,
+    "skipped": 168,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,34 +29,22 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 7,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "windowsJavaProcess",
+          "group": "javaPackageRename",
           "checks": 1
         },
         {
-          "group": "hibernateCompositeFetch",
+          "group": "kotlinNullability",
           "checks": 1
         },
         {
-          "group": "javaAdvisoryCalls",
+          "group": "hibernateAsyncFetch",
           "checks": 1
         },
         {
-          "group": "kotlinMixedTypeRename",
-          "checks": 1
-        },
-        {
-          "group": "kotlinWatches",
-          "checks": 1
-        },
-        {
-          "group": "editorInlineModel",
-          "checks": 1
-        },
-        {
-          "group": "editorConversation",
+          "group": "jpaAttributeBinding",
           "checks": 1
         }
       ],
@@ -71,34 +59,22 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 7,
+      "groupCount": 4,
       "groups": [
         {
-          "group": "windowsJavaProcess",
+          "group": "javaPackageRename",
           "checks": 1
         },
         {
-          "group": "hibernateCompositeFetch",
+          "group": "kotlinNullability",
           "checks": 1
         },
         {
-          "group": "javaAdvisoryCalls",
+          "group": "hibernateAsyncFetch",
           "checks": 1
         },
         {
-          "group": "kotlinMixedTypeRename",
-          "checks": 1
-        },
-        {
-          "group": "kotlinWatches",
-          "checks": 1
-        },
-        {
-          "group": "editorInlineModel",
-          "checks": 1
-        },
-        {
-          "group": "editorConversation",
+          "group": "jpaAttributeBinding",
           "checks": 1
         }
       ],
@@ -110,149 +86,64 @@
   ],
   "newlyVerified": {
     "IDEA-024": {
-      "scope": "실제 Kotlin LSP와 Javac이 각각 참조를 검증했다. 세 파일의 Undo·Redo 후 다시 빌드했고 두 Spring DB의 결과와 동명이인 클래스가 보존됐다.",
+      "scope": "실제 JDT 수정안을 Javac 바인딩으로 대조했다. 설치형 편집기에서 폴더와 소스 변경의 Undo·Redo 및 저장 후 두 DB의 Spring 결과를 확인했다.",
       "runtimeGroups": [
-        "kotlinMixedTypeRename"
-      ]
-    },
-    "IDEA-040": {
-      "scope": "두 빌드 도구의 실제 Spring 소스에서 권고 두 건의 호출 세 곳과 메서드 참조 한 곳을 찾았다. 권고에 연결된 수정 버전을 표시하고 파일이 바뀐 뒤 이전 참조 열기를 거부했다.",
-      "runtimeGroups": [
-        "javaAdvisoryCalls"
+        "javaPackageRename"
       ]
     },
     "IDEA-043": {
-      "scope": "실제 JVM 클래스 경로에서 Kotlin·Java 참조를 검증했다. 충돌, 저장 후 바뀐 소스, 경쟁 바이너리 클래스는 거부했다.",
+      "scope": "Kotlin 컴파일러가 위반한 제네릭 경계와 nullable 컬렉션 요소를 Problems에 표시했다. 정확한 Java 선언으로 이동하고 검사 뒤 변경된 소스의 이전 링크를 거부했다.",
       "runtimeGroups": [
-        "kotlinMixedTypeRename"
+        "kotlinNullability"
       ]
     },
     "IDEA-063": {
-      "scope": "두 DB에서 바인드가 있는 SELECT 여섯 개와 타입을 확인했다. 값은 공개하지 않았으며 지연 조회, fetch join, 명시 반복을 구분했다.",
+      "scope": "두 DB에서 Callable SELECT 여섯 개와 바인딩을 확인하고 동시 일반 요청을 구분했다. 실제 속성 변환의 BIGINT·VARCHAR 바인드와 검사 전후 SQL·변환기 호출 횟수를 대조했다.",
       "runtimeGroups": [
-        "hibernateCompositeFetch"
-      ]
-    },
-    "IDEA-075": {
-      "scope": "Windows 설치형 디버거에서 실제 중단·해제를 확인했다. Ubuntu CI의 별도 JVM에서도 동적 포트, 소유 PID, 중단 줄과 해제 후 재개를 확인했다.",
-      "runtimeGroups": [
-        "windowsJavaProcess",
-        "linuxDebugOwnership"
-      ]
-    },
-    "IDEA-080": {
-      "scope": "실제 Kotlin 프레임의 타입과 값 열 개, 정밀도, null 처리, 변경식 거부와 다시 멈추기 전 프레임 만료를 검증했다.",
-      "runtimeGroups": [
-        "kotlinWatches"
-      ]
-    },
-    "IDEA-098": {
-      "scope": "실제 Ubuntu Docker에서 두 서비스의 앱을 시작했고 HTTP와 JDWP 바이너리 요청을 보냈다. 종료와 재시작 시 소유한 포트만 해제했다.",
-      "runtimeGroups": [
-        "devContainerPorts"
-      ]
-    },
-    "IDEA-115": {
-      "scope": "실제 Qwen이 Java 커서에 제안하고 두 Spring 소스의 문맥에 답했다. 설정하거나 선택하지 않은 파일은 보내지 않았고 현재 창에서 이전 승인 대화를 이어갔다.",
-      "runtimeGroups": [
-        "editorInlineModel",
-        "editorConversation"
+        "hibernateAsyncFetch",
+        "jpaAttributeBinding"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 566,
+    "sourceCorrespondences": 570,
     "sourceConfidence": "inferred",
     "archiveEntries": 26,
     "archiveConfidence": "observed"
   },
-  "nativePayloadEquivalence": {
-    "files": 26,
-    "testedArchiveSha256": "be18d103e4f861e43e43f21af79ee489a089a19ffd9c5cffde180cdcec0a6e2f",
-    "testedInputVectorSha256": "9d5f8eea9fdef285940638c3a0c9c12aba36a1dc86d6693bf0c1bba50d32f71f",
-    "onlySourceChanges": [
-      "test/editor-inline-model-host.js",
-      "test/kotlin-mixed-type-rename-host.js"
-    ]
-  },
-  "hostedRuntime": {
-    "devContainerPorts": {
-      "source": "539158766bfe8caf53a286bd1224675faa13e8b1",
-      "identicalTestedSources": true,
-      "runId": 45750202392,
-      "runUrl": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45750202392",
-      "proofSha256": "ba1fa11e349b89c2b89eb81c13e14918512222d3b5109d7191684bc40828cfc7",
-      "receiptSha256": "6be69bf4eabb646830d44bb306ff11d80fd9ef91bd44a4215472a72c7fd5e22f",
-      "checks": {
-        "realHttp": true,
-        "realJdwpVersion": true,
-        "ipv4LoopbackOnly": true,
-        "dockerPublishedPorts": false,
-        "concurrentForwards": 2,
-        "individualClose": true,
-        "releaseOnContainerExit": true,
-        "freshReviewAfterRestart": true,
-        "releaseOnManagedStop": true,
-        "changedComposeRefused": true
-      }
-    },
-    "linuxDebugOwnership": {
-      "source": "927ceb917facb00a35bfd037be0ec9075f19db50",
-      "identicalTestedSources": true,
-      "runId": 45747414757,
-      "runUrl": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45747414757",
-      "receiptSha256": "1dfee43eaf8e2b9e189bf8ccd2b765c90e561a2096d1afd8dc0e906d5967508a",
-      "checks": {
-        "platform": "linux",
-        "jdk": "openjdk 25.0.5 2026-10-20 LTS",
-        "exactListenerOwner": true,
-        "normalSocketExcluded": true,
-        "foreignSocketRefused": true,
-        "staleIdentityRefused": true,
-        "stoppedAt": 14,
-        "localValue": 73,
-        "detachedProcessResumed": true,
-        "exitedTargetRefused": true
-      }
-    }
-  },
   "progress": {
     "counts": {
-      "implemented": 168,
-      "partial": 34,
+      "implemented": 169,
+      "partial": 33,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 197,
-    "previousWeightedPoints": 196,
+    "weightedPoints": 197.5,
+    "previousWeightedPoints": 197,
     "targetWeightedPoints": 216,
-    "referencePercent": 91.2,
+    "referencePercent": 91.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-040",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-115",
+        "id": "IDEA-043",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "로컬 모델 대화는 선택한 저장 파일 2~4개와 현재 창의 최대 15분 세션을 사용한다.",
-    "Hibernate 관찰은 지원하는 동기 Spring MVC 요청의 위치·타입을 읽으며 값을 저장하지 않는다.",
-    "Linux JDWP는 커널에서 검증한 IPv4 루프백 소유권에 한한다.",
-    "IDEA-001과 DG-095의 창 배치는 일반 VS Code 확장 API 범위를 벗어난다. 현행 가중 상한은 214/216점이다."
+    "패키지 이름 변경은 한 프로젝트의 검토한 Java 바인딩과 충돌 없는 새 형제 폴더에 적용한다.",
+    "Hibernate의 Callable 요청은 지원하는 Spring MVC 단계가 연결될 때만 전체로 표시한다.",
+    "Hibernate 속성 검사는 등록된 팩터리의 기본 속성과 임베디드 하위 기본 속성을 대상으로 한다.",
+    "IDEA-001과 DG-095의 창 배치에는 호스트 구조 제약이 있다. 현행 가중 상한은 214/216점이다."
   ],
   "next": [
-    "실제 Kotlin의 Java nullability 진단과 비동기 Hibernate 관찰",
-    "검토한 컨테이너 안에서 Java 언어 서버 연결"
+    "기존 메서드 참조를 보존하는 Java Change Signature",
+    "컨테이너에서 Java 언어 서버를 실행하고 관리 JVM에 연결",
+    "JPA 엔티티 그래프와 실제 조회 연결"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

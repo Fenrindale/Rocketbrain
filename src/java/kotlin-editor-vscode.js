@@ -6,6 +6,7 @@ const { inside,workspacePath,workspaceRoots,fail } = require('./workbench-model'
 const {registerSourceFormatting} = require('./format-vscode');
 const {kotlinFormatterOptions,buildKotlinFormatEdits} = require('./kotlin-format-edits');
 const {registerKotlinRename} = require('./kotlin-rename-vscode');
+const {registerKotlinNullability} = require('./kotlin-nullability-vscode');
 
 const COMMANDS={start:'rocketbrain.kotlinEditor.start',stop:'rocketbrain.kotlinEditor.stop',output:'rocketbrain.kotlinEditor.output'};
 
@@ -64,6 +65,7 @@ function registerKotlinEditor(context,vscode,java) {
   async function stopNow() {
     const record=active;
     active=undefined;
+    nullability.clear();
     try {if (record) await release(record);}
     catch (error) {report('error',{message:error.message});throw error;}
     return report('stopped');
@@ -119,6 +121,7 @@ function registerKotlinEditor(context,vscode,java) {
           errorHandler:{error:()=>({action:ErrorAction.Shutdown}),closed:()=>{
             if (active===record && !record.stopping) {
               active=undefined;
+              nullability.clear();
               report('error',{message:'The Kotlin language server exited. Check the Rocketbrain Kotlin Editor output.'});
               void release(record).catch(error=>output.appendLine(error.message));
             }
@@ -247,20 +250,21 @@ function registerKotlinEditor(context,vscode,java) {
   const references=(document,position,includeDeclaration,cancellation)=>sourceRequest('textDocument/references',
     document,position,{includeDeclaration:Boolean(includeDeclaration)},cancellation);
 
-  async function beginRename(document,cancellation) {
+  async function beginProjectAnalysis(document,cancellation,feature) {
     await start({document});
     const record = active, root = projectOf(document);
     const check = () => {
       trusted();
       if (!record?.client?.isRunning() || active!==record || !root || state.state!=='running' ||
           path.relative(record.launch.root,root) || cancellation?.isCancellationRequested) {
-        throw fail('Keep the Kotlin language server and selected Gradle project open while reviewing the rename.');
+        throw fail('Keep the Kotlin language server and selected Gradle project open during '+feature+'.');
       }
     };
     check();
     const capabilities = record.client.initializeResult?.capabilities;
-    if (!capabilities?.renameProvider?.prepareProvider || !capabilities.referencesProvider || !capabilities.definitionProvider) {
-      throw fail('The connected Kotlin language server does not offer reviewed semantic rename.');
+    if (!capabilities?.definitionProvider || feature==='rename' &&
+        (!capabilities.renameProvider?.prepareProvider || !capabilities.referencesProvider)) {
+      throw fail('The connected Kotlin language server does not offer semantic '+feature+'.');
     }
     return {root,check,compiler:record.launch.compiler,async classpath(token) {
       check();
@@ -276,7 +280,7 @@ function registerKotlinEditor(context,vscode,java) {
       try {
         const response = await Promise.race([
           record.client.sendRequest(method,params,...(token ? [token] : [])),
-          new Promise((_,reject)=>{timer=setTimeout(()=>reject(fail('Kotlin rename analysis timed out. Wait for project indexing and try again.')),30000);})
+          new Promise((_,reject)=>{timer=setTimeout(()=>reject(fail('Kotlin '+feature+' analysis timed out. Wait for project indexing and try again.')),30000);})
         ]);
         check();
         return response;
@@ -284,8 +288,10 @@ function registerKotlinEditor(context,vscode,java) {
     }};
   }
 
-  const rename = registerKotlinRename(vscode,{begin:beginRename,refactoring:java.refactoring,output});
-  subscriptions.push(rename);
+  const rename = registerKotlinRename(vscode,{begin:(document,token)=>beginProjectAnalysis(document,token,'rename'),
+    refactoring:java.refactoring,output});
+  const nullability = registerKotlinNullability(vscode,{begin:(document,token)=>beginProjectAnalysis(document,token,'nullability'),output});
+  subscriptions.push(rename,nullability);
 
   function automatic(document) {
     if (disposed || suspended || !vscode.workspace.isTrusted || !vscode.workspace.getConfiguration('rocketbrain.kotlinEditor').get('serverHome')) return;
@@ -311,7 +317,7 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,definition,references,formatting,rename,documentSymbols,selectionRanges,codeInformation,inlayHints,getState:()=>({...state}),dispose() {
+  return {start,stop,definition,references,formatting,rename,nullability,documentSymbols,selectionRanges,codeInformation,inlayHints,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;

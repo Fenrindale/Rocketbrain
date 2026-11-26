@@ -80,6 +80,10 @@ function registerJavaFeatures(context, vscode) {
         initializationOptions: { bundles: launch.bundles, workspaceFolders: (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.toString()), settings, extendedClientCapabilities: { progressReportProvider: true, classFileContentsSupport: true, overrideMethodsPromptSupport: false, hashCodeEqualsPromptSupport: false, advancedOrganizeImportsSupport: false,advancedExtractRefactoringSupport:false } },
         synchronize: { fileEvents: watcher },
         middleware: {
+          workspace:{willRenameFiles(event,next){
+            // This exact folder change already includes approved JDT-equivalent text edits.
+            return api.refactoring?.isApplyingPackageRename(event.files)?undefined:next(event);
+          }},
           provideInlayHints(document,range,token,next) {
             return api.codeHints?.available(document)?[]:next(document,range,token);
           },

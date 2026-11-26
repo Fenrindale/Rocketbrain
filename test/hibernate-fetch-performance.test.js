@@ -146,3 +146,29 @@ test('reviewed bind metadata is position-exact, bounded and independent of colle
   assert.equal(summarizePerformance(snapshot([sample([excessive])],observation)).requests[0].selects[0].binds.positions.length,16);
   assert.equal(summarize([event(root,1),first]).selects[1].binds,undefined);
 });
+
+test('Callable evidence keeps phase labels and fails closed for unknown or unsupported dispatch', () => {
+  const observed = snapshot([], { scope:'spring-mvc', callableObservation:true });
+  const phase = (select, label) => ({ ...select, phase:label });
+  const selects = [phase(event(root,1),'request'),phase(collection(1,2),'callable-worker'),
+    phase(collection(2,3),'callable-worker')];
+  const callable = sample(selects, { dispatch:'spring-mvc-callable' });
+  const complete = summarizePerformance({ ...observed, requests:[callable] });
+  assert.equal(complete.scope,'spring-mvc-hibernate-selects');
+  assert.equal(complete.requests[0].coverage,'complete-within-supported-hooks');
+  assert.equal(complete.requests[0].suspects.length,1);
+  assert.deepEqual(complete.requests[0].selects.map(select=>select.phase),['request','callable-worker','callable-worker']);
+
+  const transitions = [
+    summarizePerformance({ ...observed, callableObservation:false, requests:[callable] }),
+    summarizePerformance({ ...observed, requests:[{ ...callable, complete:false }] }),
+    summarizePerformance({ ...observed, requests:[{ ...callable, selects:[...selects.slice(0,2), phase(selects[2],'executor-work')] }] }),
+    summarizePerformance({ ...observed, requests:[sample([selects[0]],{dispatch:'unattributed'})] })
+  ];
+  for(const report of transitions){
+    assert.equal(report.requests[0].coverage,'partial');
+    assert.equal(report.requests[0].suspects.length,0);
+  }
+  assert.equal(transitions[2].requests[0].omittedSelects,1);
+  assert.equal(summarizePerformance({ ...observed, requests:[sample(selects,{dispatch:'arbitrary'})] }).requests.length,0);
+});

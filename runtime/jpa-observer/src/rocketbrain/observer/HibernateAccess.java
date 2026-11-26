@@ -6,6 +6,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
+import java.sql.JDBCType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -262,6 +263,158 @@ public final class HibernateAccess {
         Object code = optional(jdbcType, "getJdbcTypeCode"); if (code instanceof Number) result.put("jdbcTypeCode", code);
         String javaType = javaType(optional(jdbc, "getJdbcJavaType")); if (javaType != null) result.put("jdbcJavaType", javaType);
         return result;
+    }
+
+    private static final String JPA_DOMAIN="org.hibernate.metamodel.model.domain.internal.";
+    private static final String MAPPING="org.hibernate.metamodel.mapping.internal.";
+    private static final String HIBERNATE_TYPE="org.hibernate.type.";
+    private static final Set<String> BINDING_TYPES=Set.of(
+        "BasicTypeImpl","NamedBasicTypeImpl","ImmutableNamedBasicTypeImpl","PrimitiveBasicTypeImpl",
+        "ConvertedBasicTypeImpl","CustomMutabilityConvertedBasicTypeImpl","CustomMutabilityConvertedPrimitiveBasicTypeImpl");
+    private static final Set<String> PERSISTERS=Set.of("SingleTableEntityPersister","JoinedSubclassEntityPersister","UnionSubclassEntityPersister");
+
+    static Map<String,Object> attributeBinding(Object factory,String entityName,String propertyPath){
+        Map<String,Object> report=map("entityJavaType",entityName,"propertyPath",propertyPath,"state","unknown",
+            "observerExecutedSql",false,"valuesRetained",false,"applicationCallbacksInvoked",false);
+        if(!classIs(factory,"org.hibernate.internal.SessionFactoryImpl")||!Boolean.FALSE.equals(optional(factory,"isClosed"))){
+            return bindingGap(report,"factory_unavailable");
+        }
+        Object metamodel=optional(factory,"getMetamodel"), selected=null;
+        if(!providerObject(factory,metamodel))return bindingGap(report,"entity_unavailable");
+        List<Object> types=values(optional(metamodel,"getEntities"),ENTITY_LIMIT+1);
+        if(types.size()>ENTITY_LIMIT)return bindingGap(report,"entity_limit");
+        for(Object candidate:types){
+            if(providerObject(factory,candidate)&&classIs(candidate,JPA_DOMAIN+"EntityTypeImpl")&&
+                bindingJavaClass(factory,optional(candidate,"getExpressibleJavaType")) instanceof Class<?> cls&&cls.getName().equals(entityName)){
+                if(selected!=null)return bindingGap(report,"entity_ambiguous");
+                selected=candidate;
+            }
+        }
+        if(selected==null)return bindingGap(report,"entity_unavailable");
+        String[] path=propertyPath.split("\\.");
+        Class<?> declared=null;
+        String kind=null;
+        for(int i=0;i<path.length;i++){
+            Object attribute=optional(selected,"getAttribute",path[i]);
+            if(!providerObject(factory,attribute))return bindingGap(report,"attribute_unavailable");
+            Object attributeKind=optional(attribute,"getPersistentAttributeType");
+            Class<?> type=bindingJavaClass(factory,optional(attribute,"getAttributeJavaType"));
+            if(!(attributeKind instanceof Enum<?> enumeration)||type==null){
+                return bindingGap(report,"attribute_unavailable");
+            }
+            kind=enumeration.name();
+            declared=type;
+            if(i+1<path.length){
+                if(!kind.equals("EMBEDDED"))return bindingGap(report,"unsupported_jpa_path");
+                selected=optional(attribute,"getType");
+                if(!providerObject(factory,selected)||!classIs(selected,JPA_DOMAIN+"EmbeddableTypeImpl")){
+                    return bindingGap(report,"unsupported_jpa_path");
+                }
+            }
+        }
+        report.put("declaration",map("basis","jakarta-persistence-metamodel","kind",kind,"javaType",declared.getTypeName()));
+        report.put("state","partial");
+        if(!"BASIC".equals(kind))return bindingGap(report,"unsupported_jpa_kind");
+
+        Object runtimeModel=optional(factory,"getMappingMetamodel");
+        if(!providerObject(factory,runtimeModel))return bindingGap(report,"mapping_unavailable");
+        Object mapping=optional(runtimeModel,"findEntityDescriptor",entityName);
+        if(!providerFamily(factory,mapping,"org.hibernate.persister.entity.")||!PERSISTERS.contains(mapping.getClass().getSimpleName())){
+            return bindingGap(report,"mapping_unavailable");
+        }
+        for(int i=0;i<path.length;i++){
+            Object attribute=optional(mapping,"findAttributeMapping",path[i]);
+            if(attribute==null&&i==0)attribute=optional(mapping,"findSubPart",path[i]);
+            if(!providerFamily(factory,attribute,MAPPING))return bindingGap(report,"mapping_unavailable");
+            mapping=attribute;
+            if(i+1<path.length){
+                if(!classIs(mapping,MAPPING+"EmbeddedAttributeMapping"))return bindingGap(report,"unsupported_provider_path");
+                mapping=optional(mapping,"getEmbeddableTypeDescriptor");
+                if(!providerFamily(factory,mapping,MAPPING))return bindingGap(report,"unsupported_provider_path");
+            }
+        }
+        if(!classIs(mapping,MAPPING+"BasicAttributeMapping")&&!classIs(mapping,MAPPING+"BasicEntityIdentifierMappingImpl")){
+            return bindingGap(report,"unsupported_provider_mapping");
+        }
+        if(!Boolean.FALSE.equals(optional(mapping,"isFormula")))return bindingGap(report,"unsupported_selectable");
+        String table=bindingName(optional(mapping,"getContainingTableExpression"));
+        String column=bindingName(optional(mapping,"getSelectionExpression"));
+        if(table==null||column==null)return bindingGap(report,"selectable_unavailable");
+        Object jdbc=optional(mapping,"getJdbcMapping");
+        if(!providerFamily(factory,jdbc,HIBERNATE_TYPE+"internal.")||!BINDING_TYPES.contains(jdbc.getClass().getSimpleName())){
+            return bindingGap(report,"unsupported_provider_type");
+        }
+
+        try{
+            // Trusted Hibernate wrappers return registered descriptors or cached binders.
+            // Never ask a bean for a converter instance or call a conversion/binding method.
+            Object converter=invoke(jdbc,"getValueConverter");
+            if(converter!=null&&(!providerObject(factory,converter)||
+                !classIs(converter,HIBERNATE_TYPE+"descriptor.converter.internal.AttributeConverterBean"))){
+                return bindingGap(report,"unsupported_converter");
+            }
+            Class<?> domain=bindingJavaClass(factory,optional(jdbc,"getMappedJavaType"));
+            Class<?> relational=bindingJavaClass(factory,optional(jdbc,"getJdbcJavaType"));
+            Map<String,Object> conversion=Map.of("kind","no-registered-converter");
+            if(converter!=null){
+                Class<?> converterClass=bindingJavaClass(factory,optional(converter,"getConverterJavaType"));
+                if(converterClass==null||bindingJavaClass(factory,optional(converter,"getDomainJavaType"))!=domain||
+                    bindingJavaClass(factory,optional(converter,"getRelationalJavaType"))!=relational){
+                    return bindingGap(report,"converter_metadata_unavailable");
+                }
+                conversion=Map.of("kind","attribute-converter","javaType",converterClass.getName());
+            }
+            if(domain==null||relational==null||boxed(declared)!=boxed(domain))return bindingGap(report,"java_type_unavailable");
+            Object jdbcType=optional(jdbc,"getJdbcType");
+            if(!providerFamily(factory,jdbcType,HIBERNATE_TYPE+"descriptor.jdbc.")||
+                !(optional(jdbcType,"getJdbcTypeCode") instanceof Integer number)){
+                return bindingGap(report,"jdbc_metadata_unavailable");
+            }
+            Class<?> owner=jdbc.getClass().getMethod("getJdbcValueBinder").getDeclaringClass();
+            if(!owner.getName().equals(HIBERNATE_TYPE+"AbstractStandardBasicType")&&
+                !owner.getName().equals(HIBERNATE_TYPE+"internal.ConvertedBasicTypeImpl")){
+                return bindingGap(report,"jdbc_binder_unavailable");
+            }
+            Object binder=optional(jdbc,"getJdbcValueBinder");
+            if(!providerFamily(factory,binder,HIBERNATE_TYPE+"descriptor.jdbc."))return bindingGap(report,"jdbc_binder_unavailable");
+            String type=JDBCType.valueOf(number).name();
+            report.put("mapping",map("basis","hibernate-runtime-mapping","table",table,"column",column,
+                "domainJavaType",domain.getTypeName(),"relationalJavaType",relational.getTypeName(),"conversion",conversion,
+                "jdbcTypeCode",number,"jdbcType",type,"binderClass",binder.getClass().getName()));
+            report.put("state","observed");
+            return report;
+        }catch(Throwable unsupported){
+            return bindingGap(report,"jdbc_metadata_unavailable");
+        }
+    }
+
+    private static Map<String,Object> bindingGap(Map<String,Object> report,String reason){report.put("reason",reason);return report;}
+    private static String bindingName(Object value){
+        return value instanceof String field&&!field.isBlank()&&field.length()<=256&&field.chars().noneMatch(Character::isISOControl)?field:null;
+    }
+    private static boolean classIs(Object value,String name){return value!=null&&value.getClass().getName().equals(name);}
+    private static boolean providerFamily(Object factory,Object value,String prefix){
+        return value!=null&&value.getClass().getName().startsWith(prefix)&&providerObject(factory,value);
+    }
+    private static boolean providerObject(Object factory,Object value){
+        if(value==null)return false;
+        Class<?> origin=factory.getClass(), actual=value.getClass();
+        if(actual.getClassLoader()!=origin.getClassLoader())return false;
+        var expected=origin.getProtectionDomain().getCodeSource();
+        var received=actual.getProtectionDomain().getCodeSource();
+        return expected!=null&&received!=null&&expected.getLocation()!=null&&received.getLocation()!=null&&
+            expected.getLocation().toExternalForm().equals(received.getLocation().toExternalForm());
+    }
+    private static Class<?> bindingJavaClass(Object factory,Object descriptor){
+        if(!providerFamily(factory,descriptor,HIBERNATE_TYPE+"descriptor.java."))return null;
+        try{
+            Method getter=descriptor.getClass().getMethod("getJavaType");
+            String owner=getter.getDeclaringClass().getName();
+            String base=HIBERNATE_TYPE+"descriptor.java.";
+            if(!owner.equals(base+"AbstractClassJavaType")&&!owner.equals(base+"AbstractJavaType")&&
+                !owner.equals(base+"spi.UnknownBasicJavaType"))return null;
+            return getter.invoke(descriptor) instanceof Class<?> type?type:null;
+        }catch(ReflectiveOperationException unavailable){return null;}
     }
 
     private static Map<String, Object> function(Object registry, String name) {

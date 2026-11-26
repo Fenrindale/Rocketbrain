@@ -6,6 +6,7 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const mysql = require('mysql2/promise');
 const { ObserverClient } = require('../src/jpa/observer-client');
+const { VERSION } = require('../scripts/jpa-observer-build');
 const { summarizePerformance } = require('../src/jpa/fetch-performance');
 const { jdbcReadback } = require('./java-source-analysis-host');
 
@@ -65,7 +66,7 @@ async function withFetchFixture(run) {
 }
 
 function checkPerformance(snapshot, report, secrets) {
-  assert.equal(snapshot.agentVersion, '0.8.0');
+  assert.equal(snapshot.agentVersion, VERSION);
   assert.equal(snapshot.performance.enabled, true);
   assert.equal(snapshot.performance.available, true, JSON.stringify(snapshot.warnings));
   assert.equal(snapshot.performance.rawBindValuesRetained, false);
@@ -132,4 +133,4 @@ if (require.main === module) verifyHibernateFetchBackend().then(result => consol
   console.error(error.stack);
   process.exitCode=1;
 });
-module.exports={runHibernateFetchPerformanceChecks,verifyHibernateFetchBackend};
+module.exports={runHibernateFetchPerformanceChecks,verifyHibernateFetchBackend,withFetchFixture};

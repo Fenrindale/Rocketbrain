@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.111.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.113.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 168 |
-| 부분 구현 | 34 |
+| 구현 | 169 |
+| 부분 구현 | 33 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **91.2%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **91.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.111에서는 혼합 Java·Kotlin 이름 변경과 Kotlin Watch, Hibernate 바인드 타입, Java 의존 권고 호출 탐색을 추가했다. 로컬 모델은 승인한 코드를 자동완성하고 선택한 여러 파일로 대화를 이어간다. Linux JVM 탐색과 Compose의 검토된 포트 전달도 검증했다. 상태가 바뀐 항목은 2개이고 가중 점수는 196점에서 197점으로 바뀌었다.
+v0.113에서는 Java 패키지 이름 변경, Kotlin의 Java 타입 계약 진단, Spring MVC Callable 요청의 Hibernate SQL 관측, 실행 중인 JPA 속성 바인딩 검사를 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 197점에서 197.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -63,7 +63,7 @@ v0.111에서는 혼합 Java·Kotlin 이름 변경과 Kotlin Watch, Hibernate 바
 | IDEA-040 | IntelliJ IDEA | 의존성 취약점·취약 API 사용 분석 | 구현 |
 | IDEA-041 | IntelliJ IDEA | Qodana·CI 품질 게이트 연결 | 구현 |
 | IDEA-042 | IntelliJ IDEA | Java 버전·JDK·언어 수준 | 구현 |
-| IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 부분 구현 |
+| IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 구현 |
 | IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 부분 구현 |
 | IDEA-045 | IntelliJ IDEA | Kotlin Multiplatform·Compose 개발 | 부분 구현 |
 | IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 부분 구현 |

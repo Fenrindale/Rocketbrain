@@ -1,5 +1,5 @@
 {
-  "version": "0.111.0",
+  "version": "0.113.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,37 +30,27 @@
     }
   },
   "summary": {
-    "implemented": 168,
-    "partial": 34,
+    "implemented": 169,
+    "partial": 33,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 91.2,
+    "percent": 91.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
     "IDEA-024",
-    "IDEA-040",
     "IDEA-043",
-    "IDEA-063",
-    "IDEA-075",
-    "IDEA-080",
-    "IDEA-098",
-    "IDEA-115"
+    "IDEA-063"
   ],
   "expandedFeatures": [
     "IDEA-024",
-    "IDEA-040",
     "IDEA-043",
-    "IDEA-063",
-    "IDEA-075",
-    "IDEA-080",
-    "IDEA-098",
-    "IDEA-115"
+    "IDEA-063"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -725,23 +715,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "Java 공개 타입과 Spring XML 이름 변경 외에 한 Gradle 프로젝트의 Kotlin 공개 클래스와 Java·Kotlin 참조를 한 번에 검토하고 편집한다.",
+      "scope": "공개 타입 이름과 Spring XML 참조를 바꾸고, Java 패키지와 하위 패키지를 새 형제 폴더로 한 번에 변경한다.",
       "remaining": [
-        "비어 있는 새 디렉터리로의 패키지 이름 변경과 더 넓은 교차 언어 계약이 남아 있다."
+        "Java 외 파일과 동적 리소스 안의 패키지 계약은 확인 가능한 범위를 벗어나면 거부한다."
       ],
       "verification": {
-        "state": "v0.111-installed-coverage",
+        "state": "v0.113-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Kotlin LSP와 Javac이 각각 참조를 검증했다. 세 파일의 Undo·Redo 후 다시 빌드했고 두 Spring DB의 결과와 동명이인 클래스가 보존됐다.",
+        "testedScope": "실제 JDT 수정안을 Javac 바인딩으로 대조했다. 설치형 편집기에서 폴더와 소스 변경의 Undo·Redo 및 저장 후 두 DB의 Spring 결과를 확인했다.",
         "publicEvidence": [
-          "src/java/kotlin-mixed-type-rename.js",
-          "test/kotlin-mixed-type-rename-host.js",
-          "test/workflows-v111-host.js"
+          "src/java/java-package-rename.js",
+          "test/java-package-rename-host.js",
+          "test/workflows-v113-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1241,8 +1231,8 @@
       "verification": {
         "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.111.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1319,26 +1309,25 @@
       "category": "JVM 언어·프로젝트",
       "feature": "Java와 Kotlin 혼합 프로젝트",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "Java와 Kotlin 선언을 오가며 단일 Gradle JVM 프로젝트의 공개 Kotlin 클래스 이름과 정확한 두 언어 참조를 리뷰한다.",
-      "remaining": [
-        "Java에서 들어온 nullability 계약과 일반 혼합 언어 이름 계약이 남아 있다."
-      ],
+      "scope": "Maven·Gradle에 섞인 Java·Kotlin 소스를 탐색하고 JVM 선언을 오간다. 지원 Gradle 프로젝트에서 공개 Kotlin 클래스와 두 언어 참조를 변경하고 Java JSpecify의 nullability 계약을 Kotlin 편집기에 표시한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.111-installed-coverage",
+        "state": "v0.113-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 JVM 클래스 경로에서 Kotlin·Java 참조를 검증했다. 충돌, 저장 후 바뀐 소스, 경쟁 바이너리 클래스는 거부했다.",
+        "testedScope": "Kotlin 컴파일러가 위반한 제네릭 경계와 nullable 컬렉션 요소를 Problems에 표시했다. 정확한 Java 선언으로 이동하고 검사 뒤 변경된 소스의 이전 링크를 거부했다.",
         "publicEvidence": [
-          "src/java/kotlin-mixed-type-rename.js",
-          "test/kotlin-mixed-type-rename.test.js",
-          "test/kotlin-mixed-type-rename-host.js"
+          "src/java/kotlin-editor-vscode.js",
+          "test/kotlin-mixed-type-rename-host.js",
+          "test/kotlin-nullability-host.js",
+          "test/workflows-v113-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1911,23 +1900,25 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "동기 Spring 요청의 Hibernate SELECT에서 실제 JDBC 바인드 인덱스와 타입을 보고 복합 키 컬렉션 N+1을 검토한다.",
+      "scope": "Hibernate의 SQL 위치·타입 및 Spring MVC Callable 초기 요청·워커·재디스패치의 N+1을 표시한다. 선택한 팩터리와 JPA 속성의 실제 변환기·물리 열·JDBC 바인더를 확인한다.",
       "remaining": [
-        "Spring MVC 비동기 작업의 연결과 다른 관찰 범위가 남아 있다."
+        "등록 엔티티 그래프와 실제 조회의 원인 연결이 남아 있다. DeferredResult와 타임아웃은 부분 관측으로 표시한다."
       ],
       "verification": {
-        "state": "v0.111-installed-coverage",
+        "state": "v0.113-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 바인드가 있는 SELECT 여섯 개와 타입을 확인했다. 값은 공개하지 않았으며 지연 조회, fetch join, 명시 반복을 구분했다.",
+        "testedScope": "두 DB에서 Callable SELECT 여섯 개와 바인딩을 확인하고 동시 일반 요청을 구분했다. 실제 속성 변환의 BIGINT·VARCHAR 바인드와 검사 전후 SQL·변환기 호출 횟수를 대조했다.",
         "publicEvidence": [
           "src/jpa/fetch-performance.js",
-          "test/hibernate-composite-fetch-host.js",
-          "test/workflows-v111-host.js"
+          "src/jpa/attribute-binding.js",
+          "test/hibernate-async-fetch-host.js",
+          "test/jpa-attribute-binding-host.js",
+          "test/workflows-v113-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2265,8 +2256,8 @@
       "verification": {
         "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.111.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2417,8 +2408,8 @@
       "verification": {
         "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.111.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2937,8 +2928,8 @@
       "verification": {
         "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.111.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3431,8 +3422,8 @@
       "verification": {
         "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.111.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6424,38 +6415,33 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "3680b936619fbcaef95599fbe59f361461376a4733694bd94b1e596570aceb62",
-    "sourceManifestSha256": "774583d90f508adfa78ba8f0e0e0bb28aba20026b17a0f640c70c5453a662b47",
+    "vsixSha256": "cbdf8c78d7f4fcc202ba4e5b3380e692349476e22305ddb48224fb4ed96dae04",
+    "sourceManifestSha256": "08220a3f46daaeeac72d5928c409dd84c4f56dff2fb54b091f88449d775b7334",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 7
+        "featureGroups": 4
       },
       {
         "engine": "mariadb",
-        "featureGroups": 7
+        "featureGroups": 4
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-040",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-115",
+      "id": "IDEA-043",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 2003,
-    "pass": 1837,
+    "tests": 2010,
+    "pass": 1842,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 166,
+    "skipped": 168,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

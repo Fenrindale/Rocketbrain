@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.111.0",
+  "version": "0.113.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -296,6 +296,7 @@
       { "command": "rocketbrain.java.moveMember", "title": "Move Java Static Member", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.moveInstanceMethod", "title": "Move Java Instance Method", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.movePackage", "title": "Move Java Package", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.renamePackage", "title": "Rename Java Package", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == java" },
       { "command": "rocketbrain.java.reviewTypeRename", "title": "Review Public Java Type Rename", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.changeSignature", "title": "Change Java Signature", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.safeDelete", "title": "Safe Delete Java Declaration", "category": "Rocketbrain" },
@@ -311,6 +312,7 @@
       { "command": "rocketbrain.java.fileStructure", "title": "File Structure", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.previewFormatting", "title": "Preview Java Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == java" },
       { "command": "rocketbrain.kotlinEditor.previewFormatting", "title": "Preview Kotlin Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
+      { "command": "rocketbrain.kotlinEditor.inspectJavaNullability", "title": "Inspect Java Nullability in Kotlin", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlinEditor.previewRename", "title": "Review Kotlin Symbol Rename", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.java.goToSuperMethod", "title": "Go to Java Super Method", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
       { "command": "rocketbrain.java.insertLiveTemplate", "title": "Insert Java Live Template", "category": "Rocketbrain", "enablement": "editorLangId == java && isWorkspaceTrusted" },
@@ -752,6 +754,12 @@
         "command": "rocketbrain.jpa.observer.inspectPerformance",
         "title": "Inspect Hibernate Fetch Activity",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.inspectAttributeBinding",
+        "title": "Inspect JPA Attribute Binding",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.jpa.observer.validate",

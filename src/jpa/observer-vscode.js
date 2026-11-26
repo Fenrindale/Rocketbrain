@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const {ObserverClient,ObserverError,emptySnapshot} = require('./observer-client');
 const {validateRuntimeUrl} = require('../spring/runtime-client');
 const {summarizePerformance} = require('./fetch-performance');
+const { attributeTarget, observedPropertyPaths } = require('./attribute-binding');
 const {registerJpaConsole} = require('./console-vscode');
 const {registerSecurityTrace} = require('../spring/security-trace-vscode');
 const {registerReactiveSecurityTrace} = require('../spring/reactive-security-trace-vscode');
@@ -74,6 +75,44 @@ function registerObserver(context,vscode,output,{source}) {
     const entities=model.entities.map(entity=>({fqn:entity.fqn,sourceTable:entity.table?.physicalName||null,sourceState:entity.status,observations:observed.factories.flatMap(factory=>(factory.entities||[]).filter(e=>e.javaType===entity.fqn).map(e=>({factoryId:factory.id,entity:e})))}));
     return {mode:'source-and-runtime-side-by-side',observedAt:observed.fetchedAt,sourceRevision:model.revision,sameSourceRevisionVerified:false,entities};
   }
+  async function inspectAttributeBinding(selection) {
+    trusted();
+    if (!client) throw new ObserverError('NOT_CONNECTED','Connect a JPA observer first.');
+    if (current.capabilities?.attributeBinding !== true) {
+      throw new ObserverError('UNSUPPORTED_ATTRIBUTE_BINDING','Start the application with an observer that supports attribute binding inspection.');
+    }
+    const candidate = client, frame = generation;
+    function assertCurrent() {
+      trusted();
+      if (client !== candidate || generation !== frame) throw new ObserverError('STALE','The observer connection changed during inspection.');
+    }
+    let target = selection && attributeTarget(selection);
+    if (!target) {
+      if (!current.factories.length) throw new ObserverError('NO_JPA_FACTORY','Refresh the snapshot after the JPA factory has started.');
+      const factory = await vscode.window.showQuickPick(current.factories.map(value => ({
+        label: value.factoryName || value.id, description: [value.id, value.provider, value.version].filter(Boolean).join(' · '), value
+      })), { title: 'Select a Running JPA Factory' });
+      if (!factory) return;
+      assertCurrent();
+      const entity = await vscode.window.showQuickPick((factory.value.entities || []).filter(value => value.javaType).map(value => ({
+        label: value.javaType, description: value.table, value
+      })), { title: 'Select a Managed JPA Entity' });
+      if (!entity) return;
+      assertCurrent();
+      const attribute = await vscode.window.showQuickPick(observedPropertyPaths(entity.value).map(([label, description]) => ({
+        label, description
+      })), { title: 'Inspect JPA Attribute Binding', placeHolder: 'Choose an attribute to inspect its declared type and runtime mapping' });
+      if (!attribute) return;
+      assertCurrent();
+      target = attributeTarget({ factoryId: factory.value.id, entityJavaType: entity.value.javaType, propertyPath: attribute.label });
+    }
+    const report = await candidate.inspectAttributeBinding(target);
+    assertCurrent();
+    const document = await vscode.workspace.openTextDocument({ language: 'json', content: JSON.stringify(report, null, 2) + '\n' });
+    assertCurrent();
+    await vscode.window.showTextDocument(document, { preview: true });
+    return report;
+  }
   async function inspectPerformance(requestId){
     const frame=generation;
     await refresh();
@@ -93,7 +132,9 @@ function registerObserver(context,vscode,output,{source}) {
         description:item.selectCount+' SELECTs · '+item.suspects.length+' collection fetch finding(s)'+
           (report.bindObservation ? ' · '+item.selects.reduce((count,select)=>count+
             (select.binds?.positions.filter(position=>position.jdbcType).length||0),0)+' typed binds' : ''),
-        detail:item.startedAt,request:item
+        detail:[item.startedAt,
+          item.dispatch==='spring-mvc-callable' ? 'Spring MVC Callable' : item.dispatch==='unattributed' ? 'Unattributed dispatch' : undefined,
+          item.coverage==='partial' ? 'Partial observation' : undefined].filter(Boolean).join(' · '),request:item
       })),{title:'Hibernate Fetch Activity'});
       if(!selected)return;
       trusted();
@@ -135,7 +176,8 @@ function registerObserver(context,vscode,output,{source}) {
   command('rocketbrain.jpa.observer.connect',()=>connect());command('rocketbrain.jpa.observer.refresh',refresh);command('rocketbrain.jpa.observer.disconnect',disconnect);command('rocketbrain.jpa.observer.validate',validateSelection);
   command('rocketbrain.jpa.observer.inspect',async()=>{const report={snapshot:snapshot(),comparison:await compareSource()};const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(report,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return report;});
   command('rocketbrain.jpa.observer.inspectPerformance',inspectPerformance);
+  command('rocketbrain.jpa.observer.inspectAttributeBinding',inspectAttributeBinding);
   command('rocketbrain.jpa.observer.prepare',async()=>{trusted();const result=await require('./observer-install').prepareObserver(context,vscode);const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(result,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return result;});
-  return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
+  return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,inspectAttributeBinding,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
 }
 module.exports={registerObserver};

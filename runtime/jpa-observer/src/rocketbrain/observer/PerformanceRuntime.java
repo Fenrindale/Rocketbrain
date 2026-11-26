@@ -11,7 +11,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +29,10 @@ public final class PerformanceRuntime {
     private static final Pattern JAVA_NAME=Pattern.compile("[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)+");
     private static final Pattern ROUTE=Pattern.compile("/[A-Za-z0-9/_{}*.:\\-]{0,159}");
     private static final Set<String> METHODS=Set.of("GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS","TRACE");
+    private static final String ASYNC_MANAGER_ATTRIBUTE =
+        "org.springframework.web.context.request.async.WebAsyncManager.WEB_ASYNC_MANAGER";
+    private static final long ASYNC_LIMIT = TimeUnit.SECONDS.toNanos(30);
+    private static final List<Capture> asyncRequests = new ArrayList<>();
     private static final ThreadLocal<Request> request=new ThreadLocal<>();
     private static final Semaphore active=new Semaphore(32);
     private static final AtomicLong sequence=new AtomicLong(), omittedRequests=new AtomicLong();
@@ -43,19 +46,49 @@ public final class PerformanceRuntime {
 
     private record CollectionLoad(Object session,String role,String entity,String owner,String table,List<String> keyColumns,int key){}
     private static final CollectionLoad opaque=new CollectionLoad(null,null,null,null,null,null,0);
-    private static final class Request {
-        final Object servletRequest;
+    private enum Phase {
+        INITIAL("request"), WORKER("callable-worker"), REDISPATCH("async-dispatch"), OTHER("unattributed-dispatch");
+        final String label;
+        Phase(String label){this.label=label;}
+    }
+
+    private static final class Capture {
         final long id=sequence.incrementAndGet(), started=System.nanoTime();
         final String startedAt=Instant.now().toString();
         final List<Map<String,Object>> selects=new ArrayList<>();
-        final IdentityHashMap<Object,Integer> sessions=new IdentityHashMap<>();
+        final List<WeakReference<Object>> sessions=new ArrayList<>();
         final Map<ByteBuffer,Integer> keys=new HashMap<>();
+        byte[] salt;
+        int omitted;
+
+        // These lifecycle fields belong to the asyncRequests lock.
+        WeakReference<Object> manager;
+        String method, route;
+        boolean initialDone, workerStarted, workerEnded, workerReturned, workerResult, resultAccepted;
+        boolean redispatchStarted, redispatchDone, incomplete;
+        volatile boolean finished;
+
+        int sessionId(Object session){
+            for(int i=0;i<sessions.size();i++){
+                if(sessions.get(i).get()==session)return i+1;
+            }
+            sessions.add(new WeakReference<>(session));
+            return sessions.size();
+        }
+    }
+
+    private static final class Request {
+        final Capture capture;
+        final Phase phase;
+        final Object servletRequest;
         final ArrayDeque<CollectionLoad> loads=new ArrayDeque<>();
         final ArrayDeque<BindFrame> bindFrames=new ArrayDeque<>();
-        byte[] salt;
-        int depth=1, loadDepth, selectDepth, omitted;
-        boolean incomplete;
-        Request(Object servletRequest){this.servletRequest=servletRequest;}
+        int depth=1, loadDepth, selectDepth;
+        boolean incomplete, callableReturned;
+        Request(Capture capture,Phase phase,Object servletRequest){
+            this.capture=capture;this.phase=phase;this.servletRequest=servletRequest;
+        }
+        boolean balanced(){return !incomplete&&depth==1&&loadDepth==0&&selectDepth==0;}
     }
     private record Binding(String jdbcType,String source){}
     private static final class BindFrame {
@@ -64,13 +97,34 @@ public final class PerformanceRuntime {
         boolean binding,bound,outOfRange;
     }
 
+    private static String dispatcher(Object servletRequest){
+        Object value=HibernateAccess.optional(servletRequest,"getDispatcherType");
+        return value instanceof Enum<?> enumeration?enumeration.name():"";
+    }
+
+    private static Object asyncManager(Object servletRequest){
+        return HibernateAccess.optional(servletRequest,"getAttribute",ASYNC_MANAGER_ATTRIBUTE);
+    }
+
     public static void requestStart(Object servletRequest){
         try{
             if(!enabled)return;
             Request prior=request.get();
             if(prior!=null){prior.depth++;prior.incomplete=true;return;}
+            String dispatch=dispatcher(servletRequest);
+            Object manager=dispatch.equals("ASYNC")?asyncManager(servletRequest):null;
+            synchronized(asyncRequests){
+                retireAsyncRequests();
+                Capture linked=findAsync(manager);
+                if(linked!=null&&linked.resultAccepted&&!linked.redispatchStarted){
+                    linked.redispatchStarted=true;
+                    request.set(new Request(linked,Phase.REDISPATCH,servletRequest));
+                    return;
+                }
+                if(linked!=null)linked.incomplete=true;
+            }
             if(!active.tryAcquire()){omittedRequests.incrementAndGet();return;}
-            try{request.set(new Request(servletRequest));}
+            try{request.set(new Request(new Capture(),dispatch.equals("REQUEST")?Phase.INITIAL:Phase.OTHER,servletRequest));}
             catch(Throwable failure){active.release();omittedRequests.incrementAndGet();}
         }catch(Throwable ignored){}
     }
@@ -78,32 +132,149 @@ public final class PerformanceRuntime {
     public static void requestEnd(boolean success){
         try{
             Request current=request.get();
-            if(current==null||--current.depth>0)return;
+            if(current==null)return;
+            if(current.depth>1){current.depth--;return;}
             request.remove();
-            try{
-                if(current.selects.isEmpty()&&current.omitted==0)return;
-                Map<String,Object> sample=new LinkedHashMap<>();
-                sample.put("id",current.id);sample.put("startedAt",current.startedAt);
-                sample.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(System.nanoTime()-current.started));
-                Object dispatch=HibernateAccess.optional(current.servletRequest,"getDispatcherType");
-                boolean direct=dispatch instanceof Enum<?> value&&value.name().equals("REQUEST");
-                sample.put("complete",success&&!current.incomplete&&current.omitted==0&&current.loadDepth==0&&current.selectDepth==0&&direct&&
-                    Boolean.FALSE.equals(HibernateAccess.optional(current.servletRequest,"isAsyncStarted")));
-                Object method=HibernateAccess.optional(current.servletRequest,"getMethod");
-                if(method instanceof String value&&METHODS.contains(value))sample.put("method",value);
-                Object route=HibernateAccess.optional(current.servletRequest,"getAttribute","org.springframework.web.servlet.HandlerMapping.bestMatchingPattern");
-                if(route!=null&&route.getClass().getName().equals("org.springframework.web.util.pattern.PathPattern")){
-                    route=HibernateAccess.optional(route,"getPatternString");
+            Capture capture=current.capture;
+            Object method=HibernateAccess.optional(current.servletRequest,"getMethod");
+            Object route=HibernateAccess.optional(current.servletRequest,"getAttribute","org.springframework.web.servlet.HandlerMapping.bestMatchingPattern");
+            if(route!=null&&route.getClass().getName().equals("org.springframework.web.util.pattern.PathPattern")){
+                route=HibernateAccess.optional(route,"getPatternString");
+            }
+            var async=HibernateAccess.optional(current.servletRequest,"isAsyncStarted");
+            synchronized(asyncRequests){
+                if(capture.finished)return;
+                if(capture.method==null&&method instanceof String value&&METHODS.contains(value))capture.method=value;
+                if(capture.route==null&&route instanceof String value&&ROUTE.matcher(value).matches())capture.route=value;
+                capture.incomplete|=!success||!current.balanced();
+                if(current.phase==Phase.INITIAL&&capture.manager!=null){
+                    capture.initialDone=true;
+                    finishWhenReady(capture);
+                }else if(current.phase==Phase.REDISPATCH){
+                    capture.redispatchDone=true;
+                    capture.incomplete|=!Boolean.FALSE.equals(async);
+                    finishWhenReady(capture);
+                }else{
+                    boolean synchronous=current.phase==Phase.INITIAL&&Boolean.FALSE.equals(async);
+                    publish(capture,synchronous?"synchronous":"unattributed",synchronous);
                 }
-                if(route instanceof String value&&ROUTE.matcher(value).matches())sample.put("route",value);
-                sample.put("selects",List.copyOf(current.selects));
-                sample.put("omittedSelects",current.omitted);
+            }
+        }catch(Throwable ignored){}
+    }
+
+    public static void callableScheduled(Object manager){
+        try{
+            Request current=request.get();
+            // Check the original Spring-managed request instead of propagating every executor task.
+            if(current==null||current.phase!=Phase.INITIAL||asyncManager(current.servletRequest)!=manager)return;
+            synchronized(asyncRequests){
+                Capture capture=current.capture;
+                if(capture.finished)return;
+                if(capture.manager!=null||findAsync(manager)!=null){capture.incomplete=true;return;}
+                capture.manager=new WeakReference<>(manager);
+                asyncRequests.add(capture);
+            }
+        }catch(Throwable ignored){}
+    }
+
+    public static Object callableWorkerStart(Object manager){
+        try{
+            synchronized(asyncRequests){
+                retireAsyncRequests();
+                Capture capture=findAsync(manager);
+                if(capture==null||capture.resultAccepted)return null;
+                if(request.get()!=null||capture.workerStarted){capture.incomplete=true;return null;}
+                capture.workerStarted=true;
+                Request worker=new Request(capture,Phase.WORKER,null);
+                request.set(worker);
+                return worker;
+            }
+        }catch(Throwable ignored){return null;}
+    }
+
+    public static void callableReturned(Object token){
+        try{if(token instanceof Request worker&&request.get()==worker)worker.callableReturned=true;}
+        catch(Throwable ignored){}
+    }
+
+    public static void callableAccepted(Object manager,Object result){
+        try{
+            synchronized(asyncRequests){
+                Capture capture=findAsync(manager);
+                if(capture==null)return;
+                Request current=request.get();
+                capture.resultAccepted=true;
+                capture.workerResult=current!=null&&current.capture==capture&&current.phase==Phase.WORKER&&
+                    current.callableReturned&&!(result instanceof Throwable);
+            }
+        }catch(Throwable ignored){}
+    }
+
+    public static void callableWorkerEnd(Object token,boolean success){
+        try{
+            if(!(token instanceof Request worker)||request.get()!=worker)return;
+            request.remove();
+            synchronized(asyncRequests){
+                Capture capture=worker.capture;
+                if(capture.finished)return;
+                capture.workerEnded=true;
+                capture.workerReturned=success&&worker.callableReturned&&worker.balanced();
+                finishWhenReady(capture);
+            }
+        }catch(Throwable ignored){}
+    }
+
+    private static Capture findAsync(Object manager){
+        if(manager!=null)for(Capture capture:asyncRequests)if(capture.manager.get()==manager)return capture;
+        return null;
+    }
+
+    private static void finishWhenReady(Capture capture){
+        if(capture.initialDone&&capture.redispatchDone&&capture.resultAccepted&&(!capture.workerResult||capture.workerEnded)){
+            publish(capture,"spring-mvc-callable",capture.workerResult&&capture.workerReturned);
+        }
+    }
+
+    private static void retireAsyncRequests(){
+        // A weak manager identity and a hard age bound cover requests with no redispatch.
+        long now=System.nanoTime();
+        for(int i=asyncRequests.size()-1;i>=0;i--){
+            Capture capture=asyncRequests.get(i);
+            if(capture.manager.get()==null||now-capture.started>=ASYNC_LIMIT)publish(capture,"spring-mvc-callable",false);
+        }
+    }
+
+    private static void publish(Capture capture,String dispatch,boolean complete){
+        if(capture.finished)return;
+        asyncRequests.remove(capture);
+        try{
+            synchronized(capture){
+                capture.finished=true;
+                if(capture.selects.isEmpty()&&capture.omitted==0)return;
+                Map<String,Object> sample=new LinkedHashMap<>();
+                sample.put("id",capture.id);sample.put("startedAt",capture.startedAt);
+                sample.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(System.nanoTime()-capture.started));
+                sample.put("dispatch",dispatch);
+                sample.put("complete",complete&&!capture.incomplete&&capture.omitted==0);
+                if(capture.method!=null)sample.put("method",capture.method);
+                if(capture.route!=null)sample.put("route",capture.route);
+                sample.put("selects",List.copyOf(capture.selects));
+                sample.put("omittedSelects",capture.omitted);
                 synchronized(samples){
                     if(samples.size()>=MAX_REQUESTS){samples.removeFirst();omittedRequests.incrementAndGet();}
                     samples.addLast(Map.copyOf(sample));
                 }
-            }finally{active.release();}
-        }catch(Throwable ignored){}
+            }
+        }finally{
+            synchronized(capture){
+                // Timed-out application work may still hold its frame.
+                capture.selects.clear();
+                capture.sessions.clear();
+                capture.keys.clear();
+                capture.salt=null;
+            }
+            active.release();
+        }
     }
 
     private static String safeName(Object value,Pattern pattern){
@@ -113,7 +284,7 @@ public final class PerformanceRuntime {
     public static void collectionStart(Object loader,Object key,Object session){
         try{
             Request current=request.get();
-            if(current==null)return;
+            if(current==null||current.capture.finished)return;
             if(++current.loadDepth>MAX_LOADERS){current.incomplete=true;return;}
             CollectionLoad load=opaque;
             try{
@@ -127,7 +298,7 @@ public final class PerformanceRuntime {
                 String child=safeName(HibernateAccess.optional(collection,"getTableName"),SQL_NAME);
                 List<String> columns=keyColumns(collection);
                 Object[] values=keyParts(collection,key,columns.size());
-                int id=values==null?0:keyOrdinal(current,values);
+                int id=values==null?0:keyOrdinal(current.capture,values);
                 if(session!=null&&role!=null&&entity!=null&&parent!=null&&child!=null&&!columns.isEmpty()&&id>0){
                     load=new CollectionLoad(session,role,entity,parent,child,columns,id);
                 }
@@ -172,26 +343,29 @@ public final class PerformanceRuntime {
         digest.update(value);
     }
 
-    private static int keyOrdinal(Request current,Object[] parts)throws Exception{
-        if(current.salt==null){current.salt=new byte[24];random.nextBytes(current.salt);}
-        MessageDigest digest=MessageDigest.getInstance("SHA-256");
-        digest.update(current.salt);
-        digest.update((byte)parts.length);
-        for(Object key:parts){
-            String rendered;
-            if(key instanceof String text&&text.length()<=128)rendered=text;
-            else if(key instanceof Long||key instanceof Integer||key instanceof Short||key instanceof Byte||key instanceof UUID)rendered=key.toString();
-            else return 0;
-            appendPart(digest,key.getClass().getName().getBytes(StandardCharsets.US_ASCII));
-            appendPart(digest,rendered.getBytes(StandardCharsets.UTF_8));
+    private static int keyOrdinal(Capture capture,Object[] parts)throws Exception{
+        synchronized(capture){
+            if(capture.finished)return 0;
+            if(capture.salt==null){capture.salt=new byte[24];random.nextBytes(capture.salt);}
+            MessageDigest digest=MessageDigest.getInstance("SHA-256");
+            digest.update(capture.salt);
+            digest.update((byte)parts.length);
+            for(Object key:parts){
+                String rendered;
+                if(key instanceof String text&&text.length()<=128)rendered=text;
+                else if(key instanceof Long||key instanceof Integer||key instanceof Short||key instanceof Byte||key instanceof UUID)rendered=key.toString();
+                else return 0;
+                appendPart(digest,key.getClass().getName().getBytes(StandardCharsets.US_ASCII));
+                appendPart(digest,rendered.getBytes(StandardCharsets.UTF_8));
+            }
+            ByteBuffer fingerprint=ByteBuffer.wrap(digest.digest());
+            Integer previous=capture.keys.get(fingerprint);
+            if(previous!=null)return previous;
+            if(capture.keys.size()>=MAX_SELECTS)return 0;
+            int ordinal=capture.keys.size()+1;
+            capture.keys.put(fingerprint,ordinal);
+            return ordinal;
         }
-        ByteBuffer fingerprint=ByteBuffer.wrap(digest.digest());
-        Integer previous=current.keys.get(fingerprint);
-        if(previous!=null)return previous;
-        if(current.keys.size()>=MAX_SELECTS)return 0;
-        int ordinal=current.keys.size()+1;
-        current.keys.put(fingerprint,ordinal);
-        return ordinal;
     }
 
     private static String shape(String raw){
@@ -210,7 +384,7 @@ public final class PerformanceRuntime {
     public static void selectStart(){
         try{
             Request current=request.get();
-            if(current!=null&&++current.selectDepth<=MAX_LOADERS)current.bindFrames.push(new BindFrame());
+            if(current!=null&&!current.capture.finished&&++current.selectDepth<=MAX_LOADERS)current.bindFrames.push(new BindFrame());
         }catch(Throwable ignored){}
     }
 
@@ -299,36 +473,43 @@ public final class PerformanceRuntime {
             Request current=request.get();
             if(current==null)return;
             Object session=HibernateAccess.optional(context,"getSession");
-            if(session==null||current.selects.size()>=MAX_SELECTS){current.omitted++;return;}
             String sql=shape(raw);
-            if(sql==null){current.omitted++;return;}
-            int id=current.selects.size()+1,
-                sessionId=current.sessions.computeIfAbsent(session,key->current.sessions.size()+1);
-            Map<String,Object> entry=new LinkedHashMap<>();
-            entry.put("sequence",id);entry.put("session",sessionId);entry.put("sql",sql);
-            entry.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(elapsed));
-            entry.put("binds",bindings(current,statement,sql));
-            CollectionLoad load=current.loads.peek();
-            if(current.loadDepth>0&&(load==null||load.session!=session)){
-                current.incomplete=true;
-            }else if(load!=null){
-                Map<String,Object> identified=new LinkedHashMap<>();
-                identified.put("role",load.role);identified.put("entity",load.entity);identified.put("ownerTable",load.owner);
-                identified.put("childTable",load.table);identified.put("key",load.key);
-                if(load.keyColumns.size()==1)identified.put("keyColumn",load.keyColumns.get(0));
-                else identified.put("keyColumns",load.keyColumns);
-                entry.put("collection",Map.copyOf(identified));
+            Capture capture=current.capture;
+            synchronized(capture){
+                if(capture.finished)return;
+                if(session==null||sql==null||capture.selects.size()>=MAX_SELECTS){capture.omitted++;return;}
+                int id=capture.selects.size()+1, sessionId=capture.sessionId(session);
+                Map<String,Object> entry=new LinkedHashMap<>();
+                entry.put("sequence",id);entry.put("session",sessionId);entry.put("sql",sql);
+                entry.put("phase",current.phase.label);
+                entry.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(elapsed));
+                entry.put("binds",bindings(current,statement,sql));
+                CollectionLoad load=current.loads.peek();
+                if(current.loadDepth>0&&(load==null||load.session!=session)){
+                    current.incomplete=true;
+                }else if(load!=null){
+                    Map<String,Object> identified=new LinkedHashMap<>();
+                    identified.put("role",load.role);identified.put("entity",load.entity);identified.put("ownerTable",load.owner);
+                    identified.put("childTable",load.table);identified.put("key",load.key);
+                    if(load.keyColumns.size()==1)identified.put("keyColumn",load.keyColumns.get(0));
+                    else identified.put("keyColumns",load.keyColumns);
+                    entry.put("collection",Map.copyOf(identified));
+                }
+                capture.selects.add(Map.copyOf(entry));
             }
-            current.selects.add(Map.copyOf(entry));
         }catch(Throwable ignored){}
     }
 
     static Map<String,Object> snapshot(List<String> instruments){
+        synchronized(asyncRequests){retireAsyncRequests();}
         List<Map<String,Object>> retained;
         synchronized(samples){retained=List.copyOf(samples);}
-        return Map.of("enabled",enabled,"scope","synchronous-spring-mvc",
-            "available",enabled&&instruments.containsAll(List.of(PerformanceTransformer.MVC,PerformanceTransformer.LOADER,PerformanceTransformer.JDBC)),
-            "maxRequests",MAX_REQUESTS,"maxSelectsPerRequest",MAX_SELECTS,"omittedRequests",omittedRequests.get(),
-            "requests",retained,"rawBindValuesRetained",false,"observerExecutedSql",false,"bindObservation","hibernate-jdbc-setters-v1");
+        return Map.ofEntries(
+            Map.entry("enabled",enabled),Map.entry("scope","spring-mvc"),
+            Map.entry("available",enabled&&instruments.containsAll(List.of(PerformanceTransformer.MVC,PerformanceTransformer.LOADER,PerformanceTransformer.JDBC))),
+            Map.entry("maxRequests",MAX_REQUESTS),Map.entry("maxSelectsPerRequest",MAX_SELECTS),Map.entry("omittedRequests",omittedRequests.get()),
+            Map.entry("requests",retained),Map.entry("rawBindValuesRetained",false),Map.entry("observerExecutedSql",false),
+            Map.entry("bindObservation","hibernate-jdbc-setters-v1"),
+            Map.entry("callableObservation",enabled&&instruments.contains(PerformanceTransformer.ASYNC)));
     }
 }

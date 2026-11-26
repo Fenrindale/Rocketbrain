@@ -22,6 +22,8 @@ async function build() {
   fs.writeFileSync(path.join(__dirname,'../src/java/signature-compiler-sources.json'),JSON.stringify(signatureSources));
   const kotlinWindowsPath=fs.readFileSync(path.join(__dirname,'../runtime/kotlin-editor/KtlspWindowsPath.java'),'utf8');
   fs.writeFileSync(path.join(__dirname,'../src/java/kotlin-editor-windows-source.json'),JSON.stringify(kotlinWindowsPath));
+  const interopNullability=fs.readFileSync(path.join(__dirname,'../runtime/kotlin-editor/InteropNullability.java'),'utf8');
+  fs.writeFileSync(path.join(__dirname,'../src/java/kotlin-nullability-source.json'),JSON.stringify(interopNullability));
   const coroutineProbe=fs.readFileSync(path.join(__dirname,'../runtime/kotlin-coroutines/CoroutineProbeAgent.java'),'utf8');
   fs.writeFileSync(path.join(__dirname,'../src/java/kotlin-coroutine-probe-source.json'),JSON.stringify(coroutineProbe));
   const quarkusStarter = path.join(__dirname,'../test/fixtures/java/quarkus');
