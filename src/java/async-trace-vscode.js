@@ -49,6 +49,11 @@ function registerJavaAsyncTrace(context, vscode, debuggerController) {
   function source(frame) { trusted(); return openJavaFrame(vscode, frame); }
 
   const labels = frame => frame.type + '.' + frame.method;
+  const threadName = thread => {
+    const id = '#' + thread.id;
+    const name = thread.name ? thread.name + (thread.virtual === undefined ? '' : ' ' + id) : 'Thread ' + id;
+    return name + (thread.virtual === undefined ? '' : ' (' + (thread.virtual ? 'virtual' : 'platform') + ')');
+  };
   const subscriptions = [];
   function command(name, action) {
     subscriptions.push(vscode.commands.registerCommand(name, async () => {
@@ -80,11 +85,12 @@ function registerJavaAsyncTrace(context, vscode, debuggerController) {
     if (!file) return undefined;
     const report = await inspect(file, session);
     const items = report.chain.flatMap(task => [{
-      label: task.label + ' (#' + task.id + ')', kind: vscode.QuickPickItemKind.Separator
+      label: task.label + ' (#' + task.id + ')' + (task.handoff === 'virtual-thread' ? ' · virtual thread launch' : ''),
+      kind: vscode.QuickPickItemKind.Separator
     }, ...task.submissionFrames.map(frame => ({
       label: labels(frame),
       description: frame.file && frame.line > 0 ? frame.file + ':' + frame.line : undefined,
-      detail: 'Submitted by ' + task.submittedBy.name + (task.worker ? ' · running on ' + task.worker.name : ''),
+      detail: 'Submitted by ' + threadName(task.submittedBy) + (task.worker ? ' · worker ' + threadName(task.worker) : ''),
       frame
     }))]);
     const choice = await vscode.window.showQuickPick(items, {
