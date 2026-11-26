@@ -13,6 +13,16 @@ const boundedArgument = value => typeof value === 'string' && value.length <= 40
 const identity = stat => [stat.dev, stat.ino, stat.size, stat.mode, stat.ctimeMs, stat.mtimeMs].join(':');
 const changed = () => Error('The reviewed Kotlin/Native source, executable or GDB changed. Review again.');
 
+function nativeArgumentList(args) {
+  if (!Array.isArray(args) || args.length > 32 ||
+      !args.every(value => boundedArgument(value) && value.length && !/[\s"'\\]/u.test(value))) {
+    throw Error('Use up to 32 nonempty arguments without whitespace, quotes or backslashes for shellless GDB.');
+  }
+  const text = args.join(' ');
+  if (Buffer.byteLength(text) > 16384) throw Error('Use up to 16 KiB of shellless GDB arguments.');
+  return text;
+}
+
 function physicalFile(file, limit) {
   if (!boundedArgument(file) || !path.isAbsolute(file)) throw Error('Choose a physical local file.');
   const stat = fs.lstatSync(file);
@@ -70,9 +80,7 @@ function kotlinNativeElf(bytes) {
 
 function reviewKotlinNativeLaunch({ workspace, program, source, args = [], gdb = '/usr/bin/gdb' }) {
   if (process.platform !== 'linux' || process.arch !== 'x64') throw Error('Kotlin/Native debugging requires a Linux x64 extension host.');
-  if (!Array.isArray(args) || args.length > 32 || !args.every(boundedArgument) || JSON.stringify(args).length > 16384) {
-    throw Error('Use up to 32 literal application arguments within 16 KiB.');
-  }
+  nativeArgumentList(args);
   const root = fs.realpathSync(workspace);
   const programStat = physicalFile(program, programLimit), sourceStat = physicalFile(source, sourceLimit);
   const output = path.dirname(program), module = path.resolve(output, '../../../..');
@@ -116,4 +124,4 @@ function reviewKotlinNativeLaunch({ workspace, program, source, args = [], gdb =
     validate, validateInferior });
 }
 
-module.exports = { kotlinNativeElf, reviewKotlinNativeLaunch, boundedArgument };
+module.exports = { kotlinNativeElf, reviewKotlinNativeLaunch, boundedArgument, nativeArgumentList };

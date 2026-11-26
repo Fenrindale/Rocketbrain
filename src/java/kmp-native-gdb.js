@@ -3,7 +3,7 @@
 const { EventEmitter } = require('node:events');
 const { spawn } = require('node:child_process');
 const { StringDecoder } = require('node:string_decoder');
-const { boundedArgument } = require('./kmp-native-review');
+const { boundedArgument, nativeArgumentList } = require('./kmp-native-review');
 
 const lineLimit = 256 * 1024;
 const quote = text => {
@@ -164,10 +164,11 @@ function startNativeGdb(review) {
   }
 
   async function initialize() {
+    const argumentsText = nativeArgumentList(review.args);
     for (const command of ['-gdb-set confirm off', '-gdb-set pagination off', '-gdb-set mi-async on', '-gdb-set disable-randomization off',
       '-gdb-set startup-with-shell off', '-gdb-set may-call-functions off', '-gdb-set debuginfod enabled off',
       '-inferior-tty-set /dev/null', '-file-exec-and-symbols ' + quote(review.program),
-      '-exec-arguments' + review.args.map(value => ' ' + quote(value)).join('')]) {
+      '-gdb-set args' + (argumentsText ? ' ' + argumentsText : '')]) {
       const result = await request(command).catch(error => {
         throw new Error('GDB could not configure ' + command.split(' ').slice(0, command.startsWith('-gdb-set') ? 2 : 1).join(' ') + '.', { cause: error });
       });

@@ -60,7 +60,7 @@ private fun springProbe(port: Int, engine: String): String = memScoped {
 
 @OptIn(ExperimentalForeignApi::class)
 fun main(args: Array<String>) {
-    check(args.size == 3)
+    check(args.size == 4 && args[3] == "--rocketbrain-fixture=literal*")
     val port = args[0].toInt()
     val engine = args[1]
     check(port in 1..65535 && (engine == "mysql" || engine == "mariadb"))
