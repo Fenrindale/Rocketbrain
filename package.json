@@ -2652,11 +2652,11 @@
               },
               "testModule": {
                 "type": "string",
-                "description": "JPMS name of the separately compiled JUnit Jupiter 6.0.3 test module."
+                "description": "JPMS name of a separately compiled Jupiter 6.0.3 or TestNG 7.11.0 test module. For TestNG, declare requires org.testng and open test packages to org.testng in module-info.java."
               },
               "modulePath": {
                 "type": "array",
-                "description": "Named test and application output directories plus individual dependency JARs, including the modular Jupiter 6.0.3 runtime artifacts.",
+                "description": "Named test and application output directories plus dependency JARs for one selected framework. Use the official Jupiter 6.0.3 artifacts or TestNG 7.11.0 with JCommander 1.83 and SLF4J 2.0.16.",
                 "items": {
                   "type": "string"
                 }
@@ -2675,6 +2675,7 @@
               },
               "classDirectories": {
                 "type": "array",
+                "description": "Compiled application outputs for coverage. Named TestNG whole-run coverage uses application module directories already on the reviewed module path.",
                 "items": {
                   "type": "string"
                 }
@@ -2695,7 +2696,7 @@
                   "testng"
                 ],
                 "default": "junit",
-                "description": "JUnit Platform or TestNG runner; automatic resolution creates separate profiles when both are imported."
+                "description": "JUnit Platform or TestNG runner. A named module profile selects one framework. For ordinary class paths, automatic resolution creates separate profiles when both are imported."
               }
             }
           }

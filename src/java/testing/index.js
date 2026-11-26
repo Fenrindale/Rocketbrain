@@ -6,7 +6,7 @@ const {parseJavaFile,rangeAt}=require('../../spring/java');
 const {provisionTestingRuntime,validateJavaHome,execute,TestingError,ARTIFACTS,sha}=require('./provision');
 const {parseCoverageXml,snapshotInputs,locateSource}=require('./coverage');
 const {readBranchEvidence,applyBranchEvidence}=require('./coverage-branches');
-const {MAX_MODULE_ENTRIES,validateModuleConfig,prepareModulePath}=require('./module-path');
+const {MAX_MODULE_ENTRIES,validateModuleConfig,validateModuleCoverage,prepareModulePath}=require('./module-path');
 const LIMITS={classPaths:1000,roots:40,selectors:2000,events:50000,eventBytes:32*1024*1024};
 const isCancelled=value=>Boolean(value?.isCancellationRequested||value?.aborted);
 function absolute(value,label,directory=false){if(typeof value!=='string'||!path.isAbsolute(value)||value.length>4096||value.includes('\0'))throw new TestingError('INVALID_CONFIG',label+' must be an absolute local path.');const real=fs.realpathSync(value);if(directory&&!fs.statSync(real).isDirectory())throw new TestingError('INVALID_CONFIG',label+' must be a directory.');return real;}
@@ -115,7 +115,7 @@ async function perform(mode,input,options={}){
   if(excluded.some(item=>item.kind!=='uniqueId'||config.framework==='junit'&&/\[(?:dynamic-test|test-template-invocation):/.test(item.value)))throw new TestingError('UNSUPPORTED_EXCLUSION','Exclude discovered containers/tests by unique ID. Select positive JUnit dynamic invocation IDs instead of excluding late-created invocations.');
   if(isCancelled(options.cancellation))return {state:'cancelled',tests:[],events:[],summary:{},output:'',coverage:undefined};
   const perTestCoverage=mode==='run'&&options.perTestCoverage===true,coverage=mode==='run'&&(options.coverage===true||perTestCoverage);
-  if(config.testModule&&coverage)throw new TestingError('MODULE_TEST_COVERAGE','Use Run or Debug for the named module test profile.');
+  if(coverage)validateModuleCoverage(config,perTestCoverage);
   if(coverage&&!config.classDirectories.length)throw new TestingError('COVERAGE_INPUT','Provide compiled main class directories for coverage.');
   if(config.testModule&&mode==='run'&&(typeof options.moduleReview!=='string'||!/^[a-f0-9]{64}$/.test(options.moduleReview))){
     throw new TestingError('MODULE_TEST_REVIEW_REQUIRED','Discover the current named tests before running them.');
@@ -156,17 +156,18 @@ async function perform(mode,input,options={}){
   }finally{clearInterval(poll);externalCancellation?.dispose();await moduleSession?.dispose();}
   const moduleEvents=events.filter(event=>event.type==='module'),moduleEvidence=moduleEvents[0];
   if(moduleEvents.length&&(moduleEvents.length!==1||!moduleSession||moduleEvidence.sequence!==1||
-      moduleEvidence.name!==config.testModule||moduleEvidence.engine!=='junit-jupiter'||
-      moduleEvidence.version!==config.runtime.junitVersion||moduleEvidence.entries!==config.modulePath.length)||
+      moduleEvidence.name!==config.testModule||moduleEvidence.engine!==moduleSession.engine.id||
+      moduleEvidence.version!==moduleSession.engine.version||moduleEvidence.entries!==config.modulePath.length)||
       moduleSession&&!moduleEvidence&&events.some(event=>event.type==='complete')){
     throw new TestingError('EVENT_PROTOCOL','Named test boot-layer evidence is invalid.');
   }
   if(moduleSession&&!execution.cancelled&&moduleEvidence)
     for(const event of events)try{options.onEvent?.(structuredClone(event));}catch{}
   const complete=events.findLast(event=>event.type==='complete'),state=execution.cancelled?'cancelled':execution.timedOut||!complete||errors.length||![0,1].includes(execution.code)?'errored':'completed';
-  const branchEvidence=coverage&&state!=='cancelled'?await readBranchEvidence(config,directory,before,options.cancellation):null;
+  const coverageConfig=moduleSession?{...config,env:childEnv}:config;
+  const branchEvidence=coverage&&state!=='cancelled'?await readBranchEvidence(coverageConfig,directory,before,options.cancellation):null;
   let intervals;if(perTestCoverage&&state!=='cancelled')try{intervals=await intervalCoverage(config,directory,cp,events,before,options,branchEvidence);}catch(error){intervals={state:'unavailable',scope:'test-execution-interval',tests:[],warnings:[error.message],concurrencyObserved:false};}
-  const result={state,mode,tests:[...tests.values()],events,summary:complete?.summary||{},output:execution.output,exitCode:execution.code,timedOut:execution.timedOut,cancelled:execution.cancelled,runDirectory:directory,eventsFile,errors,...(coverage?{coverage:state==='cancelled'?{state:'unavailable',scope:'run',perTestCoverage:false,files:[],warnings:['Run was cancelled; complete coverage was not established.']}:await generateCoverage(config,directory,before,options.onOutput,options.cancellation,branchEvidence)}:{})};
+  const result={state,mode,tests:[...tests.values()],events,summary:complete?.summary||{},output:execution.output,exitCode:execution.code,timedOut:execution.timedOut,cancelled:execution.cancelled,runDirectory:directory,eventsFile,errors,...(coverage?{coverage:state==='cancelled'?{state:'unavailable',scope:'run',perTestCoverage:false,files:[],warnings:['Run was cancelled; complete coverage was not established.']}:await generateCoverage(coverageConfig,directory,before,options.onOutput,options.cancellation,branchEvidence)}:{})};
   if(moduleEvidence)result.module={name:moduleEvidence.name,engine:moduleEvidence.engine,version:moduleEvidence.version,
     entries:moduleEvidence.entries,fingerprint:moduleSession.fingerprint};
   if(perTestCoverage){result.perTestCoverage=intervals||{state:'unavailable',scope:'test-execution-interval',tests:[],warnings:['Run was cancelled.'],concurrencyObserved:false};if(result.coverage)result.coverage.perTestCoverage=['available','partial'].includes(result.perTestCoverage.state);}

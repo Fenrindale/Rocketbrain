@@ -11,30 +11,12 @@ import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.junit.platform.engine.DiscoverySelector;
-import org.junit.platform.engine.FilterResult;
-import org.junit.platform.engine.TestExecutionResult;
-import org.junit.platform.engine.discovery.ClassNameFilter;
-import org.junit.platform.engine.discovery.DiscoverySelectors;
-import org.junit.platform.engine.support.descriptor.ClassSource;
-import org.junit.platform.engine.support.descriptor.FileSource;
-import org.junit.platform.engine.support.descriptor.MethodSource;
-import org.junit.platform.launcher.Launcher;
-import org.junit.platform.launcher.PostDiscoveryFilter;
-import org.junit.platform.launcher.TestExecutionListener;
-import org.junit.platform.launcher.TestIdentifier;
-import org.junit.platform.launcher.TestPlan;
-import org.junit.platform.launcher.core.LauncherDiscoveryRequestBuilder;
-import org.junit.platform.launcher.core.LauncherFactory;
-import org.junit.platform.launcher.listeners.SummaryGeneratingListener;
-import org.opentest4j.AssertionFailedError;
 
 /** Owned adapter using the public JUnit Platform launcher and JaCoCo runtime API. */
 public final class Runner {
@@ -43,7 +25,6 @@ public final class Runner {
     private static String nonce;
     private static long sequence;
     private static final AtomicBoolean coverageSaved = new AtomicBoolean();
-    private static int nodeCount;
     private Runner() {}
 
     public static void main(String[] args) throws Exception {
@@ -60,103 +41,24 @@ public final class Runner {
             String mode = value("mode");
             if (!Set.of("discover", "run").contains(mode)) throw new IllegalArgumentException("Unsupported execution mode.");
             NamedModuleTests named = value("testModule").isEmpty() ? null : NamedModuleTests.open();
-            if(value("framework").equals("testng")){exit=TestNgAdapter.execute(mode);}else{
-            var builder = LauncherDiscoveryRequestBuilder.request().filters(ClassNameFilter.includeClassNamePatterns(".*"));
-            List<DiscoverySelector> selectors = new ArrayList<>();
-            for (int index = 0; index < number("selectorCount"); index++) {
-                String kind = value("selector." + index + ".kind"), text = value("selector." + index + ".value");
-                selectors.add(named==null?switch (kind) {
-                    case "uniqueId" -> DiscoverySelectors.selectUniqueId(text);
-                    case "class" -> DiscoverySelectors.selectClass(text);
-                    case "method" -> DiscoverySelectors.selectMethod(text);
-                    case "package" -> DiscoverySelectors.selectPackage(text);
-                    default -> throw new IllegalArgumentException("Unsupported selector.");
-                }:named.selector(kind,text));
-            }
-            if (selectors.isEmpty() && named!=null) selectors.add(named.all());
-            if (selectors.isEmpty()) {
-                java.util.HashSet<Path> roots = new java.util.HashSet<>();
-                for (int index = 0; index < number("rootCount"); index++) roots.add(Path.of(URI.create(value("root." + index))));
-                selectors.addAll(DiscoverySelectors.selectClasspathRoots(roots));
-            }
-            builder.selectors(selectors);
-            List<String> excluded = new ArrayList<>();
-            for (int index = 0; index < number("excludeCount"); index++) {
-                String id=value("exclude." + index);
-                if(named!=null)named.verifyId(id);
-                excluded.add(id);
-            }
-            if (!excluded.isEmpty()) builder.filters((PostDiscoveryFilter) descriptor -> FilterResult.includedIf(excluded.stream().noneMatch(id -> descriptor.getUniqueId().toString().equals(id) || descriptor.getUniqueId().toString().startsWith(id + "/"))));
-            for (int index = 0; index < number("parameterCount"); index++) builder.configurationParameter(value("parameter." + index + ".key"), value("parameter." + index + ".value"));
-            if(PerTestCoverage.enabled())builder.configurationParameter("junit.jupiter.execution.parallel.enabled","false");
-            Launcher launcher = named==null?LauncherFactory.create():named.launcher();
-            TestPlan plan = launcher.discover(builder.build());
-            if(named!=null)named.verifyPlan(plan);
-            for (TestIdentifier root : plan.getRoots()) emitPlan(plan, root);
-            emit(map("type", "plan", "testsFound", plan.countTestIdentifiers(TestIdentifier::isTest)));
-            if (mode.equals("run")) {
-                SummaryGeneratingListener summary = new SummaryGeneratingListener();
-                launcher.execute(plan, summary, new TestExecutionListener() {
-                    @Override public void dynamicTestRegistered(TestIdentifier test) { if (++nodeCount > 10000) throw new IllegalStateException("Test node limit exceeded."); emit(withTest("dynamic", test)); }
-                    @Override public void executionStarted(TestIdentifier test) { if(test.isTest())PerTestCoverage.start(test.getUniqueId());emit(withTest("started", test)); }
-                    @Override public void executionSkipped(TestIdentifier test, String reason) { Map<String,Object> event=withTest("skipped", test);event.put("reason", cut(reason, 4096));emit(event); }
-                    @Override public void executionFinished(TestIdentifier test, TestExecutionResult result) {
-                        Map<String,Object> event=withTest("finished", test);event.put("state", switch(result.getStatus()) { case SUCCESSFUL -> "passed"; case FAILED -> "failed"; case ABORTED -> "aborted"; });
-                        result.getThrowable().ifPresent(error -> event.put("error", failure(error)));emit(event);if(test.isTest())PerTestCoverage.finish(test.getUniqueId());
-                    }
-                });
-                var result = summary.getSummary();
-                Map<String,Object> totals=map("testsFound",result.getTestsFoundCount(),"testsStarted",result.getTestsStartedCount(),"testsSucceeded",result.getTestsSucceededCount(),"testsFailed",result.getTestsFailedCount(),"testsSkipped",result.getTestsSkippedCount(),"testsAborted",result.getTestsAbortedCount(),"containersFailed",result.getContainersFailedCount(),"durationMs",Math.max(0,result.getTimeFinished()-result.getTimeStarted()));
-                PerTestCoverage.finishSuite();saveCoverage();
-                emit(map("type","complete","summary",totals));
-                if(result.getTestsFailedCount()>0 || result.getContainersFailedCount()>0) exit=1;
-            } else emit(map("type","complete","summary",map("testsFound",plan.countTestIdentifiers(TestIdentifier::isTest))));
-            }
+            exit=value("framework").equals("testng")?TestNgAdapter.execute(mode,named):new JupiterAdapter(named).execute(mode);
         } catch (Throwable error) {
             emit(map("type","error","error",failure(error)));exit=2;
         } finally { saveCoverage(); events.close(); }
         System.exit(exit);
     }
-    private static void emitPlan(TestPlan plan, TestIdentifier test) {
-        if (++nodeCount > 10000) throw new IllegalStateException("Test discovery node limit exceeded.");
-        emit(withTest("discovered",test));
-        plan.getChildren(test).stream().sorted(Comparator.comparing(TestIdentifier::getUniqueId)).forEach(child -> emitPlan(plan,child));
-    }
-    private static Map<String,Object> withTest(String type, TestIdentifier test) { return map("type",type,"test",describe(test)); }
-    private static Map<String,Object> describe(TestIdentifier test) {
-        Map<String,Object> result=map("id",test.getUniqueId(),"parentId",test.getParentId().orElse(null),"label",cut(test.getDisplayName(),4096),"kind",test.isTest()?"test":"container","tags",test.getTags().stream().map(tag->tag.getName()).toList());
-        test.getSource().ifPresent(source -> {
-            if(source instanceof MethodSource method) {result.put("className",method.getClassName());result.put("methodName",method.getMethodName());result.put("methodParameterTypes",method.getMethodParameterTypes());}
-            else if(source instanceof ClassSource type) {result.put("className",type.getClassName());type.getPosition().ifPresent(position->result.put("line",position.getLine()-1));}
-            else if(source instanceof FileSource file) {result.put("uri",file.getUri().toString());file.getPosition().ifPresent(position->result.put("line",position.getLine()-1));}
-        });return result;
-    }
     static Map<String,Object> failure(Throwable error) {
         StringWriter stack=new StringWriter();error.printStackTrace(new PrintWriter(stack));
         Map<String,Object> result=map("className",error.getClass().getName(),"message",cut(error.getMessage(),16384),"stack",cut(stack.toString(),65536));
-        comparison(error,result);
+        if (value("testModule").isEmpty() || !value("framework").equals("testng")) JupiterAdapter.comparison(error,result);
+        if (error.getClass() == AssertionError.class) testNgTextComparison(error,result);
         result.put("frames",java.util.Arrays.stream(error.getStackTrace()).limit(128).map(frame->map("className",frame.getClassName(),"methodName",frame.getMethodName(),"fileName",frame.getFileName(),"line",Math.max(0,frame.getLineNumber()-1))).toList());return result;
     }
-    private static void comparison(Throwable error,Map<String,Object> result) {
-        if(error instanceof AssertionFailedError assertion&&assertion.isExpectedDefined()&&assertion.isActualDefined()) {
-            var expected=assertion.getExpected();var actual=assertion.getActual();
-            setComparison(result,"opentest4j",expected.getStringRepresentation(),actual.getStringRepresentation(),
-                expected.getType()==null?"null":expected.getType().getTypeName(),actual.getType()==null?"null":actual.getType().getTypeName());
-        } else if(error.getClass().getName().equals("org.junit.ComparisonFailure") && error.getClass()==org.junit.ComparisonFailure.class) {
-            var failure=(org.junit.ComparisonFailure)error;
-            setStringComparison(result,"junit4",failure.getExpected(),failure.getActual());
-        } else if(error.getClass().getName().equals("junit.framework.ComparisonFailure") && error.getClass()==junit.framework.ComparisonFailure.class) {
-            var failure=(junit.framework.ComparisonFailure)error;
-            setStringComparison(result,"junit3",failure.getExpected(),failure.getActual());
-        } else if(error.getClass()==AssertionError.class) {
-            testNgTextComparison(error,result);
-        }
-    }
-    private static void setStringComparison(Map<String,Object> result,String kind,String expected,String actual) {
+    static void setStringComparison(Map<String,Object> result,String kind,String expected,String actual) {
         setComparison(result,kind,expected==null?"null":expected,actual==null?"null":actual,
             expected==null?"null":"java.lang.String",actual==null?"null":"java.lang.String");
     }
-    private static void setComparison(Map<String,Object> result,String kind,String expected,String actual,String expectedType,String actualType) {
+    static void setComparison(Map<String,Object> result,String kind,String expected,String actual,String expectedType,String actualType) {
         if(expected==null||actual==null||expected.length()>16384||actual.length()>16384)return;
         result.put("comparisonKind",kind);result.put("expected",expected);result.put("actual",actual);
         if(expectedType!=null)result.put("expectedType",cut(expectedType,512));
@@ -187,7 +89,7 @@ public final class Runner {
     }
     static String value(String key) { return new String(Base64.getDecoder().decode(settings.getProperty(key,"")), StandardCharsets.UTF_8); }
     static int number(String key) {String value=value(key);return value.isEmpty()?0:Integer.parseInt(value);}
-    private static String cut(String value,int max) {return value==null?"":value.substring(0,Math.min(value.length(),max));}
+    static String cut(String value,int max) {return value==null?"":value.substring(0,Math.min(value.length(),max));}
     static Map<String,Object> map(Object... values) {Map<String,Object> result=new LinkedHashMap<>();for(int i=0;i<values.length;i+=2)result.put((String)values[i],values[i+1]);return result;}
     static synchronized void emit(Map<String,Object> event) {
         if(events==null)return;event.put("nonce",nonce);event.put("sequence",++sequence);event.put("at",Instant.now().toString());

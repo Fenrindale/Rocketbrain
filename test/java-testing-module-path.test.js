@@ -48,7 +48,8 @@ test('a Gradle black-box module discovers and runs reviewed Jupiter tests on Spr
   assert.deepEqual(imported.testClassPaths, profile.testClassPaths);
   const [configured] = await resolveTestingProjects(context, vscode, java, [profile]);
   assert.equal(configured.testModule, testModule);
-  await assert.rejects(resolveTestingProjects(context, vscode, java, [{ ...profile, framework: 'testng' }]), /Jupiter module path/);
+  const [testNgProfile] = await resolveTestingProjects(context, vscode, java, [{ ...profile, framework: 'testng' }]);
+  assert.equal(testNgProfile.framework, 'testng');
   const project = { ...imported, runtimePath, env };
   await assert.rejects(runTests(project), { code: 'MODULE_TEST_REVIEW_REQUIRED' });
   await assert.rejects(discoverTests({ ...project, framework: 'testng' }), { code: 'UNSUPPORTED_MODULE_TEST_ENGINE' });

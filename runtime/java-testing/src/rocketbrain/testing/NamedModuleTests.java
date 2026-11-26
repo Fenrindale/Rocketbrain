@@ -5,35 +5,36 @@ import java.lang.module.ModuleReference;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.HashSet;
-import java.util.ServiceLoader;
-import org.junit.platform.engine.DiscoverySelector;
-import org.junit.platform.engine.TestEngine;
-import org.junit.platform.engine.UniqueId;
-import org.junit.platform.engine.discovery.DiscoverySelectors;
-import org.junit.platform.engine.support.descriptor.ClassSource;
-import org.junit.platform.engine.support.descriptor.MethodSource;
-import org.junit.platform.launcher.Launcher;
-import org.junit.platform.launcher.TestIdentifier;
-import org.junit.platform.launcher.TestPlan;
-import org.junit.platform.launcher.core.LauncherConfig;
-import org.junit.platform.launcher.core.LauncherFactory;
 
-/** Validates the boot layer and limits Jupiter to one explicitly named test module. */
+/** Checks the actual boot-layer artifacts before either framework can discover tests. */
 final class NamedModuleTests {
-    private static final String ENGINE_MODULE = "org.junit.jupiter.engine";
-    private static final String ENGINE_ID = "junit-jupiter";
+    private static final String PLATFORM_SERVICE = "org.junit.platform.engine.TestEngine";
     private final Module testModule;
+    private final Module engineModule;
+    private final Path output;
 
-    private NamedModuleTests(Module testModule) {
+    private NamedModuleTests(Module testModule, Module engineModule, Path output) {
         this.testModule = testModule;
+        this.engineModule = engineModule;
+        this.output = output;
     }
 
     static NamedModuleTests open() {
+        boolean testng = Runner.value("framework").equals("testng");
+        String engineId = testng ? "testng" : "junit-jupiter";
+        String engineName = testng ? "org.testng" : "org.junit.jupiter.engine";
+        String apiName = testng ? engineName : "org.junit.jupiter.api";
+        String version = testng ? "7.11.0" : "6.0.3";
         String name = Runner.value("testModule");
         var layer = ModuleLayer.boot();
         var module = layer.findModule(name).orElseThrow(() -> new IllegalArgumentException("The selected named test module was not resolved."));
-        if (!module.isNamed() || module.getDescriptor().isAutomatic() || !module.canRead(org.junit.jupiter.api.Test.class.getModule())) {
-            throw new IllegalArgumentException("Compile the selected named test output with a read on Jupiter's API.");
+        var api = layer.findModule(apiName).orElseThrow(() -> new IllegalArgumentException("The selected named test framework API was not resolved."));
+        if (!module.isNamed() || module.getDescriptor().isAutomatic() || !module.canRead(api)) {
+            throw new IllegalArgumentException(testng ? "Declare requires org.testng in the selected named test module."
+                : "Compile the selected named test output with a read on Jupiter's API.");
+        }
+        if (testng && module.getDescriptor().requires().stream().noneMatch(edge -> edge.name().equals(apiName))) {
+            throw new IllegalArgumentException("Declare requires org.testng in the selected named test module.");
         }
         int count = Runner.number("moduleEntries");
         if (count < 1 || count > 80) throw new IllegalArgumentException("Invalid named test module path.");
@@ -44,27 +45,28 @@ final class NamedModuleTests {
             boolean optional = Boolean.parseBoolean(Runner.value("module." + index + ".optional"));
             var choices = ModuleFinder.of(file).findAll();
             if (choices.size() != 1) throw new IllegalArgumentException("Every reviewed path entry must describe exactly one module.");
-            var reference = choices.iterator().next();
-            var description = reference.descriptor();
+            var description = choices.iterator().next().descriptor();
             String found = description.name();
             if (!names.add(found)) throw new IllegalArgumentException("The named test path contains a duplicate module.");
-            if ((!expected.isEmpty() && !expected.equals(found)) ||
-                    (found.startsWith("org.junit.") || found.equals("junit") || found.equals("org.testng") ||
-                         found.equals("org.opentest4j") || found.equals("org.apiguardian.api")) && expected.isEmpty() ||
-                    !found.equals(ENGINE_MODULE) && description.provides().stream()
-                        .anyMatch(provider -> provider.service().equals(TestEngine.class.getName()))) {
+            boolean framework = found.startsWith("org.junit.") || found.equals("junit") || found.equals("org.testng") ||
+                found.equals("org.opentest4j") || found.equals("org.apiguardian.api");
+            boolean foreignProvider = !found.equals(engineName) && description.provides().stream()
+                .anyMatch(provider -> provider.service().equals(PLATFORM_SERVICE));
+            if ((!expected.isEmpty() && !expected.equals(found)) || (framework && expected.isEmpty()) || foreignProvider) {
                 throw new IllegalArgumentException("The named test path contains an unreviewed test engine or framework module.");
             }
             if (!expected.isEmpty() && (!optional || layer.findModule(found).isPresent())) {
                 checkLocation(layer, found, file);
             }
         }
-        checkLocation(layer, name, Path.of(URI.create(Runner.value("testModuleOutput"))));
-        var engine = layer.findModule(ENGINE_MODULE).orElseThrow();
-        String version = engine.getDescriptor().rawVersion().orElse("");
-        if (!"6.0.3".equals(version)) throw new IllegalArgumentException("The boot layer did not resolve the pinned Jupiter 6.0.3 engine.");
-        Runner.emit(Runner.map("type", "module", "name", name, "engine", ENGINE_ID, "version", version, "entries", count));
-        return new NamedModuleTests(module);
+        Path output = Path.of(URI.create(Runner.value("testModuleOutput")));
+        checkLocation(layer, name, output);
+        var engine = layer.findModule(engineName).orElseThrow(() -> new IllegalArgumentException("The named test engine is unavailable."));
+        if (!version.equals(engine.getDescriptor().rawVersion().orElse(""))) {
+            throw new IllegalArgumentException("The boot layer did not resolve the pinned named test engine.");
+        }
+        Runner.emit(Runner.map("type", "module", "name", name, "engine", engineId, "version", version, "entries", count));
+        return new NamedModuleTests(module, engine, output);
     }
 
     private static void checkLocation(ModuleLayer layer, String name, Path file) {
@@ -75,70 +77,11 @@ final class NamedModuleTests {
         }
     }
 
-    Launcher launcher() {
-        var engines = ServiceLoader.load(ModuleLayer.boot(), TestEngine.class).stream()
-            .filter(provider -> ENGINE_MODULE.equals(provider.type().getModule().getName()))
-            .toList();
-        if (engines.size() != 1) throw new IllegalArgumentException("The pinned named Jupiter engine was not uniquely resolved.");
-        TestEngine engine = engines.getFirst().get();
-        if (!ENGINE_ID.equals(engine.getId())) throw new IllegalArgumentException("The resolved named test engine differs from Jupiter.");
-        return LauncherFactory.create(LauncherConfig.builder()
-            .enableTestEngineAutoRegistration(false).enableLauncherDiscoveryListenerAutoRegistration(false)
-            .enableLauncherSessionListenerAutoRegistration(false).enablePostDiscoveryFilterAutoRegistration(false)
-            .enableTestExecutionListenerAutoRegistration(false).addTestEngines(engine).build());
-    }
+    String name() { return testModule.getName(); }
+    Path output() { return output; }
+    boolean containsPackage(String name) { return testModule.getPackages().contains(name); }
 
-    DiscoverySelector all() {
-        return DiscoverySelectors.selectModule(testModule.getName());
-    }
-
-    DiscoverySelector selector(String kind, String text) {
-        return switch (kind) {
-            case "class" -> DiscoverySelectors.selectClass(requireClass(text));
-            case "method" -> {
-                int separator = text.indexOf('#');
-                if (separator < 1) throw new IllegalArgumentException("Select a method declared inside the named test module.");
-                requireClass(text.substring(0, separator));
-                yield DiscoverySelectors.selectMethod(text);
-            }
-            case "package" -> {
-                if (!testModule.getPackages().contains(text)) throw new IllegalArgumentException("The selected package is outside the named test module.");
-                yield DiscoverySelectors.selectPackage(text);
-            }
-            case "uniqueId" -> {
-                UniqueId identifier = verifyId(text);
-                yield identifier.getSegments().size() == 1 ? all() : DiscoverySelectors.selectUniqueId(identifier);
-            }
-            default -> throw new IllegalArgumentException("Unsupported named test selector.");
-        };
-    }
-
-    UniqueId verifyId(String text) {
-        var identifier = UniqueId.parse(text);
-        if (!identifier.getEngineId().filter(ENGINE_ID::equals).isPresent()) {
-            throw new IllegalArgumentException("The selected test does not belong to the pinned named Jupiter engine.");
-        }
-        if (identifier.getSegments().size() > 1) {
-            var first = identifier.getSegments().get(1);
-            if (!"class".equals(first.getType())) throw new IllegalArgumentException("Select a class in the reviewed named test module.");
-            requireClass(first.getValue());
-        }
-        return identifier;
-    }
-
-    void verifyPlan(TestPlan plan) {
-        for (TestIdentifier root : plan.getRoots()) {
-            verifyId(root.getUniqueId());
-            for (TestIdentifier item : plan.getDescendants(root)) {
-                var source = item.getSource().orElse(null);
-                if (source instanceof ClassSource type) requireClass(type.getClassName());
-                else if (source instanceof MethodSource method) requireClass(method.getClassName());
-                else if (item.isTest()) throw new IllegalArgumentException("A discovered test has no class in the selected named module.");
-            }
-        }
-    }
-
-    private Class<?> requireClass(String name) {
+    Class<?> requireClass(String name) {
         if (name.length() > 512 || !name.matches("[\\p{L}_$][\\p{L}\\p{N}_$.]*")) {
             throw new IllegalArgumentException("Invalid Java test class.");
         }
@@ -147,5 +90,18 @@ final class NamedModuleTests {
             throw new IllegalArgumentException("The selected Java test is outside " + testModule.getName() + ".");
         }
         return type;
+    }
+
+    void requireTestNgAccess(Class<?> type) {
+        if (type.getModule() != testModule) {
+            throw new IllegalArgumentException("The selected TestNG method or provider is outside " + testModule.getName() + ".");
+        }
+        String packageName = type.getPackageName();
+        var descriptor = testModule.getDescriptor();
+        boolean declaredOpen = descriptor.isOpen() || descriptor.opens().stream().anyMatch(edge ->
+            edge.source().equals(packageName) && (!edge.isQualified() || edge.targets().contains(engineModule.getName())));
+        if (!declaredOpen || !testModule.isOpen(packageName, engineModule)) {
+            throw new IllegalArgumentException("Declare opens " + packageName + " to org.testng in module-info.java.");
+        }
     }
 }

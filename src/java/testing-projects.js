@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path');
 const {fileURLToPath}=require('node:url');
 const {lexJava}=require('../spring/java');
-const {namedModule,modularJUnitJar}=require('./testing/module-path');
+const {namedModule,namedFramework,modularTestingJar}=require('./testing/module-path');
 const inside=(root,file)=>{const relative=path.relative(root,file);return !relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative);};
 function localPath(value,root){if(typeof value!=='string'||!value||value.includes('\0'))throw new Error('Use local test project paths.');return value.startsWith('file:')?fileURLToPath(value):path.resolve(root,value);}
 const isNamedOutput=file=>fs.statSync(file,{throwIfNoEntry:false})?.isDirectory()&&
@@ -39,8 +39,8 @@ async function resolveTestingProjects(context,vscode,java,supplied,cancellation)
     };
     const classPath=paths('classPath'),modulePath=paths('modulePath');
     if(!classPath.length&&!modulePath.length)throw new Error('A Java test project requires a compiled test classpath or module path. Build the project first.');
-    if((modulePath.length||raw.testModule!==undefined)&&(!modulePath.length||!namedModule(raw.testModule)||classPath.length||raw.framework==='testng')){
-      throw new Error('A named Java test project requires a testModule, a Jupiter module path and one compiled test module output.');
+    if((modulePath.length||raw.testModule!==undefined)&&(!modulePath.length||!namedModule(raw.testModule)||classPath.length)){
+      throw new Error('A named Java test project requires a testModule, a framework module path and one compiled test module output.');
     }
     const result={...raw,id:raw.id||workspace+(raw.testModule?'::module:'+raw.testModule:''),label:raw.label||path.basename(workspace)+(raw.testModule?' · '+raw.testModule:''),workspace,javaHome:localPath(raw.javaHome||javaConfig.get('javaHome'),workspace),runtimePath:raw.runtimePath||runtimePath,classPath,modulePath,testClassPaths:paths('testClassPaths'),sourceRoots:paths('sourceRoots'),classDirectories:paths('classDirectories'),outputRoot:raw.outputRoot||path.join(context.globalStorageUri.fsPath,'java-test-results')};
     if(raw.testModule&&(result.testClassPaths.length!==1||!result.sourceRoots.length))throw new Error('Name the compiled test module output and saved source roots in the test profile.');
@@ -69,12 +69,15 @@ async function resolveTestingProjects(context,vscode,java,supplied,cancellation)
     const testModule=declaredTestModule(workspace);
     if(testModule||configuredModulePath.length){
       const modulePath=[...new Set([...configuredModulePath,...classPath])];
+      const framework=namedFramework(modulePath);
       const conventionalTestOutputs=['target/test-classes','build/classes/java/test','bin/test'].map(file=>path.resolve(workspace,file));
       const testClassPaths=conventionalTestOutputs.filter(file=>modulePath.some(entry=>path.relative(file,entry)==='')&&isNamedOutput(file));
-      if(!testModule||testClassPaths.length!==1||classPath.some(file=>!isNamedOutput(file)&&!modularJUnitJar(file)&&!configuredModulePath.includes(file))){
+      if(!testModule||!framework||testClassPaths.length!==1||classPath.some(file=>!isNamedOutput(file)&&!modularTestingJar(file)&&!configuredModulePath.includes(file))){
         throw new Error('The imported test paths do not identify a separate named test module. Configure a reviewed module-path test profile.');
       }
-      projects.push(normalize({...base,framework:'junit',classPath:[],modulePath,testModule,testClassPaths},workspace));
+      const classDirectories=modulePath.filter(file=>inside(workspace,file)&&isNamedOutput(file)&&
+        !testClassPaths.some(output=>path.relative(output,file)===''));
+      projects.push(normalize({...base,framework,classPath:[],modulePath,testModule,testClassPaths,classDirectories},workspace));
       continue;
     }
     const hasTestNG=classPath.some(file=>/^testng-\d[^\\/]*\.jar$/i.test(path.basename(file))),hasJUnit=classPath.some(file=>/^(?:junit(?:-jupiter|-vintage|-platform)?[^\\/]*|junit)\d*[-.][^\\/]*\.jar$/i.test(path.basename(file)));

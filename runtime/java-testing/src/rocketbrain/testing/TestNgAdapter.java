@@ -17,6 +17,8 @@ import org.testng.xml.*;
 /** TestNG adapter. Discovery describes compiled annotations; actual cases come from listeners. */
 final class TestNgAdapter implements ITestListener, IConfigurationListener, IDataProviderInterceptor, IAnnotationTransformer, IMethodInterceptor {
     private static final String ENGINE="[engine:testng]";
+    private static final String TEST_ID = "\\[engine:testng\\](?:/\\[class:[A-Za-z0-9_-]+\\](?:/\\[method:[A-Za-z0-9_-]+\\](?:/\\[invocation:(?:[a-f0-9]{64}|unresolved-[0-9]+):[0-9]+\\](?:/\\[(?:factory:[0-9]+|rows:[a-f0-9]{64}:[0-9]+)\\])?)?)?)?";
+    private final NamedModuleTests named;
     private final Map<String,Class<?>> classes=new LinkedHashMap<>();
     private final Map<String,Method> methods=new LinkedHashMap<>();
     private final Set<String> allowedMethods=new LinkedHashSet<>(),wholeMethods=new HashSet<>(),selectedInvocations=new LinkedHashSet<>(),excluded=new LinkedHashSet<>(),published=new HashSet<>(),seen=new HashSet<>();
@@ -31,18 +33,38 @@ final class TestNgAdapter implements ITestListener, IConfigurationListener, IDat
     private static final String RESULT_ATTEMPT="rocketbrain.attempt";
     private record ProviderRow(Object[] values,String fingerprint,int index,int occurrence) {}
     private record SubmittedRow(String fingerprint,int index,int occurrence,String id) {}
-    private TestNgAdapter(){}
-    static int execute(String mode) throws Exception {return new TestNgAdapter().perform(mode);}
+    private TestNgAdapter(NamedModuleTests named) { this.named = named; }
+    static int execute(String mode, NamedModuleTests named) throws Exception {return new TestNgAdapter(named).perform(mode);}
     private int perform(String mode) throws Exception {
-        for(int i=0;i<Runner.number("excludeCount");i++)excluded.add(Runner.value("exclude."+i));
+        for(int i=0;i<Runner.number("excludeCount");i++){
+            String id=Runner.value("exclude."+i);
+            if(named!=null){
+                checkId(id);
+                if(!id.equals(ENGINE))named.requireClass(decodePart(id,"class"));
+            }
+            excluded.add(id);
+        }
         List<String> requestedClasses=new ArrayList<>(),packages=new ArrayList<>(),methodRequests=new ArrayList<>(),uids=new ArrayList<>();Set<String> wholeClasses=new HashSet<>();boolean allSelected=Runner.number("selectorCount")==0;
         for(int i=0;i<Runner.number("selectorCount");i++){
             String kind=Runner.value("selector."+i+".kind"),value=Runner.value("selector."+i+".value");
-            switch(kind){case "class"->{requestedClasses.add(value);wholeClasses.add(value);}case "package"->packages.add(value);case "method"->{requestedClasses.add(value.split("#",2)[0]);methodRequests.add(value);}case "uniqueId"->{if(!value.matches("\\[engine:testng\\](?:/\\[class:[A-Za-z0-9_-]+\\](?:/\\[method:[A-Za-z0-9_-]+\\](?:/\\[invocation:(?:[a-f0-9]{64}|unresolved-[0-9]+):[0-9]+\\](?:/\\[(?:factory:[0-9]+|rows:[a-f0-9]{64}:[0-9]+)\\])?)?)?)?"))throw new IllegalArgumentException("Unsupported or malformed exact TestNG identity; select a current class/method/test ID.");if(value.equals(ENGINE))allSelected=true;else{uids.add(value);requestedClasses.add(decodePart(value,"class"));}}default->throw new IllegalArgumentException("Unsupported TestNG selector.");}
+            switch(kind){
+                case "class" -> {requestedClasses.add(value);wholeClasses.add(value);}
+                case "package" -> {
+                    if(named!=null&&!named.containsPackage(value))throw new IllegalArgumentException("The selected package is outside the named test module.");
+                    packages.add(value);
+                }
+                case "method" -> {requestedClasses.add(value.split("#",2)[0]);methodRequests.add(value);}
+                case "uniqueId" -> {
+                    checkId(value);
+                    if(value.equals(ENGINE))allSelected=true;
+                    else{uids.add(value);requestedClasses.add(decodePart(value,"class"));}
+                }
+                default -> throw new IllegalArgumentException("Unsupported TestNG selector.");
+            }
         }
         if(allSelected||!packages.isEmpty()){
             for(int i=0;i<Runner.number("rootCount");i++){
-                Path root=Path.of(URI.create(Runner.value("root."+i)));
+                Path root=named==null?Path.of(URI.create(Runner.value("root."+i))):named.output();
                 try(var files=Files.walk(root)){for(Path file:files.filter(Files::isRegularFile).filter(p->p.toString().endsWith(".class")).limit(20001).toList()){
                     if(classes.size()>10000)throw new IllegalArgumentException("TestNG class scan limit.");
                     String name=root.relativize(file).toString().replace('\\','.').replace('/','.').replaceAll("\\.class$","");
@@ -51,7 +73,20 @@ final class TestNgAdapter implements ITestListener, IConfigurationListener, IDat
                 }}
             }
         }for(String name:new LinkedHashSet<>(requestedClasses))addClass(name,true);
-        for(Class<?> type:classes.values()){if(hasFactory(type))factories.add(type.getName());for(Method method:allMethods(type))if(isTest(type,method))methods.put(methodId(type,method),method);}
+        for(Class<?> type:classes.values()){
+            if(hasFactory(type)){
+                if(named!=null)throw new IllegalArgumentException("Named TestNG profiles currently require directly declared test classes instead of @Factory.");
+                factories.add(type.getName());
+            }
+            for(Method method:allMethods(type))if(isTest(type,method)){
+                if(named!=null){
+                    named.requireTestNgAccess(method.getDeclaringClass());
+                    Class<?> provider=testAnnotation(type,method).dataProviderClass();
+                    if(provider!=null&&provider!=Object.class)named.requireTestNgAccess(provider);
+                }
+                methods.put(methodId(type,method),method);
+            }
+        }
         for(var entry:methods.entrySet()){
             String id=entry.getKey();Method method=entry.getValue();Class<?> owner=classes.get(decodePart(id,"class"));
             boolean whole=allSelected||wholeClasses.contains(owner.getName())||packages.stream().anyMatch(p->owner.getName().startsWith(p+"."));
@@ -99,7 +134,16 @@ final class TestNgAdapter implements ITestListener, IConfigurationListener, IDat
         return failed>0||configurationFailures>0?1:0;
     }
     private void addClass(String name,boolean required) throws Exception {
-        try{Class<?> type=Class.forName(name,false,Thread.currentThread().getContextClassLoader());if(!type.isInterface()&&!Modifier.isAbstract(type.getModifiers())&&(hasFactory(type)||allMethods(type).stream().anyMatch(m->isTest(type,m))))classes.put(type.getName(),type);}catch(LinkageError|ClassNotFoundException error){if(required)throw new IllegalArgumentException("TestNG class is unavailable: "+name,error);}
+        try{
+            Class<?> type=named==null?Class.forName(name,false,Thread.currentThread().getContextClassLoader()):named.requireClass(name);
+            if(!type.isInterface()&&!Modifier.isAbstract(type.getModifiers())&&(hasFactory(type)||allMethods(type).stream().anyMatch(m->isTest(type,m)))){
+                if(named!=null)named.requireTestNgAccess(type);
+                classes.put(type.getName(),type);
+            }
+        }catch(LinkageError|ClassNotFoundException error){if(required||named!=null)throw new IllegalArgumentException("TestNG class is unavailable: "+name,error);}
+    }
+    private static void checkId(String id) {
+        if(!id.matches(TEST_ID))throw new IllegalArgumentException("Unsupported or malformed exact TestNG identity; select a current class/method/test ID.");
     }
     private static List<Method> allMethods(Class<?> type){Map<String,Method> result=new LinkedHashMap<>();for(Class<?> at=type;at!=null&&at!=Object.class;at=at.getSuperclass())for(Method method:at.getDeclaredMethods())if(!method.isSynthetic()&&!method.isBridge())result.putIfAbsent(signature(method),method);return new ArrayList<>(result.values());}
     private static boolean isTest(Class<?> owner,Method method){if(method.getAnnotation(Test.class)!=null)return true;if(owner.getAnnotation(Test.class)==null||!Modifier.isPublic(method.getModifiers())||Modifier.isStatic(method.getModifiers())||method.getDeclaringClass()==Object.class)return false;for(var annotation:method.getAnnotations())if(annotation.annotationType().getPackageName().equals("org.testng.annotations"))return false;return true;}
