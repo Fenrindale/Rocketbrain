@@ -93,7 +93,9 @@ function registerObserver(context,vscode,output,{source}) {
         description:item.selectCount+' SELECTs · '+item.suspects.length+' collection fetch finding(s)'+
           (report.bindObservation ? ' · '+item.selects.reduce((count,select)=>count+
             (select.binds?.positions.filter(position=>position.jdbcType).length||0),0)+' typed binds' : ''),
-        detail:item.startedAt,request:item
+        detail:[item.startedAt,
+          item.dispatch==='spring-mvc-callable' ? 'Spring MVC Callable' : item.dispatch==='unattributed' ? 'Unattributed dispatch' : undefined,
+          item.coverage==='partial' ? 'Partial observation' : undefined].filter(Boolean).join(' · '),request:item
       })),{title:'Hibernate Fetch Activity'});
       if(!selected)return;
       trusted();

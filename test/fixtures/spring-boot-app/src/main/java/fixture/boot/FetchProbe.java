@@ -47,6 +47,12 @@ class FetchProbe {
         return Map.of("owners",owners.size(),"items",items);
     }
 
+    @Transactional(readOnly=true)
+    void observeMarker() {
+        entityManager.createQuery("select p.id from Person p where p.id=:id", Long.class)
+            .setParameter("id", 1L).getResultList();
+    }
+
     private Map<String,Integer> count(List<PerformanceOwner> owners) {
         int items=0;
         for(PerformanceOwner owner:owners)for(PerformanceItem item:owner.items)items++;

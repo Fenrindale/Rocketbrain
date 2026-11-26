@@ -203,30 +203,45 @@ function findings(selects) {
   return suspects;
 }
 
+const dispatchPhases = new Map([
+  ['synchronous', new Set(['request'])],
+  ['spring-mvc-callable', new Set(['request', 'callable-worker', 'async-dispatch'])],
+  ['unattributed', new Set(['request', 'unattributed-dispatch'])]
+]);
+
 function summarizePerformance(input) {
   const enabled = input?.enabled === true, available = enabled && input.available === true;
+  const multiPhase = input?.scope === 'spring-mvc';
+  const callableObservation = multiPhase && input.callableObservation === true;
   const withBinds = input?.bindObservation === 'hibernate-jdbc-setters-v1';
   const report = { state: available ? 'observed' : enabled ? 'awaiting-supported-hooks' : 'disabled',
-    scope: 'synchronous-spring-mvc-hibernate-selects', requests: [], omittedRequests: safeInt(input?.omittedRequests) ? input.omittedRequests : 0,
+    scope: multiPhase ? 'spring-mvc-hibernate-selects' : 'synchronous-spring-mvc-hibernate-selects',
+    requests: [], omittedRequests: safeInt(input?.omittedRequests) ? input.omittedRequests : 0,
+    ...(multiPhase && { callableObservation }),
     ...(withBinds && { bindObservation: input.bindObservation }),
     rawBindValuesRetained: false, observerExecutedSql: false };
-  if (!enabled || input.scope !== 'synchronous-spring-mvc' || input.rawBindValuesRetained !== false || input.observerExecutedSql !== false ||
+  if (!enabled || (!multiPhase && input.scope !== 'synchronous-spring-mvc') || input.rawBindValuesRetained !== false || input.observerExecutedSql !== false ||
       !Array.isArray(input.requests) || input.requests.length > maxRequests) return report;
   for (const value of input.requests) {
-    if (!safeInt(value?.id,1) || !safeInt(value.durationMicros) || !safeInt(value.omittedSelects) ||
+    const phases = multiPhase ? dispatchPhases.get(value?.dispatch) : undefined;
+    if ((multiPhase && !phases) || !safeInt(value?.id,1) || !safeInt(value.durationMicros) || !safeInt(value.omittedSelects) ||
         !Array.isArray(value.selects) || value.selects.length > maxSelects) {
       report.omittedRequests++;
       continue;
     }
     const selects = value.selects.flatMap((select,index)=>{
       try {
+        if (phases && !phases.has(select?.phase)) return [];
         const observed = readSelect(select,index,withBinds);
-        return observed ? [observed] : [];
+        return observed ? [phases ? { ...observed, phase: select.phase } : observed] : [];
       } catch { return []; }
     });
     const omittedSelects = value.omittedSelects + value.selects.length - selects.length;
-    const complete = available && value.complete === true && omittedSelects === 0;
+    const coveredDispatch = !multiPhase || value.dispatch === 'synchronous' ||
+      (callableObservation && value.dispatch === 'spring-mvc-callable');
+    const complete = available && coveredDispatch && value.complete === true && omittedSelects === 0;
     report.requests.push({ id: value.id, method: methods.has(value.method) ? value.method : undefined,
+      ...(multiPhase && { dispatch: value.dispatch }),
       route: validRoute(value.route) ? value.route : undefined,
       startedAt: typeof value.startedAt==='string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(value.startedAt) ? value.startedAt : undefined,
       durationMicros:value.durationMicros, coverage: complete ? 'complete-within-supported-hooks' : 'partial',
