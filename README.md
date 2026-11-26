@@ -130,6 +130,8 @@ Quarkus 설정 탐색은 중첩 `ConfigMapping` 인터페이스와 다른 소스
 
 **Debug Jakarta WAR on Tomcat**은 Rocketbrain Java 디버거로 관리 중인 로컬 Tomcat JVM에 연결합니다. 배포에는 선택한 WAR의 별도 임시 복사본과 루프백 포트를 사용합니다. 이 흐름은 로컬 Tomcat 11의 Jakarta Servlet·JSP WAR를 지원합니다.
 
+**Review and Deploy Jakarta WAR on WildFly**는 JDK 25와 별도로 설치한 정식 WildFly 42.0.0.Final에서 검토한 Maven WAR를 실행합니다. 설치 경로와 파일 SHA-256을 확인하고 배포하면 별도 루프백 서버에서 Servlet과 Jakarta Enterprise Beans를 사용할 수 있습니다. [WildFly 로컬 배포 절차](docs/jakarta-wildfly.md)
+
 ### Micronaut Maven과 Gradle
 
 Micronaut 5 Maven JAR 모듈이나 `io.micronaut.application`과 `application.mainClass`를 명시한 Gradle 앱을 **Java Projects**로 가져옵니다. **Inspect Micronaut Application**에서 타입이 지정된 설정 키, 환경별 설정 파일, HTTP 경로와 생성자 연결의 소스를 엽니다. `application*.properties`에서 키 완성과 선언 이동을 사용하고, 단일 문서 YAML의 스칼라 키에서 선언으로 이동합니다.

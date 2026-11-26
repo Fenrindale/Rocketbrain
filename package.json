@@ -214,6 +214,9 @@
       { "command": "rocketbrain.jakarta.debug", "title": "Debug Jakarta WAR on Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.status", "title": "Show Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.stop", "title": "Stop Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.wildfly.deploy", "title": "Review and Deploy Jakarta WAR on WildFly", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.wildfly.status", "title": "Show WildFly Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.wildfly.stop", "title": "Stop WildFly Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.inspect", "title": "Inspect Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.run", "title": "Build and Run Micronaut", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.debug", "title": "Debug Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -2976,6 +2979,12 @@
           "default": "",
           "scope": "machine",
           "description": "Absolute directory of an independently installed Apache Tomcat 11 distribution for local Jakarta WAR deployments."
+        },
+        "rocketbrain.java.jakarta.wildflyHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute directory of the extracted stock WildFly 42.0.0.Final distribution for reviewed localhost WAR deployments with JDK 25."
         },
         "rocketbrain.scala.sbtLauncher": {
           "type": "string",

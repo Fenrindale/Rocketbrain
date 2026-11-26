@@ -6,6 +6,7 @@ const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbe
 const { mavenWarProject,listWarArtifacts,resolveWarArtifact,contextPattern } = require('./jakarta-war');
 const { createTomcatDeployment,reviewTomcatWarSet,MAX_APPLICATIONS } = require('./jakarta-tomcat');
 const { registerJakartaManager } = require('./jakarta-manager-vscode');
+const { registerWildFly } = require('./jakarta-wildfly-vscode');
 
 const MARKER='__rocketbrainJakartaRun';
 const COMMANDS={build:'rocketbrain.jakarta.buildWar',deploy:'rocketbrain.jakarta.deploy',
@@ -205,6 +206,10 @@ function registerJakartaWorkbench(vscode,java) {
   const remote=registerJakartaManager(vscode,{trusted,withProgress,chooseProject,listWarArtifacts,output,
     resolveArtifact:async (projectUri,warUri,cancellation) => resolveWarArtifact(await projectFor(projectUri,cancellation),warUri)});
   register(COMMANDS.manager,remote.command);
+  const wildfly=registerWildFly(vscode,{trusted,withProgress,projectFor,chooseProject,saved,output,
+    tools:project=>({wildflyHome:config().get('jakarta.wildflyHome'),
+      javaHome:project.jdk||config().get('javaHome')||java.getState().javaHome})});
+  for (const [id,handler] of Object.entries(wildfly.commands)) register(id,handler);
 
   register(COMMANDS.build,async () => {
     const project=await chooseProject();
@@ -302,6 +307,8 @@ function registerJakartaWorkbench(vscode,java) {
     deploy:options => track(async () => (await deployWar(options)).receipt),debug:options => track(() => debug(options)),stop,
     remoteManager:{observe:options => track(() => remote.observe(options)),review:options => track(() => remote.review(options)),
       execute:options => track(() => remote.execute(options))},
+    wildfly:{review:options=>track(()=>wildfly.review(options)),deploy:options=>track(()=>wildfly.deploy(options)),
+      status:wildfly.status,stop:()=>track(()=>wildfly.stop())},
     reviewSet:options => track(() => reviewSet(options)),deploySet:options => track(() => deploySet(options)),
     undeploy:options => track(() => undeploy(options)),
     getState:backend.getState,dispose() {
@@ -309,7 +316,7 @@ function registerJakartaWorkbench(vscode,java) {
       disposed=true;
       remote.dispose();
       closing=(async () => {
-        try {await stop();await backend.dispose();}
+        try {await Promise.all([stop(),wildfly.dispose()]);await backend.dispose();}
         finally {await Promise.allSettled(jobs);for (const item of subscriptions) item.dispose();}
       })();
       return closing;
