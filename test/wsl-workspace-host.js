@@ -45,6 +45,7 @@ async function verifyForwardedDatabase(api, vscode) {
     const [score, serverVersion] = result.result.rows[0];
     assert.equal(Number(score), 42);
     assert.match(serverVersion, /^[0-9]+\.[0-9]+\.[0-9]+/u);
+    console.log('Windows VS Code queried its owned WSL database:', serverVersion);
     return { score: 42, serverVersion, reachedFromWindowsVsCode: true };
   } finally { await api.disconnectMysql(); }
 }
@@ -166,6 +167,7 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, d
     rejectedChangedDescriptor: true, mavenGoal: 'package' };
   if (debuggerOptions) {
     const database = await verifyForwardedDatabase(debuggerOptions.api, vscode);
+    await vscode.window.showTextDocument(document, { preview: false });
     return { ...basic, javaDebug: await verifyWslDebugger(wsl.javaDebug, vscode, folder, source, document, database) };
   }
   await build(options, mapping.windows, 'gradle', 'classes', compiled, /BUILD SUCCESSFUL/u);
