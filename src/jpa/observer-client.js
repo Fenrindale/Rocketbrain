@@ -9,6 +9,7 @@ const { attributeTarget, attributeBindingReport } = require('./attribute-binding
 const { factoryId: graphFactoryId, graphRegistry } = require('./entity-graphs');
 const { normalizePersistenceContexts } = require('./persistence-contexts');
 const { normalizeObservedInjection } = require('../spring/observed-injection');
+const { normalizeTransactionTrace } = require('./transaction-trace');
 
 class ObserverError extends Error { constructor(code, message) { super(message); this.code = code; } }
 const consoleTypes = new Set(['java.lang.String','java.lang.Long','java.lang.Integer','java.lang.Short','java.lang.Byte','java.lang.Boolean',
@@ -203,6 +204,11 @@ class ObserverClient {
     const value = await this.#request('spring-observed-constructor-injection');
     try { return normalizeObservedInjection(value); }
     catch (error) { throw new ObserverError('INVALID_SCHEMA',error.message); }
+  }
+  async transactions() {
+    const payload=await this.#request('spring-transactions');
+    try { return normalizeTransactionTrace(payload); }
+    catch { throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Spring JPA transaction metadata.'); }
   }
   async persistenceContexts() {
     const value = await this.#request('spring-persistence-contexts');

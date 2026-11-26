@@ -783,6 +783,12 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectTransactions",
+        "title": "Inspect Spring JPA Transaction Outcomes",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.inspectPersistenceContexts",
         "title": "Inspect Spring Persistence Contexts",
         "category": "Rocketbrain",

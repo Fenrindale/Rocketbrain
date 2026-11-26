@@ -9,4 +9,7 @@ import jakarta.persistence.Table;
 public class ContextChildRow {
     @Id Long id;
     String note;
+
+    protected ContextChildRow(){}
+    public ContextChildRow(Long id,String note){this.id=id;this.note=note;}
 }

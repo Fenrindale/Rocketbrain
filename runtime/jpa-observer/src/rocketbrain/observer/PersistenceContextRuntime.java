@@ -87,6 +87,24 @@ public final class PersistenceContextRuntime {
     private record Definition(String javaType,WeakReference<ClassLoader> loader,String sha256){}
     private record ContextFrame(String key,String id,String parentState,String parentKey,List<LiveOwner> owners){}
     private record LiveOwner(Owner owner,Object instance){}
+    record TransactionOwner(String factoryId,String contextKey,String unit){}
+
+    static synchronized TransactionOwner transactionOwner(Object nativeFactory){
+        if(!enabled||nativeFactory==null)return null;
+        for(Owner owner:owners){
+            if(owner.ambiguous||owner.factory.get()!=nativeFactory)continue;
+            Object beans=owner.beans.get();
+            if(beans==null)return null;
+            Context selected=null;
+            for(Context context:contexts){
+                if(!context.ready||context.instance.get()==null||context.beanFactory.get()!=beans)continue;
+                if(selected!=null)return null;
+                selected=context;
+            }
+            if(selected!=null)return new TransactionOwner(owner.id,selected.key,owner.unitName);
+        }
+        return null;
+    }
 
     private static String label(String value){
         return value!=null&&value.matches("[A-Za-z0-9_.$:@ -]{1,180}")&&!value.isBlank()?value:null;

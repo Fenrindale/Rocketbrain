@@ -155,7 +155,8 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
   await fsp.writeFile(path.join(folder, 'owner.json'), JSON.stringify({ kind: MARKER, id }));
   try {
   let observerArgs=[],observerTokenFile,observerDescriptorFile;
-  const persistenceContexts=process.env.ROCKETBRAIN_JPA_CONTEXT_TEST==='1';
+  const transactionTrace=process.env.ROCKETBRAIN_JPA_TRANSACTION_TEST==='1';
+  const persistenceContexts=process.env.ROCKETBRAIN_JPA_CONTEXT_TEST==='1'||transactionTrace;
   const autowireTrace=process.env.ROCKETBRAIN_SPRING_AUTOWIRE_TRACE_TEST==='1';
   if(observer){
     observerTokenFile=path.join(folder,'observer.token');observerDescriptorFile=path.join(folder,'observer-connection.json');
@@ -164,13 +165,15 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     await fsp.writeFile(configFile,JSON.stringify({tokenFile:observerTokenFile,descriptorFile:observerDescriptorFile,port:0,queries:true,validate:true,
       springAutowireTrace:autowireTrace,springAutowireTracePackages:autowireTrace?['fixture.boot']:[],
       springPersistenceContexts:persistenceContexts,springPersistenceContextPackages:persistenceContexts?['fixture.boot','fixture.contextchild']:[],
+      jpaTransactionTrace:transactionTrace,
       performance:process.env.ROCKETBRAIN_JPA_PERFORMANCE_TEST==='1',consoleSelect:process.env.ROCKETBRAIN_JPA_CONSOLE_TEST==='1',
       consoleFetchSnapshots:process.env.ROCKETBRAIN_JPA_FETCH_SNAPSHOT_TEST==='1',
       consoleEntityProjections:process.env.ROCKETBRAIN_JPA_ENTITY_PROJECTION_TEST==='1'}),{flag:'wx',mode:0o600});
     observerArgs=['-javaagent:'+agent.jarPath+'=config='+pathToFileURL(configFile).href];
   }
   const runtimeUrl = 'http://127.0.0.1:' + port + '/actuator', baseUrl = 'http://127.0.0.1:' + port;
-  const contextProbe = persistenceContexts ? { FIXTURE_PERSISTENCE_CONTEXTS_ENABLED: 'true' } : {};
+  const contextProbe = persistenceContexts ? { FIXTURE_PERSISTENCE_CONTEXTS_ENABLED: 'true',
+    FIXTURE_JPA_TRANSACTIONS_ENABLED: String(transactionTrace) } : {};
   const propertyProbe = process.env.ROCKETBRAIN_SPRING_PROPERTY_TEST === '1' ? {
     FIXTURE_INSPECTION_ENABLED: 'true', FIXTURE_INSPECTION_MESSAGE: engine + '-from-local-launch',
     MANAGEMENT_ENDPOINT_ENV_SHOW_VALUES: 'always', MANAGEMENT_INFO_PROCESS_ENABLED: 'true'
