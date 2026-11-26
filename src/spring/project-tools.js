@@ -24,18 +24,50 @@ function catalogContext(sources){
  if(sources.length>2)throw fail('BUILD','Use one root settings file for reviewed Gradle catalog starter edits.');
  return {versionCatalog:sources[0].text,settings:sources[1]?.text};
 }
+function mavenParentSources(leaf,roots){
+ const project=path.dirname(leaf.path),allowed=roots.filter(root=>contained(project,root)),parents=[];
+ const seen=new Set([normalize(leaf.path)]);
+ let source=leaf, reference=B.mavenParentReference(leaf.text);
+ if(!reference||reference.officialBoot)return parents;
+ while(reference){
+  if(reference.officialBoot||!reference.relativePath||parents.length>=4)
+   throw fail('BUILD','Use up to four local Maven parent POMs ending at the direct Boot BOM import.');
+  let file=path.resolve(path.dirname(source.path),reference.relativePath);
+  if(!allowed.some(root=>contained(file,root)))
+   throw fail('PATH','Open the containing local Maven reactor before reviewing its parent POMs.');
+  let stat;
+  try{stat=fs.lstatSync(file);}catch(error){
+   if(error.code==='ENOENT')throw fail('BUILD','The declared local Maven parent POM is missing.');
+   throw error;
+  }
+  if(stat.isDirectory())file=path.join(file,'pom.xml');
+  if(!allowed.some(root=>contained(file,root))||seen.has(normalize(file)))
+   throw fail('BUILD','The Maven parent path is repeated or outside the reviewed workspace.');
+  source={...snapshot(file),name:path.relative(project,file).split(path.sep).join('/')};
+  parents.push(source);
+  seen.add(normalize(file));
+  reference=B.mavenParentReference(source.text);
+ }
+ return parents;
+}
 const sameSource=(first,second)=>first.path===second.path&&first.bytesSha256===second.bytesSha256&&
  first.dev===second.dev&&first.ino===second.ino;
-function verifyCatalogSources(root,sources){
- const live=catalogSources(root);
+function verifyBuildCompanions(root,source,sources,roots){
+ const maven=path.basename(source.path)==='pom.xml';
+ let live;
+ try{live=maven?mavenParentSources(snapshot(source.path),roots):catalogSources(root);}
+ catch(error){
+  if(maven)throw fail('STALE','A local Maven parent changed after review.');
+  throw error;
+ }
  if(live.length!==sources.length||live.some((source,index)=>!sameSource(source,sources[index])))
-  throw fail('STALE','The Gradle version catalog or settings changed after review.');
+  throw fail('STALE',maven?'A local Maven parent changed after review.':'The Gradle version catalog or settings changed after review.');
 }
-async function cleanCatalogDocuments(read,sources,code){
+async function cleanBuildCompanions(read,sources,code){
  for(const source of sources){
   const document=await read(source.uri);
   if(document?.dirty||document&&document.text!==source.text)
-   throw fail(code,'Save or reconcile the Gradle version catalog and settings before editing starters.');
+   throw fail(code,'Save or reconcile the reviewed build inputs before editing starters.');
  }
 }
 class SpringProjectTools{
@@ -55,16 +87,20 @@ class SpringProjectTools{
   if(names.length!==1)throw fail('BUILD','Select a project with one root Maven or Gradle build file.');
   const source=snapshot(path.join(root,names[0])),document=await this.options.documentSnapshot(source.uri);
   if(document?.dirty||document&&document.text!==source.text)throw fail('DIRTY','Save or reconcile the build file before reviewing starter changes.');
-  const companions=names[0]==='pom.xml'?[]:catalogSources(root);
-  const model=B.inspect(source.text,names[0],catalogContext(companions));
-  const readOnlySources=model.catalogContext?companions:[];
-  await cleanCatalogDocuments(this.options.documentSnapshot,readOnlySources,'DIRTY');
+  if(input.expectedSourceSha256!==undefined&&source.bytesSha256!==input.expectedSourceSha256)
+   throw fail('STALE','The build source changed while choosing starter edits.');
+  const maven=names[0]==='pom.xml';
+  const companions=maven?mavenParentSources(source,this.roots()):catalogSources(root);
+  const model=B.inspect(source.text,names[0],maven?{mavenParents:companions,mavenProfile:input.mavenProfile}:catalogContext(companions));
+  const readOnlySources=model.catalogContext||model.mavenContext?companions:[];
+  await cleanBuildCompanions(this.options.documentSnapshot,readOnlySources,'DIRTY');
   const catalog=await this.metadata({endpoint:input.endpoint,bootVersion:model.bootVersion,signal:input.signal});
-  await cleanCatalogDocuments(this.options.documentSnapshot,readOnlySources,'DIRTY');
+  await cleanBuildCompanions(this.options.documentSnapshot,readOnlySources,'DIRTY');
   this.guard(input);
-  if(readOnlySources.length)verifyCatalogSources(root,readOnlySources);
+  if(readOnlySources.length)verifyBuildCompanions(root,source,readOnlySources,this.roots());
   return {projectUri:pathToFileURL(root).toString(),buildUri:source.uri,kind:model.kind,bootVersion:model.bootVersion,
    management:model.management||null,sourceSha256:source.bytesSha256,choices:B.choices(model,catalog),endpoint:catalog.endpoint,
+   mavenProfiles:model.mavenProfiles,mavenProfile:model.mavenProfile,
    sources:readOnlySources.map(item=>({name:item.name,uri:item.uri,sha256:item.bytesSha256})),readOnlySources,source,document,model,catalog};
  }
  async previewDependencies(input){
@@ -75,6 +111,7 @@ class SpringProjectTools{
    cacheBytes:Buffer.byteLength(found.source.text)+Buffer.byteLength(change.after)+found.readOnlySources.reduce((sum,item)=>sum+Buffer.byteLength(item.text),0),
    public:{kind:'dependencies',projectUri:found.projectUri,buildUri:found.buildUri,bootVersion:found.bootVersion,management:found.management,
     sources:found.sources,buildKind:found.kind,endpoint:found.endpoint,metadataSha256:found.catalog.metadataSha256,
+    ...(found.mavenProfile&&{mavenProfile:found.mavenProfile}),
     catalogSha256:found.catalog.catalogSha256,before:found.source.text,after:change.after,beforeSha256:found.source.bytesSha256,
     afterSha256:sha(afterBytes),add:change.add,remove:change.remove,requiresProjectExecutionApproval:inside,
     automaticBuildStartedByTool:false,resyncRequired:true,review:'The diff changes selected direct dependencies. Maven and Gradle resolve their effective versions when you run the build. Use a separate action to import or refresh the project configuration.'}});
@@ -93,13 +130,13 @@ class SpringProjectTools{
   const guard=()=>{
    this.guard(input);
    if(companions.length){
-    verifyCatalogSources(root,companions);
+    verifyBuildCompanions(root,record.source,companions,this.roots());
     if(!sameSource(snapshot(record.source.path),record.source))
-     throw fail('STALE','The Gradle build source changed before applying.');
+     throw fail('STALE','The build source changed before applying.');
    }
    return true;
   };
-  await cleanCatalogDocuments(this.options.documentSnapshot,companions,'STALE');
+  await cleanBuildCompanions(this.options.documentSnapshot,companions,'STALE');
   guard();
   this.reviews.delete(record.reviewId);
   const written=await this.options.writeBuildFile({uri:record.source.uri,path:record.source.path,before:record.source.text,

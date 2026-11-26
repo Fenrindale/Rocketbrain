@@ -17,10 +17,6 @@ exports.run = async (vscode = require('vscode')) => {
   const api=await extension.activate();
   const checks=[],details={},failures=[];
   const groups={
-    sqliteFile:()=>require('./sqlite-file-host').runSqliteFileChecks(api,vscode,checks),
-    localSqlGrounding:()=>require('./local-sql-grounding-host').runLocalSqlGroundingChecks(api,vscode,checks),
-    javaTypeRename:()=>require('./java-type-rename-host').runJavaTypeRenameChecks(api,vscode,checks),
-    codeReviewPublication:()=>require('./code-review-publication-host').runCodeReviewPublicationChecks(api,vscode,checks),
     hibernateCompositeFetch:()=>require('./hibernate-composite-fetch-host').runHibernateCompositeFetchChecks(api,vscode,checks),
     postgreSqlMeasuredPlan:()=>require('./postgresql-measured-plan-host').runPostgreSqlMeasuredPlanChecks(api,vscode,checks),
     kotlinCoroutineDebug:()=>require('./kotlin-coroutine-debug-host').runKotlinCoroutineDebugChecks(api,vscode,checks),

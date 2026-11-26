@@ -97,6 +97,8 @@ async function activate(context) {
   const sshWorkspace = require('./remote/ssh-workspace-vscode').registerSshWorkspace(context, vscode);
   const acpReview = require('./ai/acp-vscode').registerAcpReview(context,vscode);
   acpReview.database = require('./db/acp-database-vscode').registerDatabaseAcp(context,vscode,database);
+  acpReview.workspaceEdits = require('./ai/acp-workspace-edit-vscode').registerWorkspaceAcpEdits(context,vscode);
+  acpReview.savedSessions = require('./ai/acp-recovery-vscode').registerAcpRecovery(context,vscode);
   context.subscriptions.push(codeModel);
   const docker = require('./docker/vscode').registerDockerWorkbench(vscode);
   context.subscriptions.push(docker);

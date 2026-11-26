@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.104.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.106.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 157 |
-| 부분 구현 | 45 |
+| 구현 | 162 |
+| 부분 구현 | 40 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **88.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **89.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.104에서는 SQLite 파일 조회, PostgreSQL 실측 계획, 로컬 모델 SQL 탐색, Java 이름 변경과 저장소 검토, Hibernate 복합 키 조회 및 Kotlin 코루틴 디버깅을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 190.5점에서 191.5점으로 바뀌었다.
+v0.106에서는 Spring Maven 부모·프로필과 JPQL 엔티티, SQLite 원본 셀, ACP 다중 파일 변경과 저장 세션, 로컬 모델의 SQL 탐색 이어하기를 추가했다. GitHub·GitLab 검토를 제출하고 대화에 답하거나 편집할 수 있다. 상태가 바뀐 항목은 5개이고 가중 점수는 191.5점에서 194점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -80,7 +80,7 @@ v0.104에서는 SQLite 파일 조회, PostgreSQL 실측 계획, 로컬 모델 SQ
 | IDEA-057 | IntelliJ IDEA | Actuator 런타임 Bean·Health·Mappings | 구현 |
 | IDEA-058 | IntelliJ IDEA | Spring 디버거의 실제 설정값·출처 | 구현 |
 | IDEA-059 | IntelliJ IDEA | Spring Data 파생 메서드·쿼리 | 구현 |
-| IDEA-060 | IntelliJ IDEA | JPQL/HQL 작성·JPA Console | 부분 구현 |
+| IDEA-060 | IntelliJ IDEA | JPQL/HQL 작성·JPA Console | 구현 |
 | IDEA-061 | IntelliJ IDEA | DB 스키마→JPA 엔티티·매핑 생성 | 구현 |
 | IDEA-062 | IntelliJ IDEA | Persistence 트리·엔티티 관계도 | 구현 |
 | IDEA-063 | IntelliJ IDEA | Hibernate 디버거·SQL 바인딩·N+1 | 부분 구현 |
@@ -115,7 +115,7 @@ v0.104에서는 SQLite 파일 조회, PostgreSQL 실측 계획, 로컬 모델 SQ
 | IDEA-092 | IntelliJ IDEA | Shelf·Stash·선택 변경 보관 | 구현 |
 | IDEA-093 | IntelliJ IDEA | Branch·Rebase·Merge 충돌 해결 | VS Code 재사용 |
 | IDEA-094 | IntelliJ IDEA | Git Worktree·작업별 프로젝트 설정 | 구현 |
-| IDEA-095 | IntelliJ IDEA | GitHub PR·GitLab MR 리뷰 | 부분 구현 |
+| IDEA-095 | IntelliJ IDEA | GitHub PR·GitLab MR 리뷰 | 구현 |
 | IDEA-096 | IntelliJ IDEA | SSH 원격 개발 | 부분 구현 |
 | IDEA-097 | IntelliJ IDEA | WSL 실행·개발 | 부분 구현 |
 | IDEA-098 | IntelliJ IDEA | Dev Container 환경 | 부분 구현 |
@@ -136,14 +136,14 @@ v0.104에서는 SQLite 파일 조회, PostgreSQL 실측 계획, 로컬 모델 SQ
 | IDEA-113 | IntelliJ IDEA | IDE 키맵·동작 컨텍스트·테마 | 부분 구현 |
 | IDEA-114 | IntelliJ IDEA | 플러그인 설치·호환·갱신 | VS Code 재사용 |
 | IDEA-115 | IntelliJ IDEA | AI 완성·채팅·프로젝트 문맥 | 부분 구현 |
-| IDEA-116 | IntelliJ IDEA | Air·ACP 에이전트·병렬 작업 | 부분 구현 |
+| IDEA-116 | IntelliJ IDEA | Air·ACP 에이전트·병렬 작업 | 구현 |
 | IDEA-117 | IntelliJ IDEA | IDE 기능을 MCP 도구로 제공 | 구현 |
 | IDEA-118 | IntelliJ IDEA | 프로젝트 신뢰·제한 모드 | 구현 |
 | IDEA-119 | IntelliJ IDEA | 문자열 안 SQL/정규식/HTML 언어 주입 | 구현 |
 | IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 부분 구현 |
 | DG-001 | DataGrip | MySQL 데이터 소스 생성·연결 검사 | 구현 |
 | DG-002 | DataGrip | MariaDB 전용 지원 | 구현 |
-| DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 부분 구현 |
+| DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 구현 |
 | DG-004 | DataGrip | 사용자 JDBC JAR·드라이버 클래스 추가 | 구현 |
 | DG-005 | DataGrip | 드라이버 버전 교체·추가 라이브러리 | 구현 |
 | DG-006 | DataGrip | 사용자·비밀번호·무인증 모드 | 구현 |
@@ -229,7 +229,7 @@ v0.104에서는 SQLite 파일 조회, PostgreSQL 실측 계획, 로컬 모델 SQ
 | DG-086 | DataGrip | live schema ERD 생성·관계 탐색 | 구현 |
 | DG-087 | DataGrip | diagram 출력·레이아웃 보존 | 구현 |
 | DG-088 | DataGrip | SQL 파일 Git·diff·변경 검토 | VS Code 재사용 |
-| DG-089 | DataGrip | schema 문맥의 자연어 SQL·설명 | 부분 구현 |
+| DG-089 | DataGrip | schema 문맥의 자연어 SQL·설명 | 구현 |
 | DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 구현 |
 | DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 구현 |
 | DG-092 | DataGrip | 서로 다른 data source의 cross-database SQL | 구현 |

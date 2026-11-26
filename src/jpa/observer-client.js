@@ -13,6 +13,8 @@ const consoleTypes = new Set(['java.lang.String','java.lang.Long','java.lang.Int
 const consoleKey = /^(:[A-Za-z_][A-Za-z0-9_]{0,63}|\?(?:[1-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-6]))$/;
 const collectionKinds = new Set(['BAG','LIST','SET','ORDERED_SET']);
 const setIdTypes = new Set(['java.lang.Long','java.lang.Integer','java.lang.Short','java.lang.Byte','java.lang.String','java.util.UUID']);
+const entityReviewKey = /^[a-f0-9]{64}$/;
+const hqlName = /^[A-Za-z_][A-Za-z_0-9]{0,127}$/;
 
 function consoleInput(query,factoryId) {
   if (typeof query!=='string' || !query.trim() || query.length>4096 || Buffer.byteLength(query)>16384 || query.includes('\0'))
@@ -58,6 +60,18 @@ function consoleResponse(result,factoryId,state,limit=100) {
   const columns=readColumns(result.columns,16);
   const singular=result.fetchSnapshot!==undefined, plural=result.fetchSnapshots!==undefined;
   if(singular&&plural)return invalid();
+  const entity=result.entityProjection;
+  let projection={};
+  if(entity!==undefined){
+    if(!entity || singular || plural || !typeName(entity.javaType) || typeof entity.alias!=='string' || typeof entity.id!=='string' ||
+        !hqlName.test(entity.alias) || !hqlName.test(entity.id) || typeof entity.review!=='string' ||
+        !entityReviewKey.test(entity.review) || typeof entity.nullable!=='boolean' || entity.scalarFieldsOnly!==true ||
+        columns[0].alias!==entity.id || !setIdTypes.has(columns[0].javaType) ||
+        columns.some(column=>!hqlName.test(column.alias||'')) ||
+        new Set(columns.map(column=>column.alias.toLowerCase())).size!==columns.length) return invalid();
+    const {javaType,alias,id,review,nullable,scalarFieldsOnly}=entity;
+    projection={entityProjection:{javaType,alias,id,review,nullable,scalarFieldsOnly}};
+  }
   const fetched=singular?result.fetchSnapshot:result.fetchSnapshots;
   let fetch={}, associations=[], sources=[], parallel=[];
   if(singular||plural){
@@ -78,12 +92,13 @@ function consoleResponse(result,factoryId,state,limit=100) {
     if (result.sqlExecuted!==false || !Array.isArray(result.parameters) || result.parameters.length>16 ||
         result.parameters.some(item=>!item || typeof item.key!=='string' || !consoleKey.test(item.key) || !consoleTypes.has(item.javaType)) ||
         new Set(result.parameters.map(item=>item.key)).size!==result.parameters.length) return invalid();
-    return {state,factoryId,columns,parameters:result.parameters.map(({key,javaType})=>({key,javaType})),sqlExecuted:false,...fetch};
+    return {state,factoryId,columns,parameters:result.parameters.map(({key,javaType})=>({key,javaType})),sqlExecuted:false,...fetch,...projection};
   }
   if (result.sqlExecuted!==true || result.queryExecuted!==true || result.databaseReadOnlyTransaction!==true ||
       result.boundParameterValuesRetained!==false || result.rolledBack!==true ||
       !scalarRows(result.rows,columns,associations.length?Math.min(limit,25):limit) ||
       result.rowCount!==result.rows.length || typeof result.hasMore!=='boolean') return invalid();
+  if(entity&&result.rows.some(row=>row[0]===null&&(!entity.nullable||row.some(cell=>cell!==null))))return invalid();
   if(associations.length){
     if(!Number.isInteger(fetched.joinedRows)||fetched.joinedRows<result.rowCount||fetched.joinedRows>512)return invalid();
     for(const [index,item] of associations.entries())item.linked=linked(sources[index],item);
@@ -104,7 +119,7 @@ function consoleResponse(result,factoryId,state,limit=100) {
     else fetch.fetchSnapshots.joinedRows=fetched.joinedRows;
   }
   return {state,factoryId,columns,rows:result.rows,rowCount:result.rowCount,hasMore:result.hasMore,sqlExecuted:true,
-    databaseReadOnlyTransaction:true,rolledBack:true,boundParameterValuesRetained:false,...fetch};
+    databaseReadOnlyTransaction:true,rolledBack:true,boundParameterValuesRetained:false,...fetch,...projection};
 }
 const emptySnapshot = () => ({ state: 'disconnected', factories: [], events: [], fetchedAt: null, sameSourceRevisionVerified: false });
 function normalize(value, token, stripControls=true) {
@@ -191,17 +206,23 @@ class ObserverClient {
     consoleInput(query,factoryId);
     return consoleResponse(await this.#request('console/describe',{query,factoryId}),factoryId,'described');
   }
-  async select(query,factoryId,values,limit=100) {
+  async select(query,factoryId,values,limit=100,entityReview) {
     consoleInput(query,factoryId);
     if (!Number.isInteger(limit) || limit<1 || limit>100 || !values || typeof values!=='object' || Array.isArray(values))
       throw new ObserverError('INVALID_BINDINGS','Use named or positional bindings and a row limit from 1 to 100.');
-    const entries=Object.entries(values), payload={query,factoryId,values:Object.fromEntries(entries),limit};
+    if(entityReview!==undefined&&(typeof entityReview!=='string'||!entityReviewKey.test(entityReview)))
+      throw new ObserverError('INVALID_REVIEW','Use the fingerprint of the reviewed Hibernate entity projection.');
+    const entries=Object.entries(values), payload={query,factoryId,values:Object.fromEntries(entries),limit,
+      ...(entityReview===undefined?{}:{entityReview})};
     if (entries.length>16 || entries.some(([key,value])=>!consoleKey.test(key) ||
         (value!==null && (typeof value!=='string' || value.length>1024 || value.includes('\0')))) ||
         Buffer.byteLength(JSON.stringify(payload))>32768)
       throw new ObserverError('INVALID_BINDINGS','Use at most 16 short text or NULL parameter bindings.');
     const result=await this.#request('console/select',payload);
-    return consoleResponse(result,factoryId,'executed',limit);
+    const checked=consoleResponse(result,factoryId,'executed',limit);
+    if(checked.state==='executed'&&checked.entityProjection?.review!==entityReview)
+      throw new ObserverError('INVALID_SCHEMA','Observer entity projection does not match the reviewed Hibernate mapping.');
+    return checked;
   }
   dispose() { this.#disposed=true; for (const request of this.#requests) request.destroy(); this.#requests.clear(); }
 }

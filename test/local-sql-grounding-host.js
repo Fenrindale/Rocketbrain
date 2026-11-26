@@ -138,4 +138,4 @@ if (require.main === module) fixtureConfig().then(async config => {
   finally { await model.close(); }
 }).catch(error => { console.error(error.stack); process.exitCode = 1; });
 
-module.exports = { runLocalSqlGroundingChecks, fixtures, selectRoute, expected };
+module.exports = { runLocalSqlGroundingChecks, fixtures, selectRoute, original, followup, expected };

@@ -25,7 +25,7 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
    change.guard();
    for(const source of change.readOnlySources){
     const open=documentSnapshot(source.uri);
-    if(open?.dirty||open&&open.text!==source.text)throw fail('STALE','The Gradle catalog or settings buffer changed before applying.');
+    if(open?.dirty||open&&open.text!==source.text)throw fail('STALE','A reviewed build input buffer changed before applying.');
    }
    if(doc.version!==version||doc.getText()!==change.before)throw fail('STALE','The build document changed before applying.');
    if(!await vscode.workspace.applyEdit(edit))throw fail('EDITOR','The editor declined the reviewed build-file edit.');
@@ -39,7 +39,7 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
    return result;
   }
  });
- const api={metadata:input=>controller.metadata(input),previewCreate:input=>controller.previewCreate(input),previewDependencies:input=>controller.previewDependencies(input),async inspectDependencies(input){const value=await controller.inspectDependencies(input);return{projectUri:value.projectUri,buildUri:value.buildUri,kind:value.kind,bootVersion:value.bootVersion,management:value.management,sourceSha256:value.sourceSha256,choices:value.choices,sources:value.sources,endpoint:value.endpoint};},async apply(input){const result=await controller.apply(input);outcomes.set(result.reviewId,JSON.stringify(result,null,2));await context.workspaceState.update('rocketbrain.spring.projects.last',result.projectUri);return result;},resync:input=>controller.resync(input),getReview:id=>controller.getReview(id),reviews:()=>[...controller.reviews.keys()].map(id=>controller.getReview(id)),reviewFile:(id,name)=>controller.reviewFile(id,name),discard:id=>controller.discard(id),async dispose(){if(disposed)return;disposed=true;controller.dispose();outcomes.clear();for(const item of subscriptions)item.dispose();}};
+ const api={metadata:input=>controller.metadata(input),previewCreate:input=>controller.previewCreate(input),previewDependencies:input=>controller.previewDependencies(input),async inspectDependencies(input){const value=await controller.inspectDependencies(input);return{projectUri:value.projectUri,buildUri:value.buildUri,kind:value.kind,bootVersion:value.bootVersion,management:value.management,sourceSha256:value.sourceSha256,choices:value.choices,sources:value.sources,endpoint:value.endpoint,mavenProfiles:value.mavenProfiles,mavenProfile:value.mavenProfile};},async apply(input){const result=await controller.apply(input);outcomes.set(result.reviewId,JSON.stringify(result,null,2));await context.workspaceState.update('rocketbrain.spring.projects.last',result.projectUri);return result;},resync:input=>controller.resync(input),getReview:id=>controller.getReview(id),reviews:()=>[...controller.reviews.keys()].map(id=>controller.getReview(id)),reviewFile:(id,name)=>controller.reviewFile(id,name),discard:id=>controller.discard(id),async dispose(){if(disposed)return;disposed=true;controller.dispose();outcomes.clear();for(const item of subscriptions)item.dispose();}};
  function managementLines(management){
   if(!management)return[];
   if(management.kind==='gradle-catalog-bom')return [
@@ -47,12 +47,15 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
    'Boot plugin alias '+management.pluginAlias+' · BOM alias '+management.platformAlias+
     (management.property?' · version.ref '+management.property:'')
   ];
-  const kind=management.kind==='boot-bom-import'?'Direct Maven BOM import':'Maven parent';
+  const kind=management.kind==='boot-bom-import'?'Direct Maven BOM import':
+   management.kind==='inherited-boot-bom'?'Inherited Maven BOM import':'Maven parent';
   const version=management.property?' via local property '+management.property:'';
   return [kind+' '+management.coordinate+' '+management.version+version,
+   ...(management.chain||[]).map(item=>'Local parent '+item.coordinate+' · '+item.source),
    ...management.overrides.map(item=>'Protected local override '+item.coordinate+' '+item.version)];
  }
  function reviewText(review){if(!review)return'# Spring project review unavailable';if(review.kind==='dependencies')return['# Review starter changes','',review.review,'','Build: '+review.buildUri,'Boot: '+review.bootVersion,...managementLines(review.management),
+  ...(review.mavenProfile?['Maven profile '+review.mavenProfile]:[]),
   ...(review.sources||[]).map(source=>'Reviewed input '+source.name+' · SHA-256 '+source.sha256),
   '','Add: '+review.add.join(', '),'Remove: '+review.remove.join(', '),'','Before SHA-256: '+review.beforeSha256,'After SHA-256: '+review.afterSha256,'','Use the before/after virtual documents to inspect the exact change. Save/apply is separate from project resync.','',review.requiresProjectExecutionApproval?'This project is inside an open workspace. Initial import may execute its build configuration; separate execution approval is required.':'This change does not explicitly start project import or build.'].join('\n');return['# Review new Spring project','',review.review,'','Destination: '+review.projectUri,'Service: '+review.endpoint,'Archive SHA-256: '+review.archiveSha256,'','Language · packaging: '+review.selection.language+' · '+review.selection.packaging.toUpperCase(),
   'Build: '+review.archiveShape.buildFile,'Source: '+review.archiveShape.mainSourceDirectory,
@@ -98,11 +101,24 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
  command('rocketbrain.spring.editStarters',async()=>{
   const projectUri=await chooseProject();if(!projectUri)return;
   const endpoint=await service();if(endpoint===undefined)return;
-  const current=await api.inspectDependencies({endpoint,projectUri}),choices=current.choices.filter(item=>item.editable);
+  let current=await api.inspectDependencies({endpoint,projectUri});
+  const expectedSourceSha256=current.sourceSha256;
+  let mavenProfile;
+  if(current.mavenProfiles?.length){
+   const selected=await pick([{label:'Main POM dependencies'},...current.mavenProfiles.map(id=>({label:'Maven profile '+id,id}))],
+    'Choose the Maven dependency scope');
+   trusted();if(!selected)return;
+   mavenProfile=selected.id;
+   if(mavenProfile!==undefined)current=await api.inspectDependencies({endpoint,projectUri,mavenProfile,expectedSourceSha256});
+  }
+  const choices=current.choices.filter(item=>item.editable);
   if(!choices.length)throw fail('DEPENDENCY','The project has no editable direct starters in the selected catalog.');
   const protectedCount=current.choices.length-choices.length;
-  const title=current.management?.kind==='gradle-catalog-bom'?'Spring Boot starters and drivers · Gradle catalog '+current.bootVersion:
-   current.management?.kind==='boot-bom-import'?'Direct Spring Boot starters and drivers · Maven BOM '+current.bootVersion:'Direct Boot-managed starters and database drivers';
+  const title=mavenProfile?'Spring Boot starters and drivers · Maven profile '+mavenProfile:
+   current.management?.kind==='gradle-catalog-bom'?'Spring Boot starters and drivers · Gradle catalog '+current.bootVersion:
+   current.management?.kind==='boot-bom-import'?'Direct Spring Boot starters and drivers · Maven BOM '+current.bootVersion:
+   current.management?.kind==='inherited-boot-bom'?'Spring starters and drivers · Inherited Maven BOM '+current.bootVersion:
+    'Direct Boot-managed starters and database drivers';
   const selected=await vscode.window.showQuickPick(choices.map(item=>({label:item.name,description:item.id+' · '+item.groupId+':'+item.artifactId,
    detail:item.catalogAlias?'Gradle alias '+item.catalogAlias:undefined,picked:item.selected,id:item.id})),{
    title,canPickMany:true,ignoreFocusOut:true,...(protectedCount?{placeHolder:protectedCount+' protected declarations are excluded from editing'}:{})
@@ -111,7 +127,7 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
   const ids=new Set(selected.map(item=>item.id)),add=choices.filter(item=>ids.has(item.id)&&!item.selected).map(item=>item.id),
    remove=choices.filter(item=>item.selected&&!ids.has(item.id)).map(item=>item.id);
   if(!add.length&&!remove.length)return;
-  return openReview(await api.previewDependencies({endpoint,projectUri,add,remove}));
+  return openReview(await api.previewDependencies({endpoint,projectUri,mavenProfile,expectedSourceSha256,add,remove}));
  });
  command('rocketbrain.spring.applyProjectReview',async()=>{const picked=await pick(api.reviews().map(review=>({label:(review.kind==='create'?'Create project':'Edit starters')+' · '+review.projectUri,review})),'Apply reviewed Spring change');if(!picked)return;const review=picked.review;if(await vscode.window.showWarningMessage('Write the exact reviewed project files?',{modal:true},'Apply reviewed files')!=='Apply reviewed files')return;trusted();let allowProjectExecution=false;if(review.requiresProjectExecutionApproval){const label=review.kind==='create'?'Create and import':'Apply and allow project configuration';if(await vscode.window.showWarningMessage('This target is inside an open Java workspace. Initial project import may execute downloaded or existing build configuration. Continue only after reviewing the project scripts.',{modal:true},label)!==label)return;trusted();allowProjectExecution=true;}const result=await api.apply({reviewId:review.reviewId,allowWrite:true,allowProjectExecution});const doc=await vscode.workspace.openTextDocument(documentUri(result.reviewId,'outcome.md'));await vscode.window.showTextDocument(doc,{preview:false});await vscode.window.showInformationMessage(result.state==='editor-unsaved'?'The editor change is not saved. Save/reconcile it before resync.':'Files are saved. Use Resync Spring Project when ready to import/update configuration, then the Java workbench to build/run.');return result;});
  command('rocketbrain.spring.resyncProject',async()=>{const projectUri=await chooseProject();if(!projectUri)return;if(await vscode.window.showWarningMessage('Resync can execute Maven/Gradle project configuration and resolve dependencies. Build/run remain separate actions.',{modal:true},'Resync reviewed project')!=='Resync reviewed project')return;trusted();return api.resync({projectUri,allowProjectExecution:true});});

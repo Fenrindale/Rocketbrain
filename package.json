@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.104.0",
+  "version": "0.106.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -188,6 +188,8 @@
       { "command": "rocketbrain.review.draft", "title": "Add Local Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.page", "title": "Navigate Review Pages", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.publishDraft", "title": "Publish Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
+      { "command": "rocketbrain.review.action", "title": "Repository Review Action", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
+      { "command": "rocketbrain.review.refresh", "title": "Refresh Repository Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.discardDraft", "title": "Discard Local Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.token", "title": "Set Repository Review Token", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.traceStream", "title": "Trace Java Stream Values", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java && editorHasSelection" },
@@ -221,8 +223,11 @@
       { "command": "rocketbrain.sqlite.refresh", "title": "Refresh SQLite Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sqlite.browse", "title": "Browse SQLite Tables and Indexes", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sqlite.newQuery", "title": "New SQLite Query", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted" },
-      { "command": "rocketbrain.sqlite.run", "title": "Review and Run SQLite Query", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot" },
+      { "command": "rocketbrain.sqlite.run", "title": "Review and Run SQLite Query", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot && resourceScheme != rocketbrain-sqlite-edit" },
       { "command": "rocketbrain.sqlite.close", "title": "Close SQLite Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected" },
+      { "command": "rocketbrain.sqlite.chooseEditRuntime", "title": "Choose Pinned SQLite Edit Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.sqliteEditPlatform" },
+      { "command": "rocketbrain.sqlite.reviewCellEdit", "title": "Review SQLite Cell Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.sqliteConnected && rocketbrain.sqliteEditRuntime" },
+      { "command": "rocketbrain.sqlite.applyCellEdit", "title": "Apply Reviewed SQLite Cell Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.sqliteConnected && rocketbrain.sqliteEditRuntime && resourceScheme == rocketbrain-sqlite-edit", "icon": "$(check)" },
       { "command": "rocketbrain.mongodb.open", "title": "Connect to MongoDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.mongodb.browse", "title": "Browse MongoDB Collections", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
       { "command": "rocketbrain.mongodb.newFind", "title": "New MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
@@ -310,6 +315,12 @@
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.grounded", "title": "Explore Schema with Local SQL Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.acp.reviewDatabase", "title": "Review Database ACP Tasks", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
+      { "command": "rocketbrain.acp.reviewWorkspaceEdit", "title": "Review an ACP Multi-File Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.localSqlAssistant.continueGrounded", "title": "Continue Grounded SQL Exploration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
+      { "command": "rocketbrain.localSqlAssistant.groundedTranscript", "title": "Show Grounded SQL Exploration Transcript", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
+      { "command": "rocketbrain.acp.savedSession", "title": "Start or Continue a Saved ACP Session", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.acp.removeSavedSession", "title": "Remove a Saved ACP Session", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.acp.recoverSavedSessions", "title": "Recover Saved ACP Workspace Storage", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localSqlAssistant.compareProposals", "title": "Compare Local SQL Proposals", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.measurePlan", "title": "Measure SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
@@ -1415,6 +1426,8 @@
       "view/title": [
         { "command": "rocketbrain.sqlite.open", "when": "view == rocketbrain.databases && isWorkspaceTrusted", "group": "connection@3" },
         { "command": "rocketbrain.sqlite.browse", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && isWorkspaceTrusted", "group": "connection@4" },
+        { "command": "rocketbrain.sqlite.chooseEditRuntime", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && isWorkspaceTrusted && rocketbrain.sqliteEditPlatform", "group": "connection@5" },
+        { "command": "rocketbrain.sqlite.reviewCellEdit", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && rocketbrain.sqliteEditRuntime && isWorkspaceTrusted", "group": "connection@6" },
         { "command": "rocketbrain.focusQueryEditor", "when": "view == rocketbrain.results && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.select", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.refresh", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@2" },
@@ -1539,6 +1552,7 @@
         }
       ],
       "editor/title": [
+        { "command": "rocketbrain.sqlite.applyCellEdit", "when": "resourceScheme == rocketbrain-sqlite-edit && rocketbrain.sqliteConnected && rocketbrain.sqliteEditRuntime && isWorkspaceTrusted", "group": "navigation" },
         {
           "command": "rocketbrain.jdbc.run",
           "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.jdbcConnected && isWorkspaceTrusted",
@@ -1798,7 +1812,7 @@
       },
       { "command": "rocketbrain.jpa.console.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jpql && isWorkspaceTrusted" },
       { "command": "rocketbrain.duckdb.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == duckdb-sql && rocketbrain.duckdbConnected && isWorkspaceTrusted" },
-      { "command": "rocketbrain.sqlite.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot && rocketbrain.sqliteConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.sqlite.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot && resourceScheme != rocketbrain-sqlite-edit && rocketbrain.sqliteConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.jdbc.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jdbc && rocketbrain.jdbcConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.focusQueryResults", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "editorTextFocus && editorLangId == sql && !suggestWidgetVisible" },
       { "command": "rocketbrain.focusQueryEditor", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "!editorTextFocus && (focusedView == rocketbrain.results || webviewId == rocketbrain.results) && isWorkspaceTrusted" },
@@ -2016,6 +2030,10 @@
               "args": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
             }
           }
+        },
+        "rocketbrain.acp.workspaceEditOpenCodePath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to the optional OpenCode executable for reviewed ACP source edits and saved sessions with the configured loopback code model."
         },
         "rocketbrain.acp.databaseAgents": {
           "type": "array", "default": [], "scope": "machine-overridable", "maxItems": 20,

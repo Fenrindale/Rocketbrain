@@ -1,5 +1,5 @@
 {
-  "version": "0.104.0",
+  "version": "0.106.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,35 +30,33 @@
     }
   },
   "summary": {
-    "implemented": 157,
-    "partial": 45,
+    "implemented": 162,
+    "partial": 40,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 88.7,
+    "percent": 89.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-024",
-    "IDEA-063",
-    "IDEA-083",
+    "IDEA-052",
+    "IDEA-060",
     "IDEA-095",
+    "IDEA-116",
     "DG-003",
-    "DG-089",
-    "DG-091"
+    "DG-089"
   ],
   "expandedFeatures": [
-    "IDEA-024",
-    "IDEA-063",
-    "IDEA-083",
+    "IDEA-052",
+    "IDEA-060",
     "IDEA-095",
+    "IDEA-116",
     "DG-003",
-    "DG-089",
-    "DG-091"
+    "DG-089"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -730,8 +728,8 @@
       "verification": {
         "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.104.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1586,22 +1584,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Gradle 버전 카탈로그의 Spring Boot 플랫폼과 등록된 라이브러리 별칭을 사용해 starter 변경을 검토하고, 설정과 카탈로그의 검토 시점 버전을 확인한다.",
+      "scope": "로컬 Maven 부모 POM의 Boot BOM을 확인하고, 하위 POM의 일반 의존성이나 선택한 명시 프로필에서 starter 변경을 검토한다.",
       "remaining": [
-        "일반 Maven 상속과 복수 BOM·프로필, 추가 Gradle DSL 관리가 남아 있다."
+        "추가 BOM의 정확한 모델을 검증한 변경 흐름을 연결한다."
       ],
       "verification": {
-        "state": "v0.100-installed-coverage",
+        "state": "v0.106-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.100.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Gradle 9.1.0과 Spring Boot 4.1.2에서 별칭에 묶인 starter와 JDBC 드라이버, 변경 전후, Undo/Redo와 실제 Boot JAR 실행을 확인했다.",
+        "testedScope": "실제 Maven 부모 두 개와 명시 프로필에서 effective POM, 두 JDBC 드라이버, 새 Boot JAR 실행을 확인했다.",
         "publicEvidence": [
-          "test/spring-gradle-catalog-host.js",
-          "test/helpers/spring-gradle-catalog-fixture.js"
+          "test/spring-maven-parent-host.js",
+          "test/spring-maven-profile-host.js",
+          "test/workflows-v106-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1822,26 +1821,23 @@
       "category": "Spring·영속성",
       "feature": "JPQL/HQL 작성·JPA Console",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "읽기 전용 Hibernate JPQL/HQL 콘솔이 엔티티의 직접 연관관계 세 개까지 한 번의 조회로 펼친다. 하나의 Bag·List와 to-one 또는 검증된 두 표준 Set을 지원한다.",
-      "remaining": [
-        "중첩·연쇄 경로, 일반 엔티티 반환, 사용자 정의 매핑 및 다른 provider가 남아 있다."
-      ],
+      "scope": "검토한 JPQL에서 관리 엔티티의 기본 필드, to-one 조인, 스칼라 결과를 볼 수 있다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.70-installed-coverage",
+        "state": "v0.106-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.70.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 DB에서 nullable to-one 두 개와 Bag의 중복을 보존했다. 두 Set의 물리 조인 일곱 행, 512행 초과 거부, 반복·중첩·병렬 Bag의 실행 전 거부, 읽기 전용 롤백을 확인했다.",
+        "testedScope": "실제 Hibernate에서 루트·조인·NULL 행, 콜백 실행 없이 한 번의 읽기 전용 SELECT, 바뀐 매핑 거부를 확인했다.",
         "publicEvidence": [
-          "runtime/jpa-observer/src/rocketbrain/observer/ConsoleFetchSnapshot.java",
-          "src/jpa/vscode.js",
-          "test/jpql-multi-fetch-host.js"
+          "test/jpql-entity-projection-host.js",
+          "test/workflows-v106-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1922,8 +1918,8 @@
       "verification": {
         "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.104.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2507,8 +2503,8 @@
       "verification": {
         "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.104.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2845,25 +2841,23 @@
       "category": "VCS·리뷰",
       "feature": "GitHub PR·GitLab MR 리뷰",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "GitHub·GitLab 변경 파일과 대화 페이지를 탐색하며, 검토한 커밋과 줄에 로컬 초안을 게시한다.",
-      "remaining": [
-        "정식 리뷰 제출과 기존 메모 편집을 추가한다."
-      ],
+      "scope": "GitHub·GitLab의 리뷰 변경과 대화를 읽고 승인, 검토 의견, 답글·편집을 보낸다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.104-installed-coverage",
+        "state": "v0.106-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "소유 GitHub·GitLab API 시험 서버에서 정확한 줄과 커밋에 한 번 게시했다. 서버 응답이 끊긴 시도는 자동 재전송하지 않았다.",
+        "testedScope": "소유 HTTP 시험 서버에서 정확한 커밋과 노트 승인, 수정된 원본과 불확정 응답의 재전송 거부를 확인했다.",
         "publicEvidence": [
-          "test/code-review-publication-host.js",
-          "test/workflows-v104-host.js"
+          "test/code-review-actions-host.js",
+          "test/workflows-v106-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3464,26 +3458,24 @@
       "category": "설정·확장·AI",
       "feature": "Air·ACP 에이전트·병렬 작업",
       "priority": "P2",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "두세 로컬 ACP v1 프로세스에 같은 요청을 병렬로 보내고 스트리밍 결과를 VS Code 차이 보기에서 비교한다. 에디터 파일과 터미널 권한 요청을 거절한다.",
-      "remaining": [
-        "장기 복구 가능한 다중 요청 세션, 원격 ACP 전송과 승인된 다중 파일 변경이 남아 있다."
-      ],
+      "scope": "로컬 ACP 에이전트의 다중 파일 제안을 검토해 한 번 적용하고, 승인한 작업 세션을 암호화해 후속 요청을 이어갈 수 있다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.56-installed-coverage",
+        "state": "v0.106-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.56.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "공식 ACP SDK 2.12.0의 독립 프로세스 둘이 교대로 도착하는 요청에서 동시 실행, 텍스트 청크, 권한 거절, 결과 비교를 실제 프로토콜로 확인했다. 취소는 별도 실제 피어 시험에서 확인했다.",
+        "testedScope": "실제 OpenCode와 Qwen이 두 Java 파일의 변경을 제안했다. 컴파일 후 Spring에서 실행했고 새 OpenCode 프로세스가 암호화한 이력을 복구했다.",
         "publicEvidence": [
-          "src/ai/acp-process.js",
-          "src/ai/acp-vscode.js",
-          "test/acp-review-host.js"
+          "test/acp-workspace-edit-host.js",
+          "test/acp-recovery-host.js",
+          "test/workflows-v106-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3675,26 +3667,23 @@
       "category": "연결·드라이버",
       "feature": "다중 SQL·NoSQL DBMS 드라이버",
       "priority": "P2",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "실제 SQLite 파일의 타입·키·인덱스를 읽고, PostgreSQL EXPLAIN ANALYZE의 행·타이밍·버퍼를 검토한다.",
-      "remaining": [
-        "SQLite 원본 셀 편집을 검증한다."
-      ],
+      "scope": "MySQL·MariaDB와 지원하는 PostgreSQL·SQLite·MongoDB 연결 및 결과에서 읽기·타입·검토한 편집을 제공한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.104-installed-coverage",
+        "state": "v0.106-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "SQLite 스냅샷·정확한 숫자와 BLOB·공용 결과, PostgreSQL 17.12의 쿼리 승인과 실제 시간·버퍼·중단을 확인했다.",
+        "testedScope": "실제 SQLite에서 64비트 한계, 실수, 유니코드, BLOB과 NULL을 원본에 반영했다. 다른 행, 잠금 및 파일·스키마·행 변경에 대한 검토를 확인했다.",
         "publicEvidence": [
-          "test/sqlite-file-host.js",
-          "test/postgresql-measured-plan-host.js",
-          "test/workflows-v104-host.js"
+          "test/sqlite-cell-edit-host.js",
+          "test/workflows-v106-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6213,25 +6202,23 @@
       "category": "AI·도구 연결",
       "feature": "schema 문맥의 자연어 SQL·설명",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "로컬 Qwen 모델이 승인한 컬럼과 검증한 FK 그래프에서 읽기 SQL을 제안하고 수정한다.",
-      "remaining": [
-        "검토를 닫고 별도 명령에서 다시 열어 이어가는 기능을 추가한다."
-      ],
+      "scope": "검토한 FK·컬럼의 로컬 모델 SQL 초안을 닫은 뒤 같은 관계로 이어서 질문하고 두 계획의 차이를 본다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.104-installed-coverage",
+        "state": "v0.106-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Qwen에서 테이블 네 개·외래 키 세 개와 복합 키 두 열을 사용했다. 양쪽 DB에서 두 질의 결과와 계획을 대조했다.",
+        "testedScope": "실제 로컬 Qwen으로 읽기 SQL 두 차례, 결과 1행과 2행, 원본 편집기 다시 열기, 바뀐 FK 거부와 대화 기록을 확인했다.",
         "publicEvidence": [
-          "test/local-sql-grounding-host.js",
-          "test/workflows-v104-host.js"
+          "test/local-sql-exploration-host.js",
+          "test/workflows-v106-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6280,8 +6267,8 @@
       "verification": {
         "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.104.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6443,8 +6430,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "5a596b0cd6534ad8d46239c048da9afba758b3aaf92dc18442225c7aea991b82",
-    "sourceManifestSha256": "f40985287639e90134f3fbe1e1dd7f6535bc41af096fb41f5e9f9018e4523d6e",
+    "vsixSha256": "fef8dffe1c9dcd68a8d6a7e0141a0acff41f4e7196cf4982cc3dd6f7a571e2c8",
+    "sourceManifestSha256": "a9c2ebc60fc9eb207f4ed085d3d1fd9b9e43377eeffe3d030048aee4b74cab90",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6458,20 +6445,35 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-083",
+      "id": "IDEA-060",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-091",
+      "id": "IDEA-095",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "IDEA-116",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-003",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-089",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1968,
-    "pass": 1807,
+    "tests": 1980,
+    "pass": 1819,
     "fail": 0,
     "cancelled": 0,
     "skipped": 161,

@@ -1,86 +1,26 @@
 'use strict';
 
-const fs = require('node:fs/promises');
-const { createReadStream } = require('node:fs');
 const { randomUUID, createHash } = require('node:crypto');
-const os = require('node:os');
-const path = require('node:path');
-const { agentProgram, runAgent } = require('../ai/acp-process');
-const { normalizeLocalChatTarget } = require('../ai/local-chat');
-const { startStructuredBridge } = require('../ai/acp-structured-bridge');
+const { prepareIsolatedAgent, runIsolatedAgent } = require('../ai/acp-isolated-peer');
 const { projectGrounding, prepareGroundedIntent, compileGroundedQuery } = require('./local-sql-grounding');
-
-async function executableDigest(executable) {
-  if ((await fs.stat(executable)).size > 256 * 1024 * 1024) throw Error('Select a standalone ACP executable of at most 256 MiB.');
-  const hash = createHash('sha256');
-  for await (const chunk of createReadStream(executable)) hash.update(chunk);
-  return hash.digest('hex');
-}
 
 async function prepareDatabaseAgents(profiles, localModel) {
   if (!Array.isArray(profiles) || !profiles.length || profiles.length > 3) throw Error('Select up to three database ACP profiles.');
-  const agents = await Promise.all(profiles.map(async input => {
-    const adapter = input?.adapter ?? 'stdio';
-    if (!['stdio', 'opencode-local'].includes(adapter)) throw Error('Select a stable ACP v1 stdio agent adapter.');
-    const profile = await agentProgram(input);
-    if (adapter === 'opencode-local' && (!/^opencode(?:\.exe)?$/i.test(path.basename(profile.executable)) || profile.args.length)) {
-      throw Error('Provide the OpenCode executable without custom arguments for the local OpenCode adapter.');
-    }
-    if (adapter === 'opencode-local') profile.args = ['acp', '--pure'];
-    return { ...profile, adapter, sha256: await executableDigest(profile.executable),
-      ...(adapter === 'opencode-local' && { localModel: normalizeLocalChatTarget(localModel?.endpoint, localModel?.model) }) };
-  }));
+  const agents = await Promise.all(profiles.map(input => prepareIsolatedAgent(input, localModel)));
   if (new Set(agents.map(agent => agent.label)).size !== agents.length) throw Error('Choose distinctly named ACP profiles.');
   return agents;
 }
 
-function isolatedEnvironment(folder) {
-  const system = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(Path|SystemRoot|ComSpec|windir|PATHEXT|LANG|LC_ALL)$/i.test(key)));
-  // A peer inherits bootstrap paths only, plus its own temporary profile directories.
-  return { ...system, HOME: folder, USERPROFILE: folder, LOCALAPPDATA: folder, APPDATA: folder, TEMP: folder, TMP: folder,
-    XDG_CONFIG_HOME: folder, XDG_STATE_HOME: folder, XDG_DATA_HOME: folder, XDG_CACHE_HOME: folder };
-}
-
 async function executeDatabaseAgent(agent, intent, { signal, onUpdate } = {}) {
-  signal?.throwIfAborted();
-  if (await executableDigest(agent.executable) !== agent.sha256) throw Error('The reviewed ACP executable changed. Review it again.');
-  signal?.throwIfAborted();
-  const parent = await fs.realpath(os.tmpdir());
-  const folder = await fs.mkdtemp(path.join(parent, 'rocketbrain-db-acp-'));
-  let bridge;
-  try {
-    const env = isolatedEnvironment(folder);
-    if (agent.adapter === 'opencode-local') {
-      const { model } = agent.localModel;
-      bridge = await startStructuredBridge(agent.localModel, { prompt: intent.text, schema: intent.schema, name: 'rocketbrain_acp_sql', signal });
-      const config = { model: 'rocketbrain/' + model, enabled_providers: ['rocketbrain'], autoupdate: false, snapshot: false,
-        default_agent: 'rocketbrain-review', agent: { 'rocketbrain-review': { mode: 'primary', temperature: 0, top_p: 1,
-          prompt: 'Follow the latest reviewed request literally. Return exactly the requested JSON object. Use no tools.' } },
-        permission: 'deny', provider: { rocketbrain: { name: 'Approved loopback model', npm: '@ai-sdk/openai-compatible',
-          options: { baseURL: bridge.baseURL, apiKey: bridge.key },
-          models: { [model]: { name: model, tool_call: false, limit: { context: 4096, output: 1024 } } } } } };
-      const filename = path.join(folder, 'opencode.json');
-      await fs.writeFile(filename, JSON.stringify(config), { flag: 'wx', mode: 0o600 });
-      Object.assign(env, { OPENCODE_CONFIG: filename, OPENCODE_DISABLE_AUTOUPDATE: '1', OPENCODE_DISABLE_DEFAULT_PLUGINS: '1',
-        OPENCODE_DISABLE_MODELS_FETCH: '1' });
-    }
-    const reply = await runAgent(agent, { cwd: folder, env, text: intent.text, signal, onUpdate });
-    if (reply.stopReason !== 'end_turn') throw Error('The ACP job finished before returning an SQL proposal.');
-    const text = reply.output.trim();
-    const fenced = /^```(?:json)?\s*\r?\n([\s\S]*?)\r?\n```$/i.exec(text);
-    let answer;
-    try { answer = JSON.parse(fenced?.[1] ?? text); }
-    catch { throw Error('The ACP peer did not return one structured SQL plan.'); }
-    const result = compileGroundedQuery(intent.scope, answer);
-    return { ...result, denied: reply.denied, stopReason: reply.stopReason };
-  } finally {
-    await bridge?.close();
-    const current = await fs.realpath(folder).catch(error => { if (error.code !== 'ENOENT') throw error; });
-    if (current && (current !== folder || path.dirname(current) !== parent || !path.basename(current).startsWith('rocketbrain-db-acp-'))) {
-      throw Error('The isolated database ACP directory changed before cleanup.');
-    }
-    if (current) await fs.rm(current, { recursive: true, maxRetries: 6, retryDelay: 150 });
-  }
+  const reply = await runIsolatedAgent(agent, { text: intent.text, schema: intent.schema, schemaName: 'rocketbrain_acp_sql', signal, onUpdate });
+  if (reply.stopReason !== 'end_turn') throw Error('The ACP job finished before returning an SQL proposal.');
+  const text = reply.output.trim();
+  const fenced = /^```(?:json)?\s*\r?\n([\s\S]*?)\r?\n```$/i.exec(text);
+  let answer;
+  try { answer = JSON.parse(fenced?.[1] ?? text); }
+  catch { throw Error('The ACP peer did not return one structured SQL plan.'); }
+  const result = compileGroundedQuery(intent.scope, answer);
+  return { ...result, denied: reply.denied, stopReason: reply.stopReason };
 }
 
 function prepareDatabaseTasks({ catalog, choices, agents, tasks }) {

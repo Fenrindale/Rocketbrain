@@ -161,7 +161,8 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     await fsp.writeFile(observerTokenFile,crypto.randomBytes(32).toString('hex'),{flag:'wx',mode:0o600});
     await fsp.writeFile(configFile,JSON.stringify({tokenFile:observerTokenFile,descriptorFile:observerDescriptorFile,port:0,queries:true,validate:true,
       performance:process.env.ROCKETBRAIN_JPA_PERFORMANCE_TEST==='1',consoleSelect:process.env.ROCKETBRAIN_JPA_CONSOLE_TEST==='1',
-      consoleFetchSnapshots:process.env.ROCKETBRAIN_JPA_FETCH_SNAPSHOT_TEST==='1'}),{flag:'wx',mode:0o600});
+      consoleFetchSnapshots:process.env.ROCKETBRAIN_JPA_FETCH_SNAPSHOT_TEST==='1',
+      consoleEntityProjections:process.env.ROCKETBRAIN_JPA_ENTITY_PROJECTION_TEST==='1'}),{flag:'wx',mode:0o600});
     observerArgs=['-javaagent:'+agent.jarPath+'=config='+pathToFileURL(configFile).href];
   }
   const runtimeUrl = 'http://127.0.0.1:' + port + '/actuator', baseUrl = 'http://127.0.0.1:' + port;
@@ -294,6 +295,9 @@ async function main() {
       const sqliteFileConfig = process.env.ROCKETBRAIN_ENABLE_SQLITE_FILE_FIXTURE === '1'
         ? await require('../test/helpers/sqlite-file-fixture').prepareSqliteFileFixture(fixture)
         : undefined;
+      const sqliteEditConfig = process.env.ROCKETBRAIN_ENABLE_SQLITE_EDIT_FIXTURE === '1'
+        ? require('../test/helpers/sqlite-edit-fixture').prepareSqliteEditFixture(fixture)
+        : undefined;
       const passwordRotationConfig = process.env.ROCKETBRAIN_ENABLE_PASSWORD_ROTATION_FIXTURE === '1'
         ? await require('../test/helpers/database-password-rotation-fixture').preparePasswordRotationFixture(fixture)
         : undefined;
@@ -315,6 +319,7 @@ async function main() {
           ...(functionGrantConfig ? { ROCKETBRAIN_FUNCTION_GRANT_CONFIG:functionGrantConfig } : {}),
           ...(functionRoleConfig ? { ROCKETBRAIN_FUNCTION_ROLE_CONFIG:functionRoleConfig } : {}),
           ...(sqliteFileConfig ? { ROCKETBRAIN_SQLITE_FILE_CONFIG:sqliteFileConfig } : {}),
+          ...(sqliteEditConfig ? { ROCKETBRAIN_SQLITE_EDIT_CONFIG:sqliteEditConfig } : {}),
           ...(fixture.db.crossConfigPath ? { ROCKETBRAIN_SCHEMA_CROSS_CONFIG: fixture.db.crossConfigPath } : {}) } });
         child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
       });

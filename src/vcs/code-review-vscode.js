@@ -8,7 +8,7 @@ const storeKey='rocketbrain.codeReview.drafts.v1';
 
 function registerCodeReview(context,vscode) {
   let disposed=false, writes=Promise.resolve();
-  const documents=new Map(), publications=new Map(), activeDrafts=new Set();
+  const documents=new Map(), publications=new Map(), reviewActions=new Map(), activeDrafts=new Set();
   const updates=new vscode.EventEmitter();
 
   function guard() {
@@ -178,6 +178,34 @@ function registerCodeReview(context,vscode) {
     return publish(review.scope,updated);
   }
 
+  async function refreshReview(uri,{signal}={}) {
+    const {review}=available(uri), {value}=review;
+    const api=await client(settingsForScope(review.scope));
+    const updated=await api.read(value.id,{signal,filePage:value.filePage,commentPage:value.commentPage});
+    return publish(review.scope,updated);
+  }
+
+  async function reviewAction(uri,{action,noteId,body},{signal}={}) {
+    const {review}=available(uri), {value}=review;
+    const note=value.comments.find(item=>item.id===noteId&&noteId!==undefined);
+    const api=await client(settingsForScope(review.scope));
+    const draft=await api.prepareAction({action,review:value.id,head:value.head,base:value.base,
+      start:value.start??null,commentPage:value.commentPage,note,body},{signal});
+    for(const [id,entry] of reviewActions) if(entry.expires<Date.now()) reviewActions.delete(id);
+    if(reviewActions.size>=8) reviewActions.delete(reviewActions.keys().next().value);
+    reviewActions.set(draft.actionId,{api,scope:review.scope,expires:Date.now()+120000});
+    return draft;
+  }
+
+  async function sendReviewAction(actionId,{approved=false,signal}={}) {
+    if(approved!==true) throw Error('Explicitly approve the selected review action.');
+    const bound=reviewActions.get(actionId);
+    reviewActions.delete(actionId);
+    if(!bound||bound.expires<Date.now()) throw Error('Prepare a fresh review action.');
+    settingsForScope(bound.scope);
+    return bound.api.submitAction(actionId,{approved,signal,beforeDispatch:()=>settingsForScope(bound.scope)});
+  }
+
   function progress(title,action) {
     return vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title,cancellable:true},async(_,token)=>{
       const abort=new AbortController(), listener=token.onCancellationRequested(()=>abort.abort());
@@ -200,7 +228,7 @@ function registerCodeReview(context,vscode) {
         'Changed files · Page '+(view.filePage??1),
         ...view.files.map(file=>file.state+' · '+file.name+(file.limited?' · Patch unavailable':'')),
         ...(view.coverage.moreFiles?['More changed files are available on the server.']:[]),
-        '','Discussion · Page '+(view.commentPage??1),...view.comments.map(item=>`${item.author} · ${item.file||'Review'}${item.line?' · Line '+item.line:''}\n${item.body}`),
+        '','Discussion · Page '+(view.commentPage??1),...view.comments.map(item=>`${item.author} · ${item.file||'Review'}${item.line?' · Line '+item.line:''}${item.id?' · Note '+item.id:''}\n${item.body}`),
         ...(view.coverage.moreComments?['More comments are available on the server.']:[]),
         ...(view.coverage.limitedComments?['Showing the first 100 comments on this page.']:[]),
         ...(view.linkedIssueNumbers?.length?['','Linked issues',...view.linkedIssueNumbers.map(value=>'#'+value)]:[]),
@@ -274,6 +302,48 @@ function registerCodeReview(context,vscode) {
       return result;
     } finally { publications.delete(entry.publicationId); }
   });
+  command('refresh',async()=>{
+    const uri=vscode.window.activeTextEditor?.document.uri;
+    return progress('Refreshing the repository review',signal=>refreshReview(uri,{signal}));
+  });
+  command('action',async()=>{
+    const uri=vscode.window.activeTextEditor?.document.uri, {review}=available(uri);
+    const github=review.value.provider==='github';
+    const choices=[
+      {label:'Approve Review',action:'approve'},
+      {label:'Submit Review Comment',action:'comment'},
+      ...(github?[{label:'Request Changes',action:'request-changes'}]:[]),
+      {label:'Reply to Discussion',action:'reply'},
+      {label:'Edit Discussion Note',action:'edit'}
+    ];
+    const selected=await vscode.window.showQuickPick(choices,{title:'Repository Review Action'});
+    if(!selected) return;
+    let note;
+    if(['reply','edit'].includes(selected.action)) {
+      const notes=review.value.comments.filter(item=>item.id).map(value=>({
+        label:value.author+' · Note '+value.id,description:value.body.slice(0,100),value
+      }));
+      if(!notes.length) return vscode.window.showInformationMessage('No editable discussion notes were returned on this page.');
+      note=(await vscode.window.showQuickPick(notes,{title:selected.label}))?.value;
+      if(!note) return;
+    }
+    let body;
+    if(selected.action!=='approve') {
+      body=await vscode.window.showInputBox({title:selected.label,value:selected.action==='edit'?note.body:undefined});
+      if(body===undefined) return;
+    }
+    const entry=await progress('Checking the review revision',signal=>
+      reviewAction(uri,{action:selected.action,noteId:note?.id,body},{signal}));
+    try {
+      const detail=[entry.head,entry.note&&'Note '+entry.note.id+' · '+entry.note.author,entry.note?.body,entry.body].filter(Boolean).join('\n\n');
+      const confirmation=await vscode.window.showWarningMessage(entry.repository+' #'+entry.review,
+        {modal:true,detail},selected.label);
+      if(confirmation!==selected.label) return;
+      const result=await progress('Sending the approved review action',signal=>sendReviewAction(entry.actionId,{approved:true,signal}));
+      await vscode.window.showInformationMessage('Review action submitted. Refresh the review to read the current discussion.');
+      return result;
+    } finally { reviewActions.delete(entry.actionId); }
+  });
   command('discardDraft',async()=>{
     const uri=vscode.window.activeTextEditor?.document.uri;
     const {review,id}=available(uri);
@@ -308,8 +378,9 @@ function registerCodeReview(context,vscode) {
     return scope;
   }
 
-  return {publish,openPatch,draft,changePage,reviewPublication,publishDraft,storeToken,read(input,id,options){guard();return createReviewClient(input).read(id,options);},
-    async dispose(){disposed=true;documents.clear();publications.clear();await writes;for(const item of subscriptions)item.dispose();}};
+  return {publish,openPatch,draft,changePage,reviewPublication,publishDraft,refreshReview,reviewAction,sendReviewAction,storeToken,
+    read(input,id,options){guard();return createReviewClient(input).read(id,options);},
+    async dispose(){disposed=true;documents.clear();publications.clear();reviewActions.clear();await writes;for(const item of subscriptions)item.dispose();}};
 }
 
 module.exports={registerCodeReview};

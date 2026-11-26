@@ -2,7 +2,9 @@
 
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+const { createServer } = require('node:http');
 const { relationshipOptions, projectGrounding, compileGroundedQuery, prepareGroundedRequest } = require('../src/db/local-sql-grounding');
+const { registerGroundedSqlAssistant } = require('../src/db/local-sql-grounding-vscode');
 const { explanationHtml } = require('../src/db/explain-plan-view');
 
 const column = (name, type = 'int') => ({ name, type });
@@ -23,6 +25,54 @@ const choices = { root: 'orders', edgeIds: [first.id, second.id], selections: [
 ] };
 const plan = { columns: ['regions.name'], measures: [{ column: 'orders.total', function: 'SUM' }],
   sort: [{ key: 'SUM(orders.total)', direction: 'DESC' }], limit: 25, explanation: 'Totals by region' };
+
+test('an exploration has fixed turn, model request and total lifetime bounds', async t => {
+  let accept = true, hits = 0;
+  const model = createServer((request, response) => {
+    hits++;
+    request.resume();
+    response.writeHead(accept ? 200 : 500, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: JSON.stringify(plan) }, finish_reason: 'stop' }] }));
+  });
+  await new Promise(resolve => model.listen(0, '127.0.0.1', resolve));
+  const subscriptions = [], disposable = { dispose() {} };
+  const target = { model: 'fixture', endpoint: 'http://127.0.0.1:' + model.address().port + '/v1/chat/completions' };
+  const api = registerGroundedSqlAssistant({ subscriptions }, {
+    workspace: { isTrusted: true, getConfiguration: () => ({ get: name => target[name] }),
+      onDidChangeConfiguration: () => disposable, registerTextDocumentContentProvider: () => disposable },
+    commands: { registerCommand: () => disposable }
+  }, { liveCatalogIdentity: () => 'fixture', databaseCatalog: async () => catalog, onDidChangeDatabase: () => disposable });
+  t.after(async () => {
+    for (const item of subscriptions) item.dispose();
+    await new Promise(resolve => model.close(resolve));
+  });
+  const stage = previousId => api.stage(previousId ? { previousId, input: 'Keep the request' } : { choices, input: 'Summarize by region' });
+  async function approved(previousId) {
+    const request = await stage(previousId);
+    const proposal = await api.draft(request.id, { confirmed: true });
+    api.review(proposal.id, { confirmed: true, digest: proposal.digest });
+    return proposal;
+  }
+  const first = await approved();
+  let latest = first;
+  for (let turn = 2; turn <= 4; turn++) latest = await approved(latest.id);
+  assert.equal(first.explorationId, latest.explorationId);
+  assert.equal(api.transcript(first.explorationId).turns.length, 4);
+  await assert.rejects(stage(latest.id), /turn or model request limit/);
+  assert.equal(hits, 4);
+  const limited = await approved();
+  accept = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const pending = await stage(limited.id);
+    await assert.rejects(api.draft(pending.id, { confirmed: true }), /could not complete the request/);
+  }
+  await assert.rejects(stage(limited.id), /turn or model request limit/);
+  assert.equal(hits, 10);
+  const { expiresAt } = api.transcript(first.explorationId);
+  t.mock.method(Date, 'now', () => expiresAt);
+  assert.throws(() => api.transcript(first.explorationId), /expired/);
+  await assert.rejects(stage(limited.id), /expired|limit/);
+});
 
 test('full composite and chained keys are compiled rather than inferred from model SQL', () => {
   const scope = projectGrounding(catalog, choices);
