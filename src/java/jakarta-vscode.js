@@ -5,10 +5,12 @@ const { randomUUID } = require('node:crypto');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 const { mavenWarProject,listWarArtifacts,resolveWarArtifact,contextPattern } = require('./jakarta-war');
 const { createTomcatDeployment,reviewTomcatWarSet,MAX_APPLICATIONS } = require('./jakarta-tomcat');
+const { registerJakartaManager } = require('./jakarta-manager-vscode');
 
 const MARKER='__rocketbrainJakartaRun';
 const COMMANDS={build:'rocketbrain.jakarta.buildWar',deploy:'rocketbrain.jakarta.deploy',
   deploySet:'rocketbrain.jakarta.deploySet',undeploy:'rocketbrain.jakarta.undeploy',
+  manager:'rocketbrain.jakarta.manager',
   debug:'rocketbrain.jakarta.debug',status:'rocketbrain.jakarta.status',stop:'rocketbrain.jakarta.stop'};
 
 function registerJakartaWorkbench(vscode,java) {
@@ -200,6 +202,10 @@ function registerJakartaWorkbench(vscode,java) {
       (_progress,cancellation) => action(cancellation));
   }
 
+  const remote=registerJakartaManager(vscode,{trusted,withProgress,chooseProject,listWarArtifacts,output,
+    resolveArtifact:async (projectUri,warUri,cancellation) => resolveWarArtifact(await projectFor(projectUri,cancellation),warUri)});
+  register(COMMANDS.manager,remote.command);
+
   register(COMMANDS.build,async () => {
     const project=await chooseProject();
     if (!project) return;
@@ -294,11 +300,14 @@ function registerJakartaWorkbench(vscode,java) {
 
   return {artifacts:options => track(() => artifacts(options)),buildWar:options => track(() => buildWar(options)),
     deploy:options => track(async () => (await deployWar(options)).receipt),debug:options => track(() => debug(options)),stop,
+    remoteManager:{observe:options => track(() => remote.observe(options)),review:options => track(() => remote.review(options)),
+      execute:options => track(() => remote.execute(options))},
     reviewSet:options => track(() => reviewSet(options)),deploySet:options => track(() => deploySet(options)),
     undeploy:options => track(() => undeploy(options)),
     getState:backend.getState,dispose() {
       if (closing) return closing;
       disposed=true;
+      remote.dispose();
       closing=(async () => {
         try {await stop();await backend.dispose();}
         finally {await Promise.allSettled(jobs);for (const item of subscriptions) item.dispose();}

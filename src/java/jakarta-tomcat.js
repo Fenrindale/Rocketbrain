@@ -299,4 +299,4 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
   return {deploy,deploySet,undeploy,stop,getState,async dispose(){disposed=true;await stop();}};
 }
 
-module.exports = { createTomcatDeployment,reviewTomcatWarSet,MAX_APPLICATIONS };
+module.exports = { createTomcatDeployment,reviewTomcatWarSet,hashArchive,MAX_APPLICATIONS };
