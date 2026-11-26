@@ -117,6 +117,8 @@
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
+      { "command": "rocketbrain.localCodeModel.enableInline", "title": "Allow Local Inline Completions for This File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
+      { "command": "rocketbrain.localCodeModel.disableInline", "title": "Stop Local Inline Completions", "category": "Rocketbrain" },
       { "command": "rocketbrain.kotlinEditor.start", "title": "Start Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.stop", "title": "Stop Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.output", "title": "Show Kotlin Language Server Output", "category": "Rocketbrain" },
