@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-27 기준 Rocketbrain 0.158.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-27 기준 Rocketbrain 0.160.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 196 |
-| 부분 구현 | 6 |
+| 구현 | 199 |
+| 부분 구현 | 3 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **97.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **98.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.158에서는 Java 이름 변경에 Kotlin 별칭·생성자 참조와 두 JPMS 모듈의 한정 공개 범위를 추가했다. 내부 클래스 이동, 기존 바이너리 호출을 유지하는 Change Signature, 선택 주석 검토, Compose Desktop 리소스 미리보기와 실제 Spring 등록 추적을 확장했다. 상태가 바뀐 항목은 3개이고 가중 점수는 209.5점에서 211점으로 바뀌었다.
+v0.160에서는 여러 JPMS 모듈의 서비스 등록을 보존하는 패키지 이동, 작업공간별 키맵, 실제 Spring Boot 서블릿 컨텍스트의 빈 등록 추적과 Android 에뮬레이터 Kotlin 디버깅을 추가했다. 상태가 바뀐 항목은 3개이고 가중 점수는 211점에서 212.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -48,7 +48,7 @@ v0.158에서는 Java 이름 변경에 Kotlin 별칭·생성자 참조와 두 JPM
 | IDEA-025 | IntelliJ IDEA | 변수·상수·필드 추출 | 구현 |
 | IDEA-026 | IntelliJ IDEA | 메서드 추출 | 구현 |
 | IDEA-027 | IntelliJ IDEA | 변수·메서드 인라인 | 구현 |
-| IDEA-028 | IntelliJ IDEA | 클래스·멤버 이동 | 부분 구현 |
+| IDEA-028 | IntelliJ IDEA | 클래스·멤버 이동 | 구현 |
 | IDEA-029 | IntelliJ IDEA | Change Signature·파라미터 전파 | 구현 |
 | IDEA-030 | IntelliJ IDEA | Safe Delete | 구현 |
 | IDEA-031 | IntelliJ IDEA | 인터페이스 추출 | 구현 |
@@ -73,7 +73,7 @@ v0.158에서는 Java 이름 변경에 Kotlin 별칭·생성자 참조와 두 JPM
 | IDEA-050 | IntelliJ IDEA | 어노테이션 프로세서·Lombok 생성 코드 | 구현 |
 | IDEA-051 | IntelliJ IDEA | Spring Initializr 프로젝트 생성 | 구현 |
 | IDEA-052 | IntelliJ IDEA | 기존 프로젝트 starter 편집 | 구현 |
-| IDEA-053 | IntelliJ IDEA | Bean·Autowiring 분석·빠른 수정 | 부분 구현 |
+| IDEA-053 | IntelliJ IDEA | Bean·Autowiring 분석·빠른 수정 | 구현 |
 | IDEA-054 | IntelliJ IDEA | Bean의 논리 구조·의존성 그래프 | 구현 |
 | IDEA-055 | IntelliJ IDEA | Application Context·분석용 프로필 | 구현 |
 | IDEA-056 | IntelliJ IDEA | Boot properties·YAML 메타데이터 | 구현 |
@@ -133,7 +133,7 @@ v0.158에서는 Java 이름 변경에 Kotlin 별칭·생성자 참조와 두 JPM
 | IDEA-110 | IntelliJ IDEA | Jupyter Notebook·커널·셀 디버그 | 구현 |
 | IDEA-111 | IntelliJ IDEA | 원격 파일 배포·SFTP/FTPS/WebDAV | 구현 |
 | IDEA-112 | IntelliJ IDEA | 설정·스타일·프로필 동기화 | VS Code 재사용 |
-| IDEA-113 | IntelliJ IDEA | IDE 키맵·동작 컨텍스트·테마 | 부분 구현 |
+| IDEA-113 | IntelliJ IDEA | IDE 키맵·동작 컨텍스트·테마 | 구현 |
 | IDEA-114 | IntelliJ IDEA | 플러그인 설치·호환·갱신 | VS Code 재사용 |
 | IDEA-115 | IntelliJ IDEA | AI 완성·채팅·프로젝트 문맥 | 구현 |
 | IDEA-116 | IntelliJ IDEA | Air·ACP 에이전트·병렬 작업 | 구현 |

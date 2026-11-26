@@ -1,5 +1,5 @@
 {
-  "version": "0.158.0",
+  "version": "0.160.0",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,33 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 196,
-    "partial": 6,
+    "implemented": 199,
+    "partial": 3,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 97.7,
+    "percent": 98.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-024",
     "IDEA-028",
-    "IDEA-029",
-    "IDEA-033",
     "IDEA-045",
-    "IDEA-053"
+    "IDEA-053",
+    "IDEA-113"
   ],
   "expandedFeatures": [
-    "IDEA-024",
     "IDEA-028",
-    "IDEA-029",
-    "IDEA-033",
     "IDEA-045",
-    "IDEA-053"
+    "IDEA-053",
+    "IDEA-113"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -726,8 +722,8 @@
       "verification": {
         "state": "v0.158-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.158.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -829,26 +825,24 @@
       "category": "리팩터링·코드 생성",
       "feature": "클래스·멤버 이동",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "지원되는 비정적 내부 클래스를 원래 패키지의 최상위 파일로 이동한다. 원래 바깥 인스턴스와 인수 평가 순서를 보존하고 기존 Java 클래스·멤버·패키지 이동을 유지한다.",
-      "remaining": [
-        "여러 JPMS 모듈의 ServiceLoader 등록, 일반 상속·소유권 이동과 외부 바이너리 참조가 남아 있다."
-      ],
+      "scope": "Java 클래스·내부 클래스·멤버 이동에 실제 Maven JPMS 서비스 패키지 이동을 추가했다. 원래 모듈과 제공자·소비자의 uses·provides·exports 연결을 보존한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.158-vendor-runtime-coverage",
+        "state": "v0.160-vendor-runtime-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Javac와 JDT로 호출을 검증하고 Spring이 관리하는 바깥 객체의 상태와 두 생성자 호출을 유지했다. 명시적 null 소유 객체의 검사 순서와 두 DB의 JDBC 결과도 기준과 일치했다.",
+        "testedScope": "Maven 3.9.11과 실제 JDT에서 서비스 소유 모듈, 두 제공자 모듈, 소비자 모듈을 가져왔다. 이동 전후 생성자·정적 팩터리 제공자의 결과 17·29와 두 DB의 Spring JDBC 결과 46이 일치했다.",
         "publicEvidence": [
-          "runtime/java-signature/src/rocketbrain/signature/InnerMoveInspector.java",
-          "test/java-inner-class-move.test.js",
-          "test/java-inner-class-move-host.js"
+          "src/java/package-move-service.js",
+          "test/java-jpms-service-package-move.test.js",
+          "test/java-jpms-service-package-move-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -867,8 +861,8 @@
       "verification": {
         "state": "v0.158-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.158.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -986,8 +980,8 @@
       "verification": {
         "state": "v0.158-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.158.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1329,23 +1323,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "선택한 Gradle Desktop JVM 대상의 commonMain·desktopMain 또는 jvmMain 및 저장된 리소스를 실제 Compose 미리보기에 사용한다. 기존 JS·Linux Kotlin/Native 지원을 유지한다.",
+      "scope": "기존 Kotlin Multiplatform 디버깅에 소유한 Android 에뮬레이터의 검토된 APK를 실행하여 Kotlin 소스 중단점과 기본형 지역 변수를 검사하는 흐름을 추가했다.",
       "remaining": [
-        "Android·iOS 디버깅 및 범용 expect/actual 타입 계약은 검증 범위가 남아 있다."
+        "iOS Simulator의 실제 소스 중단점과 지역 변수 지원이 남아 있다."
       ],
       "verification": {
-        "state": "v0.158-installed-coverage",
+        "state": "v0.160-vendor-runtime-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Gradle·Kotlin·Skia를 실행했다. 저장된 리소스만 바꾸면 같은 Kotlin 소스의 렌더링 픽셀이 바뀌었고 두 DB의 Spring JDBC 결과도 확인했다.",
+        "testedScope": "Android API 35 실제 에뮬레이터에서 Kotlin 앱을 설치하고 MainActivity.kt의 목표 줄에서 멈췄다. 정수 42를 읽고 실행을 재개했다. 기존 앱, 변경한 소스, 다른 ADB 연결의 변경을 거부하는 경로도 검증했다.",
         "publicEvidence": [
-          "src/java/kmp-compose-preview.js",
-          "test/kmp-compose-preview.test.js",
-          "test/kmp-compose-preview-host.js"
+          "src/java/android-debug-vscode.js",
+          "src/java/android-debug.js",
+          "test/android-kotlin-debug.test.js",
+          ".github/workflows/android-kotlin-debug.yml"
         ],
         "originalProductParityVerified": false
       }
@@ -1560,27 +1555,24 @@
       "category": "Spring·영속성",
       "feature": "Bean·Autowiring 분석·빠른 수정",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "사용자가 지정한 실제 Spring BeanDefinitionRegistry 콜백의 등록·제거·별칭 호출, 종료 상태 및 소스 위치를 기록한다. 기존 BeanFactory 계층 분석과 Maven·Gradle AOT 분석을 유지한다.",
-      "remaining": [
-        "추적 도우미를 사용하지 않는 외부 등록 경로와 임의 AOT 코드 분석이 남아 있다."
-      ],
+      "scope": "선택한 Spring Boot 서블릿 컨텍스트의 빈 정의 등록·제거·별칭 호출을 소스 위치와 함께 기록한다. 기존 BeanFactory 계층 및 AOT 산출물 분석, 직접 선택한 콜백 기록을 유지한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.158-vendor-runtime-coverage",
+        "state": "v0.160-vendor-runtime-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring에서 두 등록 분기를 각각 실행했다. 등록과 별칭 처리 일곱 건, 등록 실패의 예외 전파, 단일 빈 생성 및 두 DB에서 JDBC 42를 확인했다.",
+        "testedScope": "실제 Spring Boot 4.1.2 서블릿 앱에서 초기화 콜백, 가져오기 등록기, 순서가 지정된 후처리기, 나중에 일어난 등록 변경을 관찰했다. 빈 생성 횟수, 종료, 오류 전파와 두 DB의 HTTP·JDBC 결과를 비교했다.",
         "publicEvidence": [
-          "runtime/spring-registration/src/rocketbrain/spring/RegistrationTrace.java",
-          "src/spring/registration-trace.js",
+          "runtime/spring-registration/src/rocketbrain/spring/BootServletRegistrationTrace.java",
           "src/spring/registration-trace-vscode.js",
-          "test/spring-registration-trace.test.js"
+          "test/spring-boot-servlet-trace.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3291,25 +3283,24 @@
       "category": "설정·확장·AI",
       "feature": "IDE 키맵·동작 컨텍스트·테마",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "Windows·Linux·macOS에 맞춘 선택형 52개 키보드 프로필을 만들고 명령 및 입력 JSONC의 키 충돌을 표시한다.",
-      "remaining": [
-        "OS 전역 단축키와 각 키의 물리 입력, 장기 포커스·접근성 동작의 추가 검증이 남아 있다."
-      ],
+      "scope": "작업공간 단위로 키맵을 활성화하고 재시작 뒤에 복원한다. 활성화 상태, 에디터 포커스, 충돌 검토와 취소를 제공하고 VS Code 기본 환경과 사용자 설정을 보존한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.150-installed-coverage",
+        "state": "v0.160-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.150.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "설치본에서 세 OS용 내보내기와 52개 명령 연결을 확인했다. 기존 키 조합과 겹치는 입력을 표시하고 두 DB의 Spring 작업환경에서 동작을 검증했다.",
+        "testedScope": "OS별 단축키 규칙 52개를 검증했다. Linux의 실제 VS Code에서 SQL 포맷과 Java 정의 이동 키 입력, Quick Pick 포커스, Escape, 작업공간 격리와 재시작을 확인했다.",
         "publicEvidence": [
-          "src/keyboard-profile.js",
-          "test/keyboard-profile-host.js"
+          "scripts/keyboard-profile-manifest.js",
+          "test/keyboard-profile.test.js",
+          "test/keyboard-profile-key-input.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6345,32 +6336,32 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "c639e5564eb406547e78f9282f1da40668ecc239b2f15935b7ac4686a45163b6",
-    "sourceManifestSha256": "10ff18d541e765b58623a47844749ab2359c6856b9e5303644842c49644471a7",
+    "vsixSha256": "88b0cc6e816f352215a29b0ce6368512a8db3f9496b3fbe43f45adc306f407db",
+    "sourceManifestSha256": "830d2399944d1cebf77449ad16d791b90c5214ff2f9b36fddf2bb289e7ae9696",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 1
+        "featureGroups": 0
       },
       {
         "engine": "mariadb",
-        "featureGroups": 1
+        "featureGroups": 0
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-024",
+      "id": "IDEA-028",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-029",
+      "id": "IDEA-053",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-033",
+      "id": "IDEA-113",
       "before": "partial",
       "after": "implemented"
     }
@@ -6378,15 +6369,15 @@
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "a0c5adcb9deaff0b0f7a386895e851c3cb03e605",
-    "run": 45865649291,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45865649291",
-    "tests": 2233,
+    "head": "bb56210be59cd94daf8776e34c3419a7ac7574eb",
+    "run": 45869817050,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45869817050",
+    "tests": 2248,
     "suites": 0,
-    "pass": 1991,
+    "pass": 2002,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 242,
+    "skipped": 246,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

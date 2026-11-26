@@ -24,7 +24,8 @@ function parseRegistrationTrace(input) {
   const pendingLine = Boolean(rows.pop());
   let header;
   try { header = JSON.parse(rows.shift()); } catch { throw invalid(); }
-  if (header?.kind !== 'spring-registration' || header.version !== 1 || rows.length > maxEntries + 1) throw invalid();
+  const factory = header?.version === 2 && header.mode === 'bean-factory';
+  if (header?.kind !== 'spring-registration' || header.version !== 1 && !factory || rows.length > maxEntries + 1) throw invalid();
 
   const scopes = new Map(), mutations = [];
   let truncated = false;
@@ -53,9 +54,9 @@ function parseRegistrationTrace(input) {
         (isAlias ? !text(row.alias, 512) : row.alias !== undefined)) throw invalid();
     scope.mutationCount++;
     mutations.push({ scope: scope.id, label: scope.label, operation: row.operation, name: row.name,
-      ...(isAlias && { alias: row.alias }), origin: source(row.origin) });
+      ...(isAlias && { alias: row.alias }), origin: source(row.origin),...(factory && {provider:source(row.provider)}) });
   }
-  return { version: 1, truncated, pendingLine, scopes: [...scopes.values()], mutations };
+  return { version:header.version,...(factory && {mode:header.mode}), truncated, pendingLine, scopes: [...scopes.values()], mutations };
 }
 
 async function readRegistrationTrace(file) {

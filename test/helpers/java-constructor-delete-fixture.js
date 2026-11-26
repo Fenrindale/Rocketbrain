@@ -103,7 +103,12 @@ async function frameworkClasspath(classpathFile, engine) {
 }
 
 async function populateConstructorDelete(root, classpathFile, engine) {
-  await populateSignatureReferences(root, await frameworkClasspath(classpathFile, engine), fixtureSources);
+  const jars = await frameworkClasspath(classpathFile, engine);
+  await populateSignatureReferences(root, jars, fixtureSources);
+  // Buildship replaces the Eclipse classpath with Gradle dependencies during native import.
+  const libraries = jars.map(file => "'" + file.replaceAll('\\', '/').replaceAll("'", "\\'") + "'").join(', ');
+  await fs.writeFile(path.join(root, 'build.gradle'), "plugins { id 'java' }\n" +
+    'dependencies { implementation files(' + libraries + ') }\n');
 }
 
 async function runConstructorSpring({ root, work, javaHome, classpathFile, engine, database }) {

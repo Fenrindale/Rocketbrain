@@ -1,0 +1,54 @@
+name: Workspace keyboard input
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['verify-workspace-keys-*']
+    paths:
+      - '.github/workflows/workspace-keyboard-input.yml'
+      - 'src/keyboard-profile*.js'
+      - 'src/java/startup.js'
+      - 'src/java/index.js'
+      - 'test/keyboard-profile*.js'
+      - 'test/java-startup.test.js'
+      - 'scripts/test-workspace-keyboard-input.js'
+      - 'scripts/keyboard-profile-manifest.js'
+      - 'package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  key-input:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061
+        with:
+          version: 10.29.3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.22.3
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build and verify the generated keybindings
+        run: |
+          node scripts/build.js
+          node --test test/keyboard-profile.test.js test/java-startup.test.js
+      - name: Dispatch real chords in isolated VS Code windows
+        env:
+          ROCKETBRAIN_OWNED_KEYBOARD_DISPLAY: '1'
+          ROCKETBRAIN_KEYBOARD_INPUT_OUTPUT: ${{ runner.temp }}/rocketbrain-workspace-keyboard.json
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends xvfb xauth xdotool libasound2t64 libgbm1
+          xvfb-run -a -s '-screen 0 1280x800x24' node scripts/test-workspace-keyboard-input.js
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rocketbrain-workspace-keyboard-input
+          path: ${{ runner.temp }}/rocketbrain-workspace-keyboard.json
+          if-no-files-found: error
+          retention-days: 7

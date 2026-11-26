@@ -3,6 +3,7 @@ const esbuild = require('esbuild');
 const fs = require('node:fs');
 const path = require('node:path');
 async function build() {
+  require('./keyboard-profile-manifest').assertWorkspaceKeybindings(require('../package.json'));
   const jdbcWorker = fs.readFileSync(path.join(__dirname, '../runtime/jdbc/DriverWorker.java'), 'utf8');
   fs.writeFileSync(path.join(__dirname, '../src/db/jdbc-worker-source.json'), JSON.stringify(jdbcWorker));
   const clientIdentity = fs.readFileSync(path.join(__dirname, '../runtime/db-tls/ClientIdentity.java'), 'utf8');
@@ -42,8 +43,9 @@ async function build() {
   fs.mkdirSync('dist', { recursive: true });
   const registration = path.join('dist', 'spring-registration');
   fs.mkdirSync(registration, { recursive: true });
-  fs.copyFileSync(path.join(__dirname, '../runtime/spring-registration/src/rocketbrain/spring/RegistrationTrace.java'),
-    path.join(registration, 'RegistrationTrace.java'));
+  for(const name of ['RegistrationTrace.java','BootServletRegistrationTrace.java']) {
+    fs.copyFileSync(path.join(__dirname,'../runtime/spring-registration/src/rocketbrain/spring',name),path.join(registration,name));
+  }
   fs.mkdirSync(path.join('dist', 'java-async'), { recursive: true });
   for (const file of ['TaskTrace.java', 'ReactorTaskTrace.java']) {
     fs.copyFileSync(path.join(__dirname, '../runtime/java-async/src/rocketbrain/async', file), path.join('dist', 'java-async', file));
@@ -52,6 +54,8 @@ async function build() {
   for (const file of fs.readdirSync(path.join(__dirname, '../runtime/java-debug')).filter(file => file.endsWith('.java'))) {
     fs.copyFileSync(path.join(__dirname, '../runtime/java-debug', file), path.join('dist', 'java-debug', file));
   }
+  fs.mkdirSync(path.join('dist', 'android-debug'), { recursive: true });
+  fs.copyFileSync(path.join(__dirname, '../runtime/android-debug/AndroidBreakpoint.java'), path.join('dist', 'android-debug/AndroidBreakpoint.java'));
   await esbuild.build({ entryPoints: ['scripts/java-quality-gate.js'], outfile: 'dist/java-quality-gate.js', bundle: true, platform: 'node', target: 'node20' });
   await esbuild.build({ entryPoints: ['scripts/ide-mcp-server.js'], outfile: 'dist/ide-mcp-server.js', bundle: true, platform: 'node', target: 'node20' });
   await esbuild.build({ entryPoints: ['src/extension.js'], outfile: 'dist/extension.js', bundle: true, platform: 'node', target: 'node20', external: ['vscode', 'cpu-features', './crypto/build/Release/sshcrypto.node'], sourcemap: false });

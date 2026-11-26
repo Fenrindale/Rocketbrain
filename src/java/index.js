@@ -10,6 +10,7 @@ const { resolveNullChecks, nullCheckUpdates } = require('./null-checks');
 const { configureNullChecks } = require('./null-checks-vscode');
 const { hash, indexScope, indexStorage, readGeneration } = require('./workspace-index');
 const { registerWorkspaceIndex } = require('./workspace-index-vscode');
+const { registerJavaAutostart } = require('./startup');
 
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
@@ -221,7 +222,7 @@ function registerJavaFeatures(context, vscode) {
     dispose() {
       if (!disposing) {
         disposed = true;
-        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.micronaut?.dispose();await api.scalaEditor?.dispose();await api.scala?.dispose();await api.kotlinMultiplatform?.dispose();await api.kotlinEditor?.dispose();await api.coroutines?.dispose();await api.typeRename?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
+        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.micronaut?.dispose();await api.scalaEditor?.dispose();await api.scala?.dispose();await api.kotlinMultiplatform?.dispose();await api.androidDebug?.dispose();await api.kotlinEditor?.dispose();await api.coroutines?.dispose();await api.typeRename?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
       }
       return disposing;
     }
@@ -326,6 +327,7 @@ function registerJavaFeatures(context, vscode) {
   api.scala=require('./scala-vscode').registerScalaWorkbench(context,vscode,api);
   api.scalaEditor=require('./scala-editor-vscode').registerScalaEditor(vscode,api);
   api.kotlinMultiplatform=require('./kmp-vscode').registerKmpWorkbench(vscode,api);
+  api.androidDebug=require('./android-debug-vscode').registerAndroidDebug(vscode,api);
   api.kotlinEditor=require('./kotlin-editor-vscode').registerKotlinEditor(context,vscode,api);
   api.structure=registerFileStructure(vscode,{java:api,output,readJava:async (document,token)=>{
     const server=client;
@@ -416,7 +418,7 @@ function registerJavaFeatures(context, vscode) {
     else if (selected?.action === 'output') output.show();
     else if (selected?.action === 'endpoints') await vscode.commands.executeCommand('rocketbrain.spring.endpoints');
   }));
-  subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => { void api.start().catch(error => output.appendLine(error.message)); }));
+
   subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.configureNullChecks',()=>{
     return configureNullChecks(vscode).catch(error=>{void vscode.window.showErrorMessage(error.message);});
   }));
@@ -425,7 +427,7 @@ function registerJavaFeatures(context, vscode) {
   }));
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages', 'staticImport.favorites', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
   update('stopped', 'Java server is stopped.');
-  void api.start().catch(error => output.appendLine(error.message));
+  subscriptions.push(registerJavaAutostart(vscode,api.start,error=>output.appendLine(error.message)));
   return api;
 }
 

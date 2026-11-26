@@ -6,7 +6,7 @@ const { lexJava, rangeAt } = require('../spring/java');
 const MAIN_JAVA = path.join('src', 'main', 'java');
 const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-function reviewClosedModule(project, sources, { allowVisibility = false, qualifiedPeer, requirePeer = false } = {}) {
+function reviewClosedModule(project, sources, { allowVisibility = false, qualifiedPeer, requirePeer = false, serviceOwner } = {}) {
   const descriptors = sources.filter(source => path.basename(source.file).toLowerCase() === 'module-info.java');
   if (!descriptors.length) return null;
   const [source] = descriptors;
@@ -21,7 +21,9 @@ function reviewClosedModule(project, sources, { allowVisibility = false, qualifi
   }
   const { tokens, issues } = lexJava(source.text);
   let cursor = 0;
-  const invalid = () => Error(qualifiedPeer
+  const invalid = () => Error(serviceOwner
+    ? 'Service Package Move requires closed named modules with literal service directives and exact owned dependencies.'
+    : qualifiedPeer
     ? 'Qualified Package Rename requires a closed named module with only its reviewed peer, java.base and literal visibility directives.'
     : allowVisibility
     ? 'Package Rename requires a closed named module with java.base, literal uses/provides and unqualified exports/opens.'
@@ -67,7 +69,8 @@ function reviewClosedModule(project, sources, { allowVisibility = false, qualifi
     if (match('requires')) {
       consume('requires');
       const value = directive('requires',{qualified:false}).name;
-      if (dependencies.has(value) || value !== 'java.base' && (!requirePeer || value !== qualifiedPeer)) throw invalid();
+      const permittedPeer = serviceOwner && moduleName !== serviceOwner ? serviceOwner : requirePeer ? qualifiedPeer : undefined;
+      if (dependencies.has(value) || value !== 'java.base' && value !== permittedPeer) throw invalid();
       dependencies.add(value);
     } else if (allowVisibility && (match('exports') || match('opens'))) {
       const role = tokens[cursor++].text;
@@ -103,7 +106,8 @@ function reviewClosedModule(project, sources, { allowVisibility = false, qualifi
     consume(';');
   }
   consume('}');
-  if (cursor !== tokens.length || requirePeer && !dependencies.has(qualifiedPeer)) throw invalid();
+  if (cursor !== tokens.length || requirePeer && !dependencies.has(qualifiedPeer) ||
+      serviceOwner && moduleName !== serviceOwner && !dependencies.has(serviceOwner)) throw invalid();
 
   return {
     name: moduleName, uri: source.uri, file: source.file, uses, registrations, declarations,

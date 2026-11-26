@@ -8,9 +8,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
 /** Records the registry operations that a selected Spring callback makes through this view. */
 public final class RegistrationTrace implements AutoCloseable {
@@ -19,7 +22,9 @@ public final class RegistrationTrace implements AutoCloseable {
     private static final int MAX_NAME = 512;
     private static final StackWalker STACKS = StackWalker.getInstance();
 
+    private static final StackWalker FACTORY_STACKS = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
     private final BufferedWriter writer;
+    private final Predicate<StackWalker.StackFrame> providerFilter;
     private int bytes;
     private int records;
     private int nextScope;
@@ -27,17 +32,27 @@ public final class RegistrationTrace implements AutoCloseable {
     private boolean healthy = true;
     private boolean closed;
 
-    private RegistrationTrace(BufferedWriter writer) throws IOException {
+    private RegistrationTrace(BufferedWriter writer, Predicate<StackWalker.StackFrame> providerFilter) throws IOException {
         this.writer = writer;
-        write("{\"kind\":\"spring-registration\",\"version\":1}");
+        this.providerFilter = providerFilter;
+        write(providerFilter != null ? "{\"kind\":\"spring-registration\",\"version\":2,\"mode\":\"bean-factory\"}"
+            : "{\"kind\":\"spring-registration\",\"version\":1}");
     }
 
     public static RegistrationTrace open(Path file) throws IOException {
+        return open(file,null);
+    }
+
+    static RegistrationTrace openFactory(Path file, Predicate<StackWalker.StackFrame> providerFilter) throws IOException {
+        return open(file,Objects.requireNonNull(providerFilter));
+    }
+
+    private static RegistrationTrace open(Path file, Predicate<StackWalker.StackFrame> providerFilter) throws IOException {
         Objects.requireNonNull(file, "trace file");
         if (!file.isAbsolute()) throw new IllegalArgumentException("Use an absolute Spring registration trace path");
         var writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
         try {
-            return new RegistrationTrace(writer);
+            return new RegistrationTrace(writer,providerFilter);
         } catch (IOException failure) {
             try { writer.close(); } catch (IOException cleanup) { failure.addSuppressed(cleanup); }
             throw failure;
@@ -58,6 +73,18 @@ public final class RegistrationTrace implements AutoCloseable {
         }
     }
 
+    <T> T observeFactory(String label, Function<DefaultListableBeanFactory,T> callback) {
+        Scope scope = begin(label);
+        boolean succeeded = false;
+        try {
+            T result = callback.apply(scope == null ? new DefaultListableBeanFactory() : new AuditedFactory(scope));
+            succeeded = true;
+            return result;
+        } finally {
+            if (scope != null) end(scope,succeeded);
+        }
+    }
+
     private synchronized Scope begin(String label) {
         if (!recording || closed) return null;
         if (label.isEmpty() || label.length() > MAX_NAME) {
@@ -74,14 +101,31 @@ public final class RegistrationTrace implements AutoCloseable {
             truncate();
             return;
         }
-        var frame = STACKS.walk(stream -> stream
-            .filter(item -> !item.getClassName().equals(RegistrationTrace.class.getName())
-                && !item.getClassName().startsWith(RegistrationTrace.class.getName() + "$"))
-            .findFirst().orElse(null));
-        var origin = frame == null ? "null" : "{\"type\":" + json(frame.getClassName()) + ",\"method\":" + json(frame.getMethodName())
-            + ",\"file\":" + json(Objects.toString(frame.getFileName(), "")) + ",\"line\":" + frame.getLineNumber() + "}";
+        var frame = STACKS.walk(stream -> stream.filter(RegistrationTrace::externalFrame)
+            .filter(item -> providerFilter == null || !contextForwarder(item)).findFirst().orElse(null));
+        var provider = providerFilter != null ? FACTORY_STACKS.walk(stream -> stream.limit(96)
+            .filter(providerFilter).findFirst().orElse(null)) : null;
         append("{\"kind\":\"mutation\",\"id\":" + scope.id + ",\"operation\":" + json(operation)
-            + ",\"name\":" + json(name) + (alias == null ? "" : ",\"alias\":" + json(alias)) + ",\"origin\":" + origin + "}");
+            + ",\"name\":" + json(name) + (alias == null ? "" : ",\"alias\":" + json(alias)) + ",\"origin\":" + frameJson(frame)
+            + (providerFilter != null ? ",\"provider\":" + frameJson(provider) : "") + "}");
+    }
+
+    private static boolean externalFrame(StackWalker.StackFrame frame) {
+        String type = frame.getClassName();
+        return !type.equals(RegistrationTrace.class.getName()) && !type.startsWith(RegistrationTrace.class.getName()+"$");
+    }
+
+    private static boolean contextForwarder(StackWalker.StackFrame frame) {
+        if (!frame.getClassName().equals("org.springframework.context.support.GenericApplicationContext")) return false;
+        return switch (frame.getMethodName()) {
+            case "registerBeanDefinition", "removeBeanDefinition", "registerAlias", "removeAlias" -> true;
+            default -> false;
+        };
+    }
+
+    private static String frameJson(StackWalker.StackFrame frame) {
+        return frame == null ? "null" : "{\"type\":" + json(frame.getClassName()) + ",\"method\":" + json(frame.getMethodName())
+            + ",\"file\":" + json(Objects.toString(frame.getFileName(),"")) + ",\"line\":" + frame.getLineNumber() + "}";
     }
 
     private synchronized void end(Scope scope, boolean succeeded) {
@@ -142,6 +186,34 @@ public final class RegistrationTrace implements AutoCloseable {
         final int id;
         boolean finished;
         Scope(int id) { this.id = id; }
+    }
+
+    private final class AuditedFactory extends DefaultListableBeanFactory {
+        private final Scope scope;
+
+        AuditedFactory(Scope scope) {
+            this.scope = scope;
+        }
+
+        @Override public void registerBeanDefinition(String name, BeanDefinition definition) {
+            super.registerBeanDefinition(name,definition);
+            mutation(scope,"register",name,null);
+        }
+
+        @Override public void removeBeanDefinition(String name) {
+            super.removeBeanDefinition(name);
+            mutation(scope,"remove",name,null);
+        }
+
+        @Override public void registerAlias(String name,String alias) {
+            super.registerAlias(name,alias);
+            mutation(scope,"alias",name,alias);
+        }
+
+        @Override public void removeAlias(String alias) {
+            super.removeAlias(alias);
+            mutation(scope,"unalias",alias,null);
+        }
     }
 
     private final class RegistryView implements BeanDefinitionRegistry {

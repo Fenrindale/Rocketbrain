@@ -24,6 +24,7 @@ function publicPath(name) {
   if (name === 'media/jdbc.tmLanguage.json' || name === 'media/scala.tmLanguage.json' || name === 'media/jpql.tmLanguage.json' ||
       name === 'media/java-regex.tmLanguage.json') return true;
   if (name === 'test/fixtures/java/scala-sbt/build.sbt') return true;
+  if (name === 'test/fixtures/android-debug/build-apk.sh') return true;
   if (/^test\/fixtures\/java\/scala-sbt\/(?:app\/src\/(?:main|test)|core\/src\/main)\/scala\/scalafixture\/(?:Application|ApplicationSuite|Message)\.scala$/.test(name)) return true;
   if (name.includes('/.vscode/')) return false;
   if (/^src\/.+\.(?:js|cjs|json|css)$/.test(name)) return true;
