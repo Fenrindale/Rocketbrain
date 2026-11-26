@@ -109,6 +109,12 @@ function startWorker({ env }, config, observe) {
   let buffer = '', diagnostics = '', result, failed, lastStage = 'spawned';
   const waiters = new Map();
   const events = new Map();
+  function recordEvent(name, item) {
+    if (events.has(name)) return;
+    events.set(name, item);
+    waiters.get(name)?.resolve(item);
+    waiters.delete(name);
+  }
   function rejectAll(error) {
     failed ||= error;
     for (const waiter of waiters.values()) waiter.reject(failed);
@@ -140,16 +146,14 @@ function startWorker({ env }, config, observe) {
       if (item.event === 'phase' && workerStages.has(item.stage)) {
         lastStage = item.stage;
         observe('lldb-' + item.stage);
+        if (item.stage === 'process-verified') recordEvent(item.stage, item);
         continue;
       }
       if (item.event === 'framework' && Array.isArray(item.modules) && item.modules.length <= 8 && line.length <= 10000) {
         observe('lldb-framework-observation', { fileAddress: item.fileAddress, modules: item.modules });
         continue;
       }
-      if (!['ready', 'stopped', 'continued'].includes(item.event) || events.has(item.event)) continue;
-      events.set(item.event, item);
-      waiters.get(item.event)?.resolve(item);
-      waiters.delete(item.event);
+      if (['ready', 'stopped', 'continued'].includes(item.event)) recordEvent(item.event, item);
     }
   });
   const done = new Promise(resolve => child.once('close', code => {
@@ -308,7 +312,12 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
       source: snapshot.source, line: snapshot.line, reportMappings: Boolean(observer) }, observe);
     const stopOnCancel = () => { void worker.stop().catch(() => {}); };
     signal.addEventListener('abort', stopOnCancel, { once: true });
-    try { await worker.expect('ready', 95000); }
+    try {
+      // A cold Xcode interpreter can spend most of the old shared deadline before
+      // inspecting the app. Let the verified attach and subsequent loader have separate bounds.
+      await worker.expect('process-verified', 115000);
+      await worker.expect('ready', 83000);
+    }
     finally { signal.removeEventListener('abort', stopOnCancel); }
     observe('lldb-breakpoint-bound');
     signal.throwIfAborted();
