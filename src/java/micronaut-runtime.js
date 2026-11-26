@@ -133,7 +133,9 @@ function createMicronautRuntime({log=()=>{},startupMs=90000,checkListener=waitFo
       throw fail('The Micronaut Gradle build changed during staging. Build again.');
     if (cancelledNow()) throw fail('Micronaut startup was cancelled.');
     const env={...process.env};
-    for (const name of ['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','MICRONAUT_ENVIRONMENTS']) delete env[name];
+    for (const name of Object.keys(env)) {
+      if (/^(?:JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS|MICRONAUT_ENVIRONMENTS)$/i.test(name)) delete env[name];
+    }
     const args=[...(debug?['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:0']:[]),
       '-Dfile.encoding=UTF-8','-Dmicronaut.server.host=127.0.0.1','-Dmicronaut.server.port=-1',
       '-Dmicronaut.env.deduction=false','-Dmicronaut.environments='+environment,...launch];

@@ -90,7 +90,8 @@ function createMicronautDebugger(vscode, java, runtime) {
       if (!own(session)) return;
       record.terminated = true;
       terminated();
-      if (record.closed) cleanup(record);
+      if (current === record) current = undefined;
+      cleanup(record);
     });
     current = record;
     settling.add(record);

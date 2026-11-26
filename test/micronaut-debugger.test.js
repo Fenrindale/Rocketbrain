@@ -38,10 +38,12 @@ function control() {
     const session = { id, type: 'rocketbrain-java', configuration: config };
     if (known) acknowledged = id;
     for (const hook of started) hook(session);
+    return session;
   }
   const java = { debug: { processes: { resolve: async candidate => { assert.equal(candidate, pid); return exact; } },
     verifiedLocalPid: session => session?.id === acknowledged ? pid : undefined } };
-  return { vscode, java, calls, stops, folder, started, ended, publish, release: value => releaseStart(value) };
+  return { vscode, java, calls, stops, folder, started, ended, publish, release: value => releaseStart(value),
+    terminate(session) { for (const hook of ended) hook(session); } };
 }
 
 const options = { project: { uri: 'file:///test', name: 'micronaut' }, receipt: { runId, debug: { pid } },
@@ -86,6 +88,25 @@ test('Micronaut refuses another port and retires a native session arriving after
   fixture.release(true);
   await until(() => fixture.stops.length === 1 && !fixture.started.size && !fixture.ended.size, 2000);
   assert.deepEqual(fixture.stops, ['late']);
+});
+
+test('Micronaut releases the debugger identity when its JVM ends independently', async () => {
+  const fixture = control();
+  const debuggerControl = createMicronautDebugger(fixture.vscode, fixture.java, { verifyDebugTarget: async () => proof });
+  const pending = debuggerControl.attach(options);
+  await until(() => fixture.calls[0], 2000);
+  const first = fixture.publish('first', true);
+  fixture.release(true);
+  assert.equal(await pending, first.id);
+  fixture.terminate(first);
+  assert.equal(debuggerControl.sessionId(runId), undefined);
+  const second = debuggerControl.attach(options);
+  await until(() => fixture.calls[1], 2000);
+  fixture.publish('second', true);
+  fixture.release(true);
+  assert.equal(await second, 'second');
+  await debuggerControl.stop();
+  assert.deepEqual(fixture.stops, ['second']);
 });
 
 test('Micronaut debug source checksum includes exact Java bytes, application configuration and build descriptors', async () => {
