@@ -98,9 +98,8 @@ async function runHeadless(version) {
   }
 }
 
-async function runScalaDebugChecks(api,vscode,checks) {
+async function runScalaDebugChecks(api,vscode,checks,version=scala2) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
-  const version = process.env.ROCKETBRAIN_SCALA_DEBUG_VERSION===scala3 ? scala3 : scala2;
   const config = vscode.workspace.getConfiguration('rocketbrain.scala');
   const target = vscode.ConfigurationTarget.Workspace;
   const changes = [];
