@@ -13,8 +13,9 @@ const { request, breakpointName, launchKotlinWatches, assertKotlinWatchValues, a
   require('./helpers/kotlin-watch-expressions');
 
 const { fieldRequest, assertObservedFields, assertFieldsResumed } = require('./helpers/kotlin-object-fields');
+const { stageCleanup } = require('./helpers/kotlin-native-fixture-cleanup');
 
-async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields = false) {
+async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields = false, { cleanupManifest } = {}) {
   await api.java.start();
   const debugBuild = api.java.getState().debugBuild;
   assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD].includes(debugBuild));
@@ -22,10 +23,11 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields
   const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const project = await fs.mkdtemp(path.join(workspace, 'rb-kotlin-expressions-'));
+  const cleanup = cleanupManifest && await stageCleanup(cleanupManifest, workspace, project);
   const name = 'Kotlin expression fixture ' + randomUUID().slice(0, 8);
   const breakpoint = new vscode.FunctionBreakpoint(breakpointName, true);
   const port = await freePort();
-  let running, session, closed = false;
+  let running, session, closed = false, completed = false;
   const started = vscode.debug.onDidStartDebugSession(active => {
     if (active.name === name && active.type === 'rocketbrain-java') session = active;
   });
@@ -46,6 +48,7 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields
     const sourceRoot = path.join(fixture.root, 'src/main/kotlin');
     running = await launchKotlinWatches(fixture, { engine: spring.dbEngine, configFile: spring.dbConfigPath,
       classpathFile: path.join(spring.projectPath, 'build/runtime-classpath.txt') }, port);
+    if (cleanup && running.pid) await cleanup.recordJvm(running.pid);
     await running.ready();
     const target = await api.java.debug.processes.resolve(running.pid);
     assert.equal(target.port, port);
@@ -117,13 +120,17 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields
     checks.push('Unsupported Kotlin assignments and function calls leave the JVM unchanged, and a resumed frame cannot be reused.');
     if (indexed) checks.push('Kotlin Watch reads array and standard JVM list size and indexed values through JDI, with custom getters excluded.');
     if(write)checks.push('The native debugger explicitly reviewed a Kotlin local value, changed it, observed it in Watch and restored it before resume.');
+    completed = true;
     return { ...application, frameLine: frame.line, values, indexed, write, fieldResult, staleFrameRefused: true };
   } finally {
     vscode.debug.removeBreakpoints([breakpoint]);
     await detach().catch(() => {});
     started.dispose();
     terminated.dispose();
-    if (running) await running.stop();
+    if (running) {
+      const exit = await running.stop();
+      if (cleanup && completed) assert.equal(exit, 0, 'The owned Kotlin fixture JVM did not exit cleanly.');
+    }
     const owned = await fs.realpath(project);
     assert.equal(path.relative(workspace, path.dirname(owned)), '');
     assert.ok(path.basename(owned).startsWith('rb-kotlin-expressions-'));
@@ -142,10 +149,10 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields
       });
       if (imported) await api.java.requestWorkspaceCommand('java.project.changeImportedProjects',[[],[],[pathToFileURL(owned).href]]);
     }
-    await fs.rm(owned, { recursive: true, force: true, maxRetries: 12, retryDelay: 350 });
+    if (!cleanup) await fs.rm(owned, { recursive: true, force: true, maxRetries: 12, retryDelay: 350 });
   }
 }
 
-const runKotlinObjectFieldChecks = (api,vscode,checks) => runKotlinWatchExpressionChecks(api,vscode,checks,true);
+const runKotlinObjectFieldChecks = (api,vscode,checks,options) => runKotlinWatchExpressionChecks(api,vscode,checks,true,options);
 
 module.exports = { runKotlinWatchExpressionChecks, runKotlinObjectFieldChecks };
