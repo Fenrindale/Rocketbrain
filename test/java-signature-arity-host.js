@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { until } = require('./helpers/stdio-lsp');
-const { sources, targetPath, marker, selection, primitiveFacts, rejected,
+const { sources, targetPath, marker, selection, primitiveFacts, instanceFacts, rejected,
   populateArity, runAritySpring, assertArityPlan } = require('./helpers/java-signature-arity-fixture');
 
 async function runJavaSignatureArityChecks(api, vscode, checks) {
@@ -73,11 +73,18 @@ async function runJavaSignatureArityChecks(api, vscode, checks) {
     assertArityPlan(primitive, primitivePlan, primitiveFacts);
     assert.equal((await api.java.refactoring.apply(primitivePlan.id)).state, 'applied');
     assert.equal(await declaration.save(), true);
+    await build();
+    const instance = await inspect('collect(String');
+    const instancePlan = await signature.preview(instance.id, { arity: 'array' });
+    assertArityPlan(instance, instancePlan, instanceFacts);
+    assert.equal((await api.java.refactoring.apply(instancePlan.id)).state, 'applied');
+    assert.equal(await declaration.save(), true);
     const after = await run();
     assert.deepEqual(after, before);
-    checks.push('Change Signature converted private reference and primitive varargs to arrays using attributed caller ranges.');
-    checks.push('Native Undo and Redo covered the reviewed declaration and callers. Real Spring JDBC confirmed explicit array identity and argument order.');
+    checks.push('Change Signature converted private object and primitive varargs to arrays while retaining fixed-array references and adapting typed spread references.');
+    checks.push('Native Undo and Redo covered the reviewed declaration, direct callers and method references. Real Spring JDBC confirmed argument order, array identity and fresh spread arrays.');
     return { referenceArray: plan.signature.arityConversion, primitiveArray: primitivePlan.signature.arityConversion,
+      instanceArray: instancePlan.signature.arityConversion,
       changedOverloadRefused: true, refusedUnsupportedCalls: rejected.length, nativeApplyUndoRedo: true, before, after };
   } finally {
     try {

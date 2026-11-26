@@ -7,10 +7,15 @@ const uriKey=value=>fileKey(fileURLToPath(value));
 
 function inspectArityConversion(family, calls, references) {
   const method=family[0], declaration=method?.varargDeclaration;
-  if (family.length!==1 || !declaration || references.length || calls.length>200) return undefined;
+  if (family.length!==1 || !declaration || references.length>40 || calls.length>200) return undefined;
   const fixedCount=method.parameters.length-1;
   if (calls.some(call=>{
     const arity=call.arityConversion;
+    return !arity || arity.component!==declaration.component || arity.fixedCount!==fixedCount ||
+      !['fixed-array','spread'].includes(arity.mode);
+  })) return undefined;
+  if (references.some(reference=>{
+    const arity=reference.arityConversion;
     return !arity || arity.component!==declaration.component || arity.fixedCount!==fixedCount ||
       !['fixed-array','spread'].includes(arity.mode);
   })) return undefined;
@@ -21,8 +26,10 @@ function inspectArityConversion(family, calls, references) {
     lastBySource.set(key,invocation.end);
   }
   const spreadCalls=calls.filter(call=>call.arityConversion.mode==='spread').length;
+  const spreadReferences=references.filter(reference=>reference.arityConversion.mode==='spread');
   return {key:method.key,uri:method.uri,declaration,fixedCount,componentType:declaration.component,
-    spreadCalls,fixedArrayCalls:calls.length-spreadCalls};
+    spreadCalls,fixedArrayCalls:calls.length-spreadCalls,spreadReferences,
+    fixedReferences:references.filter(reference=>reference.arityConversion.mode==='fixed-array')};
 }
 
 function arityChange(semantic,value) {
@@ -88,4 +95,16 @@ function verifyArityCalls(semantic,after,change) {
   }
 }
 
-module.exports={inspectArityConversion,arityChange,prepareArityEdits,verifyArityCalls};
+function verifyArityReferences(after,change) {
+  const evidence=reference=>{
+    const arity=reference.arityConversion;
+    return [uriKey(reference.uri),reference.enclosingKey,reference.targetType,arity?.mode,arity?.kind,
+      arity?.source,arity?.component,arity?.fixedCount,arity?.parameterTypes,arity?.returnType];
+  };
+  const actual=after.methodReferences.filter(reference=>reference.methodKey===change.key);
+  if (JSON.stringify(change.fixedReferences.map(evidence))!==JSON.stringify(actual.map(evidence))) {
+    throw Error('The array conversion changes the binding or fixed-array mode of a retained method reference.');
+  }
+}
+
+module.exports={inspectArityConversion,arityChange,prepareArityEdits,verifyArityCalls,verifyArityReferences};

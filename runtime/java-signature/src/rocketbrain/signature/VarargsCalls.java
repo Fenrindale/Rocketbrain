@@ -66,7 +66,7 @@ final class VarargsCalls {
             "selector", selector, "arguments", observed);
     }
 
-    private static ArrayType conversionArray(ExecutableElement method) {
+    static ArrayType conversionArray(ExecutableElement method) {
         if (method.getKind() != ElementKind.METHOD || !method.getModifiers().contains(Modifier.PRIVATE) ||
                 !method.getAnnotationMirrors().isEmpty() || !method.getTypeParameters().isEmpty() || method.getParameters().isEmpty() ||
                 !(method.getEnclosingElement() instanceof TypeElement owner) || owner.getKind() != ElementKind.CLASS ||

@@ -6,7 +6,7 @@ const {analyzeJavaSources}=require('./signature-compiler');
 const {analyzeSpringContracts,inspectSpringMethodContract}=require('./spring-contract-analysis');
 const {adaptSignatureReferences,verifyReferenceAdapters}=require('./change-signature-references');
 const {inspectVarargsFamily,verifyVarargsPermutation,verifyVarargsCalls}=require('./change-signature-varargs');
-const {inspectArityConversion,arityChange,prepareArityEdits,verifyArityCalls}=require('./change-signature-arity');
+const {inspectArityConversion,arityChange,prepareArityEdits,verifyArityCalls,verifyArityReferences}=require('./change-signature-arity');
 const {checkedThrowsOption,checkedThrowsChange,verifyCheckedThrowsEdits}=require('./change-signature-throws');
 const {eligibleNarrowing,narrowedReturnChange,verifyNarrowedReturnEdits,verifyNarrowedDeclaration,verifyNarrowedCallers}=require('./change-signature-return');
 const {nestedAccessAnchor,bindNestedAccess,accessChange,verifyPrivateEdit}=require('./change-signature-access');
@@ -98,8 +98,8 @@ function inspectSemanticFamily(before,uri,nameStart){
  const methodReferences=before.methodReferences.filter(reference=>keys.has(reference.methodKey));
  const convertArity=inspectArityConversion(family,calls,methodReferences);
  const varargs=inspectVarargsFamily(family,calls,methodReferences,{optional:Boolean(convertArity)});
- if(methodReferences.length>40||methodReferences.some(reference=>!reference.adapter)||
-    methodReferences.length&&family.some(method=>method.ownerKind==='INTERFACE'||method.generic))
+ if(methodReferences.length>40||(!convertArity&&methodReferences.some(reference=>!reference.adapter))||
+    (methodReferences.length&&family.some(method=>method.ownerKind==='INTERFACE'||method.generic)))
   throw new Error('Method or constructor references need additional signature adaptation analysis.');
  if(calls.length>200||(!varargs&&!convertArity&&calls.some(call=>!call.safeArguments)))throw new Error('Caller expressions with evaluation effects need additional ordering analysis; use literal or local-name arguments.');
  return {family,keys,calls,methodReferences,varargs,convertArity};
@@ -136,11 +136,15 @@ function verifySemanticChange(semantic,after,parameters,adapters=[],{checkedThro
  const remainingCalls=verifyReferenceAdapters(semantic.before,after,adapters,mapping);
  if(JSON.stringify(fingerprint(semantic.before.calls,true))!==JSON.stringify(fingerprint(remainingCalls,false)))throw new Error('The signature edit changes overload resolution or an unrelated caller binding.');
  if(narrowedReturn)verifyNarrowedCallers(semantic.before.calls,remainingCalls,narrowedReturn);
- if(conversion)verifyArityCalls(semantic,remainingCalls,conversion);
- else verifyVarargsCalls(semantic,remainingCalls,parameters,mapping);
+ if(conversion){
+  verifyArityCalls(semantic,remainingCalls,conversion);
+  verifyArityReferences(after,conversion);
+ }else verifyVarargsCalls(semantic,remainingCalls,parameters,mapping);
 }
-function describeArity({componentType,spreadCalls,fixedArrayCalls}){
- return {from:'varargs',to:'array',componentType,spreadCalls,fixedArrayCalls};
+function describeArity({componentType,spreadCalls,fixedArrayCalls,spreadReferences,fixedReferences}){
+ const references=spreadReferences.length+fixedReferences.length;
+ return {from:'varargs',to:'array',componentType,spreadCalls,fixedArrayCalls,
+  ...(references&&{adaptedSpreadReferences:spreadReferences.length,retainedArrayReferences:fixedReferences.length})};
 }
 function registerJavaChangeSignature(context,vscode,{request,refactoring,getJavaHome}={}){
  const infos=new Map(),operations=new Set();let closed=false;
@@ -244,9 +248,10 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
    if(checkedThrows)verifyCheckedThrowsEdits(record,targets,sources,checkedThrows,offset);
    if(narrowedReturn)verifyNarrowedReturnEdits(record,targets,sources,narrowedReturn,offset);
    if(visibility)verifyPrivateEdit(record,targets,sources,visibility,offset);
-   if(record.semantic.methodReferences.length){
+   const adaptedReferences=conversion?conversion.spreadReferences:record.semantic.methodReferences;
+   if(adaptedReferences.length){
     if(targets.some(([,edits])=>edits.some(value=>value.annotationId)))throw Error('Annotated signature changes require separate review.');
-    const adapted=adaptSignatureReferences(record.scope.sources,sources,record.semantic.methodReferences,parameters);
+    const adapted=adaptSignatureReferences(record.scope.sources,sources,adaptedReferences,parameters,{arrayConversion:Boolean(conversion)});
     adapters=adapted.adapters;
     const replacements=new Map([...adapted.changed].map(([uri,text])=>[uriKey(uri),{uri,text}]));
     sources=sources.map(source=>replacements.has(uriKey(source.uri))?{...source,text:replacements.get(uriKey(source.uri)).text}:source);

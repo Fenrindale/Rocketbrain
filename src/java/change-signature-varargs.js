@@ -2,6 +2,10 @@
 
 function inspectVarargsFamily(family, calls, references, { optional = false } = {}) {
   if (!family.some(method => method.varargs)) return undefined;
+  if (references.length) {
+    if (optional) return undefined;
+    throw Error('Varargs method references require a separate signature review.');
+  }
   const method = family[0];
   const fixedCount = method.parameters.length - 1;
   if (family.length !== 1 || !method.varargs || method.generic || method.constructor || fixedCount < 2 ||
@@ -9,7 +13,6 @@ function inspectVarargsFamily(family, calls, references, { optional = false } = 
     if (optional) return undefined;
     throw Error('Varargs Change Signature requires one non-generic private, static or final method with at least two fixed parameters.');
   }
-  if (references.length) throw Error('Varargs method references require a separate signature review.');
   if (calls.some(call => call.varargs?.fixedCount !== fixedCount || !['fixed-array', 'spread'].includes(call.varargs.mode))) {
     if (optional) return undefined;
     throw Error('The varargs caller has an effectful or boxing fixed argument, or the compiler could not verify its trailing invocation mode.');

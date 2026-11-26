@@ -624,10 +624,13 @@ public final class SignatureInspector {
                         TreePath member = getCurrentPath();
                         if (trees.getElement(member) instanceof ExecutableElement method) {
                             TypeMirror target = trees.getTypeMirror(member);
-                            references.add(object("uri",uri,"methodKey",key(method),"enclosingKey",enclosingKey(),
+                            var reference = object("uri",uri,"methodKey",key(method),"enclosingKey",enclosingKey(),
                                 "start",positions.getStartPosition(unit,tree),"end",positions.getEndPosition(unit,tree),
                                 "targetType",target==null?null:target.toString(),
-                                "adapter",SignatureReferences.adapter(tree,method,member,trees,types,elements,text)));
+                                "adapter",SignatureReferences.inspect(tree,method,member,trees,types,elements,text,false));
+                            var arity = SignatureReferences.inspect(tree,method,member,trees,types,elements,text,true);
+                            if (arity != null) reference.put("arityConversion",arity);
+                            references.add(reference);
                         }
                         return super.visitMemberReference(tree,p);
                     }

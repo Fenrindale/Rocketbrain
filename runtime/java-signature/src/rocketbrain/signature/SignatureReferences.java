@@ -22,7 +22,7 @@ import javax.lang.model.util.Types;
 
 import static rocketbrain.signature.SignatureInspector.object;
 
-/** Describes references that can become lambdas without changing argument conversions. */
+/** Reports attributed references that can be kept or adapted during signature changes. */
 final class SignatureReferences {
     private SignatureReferences() {}
 
@@ -32,9 +32,11 @@ final class SignatureReferences {
             parent instanceof TypeCastTree cast && cast.getExpression() == reference;
     }
 
-    static Map<String,Object> adapter(MemberReferenceTree reference, ExecutableElement method,
-            TreePath member, Trees trees, Types types, Elements elements, String text) {
-        if (method.isVarArgs() || !method.getTypeParameters().isEmpty() || trees.getPath(method) == null ||
+    static Map<String,Object> inspect(MemberReferenceTree reference, ExecutableElement method,
+            TreePath member, Trees trees, Types types, Elements elements, String text, boolean arrayConversion) {
+        var array = arrayConversion ? VarargsCalls.conversionArray(method) : null;
+        if ((arrayConversion ? array == null || method.getParameters().size() > 30 : method.isVarArgs()) ||
+            !method.getTypeParameters().isEmpty() || trees.getPath(method) == null ||
             reference.getTypeArguments() != null && !reference.getTypeArguments().isEmpty() ||
             !isDirectTarget(reference, member.getParentPath().getLeaf()) ||
             !(method.getEnclosingElement() instanceof TypeElement owner) || !owner.getTypeParameters().isEmpty()) return null;
@@ -74,12 +76,35 @@ final class SignatureReferences {
             kind = "this";
         }
         int receiver = kind.equals("unbound") ? 1 : 0;
-        if (parameters.size() != method.getParameters().size() + receiver) return null;
-        for (int index = 0; index < method.getParameters().size(); index++) {
+        int fixedCount = method.getParameters().size() - (arrayConversion ? 1 : 0);
+        if (arrayConversion && parameters.size() > 64 || parameters.size() < fixedCount + receiver ||
+                !arrayConversion && parameters.size() != fixedCount + receiver) return null;
+        for (int index = 0; index < fixedCount; index++) {
             if (!types.isSameType(parameters.get(index + receiver), method.getParameters().get(index).asType())) return null;
         }
         String name = kind.equals("constructor") ? "new" : reference.getName().toString();
-        return object("kind",kind,"receiver",receiver,"qualifier",spelling,"name",name,
+        var result = object("kind",kind,"receiver",receiver,"qualifier",spelling,"name",name,
             "qualifierEnd",to,"arity",parameters.size(),"targetType",target.toString());
+        if (!arrayConversion) return result;
+
+        boolean fixed = parameters.size() == fixedCount + receiver + 1 && types.isAssignable(parameters.getLast(),array);
+        var component = array.getComponentType();
+        if (!fixed) {
+            // An unbound receiver can be null. A generated array would move allocation
+            // across the reference invocation's receiver check.
+            if (!method.isVarArgs() || receiver != 0 || !types.isSameType(descriptor.getReturnType(),method.getReturnType())) return null;
+            for (int index = fixedCount; index < parameters.size(); index++) {
+                if (!types.isSameType(parameters.get(index),component)) return null;
+            }
+        }
+        long start = positions.getStartPosition(unit, reference), end = positions.getEndPosition(unit, reference);
+        if (start < 0 || end <= start || end > text.length() || end - start > 512) return null;
+        result.put("mode",fixed ? "fixed-array" : "spread");
+        result.put("component",component.toString());
+        result.put("fixedCount",fixedCount);
+        result.put("parameterTypes",parameters.stream().map(TypeMirror::toString).toList());
+        result.put("returnType",descriptor.getReturnType().toString());
+        result.put("source",text.substring((int)start,(int)end));
+        return result;
     }
 }
