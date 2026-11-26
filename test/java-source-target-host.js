@@ -5,9 +5,9 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { until } = require('./helpers/stdio-lsp');
-const { populateTargets, buildTargets, runTargets, executionCases } = require('./helpers/java-source-target-fixture');
+const { populateTargets, buildTargets, runTargets, executionCases, runObservedGradleComposite } = require('./helpers/java-source-target-fixture');
 
-async function runJavaSourceTargetChecks(api, vscode, checks, { executeFromSource = false } = {}) {
+async function runJavaSourceTargetChecks(api, vscode, checks, { executeFromSource = false, observeComposite = false } = {}) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const owner = JSON.parse(await fs.readFile(path.join(path.dirname(spring.dbConfigPath), 'owner.json'), 'utf8'));
@@ -85,9 +85,12 @@ async function runJavaSourceTargetChecks(api, vscode, checks, { executeFromSourc
       checks.push('One-use approved task reviews compile the exact Maven reactor and Gradle composite Java components.');
     }
     const jdbc = await runTargets(root, tools, classpath, database, spring.dbEngine);
+    const observed = observeComposite ? await runObservedGradleComposite(service, root, targets) : undefined;
     checks.push('The installed source action distinguishes imported Maven reactor and renamed included Gradle projects and their main and test scopes.');
     checks.push('Opening the report and exact aggregation declaration uses read-only JDT queries. Both built Spring JDBC applications returned 42.');
-    return { selected: Object.keys(records), jdbc, builds, exactDeclarationLinks: true, readOnlyInspection: true };
+    if (observed) checks.push('The approved Gradle model binds the computed included-build name and runs the exact reviewed source task.');
+    return { selected: Object.keys(records), jdbc, builds, exactDeclarationLinks: true, readOnlyInspection: true,
+      ...(observed && { observedComposite: observed }) };
   } finally {
     try {
       const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => {
@@ -108,4 +111,7 @@ async function runJavaSourceTargetChecks(api, vscode, checks, { executeFromSourc
 const runJavaSourceBuildExecutionChecks = (api, vscode, checks) =>
   runJavaSourceTargetChecks(api, vscode, checks, { executeFromSource: true });
 
-module.exports = { runJavaSourceTargetChecks, runJavaSourceBuildExecutionChecks };
+const runObservedGradleCompositeChecks = (api, vscode, checks) =>
+  runJavaSourceTargetChecks(api, vscode, checks, { observeComposite: true });
+
+module.exports = { runJavaSourceTargetChecks, runJavaSourceBuildExecutionChecks, runObservedGradleCompositeChecks };

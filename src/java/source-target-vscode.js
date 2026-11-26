@@ -5,6 +5,8 @@ const { randomUUID } = require('node:crypto');
 const { cancelled, fail } = require('./workbench-model');
 const { resolveJavaSourceTarget } = require('./source-target');
 const { prepareSourceExecution, route } = require('./source-target-execution');
+const { prepareGradleObservation, observeGradleTarget } = require('./gradle-source-model');
+const { fileURLToPath } = require('node:url');
 
 const scheme = 'rocketbrain-java-source-target';
 const until = 5 * 60 * 1000;
@@ -33,7 +35,7 @@ function render(target) {
 }
 
 function registerSourceTarget(vscode, { trusted, request, generation, runGeneration, getTools, executePrepared }) {
-  const records = new Map(), reviews = new Map();
+  const records = new Map(), reviews = new Map(), modelReviews = new Map(), observations = new Map();
   const provider = vscode.workspace.registerTextDocumentContentProvider?.(scheme, {
     provideTextDocumentContent: uri => {
       const entry = records.get(uri.path.split('/')[1]);
@@ -43,10 +45,10 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
   const dirty = file => vscode.workspace.textDocuments.some(doc => doc.uri.scheme === 'file' && !doc.isClosed &&
     doc.isDirty && !path.relative(file, doc.uri.fsPath));
 
-  function context(value) {
+  function context(value, error = 'Select a saved local Java source file.') {
     const address = typeof value === 'string' ? vscode.Uri.parse(value) : value;
     if (!address || address.scheme !== 'file' || address.authority || address.query || address.fragment) {
-      throw fail('Select a saved local Java source file.');
+      throw fail(error);
     }
     return address.toString();
   }
@@ -105,18 +107,52 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
     return structuredClone(detail);
   }
 
-  function prepare(entry) {
+  const folderList = () => vscode.workspace.workspaceFolders || [];
+
+  function prepare(entry, observation) {
     trusted();
     if (entry.ticket !== generation()) throw fail('The workspace changed after the Java source target review.');
     entry.validateInputs();
-    return prepareSourceExecution(entry.report, vscode.workspace.workspaceFolders || [], getTools(entry.report), dirty);
+    return prepareSourceExecution(entry.report, folderList(), getTools(entry.report), dirty, observation);
   }
 
-  async function reviewBuild(id, { cancellation } = {}) {
+  async function reviewGradleModel(id, { rootUri, cancellation } = {}) {
     const entry = await fresh(id, cancellation);
-    const result = prepare(entry), reviewId = randomUUID();
+    const root = fileURLToPath(context(rootUri, 'Select a physical Gradle composite root inside the workspace.'));
+    const prepared = prepareGradleObservation(entry.report, root, folderList(), getTools(entry.report), dirty);
+    const review = { id: randomUUID(), targetId: id, prepared, expiry: Date.now() + reviewLifetime };
+    while (modelReviews.size >= 8) modelReviews.delete(modelReviews.keys().next().value);
+    modelReviews.set(review.id, review);
+    return structuredClone({ ...prepared.review, id: review.id, expiresAt: review.expiry });
+  }
+
+  async function observeGradleModel(id, { allowProjectExecution, cancellation } = {}) {
+    trusted();
+    if (allowProjectExecution !== true) throw fail('Approve execution of the reviewed Gradle model explicitly.');
+    if (cancelled(cancellation)) throw fail('The Gradle model inspection was cancelled before launch.');
+    const review = modelReviews.get(id);
+    modelReviews.delete(id);
+    if (!review || Date.now() > review.expiry) throw fail('The Gradle model review expired or was already used.');
+    const entry = await fresh(review.targetId, cancellation);
+    const current = prepareGradleObservation(entry.report, review.prepared.project.root, folderList(), getTools(entry.report), dirty);
+    if (current.key !== review.prepared.key) throw fail('The Gradle model inputs changed after review.');
+    const model = await observeGradleTarget(entry.report, current, folderList(), dirty, cancellation);
+    await fresh(review.targetId, cancellation);
+    const observationId = randomUUID();
+    while (observations.size >= 8) observations.delete(observations.keys().next().value);
+    observations.set(observationId, { targetId: review.targetId, model, expiresAt: Date.now() + until });
+    return structuredClone({ ...model, observationId, executedProjectCode: true });
+  }
+
+  async function reviewBuild(id, { cancellation, observationId } = {}) {
+    const entry = await fresh(id, cancellation);
+    const observation = observationId === undefined ? undefined : observations.get(observationId);
+    if (observationId !== undefined && (observation?.targetId !== id || observation.expiresAt < Date.now())) {
+      throw fail('Observe the current Gradle composite before reviewing its build.');
+    }
+    const result = prepare(entry, observation?.model), reviewId = randomUUID();
     while (reviews.size >= 8) reviews.delete(reviews.keys().next().value);
-    reviews.set(reviewId, { targetId: id, key: result.key, expiry: Date.now() + reviewLifetime });
+    reviews.set(reviewId, { targetId: id, observation: observation?.model, key: result.key, expiry: Date.now() + reviewLifetime });
     return structuredClone({ ...result.review, id: reviewId, expiresAt: reviews.get(reviewId).expiry });
   }
 
@@ -129,26 +165,52 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
     if (!review || Date.now() > review.expiry) throw fail('The Java source build review expired or was already used.');
     const operation = runGeneration();
     const entry = await fresh(review.targetId, cancellation);
+    if (review.observation) {
+      const approved = review.observation;
+      const prepared = prepareGradleObservation(entry.report, approved.compositeRoot, folderList(), getTools(entry.report), dirty);
+      if (prepared.key !== approved.key) throw fail('The reviewed Gradle composite model changed. Observe the current composite again.');
+      const current = await observeGradleTarget(entry.report, prepared, folderList(), dirty, cancellation);
+      if (JSON.stringify(current) !== JSON.stringify(approved)) throw fail('The reviewed Gradle composite membership changed.');
+      await fresh(review.targetId, cancellation);
+    }
     return executePrepared(() => {
       if (runGeneration() !== operation) throw fail('The reviewed Java build was stopped before launch.');
       if (Date.now() > review.expiry) throw fail('The Java source build review expired.');
-      const result = prepare(entry);
+      const result = prepare(entry, review.observation);
       if (result.key !== review.key) throw fail('The reviewed Java build command or inputs changed. Review it again.');
       return { spec: result.spec, task: result.review.task, projectId: result.projectId };
     }, { allowProjectExecution, cancellation });
   }
 
-  async function chooseBuild(id) {
-    const review = await reviewBuild(id);
+  async function chooseBuild(id, observationId) {
+    const review = await reviewBuild(id, { observationId });
     const label = 'Run Reviewed Build';
     const selected = await vscode.window.showWarningMessage('Compile the selected Java component?', {
       modal: true,
       detail: 'Target: ' + review.selector + '\n' + (review.reactorDependenciesIncluded ?
         'Required Maven reactor dependencies can also build.\n' : 'Required Gradle task dependencies can also run.\n') +
+        (review.gradleModel ? 'Observed settings: ' + review.gradleModel.settingsFile + '\n' : '') +
         'Working directory: ' + review.cwd + '\n' + JSON.stringify([review.command, ...review.args], null, 2)
     }, label);
     if (selected !== label) { reviews.delete(review.id); return; }
     return runBuild(review.id, { allowProjectExecution: true });
+  }
+
+  async function chooseGradleModel(id) {
+    const [root] = await vscode.window.showOpenDialog({ title: 'Select an In-Workspace Gradle Composite Root',
+      canSelectFiles: false, canSelectFolders: true, canSelectMany: false }) || [];
+    if (!root) return;
+    const review = await reviewGradleModel(id, { rootUri: root });
+    const label = 'Observe Gradle Model';
+    const answer = await vscode.window.showWarningMessage('Evaluate the reviewed Gradle settings and build model?', {
+      modal: true, detail: review.compositeRoot + '\n' + review.inputCount + ' reviewed inputs. This uses the configured Gradle ' +
+        'installation in offline mode and evaluates trusted project configuration code.'
+    }, label);
+    if (answer !== label) { modelReviews.delete(review.id); return; }
+    const model = await vscode.window.withProgress({ title: 'Observe Gradle Composite Model',
+      location: vscode.ProgressLocation.Notification, cancellable: true }, (_progress, cancellation) =>
+      observeGradleModel(review.id, { allowProjectExecution: true, cancellation }));
+    return chooseBuild(id, model.observationId);
   }
 
   async function command(value) {
@@ -164,14 +226,18 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
       label: 'Open Build Declaration', description: item.label, open: () => openBuild(report.id, index)
     }));
     if (route(report)) choices.push({ label: 'Review Compile for This Source', open: () => chooseBuild(report.id) });
+    if (report.provider === 'gradle' && ['main', 'test'].includes(report.sourceRole) && !report.generated) {
+      choices.push({ label: 'Observe Gradle Composite and Review Compile', open: () => chooseGradleModel(report.id) });
+    }
     const selected = await vscode.window.showQuickPick(choices, {
       title: 'Java Source Build Target · ' + path.basename(report.projectRoot), matchOnDescription: true
     });
     return selected?.open();
   }
 
-  const clear = () => { records.clear(); reviews.clear(); };
-  return { inspect, show, openBuild, command, reviewBuild, runBuild, clear, dispose() { clear(); provider?.dispose(); } };
+  const clear = () => { records.clear(); reviews.clear(); modelReviews.clear(); observations.clear(); };
+  return { inspect, show, openBuild, command, reviewBuild, runBuild, reviewGradleModel, observeGradleModel,
+    clear, dispose() { clear(); provider?.dispose(); } };
 }
 
 module.exports = { registerSourceTarget, render };

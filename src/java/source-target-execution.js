@@ -6,6 +6,7 @@ const { pathToFileURL } = require('node:url');
 const M = require('./workbench-model');
 const { pomFacts, gradleSettings } = require('./dependency-builds');
 const { buildSpec } = require('./workbench-tasks');
+const { verifyGradleObservation } = require('./gradle-source-model');
 
 const segment = /^[A-Za-z0-9_][\w.-]*$/u;
 const configFiles = ['settings.gradle', 'settings.gradle.kts'];
@@ -123,12 +124,21 @@ function route(target) {
   }
 }
 
-function prepareSourceExecution(target, folders, tools, dirty) {
-  const selected = route(target);
+function prepareSourceExecution(target, folders, tools, dirty, observedGradle) {
+  const selected = observedGradle ? { tool: 'gradle', root: observedGradle.compositeRoot } : route(target);
   if (!selected) throw M.fail('Select an observed main or test source in a supported literal Maven reactor or Gradle build tree.');
   const root = localPath(selected.root, M.workspaceRoots(folders));
   const { read, fingerprint } = capture(dirty);
-  const details = selected.tool === 'maven' ? reviewedMaven(target, root, read) : reviewedGradle(target, root, read);
+  let details;
+  if (observedGradle) {
+    verifyGradleObservation(target, observedGradle, folders, tools, dirty);
+    const selector = observedGradle.selected.treePath;
+    const suffix = target.scope === 'test' ? 'testClasses' : 'classes';
+    details = { task: selector + ':' + suffix, selector, tail: ['--offline', '--no-configuration-cache',
+      '-Dorg.gradle.java.installations.auto-download=false'] };
+  } else {
+    details = selected.tool === 'maven' ? reviewedMaven(target, root, read) : reviewedGradle(target, root, read);
+  }
   const project = { tool: selected.tool, root, uri: pathToFileURL(root).href, name: path.basename(root) };
   const spec = buildSpec(project, tools, [details.task]);
   spec.args.push(...details.tail);
@@ -149,6 +159,9 @@ function prepareSourceExecution(target, folders, tools, dirty) {
   const projectId = M.id('project', target.projectRoot);
   const review = { sourceUri: target.sourceUri, projectRoot: target.projectRoot, tool: selected.tool, scope: target.scope,
     cwd: spec.cwd, command: spec.command, args: spec.args, task: details.task, selector: details.selector,
+    ...(observedGradle && { gradleModel: { buildRoot: observedGradle.selected.buildRoot,
+      settingsFile: observedGradle.selected.settingsFile, buildCount: observedGradle.buildCount,
+      projectCount: observedGradle.projectCount, buildInputs: observedGradle.key, membershipSha256: observedGradle.membershipSha256 } }),
     reactorDependenciesIncluded: selected.tool === 'maven' };
   return { spec, projectId, review, key: M.hash({ review, env: spec.env, files: fingerprint() }) };
 }
