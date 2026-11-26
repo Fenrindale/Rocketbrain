@@ -25,9 +25,17 @@ function selectGroups(value) {
   return names;
 }
 
+function scalaFixtureManifests(root, prefix, engine, groups) {
+  assert.match(prefix, /^v0\.136(?:-[a-z0-9-]+)?$/u);
+  assert.ok(['mysql', 'mariadb'].includes(engine));
+  return Object.fromEntries(groups.filter(group => group === 'scala2Language' || group === 'scala3Language').map(group =>
+    [group, path.resolve(root, 'test-output', `${prefix}-native-${engine}-${group}-fixture.json`)]));
+}
+
 exports.version = version;
 exports.hooks = hooks;
 exports.selectGroups = selectGroups;
+exports.scalaFixtureManifests = scalaFixtureManifests;
 exports.run = async (vscode = require('vscode')) => {
   const extension = vscode.extensions.getExtension('rocketbrain-local.rocketbrain');
   assert.equal(extension?.packageJSON.version, version);
@@ -40,6 +48,7 @@ exports.run = async (vscode = require('vscode')) => {
   fs.writeFileSync(log, '', { flag: 'wx' });
   const mark = (group, state, details = {}) =>
     fs.appendFileSync(log, JSON.stringify({ group, state, time: new Date().toISOString(), ...details }) + '\n');
+  const scalaFixtures = scalaFixtureManifests(path.resolve(__dirname, '..'), prefix, engine, names);
   const api = await extension.activate();
   const checks = [], details = {}, failures = [];
   for (const group of names) {
@@ -58,14 +67,21 @@ exports.run = async (vscode = require('vscode')) => {
         assert.equal(evidence.engine, engine);
         assert.equal(evidence.preflightRefusalWithoutRecoveryRecord, true);
       } else {
-        evidence = await hook(api, vscode, checks, ...(argument ? [argument] : []));
+        const args = argument ? [argument] : [];
+        if (scalaFixtures[group]) {
+          const admitted = JSON.parse(process.env.ROCKETBRAIN_V136_SCALA_FIXTURE_CLEANUP || '{}');
+          assert.equal(admitted[group], scalaFixtures[group], 'The native runner must register post-exit Scala fixture cleanup.');
+          args.push({ cleanupManifest: scalaFixtures[group], progress: (stage, details) => mark(group, stage, details) });
+        }
+        evidence = await hook(api, vscode, checks, ...args);
       }
       assert.ok(evidence && typeof evidence === 'object', group + ' returned no proof.');
       details[group] = { ...evidence, jdbc: await jdbcReadback() };
       mark(group, 'completed');
     } catch (error) {
+      const original = error instanceof AggregateError ? error.errors[0] : error;
       const failure = { group, message: String(error.message || error).slice(0, 1400),
-        location: String(error.stack || '').split(/\r?\n/u).find(line => /test[\\/].+-host\.js:\d+/u.test(line))?.trim() };
+        location: String(original.stack || '').split(/\r?\n/u).find(line => /test[\\/].+-host\.js:\d+/u.test(line))?.trim() };
       failures.push(failure);
       mark(group, 'failed', failure);
     }
