@@ -27,7 +27,8 @@ exports.run = async (vscode = require('vscode')) => {
     },
     kotlinMixedTypeRename:()=>require('./kotlin-mixed-type-rename-host').runKotlinMixedTypeRenameChecks(api,vscode,checks),
     kotlinWatches:()=>require('./kotlin-watch-expressions-host').runKotlinWatchExpressionChecks(api,vscode,checks),
-    editorInlineModel:()=>require('./editor-inline-model-host').runEditorInlineModelChecks(api,vscode,checks)
+    editorInlineModel:()=>require('./editor-inline-model-host').runEditorInlineModelChecks(api,vscode,checks),
+    editorConversation:()=>require('./editor-conversation-host').runEditorConversationChecks(api,vscode,checks)
   };
   const names=process.env.ROCKETBRAIN_V111_ONLY?.split(',') || Object.keys(groups);
   assert.ok(names.length && names.every(name=>Object.hasOwn(groups,name)) && new Set(names).size===names.length);
