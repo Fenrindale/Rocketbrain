@@ -11,7 +11,9 @@ const hooks = Object.freeze({
   jakartaManager: ['jakarta-manager-host', 'runJakartaManagerChecks'],
   javafxGradleImage: ['javafx-gradle-image-host', 'runJavaFxGradleImageChecks'],
   javafxProperties: ['javafx-properties-host', 'runJavaFxPropertyChecks'],
+  javafxCompletion: ['javafx-completion-host', 'runJavaFxCompletionChecks'],
   kmpJvmDebug: ['kmp-jvm-debug-host', 'runKmpJvmDebugChecks'],
+  kmpJvmSourceLines: ['kmp-jvm-source-lines-host', 'runKmpJvmSourceLinesChecks'],
   mavenSnapshot: ['maven-snapshot-host', 'runMavenSnapshotChecks'],
   mavenSnapshotMove: ['maven-snapshot-model-move-host', 'runMavenSnapshotMoveChecks']
 });

@@ -81,6 +81,7 @@ test('the JavaFX command validates the selected folder before choosing a build m
     onDidOpenTextDocument: () => handle, onDidSaveTextDocument: () => handle, onDidCloseTextDocument: () => handle },
   commands: { registerCommand(id, callback) { commands.set(id, callback); return handle; } },
   languages: { createDiagnosticCollection: () => handle, registerDefinitionProvider: () => handle,
+    registerCompletionItemProvider: () => handle,
     registerDocumentSymbolProvider: () => handle },
   window: { showOpenDialog: async () => [uri(path.dirname(root))],
     showQuickPick: async () => { choicesShown++; }, showErrorMessage: async value => { error = value; } } };
