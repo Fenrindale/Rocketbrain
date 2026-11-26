@@ -9,8 +9,8 @@ const { pathToFileURL } = require('node:url');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { createQuarkusProject } = require('../src/java/quarkus-create');
-const { inspectQuarkusProject,modelQuarkus } = require('../src/java/quarkus-model');
-const { createQuarkusDev } = require('../src/java/quarkus-dev');
+const { inspectQuarkusProject,modelQuarkus,quarkusGradleProject } = require('../src/java/quarkus-model');
+const { createQuarkusDev,fastJar } = require('../src/java/quarkus-dev');
 const { buildSpec } = require('../src/java/workbench-tasks');
 
 const execute = promisify(execFile);
@@ -73,6 +73,38 @@ async function read(baseUrl,route,format='text') {
   assert.equal(response.ok,true);
   return response[format]();
 }
+
+test('Quarkus pins saved Gradle plugins and validates the standard fast-jar output',async context=>{
+  const root=await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()),'rb-quarkus-gradle-unit-'));
+  context.after(async()=>{
+    assert.equal(await fs.realpath(root),root);
+    await fs.rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});
+  });
+  const project={tool:'gradle',root,uri:pathToFileURL(root).href};
+  const build=path.join(root,'build.gradle.kts');
+  await fs.writeFile(build,'plugins {\n  // id("io.quarkus") version("3.30.0")\n  id("io.quarkus") version("3.40.1.2")\n}\n');
+  assert.equal(quarkusGradleProject(project).version,'3.40.1.2');
+  const first=quarkusGradleProject(project).buildFingerprint;
+  await fs.writeFile(build,'plugins {\n  id("io.quarkus")\n}\n');
+  await fs.writeFile(path.join(root,'settings.gradle'),'pluginManagement {\n  plugins {\n    id "\x24{quarkusPluginId}" version "\x24{quarkusPluginVersion}"\n  }\n}\n');
+  const properties=path.join(root,'gradle.properties');
+  await fs.writeFile(properties,'quarkusPluginId=io.quarkus\nquarkusPluginVersion=3.40.1.2\n');
+  assert.equal(quarkusGradleProject(project).version,'3.40.1.2');
+  assert.notEqual(quarkusGradleProject(project).buildFingerprint,first);
+  await fs.appendFile(properties,'quarkusPluginVersion=3.38.0\n');
+  assert.throws(()=>quarkusGradleProject(project),/one value/);
+  await fs.writeFile(properties,'');
+  await fs.writeFile(build,'def fake = """\nplugins {\n  id("io.quarkus") version "3.40.1.2"\n}\n"""\n');
+  assert.throws(()=>quarkusGradleProject(project),/pinned Quarkus/);
+  const output=path.join(root,'build'), runJar=path.join(output,'quarkus-app','quarkus-run.jar');
+  await fs.mkdir(path.dirname(runJar),{recursive:true});
+  await fs.writeFile(runJar,'test-only');
+  const artifact=path.join(output,'quarkus-artifact.properties');
+  await fs.writeFile(artifact,'type=jar\npath=quarkus-app/quarkus-run.jar\n');
+  assert.equal(fastJar(project),runJar);
+  await fs.appendFile(artifact,'path=../external.jar\n');
+  assert.throws(()=>fastJar(project),/standard Quarkus fast-jar/);
+});
 
 test('scaffold runs actual Quarkus Maven tests and serves, reloads and stops owned dev mode',{
   skip:!javaConfig || !mavenHome,timeout:250000

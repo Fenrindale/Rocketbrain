@@ -37,6 +37,17 @@ public final class SignatureInspector {
     static Map<String, Object> object(Object... values) {
         Map<String, Object> map = new LinkedHashMap<>(); for (int i = 0; i < values.length; i += 2) map.put((String) values[i], values[i + 1]); return map;
     }
+    static String hiddenAccessNest(TypeElement owner) {
+        if (owner.getKind() != ElementKind.CLASS || owner.getNestingKind() != NestingKind.MEMBER ||
+                !owner.getModifiers().containsAll(Set.of(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)) ||
+                !owner.getSuperclass().toString().equals("java.lang.Object") || !owner.getInterfaces().isEmpty()) return null;
+        for (Element current = owner; current instanceof TypeElement type; current = type.getEnclosingElement()) {
+            if (!type.getAnnotationMirrors().isEmpty()) return null;
+            if (type.getNestingKind() == NestingKind.TOP_LEVEL) return type.getQualifiedName().toString();
+            if (type.getNestingKind() != NestingKind.MEMBER) return null;
+        }
+        return null;
+    }
     static List<String> checkedThrownTypes(ExecutableElement method, Types types, Elements elements) {
         if (method.getThrownTypes().isEmpty()) return List.of();
         TypeMirror throwable = elements.getTypeElement("java.lang.Throwable").asType();
@@ -552,6 +563,12 @@ public final class SignatureInspector {
                         if (executable.getModifiers().contains(Modifier.PRIVATE)) {
                             method.model.put("checkedThrows", checkedThrownTypes(executable, types, elements));
                         }
+                        if (tree.getBody() != null) {
+                            var nest = hiddenAccessNest(owner);
+                            if (nest != null) method.model.put("hiddenAccessNest", nest);
+                        }
+                        var returnContract = SignatureReturn.declaration(executable,tree,getCurrentPath(),trees,types);
+                        if (!returnContract.isEmpty()) method.model.put("returnContract",returnContract);
                         method.model.put("typeParameters",typeParameters(executable.getTypeParameters()));
                         method.model.put("ownerTypeParameters",typeParameters(owner.getTypeParameters()));
                         method.model.put("ownerSupertypes",types.directSupertypes(owner.asType()).stream().map(Object::toString).toList());
@@ -575,6 +592,10 @@ public final class SignatureInspector {
                         if (executable.isVarArgs() && trees.getPath(executable) != null) {
                             var varargs = VarargsCalls.inspect(getCurrentPath(), executable, arguments, trees, types, text);
                             if (!varargs.isEmpty()) report.put("varargs",varargs);
+                        }
+                        if (!constructor && executable.getModifiers().contains(Modifier.PRIVATE) && trees.getPath(executable) != null) {
+                            var consumer = SignatureReturn.consumer(tree,getCurrentPath(),trees,text);
+                            if (!consumer.isEmpty()) report.put("returnConsumer",consumer);
                         }
                         calls.add(report);
                     }

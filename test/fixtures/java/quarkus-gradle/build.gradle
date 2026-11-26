@@ -1,0 +1,26 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version '3.40.1.2'
+}
+
+group = 'quarkusgradlefixture'
+version = '1.0.0'
+repositories { mavenCentral() }
+java { sourceCompatibility = JavaVersion.VERSION_25; targetCompatibility = JavaVersion.VERSION_25 }
+
+dependencies {
+    implementation enforcedPlatform('io.quarkus.platform:quarkus-bom:3.40.1.2')
+    implementation 'io.quarkus:quarkus-rest'
+    implementation 'io.quarkus:quarkus-smallrye-health'
+    runtimeOnly 'com.mysql:mysql-connector-j:9.7.0'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.5.10'
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
+}
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.compilerArgs += '-parameters' }
+test {
+    useJUnitPlatform()
+    systemProperty 'java.util.logging.manager', 'org.jboss.logmanager.LogManager'
+    systemProperty 'quarkus.http.test-port', '0'
+}

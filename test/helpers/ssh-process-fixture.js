@@ -9,6 +9,7 @@ const { once } = require('node:events');
 const { source } = require('../../src/remote/ssh-files-worker');
 const { terminalProgram } = require('../../src/remote/ssh-processes');
 const { javaSupervisorInvocation } = require('../../src/devcontainer/java-process');
+const { debugSupervisorInvocation } = require('../../src/remote/ssh-java-debug-runtime');
 const { fixtureStep } = require('../devcontainer-port-fixture');
 
 async function startSshProcessFixture({ python, pythonPackage }, registerCleanup) {
@@ -28,7 +29,7 @@ async function startSshProcessFixture({ python, pythonPackage }, registerCleanup
   }
   const input = path.join(owned, 'input.json'), host = path.join(owned, 'host');
   await fs.writeFile(input, JSON.stringify({ host, client: path.join(owned, 'client.pub'), programs: [source, terminalProgram,
-    javaSupervisorInvocation({}, undefined, 'ssh').program] }));
+    javaSupervisorInvocation({}, undefined, 'ssh').program, debugSupervisorInvocation({}).program] }));
   const worker = spawn(python, [path.join(__dirname, '..', 'fixtures', 'ssh-process-server.txt'), input],
     { cwd: owned, env: { ...process.env, PYTHONPATH: pythonPackage }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   const stopped = once(worker, 'close');

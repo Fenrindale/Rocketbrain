@@ -6,6 +6,7 @@ const { execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { workspacePath, workspaceRoots } = require('../java/workbench-model');
 const { localPython, pythonEnvironment } = require('./local-python');
+const { registerPythonTypes } = require('./pyright-vscode');
 const inspector = require('./python-inspector-source.json');
 
 const debugType = 'rocketbrain-python';
@@ -42,6 +43,11 @@ function registerPython(vscode) {
   const running = new Set();
   let disposed = false;
   const config = uri => vscode.workspace.getConfiguration('rocketbrain.python', uri);
+  const types = registerPythonTypes(vscode, () => {
+    diagnostics.clear();
+    if (!disposed) vscode.workspace.textDocuments.forEach(document => void lint(document));
+  });
+  subscriptions.push(types);
 
   function localContext(folder) {
     if (disposed || !vscode.workspace.isTrusted || folder?.uri.scheme !== 'file') {
@@ -91,8 +97,9 @@ function registerPython(vscode) {
   }
 
   async function lint(document) {
+    if (types.contains(document)) return;
     const result = await inspect(document).catch(() => null);
-    if (!result) return;
+    if (!result || types.contains(document)) return;
     if (!result.error) { diagnostics.delete(document.uri); return; }
     const start = document.validatePosition(new vscode.Position(...result.error.position));
     const end = document.validatePosition(new vscode.Position(start.line, start.character + 1));
@@ -174,7 +181,7 @@ function registerPython(vscode) {
   });
   command('debug', folder => vscode.debug.startDebugging(folder, launchConfig(folder, {})));
 
-  return { inspect, launchConfig, dispose() {
+  return { inspect, launchConfig, types, dispose() {
     disposed = true;
     for (const abort of running) abort.abort();
     subscriptions.forEach(item => item.dispose());

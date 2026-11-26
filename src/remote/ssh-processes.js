@@ -8,6 +8,7 @@ const { createHash, randomUUID } = require('node:crypto');
 const { secureSshTarget } = require('../db/connection-tunnel');
 const { pythonCommand } = require('./ssh-files-worker');
 const { rootParts } = require('./ssh-java-mapping');
+const { debugSupervisorInvocation } = require('./ssh-java-debug-runtime');
 const { javaSupervisorInvocation } = require('../devcontainer/java-process');
 
 const bytesHash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -40,13 +41,13 @@ function commandWithArgs(python, program, argv) {
   return pythonCommand(python, "import base64, json, sys\nsys.argv = ['rocketbrain'] + json.loads(base64.b64decode('" + payload + "'))\n" + program);
 }
 
-function collectRuntime(child) {
+function collectRuntime(child, valid, message, { input, timeout = 18000 } = {}) {
   return new Promise((resolve, reject) => {
     let count = 0, invalid = false;
     const chunks = [];
-    const timer = setTimeout(() => { invalid = true; child.kill(); }, 18000);
+    const timer = setTimeout(() => { invalid = true; child.kill(); }, timeout);
     child.stdin.on('error', () => {});
-    child.stdin.end();
+    child.stdin.end(input);
     child.stdout.on('data', data => {
       count += data.length;
       if (count > 8192) { invalid = true; child.kill(); } else chunks.push(data);
@@ -58,9 +59,9 @@ function collectRuntime(child) {
       try {
         if (invalid || code !== 0) throw Error();
         const info = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        if (!Number.isSafeInteger(info.jdk) || info.jdk < 25 || !/^[a-f0-9]{64}$/.test(info.sha256 || '')) throw Error();
+        if (!valid(info)) throw Error();
         resolve(info);
-      } catch { reject(Error('Verify Python, the independent JDK 25+ and Eclipse JDT LS inside the reviewed SSH workspace.')); }
+      } catch { reject(Error(message)); }
     });
   });
 }
@@ -116,12 +117,31 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
 
   async function javaRuntime(config) {
     const { program, argv } = javaSupervisorInvocation(config, undefined, 'ssh');
-    return collectRuntime(processFor('probe', commandWithArgs(profile.python, program, argv)));
+    return collectRuntime(processFor('probe', commandWithArgs(profile.python, program, argv)),
+      info => Number.isSafeInteger(info.jdk) && info.jdk >= 25 && /^[a-f0-9]{64}$/.test(info.sha256 || ''),
+      'Verify Python, the independent JDK 25+ and Eclipse JDT LS inside the reviewed SSH workspace.');
+  }
+
+  function debugProcess(config, expected) {
+    const { program, argv } = debugSupervisorInvocation(config, expected);
+    const input = JSON.stringify(argv) + '\n';
+    if (Buffer.byteLength(input) > 16384) throw Error('The SSH Java debug paths exceeded their input limit.');
+    const child = processFor(expected ? 'debug' : 'probe', pythonCommand(profile.python, program));
+    if (expected) {
+      child.stdin.write(input);
+      return child;
+    }
+    return collectRuntime(child, info => info.pid === config.pid && info.port === config.port && info.platform === config.platform &&
+      Number.isSafeInteger(info.startedAt) && info.startedAt > 0 && /^[a-f0-9]{64}$/.test(info.jdkSha256 || '') &&
+      (config.platform === 'win32' || /^[1-9][0-9]{0,19}$/.test(info.linuxStartTicks || '') &&
+        /^[1-9][0-9]{0,19}$/.test(info.linuxListenerInode || '')),
+    'Verify a same-account JVM, its reported workspace directory and exact IPv4 loopback JDWP listener on Windows or Linux.',
+    { input, timeout: 38000 });
   }
 
   return {
     async inspect(kind, requested) {
-      if (!['terminal', 'java'].includes(kind)) throw Error('Choose a supported reviewed SSH workspace process.');
+      if (!['terminal', 'java', 'debug'].includes(kind)) throw Error('Choose a supported reviewed SSH workspace process.');
       rootParts(remoteRoot);
       let config;
       if (kind === 'java') {
@@ -132,15 +152,26 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
         }
         config = { javaHome, serverPath, containerRoot: remoteRoot };
       }
+      if (kind === 'debug') {
+        const { javaHome, pid, port } = requested || {};
+        const windows = Boolean(rootParts(remoteRoot).drive);
+        if (Boolean(rootParts(javaHome).drive) !== windows) throw Error('Use a remote JDK 25 path on the same Windows or Linux SSH host.');
+        if (!Number.isSafeInteger(pid) || pid < 1 || pid > 0xffffffff || !Number.isInteger(port) || port < 1 || port > 65535) {
+          throw Error('Choose an exact remote JVM process ID and debug port.');
+        }
+        config = { platform: windows ? 'win32' : 'linux', javaHome, pid, port, root: remoteRoot };
+      }
       await verifyRoot();
-      const info = config ? await javaRuntime(config) : undefined;
+      const info = kind === 'debug' ? await debugProcess(config) : config ? await javaRuntime(config) : undefined;
       if (closed) throw Error('The SSH workspace closed.');
       const now = Date.now();
       for (const [token, offer] of offers) if (offer.expires <= now) offers.delete(token);
       while (offers.size >= 8) offers.delete(offers.keys().next().value);
       const token = randomUUID();
       offers.set(token, { kind, config, info, expires: now + 120000 });
-      return { token, kind, host: profile.host, port: profile.port ?? 22, user: profile.user, root: remoteRoot, ...(info && { jdk: info.jdk, javaHome: config.javaHome, serverPath: config.serverPath }) };
+      return { token, kind, host: profile.host, port: profile.port ?? 22, user: profile.user, root: remoteRoot,
+        ...(kind === 'java' && { jdk: info.jdk, javaHome: config.javaHome, serverPath: config.serverPath }),
+        ...(kind === 'debug' && { platform: info.platform, javaHome: config.javaHome, pid: info.pid, debugPort: info.port, startedAt: info.startedAt }) };
     },
     async open(kind, approval) {
       if (closed || approval?.allowRemoteProcess !== true) throw Error('Review and approve the remote workspace process first.');
@@ -152,6 +183,7 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       try {
         await verifyRoot();
         if (kind === 'terminal') return processFor(kind, commandWithArgs(profile.python, terminalProgram, [remoteRoot]), true);
+        if (kind === 'debug') return debugProcess(offer.config, offer.info);
         const current = await javaRuntime(offer.config);
         if (current.sha256 !== offer.info.sha256) throw Error('The remote JDK or JDT LS changed after review.');
         await verifyRoot();

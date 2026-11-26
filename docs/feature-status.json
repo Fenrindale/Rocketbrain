@@ -1,5 +1,5 @@
 {
-  "version": "0.125.0",
+  "version": "0.128.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,31 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 175,
-    "partial": 27,
+    "implemented": 176,
+    "partial": 26,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 92.8,
+    "percent": 93.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
     "IDEA-029",
-    "IDEA-055",
-    "IDEA-071",
-    "IDEA-100",
-    "IDEA-110"
+    "IDEA-066",
+    "IDEA-096",
+    "IDEA-109"
   ],
   "expandedFeatures": [
     "IDEA-029",
-    "IDEA-055",
-    "IDEA-071",
-    "IDEA-100",
-    "IDEA-110"
+    "IDEA-066",
+    "IDEA-096",
+    "IDEA-109"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -872,23 +870,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "선택한 비제네릭 private Java 메서드의 체크 예외를 추가·제거하고 기존 호출자가 처리할 수 있는 경우에만 수정한다. 원래의 가변 인자와 참조 검토도 제공한다.",
+      "scope": "비공개 Java 메서드 반환형을 검증된 참조 하위 타입으로 좁히고, 폐쇄된 중첩 클래스의 메서드를 private으로 바꾼다. 체크 예외와 기존 인자 서명 검토를 계속 제공한다.",
       "remaining": [
-        "다른 접근성·반환 타입, 상속 계약 및 호출자 자동 편집 전체는 남아 있다."
+        "공개 API의 외부 소비자, 동적 호출, 추론된 소비자 타입 및 일반 상속 접근 변경을 별도 검토한다."
       ],
       "verification": {
-        "state": "v0.125-installed-coverage",
+        "state": "v0.128-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 Javac로 기존 catch와 호출자 계약을 확인했다. 선택한 선언만 적용·실행 취소·다시 실행하고 다시 빌드한 Spring 결과는 보존됐다.",
+        "testedScope": "두 DB에서 직접 호출의 결합과 이전·이후 Spring JDBC가 같았다. 변경과 실행 취소·다시 실행은 선택한 선언에만 적용됐다.",
         "publicEvidence": [
-          "src/java/change-signature-throws.js",
-          "test/java-signature-throws-host.js",
-          "test/java-signature-throws.test.js"
+          "src/java/change-signature-return.js",
+          "src/java/change-signature-access.js",
+          "test/java-signature-return-host.js",
+          "test/java-signature-access-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1660,8 +1659,8 @@
       "verification": {
         "state": "v0.125-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.125.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1971,23 +1970,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Maven Quarkus 프로젝트 생성, MicroProfile 설정 완료·선언 이동, REST·Qute 탐색, 로컬 개발 모드 시작·종료와 Maven 테스트를 지원한다.",
+      "scope": "Quarkus Gradle 프로젝트를 가져오고 테스트·빌드·개발 모드로 실행한다. 패키징된 JVM의 소유 루프백 JDWP 소켓을 확인해 소스 디버거를 연결한다.",
       "remaining": [
-        "동적 CDI 그래프, 중첩 설정, Gradle 및 디버거 연결이 남아 있다."
+        "동적 Arc CDI와 중첩 Configuration Mapping 범위가 남아 있다.",
+        "설치 VS Code에서 전체 Quarkus Gradle 검증을 다시 확인한다."
       ],
       "verification": {
-        "state": "v0.52-installed-coverage",
+        "state": "v0.128-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.52.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Quarkus 3.40.1.2의 HTTP 테스트 2개, 열려 있는 설정의 편집기 탐색, Qute, 실제 개발 모드의 설정 다시 읽기, 소유 서버의 종료를 확인했다.",
+        "testedScope": "별도 실제 Quarkus 3.40.1.2와 Gradle 9.7.1에서 두 DB의 개발·패키지 실행, 테스트 두 건과 소스 중단점 21행을 확인했다. 설치 VS Code 검증은 HTTP 확인 중 시간 초과였다.",
         "publicEvidence": [
-          "src/java/quarkus-vscode.js",
           "src/java/quarkus-dev.js",
-          "test/quarkus-host.js"
+          "src/java/quarkus-vscode.js",
+          "test/quarkus-gradle-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2125,8 +2125,8 @@
       "verification": {
         "state": "v0.125-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.125.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2843,22 +2843,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "호스트 지문이 고정된 SSH 프로필에서 작업 폴더 터미널을 열고 읽기 전용 원격 Java 편집기에 정의 이동과 hover를 연결한다.",
+      "scope": "승인한 Windows·Linux SSH 작업공간에서 실제 Java 프로세스와 루프백 소켓을 확인하고 소스가 맞는 로컬 편집기에서 디버깅한다.",
       "remaining": [
-        "원격 빌드 그래프, 디버거와 대규모 원격 변경의 생명주기는 남아 있다."
+        "원격 Maven·Gradle 빌드 그래프와 여러 파일의 변경 수명주기가 남아 있다."
       ],
       "verification": {
-        "state": "v0.119-installed-coverage",
+        "state": "v0.128-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.119.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 AsyncSSH와 OpenSSH 및 JDT에서 원격 Java 정의·hover와 터미널 수명주기를 확인했다. Java 세션 종료는 터미널에 영향을 주지 않았다.",
+        "testedScope": "실제 Windows·Linux SSH에서 14행에 멈춰 지역 변수 73을 확인했다. 연결을 해제하니 JVM이 재개되고 기존 파일 세션이 유지됐다. 잘못된 소유자와 연결 대상 교체는 거부됐다.",
         "publicEvidence": [
-          "test/ssh-workspace-process-host.js",
-          "test/workflows-v119-host.js"
+          "docs/ssh-workspace.md",
+          "src/remote/ssh-java-debug.js",
+          "src/remote/ssh-java-debug-linux.js",
+          "test/ssh-java-debug-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2968,8 +2970,8 @@
       "verification": {
         "state": "v0.125-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.125.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3219,26 +3221,24 @@
       "category": "웹·API·데이터 도구",
       "feature": "Python 언어·환경·디버그",
       "priority": "P3",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "로컬 Python 환경을 선택해 AST Outline·구문 검사, 파일 실행, debugpy 중단점·단계 실행·지역 변수 조회를 사용한다.",
-      "remaining": [
-        "일반 Python 타입 분석, IntelliSense, 리팩터링과 원격 환경 연결이 남아 있다."
-      ],
+      "scope": "로컬 Python 인터프리터의 실행·debugpy와 독립 Pyright 타입 검사, 타입 완성·정의 이동·워크스페이스 안의 이름 변경을 제공한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.53-installed-coverage",
+        "state": "v0.128-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.53.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Python 3.12.14에서 AST 위치를 확인하고 실제 debugpy 1.8.22로 3번째 줄에서 멈춰 지역 변수를 읽고 4번째 줄로 이동했다.",
+        "testedScope": "실제 Pyright 1.1.414와 설치형 편집기에서 타입 오류가 수정 후 사라졌다. 타입 힌트와 완성, 두 파일 이름 변경, 실제 정의 위치를 확인했다.",
         "publicEvidence": [
-          "src/python/python-vscode.js",
-          "runtime/python/source_inspector.py",
-          "test/python-workbench-host.js"
+          "docs/python-type-analysis.md",
+          "src/python/pyright-vscode.js",
+          "test/python-types-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3257,8 +3257,8 @@
       "verification": {
         "state": "v0.125-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.125.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6394,27 +6394,22 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "0084ac7cf2e091cfc34989e35f350c0321031bbf8c58fa8f8eb04f3b50785183",
-    "sourceManifestSha256": "6d80a05c5e47af53085c3c60752ee5162a39e9c0168a28ffb880fccfc5bb55f7",
+    "vsixSha256": "11d23d6d4379a2896709530463bca386b148efa4925c43bee00db327cbaf0ea2",
+    "sourceManifestSha256": "62eea96afa744ac3903ec52d235bcca33d6574b1bcc89215746dda77c4477c02",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 5
+        "featureGroups": 4
       },
       {
         "engine": "mariadb",
-        "featureGroups": 5
+        "featureGroups": 4
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-100",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-110",
+      "id": "IDEA-109",
       "before": "partial",
       "after": "implemented"
     }
@@ -6422,13 +6417,13 @@
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45769276148",
-    "tests": 2034,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45769966853",
+    "tests": 2043,
     "suites": 0,
-    "pass": 1840,
+    "pass": 1844,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 194,
+    "skipped": 199,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

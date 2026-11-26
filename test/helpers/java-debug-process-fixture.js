@@ -33,9 +33,9 @@ function processFixture(packageName, className) {
   };
 }
 
-function fixtureJvm(java, project, mainClass, classPaths, { debug = true, token = 'fixture-private-argument' } = {}) {
+function fixtureJvm(java, project, mainClass, classPaths, { debug = true, token = 'fixture-private-argument', vmArgs = [] } = {}) {
   const target = spawn(java, [...(debug ? ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:0'] : []),
-    '-cp', classPaths.join(path.delimiter), mainClass, debug ? 'attach' : 'plain', token],
+    ...vmArgs, '-cp', classPaths.join(path.delimiter), mainClass, debug ? 'attach' : 'plain', token],
   { cwd: project, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let details = '', failure;
   const capture = chunk => { details = (details + chunk).slice(-32768); };

@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.125.0",
+  "version": "0.128.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -52,7 +52,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.python.typeServerHome", "rocketbrain.python.typeNodePath", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
@@ -109,6 +109,8 @@
       { "command": "rocketbrain.sshWorkspace.terminal", "title": "Open Reviewed SSH Workspace Terminal", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaStart", "title": "Start Reviewed SSH Java Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaStop", "title": "Stop SSH Java Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.javaDebug", "title": "Attach Reviewed SSH Java Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.javaDebugStop", "title": "Disconnect SSH Java Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.compare", "title": "Compare Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.review", "title": "Review Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.select", "title": "Select Docker Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
@@ -161,9 +163,13 @@
       { "command": "rocketbrain.quarkus.startDev", "title": "Start Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.stopDev", "title": "Stop Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.runTests", "title": "Run Quarkus Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.build", "title": "Build Quarkus Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.debug", "title": "Debug Quarkus Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.select", "title": "Select Python Interpreter", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.run", "title": "Run Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
       { "command": "rocketbrain.python.debug", "title": "Debug Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
+      { "command": "rocketbrain.python.startTypes", "title": "Start Python Type Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.python.stopTypes", "title": "Stop Python Type Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.checkProject", "title": "Check Vue Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.startDevServer", "title": "Start Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -2187,6 +2193,18 @@
         "rocketbrain.python.path": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Absolute path to the Python interpreter for local source inspection, tasks and debugpy."
+        },
+        "rocketbrain.python.typeServerHome": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute folder of an installed open-source Pyright distribution for Python type analysis."
+        },
+        "rocketbrain.python.typeNodePath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute standalone Node.js executable for Pyright. An empty value uses Node.js from PATH."
+        },
+        "rocketbrain.python.typeCheckingMode": {
+          "type": "string", "default": "standard", "scope": "resource", "enum": ["basic", "standard", "strict"],
+          "description": "Default Pyright checking mode. A Python project's own Pyright configuration can override it."
         },
         "rocketbrain.localCodeModel.endpoint": {
           "type": "string", "default": "", "scope": "machine-overridable",

@@ -24,7 +24,55 @@ function quarkusMavenProject(project) {
   ).filter(Boolean);
   const plugins=new Set(candidates.map(match => match[1]));
   if (plugins.size !== 1) throw fail('Observe one explicit Quarkus 3 Maven plugin coordinate in the module POM.');
-  return {plugin:candidates[0][1],version:candidates[0][2],buildFingerprint:buildFingerprint(project.root)};
+  return {plugin:candidates[0][1],version:candidates[0][2],buildFingerprint:buildFingerprint(project.root),tool:'maven'};
+}
+
+const RELEASE=/^3\.\d+\.\d+(?:\.\d+)?$/u;
+const QUARKUS_MARKER='io.quarkus';
+function gradleSource(root,names) {
+  const files=names.map(name=>path.join(root,name)).filter(file=>fs.existsSync(file));
+  if(files.length>1)throw fail('Select one saved Gradle build or settings script.');
+  if(!files.length)return '';
+  const file=files[0], stat=fs.lstatSync(file);
+  if(!stat.isFile()||stat.isSymbolicLink()||stat.size>512*1024||path.relative(file,fs.realpathSync(file)))
+    throw fail('Read bounded physical Quarkus Gradle files.');
+  return new TextDecoder('utf-8',{fatal:true}).decode(fs.readFileSync(file));
+}
+
+function quarkusPluginDeclarations(source,properties) {
+  const visible=source.replace(/"""[\s\S]*?"""|'''[\s\S]*?'''|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|\/\*[\s\S]*?\*\/|\/\/[^\r\n]*/gu,
+    (whole,quoted)=>quoted??whole.replace(/[^\r\n]/g,' '));
+  const blocks=visible.matchAll(/(?:^|\n)[ \t]*plugins\s*\{((?:\$\{[A-Za-z0-9_.]+\}|[^{}])*)\}/gu);
+  const declarations=[];
+  for(const block of blocks)for(const line of block[1].split(/\r?\n/u)) {
+    const match=/^\s*id\s*(?:\(\s*(['"])([^'"\\]*)\1\s*\)|(['"])([^'"\\]*)\3)(?:\s+version\s*(?:\(\s*(['"])([^'"\\]*)\5\s*\)|(['"])([^'"\\]*)\7))?\s*;?\s*$/u.exec(line);
+    if(!match)continue;
+    const resolve=value=>value?.replace(/^\$\{(quarkusPluginId|quarkusPluginVersion)\}$/u,(_value,key)=>properties[key]??'');
+    if(resolve(match[2]??match[4])===QUARKUS_MARKER)declarations.push(resolve(match[6]??match[8]));
+  }
+  return declarations;
+}
+
+function quarkusGradleProject(project) {
+  if(project.tool!=='gradle')throw fail('Choose an imported Gradle Quarkus application.');
+  const properties=Object.create(null);
+  for(const line of gradleSource(project.root,['gradle.properties']).split(/\r?\n/u)) {
+    const item=/^\s*(quarkusPluginId|quarkusPluginVersion)\s*=\s*([A-Za-z0-9.]+)\s*$/u.exec(line);
+    if(!item)continue;
+    if(Object.hasOwn(properties,item[1]))throw fail('Observe one value for each Quarkus Gradle plugin property.');
+    properties[item[1]]=item[2];
+  }
+  const applied=quarkusPluginDeclarations(gradleSource(project.root,['build.gradle','build.gradle.kts']),properties);
+  const managed=quarkusPluginDeclarations(gradleSource(project.root,['settings.gradle','settings.gradle.kts']),properties);
+  const version=applied[0]??managed[0];
+  if(applied.length!==1||managed.length>1||!RELEASE.test(version??'')||
+    (managed[0]!==undefined&&managed[0]!==version))
+    throw fail('Observe one explicitly pinned Quarkus 3 Gradle plugin declaration.');
+  return {plugin:QUARKUS_MARKER,version,buildFingerprint:buildFingerprint(project.root),tool:'gradle'};
+}
+
+function quarkusProject(project) {
+  return project.tool==='gradle'?quarkusGradleProject(project):quarkusMavenProject(project);
 }
 
 function pathFragment(annotation) {
@@ -105,7 +153,7 @@ function modelQuarkus(sources,properties) {
 }
 
 function inspectQuarkusProject(project,cancellation) {
-  const model=quarkusMavenProject(project), root=project.root;
+  const model=quarkusProject(project), root=project.root;
   const base=path.join(root,'src/main/java'), propertiesFile=path.join(root,'src/main/resources/application.properties');
   const sources=[];
   let entries=0, size=0;
@@ -148,4 +196,4 @@ function inspectQuarkusProject(project,cancellation) {
   return {...model,...report,projectUri:project.uri,propertiesFile};
 }
 
-module.exports = { modelQuarkus,inspectQuarkusProject,quarkusMavenProject,profileKey };
+module.exports = { modelQuarkus,inspectQuarkusProject,quarkusMavenProject,quarkusGradleProject,quarkusProject,profileKey };

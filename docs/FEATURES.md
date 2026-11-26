@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.125.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.128.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 175 |
-| 부분 구현 | 27 |
+| 구현 | 176 |
+| 부분 구현 | 26 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **92.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **93.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.125에서는 Python 노트북 셀 디버깅, Kubernetes 복제본 조정·Helm 복원·검토된 인증 실행 파일, Java 소스 기준 모듈 빌드와 체크 예외 서명, Spring JPA 트랜잭션 실측을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 199.5점에서 200.5점으로 바뀌었다.
+v0.128에서는 Python 타입 분석과 이름 변경, Java 반환형·접근 범위 검토, Windows·Linux SSH Java 디버깅 및 Quarkus Gradle 작업과 Java 소스 디버깅을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 200.5점에서 201점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -129,7 +129,7 @@ v0.125에서는 Python 노트북 셀 디버깅, Kubernetes 복제본 조정·Hel
 | IDEA-106 | IntelliJ IDEA | JavaScript·TypeScript·Node/브라우저 디버그 | VS Code 재사용 |
 | IDEA-107 | IntelliJ IDEA | React·Angular·Vue 프레임워크 | 부분 구현 |
 | IDEA-108 | IntelliJ IDEA | HTML·CSS/SCSS·Emmet·Preview | VS Code 재사용 |
-| IDEA-109 | IntelliJ IDEA | Python 언어·환경·디버그 | 부분 구현 |
+| IDEA-109 | IntelliJ IDEA | Python 언어·환경·디버그 | 구현 |
 | IDEA-110 | IntelliJ IDEA | Jupyter Notebook·커널·셀 디버그 | 구현 |
 | IDEA-111 | IntelliJ IDEA | 원격 파일 배포·SFTP/FTPS/WebDAV | 구현 |
 | IDEA-112 | IntelliJ IDEA | 설정·스타일·프로필 동기화 | VS Code 재사용 |
