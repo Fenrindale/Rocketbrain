@@ -159,13 +159,13 @@ function registerJavaFeatures(context, vscode) {
     dispose() {
       if (!disposing) {
         disposed = true;
-        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.micronaut?.dispose();await api.scala?.dispose();await api.kotlinMultiplatform?.dispose();await api.kotlinEditor?.dispose();await api.coroutines?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
+        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.micronaut?.dispose();await api.scala?.dispose();await api.kotlinMultiplatform?.dispose();await api.kotlinEditor?.dispose();await api.coroutines?.dispose();await api.typeRename?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
       }
       return disposing;
     }
   };
   const refactoringRequest=async(method,params,cancellation)=>{
-    if(!['textDocument/codeAction','codeAction/resolve','textDocument/documentSymbol','textDocument/definition','textDocument/references','workspace/willRenameFiles','java/getChangeSignatureInfo','java/getRefactorEdit','java/move','java/getMoveDestinations'].includes(method)&&!(method==='workspace/executeCommand'&&['java.project.getClasspaths','java.project.getSettings','java.project.getAll'].includes(params?.command)))throw new Error('Unsupported Java refactoring request.');
+    if(!['textDocument/codeAction','codeAction/resolve','textDocument/documentSymbol','textDocument/definition','textDocument/references','textDocument/prepareRename','textDocument/rename','workspace/willRenameFiles','java/getChangeSignatureInfo','java/getRefactorEdit','java/move','java/getMoveDestinations'].includes(method)&&!(method==='workspace/executeCommand'&&['java.project.getClasspaths','java.project.getSettings','java.project.getAll'].includes(params?.command)))throw new Error('Unsupported Java refactoring request.');
     await api.start();if(!vscode.workspace.isTrusted||!client||state.state!=='running')throw new Error('Start Java support in a trusted workspace before refactoring.');
     return client.sendRequest(method,params,...(cancellation?[cancellation]:[]));
   };
@@ -227,6 +227,7 @@ function registerJavaFeatures(context, vscode) {
     await client.sendNotification('workspace/didChangeWatchedFiles',{changes});
   };
   api.move=require('./move').registerJavaMove(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
+  api.typeRename=require('./java-type-rename-vscode').registerJavaTypeRename(vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
   api.memberMove=require('./member-move').registerJavaMemberMove(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
   api.changeSignature=require('./change-signature').registerJavaChangeSignature(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,getJavaHome:()=>api.getState().javaHome});
   api.safeDelete=require('./safe-delete').registerJavaSafeDelete(context,vscode,{request:refactoringRequest,refactoring:api.refactoring});
