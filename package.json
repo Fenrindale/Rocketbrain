@@ -139,6 +139,7 @@
       { "command": "rocketbrain.localCodeModel.closeConversation", "title": "Close Local Workspace Conversation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.start", "title": "Start Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.stop", "title": "Stop Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlinEditor.startMavenReactor", "title": "Start Kotlin Maven Reactor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.output", "title": "Show Kotlin Language Server Output", "category": "Rocketbrain" },
       { "command": "rocketbrain.coroutines.prepare", "title": "Prepare Kotlin Coroutine Probe", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.coroutines.prepareDebug", "title": "Prepare Kotlin Coroutine Debug Attach", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },

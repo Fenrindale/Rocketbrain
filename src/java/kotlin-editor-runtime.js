@@ -104,7 +104,7 @@ async function configureMaven(env,mavenHome) {
     throw fail('Choose an independent Apache Maven distribution with its classworlds runtime.');
   }
   for (const key of Object.keys(env)) {
-    if (['MAVEN_ARGS','MAVEN_OPTS','MAVEN_HOME','M2_HOME','MAVEN_SKIP_RC'].includes(key.toUpperCase())) delete env[key];
+    if (['MAVEN_ARGS','MAVEN_OPTS','MAVEN_HOME','M2_HOME','MAVEN_SKIP_RC','MAVEN_BASEDIR','MAVEN_PROJECTBASEDIR','MAVEN_DEBUG_OPTS'].includes(key.toUpperCase())) delete env[key];
   }
   env.MAVEN_HOME=home;
   env.MAVEN_SKIP_RC='1';
@@ -159,7 +159,7 @@ async function windowsOverlay(jdk,java,library,env) {
   }
 }
 
-async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome,mavenHome,storageRoot,root}) {
+async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome,mavenHome,storageRoot,root,reactor}) {
   if (!path.isAbsolute(serverHome || '')) throw fail('Set rocketbrain.kotlinEditor.serverHome to the extracted open ktlsp '+VERSION+' server directory.');
   if (!path.isAbsolute(root||'')) throw fail('Start Kotlin editing in a local Gradle or Maven project.');
   const project=await fs.realpath(root);
@@ -196,6 +196,20 @@ async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome
   const env={...process.env,JAVA_HOME:jdk};
   for (const key of ['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','KOTLIN_LANGUAGE_SERVER_OPTS']) delete env[key];
   if (buildTool==='maven') await configureMaven(env,mavenHome);
+  if (reactor) {
+    if (buildTool!=='maven'||path.relative(project,reactor.project)||
+        path.relative(path.join(reactor.home,'.m2','repository'),reactor.repository)) {
+      throw fail('The prepared Kotlin Maven reactor belongs to another module.');
+    }
+    const repository=await fs.realpath(reactor.repository);
+    if (path.relative(repository,reactor.repository)||/["\r\n\0]/u.test(repository)) {
+      throw fail('Use a physical Kotlin Maven session repository.');
+    }
+    env.MAVEN_BASEDIR=reactor.root;
+    env.MAVEN_REPOSITORY=repository;
+    // The JVM parses this one owned option for Maven subprocesses, without shell argument splitting.
+    env.JDK_JAVA_OPTIONS='"-Dmaven.repo.local='+repository.split(path.sep).join('/')+'"';
+  }
   if (buildTool==='gradle' && gradleHome) {
     if (!path.isAbsolute(gradleHome)) throw fail('Use an absolute Gradle installation path for Kotlin support.');
     const bin=path.join(await fs.realpath(gradleHome),'bin');
@@ -209,7 +223,7 @@ async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome
   }
   const overlay=await windowsOverlay(jdk,command,library,env);
   // The open server's SQLite driver fails on deep Windows VS Code profile paths.
-  const localStorage=overlay.file && storage.length>200 ? path.join(path.dirname(overlay.file),'cache') : storage;
+  const localStorage=reactor ? path.join(reactor.home,'kls') : overlay.file && storage.length>200 ? path.join(path.dirname(overlay.file),'cache') : storage;
   try {
     await fs.mkdir(localStorage,{recursive:true});
     env.KLS_HOME=await fs.realpath(localStorage);
@@ -218,7 +232,8 @@ async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome
     throw error;
   }
   const classpath=[overlay.file,path.join(library,'*')].filter(Boolean).join(path.delimiter);
-  return {command,args:['-Dfile.encoding=UTF-8','-DkotlinLanguageServer.version='+VERSION,'-Xmx1536m','-XX:ActiveProcessorCount=4',
+  return {command,args:['-Dfile.encoding=UTF-8','-DkotlinLanguageServer.version='+VERSION,
+    ...(reactor?['-Duser.home='+reactor.home]:[]),'-Xmx1536m','-XX:ActiveProcessorCount=4',
     '-cp',classpath,'org.javacs.kt.MainKt'],options:{cwd:project,env,windowsHide:true},
     root:project,buildTool,serverVersion:VERSION,compilerVersion:COMPILER,windowsPathAdapter:Boolean(overlay.file),dispose:overlay.dispose,
     compiler:{javaHome:jdk,java:command,libraries:jars.map(entry=>path.join(library,entry.name)).sort(),

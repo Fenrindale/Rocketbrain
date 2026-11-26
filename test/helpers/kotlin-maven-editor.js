@@ -20,14 +20,14 @@ const isTypedCompletion = item => /^queryForObject(?:\(|$)/u.test(item?.label?.l
 const findMismatch = item => /MISMATCH/u.test(String(typeof item?.code==='object'?item.code?.value:item?.code)) &&
   /String/u.test(item.message) && /Int/u.test(item.message);
 
-async function build(root, {javaHome,mavenHome}) {
+async function build(root, {javaHome,mavenHome,repository}) {
   const spec=buildSpec({root,name:'Kotlin Maven editor fixture',tool:'maven',uri:pathToFileURL(root).href},
     {javaHome,mavenHome},['compile','dependency:build-classpath']);
   const versionArgs=spec.args.slice(0,-2);
   const check=await execute(spec.command,[...versionArgs,'--version'],{cwd:root,env:spec.env,windowsHide:true,timeout:15000});
   const mavenVersion=/Apache Maven (\d+\.\d+\.\d+)/u.exec(check.stdout)?.[1];
   assert.equal(mavenVersion,'3.9.11');
-  const built=await execute(spec.command,[...spec.args,'-Dmdep.outputFile=target/runtime-classpath.txt'],
+  const built=await execute(spec.command,[...spec.args,'-Dmdep.outputFile=target/runtime-classpath.txt',...(repository?['-Dmaven.repo.local='+repository]:[])],
     {cwd:root,env:spec.env,windowsHide:true,timeout:140000,maxBuffer:3*1024*1024});
   assert.match(built.stdout,/kotlin:2\.2\.21:compile/u);
   assert.match(built.stdout,/BUILD SUCCESS/u);

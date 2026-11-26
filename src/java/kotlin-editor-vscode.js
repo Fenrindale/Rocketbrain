@@ -7,13 +7,15 @@ const {registerSourceFormatting} = require('./format-vscode');
 const {kotlinFormatterOptions,buildKotlinFormatEdits} = require('./kotlin-format-edits');
 const {registerKotlinRename} = require('./kotlin-rename-vscode');
 const {registerKotlinNullability} = require('./kotlin-nullability-vscode');
+const {isReactorComponent,reviewKotlinReactor,prepareKotlinReactor} = require('./kotlin-maven-reactor');
 
-const COMMANDS={start:'rocketbrain.kotlinEditor.start',stop:'rocketbrain.kotlinEditor.stop',output:'rocketbrain.kotlinEditor.output'};
+const COMMANDS={start:'rocketbrain.kotlinEditor.start',stop:'rocketbrain.kotlinEditor.stop',output:'rocketbrain.kotlinEditor.output',reactor:'rocketbrain.kotlinEditor.startMavenReactor'};
 
 function registerKotlinEditor(context,vscode,java) {
   const output=vscode.window.createOutputChannel('Rocketbrain Kotlin Editor',{log:true});
   const subscriptions=[output];
-  let state={state:'stopped'}, active, closing, disposed=false, suspended=false, pending=Promise.resolve();
+  const reactorReviews=new WeakMap();
+  let state={state:'stopped'}, active, preparation, closing, disposed=false, suspended=false, pending=Promise.resolve();
 
   function serial(action) {
     const task=pending.then(action,action);
@@ -26,6 +28,13 @@ function registerKotlinEditor(context,vscode,java) {
   }
 
   function roots() {return workspaceRoots(vscode.workspace.workspaceFolders||[]);}
+
+  function containing(folder) {
+    return roots().filter(root=>inside(root,folder)).sort((a,b)=>b.length-a.length)[0];
+  }
+
+  const dirty = file => vscode.workspace.textDocuments.some(document=>document.uri.scheme==='file' && !document.isClosed &&
+    document.isDirty && !path.relative(file,document.uri.fsPath));
 
   function projectOf(document) {
     if (!document || document.languageId!=='kotlin' || document.uri.scheme!=='file' || document.uri.authority) return undefined;
@@ -50,7 +59,9 @@ function registerKotlinEditor(context,vscode,java) {
       catch (error) {output.appendLine('Kotlin language-server shutdown: '+error.message);}
       finally {
         record.watcher?.dispose();
-        await record.launch.dispose();
+        record.reactorWatcher?.dispose();
+        try {await record.launch.dispose();}
+        finally {await record.reactor?.dispose();}
       }
     })();
     return record.released;
@@ -65,14 +76,17 @@ function registerKotlinEditor(context,vscode,java) {
     return report('stopped');
   }
 
-  async function startNow(root) {
+  async function startNow(root,reactor) {
     trusted();
     const settings=vscode.workspace.getConfiguration('rocketbrain.kotlinEditor');
     const serverHome=settings.get('serverHome');
     if (!serverHome) throw fail('Configure the extracted open ktlsp server in rocketbrain.kotlinEditor.serverHome.');
     if (!root) throw fail('Open a Kotlin source file in a local Gradle or Maven project first.');
     const buildTool=kotlinBuildTool(root);
-    if (active && !path.relative(active.launch.root,root) && active.launch.buildTool===buildTool && state.state==='running') return {...state};
+    if (!reactor && active && !path.relative(active.launch.root,root) && active.launch.buildTool===buildTool && state.state==='running') return {...state};
+    if (!reactor && buildTool==='maven' && isReactorComponent(root,containing(root))) {
+      throw fail('Use Start Kotlin Maven Reactor to review and prepare this module’s dependencies.');
+    }
     if (active) await stopNow();
     const javaSettings=vscode.workspace.getConfiguration('rocketbrain.java');
     report('starting',{message:'Starting Rocketbrain Kotlin editing for '+path.basename(root)+'.'});
@@ -81,8 +95,8 @@ function registerKotlinEditor(context,vscode,java) {
       const launch=await kotlinEditorLaunch({serverHome,root,
         javaHome:javaSettings.get('javaHome')||java.getState().javaHome,gradleHome:javaSettings.get('gradleHome'),
         mavenHome:javaSettings.get('mavenHome'),
-        gradleUserHome:settings.get('gradleUserHome'),storageRoot:(context.storageUri||context.globalStorageUri).fsPath});
-      record={launch};
+        gradleUserHome:settings.get('gradleUserHome'),storageRoot:(context.storageUri||context.globalStorageUri).fsPath,reactor});
+      record={launch,reactor};
       active=record;
       trusted();
       if (suspended) throw fail('Kotlin editing was stopped while its server was preparing.');
@@ -94,6 +108,7 @@ function registerKotlinEditor(context,vscode,java) {
         ? '**/{*.kt,*.kts,*.java,pom.xml,build.gradle,build.gradle.kts,kls-classpath*,kotlinLspClasspath*}'
         : '**/{*.kt,*.kts,build.gradle,settings.gradle,gradle.properties}';
       record.watcher=vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(scope,files));
+      if (reactor) watchReactor(record);
       record.client=new LanguageClient('rocketbrain-kotlin-editor','Rocketbrain Kotlin Editor',
         {command:launch.command,args:launch.args,options:launch.options},{
           workspaceFolder:scope,outputChannel:output,
@@ -119,6 +134,7 @@ function registerKotlinEditor(context,vscode,java) {
               async didChangeWatchedFile(event,next) {
                 if (active!==record || !vscode.workspace.isTrusted) return;
                 if (launch.buildTool==='maven' && isMavenClasspathFile(path.basename(vscode.Uri.parse(event.uri).fsPath))) {
+                  if (record.reactor && path.basename(vscode.Uri.parse(event.uri).fsPath)==='pom.xml') return;
                   try {await validateMavenComponent(launch.root);}
                   catch (error) {
                     void serial(async()=>{
@@ -152,7 +168,9 @@ function registerKotlinEditor(context,vscode,java) {
         kotlin:{inlayHints:{typeHints:true,parameterHints:true,chainedHints:false}}
       }});
       const running=report('running',{projectUri:uri.toString(),buildTool:launch.buildTool,serverVersion:launch.serverVersion,
-        compilerVersion:launch.compilerVersion,windowsPathAdapter:launch.windowsPathAdapter,message:'Kotlin language features are connected.'});
+        compilerVersion:launch.compilerVersion,windowsPathAdapter:launch.windowsPathAdapter,
+        ...(reactor&&{reactor:{module:reactor.module,dependencies:reactor.dependencies,repository:reactor.repository}}),
+        message:'Kotlin language features are connected.'});
       java.codeHints?.refresh();
       return running;
     } catch (error) {
@@ -172,7 +190,89 @@ function registerKotlinEditor(context,vscode,java) {
     });
   }
 
-  function stop() {suspended=true;return serial(stopNow);}
+  function stop() {suspended=true;preparation?.abort();return serial(stopNow);}
+
+  function reactorPlan(document) {
+    trusted();
+    const project=projectOf(document),workspace=project&&containing(project);
+    if (!project||!workspace||kotlinBuildTool(project)!=='maven') throw fail('Open a Kotlin source in a Maven reactor module first.');
+    if (!vscode.workspace.getConfiguration('rocketbrain.kotlinEditor').get('serverHome')) {
+      throw fail('Configure the extracted open ktlsp server before starting a Kotlin Maven reactor.');
+    }
+    const javaSettings=vscode.workspace.getConfiguration('rocketbrain.java');
+    return reviewKotlinReactor({project,workspace,dirty,tools:{javaHome:javaSettings.get('javaHome')||java.getState().javaHome,
+      mavenHome:javaSettings.get('mavenHome')}});
+  }
+
+  function reviewReactor({document=vscode.window.activeTextEditor?.document}={}) {
+    const plan=reactorPlan(document),review=Object.freeze(structuredClone(plan.report));
+    reactorReviews.set(review,{document,fingerprint:plan.fingerprint,expires:Date.now()+120000});
+    return review;
+  }
+
+  function startReactor(review,{allowProjectExecution,cancellation}={}) {
+    if (allowProjectExecution!==true) return Promise.reject(fail('Approve the reviewed Maven dependency build before starting Kotlin editing.'));
+    const saved=reactorReviews.get(review);
+    if (!saved||saved.expires<Date.now()) return Promise.reject(fail('Review the current Kotlin Maven module dependencies again.'));
+    reactorReviews.delete(review);
+    suspended=false;
+    return serial(async()=>{
+      const plan=reactorPlan(saved.document);
+      if (plan.fingerprint!==saved.fingerprint||suspended) throw fail('The reviewed Maven reactor changed. Review its dependencies again.');
+      const controller=new AbortController();
+      const cancel=cancellation?.onCancellationRequested(()=>controller.abort());
+      if (cancellation?.isCancellationRequested) controller.abort();
+      preparation=controller;
+      let prepared;
+      try {
+        output.appendLine('Preparing Kotlin Maven module '+plan.report.module+' using '+plan.report.steps.join(', ')+'.');
+        prepared=await prepareKotlinReactor(plan,{cancellation:controller.signal,onOutput:text=>output.append(text)});
+        if (controller.signal.aborted||suspended||reactorPlan(saved.document).fingerprint!==plan.fingerprint) {
+          throw fail('The Maven reactor changed during preparation. Review its dependencies again.');
+        }
+        return await startNow(plan.report.project,prepared);
+      } catch (error) {
+        await prepared?.dispose();
+        throw error;
+      } finally {
+        preparation=undefined;
+        cancel?.dispose();
+      }
+    });
+  }
+
+  function watchReactor(record) {
+    const reactor=record.reactor;
+    const scope={uri:vscode.Uri.file(reactor.root),name:path.basename(reactor.root),index:0};
+    const watcher=vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(scope,
+      '**/{pom.xml,maven.config,jvm.config,extensions.xml,*.kt,*.java}'));
+    record.reactorWatcher=watcher;
+    const react=uri=>{
+      if (active!==record) return;
+      const file=uri.fsPath;
+      const descriptor=[...reactor.watched.keys()].some(item=>!path.relative(item,file));
+      const dependency=reactor.dependencies.some(item=>inside(path.join(item.directory,'src'),file));
+      if (!descriptor&&!dependency) return;
+      void serial(async()=>{
+        if (active!==record) return;
+        await stopNow();
+        report('stopped',{message:'The Kotlin Maven reactor changed. Review and prepare its dependencies again.'});
+      }).catch(failure=>output.appendLine(failure.message));
+    };
+    watcher.onDidCreate(react);
+    watcher.onDidDelete(react);
+    watcher.onDidChange(react);
+  }
+
+  async function chooseReactor() {
+    const review=reviewReactor();
+    const choice=await vscode.window.showWarningMessage('Prepare Kotlin editing for '+review.module+'?',{modal:true,
+      detail:'Maven install will run the following reactor modules and use an editor-owned local repository.\n'+
+        review.steps.join(', ')+'\n'+review.dependencies.map(item=>item.coordinates).join('\n')+'\n'+review.root},'Build Dependencies and Start');
+    if (choice!=='Build Dependencies and Start') return;
+    return vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'Preparing Kotlin Maven reactor',cancellable:true},
+      (_progress,cancellation)=>startReactor(review,{allowProjectExecution:true,cancellation}));
+  }
 
   const formatting=registerSourceFormatting(vscode,{language:'kotlin',name:'Kotlin',commandId:'rocketbrain.kotlinEditor.previewFormatting',
     start:document=>start({document}),refactoring:java.refactoring,output,buildEdits:buildKotlinFormatEdits,engineOptions:kotlinFormatterOptions,
@@ -321,6 +421,9 @@ function registerKotlinEditor(context,vscode,java) {
   subscriptions.push(vscode.commands.registerCommand(COMMANDS.start,async () => {
     try {return await start();}
     catch (error) {void vscode.window.showErrorMessage('Rocketbrain Kotlin: '+error.message);}
+  }),vscode.commands.registerCommand(COMMANDS.reactor,async()=>{
+    try {return await chooseReactor();}
+    catch (error) {void vscode.window.showErrorMessage('Rocketbrain Kotlin: '+error.message);}
   }),vscode.commands.registerCommand(COMMANDS.stop,stop),
   vscode.commands.registerCommand(COMMANDS.output,()=>output.show()),
   vscode.window.onDidChangeActiveTextEditor(editor=>automatic(editor?.document)),
@@ -332,10 +435,11 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,definition,references,formatting,rename,nullability,documentSymbols,selectionRanges,codeInformation,inlayHints,getState:()=>({...state}),dispose() {
+  return {start,stop,reviewReactor,startReactor,definition,references,formatting,rename,nullability,documentSymbols,selectionRanges,codeInformation,inlayHints,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;
+    preparation?.abort();
     closing=serial(stopNow).finally(()=>{for (const item of subscriptions) item.dispose();});
     return closing;
   }};
