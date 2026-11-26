@@ -1,7 +1,7 @@
 'use strict';
 
 const { randomBytes } = require('node:crypto');
-const { DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILD } = require('./debug-runtime');
+const { DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILDS } = require('./debug-runtime');
 
 const command = 'rocketbrain/readJavaValues';
 const pageSize = 100;
@@ -22,7 +22,7 @@ function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
     if (state?.state !== 'stopped' || state.resuming !== undefined || !positiveId(state.threadId)) {
       throw Error('Pause the Java session before reading local values.');
     }
-    if (![DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD].includes(state.debugBuild)) throw Error('Update the Rocketbrain Java engine to read local values without expression evaluation.');
+    if (![DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD,...KOTLIN_LINE_BUILDS].includes(state.debugBuild)) throw Error('Update the Rocketbrain Java engine to read local values without expression evaluation.');
     const focused = vscode.debug.activeStackItem;
     if (focused?.session?.id === session.id && focused.threadId !== state.threadId) {
       throw Error('Select a frame on the Java thread that reported the current stop.');

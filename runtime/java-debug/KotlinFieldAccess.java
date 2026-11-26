@@ -31,10 +31,10 @@ final class KotlinFieldAccess {
                     case 1: strings[i] = stream.readUTF(); break;
                     case 3: case 4: skip(stream,4); break;
                     case 5: case 6: skip(stream,8); i++; break;
-                    case 7: entries[i] = new int[] {tag, stream.readUnsignedShort()}; break;
-                    case 8: case 16: case 19: case 20: skip(stream,2); break;
-                    case 9: case 12: entries[i] = new int[] {tag, stream.readUnsignedShort(), stream.readUnsignedShort()}; break;
-                    case 10: case 11: case 17: case 18: skip(stream,4); break;
+                    case 7: case 8: entries[i] = new int[] {tag, stream.readUnsignedShort()}; break;
+                    case 16: case 19: case 20: skip(stream,2); break;
+                    case 9: case 10: case 12: entries[i] = new int[] {tag, stream.readUnsignedShort(), stream.readUnsignedShort()}; break;
+                    case 11: case 17: case 18: skip(stream,4); break;
                     case 15: skip(stream,3); break;
                     default: throw new IOException("Unsupported constant pool entry.");
                 }
@@ -56,22 +56,47 @@ final class KotlinFieldAccess {
     static boolean writable(Field field, KotlinFieldAccess access) {
         if (field.isFinal() || field.isStatic()) return false;
         if (field.isPublic()) return true; // Direct JVM field, independent of any property accessors.
-        if (access == null) return false;
+        if (!directGetter(field, access)) return false;
         ReferenceType type = field.declaringType();
-        String name = field.name(), signature = field.signature();
-        boolean isStyle = name.length() > 2 && name.startsWith("is") && Character.isUpperCase(name.charAt(2));
-        String title = isStyle ? name.substring(2) : Character.toUpperCase(name.charAt(0)) + name.substring(1);
-        Method getter = method(type, isStyle ? name : "get" + title, "()" + signature);
-        Method setter = method(type, "set" + title, "(" + signature + ")V");
-        if (getter == null || setter == null) return false;
-        byte[] read = getter.bytecodes(), write = setter.bytecodes();
-        int returnOp = signature.equals("J") ? 0xad : signature.startsWith("L") ? 0xb0 : 0xac;
+        String signature = field.signature();
+        Method setter = method(type, "set" + title(field.name()), "(" + signature + ")V");
+        if (setter == null) return false;
+        byte[] write = setter.bytecodes();
+        int address = write.length == 6 ? 0 : access.nonNullStringPrefix(field, write);
+        if (address < 0) return false;
         int loadOp = signature.equals("J") ? 0x1f : signature.startsWith("L") ? 0x2b : 0x1b;
-        return read.length == 5 && op(read,0) == 0x2a && op(read,1) == 0xb4 && op(read,4) == returnOp
-            && write.length == 6 && op(write,0) == 0x2a && op(write,1) == loadOp
-            && op(write,2) == 0xb5 && op(write,5) == 0xb1
-            && access.fieldMatches(index(read,2), field) && access.fieldMatches(index(write,3), field);
+        return op(write,address) == 0x2a && op(write,address+1) == loadOp && op(write,address+2) == 0xb5
+            && op(write,address+5) == 0xb1 && access.fieldMatches(index(write,address+3), field);
     }
+
+    static boolean directGetter(Field field, KotlinFieldAccess access) {
+        if (field.isPublic()) return true;
+        if (access == null) return false;
+        String name = field.name(), signature = field.signature();
+        Method getter = method(field.declaringType(), isStyle(name) ? name : "get" + title(name), "()" + signature);
+        if (getter == null) return false;
+        byte[] read = getter.bytecodes();
+        int returnOp = signature.equals("J") ? 0xad : signature.startsWith("L") || signature.startsWith("[") ? 0xb0 : 0xac;
+        return read.length == 5 && op(read,0) == 0x2a && op(read,1) == 0xb4 && op(read,4) == returnOp
+            && access.fieldMatches(index(read,2), field);
+    }
+
+    private int nonNullStringPrefix(Field field, byte[] write) {
+        if (!KotlinFieldValues.isString(field) || (write.length != 12 && write.length != 13) || op(write,0) != 0x2b) return -1;
+        int invoke = write.length - 9;
+        int argument = invoke == 3 && op(write,1) == 0x12 ? op(write,2)
+            : invoke == 4 && op(write,1) == 0x13 ? index(write,2) : -1;
+        int[] constant = entry(argument,8);
+        int[] method = entry(index(write,invoke+1),10);
+        if (constant == null || !"<set-?>".equals(string(constant[1])) || op(write,invoke) != 0xb8 || method == null) return -1;
+        int[] type = entry(method[1],7), name = entry(method[2],12);
+        return type != null && name != null && "kotlin/jvm/internal/Intrinsics".equals(string(type[1]))
+            && "checkNotNullParameter".equals(string(name[1])) && "(Ljava/lang/Object;Ljava/lang/String;)V".equals(string(name[2]))
+            ? invoke+3 : -1;
+    }
+
+    private static boolean isStyle(String name) { return name.length() > 2 && name.startsWith("is") && Character.isUpperCase(name.charAt(2)); }
+    private static String title(String name) { return isStyle(name) ? name.substring(2) : Character.toUpperCase(name.charAt(0)) + name.substring(1); }
 
     private static Method method(ReferenceType type, String name, String signature) {
         List<Method> matches = type.methodsByName(name, signature);
