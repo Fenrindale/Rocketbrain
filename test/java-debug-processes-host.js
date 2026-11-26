@@ -80,8 +80,16 @@ async function runJavaProcessChecks(api, vscode, checks) {
       ?.find(item => item.mainClass === fixture.mainClass), 45000);
     const [, classPaths] = await api.java.executeWorkspaceCommand('vscode.java.resolveClasspath', fixture.mainClass, main.projectName);
     const java = await api.java.executeWorkspaceCommand('vscode.java.resolveJavaExecutable', fixture.mainClass, main.projectName);
-    started = fixtureJvm(java, workspace, fixture.mainClass, classPaths);
-    nonDebug = fixtureJvm(java, workspace, fixture.mainClass, classPaths, { debug: false });
+    // The generated process has no third-party dependencies. Resolve its exact
+    // compiled output without passing the full Spring classpath to CreateProcess.
+    const bytecode = fixture.mainClass.replaceAll('.', path.sep) + '.class';
+    const outputs = [];
+    for (const entry of classPaths) {
+      if (await fs.stat(path.join(entry, bytecode)).then(stat => stat.isFile(), () => false)) outputs.push(entry);
+    }
+    assert.equal(outputs.length, 1, 'Expected one workspace output for the generated Java main class.');
+    started = fixtureJvm(java, workspace, fixture.mainClass, outputs);
+    nonDebug = fixtureJvm(java, workspace, fixture.mainClass, outputs, { debug: false });
     const [port] = await bounded('fixture-listeners', () => Promise.all([started.readyPort(), nonDebug.readyPort()]), 18000);
     const listed = await bounded('discovery', () => service.list(), 40000);
     const picked = listed.find(row => row.pid === started.target.pid);

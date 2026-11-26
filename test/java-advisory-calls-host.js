@@ -225,7 +225,14 @@ async function runJavaAdvisoryCallChecks(api,vscode,checks={}) {
       assert.equal(path.relative(path.dirname(project.root),workspace),'');
       assert.ok(path.basename(project.root).startsWith('rocketbrain-advisory-'+tool+'-')&&
         (await fs.stat(path.join(project.root,'.owned'))).isFile());
-      await fs.rm(project.root,{recursive:true});
+      if (vscode) {
+        const active = vscode.window.activeTextEditor?.document;
+        if (active?.uri.scheme === 'file' && path.relative(active.uri.fsPath,project.source) === '') {
+          assert.equal(active.isDirty,false);
+          await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        }
+      }
+      await fs.rm(project.root,{recursive:true,maxRetries:12,retryDelay:180});
     }
   }
   checks.javaAdvisoryCalls={tools:columns,jdbc:await jdbcReadback()};

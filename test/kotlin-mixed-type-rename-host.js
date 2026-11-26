@@ -8,7 +8,13 @@ const { ownerFile, kotlinCaller, javaCaller, sameName, newName, populate, rebuil
 
 async function runKotlinMixedTypeRenameChecks(api, vscode, checks) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
-  const project = await fs.mkdtemp(path.join(workspace, 'rb-mixed-type-rename-'));
+  const prepared = process.env.ROCKETBRAIN_V111_MIXED_WORKSPACE;
+  const project = prepared ? await fs.realpath(prepared) : await fs.mkdtemp(path.join(workspace, 'rb-mixed-type-rename-'));
+  if (prepared) {
+    assert.equal(path.relative(path.dirname(workspace),path.dirname(project)),'');
+    assert.match(path.basename(project),/^rb-mixed-type-rename-(?:mysql|mariadb)$/u);
+    assert.equal(path.relative(vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project)).uri.fsPath,project),'');
+  }
   const uri = vscode.Uri.file(project);
   const javaSettings = vscode.workspace.getConfiguration('rocketbrain.java', uri);
   const kotlinSettings = vscode.workspace.getConfiguration('rocketbrain.kotlinEditor', uri);
@@ -24,7 +30,7 @@ async function runKotlinMixedTypeRenameChecks(api, vscode, checks) {
     return relative && relative!=='..' && !relative.startsWith('..'+path.sep) && !path.isAbsolute(relative);
   };
   try {
-    await populate(project, tools);
+    if (!prepared) await populate(project, tools);
     const baseline=await runJdbc(project,tools,config,spring.dbEngine);
     const shadow=await saved(sameName);
     const document=await open(ownerFile), caller=await open(javaCaller), kotlinUse=await open(kotlinCaller);
@@ -35,7 +41,8 @@ async function runKotlinMixedTypeRenameChecks(api, vscode, checks) {
     await api.java.start();
     await until(async()=>{
       const cp=await api.java.executeWorkspaceCommand('java.project.getClasspaths',uri.toString(),{scope:'runtime'});
-      return cp?.projectRoot && cp.classpaths?.some(file=>file.endsWith('spring-jdbc-7.0.10.jar'));
+      return cp?.projectRoot && path.relative(project,cp.projectRoot)==='' &&
+        cp.classpaths?.some(file=>file.endsWith('spring-jdbc-7.0.10.jar'));
     },100000);
     await api.java.kotlinEditor.start({document});
     const use=positionOf(kotlinUse.getText(),'Invoice(amount)',2);
@@ -88,9 +95,9 @@ async function runKotlinMixedTypeRenameChecks(api, vscode, checks) {
       await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     }
     const real=await fs.realpath(project);
-    assert.equal(path.relative(workspace,path.dirname(real)),'');
+    assert.equal(path.relative(prepared?path.dirname(workspace):workspace,path.dirname(real)),'');
     assert.match(path.basename(real),/^rb-mixed-type-rename-[^/\\]+$/u);
-    await fs.rm(real,{recursive:true,force:true,maxRetries:8,retryDelay:250});
+    if (!prepared) await fs.rm(real,{recursive:true,force:true,maxRetries:8,retryDelay:250});
   }
 }
 
