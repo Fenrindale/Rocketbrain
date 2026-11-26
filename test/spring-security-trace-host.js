@@ -43,6 +43,8 @@ async function verify(fixture,config){
     assert.equal((await fetch(observer.url+'/security-trace',{headers:{...privateHeader,Origin:'https://example.invalid'}})).status,403);
     const initial=await client.securityTrace();
     assert.equal(initial.state,'ready',JSON.stringify(initial.hooks));
+    assert.equal(initial.authenticationProviderTraceEnabled,undefined);
+    assert.ok(!initial.hooks.includes('authentication-provider-manager'));
     assert.ok(initial.hooks.includes('authorization'));
     assert.ok(initial.hooks.some(hook=>hook.endsWith('execution')),JSON.stringify({hooks:initial.hooks,warnings:(await client.refresh()).warnings}));
     const anonymous=(await tracked('/secure/db')).trace;

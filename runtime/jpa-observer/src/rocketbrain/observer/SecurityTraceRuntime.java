@@ -33,6 +33,7 @@ public final class SecurityTraceRuntime {
         final List<Object> configured=new ArrayList<>();
         final List<String> entered=new ArrayList<>();
         final MethodSecurityTrace methods=MethodSecurityTrace.enabled()?new MethodSecurityTrace():null;
+        final AuthenticationProviderTrace authentication=AuthenticationProviderTrace.enabled()?new AuthenticationProviderTrace():null;
         Candidate pending;
         int depth=1;
         boolean incomplete, selectionSeen;
@@ -126,6 +127,10 @@ public final class SecurityTraceRuntime {
                 report.put("methodCoverage",methodCoverage(trace,asynchronous));
                 report.put("methodDecisions",trace.methods.snapshot());
             }
+            if(trace.authentication!=null){
+                report.put("authenticationCoverage",trace.authentication.coverage(authenticationInstrumented(),asynchronous||trace.incomplete));
+                report.put("authenticationManagers",trace.authentication.reports());
+            }
             retain(report);
         }catch(Throwable ignored){}
     }
@@ -138,6 +143,11 @@ public final class SecurityTraceRuntime {
     static MethodSecurityTrace methodTrace(){
         if(!MethodSecurityTrace.enabled())return null;
         Trace trace=outer();return trace==null?null:trace.methods;
+    }
+    private static synchronized boolean authenticationInstrumented(){return hooks.contains(AuthenticationProviderTrace.HOOK);}
+    static AuthenticationProviderTrace authenticationTrace(){
+        if(!AuthenticationProviderTrace.enabled())return null;
+        Trace trace=outer();return trace==null?null:trace.authentication;
     }
     private static Trace outer(){Trace trace=current.get();return trace!=null&&trace.depth==1?trace:null;}
     private static Object servlet(Object value,String api,String method)throws ReflectiveOperationException {
@@ -162,6 +172,7 @@ public final class SecurityTraceRuntime {
             report.put("methodTraceEnabled",true);
             report.put("roleDisclosureEnabled",MethodSecurityTrace.roleDisclosureEnabled());
         }
+        if(AuthenticationProviderTrace.enabled())report.put("authenticationProviderTraceEnabled",true);
         return report;
     }
 }

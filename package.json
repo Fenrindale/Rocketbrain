@@ -288,6 +288,7 @@
       { "command": "rocketbrain.spring.runtimeProperty", "title": "Inspect Spring Property Value and Origin", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.debugProperty", "title": "Inspect Spring Property in Active Debug Target", "category": "Rocketbrain", "icon": "$(search)", "enablement": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java" },
       { "command": "rocketbrain.spring.securityTrace", "title": "Inspect Spring Security Filter Trace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.securityTrace.inspectAuthentication", "title": "Inspect Spring Authentication Decisions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.reactiveSecurityTrace", "title": "Inspect Reactive Spring Security Trace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.feignContracts", "title": "Inspect OpenFeign Runtime Contracts", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },

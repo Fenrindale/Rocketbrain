@@ -102,6 +102,8 @@ Spring Boot 설정 파일에서 현재 모듈의 생성 메타데이터로 설�
 
 **Inspect Spring Security Filter Trace**는 관찰을 켠 로컬 앱에서 요청별 매처 순서, 선택된 체인, 실제 실행에 들어간 필터와 관찰된 인가 결과를 표시합니다. 메서드 추적을 켜면 호출 전·후 판단과 실제 역할 비교 근거도 확인할 수 있습니다. [Spring Security 추적 설정](docs/spring-security-filter-trace.md)
 
+**Inspect Spring Authentication Decisions**는 관찰을 켠 로컬 Servlet 앱에서 Spring이 호출한 인증 제공자, 각 제공자가 반환한 결과 및 `ProviderManager`의 최종 결과를 표시합니다. 자격 증명과 요청 값은 수집하지 않습니다. [인증 제공자 관찰 설정](docs/spring-security-filter-trace.md#authentication-providers)
+
 ### Quarkus Maven
 
 **Create Quarkus Maven Project**로 시작 프로젝트를 만든 뒤 **Java Projects**에서 가져옵니다. 시작 프로젝트는 JDK 25와 Maven을 사용합니다. `application.properties`에서 Java에 선언된 MicroProfile Config와 SmallRye ConfigMapping 키를 완성하고 선언으로 이동할 수 있습니다. **Inspect Quarkus Configuration and Endpoints**에서는 프로필별 키, REST 경로와 Qute 템플릿을 엽니다.

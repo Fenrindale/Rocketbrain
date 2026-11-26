@@ -2,6 +2,7 @@
 
 const { randomBytes } = require('node:crypto');
 const VIEW='rocketbrain.spring.securityTrace', TITLE='Spring Security Filter Trace';
+const AUTHENTICATION_VIEW='rocketbrain.spring.securityTrace.inspectAuthentication', AUTHENTICATION_TITLE='Spring Authentication Decisions';
 const safe=value=>String(value).replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[character]);
 const short=value=>value?value.split('.').at(-1):'Type unavailable';
 
@@ -75,7 +76,47 @@ function registerTracePanel(vscode, { target, command }, { viewId, title, inspec
 }
 
 function registerSecurityTrace(vscode, options) {
-  return registerTracePanel(vscode, options, {viewId:VIEW,title:TITLE,inspect:'securityTrace',render:renderSecurityTrace});
+  const filters=registerTracePanel(vscode, options, {viewId:VIEW,title:TITLE,inspect:'securityTrace',render:renderSecurityTrace});
+  const authentication=registerTracePanel(vscode, options, {viewId:AUTHENTICATION_VIEW,title:AUTHENTICATION_TITLE,
+    inspect:'securityTrace',render:renderAuthenticationDecisions});
+  return {close(){filters.close();authentication.close();}};
 }
 
-module.exports={registerTracePanel,registerSecurityTrace,renderSecurityTrace};
+const managerLabels={returned:'Returned an authentication result',rejected:'Raised an authentication rejection',
+  error:'Raised an application or authentication service error',unobserved:'Final result unavailable'};
+const providerLabels={skipped:'Skipped · supports returned false',abstained:'Abstained · returned null',returned:'Returned an authentication result',
+  rejected:'Raised an authentication rejection',error:'Raised an application or authentication service error',
+  'support-error':'Supports check raised an exception',unobserved:'Provider result unavailable'};
+function renderAuthenticationDecisions(report){
+  const nonce=randomBytes(16).toString('base64');
+  const samples=report.traces.filter(trace=>trace.authenticationManagers?.length || trace.authenticationCoverage==='partial');
+  const summary=!report.authenticationProviderTraceEnabled
+    ?'Set authenticationProviderTrace to true in the local observer configuration and restart the application.'
+    :!report.hooks.includes('authentication-provider-manager')
+      ?'Waiting for a supported Servlet ProviderManager.'
+      :!samples.length?'No supported authentication manager invocation has been captured.'
+        :'Showing '+samples.length+' requests with authentication evidence'+(report.dropped?' · Older requests expired':'')+'.';
+  const sections=samples.map((trace,index)=>{
+    const managers=trace.authenticationManagers.map(manager=>{
+      const providers=manager.providers.map(provider=>'<tr><td>'+provider.index+'</td><td>'+safe(provider.providerType)+'</td><td>'+
+        safe(providerLabels[provider.outcome])+(manager.selectedProvider===provider.index?' · Returned by manager':'')+'</td></tr>').join('');
+      return '<section><h2>'+safe(manager.managerId)+' · '+safe(manager.managerType)+' · Invocation '+manager.index+'</h2><p>'+
+        safe(managerLabels[manager.outcome])+(manager.delegated?' · Delegated to '+safe(manager.parentType||'an unspecified parent'):'')+
+        '</p>'+(providers?'<table><thead><tr><th>Step</th><th>Provider</th><th>Outcome</th></tr></thead><tbody>'+providers+'</tbody></table>':
+          '<p>No provider steps captured.</p>')+'</section>';
+    }).join('');
+    return '<details'+(index===0?' open':'')+'><summary>Request '+trace.id+' · '+safe(trace.method)+' · '+
+      (trace.status===null?'Status unavailable':'HTTP '+trace.status)+' · '+safe(trace.startedAt)+'</summary>'+
+      (trace.authenticationCoverage==='partial'?'<p>Partial authentication evidence for this request.</p>':'')+managers+'</details>';
+  }).join('');
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'"><title>${AUTHENTICATION_TITLE}</title>
+    <style nonce="${nonce}">
+    body{padding:.75rem 1rem;font-family:var(--vscode-font-family)} h1{font-size:1.25rem} h2{font-size:1rem;overflow-wrap:anywhere}
+    p{color:var(--vscode-descriptionForeground)} details{padding:.6rem 0;border-bottom:1px solid var(--vscode-panel-border)} summary{cursor:pointer}
+    table{border-collapse:collapse} th,td{padding:.35rem .55rem;border:1px solid var(--vscode-panel-border);text-align:left;overflow-wrap:anywhere}
+    th{background:var(--vscode-editorWidget-background)} td:nth-child(2){font-family:var(--vscode-editor-font-family)}
+    </style></head><body><h1>${AUTHENTICATION_TITLE}</h1><p>${safe(summary)}</p>${sections}</body></html>`;
+}
+
+module.exports={registerTracePanel,registerSecurityTrace,renderSecurityTrace,renderAuthenticationDecisions};
