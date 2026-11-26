@@ -10,7 +10,8 @@ const { allocatePort, waitForOwnedListener } = require('./testing-debug');
 const { nativePlatform, inspectImage, toolchain, directory, ownProcess } = require('./linux-native-executable');
 
 const framework = 'Micronaut';
-const goals = Object.freeze(['package','org.graalvm.buildtools:native-maven-plugin:compile-no-fork']);
+const plugin = 'org.graalvm.buildtools:native-maven-plugin:';
+const goals = Object.freeze(['prepare-package',plugin+'generateResourceConfig',plugin+'compile-no-fork']);
 const changed = () => fail('The reviewed Micronaut native image changed. Build it again.');
 const model = project => micronautMavenProject(project,{native:true});
 
@@ -61,7 +62,7 @@ function createMicronautNative({ log = () => {} } = {}) {
     const operation=begin(cancellation);
     try {
       const reviewed=model(project), graal=await toolchain(graalvmHome);
-      // A literal JAR POM keeps its ordinary lifecycle; invoke the Native Build Tools goal explicitly.
+      // Prepare the application without shading dependencies, then run the framework's native resource and image goals.
       const spec=buildSpec(project,{javaHome:graal.javaHome,mavenHome},goals);
       const version=await command(operation,graal.nativeImage,['--version'],spec,12000,current);
       const banner=version.split(/\r?\n/u).map(line=>line.trim()).find(line=>/graalvm/iu.test(line));
