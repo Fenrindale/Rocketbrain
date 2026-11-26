@@ -320,5 +320,5 @@ function createWslWorkbench({ platform = process.platform, fileSystem = fs, run 
     dispose() { disposed = true; reviews.clear(); void cancelActive().catch(() => {}); } };
 }
 
-module.exports = { createWslWorkbench, readWslText,
+module.exports = { createWslWorkbench, distroArgs, osWslPath, readWslText,
   wslBuildTasks: Object.fromEntries(Object.entries(toolSpecifications).map(([name, spec]) => [name, [...spec.goals]])) };

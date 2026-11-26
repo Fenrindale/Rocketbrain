@@ -173,7 +173,9 @@ test('the WSL open command delegates exact folder opening to VS Code and reviews
       showQuickPick: async choices => choices[0], showInputBox: async () => linuxOnly,
       showErrorMessage: message => assert.fail(message) }
   };
-  const workbench = registerWslWorkbench(vscode, { createService: () => service });
+  const workbench = registerWslWorkbench(vscode, {
+    createService: () => service, registerSourceWatch: () => ({ dispose() {} })
+  });
   await registered.get('rocketbrain.wsl.openProject')();
   assert.equal(opened.length, 1);
   assert.equal(opened[0][0], 'vscode.openFolder');
