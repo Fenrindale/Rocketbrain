@@ -75,6 +75,7 @@ async function activate(context) {
   const databaseSearch = require('./db/unified-search-vscode').registerUnifiedSearch(context, vscode, { database, objectSources, schemaCatalog });
   const explainPlans=require('./db/explain-plan-vscode').registerExplainPlans(context,vscode,{database});
   const localSqlAssistant = require('./db/local-sql-assistant-vscode').registerLocalSqlAssistant(context, vscode, database);
+  localSqlAssistant.grounded = require('./db/local-sql-grounding-vscode').registerGroundedSqlAssistant(context, vscode, database);
   const sqlProposalReview = require('./db/sql-proposal-review-vscode').registerSqlProposalReview(context, vscode, database);
   context.subscriptions.push(lazyCatalog,objectSources,schemaCatalog,explainPlans);
   const tableTransfer=require('./db/table-transfer-vscode').registerTableTransfer(context,vscode,{database});
