@@ -1,0 +1,18 @@
+FROM ubuntu:24.04
+
+RUN apt-get -o Acquire::Retries=3 update \
+    && apt-get -o Acquire::Retries=3 install -y --no-install-recommends ca-certificates curl python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt/java/openjdk /opt/jdtls \
+    && curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
+       'https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz' -o /tmp/owned-jdk.tar.gz \
+    && printf '%s  %s\n' '68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb' /tmp/owned-jdk.tar.gz | sha256sum --check \
+    && tar -xzf /tmp/owned-jdk.tar.gz --strip-components=1 -C /opt/java/openjdk \
+    && rm /tmp/owned-jdk.tar.gz
+
+RUN curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
+      'https://download.eclipse.org/jdtls/milestones/1.63.0/jdt-language-server-1.63.0-202610191322.tar.gz' -o /tmp/owned-jdt.tar.gz \
+    && printf '%s  %s\n' 'b1f2abe0b3cccb462cf64fb4a5587c7d09df60cf8be7748b152cbd89d018bdc4' /tmp/owned-jdt.tar.gz | sha256sum --check \
+    && tar -xzf /tmp/owned-jdt.tar.gz -C /opt/jdtls \
+    && rm /tmp/owned-jdt.tar.gz
