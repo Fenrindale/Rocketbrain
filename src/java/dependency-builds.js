@@ -53,6 +53,9 @@ function pomFacts(file) {
       version: simple.test(version) ? version : '', declaredVersion: version
     };
   }
+  const dependency = node => ({ ...gav(node), scope: literal(node, 'scope') || 'compile',
+    type: literal(node, 'type') || 'jar', classifier: literal(node, 'classifier'),
+    range: rangeAt(file.text, Math.max(node.start, 0), node.end) });
   return {
     file, root: path.dirname(file.path), gav: gav(project, one(project, 'parent')),
     parent: one(project,'parent') ? gav(one(project,'parent')) : null,
@@ -61,11 +64,8 @@ function pomFacts(file) {
     modules: children(one(project, 'modules'), 'module')
       .filter(module => !module.children.length).map(module => module.text.trim()),
     profiles: Boolean(one(project, 'profiles')),
-    dependencies: children(one(project, 'dependencies'), 'dependency').map(node => ({
-      ...gav(node), scope: literal(node, 'scope') || 'compile',
-      type: literal(node, 'type') || 'jar', classifier: literal(node, 'classifier'),
-      range: rangeAt(file.text, Math.max(node.start, 0), node.end)
-    }))
+    dependencies: children(one(project, 'dependencies'), 'dependency').map(dependency),
+    managedDependencies: children(one(one(project, 'dependencyManagement'), 'dependencies'), 'dependency').map(dependency)
   };
 }
 

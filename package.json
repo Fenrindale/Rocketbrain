@@ -1124,6 +1124,7 @@
         "title": "Add Java Run Configuration",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.java.workbench.mavenResolution", "title": "Inspect Maven Dependency Resolution", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.workbench.reviewRuntimes", "title": "Review Java Runtime Compatibility", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.workbench.changeRuntime", "title": "Change Saved Java Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
@@ -1779,6 +1780,7 @@
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
           "group": "launch"
         },
+        { "command": "rocketbrain.java.workbench.mavenResolution", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject && isWorkspaceTrusted", "group": "build" },
         { "command": "rocketbrain.java.workbench.reviewRuntimes", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject && isWorkspaceTrusted", "group": "launch" },
         { "command": "rocketbrain.java.workbench.changeRuntime", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaRunConfiguration && isWorkspaceTrusted", "group": "configuration" },
         {
