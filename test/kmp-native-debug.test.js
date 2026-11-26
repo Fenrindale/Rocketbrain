@@ -157,7 +157,12 @@ test('real Kotlin Native Linux x64 GDB source step resumes both Spring JDBC HTTP
     for(const engine of ['mysql','mariadb']) {
       const seeded = await readProbe(spring.baseUrl,engine);
       const resultFile = path.join(owned,engine+'.txt');
-      const reviewed = reviewKotlinNativeLaunch({workspace,program,source,args:[new URL(spring.baseUrl).port,engine,resultFile]});
+      const port = new URL(spring.baseUrl).port, baseline = path.join(owned,engine+'-baseline.txt');
+      const rawOutput = execFileSync(program,[port,engine,baseline],{encoding:'utf8',timeout:8000});
+      assert.match(rawOutput,/\*stopped,reason="exited-normally"/u);
+      const expected = '42|spring|2|42|'+seeded.version;
+      assert.equal((await fs.readFile(baseline,'utf8')).trim(),expected);
+      const reviewed = reviewKotlinNativeLaunch({workspace,program,source,args:[port,engine,resultFile]});
       exactArtifact = reviewed;
       assert.equal(await sha256(program),reviewed.artifactSha256);
       assert.equal(await sha256(source),reviewed.sourceSha256);
@@ -172,7 +177,7 @@ test('real Kotlin Native Linux x64 GDB source step resumes both Spring JDBC HTTP
         assert.deepEqual(bp.breakpoints.map(row=>row.verified),[true,false]);
         await dap.rpc('configurationDone');
         const stopped=await dap.event('stopped');
-        assert.equal(stopped.reason,'breakpoint');
+        assert.equal(stopped.reason,'breakpoint',JSON.stringify(stopped));
         async function localAt(entry,expectedLine,value) {
           const [frame]=(await dap.rpc('stackTrace',{threadId:entry.threadId})).stackFrames;
           assert.deepEqual([frame.source.path,frame.line],[source,expectedLine]);
@@ -185,7 +190,7 @@ test('real Kotlin Native Linux x64 GDB source step resumes both Spring JDBC HTTP
         const after=dap.messages.length;
         await dap.rpc('next',{threadId:stopped.threadId});
         const stepped=await dap.event('stopped',after);
-        assert.equal(stepped.reason,'step');
+        assert.equal(stepped.reason,'step',JSON.stringify(stepped));
         await localAt(stepped,line('STEP_TO_HTTP'),42);
         await assert.rejects(dap.rpc('variables',{variablesReference:scope.variablesReference}),/current stopped/u);
         await assert.rejects(dap.rpc('evaluate',{expression:'total'}),/unavailable/u);
@@ -197,10 +202,10 @@ test('real Kotlin Native Linux x64 GDB source step resumes both Spring JDBC HTTP
         await dap.dispose();
         await assert.rejects(fs.access('/proc/'+inferior+'/exe'),{code:'ENOENT'});
         const native=(await fs.readFile(resultFile,'utf8')).trim();
-        assert.equal(native,'42|spring|2|42|'+seeded.version);
+        assert.equal(native,expected);
         assert.ok(!native.includes(dbPassword));
         findings[engine]={...seeded,breakpointLine:line('BREAK_ON_UPDATE'),nextLine:line('STEP_TO_HTTP'),
-          localBefore:41,localAfter:42,exactInferior:true,nativeHttpReadback:true,staleHandleRefused:true,
+          localBefore:41,localAfter:42,exactInferior:true,nativeHttpReadback:true,plainNativeBaseline:true,staleHandleRefused:true,
           foreignSourceRefused:true,invalidLineRefused:true,ownedProcessClosed:true};
       } finally { await dap.dispose(); }
     }
