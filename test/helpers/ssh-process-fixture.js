@@ -10,9 +10,10 @@ const { source } = require('../../src/remote/ssh-files-worker');
 const { terminalProgram } = require('../../src/remote/ssh-processes');
 const { javaSupervisorInvocation } = require('../../src/devcontainer/java-process');
 const { debugSupervisorInvocation } = require('../../src/remote/ssh-java-debug-runtime');
+const { compileProgram } = require('../../src/remote/ssh-java-compile-runtime');
 const { fixtureStep } = require('../devcontainer-port-fixture');
 
-async function startSshProcessFixture({ python, pythonPackage }, registerCleanup) {
+async function startSshProcessFixture({ python, pythonPackage, ownWorkerTemp = false }, registerCleanup) {
   const boundary = await fs.realpath(os.tmpdir());
   const owned = await fs.mkdtemp(path.join(boundary, 'rb-ssh-exec-'));
   const root = path.join(owned, 'workspace');
@@ -28,10 +29,14 @@ async function startSshProcessFixture({ python, pythonPackage }, registerCleanup
       { timeout: 12000, stdio: 'ignore', windowsHide: true });
   }
   const input = path.join(owned, 'input.json'), host = path.join(owned, 'host');
+  const workerTemp = ownWorkerTemp ? path.join(owned, 'temporary') : undefined;
+  if (workerTemp) await fs.mkdir(workerTemp);
   await fs.writeFile(input, JSON.stringify({ host, client: path.join(owned, 'client.pub'), programs: [source, terminalProgram,
-    javaSupervisorInvocation({}, undefined, 'ssh').program, debugSupervisorInvocation({}).program] }));
+    javaSupervisorInvocation({}, undefined, 'ssh').program, debugSupervisorInvocation({}).program, compileProgram] }));
   const worker = spawn(python, [path.join(__dirname, '..', 'fixtures', 'ssh-process-server.txt'), input],
-    { cwd: owned, env: { ...process.env, PYTHONPATH: pythonPackage }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    { cwd: owned, env: { ...process.env, PYTHONPATH: pythonPackage,
+      ...(workerTemp && { TMPDIR: workerTemp, TEMP: workerTemp, TMP: workerTemp }) },
+    windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   const stopped = once(worker, 'close');
   registerCleanup(async () => {
     if (worker.exitCode === null) worker.kill();
@@ -64,7 +69,7 @@ async function startSshProcessFixture({ python, pythonPackage }, registerCleanup
   }
   const profile = { id: 'rb-ssh-process', host: '127.0.0.1', port: information.port, user: 'rb_process',
     root, python: 'python', privateKeyPath: path.join(owned, 'client'), knownHostsPath };
-  return { profile, wrongPin, example, sourceText, asyncssh: information.asyncssh };
+  return { profile, wrongPin, example, sourceText, asyncssh: information.asyncssh, workerTemp };
 }
 
 module.exports = { startSshProcessFixture };

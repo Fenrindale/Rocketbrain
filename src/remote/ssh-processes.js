@@ -9,6 +9,8 @@ const { secureSshTarget } = require('../db/connection-tunnel');
 const { pythonCommand } = require('./ssh-files-worker');
 const { rootParts } = require('./ssh-java-mapping');
 const { debugSupervisorInvocation } = require('./ssh-java-debug-runtime');
+const { compileProgram, compileRequest } = require('./ssh-java-compile-runtime');
+const { compileConfig, compileProof, validCompileReview, validCompileResult } = require('./ssh-java-compile');
 const { javaSupervisorInvocation } = require('../devcontainer/java-process');
 
 const bytesHash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -41,27 +43,50 @@ function commandWithArgs(python, program, argv) {
   return pythonCommand(python, "import base64, json, sys\nsys.argv = ['rocketbrain'] + json.loads(base64.b64decode('" + payload + "'))\n" + program);
 }
 
-function collectRuntime(child, valid, message, { input, timeout = 18000 } = {}) {
+function collectRuntime(child, valid, message, { input, timeout = 18000, maxBytes = 8192, keepInput = false,
+  reportRemoteError = false, signal } = {}) {
   return new Promise((resolve, reject) => {
     let count = 0, invalid = false;
+    let stopTimer, reason;
     const chunks = [];
-    const timer = setTimeout(() => { invalid = true; child.kill(); }, timeout);
+    function stop(error) {
+      if (invalid) return;
+      invalid = true;
+      reason = error;
+      if (keepInput) {
+        child.stdin.end();
+        stopTimer = setTimeout(() => child.kill(), 2200);
+        stopTimer.unref();
+      } else child.kill();
+    }
+    const abort = () => stop('The SSH Java compile was cancelled.');
+    const timer = setTimeout(() => stop(), timeout);
     child.stdin.on('error', () => {});
-    child.stdin.end(input);
+    if (keepInput) child.stdin.write(input);
+    else child.stdin.end(input);
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
     child.stdout.on('data', data => {
       count += data.length;
-      if (count > 8192) { invalid = true; child.kill(); } else chunks.push(data);
+      if (count > maxBytes) stop();
+      else chunks.push(data);
     });
     child.stderr.resume();
     child.once('error', () => { invalid = true; });
     child.once('close', code => {
       clearTimeout(timer);
+      clearTimeout(stopTimer);
+      signal?.removeEventListener('abort', abort);
       try {
-        if (invalid || code !== 0) throw Error();
+        if (invalid || code !== 0) throw Error(reason || message);
         const info = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        if (!valid(info)) throw Error();
+        if (reportRemoteError && typeof info?.error === 'string' && /^[\x20-\x7e]{1,160}$/u.test(info.error)) {
+          reject(Error(info.error));
+          return;
+        }
+        if (!valid(info)) throw Error(message);
         resolve(info);
-      } catch { reject(Error(message)); }
+      } catch { reject(Error(reason || message)); }
     });
   });
 }
@@ -139,9 +164,18 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
     { input, timeout: 38000 });
   }
 
+  function compileProcess(config, expected, signal) {
+    signal?.throwIfAborted();
+    const input = compileRequest(config, expected);
+    const child = processFor(expected ? 'compile' : 'probe', pythonCommand(profile.python, compileProgram));
+    return collectRuntime(child, expected ? validCompileResult : info => validCompileReview(info, config),
+      'Verify the independent remote JDK 25 and reviewed Java module before compiling.',
+      { input, signal, keepInput: Boolean(expected), reportRemoteError: true, timeout: expected ? 47000 : 18000, maxBytes: 65536 });
+  }
+
   return {
     async inspect(kind, requested) {
-      if (!['terminal', 'java', 'debug'].includes(kind)) throw Error('Choose a supported reviewed SSH workspace process.');
+      if (!['terminal', 'java', 'debug', 'compile'].includes(kind)) throw Error('Choose a supported reviewed SSH workspace process.');
       rootParts(remoteRoot);
       let config;
       if (kind === 'java') {
@@ -161,8 +195,12 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
         }
         config = { platform: windows ? 'win32' : 'linux', javaHome, pid, port, root: remoteRoot };
       }
+      if (kind === 'compile') config = compileConfig(remoteRoot, requested);
       await verifyRoot();
-      const info = kind === 'debug' ? await debugProcess(config) : config ? await javaRuntime(config) : undefined;
+      let info;
+      if (kind === 'debug') info = await debugProcess(config);
+      else if (kind === 'compile') info = await compileProcess(config);
+      else if (kind === 'java') info = await javaRuntime(config);
       if (closed) throw Error('The SSH workspace closed.');
       const now = Date.now();
       for (const [token, offer] of offers) if (offer.expires <= now) offers.delete(token);
@@ -171,19 +209,24 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       offers.set(token, { kind, config, info, expires: now + 120000 });
       return { token, kind, host: profile.host, port: profile.port ?? 22, user: profile.user, root: remoteRoot,
         ...(kind === 'java' && { jdk: info.jdk, javaHome: config.javaHome, serverPath: config.serverPath }),
-        ...(kind === 'debug' && { platform: info.platform, javaHome: config.javaHome, pid: info.pid, debugPort: info.port, startedAt: info.startedAt }) };
+        ...(kind === 'debug' && { platform: info.platform, javaHome: config.javaHome, pid: info.pid, debugPort: info.port, startedAt: info.startedAt }),
+        ...(kind === 'compile' && { ...info, file: config.file, javaHome: config.javaHome, jars: config.jars }) };
     },
     async open(kind, approval) {
       if (closed || approval?.allowRemoteProcess !== true) throw Error('Review and approve the remote workspace process first.');
       const offer = offers.get(approval.token);
       if (offer?.kind !== kind || offer.expires <= Date.now()) throw Error('Open a current SSH process review first.');
       offers.delete(approval.token);
+      if (kind === 'compile' && approval.file !== offer.config.file) {
+        throw Error('Open the exact remote Java source that was reviewed for compilation.');
+      }
       if (started || active.size >= 3 || [...active.values()].includes(kind)) throw Error('Close the existing SSH workspace process of this kind first.');
       started = true;
       try {
         await verifyRoot();
         if (kind === 'terminal') return processFor(kind, commandWithArgs(profile.python, terminalProgram, [remoteRoot]), true);
         if (kind === 'debug') return debugProcess(offer.config, offer.info);
+        if (kind === 'compile') return compileProcess(offer.config, compileProof(offer.info), approval.signal);
         const current = await javaRuntime(offer.config);
         if (current.sha256 !== offer.info.sha256) throw Error('The remote JDK or JDT LS changed after review.');
         await verifyRoot();
@@ -197,7 +240,14 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       if (closed) return;
       closed = true;
       offers.clear();
-      for (const child of active.keys()) child.kill();
+      for (const [child, kind] of active) {
+        if (kind === 'compile') {
+          child.stdin.end();
+          const timeout = setTimeout(() => child.kill(), 2200);
+          timeout.unref();
+          child.once('close', () => clearTimeout(timeout));
+        } else child.kill();
+      }
     }
   };
 }
