@@ -14,10 +14,11 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
  const trusted=()=>{if(closed)throw Error('Java refactoring is closed.');if(!vscode.workspace.isTrusted)throw Error('Trust the workspace before refactoring Java sources.');};
  const cancelled=token=>{if(token?.isCancellationRequested)throw Error('Java refactoring was cancelled.');};
  async function send(method,params,cancellation){let timer;try{return await Promise.race([request(method,params,cancellation),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Java refactoring request timed out. Try again after project import completes.')),30000);})]);}finally{clearTimeout(timer);}}
- function sourceUri(value,{destination=false,guard=false,resource=false,kotlinFormatting=false,kotlinRename=false}={}){
+ function sourceUri(value,{destination=false,guard=false,resource=false,kotlinFormatting=false,kotlinRename=false,kotlinMixedRename=false}={}){
   const uri=typeof value==='string'?vscode.Uri.parse(value):value;
   const kotlinSource=kotlinFormatting||kotlinRename;
-  if(uri?.scheme!=='file'||uri.authority||uri.query||uri.fragment||(!guard&&!resource&&!uri.fsPath.endsWith(kotlinSource?'.kt':'.java')))throw Error(kotlinSource?'Kotlin edits must target reviewed local Kotlin sources.':'Refactoring edits must target local Java source files.');
+  if(uri?.scheme!=='file'||uri.authority||uri.query||uri.fragment||(!guard&&!resource&&
+   !(kotlinMixedRename&&/\.(?:kt|java)$/u.test(uri.fsPath))&&!uri.fsPath.endsWith(kotlinSource?'.kt':'.java')))throw Error(kotlinSource?'Kotlin edits must target reviewed local Kotlin sources.':'Refactoring edits must target local Java source files.');
   const folder=vscode.workspace.getWorkspaceFolder(uri);if(!folder)throw Error('Refactoring files must remain inside an open workspace.');
   const root=fs.realpathSync(folder.uri.fsPath),candidate=destination?path.dirname(uri.fsPath):uri.fsPath;
   if(!inside(root,fs.realpathSync(candidate)))throw Error('Refactoring files must remain inside an open workspace.');
@@ -63,9 +64,10 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   trusted();cancelled(cancellation);if(!workspaceEdit||typeof workspaceEdit!=='object'||Array.isArray(workspaceEdit))throw Error('The Java engine did not return a WorkspaceEdit.');if(Object.keys(workspaceEdit.changeAnnotations||{}).length)throw Error('Annotated refactoring conflicts require a separate review workflow.');
   const kotlinFormatting=kind==='source.format.kotlin';
   const kotlinRename=kind==='refactor.rename.kotlin';
+  const kotlinMixedRename=kind==='refactor.rename.kotlin.mixed.type';
   if(kotlinFormatting&&(!anchorDocument||anchorDocument.languageId!=='kotlin'||createJavaFile||guards.length||allowedResourceOperations.length||allowedResourceRenames.length||allowedServiceEdits.length))throw Error('Kotlin formatting requires one anchored text-only source review.');
-  if(kotlinRename&&(!anchorDocument||anchorDocument.languageId!=='kotlin'||createJavaFile||guards.length||allowedResourceOperations.length||allowedResourceRenames.length||allowedServiceEdits.length))throw Error('Kotlin rename requires anchored text-only source changes.');
-  if(!Array.isArray(warnings)||warnings.length>20||warnings.some(value=>typeof value!=='string'||value.length>1000||/[\u0000-\u0008\u000b-\u001f]/.test(value)))throw Error('Invalid refactoring review warnings.');const anchor=anchorDocument&&{document:anchorDocument,version:anchorDocument.version,text:anchorDocument.getText()};if(anchor){sourceUri(anchorDocument.uri,{kotlinFormatting,kotlinRename});if(anchorDocument.isClosed)throw Error('The selected source document is closed.');}
+  if((kotlinRename||kotlinMixedRename)&&(!anchorDocument||anchorDocument.languageId!=='kotlin'||createJavaFile||guards.length||allowedResourceOperations.length||allowedResourceRenames.length||allowedServiceEdits.length))throw Error('Kotlin rename requires anchored text-only source changes.');
+  if(!Array.isArray(warnings)||warnings.length>20||warnings.some(value=>typeof value!=='string'||value.length>1000||/[\u0000-\u0008\u000b-\u001f]/.test(value)))throw Error('Invalid refactoring review warnings.');const anchor=anchorDocument&&{document:anchorDocument,version:anchorDocument.version,text:anchorDocument.getText()};if(anchor){sourceUri(anchorDocument.uri,{kotlinFormatting,kotlinRename,kotlinMixedRename});if(anchorDocument.isClosed)throw Error('The selected source document is closed.');}
   if(!Array.isArray(allowedResourceRenames)||allowedResourceRenames.length>30)throw Error('Invalid reviewed resource rename set.');
   const resourcePermissions=new Map();for(const entry of allowedResourceRenames){if(!entry||!/^[a-f0-9]{64}$/.test(entry.sha256)||entry.binary!==undefined&&entry.binary!==true)throw Error('A reviewed resource rename requires its exact byte hash and valid binary permission.');if(entry.binary&&(!Number.isSafeInteger(entry.bytes)||entry.bytes<0||entry.bytes>64*1024))throw Error('Reviewed binary resource permissions require an exact bounded byte length.');const old=sourceUri(entry.oldUri,{resource:true}),next=sourceUri(entry.newUri,{destination:true,resource:true}),id=key(old.fsPath);if(old.fsPath.endsWith('.java')||next.fsPath.endsWith('.java')||entry.binary&&(!['.bin','.png','.jpg','.jpeg'].includes(path.extname(old.fsPath))||path.extname(old.fsPath)!==path.extname(next.fsPath))||resourcePermissions.has(id)||hash(fs.readFileSync(old.fsPath))!==entry.sha256||entry.binary&&fs.statSync(old.fsPath).size!==entry.bytes)throw Error('Invalid, duplicate or stale reviewed resource rename.');resourcePermissions.set(id,{oldUri:old.toString(),newUri:next.toString(),sha256:entry.sha256,...(entry.binary?{binary:true,bytes:entry.bytes}:{})});}
   const servicePermissions=new Map();
@@ -93,7 +95,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    beanPermissions.set(id,{...entry,uri:uri.toString()});
   }
   const edits=new Map(),versions=new Map(),resources=[],resourceKeys=new Set();let resourceSeen=false;
-  function addText(value,changes,version){if(!Array.isArray(changes))throw Error('Invalid Java refactoring text edits.');if(changes.some(change=>change.annotationId))throw Error('Annotated refactoring conflicts require a separate review workflow.');const candidate=typeof value==='string'?vscode.Uri.parse(value):value,id=candidate&&key(candidate.fsPath),permission=servicePermissions.get(id)||beanPermissions.get(id),uri=sourceUri(value,{resource:!!permission&&permission.uri===candidate.toString(),kotlinFormatting,kotlinRename}),saved=edits.get(id);edits.set(id,{uri,edits:[...(saved?.edits||[]),...structuredClone(changes)]});if(version!==undefined&&version!==null){if(versions.has(id)&&versions.get(id)!==version)throw Error('Conflicting Java document versions.');versions.set(id,version);}}
+  function addText(value,changes,version){if(!Array.isArray(changes))throw Error('Invalid Java refactoring text edits.');if(changes.some(change=>change.annotationId))throw Error('Annotated refactoring conflicts require a separate review workflow.');const candidate=typeof value==='string'?vscode.Uri.parse(value):value,id=candidate&&key(candidate.fsPath),permission=servicePermissions.get(id)||beanPermissions.get(id),uri=sourceUri(value,{resource:!!permission&&permission.uri===candidate.toString(),kotlinFormatting,kotlinRename,kotlinMixedRename}),saved=edits.get(id);edits.set(id,{uri,edits:[...(saved?.edits||[]),...structuredClone(changes)]});if(version!==undefined&&version!==null){if(versions.has(id)&&versions.get(id)!==version)throw Error('Conflicting Java document versions.');versions.set(id,version);}}
   for(const [uri,changes]of Object.entries(workspaceEdit.changes||{}))addText(uri,changes);
   for(const change of workspaceEdit.documentChanges||[]){
    if(change.textDocument&&Array.isArray(change.edits)){if(resourceSeen)throw Error('Text edits following file operations require a separate review workflow.');addText(change.textDocument.uri,change.edits,change.textDocument.version);continue;}
@@ -137,7 +139,8 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   if(!edits.size||edits.size+Number(Boolean(creation))>30||resources.length>30)throw Error('A Java refactoring must review between 1 and 30 files.');if(!Array.isArray(guards)||guards.length>2000)throw Error('Refactoring dependency review exceeds its file limit.');
   const oneAnchor=edits.size===1&&anchor&&edits.has(key(anchor.document.uri.fsPath))&&!resources.length;
   if(kotlinFormatting&&!oneAnchor)throw Error('Kotlin formatting requires one anchored text-only source review.');
-  if(kotlinRename&&!edits.has(key(anchor.document.uri.fsPath)))throw Error('Kotlin rename edits must include the selected source.');
+  if((kotlinRename||kotlinMixedRename)&&!edits.has(key(anchor.document.uri.fsPath)))throw Error('Kotlin rename edits must include the selected source.');
+  if(kotlinMixedRename&&![...edits.values()].some(file=>file.uri.fsPath.endsWith('.java')&&file.edits.length))throw Error('Mixed Kotlin type rename requires reviewed Java caller edits.');
   if(formattingEndOfLine!==undefined&&(!['lf','crlf'].includes(formattingEndOfLine)||!kotlinFormatting&&kind!=='source.format.java'||!oneAnchor))throw Error('Line ending conversion requires one reviewed Java or Kotlin formatting document.');
   const documents=[],guardSnapshots=[];let size=0,count=0;
   function assertBinaryClosed(uri){if((vscode.workspace.textDocuments||[]).some(doc=>!doc.isClosed&&key(doc.uri.fsPath)===key(uri.fsPath)))throw Error('Close every text document for the reviewed binary resource before moving it.');}
@@ -153,7 +156,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    const after=eol?edited.replace(/\r?\n/g,eol==='crlf'?'\r\n':'\n'):edited;
    if(service&&(!disk.equals(Buffer.from(before))||hash(disk)!==service.beforeSha256||hash(after)!==service.afterSha256))throw Error('A service descriptor buffer or its exact reviewed edit changed.');
    if(bean&&(doc.isDirty||!disk.equals(Buffer.from(before))||hash(disk)!==bean.beforeSha256||hash(after)!==bean.afterSha256))throw Error('A Spring XML buffer or its exact reviewed edit changed.');
-   return {uri:uri.toString(),version:doc.version,hash:hash(before),diskHash:hash(disk),before,after,edits:changes,...(eol?{formattingEndOfLine:eol}:{}),...(kotlinFormatting?{kotlinFormatting:true}:{}),...(kotlinRename?{kotlinRename:true}:{}),...(resource?{resourceOperation:resource.kind,newUri:resource.newUri,...(resource.resourceSha256?{resourceSha256:resource.resourceSha256}:{})}:{}),...(service?{serviceDescriptor:true}:{}),...(bean?{beanClassReference:true}:{}),...(guard?{guard:true}:{})};
+   return {uri:uri.toString(),version:doc.version,hash:hash(before),diskHash:hash(disk),before,after,edits:changes,...(eol?{formattingEndOfLine:eol}:{}),...(kotlinFormatting?{kotlinFormatting:true}:{}),...(kotlinRename?{kotlinRename:true}:{}),...(kotlinMixedRename?{kotlinMixedRename:true}:{}),...(resource?{resourceOperation:resource.kind,newUri:resource.newUri,...(resource.resourceSha256?{resourceSha256:resource.resourceSha256}:{})}:{}),...(service?{serviceDescriptor:true}:{}),...(bean?{beanClassReference:true}:{}),...(guard?{guard:true}:{})};
   }
   function captureDiskGuard(uri,expected){
    if(kind!=='refactor.rename.java.type'||!/^[a-f0-9]{64}$/.test(expected.diskHash)||!/^[a-f0-9]{64}$/.test(expected.hash)){
@@ -196,7 +199,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    }
   }
  }
- function reviewedUri(saved,value=saved.uri){return sourceUri(value,{guard:!!saved.guard,resource:!!saved.resourceSha256||!!saved.serviceDescriptor||!!saved.beanClassReference,kotlinFormatting:!!saved.kotlinFormatting,kotlinRename:!!saved.kotlinRename});}
+ function reviewedUri(saved,value=saved.uri){return sourceUri(value,{guard:!!saved.guard,resource:!!saved.resourceSha256||!!saved.serviceDescriptor||!!saved.beanClassReference,kotlinFormatting:!!saved.kotlinFormatting,kotlinRename:!!saved.kotlinRename,kotlinMixedRename:!!saved.kotlinMixedRename});}
  function checkDiskGuard(saved,uri,diskHash=hash(fs.readFileSync(uri.fsPath))){
   const fileKey=key(uri.fsPath);
   const changedBuffer=(vscode.workspace.textDocuments||[]).some(doc=>!doc.isClosed&&doc.uri.scheme==='file'&&
@@ -273,7 +276,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
  async function review(plan){
   await validate(plan.id);plan=plans.get(plan.id);
   for(let index=0;index<plan.documents.length;index++){
-   const file=plan.documents[index];if(file.binary)continue;const extension=file.beanClassReference?'xml':file.kotlinFormatting||file.kotlinRename?'kt':'java';
+   const file=plan.documents[index];if(file.binary)continue;const extension=file.beanClassReference?'xml':file.kotlinFormatting||file.kotlinRename||file.kotlinMixedRename&&file.uri.endsWith('.kt')?'kt':'java';
    await vscode.commands.executeCommand('vscode.diff',
     vscode.Uri.parse('rocketbrain-java-refactor:/'+plan.id+'/'+index+'/before.'+extension),
     vscode.Uri.parse('rocketbrain-java-refactor:/'+plan.id+'/'+index+'/after.'+extension),

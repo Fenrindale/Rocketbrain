@@ -41,9 +41,9 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
  const query=[];
  if(inspection){
   if(['diagram','check','hierarchy','attributedDependencies'].includes(inspection.kind))query.push(inspection.kind);
-  else if(inspection.kind==='typeRename'&&[inspection.fqn,inspection.other].every(value=>
+  else if(['typeRename','typeRenameBinary'].includes(inspection.kind)&&[inspection.fqn,inspection.other].every(value=>
     typeof value==='string'&&value.length<1024&&value.includes('.')&&value.split('.').every(validIdentifier)))
-   query.push('typeRename',inspection.fqn,inspection.other);
+   query.push(inspection.kind,inspection.fqn,inspection.other);
   else if(inspection.kind==='advisoryCalls'&&Array.isArray(inspection.targets)&&inspection.targets.length>0&&inspection.targets.length<=32){
     const name=/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/u;
     const method=/^[A-Za-z_$][\w$]*$/u;

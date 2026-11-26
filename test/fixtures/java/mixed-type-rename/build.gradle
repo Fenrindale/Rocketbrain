@@ -1,0 +1,23 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.3.20'
+}
+
+repositories { mavenCentral() }
+
+kotlin { jvmToolchain(25) }
+
+dependencies {
+    implementation 'org.springframework:spring-jdbc:7.0.10'
+    runtimeOnly 'com.mysql:mysql-connector-j:9.7.0'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.5.10'
+}
+
+tasks.register('writeReviewClasspath') {
+    dependsOn tasks.classes
+    doLast {
+        layout.buildDirectory.file('review-compile-path.txt').get().asFile.text =
+            configurations.compileClasspath.files.collect { it.absolutePath }.join(System.lineSeparator())
+        layout.buildDirectory.file('review-runtime-path.txt').get().asFile.text =
+            configurations.runtimeClasspath.files.collect { it.absolutePath }.join(System.lineSeparator())
+    }
+}

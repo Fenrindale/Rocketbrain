@@ -48,7 +48,7 @@ function physicalInput(file,root) {
   return {file,key:key(file),text:contents,sha:digest(bytes)};
 }
 
-function inventory(root) {
+function inventory(root,{resources=false}={}) {
   const result = new Map();
   let total = 0, visited = 0;
   function add(file) {
@@ -82,6 +82,9 @@ function inventory(root) {
         }
         add(file);
       }
+      else if (resources && path.relative(root,file).split(path.sep)[2]==='resources' &&
+        (/\.(?:xml|properties|ya?ml|json|conf|txt|imports|factories)$/iu.test(entry.name) ||
+          /[\\/]META-INF[\\/]services[\\/]/u.test(file))) add(file);
     }
   }
   const source = path.join(root,'src');
@@ -128,6 +131,11 @@ function selectedRange(text,position) {
     end:{line:position.line,character:position.character+after}};
 }
 
+function offsetsForClassRename(text,position){
+  const range=selectedRange(text,position);
+  return {range,start:offset(text,range.start),end:offset(text,range.end)};
+}
+
 function sameRange(first,second) {
   return ['start','end'].every(point=>first?.[point]?.line===second?.[point]?.line &&
     first?.[point]?.character===second?.[point]?.character);
@@ -159,7 +167,7 @@ function referenceParameters(original,definitions,files) {
   return {textDocument:{uri},position,context:{includeDeclaration:true}};
 }
 
-function reconcileRename({files,uri,position,prepared,definitions,references,edit,newName}) {
+function reconcileRename({files,uri,position,prepared,definitions,references,edit,newName,mixedClass}) {
   verifyName(newName);
   const source = files.get(sourceKey(uri)), preparedRange = prepared?.range || prepared;
   if (!source?.file.endsWith('.kt') || !preparedRange?.start || !preparedRange?.end) {
@@ -188,7 +196,12 @@ function reconcileRename({files,uri,position,prepared,definitions,references,edi
         throw fail('The Kotlin server returned a replacement outside the reviewed identifier change.');
       }
       const span = sourceSpan({uri:operation.textDocument.uri,range:change.range},files,oldName);
-      if (exact.has(span.id)) throw fail('The Kotlin server returned overlapping or duplicate rename edits.');
+      if (exact.has(span.id)) {
+        // The pinned Kotlin server may report a class import through both
+        // reference paths. The mixed review applies an identical span once.
+        if(mixedClass)continue;
+        throw fail('The Kotlin server returned overlapping or duplicate rename edits.');
+      }
       exact.set(span.id,span);
       if (!changed.has(span.file.key)) changed.set(span.file.key,{file:span.file,edits:[]});
       changed.get(span.file.key).edits.push({range:span.range,newText:newName});
@@ -209,15 +222,17 @@ function reconcileRename({files,uri,position,prepared,definitions,references,edi
     throw error;
   }
   const mixed = [...files.values()].some(file=>file.file.endsWith('.java'));
-  if (mixed && (!filePrivateFunction(declaration) || [...changed.keys()].some(id=>id!==declaration.file.key))) {
+  if (mixed && !mixedClass && (!filePrivateFunction(declaration) || [...changed.keys()].some(id=>id!==declaration.file.key))) {
     throw fail('Mixed Kotlin/Java projects can review ordinary private function rename within its declaring Kotlin file.');
   }
   const collision = new RegExp('(?<![\\p{L}\\p{N}_])'+newName+'(?![\\p{L}\\p{N}_])','u');
-  const scope = mixed ? [declaration.file] : [...files.values()].filter(file=>file.file.endsWith('.kt'));
+  if(mixedClass && (declaration.id!==mixedClass.id || !mixed))throw fail('The Kotlin rename did not resolve the reviewed top-level class.');
+  const scope = mixed && !mixedClass ? [declaration.file] : [...files.values()].filter(file=>file.file.endsWith('.kt'));
   if (scope.some(file=>collision.test(file.text))) {
     throw fail('The proposed Kotlin name already appears in the reviewed source scope. Choose a different name.');
   }
-  return {changed,oldName,declaration,referenceCount:expected.size-1,scope:mixed?'private-function':'kotlin-project'};
+  return {changed,oldName,declaration,referenceCount:expected.size-1,
+    scope:mixedClass?'mixed-public-class':mixed?'private-function':'kotlin-project'};
 }
 
-module.exports = {inventory,reconcileRename,referenceParameters,verifyName,sourceKey,canonicalText};
+module.exports = {inventory,reconcileRename,referenceParameters,verifyName,sourceKey,canonicalText,offsetsForClassRename,sourceSpan,sameRange};

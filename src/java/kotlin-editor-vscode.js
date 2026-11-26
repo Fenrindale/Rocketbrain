@@ -262,7 +262,15 @@ function registerKotlinEditor(context,vscode,java) {
     if (!capabilities?.renameProvider?.prepareProvider || !capabilities.referencesProvider || !capabilities.definitionProvider) {
       throw fail('The connected Kotlin language server does not offer reviewed semantic rename.');
     }
-    return {root,check,async request(method,params,token) {
+    return {root,check,compiler:record.launch.compiler,async classpath(token) {
+      check();
+      await java.start();
+      check();
+      const args=[vscode.Uri.file(root).toString(),{scope:'runtime'}];
+      const result=await java.requestWorkspaceCommand('java.project.getClasspaths',args,token);
+      check();
+      return result;
+    },async request(method,params,token) {
       check();
       let timer;
       try {
