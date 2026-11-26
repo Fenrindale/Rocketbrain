@@ -6,10 +6,12 @@ const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { until, positionOf } = require('./helpers/stdio-lsp');
-const { owner, target, caller, shadow, kotlin, newName, files, populate, rebuild, readDatabase } =
-  require('./helpers/java-kotlin-rename-fixture');
+const plain = require('./helpers/java-kotlin-rename-fixture');
+const aliased = require('./helpers/java-kotlin-aliased-rename-fixture');
 
-async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
+async function verifyMixedRename(api, vscode, checks, fixture) {
+  const { owner, target, caller, shadow, kotlin, newName, files, populate, rebuild, readDatabase } = fixture;
+  const expectedSites = fixture.evidence || { files: 1, sites: 4, constructorBindings: 1, compilerVerified: true };
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const parent = await fs.realpath(path.dirname(workspace));
   const preparation = await fs.mkdtemp(path.join(parent, 'rb-mixed-rename-prep-'));
@@ -53,6 +55,8 @@ async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
     await java.executeWorkspaceCommand('java.project.changeImportedProjects', [vscode.Uri.file(path.join(root, '.project')).toString()], [], []);
     const document = (await show(owner)).document, kt = (await show(kotlin)).document;
     const javaUse = await open(caller);
+    const kotlinUnits = [...files.keys()].filter(unit=>unit.endsWith('.kt'));
+    for (const unit of kotlinUnits) if (unit !== kotlin) await open(unit);
     imported = await until(async () => {
       const metadata = await java.executeWorkspaceCommand('java.project.getClasspaths', document.uri.toString(), { scope: 'test' });
       const key = metadata?.projectRoot, physical = key?.startsWith('file:') ? fileURLToPath(key) : key;
@@ -82,14 +86,17 @@ async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
       return true;
     }, 25000);
     plan = await java.typeRename.prepare({ document, position, newName });
-    assert.deepEqual(plan.typeRename.kotlinCallers, { files: 1, sites: 4, constructorBindings: 1, compilerVerified: true });
+    assert.deepEqual(plan.typeRename.kotlinCallers, expectedSites);
     assert.equal(plan.resourceOperations.length, 1);
-    const index = plan.documents.findIndex(file => file.javaTypeKotlinReference);
-    assert.ok(index >= 0);
-    for (const side of ['before', 'after']) {
-      const comparison = await vscode.workspace.openTextDocument(
-        vscode.Uri.parse('rocketbrain-java-refactor:/' + plan.id + '/' + index + '/' + side + '.kt'));
-      assert.equal(comparison.getText().replaceAll('\r\n', '\n'), plan.documents[index][side].replaceAll('\r\n', '\n'));
+    const kotlinDiffs = plan.documents.map((file,index)=>({file,index})).filter(({file})=>file.javaTypeKotlinReference);
+    assert.equal(kotlinDiffs.length,kotlinUnits.length);
+    for (const {file,index} of kotlinDiffs) {
+      if (fixture.renamedKotlin) assert.equal(file.after,fixture.renamedKotlin(file.before));
+      for (const side of ['before','after']) {
+        const comparison = await vscode.workspace.openTextDocument(
+          vscode.Uri.parse('rocketbrain-java-refactor:/' + plan.id + '/' + index + '/' + side + '.kt'));
+        assert.equal(comparison.getText().replaceAll('\r\n','\n'),file[side].replaceAll('\r\n','\n'));
+      }
     }
     async function verify(after) {
       assert.equal(await exists(owner), !after);
@@ -108,12 +115,14 @@ async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
     await vscode.commands.executeCommand('redo');
     await until(async () => !await exists(owner) && await exists(target), 10000);
     await verify(true);
-    for (const file of [target, caller, kotlin]) assert.equal(await (await open(file)).save(), true);
+    for (const file of [target, caller, ...kotlinUnits]) assert.equal(await (await open(file)).save(), true);
     assert.equal(await fs.readFile(path.join(root, shadow), 'utf8'), files.get(shadow));
     await rebuild(root, tools);
     const after = await readDatabase(root, tools, config, spring.dbEngine);
     assert.deepEqual(after, before);
-    checks.push('Reviewed Java public class rename resolves Kotlin imports, direct constructors and explicit types with the exact Java owner.');
+    checks.push(fixture.evidence
+      ? 'Reviewed Java class rename preserves Kotlin import aliases and verifies the exact JVM bindings of aliased and unaliased constructor references.'
+      : 'Reviewed Java public class rename resolves Kotlin imports, direct constructors and explicit types with the exact Java owner.');
     checks.push('One native Undo and Redo covers the Java file rename and both languages. The Gradle Spring JDBC output is unchanged.');
     return { ...plan.typeRename, kotlinDiff: true, nativeUndo: true, nativeRedo: true, spring: after };
   } finally {
@@ -143,4 +152,6 @@ async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
   }
 }
 
-module.exports = { runJavaKotlinTypeRenameChecks };
+const runJavaKotlinTypeRenameChecks = (api,vscode,checks) => verifyMixedRename(api,vscode,checks,plain);
+const runJavaKotlinAliasedTypeRenameChecks = (api,vscode,checks) => verifyMixedRename(api,vscode,checks,aliased);
+module.exports = { runJavaKotlinTypeRenameChecks, runJavaKotlinAliasedTypeRenameChecks };

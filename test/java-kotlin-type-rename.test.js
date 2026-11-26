@@ -12,8 +12,9 @@ const { registerJavaRefactoring, editedText } = require('../src/java/refactoring
 const { kotlinEditorLaunch, kotlinProtocolUri } = require('../src/java/kotlin-editor-runtime');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { rangeAt } = require('../src/spring/java');
-const { owner, target, caller, shadow, kotlin, newName, files, populate, rebuild, readDatabase } =
-  require('./helpers/java-kotlin-rename-fixture');
+const plain = require('./helpers/java-kotlin-rename-fixture');
+const aliased = require('./helpers/java-kotlin-aliased-rename-fixture');
+const { owner, kotlin, newName, files } = plain;
 const { uri } = require('./helpers/java-signature-jdt-host');
 const { StdioLsp, until, positionOf } = require('./helpers/stdio-lsp');
 
@@ -94,7 +95,7 @@ function testHost(root, java, kotlinClient) {
   };
 }
 
-test('Kotlin candidate attribution refuses mismatched Java ranges, constructor overloads, and callable references', async t => {
+test('Kotlin candidate attribution requires the exact class or constructor, including unqualified callable references', async t => {
   const parent = await fs.realpath(os.tmpdir());
   const root = await fs.mkdtemp(path.join(parent, 'rb-java-kt-range-'));
   t.after(async () => {
@@ -116,16 +117,23 @@ test('Kotlin candidate attribution refuses mismatched Java ranges, constructor o
     range: position.line === 1 ? rangeAt(java.text, declaration.start, declaration.end)
       : rangeAt(java.text, declaration.constructors[0].start, declaration.constructors[0].end) });
   const input = { root, sources: [java, kt], owner: java, declaration, fqn: 'mixed.reverse.domain.Shipment', newName };
-  await assert.rejects(boundKotlinSites({ ...input, runtime: { request: lookup, check() {} } }), /callable references/u);
+  const bound = await boundKotlinSites({ ...input, runtime: { request: lookup, check() {} } });
+  assert.deepEqual(bound.map(site=>site.role), ['type', 'constructor-reference']);
+  kt.text = kt.text.replace('domain.Shipment','domain.Shipment as Delivery').replace('::Shipment','::Delivery');
+  const unchanged = await boundKotlinSites({ ...input, runtime: { request: lookup, check() {} } });
+  assert.deepEqual(unchanged.map(site=>[site.role,Boolean(site.importAlias),Boolean(site.keepAlias)]),
+    [['type',true,false],['constructor-reference',false,true]]);
+  kt.text = kt.text.replace('::Delivery','Delivery::class');
+  await assert.rejects(boundKotlinSites({ ...input, runtime: { request: lookup, check() {} } }), /class literals/u);
   await assert.rejects(boundKotlinSites({ ...input, runtime: { request: async () => ({ uri: java.uri, range: rangeAt(java.text, 0, 1) }),
     check() {} } }), /exact attributed Java class/u);
   await assert.rejects(boundKotlinSites({ ...input, declaration: { ...declaration,
     constructors: [...declaration.constructors, ...declaration.constructors] } }), /one explicit public constructor/u);
 });
 
-test('public Java class review updates exact Kotlin constructor and type sites in real Gradle and paired Spring JDBC', {
-  skip: !runtimeFile || !serverHome || !gradleHome || !gradleUserHome || !engines.every(([, file]) => file), timeout: 360000
-}, async t => {
+async function verifyMixedRename(t, fixture, receiptVariable) {
+  const { owner, target, caller, shadow, kotlin, newName, files, populate, rebuild, readDatabase } = fixture;
+  const expectedSites = fixture.evidence || { files: 1, sites: 4, constructorBindings: 1, compilerVerified: true };
   const parent = await fs.realpath(os.tmpdir());
   const owned = await fs.mkdtemp(path.join(parent, 'rb-java-kt-rename-'));
   const root = path.join(owned, 'project');
@@ -168,7 +176,9 @@ test('public Java class review updates exact Kotlin constructor and type sites i
   const vscode = bridge.host;
   const document = await vscode.workspace.openTextDocument(uri(path.join(root, owner)));
   await vscode.workspace.openTextDocument(uri(path.join(root, caller)));
-  const kotlinDoc = await vscode.workspace.openTextDocument(uri(path.join(root, kotlin)));
+  const kotlinUnits = [...files.keys()].filter(file=>file.endsWith('.kt'));
+  const kotlinDocs = await Promise.all(kotlinUnits.map(file=>vscode.workspace.openTextDocument(uri(path.join(root,file)))));
+  const kotlinDoc = kotlinDocs[kotlinUnits.indexOf(kotlin)];
   await until(async () => {
     const model = await java.request('workspace/executeCommand', { command: 'java.project.getClasspaths',
       arguments: [document.uri.toString(), { scope: 'test' }] }, 25000);
@@ -189,11 +199,15 @@ test('public Java class review updates exact Kotlin constructor and type sites i
       request: (method, params) => kotlinClient.request(method, params, 30000) }) });
   const position = positionOf(document.getText(), 'class Shipment', 6);
   const plan = await service.prepare({ document, position, newName });
-  assert.deepEqual(plan.typeRename.kotlinCallers, { files: 1, sites: 4, constructorBindings: 1, compilerVerified: true });
+  assert.deepEqual(plan.typeRename.kotlinCallers, expectedSites);
   assert.equal(plan.resourceOperations.length, 1);
-  assert.equal(plan.documents.length, 3);
-  const expectedKotlin = kotlinDoc.getText().replace(/(?<!reverse\.shadow\.)\bShipment\b/gu, newName);
-  assert.equal(plan.documents.find(file => file.javaTypeKotlinReference).after, expectedKotlin);
+  assert.equal(plan.documents.length, 2 + kotlinDocs.length);
+  const expected = kotlinDocs.map(doc=>fixture.renamedKotlin?.(doc.getText()) ||
+    doc.getText().replace(/(?<!reverse\.shadow\.)\bShipment\b/gu,newName));
+  for (const [index, doc] of kotlinDocs.entries()) {
+    const diff = plan.documents.find(file => file.javaTypeKotlinReference && file.uri === doc.uri.toString());
+    assert.equal(diff?.after, expected[index]);
+  }
   assert.equal(bridge.submitted.length, 0);
   kotlinDoc.isDirty = true;
   await assert.rejects(review.apply(plan.id), /save|unsaved|changed/iu);
@@ -202,9 +216,9 @@ test('public Java class review updates exact Kotlin constructor and type sites i
   kotlinDoc.isDirty = false;
   assert.equal((await review.apply(plan.id)).state, 'applied');
   assert.equal(bridge.submitted.length, 1);
-  assert.equal(bridge.submitted[0].entries.length, 3);
+  assert.equal(bridge.submitted[0].entries.length, 2 + kotlinDocs.length);
   assert.equal(bridge.submitted[0].renames.length, 1);
-  assert.equal(kotlinDoc.getText(), expectedKotlin);
+  assert.deepEqual(kotlinDocs.map(doc=>doc.getText()), expected);
   await assert.rejects(review.apply(plan.id), /expired/u);
   await bridge.save();
   await assert.rejects(fs.stat(path.join(root, owner)), { code: 'ENOENT' });
@@ -216,8 +230,14 @@ test('public Java class review updates exact Kotlin constructor and type sites i
   const binary = 'build/classes/java/main/mixed/reverse/domain/';
   await assert.rejects(fs.stat(path.join(root, binary + 'Shipment.class')), { code: 'ENOENT' });
   await fs.stat(path.join(root, binary + newName + '.class'));
-  const receipt = process.env.ROCKETBRAIN_JAVA_KOTLIN_RENAME_RECEIPT;
+  const receipt = process.env[receiptVariable];
   if (receipt) await fs.writeFile(receipt, JSON.stringify({ ...plan.typeRename, editSubmissions: 1,
     jdt: true, kotlinServer: launch.serverVersion, compiler: launch.compilerVersion, gradleRebuilt: true,
     dirtyRefused: true, replayRefused: true, unrelatedClassRetained: true, previousBinaryGone: true, results: after }, null, 2) + '\n');
-});
+}
+
+const actual = !runtimeFile || !serverHome || !gradleHome || !gradleUserHome || !engines.every(([, file]) => file);
+test('public Java class review updates exact Kotlin constructor and type sites in real Gradle and paired Spring JDBC',
+  { skip: actual, timeout: 360000 }, t => verifyMixedRename(t, plain, 'ROCKETBRAIN_JAVA_KOTLIN_RENAME_RECEIPT'));
+test('Java class rename preserves Kotlin import aliases and exact direct constructor callable references in real Gradle and paired Spring JDBC',
+  { skip: actual, timeout: 360000 }, t => verifyMixedRename(t, aliased, 'ROCKETBRAIN_JAVA_KOTLIN_ALIASED_RENAME_RECEIPT'));

@@ -54,7 +54,7 @@ pnpm run package
 
 **Rename Java Package**는 패키지 디렉터리와 확인된 Java 참조를 한 번에 변경합니다. 단일 JPMS 모듈의 표준 주 소스에서는 `module-info.java`의 비한정 `exports`·`opens`, `uses`, `provides … with`를 같은 검토에서 확인할 수 있습니다. 모듈 이름과 공급자 순서는 유지되며, 이 경로는 `java.base`만 사용하는 일반 모듈을 지원합니다.
 
-**Review Public Java Type Rename**은 공개 Java 클래스의 파일 이름과 확인된 Java 참조를 함께 바꿉니다. 가져온 단일 Gradle JVM 프로젝트에서 Kotlin 편집기를 설정하면, Kotlin의 명시적 import·타입 지정·직접 생성자 호출도 같은 검토에 표시됩니다. 이 혼합 경로는 명시적 공개 생성자 하나가 있는 비제네릭 클래스를 지원하며, Java와 Kotlin의 변경 전후 바인딩을 확인합니다.
+**Review Public Java Type Rename**은 공개 Java 클래스의 파일 이름과 확인된 Java 참조를 함께 바꿉니다. 가져온 단일 Gradle JVM 프로젝트에서 Kotlin 편집기를 설정하면, Kotlin의 명시적 import·타입 지정·직접 생성자 호출도 같은 검토에 표시됩니다. 이 혼합 경로는 명시적 공개 생성자 하나가 있는 비제네릭 클래스를 지원하며, Java와 Kotlin의 변경 전후 바인딩을 확인합니다. Kotlin import 별칭 이름은 유지하며, 별칭 또는 원래 유형 이름을 사용하는 직접 생성자 참조도 같은 생성자에 연결되는지 확인합니다.
 
 Java 중단점에서 **Restart Java Stack Frame**으로 현재 정지한 스레드의 프레임을 선택해 메서드를 다시 실행할 수 있습니다. 이미 수행된 부수 효과는 그대로 남습니다. **Inspect Java Local Value**는 지역 배열과 표준 `ArrayList`를 페이지로 보여줍니다. 검증된 로컬 JVM의 Java·Kotlin 프레임에서 긴 문자열도 8,192 UTF-16 코드 단위씩 볼 수 있습니다. [Java 스택 프레임과 변수 뷰어](docs/java-frame-debugging.md)
 
