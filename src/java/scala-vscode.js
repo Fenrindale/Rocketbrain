@@ -5,7 +5,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 const { projectSbt,createSbtRunner,observedProjects,mainClasses } = require('./scala-sbt');
-const { indexSemanticdb,definitionAt,configSnapshot } = require('./scala-semanticdb');
+const { indexSemanticdb,definitionAt,referencesAt,configSnapshot } = require('./scala-semanticdb');
 
 const COMMANDS={discover:'rocketbrain.scala.discover',compile:'rocketbrain.scala.compile',test:'rocketbrain.scala.test',
   run:'rocketbrain.scala.run',definition:'rocketbrain.scala.definition',stop:'rocketbrain.scala.stop'};
@@ -99,12 +99,15 @@ function registerScalaWorkbench(context,vscode,java) {
     return task(observed.root,'run',options,{main:options.mainClass});
   }
 
-  function definition({document,position}={},cancellation) {
+  function indexedSource(document,cancellation) {
     trusted(cancellation);
     if (!document || document.uri.scheme!=='file' || document.uri.authority || !document.uri.fsPath.endsWith('.scala')) return undefined;
     const file=workspacePath(document.uri.fsPath,roots(),{directory:false});
-    const owner=[...indexes.values()].sort((a,b) => b.root.length-a.root.length).find(index => inside(index.root,file));
-    const result=definitionAt(owner,{file,text:document.getText(),position});
+    const index=[...indexes.values()].sort((a,b) => b.root.length-a.root.length).find(index => inside(index.root,file));
+    return {file,index};
+  }
+
+  function codeLocation(result) {
     if (!result) return undefined;
     const uri=vscode.Uri.parse(result.uri);
     if (uri.scheme!=='file' || uri.authority || uri.query || uri.fragment || !vscode.workspace.getWorkspaceFolder(uri)) return undefined;
@@ -113,12 +116,33 @@ function registerScalaWorkbench(context,vscode,java) {
     return {symbol:result.symbol,uri,range:new vscode.Range(start.line,start.character,end.line,end.character)};
   }
 
-  subscriptions.push(vscode.languages.registerDefinitionProvider({scheme:'file',language:'scala',pattern:'**/*.scala'}, {
+  function definition({document,position}={},cancellation) {
+    const source=indexedSource(document,cancellation);
+    return source && codeLocation(definitionAt(source.index,{file:source.file,text:document.getText(),position}));
+  }
+
+  function references({document,position,includeDeclaration}={},cancellation) {
+    const source=indexedSource(document,cancellation);
+    if (!source) return [];
+    return referencesAt(source.index,{file:source.file,text:document.getText(),position,includeDeclaration},cancellation)
+      .map(codeLocation).filter(Boolean);
+  }
+
+  const selector={scheme:'file',language:'scala',pattern:'**/*.scala'};
+  subscriptions.push(vscode.languages.registerDefinitionProvider(selector, {
     provideDefinition(document,position,cancellation) {
       try {
         const found=definition({document,position},cancellation);
         return found ? new vscode.Location(found.uri,found.range) : undefined;
       } catch {return undefined;}
+    }
+  }));
+  subscriptions.push(vscode.languages.registerReferenceProvider(selector,{
+    provideReferences(document,position,context,cancellation) {
+      try {
+        return references({document,position,includeDeclaration:context.includeDeclaration},cancellation)
+          .map(item=>new vscode.Location(item.uri,item.range));
+      } catch {return [];}
     }
   }));
 
@@ -212,7 +236,7 @@ function registerScalaWorkbench(context,vscode,java) {
 
   return {discover:options => track(() => discover(options)),compile:options => track(() => selected(options,'compile')),
     test:options => track(() => selected(options,'test')),mainClasses:options => track(() => selected(options,'mains')),
-    run:options => track(() => runMain(options)),definition,stop:runner.stop,dispose() {
+    run:options => track(() => runMain(options)),definition,references,stop:runner.stop,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {

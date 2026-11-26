@@ -118,7 +118,7 @@ function configSnapshot(root) {
 }
 
 function indexSemanticdb(root,cancellation) {
-  const documents=new Map(), definitions=new Map(), rejected=new Set();
+  const documents=new Map(), definitions=new Map(), references=new Map(), rejected=new Set();
   let examined=0, size=0, count=0, sourceBytes=0, occurrenceCount=0;
   function scan(directory,depth,visitor) {
     if (depth>32 || path.relative(directory,fs.realpathSync(directory))) throw fail('A Scala output directory cannot be inspected safely.');
@@ -173,46 +173,79 @@ function indexSemanticdb(root,cancellation) {
   projectFolder(root,0);
   for (const document of documents.values()) {
     for (const item of document.occurrences) {
-      if (item.role!==2) continue;
-      const key=/^local\d/.test(item.symbol) ? document.file+'\0'+item.symbol : item.symbol;
-      const locations=definitions.get(key) || [];
+      const index=item.role===2 ? definitions : item.role===1 ? references : null;
+      if (!index) continue;
+      const key=symbolKey(document.file,item.symbol);
+      const locations=index.get(key) || [];
       locations.push({document,range:item.range});
-      definitions.set(key,locations);
+      index.set(key,locations);
     }
   }
-  return {root,documents,definitions,configs:configSnapshot(root)};
+  return {root,documents,definitions,references,configs:configSnapshot(root)};
 }
 
 function positionOrder(left,right) {return left.line-right.line || left.character-right.character;}
+function symbolKey(file,symbol) {return /^local\d/.test(symbol) ? file+'\0'+symbol : symbol;}
+function coveredOccurrence(item,position) {
+  return positionOrder(position,item.range.start)>=0 && positionOrder(position,item.range.end)<0;
+}
+const stale=()=>fail('Scala sources, build files or SemanticDB changed after compile. Compile and index again.');
+
+function unchanged(index,record) {
+  try {
+    return digest('sha256',regular(record.file,index.root))===record.sha256 &&
+      digest('sha256',regular(record.artifact,index.root))===record.artifactHash;
+  } catch {return false;}
+}
+
+function currentDocument(index,file,text,position) {
+  if (!index || !file || !position || typeof text!=='string') return undefined;
+  const document=index.documents.get(file) || (process.platform==='win32' &&
+    [...index.documents.values()].find(item=>path.relative(file,item.file)===''));
+  if (!document) return undefined;
+  let sameConfig=false;
+  try {sameConfig=JSON.stringify(configSnapshot(index.root))===JSON.stringify(index.configs);}
+  catch { /* Report the index as stale when its build descriptors disappear. */ }
+  if (normalize(text)!==document.text || !unchanged(index,document) || !sameConfig) throw stale();
+  return document;
+}
+
+function publicRange(target) {
+  const {range,document}=target;
+  const line=document.text.split('\n')[range.start.line];
+  if (range.start.line!==range.end.line || line===undefined || range.end.character>line.length) return undefined;
+  return {uri:document.uri,range};
+}
 
 function definitionAt(index,{file,text,position}) {
-  if (!index || !file || !position || typeof text!=='string') return undefined;
-  const document=index.documents.get(file);
+  const document=currentDocument(index,file,text,position);
   if (!document) return undefined;
-  function unchanged(record) {
-    try {
-      return digest('sha256',regular(record.file,index.root))===record.sha256 &&
-        digest('sha256',regular(record.artifact,index.root))===record.artifactHash;
-    } catch {return false;}
-  }
-  function sameConfig() {
-    try {return JSON.stringify(configSnapshot(index.root))===JSON.stringify(index.configs);}
-    catch {return false;}
-  }
-  const stale=() => fail('Scala sources, build files or SemanticDB changed after compile. Compile and index again.');
-  if (normalize(text)!==document.text || !unchanged(document) || !sameConfig()) throw stale();
-  const candidates=document.occurrences.filter(item => item.role===1 && positionOrder(position,item.range.start)>=0 &&
-    positionOrder(position,item.range.end)<0);
+  const candidates=document.occurrences.filter(item => item.role===1 && coveredOccurrence(item,position));
   const bySymbol=new Map(candidates.map(item => [item.symbol,item]));
   if (bySymbol.size!==1) return undefined;
-  const [symbol]=bySymbol.keys(), key=/^local\d/.test(symbol) ? document.file+'\0'+symbol : symbol;
+  const [symbol]=bySymbol.keys(), key=symbolKey(document.file,symbol);
   const targets=index.definitions.get(key) || [];
   if (targets.length!==1) return undefined;
   const [target]=targets;
-  if (!unchanged(target.document)) throw stale();
-  const line=target.document.text.split('\n')[target.range.start.line];
-  if (target.range.start.line!==target.range.end.line || line===undefined || target.range.end.character>line.length) return undefined;
-  return {symbol,uri:target.document.uri,range:target.range};
+  if (!unchanged(index,target.document)) throw stale();
+  const result=publicRange(target);
+  return result && {symbol,...result};
 }
 
-module.exports = { semanticDocuments,indexSemanticdb,definitionAt,configSnapshot };
+function referencesAt(index,{file,text,position,includeDeclaration=false},cancellation) {
+  const document=currentDocument(index,file,text,position);
+  if (!document) return [];
+  const symbols=new Set(document.occurrences.filter(item => (item.role===1 || item.role===2) &&
+    coveredOccurrence(item,position)).map(item=>item.symbol));
+  if (symbols.size!==1) return [];
+  for (const indexed of index.documents.values()) {
+    if (cancelled(cancellation)) throw fail('Scala reference lookup was cancelled.');
+    if (indexed!==document && !unchanged(index,indexed)) throw stale();
+  }
+  const [symbol]=symbols, key=symbolKey(document.file,symbol);
+  const targets=[...(index.references.get(key) || []),...(includeDeclaration ? (index.definitions.get(key) || []) : [])];
+  if (targets.length>1000) throw fail('Scala reference results exceed the supported review limit.');
+  return targets.map(publicRange).filter(Boolean).map(item=>({symbol,...item}));
+}
+
+module.exports = { semanticDocuments,indexSemanticdb,definitionAt,referencesAt,configSnapshot };
