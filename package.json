@@ -1341,6 +1341,12 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.spring.copyBootServletRegistrationTrace",
+        "title": "Copy Spring Boot 4 Servlet Registration Trace Helpers",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.spring.inspectRegistrationTrace",
         "title": "Inspect Spring Registration Trace",
         "category": "Rocketbrain"

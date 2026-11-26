@@ -43,8 +43,9 @@ async function build() {
   fs.mkdirSync('dist', { recursive: true });
   const registration = path.join('dist', 'spring-registration');
   fs.mkdirSync(registration, { recursive: true });
-  fs.copyFileSync(path.join(__dirname, '../runtime/spring-registration/src/rocketbrain/spring/RegistrationTrace.java'),
-    path.join(registration, 'RegistrationTrace.java'));
+  for(const name of ['RegistrationTrace.java','BootServletRegistrationTrace.java']) {
+    fs.copyFileSync(path.join(__dirname,'../runtime/spring-registration/src/rocketbrain/spring',name),path.join(registration,name));
+  }
   fs.mkdirSync(path.join('dist', 'java-async'), { recursive: true });
   for (const file of ['TaskTrace.java', 'ReactorTaskTrace.java']) {
     fs.copyFileSync(path.join(__dirname, '../runtime/java-async/src/rocketbrain/async', file), path.join('dist', 'java-async', file));

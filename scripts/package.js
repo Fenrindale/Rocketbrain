@@ -96,6 +96,7 @@ async function verifyArchive(archive, vsceManifest) {
     'dist/extension.js', 'dist/worker.js', 'dist/sqlite-edit-worker.js', 'dist/sql-wasm.wasm', 'dist/results.js', 'dist/results.css',
     'dist/java-async/TaskTrace.java',
     'dist/spring-registration/RegistrationTrace.java',
+    'dist/spring-registration/BootServletRegistrationTrace.java',
     'dist/java-async/ReactorTaskTrace.java',
     'dist/java-debug/LocalValueInspection.java',
     'dist/java-debug/CoroutineFrameWatch.java',
