@@ -7,7 +7,7 @@ const traceLimit = 4 * 1024 * 1024;
 const taskLimit = 2048;
 const traceIdPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const wrapperFrame = /(?:^|\.)TaskTrace\.runRecorded\(/;
-const handoffs = new Set(['executor', 'virtual-thread', 'reactor-scheduler']);
+const handoffs = new Set(['executor', 'virtual-thread', 'reactor-scheduler', 'completable-future']);
 const validId = value => Number.isSafeInteger(value) && value > 0;
 const shortText = (value, max) => typeof value === 'string' && value.length <= max;
 
@@ -53,11 +53,14 @@ function parseAsyncTrace(text) {
       if (typed && !handoffs.has(item.handoff)) throw parseError();
       const submittedBy = thread(item.thread, typed);
       const parent = tasks.get(item.parent);
-      if (typed && parent && (parent.state !== 'entered' ||
+      const stageParent = item.parentKind === 'stage';
+      if (item.parentKind !== undefined && (!stageParent || item.handoff !== 'completable-future' ||
+          parent?.handoff !== 'completable-future')) throw parseError();
+      if (typed && parent && !stageParent && (parent.state !== 'entered' ||
           parent.worker.id !== submittedBy.id || parent.worker.virtual !== submittedBy.virtual)) throw parseError();
       tasks.set(item.id, {
         id: item.id, parentId: item.parent, label: item.label, submittedBy,
-        ...(typed ? { handoff: item.handoff } : {}),
+        ...(typed ? { handoff: item.handoff } : {}), ...(stageParent ? { parentKind: item.parentKind } : {}),
         submissionFrames: sourceFrames(item.frames), state: 'submitted'
       });
       continue;
@@ -67,6 +70,7 @@ function parseAsyncTrace(text) {
     if (item.kind === 'entered' && task.state === 'submitted') {
       const worker = thread(item.thread, task.handoff !== undefined);
       if (task.handoff === 'virtual-thread' && (!worker.virtual || worker.id === task.submittedBy.id)) throw parseError();
+      if (task.parentKind === 'stage' && tasks.get(task.parentId).state !== 'completed') throw parseError();
       task.state = 'entered';
       task.worker = worker;
     } else if (item.kind === 'rejected' && task.state === 'submitted' ||

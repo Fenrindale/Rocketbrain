@@ -165,7 +165,11 @@ Gradle 앱은 표준 이름의 클래스패스 배포판을 사용하며 JVM에�
 
 Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compile and Index Scala**를 실행합니다. `.scala` 편집기의 **Go to Definition**은 컴파일러가 해석한 심볼을 사용하므로 하위 프로젝트 간 오버로드도 올바른 선언으로 이동합니다. 소스나 빌드가 바뀌면 다시 컴파일합니다.
 
-### Kotlin Multiplatform
+#### Java CompletableFuture 비동기 스택
+
+선택한 CompletableFuture 공급자와 비동기 후속 단계의 소스 등록 위치를 디버거에서 추적할 수 있습니다. [Java 비동기 추적 사용법](docs/java-async-trace.md)
+
+## Kotlin Multiplatform
 
 **Inspect Kotlin Multiplatform Targets**에서 Gradle이 구성한 JVM·JavaScript 타깃과 소스셋 의존 관계를 확인합니다. **Compile Kotlin Multiplatform Targets**, **Test Kotlin Multiplatform Targets**, **Run Kotlin Multiplatform Target**은 관찰된 타깃의 컴파일·테스트·실행 작업을 사용합니다. JavaScript 실행과 테스트는 Node.js 타깃을 대상으로 합니다.
 

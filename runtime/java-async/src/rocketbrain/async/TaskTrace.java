@@ -8,8 +8,11 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** Opt-in submission stacks for explicitly selected asynchronous boundaries. */
 public final class TaskTrace implements AutoCloseable {
@@ -86,8 +89,70 @@ public final class TaskTrace implements AutoCloseable {
         }
     }
 
+    /** Track a CompletableFuture supplier and any explicitly selected continuation. */
+    public <T> RecordedFuture<T> supplyAsync(String label, Supplier<T> supplier, Executor executor) {
+        Objects.requireNonNull(supplier, "supplier");
+        Objects.requireNonNull(executor, "executor");
+        Task task = submitted(Objects.requireNonNull(label, "label"), "completable-future");
+        var result = CompletableFuture.supplyAsync(wrapSupplier(task, supplier), recordingRejections(executor, task));
+        return new RecordedFuture<>(task, result);
+    }
+
+    /** Keeps the predecessor identity when a continuation is registered on another thread. */
+    public final class RecordedFuture<T> {
+        private final Task task;
+        private final CompletableFuture<T> future;
+
+        private RecordedFuture(Task task, CompletableFuture<T> future) {
+            this.task = task;
+            this.future = future;
+        }
+
+        public CompletionStage<T> stage() { return future.minimalCompletionStage(); }
+
+        public boolean cancel() { return future.cancel(false); }
+
+        public <U> RecordedFuture<U> thenApplyAsync(String label, Function<? super T, ? extends U> function,
+                Executor executor) {
+            Objects.requireNonNull(function, "function");
+            Objects.requireNonNull(executor, "executor");
+            Task next = submitted(Objects.requireNonNull(label, "label"), "completable-future", task);
+            var result = future.<U>thenApplyAsync(value -> wrapSupplier(next, () -> function.apply(value)).get(),
+                recordingRejections(executor, next));
+            return new RecordedFuture<>(next, result);
+        }
+
+        public <U> RecordedFuture<U> thenComposeAsync(String label, Function<? super T, ? extends CompletionStage<U>> function,
+                Executor executor) {
+            Objects.requireNonNull(function, "function");
+            Objects.requireNonNull(executor, "executor");
+            Task next = submitted(Objects.requireNonNull(label, "label"), "completable-future", task);
+            var result = future.<U>thenComposeAsync(value -> wrapSupplier(next, () -> function.apply(value)).get(),
+                recordingRejections(executor, next));
+            return new RecordedFuture<>(next, result);
+        }
+    }
+
+    private Executor recordingRejections(Executor delegate, Task task) {
+        return runnable -> {
+            try {
+                delegate.execute(runnable);
+            } catch (RuntimeException | Error failure) {
+                rejected(task);
+                throw failure;
+            }
+        };
+    }
+
+    private <T> Supplier<T> wrapSupplier(Task task, Supplier<T> supplier) {
+        return task == null ? supplier : () -> runRecorded(task, supplier);
+    }
+
     private Runnable wrap(Task task, Runnable runnable) {
-        return task == null ? runnable : () -> runRecorded(task, runnable);
+        return task == null ? runnable : () -> runRecorded(task, () -> {
+            runnable.run();
+            return null;
+        });
     }
 
     private void rejected(Task task) {
@@ -96,18 +161,23 @@ public final class TaskTrace implements AutoCloseable {
 
     public synchronized boolean isHealthy() { return healthy; }
 
-    private synchronized Task submitted(String label, String handoff) {
+    private Task submitted(String label, String handoff) {
+        return submitted(label, handoff, null);
+    }
+
+    private synchronized Task submitted(String label, String handoff, Task predecessor) {
         if (closed || !recording) return null;
         if (nextTask >= MAX_TASKS) {
             truncate();
             return null;
         }
         long id = ++nextTask;
-        Long parent = activeTask.get();
+        Long parent = predecessor == null ? activeTask.get() : Long.valueOf(predecessor.id);
         var frames = STACKS.walk(stream -> stream
             .filter(frame -> !helperFrame(frame.getClassName()))
             .limit(MAX_FRAMES).map(TaskTrace::frame).toList());
         var entry = "{\"kind\":\"submitted\",\"id\":" + id + ",\"parent\":" + (parent == null ? 0 : parent)
+            + (predecessor == null ? "" : ",\"parentKind\":\"stage\"")
             + ",\"label\":" + json(shorten(label, 160)) + ",\"handoff\":" + json(handoff)
             + ",\"thread\":" + thread(Thread.currentThread())
             + ",\"frames\":[" + String.join(",", frames) + "]}";
@@ -115,11 +185,11 @@ public final class TaskTrace implements AutoCloseable {
     }
 
     private static boolean helperFrame(String name) {
-        return name.equals(OWN_CLASS) || name.equals("rocketbrain.async.ReactorTaskTrace")
+        return name.equals(OWN_CLASS) || name.startsWith(OWN_CLASS + "$") || name.equals("rocketbrain.async.ReactorTaskTrace")
             || name.startsWith("rocketbrain.async.ReactorTaskTrace$");
     }
 
-    private void runRecorded(Task task, Runnable runnable) {
+    private <T> T runRecorded(Task task, Supplier<T> supplier) {
         // The debugger reads these locals around the user's task call.
         String rocketbrainTraceId = traceId;
         long rocketbrainTaskId = task.id;
@@ -132,8 +202,9 @@ public final class TaskTrace implements AutoCloseable {
         entered(rocketbrainTraceId, rocketbrainTaskId, worker, rocketbrainWorkerThreadId, rocketbrainWorkerVirtual);
         boolean returned = false;
         try {
-            runnable.run();
+            T value = supplier.get();
             returned = true;
+            return value;
         } finally {
             phase(returned ? "completed" : "failed", rocketbrainTaskId);
             if (previous == null) activeTask.remove();

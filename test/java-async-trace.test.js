@@ -19,6 +19,7 @@ const { asyncTraceFixture, assertAsyncChain } = require('./helpers/java-async-tr
 const { virtualTraceFixture, checkVirtualChain, writeRejectedTraces, verifyVirtualCompletion, jdbcOptions } =
   require('./helpers/virtual-async-trace-fixture');
 const { reactorTraceFixture, checkReactorChain, verifyReactorCompletion } = require('./helpers/reactor-async-trace-fixture');
+const { futureTraceFixture, checkFutureChain, verifyFutureCompletion } = require('./helpers/future-async-trace-fixture');
 
 const configPath = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
 const traceSource = path.join(__dirname, '../runtime/java-async/src/rocketbrain/async/TaskTrace.java');
@@ -315,48 +316,72 @@ test('Reactor scheduler traces retain bounded typed provenance and reject an unk
   assert.throws(() => parseAsyncTrace(encode([root, timestamp, active])), /invalid record/);
 });
 
-const reactorDatabases = ['mysql', 'mariadb'].map(engine =>
-  [engine, process.env['ROCKETBRAIN_JAVA_ASYNC_REACTOR_' + engine.toUpperCase() + '_CONFIG']]);
-const reactorClasspath = process.env.ROCKETBRAIN_JAVA_ASYNC_REACTOR_CLASSPATH;
+test('CompletableFuture trace validation recognizes explicit predecessor completion across threads', () => {
+  const typed = { ...submission, thread: { ...submission.thread, virtual: false }, handoff: 'completable-future' };
+  const entered = { ...active, thread: { ...active.thread, virtual: false } };
+  const child = { ...typed, id: 2, parent: 1, parentKind: 'stage' };
+  const completed = { kind: 'completed', id: 1 };
+  const transferred = { ...entered, id: 2, thread: { id: 3, name: 'next', virtual: false } };
+  const parse = (...entries) => parseAsyncTrace(encode([root, ...entries]));
+  assert.equal(parse(typed, entered, child, completed, transferred).tasks.get(2).parentKind, 'stage');
+  assert.throws(() => parse(typed, entered, child, transferred), /invalid record/u);
+  assert.throws(() => parse(typed, entered, { ...child, handoff: 'virtual-thread' }), /invalid record/u);
+  assert.throws(() => parse(typed, entered, { ...child, parent: 0 }), /invalid record/u);
+  assert.throws(() => parse({ ...typed, handoff: 'executor' }, entered, child), /invalid record/u);
+});
 
-test('Reactor demonstrates actual delayed Spring JDBC submission origins in local Java launch and attach', {
-  skip: !(configPath && reactorClasspath && reactorDatabases.every(([, file]) => file)) &&
-    'Configure the independent Java debugger and owned Spring JDBC pair.',
-  timeout: 330000
-}, async context => {
+for (const framework of [
+  { kind:'reactor', title:'Reactor demonstrates actual delayed Spring JDBC submission origins in local Java launch and attach',
+    fixture:()=>reactorTraceFixture('dev.rocketbrain.reactorfixture', 'ReactorAsyncFixture'), markers:['PERIODIC_STOP','REACTOR_STOP'],
+    checkChain:checkReactorChain, verifyCompletion:verifyReactorCompletion },
+  { kind:'future', title:'CompletableFuture follows JDT execution and attach across three Spring JDBC continuation stages',
+    fixture:futureTraceFixture, markers:['FUTURE_UNTRACKED','FUTURE_STOP'],
+    checkChain:checkFutureChain, verifyCompletion:verifyFutureCompletion }
+]) {
+  const key = 'ROCKETBRAIN_JAVA_ASYNC_' + framework.kind.toUpperCase();
+  const databases = ['mysql','mariadb'].map(engine => [engine,process.env[key + '_' + engine.toUpperCase() + '_CONFIG']]);
+  const classpath = process.env[key + '_CLASSPATH'], receipt = process.env[key + '_RECEIPT'];
+  test(framework.title, {
+    skip: !(configPath && classpath && databases.every(([, file]) => file)) &&
+      'Configure the independent Java debugger and owned Spring JDBC pair.',
+    timeout: 330000
+  }, context => runStageFixture(context, { ...framework, fixture:framework.fixture(), databases, classpath, receipt }));
+}
+
+async function runStageFixture(context, { kind, fixture, markers, checkChain, verifyCompletion, databases, classpath, receipt }) {
+  const reactor = kind === 'reactor';
   const runtime = JSON.parse(await fs.readFile(configPath, 'utf8'));
   const settings = runtime.settings || runtime;
   const javaHome = runtime.javaHome || settings['rocketbrain.java.javaHome'];
   const serverPath = runtime.serverPath || settings['rocketbrain.java.serverPath'];
   const debugBundlePath = runtime.debugBundlePath || settings['rocketbrain.java.debugBundlePath'];
   const parent = await fs.realpath(os.tmpdir());
-  const owned = await fs.mkdtemp(path.join(parent, 'rb-reactor-async-'));
+  const owned = await fs.mkdtemp(path.join(parent, 'rb-stage-async-'));
   context.after(async () => {
     const physical = await fs.realpath(owned);
     assert.equal(path.relative(physical, owned), '');
     assert.equal(path.relative(path.dirname(physical), parent), '');
-    assert.match(path.basename(physical), /^rb-reactor-async-/u);
+    assert.match(path.basename(physical), /^rb-stage-async-/u);
     await fs.rm(physical, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
   });
   const project = path.join(owned, 'project');
-  const source = path.join(project, 'src/main/java/dev/rocketbrain/reactorfixture/ReactorAsyncFixture.java');
+  const source = path.join(project, 'src/main/java', ...fixture.mainClass.split('.').slice(0, -1), fixture.mainClass.split('.').at(-1) + '.java');
   const helper = path.join(project, 'src/main/java/rocketbrain/async/TaskTrace.java');
   const companion = path.join(path.dirname(helper), 'ReactorTaskTrace.java');
-  const fixture = reactorTraceFixture('dev.rocketbrain.reactorfixture', 'ReactorAsyncFixture');
   for (const file of [source, helper]) await fs.mkdir(path.dirname(file), { recursive: true });
   const template = await fs.readFile(path.join(__dirname, 'fixtures/java/debugger/pom.xml'), 'utf8');
   const dependencies = [
     ['org.springframework', 'spring-jdbc', '7.0.10'], ['org.springframework', 'spring-context', '7.0.10'],
-    ['io.projectreactor', 'reactor-core', '3.8.8'], ['com.mysql', 'mysql-connector-j', '9.7.0'],
+    ...(reactor ? [['io.projectreactor', 'reactor-core', '3.8.8']] : []), ['com.mysql', 'mysql-connector-j', '9.7.0'],
     ['org.mariadb.jdbc', 'mariadb-java-client', '3.5.10']
   ].map(([group, artifact, version]) => '<dependency><groupId>' + group + '</groupId><artifactId>' +
     artifact + '</artifactId><version>' + version + '</version></dependency>').join('');
   await Promise.all([
     fs.writeFile(source, fixture.source, { flag: 'wx' }),
     fs.copyFile(traceSource, helper),
-    fs.copyFile(path.join(path.dirname(traceSource), 'ReactorTaskTrace.java'), companion),
+    ...(reactor ? [fs.copyFile(path.join(path.dirname(traceSource), 'ReactorTaskTrace.java'), companion)] : []),
     fs.writeFile(path.join(project, 'pom.xml'),
-      template.replace('advanced-debug', 'reactor-async-debug').replace('</project>', '<dependencies>' + dependencies + '</dependencies></project>'),
+      template.replace('advanced-debug', kind + '-async-debug').replace('</project>', '<dependencies>' + dependencies + '</dependencies></project>'),
       { flag: 'wx' })
   ]);
   const uri = pathToFileURL(project).href;
@@ -365,21 +390,21 @@ test('Reactor demonstrates actual delayed Spring JDBC submission origins in loca
   const reports = [];
   try {
     await lsp.request('initialize', {
-      processId: process.pid, rootUri: uri, workspaceFolders: [{ uri, name: 'reactor-async' }],
+      processId: process.pid, rootUri: uri, workspaceFolders: [{ uri, name: kind + '-async' }],
       capabilities: { workspace: { configuration: true } },
       initializationOptions: { bundles: [debugBundlePath], workspaceFolders: [uri], settings: javaSettings }
     }, 75000);
     lsp.notify('initialized', {});
     lsp.notify('workspace/didChangeConfiguration', { settings: javaSettings });
-    for (const [engine, configFile] of reactorDatabases) {
-      const { env } = await jdbcOptions({ engine, configFile, classpathFile: reactorClasspath });
+    for (const [engine, configFile] of databases) {
+      const { env } = await jdbcOptions({ engine, configFile, classpathFile: classpath });
       for (const mode of ['launch', 'attach']) {
         const files = ['live', 'other-id', 'other-worker', 'stripped-worker'].map(name => path.join(owned, engine + '-' + mode + '-' + name + '.jsonl'));
         const [trace, wrongId, wrongWorker, strippedWorker] = files;
         let dap, child, exited, childOutput = '';
         const attach = mode === 'attach' && (async ({ javaExec, classPaths, modulePaths }) => {
           assert.deepEqual(modulePaths, []);
-          assert.ok(classPaths.some(file => path.basename(file) === 'reactor-core-3.8.8.jar'));
+          if (reactor) assert.ok(classPaths.some(file => path.basename(file) === 'reactor-core-3.8.8.jar'));
           child = spawn(javaExec, ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:0',
             '-classpath', classPaths.join(path.delimiter), fixture.mainClass, trace],
           { cwd: project, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
@@ -392,7 +417,6 @@ test('Reactor demonstrates actual delayed Spring JDBC submission origins in loca
           return { hostName: '127.0.0.1', port };
         });
         try {
-          const markers = ['PERIODIC_STOP', 'REACTOR_STOP'];
           dap = await launchAsyncFixture(lsp, uri, project, source, fixture, trace, markers, env, false, attach);
           const first = await dap.event('stopped', 0, 22000);
           const state = { state: 'stopped', threadId: first.threadId, stopVersion: 1 };
@@ -410,12 +434,12 @@ test('Reactor demonstrates actual delayed Spring JDBC submission origins in loca
           assert.equal(paused.line, fixture.line(markers[1]));
           assert.equal(path.relative(paused.source.path, source), '');
           const report = await inspector.inspect(trace);
-          const proof = checkReactorChain(fixture, report);
+          const proof = checkChain(fixture, report);
           if (child) assert.equal(report.pid, child.pid);
           await writeRejectedTraces(...files, report.taskId);
           await assert.rejects(inspector.inspect(wrongId), /different Java runtime/);
           await assert.rejects(inspector.inspect(wrongWorker), /worker identity differs/);
-          await assert.rejects(inspector.inspect(strippedWorker), /worker identity differs/);
+          await assert.rejects(inspector.inspect(strippedWorker), reactor ? /worker identity differs/u : /invalid record/u);
           const after = dap.events.length;
           await session.customRequest('continue', { threadId: stopped.threadId });
           state.state = 'running';
@@ -424,7 +448,7 @@ test('Reactor demonstrates actual delayed Spring JDBC submission origins in loca
           if (exited) assert.equal((await exited)[0], 0, childOutput);
           const output = child ? childOutput :
             dap.events.filter(event => event.event === 'output').map(event => event.body.output).join('');
-          reports.push({ ...proof, ...await verifyReactorCompletion(trace, output, engine), mode, pausedLine: paused.line,
+          reports.push({ ...proof, ...await verifyCompletion(trace, output, engine), mode, pausedLine: paused.line,
             unwrappedRejected: true, mismatchedTraceRejected: true, mismatchedWorkerRejected: true, strippedWorkerRejected: true,
             resumedInspectionRejected: true, ...(child && { ownedAttach: true }) });
         } finally {
@@ -435,8 +459,8 @@ test('Reactor demonstrates actual delayed Spring JDBC submission origins in loca
       }
     }
   } finally { await lsp.close(); }
-  if (process.env.ROCKETBRAIN_JAVA_ASYNC_REACTOR_RECEIPT) {
-    await fs.writeFile(process.env.ROCKETBRAIN_JAVA_ASYNC_REACTOR_RECEIPT,
+  if (receipt) {
+    await fs.writeFile(receipt,
       JSON.stringify({ reports }, null, 2) + '\n', { flag: 'wx' });
   }
-});
+}
