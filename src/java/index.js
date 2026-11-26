@@ -144,6 +144,7 @@ function registerJavaFeatures(context, vscode) {
       if (disposed || containerOwner) throw Error('The local Java service already has a container owner.');
       if (vscode.debug.activeDebugSession) throw Error('Finish the active debug session before switching the Java language engine.');
       const wasRunning = Boolean(client);
+      const priorState = state;
       const owner = {};
       containerOwner = owner;
       try {
@@ -157,7 +158,9 @@ function registerJavaFeatures(context, vscode) {
       return { dispose() {
         if (containerOwner !== owner) return;
         containerOwner = undefined;
-        if (wasRunning && !disposed) void serial(startNow).catch(() => {});
+        if (disposed) return;
+        if (wasRunning) void serial(startNow).catch(() => {});
+        else update(priorState.state, priorState.message);
       } };
     }),
     getState: () => ({ ...state, springMode: 'local-semantic-index', springLimit: 'Local source/configuration model; runtime and custom Conditions remain unknown. This is not the full Spring Language Server.' }),
