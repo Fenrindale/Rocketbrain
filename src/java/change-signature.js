@@ -6,6 +6,7 @@ const {analyzeJavaSources}=require('./signature-compiler');
 const {analyzeSpringContracts,inspectSpringMethodContract}=require('./spring-contract-analysis');
 const {adaptSignatureReferences,verifyReferenceAdapters}=require('./change-signature-references');
 const {inspectVarargsFamily,verifyVarargsPermutation,verifyVarargsCalls}=require('./change-signature-varargs');
+const {checkedThrowsOption,checkedThrowsChange,verifyCheckedThrowsEdits}=require('./change-signature-throws');
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const escapeRegex=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const fileKey=value=>{const actual=fs.realpathSync(value);return process.platform==='win32'?actual.toLowerCase():actual;};
@@ -46,7 +47,9 @@ function selectedMethod(text,uri,range,{advanced=false}={}){
     !SIMPLE_TYPES.has(variadic[0].type.raw.replace(/\.\.\.$/u,''))||method.parameters.slice(0,-1).some(parameter=>!SIMPLE_TYPES.has(parameter.type.raw))))
    throw Error('Varargs Change Signature requires plain scalar or String/Object parameter types.');
   let methodTypeParameters='';if(method.type.raw.startsWith('<')){let depth=0;for(let i=0;i<method.type.raw.length;i++){if(method.type.raw[i]==='<')depth++;else if(method.type.raw[i]==='>'&&!--depth){methodTypeParameters=method.type.raw.slice(0,i+1);break;}}}
-  const bodyEnd=tokens[body]?.text==='{'?matching(tokens,body,'{','}'):body;return {owner,method,methodTypeParameters,bodyTokens:tokens.slice(body+1,bodyEnd),text,advanced:true};
+  const concrete=tokens[body]?.text==='{',bodyEnd=concrete?matching(tokens,body,'{','}'):body;
+  const throwsSpan=concrete?{start:tokens[close].end,end:tokens[body].start}:undefined;
+  return {owner,method,methodTypeParameters,bodyTokens:tokens.slice(body+1,bodyEnd),throwsSpan,text,advanced:true};
  }
  if(owner.kind!=='class'||owner.superTypes.length||owner.annotations.length||method.annotations.length||method.parameters.some(p=>p.annotations.length))throw new Error('Framework annotations, inheritance, interface and record signatures need additional contract analysis.');
  if(!method.constructor&&!header.some(t=>['private','static','final'].includes(t.text))&&!ownerHeader.some(t=>t.text==='final'))throw new Error('Only plain non-polymorphic methods are supported: private/static/final methods or methods of a final class.');
@@ -98,12 +101,15 @@ function editedSources(sources,targets){
  const keyFor=uri=>{const file=path.resolve(require('node:url').fileURLToPath(uri));return process.platform==='win32'?file.toLowerCase():file;},changes=new Map();for(const [uri,edits]of targets){const key=keyFor(uri);changes.set(key,[...(changes.get(key)||[]),...edits]);}
  return sources.map(source=>{const edits=changes.get(keyFor(source.uri));if(!edits)return source;const values=edits.map(edit=>{if(typeof edit.newText!=='string')throw new Error('The Java engine returned an invalid text edit.');const start=offset(source.text,edit.range?.start),end=offset(source.text,edit.range?.end);if(end<start)throw new Error('The Java engine returned a reversed text edit.');return {start,end,text:edit.newText};}).sort((a,b)=>b.start-a.start||b.end-a.end);let text=source.text,last=source.text.length;for(const edit of values){if(edit.end>last)throw new Error('The Java engine returned overlapping signature edits.');text=text.slice(0,edit.start)+edit.text+text.slice(edit.end);last=edit.start;}return {...source,text};});
 }
-function verifySemanticChange(semantic,after,parameters,adapters=[]){
+function verifySemanticChange(semantic,after,parameters,adapters=[],checkedThrows){
  if(after.errors.length)throw new Error('Signature conflict: '+after.errors[0].message);
  const canonical=type=>['String','Object'].includes(type)?'java.lang.'+type:type,mapping=new Map(semantic.family.map(method=>[method.key,method.owner+'#'+(method.constructor?'<init>':method.name)+'('+parameters.map(p=>p.originalIndex<0?canonical(p.type):method.parameters[p.originalIndex]?.type).join(',')+')']));
  if(new Set(mapping.values()).size!==mapping.size)throw new Error('Signature collision in the reviewed source family.');
  const expected=new Map(semantic.before.methods.map(method=>[mapping.get(method.key)||method.key,method]));if(expected.size!==semantic.before.methods.length||after.methods.length!==expected.size)throw new Error('Signature collision or unexpected declaration membership change.');
- for(const method of after.methods){const prior=expected.get(method.key);if(!prior||prior.uri!==method.uri||prior.returnType!==method.returnType||prior.varargs!==method.varargs||['throwsTypes','modifiers','annotations','typeParameters','ownerTypeParameters','ownerSupertypes'].some(key=>JSON.stringify(prior[key])!==JSON.stringify(method[key])))throw new Error('The engine changed an unreviewed declaration contract: '+method.key+' ('+(!prior?'unexpected binding':JSON.stringify({before:[prior.uri,prior.returnType,prior.throwsTypes,prior.modifiers],after:[method.uri,method.returnType,method.throwsTypes,method.modifiers]}))+').');
+ for(const method of after.methods){const prior=expected.get(method.key),changedThrows=checkedThrows&&prior&&semantic.keys.has(prior.key);
+  if(changedThrows&&JSON.stringify(method.checkedThrows)!==JSON.stringify(checkedThrows.after))throw Error("New throws types must resolve to the exact checked exception classes.");
+  const throwsTypes=changedThrows?checkedThrows.after:prior?.throwsTypes;
+  if(!prior||prior.uri!==method.uri||prior.returnType!==method.returnType||prior.varargs!==method.varargs||JSON.stringify(throwsTypes)!==JSON.stringify(method.throwsTypes)||['modifiers','annotations','typeParameters','ownerTypeParameters','ownerSupertypes'].some(key=>JSON.stringify(prior[key])!==JSON.stringify(method[key])))throw new Error('The engine changed an unreviewed declaration contract: '+method.key+' ('+(!prior?'unexpected binding':JSON.stringify({before:[prior.uri,prior.returnType,prior.throwsTypes,prior.modifiers],after:[method.uri,method.returnType,method.throwsTypes,method.modifiers]}))+').');
   if(semantic.keys.has(prior.key)){
    const names=parameters.map(p=>p.originalIndex<0?p.name:prior.parameters[p.originalIndex].name);
    if(JSON.stringify(method.parameters.map(p=>p.name))!==JSON.stringify(names))throw new Error('The engine changed the reviewed parameter order or names.');
@@ -161,25 +167,31 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
   for(const saved of documents.values()){const tokens=lexJava(saved.text).tokens;if(tokens.some(t=>(t.kind==='string'||t.kind==='text-block')&&typeof t.value==='string'&&t.value.includes(signature.methodName)))throw new Error('A known string or reflection reference needs a separate contract review.');}
   for(const [id,saved]of infos)if(Date.now()>saved.expiresAt)infos.delete(id);while(infos.size>=10)infos.delete(infos.keys().next().value);
   scope.validate();const id=crypto.randomUUID(),record={id,signature:structuredClone(signature),target,params,anchor,scope,semantic,documents:[...documents.values()],references:semantic?semantic.calls.length+semantic.methodReferences.length:references.length,expiresAt:Date.now()+120000};infos.set(id,record);
-  return {id,...structuredClone(signature),references:record.references,adaptableMethodReferences:semantic?.methodReferences.length||0,...(semantic?.varargs&&{varargs:structuredClone(semantic.varargs)}),familyDeclarations:semantic?.family.length||1,genericContractsVerified:!!semantic?.family.some(method=>method.generic),expiresAt:record.expiresAt,scope:semantic?'Compiler-resolved source families, exact direct callers and supported Java method reference adapters within this project.':'Plain non-polymorphic source declarations and resolved direct callers; framework, reflection, external binaries and advanced Java contracts are not verified.'};
+  const checkedThrows=checkedThrowsOption(semantic,target,signature);
+  return {id,...structuredClone(signature),...(checkedThrows&&{checkedThrows}),references:record.references,adaptableMethodReferences:semantic?.methodReferences.length||0,...(semantic?.varargs&&{varargs:structuredClone(semantic.varargs)}),familyDeclarations:semantic?.family.length||1,genericContractsVerified:!!semantic?.family.some(method=>method.generic),expiresAt:record.expiresAt,scope:semantic?'Compiler-resolved source families, exact direct callers and supported Java method reference adapters within this project.':'Plain non-polymorphic source declarations and resolved direct callers; framework, reflection, external binaries and advanced Java contracts are not verified.'};
  }
  async function preview(id,changes,{cancellation}={}){
   trusted(cancellation);const record=infos.get(id);if(!record||Date.now()>record.expiresAt)throw new Error('The signature inspection expired. Inspect it again.');fresh(record.documents,cancellation);record.scope.validate();record.semantic?.validate();
-  if(!changes||Object.keys(changes).some(k=>k!=='parameters')||!Array.isArray(changes.parameters)||changes.parameters.length>30)throw new Error('Change Signature currently accepts only an ordered parameters list.');
-  const parameters=[],indices=new Set(),names=new Set();
-  for(const input of changes.parameters){if(!input||Object.keys(input).some(k=>!['originalIndex','name','type','defaultValue'].includes(k))||!Number.isInteger(input.originalIndex)||input.originalIndex< -1||input.originalIndex>=record.signature.parameters.length||!identifier(input.name)||names.has(input.name)||typeof input.type!=='string'||input.originalIndex<0&&!SIMPLE_TYPES.has(input.type))throw new Error('Parameter indices, names or types are invalid or duplicated.');names.add(input.name);
-   if(input.originalIndex===-1){if(!scalar(input.defaultValue,input.type))throw new Error('New parameters require a compatible, side-effect-free literal default value.');if(record.target.bodyTokens.some(t=>t.kind==='id'&&t.text===input.name)||record.semantic?.family.some(method=>method.bodyIdentifiers.includes(input.name)||method.parameters.some(p=>p.name===input.name)))throw new Error('The new parameter name conflicts with an existing family method-body identifier.');parameters.push({originalIndex:-1,name:input.name,type:input.type,defaultValue:input.defaultValue});}
-   else{const original=record.signature.parameters[input.originalIndex];if(indices.has(input.originalIndex)||input.name!==original.name||input.type!==original.type)throw new Error('Existing parameter names and types must remain unchanged; only their order or removal is supported.');indices.add(input.originalIndex);parameters.push(structuredClone(original));}
+  if(!changes||Object.keys(changes).length!==1)throw Error('Review either an ordered parameters list or a checked throws list.');
+  const checkedThrows=Object.hasOwn(changes,'throws')?checkedThrowsChange(record,changes.throws):undefined;
+  const parameters=checkedThrows?structuredClone(record.signature.parameters):[];
+  if(!checkedThrows){
+   if(!Array.isArray(changes.parameters)||changes.parameters.length>30)throw Error('Review an ordered parameters list.');
+   const indices=new Set(),names=new Set();
+   for(const input of changes.parameters){if(!input||Object.keys(input).some(k=>!['originalIndex','name','type','defaultValue'].includes(k))||!Number.isInteger(input.originalIndex)||input.originalIndex< -1||input.originalIndex>=record.signature.parameters.length||!identifier(input.name)||names.has(input.name)||typeof input.type!=='string'||input.originalIndex<0&&!SIMPLE_TYPES.has(input.type))throw new Error('Parameter indices, names or types are invalid or duplicated.');names.add(input.name);
+    if(input.originalIndex===-1){if(!scalar(input.defaultValue,input.type))throw new Error('New parameters require a compatible, side-effect-free literal default value.');if(record.target.bodyTokens.some(t=>t.kind==='id'&&t.text===input.name)||record.semantic?.family.some(method=>method.bodyIdentifiers.includes(input.name)||method.parameters.some(p=>p.name===input.name)))throw new Error('The new parameter name conflicts with an existing family method-body identifier.');parameters.push({originalIndex:-1,name:input.name,type:input.type,defaultValue:input.defaultValue});}
+    else{const original=record.signature.parameters[input.originalIndex];if(indices.has(input.originalIndex)||input.name!==original.name||input.type!==original.type)throw new Error('Existing parameter names and types must remain unchanged; only their order or removal is supported.');indices.add(input.originalIndex);parameters.push(structuredClone(original));}
+   }
+   verifyVarargsPermutation(record.semantic?.varargs,parameters);
+   for(const original of record.signature.parameters)if(!indices.has(original.originalIndex)&&record.target.bodyTokens.some(t=>t.kind==='id'&&t.text===original.name))throw new Error('The removed parameter '+original.name+' is still used by the method body.');
+   if(record.semantic)for(const method of record.semantic.family)for(const [index,parameter]of method.parameters.entries())if(!indices.has(index)&&parameter.used)throw new Error('The removed parameter '+parameter.name+' is still used by a family method body.');
+   if(JSON.stringify(parameters)===JSON.stringify(record.signature.parameters))throw new Error('The signature has no parameter changes.');
   }
-  verifyVarargsPermutation(record.semantic?.varargs,parameters);
-  for(const original of record.signature.parameters)if(!indices.has(original.originalIndex)&&record.target.bodyTokens.some(t=>t.kind==='id'&&t.text===original.name))throw new Error('The removed parameter '+original.name+' is still used by the method body.');
-  if(record.semantic)for(const method of record.semantic.family)for(const [index,parameter]of method.parameters.entries())if(!indices.has(index)&&parameter.used)throw new Error('The removed parameter '+parameter.name+' is still used by a family method body.');
-  if(JSON.stringify(parameters)===JSON.stringify(record.signature.parameters))throw new Error('The signature has no parameter changes.');
   await declarationBarrier(record.anchor,record.target,record.documents,record.scope,cancellation);
   // In pinned JDT LS 1.63 this last flag only wraps edits in blanket confirmation
   // annotations. Rocketbrain performs its own complete diff and modal review.
   // It does not bypass the engine's initial/final refactoring checks.
-  const s=record.signature,response=await send('java/getRefactorEdit',{command:'changeSignature',context:record.params,commandArguments:[s.methodIdentifier,false,s.methodName,s.modifier,s.returnType,parameters,s.exceptions,false]},cancellation);fresh(record.documents,cancellation);
+  const s=record.signature,response=await send('java/getRefactorEdit',{command:'changeSignature',context:record.params,commandArguments:[s.methodIdentifier,false,s.methodName,s.modifier,s.returnType,parameters,checkedThrows?.exceptions||s.exceptions,false]},cancellation);fresh(record.documents,cancellation);
   if(!response||response.errorMessage||response.confirmationToken||response.command||!response.edit)throw new Error(response?.errorMessage||'The Java engine refused the change or requires an unsupported interaction.');
   const expectedTargets=new Set(record.documents.map(saved=>fileKey(local(saved.uri).fsPath))),anchorKey=fileKey(record.anchor.document.uri.fsPath),targets=Object.entries(response.edit.changes||{});let declarationEdited=false;
   for(const change of response.edit.documentChanges||[]){if(!change.textDocument||!Array.isArray(change.edits))throw new Error('Signature edits may only change the inspected declaration and direct source callers.');targets.push([change.textDocument.uri,change.edits]);}
@@ -188,6 +200,7 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
   let edit=response.edit,adapters=[];
   if(record.semantic){
    let sources=editedSources(record.scope.sources,targets);
+   if(checkedThrows)verifyCheckedThrowsEdits(record,targets,sources,checkedThrows,offset);
    if(record.semantic.methodReferences.length){
     if(targets.some(([,edits])=>edits.some(value=>value.annotationId)))throw Error('Annotated signature changes require separate review.');
     const adapted=adaptSignatureReferences(record.scope.sources,sources,record.semantic.methodReferences,parameters);
@@ -204,12 +217,42 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
     }
    }
    const after=await analyzeJavaSources({...record.semantic.compilerOptions,cancellation,sources});
-   fresh(record.documents,cancellation);record.scope.validate();record.semantic.validate();verifySemanticChange(record.semantic,after,parameters,adapters);
+   fresh(record.documents,cancellation);record.scope.validate();record.semantic.validate();verifySemanticChange(record.semantic,after,parameters,adapters,checkedThrows);
   }
-  const validate=()=>{fresh(record.documents,cancellation);record.scope.validate();record.semantic?.validate();},plan=await refactoring.previewWorkspaceEdit(edit,{title:'Change Signature · '+s.methodName,kind:'refactor.rewrite.changeSignature',anchorDocument:record.anchor.document,cancellation,guards:record.documents.map(({uri,version,hash,diskHash})=>({uri,version,hash,diskHash})),validate,preApply:validate});validate();infos.delete(id);return {...plan,signature:{methodName:s.methodName,before:structuredClone(s.parameters),after:parameters,resolvedReferences:record.references,adaptedMethodReferences:adapters.length,...(record.semantic?.varargs&&{varargs:{...record.semantic.varargs,verified:true}}),contractFiles:record.scope.files,familyDeclarations:record.semantic?.family.length||1,overloadBindingsVerified:!!record.semantic,genericContractsVerified:!!record.semantic?.family.some(method=>method.generic)},limitations:['Only the reviewed project source callers are covered.','Computed reflection and external binary callers require a separate review.']};
+  const validate=()=>{fresh(record.documents,cancellation);record.scope.validate();record.semantic?.validate();},plan=await refactoring.previewWorkspaceEdit(edit,{title:(checkedThrows?'Change Checked Exceptions':'Change Signature')+' · '+s.methodName,kind:'refactor.rewrite.changeSignature',anchorDocument:record.anchor.document,cancellation,guards:record.documents.map(({uri,version,hash,diskHash})=>({uri,version,hash,diskHash})),validate,preApply:validate});validate();infos.delete(id);return {...plan,signature:{methodName:s.methodName,before:structuredClone(s.parameters),after:parameters,...(checkedThrows&&{checkedThrows:{before:checkedThrows.before,after:checkedThrows.after,verified:true}}),resolvedReferences:record.references,adaptedMethodReferences:adapters.length,...(record.semantic?.varargs&&{varargs:{...record.semantic.varargs,verified:true}}),contractFiles:record.scope.files,familyDeclarations:record.semantic?.family.length||1,overloadBindingsVerified:!!record.semantic,genericContractsVerified:!!record.semantic?.family.some(method=>method.generic)},limitations:['Only the reviewed project source callers are covered.','Computed reflection and external binary callers require a separate review.']};
  }
  function tracked(fn){return(...args)=>{const operation=fn(...args);operations.add(operation);void operation.finally(()=>operations.delete(operation)).catch(()=>{});return operation;};}
- const command=vscode.commands.registerCommand('rocketbrain.java.changeSignature',async()=>{try{const editor=vscode.window.activeTextEditor;if(!editor)throw new Error('Select a Java method declaration.');const discovered=await api.info(editor.document,editor.selection),value=await vscode.window.showInputBox({title:'Change Signature · '+discovered.methodName,prompt:discovered.varargs?'Reorder the fixed parameters and keep the final varargs parameter last.':'Edit parameter order; remove unused parameters; add {originalIndex:-1,type,name,defaultValue} using a literal default.',value:JSON.stringify({parameters:discovered.parameters}),ignoreFocusOut:true});if(value===undefined)return;let changes;try{changes=JSON.parse(value);}catch{throw new Error('Enter a valid JSON parameters list.');}const plan=await api.preview(discovered.id,changes);return await refactoring.review(plan);}catch(error){if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);}});
+ const command=vscode.commands.registerCommand('rocketbrain.java.changeSignature',async()=>{
+  try {
+   const editor=vscode.window.activeTextEditor;
+   if(!editor)throw Error('Select a Java method declaration.');
+   const discovered=await api.info(editor.document,editor.selection);
+   let change='parameters';
+   if(discovered.checkedThrows){
+    const selected=await vscode.window.showQuickPick([
+     {label:'Change Parameters',change:'parameters'},
+     {label:'Change Checked Exceptions',change:'throws'}
+    ],{placeHolder:'Choose which part of the Java signature to change'});
+    if(!selected)return;
+    change=selected.change;
+   }
+   const checked=change==='throws';
+   const prompt=checked?'List fully qualified checked exception types. Existing callers must compile with the change.':
+    discovered.varargs?'Reorder the fixed parameters and keep the final varargs parameter last.':
+     'Edit parameter order; remove unused parameters; add {originalIndex:-1,type,name,defaultValue} using a literal default.';
+   const value=await vscode.window.showInputBox({
+    title:(checked?'Change Checked Exceptions':'Change Signature')+' · '+discovered.methodName,prompt,
+    value:JSON.stringify({[change]:checked?discovered.checkedThrows.before:discovered.parameters}),ignoreFocusOut:true
+   });
+   if(value===undefined)return;
+   let changes;
+   try{changes=JSON.parse(value);}catch{throw Error('Enter a valid JSON signature change.');}
+   if(!changes||!Object.hasOwn(changes,change))throw Error('Use the selected signature change.');
+   return await refactoring.review(await api.preview(discovered.id,changes));
+  } catch(error) {
+   if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);
+  }
+ });
  const api={info:tracked(info),preview:tracked(preview),async dispose(){closed=true;infos.clear();command.dispose();await Promise.allSettled([...operations]);}};return api;
 }
 module.exports={registerJavaChangeSignature,selectedMethod,callArguments,scalar,inspectSemanticFamily,verifySemanticChange,editedSources};
