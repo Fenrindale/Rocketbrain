@@ -4,8 +4,8 @@ const { createTomcatManager, managerOrigin, managerContext } = require('./jakart
 const { fail } = require('./workbench-model');
 const artifactActions = new Set(['deploy', 'update', 'track-deploy', 'track-update']);
 
-function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, listWarArtifacts, resolveArtifact, output, storageUri }) {
-  const manager = createTomcatManager({ storagePath: storageUri?.scheme === 'file' ? storageUri.fsPath : undefined });
+function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, listWarArtifacts, resolveArtifact, output, storagePath }) {
+  const manager = createTomcatManager({ storagePath });
   const observe = options => { trusted(options?.cancellation); return manager.observe(options); };
   async function review(options = {}) {
     trusted(options.cancellation);

@@ -273,6 +273,7 @@ async function exercise(api, modules, server, profile) {
   assert.equal(unconfirmed.state, 'unconfirmed');
   await assert.rejects(exec(unsafeChange), /Review the current/u);
   const uncertainPlan = await review('track-deploy', '/rb-interrupted', { projectUri: firstInput.projectUri, warUri: uri(invalid) });
+  assert.equal(uncertainPlan.historyScope, 'profile');
   assert.equal((await exec(uncertainPlan)).state, 'unconfirmed');
   await assert.rejects(review('track-deploy', '/rb-interrupted', firstInput), /interrupted or is still in progress/u);
   await expectApp(server, '/rb-peer', 'peer');
