@@ -1,6 +1,5 @@
 'use strict';
 
-const { win32 } = require('node:path');
 const { createManagedJavaAttach } = require('../devcontainer/java-attach');
 const { createWslJavaDebug } = require('./wsl-java-debug');
 const { sameWslPath, wslUnc } = require('./wsl-paths');
@@ -31,11 +30,16 @@ function registerWslJavaDebug(vscode, workbench, getJava) {
     }
   });
   const adapter = createManagedJavaAttach({
-    kind: 'wsl', debug: vscode.debug,
+    kind: 'wsl', debug: vscode.debug, launchTimeout: 45000,
     async ready() {
       trusted();
-      const state = await getJava().start();
+      const java = getJava();
+      const state = await java.start();
       if (state?.state !== 'running' || !state.debugBundlePath) throw Error('Start the independent local Java engine and debug adapter.');
+      const cancellation = new vscode.CancellationTokenSource();
+      const wait = setTimeout(() => cancellation.cancel(), 25000);
+      try { await java.requestWorkspaceCommand('java.project.getAll', [], cancellation.token); }
+      finally { clearTimeout(wait); cancellation.dispose(); }
     },
     async openForward(root, confirmation) {
       const forward = await service.open(root, confirmation);
@@ -52,11 +56,16 @@ function registerWslJavaDebug(vscode, workbench, getJava) {
       const edit = vscode.workspace.onDidChangeTextDocument(({ document, contentChanges }) => {
         if (contentChanges.length && sameFile(document.uri, forward.sourceFile)) stop();
       });
-      const selectedDir = vscode.Uri.file(win32.dirname(forward.sourceFile));
-      const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(selectedDir, '*.java'));
-      const diskEdit = uri => { if (sameFile(uri, forward.sourceFile)) stop(); };
-      const subscriptions = [close, edit, watcher, watcher.onDidChange(diskEdit), watcher.onDidCreate(diskEdit), watcher.onDidDelete(diskEdit)];
-      return { dispose() { for (const subscription of subscriptions) subscription.dispose(); } };
+      let checking = false;
+      const poll = setInterval(async () => {
+        if (checking) return;
+        checking = true;
+        try { await forward.checkSource(); }
+        catch { stop(); }
+        finally { checking = false; }
+      }, 1500);
+      poll.unref();
+      return { dispose() { clearInterval(poll); close.dispose(); edit.dispose(); } };
     }
   });
 

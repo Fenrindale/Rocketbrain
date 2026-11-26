@@ -110,7 +110,14 @@ try {
         $env:ROCKETBRAIN_VSCODE = $editor | Select-Object -Last 1
         if (-not (Test-Path -LiteralPath $env:ROCKETBRAIN_VSCODE -PathType Leaf)) { throw 'The selected VS Code test runtime is absent.' }
         & node (Join-Path $repo 'scripts/test-vsix.js') $vsix
-        if ($LASTEXITCODE -ne 0) { throw 'The packaged native WSL workbench check failed.' }
+        if ($LASTEXITCODE -ne 0) {
+            if ($VerifyJavaDebug) {
+                Get-ChildItem -LiteralPath (Join-Path $repo '.vscode-test/core-user') -Filter '.log' -Recurse -File -Force |
+                    Where-Object { $_.Directory.Name -ceq '.metadata' } |
+                    Select-Object -First 3 | ForEach-Object { Get-Content -LiteralPath $_.FullName -Tail 50 }
+            }
+            throw 'The packaged native WSL workbench check failed.'
+        }
         if (-not (Test-Path -LiteralPath $env:ROCKETBRAIN_TEST_OUTPUT -PathType Leaf)) { throw 'The native WSL workbench did not emit verification.' }
         $proof['native'] = Get-Content -LiteralPath $env:ROCKETBRAIN_TEST_OUTPUT -Raw | ConvertFrom-Json
     }

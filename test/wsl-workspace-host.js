@@ -49,7 +49,13 @@ async function verifyWslDebugger(debug, vscode, folder, source, document) {
   const sessions = new Map();
   const tracker = vscode.debug.registerDebugAdapterTrackerFactory('rocketbrain-java', { createDebugAdapterTracker(session) {
     sessions.set(session.id, session);
-    return { onDidSendMessage(message) { if (message.type === 'event') events.push({ session, message }); } };
+    console.log('WSL debugger created its session.');
+    return { onDidSendMessage(message) {
+      if (message.type === 'event') events.push({ session, message });
+      if (message.type === 'response' && ['initialize', 'attach'].includes(message.command)) {
+        console.log('WSL debugger', message.command, 'success:', message.success, message.message || '');
+      }
+    } };
   } });
   vscode.debug.addBreakpoints([breakpoint]);
   try {

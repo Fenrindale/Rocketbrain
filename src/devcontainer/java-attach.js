@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const { sameWslPath, wslUnc } = require('../remote/wsl-paths');
 
 const debugType = 'rocketbrain-java';
 const containerMarker = '__rocketbrainManagedContainerAttach';
@@ -16,6 +17,8 @@ const routes = {
     name: 'Rocketbrain: Debug WSL Java', review: 'its reviewed WSL Java launch' }
 };
 const permits = new Map();
+const sameTarget = (route, one, other) => route === routes.wsl
+  ? Boolean(sameWslPath(wslUnc(one), wslUnc(other))) : !path.relative(one, other);
 
 function assertManagedAttach(configuration, folder) {
   if (!configuration) return;
@@ -28,8 +31,8 @@ function assertManagedAttach(configuration, folder) {
       configuration.hostName !== record.forward.host || configuration.port !== record.forward.localPort ||
       !Array.isArray(configuration.sourcePaths) || configuration.sourcePaths.length !== 1 ||
       typeof configuration.sourcePaths[0] !== 'string' ||
-      path.relative(record.forward.sourceRoot, configuration.sourcePaths[0]) ||
-      folder?.uri.scheme !== 'file' || path.relative(record.folder.uri.fsPath, folder.uri.fsPath)) {
+      !sameTarget(route, record.forward.sourceRoot, configuration.sourcePaths[0]) ||
+      folder?.uri.scheme !== 'file' || !sameTarget(route, record.folder.uri.fsPath, folder.uri.fsPath)) {
     throw Error('Open a current reviewed Java attach from ' + route.review + '.');
   }
 }
@@ -70,7 +73,7 @@ function createManagedJavaAttach({ debug, openForward, closeForward, ready, kind
   function ownsSession(record, session) {
     const cfg = session.configuration;
     return session.type === debugType && session.workspaceFolder?.uri.scheme === 'file' &&
-      !path.relative(record.folder.uri.fsPath, session.workspaceFolder.uri.fsPath) && cfg?.request === 'attach' &&
+      sameTarget(route, record.folder.uri.fsPath, session.workspaceFolder.uri.fsPath) && cfg?.request === 'attach' &&
       cfg[attachMarker] === record.marker && cfg.hostName === record.forward.host && cfg.port === record.forward.localPort;
   }
 
@@ -90,7 +93,7 @@ function createManagedJavaAttach({ debug, openForward, closeForward, ready, kind
       if (disposed || approval?.[route.approval] !== true || typeof approval.token !== 'string') {
         throw Error('Review and approve the managed JVM attach first.');
       }
-      if (folder?.uri.scheme !== 'file' || path.relative(folder.uri.fsPath, root)) {
+      if (folder?.uri.scheme !== 'file' || !sameTarget(route, folder.uri.fsPath, root)) {
         throw Error('Choose the exact mounted local Java workspace.');
       }
       await ready();
