@@ -26,6 +26,25 @@ const composeLabel = 'com.docker.compose.project';
 const approved = plan => ({ file: plan.file, fingerprint: plan.fingerprint, allowProjectExecution: true });
 const response = value => ({ code: 0, stdout: typeof value === 'string' ? value : JSON.stringify(value), stderr: '' });
 
+function runWithFixtureTrace(executable, args, { cwd, env, timeout }) {
+  const specStart = args[1] === 'up';
+  const argv = specStart ? [...args, '--log-level', 'debug'] : args;
+  return new Promise((resolve, reject) => {
+    const child = execFile(executable, argv, { cwd, env, timeout, maxBuffer: 4 * 1024 * 1024,
+      windowsHide: true, encoding: 'utf8' }, (error, stdout, stderr) => {
+      if (error && typeof error.code !== 'number') return reject(Error('The owned Docker fixture process did not complete.'));
+      if (error && specStart) {
+        const text = [stdout, stderr].join('\n').replace(/fixture-secret-[0-9a-f-]+/giu, '[fixture value]');
+        const diagnostics = text.split(/\r?\n/u).filter(line => /error|failed|denied|not found/iu.test(line)).slice(-14);
+        console.error(diagnostics.map(line => line.slice(0, 1000)).join('\n'));
+      }
+      resolve({ code: error?.code || 0, stdout, stderr });
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end();
+  });
+}
+
 async function tempFixture(context, name) {
   const parent = await fs.realpath(os.tmpdir());
   const owned = await fs.mkdtemp(path.join(parent, 'rb-devcontainer-'));
@@ -431,7 +450,8 @@ test('actual local Docker starts image, Dockerfile and Compose Dev Containers an
   const {root}=await tempFixture(context,'compose');
   const sessions=new Map();
   const service=createDevContainers({trusted:()=>true,settings:()=>({nodePath:process.execPath,cliPath,dockerPath}),
-    readSession:key=>sessions.get(key),writeSession:(key,value)=>value?sessions.set(key,value):sessions.delete(key)});
+    readSession:key=>sessions.get(key),writeSession:(key,value)=>value?sessions.set(key,value):sessions.delete(key),
+    run:runWithFixtureTrace});
   const docker=async args=>(await executeFile(dockerPath||'docker',args,{cwd:root,windowsHide:true,timeout:60000,maxBuffer:1024*1024})).stdout.trim();
   const marker=randomUUID();
   const unrelatedLabel='rocketbrain.devcontainer.fixture-isolation='+marker;
