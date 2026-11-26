@@ -139,7 +139,12 @@ async function runReactPropsChecks(api,vscode,checks) {
           const invalid=await vscode.commands.executeCommand('rocketbrain.react.checkProps');
           assert.equal(invalid.diagnostics[0]?.code,2322);
           assert.equal((await fs.readFile(file,'utf8')),application);
-        } finally { assert.equal(await editor.edit(edit=>edit.replace(range(7),'{3}')),true); }
+        } finally {
+          assert.equal(await editor.edit(edit=>edit.replace(range(7),'{3}')),true);
+          assert.equal(document.getText(),application);
+          assert.equal(await document.save(),true);
+          assert.equal(document.isDirty,false);
+        }
         checks.push('The installed React provider showed the exact number prop and directed the JSX call to its compiled TypeScript prop declaration.');
         return {types:result.types,typedCompletion:true,exactCrossFileDeclaration:true,unsavedTypeDiagnostic:true,
           realReactRender:await renderActualReact(root,descriptor),jdbc:await jdbcReadback()};

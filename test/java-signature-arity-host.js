@@ -42,6 +42,9 @@ async function runJavaSignatureArityChecks(api, vscode, checks) {
       return model?.projectRoot && path.relative(root, vscode.Uri.parse(model.projectRoot).fsPath) === '' &&
         model.classpaths.some(file => file.endsWith('spring-jdbc-7.0.10.jar')) ? model.projectRoot : undefined;
     }, 100000);
+    // Wait for JDT's class output to settle before the compiler snapshots it.
+    const build = () => api.java.buildWorkspace();
+    await build();
     const signature = api.java.changeSignature;
     const inspect = value => {
       const { start, end } = selection(declaration.getText(), value);
@@ -64,6 +67,7 @@ async function runJavaSignatureArityChecks(api, vscode, checks) {
     await vscode.commands.executeCommand('redo');
     assert.equal(declaration.getText(), plan.documents[0].after);
     assert.equal(await declaration.save(), true);
+    await build();
     const primitive = await inspect('sum(int');
     const primitivePlan = await signature.preview(primitive.id, { arity: 'array' });
     assertArityPlan(primitive, primitivePlan, primitiveFacts);
