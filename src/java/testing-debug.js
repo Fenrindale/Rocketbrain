@@ -2,6 +2,8 @@
 
 const net=require('node:net'),path=require('node:path'),crypto=require('node:crypto');
 const {execFile}=require('node:child_process');
+const { setTimeout: delay } = require('node:timers/promises');
+const { readLinuxListeners } = require('./linux-debug-listeners');
 
 const DEBUG_TYPE='rocketbrain-java';
 const MARKER='__rocketbrainTestDebugId';
@@ -18,12 +20,34 @@ async function allocatePort(){
   return new Promise((resolve,reject)=>{const server=net.createServer();server.once('error',reject);server.listen(0,'127.0.0.1',()=>{const port=server.address().port;server.close(error=>error?reject(error):resolve(port));});});
 }
 
+async function waitForLinuxListener(pid, port, cancellation, timeoutMs) {
+  const controller = new AbortController();
+  const subscription = linkCancellation(cancellation, controller);
+  const { signal } = controller;
+  const deadline = Date.now() + timeoutMs;
+  try {
+    while (Date.now() < deadline && !signal.aborted) {
+      const listener = (await readLinuxListeners({ signal, port })).get(port);
+      if (listener?.pid === pid) return { pid, port, address: '127.0.0.1', verified: true, method: 'Linux iproute2 ss' };
+      if (listener) throw new TestDebugError('FOREIGN_LISTENER', 'The debug port does not belong exclusively to the managed JVM.');
+      await delay(100, undefined, { signal });
+    }
+    throw new TestDebugError('TARGET_NOT_READY', 'The managed JVM did not expose a verifiable loopback debug listener.');
+  } catch (error) {
+    if (signal.aborted) throw new TestDebugError('CANCELLED', 'Test debugging was cancelled.');
+    throw error;
+  } finally {
+    subscription?.dispose();
+  }
+}
+
 /** Read-only OS ownership check; never opens a JDWP connection or trusts application output. */
 function waitForOwnedListener({pid,port,cancellation,timeoutMs=15000}={}){
   if(!Number.isInteger(pid)||pid<1||!Number.isInteger(port)||port<1||port>65535)throw new TestDebugError('INVALID_TARGET','A managed JVM PID and loopback port are required.');
-  if(process.platform!=='win32')throw new TestDebugError('OWNERSHIP_UNSUPPORTED','Managed test debugging currently verifies listener ownership on Windows. This platform is not yet verified.');
+  if(!['win32','linux'].includes(process.platform))throw new TestDebugError('OWNERSHIP_UNSUPPORTED','Managed test debugging verifies listener ownership on Windows and Linux.');
   if(!Number.isInteger(timeoutMs)||timeoutMs<250||timeoutMs>30000)throw new TestDebugError('INVALID_TIMEOUT','Invalid debug ownership timeout.');
   if(cancelled(cancellation))return Promise.reject(new TestDebugError('CANCELLED','Test debugging was cancelled.'));
+  if (process.platform === 'linux') return waitForLinuxListener(pid, port, cancellation, timeoutMs);
   // Every substituted value is a validated integer. No project text, paths or credentials enter this command.
   const script="$ErrorActionPreference='Stop';$targetDeadline=[DateTime]::UtcNow.AddMilliseconds("+timeoutMs+");while([DateTime]::UtcNow -lt $targetDeadline){$targetRows=@(Get-NetTCPConnection -LocalPort "+port+" -State Listen -ErrorAction SilentlyContinue);if($targetRows.Count -gt 0){$ownedRows=@($targetRows|Where-Object {$_.OwningProcess -eq "+pid+" -and $_.LocalAddress -eq '127.0.0.1'});if($ownedRows.Count -eq 1 -and $targetRows.Count -eq 1){[Console]::Out.Write('OWNED');exit 0};[Console]::Out.Write('FOREIGN');exit 3};if(-not(Get-Process -Id "+pid+" -ErrorAction SilentlyContinue)){[Console]::Out.Write('EXITED');exit 4};Start-Sleep -Milliseconds 100};[Console]::Out.Write('TIMEOUT');exit 5";
   return new Promise((resolve,reject)=>{
