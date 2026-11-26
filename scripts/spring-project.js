@@ -61,7 +61,7 @@ async function buildSpringProject() {
       const base = 'https://repo.maven.apache.org/maven2/' + item.group.replaceAll('.', '/') + '/' + item.name + '/' + item.version + '/' + item.name + '-' + item.version;
       dependencies.push({ ...item, url: base + '.jar', pomUrl: base + '.pom', sourceUrl: base + '-sources.jar', sha256: await hash(item.file) });
     }
-    const checked = new Set(['spring-boot', 'spring-core', 'hibernate-core', 'spring-data-jpa', 'mysql-connector-j', 'mariadb-java-client', 'spring-webflux', 'spring-cloud-openfeign-core', 'reactor-netty-http']);
+    const checked = new Set(['spring-boot', 'spring-core', 'hibernate-core', 'spring-data-jpa', 'mysql-connector-j', 'mariadb-java-client', 'spring-webflux', 'spring-cloud-openfeign-core', 'reactor-netty-http', 'reactor-core']);
     for (const item of dependencies.filter(item => checked.has(item.name))) {
       const pomResponse = await fetch(item.pomUrl, { signal: AbortSignal.timeout(15000) });
       if (!pomResponse.ok) throw new Error('Cannot inspect the official dependency POM license: ' + item.name);

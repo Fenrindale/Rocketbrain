@@ -23,7 +23,7 @@ function registerJavaAsyncTrace(context, vscode, debuggerController) {
     ensureTrusted: trusted
   });
 
-  async function copyHelper(uri) {
+  async function copySource(uri, name) {
     trusted();
     const roots = workspaceRoots(vscode.workspace.workspaceFolders || []);
     let folder = workspacePath(local(uri), roots);
@@ -35,16 +35,29 @@ function registerJavaAsyncTrace(context, vscode, debuggerController) {
         throw Error('Place the trace helper in a physical Java source directory.');
       }
     }
-    const destination = path.join(folder, 'TaskTrace.java');
-    const packaged = context.asAbsolutePath('dist/java-async/TaskTrace.java');
+    if (name === 'ReactorTaskTrace.java') {
+      const core = path.join(folder, 'TaskTrace.java');
+      const installed = await fs.lstat(core).catch(error => { if (error.code !== 'ENOENT') throw error; });
+      if (!installed?.isFile() || installed.isSymbolicLink()) {
+        throw Error('Copy the current Java Async Trace Helper to this source root first.');
+      }
+      const current = await fs.readFile(context.asAbsolutePath('dist/java-async/TaskTrace.java'));
+      if (installed.size !== current.length || !current.equals(await fs.readFile(core))) {
+        throw Error('Update TaskTrace.java to the current Java Async Trace Helper before adding its Reactor companion.');
+      }
+    }
+    const destination = path.join(folder, name);
+    const packaged = context.asAbsolutePath('dist/java-async/' + name);
     try { await fs.copyFile(packaged, destination, constants.COPYFILE_EXCL); }
     catch (error) {
-      if (error.code === 'EEXIST') throw Error('TaskTrace.java already exists in this source folder.');
+      if (error.code === 'EEXIST') throw Error(name + ' already exists in this source folder.');
       throw error;
     }
     return vscode.Uri.file(destination);
   }
 
+  const copyHelper = uri => copySource(uri, 'TaskTrace.java');
+  const copyReactorHelper = uri => copySource(uri, 'ReactorTaskTrace.java');
   function inspect(uri, session) { return inspector.inspect(local(uri), session); }
   function source(frame) { trusted(); return openJavaFrame(vscode, frame); }
 
@@ -62,17 +75,19 @@ function registerJavaAsyncTrace(context, vscode, debuggerController) {
     }));
   }
 
-  command('rocketbrain.java.copyAsyncTraceHelper', async () => {
+  async function chooseHelper(copy) {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri;
     const [directory] = await vscode.window.showOpenDialog({ title: 'Choose the Java Source Root',
       canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
       defaultUri: root?.scheme === 'file' ? vscode.Uri.joinPath(root, 'src', 'main', 'java') : undefined
     }) || [];
     if (!directory) return undefined;
-    const uri = await copyHelper(directory);
+    const uri = await copy(directory);
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri), { preview: true });
     return uri;
-  });
+  }
+  command('rocketbrain.java.copyAsyncTraceHelper', () => chooseHelper(copyHelper));
+  command('rocketbrain.java.copyReactorAsyncTraceHelper', () => chooseHelper(copyReactorHelper));
 
   command('rocketbrain.java.showAsyncTaskStack', async () => {
     const session = vscode.debug.activeDebugSession;
@@ -85,7 +100,9 @@ function registerJavaAsyncTrace(context, vscode, debuggerController) {
     if (!file) return undefined;
     const report = await inspect(file, session);
     const items = report.chain.flatMap(task => [{
-      label: task.label + ' (#' + task.id + ')' + (task.handoff === 'virtual-thread' ? ' · virtual thread launch' : ''),
+      label: task.label + ' (#' + task.id + ')' + ({
+        'virtual-thread': ' · virtual thread launch', 'reactor-scheduler': ' · Reactor scheduler'
+      }[task.handoff] || ''),
       kind: vscode.QuickPickItemKind.Separator
     }, ...task.submissionFrames.map(frame => ({
       label: labels(frame),
@@ -103,7 +120,7 @@ function registerJavaAsyncTrace(context, vscode, debuggerController) {
     return report;
   });
 
-  return { copyHelper, inspect, openFrame: source, dispose() {
+  return { copyHelper, copyReactorHelper, inspect, openFrame: source, dispose() {
     if (disposed) return;
     disposed = true;
     for (const subscription of subscriptions) subscription.dispose();

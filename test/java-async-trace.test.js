@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
+const { once } = require('node:events');
 const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
@@ -12,9 +14,11 @@ const { argumentString, launchCommandMode } = require('../src/java/debug-runtime
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { DapClient } = require('./java-debug-dap');
+const { waitForOwnedListener } = require('../src/java/testing-debug');
 const { asyncTraceFixture, assertAsyncChain } = require('./helpers/java-async-trace-fixture');
 const { virtualTraceFixture, checkVirtualChain, writeRejectedTraces, verifyVirtualCompletion, jdbcOptions } =
   require('./helpers/virtual-async-trace-fixture');
+const { reactorTraceFixture, checkReactorChain, verifyReactorCompletion } = require('./helpers/reactor-async-trace-fixture');
 
 const configPath = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
 const traceSource = path.join(__dirname, '../runtime/java-async/src/rocketbrain/async/TaskTrace.java');
@@ -27,7 +31,7 @@ const virtualDatabases = ['mysql', 'mariadb'].map(engine =>
   [engine, process.env['ROCKETBRAIN_JAVA_ASYNC_VIRTUAL_' + engine.toUpperCase() + '_CONFIG']]);
 const virtualClasspath = process.env.ROCKETBRAIN_JAVA_ASYNC_VIRTUAL_CLASSPATH;
 
-async function launchAsyncFixture(lsp, uri, project, source, fixture, trace, markers, env, longClasspath = false) {
+async function launchAsyncFixture(lsp, uri, project, source, fixture, trace, markers, env, longClasspath = false, attach) {
   const command = (name, ...args) => lsp.request('workspace/executeCommand', { command: name, arguments: args });
   const main = await until(async () => (await command('vscode.java.resolveMainClass', uri))
     ?.find(item => item.mainClass === fixture.mainClass), 65000);
@@ -49,7 +53,9 @@ async function launchAsyncFixture(lsp, uri, project, source, fixture, trace, mar
       cmd.shortenCommandLine = launchCommandMode(cmd);
       assert.equal(cmd.shortenCommandLine, 'argfile');
     }
-    const started = dap.request('launch', cmd);
+    const target = attach && await attach({ javaExec, classPaths, modulePaths });
+    const started = target ? dap.request('attach', { ...target, projectName: main.projectName,
+      sourcePaths: [path.join(project, 'src/main/java')] }) : dap.request('launch', cmd);
     started.catch(() => {});
     await dap.event('initialized', 0, 15000);
     const { breakpoints } = await dap.request('setBreakpoints', { source: { name: path.basename(source), path: source },
@@ -297,6 +303,140 @@ test('a paused virtual Java thread identifies both traced launches and its Compl
   }
   if (process.env.ROCKETBRAIN_JAVA_ASYNC_VIRTUAL_RECEIPT) {
     await fs.writeFile(process.env.ROCKETBRAIN_JAVA_ASYNC_VIRTUAL_RECEIPT,
+      JSON.stringify({ reports }, null, 2) + '\n', { flag: 'wx' });
+  }
+});
+
+test('Reactor scheduler traces retain bounded typed provenance and reject an unknown handoff', () => {
+  const timestamp = { ...submission, handoff: 'reactor-scheduler', thread: { ...submission.thread, virtual: false } };
+  const stopped = { ...active, thread: { ...active.thread, virtual: false } };
+  assert.equal(parseAsyncTrace(encode([root, timestamp, stopped])).tasks.get(1).handoff, 'reactor-scheduler');
+  assert.throws(() => parseAsyncTrace(encode([root, { ...timestamp, handoff: 'arbitrary-scheduler' }])), /invalid record/);
+  assert.throws(() => parseAsyncTrace(encode([root, timestamp, active])), /invalid record/);
+});
+
+const reactorDatabases = ['mysql', 'mariadb'].map(engine =>
+  [engine, process.env['ROCKETBRAIN_JAVA_ASYNC_REACTOR_' + engine.toUpperCase() + '_CONFIG']]);
+const reactorClasspath = process.env.ROCKETBRAIN_JAVA_ASYNC_REACTOR_CLASSPATH;
+
+test('Reactor demonstrates actual delayed Spring JDBC submission origins in local Java launch and attach', {
+  skip: !(configPath && reactorClasspath && reactorDatabases.every(([, file]) => file)) &&
+    'Configure the independent Java debugger and owned Spring JDBC pair.',
+  timeout: 330000
+}, async context => {
+  const runtime = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  const settings = runtime.settings || runtime;
+  const javaHome = runtime.javaHome || settings['rocketbrain.java.javaHome'];
+  const serverPath = runtime.serverPath || settings['rocketbrain.java.serverPath'];
+  const debugBundlePath = runtime.debugBundlePath || settings['rocketbrain.java.debugBundlePath'];
+  const parent = await fs.realpath(os.tmpdir());
+  const owned = await fs.mkdtemp(path.join(parent, 'rb-reactor-async-'));
+  context.after(async () => {
+    const physical = await fs.realpath(owned);
+    assert.equal(path.relative(physical, owned), '');
+    assert.equal(path.relative(path.dirname(physical), parent), '');
+    assert.match(path.basename(physical), /^rb-reactor-async-/u);
+    await fs.rm(physical, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+  });
+  const project = path.join(owned, 'project');
+  const source = path.join(project, 'src/main/java/dev/rocketbrain/reactorfixture/ReactorAsyncFixture.java');
+  const helper = path.join(project, 'src/main/java/rocketbrain/async/TaskTrace.java');
+  const companion = path.join(path.dirname(helper), 'ReactorTaskTrace.java');
+  const fixture = reactorTraceFixture('dev.rocketbrain.reactorfixture', 'ReactorAsyncFixture');
+  for (const file of [source, helper]) await fs.mkdir(path.dirname(file), { recursive: true });
+  const template = await fs.readFile(path.join(__dirname, 'fixtures/java/debugger/pom.xml'), 'utf8');
+  const dependencies = [
+    ['org.springframework', 'spring-jdbc', '7.0.10'], ['org.springframework', 'spring-context', '7.0.10'],
+    ['io.projectreactor', 'reactor-core', '3.8.8'], ['com.mysql', 'mysql-connector-j', '9.7.0'],
+    ['org.mariadb.jdbc', 'mariadb-java-client', '3.5.10']
+  ].map(([group, artifact, version]) => '<dependency><groupId>' + group + '</groupId><artifactId>' +
+    artifact + '</artifactId><version>' + version + '</version></dependency>').join('');
+  await Promise.all([
+    fs.writeFile(source, fixture.source, { flag: 'wx' }),
+    fs.copyFile(traceSource, helper),
+    fs.copyFile(path.join(path.dirname(traceSource), 'ReactorTaskTrace.java'), companion),
+    fs.writeFile(path.join(project, 'pom.xml'),
+      template.replace('advanced-debug', 'reactor-async-debug').replace('</project>', '<dependencies>' + dependencies + '</dependencies></project>'),
+      { flag: 'wx' })
+  ]);
+  const uri = pathToFileURL(project).href;
+  const javaSettings = serverSettings([{ name: 'JavaSE-25', path: javaHome, default: true }]);
+  const lsp = new StdioLsp(resolveLaunch({ javaHome, serverPath, debugBundlePath, storagePath: path.join(owned, 'jdt') }));
+  const reports = [];
+  try {
+    await lsp.request('initialize', {
+      processId: process.pid, rootUri: uri, workspaceFolders: [{ uri, name: 'reactor-async' }],
+      capabilities: { workspace: { configuration: true } },
+      initializationOptions: { bundles: [debugBundlePath], workspaceFolders: [uri], settings: javaSettings }
+    }, 75000);
+    lsp.notify('initialized', {});
+    lsp.notify('workspace/didChangeConfiguration', { settings: javaSettings });
+    for (const [engine, configFile] of reactorDatabases) {
+      const { env } = await jdbcOptions({ engine, configFile, classpathFile: reactorClasspath });
+      for (const mode of ['launch', 'attach']) {
+        const files = ['live', 'other-id', 'other-worker', 'stripped-worker'].map(name => path.join(owned, engine + '-' + mode + '-' + name + '.jsonl'));
+        const [trace, wrongId, wrongWorker, strippedWorker] = files;
+        let dap, child, exited, childOutput = '';
+        const attach = mode === 'attach' && (async ({ javaExec, classPaths, modulePaths }) => {
+          assert.deepEqual(modulePaths, []);
+          assert.ok(classPaths.some(file => path.basename(file) === 'reactor-core-3.8.8.jar'));
+          child = spawn(javaExec, ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:0',
+            '-classpath', classPaths.join(path.delimiter), fixture.mainClass, trace],
+          { cwd: project, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+          exited = once(child, 'close');
+          void exited.catch(() => {});
+          for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => { childOutput = (childOutput + chunk).slice(-32768); });
+          const port = await until(() => Number(/Listening for transport dt_socket at address:\s*(\d+)/u.exec(childOutput)?.[1]), 15000);
+          const owner = await waitForOwnedListener({ pid: child.pid, port });
+          assert.deepEqual([owner.verified, owner.pid, owner.port], [true, child.pid, port]);
+          return { hostName: '127.0.0.1', port };
+        });
+        try {
+          const markers = ['PERIODIC_STOP', 'REACTOR_STOP'];
+          dap = await launchAsyncFixture(lsp, uri, project, source, fixture, trace, markers, env, false, attach);
+          const first = await dap.event('stopped', 0, 22000);
+          const state = { state: 'stopped', threadId: first.threadId, stopVersion: 1 };
+          const session = { id: engine + '-' + mode, type: 'rocketbrain-java', customRequest: (...args) => dap.request(...args) };
+          const inspector = createAsyncInspection({ activeSession: () => session, getState: () => state, ensureTrusted() {} });
+          const top = async threadId => (await session.customRequest('stackTrace', { threadId, startFrame: 0, levels: 1 })).stackFrames[0];
+          assert.equal((await top(first.threadId)).line, fixture.line(markers[0]));
+          await assert.rejects(inspector.inspect(trace), /No recorded Java task/);
+          const afterPeriodic = dap.events.length;
+          await session.customRequest('continue', { threadId: first.threadId });
+          const stopped = await dap.event('stopped', afterPeriodic, 22000);
+          Object.assign(state, { threadId: stopped.threadId, stopVersion: 2 });
+          assert.notEqual(stopped.threadId, first.threadId);
+          const paused = await top(stopped.threadId);
+          assert.equal(paused.line, fixture.line(markers[1]));
+          assert.equal(path.relative(paused.source.path, source), '');
+          const report = await inspector.inspect(trace);
+          const proof = checkReactorChain(fixture, report);
+          if (child) assert.equal(report.pid, child.pid);
+          await writeRejectedTraces(...files, report.taskId);
+          await assert.rejects(inspector.inspect(wrongId), /different Java runtime/);
+          await assert.rejects(inspector.inspect(wrongWorker), /worker identity differs/);
+          await assert.rejects(inspector.inspect(strippedWorker), /worker identity differs/);
+          const after = dap.events.length;
+          await session.customRequest('continue', { threadId: stopped.threadId });
+          state.state = 'running';
+          await assert.rejects(inspector.inspect(trace), /Pause a Rocketbrain Java task/);
+          await dap.event('terminated', after, 22000);
+          if (exited) assert.equal((await exited)[0], 0, childOutput);
+          const output = child ? childOutput :
+            dap.events.filter(event => event.event === 'output').map(event => event.body.output).join('');
+          reports.push({ ...proof, ...await verifyReactorCompletion(trace, output, engine), mode, pausedLine: paused.line,
+            unwrappedRejected: true, mismatchedTraceRejected: true, mismatchedWorkerRejected: true, strippedWorkerRejected: true,
+            resumedInspectionRejected: true, ...(child && { ownedAttach: true }) });
+        } finally {
+          await dap?.close();
+          if (child?.pid && child.exitCode === null && child.signalCode === null) child.kill();
+          await exited?.catch(() => {});
+        }
+      }
+    }
+  } finally { await lsp.close(); }
+  if (process.env.ROCKETBRAIN_JAVA_ASYNC_REACTOR_RECEIPT) {
+    await fs.writeFile(process.env.ROCKETBRAIN_JAVA_ASYNC_REACTOR_RECEIPT,
       JSON.stringify({ reports }, null, 2) + '\n', { flag: 'wx' });
   }
 });

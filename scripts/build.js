@@ -41,7 +41,9 @@ async function build() {
   fs.writeFileSync(path.join(__dirname,'../src/java/jakarta-host-source.json'),JSON.stringify(jakartaHost));
   fs.mkdirSync('dist', { recursive: true });
   fs.mkdirSync(path.join('dist', 'java-async'), { recursive: true });
-  fs.copyFileSync(path.join(__dirname, '../runtime/java-async/src/rocketbrain/async/TaskTrace.java'), path.join('dist', 'java-async', 'TaskTrace.java'));
+  for (const file of ['TaskTrace.java', 'ReactorTaskTrace.java']) {
+    fs.copyFileSync(path.join(__dirname, '../runtime/java-async/src/rocketbrain/async', file), path.join('dist', 'java-async', file));
+  }
   fs.mkdirSync(path.join('dist', 'java-debug'), { recursive: true });
   for (const file of fs.readdirSync(path.join(__dirname, '../runtime/java-debug')).filter(file => file.endsWith('.java'))) {
     fs.copyFileSync(path.join(__dirname, '../runtime/java-debug', file), path.join('dist', 'java-debug', file));
