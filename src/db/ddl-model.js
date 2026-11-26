@@ -332,7 +332,7 @@ function parseSchema(text,database,dialect) {
 }
 
 function analyzeDdlScript(text,seed) {
-  const opts={dialect:seed.dialect,database:seed.database,tableNameCaseSensitive:seed.tableNameCaseSensitive,sqlMode:seed.sqlMode,
+  const opts={dialect:seed.dialect,database:seed.database,serverVersion:seed.serverVersion,tableNameCaseSensitive:seed.tableNameCaseSensitive,sqlMode:seed.sqlMode,
     ...(seed.overlayExternalTables&&{joinOrigins:true,joinTables:seed.overlayExternalTables})};
   const split=statementRanges(text,opts),known=split.unknown.length===0&&split.statements.length<=100;
   let catalog=seed,uncertain=!known,contextMayChange=false;
@@ -385,7 +385,7 @@ function analyzeLiveDdlScript(text,seed,split) {
   const changesContext=part=>liveScriptAction(text.slice(part.start,part.end),
     split.unknown.filter(issue=>issue.start>=part.start&&issue.start<part.end));
   if (!split.statements.some(changesContext)) return null;
-  const options={dialect:seed.dialect,database:seed.database,tableNameCaseSensitive:seed.tableNameCaseSensitive,sqlMode:seed.sqlMode};
+  const options={dialect:seed.dialect,database:seed.database,serverVersion:seed.serverVersion,tableNameCaseSensitive:seed.tableNameCaseSensitive,sqlMode:seed.sqlMode};
   let catalog=seed,contextMayChange=false,uncertain=split.statements.length>100 || split.unknown.some(issue=>issue.start===undefined);
   const changes=[],issues=[],modeTransitions=[];
   const statements=split.statements.slice(0,100).map(part=>{

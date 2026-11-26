@@ -339,6 +339,17 @@ function analyzeDmlUsage(text, catalog, options = {}, remote = [], parsedTokens)
       return /^\s*(?:INSERT|UPDATE|DELETE)\b/i.test(text) ? unresolved('The mutation has incomplete or uncertain SQL token boundaries.') : undefined;
     }
   }
+  const returning = require('./sql-dml-returning').analyzeReturning(text,catalog,{...options,joinTables:remote},tokens,
+    {analyzeSql,sourceRange,isJoined:joinedMutation});
+  if (returning) {
+    const { completion, returning: clause, ...binding } = returning;
+    if (binding.state !== 'known') return { ...binding, command:clause.command };
+    const prefix = analyzeDmlUsage(text.slice(0,clause.start),catalog,options,remote);
+    const combined = [...(prefix?.state === 'known' ? prefix.references : []), ...binding.references];
+    const references=[...new Map(combined.map(ref=>[ref.start+':'+ref.end+':'+ref.kind,ref])).values()]
+      .sort((a,b)=>a.start-b.start || a.end-b.end);
+    return { ...binding, command:clause.command, references, returning:clause };
+  }
   const parsed = parse(options,tokens);
   if (parsed === undefined) return undefined;
   if (!parsed) {
@@ -393,4 +404,4 @@ function analyzeDmlUsage(text, catalog, options = {}, remote = [], parsedTokens)
     coverage:{unknown:[]},target:origin,executedSql:false };
 }
 
-module.exports = { joinedCompletionContext, analyzeDmlUsage };
+module.exports = { joinedCompletionContext, analyzeDmlUsage, joinedMutation };

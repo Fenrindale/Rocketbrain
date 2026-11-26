@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.99.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.100.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 149 |
-| 부분 구현 | 53 |
+| 구현 | 150 |
+| 부분 구현 | 52 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **86.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **87%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.99에서는 Spring Data 복합 파생 쿼리, HTTP 세션 쿠키, PostgreSQL 결과 셀 편집, MySQL·MariaDB 뷰의 CHECK OPTION 검토를 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 187점에서 187.5점으로 바뀌었다.
+v0.100에서는 Gradle 카탈로그 starter 편집, MongoDB 집계, HTTP OAuth 2.0과 버전별 RETURNING 지원을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 187.5점에서 188점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -171,7 +171,7 @@ v0.99에서는 Spring Data 복합 파생 쿼리, HTTP 세션 쿠키, PostgreSQL 
 | DG-028 | DataGrip | FK 기반 JOIN/ON 자동 생성 | 구현 |
 | DG-029 | DataGrip | SELECT·INSERT·GROUP BY 필드 목록 완성 | 구현 |
 | DG-030 | DataGrip | alias·약어·함수 구문 완성 | 구현 |
-| DG-031 | DataGrip | MySQL/MariaDB dialect별 구문·키워드 | 부분 구현 |
+| DG-031 | DataGrip | MySQL/MariaDB dialect별 구문·키워드 | 구현 |
 | DG-032 | DataGrip | 파일·폴더별 SQL resolution scope | 구현 |
 | DG-033 | DataGrip | 현재 스크립트의 DDL 변화 인식 | 구현 |
 | DG-034 | DataGrip | 실시간·범위별 정적 검사 | 구현 |

@@ -1,5 +1,5 @@
 {
-  "version": "0.99.0",
+  "version": "0.100.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 149,
-    "partial": 53,
+    "implemented": 150,
+    "partial": 52,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 86.8,
+    "percent": 87,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-059",
+    "IDEA-052",
     "IDEA-102",
     "DG-003",
-    "DG-081"
+    "DG-031"
   ],
   "expandedFeatures": [
-    "IDEA-059",
+    "IDEA-052",
     "IDEA-102",
     "DG-003",
-    "DG-081"
+    "DG-031"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1583,23 +1583,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "부모가 없는 Maven 프로젝트의 직접 Spring Boot BOM을 확인하고 스타터·JDBC 드라이버 의존성 변경을 검토한다. 고정값과 단일 로컬 속성 버전을 읽고 기존 직접 관리 버전을 보호한다.",
+      "scope": "Gradle 버전 카탈로그의 Spring Boot 플랫폼과 등록된 라이브러리 별칭을 사용해 starter 변경을 검토하고, 설정과 카탈로그의 검토 시점 버전을 확인한다.",
       "remaining": [
-        "일반 Maven 상속과 여러 BOM, 프로필, Gradle 버전 카탈로그 및 복합 DSL 관리가 남아 있다."
+        "일반 Maven 상속과 복수 BOM·프로필, 추가 Gradle DSL 관리가 남아 있다."
       ],
       "verification": {
-        "state": "v0.72-installed-coverage",
+        "state": "v0.100-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.72.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Maven 실제 빌드로 MySQL과 MariaDB 드라이버를 각각 해결하고 생성한 Spring Boot 앱의 JDBC 결과를 확인했다. 정확한 POM 적용, Undo·Redo, 오래된 소스와 직접 관리 버전 보호를 검증했다.",
+        "testedScope": "Gradle 9.1.0과 Spring Boot 4.1.2에서 별칭에 묶인 starter와 JDBC 드라이버, 변경 전후, Undo/Redo와 실제 Boot JAR 실행을 확인했다.",
         "publicEvidence": [
-          "docs/spring-maven-bom-starters.md",
-          "test/spring-maven-bom-host.js",
-          "test/helpers/spring-maven-bom-fixture.js"
+          "test/spring-gradle-catalog-host.js",
+          "test/helpers/spring-gradle-catalog-fixture.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1800,8 +1799,8 @@
       "verification": {
         "state": "v0.99-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.99.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3056,22 +3055,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "선택한 동일 작업 공간·환경·출처의 HTTP 요청에서 세션 쿠키를 사용한다.",
+      "scope": "선택한 HTTP 환경의 같은 출처에서 SecretStorage에 연결한 OAuth 2.0 client credentials와 이름 있는 쿠키 세션을 사용한다.",
       "remaining": [
-        "OAuth 인증과 여러 요청을 검토·연결하는 흐름을 추가한다."
+        "복수 요청의 결과를 검토하고 후속 요청으로 연결하는 흐름을 확장한다."
       ],
       "verification": {
-        "state": "v0.99-installed-coverage",
+        "state": "v0.100-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 개의 Set-Cookie 수신, 이름 있는 세션의 실제 JDBC 요청, 다른 세션의 거부, Max-Age 로그아웃, 값 가리기를 확인했다.",
+        "testedScope": "소유 OAuth 시험 서버와 실제 Spring JDBC 응답에서 정확한 폼 인증, 잘못된 자격 증명 거부, Bearer 값 가리기와 설치판 SecretStorage를 확인했다.",
         "publicEvidence": [
-          "src/http/cookie-jar.js",
-          "test/http-cookie-jar-host.js"
+          "test/http-oauth-host.js",
+          "test/workflows-v100-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3680,22 +3679,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "실제 PostgreSQL 결과에서 원래 행과 열 타입을 검토하고 승인한 셀을 수정한다.",
+      "scope": "MongoDB의 검토한 컬렉션에서 여섯 읽기 집계 연산을 사용하고, 문서와 집계 결과를 Extended JSON으로 표시한다.",
       "remaining": [
-        "PostgreSQL 실측 계획, 추가 엔진, MongoDB 원격·집계·편집을 확장한다."
+        "PostgreSQL 실측 계획과 SQLite 파일, MongoDB 원격 TLS 및 결과 편집을 확장한다."
       ],
       "verification": {
-        "state": "v0.99-installed-coverage",
+        "state": "v0.100-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "PostgreSQL17.12에서 큰 정수와 NULL·유니코드, 다른 행 보존, 충돌·재생 거부 및 제약 오류 롤백을 검증했다.",
+        "testedScope": "실제 MongoDB 8.0.38에서 저장한 파이프라인과 설치판 편집기, 결과 보존, 재생성된 컬렉션·쓰기·외부 조회 거부를 확인했다.",
         "publicEvidence": [
-          "test/postgresql-grid-host.js",
-          "test/workflows-v99-host.js"
+          "test/mongodb-aggregation-host.js",
+          "test/workflows-v100-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4491,25 +4490,23 @@
       "category": "SQL 의미 분석·편집",
       "feature": "MySQL/MariaDB dialect별 구문·키워드",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "문서의 리터럴 SQL 모드 전환을 SELECT·DML의 어휘·완성·진단에 반영한다.",
-      "remaining": [
-        "엔진·버전별 RETURNING과 임의 모드 변경 등 추가 문법·컨텍스트를 확장한다."
-      ],
+      "scope": "지원하는 SQL 문서 모드와 MySQL·MariaDB의 버전별 RETURNING을 진단하고, MariaDB 반환 열을 현재 대상 DDL에 연결한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.96-installed-coverage",
+        "state": "v0.100-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.96.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 실제 여섯 문장의 세 모드 변경을 대조했다. ANSI_QUOTES의 역슬래시 포함 식별자, NO_BACKSLASH_ESCAPES, 기본 모드 복귀 및 미확정 계산을 검증했다.",
+        "testedScope": "MariaDB 11.4.8의 반환 구문 여섯 개와 무효 사례 다섯 개를 실제 실행했다. MySQL 8.4.13의 무효 사례 열한 개, 선언한 ANSI_QUOTES 모드, 설치판 진단 및 반환 열 완성을 확인했다.",
         "publicEvidence": [
-          "src/db/sql-document-modes.js",
-          "test/sql-document-modes-host.js"
+          "test/sql-returning-host.js",
+          "test/workflows-v100-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5987,8 +5984,8 @@
       "verification": {
         "state": "v0.99-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.99.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6451,8 +6448,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "dab5e15719def22bf06677d5e87cc7494c5455af183b54b3ce052eadfd352f6f",
-    "sourceManifestSha256": "c080f20d877a32ad1564d814045ac6f1205991501e740173b90a14150867e8fd",
+    "vsixSha256": "920a08788c48f73356f3903ddf08e72c634dc9616e9717f35880eef9e27ad527",
+    "sourceManifestSha256": "d4327a98b987da012226e25ea21a8ec24cd93dd23be87239b3b87cec93e76d28",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6466,18 +6463,18 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-059",
+      "id": "DG-031",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1908,
-    "pass": 1752,
+    "tests": 1921,
+    "pass": 1764,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 156,
+    "skipped": 157,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

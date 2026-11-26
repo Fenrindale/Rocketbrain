@@ -3,11 +3,41 @@ const fs=require('node:fs'),fsp=fs.promises,path=require('node:path'),crypto=req
 const {InitializrClient,unpack,sha,fail}=require('./project-client'),B=require('./project-build');
 const {projectArchiveShape}=require('./project-archive-shape');
 const BUILDS=['pom.xml','build.gradle','build.gradle.kts'],LIMITS=Object.freeze({reviews:3,reviewMs:10*60*1000,reviewBytes:96*1024*1024});
+const CATALOG_PATH='gradle/libs.versions.toml', SETTINGS=['settings.gradle','settings.gradle.kts'];
 const local=value=>{let result;try{if(typeof value!=='string')throw Error();if(value.startsWith('file:')){const url=new URL(value);if(url.hostname)throw Error();result=fileURLToPath(url);}else result=value;}catch{throw fail('PATH','Choose a local project folder.');}if(!path.isAbsolute(result)||result.startsWith('\\\\'))throw fail('PATH','Use an absolute local project path.');return path.resolve(result);};
 function noLinks(value){let current=path.parse(value).root;for(const part of value.slice(current.length).split(path.sep).filter(Boolean)){current=path.join(current,part);const stat=fs.lstatSync(current);if(stat.isSymbolicLink())throw fail('PATH','Select the physical folder path; symbolic links and junctions are not followed.');}return fs.realpathSync(value);}
 const normalize=value=>process.platform==='win32'?value.toLowerCase():value;
 const contained=(child,root)=>{const relative=path.relative(normalize(root),normalize(child));return relative===''||relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative);};
 function snapshot(file){noLinks(path.dirname(file));const before=fs.lstatSync(file);if(!before.isFile()||before.isSymbolicLink()||before.size>1024*1024)throw fail('SOURCE','Use one ordinary UTF-8 build file no larger than1MiB.');const fd=fs.openSync(file,'r');try{const stat=fs.fstatSync(fd);if(stat.dev!==before.dev||stat.ino!==before.ino||stat.size!==before.size)throw fail('SOURCE','The build file changed while opening.');const bytes=fs.readFileSync(fd);let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw fail('SOURCE','Use a UTF-8 Maven/Gradle build file.');}const bom=bytes.subarray(0,3).equals(Buffer.from([0xef,0xbb,0xbf]));return{path:file,uri:pathToFileURL(file).toString(),bytesSha256:sha(bytes),text,bom,dev:stat.dev,ino:stat.ino};}finally{fs.closeSync(fd);}}
+function optionalSource(root,name){
+ const file=path.join(root,name);
+ try{fs.lstatSync(file);}catch(error){if(error.code==='ENOENT')return undefined;throw error;}
+ return {...snapshot(file),name};
+}
+function catalogSources(root){
+ const catalog=optionalSource(root,CATALOG_PATH);
+ if(!catalog)return [];
+ return [catalog,...SETTINGS.map(name=>optionalSource(root,name)).filter(Boolean)];
+}
+function catalogContext(sources){
+ if(!sources.length)return undefined;
+ if(sources.length>2)throw fail('BUILD','Use one root settings file for reviewed Gradle catalog starter edits.');
+ return {versionCatalog:sources[0].text,settings:sources[1]?.text};
+}
+const sameSource=(first,second)=>first.path===second.path&&first.bytesSha256===second.bytesSha256&&
+ first.dev===second.dev&&first.ino===second.ino;
+function verifyCatalogSources(root,sources){
+ const live=catalogSources(root);
+ if(live.length!==sources.length||live.some((source,index)=>!sameSource(source,sources[index])))
+  throw fail('STALE','The Gradle version catalog or settings changed after review.');
+}
+async function cleanCatalogDocuments(read,sources,code){
+ for(const source of sources){
+  const document=await read(source.uri);
+  if(document?.dirty||document&&document.text!==source.text)
+   throw fail(code,'Save or reconcile the Gradle version catalog and settings before editing starters.');
+ }
+}
 class SpringProjectTools{
  constructor({getWorkspaceRoots=()=>[],assertTrusted=()=>{},documentSnapshot=()=>undefined,writeBuildFile,resyncProject,fetchImpl=fetch,clock=Date.now}={}){this.options={getWorkspaceRoots,assertTrusted,documentSnapshot,writeBuildFile,resyncProject,fetchImpl,clock};this.reviews=new Map();this.closed=false;}
  guard(input={}){if(this.closed)throw fail('CLOSED','Spring project tools are closed.');this.options.assertTrusted();if(input.guard&&input.guard()!==true)throw fail('CONTEXT','The project workspace changed.');if(input.signal?.aborted||input.cancellation?.isCancellationRequested)throw fail('CANCELLED','The Spring project action was cancelled.');}
@@ -17,14 +47,71 @@ class SpringProjectTools{
  async metadata(input={}){this.guard(input);return new InitializrClient(input.endpoint,{fetchImpl:this.options.fetchImpl}).metadata(input);}
  remember(record){while(this.reviews.size>=LIMITS.reviews)this.reviews.delete(this.reviews.keys().next().value);record.reviewId=crypto.randomUUID();record.expiresAt=this.options.clock()+LIMITS.reviewMs;record.context=this.context();const bytes=[...this.reviews.values()].reduce((sum,r)=>sum+r.cacheBytes,0)+record.cacheBytes;if(bytes>LIMITS.reviewBytes)throw fail('SIZE','Close another Spring review before downloading more project files.');this.reviews.set(record.reviewId,record);return structuredClone({reviewId:record.reviewId,expiresAt:record.expiresAt,...record.public});}
  async previewCreate(input){this.guard(input);const parent=noLinks(local(input.parentUri)),stat=fs.statSync(parent);if(!stat.isDirectory())throw fail('PATH','Select an existing parent folder.');const client=new InitializrClient(input.endpoint,{fetchImpl:this.options.fetchImpl}),metadata=await client.metadata({signal:input.signal,bootVersion:input.selection?.bootVersion}),archive=await client.archive(input.selection||{},metadata,input),entries=await unpack(archive.bytes),name=input.targetName||archive.selection.artifactId;if(!/^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(name)||/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(name))throw fail('PATH','Choose a simple new project folder name.');const target=path.join(parent,name);if(fs.existsSync(target))throw fail('EXISTS','The project target already exists; no existing folder is overwritten.');const archiveShape=projectArchiveShape(entries,archive.selection);this.guard(input);const inside=this.inside(target),files=entries.filter(e=>!e.directory).map(e=>({path:e.path,bytes:e.bytes.length,sha256:e.sha256}));return this.remember({kind:'create',target,parent,parentIdentity:{dev:stat.dev,ino:stat.ino},entries,cacheBytes:entries.reduce((n,e)=>n+(e.bytes?.length||0),0),public:{kind:'create',projectUri:pathToFileURL(target).toString(),endpoint:metadata.endpoint,selection:archive.selection,metadataSha256:metadata.metadataSha256,catalogSha256:metadata.catalogSha256,archiveSha256:archive.sha256,archiveShape,files,requiresProjectExecutionApproval:inside,initialImportMayRun:inside,automaticBuildStartedByTool:false,review:'Review the archive file list and generated build/source files before writing. In an open Java workspace, initial import can execute build configuration; that requires a separate acknowledgment.'}});}
- async inspectDependencies(input){this.guard(input);const root=noLinks(local(input.projectUri));if(!fs.statSync(root).isDirectory())throw fail('PATH','Select a project directory.');const names=BUILDS.filter(name=>fs.existsSync(path.join(root,name)));if(names.length!==1)throw fail('BUILD','Select a project with one root Maven or Gradle build file.');const source=snapshot(path.join(root,names[0])),document=await this.options.documentSnapshot(source.uri);if(document?.dirty||document&&sha(Buffer.from(document.text))!==sha(Buffer.from(source.text)))throw fail('DIRTY','Save or reconcile the build file before reviewing starter changes.');const model=B.inspect(source.text,names[0]),catalog=await this.metadata({endpoint:input.endpoint,bootVersion:model.bootVersion,signal:input.signal});this.guard(input);return{projectUri:pathToFileURL(root).toString(),buildUri:source.uri,kind:model.kind,bootVersion:model.bootVersion,management:model.management||null,sourceSha256:source.bytesSha256,choices:B.choices(model,catalog),endpoint:catalog.endpoint,source,document,model,catalog};}
- async previewDependencies(input){const found=await this.inspectDependencies(input),change=B.change(found.source.text,found.model,found.catalog,input),inside=this.inside(local(found.projectUri)),afterBytes=Buffer.concat([found.source.bom?Buffer.from([0xef,0xbb,0xbf]):Buffer.alloc(0),Buffer.from(change.after)]);return this.remember({kind:'dependencies',source:found.source,document:found.document,change,cacheBytes:Buffer.byteLength(found.source.text)+Buffer.byteLength(change.after),public:{kind:'dependencies',projectUri:found.projectUri,buildUri:found.buildUri,bootVersion:found.bootVersion,management:found.management,buildKind:found.kind,endpoint:found.endpoint,metadataSha256:found.catalog.metadataSha256,catalogSha256:found.catalog.catalogSha256,before:found.source.text,after:change.after,beforeSha256:found.source.bytesSha256,afterSha256:sha(afterBytes),add:change.add,remove:change.remove,requiresProjectExecutionApproval:inside,automaticBuildStartedByTool:false,resyncRequired:true,review:'The diff changes selected direct dependencies. Maven and Gradle resolve their effective versions when you run the build. Use a separate action to import or refresh the project configuration.'}});}
+ async inspectDependencies(input){
+  this.guard(input);
+  const root=noLinks(local(input.projectUri));
+  if(!fs.statSync(root).isDirectory())throw fail('PATH','Select a project directory.');
+  const names=BUILDS.filter(name=>fs.existsSync(path.join(root,name)));
+  if(names.length!==1)throw fail('BUILD','Select a project with one root Maven or Gradle build file.');
+  const source=snapshot(path.join(root,names[0])),document=await this.options.documentSnapshot(source.uri);
+  if(document?.dirty||document&&document.text!==source.text)throw fail('DIRTY','Save or reconcile the build file before reviewing starter changes.');
+  const companions=names[0]==='pom.xml'?[]:catalogSources(root);
+  const model=B.inspect(source.text,names[0],catalogContext(companions));
+  const readOnlySources=model.catalogContext?companions:[];
+  await cleanCatalogDocuments(this.options.documentSnapshot,readOnlySources,'DIRTY');
+  const catalog=await this.metadata({endpoint:input.endpoint,bootVersion:model.bootVersion,signal:input.signal});
+  await cleanCatalogDocuments(this.options.documentSnapshot,readOnlySources,'DIRTY');
+  this.guard(input);
+  if(readOnlySources.length)verifyCatalogSources(root,readOnlySources);
+  return {projectUri:pathToFileURL(root).toString(),buildUri:source.uri,kind:model.kind,bootVersion:model.bootVersion,
+   management:model.management||null,sourceSha256:source.bytesSha256,choices:B.choices(model,catalog),endpoint:catalog.endpoint,
+   sources:readOnlySources.map(item=>({name:item.name,uri:item.uri,sha256:item.bytesSha256})),readOnlySources,source,document,model,catalog};
+ }
+ async previewDependencies(input){
+  const found=await this.inspectDependencies(input),change=B.change(found.source.text,found.model,found.catalog,input);
+  const inside=this.inside(local(found.projectUri)),afterBytes=Buffer.concat([
+   found.source.bom?Buffer.from([0xef,0xbb,0xbf]):Buffer.alloc(0),Buffer.from(change.after)]);
+  return this.remember({kind:'dependencies',source:found.source,document:found.document,change,readOnlySources:found.readOnlySources,
+   cacheBytes:Buffer.byteLength(found.source.text)+Buffer.byteLength(change.after)+found.readOnlySources.reduce((sum,item)=>sum+Buffer.byteLength(item.text),0),
+   public:{kind:'dependencies',projectUri:found.projectUri,buildUri:found.buildUri,bootVersion:found.bootVersion,management:found.management,
+    sources:found.sources,buildKind:found.kind,endpoint:found.endpoint,metadataSha256:found.catalog.metadataSha256,
+    catalogSha256:found.catalog.catalogSha256,before:found.source.text,after:change.after,beforeSha256:found.source.bytesSha256,
+    afterSha256:sha(afterBytes),add:change.add,remove:change.remove,requiresProjectExecutionApproval:inside,
+    automaticBuildStartedByTool:false,resyncRequired:true,review:'The diff changes selected direct dependencies. Maven and Gradle resolve their effective versions when you run the build. Use a separate action to import or refresh the project configuration.'}});
+ }
  getReview(id){const record=this.reviews.get(id);if(!record)return undefined;return structuredClone({reviewId:id,expiresAt:record.expiresAt,...record.public});}
  reviewFile(id,name){const record=this.reviews.get(id);if(!record)return undefined;if(record.kind==='dependencies')return name==='before'?record.source.text:name==='after'?record.change.after:undefined;const item=record.entries.find(e=>!e.directory&&e.path===name);if(!item)return undefined;try{const text=new TextDecoder('utf-8',{fatal:true}).decode(item.bytes);if(text.includes('\0'))throw Error();return text;}catch{return'[Binary file · '+item.bytes.length+' bytes · SHA-256 '+item.sha256+']';}}
  discard(id){return this.reviews.delete(id);}
  async apply(input){this.guard(input);const record=this.reviews.get(input.reviewId);if(!record||record.expiresAt<=this.options.clock())throw fail('STALE','Review this Spring project change again.');if(record.context!==this.context())throw fail('CONTEXT','The open workspace set changed after review.');if(input.allowWrite!==true)throw fail('APPROVAL','Review the exact file changes and explicitly allow writing.');const project=record.kind==='create'?record.target:local(record.public.projectUri),inside=this.inside(project);if(inside&&input.allowProjectExecution!==true)throw fail('EXECUTION_APPROVAL','A build file inside an open Java workspace may trigger initial import. Explicitly allow project configuration execution before writing.');if(record.kind==='create')return this.create(record,input,inside);return this.edit(record,input,inside);}
  async create(record,input,inside){const current=fs.statSync(noLinks(record.parent));if(current.dev!==record.parentIdentity.dev||current.ino!==record.parentIdentity.ino||fs.existsSync(record.target))throw fail('EXISTS','The selected parent or absent target changed.');this.guard(input);this.reviews.delete(record.reviewId);await fsp.mkdir(record.target,{recursive:false});let count=0;try{for(const entry of record.entries){this.guard(input);const file=path.join(record.target,...entry.path.split('/'));for(const directory of entry.directory?[file]:[path.dirname(file)]){await fsp.mkdir(directory,{recursive:true});noLinks(directory);}if(entry.directory)continue;const handle=await fsp.open(file,'wx',entry.executable?0o755:0o644);try{await handle.writeFile(entry.bytes);await handle.sync();}finally{await handle.close();}if(sha(await fsp.readFile(file))!==entry.sha256)throw fail('SOURCE','A generated file changed during publication.');count++;}this.guard(input);return{state:'created',reviewId:record.reviewId,projectUri:record.public.projectUri,filesWritten:count,archiveSha256:record.public.archiveSha256,noExistingFilesOverwritten:true,initialImportMayRun:inside,explicitBuildStarted:false,resyncRequired:true};}catch(error){error.partialProject={projectUri:record.public.projectUri,filesWritten:count,state:'partial-created',automaticCleanup:false};throw error;}}
- async edit(record,input,inside){const current=snapshot(record.source.path),document=await this.options.documentSnapshot(record.source.uri);if(current.bytesSha256!==record.source.bytesSha256||current.dev!==record.source.dev||current.ino!==record.source.ino||document?.dirty||document&&document.text!==record.source.text||record.document&&(!document||document.version!==record.document.version))throw fail('STALE','The build source or open document changed after review.');if(typeof this.options.writeBuildFile!=='function')throw fail('WRITER','A native reviewed build-file writer is required.');this.guard(input);this.reviews.delete(record.reviewId);const written=await this.options.writeBuildFile({uri:record.source.uri,path:record.source.path,before:record.source.text,after:record.change.after,beforeSha256:record.source.bytesSha256,documentVersion:document?.version,guard:()=>{this.guard(input);return true;}});if(!written?.saved)return{state:'editor-unsaved',reviewId:record.reviewId,projectUri:record.public.projectUri,buildUri:record.source.uri,resyncRequired:true,requiresSave:true,nativeUndo:Boolean(written?.nativeUndo)};const after=snapshot(record.source.path);if(after.bytesSha256!==record.public.afterSha256)throw fail('SOURCE','The saved build file differs from the reviewed result; inspect the file before resync.');return{state:'applied',reviewId:record.reviewId,projectUri:record.public.projectUri,buildUri:record.source.uri,beforeSha256:record.source.bytesSha256,afterSha256:after.bytesSha256,add:record.change.add,remove:record.change.remove,nativeUndo:Boolean(written.nativeUndo),saved:true,initialImportMayRun:inside,explicitBuildStarted:false,resyncRequired:true};}
+ async edit(record,input,inside){
+  const current=snapshot(record.source.path),document=await this.options.documentSnapshot(record.source.uri);
+  if(!sameSource(current,record.source)||document?.dirty||document&&document.text!==record.source.text||
+     record.document&&(!document||document.version!==record.document.version))throw fail('STALE','The build source or open document changed after review.');
+  if(typeof this.options.writeBuildFile!=='function')throw fail('WRITER','A native reviewed build-file writer is required.');
+  const root=local(record.public.projectUri),companions=record.readOnlySources;
+  const guard=()=>{
+   this.guard(input);
+   if(companions.length){
+    verifyCatalogSources(root,companions);
+    if(!sameSource(snapshot(record.source.path),record.source))
+     throw fail('STALE','The Gradle build source changed before applying.');
+   }
+   return true;
+  };
+  await cleanCatalogDocuments(this.options.documentSnapshot,companions,'STALE');
+  guard();
+  this.reviews.delete(record.reviewId);
+  const written=await this.options.writeBuildFile({uri:record.source.uri,path:record.source.path,before:record.source.text,
+   after:record.change.after,beforeSha256:record.source.bytesSha256,documentVersion:document?.version,readOnlySources:companions,guard});
+  if(!written?.saved)return {state:'editor-unsaved',reviewId:record.reviewId,projectUri:record.public.projectUri,
+   buildUri:record.source.uri,resyncRequired:true,requiresSave:true,nativeUndo:Boolean(written?.nativeUndo)};
+  const after=snapshot(record.source.path);
+  if(after.bytesSha256!==record.public.afterSha256)throw fail('SOURCE','The saved build file differs from the reviewed result; inspect the file before resync.');
+  return {state:'applied',reviewId:record.reviewId,projectUri:record.public.projectUri,buildUri:record.source.uri,
+   beforeSha256:record.source.bytesSha256,afterSha256:after.bytesSha256,add:record.change.add,remove:record.change.remove,
+   nativeUndo:Boolean(written.nativeUndo),saved:true,initialImportMayRun:inside,explicitBuildStarted:false,resyncRequired:true};
+ }
  async resync(input){this.guard(input);const project=noLinks(local(input.projectUri));if(!this.inside(project))throw fail('WORKSPACE','Open or add this project folder to the workspace before resync.');if(input.allowProjectExecution!==true)throw fail('EXECUTION_APPROVAL','Explicitly allow project configuration execution to import/resync.');const names=BUILDS.filter(name=>fs.existsSync(path.join(project,name)));if(names.length!==1)throw fail('BUILD','Select one saved root build descriptor before resync.');const source=snapshot(path.join(project,names[0])),document=await this.options.documentSnapshot(source.uri);if(document?.dirty||document&&document.text!==source.text)throw fail('DIRTY','Save or reconcile the build document before resync.');if(typeof this.options.resyncProject!=='function')throw fail('RESYNC','Java project resync is unavailable.');const result=await this.options.resyncProject({...input,projectUri:pathToFileURL(project).toString()});this.guard(input);return{state:'resynced',projectUri:pathToFileURL(project).toString(),projectConfigurationExecutionAllowed:true,snapshot:result};}
  dispose(){this.closed=true;this.reviews.clear();}
 }

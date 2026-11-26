@@ -7,8 +7,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import java.nio.charset.StandardCharsets;
+import java.net.URLEncoder;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.SpringVersion;
@@ -52,6 +56,25 @@ public class ProbeController {
                 "rb_session=; Max-Age=0; Path=/probe/session; HttpOnly",
                 "rb_secondary=; Max-Age=0; Path=/probe/session; HttpOnly")
                 .body(Map.of("ended", true));
+    }
+    @PostMapping(path="/probe/oauth/token", consumes="application/x-www-form-urlencoded")
+    public ResponseEntity<Map<String,Object>> oauthToken(@RequestHeader(HttpHeaders.AUTHORIZATION) String auth,
+            @RequestParam("grant_type") String grant, @RequestParam("scope") String scope) {
+        var clientId = URLEncoder.encode("fixture app+client", StandardCharsets.UTF_8);
+        var clientSecret = URLEncoder.encode("owned:fixture+marker", StandardCharsets.UTF_8);
+        var expected = "Basic " + Base64.getEncoder().encodeToString((clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8));
+        if (!auth.equals(expected) || !grant.equals("client_credentials") || !scope.equals("read:people")) {
+            return ResponseEntity.status(401).body(Map.of("error", "fixture client"));
+        }
+        return ResponseEntity.ok(Map.of("access_token", "fixture-oauth-bearer-marker", "token_type", "Bearer", "expires_in", 30));
+    }
+    @GetMapping("/probe/oauth/people")
+    public ResponseEntity<Map<String,Object>> oauthPeople(
+            @RequestHeader(name=HttpHeaders.AUTHORIZATION, defaultValue="") String auth) {
+        if (!auth.equals("Bearer fixture-oauth-bearer-marker")) {
+            return ResponseEntity.status(401).body(Map.of("authenticated", false));
+        }
+        return ResponseEntity.ok(Map.of("people", testingState().get("people"), "echo", auth));
     }
     @GetMapping("/probe") public Map<String,Object> probe() {
         Map<String,Object> result = service.probe();

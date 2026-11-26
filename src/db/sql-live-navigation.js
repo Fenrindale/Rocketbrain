@@ -76,7 +76,7 @@ function liveNavigation(text, offset, catalog, options = {}, remote = []) {
     if (ref?.definition) return {local:ref.definition};
     const origin = ref?.physicalColumn || ref?.catalog || ref?.physicalTable;
     const target = origin && tableTarget(origin,catalog,remote);
-    return target && {...target,usage:ref.usage,command:ref.command};
+    return target && {...target,usage:ref.usage,command:ref.command,...(ref.returning&&{returning:true})};
   }
   if (!word(tokens[0], 'SELECT') && !word(tokens[0], 'WITH')) return undefined;
   const current = tokens.find(token => token.start <= offset && offset < token.end);
@@ -104,7 +104,7 @@ function quickInfo(target, available = false) {
   const { object, member, type, nullable } = target;
   const kind = member ? object.kind + ' column' : ['function', 'procedure'].includes(object.kind) ? 'stored ' + object.kind : object.kind;
   const qualified = [object.schema, object.name, ...(member ? [member.name] : [])].join('.');
-  const operation = target.usage ? target.command + ' ' + (target.usage === 'write' ? 'write target' : 'read reference') + ' · ' : '';
+  const operation = target.returning ? target.command + ' RETURNING ' + (target.command==='DELETE'?'deleted row':'result column') + ' · ' : target.usage ? target.command + ' ' + (target.usage === 'write' ? 'write target' : 'read reference') + ' · ' : '';
   const summary = operation + kind + ' ' + qualified + (type ? ' · ' + type : '') +
     (typeof nullable === 'boolean' ? nullable ? ' · nullable' : ' · NOT NULL' : '');
   return summary + '\n' + (available ? 'DDL was read from the current account. Go to Definition refreshes the source.' :

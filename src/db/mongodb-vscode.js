@@ -1,13 +1,13 @@
 'use strict';
 
-const { MongoDbError, openMongoDb, parseMongoFind } = require('./mongodb');
+const { MongoDbError, openMongoDb, parseMongoFind, parseMongoAggregation } = require('./mongodb');
 
 const resultScheme = 'rocketbrain-mongodb-result';
 const commandPrefix = 'rocketbrain.mongodb.';
 
 function registerMongoDb(context, vscode) {
   let selected, joining, previewCount = 0;
-  const generatedQueries = new Set();
+  const generatedQueries = new Map();
   const previews = new Map();
   const changed = new vscode.EventEmitter();
   context.subscriptions.push(changed, vscode.workspace.registerTextDocumentContentProvider(resultScheme, {
@@ -70,7 +70,9 @@ function registerMongoDb(context, vscode) {
 
   const api = { open, close, source: () => vscode.workspace.isTrusted ? selected?.source ?? null : null,
     databases: options => use('databases', [options]), collections: (database, options) => use('collections', [database, options]),
-    find: (source, options) => use('find', [source, options]) };
+    find: (source, options) => use('find', [source, options]),
+    inspectAggregation: (target, options) => use('inspectAggregation', [target, options]),
+    aggregate: (source, options) => use('aggregate', [source, options]) };
 
   context.subscriptions.push({ dispose: () => { void close().catch(() => {}); } },
     vscode.workspace.onDidCloseTextDocument(document => generatedQueries.delete(document.uri.toString())));
@@ -81,7 +83,7 @@ function registerMongoDb(context, vscode) {
       catch (error) {
         if (error.code !== 'ROCKETBRAIN_MONGO_CANCELLED') {
           const message = error instanceof MongoDbError ? error.message : 'The operation could not be completed.';
-          await vscode.window.showErrorMessage('Rocketbrain MongoDB: ' + message);
+          void vscode.window.showErrorMessage('Rocketbrain MongoDB: ' + message);
         }
       }
     }));
@@ -98,7 +100,7 @@ function registerMongoDb(context, vscode) {
       });
   }
 
-  async function pickCollection() {
+  async function pickCollection(ordinaryOnly = false) {
     const { databases, truncated } = await progress('Reading MongoDB Databases', api.databases);
     if (!databases.length) {
       await vscode.window.showInformationMessage('This MongoDB account has no visible databases.');
@@ -108,13 +110,23 @@ function registerMongoDb(context, vscode) {
       { title: 'MongoDB Databases', placeHolder: truncated ? 'Showing the first 200 databases' : 'Choose a database' });
     if (!database) return;
     const catalog = await progress('Reading MongoDB Collections', options => api.collections(database, options));
-    if (!catalog.collections.length) {
+    const available = ordinaryOnly ? catalog.collections.filter(item => item.kind === 'collection' && !item.name.startsWith('system.')) :
+      catalog.collections;
+    if (!available.length) {
       await vscode.window.showInformationMessage('This MongoDB account has no visible collections in the selected database.');
       return;
     }
-    const chosen = await vscode.window.showQuickPick(catalog.collections.map(item => ({ label: item.name, description: item.kind })),
-      { title: database, placeHolder: catalog.truncated ? 'Showing the first 200 collections' : 'Choose a collection or view' });
+    const chosen = await vscode.window.showQuickPick(available.map(item => ({ label: item.name, description: item.kind })),
+      { title: database, placeHolder: catalog.truncated ? 'Showing the first 200 catalog entries' :
+        ordinaryOnly ? 'Choose a collection for aggregation' : 'Choose a collection or view' });
     return chosen ? { database, collection: chosen.label } : undefined;
+  }
+
+  async function openQuery(source, kind) {
+    const document = await vscode.workspace.openTextDocument({ language: 'json', content: source + '\n' });
+    generatedQueries.set(document.uri.toString(), kind);
+    await vscode.window.showTextDocument(document);
+    return document.uri.toString();
   }
 
   async function newFind(target) {
@@ -124,10 +136,27 @@ function registerMongoDb(context, vscode) {
     if (!target) return;
     const source = JSON.stringify({ database: target.database, collection: target.collection, filter: {}, limit: 50 }, null, 2);
     parseMongoFind(source);
-    const document = await vscode.workspace.openTextDocument({ language: 'json', content: source + '\n' });
-    generatedQueries.add(document.uri.toString());
-    await vscode.window.showTextDocument(document);
-    return document.uri.toString();
+    return openQuery(source, 'find');
+  }
+
+  async function newAggregation(target) {
+    trusted();
+    if (!selected) throw new MongoDbError('Connect to a local MongoDB instance first.');
+    target ??= await pickCollection(true);
+    if (!target) return;
+    const observed = await progress('Inspecting MongoDB Collection Identity', options => api.inspectAggregation(target, options));
+    const source = JSON.stringify({ ...observed, pipeline: [{ $match: {} }], limit: 50 }, null, 2);
+    parseMongoAggregation(source);
+    return openQuery(source, 'aggregation');
+  }
+
+  function queryText(kind, suffix) {
+    const document = vscode.window.activeTextEditor?.document;
+    if (document?.languageId !== 'json' || !(generatedQueries.get(document.uri.toString()) === kind ||
+      (document.uri.scheme === 'file' && document.fileName.toLowerCase().endsWith(suffix)))) {
+      throw new MongoDbError('Open a MongoDB ' + kind + ' editor or a ' + suffix + ' file.');
+    }
+    return document.getText();
   }
 
   async function showResult(result) {
@@ -164,14 +193,15 @@ function registerMongoDb(context, vscode) {
   command('close', close);
   command('browse', () => newFind());
   command('newFind', newFind);
+  command('newAggregation', newAggregation);
   command('run', async () => {
-    const editor = vscode.window.activeTextEditor;
-    const document = editor?.document;
-    if (document?.languageId !== 'json' || !(generatedQueries.has(document.uri.toString()) ||
-      (document.uri.scheme === 'file' && document.fileName.toLowerCase().endsWith('.mongo.json')))) {
-      throw new MongoDbError('Open a MongoDB find editor or a .mongo.json file.');
-    }
-    const result = await progress('Running Read-Only MongoDB Find', options => api.find(document.getText(), options));
+    const source = queryText('find', '.mongo.json');
+    const result = await progress('Running Read-Only MongoDB Find', options => api.find(source, options));
+    return { ...result, preview: await showResult(result) };
+  });
+  command('runAggregation', async () => {
+    const source = queryText('aggregation', '.mongo-aggregate.json');
+    const result = await progress('Running Read-Only MongoDB Aggregation', options => api.aggregate(source, options));
     return { ...result, preview: await showResult(result) };
   });
 

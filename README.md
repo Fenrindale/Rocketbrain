@@ -192,6 +192,8 @@ VSIX에서 `extension/dist/ide-mcp-server.js`를 추출하고, 같은 계정의 
 
 세션을 이어서 사용할 요청마다 `# @cookie-jar serviceSession`을 추가합니다. 같은 작업 공간, 환경, 스킴·호스트·포트와 이름을 쓰는 요청끼리만 쿠키를 공유합니다. 서버가 지정한 경로·만료·Secure 조건을 적용하고 VS Code 세션이 끝나면 쿠키를 지웁니다. [HTTP 쿠키 규격](https://datatracker.ietf.org/doc/html/rfc6265#section-5)
 
+OAuth 2.0 Client Credentials 요청에는 `# @oauth-client {"tokenUrl":"{{issuer}}/token","clientId":"{{clientId}}","clientSecret":"{{secret.service}}","scope":"read"}`를 추가합니다. 비밀값은 **Set HTTP Environment Secret**에 저장합니다. 요청을 실행할 때마다 새 Bearer 토큰을 받아 해당 요청에 사용합니다. 발급·리소스 주소에 HTTPS를 쓰거나 개발용으로 같은 루프백 HTTP origin을 선택합니다. [OAuth 2.0 Client Credentials](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4)
+
 gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 기준 `Proto: api/service.proto` 헤더를 사용합니다. 단일 요청은 JSON 객체, 클라이언트 스트림은 객체 배열을 입력합니다. 단항, 서버 스트림, 클라이언트 스트림, 양방향 스트림의 결과를 출력 창에서 확인할 수 있습니다. 현재는 자체 포함 `.proto` 파일을 사용합니다.
 
 **Review WebDAV Deployment**는 `rocketbrain.deploy.webdav`에 정의한 로컬·원격 폴더와 제외 패턴을 사용합니다. **Set WebDAV Password**로 필요한 비밀번호를 저장하고, 파일을 선택해 diff를 검토합니다. **Upload Reviewed WebDAV Files**는 비교한 ETag를 조건으로 전송하고 원격 파일이 바뀌면 충돌을 표시합니다. 기존 원격 폴더의 새 파일과 변경 파일을 업로드할 수 있습니다.
@@ -378,6 +380,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - **New SQL Notebook**은 `.rbsql` 문서에서 Markdown과 SQL 셀을 사용합니다. **Rocketbrain SQL** 커널은 연결된 MySQL·MariaDB에서 SQL 셀마다 한 읽기 전용 문장을 실행합니다. **Pin SQL Notebook Result**로 결과를 고정하면 문서를 저장하거나 공유할 때 표시 데이터가 함께 포함됩니다.
 - `JOIN` 뒤 테이블 자동 완성은 현재 스키마에서 확인된 외래 키마다 `ON` 조건을 제안합니다. 복합 외래 키의 모든 열을 선언 순서대로 포함합니다.
 - SQL 표현식에서는 현재 범위의 별칭과 열을 약어로 찾을 수 있습니다. 예를 들어 `p.dn`으로 `p.display_name`을 완성합니다. 활성 MySQL·MariaDB의 버전과 SQL 모드에 맞는 내장 함수 템플릿을 삽입하고 괄호 안의 현재 인수를 표시합니다. 지원하는 구문은 [MySQL 함수 참조](https://dev.mysql.com/doc/refman/8.4/en/built-in-function-reference.html)와 [MariaDB 함수 참조](https://mariadb.com/docs/server/reference/sql-functions/function-and-operator-reference)를 따릅니다.
+- MariaDB의 `INSERT`, `REPLACE`, 단일 테이블 `DELETE`에서 `RETURNING` 뒤에 반환 열을 자동 완성하고 정의로 이동할 수 있습니다. 연결된 서버 버전이 이 구문을 지원하지 않으면 키워드 위치에 진단을 표시합니다. 편집기 분석은 문장을 실행하지 않습니다. [MariaDB INSERT RETURNING](https://mariadb.com/docs/server/reference/sql-statements/data-manipulation/inserting-loading-data/insertreturning) · [MariaDB DELETE](https://mariadb.com/docs/server/reference/sql-statements/data-manipulation/changing-deleting-data/delete)
 - 일반 SQL 편집기에서 스크립트에 선언한 열과 InnoDB 보조 인덱스의 변화를 뒤 문장의 자동 완성과 진단에 반영합니다. 열 추가·이름 변경·삭제와 단순 인덱스 추가·이름 변경·삭제를 지원합니다. 모델을 적용할 때 DB에 DDL을 보내지 않습니다. 관찰된 카탈로그에서는 고정 리터럴 SET SESSION·SET LOCAL sql_mode 선언을 따라 뒤 문장의 따옴표와 백슬래시를 해석합니다. 이 분석은 콘솔 설정을 변경하지 않습니다. 계산된 모드나 모델링 범위 밖 문장부터 이름 추론을 중단합니다. [MySQL ALTER TABLE](https://dev.mysql.com/doc/refman/8.4/en/alter-table.html), [MariaDB ALTER TABLE](https://mariadb.com/docs/server/reference/sql-statements/data-definition/alter/alter-table)
 - **Review and Stream a Large Data Import**에서 일반 XLSX와 Strict OOXML XLSX의 워크시트를 선택해 가져옵니다. 검토 문서에 형식을 표시하고 공유 문자열, 저장된 숫자 정밀도, 날짜, NULL과 빈 텍스트를 읽습니다. 선택한 열을 검토하고, 수식은 명시적으로 선택한 저장 결과를 사용합니다. 전송 후 같은 트랜잭션에서 커밋하거나 롤백합니다.
 - 같은 흐름에서 UTF-8과 BOM이 있는 UTF-16LE·UTF-16BE CSV·TSV를 가져옵니다. 검토 문서에서 인코딩을 확인할 수 있으며, 잘못된 바이트나 검토 이후 바뀐 원본은 가져올 수 없습니다.

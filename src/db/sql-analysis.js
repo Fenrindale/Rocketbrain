@@ -330,7 +330,18 @@ function analyzeSql(text,catalog=[],options={}){
     const scopes=arms.map(([x,y])=>select(x,y,parent,ctes,depth));const main=scopes[0]||{projections:[],complete:false};if(scopes.length>1){for(const s of scopes.slice(1)){if(main.projections.length!==s.projections.length&&main.complete&&s.complete)issue('sql.shape.union','Set-operation branches return different column counts.',token[arms[scopes.indexOf(s)][0]]);}main.projections=main.projections.map((p,index)=>({...p,type:mergeTypes(scopes.map(s=>s.projections[index]?.type||UNKNOWN())),...(joinOrigins&&{joinOrigin:scopes.every(s=>sameOrigin(s.projections[index]?.joinOrigin,p.joinOrigin))?p.joinOrigin:undefined})}));main.complete=scopes.every(s=>s.complete)&&main.projections.every(p=>p.type.family!=='unknown');supported.add('union-output');for(let n=0;n<globalClauses.length;n++){const c=globalClauses[n];if(c.kind==='ORDER')for(const [x,y]of split(c.start+(token[c.start+1]?.upper==='BY'?2:1),globalClauses[n+1]?.start??b))expression(x,y,main,{projectionAlias:true,projectionClause:'ORDER'});}}return main;
   };
   let end=token.length;const semicolons=token.flatMap((t,i)=>t.kind==='symbol'&&t.value===';'?[i]:[]);if(semicolons.length){end=semicolons[0];if(semicolons.length>1||end!==token.length-1)unknown('Analyze one statement at a time; batch SQL is not bound.');}
-  if(!['SELECT','WITH'].includes(token[0]?.upper)){unknown('Only SELECT/WITH statements have a static semantic model.');return model;}
+  if(!['SELECT','WITH'].includes(token[0]?.upper)){
+    const returning = !lexicalUncertainty && semicolons.length <= 1 && (!semicolons.length || end === token.length - 1) &&
+      require('./sql-dml-returning').analyzeReturning(text,catalog,options,token,{ analyzeSql,sourceRange,
+        isJoined:tokens=>require('./sql-dml-usages').joinedMutation(tokens) });
+    if (returning) {
+      const { completion, ...observed } = returning;
+      Object.assign(model,observed);
+      if(completion)Object.defineProperty(model,'_returningCompletion',{value:completion});
+      return model;
+    }
+    unknown('Only SELECT/WITH statements have a static semantic model.');return model;
+  }
   try{const root=parseQuery(0,end,null,new Map(),0);model.projections=root.projections;if(!root.complete)unknown('The selected query block has unresolved names, types or output structure.');}catch{unknown('The statement is outside the bounded parser or incomplete.');}
   if(lexicalUncertainty)model.diagnostics=model.diagnostics.map(issue=>({...issue,severity:'information',message:issue.message+' Tokenization is uncertain; verify the SQL mode or complete the statement.'}));
   model.coverage.supported=[...supported];model.state=lexicalUncertainty?'unknown':model.diagnostics.some(d=>d.severity==='error')?'invalid':model.coverage.unknown.length?'unknown':'known';
@@ -341,6 +352,7 @@ function analyzeSql(text,catalog=[],options={}){
 function scopeAt(model,offset){return (model._scopes||[]).filter(s=>offset>=s.start&&offset<=s.end).sort((a,b)=>b.depth-a.depth||(a.end-a.start)-(b.end-b.start))[0];}
 function completionsAt(model, offset) {
   if (model._nonCode?.some(span => offset >= span.start && offset < span.end)) return [];
+  if (model._returningCompletion) return require('./sql-dml-returning').completionsForReturning(model,offset,completionsAt);
   const before = model.text.slice(0, offset);
   const tail = before.slice(-512);
   const match = /(?:(\x60(?:[^\x60]|\x60\x60)+\x60|"(?:[^"]|"")+"|[\p{L}_$][\p{L}\p{N}_$]*)\.)?([\p{L}\p{N}_$]*)$/u.exec(tail);
