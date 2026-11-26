@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.102.0",
+  "version": "0.104.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -33,6 +33,7 @@
     "onLanguage:scala",
     "onLanguage:vue",
     "onLanguage:duckdb-sql",
+    "onLanguage:rocketbrain-sqlite",
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
     "onDebug:rocketbrain-python",
@@ -69,6 +70,7 @@
         "extensions": [".http", ".rest"]
       },
       { "id": "duckdb-sql", "aliases": ["DuckDB SQL"], "extensions": [".duckdb.sql"] },
+      { "id": "rocketbrain-sqlite", "aliases": ["SQLite SQL"], "extensions": [".sqlite.sql"] },
       { "id": "rocketbrain-jdbc", "aliases": ["Rocketbrain JDBC SQL"], "extensions": [".jdbc.sql"] },
       { "id": "rocketbrain-java-regex", "aliases": ["Java Regular Expression"] },
       { "id": "rocketbrain-jpql", "aliases": ["JPQL", "Hibernate Query"], "extensions": [".jpql", ".hql"] },
@@ -79,6 +81,7 @@
     "grammars": [
       { "language": "scala", "scopeName": "source.scala", "path": "./media/scala.tmLanguage.json" },
       { "language": "duckdb-sql", "scopeName": "source.duckdb-sql", "path": "./media/duckdb.tmLanguage.json" },
+      { "language": "rocketbrain-sqlite", "scopeName": "source.rocketbrain-sqlite", "path": "./media/sqlite.tmLanguage.json" },
       { "language": "rocketbrain-jdbc", "scopeName": "source.rocketbrain-jdbc", "path": "./media/jdbc.tmLanguage.json" },
       { "language": "rocketbrain-jpql", "scopeName": "source.rocketbrain-jpql", "path": "./media/jpql.tmLanguage.json" },
       { "language": "rocketbrain-java-regex", "scopeName": "source.rocketbrain-java-regex", "path": "./media/java-regex.tmLanguage.json" }
@@ -118,10 +121,13 @@
       { "command": "rocketbrain.kotlinEditor.stop", "title": "Stop Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.output", "title": "Show Kotlin Language Server Output", "category": "Rocketbrain" },
       { "command": "rocketbrain.coroutines.prepare", "title": "Prepare Kotlin Coroutine Probe", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.prepareDebug", "title": "Prepare Kotlin Coroutine Debug Attach", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.coroutines.connect", "title": "Connect Local Kotlin Coroutine Probe", "category": "Rocketbrain", "icon": "$(plug)", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.coroutines.refresh", "title": "Refresh Kotlin Coroutine Snapshot", "category": "Rocketbrain", "icon": "$(refresh)", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.coroutines.disconnect", "title": "Disconnect Kotlin Coroutine Probe", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.coroutines.openFrame", "title": "Open Kotlin Coroutine Frame", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.watchFrame", "title": "Debug a Parked Kotlin Coroutine", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.detachDebugger", "title": "Detach Kotlin Coroutine Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.inspect", "title": "Inspect Dev Container Configuration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.start", "title": "Start Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.exec", "title": "Run in Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -180,6 +186,8 @@
       { "command": "rocketbrain.review.open", "title": "Open GitHub or GitLab Review", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.review.patch", "title": "Open Changed Review File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.draft", "title": "Add Local Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
+      { "command": "rocketbrain.review.page", "title": "Navigate Review Pages", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
+      { "command": "rocketbrain.review.publishDraft", "title": "Publish Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.discardDraft", "title": "Discard Local Review Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-code-review" },
       { "command": "rocketbrain.review.token", "title": "Set Repository Review Token", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.traceStream", "title": "Trace Java Stream Values", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java && editorHasSelection" },
@@ -209,6 +217,12 @@
       { "command": "rocketbrain.duckdb.extensions", "title": "Inspect DuckDB Extensions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.manageExtension", "title": "Manage Workspace DuckDB Extension", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.duckdbConnected" },
       { "command": "rocketbrain.duckdb.close", "title": "Close Local DuckDB", "category": "Rocketbrain", "enablement": "rocketbrain.duckdbConnected" },
+      { "command": "rocketbrain.sqlite.open", "title": "Open Local SQLite Snapshot", "category": "Rocketbrain", "icon": "$(database)", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sqlite.refresh", "title": "Refresh SQLite Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.sqlite.browse", "title": "Browse SQLite Tables and Indexes", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.sqlite.newQuery", "title": "New SQLite Query", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.sqlite.run", "title": "Review and Run SQLite Query", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot" },
+      { "command": "rocketbrain.sqlite.close", "title": "Close SQLite Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected" },
       { "command": "rocketbrain.mongodb.open", "title": "Connect to MongoDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.mongodb.browse", "title": "Browse MongoDB Collections", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
       { "command": "rocketbrain.mongodb.newFind", "title": "New MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
@@ -222,8 +236,10 @@
       { "command": "rocketbrain.jdbc.newQuery", "title": "New JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.jdbc.run", "title": "Run JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected && editorLangId == rocketbrain-jdbc", "icon": "$(play)" },
       { "command": "rocketbrain.jdbc.estimatePostgreSqlPlan", "title": "Estimate PostgreSQL Query Plan", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans && editorLangId == rocketbrain-jdbc", "icon": "$(graph)" },
+      { "command": "rocketbrain.jdbc.reviewPostgreSqlMeasurement", "title": "Review PostgreSQL Plan Measurement", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlMeasurements && editorLangId == rocketbrain-jdbc", "icon": "$(graph)" },
+      { "command": "rocketbrain.jdbc.measurePostgreSqlPlan", "title": "Measure Reviewed PostgreSQL Plan", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlMeasurements && resourceScheme == rocketbrain-jdbc-output && resourceFilename == postgresql-measurement-review.txt", "icon": "$(debug-start)" },
       { "command": "rocketbrain.jdbc.openPostgreSqlPlanJson", "title": "Open Original PostgreSQL Plan JSON", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
-      { "command": "rocketbrain.jdbc.comparePostgreSqlPlans", "title": "Compare PostgreSQL Estimated Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
+      { "command": "rocketbrain.jdbc.comparePostgreSqlPlans", "title": "Compare PostgreSQL Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
       { "command": "rocketbrain.jdbc.openPostgreSqlGrid", "title": "Open PostgreSQL Table Grid", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlGrid" },
       { "command": "rocketbrain.jdbc.browse", "title": "Browse JDBC Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.jdbc.close", "title": "Close JDBC Connection", "category": "Rocketbrain", "enablement": "rocketbrain.jdbcConnected" },
@@ -255,6 +271,7 @@
       { "command": "rocketbrain.java.moveMember", "title": "Move Java Static Member", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.moveInstanceMethod", "title": "Move Java Instance Method", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.movePackage", "title": "Move Java Package", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.reviewTypeRename", "title": "Review Public Java Type Rename", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.changeSignature", "title": "Change Java Signature", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.safeDelete", "title": "Safe Delete Java Declaration", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.restoreDeleted", "title": "Restore Deleted Java File", "category": "Rocketbrain" },
@@ -291,6 +308,8 @@
       { "command": "rocketbrain.sql.format", "title": "Format SQL", "category": "Rocketbrain", "enablement": "editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.draft", "title": "Draft SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
+      { "command": "rocketbrain.localSqlAssistant.grounded", "title": "Explore Schema with Local SQL Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
+      { "command": "rocketbrain.acp.reviewDatabase", "title": "Review Database ACP Tasks", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.compareProposals", "title": "Compare Local SQL Proposals", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.measurePlan", "title": "Measure SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
@@ -1323,7 +1342,7 @@
       },
       {
         "view": "rocketbrain.kotlinCoroutines",
-        "contents": "[Prepare JVM Probe](command:rocketbrain.coroutines.prepare)\n[Connect Local Probe](command:rocketbrain.coroutines.connect)",
+        "contents": "[Prepare JVM Probe](command:rocketbrain.coroutines.prepare)\n[Prepare Debug Attach](command:rocketbrain.coroutines.prepareDebug)\n[Connect Local Probe](command:rocketbrain.coroutines.connect)",
         "when": "isWorkspaceTrusted"
       },
       {
@@ -1394,6 +1413,8 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.sqlite.open", "when": "view == rocketbrain.databases && isWorkspaceTrusted", "group": "connection@3" },
+        { "command": "rocketbrain.sqlite.browse", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && isWorkspaceTrusted", "group": "connection@4" },
         { "command": "rocketbrain.focusQueryEditor", "when": "view == rocketbrain.results && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.select", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.refresh", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@2" },
@@ -1526,6 +1547,16 @@
         {
           "command": "rocketbrain.jdbc.estimatePostgreSqlPlan",
           "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.postgreSqlPlans && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.jdbc.reviewPostgreSqlMeasurement",
+          "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.postgreSqlMeasurements && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.jdbc.measurePostgreSqlPlan",
+          "when": "resourceScheme == rocketbrain-jdbc-output && resourceFilename == postgresql-measurement-review.txt && rocketbrain.postgreSqlMeasurements && isWorkspaceTrusted",
           "group": "navigation"
         },
         {
@@ -1767,6 +1798,7 @@
       },
       { "command": "rocketbrain.jpa.console.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jpql && isWorkspaceTrusted" },
       { "command": "rocketbrain.duckdb.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == duckdb-sql && rocketbrain.duckdbConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.sqlite.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot && rocketbrain.sqliteConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.jdbc.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jdbc && rocketbrain.jdbcConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.focusQueryResults", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "editorTextFocus && editorLangId == sql && !suggestWidgetVisible" },
       { "command": "rocketbrain.focusQueryEditor", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "!editorTextFocus && (focusedView == rocketbrain.results || webviewId == rocketbrain.results) && isWorkspaceTrusted" },
@@ -1982,6 +2014,20 @@
               "label": { "type": "string", "maxLength": 80 },
               "executable": { "type": "string", "description": "Absolute path to a trusted agent executable." },
               "args": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
+            }
+          }
+        },
+        "rocketbrain.acp.databaseAgents": {
+          "type": "array", "default": [], "scope": "machine-overridable", "maxItems": 20,
+          "description": "Local stable ACP v1 peers for reviewed, read-only database tasks.",
+          "items": {
+            "type": "object", "required": ["label", "executable"], "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string", "maxLength": 80 },
+              "executable": { "type": "string", "description": "Absolute path to the trusted local executable." },
+              "adapter": { "type": "string", "enum": ["stdio", "opencode-local"], "default": "stdio" },
+              "args": { "type": "array", "maxItems": 32, "items": { "type": "string" },
+                "description": "Literal arguments for the stdio adapter." }
             }
           }
         },

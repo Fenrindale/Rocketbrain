@@ -1,0 +1,10 @@
+{
+  "name": "SQLite SQL",
+  "scopeName": "source.rocketbrain-sqlite",
+  "patterns": [
+    { "name": "comment.line.double-dash.sqlite", "begin": "--", "end": "$" },
+    { "name": "entity.name.identifier.sqlite", "begin": "\\[", "end": "\\]" },
+    { "name": "keyword.other.sqlite", "match": "(?i)\\b(PRAGMA|STRICT|ROWID|MATERIALIZED|GLOB|AUTOINCREMENT)\\b" },
+    { "include": "source.sql" }
+  ]
+}

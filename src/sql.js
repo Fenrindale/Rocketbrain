@@ -9,13 +9,14 @@ function statementAt(text, offset, { dialect = 'mysql' } = {}) {
     if (blockComment) { if (c === '*' && n === '/') { blockComment = false; i++; } continue; }
     if (quote) {
       if (c === '\\' && dialect === 'mysql') { i++; continue; }
-      if (c === quote) { if (n === quote) i++; else quote = ''; }
+      if (c === quote) { if (n === quote && quote !== ']') i++; else quote = ''; }
       continue;
     }
-    if (c === '-' && n === '-' && (i + 2 === text.length || /\s/.test(text[i + 2]))) { lineComment = true; i++; }
-    else if (c === '#') lineComment = true;
+    if (c === '-' && n === '-' && (dialect === 'sqlite' || i + 2 === text.length || /\s/.test(text[i + 2]))) { lineComment = true; i++; }
+    else if (c === '#' && dialect === 'mysql') lineComment = true;
     else if (c === '/' && n === '*') { blockComment = true; i++; }
     else if (c === "'" || c === '"' || c === '`') quote = c;
+    else if (c === '[' && dialect === 'sqlite') quote = ']';
     else if (c === ';') { ranges.push({ start, end: i + 1, sql: text.slice(start, i + 1).trim() }); start = i + 1; }
   }
   ranges.push({ start, end: text.length, sql: text.slice(start).trim() });

@@ -18,6 +18,9 @@ const MAX_BODY=4*1024*1024;
 const STATES=new Set(['CREATED','RUNNING','SUSPENDED']);
 const relationships=new Set(['parent-observed','parent-outside-capture','no-parent-observed']);
 const UUID=/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/;
+const debugFile=/^[\p{L}\p{N}_.-]{1,150}\.kt$/u;
+const continuationName=/^[\p{L}\p{N}_$]+(?:\.[\p{L}\p{N}_$]+)*$/u;
+const validPort=port=>Number.isInteger(port)&&port>=1&&port<=65535;
 const execute=promisify(execFile);
 
 async function physicalFile(file,max) {
@@ -35,8 +38,9 @@ async function checksum(file) {
   return digest.digest('hex');
 }
 
-async function prepareCoroutineProbe({javaHome,debugJar,storageRoot,workspaceTrusted,allowProbeWrites}={}) {
+async function prepareCoroutineProbe({javaHome,debugJar,storageRoot,workspaceTrusted,allowProbeWrites,debugPort}={}) {
   if (workspaceTrusted!==true || allowProbeWrites!==true) throw fail('Explicitly prepare the coroutine probe in a trusted workspace.');
+  if (debugPort!==undefined&&!validPort(debugPort)) throw fail('Choose a local Kotlin debugger TCP port from 1 to 65535.');
   const debug=await physicalFile(debugJar,4*1024*1024);
   if (await checksum(debug)!==DEBUG_SHA256) throw fail('Use the official kotlinx-coroutines-debug '+VERSION+' JAR.');
   const java=independentJavaExecutable(javaHome && path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
@@ -62,7 +66,9 @@ async function prepareCoroutineProbe({javaHome,debugJar,storageRoot,workspaceTru
     await physicalFile(jar,256*1024);
     const encoded=Buffer.from(descriptor,'utf8').toString('base64url');
     if (encoded.length>8192) throw fail('Choose a shorter local directory for the coroutine probe.');
-    return {descriptor,jar,version:VERSION,vmArgs:['-Dkotlinx.coroutines.debug.enable.creation.stack.trace=true',
+    return {descriptor,jar,version:VERSION,...(debugPort===undefined?{}:{debugPort}),vmArgs:[
+      ...(debugPort===undefined?[]:['-Drocketbrain.coroutines.allowDebugger=true','-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:'+debugPort]),
+      '-Dkotlinx.coroutines.debug.enable.creation.stack.trace=true',
       '-javaagent:'+debug,'-javaagent:'+jar+'='+encoded]};
   } catch (error) {
     const checked=await fs.realpath(folder), identity=await fs.lstat(checked,{bigint:true});
@@ -74,11 +80,12 @@ async function prepareCoroutineProbe({javaHome,debugJar,storageRoot,workspaceTru
 }
 
 function descriptorOf(value) {
-  const {pid,port,session,token}=value || {};
+  const {pid,port,session,token,debugPort}=value || {};
   if (value?.format!=='RocketbrainCoroutineProbe' || value.version!==1 || !Number.isSafeInteger(pid) || pid<1 ||
       !Number.isInteger(port) || port<1 || port>65535 || typeof session!=='string' || !UUID.test(session) ||
-      typeof token!=='string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw fail('Invalid local Kotlin coroutine probe descriptor.');
-  return {pid,port,session,token};
+      typeof token!=='string' || !/^[A-Za-z0-9_-]{43}$/.test(token) ||
+      debugPort!==undefined&&(!validPort(debugPort)||debugPort===port)) throw fail('Invalid local Kotlin coroutine probe descriptor.');
+  return {pid,port,session,token,...(debugPort===undefined?{}:{debugPort})};
 }
 
 async function readCoroutineDescriptor(file) {
@@ -94,6 +101,11 @@ function readSnapshot(value,descriptor) {
       typeof value.capturedAt!=='string' || !/^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(value.capturedAt) ||
       !Number.isFinite(Date.parse(value.capturedAt)) || typeof value.creationEnabled!=='boolean' || typeof value.truncated!=='boolean' ||
       !Array.isArray(value.coroutines) || value.coroutines.length>100) throw fail('Unexpected snapshot from the selected local coroutine probe.');
+  const capture=value.debugCapture;
+  if(capture!==undefined&&(!validPort(descriptor.debugPort)||typeof capture!=='string'||!UUID.test(capture))){
+    throw fail('The Kotlin debug capture is outside the opted-in process session.');
+  }
+  const debugSequences=new Set();
   function text(item) {
     if (typeof item!=='string' || item.length>200) throw fail('A coroutine label or frame exceeds its supported size.');
     return item.replace(/[\u0000-\u001F\u007F]/g,'');
@@ -107,14 +119,28 @@ function readSnapshot(value,descriptor) {
   }
   const coroutines=value.coroutines.map((item,ordinal) => {
     if (!item || !STATES.has(item.state)) throw fail('Unknown Kotlin coroutine state.');
-    const {jobRelationship,parentOrdinal}=item;
+    const {jobRelationship,parentOrdinal,debugFrame}=item;
     if (jobRelationship!==undefined && !relationships.has(jobRelationship) ||
         jobRelationship==='parent-observed' && (!Number.isInteger(parentOrdinal) || parentOrdinal<0 ||
           parentOrdinal>=value.coroutines.length || parentOrdinal===ordinal) ||
         jobRelationship!=='parent-observed' && parentOrdinal!==undefined) {
       throw fail('Invalid Kotlin coroutine job relationship.');
     }
-    return {name:text(item.name),state:item.state,creation:frames(item.creation),observed:frames(item.observed),
+    const observed=frames(item.observed);
+    let debuggerFrame;
+    if(debugFrame!==undefined){
+      const {sequence,className,file,line}=debugFrame||{};
+      if(!capture||item.state!=='SUSPENDED'||typeof sequence!=='string'||!/^[1-9][0-9]{0,18}$/.test(sequence)||
+          debugSequences.has(sequence)||typeof className!=='string'||className.length>200||!continuationName.test(className)||
+          typeof file!=='string'||!debugFile.test(file)||!Number.isInteger(line)||line<1||line>2_000_000||
+          !observed.some(frame=>frame.className===className&&frame.method==='invokeSuspend'&&frame.file===file&&frame.line===line)){
+        throw fail('A Kotlin continuation does not match its observed parked source frame.');
+      }
+      debugSequences.add(sequence);
+      debuggerFrame={sequence,className,file,line};
+    }
+    return {name:text(item.name),state:item.state,creation:frames(item.creation),observed,
+      ...(debuggerFrame?{debugFrame:debuggerFrame}:{}),
       ...(jobRelationship&&{jobRelationship}),...(parentOrdinal!==undefined&&{parentOrdinal})};
   });
   for (const item of coroutines) {
@@ -126,11 +152,12 @@ function readSnapshot(value,descriptor) {
       parent=coroutines[parent].parentOrdinal;
     }
   }
-  return {pid:value.pid,capturedAt:value.capturedAt,creationEnabled:value.creationEnabled,truncated:value.truncated,coroutines};
+  return {pid:value.pid,capturedAt:value.capturedAt,creationEnabled:value.creationEnabled,truncated:value.truncated,coroutines,
+    ...(capture?{debugCapture:capture}:{})};
 }
 
 async function fetchCoroutineSnapshot(descriptor) {
-  const {pid,port,session,token}=descriptorOf({...descriptor,format:'RocketbrainCoroutineProbe',version:1});
+  const {pid,port,session,token,debugPort}=descriptorOf({...descriptor,format:'RocketbrainCoroutineProbe',version:1});
   const response=await fetch('http://127.0.0.1:'+port+ROUTE,{method:'GET',redirect:'error',
     signal:AbortSignal.timeout(5000),headers:{Accept:'application/json',Authorization:'Bearer '+token}});
   if (!response.ok || !/^application\/json\b/i.test(response.headers.get('content-type')||'')) {
@@ -144,7 +171,7 @@ async function fetchCoroutineSnapshot(descriptor) {
     chunks.push(Buffer.from(chunk));
   }
   const data=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks,size)));
-  return readSnapshot(data,{pid,session});
+  return readSnapshot(data,{pid,session,debugPort});
 }
 
 module.exports={prepareCoroutineProbe,readCoroutineDescriptor,fetchCoroutineSnapshot,readSnapshot,VERSION,DEBUG_SHA256};

@@ -1158,6 +1158,14 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
         return plan;
       } finally { state.running.delete(key); updateStatus(); }
     },
+    async explainGroundedQuery(scope, proposal, fingerprint, { signal, current } = {}) {
+      assertExclusiveReady();
+      const { db, epoch } = state, key = 'visual-explain';
+      const guard = () => databaseGuard(db, epoch)() && (current?.() ?? true);
+      state.running.add(key); updateStatus();
+      try { return await db.explainGroundedQuery(scope, proposal, fingerprint, { guard, signal }); }
+      finally { state.running.delete(key); updateStatus(); }
+    },
     async measureQueryPlan(sql, { confirmed, cancellation, beforeDispatch } = {}) {
       if (confirmed !== true) throw Error('Approve execution of the selected read-only SQL before measuring it.');
       assertExclusiveReady();

@@ -52,6 +52,7 @@ async function activate(context) {
     document=>sqlAnalysis?.virtualActive(document),document=>sqlAnalysis?.analysisOnly(document));
   activeDatabase=database;
   const duckdb = require('./db/duckdb-vscode').registerDuckDb(context, vscode);
+  const sqlite = require('./db/sqlite-file-vscode').registerSqliteFile(context, vscode, database);
   const mongoDb = require('./db/mongodb-vscode').registerMongoDb(context, vscode);
   const jdbc = require('./db/jdbc-vscode').registerJdbc(vscode, context);
   const embeddedLanguage = require('./db/embedded-language-vscode').registerEmbeddedLanguage(vscode, { catalogSnapshot: database.catalogSnapshot });
@@ -74,6 +75,7 @@ async function activate(context) {
   const databaseSearch = require('./db/unified-search-vscode').registerUnifiedSearch(context, vscode, { database, objectSources, schemaCatalog });
   const explainPlans=require('./db/explain-plan-vscode').registerExplainPlans(context,vscode,{database});
   const localSqlAssistant = require('./db/local-sql-assistant-vscode').registerLocalSqlAssistant(context, vscode, database);
+  localSqlAssistant.grounded = require('./db/local-sql-grounding-vscode').registerGroundedSqlAssistant(context, vscode, database);
   const sqlProposalReview = require('./db/sql-proposal-review-vscode').registerSqlProposalReview(context, vscode, database);
   context.subscriptions.push(lazyCatalog,objectSources,schemaCatalog,explainPlans);
   const tableTransfer=require('./db/table-transfer-vscode').registerTableTransfer(context,vscode,{database});
@@ -94,6 +96,7 @@ async function activate(context) {
   const codeModel = require('./ai/editor-model-vscode').registerEditorModel(vscode);
   const sshWorkspace = require('./remote/ssh-workspace-vscode').registerSshWorkspace(context, vscode);
   const acpReview = require('./ai/acp-vscode').registerAcpReview(context,vscode);
+  acpReview.database = require('./db/acp-database-vscode').registerDatabaseAcp(context,vscode,database);
   context.subscriptions.push(codeModel);
   const docker = require('./docker/vscode').registerDockerWorkbench(vscode);
   context.subscriptions.push(docker);
@@ -187,7 +190,7 @@ async function activate(context) {
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
   const wsl = require('./remote/wsl-vscode').registerWslWorkbench(vscode);
   context.subscriptions.push(wsl);
-  return { ...database, navigation, duckdb, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlCollations, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, gitWorktrees, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
+  return { ...database, navigation, duckdb, sqlite, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlCollations, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, gitWorktrees, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

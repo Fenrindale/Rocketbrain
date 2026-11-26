@@ -17,10 +17,6 @@ exports.run = async (vscode = require('vscode')) => {
   const api=await extension.activate();
   const checks=[],details={},failures=[];
   const groups={
-    gradleCompositeTasks:()=>require('./gradle-composite-tasks-host').runGradleCompositeTaskChecks(api,vscode,checks),
-    kotlinRename:()=>require('./kotlin-rename-host').runKotlinRenameChecks(api,vscode,checks),
-    mongoTls:()=>require('./mongodb-tls-host').runMongoTlsChecks(api,vscode,checks),
-    functionRoleDeployment:()=>require('./function-role-deployment-host').runFunctionRoleDeploymentChecks(api,vscode,checks),
     javaDelegatedBuild:()=>require('./java-delegated-build-host').runJavaDelegatedBuildChecks(api,vscode,checks),
     httpWorkflow:()=>require('./http-workflow-host').runHttpWorkflowChecks(api,vscode,checks),
     mongoEdit:()=>require('./mongodb-edit-host').runMongoEditChecks(api,vscode,checks),

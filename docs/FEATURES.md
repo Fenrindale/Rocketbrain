@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.102.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.104.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 155 |
-| 부분 구현 | 47 |
+| 구현 | 157 |
+| 부분 구현 | 45 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **88.2%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **88.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.102에서는 Gradle 복합 작업과 Java 증분 빌드, Kotlin 이름 변경, HTTP 요청 흐름, MongoDB TLS·셀 편집, 루틴의 역할 권한과 OpenBao 자격 증명 연동을 추가했다. 상태가 바뀐 항목은 5개이고 가중 점수는 188점에서 190.5점으로 바뀌었다.
+v0.104에서는 SQLite 파일 조회, PostgreSQL 실측 계획, 로컬 모델 SQL 탐색, Java 이름 변경과 저장소 검토, Hibernate 복합 키 조회 및 Kotlin 코루틴 디버깅을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 190.5점에서 191.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -103,7 +103,7 @@ v0.102에서는 Gradle 복합 작업과 Java 증분 빌드, Kotlin 이름 변경
 | IDEA-080 | IntelliJ IDEA | 표현식 평가·Watch·변수 수정·프레임 | 부분 구현 |
 | IDEA-081 | IntelliJ IDEA | HotSwap·변경 클래스 재적용 | 구현 |
 | IDEA-082 | IntelliJ IDEA | Java Stream 값 변환 시각화 | 구현 |
-| IDEA-083 | IntelliJ IDEA | Kotlin 코루틴 상태·생성 스택 | 부분 구현 |
+| IDEA-083 | IntelliJ IDEA | Kotlin 코루틴 상태·생성 스택 | 구현 |
 | IDEA-084 | IntelliJ IDEA | JUnit·TestNG 발견·실행·디버그 | 부분 구현 |
 | IDEA-085 | IntelliJ IDEA | 테스트 결과·실패 diff·재실행 | 구현 |
 | IDEA-086 | IntelliJ IDEA | 코드 커버리지·분기·테스트별 커버 | 구현 |
@@ -231,7 +231,7 @@ v0.102에서는 Gradle 복합 작업과 Java 증분 빌드, Kotlin 이름 변경
 | DG-088 | DataGrip | SQL 파일 Git·diff·변경 검토 | VS Code 재사용 |
 | DG-089 | DataGrip | schema 문맥의 자연어 SQL·설명 | 부분 구현 |
 | DG-090 | DataGrip | 외부 AI용 DB MCP·권한·결과 제공 | 구현 |
-| DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 부분 구현 |
+| DG-091 | DataGrip | 2026.3 Air·여러 agent 작업 검토 | 구현 |
 | DG-092 | DataGrip | 서로 다른 data source의 cross-database SQL | 구현 |
 | DG-093 | DataGrip | DuckDB dialect·함수·introspection | 구현 |
 | DG-094 | DataGrip | 미실행 SQL·최근 파일·Local History 복원 | 구현 |

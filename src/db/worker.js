@@ -1,11 +1,12 @@
 'use strict';
 
-const { parentPort } = require('node:worker_threads');
+const { parentPort, workerData } = require('node:worker_threads');
 const { performance } = require('node:perf_hooks');
 const fs = require('node:fs');
 const path = require('node:path');
 const initSqlJs = require('sql.js');
 const LIMITS = require('./limits');
+const { skipTrivia, prepareOne } = require('./sqlite-read');
 
 let database;
 
@@ -71,24 +72,6 @@ function seed(SQL) {
   return db;
 }
 
-function skipTrivia(sql, allowSemicolons = false) {
-  let offset = 0;
-  while (offset < sql.length) {
-    if (/\s|\uFEFF/.test(sql[offset]) || (allowSemicolons && sql[offset] === ';')) {
-      offset += 1;
-    } else if (sql.startsWith('--', offset)) {
-      const end = sql.indexOf('\n', offset + 2);
-      offset = end === -1 ? sql.length : end + 1;
-    } else if (sql.startsWith('/*', offset)) {
-      const end = sql.indexOf('*/', offset + 2);
-      offset = end === -1 ? sql.length : end + 2;
-    } else {
-      break;
-    }
-  }
-  return sql.slice(offset);
-}
-
 function validateQuery(sql, maxRows) {
   if (typeof sql !== 'string' || sql.includes('\0') || Buffer.byteLength(sql, 'utf8') > LIMITS.maxSqlBytes) {
     throw new Error('Invalid or oversized demo SQL.');
@@ -117,14 +100,9 @@ function query(sql, maxRows) {
   validateQuery(sql, maxRows);
   const started = performance.now();
   database.run('PRAGMA query_only = ON;');
-  const statement = database.prepare(sql);
+  // SQLite determines the first statement boundary before any second statement is prepared.
+  const statement = prepareOne(database, sql, 'Only one SQL statement can run at a time in the demo database.');
   try {
-    // SQLite determines the first statement boundary. Do not even prepare a
-    // second statement: some PRAGMAs have effects at preparation time.
-    const preparedSql = statement.getSQL();
-    if (!sql.startsWith(preparedSql) || skipTrivia(sql.slice(preparedSql.length), true).length) {
-      throw new Error('Only one SQL statement can run at a time in the demo database.');
-    }
     const columns = statement.getColumnNames();
     if (!columns.length) {
       // A WITH ... UPDATE/DELETE has no columns but must still meet SQLite's
@@ -180,6 +158,10 @@ function schema() {
     const adjacentWasm = path.join(__dirname, 'sql-wasm.wasm');
     const wasmPath = fs.existsSync(adjacentWasm) ? adjacentWasm : require.resolve('sql.js/dist/sql-wasm.wasm');
     const SQL = await initSqlJs({ locateFile: () => wasmPath });
+    if (workerData?.mode === 'sqlite-file') {
+      await require('./sqlite-file-worker').serveSqliteFile(parentPort, SQL, workerData.file);
+      return;
+    }
     database = seed(SQL);
     parentPort.on('message', (message) => {
       try {

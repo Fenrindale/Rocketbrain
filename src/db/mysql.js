@@ -1251,6 +1251,55 @@ class MysqlService {
     if (result.rows.length !== 1 || result.rows[0].length !== 1) throw Error('Expected one plan from the server.');
     return normalizePlan({ raw: result.rows[0][0], engine, version, database, format });
   }
+  explainGroundedQuery(scope, proposal, expectedFingerprint, { guard, signal } = {}) {
+    const { projectGrounding, compileGroundedQuery } = require('./local-sql-grounding');
+    const { explainSql, normalizePlan } = require('./explain-plan');
+    return this._withRoutineSession(async (session, read, check) => {
+      const { rows: [[serverVersion, database, mode, folding] = []] } = await read('SELECT VERSION(), DATABASE(), @@SESSION.sql_mode, @@lower_case_table_names');
+      if (typeof mode !== 'string' || typeof serverVersion !== 'string' || database !== this._options.database ||
+          !Array.isArray(scope.selections) || scope.selections.length < 2 || scope.selections.length > 4 ||
+          scope.selections.some(item => !/^[A-Za-z_][A-Za-z0-9_$]{0,63}$/.test(item?.table ?? ''))) {
+        throw Error('The grounded plan database context could not be confirmed.');
+      }
+      const dialect = /mariadb/i.test(serverVersion) ? 'mariadb' : 'mysql';
+      const sqlMode = mode.split(',').filter(Boolean);
+      const catalog = { database, dialect, serverVersion, sqlMode, tableNameCaseSensitive: Number(folding) === 0,
+        semanticContextObserved: true, coverage: { tables: 'loaded', columns: 'loaded', foreignKeys: 'loaded' }, tables: [] };
+      this._observe(session, await this._control(session, 'START TRANSACTION READ ONLY', 5000));
+      try {
+        if (!session.readOnly || !session.inTransaction) throw Error('The grounded plan requires an isolated read-only transaction.');
+        const readObserved = async (sql, values) => {
+          check();
+          const result = await this._stream(session, sql, values, { maxRows: 1000, timeoutMs: 5000 }, false,
+            { category: 'metadata', operation: operationOf(sql) });
+          if (result.truncated) throw Error('The selected table metadata exceeds the grounded plan inspection limit.');
+          return result;
+        };
+        for (const { table } of [...scope.selections].sort((a, b) => a.table < b.table ? -1 : a.table > b.table ? 1 : 0)) {
+          const { rows } = await read('SELECT TABLE_TYPE, ENGINE FROM information_schema.TABLES ' +
+            'WHERE CAST(TABLE_SCHEMA AS BINARY)=CAST(? AS BINARY) AND CAST(TABLE_NAME AS BINARY)=CAST(? AS BINARY)', [database, table]);
+          if (rows.length !== 1 || rows[0][0] !== 'BASE TABLE' || !/^innodb$/i.test(rows[0][1])) {
+            throw Error('A grounded-plan table is no longer an observed InnoDB base table. Prepare the proposal again.');
+          }
+          // Hold the table metadata lock through EXPLAIN without selecting any stored values.
+          await read(`SELECT 1 FROM ${quoteIdentifier(database)}.${quoteIdentifier(table)} LIMIT 0`);
+          const observed = await readMetadata(readObserved, database, 0, table, { exactScope: true });
+          if (observed.coverage.foreignKeys !== 'loaded') throw Error('The foreign key metadata changed or is no longer visible.');
+          catalog.tables.push(...observed.tables);
+        }
+        const current = projectGrounding(catalog, scope);
+        if (current.fingerprint !== expectedFingerprint) throw Error('The approved table or foreign key metadata changed. Prepare the proposal again.');
+        if (!session.inTransaction) throw Error('The grounded plan lost its read-only transaction.');
+        const { sql } = compileGroundedQuery(current, proposal);
+        const { rows } = await read(explainSql(sql, sqlMode));
+        check();
+        if (rows.length !== 1 || rows[0].length !== 1) throw Error('Expected one estimated plan from the server.');
+        return normalizePlan({ raw: rows[0][0], engine: dialect, version: serverVersion, database, format: 'json' });
+      } finally {
+        if (session.connected) this._observe(session, await this._control(session, 'ROLLBACK', 5000));
+      }
+    }, { guard, signal });
+  }
   async measureQueryPlan(sql, { assertCurrent, cancellation } = {}) {
     const { validatePlanQuery, measuredSql, normalizePlan } = require('./explain-plan');
     validatePlanQuery(sql, undefined, { measured: true });

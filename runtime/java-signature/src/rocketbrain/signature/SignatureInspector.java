@@ -407,6 +407,7 @@ public final class SignatureInspector {
                 !(args.length == 8 && args[4].equals("typeStructure")) &&
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
                 !(args.length == 7 && args[4].equals("cleanup")) &&
+                !(args.length == 7 && args[4].equals("typeRename")) &&
                 !(args.length == 9 && Set.of("typeImport", "staticImport").contains(args[4])) &&
                 !(args.length == 5 && args[4].equals("check")) &&
                 !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
@@ -447,6 +448,7 @@ public final class SignatureInspector {
                     else if (args[4].equals("attributedDependencies")) {
                         report.put("attributedDependencies",new AttributedDependencies(trees,byUri.keySet()).inspect(units));
                     }
+                    else if (args[4].equals("typeRename")) report.put("typeRename",TypeRenameInspector.inspect(task,units,args[5],args[6]));
                     else if (args[4].equals("hierarchy")) report.put("hierarchy",new HierarchyInspector(task).inspect(units,byUri));
                     else if (args[4].equals("dataflow")) report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
                     else if (args[4].equals("callFlow")) {

@@ -1,5 +1,5 @@
 {
-  "version": "0.102.0",
+  "version": "0.104.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,35 +30,35 @@
     }
   },
   "summary": {
-    "implemented": 155,
-    "partial": 47,
+    "implemented": 157,
+    "partial": 45,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 88.2,
+    "percent": 88.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-044",
-    "IDEA-070",
-    "IDEA-072",
-    "IDEA-102",
+    "IDEA-024",
+    "IDEA-063",
+    "IDEA-083",
+    "IDEA-095",
     "DG-003",
-    "DG-007",
-    "DG-081"
+    "DG-089",
+    "DG-091"
   ],
   "expandedFeatures": [
-    "IDEA-044",
-    "IDEA-070",
-    "IDEA-072",
-    "IDEA-102",
+    "IDEA-024",
+    "IDEA-063",
+    "IDEA-083",
+    "IDEA-095",
     "DG-003",
-    "DG-007",
-    "DG-081"
+    "DG-089",
+    "DG-091"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -723,24 +723,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT의 실제 Java 기호 rename과 편집기 적용을 검증했다.",
+      "scope": "공개 Java 타입과 파일 이름을 함께 바꾸고 실제로 연결된 Java import·참조와 Spring XML을 갱신한다.",
       "remaining": [
-        "패키지 이동·공개 API·Kotlin/Spring XML 교차 변경 및 일괄 undo 검증이 남는다."
+        "패키지 이름 변경과 더 복잡한 교차 언어 호출 계약이 남아 있다."
       ],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): JDT 기본 Java 완성·정의·rename·진단·JDK 소스와 작은 Maven/Gradle import 표본. 행별 고급 기능은 별도 확인 대상이다.",
+        "testedScope": "실제 Spring 프로젝트에서 적용 전후 컴파일과 빈 동작, Java·XML을 묶은 Undo/Redo를 확인했다.",
         "publicEvidence": [
-          "src/java/index.js",
-          "src/java/runtime.js",
-          "test/java-engine.test.js",
-          "test/java-host.js"
+          "test/java-type-rename-host.js",
+          "test/workflows-v104-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1360,8 +1358,8 @@
       "verification": {
         "state": "v0.102-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.102.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1917,23 +1915,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Hibernate entity·lazy proxy 디버깅과 쿼리·매핑 관찰을 지원한다. 동기 Spring MVC 요청에서 확인된 단일 키 Hibernate 컬렉션의 N+1 패턴을 SQL 템플릿과 실제 SELECT 수로 표시한다.",
+      "scope": "실제 Hibernate가 수행한 복합 키 컬렉션 조회에서 지연 로딩의 반복을 fetch join 및 명시적 반복 조회와 구분한다.",
       "remaining": [
-        "복합 키, 비동기 요청, 다른 provider의 N+1 패턴과 원시 SQL 바인딩의 사용자 검토 경로가 남아 있다."
+        "다른 계측 범위와 비동기 요청의 실제 연결을 확장한다."
       ],
       "verification": {
-        "state": "v0.62-installed-coverage",
+        "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.62.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Spring MVC와 Hibernate의 두 실제 DB에서 lazy·fetch join·독립 반복 요청의 SELECT를 4·1·4회로 관찰했다. 서로 다른 키 3개를 읽은 첫 요청만 탐지하고 원시 값을 기록하지 않았다.",
+        "testedScope": "두 DB에서 각 SQL 호출 수 4·1·4회를 대조했다. 지연 로딩에만 N+1을 표시했다.",
         "publicEvidence": [
-          "src/jpa/fetch-performance.js",
-          "src/jpa/observer-vscode.js",
-          "test/hibernate-fetch-performance-host.js"
+          "test/hibernate-composite-fetch-host.js",
+          "test/workflows-v104-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2132,8 +2129,8 @@
       "verification": {
         "state": "v0.102-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.102.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2185,8 +2182,8 @@
       "verification": {
         "state": "v0.102-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.102.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2502,25 +2499,23 @@
       "category": "디버깅",
       "feature": "Kotlin 코루틴 상태·생성 스택",
       "priority": "P2",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "계측한 실제 코루틴에서 생성·대기 위치와 Job의 정확한 부모·자식 관계를 조회한다.",
-      "remaining": [
-        "외부 JVM에 동적으로 연결하고 코루틴 선택을 JDI 디버그 프레임 이동에 연계한다."
-      ],
+      "scope": "실행 중인 로컬 JVM의 코루틴을 선택하고 재개 시 지정한 인스턴스의 실제 Kotlin 소스 프레임에서 멈춘다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.97-installed-coverage",
+        "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.97.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "같은 표시명을 가진 서로 다른 Job을 구분하고 실제 부모·자식 관계를 확인했다. 관찰 도구 분리 후 앱은 계속 실행됐다.",
+        "testedScope": "동일한 이름과 클래스의 다른 코루틴과 구분했다. 디버거 정지 중 JDBC 조회와 분리 뒤 계속 실행을 확인했다.",
         "publicEvidence": [
-          "src/java/kotlin-coroutines-vscode.js",
-          "test/kotlin-coroutines-host.js"
+          "test/kotlin-coroutine-debug-host.js",
+          "test/workflows-v104-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2853,23 +2848,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "GitHub PR과 GitLab MR의 변경 파일, 패치, 주석, 관련 이슈 번호와 검사 상태를 읽는다. 확인한 커밋과 변경 줄에 로컬 초안을 저장한다.",
+      "scope": "GitHub·GitLab 변경 파일과 대화 페이지를 탐색하며, 검토한 커밋과 줄에 로컬 초안을 게시한다.",
       "remaining": [
-        "리뷰 제출, 서버의 주석 변경, 모든 변경 파일 페이지와 대화 탐색이 필요하다."
+        "정식 리뷰 제출과 기존 메모 편집을 추가한다."
       ],
       "verification": {
-        "state": "v0.51-installed-coverage",
+        "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.51.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "인증을 검증하는 두 로컬 API에서 변경과 검사 결과를 표시하고, 패치 전용 편집기와 커밋에 묶인 로컬 초안을 확인했다. 실제 공개 GitHub API 읽기도 별도로 확인했다.",
+        "testedScope": "소유 GitHub·GitLab API 시험 서버에서 정확한 줄과 커밋에 한 번 게시했다. 서버 응답이 끊긴 시도는 자동 재전송하지 않았다.",
         "publicEvidence": [
-          "src/vcs/code-review.js",
-          "src/vcs/code-review-vscode.js",
-          "test/code-review-host.js"
+          "test/code-review-publication-host.js",
+          "test/workflows-v104-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3067,8 +3061,8 @@
       "verification": {
         "state": "v0.102-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.102.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3684,23 +3678,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "MongoDB에서 고정된 TLS CA와 서버 이름을 검증한 뒤 읽기·집계와 BSON 단일 필드 변경을 제공한다.",
+      "scope": "실제 SQLite 파일의 타입·키·인덱스를 읽고, PostgreSQL EXPLAIN ANALYZE의 행·타이밍·버퍼를 검토한다.",
       "remaining": [
-        "PostgreSQL 실측 계획과 로컬 SQLite의 파일 읽기·편집을 추가한다."
+        "SQLite 원본 셀 편집을 검증한다."
       ],
       "verification": {
-        "state": "v0.102-installed-coverage",
+        "state": "v0.104-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 MongoDB 8.0.38에서 TLS와 SCRAM, 64비트 BSON·NULL, 제약 검사, 컬렉션 재생성·편집 충돌 거부를 확인했다.",
+        "testedScope": "SQLite 스냅샷·정확한 숫자와 BLOB·공용 결과, PostgreSQL 17.12의 쿼리 승인과 실제 시간·버퍼·중단을 확인했다.",
         "publicEvidence": [
-          "test/mongodb-tls-host.js",
-          "test/mongodb-edit-host.js",
-          "test/workflows-v102-host.js"
+          "test/sqlite-file-host.js",
+          "test/postgresql-measured-plan-host.js",
+          "test/workflows-v104-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3807,8 +3801,8 @@
       "verification": {
         "state": "v0.102-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.102.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5989,8 +5983,8 @@
       "verification": {
         "state": "v0.102-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.102.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6222,23 +6216,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "사용자가 지정한 테이블과 열의 구조를 로컬 모델 요청에 첨부한다. 읽기 SQL 초안과 리터럴을 가린 SQL 설명을 편집기에서 검토할 수 있다.",
+      "scope": "로컬 Qwen 모델이 승인한 컬럼과 검증한 FK 그래프에서 읽기 SQL을 제안하고 수정한다.",
       "remaining": [
-        "대화형 스키마 탐색과 복잡한 다중 테이블 모델 정확도 검증이 남아 있다."
+        "검토를 닫고 별도 명령에서 다시 열어 이어가는 기능을 추가한다."
       ],
       "verification": {
-        "state": "v0.54-installed-coverage",
+        "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.54.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Qwen2.5-Coder와 두 DB의 Spring 스키마에서 검토한 SQL 초안을 수동 실행해 기준 쿼리의 두 행과 일치함을 확인했다.",
+        "testedScope": "실제 Qwen에서 테이블 네 개·외래 키 세 개와 복합 키 두 열을 사용했다. 양쪽 DB에서 두 질의 결과와 계획을 대조했다.",
         "publicEvidence": [
-          "src/db/local-sql-assistant.js",
-          "src/db/local-sql-assistant-vscode.js",
-          "test/local-sql-assistant-host.js"
+          "test/local-sql-grounding-host.js",
+          "test/workflows-v104-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6279,26 +6272,23 @@
       "category": "AI·도구 연결",
       "feature": "2026.3 Air·여러 agent 작업 검토",
       "priority": "P2",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "검토한 스키마 범위에서 로컬 모델에 여러 읽기 SQL을 맡긴 뒤 개별 제안의 취소, 승인, 거절 및 편집기 내보내기를 지원한다.",
-      "remaining": [
-        "범용 ACP·외부 에이전트 연결과 여러 도구를 사용하는 DB 작업 검토가 남아 있다."
-      ],
+      "scope": "OpenCode ACP 에이전트의 DB 작업을 각각 검토하고 허용한 스키마 범위로 SQL 초안과 예상 계획을 확인한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.55-installed-coverage",
+        "state": "v0.104-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.55.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "동시에 구동한 실제 Qwen 모델 제안 둘을 비교하고 승인 범위를 확인했다. 사용자가 검토한 SQL을 두 DB에서 수동 실행해 Spring 기준 결과와 비교했고, 취소는 단위 테스트로 확인했다.",
+        "testedScope": "실제 OpenCode·로컬 Qwen으로 독립 작업 두 개를 실행했다. 결과를 실제 양쪽 엔진에서 비교하고 변경된 복합 FK를 거부했다.",
         "publicEvidence": [
-          "src/db/sql-proposal-review.js",
-          "src/db/sql-proposal-review-vscode.js",
-          "test/sql-proposal-review-host.js"
+          "test/acp-database-host.js",
+          "test/workflows-v104-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6453,8 +6443,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "0fc1090ba5b582431079e8d8d4e89fad54ca1ba5ece4346abc95f656bc6b203c",
-    "sourceManifestSha256": "9662676c1cf4a69ecd29d786997ec6d93f04188106022915846562202fc7f37d",
+    "vsixSha256": "5a596b0cd6534ad8d46239c048da9afba758b3aaf92dc18442225c7aea991b82",
+    "sourceManifestSha256": "f40985287639e90134f3fbe1e1dd7f6535bc41af096fb41f5e9f9018e4523d6e",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6468,38 +6458,23 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-070",
+      "id": "IDEA-083",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-072",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-102",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-007",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-081",
+      "id": "DG-091",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1941,
-    "pass": 1782,
+    "tests": 1968,
+    "pass": 1807,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 159,
+    "skipped": 161,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

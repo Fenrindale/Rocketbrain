@@ -78,7 +78,7 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 17. **Manage Git Changelists**에서 변경 파일을 이름 있는 작업 목록에 배정합니다. 목록에 편집 위치와 실행 구성 선택을 기록해 복원할 수 있습니다. 복원 후 실행 구성은 VS Code의 Run and Debug에서 시작할 수 있습니다.
 
 **Manage Git Worktree Context**에서 worktree별 Java 프로젝트, Spring Actuator 주소와 DB 프로필을 저장하고 그 문맥에서 작업합니다. [Git worktree별 프로젝트 문맥](docs/git-worktree-context.md)
-   **Open GitHub or GitLab Review**는 `rocketbrain.codeReview`에 지정한 프로젝트의 열린 검토를 불러옵니다. 변경 패치와 댓글, 연결 이슈 번호와 CI 상태를 볼 수 있으며 **Add Local Review Draft**로 새 줄에 연결한 초안을 작업 공간에 저장합니다.
+   **Open GitHub or GitLab Review**는 `rocketbrain.codeReview`에 지정한 프로젝트의 열린 검토를 불러옵니다. **Navigate Review Pages**로 변경 파일과 대화 페이지를 각각 이동합니다. **Add Local Review Draft**로 변경 파일의 새 줄에 연결한 초안을 저장합니다. **Publish Review Draft**는 파일, 줄, 커밋, 댓글 본문을 다시 확인해 선택한 서버에 게시합니다. 서버가 결과를 확인해 주지 않으면 대화를 새로 읽어 게시 여부를 확인합니다.
 18. **Convert Java Lambda, Anonymous Class or Loop**에서 플랫폼 또는 프로젝트에 선언된 단일 추상 메서드 인터페이스를 구현하는 지역 변수와 배열 합산 루프의 변환을 검토합니다. 적용 전에 Javac로 캡처한 지역 값과 호출 오버로드의 바인딩을 확인합니다. [Java 변환](docs/java-conversions.md)
 19. **Trace Java Stream Values**에서 `Stream.of` 또는 `List.of(...).stream()`부터 `toList()`까지 선택합니다. 독립 JDK에서 `filter`, `map`, `flatMap`, `limit`의 실제 값 흐름을 실행하고 **Go to Java Stream Stage**로 원본 단계에 이동합니다.
 20. **Build and Index Mixed JVM Sources**로 가져온 Gradle·Maven 혼합 프로젝트의 표준 main 소스를 빌드하고 인덱싱합니다. Java Projects에서 Kotlin 파일을 열고, 한 줄에서 대상을 식별할 수 있는 호출·getter·상위 클래스에 **Go to Mixed JVM Declaration**을 사용합니다. 소스나 컴파일 결과가 바뀌면 다시 인덱싱합니다. Gradle `application` 프로젝트는 **Run Mixed Gradle Application**에서 실행합니다.
@@ -151,6 +151,10 @@ Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를
 코루틴을 펼치면 생성 스택과 마지막 관찰 스택이 표시됩니다. 실행 중인 코루틴의 마지막 관찰 스택은 재개 지점일 수 있습니다. 로컬 소스와 일치하는 스택 프레임을 선택하면 해당 줄을 엽니다. 이 기능은 가동 중인 JVM에 시작 옵션으로 연결한 개발 프로브의 스냅샷을 읽습니다.
 
 같은 스냅샷에서 부모 Job을 직접 관찰하면 자식 코루틴을 부모 아래에 표시합니다. 이름이 같아도 Job 객체가 다르면 분리하며, 캡처 범위 밖에 있는 부모는 별도로 표시합니다.
+
+Windows의 로컬 개발 JVM에서 **Prepare Kotlin Coroutine Debug Attach**를 선택해 IPv4 루프백 JDWP 포트와 프로브를 설정할 수 있습니다. Java 엔진 설치 명령으로 Rocketbrain Java 디버거를 업데이트한 뒤, 받은 VM 인수로 JVM을 실행하고 **Connect Local Probe**에서 해당 프로브를 엽니다. 대기 중인 코루틴에서 **Debug when this coroutine resumes**를 선택하면 실행 중인 JVM에 연결합니다. 선택한 continuation이 45초 안에 재개되면 VS Code 디버그 스택에 실제 Kotlin 프레임이 열립니다.
+
+이 흐름은 고정된 `kotlinx-coroutines-core-jvm`과 `kotlinx-coroutines-debug` 1.11.0의 소스 정보가 있는 suspend lambda를 지원합니다. **Detach Kotlin Coroutine Debugger**로 디버거를 분리하면 JVM이 계속 실행됩니다.
 
 ### Java CI 품질 게이트
 
@@ -320,8 +324,10 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 **Track SQL Console as Draft**로 보관을 시작하면 편집 중인 SQL과 선택 영역이 로컬에 갱신됩니다. 닫거나 재시작한 뒤 **Restore SQL Draft**에서 오프라인으로 이어서 편집합니다. [SQL 콘솔 초안 복원](docs/sql-draft-recovery.md)
 
 - **Open Local DuckDB Read-Only**에서 로컬 `.duckdb` 파일과 별도 설치한 DuckDB CLI 1.5.6 이상을 선택합니다. **New DuckDB Query**로 전용 SQL 편집기를 열고, **Run Read-Only DuckDB Query**로 단일 읽기 쿼리를 실행합니다. 테이블·뷰의 열과 타입, 네이티브 함수의 오버로드는 **Browse DuckDB Tables and Views**와 **Find DuckDB Functions**에서 확인합니다. **Preview Local CSV or Parquet with DuckDB**는 직접 선택한 파일 하나의 열 타입과 행 표본을 별도 읽기 작업으로 표시합니다. 일반 쿼리의 외부 파일 접근과 쓰기는 차단합니다. **Inspect DuckDB Extensions**는 현재 바이너리의 설치·로드 상태와 버전을 보여 줍니다.
+- **Open Local SQLite Snapshot**에서 깨끗하게 체크포인트된 32 MiB 이하의 SQLite 파일을 엽니다. **Browse SQLite Tables and Indexes**에서 테이블·뷰와 복합 키, 생성 열, 표현식·부분 인덱스의 원문을 확인합니다. **New SQLite Query**에서 `Ctrl+Enter`를 누르면 정확한 한 문장, SQLite 실행 계획, 스냅샷 지문을 검토한 뒤 공용 결과 그리드에서 실행합니다. JSON 내보내기는 NULL, 64비트 정수, 텍스트와 BLOB의 저장 타입을 함께 보존합니다. 열린 스냅샷에는 원본의 이후 변경이 반영되지 않으므로, 변경을 읽으려면 **Refresh SQLite Snapshot**을 선택합니다. WAL 모드 파일과 저널 보조 파일이 있는 사본은 열 수 없습니다. [SQLite 파일 형식](https://sqlite.org/fileformat.html) · [SQLite WAL](https://sqlite.org/wal.html)
 - **Manage Workspace DuckDB Extension**에서 공식 `tpch`·`tpcds` 확장의 설치·업데이트·사용·제거를 관리합니다. 다운받은 파일은 DuckDB로 서명과 실행 호환성을 확인한 뒤 워크스페이스 전용 저장소에 둡니다. 활성화한 확장은 현재 DB 접속에 적용되며, 사용자 SQL의 외부 파일 접근 차단은 유지합니다.
 - **Add JDBC Driver**에서 별도 JDK와 공급사 JAR를 사용합니다. 드라이버 클래스와 SHA-256을 검토해 승인하고, **Manage JDBC Profiles**로 연결한 뒤 카탈로그와 읽기 쿼리를 사용할 수 있습니다. [사용자 지정 JDBC 드라이버 문서](docs/jdbc-drivers.md)
+- PostgreSQL 17 이상에서는 **Review PostgreSQL Plan Measurement**로 단일 테이블 SELECT를 검토한 뒤 **Measure Reviewed PostgreSQL Plan**으로 실측 실행 시간, 행 수, 반복 횟수와 버퍼 통계를 확인합니다. 같은 검토의 추정치와 비교할 수 있으며, 실측에는 대상 테이블의 읽기·유지 관리 잠금 권한이 필요합니다. [실행 계획 사용법](docs/jdbc-drivers.md#postgresql)
 - SSH 연결 프로필에서 **Use one agent identity**를 선택하면 로컬 에이전트의 named pipe 또는 Unix socket과 OpenSSH Ed25519 공개 키 파일을 지정할 수 있습니다. 시스템 OpenSSH는 검증한 known_hosts와 선택한 키를 사용합니다. 연결 테스트에 공개 키 지문을 표시하며, 저장한 공개 키 파일이 바뀌면 프로필을 다시 검증합니다. 로컬 에이전트 주소와 키 파일 경로는 공유 프로필에서 제외합니다.
 - SSH 프로필에서 **SSH password** 또는 **Encrypted OpenSSH private key**를 선택할 수 있습니다. 관리자가 별도로 알려준 서버 호스트 키의 `SHA256:…` 지문을 입력하세요. 연결할 때마다 입력한 SSH 비밀번호와 키 암호는 저장하거나 내보내지 않습니다. 암호화 키에는 OpenSSH 형식의 AES·bcrypt 키 파일을 사용합니다. [OpenSSH 호스트 키 지문](https://man.openbsd.org/ssh-keygen.1)
 - 연결 프로필에는 TCP, Unix 도메인 소켓, Windows 명명된 파이프 중 실행 환경과 맞는 전송을 선택합니다. 공유 프로필에는 비밀번호와 로컬 경로를 담지 않으며, 가져온 로컬 연결의 주소는 해당 컴퓨터에서 입력합니다.

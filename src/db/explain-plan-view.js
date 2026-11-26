@@ -83,9 +83,9 @@ function costMeter(group, maxima) {
     '" value="' + Number(value.value) + '"></meter>';
 }
 
-function explanationHtml(plan, { nonce, source = false }) {
+function explanationHtml(plan, { nonce, source = false, allowTreeCapture = true }) {
   const rawLabel = plan.format === 'tree' ? 'TREE text' : 'JSON';
-  const captureTreeSeparately = plan.engine === 'mysql' && !plan.measured;
+  const captureTreeSeparately = allowTreeCapture && plan.engine === 'mysql' && !plan.measured;
   const byId = new Map(plan.nodes.map(node => [node.id, node]));
   const children = new Map(), maxima = new Map();
   for (const node of plan.nodes) {

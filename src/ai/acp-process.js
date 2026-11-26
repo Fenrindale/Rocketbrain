@@ -23,14 +23,14 @@ async function agentProgram(profile) {
   return { label: profile.label.trim(), executable, args: [...args] };
 }
 
-async function runAgent(profile, { cwd, text, signal, onUpdate, promptTimeout = 90000 }) {
+async function runAgent(profile, { cwd, text, signal, onUpdate, promptTimeout = 90000, env }) {
   const { label, executable, args } = await agentProgram(profile);
   if (!path.isAbsolute(cwd) || !(await fs.stat(cwd)).isDirectory()) throw Error('Open a local workspace folder.');
   if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text) > 16 * 1024) {
     throw Error('Enter a request of up to 16 KiB.');
   }
   if (signal?.aborted) throw aborted();
-  const child = spawn(executable,args,{cwd,shell:false,windowsHide:true,stdio:['pipe','pipe','pipe']});
+  const child = spawn(executable,args,{cwd,env,shell:false,windowsHide:true,stdio:['pipe','pipe','pipe']});
   const pending = new Map();
   let unusable;
   let sessionId;

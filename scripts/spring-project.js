@@ -291,6 +291,9 @@ async function main() {
       const functionRoleConfig = process.env.ROCKETBRAIN_ENABLE_FUNCTION_ROLE_FIXTURE === '1'
         ? await require('../test/helpers/function-role-fixture').prepareFunctionRoleFixture(fixture)
         : undefined;
+      const sqliteFileConfig = process.env.ROCKETBRAIN_ENABLE_SQLITE_FILE_FIXTURE === '1'
+        ? await require('../test/helpers/sqlite-file-fixture').prepareSqliteFileFixture(fixture)
+        : undefined;
       const passwordRotationConfig = process.env.ROCKETBRAIN_ENABLE_PASSWORD_ROTATION_FIXTURE === '1'
         ? await require('../test/helpers/database-password-rotation-fixture').preparePasswordRotationFixture(fixture)
         : undefined;
@@ -311,6 +314,7 @@ async function main() {
           ...(accountAccessConfig ? { ROCKETBRAIN_ACCOUNT_ACCESS_CONFIG:accountAccessConfig } : {}),
           ...(functionGrantConfig ? { ROCKETBRAIN_FUNCTION_GRANT_CONFIG:functionGrantConfig } : {}),
           ...(functionRoleConfig ? { ROCKETBRAIN_FUNCTION_ROLE_CONFIG:functionRoleConfig } : {}),
+          ...(sqliteFileConfig ? { ROCKETBRAIN_SQLITE_FILE_CONFIG:sqliteFileConfig } : {}),
           ...(fixture.db.crossConfigPath ? { ROCKETBRAIN_SCHEMA_CROSS_CONFIG: fixture.db.crossConfigPath } : {}) } });
         child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
       });

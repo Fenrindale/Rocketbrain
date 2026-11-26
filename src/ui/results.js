@@ -657,6 +657,8 @@
     const pending = column && row.pending && Object.hasOwn(row.pending, column.name) ? row.pending[column.name] : undefined;
     const value = pending ? pending.kind === 'null' ? null : pending.text : row.values[index];
     presentValue(cell, row.inserted && !pending ? 'DEFAULT' : value);
+    const storageClass = record.result.sqliteStorageClasses?.[row.number - 1]?.[index];
+    if (storageClass) cell.title = 'SQLite ' + storageClass;
     if (pending) cell.classList.add('modified');
     if (enabled && column && !row.deleted && (row.inserted ? column.insertable ?? column.editable : column.editable)) {
       editableCell(cell, record, row.id, column, value, row.inserted);

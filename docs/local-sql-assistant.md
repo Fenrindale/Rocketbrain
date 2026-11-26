@@ -9,3 +9,13 @@ The assistant sends selected table and column names, basic type names and relati
 Requests cover up to six tables, 48 columns, 8 KiB of metadata and 4 KiB of input. A local model can decline a request, return invalid output, or time out after 30 seconds. The assistant reports those failures without opening an SQL draft. Model quality depends on the selected model and supported query grammar.
 
 The test fixture uses a separately obtained llama.cpp CPU runtime and Qwen2.5-Coder‑1.5B‑Instruct weights. The installed extension uses the local endpoint you configure. The integration test requires `ROCKETBRAIN_LOCAL_MODEL_BIN` and `ROCKETBRAIN_LOCAL_MODEL_GGUF` with absolute fixture paths. [Qwen model card](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF)
+
+## Explore related tables
+
+Run **Rocketbrain: Explore Schema with Local SQL Model** in a trusted workspace connected to MySQL or MariaDB. Choose the first table, then select the observed foreign keys that extend the route. Each join picker shows the constraint and its column pairs. Choose the columns the model can use, describe the query, and review the metadata and request before sending them to the local endpoint.
+
+The model requests columns, standard aggregates, grouping, sorting, and a bounded result size. Rocketbrain builds the SQL from the approved columns and joins. Review the exact draft in the SQL editor. **Refine with Same Schema** carries forward the prior reviewed plan choices. The next request preview shows those choices alongside the follow-up. Model inference sends the shown identifiers, types, selected key mappings, plan choices, and the current prompt. Database rows, column defaults, column comments, and the prior explanation stay local to their original surfaces.
+
+**Inspect Estimated Plan** asks for separate approval. It obtains an estimated JSON plan using a dedicated read-only database transaction and checks the selected table and foreign-key metadata with the tables pinned. The generated `SELECT` remains a draft for manual use. This workflow covers two to four distinct InnoDB tables in one schema, up to 24 selected and join columns, foreign-key inner joins, and 1 to 500 results. Complex filters, outer joins, views, and cross-schema routes are outside its structured query model. Correct interpretation of a natural-language request still requires reviewing the SQL and its result expectations.
+
+To compare separate requests assigned to locally configured ACP peers, open [Database ACP task review](acp-database-tasks.md).

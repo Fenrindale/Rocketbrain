@@ -42,7 +42,7 @@ function publicPath(name) {
   if (/^scripts\/[^/]+\.(?:js|ps1)$/.test(name) && !/^scripts\/(?:record-v|observe-reference\.)/.test(name)) return true;
   if (/^docs\/.+\.(?:md|json)$/.test(name)) return true;
   if (/^\.github\/(?:workflows\/[^/]+\.ya?ml|[^/]+\.md)$/.test(name)) return true;
-  if (name === 'media/duckdb.tmLanguage.json') return true;
+  if (name === 'media/duckdb.tmLanguage.json' || name === 'media/sqlite.tmLanguage.json') return true;
   return /^(?:media\/[^/]+\.svg|themes\/[^/]+\.json|third-party\/licenses\/[^/]+\.(?:txt|json))$/.test(name);
 }
 const rules = [

@@ -1,25 +1,25 @@
 {
-  "version": "0.102.0",
-  "verifiedAt": "2026-11-26T02:32:33.223Z",
+  "version": "0.104.0",
+  "verifiedAt": "2026-11-26T03:10:12.719Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.102.0.vsix",
-    "sha256": "0fc1090ba5b582431079e8d8d4e89fad54ca1ba5ece4346abc95f656bc6b203c",
-    "bytes": 3988506,
-    "files": 22
+    "name": "rocketbrain-0.104.0.vsix",
+    "sha256": "5a596b0cd6534ad8d46239c048da9afba758b3aaf92dc18442225c7aea991b82",
+    "bytes": 4038318,
+    "files": 24
   },
   "source": {
-    "frozenPublicInputs": 2340,
-    "inputVectorSha256": "9662676c1cf4a69ecd29d786997ec6d93f04188106022915846562202fc7f37d",
+    "frozenPublicInputs": 2380,
+    "inputVectorSha256": "f40985287639e90134f3fbe1e1dd7f6535bc41af096fb41f5e9f9018e4523d6e",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1941,
-    "pass": 1782,
+    "tests": 1968,
+    "pass": 1807,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 159,
+    "skipped": 161,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,35 +32,35 @@
       "groupCount": 8,
       "groups": [
         {
-          "group": "gradleCompositeTasks",
+          "group": "sqliteFile",
           "checks": 1
         },
         {
-          "group": "kotlinRename",
+          "group": "localSqlGrounding",
           "checks": 1
         },
         {
-          "group": "mongoTls",
+          "group": "javaTypeRename",
           "checks": 1
         },
         {
-          "group": "functionRoleDeployment",
+          "group": "codeReviewPublication",
           "checks": 1
         },
         {
-          "group": "javaDelegatedBuild",
+          "group": "hibernateCompositeFetch",
           "checks": 1
         },
         {
-          "group": "httpWorkflow",
+          "group": "postgreSqlMeasuredPlan",
           "checks": 1
         },
         {
-          "group": "mongoEdit",
+          "group": "kotlinCoroutineDebug",
           "checks": 1
         },
         {
-          "group": "openBaoProfiles",
+          "group": "databaseAcp",
           "checks": 1
         }
       ],
@@ -78,35 +78,35 @@
       "groupCount": 8,
       "groups": [
         {
-          "group": "gradleCompositeTasks",
+          "group": "sqliteFile",
           "checks": 1
         },
         {
-          "group": "kotlinRename",
+          "group": "localSqlGrounding",
           "checks": 1
         },
         {
-          "group": "mongoTls",
+          "group": "javaTypeRename",
           "checks": 1
         },
         {
-          "group": "functionRoleDeployment",
+          "group": "codeReviewPublication",
           "checks": 1
         },
         {
-          "group": "javaDelegatedBuild",
+          "group": "hibernateCompositeFetch",
           "checks": 1
         },
         {
-          "group": "httpWorkflow",
+          "group": "postgreSqlMeasuredPlan",
           "checks": 1
         },
         {
-          "group": "mongoEdit",
+          "group": "kotlinCoroutineDebug",
           "checks": 1
         },
         {
-          "group": "openBaoProfiles",
+          "group": "databaseAcp",
           "checks": 1
         }
       ],
@@ -117,117 +117,93 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-044": {
-      "scope": "충돌과 미저장 변경, 다른 프로젝트 보존 및 네이티브 Undo/Redo를 검증했다.",
+    "IDEA-024": {
+      "scope": "실제 Spring 프로젝트에서 적용 전후 컴파일과 빈 동작, Java·XML을 묶은 Undo/Redo를 확인했다.",
       "runtimeGroups": [
-        "kotlinRename"
+        "javaTypeRename"
       ]
     },
-    "IDEA-070": {
-      "scope": "실제 Gradle에서 별칭이 있는 포함 빌드의 서비스 작업과 컴파일을 확인했다. 검토 후 Kotlin 빌드 스크립트가 바뀌면 거부했다.",
+    "IDEA-063": {
+      "scope": "두 DB에서 각 SQL 호출 수 4·1·4회를 대조했다. 지연 로딩에만 N+1을 표시했다.",
       "runtimeGroups": [
-        "gradleCompositeTasks"
+        "hibernateCompositeFetch"
       ]
     },
-    "IDEA-072": {
-      "scope": "실제 Spring 프로젝트에서 출력 재사용, 미저장 또는 오래된 검토 거부, 컴파일 실패와 clean 없이 고친 뒤 재시도를 확인했다.",
+    "IDEA-083": {
+      "scope": "동일한 이름과 클래스의 다른 코루틴과 구분했다. 디버거 정지 중 JDBC 조회와 분리 뒤 계속 실행을 확인했다.",
       "runtimeGroups": [
-        "javaDelegatedBuild"
+        "kotlinCoroutineDebug"
       ]
     },
-    "IDEA-102": {
-      "scope": "실제 Spring JDBC 값을 두 번째 요청에 전달했다. 검토가 바뀌거나 필요한 값이 빠지면 이후 요청을 멈췄다.",
+    "IDEA-095": {
+      "scope": "소유 GitHub·GitLab API 시험 서버에서 정확한 줄과 커밋에 한 번 게시했다. 서버 응답이 끊긴 시도는 자동 재전송하지 않았다.",
       "runtimeGroups": [
-        "httpWorkflow"
+        "codeReviewPublication"
       ]
     },
     "DG-003": {
-      "scope": "실제 MongoDB 8.0.38에서 TLS와 SCRAM, 64비트 BSON·NULL, 제약 검사, 컬렉션 재생성·편집 충돌 거부를 확인했다.",
+      "scope": "SQLite 스냅샷·정확한 숫자와 BLOB·공용 결과, PostgreSQL 17.12의 쿼리 승인과 실제 시간·버퍼·중단을 확인했다.",
       "runtimeGroups": [
-        "mongoTls",
-        "mongoEdit"
+        "sqliteFile",
+        "postgreSqlMeasuredPlan"
       ]
     },
-    "DG-007": {
-      "scope": "OpenBao 2.7.3에서 일회 권한, 실제 DB 암호 회전, 승인 취소와 잘못된 CA 거부, 내보낸 프로필과 저장소에 민감값이 없는 것을 확인했다.",
+    "DG-089": {
+      "scope": "실제 Qwen에서 테이블 네 개·외래 키 세 개와 복합 키 두 열을 사용했다. 양쪽 DB에서 두 질의 결과와 계획을 대조했다.",
       "runtimeGroups": [
-        "openBaoProfiles"
+        "localSqlGrounding"
       ]
     },
-    "DG-081": {
-      "scope": "중첩 역할을 적용한 실제 호출자와 거부 대조, 종속 INVOKER 뷰·권한, 재연결 복구 및 검토 후 권한·기본 역할 변경 거부를 확인했다.",
+    "DG-091": {
+      "scope": "실제 OpenCode·로컬 Qwen으로 독립 작업 두 개를 실행했다. 결과를 실제 양쪽 엔진에서 비교하고 변경된 복합 FK를 거부했다.",
       "runtimeGroups": [
-        "functionRoleDeployment"
+        "databaseAcp"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 517,
+    "sourceCorrespondences": 530,
     "sourceConfidence": "inferred",
-    "archiveEntries": 22,
+    "archiveEntries": 24,
     "archiveConfidence": "observed"
-  },
-  "nativePayloadEquivalence": {
-    "files": 22,
-    "testedArchiveSha256": "9999fe18324164392a9bf356e79937a16962ee233deee64c7636fafe51d66b9f",
-    "testedInputVectorSha256": "554998bf756b94b485ef814c57d8f4fcf6b4fdc4b20cd556ec10f60ccc566d0a",
-    "onlySourceChanges": [
-      "test/gradle-composite-tasks-host.js"
-    ]
   },
   "progress": {
     "counts": {
-      "implemented": 155,
-      "partial": 47,
+      "implemented": 157,
+      "partial": 45,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 190.5,
-    "previousWeightedPoints": 188,
+    "weightedPoints": 191.5,
+    "previousWeightedPoints": 190.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 88.2,
+    "referencePercent": 88.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-070",
+        "id": "IDEA-083",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "IDEA-072",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-102",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-007",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-081",
+        "id": "DG-091",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "도구에 등록한 Maven·Gradle 프로젝트의 검토 대상 작업을 빌드한다.",
-    "MongoDB 편집은 별도 승인한 컬렉션의 검토한 한 필드에 적용한다.",
-    "루틴 변경은 검토한 함수·뷰와 관찰한 역할 및 권한에 묶는다.",
+    "SQLite 조회는 확인한 단일 체크포인트 파일을 사용한다.",
+    "Kotlin 코루틴 연결은 디버깅을 허용한 로컬 JVM에서 검증했다.",
+    "로컬 SQL 탐색과 ACP는 허용한 관계와 컬럼을 읽고 별도 승인을 받아 계획을 조회한다.",
     "IDEA-001과 DG-095가 요구하는 창 배치는 일반 VS Code 확장 API의 범위를 벗어난다. 현행 가중 점수 상한은 214/216점이다."
   ],
   "next": [
-    "SQLite 파일과 PostgreSQL 실측 계획",
-    "Hibernate 복합 키 조회와 Kotlin 코루틴 디버깅",
-    "로컬 SQL과 ACP의 데이터베이스 작업 검토"
+    "Maven 부모 BOM과 SQLite 원본 셀 편집",
+    "ACP 다중 파일 변경과 GitHub·GitLab 리뷰 제출"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

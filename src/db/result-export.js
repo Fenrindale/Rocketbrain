@@ -65,6 +65,7 @@ function jsonExport(result) {
       originalTable: field.originalTable, schema: field.schema } : { name, kind: 'unknown' };
   });
   const metadata = { columns, rowCount: result.rows.length, truncated: result.truncated === true,
+    ...(result.sqliteStorageClasses && { sqliteStorageClasses: result.sqliteStorageClasses }),
     ...(result.browse ? { page: result.browse.page + 1, pageSize: result.browse.pageSize, hasNext: result.browse.hasNext,
       ...(result.browse.window && { lastPage: result.browse.window.lastPage + 1 }) } : {}) };
   const heading = JSON.stringify(metadata, null, 2).replace(/\n}$/, ',\n  "rows": [\n');

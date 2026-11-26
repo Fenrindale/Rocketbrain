@@ -66,6 +66,59 @@ function usesCollectionKey(sql, keyColumn) {
   return false;
 }
 
+function usesCompositeCollectionKey(sql, columns) {
+  if (sql.where < 0 || sql.tokens.filter(token => token.kind === 'parameter').length !== columns.length) return false;
+  const tokens = sql.tokens;
+  let at = sql.where;
+  function take(matches) {
+    if (!matches(tokens[at])) return false;
+    at++;
+    return true;
+  }
+  const takeSymbol = value => take(token=>symbol(token,value));
+  const takeWord = value => take(token=>word(token,value));
+  const parameter = () => take(token=>token?.kind==='parameter');
+  function column() {
+    if (!names(tokens[at])) return null;
+    const first = tokens[at++].value;
+    if (!takeSymbol('.')) return first;
+    if (first!==sql.qualifier || !names(tokens[at])) return null;
+    return tokens[at++].value;
+  }
+  function complete(found) {
+    return at===tokens.length && new Set(found).size===columns.length &&
+      columns.every(name=>found.includes(name));
+  }
+  if (takeSymbol('(')) {
+    const found = [];
+    for (let index=0; index<columns.length; index++) {
+      if (index && !takeSymbol(',')) return false;
+      found.push(column());
+    }
+    if (!takeSymbol(')')) return false;
+    const membership = takeWord('IN');
+    if (membership ? !takeSymbol('(') : !takeSymbol('=')) return false;
+    if (!takeSymbol('(')) return false;
+    for (let index=0; index<columns.length; index++) {
+      if (index && !takeSymbol(',')) return false;
+      if (!parameter()) return false;
+    }
+    return takeSymbol(')') && (!membership || takeSymbol(')')) && complete(found);
+  }
+  const found = [];
+  for (let index=0; index<columns.length; index++) {
+    if (index && !takeWord('AND')) return false;
+    if (parameter()) {
+      if (!takeSymbol('=')) return false;
+      found.push(column());
+    } else {
+      found.push(column());
+      if (!takeSymbol('=') || !parameter()) return false;
+    }
+  }
+  return complete(found);
+}
+
 function readSelect(value, index) {
   if (!value || value.sequence !== index + 1 || !safeInt(value.session, 1, maxSelects) || !safeInt(value.durationMicros)) return null;
   const shape = sqlShape(value.sql);
@@ -75,10 +128,18 @@ function readSelect(value, index) {
   if (value.collection === undefined) return select;
   const load = value.collection;
   const ownerTable = tableName(load?.ownerTable), childTable = tableName(load?.childTable), keyColumn = tableName(load?.keyColumn);
+  const keyColumns = Array.isArray(load?.keyColumns) && load.keyColumns.length>=2 && load.keyColumns.length<=4
+    ? load.keyColumns.map(tableName) : undefined;
   if (!validJavaName(load?.role) || !validJavaName(load.entity) || !load.role.startsWith(load.entity + '.') ||
-      !ownerTable || !childTable || childTable !== shape.table || !keyColumn || keyColumn.includes('.') ||
-      !safeInt(load.key, 1, maxSelects) || !usesCollectionKey(shape, keyColumn)) return null;
-  return { ...select, collection: { role:load.role, entity:load.entity, ownerTable, childTable, keyColumn, key:load.key } };
+      !ownerTable || !childTable || childTable !== shape.table || !safeInt(load.key, 1, maxSelects)) return null;
+  if (keyColumns) {
+    if (load.keyColumn!==undefined || new Set(keyColumns).size!==keyColumns.length ||
+        keyColumns.some(name=>!name || name.includes('.')) || !usesCompositeCollectionKey(shape,keyColumns)) return null;
+  } else if (load.keyColumns!==undefined || !keyColumn || keyColumn.includes('.') || !usesCollectionKey(shape,keyColumn)) {
+    return null;
+  }
+  return { ...select, collection: { role:load.role, entity:load.entity, ownerTable, childTable,
+    ...(keyColumns?{keyColumns}:{keyColumn}), key:load.key } };
 }
 
 function findings(selects) {
@@ -86,7 +147,8 @@ function findings(selects) {
   for (const select of selects) {
     const load = select.collection;
     if (!load) continue;
-    const key = JSON.stringify([select.session, load.role, load.entity, load.ownerTable, load.childTable, select.sql]);
+    const key = JSON.stringify([select.session, load.role, load.entity, load.ownerTable, load.childTable,
+      load.keyColumns || load.keyColumn, select.sql]);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(select);
   }
@@ -104,7 +166,7 @@ function findings(selects) {
       collectionRole: load.role,
       ownerTable: load.ownerTable,
       childTable: load.childTable,
-      keyColumn: load.keyColumn,
+      ...(load.keyColumns?{keyColumns:load.keyColumns}:{keyColumn:load.keyColumn}),
       session: first.session,
       parent: { sequence: parents[0].sequence, sql: parents[0].sql, durationMicros: parents[0].durationMicros },
       child: { sql:first.sql, sequences:repeats.map(select=>select.sequence), executions:repeats.length,
