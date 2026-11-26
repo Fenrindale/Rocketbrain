@@ -52,9 +52,13 @@ jobs:
           printf '%s  %s\n' 'a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806' \
             "$RUNNER_TEMP/rocketbrain-gradle.zip" | sha256sum --check
           unzip -q "$RUNNER_TEMP/rocketbrain-gradle.zip" -d "$RUNNER_TEMP/rocketbrain-gradle"
-          curl --fail --silent --show-error --location --retry 3 \
+          if ! curl --fail --silent --show-error --location --retry 3 \
             'https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.tar.gz' \
-            --output "$RUNNER_TEMP/rocketbrain-maven.tar.gz"
+            --output "$RUNNER_TEMP/rocketbrain-maven.tar.gz"; then
+            curl --fail --silent --show-error --location --retry 3 \
+              'https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz' \
+              --output "$RUNNER_TEMP/rocketbrain-maven.tar.gz"
+          fi
           printf '%s  %s\n' 'bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978' \
             "$RUNNER_TEMP/rocketbrain-maven.tar.gz" | sha512sum --check
           tar --extract --gzip --file "$RUNNER_TEMP/rocketbrain-maven.tar.gz" --directory "$RUNNER_TEMP/rocketbrain-maven" --strip-components=1
