@@ -6,7 +6,7 @@ const { createHash } = require('node:crypto');
 
 const apiVersion = 'client.authentication.k8s.io/v1';
 const maxExecutableBytes = 96 * 1024 * 1024;
-const fields = new Set(['apiVersion', 'command', 'args', 'interactiveMode', 'provideClusterInfo', 'env']);
+const fields = new Set(['apiVersion', 'command', 'args', 'interactiveMode', 'provideClusterInfo', 'env', 'installHint']);
 const control = /[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]/u;
 const localFile = value => typeof value === 'string' && value.length <= 768 && path.isAbsolute(value) &&
   !/^[\\/]{2}/u.test(value) && !control.test(value);
@@ -15,7 +15,8 @@ function parseExecCredential(exec) {
   if (!exec || typeof exec !== 'object' || Array.isArray(exec) || !Object.keys(exec).every(name => fields.has(name)) ||
       exec.apiVersion !== apiVersion || exec.interactiveMode !== 'Never' || !localFile(exec.command) ||
       (exec.provideClusterInfo !== undefined && exec.provideClusterInfo !== false) ||
-      (exec.env !== undefined && (!Array.isArray(exec.env) || exec.env.length))) return null;
+      (exec.installHint !== undefined && (typeof exec.installHint !== 'string' || exec.installHint.length > 2048)) ||
+      (exec.env !== undefined && exec.env !== null && (!Array.isArray(exec.env) || exec.env.length))) return null;
   const args = exec.args ?? [];
   if (!Array.isArray(args) || args.length > 24 ||
       args.some(arg => typeof arg !== 'string' || arg.length > 512 || control.test(arg))) return null;

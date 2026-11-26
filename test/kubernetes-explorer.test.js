@@ -193,7 +193,7 @@ test('redirects only the approved non-interactive credential executable to an ow
     { provideClusterInfo: true }, { apiVersion: 'client.authentication.k8s.io/v1beta1' }]) {
     assert.equal(approvedContexts(withExec({ ...exec, ...change })).size, 0);
   }
-  await fs.writeFile(file, JSON.stringify(withExec(exec)), { flag: 'wx' });
+  await fs.writeFile(file, JSON.stringify(withExec({ ...exec, env: null, installHint: 'Tool metadata' })), { flag: 'wx' });
   t.after(async () => { await fs.unlink(file); await fs.unlink(command); await fs.rmdir(root); });
   let snapshot, calls = 0;
   const tool = async (_binary, argv, options) => {
