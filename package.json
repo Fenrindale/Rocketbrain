@@ -2116,6 +2116,12 @@
                 ],
                 "description": "Java virtual machine arguments."
               },
+              "shortenCommandLine": {
+                "type": "string",
+                "enum": ["auto", "none", "argfile", "jarmanifest"],
+                "default": "auto",
+                "description": "Shorten long Java launch commands. Auto uses a JDK argument file or a JDK 8 classpath manifest on Windows when needed."
+              },
               "stopOnEntry": {
                 "type": "boolean",
                 "default": false

@@ -1,7 +1,7 @@
 'use strict';
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { independentJavaExecutable, argumentString, KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILD } = require('./debug-runtime');
+const { independentJavaExecutable, argumentString, launchCommandMode, KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILD } = require('./debug-runtime');
 const { applyManagedSpringLaunch } = require('./spring-launch');
 const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
@@ -166,6 +166,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     config.console = config.console || 'internalConsole'; config.encoding = config.encoding || 'UTF-8'; config.sourcePaths = config.sourcePaths || [];
     applyManagedSpringLaunch(config);
     config.args = argumentString(config.args); config.vmArgs = argumentString(config.vmArgs);
+    config.shortenCommandLine = launchCommandMode(config);
     return token?.isCancellationRequested ? undefined : config;
   }
   const provider = {

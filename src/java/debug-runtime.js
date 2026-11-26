@@ -78,6 +78,27 @@ function argumentString(value, platform = process.platform) {
   return value.map(item => platform === 'win32' ? '"' + item.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1') + '"' : '"' + item.replace(/[\\"]/g, '\\$&') + '"').join(' ');
 }
 
+function launchCommandMode(config, platform = process.platform) {
+  const requested = config.shortenCommandLine ?? 'auto';
+  if (['none', 'argfile', 'jarmanifest'].includes(requested)) return requested;
+  if (requested !== 'auto') throw Error('Use auto, none, argfile, or jarmanifest for shortenCommandLine.');
+  if (platform !== 'win32') return 'none';
+
+  // Reserve room for Windows quoting and the debugger's extra VM arguments.
+  // External and integrated terminals may launch through cmd.exe.
+  const limit = config.console === 'internalConsole' ? 28000 : 7000;
+  const length = [config.javaExec, config.mainClass, config.vmArgs, config.args,
+    ...(config.classPaths || []), ...(config.modulePaths || [])]
+    .reduce((sum, value) => sum + (typeof value === 'string' ? value.length + 3 : 0), 0);
+  if (length < limit) return 'none';
+
+  const release = fs.readFileSync(path.join(path.dirname(path.dirname(config.javaExec)), 'release'), 'utf8');
+  const version = /(?:^|\n)JAVA_VERSION="(?:1\.)?(\d+)/u.exec(release)?.[1];
+  if (Number(version) >= 9) return 'argfile';
+  if (config.classPaths?.length && !config.modulePaths?.length) return 'jarmanifest';
+  throw Error('Use JDK 9 or later to shorten this Java debug launch.');
+}
+
 module.exports = { DEBUG_VERSION, DEBUG_BUILD, DEBUG_FILE, DEBUG_SHA256, DEBUG_URL, UPSTREAM_FILE, UPSTREAM_SHA256,
   COROUTINE_BUILD, COROUTINE_FILE, COROUTINE_SHA256, EXCEPTION_BUILD, resolveDebugBundle, resolveDebugBundles,
   WATCH_BUILD, WATCH_FILE, WATCH_SHA256, INDEXED_WATCH_BUILD, INDEXED_WATCH_FILE, INDEXED_WATCH_SHA256,
@@ -85,4 +106,4 @@ module.exports = { DEBUG_VERSION, DEBUG_BUILD, DEBUG_FILE, DEBUG_SHA256, DEBUG_U
   KOTLIN_FIELD_BUILD, KOTLIN_FIELD_FILE, KOTLIN_FIELD_SHA256,
   KOTLIN_LINE_BUILD, KOTLIN_LINE_FILE, KOTLIN_LINE_SHA256,
   KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILD, KOTLIN_FIELD_VALUES_FILE, KOTLIN_FIELD_VALUES_SHA256,
-  independentJavaExecutable, argumentString };
+  independentJavaExecutable, argumentString, launchCommandMode };

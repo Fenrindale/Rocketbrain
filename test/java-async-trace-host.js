@@ -11,7 +11,7 @@ const { virtualTraceFixture, checkVirtualChain, writeRejectedTraces, verifyVirtu
   require('./helpers/virtual-async-trace-fixture');
 const { until } = require('./helpers/stdio-lsp');
 
-async function runTraceChecks(api, vscode, checks, virtual) {
+async function runTraceChecks(api, vscode, checks, virtual, useAutomaticLaunch = false) {
   const service = api.java.debug.asyncTrace;
   assert.ok(service?.copyHelper && service.inspect && service.openFrame);
   const commands = await vscode.commands.getCommands(true);
@@ -59,10 +59,11 @@ async function runTraceChecks(api, vscode, checks, virtual) {
       type: 'rocketbrain-java', request: 'launch', name, mainClass: fixture.mainClass, projectName: main.projectName,
       args: [trace.fsPath], console: 'internalConsole', env,
       // The virtual task fixture uses the full observed Spring classpath on Windows.
-      ...(virtual && { shortenCommandLine: 'argfile' })
+      ...(virtual && !useAutomaticLaunch && { shortenCommandLine: 'argfile' })
     }), true);
     const first = await until(() => events.find(event => event.event === 'stopped'), 30000);
     const session = sessions.get(first.sessionId);
+    if (useAutomaticLaunch && process.platform === 'win32') assert.equal(session.configuration.shortenCommandLine, 'argfile');
     await until(() => vscode.debug.activeDebugSession?.id === session.id, 10000);
     const eventAfter = (index, kind) => until(() => events.slice(index).find(event =>
       event.sessionId === session.id && event.event === kind), 18000);
@@ -103,7 +104,8 @@ async function runTraceChecks(api, vscode, checks, virtual) {
       await assert.rejects(service.inspect(trace, session), /Pause a Rocketbrain Java task/);
       checks.push('The native debugger resolved a paused Spring JDBC virtual thread to two explicit launches and a CompletableFuture executor handoff.');
       return { ...proof, application, jdbc, pausedLine: stopped.line, sourceNavigation: true, unwrappedRejected: true,
-        mismatchedTraceRejected: true, mismatchedWorkerRejected: true, strippedWorkerRejected: true, resumedInspectionRejected: true };
+        mismatchedTraceRejected: true, mismatchedWorkerRejected: true, strippedWorkerRejected: true, resumedInspectionRejected: true,
+        ...(useAutomaticLaunch && { automaticLaunch: session.configuration.shortenCommandLine }) };
     }
     assert.ok(events.some(event => event.event === 'output' && event.body.output.includes('ASYNC_RESULT:42')));
     checks.push('Copied the packaged helper into a Spring source tree, traced an Executor and CompletableFuture handoff from a paused Java thread and navigated to its original submission.');
@@ -128,4 +130,5 @@ async function runTraceChecks(api, vscode, checks, virtual) {
 const runJavaAsyncTraceChecks = (api, vscode, checks) => runTraceChecks(api, vscode, checks, false);
 const runJavaVirtualAsyncTraceChecks = (api, vscode, checks) => runTraceChecks(api, vscode, checks, true);
 
-module.exports = { runJavaAsyncTraceChecks, runJavaVirtualAsyncTraceChecks };
+const runJavaAutomaticClasspathChecks=(api,vscode,checks)=>runTraceChecks(api,vscode,checks,true,true);
+module.exports = { runJavaAsyncTraceChecks, runJavaVirtualAsyncTraceChecks, runJavaAutomaticClasspathChecks };
