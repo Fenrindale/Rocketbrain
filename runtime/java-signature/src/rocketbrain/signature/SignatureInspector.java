@@ -420,6 +420,7 @@ public final class SignatureInspector {
                 !(args.length == 7 && args[4].equals("dataflow")) &&
                 !(args.length == 9 && args[4].equals("callFlow")) &&
                 !(args.length == 6 && args[4].equals("conversion")) &&
+                !(args.length == 7 && args[4].equals("groovyMembers")) &&
                 !(args.length == 6 && args[4].equals("binaryBeanLifecycle")) &&
                 !(args.length == 9 && args[4].equals("constant")) &&
                 !(args.length == 9 && args[4].equals("extraction")) &&
@@ -476,6 +477,9 @@ public final class SignatureInspector {
                     else if (args[4].equals("advisoryCalls")) {
                         report.put("advisoryCalls",new AdvisoryCalls(trees,elements,types,files,classpath,
                             Arrays.asList(args).subList(5,args.length)).inspect(units));
+                    }
+                    else if (args[4].equals("groovyMembers")) {
+                        report.put("groovyMembers", GroovyJavaMembers.inspect(elements, trees, args[5], args[6]));
                     }
                     else if (args[4].equals("binaryBeanLifecycle")) {
                         report.put("binaryBeanLifecycle", new BinaryBeanLifecycle(trees, elements, files, classpath)

@@ -162,6 +162,8 @@
       { "command": "rocketbrain.groovy.runTests", "title": "Run Groovy and Spock Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.projectSelection", "title": "Review Groovy Selection with Project Classpath", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file && editorHasSelection" },
       { "command": "rocketbrain.groovy.stopProject", "title": "Stop Groovy Project Evaluation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.groovy.completeTypedMember", "title": "Complete Typed Groovy Member", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
+      { "command": "rocketbrain.groovy.openTypedMemberDeclaration", "title": "Open Typed Groovy Member Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
       { "command": "rocketbrain.quarkus.create", "title": "Create Quarkus Maven Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.inspect", "title": "Inspect Quarkus Configuration and Endpoints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.inspectConfigOrigins", "title": "Inspect Quarkus Config Origins", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },

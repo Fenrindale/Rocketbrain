@@ -25,6 +25,17 @@ const scripts = {
   ].join('\n') + '\n'
 };
 
+const typedMemberScript = [
+  'import fixture.groovyproject.ProjectProbe as Probe',
+  'import groovy.transform.CompileStatic',
+  '@CompileStatic',
+  'String compute() {',
+  '  Probe service = new Probe()',
+  '  service.quer(System.getenv("RB_GROOVY_PROJECT_URL"), System.getenv("RB_GROOVY_PROJECT_USER"), System.getenv("RB_GROOVY_PROJECT_PASSWORD"))',
+  '}',
+  'compute()', ''
+].join('\n');
+
 const dependency = (group, name, version) => '<dependency><groupId>' + group + '</groupId><artifactId>' + name +
   '</artifactId><version>' + version + '</version></dependency>';
 async function put(root, relative, content) {
@@ -51,6 +62,14 @@ async function prepareGroovyProject(root, { javaHome, mavenHome, gradleHome, gra
     'import org.springframework.jdbc.datasource.DriverManagerDataSource;',
     'public final class ProjectProbe {',
     '  public static String codeLocation() { return ProjectProbe.class.getProtectionDomain().getCodeSource().getLocation().toString(); }',
+    '  static {',
+    '    var marker = System.getenv("RB_GROOVY_MEMBER_INITIALIZED");',
+    '    if (marker != null) try { java.nio.file.Files.writeString(java.nio.file.Path.of(marker), "initialized"); }',
+    '    catch (java.io.IOException error) { throw new java.io.UncheckedIOException(error); }',
+    '  }',
+    '  public String query(String url, String user, String password) throws Exception { return read(url, user, password); }',
+    '  public String query(String url) throws Exception { return read(url, System.getenv("RB_GROOVY_PROJECT_USER"), System.getenv("RB_GROOVY_PROJECT_PASSWORD")); }',
+    '  private String queryHidden() { return "private"; }',
     '  public static String read(String url, String user, String password) throws Exception {',
     '    int factor;',
     '    try (var resource = ProjectProbe.class.getResourceAsStream("/probe-factor.txt")) {',
@@ -126,4 +145,4 @@ async function withGroovyDatabase(database, engine, operation) {
   }
 }
 
-module.exports = { resource, scripts, prepareGroovyProject, rangeFor, withGroovyDatabase, expectedOutput };
+module.exports = { resource, scripts, typedMemberScript, prepareGroovyProject, rangeFor, withGroovyDatabase, expectedOutput };

@@ -55,6 +55,11 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
     if(new Set(encoded).size!==encoded.length||encoded.join('').length>10000)throw Error('Use bounded distinct Java advisory signatures.');
     query.push('advisoryCalls',...encoded);
   }
+  else if(inspection.kind==='groovyMembers'&&typeof inspection.receiver==='string'&&inspection.receiver.length<512&&
+    inspection.receiver.includes('.')&&inspection.receiver.split('.').every(validIdentifier)&&
+    typeof inspection.prefix==='string'&&/^[A-Za-z_$][\w$]{0,127}$|^$/u.test(inspection.prefix)){
+   query.push(inspection.kind,inspection.receiver,inspection.prefix);
+  }
   else if(inspection.kind==='binaryBeanLifecycle'&&typeof inspection.owner==='string'&&inspection.owner.length<512&&
     inspection.owner.includes('.')&&inspection.owner.split('.').every(validIdentifier))query.push(inspection.kind,inspection.owner);
   else if(inspection.kind==='conversion'&&sources.some(item=>item.uri===inspection.uri))query.push('conversion',inspection.uri);

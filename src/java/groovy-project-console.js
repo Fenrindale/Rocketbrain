@@ -3,6 +3,7 @@
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { startGroovyConsole, verifiedGroovyJar, GROOVY_SHA256 } = require('./groovy-console');
+const { createGroovyMemberTools } = require('./groovy-static-members');
 const { listGroovyProjects, observeGroovyClasspath, runtimeKey } = require('./groovy-project-model');
 const { hash } = require('./groovy-project-classpath');
 const { workspaceRoots, workspacePath, cancelled, fail } = require('./workbench-model');
@@ -180,8 +181,9 @@ function createGroovyProjectConsole(vscode, java, { trusted, configuration, read
     return true;
   }
 
-  function invalidate() { generation++; plans.clear(); return stop(); }
-  return { list, review, show, run, stop, invalidate, dispose() { provider?.dispose(); return invalidate(); } };
+  const members = createGroovyMemberTools(vscode, { roots, configuration, observe, requests, generation: () => generation, projectGuard });
+  function invalidate() { generation++; plans.clear(); members.clear(); return stop(); }
+  return { list, review, show, run, stop, members, invalidate, dispose() { provider?.dispose(); return invalidate(); } };
 }
 
 module.exports = { createGroovyProjectConsole };
