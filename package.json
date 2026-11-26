@@ -37,6 +37,7 @@
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
     "onDebug:rocketbrain-python",
+    "onDebug:rocketbrain-scala",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
@@ -201,6 +202,7 @@
       { "command": "rocketbrain.scala.compile", "title": "Compile and Index Scala", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.test", "title": "Run sbt Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.run", "title": "Run sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.debug", "title": "Debug sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.definition", "title": "Open Compiled Scala Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == scala" },
       { "command": "rocketbrain.scala.stop", "title": "Stop sbt Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.inspect", "title": "Inspect Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1961,7 +1963,13 @@
         "when": "editorTextFocus && editorHasCodeActionsProvider"
       }
     ],
+    "breakpoints": [{ "language": "scala" }],
     "debuggers": [
+      {
+        "type": "rocketbrain-scala",
+        "label": "Rocketbrain Scala (sbt)",
+        "languages": ["scala"]
+      },
       {
         "type": "rocketbrain-python",
         "label": "Rocketbrain Python",

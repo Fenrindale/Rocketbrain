@@ -5,7 +5,10 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { execFile,spawn } = require('node:child_process');
 const { promisify } = require('node:util');
+const { setTimeout: delay } = require('node:timers/promises');
 const { independentJavaExecutable } = require('./debug-runtime');
+const { waitForOwnedListener } = require('./testing-debug');
+const { buildLoopbackAgent } = require('./scala-debug-runtime');
 const { cancelled,fail } = require('./workbench-model');
 
 const LAUNCHER_VERSION='1.13.1';
@@ -37,7 +40,13 @@ function launcherCommands(action,projectId,main) {
   const scope=projectId ? projectId+' / ' : '';
   if (action==='compile' || action==='test') return [scope+action];
   if (action==='mains') return ['show '+scope+'Compile / discoveredMainClasses'];
-  if (action==='run' && typeof main==='string' && main.length<=220 && MAIN.test(main)) return [scope+'Compile / runMain '+main];
+  if (typeof main==='string' && main.length<=220 && MAIN.test(main)) {
+    if (action==='run') return [scope+'Compile / runMain '+main];
+    if (action==='debug') {
+      const input=JSON.stringify({class:main,arguments:[],jvmOptions:[],environmentVariables:[]});
+      return ['show '+scope+'Compile / startMainClassDebugSession '+input,'shell'];
+    }
+  }
   throw fail('Choose a supported sbt task and a discovered main class.');
 }
 
@@ -116,42 +125,92 @@ function createSbtRunner({log=()=>{},timeoutMs=240000}={}) {
     return {state:'stopped'};
   }
 
-  async function run(options={}) {
+  async function open(options={}) {
     const {root,action,workspaceTrusted,allowProjectExecution,cancellation}=options;
     if (disposed || workspaceTrusted!==true || allowProjectExecution!==true) throw fail('Explicitly run sbt from a trusted local workspace.');
     if (cancelled(cancellation)) throw fail('The sbt task was cancelled.');
     if (active) throw fail('Wait for the current owned sbt task or stop it.');
-    const record={cancelled:false,exited:false};
+    const record={cancelled:false,exited:false,output:''};
     active=record;
     const cancel=() => {void stop().catch(error => log(error.message+'\n'));};
     const subscription=cancellation?.onCancellationRequested?.(cancel);
     cancellation?.addEventListener?.('abort',cancel,{once:true});
-    let timeout,output='';
-    try {
-      const launch=await spec(options);
-      if (disposed || record.cancelled || cancelled(cancellation)) throw fail('The sbt task was cancelled.');
-      const child=spawn(launch.command,launch.args,{cwd:root,env:launch.env,windowsHide:true,
-        detached:process.platform!=='win32',stdio:['ignore','pipe','pipe']});
-      record.child=child;
-      const capture=chunk => {output=(output+chunk).slice(-1_000_000);log(chunk);};
-      child.stdout.setEncoding('utf8').on('data',capture);
-      child.stderr.setEncoding('utf8').on('data',capture);
-      child.once('error',error => {record.spawnError=error;});
-      record.done=new Promise(resolve => child.once('close',code => {record.exited=true;resolve(code);}));
-      timeout=setTimeout(() => {record.timedOut=true;cancel();},timeoutMs);
-      const code=await record.done;
-      if (record.spawnError) throw record.spawnError;
-      const state=record.timedOut ? 'timed-out' : record.cancelled ? 'cancelled' : code===0 ? 'succeeded' : 'failed';
-      return {state,task:action,sbtVersion:launch.sbtVersion,output:cleanTranscript(output),exitCode:code};
-    } finally {
-      clearTimeout(timeout);
+    const release=()=>{
+      clearTimeout(record.timeout);
       subscription?.dispose();
       cancellation?.removeEventListener?.('abort',cancel);
       if (active===record) active=undefined;
+    };
+    try {
+      const launch=await spec(options);
+      if (action==='debug') record.agent=await buildLoopbackAgent(path.dirname(launch.command),launch.env);
+      if (disposed || record.cancelled || cancelled(cancellation)) throw fail('The sbt task was cancelled.');
+      const args=record.agent ? ['-javaagent:'+record.agent.jar,...launch.args] : launch.args;
+      const child=spawn(launch.command,args,{cwd:root,env:launch.env,windowsHide:true,
+        detached:process.platform!=='win32',stdio:[record.agent?'pipe':'ignore','pipe','pipe']});
+      record.child=child;
+      child.stdin?.on('error',()=>{});
+      const capture=chunk => {record.output=(record.output+chunk).slice(-1_000_000);log(chunk);};
+      child.stdout.setEncoding('utf8').on('data',capture);
+      child.stderr.setEncoding('utf8').on('data',capture);
+      child.once('error',error => {record.spawnError=error;});
+      record.done=new Promise(resolve => child.once('close',code => {record.exited=true;resolve(code);})).finally(async()=>{
+        try {await record.agent?.dispose();} finally {release();}
+      });
+      void record.done.catch(error=>log(error.message+'\n'));
+      record.timeout=setTimeout(() => {record.timedOut=true;cancel();},timeoutMs);
+      return {record,sbtVersion:launch.sbtVersion};
+    } catch (error) {
+      try {await record.agent?.dispose();} finally {release();}
+      throw error;
     }
   }
 
-  return {run,stop,async dispose(){disposed=true;await stop();}};
+  async function run(options={}) {
+    if (options.action==='debug') throw fail('Use the managed Scala debug session.');
+    const {record,sbtVersion}=await open(options);
+    const code=await record.done;
+    if (record.spawnError) throw record.spawnError;
+    const state=record.timedOut ? 'timed-out' : record.cancelled ? 'cancelled' : code===0 ? 'succeeded' : 'failed';
+    return {state,task:options.action,sbtVersion,output:cleanTranscript(record.output),exitCode:code};
+  }
+
+  async function verifyDebug(target,cancellation) {
+    const record=active;
+    if (!record?.target || record.target!==target || record.cancelled || record.exited || disposed) {
+      throw fail('The owned Scala debugger has ended.');
+    }
+    const proof=await waitForOwnedListener({pid:target.pid,port:target.port,cancellation,timeoutMs:6000});
+    if (active!==record || record.cancelled || record.exited || disposed || cancelled(cancellation)) {
+      throw fail('The Scala debugger changed during verification.');
+    }
+    return proof;
+  }
+
+  async function debug(options={}) {
+    const {record}=await open({...options,action:'debug'});
+    try {
+      while (!record.exited && !record.cancelled) {
+        const line=cleanTranscript(record.output).match(/^\[info\] (tcp:\/\/[^\s]+)$/m)?.[1];
+        if (line) {
+          const location=/^tcp:\/\/127\.0\.0\.1:(\d{1,5})$/.exec(line);
+          if (!location) throw fail('The Scala debug adapter reported an unexpected listener address.');
+          const target=Object.freeze({pid:record.child.pid,port:Number(location[1]),address:'127.0.0.1'});
+          record.target=target;
+          await verifyDebug(target,options.cancellation);
+          clearTimeout(record.timeout);
+          return target;
+        }
+        await delay(150);
+      }
+      throw fail('The sbt debugger did not start. Check the Scala output and the configured debug plugin.');
+    } catch (error) {
+      if (active===record) await stop();
+      throw error;
+    }
+  }
+
+  return {run,debug,verifyDebug,stop,async dispose(){disposed=true;await stop();}};
 }
 
 module.exports = { projectSbt,createSbtRunner,observedProjects,mainClasses,launcherCommands,LAUNCHER_VERSION,LAUNCHER_SHA256 };
