@@ -84,7 +84,7 @@ async function verifyWslDebugger(debug, vscode, folder, source, document) {
   }
 }
 
-async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build) {
+async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, javaDebugOnly = false) {
   const linux = process.env.ROCKETBRAIN_WSL_TEST_LINUX_PROJECT;
   const windows = process.env.ROCKETBRAIN_WSL_TEST_UNC_WORKSPACE;
   assert.match(linux, /^\/tmp\/rocketbrain-wsl-[a-z0-9]{8}\/Case Project$/iu);
@@ -130,13 +130,13 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build) {
   const jar = 'target/spring-workbench-1.0.0.jar';
   const compiled = 'build/classes/java/main/fixture/WslSpringConfiguration.class';
   await build(options, mapping.windows, 'maven', 'package', jar, /BUILD SUCCESS/u);
-  const javaDebug = await verifyWslDebugger(wsl.javaDebug, vscode, folder, source, document);
+  const basic = { openedInWindowsVscode: true, exactDistroAndPath: true, caseMismatchRejected: true,
+    crossDistroRejected: true, editorSavedAndLinuxDigestMatched: true, rejectedChangedDescriptor: true, mavenGoal: 'package' };
+  if (javaDebugOnly) return { ...basic, javaDebug: await verifyWslDebugger(wsl.javaDebug, vscode, folder, source, document) };
   await build(options, mapping.windows, 'gradle', 'classes', compiled, /BUILD SUCCESSFUL/u);
   for (const produced of [jar, compiled]) await linuxCommand(distribution, '/usr/bin/test', '-s', linux + '/' + produced);
   assert.ok((await fs.readFile(path.join(mapping.windows, compiled))).includes('wsl-spring-linux-verified'));
-  return { openedInWindowsVscode: true, exactDistroAndPath: true, caseMismatchRejected: true, crossDistroRejected: true,
-    editorSavedAndLinuxDigestMatched: true, rejectedChangedDescriptor: true, mavenGoal: 'package', gradleGoal: 'classes',
-    artifactsObservedFromLinux: true, compiledEditedSpringConfiguration: true, javaDebug };
+  return { ...basic, gradleGoal: 'classes', artifactsObservedFromLinux: true, compiledEditedSpringConfiguration: true };
 }
 
 async function runWslChecks(api, vscode, checks) {
@@ -145,6 +145,27 @@ async function runWslChecks(api, vscode, checks) {
   const workspace = await fs.realpath(process.env.ROCKETBRAIN_WSL_TEST_WORKSPACE);
   assert.ok(vscode.workspace.isTrusted);
   const folders = (vscode.workspace.workspaceFolders || []).filter(item => item.uri.scheme === 'file');
+  const { wsl } = api;
+  const commands = await vscode.commands.getCommands(true);
+  for (const id of ['rocketbrain.wsl.distributions', 'rocketbrain.wsl.openProject', 'rocketbrain.wsl.reviewBuild', 'rocketbrain.wsl.cancelBuild', 'rocketbrain.wsl.debugJava']) {
+    assert.ok(commands.includes(id), id);
+  }
+  assert.ok((await wsl.distributions()).includes(distribution));
+
+  async function build(target, root, system, goal, expectedFile, expectedOutput) {
+    const review = await wsl.review({ ...target, system, goal });
+    assert.equal(review.distribution, distribution);
+    const result = await wsl.apply(review.token, { approved: true });
+    assert.equal(result.code, 0, result.output.slice(-4500));
+    assert.equal(result.cancelled, false);
+    assert.match(result.output, expectedOutput);
+    assert.ok((await fs.stat(path.join(root, expectedFile))).size > 0);
+  }
+
+  if (process.env.ROCKETBRAIN_WSL_TEST_JAVA_DEBUG === '1') {
+    checks.wsl = { javaDebugOnly: true, linuxOwned: await verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, true) };
+    return;
+  }
   let folder;
   for (const candidate of folders.filter(item => !item.uri.authority)) {
     const canonical = await fs.realpath(candidate.uri.fsPath);
@@ -152,12 +173,6 @@ async function runWslChecks(api, vscode, checks) {
   }
   assert.ok(folder, 'The owned Windows WSL fixture must be opened in VS Code. Open local folders: '
     + (folders.map(item => path.basename(item.uri.fsPath)).join(', ') || '(none)'));
-  const { wsl } = api;
-  const commands = await vscode.commands.getCommands(true);
-  for (const id of ['rocketbrain.wsl.distributions', 'rocketbrain.wsl.openProject', 'rocketbrain.wsl.reviewBuild', 'rocketbrain.wsl.cancelBuild', 'rocketbrain.wsl.debugJava']) {
-    assert.ok(commands.includes(id), id);
-  }
-  assert.ok((await wsl.distributions()).includes(distribution));
   const mapping = await wsl.mapping(distribution, folder.uri);
   assert.equal(mapping.windows.toLowerCase(), workspace.toLowerCase());
   assert.match(mapping.linux, /^\/mnt\/[a-z]\/.*\/Spring workspace$/u);
@@ -170,16 +185,6 @@ async function runWslChecks(api, vscode, checks) {
     await fs.appendFile(pom, '\n<!-- Changed after test approval. -->\n');
     await assert.rejects(wsl.apply(stale.token, { approved: true }), /changed after review/u);
   } finally { await fs.writeFile(pom, original); }
-
-  async function build(target, root, system, goal, expectedFile, expectedOutput) {
-    const review = await wsl.review({ ...target, system, goal });
-    assert.equal(review.distribution, distribution);
-    const result = await wsl.apply(review.token, { approved: true });
-    assert.equal(result.code, 0, result.output.slice(-4500));
-    assert.equal(result.cancelled, false);
-    assert.match(result.output, expectedOutput);
-    assert.ok((await fs.stat(path.join(root, expectedFile))).size > 0);
-  }
 
   await build(options, workspace, 'maven', 'package', 'target/spring-workbench-1.0.0.jar', /BUILD SUCCESS/u);
   await build(options, workspace, 'gradle', 'classes', 'build/classes/java/main/fixture/WslSpringConfiguration.class', /BUILD SUCCESSFUL/u);
