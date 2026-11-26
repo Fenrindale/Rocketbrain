@@ -416,6 +416,7 @@ public final class SignatureInspector {
 
     public static void main(String[] args) throws Exception {
         boolean packageServiceBindings = args.length == 7 && args[4].equals("packageRenameServices");
+        boolean constructorParameter = args.length == 7 && args[4].equals("constructorParameterDelete");
         if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy","attributedDependencies").contains(args[4])) &&
                 !(args.length >= 6 && args.length <= 37 && args[4].equals("advisoryCalls")) &&
                 !(args.length == 7 && args[4].equals("dataflow")) &&
@@ -434,7 +435,7 @@ public final class SignatureInspector {
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
                 !(args.length == 7 && args[4].equals("cleanup")) &&
                 !(args.length == 7 && Set.of("typeRename","typeRenameBinary","packageRename").contains(args[4])) &&
-                !packageServiceBindings &&
+                !packageServiceBindings && !constructorParameter &&
                 !(args.length == 9 && Set.of("typeImport", "staticImport").contains(args[4])) &&
                 !(args.length == 5 && args[4].equals("check")) &&
                 !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
@@ -465,7 +466,7 @@ public final class SignatureInspector {
             JavacTask task = (JavacTask) compiler.getTask(compilerOutput, files, diagnostics, options, null, sources);
             List<CompilationUnitTree> units = new ArrayList<>(); task.parse().forEach(units::add); task.analyze();
             Trees trees = Trees.instance(task); Elements elements = task.getElements(); Types types=task.getTypes(); SourcePositions positions = trees.getSourcePositions();
-            if (args.length > 4 && !packageServiceBindings) {
+            if (args.length > 4 && !packageServiceBindings && !constructorParameter) {
                 System.setOut(new PrintStream(System.out,false,StandardCharsets.UTF_8));
                 var problems = errors(diagnostics);
                 Map<String,Object> report = object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,
@@ -676,7 +677,13 @@ public final class SignatureInspector {
                 }
             }
             List<Map<String,Object>> errors=errors(diagnostics);
-            System.out.print(json(object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,"classGenerationEnabled",false,"errors",errors,"methods",methods.stream().map(m->m.model).toList(),"calls",calls,"methodReferences",references,"lambdas",lambdas,"overrideEdges",edges,"externalOverrides",external)));
+            var report = object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,
+                "classGenerationEnabled",false,"errors",errors,"methods",methods.stream().map(m->m.model).toList(),
+                "calls",calls,"methodReferences",references,"lambdas",lambdas,"overrideEdges",edges,"externalOverrides",external);
+            if (constructorParameter && errors.isEmpty()) {
+                report.put("constructorParameter", ConstructorParameterDelete.inspect(task, units, args[5], Integer.parseInt(args[6])));
+            }
+            System.out.print(json(report));
         }
     }
 }

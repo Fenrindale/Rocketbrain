@@ -61,6 +61,9 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
     (inspection.strategy===undefined||typeof inspection.strategy==='string'&&/^(?:constructor|factory:[A-Za-z_$][\w$]{0,127})$/u.test(inspection.strategy))){
    query.push(inspection.kind,inspection.receiver,inspection.prefix,...(inspection.strategy?[inspection.strategy]:[]));
   }
+  else if(inspection.kind==='constructorParameterDelete'&&Number.isSafeInteger(inspection.offset)&&inspection.offset>=0&&
+    sources.some(item=>item.uri===inspection.uri&&inspection.offset<item.text.length))
+   query.push(inspection.kind,inspection.uri,String(inspection.offset));
   else if(inspection.kind==='parameterNameBindings'&&Number.isInteger(inspection.ordinal)&&inspection.ordinal>=0&&inspection.ordinal<30&&
     Array.isArray(inspection.methods)&&inspection.methods.length>0&&inspection.methods.length<=30&&
     inspection.methods.every(key=>typeof key==='string'&&key.length>0&&key.length<=320&&!/[\u0000-\u001f]/u.test(key))&&
