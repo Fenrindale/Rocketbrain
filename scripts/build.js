@@ -40,6 +40,10 @@ async function build() {
   const jakartaHost=fs.readFileSync(path.join(__dirname,'../runtime/jakarta/JakartaWarHost.java'),'utf8');
   fs.writeFileSync(path.join(__dirname,'../src/java/jakarta-host-source.json'),JSON.stringify(jakartaHost));
   fs.mkdirSync('dist', { recursive: true });
+  const registration = path.join('dist', 'spring-registration');
+  fs.mkdirSync(registration, { recursive: true });
+  fs.copyFileSync(path.join(__dirname, '../runtime/spring-registration/src/rocketbrain/spring/RegistrationTrace.java'),
+    path.join(registration, 'RegistrationTrace.java'));
   fs.mkdirSync(path.join('dist', 'java-async'), { recursive: true });
   for (const file of ['TaskTrace.java', 'ReactorTaskTrace.java']) {
     fs.copyFileSync(path.join(__dirname, '../runtime/java-async/src/rocketbrain/async', file), path.join('dist', 'java-async', file));

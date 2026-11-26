@@ -129,6 +129,7 @@ async function activate(context) {
   const javaUtilities = require('./java/utilities-vscode').registerJavaUtilities(context, vscode, { java });
   activeJavaUtilities = javaUtilities;
   context.subscriptions.push(javaUtilities);
+  const springRegistration = require('./spring/registration-trace-vscode').registerSpringRegistrationTrace(context, vscode);
   const springProjects=require('./spring/project-vscode').registerSpringProjectTools(context,vscode,{java});activeSpringProjects=springProjects;
   context.subscriptions.push(java);
   const javaTesting=require('./java/testing-vscode').registerJavaTesting(context,vscode,{java});
@@ -207,7 +208,7 @@ async function activate(context) {
   const contextActions = require('./context-actions').registerContextActions(vscode, context, { database, java });
   const keyboardProfile = require('./keyboard-profile-vscode').registerKeyboardProfile(vscode);
   context.subscriptions.push(contextActions, keyboardProfile);
-  return { ...database, navigation, contextActions, keyboardProfile, duckdb, sqlite, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, sftpDeployment, ftpsDeployment, deploymentChanges, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlCollations, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, react, angular, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, gitWorktrees, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
+  return { ...database, navigation, contextActions, keyboardProfile, duckdb, sqlite, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, sftpDeployment, ftpsDeployment, deploymentChanges, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlCollations, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, react, angular, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, springRegistration, gitWorktrees, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

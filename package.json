@@ -1332,6 +1332,16 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.spring.copyRegistrationTraceHelper",
+        "title": "Copy Spring Registration Trace Helper",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.inspectRegistrationTrace",
+        "title": "Inspect Spring Registration Trace",
+        "category": "Rocketbrain"
+      },
+      {
         "command": "rocketbrain.spring.inspectAotBeans",
         "title": "Inspect Spring AOT Beans",
         "category": "Rocketbrain"
