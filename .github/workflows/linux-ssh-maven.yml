@@ -1,0 +1,74 @@
+name: Linux OpenSSH reviewed Maven tasks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'verify-linux-ssh-maven-*']
+    paths:
+      - '.github/workflows/linux-ssh-maven.yml'
+      - 'src/remote/ssh-*.js'
+      - 'test/ssh-maven.test.js'
+      - 'test/helpers/linux-openssh-fixture.js'
+      - 'test/helpers/ssh-maven-fixture.js'
+      - 'test/helpers/ssh-process-fixture.js'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  pull_request:
+    paths:
+      - '.github/workflows/linux-ssh-maven.yml'
+      - 'src/remote/ssh-*.js'
+      - 'test/ssh-maven.test.js'
+      - 'test/helpers/linux-openssh-fixture.js'
+      - 'test/helpers/ssh-maven-fixture.js'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  reviewed-maven:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install the locked extension dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Fetch and verify the owned Maven distribution
+        run: |
+          set -euo pipefail
+          test -x /usr/sbin/sshd
+          ssh -V
+          bundle="$RUNNER_TEMP/apache-maven-3.9.11-bin.zip"
+          curl -fsSL --proto '=https' --retry 2 \
+            https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.zip -o "$bundle"
+          printf '%s  %s\n' '03e2d65d4483a3396980629f260e25cac0d8b6f7f2791e4dc20bc83f9514db8d0f05b0479e699a5f34679250c49c8e52e961262ded468a20de0be254d8207076' "$bundle" | sha512sum -c -
+          unzip -q "$bundle" -d "$RUNNER_TEMP"
+          echo "ROCKETBRAIN_SSH_MAVEN_TEST_HOME=$RUNNER_TEMP/apache-maven-3.9.11" >> "$GITHUB_ENV"
+      - name: Run actual Maven against a private non-root stock OpenSSH daemon
+        env:
+          ROCKETBRAIN_OPENSSH_TEST_SSHD: /usr/sbin/sshd
+          ROCKETBRAIN_SSH_MAVEN_TEST_RECEIPT: ${{ runner.temp }}/rocketbrain-linux-ssh-maven.json
+        run: |
+          set -euo pipefail
+          export ROCKETBRAIN_SSH_PROCESS_TEST_JDK="$(realpath "$JAVA_HOME")"
+          node --test test/ssh-maven.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-linux-ssh-maven
+          path: ${{ runner.temp }}/rocketbrain-linux-ssh-maven.json
+          if-no-files-found: error
+          retention-days: 7

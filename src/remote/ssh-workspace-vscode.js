@@ -6,6 +6,7 @@ const { connectWorkspace, maxFileBytes, uriScheme, digest } = require('./ssh-wor
 const { registerSshProcesses } = require('./ssh-processes-vscode');
 const { registerSshJavaDebug } = require('./ssh-java-debug-vscode');
 const { registerSshJavaCompile } = require('./ssh-java-compile-vscode');
+const { registerSshMaven } = require('./ssh-maven-vscode');
 
 async function localText(uri) {
   if (uri?.scheme !== 'file') throw Error('Choose a local UTF-8 file.');
@@ -29,7 +30,7 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
   const tree = new vscode.EventEmitter();
   const files = new vscode.EventEmitter();
   const pending = new Map();
-  let connection, processes, javaDebug, javaCompile;
+  let connection, processes, javaDebug, javaCompile, mavenBuild;
   let epoch = 0;
 
   function retire() {
@@ -38,6 +39,7 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
     processes?.retire();
     void javaDebug?.retire();
     javaCompile?.retire();
+    mavenBuild?.retire();
     connection?.close();
     connection = undefined;
     tree.fire();
@@ -160,7 +162,8 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
   processes = registerSshProcesses(vscode, command, () => connection, uriFor);
   javaDebug = registerSshJavaDebug(vscode, command, () => connection, getLocalJava);
   javaCompile = registerSshJavaCompile(vscode, command, requireConnection, uriFor);
-  context.subscriptions.push(tree, files, { dispose: retire }, processes, javaDebug, javaCompile,
+  mavenBuild = registerSshMaven(vscode, command, requireConnection);
+  context.subscriptions.push(tree, files, { dispose: retire }, processes, javaDebug, javaCompile, mavenBuild,
     vscode.workspace.registerFileSystemProvider(uriScheme, provider, { isReadonly: true }),
     vscode.window.registerTreeDataProvider('rocketbrain.sshWorkspace', treeProvider),
     command('attach', async () => {
@@ -185,7 +188,7 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
       } finally { pending.delete(review.id); }
     })
   );
-  return { attach, close: retire, reviewUpload, applyUpload, processes, javaDebug, javaCompile };
+  return { attach, close: retire, reviewUpload, applyUpload, processes, javaDebug, javaCompile, mavenBuild };
 }
 
 module.exports = { registerSshWorkspace };

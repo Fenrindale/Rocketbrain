@@ -11,6 +11,7 @@ const { terminalProgram } = require('../../src/remote/ssh-processes');
 const { javaSupervisorInvocation } = require('../../src/devcontainer/java-process');
 const { debugSupervisorInvocation } = require('../../src/remote/ssh-java-debug-runtime');
 const { compileProgram } = require('../../src/remote/ssh-java-compile-runtime');
+const { mavenProgram } = require('../../src/remote/ssh-maven-runtime');
 const { fixtureStep } = require('../devcontainer-port-fixture');
 
 async function startSshProcessFixture({ python, pythonPackage, ownWorkerTemp = false }, registerCleanup) {
@@ -32,7 +33,7 @@ async function startSshProcessFixture({ python, pythonPackage, ownWorkerTemp = f
   const workerTemp = ownWorkerTemp ? path.join(owned, 'temporary') : undefined;
   if (workerTemp) await fs.mkdir(workerTemp);
   await fs.writeFile(input, JSON.stringify({ host, client: path.join(owned, 'client.pub'), programs: [source, terminalProgram,
-    javaSupervisorInvocation({}, undefined, 'ssh').program, debugSupervisorInvocation({}).program, compileProgram] }));
+    javaSupervisorInvocation({}, undefined, 'ssh').program, debugSupervisorInvocation({}).program, compileProgram, mavenProgram] }));
   const worker = spawn(python, [path.join(__dirname, '..', 'fixtures', 'ssh-process-server.txt'), input],
     { cwd: owned, env: { ...process.env, PYTHONPATH: pythonPackage,
       ...(workerTemp && { TMPDIR: workerTemp, TEMP: workerTemp, TMP: workerTemp }) },
