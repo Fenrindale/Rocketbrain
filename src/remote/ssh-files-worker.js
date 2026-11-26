@@ -1,6 +1,6 @@
 'use strict';
 
-const source = String.raw`
+const filePrimitives = String.raw`
 import base64, hashlib, json, os, pathlib, stat, sys, tempfile
 
 LIMIT = 2 * 1024 * 1024
@@ -44,7 +44,8 @@ def checked_path(root, parts):
         identify(root)
     return root
 
-def watch_states(root, targets):
+`;
+const source = filePrimitives + String.raw`def watch_states(root, targets):
     if not isinstance(targets, list) or not 1 <= len(targets) <= 64:
         raise ValueError("invalid-data")
     states = []
@@ -143,4 +144,4 @@ function pythonCommand(python, program) {
 
 function remoteCommand(python) { return pythonCommand(python, source); }
 
-module.exports = { remoteCommand, pythonCommand, source };
+module.exports = { remoteCommand, pythonCommand, source, filePrimitives };

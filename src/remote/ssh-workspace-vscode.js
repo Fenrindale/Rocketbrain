@@ -8,6 +8,7 @@ const { registerSshProcesses } = require('./ssh-processes-vscode');
 const { registerSshJavaDebug } = require('./ssh-java-debug-vscode');
 const { registerSshJavaCompile } = require('./ssh-java-compile-vscode');
 const { registerSshBuild, maven, gradle } = require('./ssh-build-vscode');
+const { registerSshBatch } = require('./ssh-batch-vscode');
 
 async function localText(uri) {
   if (uri?.scheme !== 'file') throw Error('Choose a local UTF-8 file.');
@@ -31,16 +32,18 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
   const tree = new vscode.EventEmitter();
   const files = new vscode.EventEmitter();
   const pending = new Map();
-  let connection, processes, javaDebug, javaCompile, mavenBuild, gradleBuild;
+  let connection, processes, javaDebug, javaCompile, mavenBuild, gradleBuild, batch;
   let epoch = 0;
   const documents = new Map();
   const changes = { created: vscode.FileChangeType.Created, changed: vscode.FileChangeType.Changed,
     deleted: vscode.FileChangeType.Deleted };
-  const watcher = createSshFileWatch({ connection:() => vscode.workspace.isTrusted ? connection : undefined,
-    notify(items) {
-      files.fire(items.map(({ uri, type }) => ({ uri, type:changes[type] })));
-      tree.fire();
-    } });
+  const currentConnection = () => vscode.workspace.isTrusted ? connection : undefined;
+  function notify(items) {
+    if (!items.length) return;
+    files.fire(items.map(({ uri, type }) => ({ uri, type:changes[type] })));
+    tree.fire();
+  }
+  const watcher = createSshFileWatch({ connection: currentConnection, notify });
 
   function retire() {
     epoch++;
@@ -52,6 +55,7 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
     javaCompile?.retire();
     mavenBuild?.retire();
     gradleBuild?.retire();
+    batch?.retire();
     connection?.close();
     connection = undefined;
     tree.fire();
@@ -189,7 +193,8 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
   javaCompile = registerSshJavaCompile(vscode, command, requireConnection, uriFor);
   mavenBuild = registerSshBuild(vscode, command, requireConnection, maven);
   gradleBuild = registerSshBuild(vscode, command, requireConnection, gradle);
-  context.subscriptions.push(tree, files, { dispose: retire }, processes, javaDebug, javaCompile, mavenBuild, gradleBuild,
+  batch = registerSshBatch(vscode, { command, requireConnection, currentConnection, uriFor, localText, notify });
+  context.subscriptions.push(tree, files, { dispose: retire }, processes, javaDebug, javaCompile, mavenBuild, gradleBuild, batch,
     vscode.workspace.registerFileSystemProvider(uriScheme, provider, { isReadonly: true }),
     vscode.workspace.onDidOpenTextDocument(watchDocument),
     vscode.workspace.onDidCloseTextDocument(document => {
@@ -219,7 +224,8 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
       } finally { pending.delete(review.id); }
     })
   );
-  return { attach, close: retire, reviewUpload, applyUpload, processes, javaDebug, javaCompile, mavenBuild, gradleBuild };
+  return { attach, close: retire, reviewUpload, applyUpload, processes, javaDebug, javaCompile, mavenBuild, gradleBuild,
+    reviewBatch: batch.reviewBatch, applyBatch: batch.applyBatch, readbackBatch: batch.readbackBatch };
 }
 
 module.exports = { registerSshWorkspace };
