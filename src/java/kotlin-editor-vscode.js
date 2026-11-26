@@ -7,6 +7,7 @@ const {registerSourceFormatting} = require('./format-vscode');
 const {kotlinFormatterOptions,buildKotlinFormatEdits} = require('./kotlin-format-edits');
 const {registerKotlinRename} = require('./kotlin-rename-vscode');
 const {registerKotlinNullability} = require('./kotlin-nullability-vscode');
+const {createKotlinEditorScope}=require('./kotlin-editor-scope');
 const {isReactorComponent,reviewKotlinReactor,prepareKotlinReactor} = require('./kotlin-maven-reactor');
 
 const COMMANDS={start:'rocketbrain.kotlinEditor.start',stop:'rocketbrain.kotlinEditor.stop',output:'rocketbrain.kotlinEditor.output',reactor:'rocketbrain.kotlinEditor.startMavenReactor'};
@@ -103,6 +104,7 @@ function registerKotlinEditor(context,vscode,java) {
       const uri=vscode.Uri.file(launch.root), folder=vscode.workspace.getWorkspaceFolder(uri);
       if (!folder) throw fail('Keep the Kotlin project inside an open workspace.');
       const scope={uri,name:path.basename(launch.root),index:folder.index};
+      const selected=createKotlinEditorScope(launch.root,()=>active===record&&!record.stopping&&vscode.workspace.isTrusted);
       const { LanguageClient,ErrorAction,CloseAction }=require('vscode-languageclient/node');
       const files=launch.buildTool==='maven'
         ? '**/{*.kt,*.kts,*.java,pom.xml,build.gradle,build.gradle.kts,kls-classpath*,kotlinLspClasspath*}'
@@ -117,24 +119,40 @@ function registerKotlinEditor(context,vscode,java) {
             protocol2Code:value=>vscode.Uri.parse(value)},
           synchronize:{fileEvents:record.watcher},markdown:{isTrusted:false},
           middleware:{
+            ...selected.middleware,
+            provideCompletionItem:selected.request,
+            provideHover:selected.request,
+            provideSignatureHelp:selected.request,
+            provideDefinition:selected.request,
+            provideReferences:selected.request,
+            provideCodeActions:selected.request,
+            provideCodeLenses:selected.request,
+            provideFoldingRanges:selected.request,
+            provideDocumentSemanticTokens:selected.request,
+            provideDocumentRangeSemanticTokens:selected.request,
             provideInlayHints(document,range,token,next) {
+              if (!selected.available(document)) return undefined;
               return java.codeHints?.available(document)?[]:next(document,range,token);
             },
             provideDocumentSymbols(document,token,next) {
+              if (!selected.available(document)) return undefined;
               return java.structure.outline(document,token,next);
             },
             provideDocumentFormattingEdits(document,options,token,next) {
+              if (!selected.available(document)) return undefined;
               return formatting.native(document,undefined,options,token,()=>next(document,options,token));
             },
             provideDocumentRangeFormattingEdits(document,range,options,token,next) {
+              if (!selected.available(document)) return undefined;
               return formatting.native(document,range,options,token,()=>next(document,range,options,token));
             },
             workspace:{
               handleApplyEdit:() => ({applied:false,failureReason:'Apply Kotlin editor changes through the VS Code action that initiated them.'}),
               async didChangeWatchedFile(event,next) {
-                if (active!==record || !vscode.workspace.isTrusted) return;
-                if (launch.buildTool==='maven' && isMavenClasspathFile(path.basename(vscode.Uri.parse(event.uri).fsPath))) {
-                  if (record.reactor && path.basename(vscode.Uri.parse(event.uri).fsPath)==='pom.xml') return;
+                const uri=vscode.Uri.parse(event.uri);
+                if (active!==record || !vscode.workspace.isTrusted || !selected.owns(uri,true)) return;
+                if (launch.buildTool==='maven' && isMavenClasspathFile(path.basename(uri.fsPath))) {
+                  if (record.reactor && path.basename(uri.fsPath)==='pom.xml') return;
                   try {await validateMavenComponent(launch.root);}
                   catch (error) {
                     void serial(async()=>{
