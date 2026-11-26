@@ -7,6 +7,7 @@ const path = require('node:path');
 const { test } = require('node:test');
 const { pathToFileURL } = require('node:url');
 const { observeImage, planImage, readModule } = require('../src/java/javafx-gradle-image');
+const { registerJavaFx } = require('../src/java/javafx-vscode');
 
 function fixture() {
   const workspace = fs.realpathSync(os.tmpdir());
@@ -65,6 +66,29 @@ test('a planned image refuses symlink redirection, missing launchers and mismatc
     fs.writeFileSync(path.join(fields.directory, 'lib/modules'), Buffer.alloc(28));
     assert.throws(() => observeImage(root, plan, 'win32'), /jlink runtime payload/u);
   } finally {
+    dispose();
+  }
+});
+
+test('the JavaFX command validates the selected folder before choosing a build mode', async () => {
+  const { root, dispose } = fixture();
+  const uri = folder => ({ scheme: 'file', fsPath: folder, toString: () => pathToFileURL(folder).href });
+  const handle = { dispose() {} };
+  let command, choicesShown = 0, error;
+  const vscode = { workspace: { isTrusted: true, workspaceFolders: [{ uri: uri(root) }], textDocuments: [],
+    onDidOpenTextDocument: () => handle, onDidSaveTextDocument: () => handle, onDidCloseTextDocument: () => handle },
+  commands: { registerCommand(_id, callback) { command = callback; return handle; } },
+  languages: { createDiagnosticCollection: () => handle, registerDefinitionProvider: () => handle,
+    registerDocumentSymbolProvider: () => handle },
+  window: { showOpenDialog: async () => [uri(path.dirname(root))],
+    showQuickPick: async () => { choicesShown++; }, showErrorMessage: async value => { error = value; } } };
+  const service = registerJavaFx(vscode, { java: {} });
+  try {
+    await command();
+    assert.match(error, /inside an open local workspace/u);
+    assert.equal(choicesShown, 0);
+  } finally {
+    await service.dispose();
     dispose();
   }
 });

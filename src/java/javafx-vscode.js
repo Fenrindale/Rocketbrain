@@ -229,18 +229,22 @@ function registerJavaFx(vscode, { java, context }) {
 
   disposables.push(vscode.commands.registerCommand('rocketbrain.javafx.build', async () => {
     try {
+      if (!vscode.workspace.isTrusted) throw Error('Trust the local workspace before building JavaFX.');
       const active = vscode.window.activeTextEditor?.document.uri;
       const folder = (active && vscode.workspace.getWorkspaceFolder(active)) || vscode.workspace.workspaceFolders?.[0];
       const selection = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true,
         canSelectMany: false, defaultUri: folder?.uri, title: 'Select JavaFX Maven or Gradle Project' });
       if (!selection?.length) return;
+      const project = selection[0];
+      if (!vscode.workspace.isTrusted || project.scheme !== 'file') throw Error('Select a trusted local JavaFX project.');
+      const selectedRoot = workspacePath(project.toString(), workspaceRoots(vscode.workspace.workspaceFolders || []));
       const item = { label: 'Build JavaFX runtime image', value: 'image' };
-      const choices = fs.existsSync(path.join(selection[0].fsPath, 'pom.xml')) ?
+      const choices = fs.existsSync(path.join(selectedRoot, 'pom.xml')) ?
         [{ label: 'Run JavaFX application', value: 'run' }, item] : [item];
       const mode = await vscode.window.showQuickPick(choices, { title: 'JavaFX Task' });
       if (!mode) return;
       const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification,
-        title: mode.label, cancellable: true }, (_, cancellation) => build(selection[0], mode.value, {
+        title: mode.label, cancellable: true }, (_, cancellation) => build(project, mode.value, {
         cancellation, allowProjectExecution: true
       }));
       if (!result.cancelled && result.code !== 0) await vscode.window.showErrorMessage('JavaFX task failed. See the Rocketbrain task terminal.');
