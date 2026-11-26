@@ -10,7 +10,7 @@ const { execFileSync } = require('node:child_process');
 const { EventEmitter, once } = require('node:events');
 const { setTimeout: delay } = require('node:timers/promises');
 const { armSimulatorBuild, armUuid, bundleDigest } = require('../src/java/kmp-ios-review');
-const { createKmpIosDebug, launchedPid } = require('../src/java/kmp-ios-debug');
+const { createKmpIosDebug, launchedPid, observeInstalledContainer } = require('../src/java/kmp-ios-debug');
 const { createKmpIosDebugAdapter } = require('../src/java/kmp-ios-debug-adapter');
 
 test('iOS review refuses physical iOS, macOS and fat Mach-O debug artifacts', () => {
@@ -39,6 +39,27 @@ test('iOS bundle review binds file names and bytes and refuses links', t => {
     fs.symlinkSync('Renamed.plist', file);
     assert.throws(() => bundleDigest(dir), /without links/);
   }
+});
+
+test('a busy owned simulator repeats only the exact read and never retries a reported exit', async () => {
+  const calls = [], phases = [];
+  const signal = new AbortController().signal;
+  const timedOut = Error('container still busy', { cause: { killed: true, signal: 'SIGTERM', code: null } });
+  const lookup = async (tool, args, { timeout }) => {
+    calls.push([tool, ...args, timeout]);
+    if (calls.length === 1) throw timedOut;
+    return '/owned/container';
+  };
+  assert.equal(await observeInstalledContainer(lookup, 'device', 'app.bundle', signal, phase => phases.push(phase)),
+    '/owned/container');
+  assert.deepEqual(calls, [
+    ['simctl', 'get_app_container', 'device', 'app.bundle', 'app', 75000],
+    ['simctl', 'get_app_container', 'device', 'app.bundle', 'app', 35000]
+  ]);
+  assert.deepEqual(phases, ['read-container-retry']);
+  await assert.rejects(observeInstalledContainer(async () => {
+    throw Error('actual simctl exit', { cause: { code: 2 } });
+  }, 'device', 'app.bundle', signal, () => assert.fail('unexpected retry')), /actual simctl exit/);
 });
 
 test('iOS review denies a replay and cancellation cleans up just the UUID created in flight', async t => {
@@ -144,7 +165,7 @@ test('iOS adapter refuses wrong/conditional breakpoints and frames outside the p
 });
 
 test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped teardown', {
-  skip: !process.env.ROCKETBRAIN_IOS_SIMULATOR_TEST, timeout: 480000
+  skip: !process.env.ROCKETBRAIN_IOS_SIMULATOR_TEST, timeout: 635000
 }, async t => {
   assert.equal(process.platform, 'darwin');
   assert.equal(process.arch, 'arm64');
@@ -157,7 +178,11 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
   const original = fs.readFileSync(source);
   const line = original.toString('utf8').split('\n').findIndex(item => item.includes('// debugger-stop')) + 1;
   assert.ok(line > 0);
-  const service = createKmpIosDebug();
+  const phases = [];
+  const service = createKmpIosDebug({ observe(phase) {
+    phases.push(phase);
+    t.diagnostic('iOS fixture: ' + phase);
+  } });
   t.after(() => service.stop());
   const inventory = await service.devices();
   const runtime = inventory.runtimes.find(item => item.id === 'com.apple.CoreSimulator.SimRuntime.iOS-26-4');
@@ -199,10 +224,10 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
   await client.request('initialize');
   assert.equal((await client.request('launch')).success, true);
   assert.equal((await client.request('setBreakpoints', { source: { path: source }, breakpoints: [{ line }] })).success, true);
-  const stop = client.event('stopped', 420000);
+  const stop = client.event('stopped', 575000);
   const observed = stop.catch(error => { throw error; });
   void observed.catch(() => {});
-  const failure = client.event('output', 420000).then(event => { throw Error(event.output); });
+  const failure = client.event('output', 575000).then(event => { throw Error(event.output); });
   void failure.catch(() => {});
   assert.equal((await client.request('configurationDone')).success, true);
   assert.equal((await Promise.race([observed, failure])).reason, 'breakpoint');
@@ -230,6 +255,6 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
     symbolsSha256: review.symbolsSha256, sourceSha256: digest(source), editorBreakpoint: { file: path.basename(source), line,
       stack: stack.body.stackFrames[0].name, local: { name: measured.name, type: measured.type, value: measured.value } },
     resumed: 'UIKit Kotlin=42', staleSourceRefused: true, staleDsymRefused: true, wrongDsymRefused: true, oneShot: true, simulatorRemoved: true,
-    otherSimulatorsUnchanged: true
+    otherSimulatorsUnchanged: true, phases
   }, null, 2) + '\n');
 });

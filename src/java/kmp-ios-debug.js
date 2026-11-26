@@ -6,6 +6,7 @@ const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
 const { randomUUID } = require('node:crypto');
+const { setTimeout: delay } = require('node:timers/promises');
 const { inspectIosReview, fileDigest, bundleDigest, uuid } = require('./kmp-ios-review');
 
 const exec = promisify(execFile);
@@ -14,6 +15,7 @@ const deviceId = /^com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-[A-Za-z0-9-]
 const workerPrefix = 'ROCKETBRAIN_IOS:';
 const workerPaths = [path.join(__dirname, 'ios-debug', 'simulator_lldb.py'),
   path.join(__dirname, '../../runtime/ios-debug/simulator_lldb.py')];
+const execTimedOut = error => error?.killed === true && error?.signal === 'SIGTERM' && error?.code == null;
 
 function environment() {
   const env = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: os.homedir(), LC_ALL: 'C' };
@@ -34,8 +36,17 @@ async function systemTool() {
   env.DEVELOPER_DIR = developer;
   const tool = async (name, args, { timeout = 20000, signal } = {}) => {
     const binary = name.startsWith('/') ? name : '/usr/bin/xcrun';
-    return (await exec(binary, name.startsWith('/') ? args : [name, ...args],
-      { env, signal, timeout, maxBuffer: 3 * 1024 * 1024, encoding: 'utf8' })).stdout;
+    try {
+      return (await exec(binary, name.startsWith('/') ? args : [name, ...args],
+        { env, signal, timeout, maxBuffer: 3 * 1024 * 1024, encoding: 'utf8' })).stdout;
+    } catch (cause) {
+      if (signal?.aborted) signal.throwIfAborted();
+      const operation = name === 'simctl' ? 'simctl ' + args[0] : path.basename(name);
+      const measured = execTimedOut(cause) ? 'timed out after ' + timeout + ' ms' :
+        'exited with ' + (cause.code ?? cause.signal ?? 'an unknown error');
+      const detail = String(cause.stderr ?? '').trim().slice(0, 1200);
+      throw Error(operation + ' ' + measured + (detail ? ': ' + detail : '') + '.', { cause });
+    }
   };
   return { tool, env };
 }
@@ -152,7 +163,21 @@ function startWorker({ env }, config) {
   };
 }
 
-function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemTool, openWorker = startWorker } = {}) {
+async function observeInstalledContainer(tool, id, bundleId, signal, observe) {
+  const args = ['get_app_container', id, bundleId, 'app'];
+  try { return await tool('simctl', args, { signal, timeout: 75000 }); }
+  catch (error) {
+    // A busy new simulator can briefly time out during its first app-container lookup.
+    // Re-observe only the same read; the approved installation is never repeated.
+    if (signal.aborted || !execTimedOut(error.cause)) throw error;
+    observe('read-container-retry');
+    await delay(500, undefined, { signal });
+    return tool('simctl', args, { signal, timeout: 35000 });
+  }
+}
+
+function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemTool,
+  openWorker = startWorker, observe = () => {} } = {}) {
   let active, pending;
   function validate(record) {
     trust();
@@ -191,6 +216,7 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
           throw Error('The owned iOS simulator remains registered after cleanup.');
         }
         record.id = undefined;
+        observe('owned-device-deleted');
       }
       if (record === active) active = undefined;
     } finally {
@@ -225,25 +251,32 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
       throw Error('CoreSimulator did not return a fresh owned device UUID.');
     }
     record.id = id;
+    observe('owned-device-created');
     signal.throwIfAborted();
     await tool('simctl', ['boot', id], { signal, timeout: 45000 });
     await tool('simctl', ['bootstatus', id, '-b'], { signal, timeout: 240000 });
+    observe('owned-device-booted');
     await tool('simctl', ['install', id, staged], { signal, timeout: 65000 });
-    const installed = installedApp(id, await tool('simctl', ['get_app_container', id, snapshot.bundleId, 'app'], { signal }));
+    observe('owned-app-installed');
+    const installed = installedApp(id, await observeInstalledContainer(tool, id, snapshot.bundleId, signal, observe));
     const executable = path.join(installed, path.relative(snapshot.app, snapshot.executable));
     const framework = path.join(installed, path.relative(snapshot.app, snapshot.framework));
     if (fileDigest(executable) !== snapshot.executableSha256 || fileDigest(framework) !== snapshot.frameworkSha256) {
       throw Error('Simulator installed a different app executable or framework.');
     }
+    observe('installed-executable-and-framework-verified');
     validate(record);
     const pid = launchedPid(await tool('simctl', ['launch', '--wait-for-debugger', id, snapshot.bundleId],
-      { signal, timeout: 45000 }), snapshot.bundleId);
+      { signal, timeout: 90000 }), snapshot.bundleId);
+    observe('debuggee-launched');
     const processIdentity = await verifyProcess(tool, pid, executable, signal);
     validate(record);
     if (await verifyProcess(tool, pid, executable, signal) !== processIdentity) throw Error('The reviewed simulator process changed.');
+    observe('owned-pid-verified');
     const worker = record.worker = openWorker(record.system, { executable, framework, symbols, pid,
       frameworkUuid: snapshot.frameworkUuid, source: snapshot.source, line: snapshot.line });
     await worker.expect('ready', 35000);
+    observe('lldb-breakpoint-bound');
     signal.throwIfAborted();
     let stopped = false, continued = false;
     return { id, pid, bundleId: snapshot.bundleId,
@@ -286,4 +319,4 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
   };
 }
 
-module.exports = { createKmpIosDebug, availableSimulators, launchedPid, installedApp };
+module.exports = { createKmpIosDebug, availableSimulators, launchedPid, installedApp, observeInstalledContainer };
