@@ -14,6 +14,7 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
  }
  const controller=new SpringProjectTools({
   fetchImpl,getWorkspaceRoots:()=>vscode.workspace.workspaceFolders?.map(folder=>folder.uri.fsPath)||[],assertTrusted:trusted,documentSnapshot,
+  getMavenRepository:root=>vscode.workspace.getConfiguration('rocketbrain.spring',vscode.Uri.file(root)).get('mavenModelRepository',''),
   async writeBuildFile(change){
    trusted();
    const uri=vscode.Uri.parse(change.uri),doc=await vscode.workspace.openTextDocument(uri);
@@ -52,7 +53,8 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
   const version=management.property?' via local property '+management.property:'';
   return [kind+' '+management.coordinate+' '+management.version+version,
    ...(management.chain||[]).map(item=>'Local parent '+item.coordinate+' · '+item.source),
-   ...management.overrides.map(item=>'Protected local override '+item.coordinate+' '+item.version)];
+   ...(management.supplemental||[]).map(item=>'Supplemental Maven BOM '+item.coordinate+' · SHA-256 '+item.sha256),
+   ...management.overrides.map(item=>'Protected management '+item.coordinate+' '+item.version+(item.source?' · '+item.source:''))];
  }
  function reviewText(review){if(!review)return'# Spring project review unavailable';if(review.kind==='dependencies')return['# Review starter changes','',review.review,'','Build: '+review.buildUri,'Boot: '+review.bootVersion,...managementLines(review.management),
   ...(review.mavenProfile?['Maven profile '+review.mavenProfile]:[]),

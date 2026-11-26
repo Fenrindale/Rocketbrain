@@ -2745,6 +2745,12 @@
           "default": "https://start.spring.io/",
           "scope": "machine-overridable",
           "description": "HTTPS Spring Initializr service used for explicit metadata and project creation requests."
+        },
+        "rocketbrain.spring.mavenModelRepository": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Local Maven repository for reviewing exact supplemental BOM pins. Leave empty for the standard Maven repository."
         }
       }
     },

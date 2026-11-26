@@ -2,6 +2,7 @@
 const fs=require('node:fs'),fsp=fs.promises,path=require('node:path'),crypto=require('node:crypto'),{fileURLToPath,pathToFileURL}=require('node:url');
 const {InitializrClient,unpack,sha,fail}=require('./project-client'),B=require('./project-build');
 const {projectArchiveShape}=require('./project-archive-shape');
+const {openExternalMavenModels}=require('../java/maven-external-models');
 const BUILDS=['pom.xml','build.gradle','build.gradle.kts'],LIMITS=Object.freeze({reviews:3,reviewMs:10*60*1000,reviewBytes:96*1024*1024});
 const CATALOG_PATH='gradle/libs.versions.toml', SETTINGS=['settings.gradle','settings.gradle.kts'];
 const local=value=>{let result;try{if(typeof value!=='string')throw Error();if(value.startsWith('file:')){const url=new URL(value);if(url.hostname)throw Error();result=fileURLToPath(url);}else result=value;}catch{throw fail('PATH','Choose a local project folder.');}if(!path.isAbsolute(result)||result.startsWith('\\\\'))throw fail('PATH','Use an absolute local project path.');return path.resolve(result);};
@@ -50,6 +51,39 @@ function mavenParentSources(leaf,roots){
  }
  return parents;
 }
+function mavenBomInputs(root,source,parents,roots,getMavenRepository){
+ const readRepository=()=>{
+  const configured=getMavenRepository(root);
+  if(!configured)return undefined;
+  const repository=noLinks(local(configured));
+  if(!fs.statSync(repository).isDirectory())throw fail('BUILD','Select a physical Maven local repository directory.');
+  return repository;
+ };
+ const project=path.dirname(parents.at(-1)?.path||source.path);
+ let repository, reader;
+ return {
+  read(dependency){
+   try {
+    if(!reader){
+     repository=readRepository();
+     reader=openExternalMavenModels(project,roots,{repository});
+    }
+    return reader.read(dependency);
+   } catch(error) { throw fail('BUILD',error.message); }
+  },
+  proof(){
+   const reviewed=reader?.finish();
+   if(!reviewed)return undefined;
+   const sources=[reviewed.lock,...reviewed.files].map(file=>optionalSource(path.dirname(file),path.basename(file))).filter(Boolean);
+   return {sources,validate(){
+    try{
+     if(readRepository()!==repository)throw Error('Repository path changed.');
+     reviewed.validate();
+    }catch{throw fail('STALE','A supplemental Maven BOM, its pin or the local repository changed after review.');}
+   }};
+  }
+ };
+}
 const sameSource=(first,second)=>first.path===second.path&&first.bytesSha256===second.bytesSha256&&
  first.dev===second.dev&&first.ino===second.ino;
 function verifyBuildCompanions(root,source,sources,roots){
@@ -71,7 +105,7 @@ async function cleanBuildCompanions(read,sources,code){
  }
 }
 class SpringProjectTools{
- constructor({getWorkspaceRoots=()=>[],assertTrusted=()=>{},documentSnapshot=()=>undefined,writeBuildFile,resyncProject,fetchImpl=fetch,clock=Date.now}={}){this.options={getWorkspaceRoots,assertTrusted,documentSnapshot,writeBuildFile,resyncProject,fetchImpl,clock};this.reviews=new Map();this.closed=false;}
+ constructor({getWorkspaceRoots=()=>[],getMavenRepository=()=>undefined,assertTrusted=()=>{},documentSnapshot=()=>undefined,writeBuildFile,resyncProject,fetchImpl=fetch,clock=Date.now}={}){this.options={getWorkspaceRoots,getMavenRepository,assertTrusted,documentSnapshot,writeBuildFile,resyncProject,fetchImpl,clock};this.reviews=new Map();this.closed=false;}
  guard(input={}){if(this.closed)throw fail('CLOSED','Spring project tools are closed.');this.options.assertTrusted();if(input.guard&&input.guard()!==true)throw fail('CONTEXT','The project workspace changed.');if(input.signal?.aborted||input.cancellation?.isCancellationRequested)throw fail('CANCELLED','The Spring project action was cancelled.');}
  roots(){return this.options.getWorkspaceRoots().map(root=>fs.realpathSync(local(root))).sort();}
  context(){return JSON.stringify(this.roots().map(normalize));}
@@ -90,24 +124,31 @@ class SpringProjectTools{
   if(input.expectedSourceSha256!==undefined&&source.bytesSha256!==input.expectedSourceSha256)
    throw fail('STALE','The build source changed while choosing starter edits.');
   const maven=names[0]==='pom.xml';
-  const companions=maven?mavenParentSources(source,this.roots()):catalogSources(root);
-  const model=B.inspect(source.text,names[0],maven?{mavenParents:companions,mavenProfile:input.mavenProfile}:catalogContext(companions));
-  const readOnlySources=model.catalogContext||model.mavenContext?companions:[];
+  const roots=this.roots(), companions=maven?mavenParentSources(source,roots):catalogSources(root);
+  const bom=maven?mavenBomInputs(root,source,companions,roots,this.options.getMavenRepository):undefined;
+  const model=B.inspect(source.text,names[0],maven?
+   {mavenParents:companions,mavenProfile:input.mavenProfile,readMavenBom:bom.read}:catalogContext(companions));
+  const reviewedCompanions=model.catalogContext||model.mavenContext?companions:[];
+  const mavenProof=bom?.proof();
+  const readOnlySources=[...reviewedCompanions,...(mavenProof?.sources||[])];
   await cleanBuildCompanions(this.options.documentSnapshot,readOnlySources,'DIRTY');
   const catalog=await this.metadata({endpoint:input.endpoint,bootVersion:model.bootVersion,signal:input.signal});
   await cleanBuildCompanions(this.options.documentSnapshot,readOnlySources,'DIRTY');
   this.guard(input);
-  if(readOnlySources.length)verifyBuildCompanions(root,source,readOnlySources,this.roots());
+  if(reviewedCompanions.length)verifyBuildCompanions(root,source,reviewedCompanions,this.roots());
+  mavenProof?.validate();
   return {projectUri:pathToFileURL(root).toString(),buildUri:source.uri,kind:model.kind,bootVersion:model.bootVersion,
    management:model.management||null,sourceSha256:source.bytesSha256,choices:B.choices(model,catalog),endpoint:catalog.endpoint,
    mavenProfiles:model.mavenProfiles,mavenProfile:model.mavenProfile,
-   sources:readOnlySources.map(item=>({name:item.name,uri:item.uri,sha256:item.bytesSha256})),readOnlySources,source,document,model,catalog};
+   sources:readOnlySources.map(item=>({name:item.name,uri:item.uri,sha256:item.bytesSha256})),
+   readOnlySources,reviewedCompanions,mavenProof,source,document,model,catalog};
  }
  async previewDependencies(input){
   const found=await this.inspectDependencies(input),change=B.change(found.source.text,found.model,found.catalog,input);
   const inside=this.inside(local(found.projectUri)),afterBytes=Buffer.concat([
    found.source.bom?Buffer.from([0xef,0xbb,0xbf]):Buffer.alloc(0),Buffer.from(change.after)]);
   return this.remember({kind:'dependencies',source:found.source,document:found.document,change,readOnlySources:found.readOnlySources,
+   reviewedCompanions:found.reviewedCompanions,mavenProof:found.mavenProof,
    cacheBytes:Buffer.byteLength(found.source.text)+Buffer.byteLength(change.after)+found.readOnlySources.reduce((sum,item)=>sum+Buffer.byteLength(item.text),0),
    public:{kind:'dependencies',projectUri:found.projectUri,buildUri:found.buildUri,bootVersion:found.bootVersion,management:found.management,
     sources:found.sources,buildKind:found.kind,endpoint:found.endpoint,metadataSha256:found.catalog.metadataSha256,
@@ -129,8 +170,9 @@ class SpringProjectTools{
   const root=local(record.public.projectUri),companions=record.readOnlySources;
   const guard=()=>{
    this.guard(input);
+   if(record.reviewedCompanions.length)verifyBuildCompanions(root,record.source,record.reviewedCompanions,this.roots());
+   record.mavenProof?.validate();
    if(companions.length){
-    verifyBuildCompanions(root,record.source,companions,this.roots());
     if(!sameSource(snapshot(record.source.path),record.source))
      throw fail('STALE','The build source changed before applying.');
    }
