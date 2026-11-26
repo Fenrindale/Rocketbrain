@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const { randomUUID }=require('node:crypto');
-const { pathToFileURL }=require('node:url');
+const { fileURLToPath,pathToFileURL }=require('node:url');
 const { promisify }=require('node:util');
 const { execFile }=require('node:child_process');
 const net=require('node:net');
@@ -108,6 +108,7 @@ async function testCount(root) {
 async function actualBreakpoint(command,session,project) {
   const source=path.join(project.root,sourceRelative), line=await breakpointLine(source);
   const dap=new DapClient(await command('vscode.java.startDebugSession'));
+  const location={name:'FixtureResource.java',path:source};
   let request;
   try {
     await dap.request('initialize',{adapterID:'rocketbrain-java',clientID:'rocketbrain-quarkus',
@@ -116,7 +117,7 @@ async function actualBreakpoint(command,session,project) {
       hostName:session.debug.address,port:session.debug.port,sourcePaths:[path.join(project.root,'src/main/java')]});
     attach.catch(()=>{});
     await dap.event('initialized');
-    const breakpoints=await dap.request('setBreakpoints',{source:{name:'FixtureResource.java',path:source},breakpoints:[{line}]});
+    const breakpoints=await dap.request('setBreakpoints',{source:location,breakpoints:[{line}]});
     assert.equal(breakpoints.breakpoints.length,1);
     await dap.request('setExceptionBreakpoints',{filters:[]});
     await dap.request('configurationDone');
@@ -131,9 +132,28 @@ async function actualBreakpoint(command,session,project) {
     assert.equal(path.relative(source,frame.source.path),'');
     await dap.request('continue',{threadId:stopped.threadId});
     assert.equal(await request,'packaged-fixture-ready');
+
+    // A retained breakpoint can suspend a second HTTP request. Exercise it with
+    // the same attached JVM before requiring acknowledgement of its removal.
+    const nextEvent=dap.events.length;
+    request=web(session.baseUrl,'/proof','text',50000);
+    request.catch(()=>{});
+    const repeatedStop=await dap.event('stopped',nextEvent,40000);
+    assert.equal(repeatedStop.reason,'breakpoint');
+    const repeatFrame=(await dap.request('stackTrace',{threadId:repeatedStop.threadId})).stackFrames[0];
+    assert.equal(repeatFrame.line,line);
+    assert.equal(path.relative(source,repeatFrame.source.path),'');
+    const pending=Symbol('suspended request');
+    assert.equal(await Promise.race([request,new Promise(resolve=>setTimeout(resolve,150,pending))]),pending);
+    const cleared=await dap.request('setBreakpoints',{source:location,breakpoints:[]});
+    assert.deepEqual(cleared.breakpoints,[]);
+    await dap.request('continue',{threadId:repeatedStop.threadId});
+    assert.equal(await request,'packaged-fixture-ready');
+    await verifyServed(session.baseUrl,'packaged');
     await dap.request('disconnect',{terminateDebuggee:false});
     dap.socket.destroy();
-    return {source:sourceRelative,line,method:className+'.greeting'};
+    return {source:sourceRelative,line,method:className+'.greeting',retainedBreakpointSuspendedRepeatHttp:true,
+      clearAcknowledged:true,attachedHttpStillReady:true};
   } finally {
     await dap.close();
     await request?.catch(()=>{});
@@ -289,11 +309,26 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
       breakpoint=new vscode.SourceBreakpoint(new vscode.Location(source,new vscode.Position(line-1,0)),true);
       vscode.debug.addBreakpoints([breakpoint]);
       const events=[];
+      const cleared=new Map();
       tracker=vscode.debug.registerDebugAdapterTrackerFactory('rocketbrain-java',{createDebugAdapterTracker(session){
-        return {onDidSendMessage(message){
-          if(message.type==='event'&&message.event==='stopped')events.push({id:session.id,threadId:message.body?.threadId,reason:message.body?.reason});
-          if(message.type==='response'&&message.command==='configurationDone'&&message.success)events.push({id:session.id,configured:true});
-        }};
+        const removals=new Set();
+        return {
+          onWillReceiveMessage(message) {
+            if(message.type!=='request'||message.command!=='setBreakpoints')return;
+            const {source:target,breakpoints:positions,lines}=message.arguments||{};
+            const sent=positions??lines;
+            if(!target?.path||!Array.isArray(sent)||sent.length)return;
+            const candidate=target.path.startsWith('file:')?fileURLToPath(target.path):target.path;
+            if(path.isAbsolute(candidate)&&!path.relative(source.fsPath,candidate))removals.add(message.seq);
+          },
+          onDidSendMessage(message) {
+            if(message.type==='event'&&message.event==='stopped')events.push({id:session.id,threadId:message.body?.threadId,reason:message.body?.reason});
+            if(message.type==='response'&&message.command==='configurationDone'&&message.success)events.push({id:session.id,configured:true});
+            if(message.type==='response'&&message.command==='setBreakpoints'&&removals.delete(message.request_seq)) {
+              cleared.set(session.id,{success:message.success,breakpoints:message.body?.breakpoints});
+            }
+          }
+        };
       }});
       const session=await service.debug(options);
       assert.equal(session.debug.verified,true);
@@ -314,10 +349,14 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
       await active.customRequest('continue',{threadId:stopped.threadId});
       assert.equal(await request,'packaged-fixture-ready');
       complete();
+      begin('packaged debugger breakpoint removal acknowledgement');
       vscode.debug.removeBreakpoints([breakpoint]);
       breakpoint=undefined;
+      assert.deepEqual(await until(()=>cleared.get(active.id),8000),{success:true,breakpoints:[]});
+      complete();
       begin('packaged HTTP verification after breakpoint removal');
       await verifyServed(session.baseUrl,'packaged');
+      assert.equal(events.filter(event=>event.id===active.id&&event.reason==='breakpoint').length,1);
       complete();
       begin('packaged HTTP and JDWP shutdown');
       await service.stopDev();
@@ -326,7 +365,8 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
       complete();
       checks.push('Imported Quarkus Gradle in Java Projects, ran its observed tests and fast-jar build, and hit a source breakpoint in its verified owned JVM.');
       return {tool:'gradle',version:'3.40.1.2',tests,buildTask:build.task,frame:{line,source:sourceRelative},nativeView:true,
-        ownedLoopbackListener:true,ownedShutdown:true,devProfile:true,quarkusJdbc:true,phases};
+        ownedLoopbackListener:true,ownedShutdown:true,devProfile:true,quarkusJdbc:true,
+        breakpointRemovalAcknowledged:true,attachedHttpStillReady:true,phases};
     } catch(error) {
       failure=new Error(`Quarkus Gradle ${phase} failed after ${Math.round(performance.now()-phaseStart)} ms: ${error.message}`,
         {cause:error});

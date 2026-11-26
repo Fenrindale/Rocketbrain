@@ -4,10 +4,11 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 const { mavenWarProject,listWarArtifacts,resolveWarArtifact,contextPattern } = require('./jakarta-war');
-const { createTomcatDeployment } = require('./jakarta-tomcat');
+const { createTomcatDeployment,reviewTomcatWarSet,MAX_APPLICATIONS } = require('./jakarta-tomcat');
 
 const MARKER='__rocketbrainJakartaRun';
 const COMMANDS={build:'rocketbrain.jakarta.buildWar',deploy:'rocketbrain.jakarta.deploy',
+  deploySet:'rocketbrain.jakarta.deploySet',undeploy:'rocketbrain.jakarta.undeploy',
   debug:'rocketbrain.jakarta.debug',status:'rocketbrain.jakarta.status',stop:'rocketbrain.jakarta.stop'};
 
 function registerJakartaWorkbench(vscode,java) {
@@ -75,6 +76,47 @@ function registerJakartaWorkbench(vscode,java) {
     output.appendLine(`Tomcat ${receipt.version} deployed ${receipt.artifact} to ${receipt.url}`);
     output.appendLine('WAR SHA-256: '+receipt.sha256);
     return {receipt,project};
+  }
+
+  async function resolveSet(applications,cancellation) {
+    if (!Array.isArray(applications) || applications.length<2 || applications.length>MAX_APPLICATIONS) {
+      throw fail('Select two to '+MAX_APPLICATIONS+' Maven WAR artifacts.');
+    }
+    const entries=[];
+    for (const {projectUri,warUri,context,expectedSha256} of applications) {
+      const project=await projectFor(projectUri,cancellation);
+      const artifact=resolveWarArtifact(project,warUri);
+      entries.push({project,artifact,context,expectedSha256});
+    }
+    trusted(cancellation);
+    return entries;
+  }
+
+  async function reviewSet({applications,cancellation}={}) {
+    const entries=await resolveSet(applications,cancellation);
+    const reviewed=await reviewTomcatWarSet(entries,cancellation);
+    return reviewed.map(({context,artifact,expectedSha256},index) => ({projectUri:entries[index].project.uri,
+      warUri:artifact.uri,context,expectedSha256,artifact:artifact.name,size:artifact.size}));
+  }
+
+  async function deploySet({applications,allowDeploy,cancellation}={}) {
+    if (allowDeploy!==true) throw fail('Explicitly deploy the selected WAR set from a trusted workspace.');
+    const entries=await resolveSet(applications,cancellation);
+    const receipt=await backend.deploySet({applications:entries,tomcatHome:config().get('jakarta.tomcatHome'),
+      javaHome:config().get('javaHome')||java.getState().javaHome||entries[0].project.jdk,
+      workspaceTrusted:vscode.workspace.isTrusted,allowDeploy,cancellation});
+    output.appendLine(`Tomcat ${receipt.version} started ${receipt.applications.length} applications at ${receipt.url}`);
+    for (const {artifact,context,sha256} of receipt.applications) {
+      output.appendLine(`${context} · ${artifact} · SHA-256 ${sha256}`);
+    }
+    return receipt;
+  }
+
+  async function undeploy(options) {
+    trusted(options?.cancellation);
+    const receipt=await backend.undeploy(options);
+    output.appendLine(`Removed Tomcat application ${receipt.application.context}`);
+    return receipt;
   }
 
   subscriptions.push(vscode.debug.onDidStartDebugSession(session => {
@@ -192,19 +234,68 @@ function registerJakartaWorkbench(vscode,java) {
 
   register(COMMANDS.deploy,() => chooseDeployment(false));
   register(COMMANDS.debug,() => chooseDeployment(true));
+  register(COMMANDS.deploySet,async () => {
+    if (!java.workbench.getSnapshot().projects.length) await java.workbench.refresh();
+    trusted();
+    const choices=projects().flatMap(project => listWarArtifacts(project).map(artifact => (
+      {label:artifact.name,description:project.name,project,artifact})));
+    if (choices.length<2) throw fail('Build at least two Maven WAR artifacts before deploying a set.');
+    const selected=await vscode.window.showQuickPick(choices,{title:'Select WARs for One Tomcat Server',canPickMany:true,
+      placeHolder:'Select two to '+MAX_APPLICATIONS+' WAR files'});
+    if (!selected) return;
+    if (selected.length<2 || selected.length>MAX_APPLICATIONS) throw fail('Select two to '+MAX_APPLICATIONS+' WAR files.');
+    const applications=[];
+    const contexts=new Set();
+    for (const {project,artifact} of selected) {
+      const context=await vscode.window.showInputBox({title:`Tomcat Context for ${artifact.name}`,value:mavenWarProject(project).context,
+        validateInput:value => !contextPattern.test(value) ? 'Use lowercase letters, numbers and hyphens.' :
+          contexts.has(value) ? 'Choose a context that differs from the other WARs.' : undefined});
+      if (!context) return;
+      contexts.add(context);
+      applications.push({projectUri:project.uri,warUri:artifact.uri,context});
+    }
+    const reviewed=await withProgress('Review Jakarta WAR Set',cancellation => reviewSet({applications,cancellation}));
+    const detail=reviewed.map(app => `/${app.context} · ${app.artifact}\nSHA-256 ${app.expectedSha256}`).join('\n\n');
+    const chosen=await vscode.window.showWarningMessage('Start these WARs on one local Tomcat server?',{modal:true,detail},'Deploy WARs');
+    if (chosen!=='Deploy WARs') return;
+    output.show(true);
+    return withProgress('Deploy Jakarta WAR Set',cancellation => deploySet({applications:reviewed,allowDeploy:true,cancellation}));
+  });
+
+  async function selectApplication(state,title) {
+    return (await vscode.window.showQuickPick(state.applications.map(app => (
+      {label:app.context,description:app.artifact,detail:app.url,app})),{title}))?.app;
+  }
+
+  register(COMMANDS.undeploy,async () => {
+    const state=backend.getState();
+    if (!state.applications?.length) throw fail('Start a Jakarta WAR set to remove one application.');
+    const app=await selectApplication(state,'Choose an Application to Undeploy');
+    if (!app) return;
+    const detail=`${app.url}\n${app.artifact}\nSHA-256 ${app.sha256}`+
+      (state.applications.length===1?'\nThe server stops when its last application is removed.':'');
+    const chosen=await vscode.window.showWarningMessage(`Undeploy ${app.context}?`,{modal:true,detail},'Undeploy');
+    if (chosen==='Undeploy') return undeploy({deploymentId:state.deploymentId,context:app.context,
+      expectedSha256:app.sha256,allowUndeploy:true});
+  });
+
   register(COMMANDS.stop,stop);
   register(COMMANDS.status,async () => {
     const state=backend.getState();
     if (state.state!=='running') {void vscode.window.showInformationMessage('Tomcat deployment: '+state.state);return state;}
-    const choice=await vscode.window.showInformationMessage(`Tomcat ${state.version} · ${state.artifact} · ${state.url}`,
+    const app=state.applications ? await selectApplication(state,'Running Tomcat Applications') : state;
+    if (!app) return state;
+    const choice=await vscode.window.showInformationMessage(`Tomcat ${state.version} · ${app.artifact} · ${app.url}`,
       'Open Application','Show Output');
-    if (choice==='Open Application') await vscode.env.openExternal(vscode.Uri.parse(state.url));
+    if (choice==='Open Application') await vscode.env.openExternal(vscode.Uri.parse(app.url));
     if (choice==='Show Output') output.show(true);
     return state;
   });
 
   return {artifacts:options => track(() => artifacts(options)),buildWar:options => track(() => buildWar(options)),
     deploy:options => track(async () => (await deployWar(options)).receipt),debug:options => track(() => debug(options)),stop,
+    reviewSet:options => track(() => reviewSet(options)),deploySet:options => track(() => deploySet(options)),
+    undeploy:options => track(() => undeploy(options)),
     getState:backend.getState,dispose() {
       if (closing) return closing;
       disposed=true;

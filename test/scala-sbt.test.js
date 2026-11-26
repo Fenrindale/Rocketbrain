@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { fileURLToPath } = require('node:url');
-const { createSbtRunner,launcherCommands,observedProjects,mainClasses,projectSbt } = require('../src/java/scala-sbt');
+const { createSbtRunner,launcherCommands,observedProjects,mainClasses,testSuites,projectSbt } = require('../src/java/scala-sbt');
 const { semanticDocuments,indexSemanticdb,definitionAt,referencesAt } = require('../src/java/scala-semanticdb');
 const { populateScala,scala2,scala3 } = require('./helpers/scala-fixture');
 
@@ -24,6 +24,31 @@ test('sbt observations select finite fully qualified commands and reject fabrica
   ]);
   assert.deepEqual(mainClasses('[info] * scalafixture.Application\n[info] * scalafixture.Application\n[info] * too many words'),['scalafixture.Application']);
   assert.throws(() => semanticDocuments(Buffer.from([10,20,1,2])),/Truncated/);
+});
+
+test('Scala test discovery and debugging keep the selected sbt project and suite exact', async () => {
+  assert.deepEqual(launcherCommands('suites','app'),[
+    'set app / Test / definedTests / aggregate := false',
+    'show app / Test / definedTests'
+  ]);
+  assert.deepEqual(launcherCommands('debugSuite','app','scalafixture.ApplicationSuite'),[
+    'show app / Test / startTestSuitesDebugSession ["scalafixture.ApplicationSuite"]',
+    'shell'
+  ]);
+  assert.deepEqual(testSuites([
+    '[info] * Test scalafixture.ApplicationSuite : subclass(false, munit.Suite)',
+    '[info] * Test scalafixture.SecondSuite : annotation(false, org.junit.Test)',
+    '[info] * Test scalafixture.ApplicationSuite : subclass(false, munit.Suite)',
+    '[info] * Test scalafixture.IncompleteSuite',
+    '[info] * Test scalafixture.Invalid;Suite : annotation(false, org.junit.Test)',
+    '[warn] * Test scalafixture.UnexpectedSuite : subclass(false, munit.Suite)'
+  ].join('\r\n')),['scalafixture.ApplicationSuite','scalafixture.SecondSuite']);
+  assert.throws(() => launcherCommands('suites'),/observed sbt project ID for Scala test suites/);
+  assert.throws(() => launcherCommands('debugSuite','app','scalafixture.*'),/supported sbt test suite name/);
+  assert.throws(() => launcherCommands('debugSuite','app','A; exit'),/supported sbt test suite name/);
+  const runner=createSbtRunner();
+  await assert.rejects(runner.run({action:'debugSuite'}),/managed Scala debug session/);
+  await assert.rejects(runner.debugSuite({workspaceTrusted:true,allowProjectExecution:false}),/trusted local workspace/);
 });
 
 for (const version of [scala3,scala2]) test('real sbt 1.13.1 Scala '+version+' JDK build, tests, app and exact overloaded references',{

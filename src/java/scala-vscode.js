@@ -5,11 +5,12 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
-const { projectSbt,createSbtRunner,observedProjects,mainClasses } = require('./scala-sbt');
-const { indexSemanticdb,definitionAt,referencesAt,configSnapshot } = require('./scala-semanticdb');
+const { projectSbt,createSbtRunner,observedProjects,mainClasses,testSuites } = require('./scala-sbt');
+const { indexSemanticdb,definitionAt,referencesAt,renameAt,configSnapshot } = require('./scala-semanticdb');
 
 const COMMANDS={discover:'rocketbrain.scala.discover',compile:'rocketbrain.scala.compile',test:'rocketbrain.scala.test',
-  run:'rocketbrain.scala.run',debug:'rocketbrain.scala.debug',definition:'rocketbrain.scala.definition',stop:'rocketbrain.scala.stop'};
+  run:'rocketbrain.scala.run',debug:'rocketbrain.scala.debug',debugSuite:'rocketbrain.scala.debugSuite',
+  definition:'rocketbrain.scala.definition',renameIndex:'rocketbrain.scala.renameIndex',stop:'rocketbrain.scala.stop'};
 const debugType='rocketbrain-scala';
 
 function registerScalaWorkbench(context,vscode,java) {
@@ -80,21 +81,25 @@ function registerScalaWorkbench(context,vscode,java) {
   async function selected(options,name) {
     if (options.allowProjectExecution!==true) throw fail('Explicitly choose the sbt task before executing project code.');
     const root=await rootFor(options.projectUri,options.cancellation);
+    if (name==='suites' && !options.projectId) throw fail('Choose an observed sbt project ID for Scala test suites.');
     const observed=projects.get(root);
     if (options.projectId && (!observed?.known.some(item => item.id===options.projectId) ||
         observed.configs!==JSON.stringify(configSnapshot(root)))) {
       throw fail('Discover current sbt project IDs before choosing a subproject.');
     }
-    if (name==='compile') indexes.delete(root);
+    const createsIndex=name==='compile' || name==='renameIndex';
+    if (createsIndex) indexes.delete(root);
     const result=await task(root,name,options);
-    if (result.state==='succeeded' && name==='compile') {
+    if (result.state==='succeeded' && createsIndex) {
       trusted(options.cancellation);
+      ensureSaved(root);
       const index=indexSemanticdb(root,options.cancellation);
       if (JSON.stringify(index.configs)!==result.configs) throw fail('Scala build files changed during SemanticDB indexing.');
-      remember(indexes,root,index);
+      remember(indexes,root,{...index,renameReady:name==='renameIndex'});
       return {...result,indexedDocuments:index.documents.size};
     }
     if (name==='mains') return {...result,classes:result.state==='succeeded' ? mainClasses(result.output) : []};
+    if (name==='suites') return {...result,suites:result.state==='succeeded' ? testSuites(result.output) : []};
     return result;
   }
 
@@ -102,6 +107,13 @@ function registerScalaWorkbench(context,vscode,java) {
     const observed=await selected(options,'mains');
     if (!observed.classes.includes(options.mainClass)) throw fail('Choose a main class reported by this sbt project.');
     if (observed.configs!==JSON.stringify(configSnapshot(observed.root))) throw fail('Discover main classes again after editing sbt settings.');
+    return observed;
+  }
+
+  async function admittedSuite(options) {
+    const observed=await selected(options,'suites');
+    if (!observed.suites.includes(options.suite)) throw fail('Choose a test suite reported by this sbt project.');
+    if (observed.configs!==JSON.stringify(configSnapshot(observed.root))) throw fail('Discover test suites again after editing sbt settings.');
     return observed;
   }
 
@@ -118,25 +130,29 @@ function registerScalaWorkbench(context,vscode,java) {
     return {state:'stopped'};
   }
 
-  async function debugMain(options={}) {
+  async function debugSelected(options, kind) {
     if (debugSession) throw fail('Stop the current Scala debugger before starting another.');
-    const observed=await admittedMain(options);
+    const test=kind==='suite';
+    const observed=await (test ? admittedSuite(options) : admittedMain(options));
     if (debugSession) throw fail('Stop the current Scala debugger before starting another.');
     const owned=executionOptions(observed.root,options);
     const selected={token:randomUUID(),version:epoch,root:observed.root,configs:observed.configs};
     debugSession=selected;
     try {
-      selected.target=await runner.debug({...owned,main:options.mainClass});
+      selected.target=test ? await runner.debugSuite({...owned,suite:options.suite}) :
+        await runner.debug({...owned,main:options.mainClass});
       trusted(options.cancellation);
       if (debugSession!==selected || selected.version!==epoch ||
           selected.configs!==JSON.stringify(configSnapshot(observed.root))) {
         throw fail('Scala build settings changed before the debugger connected.');
       }
+      ensureSaved(observed.root);
       const folder=vscode.workspace.getWorkspaceFolder(vscode.Uri.file(observed.root));
       const started=await vscode.debug.startDebugging(folder,{type:debugType,request:'launch',
-        name:'Scala: '+options.mainClass,rocketbrainOwnedSession:selected.token},{suppressSaveBeforeStart:true});
+        name:test ? 'Scala test: '+options.suite : 'Scala: '+options.mainClass,
+        rocketbrainOwnedSession:selected.token},{suppressSaveBeforeStart:true});
       if (!started || !selected.session) throw fail('VS Code did not start the owned Scala debugger.');
-      return {sessionId:selected.session.id,mainClass:options.mainClass,verifiedLoopback:true};
+      return {sessionId:selected.session.id,verifiedLoopback:true,...(test ? {suite:options.suite} : {mainClass:options.mainClass})};
     } catch (error) {
       if (debugSession===selected) await stopDebug();
       throw error;
@@ -149,7 +165,7 @@ function registerScalaWorkbench(context,vscode,java) {
       const selected=debugSession;
       if (session.configuration.request!=='launch' || !selected?.target || selected.session ||
           selected.token!==session.configuration.rocketbrainOwnedSession) {
-        throw fail('Start the debugger with Debug sbt Main Class.');
+        throw fail('Start the debugger with Debug sbt Main Class or Debug sbt Test Suite.');
       }
       selected.session=session;
       const target=await runner.verifyDebug(selected.target);
@@ -158,6 +174,7 @@ function registerScalaWorkbench(context,vscode,java) {
           selected.configs!==JSON.stringify(configSnapshot(selected.root))) {
         throw fail('The Scala debugging session changed before attaching.');
       }
+      ensureSaved(selected.root);
       return new vscode.DebugAdapterServer(target.port,target.address);
     }
   }),vscode.debug.onDidTerminateDebugSession(session=>{
@@ -194,6 +211,20 @@ function registerScalaWorkbench(context,vscode,java) {
     if (!source) return [];
     return referencesAt(source.index,{file:source.file,text:document.getText(),position,includeDeclaration},cancellation)
       .map(codeLocation).filter(Boolean);
+  }
+
+  function prepareRenameIndex(options={}) {
+    return selected({...options,projectId:undefined},'renameIndex');
+  }
+
+  function planRename({document,position,newName,root}={},cancellation) {
+    const source=indexedSource(document,cancellation);
+    if (!source) return undefined;
+    if (!source.index?.renameReady || !root || path.relative(root,source.index.root)) {
+      throw fail('Run Index Scala Sources for Rename for the selected build first.');
+    }
+    ensureSaved(source.index.root);
+    return renameAt(source.index,{file:source.file,text:document.getText(),position,newName},cancellation);
   }
 
   const selector={scheme:'file',language:'scala',pattern:'**/*.scala'};
@@ -282,6 +313,17 @@ function registerScalaWorkbench(context,vscode,java) {
     if (result.state==='succeeded') void vscode.window.showInformationMessage(`Indexed ${result.indexedDocuments} Scala source files from SemanticDB.`);
     return result;
   });
+  register(COMMANDS.renameIndex,async () => {
+    const projectUri=await chooseRoot();
+    if (!projectUri) return;
+    output.show(true);
+    const result=await progress('Index Scala Sources for Rename',
+      cancellation => prepareRenameIndex({projectUri,allowProjectExecution:true,cancellation}));
+    if (result.state==='succeeded') {
+      void vscode.window.showInformationMessage(`Indexed ${result.indexedDocuments} Scala production and test source files for rename.`);
+    }
+    return result;
+  });
   register(COMMANDS.test,async () => {
     const options=await contextFor('Select sbt Project to Test');
     if (options) return progress('Run sbt Tests',cancellation => selected({...options,cancellation},'test'));
@@ -300,7 +342,15 @@ function registerScalaWorkbench(context,vscode,java) {
   });
   register(COMMANDS.debug,async () => {
     const options=await chooseMain('Debug');
-    if (options) return progress('Start Scala Debugger',cancellation => debugMain({...options,cancellation}));
+    if (options) return progress('Start Scala Debugger',cancellation => debugSelected({...options,cancellation},'main'));
+  });
+  register(COMMANDS.debugSuite,async () => {
+    const options=await contextFor('Select sbt Project to Debug');
+    if (!options) return;
+    const report=await progress('Find sbt Test Suites',cancellation => selected({...options,cancellation},'suites'));
+    if (!report.suites.length) throw fail('No test suite was reported for this sbt project.');
+    const suite=await vscode.window.showQuickPick(report.suites,{title:'Select sbt Test Suite'});
+    if (suite) return progress('Debug sbt Test Suite',cancellation => debugSelected({...options,suite,cancellation},'suite'));
   });
   register(COMMANDS.definition,async () => {
     const editor=vscode.window.activeTextEditor;
@@ -312,7 +362,10 @@ function registerScalaWorkbench(context,vscode,java) {
 
   return {discover:options => track(() => discover(options)),compile:options => track(() => selected(options,'compile')),
     test:options => track(() => selected(options,'test')),mainClasses:options => track(() => selected(options,'mains')),
-    run:options => track(() => runMain(options)),debug:options => track(() => debugMain(options)),definition,references,stop:stopDebug,dispose() {
+    testSuites:(options={}) => track(() => selected(options,'suites')),
+    run:options => track(() => runMain(options)),debug:(options={}) => track(() => debugSelected(options,'main')),
+    debugSuite:(options={}) => track(() => debugSelected(options,'suite')),
+    prepareRenameIndex:options => track(() => prepareRenameIndex(options)),planRename,definition,references,stop:stopDebug,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {

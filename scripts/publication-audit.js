@@ -36,6 +36,7 @@ function publicPath(name) {
   if (name === 'test/fixtures/webdav-wsgidav-fixture.py') return true;
   if (name === 'test/fixtures/refactoring-v24-package/src/main/resources/fixture/packagev24/payload/nested/rows.csv') return true;
   if (/^test\/fixtures\/javafx-app\/src\/main\/resources\/views\/(?:panel|extra)\.fxml$/.test(name)) return true;
+  if (/^test\/fixtures\/javafx-preview\/src\/main\/resources\/(?:shared\/inset|views\/inventory)\.fxml$/.test(name)) return true;
   if (name === 'test/fixtures/java/quarkus/src/main/resources/templates/greeting.html') return true;
   if (name === 'test/fixtures/java/jakarta-war/src/main/webapp/page.jsp') return true;
   if (/^test\/fixtures\/vue-workbench\/(?:index\.html|vite\.config\.mjs|src\/(?:App\.vue|CountBadge\.vue|main\.ts))$/.test(name)) return true;

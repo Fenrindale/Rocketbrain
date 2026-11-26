@@ -1,28 +1,28 @@
 {
-  "version": "0.134.0",
-  "verifiedAt": "2026-11-26T09:03:52.234Z",
+  "version": "0.136.0",
+  "verifiedAt": "2026-11-26T10:53:24.697Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.134.0.vsix",
-    "sha256": "f1171f6260f6c2134e1f06cc1ecd75dc5be4e8f6d1134006fa775eb074901caf",
-    "bytes": 4373477,
+    "name": "rocketbrain-0.136.0.vsix",
+    "sha256": "be72da0c6b9d0ed2d3c6fd05c4300bdd63aa87d39bb7f3c6fe9b1c33b76da632",
+    "bytes": 4396627,
     "files": 29
   },
   "source": {
-    "frozenPublicInputs": 2781,
-    "inputVectorSha256": "4d78a09a8b6bf30b333f5bdb3d6db32ee1d565dc2e2b1884fe47c7b4dd9f9d15",
+    "frozenPublicInputs": 2807,
+    "inputVectorSha256": "0d93dc3d4e80fabae32e8770f9ea8cb595901fd8ba126f1ce3559647b9fa79d4",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45786718712",
-    "tests": 2085,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45797722795",
+    "tests": 2094,
     "suites": 0,
-    "pass": 1874,
+    "pass": 1881,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 211,
+    "skipped": 213,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,38 +32,42 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 8,
+      "groupCount": 9,
       "groups": [
         {
-          "group": "schemaPreparedJoin",
+          "group": "schemaRecovery",
           "checks": 1
         },
         {
-          "group": "schemaPreparedCte",
+          "group": "quarkusGradle",
           "checks": 1
         },
         {
-          "group": "kotlinObjectFields",
+          "group": "kmpComposePreview",
           "checks": 1
         },
         {
-          "group": "kotlinMavenEditor",
+          "group": "jakartaMulti",
           "checks": 1
         },
         {
-          "group": "kotlinMavenReactor",
+          "group": "javafxPreview",
           "checks": 1
         },
         {
-          "group": "springParentAuth",
+          "group": "scala2Language",
           "checks": 1
         },
         {
-          "group": "springReactiveRegression",
+          "group": "scala3Language",
           "checks": 1
         },
         {
-          "group": "micronautGradle",
+          "group": "scala2TestDebug",
+          "checks": 1
+        },
+        {
+          "group": "scala3TestDebug",
           "checks": 1
         }
       ],
@@ -78,38 +82,42 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 8,
+      "groupCount": 9,
       "groups": [
         {
-          "group": "schemaPreparedJoin",
+          "group": "schemaRecovery",
           "checks": 1
         },
         {
-          "group": "schemaPreparedCte",
+          "group": "quarkusGradle",
           "checks": 1
         },
         {
-          "group": "kotlinObjectFields",
+          "group": "kmpComposePreview",
           "checks": 1
         },
         {
-          "group": "kotlinMavenEditor",
+          "group": "jakartaMulti",
           "checks": 1
         },
         {
-          "group": "kotlinMavenReactor",
+          "group": "javafxPreview",
           "checks": 1
         },
         {
-          "group": "springParentAuth",
+          "group": "scala2Language",
           "checks": 1
         },
         {
-          "group": "springReactiveRegression",
+          "group": "scala3Language",
           "checks": 1
         },
         {
-          "group": "micronautGradle",
+          "group": "scala2TestDebug",
+          "checks": 1
+        },
+        {
+          "group": "scala3TestDebug",
           "checks": 1
         }
       ],
@@ -120,218 +128,87 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-044": {
-      "scope": "실제 Maven 3.9.11·Kotlin 2.2.21에서 Spring JDBC 제네릭 메서드와 형제 모듈 타입을 완성했다. 미저장 타입 오류를 확인·해제했고 두 DB에서 실제 앱 결과를 검증했다. 기존 Gradle 재검증도 통과했다.",
+    "IDEA-045": {
+      "scope": "공통 소스의 Compose 장면을 실제 JVM Desktop으로 96×72 렌더링했다. 배경색과 포함 컴포넌트 픽셀, 편집 후 재렌더링, 미저장 소스 거부를 두 DB 환경의 설치본에서 확인했다.",
       "runtimeGroups": [
-        "kotlinMavenEditor",
-        "kotlinMavenReactor"
+        "kmpComposePreview"
       ]
     },
-    "IDEA-064": {
-      "scope": "실제 Spring Security 7.1.2의 두 DB에서 동시 요청, 두 단계 Servlet 위임, 네 가지 결과, 무시된 후보 없음과 보존한 지역 실패를 확인했다. WebFlux 인증 추적도 회귀 검증했다.",
+    "IDEA-046": {
+      "scope": "실제 sbt와 Scala 2.13.18 및 3.9.0에서 형제 모듈 타입과 오버로드 편집을 확인했다. 정확한 테스트 소스에 중단했고 지역 변수를 읽은 뒤 선택한 스위트만 재개했다. Spring JDBC는 두 DB에서 확인했다.",
       "runtimeGroups": [
-        "springParentAuth",
-        "springReactiveRegression"
+        "scala2Language",
+        "scala3Language",
+        "scala2TestDebug",
+        "scala3TestDebug"
       ]
     },
-    "IDEA-067": {
-      "scope": "실제 Gradle 9.7.1 및 Micronaut 5에서 JUnit과 installDist·44개 라이브러리·소유 HTTP/JDBC 종료를 두 DB로 검증했다. 이전 Maven 경로도 실제로 재검증했다.",
+    "IDEA-066": {
+      "scope": "실제 Gradle Quarkus 앱의 테스트·HTTP/JDBC·중단점에서 두 DB를 확인했다. 중단점을 제거하고 재개한 뒤 재요청이 정상 응답했고 소유한 런타임을 종료했다.",
       "runtimeGroups": [
-        "micronautGradle"
+        "quarkusGradle"
       ]
     },
-    "IDEA-080": {
-      "scope": "실제 Kotlin JVM과 JDI에서 Int, Boolean, 정밀 Long, 박싱 Int를 두 DB의 실행 중 변경했다. 다른 인스턴스와 사용자 접근자 호출은 그대로였고 오래된 프레임에서 변경을 거부했다.",
+    "IDEA-068": {
+      "scope": "Tomcat 11.0.29와 두 Spring DB 환경에서 두 Servlet/JSP 앱의 응답, 한 앱 제거 뒤 다른 앱의 계속 실행, 변경된 파일 거부와 마지막 앱 종료를 확인했다.",
       "runtimeGroups": [
-        "kotlinObjectFields"
+        "jakartaMulti"
+      ]
+    },
+    "IDEA-120": {
+      "scope": "실제 OpenJFX 26.0.2+3에서 CSS 배경과 포함 도형의 픽셀을 확인했다. 원본 컨트롤러와 핸들러 선언을 보존했고 미저장 CSS를 거부했다.",
+      "runtimeGroups": [
+        "javafxPreview"
       ]
     },
     "DG-083": {
-      "scope": "실제 MySQL 8.4.13과 MariaDB 12.3.4에서 검토·적용·재접속·복구 중 루틴이 실행되지 않았다. 소유 fixture를 별도로 호출했을 때 원하는 행만 바뀌었고, 실제 MariaDB 11.4.8은 SQL 오류 1064로 거부를 재확인했다.",
+      "scope": "실제 Spring JDBC의 MySQL과 MariaDB에서 검토 후 변경 전 거부와 작업 제출 후 통신 실패를 구분했다. 내구성 기록을 찾아 원본 스키마·데이터를 복구했다.",
       "runtimeGroups": [
-        "schemaPreparedJoin",
-        "schemaPreparedCte",
-        "preparedCteActualEngines"
+        "schemaRecovery"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 630,
+    "sourceCorrespondences": 635,
     "sourceConfidence": "inferred",
     "archiveEntries": 29,
     "archiveConfidence": "observed"
   },
-  "nativePayloadEquivalence": {
-    "files": 29,
-    "testedArchiveSha256": "e7534d34c2e12971d7aff100ea60392652e0cfb9fe157ddf13ac2725eded0e57",
-    "testedInputVectorSha256": "d7b338a59dde548ab355be54adab0e049ad10af2ca08d45008d6e8a6ee4a3ed1",
-    "onlySourceChanges": [
-      "test/helpers/kotlin-native-fixture-cleanup.js",
-      "test/kotlin-native-fixture-cleanup.test.js",
-      "test/kotlin-watch-expressions-host.js",
-      "test/workflows-v134-host.js"
-    ]
-  },
-  "hostedRuntime": {
-    "preparedCteActualEngines": {
-      "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
-      "sha256": "90f9d26f6bc4883a3ac9dc7617e94c0734a2acea9326a43d14b13290cc7d01bf",
-      "scope": [
-        "One nonrecursive prepared lookup CTE with direct aliases, one optional equality filter and one physical update target.",
-        "The full non-null composite unique physical lookup key has integer lineage through the CTE. Only physical dependencies are included.",
-        "Apply requires fresh observed lookup metadata; procedures remain in place and apply/recovery never invoke them.",
-        "MariaDB 11.4 refuses the CTE path and continues to support the previous prepared ordinary UPDATE JOIN path."
-      ],
-      "matchedPaths": [
-        "src/db/schema-prepared-template.js",
-        "test/schema-prepared-cte.integration.test.js",
-        "test/schema-prepared-cte-host.js"
-      ],
-      "ownedSpring": [
-        {
-          "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
-          "version": "8.4.13",
-          "serverModes": {
-            "readOnly": 0,
-            "logBin": 0
-          },
-          "supported": true,
-          "explicitInputsOnly": true,
-          "outerJoinRefused": true,
-          "missingUniqueRefused": true,
-          "staleKeyApplyRefused": true,
-          "exactCompositeCteLineage": true,
-          "observedVersionBound": true,
-          "physicalLookupLocked": true,
-          "migrationAndRecoveryNeverExecutedCte": true,
-          "definitionRetained": true,
-          "boundFilterSelectedNoRows": true,
-          "laterOwnedProcedureEffect": [
-            37,
-            2
-          ],
-          "unchangedLookup": true,
-          "engine": "mysql",
-          "jdbc": {
-            "departments": 1,
-            "rolledBackNames": 0,
-            "people": 2
-          }
-        },
-        {
-          "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
-          "version": "12.3.4-MariaDB",
-          "serverModes": {
-            "readOnly": "OFF",
-            "logBin": 0
-          },
-          "supported": true,
-          "explicitInputsOnly": true,
-          "outerJoinRefused": true,
-          "missingUniqueRefused": true,
-          "staleKeyApplyRefused": true,
-          "exactCompositeCteLineage": true,
-          "observedVersionBound": true,
-          "physicalLookupLocked": true,
-          "migrationAndRecoveryNeverExecutedCte": true,
-          "definitionRetained": true,
-          "boundFilterSelectedNoRows": true,
-          "laterOwnedProcedureEffect": [
-            37,
-            2
-          ],
-          "unchangedLookup": true,
-          "engine": "mariadb",
-          "jdbc": {
-            "departments": 1,
-            "rolledBackNames": 0,
-            "people": 2
-          }
-        },
-        {
-          "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
-          "version": "11.4.8-MariaDB",
-          "serverModes": {
-            "readOnly": 0,
-            "logBin": 0
-          },
-          "supported": false,
-          "analysisRefused": true,
-          "rebuildPreviewRefused": true,
-          "vendorParserError": 1064,
-          "writesUnchanged": true,
-          "engine": "mariadb",
-          "jdbc": {
-            "departments": 1,
-            "people": 2,
-            "rolledBackNames": 0
-          }
-        }
-      ],
-      "maria114EarlierJoinRegression": {
-        "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
-        "engine": "mariadb",
-        "version": "11.4.8-MariaDB",
-        "jdbc": {
-          "departments": 1,
-          "people": 2,
-          "rolledBackNames": 0
-        },
-        "compositeUniqueLookup": true,
-        "crossSchemaSeparateDirectReadWrite": true,
-        "explicitInputsOnly": true,
-        "outerJoinRefused": true,
-        "droppedLookupKeyRefused": true,
-        "lookupIncludedInLocks": true,
-        "migrationAndRecoveryNeverExecutedJoin": true,
-        "procedureDefinitionRetained": true,
-        "actualLaterFixtureEffect": [
-          37,
-          2
-        ],
-        "actualLookupUnchanged": true
-      }
-    }
-  },
   "progress": {
     "counts": {
-      "implemented": 179,
-      "partial": 23,
+      "implemented": 180,
+      "partial": 22,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 202.5,
-    "previousWeightedPoints": 201.5,
+    "weightedPoints": 203,
+    "previousWeightedPoints": 202.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 93.8,
+    "referencePercent": 94,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-044",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-064",
+        "id": "IDEA-046",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "216개 기능과 기존 점수 기준을 유지한다.",
-    "Kotlin JVM 편집의 지원 범위에는 정상 Gradle 및 Maven 앱과 컴파일·제공 형제 JAR이 포함된다. KMP의 복합 소스 집계는 별도 행의 범위다.",
-    "Kotlin 필드 편집은 중단 중 접근이 확인된 원시 값 및 기존 JVM 박싱 값만 변경한다.",
-    "직접 관측한 Spring 표준 인증 흐름을 표시한다. 임의 사용자 관리자 내부는 외부 호출 경계만 관측한다.",
-    "MariaDB 11.4의 동적 WITH UPDATE는 변경 전에 거부한다. 원자적 분산 DDL의 엔진 제약은 그대로 반영한다."
+    "기능 216개와 기존 가중치 기준을 유지한다.",
+    "Scala 이름 변경은 SemanticDB로 확인한 독립 객체의 메서드 오버로드를 지원한다. 상속 계층 및 생성 코드의 이름 변경은 남아 있다.",
+    "Compose 미리보기는 JVM Desktop에서 인수가 없는 @Preview를 실행한다. JavaFX는 OpenJFX 내장 컴포넌트의 정적 장면을 렌더링한다.",
+    "Tomcat 다중 배포는 소유한 로컬 서버를 대상으로 한다. 원격 Manager·서버 도메인·EJB는 별도 범위다.",
+    "첫 쓰기 전 스키마 거부는 복구 대상을 만들지 않는다. 작업을 제출한 뒤 응답을 잃은 경우에는 확인과 복구가 필요하다."
   ],
   "next": [
-    "Scala 2·3 sbt 프로젝트의 타입 완성과 이름 변경",
-    "Kotlin Multiplatform Compose Desktop 미리보기",
-    "설치된 Quarkus Gradle의 HTTP·디버거 확인"
+    "Kotlin Multiplatform JVM 타깃 디버깅",
+    "Gradle JavaFX jlink 이미지와 시각 속성 편집",
+    "원격 Tomcat Manager 배포와 갱신",
+    "Quarkus dev-mode JVM 디버깅"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

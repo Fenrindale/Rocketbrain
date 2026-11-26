@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.134.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.136.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 179 |
-| 부분 구현 | 23 |
+| 구현 | 180 |
+| 부분 구현 | 22 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **93.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **94%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.134에서는 Kotlin Maven 편집과 리액터 형제 모듈, Kotlin 필드 디버깅, Servlet 상위 인증 관리자, Micronaut Gradle, 준비된 UPDATE JOIN과 CTE 마이그레이션을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 201.5점에서 202.5점으로 바뀌었다.
+v0.136에서는 Scala 2·3의 sbt 편집과 테스트 디버깅, Kotlin Compose Desktop과 JavaFX 미리보기, Tomcat 다중 WAR 제어, 스키마 복구 상태 구분을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 202.5점에서 203점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -66,7 +66,7 @@ v0.134에서는 Kotlin Maven 편집과 리액터 형제 모듈, Kotlin 필드 �
 | IDEA-043 | IntelliJ IDEA | Java와 Kotlin 혼합 프로젝트 | 구현 |
 | IDEA-044 | IntelliJ IDEA | Kotlin JVM 코드 지원 | 구현 |
 | IDEA-045 | IntelliJ IDEA | Kotlin Multiplatform·Compose 개발 | 부분 구현 |
-| IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 부분 구현 |
+| IDEA-046 | IntelliJ IDEA | Scala·sbt 개발 | 구현 |
 | IDEA-047 | IntelliJ IDEA | Groovy·Spock·콘솔 | 부분 구현 |
 | IDEA-048 | IntelliJ IDEA | 외부 라이브러리 소스·바이트코드 디컴파일 | 구현 |
 | IDEA-049 | IntelliJ IDEA | Scratch·JShell 실험 코드 | 구현 |

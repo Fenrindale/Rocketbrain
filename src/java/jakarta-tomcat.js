@@ -15,6 +15,9 @@ const { contextPattern,MAX_WAR_BYTES } = require('./jakarta-war');
 const hostSource = require('./jakarta-host-source.json');
 
 const pause=milliseconds => new Promise(resolve => setTimeout(resolve,milliseconds));
+const MAX_APPLICATIONS=8;
+const MAX_SET_BYTES=512*1024*1024;
+const sha256Pattern=/^[a-f0-9]{64}$/u;
 
 async function tomcatLibraries(directory) {
   if (!path.isAbsolute(directory || '')) throw fail('Set rocketbrain.java.jakarta.tomcatHome to an independent Apache Tomcat 11 distribution.');
@@ -32,7 +35,7 @@ function statMatches(a,b) {
   return a.dev===b.dev && a.ino===b.ino && a.size===b.size && a.mtimeNs===b.mtimeNs && a.ctimeNs===b.ctimeNs;
 }
 
-async function stageArchive(artifact,destination,expectedSha256) {
+async function hashArchive(artifact,{destination,expectedSha256}={}) {
   const file=artifact.file;
   if (path.relative(file,await fsp.realpath(file))) throw fail('The WAR path changed before staging.');
   const stat=await fsp.lstat(file,{bigint:true});
@@ -47,8 +50,13 @@ async function stageArchive(artifact,destination,expectedSha256) {
     if (bytesRead!==4 || signature.readUInt32BE()!==0x504b0304 || !statMatches(stat,await source.stat({bigint:true}))) {
       throw fail('Select a readable ZIP-format Maven WAR artifact.');
     }
-    const digest=new Transform({transform(chunk,_encoding,callback){hash.update(chunk);callback(null,chunk);}});
-    await pipeline(source.createReadStream({start:0,autoClose:false}),digest,fs.createWriteStream(destination,{flags:'wx'}));
+    const data=source.createReadStream({start:0,autoClose:false});
+    if (destination) {
+      const digest=new Transform({transform(chunk,_encoding,callback){hash.update(chunk);callback(null,chunk);}});
+      await pipeline(data,digest,fs.createWriteStream(destination,{flags:'wx'}));
+    } else {
+      for await (const chunk of data) hash.update(chunk);
+    }
     const checksum=hash.digest('hex');
     if (!statMatches(stat,await source.stat({bigint:true})) || !statMatches(stat,await fsp.lstat(file,{bigint:true})) ||
         (expectedSha256!==undefined && expectedSha256!==checksum)) {
@@ -56,6 +64,39 @@ async function stageArchive(artifact,destination,expectedSha256) {
     }
     return checksum;
   } finally { await source.close(); }
+}
+
+function validateApplications(applications,{set=false,pinned=false}={}) {
+  if (!Array.isArray(applications) || applications.length<(set?2:1) || applications.length>(set?MAX_APPLICATIONS:1)) {
+    throw fail('Choose two to '+MAX_APPLICATIONS+' Maven WAR artifacts for a deployment set.');
+  }
+  const names=new Set();
+  let bytes=0;
+  for (const {context,artifact,expectedSha256} of applications) {
+    if (typeof context!=='string' || !contextPattern.test(context) || !artifact?.file ||
+        !Number.isSafeInteger(artifact.size) || artifact.size<4 || artifact.size>MAX_WAR_BYTES) {
+      throw fail('Choose a WAR and a lowercase context name, using letters, numbers and hyphens.');
+    }
+    if (names.has(context)) throw fail('Assign a unique Tomcat context to each WAR.');
+    if (pinned && (typeof expectedSha256!=='string' || !sha256Pattern.test(expectedSha256))) {
+      throw fail('Review the SHA-256 of each WAR before starting this deployment set.');
+    }
+    names.add(context);
+    bytes+=artifact.size;
+    if (bytes>MAX_SET_BYTES) throw fail('This deployment set exceeds the combined WAR size limit.');
+  }
+}
+
+async function reviewTomcatWarSet(applications,cancellation) {
+  validateApplications(applications,{set:true});
+  const reviewed=[];
+  for (const {context,artifact} of applications) {
+    if (cancelled(cancellation)) throw fail('Tomcat deployment review cancelled.');
+    const expectedSha256=await hashArchive(artifact);
+    reviewed.push({context,artifact,expectedSha256});
+  }
+  if (cancelled(cancellation)) throw fail('Tomcat deployment review cancelled.');
+  return reviewed;
 }
 
 async function removeOwnedBase(session) {
@@ -93,6 +134,7 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
   function release(session) {
     if (session.release) return session.release;
     session.stopping=true;
+    session.operation?.reject(fail('The owned Tomcat deployment stopped during context removal.'));
     session.release=(async () => {
       try { await session.prepared; } catch { /* Startup errors are reported separately. */ }
       if (session.child && !session.exited) {
@@ -110,7 +152,7 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
     return session.release;
   }
 
-  async function prepare(session,{artifact,javaHome,tomcatHome,expectedSha256,context,debug,cancellation}) {
+  async function prepare(session,{applications,javaHome,tomcatHome,debug,cancellation}) {
     const home=await tomcatLibraries(tomcatHome);
     const java=independentJavaExecutable(javaHome && path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
     const javaRelease=await fsp.readFile(path.join(path.dirname(path.dirname(java)),'release'),'utf8');
@@ -118,9 +160,13 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
     session.parent=await fsp.realpath(os.tmpdir());
     session.base=await fsp.mkdtemp(path.join(session.parent,'rb-tomcat-'));
     session.identity=await fsp.lstat(session.base,{bigint:true});
-    const war=path.join(session.base,'rocketbrain.war'), entry=path.join(session.base,'JakartaWarHost.java');
-    const checksum=await stageArchive(artifact,war,expectedSha256);
-    if (session.stopping || disposed || cancelled(cancellation)) throw fail('Tomcat deployment cancelled.');
+    const entry=path.join(session.base,'JakartaWarHost.java'), staged=[];
+    for (const [index,{artifact,expectedSha256,context}] of applications.entries()) {
+      if (session.stopping || disposed || cancelled(cancellation)) throw fail('Tomcat deployment cancelled.');
+      const destination=path.join(session.base,'war-'+index+'.war');
+      const sha256=await hashArchive(artifact,{destination,expectedSha256});
+      staged.push({context,artifact:artifact.name,sha256,destination});
+    }
     await fsp.writeFile(entry,hostSource,{flag:'wx'});
     const logging=path.join(session.base,'logging.properties');
     await fsp.writeFile(logging,'handlers=java.util.logging.ConsoleHandler\njava.util.logging.ConsoleHandler.encoding=UTF-8\n',{flag:'wx'});
@@ -131,7 +177,7 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
     const token=crypto.randomUUID(), args=['-Dcatalina.home='+home,'-Dcatalina.base='+session.base,
       '-Djava.util.logging.config.file='+logging,
       ...(debug===true ? ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:0'] : []),'-cp',classpath,
-      entry,session.base,context,war,token];
+      entry,session.base,token,...staged.flatMap(item => [item.context,item.destination])];
     const child=spawn(java,args,{cwd:session.base,env,windowsHide:true,stdio:['pipe','pipe','pipe']});
     session.child=child;
     session.done=new Promise(resolve => child.once('close',() => {session.exited=true;resolve();}));
@@ -143,6 +189,11 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
       const lines=(buffered+chunk).split(/\r?\n/);
       buffered=lines.pop().slice(-1000);
       for (const line of lines) {
+        const operation=session.operation;
+        if (operation && line===`rocketbrain-tomcat:${token}:removed:${operation.id}:${operation.name}`) {
+          operation.resolve();
+          continue;
+        }
         const ready=pattern.exec(line);
         if (ready && Number(ready[2])>0 && Number(ready[2])<=65535) {
           session.version=ready[1];session.port=Number(ready[2]);
@@ -158,15 +209,13 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
     });
     child.stderr.setEncoding('utf8').on('data',log);
     void session.done.then(() => {if (session.ready) void release(session).catch(error => log(error.message+'\n'));});
-    return checksum;
+    return staged;
   }
 
-  async function deploy(options = {}) {
-    const {workspaceTrusted,allowDeploy,context,artifact,debug,cancellation}=options;
+  async function start(options,set) {
+    const {workspaceTrusted,allowDeploy,applications,debug,cancellation}=options;
     if (disposed || workspaceTrusted!==true || allowDeploy!==true) throw fail('Explicitly deploy the selected WAR from a trusted workspace.');
-    if (typeof context!=='string' || !contextPattern.test(context) || !artifact?.file) {
-      throw fail('Choose a WAR and a lowercase context name, using letters, numbers and hyphens.');
-    }
+    validateApplications(applications,{set,pinned:set});
     if (active) throw fail('Stop the current owned Tomcat deployment first.');
     if (cancelled(cancellation)) throw fail('Tomcat deployment cancelled.');
     const session={id:crypto.randomUUID(),stopping:false,ready:false,exited:false};
@@ -174,7 +223,7 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
     session.prepared=prepare(session,options);
     const cancel=cancellation?.onCancellationRequested?.(() => {void release(session).catch(()=>{});});
     try {
-      const sha256=await session.prepared;
+      const staged=await session.prepared;
       const deadline=Date.now()+startupMs;
       while (Date.now()<deadline) {
         if (session.stopping || disposed || cancelled(cancellation)) throw fail('Tomcat deployment cancelled.');
@@ -182,10 +231,12 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
         if (session.port && (debug!==true || session.debugPort) && await loopbackReady(session.port) &&
             !session.stopping && !session.exited) {
           session.ready=true;
-          session.result={state:'running',deploymentId:session.id,version:session.version,context:'/'+context,
-            url:'http://127.0.0.1:'+session.port+'/'+context,artifact:artifact.name,sha256,
+          const baseUrl='http://127.0.0.1:'+session.port;
+          const deployed=staged.map(({context,artifact,sha256}) => ({context:'/'+context,url:baseUrl+'/'+context,artifact,sha256}));
+          session.result={state:'running',deploymentId:session.id,version:session.version,
+            ...(set ? {url:baseUrl,applications:deployed} : deployed[0]),
             ...(debug===true ? {debugPort:session.debugPort} : {})};
-          return {...session.result};
+          return getState();
         }
         await pause(150);
       }
@@ -196,15 +247,56 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
     } finally { cancel?.dispose(); }
   }
 
+  function deploy(options={}) {
+    const {artifact,context,expectedSha256,...server}=options;
+    return start({...server,applications:[{artifact,context,expectedSha256}]},false);
+  }
+
+  function deploySet(options={}) {
+    return start({...options,debug:false},true);
+  }
+
+  async function undeploy({deploymentId,context,expectedSha256,allowUndeploy}={}) {
+    if (allowUndeploy!==true) throw fail('Explicitly confirm the selected Tomcat context removal.');
+    const session=active;
+    if (!session?.ready || session.stopping || session.id!==deploymentId || !session.result.applications) {
+      throw fail('The reviewed Tomcat deployment set is no longer running.');
+    }
+    const app=session.result.applications.find(item => item.context===context);
+    if (!app || app.sha256!==expectedSha256) throw fail('The reviewed Tomcat application has changed.');
+    if (session.operation) throw fail('Wait for the current Tomcat context removal to finish.');
+    const id=crypto.randomUUID(), name=app.context.slice(1);
+    let timer;
+    try {
+      await new Promise((resolve,reject) => {
+        session.operation={id,name,resolve,reject};
+        timer=setTimeout(() => reject(fail('Tomcat did not acknowledge the reviewed context removal.')),15000);
+        session.child.stdin.write(`remove ${id} ${name}\n`,error => {if (error) reject(error);});
+      });
+      if (session.stopping || session.exited) throw fail('The owned Tomcat deployment stopped during context removal.');
+      session.result.applications=session.result.applications.filter(item => item!==app);
+      if (!session.result.applications.length) await release(session);
+      return {state:'undeployed',deploymentId,application:{...app},remaining:session.result.applications.length};
+    } catch (error) {
+      await release(session);
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      session.operation=undefined;
+    }
+  }
+
   function stop(deploymentId) {
     return active && (!deploymentId || active.id===deploymentId) ? release(active) : Promise.resolve({state:'stopped'});
   }
   function getState() {
     if (!active) return {state:'stopped'};
     if (active.stopping) return {state:'stopping',deploymentId:active.id};
-    return active.result ? {...active.result} : {state:'starting',deploymentId:active.id};
+    const result=active.result;
+    if (!result) return {state:'starting',deploymentId:active.id};
+    return result.applications ? {...result,applications:result.applications.map(item => ({...item}))} : {...result};
   }
-  return {deploy,stop,getState,async dispose(){disposed=true;await stop();}};
+  return {deploy,deploySet,undeploy,stop,getState,async dispose(){disposed=true;await stop();}};
 }
 
-module.exports = { createTomcatDeployment };
+module.exports = { createTomcatDeployment,reviewTomcatWarSet,MAX_APPLICATIONS };

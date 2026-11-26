@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.134.0",
+  "version": "0.136.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -200,6 +200,8 @@
       { "command": "rocketbrain.kubernetes.disconnect", "title": "Close Kubernetes Explorer Session", "category": "Rocketbrain", "icon": "$(debug-disconnect)" },
       { "command": "rocketbrain.jakarta.buildWar", "title": "Build Jakarta WAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.deploy", "title": "Deploy Jakarta WAR to Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.deploySet", "title": "Deploy Jakarta WAR Set to Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.undeploy", "title": "Undeploy Jakarta Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.debug", "title": "Debug Jakarta WAR on Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.status", "title": "Show Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.stop", "title": "Stop Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -210,9 +212,14 @@
       { "command": "rocketbrain.micronaut.stop", "title": "Stop Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.discover", "title": "Discover sbt Projects", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.compile", "title": "Compile and Index Scala", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.renameIndex", "title": "Index Scala Sources for Rename", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.test", "title": "Run sbt Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.run", "title": "Run sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.debug", "title": "Debug sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.debugSuite", "title": "Debug sbt Test Suite", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.startLanguage", "title": "Start Scala Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.importLanguageBuild", "title": "Import sbt Build for Scala Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.stopLanguage", "title": "Stop Scala Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.definition", "title": "Open Compiled Scala Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == scala" },
       { "command": "rocketbrain.scala.stop", "title": "Stop sbt Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.inspect", "title": "Inspect Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -221,6 +228,8 @@
       { "command": "rocketbrain.kotlin.multiplatform.run", "title": "Run Kotlin Multiplatform Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.previewCompose", "title": "Preview Kotlin Compose", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
+      { "command": "rocketbrain.kotlin.multiplatform.refreshComposePreview", "title": "Refresh Kotlin Compose Preview", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.wsl.distributions", "title": "List WSL Distributions and Map Workspace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.reviewBuild", "title": "Review and Run WSL Workspace Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.cancelBuild", "title": "Cancel Managed WSL Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
@@ -1121,6 +1130,8 @@
         "title": "Inspect and Recover Multi-Server Schema Rebuild",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.javafx.preview", "title": "Preview JavaFX FXML", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceExtname == .fxml" },
+      { "command": "rocketbrain.javafx.refreshPreview", "title": "Refresh JavaFX FXML Preview", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
         "command": "rocketbrain.javafx.build",
         "title": "Run or Package JavaFX Application",
@@ -2949,6 +2960,12 @@
           "default": "",
           "scope": "machine",
           "description": "Optional absolute directory for the Rocketbrain sbt boot and dependency caches. Uses extension storage by default."
+        },
+        "rocketbrain.scala.languageClasspath": {
+          "type": "string",
+          "scope": "application",
+          "default": "",
+          "description": "Absolute classpath.txt produced by the Rocketbrain Metals 1.6.9 runtime provisioner."
         },
         "rocketbrain.scala.repositoryConfig": {
           "type": "string",
