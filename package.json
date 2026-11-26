@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.116.0",
+  "version": "0.119.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -92,6 +92,7 @@
       { "command": "rocketbrain.java.smartStepInto", "title": "Step Into a Java Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.restartStackFrame", "title": "Restart Java Stack Frame", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.inspectLocalValue", "title": "Inspect Java Local Value", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
+      { "command": "rocketbrain.java.setKotlinLocal", "title": "Set Kotlin Local Value", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.attachProcess", "title": "Attach to Local Java Process", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.openTableSnapshot", "title": "Open Consistent Table Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.createDatasetWorkflow", "title": "Save Table Dataset Comparison", "category": "Rocketbrain", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
@@ -105,6 +106,9 @@
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
       { "command": "rocketbrain.sshWorkspace.refresh", "title": "Refresh SSH Files", "category": "Rocketbrain", "icon": "$(refresh)" },
       { "command": "rocketbrain.sshWorkspace.upload", "title": "Review Local File Upload to SSH", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.terminal", "title": "Open Reviewed SSH Workspace Terminal", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.javaStart", "title": "Start Reviewed SSH Java Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.javaStop", "title": "Stop SSH Java Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.compare", "title": "Compare Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.review", "title": "Review Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.select", "title": "Select Docker Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
@@ -760,6 +764,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectPersistenceContexts",
+        "title": "Inspect Spring Persistence Contexts",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.comparePersistenceBuild",
+        "title": "Compare Spring Persistence Build",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.inspectEntityGraph",
         "title": "Inspect JPA Entity Graph",
         "category": "Rocketbrain",
@@ -1124,6 +1140,7 @@
         "title": "Add Java Run Configuration",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.java.workbench.mavenResolution", "title": "Inspect Maven Dependency Resolution", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.workbench.reviewRuntimes", "title": "Review Java Runtime Compatibility", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.workbench.changeRuntime", "title": "Change Saved Java Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       {
@@ -1779,6 +1796,7 @@
           "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject",
           "group": "launch"
         },
+        { "command": "rocketbrain.java.workbench.mavenResolution", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject && isWorkspaceTrusted", "group": "build" },
         { "command": "rocketbrain.java.workbench.reviewRuntimes", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaProject && isWorkspaceTrusted", "group": "launch" },
         { "command": "rocketbrain.java.workbench.changeRuntime", "when": "view == rocketbrain.javaProjects && viewItem == rocketbrainJavaRunConfiguration && isWorkspaceTrusted", "group": "configuration" },
         {

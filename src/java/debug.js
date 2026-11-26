@@ -9,6 +9,7 @@ const { createExceptionControls } = require('./debug-exceptions');
 const { createSmartStep, mergeStepFilters } = require('./debug-step');
 const { createFrameRestart } = require('./debug-frames');
 const { createLocalValueInspection } = require('./debug-local-values');
+const { createKotlinLocalEditor } = require('./debug-kotlin-local');
 const { createDebugProcessDiscovery, processId } = require('./debug-processes');
 const { assertManagedAttach } = require('../devcontainer/java-attach');
 const DEBUG_TYPE = 'rocketbrain-java';
@@ -83,6 +84,7 @@ function registerJavaDebugger(vscode, api, output, request) {
   const smartStep = createSmartStep(vscode, { getState: id => sessions.get(id), ensureTrusted });
   const frames = createFrameRestart(vscode, { getState: id => sessions.get(id), ensureTrusted });
   const localValues = createLocalValueInspection(vscode, { getState: id => sessions.get(id), ensureTrusted });
+  const kotlinLocals = createKotlinLocalEditor(vscode, { getState: id => sessions.get(id), ensureTrusted });
   async function resolve(folder, value, token) {
     ensureTrusted();
     assertManagedAttach(value, folder);
@@ -220,6 +222,7 @@ function registerJavaDebugger(vscode, api, output, request) {
   breakpointCommand('rocketbrain.java.smartStepInto', () => smartStep.choose()),
   breakpointCommand('rocketbrain.java.restartStackFrame', () => frames.choose()),
   breakpointCommand('rocketbrain.java.inspectLocalValue', () => localValues.choose()),
+  breakpointCommand('rocketbrain.java.setKotlinLocal', () => kotlinLocals.choose()),
   breakpointCommand('rocketbrain.java.attachProcess', async () => {
     const candidates = await vscode.window.withProgress({
       location: vscode.ProgressLocation.Notification, title: 'Finding local Java debug processes', cancellable: true
@@ -242,7 +245,7 @@ function registerJavaDebugger(vscode, api, output, request) {
     })),{title:'Add Java Inline Breakpoints',canPickMany:true});
     if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
-  return { breakpoints, exceptions, smartStep, frames, localValues, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
+  return { breakpoints, exceptions, smartStep, frames, localValues, kotlinLocals, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
     verifiedLocalPid(session) {
       const info = session && sessions.get(session.id);
       return info?.attached && info.state !== 'terminated' ? info.verifiedPid : undefined;

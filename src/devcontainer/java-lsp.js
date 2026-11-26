@@ -101,7 +101,9 @@ function plainHover(contents) {
   return cleanText(values.map(value => typeof value === 'string' ? value : value?.value || '').join('\n\n')).slice(0, 16384);
 }
 
-function createContainerJavaLsp({ child, protocol, mapping, settings, onDiagnostics = () => {}, onExit = () => {} }) {
+function createContainerJavaLsp({ child, protocol, mapping, settings, onDiagnostics = () => {}, onExit = () => {},
+  clientName = 'Rocketbrain Container Java', workspaceName = 'Mounted Java workspace',
+  sameFile = (first, second) => !path.relative(first, second) }) {
   const documents = new Map();
   const input = boundedMessages();
   const connection = protocol.createProtocolConnection(new protocol.StreamMessageReader(input),
@@ -134,7 +136,7 @@ function createContainerJavaLsp({ child, protocol, mapping, settings, onDiagnost
   connection.onRequest('workspace/applyEdit', () => ({ applied: false, failureReason: 'Review edits in the workspace editor.' }));
   connection.onRequest('workspace/configuration', params => (Array.isArray(params?.items) ? params.items.slice(0, 32) : [])
     .map(item => item?.section === 'java' ? settings.java : item?.section ? null : settings));
-  connection.onRequest('workspace/workspaceFolders', () => [{ uri: mapping.workspaceUri, name: 'Mounted Java workspace' }]);
+  connection.onRequest('workspace/workspaceFolders', () => [{ uri: mapping.workspaceUri, name: workspaceName }]);
   connection.onRequest('client/registerCapability', () => null);
   connection.onRequest('client/unregisterCapability', () => null);
   connection.onRequest('window/workDoneProgress/create', () => null);
@@ -142,7 +144,7 @@ function createContainerJavaLsp({ child, protocol, mapping, settings, onDiagnost
   connection.onNotification('textDocument/publishDiagnostics', params => {
     let file;
     try { file = mapping.toHost(params?.uri); } catch { return; }
-    const open = documents.get(params.uri) || [...documents.values()].find(document => !path.relative(document.file, file));
+    const open = documents.get(params.uri) || [...documents.values()].find(document => sameFile(document.file, file));
     if (!open || params.version != null && params.version !== open.version || !Array.isArray(params.diagnostics)) return;
     const diagnostics = params.diagnostics.slice(0, 128).flatMap(item =>
       safeRange(item?.range) && typeof item.message === 'string' && /^[1-4]$/.test(item.severity ?? 1)
@@ -193,9 +195,9 @@ function createContainerJavaLsp({ child, protocol, mapping, settings, onDiagnost
 
   return {
     async initialize() {
-      const workspaceFolders = [{ uri: mapping.workspaceUri, name: 'Mounted Java workspace' }];
+      const workspaceFolders = [{ uri: mapping.workspaceUri, name: workspaceName }];
       const response = await request('initialize', {
-        processId: null, clientInfo: { name: 'Rocketbrain Container Java' }, rootUri: mapping.workspaceUri, workspaceFolders,
+        processId: null, clientInfo: { name: clientName }, rootUri: mapping.workspaceUri, workspaceFolders,
         capabilities: { workspace: { workspaceFolders: true, configuration: true, applyEdit: false },
           textDocument: { synchronization: { didSave: false }, hover: { contentFormat: ['plaintext'] },
             definition: { linkSupport: true }, publishDiagnostics: { versionSupport: true } } },

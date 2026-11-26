@@ -6,7 +6,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
-const { WATCH_BUILD, INDEXED_WATCH_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
+const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
+const { assignment, assertKotlinLocalChanges } = require('./helpers/kotlin-local-write');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { DapClient, freePort } = require('./java-debug-dap');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
@@ -25,7 +26,7 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
   const runtime = JSON.parse(await fs.readFile(runtimeFile, 'utf8'));
   const { javaHome, serverPath } = runtime;
   const bundle = resolveDebugBundle(runtime.settings['rocketbrain.java.debugBundlePath'], serverPath);
-  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD].includes(bundle?.build));
+  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD].includes(bundle?.build));
   const parent = await fs.realpath(os.tmpdir()), directory = await fs.mkdtemp(path.join(parent, 'rb-kotlin-watch-'));
   let lsp;
   t.after(async () => {
@@ -78,14 +79,20 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
       assert.match(frame.name, /paused/u);
       assert.equal(path.relative(source, frame.source.path), '');
       const values = await assertKotlinWatchValues(send, frame.id);
-      const indexed = bundle.build === INDEXED_WATCH_BUILD ? await assertIndexedKotlinWatchValues(send, frame.id) : undefined;
+      const indexed = bundle.build !== WATCH_BUILD ? await assertIndexedKotlinWatchValues(send, frame.id) : undefined;
+      const write = bundle.build === KOTLIN_LOCAL_WRITE_BUILD ? await assertKotlinLocalChanges(send,frame.id) : undefined;
       const resumed = await send('continue', { threadId: stopped.threadId });
       assert.ok(resumed);
       const completion = kotlinWatchJdbcResult(await running.waitFor('Rocketbrain Kotlin JDBC|'), engine);
       await assert.rejects(send('evaluate', { frameId: frame.id, expression: 'amount', context: 'watch' }), /current suspended frame/u);
       await assert.rejects(send(request, { frameId: frame.id, expression: 'amount' }), /current suspended frame/u);
+      if(write){
+        await assert.rejects(send(assignment,{action:'apply',frameId:frame.id,reviewId:write.staleId}),/same Kotlin frame suspended/u);
+        delete write.staleId;
+        write.resumedWriteRefused=true;
+      }
       previousSessionFrame = frame.id;
-      reports.push({ ...completion, line: frame.line, values, indexed, staleFrameRefused: true,
+      reports.push({ ...completion, line: frame.line, values, indexed, write, staleFrameRefused: true,
         otherDebugSessionFrameRefused: reports.length > 0, liveFrameSource: 'KotlinWatchInspection.kt' });
       await send('disconnect', { terminateDebuggee: false }).catch(error => {
         if (!dap.events.some(event => event.event === 'terminated')) throw error;

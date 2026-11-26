@@ -196,4 +196,4 @@ function parseJavaTokens(file, lexical) {
   return { ...file, ...info, types, issues: [...new Set(issues)] };
 }
 
-module.exports = { parseJavaFile, parseJavaTokens, lexJava, matching, splitTop, strings, literal, annotation, rangeAt, positionAt, typeRef, KNOWN };
+module.exports = { parseJavaFile, parseJavaTokens, lexJava, matching, splitTop, strings, literal, annotation, parseAnnotation, rangeAt, positionAt, typeRef, KNOWN };

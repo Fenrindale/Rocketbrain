@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.116.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.119.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 171 |
-| 부분 구현 | 31 |
+| 구현 | 172 |
+| 부분 구현 | 30 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **91.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **92.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.116에서는 메서드 참조 Change Signature, 이름 있는 JPA 엔티티 그래프와 실제 조회 연결, Kotlin 배열·리스트 Watch, 관리 컨테이너 Java 언어 서버와 디버거 연결을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 197.5점에서 198.5점으로 바뀌었다.
+v0.119에서는 Maven 전이 의존성의 실제 선택 이유, 외부 JAR의 Spring 생명주기 참조 보호, 부모·자식 Spring 컨텍스트와 영속성 단위, Kotlin 지역 변수 변경, SSH 터미널·Java 소스 탐색을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 198.5점에서 199점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -75,7 +75,7 @@ v0.116에서는 메서드 참조 Change Signature, 이름 있는 JPA 엔티티 �
 | IDEA-052 | IntelliJ IDEA | 기존 프로젝트 starter 편집 | 구현 |
 | IDEA-053 | IntelliJ IDEA | Bean·Autowiring 분석·빠른 수정 | 부분 구현 |
 | IDEA-054 | IntelliJ IDEA | Bean의 논리 구조·의존성 그래프 | 구현 |
-| IDEA-055 | IntelliJ IDEA | Application Context·분석용 프로필 | 부분 구현 |
+| IDEA-055 | IntelliJ IDEA | Application Context·분석용 프로필 | 구현 |
 | IDEA-056 | IntelliJ IDEA | Boot properties·YAML 메타데이터 | 구현 |
 | IDEA-057 | IntelliJ IDEA | Actuator 런타임 Bean·Health·Mappings | 구현 |
 | IDEA-058 | IntelliJ IDEA | Spring 디버거의 실제 설정값·출처 | 구현 |
