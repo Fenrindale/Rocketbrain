@@ -96,7 +96,7 @@ function frames(stream, received) {
   return () => stream.off('data', visit);
 }
 
-async function mysqlIamEndpoint(credentials, { secure = true, requestToken = true, verify, databaseUser = target.user } = {}) {
+async function mysqlIamEndpoint(credentials, { secure = true, requestToken = true, rejectToken = false, verify, databaseUser = target.user } = {}) {
   const context = tls.createSecureContext({ cert: credentials.cert, key: credentials.privateKey, minVersion: 'TLSv1.2' });
   const sockets = new Set(), state = { initialEmpty: 0, receivedTokens: 0, accepted: 0, commands: [] };
   const ok = Buffer.from([0, 0, 0, 2, 0, 0, 0]);
@@ -131,6 +131,11 @@ async function mysqlIamEndpoint(credentials, { secure = true, requestToken = tru
           assert.equal(packet.at(-1), 0);
           state.receivedTokens++;
           verify?.(packet.subarray(0, -1).toString('utf8'));
+          if (rejectToken) {
+            const denied = Buffer.concat([Buffer.from([0xff, 0x15, 0x04]), Buffer.from('#28000Fixture authentication denied')]);
+            send(stream, 5, denied);
+            return false;
+          }
           state.accepted++;
           phase = 'query';
           send(stream, 5, ok);
