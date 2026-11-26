@@ -7,7 +7,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
-const { normalizeObservedInjection, normalizeObservedMembers, sourceParameter, sourceMember } = require('../src/spring/observed-injection');
+const { normalizeObservedInjection, normalizeObservedMembers, sourceParameter, sourceMember,
+  sourceBeanDefinition } = require('../src/spring/observed-injection');
 const { registerObserver } = require('../src/jpa/observer-vscode');
 
 const text = 'package example; import vendor.Value; class Consumer { Consumer(Value left, Value right) {} }';
@@ -18,6 +19,43 @@ const uri = file => ({scheme:'file',fsPath:file,toString:()=>pathToFileURL(file)
 const memberSite={owner:'example.Consumer',requestingBean:'consumer',kind:'field',member:'named',
   requestedType:'java.util.Map',dependencyType:'vendor.Value'};
 const memberEvent={id:5,context:event.context,site:memberSite,state:'aggregated',selectedBeans:['left','right']};
+
+test('hierarchy evidence binds exact selected labels, context distances, shadow paths and optional source shape',()=>{
+  const ancestor={key:'context-1',id:'sample'};
+  const source={kind:'bean-method',owner:'example.Parents',member:'right',returnType:'vendor.Value',parameterTypes:[]};
+  const owners=[{beanName:'left',context:event.context,distance:0},
+    {beanName:'right',context:ancestor,distance:1,source}];
+  const observed={owners,resolverHint:'explicit-hint'};
+  const row={...memberEvent,hierarchy:observed};
+  const raw={...trace,events:[row]};
+  assert.deepEqual(normalizeObservedMembers(raw).events,[row]);
+  const shadow={beanName:'right',context:ancestor,distance:1,hiddenBy:event.context,hiddenByDistance:0,mode:'hidden'};
+  assert.deepEqual(normalizeObservedMembers({...raw,events:[{...row,hierarchy:{...observed,
+    byTypeLookupObserved:true,shadowed:[shadow]}}]}).events[0].hierarchy.shadowed,[shadow]);
+  const tryHierarchy=hierarchy=>normalizeObservedMembers({...raw,events:[{...row,hierarchy}]});
+  for (const malformed of [
+    {owners:[...owners].reverse()},
+    {owners:[owners[0],{...owners[1],context:event.context}]},
+    {owners:[owners[0],{...owners[1],distance:0}]},
+    {owners:[owners[0],{...owners[1],source:{...source,parameterTypes:['../source']}}]},
+    {owners:[owners[0],{...owners[1],source:{...source,parameterTypes:Array(5).fill('a'.repeat(240))}}]},
+    {...observed,shadowed:[shadow]},
+    {...observed,byTypeLookupObserved:true,shadowed:[{...shadow,hiddenByDistance:1}]}
+  ])assert.throws(()=>tryHierarchy(malformed),/hierarchy/u);
+});
+
+test('observed Bean declaration navigation matches factory signatures or declared classes only',()=>{
+  const java='package example; import vendor.Value; import org.springframework.context.annotation.Bean; '+
+    'class Parents { @Bean Value right() { return null; } @Bean Value right(String origin) { return null; } }';
+  const method={kind:'bean-method',owner:'example.Parents',member:'right',returnType:'vendor.Value',parameterTypes:[]};
+  const selected=sourceBeanDefinition({text:java},method);
+  assert.equal(java.slice(selected.start,selected.end),'right');
+  assert.equal(java[selected.end+1],')');
+  assert.equal(sourceBeanDefinition({text:java.replace('@Bean Value right()','Value right()')},method),undefined);
+  assert.equal(sourceBeanDefinition({text:java.replace('vendor.Value','other.Value')},method),undefined);
+  const declared=sourceBeanDefinition({text:java},{kind:'class',owner:'example.Parents'});
+  assert.equal(java.slice(declared.start,declared.end),'Parents');
+});
 
 test('member evidence accepts bounded local aggregate names and typed actual missing without changing constructor events',()=>{
   const methodSite={...memberSite,kind:'method',member:'wire',parameterTypes:['vendor.Value','java.util.Map'],

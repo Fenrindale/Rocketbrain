@@ -79,7 +79,7 @@ async function runtime(storage,cancellation) {
 }
 
 async function renderFxmlPreview({file,workspace,dirty,javaHome,storage,width=480,height=320,workspaceTrusted,
-  allowPreview,cancellation,propertyEdit,expectedFingerprint}) {
+  allowPreview,cancellation,propertyEdit,hierarchyEdit,expectedFingerprint}) {
   if (workspaceTrusted!==true||allowPreview!==true||cancelled(cancellation)) {
     throw Error('Choose an FXML preview in a trusted workspace.');
   }
@@ -90,7 +90,7 @@ async function renderFxmlPreview({file,workspace,dirty,javaHome,storage,width=48
   const java=independentJavaExecutable(path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
   const version=await fs.readFile(path.join(path.dirname(path.dirname(java)),'release'),'utf8');
   if (Number(/^JAVA_VERSION="(\d+)/mu.exec(version)?.[1]||0)<24) throw Error('JavaFX preview requires JDK 24 or later.');
-  const before=captureFxmlPreview(file,workspace,{dirty,propertyEdit,expectedFingerprint});
+  const before=captureFxmlPreview(file,workspace,{dirty,propertyEdit,hierarchyEdit,expectedFingerprint});
   const modules=await runtime(storage,cancellation);
   if (cancelled(cancellation)) throw Error('FXML preview cancelled.');
   const parent=await fs.realpath(os.tmpdir()), stage=await fs.mkdtemp(path.join(parent,'rb-fxml-preview-'));
@@ -141,7 +141,7 @@ async function renderFxmlPreview({file,workspace,dirty,javaHome,storage,width=48
     }
     return {png,report:{runtime:observed,width,height,bytes:png.length,imageSha256:hash(png),resourcesSha256:before.effective,
       ...before.summary},design:{targets:before.targets.map(target=>({...target,bounds:bounds.get(target.id)})),
-      sourceText:before.sourceText,edit:before.edit}};
+      sourceText:before.sourceText,edit:before.edit,hierarchy:before.hierarchy}};
   } finally {
     const actual=await fs.realpath(stage),observed=await fs.lstat(actual,{bigint:true});
     if (path.relative(stage,actual)||path.relative(parent,path.dirname(actual))||!path.basename(actual).startsWith('rb-fxml-preview-')||

@@ -10,7 +10,8 @@ const { readModule, planImage, observeImage } = require('./javafx-gradle-image')
 const { renderFxmlPreview } = require('./javafx-preview-runtime');
 const { captureFxmlPreview } = require('./javafx-preview-fxml');
 const { registerFxmlCompletion } = require('./javafx-completion');
-const { REFRESH, EDIT, APPLY, DISCARD, commandUris, previewHtml } = require('./javafx-preview-panel');
+const { paletteTypes } = require('./javafx-preview-hierarchy');
+const { REFRESH, EDIT, HIERARCHY, APPLY, DISCARD, commandUris, previewHtml } = require('./javafx-preview-panel');
 
 const PREVIEW = 'rocketbrain.javafx.preview';
 
@@ -137,7 +138,7 @@ function registerJavaFx(vscode, { java, context }) {
     document.uri.scheme==='file'&&!path.relative(file,document.uri.fsPath));
 
   async function render({document=vscode.window.activeTextEditor?.document,width,height,allowPreview,cancellation}={},
-    { propertyEdit, expectedFingerprint } = {}) {
+    { propertyEdit, hierarchyEdit, expectedFingerprint } = {}) {
     const workspace=document&&root(document);
     if (!workspace||!document.fileName.endsWith('.fxml')||document.uri.authority||document.isClosed||allowPreview!==true) {
       throw Error('Choose a saved FXML document for preview in a trusted workspace.');
@@ -155,7 +156,7 @@ function registerJavaFx(vscode, { java, context }) {
     try {
       const {png,report,design}=await renderFxmlPreview({file,workspace,dirty,javaHome,width,height,
         storage:path.join(context.globalStorageUri.fsPath,'javafx-preview'),workspaceTrusted:true,allowPreview:true,
-        cancellation:controller.signal,propertyEdit,expectedFingerprint});
+        cancellation:controller.signal,propertyEdit,hierarchyEdit,expectedFingerprint});
       if (!root(document)||document.isDirty||controller.signal.aborted) throw Error('The FXML source changed. Refresh from the saved file.');
       const receipt=Object.freeze(report);
       return {receipt,png,design,file,uri:document.uri,width:report.width,height:report.height};
@@ -208,29 +209,46 @@ function registerJavaFx(vscode, { java, context }) {
     return workspace;
   }
 
-  async function reviewProperty({ receipt, id, property, value, allowReview, cancellation } = {}) {
+  async function reviewChange(receipt, allowReview, cancellation, change, selection) {
     const active = shown;
     if (!active || active.receipt !== receipt || allowReview !== true || pending || applying) {
-      throw Error('Choose a property from the current FXML preview.');
+      throw Error('Choose an edit from the current FXML preview.');
     }
     const document = await vscode.workspace.openTextDocument(active.uri);
     const version = document.version;
     checkEditingSource(active, document, version);
     const frame = await render({document,width:active.width,height:active.height,allowPreview:true,cancellation}, {
-      propertyEdit: { id, property, value }, expectedFingerprint: active.receipt.resourcesSha256
+      ...change, expectedFingerprint: active.receipt.resourcesSha256
     });
     checkEditingSource(active, document, version);
-    if (pending || applying) throw Error('Finish the current FXML property review.');
+    if (pending || applying) throw Error('Finish the current FXML review.');
     const { before, after } = frame.design.edit;
-    const review = Object.freeze({ id, property, before, after, proposed: frame.receipt });
+    const review = Object.freeze({ ...selection, before, after, proposed: frame.receipt });
     pending = { active, frame, version, review, ticket: randomUUID() };
     repaint();
     return review;
   }
 
-  async function applyProperty({ review, allowApply } = {}) {
-    if (allowApply !== true || !pending || pending.review !== review || applying) {
-      throw Error('Choose the active FXML property review before applying it.');
+  function reviewProperty({ receipt, id, property, value, allowReview, cancellation } = {}) {
+    return reviewChange(receipt, allowReview, cancellation, { propertyEdit: { id, property, value } }, { id, property });
+  }
+
+  function reviewHierarchy({ receipt, parent, operation, type, child, allowReview, cancellation } = {}) {
+    return reviewChange(receipt, allowReview, cancellation, { hierarchyEdit: { parent, operation, type, child } },
+      { parent, operation });
+  }
+
+  function listHierarchy(receipt) {
+    const active=shown;
+    if (!active || active.changed || active.receipt!==receipt || !vscode.workspace.isTrusted) return [];
+    return active.design.hierarchy.map(target=>({ ...target,
+      children: target.children.map(child=>({ ...child, relations: [...child.relations] })) }));
+  }
+
+  async function applyChange({ review, allowApply } = {}, scope) {
+    const actualScope=pending?.frame.design.edit.scope || 'property';
+    if (allowApply !== true || !pending || pending.review !== review || applying || scope && actualScope!==scope) {
+      throw Error('Choose the active FXML ' + (scope || actualScope) + ' review before applying it.');
     }
     const { active, frame, version } = pending;
     pending = undefined;
@@ -247,13 +265,32 @@ function registerJavaFx(vscode, { java, context }) {
       }
       const edit = frame.design.edit;
       const changed = await editor.edit(builder => builder.replace(span(document, edit), edit.encoded));
-      if (!changed) throw Error('The FXML editor rejected the reviewed property change.');
+      if (!changed) throw Error('The FXML editor rejected the reviewed change.');
       if (shown === active) shown = { ...active, changed: true };
+      if (edit.scope === 'hierarchy') return { parent: edit.parent, operation: edit.operation };
       return { id: edit.id, property: edit.property, value: edit.after };
     } finally {
       applying = false;
       repaint();
     }
+  }
+
+  async function pickHierarchy(ticket, parent) {
+    const active=shown;
+    const target=active?.ticket===ticket && !active.changed && !pending && !applying &&
+      active.design.hierarchy.find(item=>item.key===parent);
+    if (!target) throw Error('Choose a container from the current FXML preview.');
+    const options=[{label:'Add a node',operation:'insert'}];
+    for (const child of target.children) for (const operation of child.relations) {
+      const label=operation==='remove' ? 'Remove '+child.label : 'Move '+child.label+' '+operation;
+      options.push({label,description:'Child '+child.position,operation,child:child.key});
+    }
+    const chosen=await vscode.window.showQuickPick(options,{title:target.label});
+    if (!chosen) return;
+    const type=chosen.operation==='insert' ? await vscode.window.showQuickPick(paletteTypes,{title:'Add JavaFX Node'}) : undefined;
+    if (chosen.operation==='insert' && !type) return;
+    return vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'Render Proposed FXML Hierarchy',cancellable:true},
+      (_,cancellation)=>reviewHierarchy({receipt:active.receipt,parent,operation:chosen.operation,child:chosen.child,type,allowReview:true,cancellation}));
   }
 
   async function pickProperty(ticket, id) {
@@ -299,12 +336,13 @@ function registerJavaFx(vscode, { java, context }) {
   });
   command(REFRESH,refresh);
   command(EDIT,pickProperty);
+  command(HIERARCHY,pickHierarchy);
   command(APPLY,ticket => {
-    if (!pending || pending.ticket !== ticket) throw Error('The FXML property review changed.');
-    return applyProperty({review:pending.review,allowApply:true});
+    if (!pending || pending.ticket !== ticket) throw Error('The FXML property or hierarchy review changed.');
+    return applyChange({review:pending.review,allowApply:true});
   });
   command(DISCARD,ticket => {
-    if (!pending || pending.ticket !== ticket) throw Error('The FXML property review changed.');
+    if (!pending || pending.ticket !== ticket) throw Error('The FXML property or hierarchy review changed.');
     pending = undefined;
     repaint();
   });
@@ -362,7 +400,9 @@ function registerJavaFx(vscode, { java, context }) {
     }
   }));
 
-  return { definitions, build, preview, showPreview, refresh, reviewProperty, applyProperty, async dispose() {
+  return { definitions, build, preview, showPreview, refresh, reviewProperty,
+    applyProperty: options=>applyChange(options,'property'), listHierarchy, reviewHierarchy,
+    applyHierarchy: options=>applyChange(options,'hierarchy'), async dispose() {
     rendering?.abort();panel?.dispose();
     await tasks.dispose();disposables.forEach(item=>item.dispose());
   } };

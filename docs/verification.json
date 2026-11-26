@@ -1,28 +1,28 @@
 {
-  "version": "0.138.0",
-  "verifiedAt": "2026-11-26T11:41:50.017Z",
+  "version": "0.140.0",
+  "verifiedAt": "2026-11-26T12:26:48.832Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.138.0.vsix",
-    "sha256": "7ce2dcce8c1742fbc42ada8dbd8d3306c4742246c03d5c9517bd033f6ca1b715",
-    "bytes": 4442149,
+    "name": "rocketbrain-0.140.0.vsix",
+    "sha256": "bb9753b3040fc7cbd865279be334aefb00fde186843ad87c7e81ea968d354d12",
+    "bytes": 4482430,
     "files": 31
   },
   "source": {
-    "frozenPublicInputs": 2851,
-    "inputVectorSha256": "6e7589a65fb622f34f581a9cdb8f258ad4b39aa98f7c5440554f915f6fbc241d",
+    "frozenPublicInputs": 2899,
+    "inputVectorSha256": "8a70eb9cdd8aa186dd50f6a8c4742c1654dd32c21303e1d2ba6fd63cebb707ea",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45810752233",
-    "tests": 2110,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45818075464",
+    "tests": 2120,
     "suites": 0,
-    "pass": 1894,
+    "pass": 1899,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 216,
+    "skipped": 221,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,42 +32,38 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 9,
+      "groupCount": 8,
       "groups": [
         {
-          "group": "quarkusLiveDebug",
+          "group": "springAutowireHierarchy",
           "checks": 1
         },
         {
-          "group": "jakartaManager",
+          "group": "javaSignatureArity",
           "checks": 1
         },
         {
-          "group": "javafxGradleImage",
+          "group": "spockSpecification",
           "checks": 1
         },
         {
-          "group": "javafxProperties",
+          "group": "reactProps",
           "checks": 1
         },
         {
-          "group": "javafxCompletion",
+          "group": "angularTemplateTools",
           "checks": 1
         },
         {
-          "group": "kmpJvmDebug",
+          "group": "sshMaven",
           "checks": 1
         },
         {
-          "group": "kmpJvmSourceLines",
+          "group": "sshGradle",
           "checks": 1
         },
         {
-          "group": "mavenSnapshot",
-          "checks": 1
-        },
-        {
-          "group": "mavenSnapshotMove",
+          "group": "javafxHierarchy",
           "checks": 1
         }
       ],
@@ -82,42 +78,38 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 9,
+      "groupCount": 8,
       "groups": [
         {
-          "group": "quarkusLiveDebug",
+          "group": "springAutowireHierarchy",
           "checks": 1
         },
         {
-          "group": "jakartaManager",
+          "group": "javaSignatureArity",
           "checks": 1
         },
         {
-          "group": "javafxGradleImage",
+          "group": "spockSpecification",
           "checks": 1
         },
         {
-          "group": "javafxProperties",
+          "group": "reactProps",
           "checks": 1
         },
         {
-          "group": "javafxCompletion",
+          "group": "angularTemplateTools",
           "checks": 1
         },
         {
-          "group": "kmpJvmDebug",
+          "group": "sshMaven",
           "checks": 1
         },
         {
-          "group": "kmpJvmSourceLines",
+          "group": "sshGradle",
           "checks": 1
         },
         {
-          "group": "mavenSnapshot",
-          "checks": 1
-        },
-        {
-          "group": "mavenSnapshotMove",
+          "group": "javafxHierarchy",
           "checks": 1
         }
       ],
@@ -128,74 +120,84 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-045": {
-      "scope": "실제 Gradle Kotlin JVM 실행에서 commonMain SMAP과 jvmMain Java 줄 테이블의 위치, 지역 변수, 스텝, Spring JDBC 완료를 두 DB에서 확인했다.",
+    "IDEA-029": {
+      "scope": "실제 JDT와 Javac으로 참조 배열·원시 배열 호출 11곳을 확인했다. 설치형 편집기에서 적용·Undo·Redo를 했고, 인수의 평가 순서와 명시적 배열 동일성 및 실제 JDBC 결과를 두 DB에서 보존했다.",
       "runtimeGroups": [
-        "kmpJvmDebug",
-        "kmpJvmSourceLines"
+        "javaSignatureArity"
       ]
     },
-    "IDEA-066": {
-      "scope": "실제 Quarkus 3.40.1.2와 두 Spring DB 환경에서 변경 전후 같은 디버그 세션으로 Java 줄에서 멈췄다. DAP 중단점 해제, 이후 HTTP/JDBC 요청과 소유 JVM 종료도 확인했다.",
+    "IDEA-047": {
+      "scope": "실제 Gradle·Groovy·Spock에서 옆 명세는 실행되지 않았고, 선택한 명세의 성공·실패·건너뜀과 Spring JDBC 검증 실패의 정확한 소스 줄을 두 DB에서 확인했다.",
       "runtimeGroups": [
-        "quarkusLiveDebug"
+        "spockSpecification"
       ]
     },
-    "IDEA-068": {
-      "scope": "Tomcat 11.0.29 HTTPS Manager 인증과 WAR 변경·재사용 거부, 정상 앱 유지, 두 Spring DB의 Servlet/JSP·JDBC 작동을 확인했다.",
+    "IDEA-053": {
+      "scope": "실제 Spring 7.0.10에서 계층 주입 여섯 경우, 구성원 소스와 네 선언 이동을 확인했다. 보고서를 보아도 prototype 생성 횟수가 늘지 않았으며, 두 DB의 JDBC 상태가 유지됐다.",
       "runtimeGroups": [
-        "jakartaManager"
+        "springAutowireHierarchy"
       ]
     },
-    "IDEA-069": {
-      "scope": "실제 Maven에서 두 SNAPSHOT 버전을 내려받고, 내려받은 위치를 Maven 캐시와 대조했다. 외부 SNAPSHOT 부모와 BOM을 사용하는 리액터에서 설치형 Java Move, 변경된 캐시 메타데이터의 거부, 재검토 후 컴파일과 Spring JDBC를 두 DB에서 확인했다.",
+    "IDEA-096": {
+      "scope": "설치형 편집기에서 두 빌드 파일을 열고 승인한 작업이 실제 원격 JVM에서 실행됐다. JUnit과 JAR 식별자, 동일 검토 재사용 거부, 원본 파일 및 Spring JDBC 보존을 두 DB에서 확인했다.",
       "runtimeGroups": [
-        "mavenSnapshot",
-        "mavenSnapshotMove"
+        "sshMaven",
+        "sshGradle"
+      ]
+    },
+    "IDEA-107": {
+      "scope": "실제 React 렌더와 TypeScript 5.9.3의 미저장 TSX 오류, 공식 Angular 22.3 언어 서비스와 TypeScript 6의 컨트롤 흐름·별칭·이벤트 탐색 및 저장한 오류 수정의 진단 해제를 두 DB에서 확인했다.",
+      "runtimeGroups": [
+        "reactProps",
+        "angularTemplateTools"
       ]
     },
     "IDEA-120": {
-      "scope": "실제 OpenJFX에서 제안 속성과 저장한 FXML의 이미지가 일치했다. 내장 및 프로젝트 컴포넌트 완성을 실제 FXMLLoader가 읽었고, Gradle jlink 런처도 실행했다.",
+      "scope": "실제 OpenJFX에서 노드 순서 변경, 팔레트 삽입과 안전한 잎 노드 제거 후 저장한 FXML이 제안한 픽셀과 일치했다. 두 DB 환경에서 검토 재사용 거부와 읽기 결과를 확인했다.",
       "runtimeGroups": [
-        "javafxGradleImage",
-        "javafxProperties",
-        "javafxCompletion"
+        "javafxHierarchy"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 647,
+    "sourceCorrespondences": 663,
     "sourceConfidence": "inferred",
     "archiveEntries": 31,
     "archiveConfidence": "observed"
   },
   "nativePayloadEquivalence": {
     "files": 31,
-    "testedArchiveSha256": "eb8fe772b68bdbd2620313a753c48898fd0f7008dc807d245d75f69bb28da033",
-    "testedInputVectorSha256": "1b1dbd70f50c67668630154ed1782fd5568205f7c96587ce684de20708bda6d9",
+    "testedArchiveSha256": "e4afcc33656d7cd43069800743c3bb24cc799811d90e7ac203054a19204f0115",
+    "testedInputVectorSha256": "48f5e8ad966489166af262dda88d04502507bd53cf194167c6245129c9d28c3a",
     "onlySourceChanges": [
-      "test/javafx-completion-host.js",
-      "test/maven-snapshot-host.js"
+      "test/angular-workbench-host.js",
+      "test/java-signature-arity-host.js",
+      "test/react-props-host.js"
     ]
   },
   "progress": {
     "counts": {
-      "implemented": 181,
-      "partial": 21,
+      "implemented": 183,
+      "partial": 19,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 203.5,
-    "previousWeightedPoints": 203,
+    "weightedPoints": 204.5,
+    "previousWeightedPoints": 203.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 94.2,
+    "referencePercent": 94.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-069",
+        "id": "IDEA-107",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-120",
         "before": "partial",
         "after": "implemented"
       }
@@ -203,15 +205,16 @@
   },
   "limits": [
     "가중 점수는 216개 기능표 기준으로 집계한다.",
-    "Kotlin Multiplatform 디버깅은 선택한 JVM 애플리케이션과 검증한 소스 위치를 지원한다.",
-    "Maven 의존성 보고서는 검사 시점의 캐시를 표시한다. 다운로드가 바뀐 뒤에는 새로 검사한다. 모델 추적은 출처를 확인할 수 있는 Maven 캐시와 표준 POM 선언을 대상으로 한다.",
-    "Tomcat HTTPS Manager 배포는 업로드할 WAR와 대상 서버를 검토한다. 네트워크 응답이 불확실하면 원격 바이트 복원 여부를 추측하지 않는다."
+    "React는 로컬 TypeScript로 읽는 TSX 속성과 진단을 지원한다. Angular는 선택한 프로젝트의 공식 언어 서비스와 컴파일러를 사용한다. 두 프레임워크의 프로젝트 생성이나 전체 런타임 디버깅은 이 범위에 포함하지 않는다.",
+    "FXML 시각 편집은 Windows x64에서 내장 레이아웃과 컴포넌트를 지원한다. 사용자 정의 컴포넌트의 시각 렌더링과 이벤트 실행은 제외한다.",
+    "SSH 빌드는 검토한 표준 단일 프로젝트와 고정된 오프라인 의존성을 실행한다. 원격 복합 빌드나 동적으로 실행되는 빌드 확장은 다루지 않는다."
   ],
   "next": [
-    "Spring 상위 BeanFactory의 실제 주입 소유권과 선언 탐색",
-    "React 속성과 Angular 템플릿 편집",
-    "개별 Spock 명세 실행과 Java 가변 인수 변경",
-    "SSH Maven·Gradle 작업과 FXML 장면 편집"
+    "WildFly standalone에서 EJB와 WAR 배포",
+    "실행 중인 Micronaut Maven·Gradle JVM 디버깅",
+    "Kotlin String 및 배열을 중단한 프레임에서 검토하고 수정",
+    "SSH 외부 변경 감지와 여러 파일의 검토 후 전송",
+    "Gradle의 실제 모델로 계산된 포함 빌드 타깃 확인"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

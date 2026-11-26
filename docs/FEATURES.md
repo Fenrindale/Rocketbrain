@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.138.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.140.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 181 |
-| 부분 구현 | 21 |
+| 구현 | 183 |
+| 부분 구현 | 19 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **94.2%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **94.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.138에서는 Kotlin Multiplatform JVM 줄 중단점, Quarkus 라이브 디버깅, HTTPS Tomcat 배포, FXML 속성 편집과 Gradle 패키징, 외부 Maven SNAPSHOT 모델 추적을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 203점에서 203.5점으로 바뀌었다.
+v0.140에서는 Spring 상위 공장 주입 분석, Java 가변 인자 변경, 개별 Spock 명세 실행, React·Angular 편집, SSH Maven·Gradle 및 FXML 장면 편집을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 203.5점에서 204.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -127,7 +127,7 @@ v0.138에서는 Kotlin Multiplatform JVM 줄 중단점, Quarkus 라이브 디버
 | IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 구현 |
 | IDEA-105 | IntelliJ IDEA | IDE 안의 DB 연결·SQL·데이터 편집 | 구현 |
 | IDEA-106 | IntelliJ IDEA | JavaScript·TypeScript·Node/브라우저 디버그 | VS Code 재사용 |
-| IDEA-107 | IntelliJ IDEA | React·Angular·Vue 프레임워크 | 부분 구현 |
+| IDEA-107 | IntelliJ IDEA | React·Angular·Vue 프레임워크 | 구현 |
 | IDEA-108 | IntelliJ IDEA | HTML·CSS/SCSS·Emmet·Preview | VS Code 재사용 |
 | IDEA-109 | IntelliJ IDEA | Python 언어·환경·디버그 | 구현 |
 | IDEA-110 | IntelliJ IDEA | Jupyter Notebook·커널·셀 디버그 | 구현 |
@@ -140,7 +140,7 @@ v0.138에서는 Kotlin Multiplatform JVM 줄 중단점, Quarkus 라이브 디버
 | IDEA-117 | IntelliJ IDEA | IDE 기능을 MCP 도구로 제공 | 구현 |
 | IDEA-118 | IntelliJ IDEA | 프로젝트 신뢰·제한 모드 | 구현 |
 | IDEA-119 | IntelliJ IDEA | 문자열 안 SQL/정규식/HTML 언어 주입 | 구현 |
-| IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 부분 구현 |
+| IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 구현 |
 | DG-001 | DataGrip | MySQL 데이터 소스 생성·연결 검사 | 구현 |
 | DG-002 | DataGrip | MariaDB 전용 지원 | 구현 |
 | DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 구현 |

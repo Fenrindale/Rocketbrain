@@ -172,6 +172,8 @@ async function activate(context) {
   context.subscriptions.push(jupyter);
   const python = require('./python/python-vscode').registerPython(vscode);
   const vue = require('./web/vue-vscode').registerVueWorkbench(context, vscode);
+  const react = require('./web/react-vscode').registerReactWorkbench(context, vscode);
+  const angular = require('./web/angular-vscode').registerAngularWorkbench(context, vscode);
   context.subscriptions.push(python);
   const devContainers = require('./devcontainer/vscode').registerDevContainers(context, vscode, java);
   context.subscriptions.push(devContainers);
@@ -200,7 +202,7 @@ async function activate(context) {
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
   const wsl = require('./remote/wsl-vscode').registerWslWorkbench(vscode);
   context.subscriptions.push(wsl);
-  return { ...database, navigation, duckdb, sqlite, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, sftpDeployment, ftpsDeployment, deploymentChanges, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlCollations, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, gitWorktrees, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
+  return { ...database, navigation, duckdb, sqlite, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, sftpDeployment, ftpsDeployment, deploymentChanges, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlCollations, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, react, angular, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, gitWorktrees, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

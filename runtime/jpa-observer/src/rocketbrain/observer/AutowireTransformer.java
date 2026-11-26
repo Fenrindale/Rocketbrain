@@ -23,7 +23,14 @@ final class AutowireTransformer implements ClassFileTransformer {
     static final String CONSTRUCTOR="org/springframework/beans/factory/support/ConstructorResolver";
     static final String FACTORY="org/springframework/beans/factory/support/DefaultListableBeanFactory";
     static final String MEMBERS=FACTORY+"#member-autowire";
+    private static final String ANCESTORS="org/springframework/beans/factory/BeanFactoryUtils";
+    private static final String LISTABLE="Lorg/springframework/beans/factory/ListableBeanFactory;";
+    private static final String HIERARCHICAL="org/springframework/beans/factory/HierarchicalBeanFactory";
+    private static final String NAME_ARRAY="[Ljava/lang/String;";
+    private static final String TYPE_NAMES="("+LISTABLE+"Ljava/lang/Class;ZZ)"+NAME_ARRAY;
+    private static final String MERGE="("+NAME_ARRAY+NAME_ARRAY+"L"+HIERARCHICAL+";)"+NAME_ARRAY;
     private static final String DESCRIPTOR="Lorg/springframework/beans/factory/config/DependencyDescriptor;";
+    private static final String FIND="(Ljava/lang/String;Ljava/lang/Class;"+DESCRIPTOR+")Ljava/util/Map;";
     private static final String TRAILING="Ljava/lang/String;Ljava/util/Set;Lorg/springframework/beans/TypeConverter;";
     private static final String RESULT="Ljava/lang/Object;";
     private static final String RESOLVE="("+DESCRIPTOR+TRAILING+")"+RESULT;
@@ -37,7 +44,7 @@ final class AutowireTransformer implements ClassFileTransformer {
     AutowireTransformer(Instrumentation instrumentation){this.instrumentation=instrumentation;}
 
     public byte[] transform(Module module,ClassLoader loader,String type,Class<?> redefining,ProtectionDomain domain,byte[] bytes){
-        if(!CONSTRUCTOR.equals(type)&&!FACTORY.equals(type))return null;
+        if(!CONSTRUCTOR.equals(type)&&!FACTORY.equals(type)&&!ANCESTORS.equals(type))return null;
         try{
             if(Class.forName(AutowireRuntime.class.getName(),false,loader)!=AutowireRuntime.class)
                 throw new IllegalStateException("Observer helper unavailable");
@@ -45,6 +52,11 @@ final class AutowireTransformer implements ClassFileTransformer {
                 instrumentation.redefineModule(module,Set.of(AutowireRuntime.class.getModule()),Map.of(),Map.of(),Set.of(),Map.of());
             var cf=ClassFile.of(ClassFile.ClassHierarchyResolverOption.of(ClassHierarchyResolver.ofResourceParsing(loader)));
             var model=cf.parse(bytes);
+            if(ANCESTORS.equals(type)){
+                byte[] result=mergeHooks(cf,model);
+                ObserverRuntime.instrumented(ANCESTORS+"#autowire-merge");
+                return result;
+            }
             boolean constructor=CONSTRUCTOR.equals(type);
             if(constructor&&!model.fields().stream().anyMatch(value->value.fieldName().equalsString("beanFactory")&&
                 value.fieldType().equalsString(BEANS.descriptorString())))throw new IllegalStateException("Unknown constructor owner");
@@ -77,6 +89,12 @@ final class AutowireTransformer implements ClassFileTransformer {
             ObserverRuntime.instrumented(type);
             if(!constructor){
                 try{
+                    result=ancestorLookupHooks(cf,cf.parse(result));
+                    ObserverRuntime.instrumented(FACTORY+"#ancestor-lookup");
+                }catch(Throwable ignored){
+                    ObserverRuntime.warning("Spring ancestor lookup observation unavailable for this resolution shape.");
+                }
+                try{
                     byte[] members=memberHooks(cf,cf.parse(result));
                     ObserverRuntime.instrumented(MEMBERS);
                     return members;
@@ -86,9 +104,53 @@ final class AutowireTransformer implements ClassFileTransformer {
             }
             return result;
         }catch(Throwable ignored){
-            ObserverRuntime.warning("Spring constructor observation unavailable: "+type);
+            ObserverRuntime.warning("Spring injection observation unavailable: "+type);
             return null;
         }
+    }
+
+    private static byte[] ancestorLookupHooks(ClassFile format,java.lang.classfile.ClassModel model){
+        int[] hooks={0};
+        byte[] result=format.transformClass(model,(builder,element)->{
+            if(element instanceof MethodModel method&&method.code().isPresent()&&method.methodName().equalsString("findAutowireCandidates")&&
+                method.methodType().equalsString(FIND)){
+                builder.transformMethod(method,MethodTransform.transformingCode((code,instruction)->{
+                    if(call(instruction,ANCESTORS,"beanNamesForTypeIncludingAncestors",TYPE_NAMES)){
+                        hooks[0]++;
+                        int token=code.allocateLocal(TypeKind.REFERENCE);
+                        Label begin=code.newLabel(),end=code.newLabel(),handler=code.newLabel(),done=code.newLabel();
+                        code.aload(0).aload(3).invokestatic(HELPER,"enterAncestorLookup",MethodTypeDesc.of(OBJECT,OBJECT,OBJECT))
+                            .astore(token).labelBinding(begin).with(instruction).labelBinding(end)
+                            .aload(token).invokestatic(HELPER,"exitAncestorLookup",MethodTypeDesc.of(VOID,OBJECT)).goto_(done)
+                            .labelBinding(handler).aload(token).invokestatic(HELPER,"exitAncestorLookup",MethodTypeDesc.of(VOID,OBJECT))
+                            .athrow().exceptionCatchAll(begin,end,handler).labelBinding(done);
+                    }else code.with(instruction);
+                }));
+            }else builder.with(element);
+        });
+        if(hooks[0]!=1)throw new IllegalStateException("Unknown Spring by-type ancestor lookup");
+        return result;
+    }
+
+    private static byte[] mergeHooks(ClassFile format,java.lang.classfile.ClassModel model){
+        int[] matched={0},returns={0};
+        byte[] result=format.transformClass(model,(builder,element)->{
+            if(element instanceof MethodModel method&&method.code().isPresent()&&method.methodName().equalsString("mergeNamesWithParent")&&
+                method.methodType().equalsString(MERGE)&&method.code().orElseThrow().elementStream()
+                    .filter(instruction->call(instruction,HIERARCHICAL,"containsLocalBean","(Ljava/lang/String;)Z")).count()==1){
+                matched[0]++;
+                builder.transformMethod(method,MethodTransform.transformingCode((code,instruction)->{
+                    if(instruction instanceof ReturnInstruction ret&&ret.typeKind()==TypeKind.REFERENCE){
+                        returns[0]++;
+                        code.dup().aload(0).aload(1).aload(2).invokestatic(HELPER,"mergedAncestorNames",
+                            MethodTypeDesc.of(VOID,OBJECT,OBJECT,OBJECT,OBJECT));
+                    }
+                    code.with(instruction);
+                }));
+            }else builder.with(element);
+        });
+        if(matched[0]!=1||returns[0]!=2)throw new IllegalStateException("Unknown Spring ancestor name merge");
+        return result;
     }
 
     private static byte[] memberHooks(ClassFile format,java.lang.classfile.ClassModel model){

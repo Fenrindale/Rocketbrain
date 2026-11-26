@@ -572,6 +572,8 @@ public final class SignatureInspector {
                         if (executable.getModifiers().contains(Modifier.PRIVATE)) {
                             method.model.put("checkedThrows", checkedThrownTypes(executable, types, elements));
                         }
+                        var arity = VarargsCalls.declaration(getCurrentPath(),tree,executable,trees,text);
+                        if (!arity.isEmpty()) method.model.put("varargDeclaration",arity);
                         if (tree.getBody() != null) {
                             var nest = hiddenAccessNest(owner);
                             if (nest != null) method.model.put("hiddenAccessNest", nest);
@@ -605,6 +607,8 @@ public final class SignatureInspector {
                         if (!constructor && executable.getModifiers().contains(Modifier.PRIVATE) && trees.getPath(executable) != null) {
                             var consumer = SignatureReturn.consumer(tree,getCurrentPath(),trees,text);
                             if (!consumer.isEmpty()) report.put("returnConsumer",consumer);
+                            var arity = VarargsCalls.conversion(getCurrentPath(),executable,trees,types,text);
+                            if (!arity.isEmpty()) report.put("arityConversion",arity);
                         }
                         calls.add(report);
                     }

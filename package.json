@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.138.0",
+  "version": "0.140.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -53,7 +53,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.python.typeServerHome", "rocketbrain.python.typeNodePath", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.python.typeServerHome", "rocketbrain.python.typeNodePath", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.react.nodePath", "rocketbrain.react.enableProps", "rocketbrain.angular.nodePath", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
@@ -114,6 +114,8 @@
       { "command": "rocketbrain.sshWorkspace.javaDebug", "title": "Attach Reviewed SSH Java Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaDebugStop", "title": "Disconnect SSH Java Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaCompile", "title": "Compile Reviewed SSH Java Module", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-ssh && resourceLangId == java" },
+      { "command": "rocketbrain.sshWorkspace.mavenBuild", "title": "Run Reviewed Maven Task over SSH", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-ssh" },
+      { "command": "rocketbrain.sshWorkspace.gradleBuild", "title": "Run Reviewed Gradle Task over SSH", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-ssh" },
       { "command": "rocketbrain.acp.compare", "title": "Compare Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.review", "title": "Review Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.select", "title": "Select Docker Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
@@ -165,6 +167,7 @@
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
       { "command": "rocketbrain.groovy.runScript", "title": "Run Groovy Script", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
       { "command": "rocketbrain.groovy.runTests", "title": "Run Groovy and Spock Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.groovy.runSpecification", "title": "Run Selected Spock Specification", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
       { "command": "rocketbrain.groovy.projectSelection", "title": "Review Groovy Selection with Project Classpath", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file && editorHasSelection" },
       { "command": "rocketbrain.groovy.stopProject", "title": "Stop Groovy Project Evaluation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.completeTypedMember", "title": "Complete Typed Groovy Member", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
@@ -186,7 +189,11 @@
       { "command": "rocketbrain.python.startTypes", "title": "Start Python Type Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.stopTypes", "title": "Stop Python Type Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.checkProject", "title": "Check Vue Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.react.checkProps", "title": "Check React Props", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == typescriptreact" },
       { "command": "rocketbrain.vue.startDevServer", "title": "Start Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.angular.start", "title": "Start Angular Template Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.angular.check", "title": "Check Angular Templates", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.angular.stop", "title": "Stop Angular Template Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
@@ -1524,7 +1531,10 @@
         { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }
       ],
       "editor/context": [
+        { "command": "rocketbrain.groovy.runSpecification", "when": "editorLangId == groovy && resourceScheme == file && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.sshWorkspace.javaCompile", "when": "editorLangId == java && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
+        { "command": "rocketbrain.sshWorkspace.mavenBuild", "when": "resourceFilename == pom.xml && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
+        { "command": "rocketbrain.sshWorkspace.gradleBuild", "when": "resourceFilename == build.gradle && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.java.workbench.sourceTarget", "when": "editorLangId == java && resourceScheme == file && isWorkspaceTrusted", "group": "navigation" },
         {
           "command": "rocketbrain.openSharedConsole",
@@ -2286,6 +2296,12 @@
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Model name exposed by the configured local chat server."
         },
+        "rocketbrain.angular.nodePath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Absolute path to the standalone Node.js executable for reviewed Angular analysis. An empty value uses Node.js on PATH."
+        },
         "rocketbrain.vue.nodePath": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Absolute path to Node.js for workspace-local Vue tools. An empty value uses Node.js from PATH."
@@ -2293,6 +2309,14 @@
         "rocketbrain.vue.enableDefinitions": {
           "type": "boolean", "default": false, "scope": "resource",
           "description": "Load the installed Vue compiler and TypeScript in an independent Node process when finding Vue template definitions in this trusted workspace."
+        },
+        "rocketbrain.react.nodePath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute Node.js executable for the project-local React TypeScript analysis. An empty value uses PATH."
+        },
+        "rocketbrain.react.enableProps": {
+          "type": "boolean", "default": false, "scope": "resource",
+          "description": "Use project-local TypeScript for React prop completion and navigation in trusted TSX projects."
         },
         "rocketbrain.sql.analysis.resolutionScopes": {
           "type": "array",

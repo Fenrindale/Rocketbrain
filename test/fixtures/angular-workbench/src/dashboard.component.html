@@ -1,0 +1,7 @@
+<section>
+  <rb-count [currentValue]="model.people" (sent)="receive($event)"></rb-count>
+  <rb-count [currentValue]="wrong"></rb-count>
+  @for (department of model.departments; track department.id) {
+    <p>{{ department.title }}</p>
+  }
+</section>

@@ -18,6 +18,63 @@ function bounded(value, expression, length=256) {
   return typeof value === 'string' && value.length <= length && value.trim().length && expression.test(value);
 }
 
+function normalizeHierarchy(value, consumer, names, hint) {
+  if (value === undefined) return;
+  const invalid=()=>{throw Error('Invalid Spring injection hierarchy evidence.');};
+  if (!value || typeof value!=='object' ||
+      value.byTypeLookupObserved!==undefined&&value.byTypeLookupObserved!==true ||
+      value.resolverHint!==undefined&&(!bounded(value.resolverHint,label)||hint!==undefined&&hint!==value.resolverHint)) invalid();
+  const levels = new Map([[0,consumer]]), distances = new Map([[consumer.key,0]]);
+  function context(raw,distance) {
+    if (!Number.isSafeInteger(distance)||distance<0||distance>7||!bounded(raw?.key,contextKey)||
+        raw.id!==undefined&&!bounded(raw.id,label)) invalid();
+    const previous=levels.get(distance), previousDistance=distances.get(raw.key);
+    if (previous&&(previous.key!==raw.key||previous.id!==raw.id)||previousDistance!==undefined&&previousDistance!==distance) invalid();
+    const result={key:raw.key,...(raw.id&&{id:raw.id})};
+    levels.set(distance,result);
+    distances.set(raw.key,distance);
+    return result;
+  }
+  const observed = {};
+  if (value.owners !== undefined) {
+    if (!Array.isArray(value.owners)||!names.length||value.owners.length!==names.length) invalid();
+    observed.owners = value.owners.map((row,index)=>{
+      if (row?.beanName!==names[index]) invalid();
+      const result={beanName:row.beanName,distance:row.distance,context:context(row.context,row.distance)};
+      if (row.source!==undefined) {
+        const source=row.source;
+        if (!source||!bounded(source.owner,ownerType)||!['class','bean-method'].includes(source.kind)) invalid();
+        result.source={kind:source.kind,owner:source.owner};
+        if (source.kind==='bean-method') {
+          if (!bounded(source.member,localType)||!bounded(source.returnType,memberType)||
+              !Array.isArray(source.parameterTypes)||source.parameterTypes.length>24||
+              source.parameterTypes.some(name=>!bounded(name,memberType))||
+              source.parameterTypes.reduce((length,name)=>length+name.length,0)>1024) invalid();
+          Object.assign(result.source,{member:source.member,returnType:source.returnType,parameterTypes:[...source.parameterTypes]});
+        }
+      }
+      return result;
+    });
+  }
+  if (value.shadowed !== undefined) {
+    if (!Array.isArray(value.shadowed)||!value.shadowed.length||value.shadowed.length>12||value.byTypeLookupObserved!==true) invalid();
+    const seen = new Set();
+    observed.shadowed = value.shadowed.map(row=>{
+      if (!bounded(row?.beanName,label)||!['replaced','hidden'].includes(row.mode)||row.hiddenByDistance>=row.distance) invalid();
+      const ancestor=context(row.context,row.distance), blocker=context(row.hiddenBy,row.hiddenByDistance);
+      const key=JSON.stringify([row.beanName,ancestor.key,blocker.key]);
+      if (seen.has(key)) invalid();
+      seen.add(key);
+      return {beanName:row.beanName,distance:row.distance,context:ancestor,
+        hiddenBy:blocker,hiddenByDistance:row.hiddenByDistance,mode:row.mode};
+    });
+  }
+  if (value.byTypeLookupObserved!==undefined) observed.byTypeLookupObserved=true;
+  if (value.resolverHint!==undefined) observed.resolverHint=value.resolverHint;
+  if (!Object.keys(observed).length) invalid();
+  return observed;
+}
+
 function normalizeObservedInjection(raw, members=false) {
   if (!raw || !['observed','awaiting-hooks','disabled'].includes(raw.state) ||
       !Number.isSafeInteger(raw.processId) || raw.processId < 1 || !Number.isSafeInteger(raw.omitted) || raw.omitted < 0 ||
@@ -67,9 +124,12 @@ function normalizeObservedInjection(raw, members=false) {
       parameter={parameterIndex:site.parameterIndex,parameterTypes:[...site.parameterTypes],...(site.parameterName&&{parameterName:site.parameterName})};
     }
     previous = value.id;
+    const hierarchy=normalizeHierarchy(value.hierarchy,context,selection?.selectedBeans||
+      (value.state==='resolved'?[value.selectedBean]:[]),value.suggestedName);
     return { id:value.id, state:value.state, context:{key:context.key,...(context.id && {id:context.id})},
       site:{ owner:site.owner, requestingBean:site.requestingBean,...member,...parameter },...selection,
-      ...(value.selectedBean && {selectedBean:value.selectedBean}), ...(value.suggestedName && {suggestedName:value.suggestedName}) };
+      ...(value.selectedBean && {selectedBean:value.selectedBean}), ...(value.suggestedName && {suggestedName:value.suggestedName}),
+      ...(hierarchy&&{hierarchy}) };
   });
   return { processId:raw.processId, state:raw.state, omitted:raw.omitted, events,
     inspectionInvokedBeans:false,beanValuesRetained:false,observerExecutedSql:false };
@@ -177,6 +237,46 @@ function sourceParameter(file, site) {
   return { start:parameter.start,end:parameter.end,name:parameter.name,sameSourceRevisionVerified:false };
 }
 
+function sourceBeanDefinition(file, source) {
+  if (typeof file?.text!=='string'||Buffer.byteLength(file.text,'utf8')>262144||!bounded(source?.owner,ownerType)||
+      !['bean-method','class'].includes(source.kind)) return;
+  const lexical=lexJava(file.text);
+  if (lexical.issues.length) return;
+  const parsed=parseJavaTokens(file,lexical,{nestedTypes:true});
+  if (parsed.issues.some(issue=>/Unbalanced/u.test(issue))) return;
+  const types=[...parsed.types];
+  for (let index=0;index<types.length;index++) types.push(...(types[index].nested||[]));
+  const binary=type=>{
+    const length=parsed.packageName?parsed.packageName.length+1:0;
+    return type.fqn.slice(0,length)+type.fqn.slice(length).replaceAll('.','$');
+  };
+  const matchingOwners=types.filter(type=>binary(type)===source.owner);
+  if (matchingOwners.length!==1) return;
+  let target=matchingOwners[0];
+  if (source.kind==='bean-method') {
+    const resolve=type=>{
+      const array=type.raw.endsWith('[]')?'[]':'';
+      const raw=array?type.raw.slice(0,-2):type.raw;
+      if (!bounded(raw,ownerType)) return;
+      if (primitive.has(raw)) return raw+array;
+      const locals=types.filter(type=>type.name===raw||type.fqn===raw);
+      const resolved=locals.length===1?binary(locals[0]):
+        Object.hasOwn(parsed.imports,raw)?parsed.imports[raw]:raw.includes('.')?raw:
+        raw==='String'?'java.lang.String':parsed.wildcards.length?undefined:
+        parsed.packageName?parsed.packageName+'.'+raw:raw;
+      return resolved&&resolved+array;
+    };
+    const methods=target.methods.filter(method=>!method.constructor&&method.name===source.member&&
+      method.annotations.some(item=>item.name==='org.springframework.context.annotation.Bean')&&
+      resolve(method.type)===source.returnType&&method.parameters.length===source.parameterTypes?.length&&
+      method.parameters.every((parameter,index)=>resolve(parameter.type)===source.parameterTypes[index]));
+    if (methods.length!==1) return;
+    target=methods[0];
+  }
+  const {name,start,end}=target;
+  return {name,start,end,sameSourceRevisionVerified:false};
+}
+
 async function readObservedSource(file) {
   const handle = await fs.open(file,constants.O_RDONLY|(constants.O_NOFOLLOW||0));
   try {
@@ -198,4 +298,4 @@ async function readObservedSource(file) {
   } finally { await handle.close(); }
 }
 
-module.exports={ normalizeObservedInjection, normalizeObservedMembers, sourceParameter, sourceMember, readObservedSource };
+module.exports={ normalizeObservedInjection, normalizeObservedMembers, sourceParameter, sourceMember, sourceBeanDefinition, readObservedSource };

@@ -4,9 +4,10 @@ const path = require('node:path');
 
 const REFRESH = 'rocketbrain.javafx.refreshPreview';
 const EDIT = 'rocketbrain.javafx.editPreviewProperty';
+const HIERARCHY = 'rocketbrain.javafx.editPreviewHierarchy';
 const APPLY = 'rocketbrain.javafx.applyPreviewProperty';
 const DISCARD = 'rocketbrain.javafx.discardPreviewProperty';
-const commandUris = [REFRESH, EDIT, APPLY, DISCARD];
+const commandUris = [REFRESH, EDIT, HIERARCHY, APPLY, DISCARD];
 
 const escape = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;')
   .replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -31,16 +32,20 @@ function surface(frame) {
   }).join('');
   const items = editable.map(target => '<li><a href="' + href(EDIT, frame.ticket, target.id) + '">' +
     label(target) + '</a></li>').join('');
+  const containers = (frame.changed ? [] : frame.design.hierarchy || []).map(target =>
+    '<li><a href="' + href(HIERARCHY, frame.ticket, target.key) + '">' + escape(target.label) + '</a></li>').join('');
   return '<div class="surface" style="width:min(100%,' + frame.width + 'px)">' +
     image(frame, 'Rendered JavaFX layout') + hotspots + '</div>' +
-    (items ? '<h2>Editable elements</h2><ul class="elements">' + items + '</ul>' : '');
+    (items ? '<h2>Editable elements</h2><ul class="elements">' + items + '</ul>' : '') +
+    (containers ? '<h2>Scene containers</h2><ul class="elements">' + containers + '</ul>' : '');
 }
 
 function proposal(frame, review) {
   const { edit } = review.frame.design;
-  return '<h2>Review property change</h2><p>' + label(edit) + ' · <code>' + escape(edit.property) +
-    '</code></p><dl><dt>Original value</dt><dd><code>' + escape(edit.before) +
-    '</code></dd><dt>Proposed value</dt><dd><code>' + escape(edit.after) + '</code></dd></dl>' +
+  const title = edit.scope === 'hierarchy' ? '<h2>Review hierarchy change</h2>' :
+    '<h2>Review property change</h2><p>' + label(edit) + ' · <code>' + escape(edit.property) + '</code></p>';
+  return title + '<dl><dt>Original</dt><dd><code>' + escape(edit.before) +
+    '</code></dd><dt>Proposed</dt><dd><code>' + escape(edit.after) + '</code></dd></dl>' +
     '<div class="comparison"><figure><figcaption>Original</figcaption>' +
     image(frame, 'Original JavaFX render') + '</figure><figure><figcaption>Proposed</figcaption>' +
     image(review.frame, 'Proposed JavaFX render') + '</figure></div>' +
@@ -67,4 +72,4 @@ function previewHtml(frame, review) {
     (review ? proposal(frame, review) : surface(frame)) + '</body></html>';
 }
 
-module.exports = { REFRESH, EDIT, APPLY, DISCARD, commandUris, previewHtml };
+module.exports = { REFRESH, EDIT, HIERARCHY, APPLY, DISCARD, commandUris, previewHtml };
