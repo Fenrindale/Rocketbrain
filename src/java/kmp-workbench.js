@@ -37,4 +37,4 @@ async function runKmpTasks({model,modulePath,targetNames,action,tools,runner,wor
   return {result:{...receipt,sources:index.files.size,linkedDeclarations:index.links.size},index};
 }
 
-module.exports = { runKmpTasks };
+module.exports = { runKmpTasks, verifyKmpModel:current };

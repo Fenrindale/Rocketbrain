@@ -227,6 +227,7 @@
       { "command": "rocketbrain.kotlin.multiplatform.compile", "title": "Compile Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.test", "title": "Test Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.run", "title": "Run Kotlin Multiplatform Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.debugJvm", "title": "Debug Kotlin Multiplatform JVM Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.previewCompose", "title": "Preview Kotlin Compose", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
