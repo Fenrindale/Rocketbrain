@@ -405,7 +405,7 @@ function registerMicronautWorkbench(vscode,java) {
     }
     const label=action==='build'?'Build Micronaut Native Image':'Run Built Micronaut Native Image';
     const approved=await vscode.window.showWarningMessage(label+'?',{modal:true,
-      detail:action==='build'?'Run Maven package with Native Image in the selected trusted module.':
+      detail:action==='build'?'Run Maven package and the local GraalVM Native Image compile goal in this trusted module.':
         'Start the exact image built in this session on an owned loopback port.'},label);
     if (approved!==label) return;
     output.show(true);
