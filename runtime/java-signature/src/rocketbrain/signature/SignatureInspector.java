@@ -552,6 +552,8 @@ public final class SignatureInspector {
                         if (executable.getModifiers().contains(Modifier.PRIVATE)) {
                             method.model.put("checkedThrows", checkedThrownTypes(executable, types, elements));
                         }
+                        var returnContract = SignatureReturn.declaration(executable,tree,getCurrentPath(),trees,types);
+                        if (!returnContract.isEmpty()) method.model.put("returnContract",returnContract);
                         method.model.put("typeParameters",typeParameters(executable.getTypeParameters()));
                         method.model.put("ownerTypeParameters",typeParameters(owner.getTypeParameters()));
                         method.model.put("ownerSupertypes",types.directSupertypes(owner.asType()).stream().map(Object::toString).toList());
@@ -575,6 +577,10 @@ public final class SignatureInspector {
                         if (executable.isVarArgs() && trees.getPath(executable) != null) {
                             var varargs = VarargsCalls.inspect(getCurrentPath(), executable, arguments, trees, types, text);
                             if (!varargs.isEmpty()) report.put("varargs",varargs);
+                        }
+                        if (!constructor && executable.getModifiers().contains(Modifier.PRIVATE) && trees.getPath(executable) != null) {
+                            var consumer = SignatureReturn.consumer(tree,getCurrentPath(),trees,text);
+                            if (!consumer.isEmpty()) report.put("returnConsumer",consumer);
                         }
                         calls.add(report);
                     }
