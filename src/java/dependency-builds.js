@@ -58,13 +58,15 @@ function pomFacts(file) {
       version: simple.test(version) ? version : '', declaredVersion: version
     };
   }
+  const parent = one(project, 'parent');
   const modules = children(one(project, 'modules'), 'module').filter(module => !module.children.length);
   const dependency = node => ({ ...gav(node), scope: literal(node, 'scope') || 'compile',
     type: literal(node, 'type') || 'jar', classifier: literal(node, 'classifier'),
     range: rangeAt(file.text, Math.max(node.start, 0), node.end) });
   return {
-    file, root: path.dirname(file.path), gav: gav(project, one(project, 'parent')),
-    parent: one(project,'parent') ? gav(one(project,'parent')) : null,
+    file, root: path.dirname(file.path), gav: gav(project, parent),
+    parent: parent ? gav(parent) : null,
+    parentRelativePath: parent ? one(parent,'relativePath') ? literal(parent,'relativePath') : '../pom.xml' : null,
     finalName: literal(one(project,'build'),'finalName'),
     packaging: literal(project, 'packaging') || 'jar',
     modules: modules.map(module => module.text.trim()),

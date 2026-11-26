@@ -1,5 +1,67 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),M=require('../src/java/workbench-model'),T=require('../src/java/workbench-tasks'),{registerJavaWorkbench,CONFIG_KEY}=require('../src/java/workbench'),F=require('./java-workbench-fixture');
+const {pathToFileURL}=require('node:url');
+
+test('late Maven build-only resync waits for the exact reactor before making Maven tasks available',async t=>{
+ const f=F.fixture(t),s=F.fakeVscode(f);
+ const api=registerJavaWorkbench(s.context,s.vscode,s.java,s.output,{runner:s.runner});
+ t.after(()=>api.dispose());
+ const reactor=path.join(f.root,'ear-reactor'),application=path.join(reactor,'application'),common=path.join(reactor,'common');
+ const unobserved=path.join(f.root,'unobserved'),external=path.join(f.parent,'external-reactor');
+ const malformed=path.join(f.root,'invalid-reactor'),unrelated=path.join(f.root,'unrelated');
+ const wrongMember=path.join(unrelated,'common');
+ for(const [root,packaging] of [[reactor,'pom'],[application,'ear'],[common,'jar'],[unobserved,'pom'],
+  [external,'pom'],[malformed,'pom'],[unrelated,'pom'],[wrongMember,'jar']]){
+  fs.mkdirSync(root,{recursive:true});
+  fs.writeFileSync(path.join(root,'pom.xml'),'<project><artifactId>fixture</artifactId><packaging>'+packaging+'</packaging></project>');
+ }
+ const gav='<groupId>scope</groupId><artifactId>fixture</artifactId><version>1</version>';
+ const rootPom=members=>'<project>'+gav+'<packaging>pom</packaging><modules>'+
+  members.map(name=>'<module>'+name+'</module>').join('')+'</modules></project>';
+ const memberPom=(name,packaging,parent)=>'<project><parent>'+parent+'</parent><artifactId>'+name+
+  '</artifactId><packaging>'+packaging+'</packaging></project>';
+ fs.writeFileSync(path.join(reactor,'pom.xml'),rootPom(['application','common']));
+ fs.writeFileSync(path.join(application,'pom.xml'),memberPom('application','ear',gav));
+ fs.writeFileSync(path.join(common,'pom.xml'),memberPom('common','jar',gav));
+ fs.writeFileSync(path.join(unrelated,'pom.xml'),rootPom(['common']));
+ fs.writeFileSync(path.join(wrongMember,'pom.xml'),memberPom('common','jar',gav.replace('<version>1','<version>2')));
+ fs.writeFileSync(path.join(malformed,'pom.xml'),'<!DOCTYPE project [<!ENTITY env SYSTEM "file:///private">]><project/>');
+ const uri=file=>pathToFileURL(file).href;
+ const requests=s.java.requestWorkspaceCommand;
+ let imports=0,queries=0;
+ s.java.requestWorkspaceCommand=async(name,args)=>{
+  if(name==='java.project.changeImportedProjects')imports++;
+  if(name==='java.project.getAll'&&args[0]?.includeNonJava===true){
+   return [f.uri,uri(application),uri(external),uri(malformed),uri(wrongMember),
+    ...(imports&&++queries>1?[uri(common)]:[])];
+  }
+  if(['java.project.getSettings','java.project.getClasspaths','vscode.java.resolveMainClass'].includes(name)){
+   assert.equal(path.relative(f.root,M.local(args[0])),'');
+  }
+  return requests(name,args);
+ };
+ const updated=await api.resyncProject({projectUri:uri(reactor),allowProjectExecution:true});
+ assert.equal(imports,1);
+ assert.ok(queries>=2);
+ const mutation=s.requests.find(row=>row.name==='java.project.changeImportedProjects');
+ assert.deepEqual(mutation.args,[[uri(path.join(reactor,'pom.xml'))],[],[]]);
+ assert.deepEqual(updated.projects.filter(p=>p.buildOnly).map(p=>[p.root,p.packaging]).sort(),
+  [[reactor,'pom'],[application,'ear']].sort());
+ assert.deepEqual(updated.projects.find(p=>p.root===reactor).reactorMembers,[application,common]);
+ for(const project of updated.projects.filter(p=>p.buildOnly)){
+  assert.deepEqual(project.sourceRoots,[]);
+  assert.deepEqual(project.libraries,[]);
+  assert.deepEqual(await api.mainClasses({projectUri:project.uri}),[]);
+ }
+ const packageTask=(await api.discoverTasks({projectUri:uri(reactor)})).find(task=>task.name==='package');
+ assert.equal((await api.runTask({projectUri:uri(reactor),taskId:packageTask.id,allowProjectExecution:true})).state,'succeeded');
+ assert.equal(path.relative(s.specs.at(-1).cwd,reactor),'');
+ fs.writeFileSync(path.join(common,'pom.xml'),memberPom('common','jar',gav+'<relativePath/>'));
+ await assert.rejects(api.runTask({projectUri:uri(reactor),taskId:packageTask.id,allowProjectExecution:true}),/membership changed/);
+ fs.writeFileSync(path.join(common,'pom.xml'),memberPom('common','jar',gav));
+ fs.appendFileSync(path.join(reactor,'pom.xml'),'\n<!-- changed after task discovery -->');
+ await assert.rejects(api.runTask({projectUri:uri(reactor),taskId:packageTask.id,allowProjectExecution:true}),/changed/);
+});
 test('logical source roots use package declarations and observed dependencies without following symlinks',async t=>{const f=F.fixture(t),s=F.fakeVscode(f),outside=path.join(f.parent,'outside');fs.mkdirSync(outside);fs.writeFileSync(path.join(outside,'Secret.java'),'package outside; class Secret {}');fs.symlinkSync(outside,path.join(f.source,'external'),process.platform==='win32'?'junction':'dir');const data=await M.collectProjects({request:s.java.requestWorkspaceCommand,folders:s.vscode.workspace.workspaceFolders});assert.equal(data.projects.length,1);assert.equal(data.projects[0].sourceRoots[0].packages[0].name,'demo');assert.equal(data.sourceFiles,1);assert.equal(data.projects[0].libraries.length,2);assert.equal(M.packageName('/* package fake; */ class X {String text="package other;";}'),'');assert.equal(M.packageName('package a.b; public class X{}'),'a.b');assert.equal(M.packageName('package a. ; class X{}'),null);});
 test('project metadata excludes outside roots and refuses oversized source and malformed classpaths',async t=>{const f=F.fixture(t),s=F.fakeVscode(f),base=s.java.requestWorkspaceCommand;await assert.rejects(M.collectProjects({folders:s.vscode.workspace.workspaceFolders,request:async(name,args)=>name==='java.project.getClasspaths'?{classpaths:'bad',modulepaths:[]}:base(name,args)}),/classpath/);fs.writeFileSync(path.join(f.source,'Large.java'),'x'.repeat(M.LIMITS.fileBytes+1));await assert.rejects(M.collectProjects({folders:s.vscode.workspace.workspaceFolders,request:base}),/1 MiB/);});
 test('logical browsing bounds deep directories even when they contain no Java files',async t=>{const f=F.fixture(t),s=F.fakeVscode(f);fs.mkdirSync(path.join(f.source,...Array(65).fill('d')),{recursive:true});await assert.rejects(M.collectProjects({folders:s.vscode.workspace.workspaceFolders,request:s.java.requestWorkspaceCommand}),/64 directory levels/);});

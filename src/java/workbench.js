@@ -24,7 +24,23 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
  const configurations=()=>{const values=context.workspaceState.get(CONFIG_KEY,[]);if(!Array.isArray(values)||values.length>M.LIMITS.configurations)throw M.fail('Saved Java run configurations exceed their supported bound.');return values.filter(v=>v?.format==='RocketbrainJavaRunConfiguration'&&v.formatVersion===1&&typeof v.id==='string');};
  const runtimeReview=createRuntimeReview(vscode,{trusted,java,ensureProject,request,config,save:saveRunConfiguration,
    getConfiguration:id=>configurations().find(item=>item.id===id)});
- function project(value){let real;try{real=fs.realpathSync(M.local(value));}catch{}const found=snapshot.projects.find(p=>p.id===value||p.uri===value||p.root===value||real&&path.relative(p.root,real)==='');if(!found)throw M.fail('Choose a currently observed Java project. Refresh the Java Projects view first.');if(M.workspacePath(found.root,roots())!==found.root)throw M.fail('The project path changed after observation.');return found;}
+ function project(value){
+  let real;
+  try { real=M.projectIdentity(value,roots()); } catch { /* An observed ID can also select a project. */ }
+  const found=snapshot.projects.find(p=>p.id===value||p.uri===value||p.root===value||
+   real&&(p.buildOnly?p.root===real:path.relative(p.root,real)===''));
+  if(!found)throw M.fail('Choose a currently observed Java project. Refresh the Java Projects view first.');
+  const workspace=roots();
+  const current=found.buildOnly?M.projectIdentity(found.root,workspace):M.workspacePath(found.root,workspace);
+  if(current!==found.root)throw M.fail('The project path changed after observation.');
+  if(found.reactorMembers){
+   const members=M.mavenReactorMembers(found.root,workspace);
+   if(JSON.stringify(members)!==JSON.stringify(found.reactorMembers)){
+    throw M.fail('The reviewed Maven reactor membership changed. Refresh the Java Projects view.');
+   }
+  }
+  return found;
+ }
  function node(kind, value, children = []) {
   const record = { ...value, kind, children };
   nodes.set(record.id, record);
@@ -35,20 +51,22 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
   nodes = new Map();
   return snapshot.projects.map(project => {
    const { id: projectId } = project;
+   const taskNodes = tasks.list(project).map(task => node('task', { ...task, projectId }));
+   const taskGroup = node('group', { id: projectId + ':tasks', name: 'Build tasks · ' + taskNodes.length }, taskNodes);
+   if (project.buildOnly) return node('project', project, [taskGroup]);
    const sources = project.sourceRoots.map(source => node('source', { ...source, projectId },
     source.packages.map(pkg => node('package', { ...pkg, projectId },
      pkg.files.map(file => node('file', { ...file, projectId }))))));
    const outputs = project.outputRoots.map(item => node('output', { ...item, projectId,
     id: M.id('output', [projectId, item.path]), name: path.relative(project.root, item.path) || '.' }));
    const libraries = project.libraries.map(library => node('library', { ...library, pathKind: library.kind, projectId }));
-   const taskNodes = tasks.list(project).map(task => node('task', { ...task, projectId }));
    const runs = configurations().filter(config => config.projectUri === project.uri)
     .map(config => node('configuration', { ...publicConfiguration(config), projectId }));
    return node('project', project, [
     node('group', { id: projectId + ':sources', name: 'Source roots' }, sources),
     node('group', { id: projectId + ':outputs', name: 'Build outputs' }, outputs),
     node('group', { id: projectId + ':libraries', name: 'Dependencies · ' + libraries.length }, libraries),
-    node('group', { id: projectId + ':tasks', name: 'Build tasks · ' + taskNodes.length }, taskNodes),
+    taskGroup,
     node('group', { id: projectId + ':runs', name: 'Run configurations · ' + runs.length }, runs)
    ]);
   });
@@ -97,7 +115,8 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
    result.id = item.id;
    result.contextValue = contexts[item.kind] || 'rocketbrainJavaGroup';
    result.tooltip = item.path || item.uri || item.description || item.mainClass || item.name;
-   if (item.kind === 'project') result.description = [item.tool, item.compliance && 'Java ' + item.compliance,
+   if (item.kind === 'project') result.description = [item.tool, item.buildOnly && item.packaging,
+    item.compliance && 'Java ' + item.compliance,
     item.languages?.includes('kotlin') && 'Kotlin', item.languages?.includes('groovy') && 'Groovy'].filter(Boolean).join(' · ');
    if (item.kind === 'task') result.description = item.buildName ? item.buildName + ' · ' + item.group : item.group;
    if (item.kind === 'configuration') result.description = (item.springBoot ? 'Spring Boot · ' : '') + item.mainClass;
@@ -129,10 +148,47 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
 
  function getSnapshot(){return structuredClone({...snapshot,limits:{...snapshot.limits,importMs:IMPORT_BUDGET_MS},configurations:configurations().map(publicConfiguration),runs:[...active.values()].map(r=>({runId:r.runId,configurationId:r.configurationId,sessionId:r.session.id,state:r.state,debug:r.debug})),taskRunning:tasks.running});}
  async function ensureProject(value){if(!snapshot.projects.length)await refresh();return project(value);}
- async function resyncProject(options){trusted();if(options?.allowProjectExecution!==true)throw M.fail('Choose explicit project import/update before executing build configuration.');if(busy||tasks.running)throw M.fail('Finish the current managed Java operation first.');const operation={kind:'explicit-project-configuration',deadline:Date.now()+IMPORT_BUDGET_MS},root=M.workspacePath(options.projectUri,roots()),uri=pathToFileURL(root).href,current=await request('java.project.getAll',[],options.cancellation,operation),known=current.some(value=>{try{return path.relative(fs.realpathSync(M.local(String(value))),root)==='';}catch{return false;}});const configuration=known?null:['pom.xml','build.gradle','build.gradle.kts','.project'].map(name=>path.join(root,name)).find(file=>fs.existsSync(file));if(!known&&!configuration)throw M.fail('Choose a Maven, Gradle or Eclipse project with an observed local build configuration.');if(configuration)M.workspacePath(configuration,roots(),{directory:false});await request('java.project.changeImportedProjects',[known?[]:[pathToFileURL(configuration).href],known?[uri]:[],[]],options.cancellation,operation);if(!known){for(;;){const observed=await request('java.project.getAll',[],options.cancellation,operation);if(Array.isArray(observed)&&observed.some(value=>{try{return path.relative(fs.realpathSync(M.local(String(value))),root)==='';}catch{return false;}}))break;await new Promise(resolve=>setTimeout(resolve,200));}}return refresh({cancellation:options.cancellation},operation);}
+ async function resyncProject(options){
+  trusted();
+  if(options?.allowProjectExecution!==true)throw M.fail('Choose explicit project import/update before executing build configuration.');
+  if(busy||tasks.running)throw M.fail('Finish the current managed Java operation first.');
+  const operation={kind:'explicit-project-configuration',deadline:Date.now()+IMPORT_BUDGET_MS};
+  const workspace=roots(),root=M.projectIdentity(options.projectUri,workspace),uri=pathToFileURL(root).href;
+  const packaging=M.mavenBuildOnlyPackaging(root);
+  const buildIdentity=packaging&&M.buildFingerprint(root);
+  const members=packaging==='pom'?M.mavenReactorMembers(root,workspace):undefined;
+  const args=packaging?M.includeNonJavaProjects:[];
+  const observed=async requireMembers=>{
+   const entries=await request('java.project.getAll',args,options.cancellation,operation);
+   if(!Array.isArray(entries)||entries.length>M.LIMITS.projects)throw M.fail('Inspect at most 30 imported Java and Maven build projects.');
+   const physical=M.observedProjectRoots(entries,workspace);
+   const complete=members?.every(member=>physical.has(member));
+   if(requireMembers&&members&&!complete)return [];
+   if(physical.has(root))return [uri];
+   if(complete)return members.map(member=>pathToFileURL(member).href);
+   return [];
+  };
+  const updates=await observed(),known=updates.length>0;
+  const configuration=known?null:['pom.xml','build.gradle','build.gradle.kts','.project']
+   .map(name=>path.join(root,name)).find(file=>fs.existsSync(file));
+  if(!known&&!configuration)throw M.fail('Choose a Maven, Gradle or Eclipse project with an observed local build configuration.');
+  if(configuration)M.workspacePath(configuration,workspace,{directory:false});
+  if(buildIdentity&&M.buildFingerprint(root)!==buildIdentity)throw M.fail('The reviewed Maven build descriptor changed.');
+  await request('java.project.changeImportedProjects',[known?[]:[pathToFileURL(configuration).href],updates,[]],options.cancellation,operation);
+  if(!known||members){
+   while(!(await observed(true)).length)await new Promise(resolve=>setTimeout(resolve,200));
+  }
+  const result=await refresh({cancellation:options.cancellation},operation);
+  if(buildIdentity&&(M.buildFingerprint(root)!==buildIdentity||
+     members&&JSON.stringify(M.mavenReactorMembers(root,workspace))!==JSON.stringify(members)||
+     !result.projects.some(project=>M.projectIdentity(project.root,workspace)===root))){
+   throw M.fail('The reviewed Maven build project changed or is no longer observed.');
+  }
+  return result;
+ }
  async function discoverTasks(options){trusted();const p=await ensureProject(options.projectUri||options.projectId);const value=await tasks.discover(p,options);trusted();refreshTree();return value;}
  async function runTask(options){trusted();const p=await ensureProject(options.projectUri||options.projectId),value=await tasks.run(p,options.taskId,options);refreshTree();return value;}
- async function mainClasses(options){const p=await ensureProject(options.projectUri||options.projectId),raw=await request('vscode.java.resolveMainClass',[p.uri],options.cancellation);if(!Array.isArray(raw)||raw.length>100)throw M.fail('Select a project with at most 100 observed Java main classes.');return raw.filter(v=>typeof v.mainClass==='string'&&/^(?:[\p{L}_$][\p{L}\p{N}_$]*\.)*[\p{L}_$][\p{L}\p{N}_$]*$/u.test(v.mainClass)&&typeof v.projectName==='string').map(v=>({mainClass:v.mainClass,projectName:v.projectName}));}
+ async function mainClasses(options){const p=await ensureProject(options.projectUri||options.projectId);if(p.buildOnly)return[];const raw=await request('vscode.java.resolveMainClass',[p.uri],options.cancellation);if(!Array.isArray(raw)||raw.length>100)throw M.fail('Select a project with at most 100 observed Java main classes.');return raw.filter(v=>typeof v.mainClass==='string'&&/^(?:[\p{L}_$][\p{L}\p{N}_$]*\.)*[\p{L}_$][\p{L}\p{N}_$]*$/u.test(v.mainClass)&&typeof v.projectName==='string').map(v=>({mainClass:v.mainClass,projectName:v.projectName}));}
  function saveRunConfiguration(options, verifyReview){
   return serialConfigWrite(async()=>{
    trusted();
