@@ -23,7 +23,9 @@ gradle.projectsEvaluated {
         def names = p.tasks.names
         def fullTask = { name -> names.contains(name) ? (p.path == ':' ? ':' : p.path + ':') + name : null }
         def sourceSets = k.sourceSets.collect { s ->
-          [name: s.name, directories: s.kotlin.srcDirs.collect { it.canonicalPath }.sort(), dependsOn: s.dependsOn.collect { it.name }.sort()]
+          [name: s.name, directories: s.kotlin.srcDirs.collect { it.canonicalPath }.sort(),
+           resourceDirectories: s.resources.srcDirs.collect { it.toPath().toAbsolutePath().normalize().toString() }.sort(),
+           dependsOn: s.dependsOn.collect { it.name }.sort()]
         }.sort { it.name }
         def targets = k.targets.findAll { it.platformType.name() in ['jvm', 'js'] }.collect { target ->
           def main = target.compilations.findByName('main')
@@ -32,7 +34,8 @@ gradle.projectsEvaluated {
           [name: target.name, platform: target.platformType.name(), main: main?.allKotlinSourceSets?.collect { it.name }?.sort() ?: [],
            compileTask: main ? fullTask(main.compileTaskProvider.name) : null, testTask: fullTask(test), runTask: fullTask(run)]
         }.sort { it.name }
-        [path: p.path, directory: p.projectDir.canonicalPath, sourceSets: sourceSets, targets: targets]
+        [path: p.path, directory: p.projectDir.canonicalPath,
+         buildDirectory: p.layout.buildDirectory.get().asFile.canonicalPath, sourceSets: sourceSets, targets: targets]
       }.sort { it.path }
       new File(System.getProperty('rocketbrain.workbench.output')).setText(JsonOutput.toJson([format: 'RocketbrainKmpModel1', modules: modules]), 'UTF-8')
     }
@@ -90,7 +93,12 @@ function decodeKmpModel(root,value) {
           !Array.isArray(set.dependsOn) || !set.dependsOn.every(item => typeof item==='string' && BINDINGS.test(item))) {
         throw fail('Invalid Gradle Kotlin source set.');
       }
-      return {name:set.name,directories:set.directories.map(dir => safeDirectory(root,dir)),dependsOn:set.dependsOn};
+      const resourceDirectories=set.resourceDirectories===undefined ? [] : set.resourceDirectories;
+      if (!Array.isArray(resourceDirectories)||resourceDirectories.length>30||
+          !resourceDirectories.every(dir=>typeof dir==='string'&&path.isAbsolute(dir)&&dir.length<=4096&&!dir.includes('\0'))) {
+        throw fail('Invalid Gradle Kotlin resource directories.');
+      }
+      return {name:set.name,directories:set.directories.map(dir => safeDirectory(root,dir)),dependsOn:set.dependsOn,resourceDirectories};
     });
     const known=new Set(sourceSets.map(set => set.name));
     if (known.size!==sourceSets.length || sourceSets.some(set => set.dependsOn.some(name => !known.has(name)))) throw fail('Inconsistent Kotlin source set graph.');
@@ -107,7 +115,12 @@ function decodeKmpModel(root,value) {
         testTask:scopedTask(target.testTask),runTask:scopedTask(target.runTask)};
     });
     if (new Set(targets.map(item => item.name)).size!==targets.length) throw fail('Duplicate observed Gradle Kotlin targets.');
-    return {path:module.path,directory,sourceSets,targets};
+    if (module.buildDirectory!==undefined &&
+        (typeof module.buildDirectory!=='string'||!path.isAbsolute(module.buildDirectory)||module.buildDirectory.length>4096||
+          module.buildDirectory.includes('\0'))) {
+      throw fail('Invalid Kotlin Multiplatform build output directory.');
+    }
+    return {path:module.path,directory,buildDirectory:module.buildDirectory,sourceSets,targets};
   });
   if (!modules.length) throw fail('No configured Kotlin Multiplatform Gradle module was reported.');
   if (new Set(modules.map(module => module.path)).size!==modules.length) throw fail('Duplicate observed Gradle module paths.');

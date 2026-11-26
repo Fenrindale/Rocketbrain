@@ -183,7 +183,7 @@ Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compil
 
 Linux x64 확장 호스트에서는 **Debug Kotlin/Native Executable**에서 로컬 Gradle 디버그 실행 파일을 검토하고 GDB를 시작합니다. 미리 선택한 Kotlin 파일에 중단점을 설정하고, 한 줄 넘기기와 관찰된 32비트 정수 지역 변수를 확인할 수 있습니다. [Kotlin Multiplatform 디버깅](docs/kotlin-multiplatform-debug.md)
 
-공통 Kotlin UI의 저장된 `commonMain` 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수와 JVM 타깃을 선택할 수 있습니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. 소스를 저장한 뒤 미리보기 패널의 **Refresh Preview**로 같은 타깃을 다시 그립니다.
+Gradle JVM 타깃의 main 컴파일에 속하는 저장된 Kotlin 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수를 선택할 수 있습니다. `commonMain`, `desktopMain`, `jvmMain`과 Gradle에 등록한 Kotlin 소스 디렉터리를 지원합니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. Gradle 소스셋에 등록된 프로젝트 리소스와 Kotlin 파일을 저장한 뒤 **Refresh Preview**로 같은 소스셋을 다시 그립니다. 렌더링 도중 입력이 달라지면 해당 이미지를 표시하기 전에 다시 검토하도록 안내합니다.
 
 Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를 시작하지 못하면 `rocketbrain.kotlin.gradleHome`에 Gradle 9.7.0 설치 경로를 지정합니다. 이 설정은 Kotlin Multiplatform 작업에 적용됩니다.
 

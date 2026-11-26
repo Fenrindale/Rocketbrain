@@ -9,9 +9,10 @@ repositories {
     google()
 }
 
+def previewTarget = providers.gradleProperty('fixtureJvmTarget').orElse('desktop').get()
 kotlin {
     jvmToolchain(25)
-    jvm('desktop')
+    jvm(previewTarget)
     sourceSets {
         commonMain {
             dependencies {
@@ -20,7 +21,9 @@ kotlin {
                 implementation('org.jetbrains.compose.ui:ui-tooling-preview:1.12.2')
             }
         }
-        desktopMain {
+        getByName(previewTarget + 'Main') {
+            kotlin.srcDir('src/workstation/kotlin')
+            resources.srcDir('src/workstation/assets')
             dependencies { implementation(compose.desktop.currentOs) }
         }
     }

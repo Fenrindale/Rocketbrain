@@ -59,11 +59,24 @@ async function runKmpComposePreviewChecks(api,vscode,checks) {
     const after=fixture.verifyImage(png(),refreshed,'updated');
     assert.notEqual(after.imageSha256,before.imageSha256);
     assert.notEqual(after.sourceSha256,before.sourceSha256);
+    const desktopDocument=await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(root,fixture.workstationSource)));
+    const [selected]=service.composeCandidates({...options,document:desktopDocument});
+    assert.deepEqual([selected.targetName,selected.sourceSet],['desktop','desktopMain']);
+    const desktop=await service.preview({...request,...selected,document:desktopDocument});
+    assert.equal(service.showComposePreview(desktop),panel);
+    assert.match(panel.webview.html,/desktop · desktopMain/u);
+    const desktopBefore=fixture.verifyWorkstationImage(png(),desktop,'initial');
+    await fs.writeFile(path.join(root,fixture.workstationResource),fixture.changedResource);
+    const desktopRefresh=await vscode.commands.executeCommand('rocketbrain.kotlin.multiplatform.refreshComposePreview');
+    const desktopAfter=fixture.verifyWorkstationImage(png(),desktopRefresh,'updated');
+    assert.equal(desktopBefore.sourceSha256,desktopAfter.sourceSha256);
+    assert.notEqual(desktopBefore.resourceSha256,desktopAfter.resourceSha256);
+    assert.notEqual(desktopBefore.imageSha256,desktopAfter.imageSha256);
     const jdbc=await jdbcReadback();
     assert.ok(jdbc);
-    checks.push('The installed Kotlin Compose preview rendered genuine Skia pixels for the selected commonMain JVM function, rejected dirty input, and refreshed the existing image panel after a saved Kotlin change.');
+    checks.push('The installed Kotlin Compose preview rendered common and desktop main source sets, refused dirty Kotlin, and updated the same panel after a saved Kotlin or desktop resource change.');
     return {qualified:entry.qualified,target:entry.targetName,width:refreshed.width,height:refreshed.height,
-      before,after,dirtyRefused:true,jdbc};
+      before,after,desktopBefore,desktopAfter,dirtyRefused:true,jdbc};
   } finally {
     panel?.dispose();
     await service.stop();

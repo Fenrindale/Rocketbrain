@@ -7,6 +7,9 @@ const {createHash}=require('node:crypto');
 
 const fixture=path.join(__dirname,'../fixtures/java/kmp-compose-preview');
 const sourceFile=path.join('src/commonMain/kotlin/previewfixture','InventoryPreview.kt');
+const workstationSource=path.join('src/workstation/kotlin/previewfixture','WorkstationPreview.kt');
+const workstationResource=path.join('src/workstation/assets/rocketbrain-preview','desktop-color.txt');
+const initialResource='#183C66\n', changedResource='#9A4C2E\n';
 const updated=text=>text.replace('0xFFFF2244','0xFF44CC66');
 const blocks={initial:[255,34,68,255],updated:[68,204,102,255],inset:[34,51,255,255]};
 
@@ -48,4 +51,15 @@ function verifyImage(png,report,variant) {
   return {imageSha256:report.imageSha256,sourceSha256:report.sourceSha256,background,inset};
 }
 
-module.exports={fixture,sourceFile,updated,verifyImage};
+function verifyWorkstationImage(png,report,variant) {
+  const colors={initial:[24,60,102,255],updated:[154,76,46,255]};
+  const observed=pixels(png)(45,40);
+  assert.deepEqual(observed,colors[variant]);
+  assert.equal(report.imageSha256,createHash('sha256').update(png).digest('hex'));
+  assert.equal(report.resourceFiles,1);
+  assert.match(report.resourceSha256,/^[0-9a-f]{64}$/u);
+  return {sourceSet:report.sourceSet,targetName:report.targetName,resourceSha256:report.resourceSha256,
+    imageSha256:report.imageSha256,sourceSha256:report.sourceSha256,observed};
+}
+
+module.exports={fixture,sourceFile,updated,verifyImage,workstationSource,workstationResource,initialResource,changedResource,verifyWorkstationImage};
