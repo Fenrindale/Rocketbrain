@@ -99,7 +99,7 @@ function registerScalaEditor(vscode,java) {
         '**/{*.scala,*.sbt,build.properties}'));
       const record={launch,watcher,ready:false,usesOwnedBuildServer:!bsp?.some(file=>file.endsWith('.json'))};
       const forwarded=new Set();
-      const bounded=(event,next)=>{
+      const bounded=async(event,next)=>{
         const document=event.document??event;
         if (forwarded.has(document.uri.toString()) && eligible(document,record)) return next(event);
       };
@@ -117,13 +117,13 @@ function registerScalaEditor(vscode,java) {
           synchronize:{fileEvents:watcher},
           errorHandler:{error:()=>({action:ErrorAction.Shutdown}),closed:()=>({action:CloseAction.DoNotRestart})},
           middleware:{
-            didOpen(document,next) {
+            async didOpen(document,next) {
               if (!eligible(document,record)) return;
               forwarded.add(document.uri.toString());
               return next(document);
             },
             didChange:bounded,didSave:bounded,
-            didClose(document,next) {
+            async didClose(document,next) {
               if (forwarded.delete(document.uri.toString())) return next(document);
             },
             workspace:{
