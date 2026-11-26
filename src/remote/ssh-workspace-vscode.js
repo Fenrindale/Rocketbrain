@@ -4,6 +4,7 @@ const { open } = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const { connectWorkspace, maxFileBytes, uriScheme, digest } = require('./ssh-workspace');
 const { registerSshProcesses } = require('./ssh-processes-vscode');
+const { registerSshJavaDebug } = require('./ssh-java-debug-vscode');
 
 async function localText(uri) {
   if (uri?.scheme !== 'file') throw Error('Choose a local UTF-8 file.');
@@ -23,17 +24,18 @@ async function localText(uri) {
   } finally { await file.close(); }
 }
 
-function registerSshWorkspace(context, vscode) {
+function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined } = {}) {
   const tree = new vscode.EventEmitter();
   const files = new vscode.EventEmitter();
   const pending = new Map();
-  let connection, processes;
+  let connection, processes, javaDebug;
   let epoch = 0;
 
   function retire() {
     epoch++;
     pending.clear();
     processes?.retire();
+    void javaDebug?.retire();
     connection?.close();
     connection = undefined;
     tree.fire();
@@ -154,7 +156,8 @@ function registerSshWorkspace(context, vscode) {
     });
   }
   processes = registerSshProcesses(vscode, command, () => connection, uriFor);
-  context.subscriptions.push(tree, files, { dispose: retire }, processes,
+  javaDebug = registerSshJavaDebug(vscode, command, () => connection, getLocalJava);
+  context.subscriptions.push(tree, files, { dispose: retire }, processes, javaDebug,
     vscode.workspace.registerFileSystemProvider(uriScheme, provider, { isReadonly: true }),
     vscode.window.registerTreeDataProvider('rocketbrain.sshWorkspace', treeProvider),
     command('attach', async () => {
@@ -179,7 +182,7 @@ function registerSshWorkspace(context, vscode) {
       } finally { pending.delete(review.id); }
     })
   );
-  return { attach, close: retire, reviewUpload, applyUpload, processes };
+  return { attach, close: retire, reviewUpload, applyUpload, processes, javaDebug };
 }
 
 module.exports = { registerSshWorkspace };
