@@ -766,6 +766,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectObservedInjection",
+        "title": "Inspect Observed Spring Constructor Injection",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.openObservedInjectionSource",
+        "title": "Open Observed Spring Constructor Parameter",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.inspectPersistenceContexts",
         "title": "Inspect Spring Persistence Contexts",
         "category": "Rocketbrain",

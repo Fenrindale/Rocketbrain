@@ -51,6 +51,19 @@ public final class PersistenceContextRuntime {
 
     static boolean enabled(){return enabled;}
 
+    static synchronized Map<String,Object> beanFactoryIdentity(Object factory){
+        if(!enabled||factory==null)return null;
+        prune();
+        Context selected=null;
+        for(Context context:contexts){
+            if(context.beanFactory.get()!=factory)continue;
+            if(selected!=null)return null;
+            selected=context;
+        }
+        if(selected==null)return null;
+        return selected.id==null?Map.of("key",selected.key):Map.of("key",selected.key,"id",selected.id);
+    }
+
     private static final class Context {
         final String key;
         final WeakReference<Object> instance, beanFactory;
