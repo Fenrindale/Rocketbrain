@@ -423,6 +423,7 @@ public final class SignatureInspector {
                 !(args.length == 7 && args[4].equals("groovyMembers")) &&
                 !(args.length >= 7 && args.length <= 36 && args[4].equals("parameterNameBindings")) &&
                 !(args.length == 6 && args[4].equals("binaryBeanLifecycle")) &&
+                !(args.length == 8 && args[4].equals("springResourceImports")) &&
                 !(args.length == 9 && args[4].equals("constant")) &&
                 !(args.length == 9 && args[4].equals("extraction")) &&
                 !(args.length == 10 && args[4].equals("methodInline")) &&
@@ -489,6 +490,10 @@ public final class SignatureInspector {
                     else if (args[4].equals("binaryBeanLifecycle")) {
                         report.put("binaryBeanLifecycle", new BinaryBeanLifecycle(trees, elements, files, classpath)
                             .inspect(units, args[5]));
+                    }
+                    else if (args[4].equals("springResourceImports")) {
+                        report.put("springResourceImports", new SpringResourceImports(trees, files, classpath)
+                            .inspect(units, args[5], Integer.parseInt(args[6]), args[7]));
                     }
                     else if (args[4].equals("hierarchy")) report.put("hierarchy",new HierarchyInspector(task).inspect(units,byUri));
                     else if (args[4].equals("dataflow")) report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
