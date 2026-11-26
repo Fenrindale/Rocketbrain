@@ -16,17 +16,30 @@ final class PackageRenameInspector {
     private final String prefix;
     private final String other;
     private int bindingCount;
+    private final boolean qualifiedModules;
+    private Set<String> ownedModules = Set.of();
 
     PackageRenameInspector(JavacTask task, String prefix, String other) {
+        this(task,prefix,other,false);
+    }
+
+    PackageRenameInspector(JavacTask task, String prefix, String other, boolean qualifiedModules) {
         this.trees = Trees.instance(task);
         this.positions = trees.getSourcePositions();
         this.elements = task.getElements();
         this.types = task.getTypes();
         this.prefix = prefix;
         this.other = other;
+        this.qualifiedModules = qualifiedModules;
     }
 
     List<Map<String, Object>> inspect(List<CompilationUnitTree> units) {
+        if (qualifiedModules) {
+            var names = new LinkedHashSet<String>();
+            for (var unit : units) if (unit.getModule()!=null) names.add(unit.getModule().getName().toString());
+            if (names.size()!=2) throw unprovedDirective();
+            ownedModules = Set.copyOf(names);
+        }
         Set<String> localPackages = new HashSet<>();
         Set<String> sourceUris = new HashSet<>();
         for (var unit : units) {
@@ -85,7 +98,11 @@ final class PackageRenameInspector {
                         types.erasure(member.asType()).toString());
                 } else return;
                 if (++bindingCount > 24000) throw new IllegalArgumentException("Java package binding review exceeds its limit.");
-                bindings.add(List.of(from, to, node.getKind().name(), identity));
+                if (qualifiedModules) {
+                    ModuleElement module = elements.getModuleOf(resolved);
+                    if (module==null || module.isUnnamed()) throw unprovedDirective();
+                    bindings.add(List.of(from,to,node.getKind().name(),identity,module.getQualifiedName().toString()));
+                } else bindings.add(List.of(from,to,node.getKind().name(),identity));
             }
 
             @Override public Void visitCompilationUnit(CompilationUnitTree node, Void unused) {
@@ -169,16 +186,17 @@ final class PackageRenameInspector {
                     ExpressionTree source = requirement.getModuleName();
                     ModuleElement dependency = elements.getModuleElement(source.toString());
                     if (requirement.isStatic() || requirement.isTransitive() || dependency == null ||
-                            !dependency.getQualifiedName().contentEquals("java.base")) throw unprovedDirective();
+                            (!dependency.getQualifiedName().contentEquals("java.base") &&
+                            !ownedModules.contains(dependency.getQualifiedName().toString()))) throw unprovedDirective();
                     entries.add(moduleEntry(unit, source, "requires"));
                 }
                 case ExportsTree exported -> {
-                    if (exported.getModuleNames() != null && !exported.getModuleNames().isEmpty()) throw unprovedDirective();
                     entries.add(packageDirective(unit, module, exported.getPackageName(), "exports", localPackages));
+                    addTargets(unit,module,exported.getModuleNames(),"exportsTo",entries);
                 }
                 case OpensTree opened -> {
-                    if (opened.getModuleNames() != null && !opened.getModuleNames().isEmpty()) throw unprovedDirective();
                     entries.add(packageDirective(unit, module, opened.getPackageName(), "opens", localPackages));
+                    addTargets(unit,module,opened.getModuleNames(),"opensTo",entries);
                 }
                 case UsesTree used -> entries.add(typeDirective(unit, module, used.getServiceName(), "uses", sourceUris));
                 case ProvidesTree provides -> {
@@ -191,6 +209,17 @@ final class PackageRenameInspector {
             }
         }
         return object("name", moduleName, "declarations", entries);
+    }
+
+    private void addTargets(CompilationUnitTree unit, ModuleElement owner, List<? extends ExpressionTree> targets,
+            String role, List<Map<String,Object>> entries) {
+        if (targets==null || targets.isEmpty()) return;
+        if (!qualifiedModules || targets.size()!=1) throw unprovedDirective();
+        var source=targets.getFirst();
+        var target=elements.getModuleElement(source.toString());
+        if (target==null || target.equals(owner) || !ownedModules.contains(target.getQualifiedName().toString()) ||
+                !target.getQualifiedName().contentEquals(source.toString())) throw unprovedDirective();
+        entries.add(moduleEntry(unit,source,role));
     }
 
     private Map<String, Object> packageDirective(CompilationUnitTree unit, ModuleElement module, ExpressionTree source,

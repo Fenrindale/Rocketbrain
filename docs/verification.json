@@ -1,30 +1,30 @@
 {
-  "version": "0.156.0",
-  "verifiedAt": "2026-11-26T17:26:55.153Z",
+  "version": "0.158.0",
+  "verifiedAt": "2026-11-26T17:45:21.529Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.156.0.vsix",
-    "sha256": "d2446e0b4abb04a6aebe37802e894274aa8839c6d8ed96a013691dc171ad6d36",
-    "bytes": 4666162,
-    "files": 35
+    "name": "rocketbrain-0.158.0.vsix",
+    "sha256": "c639e5564eb406547e78f9282f1da40668ecc239b2f15935b7ac4686a45163b6",
+    "bytes": 4692062,
+    "files": 36
   },
   "source": {
-    "frozenPublicInputs": 3089,
-    "inputVectorSha256": "e90974ff840b2a24182e034086518cb2c428f1462a259c7247836cf4a02c9873",
+    "frozenPublicInputs": 3114,
+    "inputVectorSha256": "10ff18d541e765b58623a47844749ab2359c6856b9e5303644842c49644471a7",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "ddb99fa46f68727d86aa8d325421a7587884cb2e",
-    "run": 45864124265,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45864124265",
-    "tests": 2223,
+    "head": "a0c5adcb9deaff0b0f7a386895e851c3cb03e605",
+    "run": 45865649291,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45865649291",
+    "tests": 2233,
     "suites": 0,
-    "pass": 1986,
+    "pass": 1991,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 237,
+    "skipped": 242,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -37,7 +37,7 @@
       "groupCount": 1,
       "groups": [
         {
-          "group": "jvmLongStrings",
+          "group": "kmpComposeTargets",
           "checks": 1,
           "origin": "final-frozen"
         }
@@ -52,7 +52,7 @@
       "groupCount": 1,
       "groups": [
         {
-          "group": "jvmLongStrings",
+          "group": "kmpComposeTargets",
           "checks": 1,
           "origin": "final-frozen"
         }
@@ -62,520 +62,349 @@
   "additionalInstalledRuntimes": [
     {
       "engine": "mysql",
-      "group": "javaWorkspaceIndex",
       "state": "passed",
-      "reports": {
-        "sha256": "7a25dc4fc1cb69ad12ecf7abb3d254ab983c22fb5ddbc9bcdd59b390af0a45c1"
+      "group": "javaOptionalCommentReview",
+      "checks": 1,
+      "origin": "final-frozen",
+      "database": {
+        "version": "8.4.13",
+        "product": "MySQL Community Server - GPL"
       },
-      "upstreamDatabase": "8.4.13",
-      "origin": "final-frozen"
+      "report": "test-output/v0.158-native-comment-review-native-mysql.json",
+      "reportSha256": "549bc3a4918a724c01635093f78a1b4efafb826d4e4e0c87cef0560885cec9e5",
+      "ledgerSha256": "4a0b8d98f3facaa47dfab396a63312732bcdcb4dba110c419106b3f2c10d23a1",
+      "progressSha256": "a66a51ef88105eb4fe44468e5cc677a9e2ce2291337ba33a7810cb81d3a84171",
+      "editor": "1.145.3"
     }
   ],
   "nativeCandidateStages": [
     {
+      "group": "javaOptionalCommentReview",
       "engine": "mariadb",
-      "group": "javaWorkspaceIndex",
       "state": "incomplete",
-      "exactPackageSha256": "d2446e0b4abb04a6aebe37802e894274aa8839c6d8ed96a013691dc171ad6d36",
-      "exitReceiptSha256": "f22190df5039b92c9a2d61c4d7decbf346664c5dae138825ee4713a1f168aea6",
-      "reason": "Java engine result timeout during fixture preparation",
-      "source": "java-workspace-index-host.js:57"
-    },
-    {
-      "engine": "mysql",
-      "group": "constructorSafeDelete",
-      "state": "incomplete",
-      "exactPackageSha256": "d2446e0b4abb04a6aebe37802e894274aa8839c6d8ed96a013691dc171ad6d36",
-      "exitReceiptSha256": "a3b2dcfd6fe717c0f441029d0834359a6d979692c90c5cfb764c3cceaf14d3a7",
-      "reason": "Java engine result timeout during fixture preparation",
-      "source": "java-constructor-safe-delete-host.js:40"
-    },
-    {
-      "engine": "mariadb",
-      "group": "constructorSafeDelete",
-      "state": "incomplete",
-      "exactPackageSha256": "d2446e0b4abb04a6aebe37802e894274aa8839c6d8ed96a013691dc171ad6d36",
-      "exitReceiptSha256": "97bf59ec90cd526866374f0f61fd4ea61f9f607f5f88d38e9a96b143f251e5d5",
-      "reason": "Java engine result timeout during fixture preparation",
-      "source": "java-constructor-safe-delete-host.js:40"
+      "exitSha256": "5dd05ea7b9ca0b0e7a3f97722d384fe56081756bff41792d1cc395a6054e422c",
+      "reason": "Installed workflow did not complete"
     }
   ],
   "vendorRuntime": {
-    "completableFuture": {
-      "sourceCommit": "bd1b4c923360926de6eed365b038e2d41c460267",
-      "sha256": "66caa30b4eea7059d30e8f90014b321430a9db9960c16b5e828152e6db0a4f1a",
-      "craftSha256": "ad1f20c680058d9aec3c429bbd1aab598fc031537dee79fe325d0d201a369f0a",
-      "regressionLogSha256": "d121d43c70ecd8ed3a977c253fc0917696d65c16c68bca7a6f778bcb3b09edbe",
-      "actualTests": 9,
-      "reports": [
-        {
-          "handoffs": [
-            "completable-future",
-            "completable-future",
-            "completable-future"
-          ],
-          "originFrames": [
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 50
-            },
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 56
-            },
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 57
-            }
-          ],
-          "completionStageLink": true,
-          "crossThreadRegistration": true,
-          "workerIdentityVerified": true,
-          "engine": "mysql",
-          "server": "8.4.13",
-          "people": 2,
-          "answer": 42,
-          "failedStageBypassedCallback": true,
-          "rejectedExecutorRecorded": true,
-          "canceledBeforeSupplier": true,
-          "mode": "launch",
-          "pausedLine": 26,
-          "unwrappedRejected": true,
-          "mismatchedTraceRejected": true,
-          "mismatchedWorkerRejected": true,
-          "strippedWorkerRejected": true,
-          "resumedInspectionRejected": true
-        },
-        {
-          "handoffs": [
-            "completable-future",
-            "completable-future",
-            "completable-future"
-          ],
-          "originFrames": [
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 50
-            },
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 56
-            },
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 57
-            }
-          ],
-          "completionStageLink": true,
-          "crossThreadRegistration": true,
-          "workerIdentityVerified": true,
-          "engine": "mysql",
-          "server": "8.4.13",
-          "people": 2,
-          "answer": 42,
-          "failedStageBypassedCallback": true,
-          "rejectedExecutorRecorded": true,
-          "canceledBeforeSupplier": true,
-          "mode": "attach",
-          "pausedLine": 26,
-          "unwrappedRejected": true,
-          "mismatchedTraceRejected": true,
-          "mismatchedWorkerRejected": true,
-          "strippedWorkerRejected": true,
-          "resumedInspectionRejected": true,
-          "ownedAttach": true
-        },
-        {
-          "handoffs": [
-            "completable-future",
-            "completable-future",
-            "completable-future"
-          ],
-          "originFrames": [
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 50
-            },
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 56
-            },
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 57
-            }
-          ],
-          "completionStageLink": true,
-          "crossThreadRegistration": true,
-          "workerIdentityVerified": true,
-          "engine": "mariadb",
-          "server": "11.4.8-MariaDB",
-          "people": 2,
-          "answer": 42,
-          "failedStageBypassedCallback": true,
-          "rejectedExecutorRecorded": true,
-          "canceledBeforeSupplier": true,
-          "mode": "launch",
-          "pausedLine": 26,
-          "unwrappedRejected": true,
-          "mismatchedTraceRejected": true,
-          "mismatchedWorkerRejected": true,
-          "strippedWorkerRejected": true,
-          "resumedInspectionRejected": true
-        },
-        {
-          "handoffs": [
-            "completable-future",
-            "completable-future",
-            "completable-future"
-          ],
-          "originFrames": [
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 50
-            },
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 56
-            },
-            {
-              "type": "dev.rocketbrain.futurefixture.FutureAsyncFixture",
-              "method": "main",
-              "file": "FutureAsyncFixture.java",
-              "line": 57
-            }
-          ],
-          "completionStageLink": true,
-          "crossThreadRegistration": true,
-          "workerIdentityVerified": true,
-          "engine": "mariadb",
-          "server": "11.4.8-MariaDB",
-          "people": 2,
-          "answer": 42,
-          "failedStageBypassedCallback": true,
-          "rejectedExecutorRecorded": true,
-          "canceledBeforeSupplier": true,
-          "mode": "attach",
-          "pausedLine": 26,
-          "unwrappedRejected": true,
-          "mismatchedTraceRejected": true,
-          "mismatchedWorkerRejected": true,
-          "strippedWorkerRejected": true,
-          "resumedInspectionRejected": true,
-          "ownedAttach": true
-        }
-      ]
-    },
-    "javaWorkspaceIndex": {
-      "sourceCommit": "f68ddf318c4d436d93ab73bb2ac2728eb0ecbe08",
-      "sha256": "b02c0a1f23f9ba2e6a8eedadd46d1bb655b038bd4b1444d6a6c18ad3b6e16da7",
-      "buildTools": [
-        "maven",
-        "gradle"
+    "javaSignatureCompatibility": {
+      "sourceCommit": "1e30dd09c64014df3df9234426114c7bf82a64ed",
+      "sha256": "f388b16a3092422e3d922fc6f45acdd7c1c4cf26a4cc37a94c347b23efdc7043",
+      "descriptors": [
+        "(Ljava/lang/String;I)Ljava/lang/String;",
+        "(Ljava/lang/String;IB)Ljava/lang/String;"
       ],
-      "projects": 2,
-      "inputFiles": 14,
-      "generatedDefinition": {
-        "file": "gradle\\build\\generated\\sources\\indexProbe\\java\\index\\fixture\\generated\\GeneratedLabel.java",
-        "line": 0
+      "precompiledClient": {
+        "sha256": "327f3d67d820b22dedf20945e1f08ffff57c135ce1062d6b76fa0a1b1c3b23ed",
+        "result": "Legacy:42"
       },
-      "actualJvmRestart": true,
-      "oldIndexRetained": true,
-      "generationCommitted": true,
-      "before": [
+      "outputs": [
         {
           "engine": "mysql",
           "server": "8.4.13",
-          "value": 42
+          "value": "Local:42"
         },
         {
           "engine": "mariadb",
           "server": "11.4.8-MariaDB",
-          "value": 42
-        }
-      ],
-      "after": [
-        {
-          "engine": "mysql",
-          "server": "8.4.13",
-          "value": 42
-        },
-        {
-          "engine": "mariadb",
-          "server": "11.4.8-MariaDB",
-          "value": 42
+          "value": "Local:42"
         }
       ]
     },
-    "constructorSafeDelete": {
-      "sourceCommit": "20fd5717f8257de91040597f58ee2a5b88c9a575",
-      "sha256": "9252687e8904fd57a4ccdb8e2c30fe97fcf87d951624c1c7da02bfe7254d6ebd",
-      "directCallSites": 2,
-      "jdtAndJavacVerified": true,
-      "wholeEditDispatches": 1,
-      "usedOrProtectedOrUnsafeRefused": [
-        "UsedCounter",
-        "EffectCounter",
-        "BoxedCounter",
-        "OverloadedCounter",
-        "ReferencedCounter",
-        "ExplicitCounter",
-        "ImplicitCounter"
-      ],
-      "newResourceRejected": true,
-      "missingJdtCallerRejected": true,
-      "bindingAndArgumentOrderRetained": true,
-      "before": [
+    "javaInnerClassMove": {
+      "sourceCommit": "9b13c7736c8090f75a04c62adb5ab7e2bea0f662",
+      "sha256": "1fccff04674bc9225481b54895b382beb5365797815531f659808a554a8ec895",
+      "outputs": [
         {
           "engine": "mysql",
           "server": "8.4.13",
-          "result": "42:ABCD",
-          "explicitAndImplicitConstructorInjection": true
+          "output": "30:55:12:1"
         },
         {
           "engine": "mariadb",
           "server": "11.4.8-MariaDB",
-          "result": "42:ABCD",
-          "explicitAndImplicitConstructorInjection": true
+          "output": "30:55:12:1"
         }
       ],
-      "after": [
+      "actualCompiler": "637e2ef72637053609ef3622e41ff536d5e5f7366b887ad8682df80b6dc484e7"
+    },
+    "javaJpmsQualifiedRename": {
+      "sourceCommit": "a7ca932ec1cadd802b21174a6e367ad2be10616d",
+      "sha256": "a36873d64a31eca9dfbee423bc629d27f5c02bfb6792eaf0b7d3fd47d355bdcf",
+      "access": {
+        "namedPublicAndPrivate": "19:19",
+        "unlistedPublicAccessRefused": true,
+        "unlistedReflectiveAccessRefused": true
+      },
+      "outputs": [
         {
           "engine": "mysql",
           "server": "8.4.13",
-          "result": "42:ABCD",
-          "explicitAndImplicitConstructorInjection": true
+          "qualifiedSpringBean": "19:19",
+          "jdbc": 42
         },
         {
           "engine": "mariadb",
           "server": "11.4.8-MariaDB",
-          "result": "42:ABCD",
-          "explicitAndImplicitConstructorInjection": true
+          "qualifiedSpringBean": "19:19",
+          "jdbc": 42
         }
       ]
     },
-    "jvmLongStrings": {
-      "sourceCommit": "790ad562aa1ff66225d02f0e842644d5ae4c3c77",
-      "sha256": "d21c482755908dd2dd1643768ba65f2faf19367e066997483a7aa0e914eb4d33",
-      "adapterSha256": "cfc1baabfbe76003d83dd53f3069aa37b1ea031d4b3f30dda501643f9e9bfe26",
-      "reports": [
+    "javaKotlinAliasedRename": {
+      "sourceCommit": "fe4a3af31a97df9af4b249e08494335007155298",
+      "sha256": "a970925dbfc63da243b25b0d7365d31960d8f5a0731fdd510be0e6c4330810bd",
+      "kotlin": {
+        "files": 2,
+        "sites": 5,
+        "constructorBindings": 3,
+        "compilerVerified": true,
+        "importAliases": 1,
+        "retainedAliasSites": 4,
+        "constructorReferences": 2
+      },
+      "outputs": [
         {
-          "language": "java",
           "engine": "mysql",
           "server": "8.4.13",
-          "springRows": 2,
-          "mode": "launch",
-          "source": "JavaStringInspection.java",
-          "line": 29,
-          "ranges": {
-            "latin": {
-              "units": 272016,
-              "pages": 34,
-              "utf16leSha256": "866db3886661a74d41d77e4b81ccd20cf6af572cf30e0536dea10662e573bff6"
-            },
-            "wide": {
-              "units": 273199,
-              "pages": 34,
-              "utf16leSha256": "0dc166124ce6a490a6f12ea1db3e4aefd4af736f9e2c9fe328883f4e050d213a"
-            }
-          },
-          "shortValue": true,
-          "oversizedReadRefused": true,
-          "sameLengthForeignLocalRefused": true,
-          "replacedInspectionRefused": true,
-          "foreignTokenRefused": true,
-          "resumedFrameRefused": true
+          "output": "kotlin:42/java:42/shadow/alias:42/reference:42"
         },
         {
-          "language": "kotlin",
-          "engine": "mysql",
-          "server": "8.4.13",
-          "springRows": 2,
-          "mode": "verified-attach",
-          "source": "KotlinStringInspection.kt",
-          "line": 12,
-          "ranges": {
-            "latin": {
-              "units": 272016,
-              "pages": 34,
-              "utf16leSha256": "866db3886661a74d41d77e4b81ccd20cf6af572cf30e0536dea10662e573bff6"
-            },
-            "wide": {
-              "units": 273199,
-              "pages": 34,
-              "utf16leSha256": "0dc166124ce6a490a6f12ea1db3e4aefd4af736f9e2c9fe328883f4e050d213a"
-            }
-          },
-          "shortValue": true,
-          "oversizedReadRefused": true,
-          "sameLengthForeignLocalRefused": true,
-          "replacedInspectionRefused": true,
-          "foreignTokenRefused": true,
-          "resumedFrameRefused": true
-        },
-        {
-          "language": "java",
           "engine": "mariadb",
           "server": "11.4.8-MariaDB",
-          "springRows": 2,
-          "mode": "launch",
-          "source": "JavaStringInspection.java",
-          "line": 29,
-          "ranges": {
-            "latin": {
-              "units": 272016,
-              "pages": 34,
-              "utf16leSha256": "866db3886661a74d41d77e4b81ccd20cf6af572cf30e0536dea10662e573bff6"
-            },
-            "wide": {
-              "units": 273199,
-              "pages": 34,
-              "utf16leSha256": "0dc166124ce6a490a6f12ea1db3e4aefd4af736f9e2c9fe328883f4e050d213a"
-            }
-          },
-          "shortValue": true,
-          "oversizedReadRefused": true,
-          "sameLengthForeignLocalRefused": true,
-          "replacedInspectionRefused": true,
-          "foreignTokenRefused": true,
-          "resumedFrameRefused": true
+          "output": "kotlin:42/java:42/shadow/alias:42/reference:42"
+        }
+      ]
+    },
+    "kmpComposeTargets": {
+      "sourceCommit": "558b807a1bd19ba1187e9d0604e42b2391d0807a",
+      "sha256": "4dd4ed52546228d7fa8001fe54801ef71def6ea378bbba03229e081cf8741ef5",
+      "desktop": [
+        {
+          "sourceSet": "desktopMain",
+          "targetName": "desktop",
+          "resourceSha256": "4891683ad028352fadc3ac0440f1cdeab935c11694d973c37e066472ba3614ac",
+          "imageSha256": "5a60dd66395e1e843d835a9d6fa1e5b8475852fde4e7dce60c2ad2e43bc3bb0a",
+          "sourceSha256": "d098d3ec631e92d888f4cc7099fbb2c9ee4e42d643e2fbe9680a9766fcf60703",
+          "observed": [
+            24,
+            60,
+            102,
+            255
+          ]
         },
         {
-          "language": "kotlin",
-          "engine": "mariadb",
-          "server": "11.4.8-MariaDB",
-          "springRows": 2,
-          "mode": "verified-attach",
-          "source": "KotlinStringInspection.kt",
-          "line": 12,
-          "ranges": {
-            "latin": {
-              "units": 272016,
-              "pages": 34,
-              "utf16leSha256": "866db3886661a74d41d77e4b81ccd20cf6af572cf30e0536dea10662e573bff6"
-            },
-            "wide": {
-              "units": 273199,
-              "pages": 34,
-              "utf16leSha256": "0dc166124ce6a490a6f12ea1db3e4aefd4af736f9e2c9fe328883f4e050d213a"
-            }
-          },
-          "shortValue": true,
-          "oversizedReadRefused": true,
-          "sameLengthForeignLocalRefused": true,
-          "replacedInspectionRefused": true,
-          "foreignTokenRefused": true,
-          "resumedFrameRefused": true
+          "sourceSet": "desktopMain",
+          "targetName": "desktop",
+          "resourceSha256": "f89d4c0a217e283590c13774a7920292bb577a5d027ee234dbedabf1e0528685",
+          "imageSha256": "1852d69fdf1c62fe7983d9d332f37511442ac7becb3fc5cd05dcee04773bda5a",
+          "sourceSha256": "d098d3ec631e92d888f4cc7099fbb2c9ee4e42d643e2fbe9680a9766fcf60703",
+          "observed": [
+            154,
+            76,
+            46,
+            255
+          ]
         }
       ],
-      "unverifiedLoopbackRefused": true,
-      "cleanup": true
+      "workstationTargets": {
+        "sourceSet": "jvmMain",
+        "targetName": "jvm",
+        "resourceSha256": "774212411147a699b517d46061978de239f83fa006e52ede14618e9b92a5625c",
+        "imageSha256": "1852d69fdf1c62fe7983d9d332f37511442ac7becb3fc5cd05dcee04773bda5a",
+        "sourceSha256": "d098d3ec631e92d888f4cc7099fbb2c9ee4e42d643e2fbe9680a9766fcf60703",
+        "observed": [
+          154,
+          76,
+          46,
+          255
+        ]
+      },
+      "jdbc": [
+        {
+          "engine": "mysql",
+          "server": "8.4.13",
+          "result": "invoice/42"
+        },
+        {
+          "engine": "mariadb",
+          "server": "11.4.8-MariaDB",
+          "result": "invoice/42"
+        }
+      ]
+    },
+    "javaOptionalCommentReview": {
+      "sourceCommit": "de6b1e5686d2e7bcdebd1d72512bfa525246c7d0",
+      "sha256": "ff18f1da5455cfb7e63641d3243f026e77bd769fa88b6d6d8b216e3b5bf1ae31",
+      "review": {
+        "groups": 3,
+        "selected": 2,
+        "unchanged": 1,
+        "cancelledWithoutEdits": true,
+        "modalDismissedWithoutEdits": true,
+        "selectedOptionalDriftRefused": true,
+        "mandatoryFileRename": true,
+        "workspaceEdits": 1
+      },
+      "outputs": [
+        {
+          "engine": "mysql",
+          "server": "8.4.13",
+          "output": "bill:42:LedgerServiceExtra"
+        },
+        {
+          "engine": "mariadb",
+          "server": "11.4.8-MariaDB",
+          "output": "bill:42:LedgerServiceExtra"
+        }
+      ]
+    },
+    "springRegistrationTrace": {
+      "sourceCommit": "c081c71d082e8e6e51693d5a08e36b0b737eead0",
+      "sha256": "27e4ebe4eca3e3d8b2715d2038d42f31985d49db6f2e4fc4462b83bb116dda16",
+      "outputs": [
+        {
+          "engine": "mysql",
+          "server": "8.4.13",
+          "registeredBranch": "Blue",
+          "jdbc": 42,
+          "beanCreations": 1,
+          "exactOriginChecked": true,
+          "aliasesAndRemovalPreserved": true,
+          "failurePropagated": true,
+          "scopes": [
+            {
+              "id": 1,
+              "label": "dynamic registrar",
+              "outcome": "returned",
+              "mutationCount": 6
+            },
+            {
+              "id": 2,
+              "label": "failed registrar",
+              "outcome": "threw",
+              "mutationCount": 1
+            }
+          ]
+        },
+        {
+          "engine": "mariadb",
+          "server": "11.4.8-MariaDB",
+          "registeredBranch": "Green",
+          "jdbc": 42,
+          "beanCreations": 1,
+          "exactOriginChecked": true,
+          "aliasesAndRemovalPreserved": true,
+          "failurePropagated": true,
+          "scopes": [
+            {
+              "id": 1,
+              "label": "dynamic registrar",
+              "outcome": "returned",
+              "mutationCount": 6
+            },
+            {
+              "id": 2,
+              "label": "failed registrar",
+              "outcome": "threw",
+              "mutationCount": 1
+            }
+          ]
+        }
+      ]
     }
   },
   "newlyVerified": {
-    "IDEA-030": {
-      "scope": "실제 JDT와 Javac가 선언과 직접 호출 두 곳을 확인했다. Spring 생성자 주입과 남은 인자의 평가 순서가 유지됐고 두 DB에서 JDBC 결과가 일치했다. 누락된 엔진 참조, 부작용, 언박싱, 오버로드와 명시·암시 주입을 거부했다.",
+    "IDEA-024": {
+      "scope": "실제 JDT·Kotlin 언어 서버·Javac로 파일과 참조를 검증했다. Gradle로 다시 빌드한 Spring 애플리케이션이 두 DB에서 같은 결과를 냈다. 허용된 JPMS 소비자의 공개·반사 접근은 유지됐고 외부 모듈의 접근은 거부됐다.",
       "runtimeGroups": [
-        "constructorSafeDelete"
+        "javaKotlinAliasedRename",
+        "javaJpmsQualifiedRename"
       ]
     },
-    "IDEA-071": {
-      "scope": "실제 Maven·Gradle 작업공간을 별도 JDT JVM에서 읽었다. 새 색인과 보존한 이전 캐시를 구별했고 생성된 Java 선언으로 같은 경로를 탐색했다. 전환과 재시작 중 두 DB의 Spring JDBC 결과를 확인했다.",
+    "IDEA-028": {
+      "scope": "실제 Javac와 JDT로 호출을 검증하고 Spring이 관리하는 바깥 객체의 상태와 두 생성자 호출을 유지했다. 명시적 null 소유 객체의 검사 순서와 두 DB의 JDBC 결과도 기준과 일치했다.",
       "runtimeGroups": [
-        "javaWorkspaceIndex"
+        "javaInnerClassMove"
       ]
     },
-    "IDEA-079": {
-      "scope": "실제 JDT 실행과 별도로 소유한 프로세스 연결에서 세 단계의 소스 위치와 등록·실행 스레드를 두 DB 모두 확인했다. Spring JDBC 42와 실패·취소·실행기 거부의 표준 동작이 유지됐다. 기존 Executor·가상 스레드·Reactor도 재검증했다.",
+    "IDEA-029": {
+      "scope": "실제 JDT와 Javac로 기존과 새 JVM 서명 및 직접 호출 두 곳을 확인했다. 재컴파일하지 않은 클라이언트가 새 JAR에서 동작했고 소스를 다시 빌드한 Spring 프로젝트는 두 DB에서 동일한 결과를 냈다.",
       "runtimeGroups": [
-        "completableFuture"
+        "javaSignatureCompatibility"
       ]
     },
-    "IDEA-080": {
-      "scope": "두 실제 DB에서 Java 실행과 Kotlin 프로세스 연결을 각각 확인했다. Latin-1과 넓은 문자열을 34페이지씩 읽어 272,016과 273,199 코드 단위를 복원했다. 이모지 경계와 단독 서로게이트, 재개 후 읽기 거부, 기존 짧은 조회와 프레임 동작을 검증했다.",
+    "IDEA-033": {
+      "scope": "두 DB에서 선택 주석만 반영한 경우와 주석 없이 필수 변경을 적용한 경우의 Spring 결과가 일치했다. 선택 창과 확인 창의 취소, 변경 이후 파일 수정 감지, 필수 변경 제거 거부를 확인했다.",
       "runtimeGroups": [
-        "jvmLongStrings"
+        "javaOptionalCommentReview"
+      ]
+    },
+    "IDEA-045": {
+      "scope": "실제 Gradle·Kotlin·Skia를 실행했다. 저장된 리소스만 바꾸면 같은 Kotlin 소스의 렌더링 픽셀이 바뀌었고 두 DB의 Spring JDBC 결과도 확인했다.",
+      "runtimeGroups": [
+        "kmpComposeTargets"
+      ]
+    },
+    "IDEA-053": {
+      "scope": "실제 Spring에서 두 등록 분기를 각각 실행했다. 등록과 별칭 처리 일곱 건, 등록 실패의 예외 전파, 단일 빈 생성 및 두 DB에서 JDBC 42를 확인했다.",
+      "runtimeGroups": [
+        "springRegistrationTrace"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 716,
+    "sourceCorrespondences": 723,
     "sourceConfidence": "inferred",
-    "archiveEntries": 35,
+    "archiveEntries": 36,
     "archiveConfidence": "observed"
   },
   "progress": {
     "counts": {
-      "implemented": 193,
-      "partial": 9,
+      "implemented": 196,
+      "partial": 6,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 209.5,
-    "previousWeightedPoints": 207.5,
+    "weightedPoints": 211,
+    "previousWeightedPoints": 209.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 97,
+    "referencePercent": 97.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-030",
+        "id": "IDEA-024",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "IDEA-071",
+        "id": "IDEA-029",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "IDEA-079",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-080",
+        "id": "IDEA-033",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "216개 기능에 기존 가중치와 판정 기준을 적용했다.",
-    "Safe Delete는 사용되지 않는 비공개 생성자의 매개변수와 확인된 직접 호출을 함께 검토한다. Spring 주입, 부작용 및 불완전한 참조가 발견되면 적용을 중단한다.",
-    "CompletableFuture 스택은 추적 도우미에 연결한 공급자와 thenApplyAsync·thenComposeAsync 단계를 보여준다.",
-    "긴 문자열 조회는 추적 가능한 로컬 Java·Kotlin JVM의 중단 프레임과 지원하는 JDK 문자열 레이아웃에 적용한다.",
-    "설치한 VS Code의 MySQL 색인 재구축이 완료됐다. MariaDB 색인과 생성자 삭제의 설치 검사에서는 JDT 응답 제한 시간이 초과됐다. 네 기능의 실제 두 DB 런타임 결과를 별도로 기록했다."
+    "216개 기능에 기존 가중치와 검증 기준을 적용했다.",
+    "Java 리팩터링은 JDT와 Javac로 선언·호출 관계를 확인한 코드에서 동작한다. 임의의 외부 코드와 프레임워크 확장 계약은 지원 범위에 포함되지 않는다.",
+    "Spring 등록 로그는 추적 도우미에 전달한 등록 콜백에서 기록된다.",
+    "Compose 미리보기는 확인된 Gradle desktopMain·jvmMain과 리소스에 적용한다.",
+    "같은 VSIX를 설치한 MySQL·MariaDB 환경에서 Compose Desktop 리소스 갱신을 검증했다. 선택 주석 편집은 실제 JDT·Javac와 두 DB에서 실행 결과를 비교했다.",
+    "선택 주석의 일괄 Undo·Redo는 설치한 MySQL 환경에서 통과했다. MariaDB 설치 검사는 Spring 테스트 앱이 준비되지 않아 중단됐다. 별도 MariaDB 실서버 검증에서는 선택 편집 전후 결과가 일치했다."
   ],
   "next": [
-    "Java 내부 클래스 이동과 소유 객체·인수 평가 순서의 보존",
-    "공개 Java 메서드의 기존 바이너리 서명을 유지하는 Change Signature",
-    "실제 Spring 사용자 등록 콜백의 등록·제거·별칭 관찰",
-    "Kotlin Compose의 JVM 대상 소스셋·리소스 미리보기와 Java 형식 이름 변경의 Kotlin 별칭·생성자 참조"
+    "여러 JPMS 모듈의 ServiceLoader 등록이 연결된 패키지 이동",
+    "VS Code 작업공간별 키맵 활성화와 실제 단축키 입력",
+    "Android 에뮬레이터 Kotlin 중단점·지역 변수 검증과 iOS 디버그 범위 확인",
+    "실제 클라우드 DB 공급자 인증과 남은 스키마 이행 범위 확인"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

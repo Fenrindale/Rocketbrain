@@ -13,6 +13,7 @@ const scopeApi = require('./move-scope');
 const { planBootImports, conventionalRoots, autoConfiguration } = require('./package-boot-imports');
 const { reviewRenamedPackageServices } = require('./package-rename-services');
 const { bindModuleDescriptor, verifyModuleProjection, reconcileModuleText } = require('./package-rename-module');
+const { qualifiedPackageScope, bindQualifiedPackageScope } = require('./package-rename-qualified-scope');
 
 const kind = 'refactor.rename.java.package';
 const dynamic = new Set(['forName', 'loadClass', 'ClassLoader', 'getResource', 'getResourceAsStream', 'ServiceLoader',
@@ -131,7 +132,8 @@ function reconciledEngineEdits(edit, sources, expected, oldPackage, newPackage, 
   return { engineFiles: grouped.size, supplemented, ...(module && { engineModuleDirectives }) };
 }
 
-function enforceContracts(sources, oldPackage, moved, boot, services) {
+function enforceContracts(sources, oldPackage, moved, boot, services, qualifiedModules) {
+  const reviewedModules = new Set([services?.moduleDescriptor?.uri,qualifiedModules?.provider.uri,qualifiedModules?.client.uri]);
   const escaped = oldPackage.replace(/[$.]/gu, character => '\\' + character);
   const qualified = new RegExp('(?<![\\p{L}\\p{N}_$.])' + escaped + '(?=$|[^\\p{L}\\p{N}_$])', 'u');
   const slash = oldPackage.replaceAll('.', '/');
@@ -146,8 +148,8 @@ function enforceContracts(sources, oldPackage, moved, boot, services) {
       continue;
     }
     const { tokens, issues } = lexJava(source.text);
-    if (issues.length || path.basename(source.file) === 'module-info.java' && services?.moduleDescriptor?.uri !== source.uri) {
-      throw Error('Use ordinary Java sources and at most one reviewed named module descriptor.');
+    if (issues.length || path.basename(source.file) === 'module-info.java' && !reviewedModules.has(source.uri)) {
+      throw Error('Use ordinary Java sources and only the reviewed named module descriptors.');
     }
     if (tokens.some((token, index) =>
       token.kind === 'id' && dynamic.has(token.text) &&
@@ -221,8 +223,8 @@ function verifyBindings(before, after, moved, oldPackage, newPackage) {
     const next = after.get(moved.get(id)?.nextKey || id), delta = newPackage.length - oldPackage.length;
     if (!next) throw Error('A prospective Java source moved to an unexpected location.');
     const offset = point => point + delta * unit.spans.filter(span => point >= span.end).length;
-    const expected = unit.bindings.map(([start, end, form, binding]) =>
-      JSON.stringify([offset(start), offset(end), form, identity(binding)])).sort();
+    const expected = unit.bindings.map(([start, end, form, binding, ...owners]) =>
+      JSON.stringify([offset(start), offset(end), form, identity(binding), ...owners])).sort();
     const observed = next.bindings.map(binding => JSON.stringify(binding)).sort();
     const spans = unit.spans.map(({start, end, role}) => [offset(start), offset(end), role]);
     if (JSON.stringify(expected) !== JSON.stringify(observed) ||
@@ -243,7 +245,8 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
   }
   const oldFolder = path.dirname(uri.fsPath), newFolder = path.join(path.dirname(oldFolder), newLeaf);
   const tree = siblingTree(oldFolder, newFolder);
-  const scope = await scopeApi.moveScope(vscode, send, uri, uri, cancellation, { classpathScope: 'test', allowPackageModule: true });
+  const scope = await qualifiedPackageScope(vscode,send,uri,cancellation) ||
+    await scopeApi.moveScope(vscode, send, uri, uri, cancellation, { classpathScope: 'test', allowPackageModule: true });
   const root = scope.source.sourceRoot, part = path.relative(root, oldFolder);
   const segments = part.split(path.sep);
   if (!part || !inside(root, oldFolder) || !segments.every(validIdentifier)) throw Error('Choose a named Java package inside an imported source root.');
@@ -277,7 +280,7 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
   checkResources();
   const sources = await scopeApi.snapshotScope(scope, vscode, trusted, cancellation);
   const java = new Map(sources.filter(source => source.file.endsWith('.java')).map(source => [scopeApi.key(source.file), source]));
-  if ([...java.values()].some(source => !scope.source.sourceRoots.some(root => inside(root, source.file)))) {
+  if ([...java.values()].some(source => !scope.projects.some(project => project.sourceRoots.some(root => inside(root, source.file))))) {
     throw Error('A Java source outside the imported main or test roots needs a separate review.');
   }
   const moved = new Map(), prospectiveNames = new Map();
@@ -305,23 +308,30 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
       throw Error('The Java package source, directory or package membership changed after review.');
     }
     checkResources();
+    scope.checkBuildFiles?.();
     sourceGuard();
   }
   const boot = planBootImports({ sources, moved, projectRoot: scope.source.root, oldPackage, newPackage });
-  const services = await reviewRenamedPackageServices({ scope, sources, moved, tree, oldPackage, newPackage,
+  const qualified = scope.qualifiedPackageModules
+    ? bindQualifiedPackageScope(scope,sources,engine.javaHome,oldPackage,newPackage)
+    : undefined;
+  const services = qualified ? undefined : await reviewRenamedPackageServices({ scope, sources, moved, tree, oldPackage, newPackage,
     uriFor: file => vscode.Uri.file(file).toString() });
-  enforceContracts(sources, oldPackage, moved, boot, services);
-  const analyze = (sources, fqn, other) => analyzeJavaSources({ ...engine, sources, classpath, cancellation,
-    namedModule: scope.namedPackageModule,
-    manifestLimit: 256 * 1024, inspection: { kind: services ? 'packageRenameServices' : 'packageRename', fqn, other } });
+  enforceContracts(sources, oldPackage, moved, boot, services, qualified);
+  const analyze = (sources, fqn, other) => analyzeJavaSources({ ...engine,
+    sources:qualified ? sources.map(qualified.sourceForCompile) : sources, classpath, cancellation,
+    namedModule: scope.namedPackageModule, manifestLimit: 256 * 1024,
+    inspection: { kind: qualified ? 'packageRenameModules' : services ? 'packageRenameServices' : 'packageRename', fqn, other } });
   const first = await analyze([...java.values()], oldPackage, newPackage);
   if (first.errors.length) throw Error('Resolve existing Java compiler errors before renaming the package: ' + first.errors[0].message);
   await rejectBinaryPackages(classpath, oldPackage, newPackage, cancellation);
   first.validateClasspath();
   const before = attributedFiles(first, java, oldPackage, moved);
-  const descriptor = services?.moduleDescriptor;
+  const descriptor = qualified?.provider || services?.moduleDescriptor;
   const module = descriptor && { id: uriKey(descriptor.uri),
     ...bindModuleDescriptor(before.get(uriKey(descriptor.uri)), descriptor, oldPackage) };
+  const peerId = qualified && uriKey(qualified.client.uri);
+  const peer = qualified && bindModuleDescriptor(before.get(peerId),qualified.client,oldPackage);
   const exact = exactEntries([...java.values()], [...before].flatMap(([id, unit]) =>
     unit.spans.map(span => ({ ...span, uri: java.get(id).uri }))), newPackage);
   const directory = { kind: 'rename', oldUri: vscode.Uri.file(oldFolder).toString(), newUri: vscode.Uri.file(newFolder).toString(),
@@ -340,11 +350,15 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
   if (second.errors.length) throw Error('Package Rename would introduce a Java compiler error: ' + second.errors[0].message);
   const after = attributedFiles(second, new Map(prospective.map(source => [uriKey(source.uri), source])), newPackage, prospectiveNames);
   if (module) verifyModuleProjection(module, after.get(module.id), oldPackage, newPackage);
+  if (peer) verifyModuleProjection(peer,after.get(peerId),oldPackage,newPackage);
   const bindings = verifyBindings(before, after, moved, oldPackage, newPackage);
   services?.verify(first, second, prospective, exact);
-  const preApply = () => { checkTree(); first.validateClasspath(); second.validateClasspath(); services?.validate(); };
+  const preApply = () => { checkTree(); first.validateClasspath(); second.validateClasspath(); services?.validate(); qualified?.validate(); };
   const validate = async token => {
-    await scopeApi.validateScope(scope, vscode, send, uri, uri, token || cancellation);
+    if (qualified) {
+      const current = await qualifiedPackageScope(vscode,send,uri,token || cancellation);
+      if (current?.metadata !== scope.metadata) throw Error('The reviewed named module graph changed after review.');
+    } else await scopeApi.validateScope(scope, vscode, send, uri, uri, token || cancellation);
     preApply();
   };
   preApply();
@@ -357,13 +371,16 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
     allowedServiceEdits: services?.permissions || [],
     warnings: ['Review the saved Java source tree and its nested packages. Binary and external callers require a separate review.',
       ...(boot.entries.length ? ['Review the exact Spring Boot imports alongside the Java package. External registrations and public compatibility require a separate review.'] : []),
-      ...(module ? ['Review the exact module-info.java package and service edits. Provider order, the module name and unrelated directives are preserved.'] :
+      ...(qualified ? ['Review the provider’s qualified exports and opens alongside its consumer’s Java references. The named target modules are preserved.'] :
+        module ? ['Review the exact module-info.java package and service edits. Provider order, the module name and unrelated directives are preserved.'] :
         services ? ['Review the exact ServiceLoader filenames and provider lines. Registration order, comments and line endings are preserved.'] : [])]
   });
   return { ...plan, packageRename: { oldPackage, newPackage, movedFiles: moved.size,
     editedFiles: exact.length + boot.entries.length + (services?.edits.length || 0),
     ...(boot.entries.length && { bootImports: { files: boot.entries.length, registrations: boot.registrations } }),
     ...(services && { services: services.receipt }),
+    ...(qualified && {qualifiedNamedModules:{provider:module.name,consumer:peer.name,targets:qualified.provider.qualified,
+      consumerFiles:exact.filter(entry => inside(scope.peer.sourceRoot,fileURLToPath(entry.textDocument.uri))).length}}),
     ...(module && { namedModule: { name: module.name, directiveNamesChanged: module.spans.length,
       directivesChecked: module.declarations.length, compilerVerified: true } }),
     bindings, ...observed } };

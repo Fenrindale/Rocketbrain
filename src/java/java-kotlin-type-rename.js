@@ -49,26 +49,61 @@ function javaTargets(owner, declaration) {
     constructor: rangeAt(owner.text, constructors[0].start, constructors[0].end) };
 }
 
-function sourceRole(source, tokens, index, fqn, imported) {
-  const word = tokens[index];
+function qualifierAt(tokens, index) {
   let head = index;
   while (tokens[head - 1]?.text === '.' && tokens[head - 2]?.kind === 'id') head -= 2;
-  const qualifier = tokens.slice(head, index + 1).map(token => token.text).join('');
+  return { head, qualified: tokens.slice(head, index + 1).map(token => token.text).join('') };
+}
+
+function importBinding(source, tokens, fqn, oldName) {
+  const selected = [];
+  for (const [at, keyword] of tokens.entries()) {
+    if (keyword.text !== 'import' || tokens[at+1]?.kind !== 'id') continue;
+    let index = at+1;
+    while (tokens[index+1]?.text === '.' && tokens[index+2]?.kind === 'id') index += 2;
+    const word = tokens[index];
+    if (word.text !== oldName || tokens.slice(at+1,index+1).map(token=>token.text).join('') !== fqn) continue;
+    if (/[\r\n]/u.test(source.text.slice(keyword.end,word.start))) {
+      throw fail('Review a single-line exact Kotlin import for the Java class.');
+    }
+    const binding = { index };
+    if (tokens[index + 1]?.text === 'as' && !/[\r\n]/u.test(source.text.slice(word.end,tokens[index + 1].start))) {
+      const alias = tokens[index + 2];
+      if (alias?.kind !== 'id' || /[\r\n]/u.test(source.text.slice(word.end,alias.start)) || verifyName(alias.text) === oldName) {
+        throw fail('Use a distinct plain Kotlin import alias for the Java class.');
+      }
+      binding.alias = alias.text;
+      binding.aliasIndex = index + 2;
+    }
+    selected.push(binding);
+  }
+  if (selected.length > 1) throw fail('Multiple imports of the selected Java class in one Kotlin file require separate review.');
+  return selected[0];
+}
+
+const callableContexts = new Set(['=', '(', ',', 'return', '{', '[', ';']);
+function sourceRole(source, tokens, index, fqn, binding, isAlias) {
+  if (binding?.index === index) return 'type';
+  const { head, qualified } = qualifierAt(tokens,index);
   const before = tokens[head - 1]?.text, after = tokens[index + 1]?.text;
-  const leftCallable = before === '::' || before === ':' && tokens[head - 2]?.text === ':';
+  const colon = before === '::' ? head - 1 : before === ':' && tokens[head - 2]?.text === ':' ? head - 2 : undefined;
   const rightCallable = after === '::' || after === ':' && tokens[index + 2]?.text === ':';
-  if (leftCallable || rightCallable || after === 'as' && before === 'import') {
-    throw fail('Kotlin callable references, class literals and aliased imports require separate Java rename review.');
+  if (rightCallable) throw fail('Kotlin class literals and qualified callable references require separate Java rename review.');
+  const unqualified = head === index && (isAlias || binding && !binding.alias ||
+    packageName(source.text,'kotlin') === fqn.slice(0, fqn.lastIndexOf('.')));
+  if (qualified !== fqn && !unqualified) {
+    throw fail('Use an exact Kotlin import, import alias, package name or fully qualified Java type.');
   }
-  if (before === 'import' && qualifier === fqn && !/\r?\n/u.test(source.text.slice(tokens[head - 1].end, word.start))) {
-    return 'type';
-  }
-  if (qualifier !== fqn && (head !== index || !imported && packageName(source.text,'kotlin') !== fqn.slice(0, fqn.lastIndexOf('.')))) {
-    throw fail('Use an exact Kotlin import, package name or fully qualified Java type.');
+  if (colon !== undefined) {
+    if (!unqualified || !callableContexts.has(tokens[colon - 1]?.text)) {
+      throw fail('Only an unqualified Kotlin constructor callable reference is supported.');
+    }
+    return 'constructor-reference';
   }
   if (after === '(') return 'constructor';
-  if (before === ':' && after !== '.') return 'type';
-  throw fail('Only ordinary Kotlin imports, explicit type positions and direct Java constructor calls are supported.');
+  const functionResult = before === '->' || before === '>' && tokens[head - 2]?.text === '-';
+  if ((before === ':' || functionResult) && after !== '.') return 'type';
+  throw fail('Only ordinary Kotlin imports, explicit type positions, constructor calls and direct constructor references are supported.');
 }
 
 async function boundKotlinSites({ root, sources, owner, declaration, fqn, newName, runtime, cancellation }) {
@@ -90,10 +125,11 @@ async function boundKotlinSites({ root, sources, owner, declaration, fqn, newNam
       ['string', 'text-block'].includes(token.kind) && oldPattern.test(token.value ?? token.text))) {
       throw fail('A Kotlin source contains a destination collision, unsupported identifier or string use of the Java class name.');
     }
-    const directImport = source.text.split(/\r?\n/u).some(line=>line.replace(/\s*\/\/.*$/u,'').trim() === 'import ' + fqn);
+    const binding = importBinding(source,tokens,fqn,oldName);
     for (const [index, token] of tokens.entries()) {
-      if (token.kind === 'id' && token.text === oldName) {
-        candidates.push({ source, tokens, index, token, directImport });
+      const isAlias = token.text === binding?.alias;
+      if (token.kind === 'id' && (token.text === oldName || isAlias && index !== binding.aliasIndex)) {
+        candidates.push({ source, tokens, index, token, binding, isAlias });
         if (candidates.length > 64) throw fail('Review at most 64 Kotlin candidates for a Java class rename.');
       }
     }
@@ -104,7 +140,7 @@ async function boundKotlinSites({ root, sources, owner, declaration, fqn, newNam
     if (Date.now() > deadline) throw fail('Kotlin caller attribution timed out. Wait for indexing and retry.');
     runtime.check();
     const batch = await Promise.all(candidates.slice(index, index + 8).map(async candidate => {
-      const { source, tokens, index, token, directImport } = candidate;
+      const { source, tokens, index, token, binding, isAlias } = candidate;
       const range = rangeAt(source.text, token.start, token.end);
       const response = await runtime.request('textDocument/definition', {
         textDocument: { uri: kotlinProtocolUri(source.file) }, position: range.start
@@ -114,16 +150,22 @@ async function boundKotlinSites({ root, sources, owner, declaration, fqn, newNam
       const definition = definitions[0], key = physicalSource(definition.targetUri || definition.uri);
       if (!key || !files.has(key)) throw fail('A Kotlin definition leaves the reviewed physical source set.');
       if (key !== selected) return;
-      const role = sourceRole(source, tokens, index, fqn, directImport);
-      if (!sameRange(definition.targetSelectionRange || definition.range, targets[role])) {
+      const role = sourceRole(source,tokens,index,fqn,binding,isAlias);
+      const expected = role === 'type' ? targets.type : targets.constructor;
+      if (!sameRange(definition.targetSelectionRange || definition.range, expected)) {
         throw fail('Kotlin did not resolve the exact attributed Java class or its single constructor.');
       }
-      return { uri: source.uri, start: token.start, end: token.end, role };
+      return { uri: source.uri, start: token.start, end: token.end, role,
+        ...(isAlias&&{ keepAlias:true }), ...(binding?.index===index&&binding.alias&&{ importAlias:true }) };
     }));
     sites.push(...batch.filter(Boolean));
   }
   runtime.check();
-  if (!sites.length) throw fail('No Kotlin call site resolves to the selected Java class.');
+  if (!sites.some(site=>!site.keepAlias)) throw fail('No Kotlin call site resolves to the selected Java class.');
+  const aliasImports = new Set(sites.filter(site=>site.importAlias).map(site=>site.uri));
+  if (sites.some(site=>site.keepAlias&&!aliasImports.has(site.uri))) {
+    throw fail('Kotlin did not bind the preserved alias to an exact import of the selected Java class.');
+  }
   return sites;
 }
 
@@ -135,6 +177,35 @@ function bindings(classes, oldName, newName) {
     methods:value.methods.map(method=>({...method,descriptor:descriptor(method.descriptor)})),
     calls:value.calls.map(call=>({...call,owner:internalName(call.owner),descriptor:descriptor(call.descriptor)}))
   }));
+}
+
+function verifyConstructorReferenceBindings(classes, sources, sites, owner) {
+  const references = sites.filter(site=>site.role === 'constructor-reference');
+  if (!references.length) return 0;
+  const units = new Map(), identities = new Map();
+  for (const source of sources.filter(item=>item.file.endsWith('.kt'))) {
+    const namespace = packageName(source.text,'kotlin')?.replaceAll('.','/');
+    const filename = path.basename(source.file), key = JSON.stringify([namespace,filename]);
+    units.set(source.uri,{ source, namespace, filename, key });
+    identities.set(key,(identities.get(key)||0)+1);
+  }
+  const witnesses = new Set();
+  for (const site of references) {
+    const unit = units.get(site.uri);
+    if (!unit || identities.get(unit.key) !== 1) throw fail('A Kotlin constructor reference has an ambiguous source identity.');
+    const { source, filename, namespace } = unit;
+    const line = rangeAt(source.text,site.start,site.end).start.line + 1;
+    const matching = classes.filter(value=>value.source === filename &&
+      value.name.slice(0,Math.max(0,value.name.lastIndexOf('/'))) === namespace &&
+      value.superName === 'kotlin/jvm/internal/FunctionReferenceImpl' &&
+      value.methods.some(method=>method.name === 'invoke' && method.descriptor.endsWith('L' + owner + ';')) &&
+      value.calls.filter(call=>call.owner === owner && call.name === '<init>' && call.line === line).length === 1);
+    if (matching.length !== 1 || witnesses.has(matching[0].name)) {
+      throw fail('Kotlin compilation did not establish a distinct JVM constructor reference for the reviewed source site.');
+    }
+    witnesses.add(matching[0].name);
+  }
+  return witnesses.size;
 }
 
 async function validateKotlinProjection({ root, sources, rename, entries, fqn, newFqn, classpath, runtime, sites, cancellation }) {
@@ -165,8 +236,11 @@ async function validateKotlinProjection({ root, sources, rename, entries, fqn, n
         JSON.stringify(bindings(before,oldName,newName)) !== JSON.stringify(bindings(after,newName,newName))) {
       throw fail('The renamed Kotlin code would change a JVM type or invocation beyond the reviewed Java class.');
     }
+    const callableReferences = verifyConstructorReferenceBindings(before,original,sites,oldName);
+    // A class rename changes identifier widths, never source lines. Use the original source positions to join both builds.
+    verifyConstructorReferenceBindings(after,original,sites,newName);
     runtime.check();
-    return { constructors, validateRuntime };
+    return { constructors, callableReferences, validateRuntime };
   });
 }
 

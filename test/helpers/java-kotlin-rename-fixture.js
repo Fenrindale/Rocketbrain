@@ -55,12 +55,12 @@ const files = new Map([
   ].join('\n')]
 ]);
 
-async function populate(root, tools, { deployedRoot = root } = {}) {
+async function populate(root, tools, { deployedRoot = root, units = files } = {}) {
   await fs.mkdir(root, { recursive: true });
   for (const file of ['settings.gradle', 'build.gradle', 'gradle.properties']) {
     await fs.copyFile(path.join(input, file), path.join(root, file));
   }
-  for (const [file, text] of files) {
+  for (const [file, text] of units) {
     await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true });
     await fs.writeFile(path.join(root, file), text, { flag: 'wx' });
   }
@@ -68,9 +68,9 @@ async function populate(root, tools, { deployedRoot = root } = {}) {
   await configureJdt(root, { deployedRoot });
 }
 
-function readDatabase(root, tools, config, engine) {
+function readDatabase(root, tools, config, engine, expectedOutput = 'kotlin:42/java:42/shadow') {
   return runJdbc(root, tools, config, engine, {
-    mainClass: 'mixed.reverse.app.ShippingKt', expectedOutput: 'kotlin:42/java:42/shadow'
+    mainClass: 'mixed.reverse.app.ShippingKt', expectedOutput
   });
 }
 

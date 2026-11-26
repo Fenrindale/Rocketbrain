@@ -259,7 +259,7 @@ function registerKmpWorkbench(vscode,java) {
   function composeSource(document,root) {
     if (!document || document.isClosed || document.uri.scheme!=='file'||document.uri.authority||
         document.languageId!=='kotlin'||!document.uri.fsPath.endsWith('.kt')) {
-      throw fail('Open a saved commonMain Kotlin source file with a Compose preview.');
+      throw fail('Open a saved Kotlin file in a JVM target main source set with a Compose preview.');
     }
     const file=workspacePath(document.uri.fsPath,[root],{directory:false});
     if (document.isDirty) throw fail('Save the Compose source before rendering.');
@@ -282,7 +282,7 @@ function registerKmpWorkbench(vscode,java) {
       const receipt=Object.freeze(report);
       previewImages.set(receipt,{png,options:{
         projectUri:details.projectUri,sourceUri:details.document.uri,modulePath:details.modulePath,
-        targetName:details.targetName,qualified:details.qualified,width:report.width,height:report.height
+        targetName:report.targetName,sourceSet:report.sourceSet,qualified:report.qualified,width:report.width,height:report.height
       }});
       return receipt;
     });
@@ -303,13 +303,13 @@ function registerKmpWorkbench(vscode,java) {
     }
     visiblePreview=subject.options;
     const image=subject.png.toString('base64');
-    // Qualified name and target are bounded compiler/model identifiers; all other content is fixed.
+    // The selected names are bounded compiler/model identifiers; all other markup is fixed.
     previewPanel.webview.html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
       '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; img-src data:; style-src &#39;unsafe-inline&#39;">'+
       '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Kotlin Compose Preview</title>'+
       '<style>body{padding:18px}header{margin-bottom:18px}img{max-width:100%;height:auto;background:var(--vscode-editor-background)}'+
       'h1{font-size:1.2rem}a{color:var(--vscode-textLink-foreground)}</style></head><body>'+
-      '<header><h1>'+receipt.qualified+'</h1><p>'+receipt.targetName+' · '+receipt.width+' × '+receipt.height+
+      '<header><h1>'+receipt.qualified+'</h1><p>'+receipt.targetName+' · '+receipt.sourceSet+' · '+receipt.width+' × '+receipt.height+
       '</p><a href="command:'+COMMANDS.refreshPreview+'">Refresh Preview</a></header>'+
       '<img alt="Rendered Compose preview" width="'+receipt.width+'" height="'+receipt.height+
       '" src="data:image/png;base64,'+image+'"></body></html>';
@@ -464,17 +464,17 @@ function registerKmpWorkbench(vscode,java) {
   });
   register(COMMANDS.preview,async()=>{
     const document=vscode.window.activeTextEditor?.document;
-    if (!document||document.languageId!=='kotlin'||document.isDirty) throw fail('Open a saved commonMain Kotlin file with a Compose preview.');
+    if (!document||document.languageId!=='kotlin'||document.isDirty) throw fail('Open a saved Kotlin file with a Compose preview.');
     const configuration=await chooseModel();
     if (!configuration) return;
     const {options}=configuration;
     const candidates=composeCandidates({...options,document});
-    if (!candidates.length) throw fail('No supported @Preview and @Composable function was found in this commonMain file.');
+    if (!candidates.length) throw fail('No supported @Preview and @Composable function was found in a JVM target main source set.');
     const selected=await vscode.window.showQuickPick(candidates.map(item=>({label:item.name,
-      description:item.targetName+' · '+item.modulePath,item})),{title:'Choose Kotlin Compose Preview and JVM Target'});
+      description:item.targetName+' · '+item.sourceSet+' · '+item.modulePath,item})),{title:'Choose Kotlin Compose Preview and JVM Target'});
     if (!selected) return;
-    const {qualified,modulePath,targetName}=selected.item;
-    const receipt=await progress('Render Kotlin Compose Preview',cancellation=>preview({...options,document,qualified,modulePath,targetName,cancellation}));
+    const {qualified,modulePath,targetName,sourceSet}=selected.item;
+    const receipt=await progress('Render Kotlin Compose Preview',cancellation=>preview({...options,document,qualified,modulePath,targetName,sourceSet,cancellation}));
     showComposePreview(receipt);
     return receipt;
   });

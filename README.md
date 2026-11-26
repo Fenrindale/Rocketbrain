@@ -50,9 +50,11 @@ pnpm run package
 
 **Safe Delete**는 지원되는 비공개 생성자의 사용하지 않는 매개변수 이름에서도 실행할 수 있습니다. 선언과 직접 호출에서 해당 인자만 제거하는 편집을 검토합니다. Spring 주입 및 리플렉션 계약, 사용 중인 매개변수, 오버로드, 생성자 참조와 삭제하면 평가 동작이 달라지는 인자는 보호합니다.
 
+**Change Signature → Add Parameter and Keep Old Overload**는 지원되는 공개 정적 메서드에 리터럴 기본값이 있는 마지막 매개변수를 추가합니다. 프로젝트 안의 확인된 직접 호출은 새 서명을 사용하고, 기존 JVM 서명은 같은 클래스의 전달 오버로드로 유지됩니다. 선언과 호출 변경을 함께 검토할 수 있습니다.
+
 **Rename Java Package**는 패키지 디렉터리와 확인된 Java 참조를 한 번에 변경합니다. 단일 JPMS 모듈의 표준 주 소스에서는 `module-info.java`의 비한정 `exports`·`opens`, `uses`, `provides … with`를 같은 검토에서 확인할 수 있습니다. 모듈 이름과 공급자 순서는 유지되며, 이 경로는 `java.base`만 사용하는 일반 모듈을 지원합니다.
 
-**Review Public Java Type Rename**은 공개 Java 클래스의 파일 이름과 확인된 Java 참조를 함께 바꿉니다. 가져온 단일 Gradle JVM 프로젝트에서 Kotlin 편집기를 설정하면, Kotlin의 명시적 import·타입 지정·직접 생성자 호출도 같은 검토에 표시됩니다. 이 혼합 경로는 명시적 공개 생성자 하나가 있는 비제네릭 클래스를 지원하며, Java와 Kotlin의 변경 전후 바인딩을 확인합니다.
+**Review Public Java Type Rename**은 공개 Java 클래스의 파일 이름과 확인된 Java 참조를 함께 바꿉니다. 가져온 단일 Gradle JVM 프로젝트에서 Kotlin 편집기를 설정하면, Kotlin의 명시적 import·타입 지정·직접 생성자 호출도 같은 검토에 표시됩니다. 이 혼합 경로는 명시적 공개 생성자 하나가 있는 비제네릭 클래스를 지원하며, Java와 Kotlin의 변경 전후 바인딩을 확인합니다. Kotlin import 별칭 이름은 유지하며, 별칭 또는 원래 유형 이름을 사용하는 직접 생성자 참조도 같은 생성자에 연결되는지 확인합니다. 확인된 TODO·NOTE 한 줄 주석은 파일별로 선택할 수 있습니다. 선언·참조·파일 이름 변경은 필수이며, 선택한 주석 변경과 함께 미리보기와 한 번의 Undo를 제공합니다.
 
 Java 중단점에서 **Restart Java Stack Frame**으로 현재 정지한 스레드의 프레임을 선택해 메서드를 다시 실행할 수 있습니다. 이미 수행된 부수 효과는 그대로 남습니다. **Inspect Java Local Value**는 지역 배열과 표준 `ArrayList`를 페이지로 보여줍니다. 검증된 로컬 JVM의 Java·Kotlin 프레임에서 긴 문자열도 8,192 UTF-16 코드 단위씩 볼 수 있습니다. [Java 스택 프레임과 변수 뷰어](docs/java-frame-debugging.md)
 
@@ -90,6 +92,8 @@ Dev Container 명령은 이미지나 Dockerfile 구성과 함께 명시한 Docke
 4. **Build Java Project / Choose Build Task**, 저장한 **Run / Debug / Stop** 구성을 사용합니다.
 5. **Create Spring Project**로 공식 Initializr의 Java·Kotlin·Groovy JAR/WAR 프로젝트를 검토하고 생성합니다. **Edit Spring Starters**에서 지원하는 의존성 변경을 검토합니다. [Spring 프로젝트 만들기](docs/spring-initializr-project-forms.md) · [Maven BOM으로 관리하는 스타터](docs/spring-maven-bom-starters.md)
    **Inspect Spring AOT Beans**에서 Gradle 또는 Maven이 생성한 `__BeanFactoryRegistrations.java`를 열어 빈 이름·별칭과 원본 `@Bean` 위치를 확인합니다. 같은 파일을 다시 검사하면 두 빌드의 등록 목록을 비교할 수 있습니다. [Spring AOT 생성 소스](https://docs.spring.io/spring-framework/reference/core/aot.html)
+
+   **Copy Spring Registration Trace Helper**로 선택한 등록 콜백에 관찰을 추가할 수 있습니다. `RegistrationTrace.open(path)`으로 로컬 JSONL을 열고 `trace.observe(label, registry, callback)`에 기존 콜백을 연결합니다. **Inspect Spring Registration Trace**에서 콜백의 완료 여부와 실제 등록·제거·별칭 호출을 살펴보고 호출 소스로 이동합니다. 관찰은 선택한 콜백이 전달받은 레지스트리에서 적용됩니다.
 6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. Maven·Gradle 및 main·test에 맞는 사용자 템플릿과 저작권 프로필을 선택하고 필요한 변수 값을 입력할 수 있습니다. [Java 파일 템플릿](docs/java-file-templates.md)
 7. **New JShell Scratch**로 저장할 코드를 만들고 **Run JShell Scratch**로 독립 JDK에서 실행합니다. 프로젝트 클래스가 필요하면 실행할 때 관찰된 로컬 클래스 경로를 선택합니다.
 8. **Explore Java Call Hierarchy**와 **Explore Java Type Hierarchy**에서 JDT가 확인한 호출과 상속·구현 관계를 이동합니다. **Inspect Java Dependencies**는 소스 import, 선언된 빌드·모듈과 빌드된 클래스의 의존성을 구분해 순환 경로를 보여줍니다.
@@ -181,7 +185,7 @@ Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compil
 
 Linux x64 확장 호스트에서는 **Debug Kotlin/Native Executable**에서 로컬 Gradle 디버그 실행 파일을 검토하고 GDB를 시작합니다. 미리 선택한 Kotlin 파일에 중단점을 설정하고, 한 줄 넘기기와 관찰된 32비트 정수 지역 변수를 확인할 수 있습니다. [Kotlin Multiplatform 디버깅](docs/kotlin-multiplatform-debug.md)
 
-공통 Kotlin UI의 저장된 `commonMain` 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수와 JVM 타깃을 선택할 수 있습니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. 소스를 저장한 뒤 미리보기 패널의 **Refresh Preview**로 같은 타깃을 다시 그립니다.
+Gradle JVM 타깃의 main 컴파일에 속하는 저장된 Kotlin 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수를 선택할 수 있습니다. `commonMain`, `desktopMain`, `jvmMain`과 Gradle에 등록한 Kotlin 소스 디렉터리를 지원합니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. Gradle 소스셋에 등록된 프로젝트 리소스와 Kotlin 파일을 저장한 뒤 **Refresh Preview**로 같은 소스셋을 다시 그립니다. 렌더링 도중 입력이 달라지면 해당 이미지를 표시하기 전에 다시 검토하도록 안내합니다.
 
 Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를 시작하지 못하면 `rocketbrain.kotlin.gradleHome`에 Gradle 9.7.0 설치 경로를 지정합니다. 이 설정은 Kotlin Multiplatform 작업에 적용됩니다.
 

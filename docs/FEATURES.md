@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-27 기준 Rocketbrain 0.156.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-27 기준 Rocketbrain 0.158.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 193 |
-| 부분 구현 | 9 |
+| 구현 | 196 |
+| 부분 구현 | 6 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **97%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **97.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.156에서는 Maven·Gradle 작업공간의 JDT 색인 재생성, 비공개 Java 생성자 매개변수 Safe Delete, CompletableFuture 후속 단계 추적과 Java·Kotlin 긴 문자열의 구간 읽기를 추가했다. 상태가 바뀐 항목은 4개이고 가중 점수는 207.5점에서 209.5점으로 바뀌었다.
+v0.158에서는 Java 이름 변경에 Kotlin 별칭·생성자 참조와 두 JPMS 모듈의 한정 공개 범위를 추가했다. 내부 클래스 이동, 기존 바이너리 호출을 유지하는 Change Signature, 선택 주석 검토, Compose Desktop 리소스 미리보기와 실제 Spring 등록 추적을 확장했다. 상태가 바뀐 항목은 3개이고 가중 점수는 209.5점에서 211점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -44,16 +44,16 @@ v0.156에서는 Maven·Gradle 작업공간의 JDT 색인 재생성, 비공개 Ja
 | IDEA-021 | IntelliJ IDEA | 구조 검색·치환 | 구현 |
 | IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 구현 |
 | IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 구현 |
-| IDEA-024 | IntelliJ IDEA | 기호·패키지 이름 변경 | 부분 구현 |
+| IDEA-024 | IntelliJ IDEA | 기호·패키지 이름 변경 | 구현 |
 | IDEA-025 | IntelliJ IDEA | 변수·상수·필드 추출 | 구현 |
 | IDEA-026 | IntelliJ IDEA | 메서드 추출 | 구현 |
 | IDEA-027 | IntelliJ IDEA | 변수·메서드 인라인 | 구현 |
 | IDEA-028 | IntelliJ IDEA | 클래스·멤버 이동 | 부분 구현 |
-| IDEA-029 | IntelliJ IDEA | Change Signature·파라미터 전파 | 부분 구현 |
+| IDEA-029 | IntelliJ IDEA | Change Signature·파라미터 전파 | 구현 |
 | IDEA-030 | IntelliJ IDEA | Safe Delete | 구현 |
 | IDEA-031 | IntelliJ IDEA | 인터페이스 추출 | 구현 |
 | IDEA-032 | IntelliJ IDEA | 멤버 Pull Up·Push Down | 구현 |
-| IDEA-033 | IntelliJ IDEA | 리팩터링 미리보기·충돌·일괄 undo | 부분 구현 |
+| IDEA-033 | IntelliJ IDEA | 리팩터링 미리보기·충돌·일괄 undo | 구현 |
 | IDEA-034 | IntelliJ IDEA | 람다·익명 클래스·루프 변환 | 구현 |
 | IDEA-035 | IntelliJ IDEA | 생성자·접근자·equals·delegate 생성 | 구현 |
 | IDEA-036 | IntelliJ IDEA | 실시간 Java/Kotlin 오류·null 검사 | 구현 |

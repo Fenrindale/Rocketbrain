@@ -29,11 +29,11 @@ function localKey(uri) {
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
-function interfaceEdit(reply,{owner,created,sources,replaceUsages,parseUri}) {
+function reviewedNewTypeFile(reply,{owner,created,sources,replaceUsages,parseUri,artifact='interface'}) {
   const edit = reply?.edit;
-  if (reply?.errorMessage) throw Error('JDT refused the extract interface operation: ' + String(reply.errorMessage).slice(0,1000));
+  if (reply?.errorMessage) throw Error('JDT refused the new '+artifact+' operation: ' + String(reply.errorMessage).slice(0,1000));
   if (!edit || reply.command || Object.keys(edit.changeAnnotations || {}).length ||
-      !Array.isArray(edit.documentChanges)) throw Error('JDT did not return an independently reviewable interface extraction.');
+      !Array.isArray(edit.documentChanges)) throw Error('JDT did not return independently reviewable '+artifact+' edits.');
   const ownerKey = localKey(owner), targetKey = localKey(created);
   const sourceByKey = new Map(sources.map(source => [localKey(parseUri(source.uri)),source]));
   let createdFile = false,newText;
@@ -41,12 +41,12 @@ function interfaceEdit(reply,{owner,created,sources,replaceUsages,parseUri}) {
   function add(uri,edits,version) {
     const key = localKey(parseUri(uri));
     if (!Array.isArray(edits) || !edits.length || edits.some(item => item?.annotationId || typeof item?.newText !== 'string')) {
-      throw Error('JDT returned unsupported or annotated interface edits.');
+      throw Error('JDT returned unsupported or annotated '+artifact+' edits.');
     }
     if (key === targetKey) {
       if (!createdFile || newText !== undefined || edits.length !== 1 ||
           ![edits[0].range?.start,edits[0].range?.end].every(point => point?.line === 0 && point?.character === 0)) {
-        throw Error('JDT did not return a single initial text for the approved interface file.');
+        throw Error('JDT did not return a single initial text for the approved '+artifact+' file.');
       }
       newText = edits[0].newText;
       return;
@@ -66,22 +66,22 @@ function interfaceEdit(reply,{owner,created,sources,replaceUsages,parseUri}) {
   for (const item of edit.documentChanges) {
     if (item?.kind === 'create') {
       if (createdFile || localKey(parseUri(item.uri)) !== targetKey || item.options?.overwrite || item.annotationId) {
-        throw Error('JDT proposed an unexpected interface file creation.');
+        throw Error('JDT proposed an unexpected '+artifact+' file creation.');
       }
       createdFile = true;
     } else if (!item?.kind && item?.textDocument) {
       add(item.textDocument.uri,item.edits,item.textDocument.version);
-    } else throw Error('Interface extraction accepts just the approved file creation and reviewed Java edits.');
+    } else throw Error('The new '+artifact+' accepts just the approved file creation and reviewed Java edits.');
   }
   if (!existing.has(ownerKey) || !createdFile || !newText?.trim() || newText.includes('\0') ||
       Buffer.byteLength(newText) > 512 * 1024 || existing.size >= 30 || sourceByKey.has(targetKey)) {
-    throw Error('JDT did not return one new interface and an update to its owner within the review limits.');
+    throw Error('JDT did not return one new '+artifact+' and an update to its owner within the review limits.');
   }
   for (const [key,{textDocument,edits}] of existing) {
     const source = sourceByKey.get(key);
     const text = editedText(source.text,edits);
     if (text === source.text || Buffer.byteLength(text) > 512 * 1024) {
-      throw Error('A proposed interface change is empty or exceeds the Java source size limit.');
+      throw Error('A proposed '+artifact+' change is empty or exceeds the Java source size limit.');
     }
     after.set(textDocument.uri,text);
   }
@@ -91,4 +91,4 @@ function interfaceEdit(reply,{owner,created,sources,replaceUsages,parseUri}) {
     callerFiles:existing.size - 1 };
 }
 
-module.exports = { EXTRACT_INTERFACE_KIND, interfaceMembers, interfaceEdit, localKey };
+module.exports = { EXTRACT_INTERFACE_KIND, interfaceMembers, interfaceEdit:reviewedNewTypeFile, reviewedNewTypeFile, localKey };

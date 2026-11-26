@@ -9,7 +9,7 @@ const { importedSpring, jdbcReadback } = require('./java-source-analysis-host');
 const { until } = require('./helpers/stdio-lsp');
 const { typeRenameFixture, springTypeRenameClasspath, runSpringTypeRename } = require('./helpers/java-type-rename-fixture');
 
-async function runJavaTypeRenameChecks(api, vscode, checks) {
+async function verifyJavaTypeRename(api, vscode, checks, optional) {
   const workspace = vscode.workspace.workspaceFolders[0].uri.fsPath;
   const project = await importedSpring(api, workspace);
   const runtime = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
@@ -19,6 +19,9 @@ async function runJavaTypeRenameChecks(api, vscode, checks) {
   const config = JSON.parse(await fs.readFile(runtime.dbConfigPath, 'utf8'));
   const classpath = await springTypeRenameClasspath(path.join(runtime.projectPath, 'build/runtime-classpath.txt'), runtime.dbEngine);
   const fixture = typeRenameFixture('fixture.boot', 'RbRename' + randomBytes(5).toString('hex'));
+  const ownerNote = optional ? '// TODO ' + fixture.oldName + ' implementation.\n' : '';
+  const callerNote = optional ? '// NOTE ' + fixture.oldName + ' caller.\n' : '';
+  const extraNote = optional ? '// NOTE ' + fixture.oldFqn + ' documentation only.\n' : '';
   const java = path.join(workspace, 'src/main/java/fixture/boot');
   const nested = path.join(java, fixture.callerPackage.split('.').at(-1));
   const old = path.join(java, fixture.oldName + '.java');
@@ -51,7 +54,7 @@ async function runJavaTypeRenameChecks(api, vscode, checks) {
   try {
     await fs.mkdir(nested);
     ownNested = true;
-    for (const [file, text] of [[old, fixture.ownerText], [caller, fixture.callerText], [extra, fixture.extraText], [xml, fixture.xml]]) {
+    for (const [file, text] of [[old, fixture.ownerText+ownerNote], [caller, fixture.callerText+callerNote], [extra, fixture.extraText+extraNote], [xml, fixture.xml]]) {
       await fs.writeFile(file, text, { flag: 'wx' });
       created.add(file);
     }
@@ -76,9 +79,24 @@ async function runJavaTypeRenameChecks(api, vscode, checks) {
         await new Promise(resolve => setTimeout(resolve, 600));
       }
     }
-    assert.equal(plan.typeRename.attributedSpans, 8);
-    assert.equal(plan.typeRename.files, 2);
-    assert.equal(plan.typeRename.xmlBeanClasses, 1);
+    const verified = plan.typeRename;
+    if (optional) {
+      assert.equal(plan.optionalCommentGroups.length,3);
+      const ids = plan.optionalCommentGroups.filter(group=>[old,extra].some(file=>
+        group.uri===vscode.Uri.file(file).toString())).map(group=>group.id);
+      assert.equal(ids.length,2);
+      const originalId = plan.id;
+      plan = await api.java.refactoring.selectOptionalComments(originalId,ids);
+      await assert.rejects(api.java.refactoring.apply(originalId),/expired/u);
+      assert.equal(plan.documents.length,4);
+      const byPath = file => plan.documents.find(doc=>doc.uri===vscode.Uri.file(file).toString());
+      assert.ok(byPath(old).after.includes(fixture.newName+' implementation.'));
+      assert.ok(byPath(extra).after.includes(fixture.newFqn+' documentation only.'));
+      assert.ok(byPath(caller).after.includes(callerNote));
+    }
+    assert.equal(verified.attributedSpans, 8);
+    assert.equal(verified.files, 2);
+    assert.equal(verified.xmlBeanClasses, 1);
     assert.equal(plan.resourceOperations.length, 1);
     assert.equal(plan.resourceOperations[0].newUri, vscode.Uri.file(next).toString());
     assert.equal(await exists(next), false);
@@ -100,8 +118,8 @@ async function runJavaTypeRenameChecks(api, vscode, checks) {
     await vscode.commands.executeCommand('redo');
     await until(async () => !await exists(old) && await exists(next), 10000);
     await confirmContents(plan, true);
-    for (const file of [next, caller, xml]) assert.equal(await (await open(file)).save(), true);
-    assert.equal(await fs.readFile(extra, 'utf8'), fixture.extraText);
+    for (const file of [next, caller, xml, ...(optional?[extra]:[])]) assert.equal(await (await open(file)).save(), true);
+    assert.equal(await fs.readFile(extra, 'utf8'), fixture.extraText+extraNote.replace(fixture.oldFqn,fixture.newFqn));
     assert.equal(await fs.readFile(xml, 'utf8'), fixture.xml.replace("class='" + fixture.oldFqn + "'", "class='" + fixture.newFqn + "'"));
     const afterRuntime = await run([next, caller, extra]);
     assert.deepEqual(afterRuntime, beforeRuntime);
@@ -109,7 +127,9 @@ async function runJavaTypeRenameChecks(api, vscode, checks) {
     assert.ok(jdbc);
     checks.push('Reviewed public Java class rename updates ordinary and static imports, class references, its filename and the literal Spring XML bean class.');
     checks.push('Native Undo and Redo cover Java and XML together. Saved sources compile and the actual Spring bean and JDBC results agree before and after.');
-    return { ...plan.typeRename, nativeWorkspaceEdit: true, nativeXmlDiff: true, nativeUndo: true, nativeRedo: true,
+    if (optional) checks.push('One Undo and Redo covers mandatory Java/XML edits, the file rename and selected TODO/NOTE edits. The excluded comment stays unchanged.');
+    return { ...verified, nativeWorkspaceEdit: true, nativeXmlDiff: true, nativeUndo: true, nativeRedo: true,
+      ...(optional&&{optionalSelection:{offered:3,selected:2,retained:1}}),
       sameNamePrefixUntouched: true, destinationCollisionRefused: true, savedSpring: afterRuntime, jdbc };
   } finally {
     try {
@@ -131,4 +151,6 @@ async function runJavaTypeRenameChecks(api, vscode, checks) {
   }
 }
 
-module.exports = { runJavaTypeRenameChecks };
+const runJavaTypeRenameChecks = (api,vscode,checks) => verifyJavaTypeRename(api,vscode,checks,false);
+const runJavaTypeRenameOptionalCommentChecks = (api,vscode,checks) => verifyJavaTypeRename(api,vscode,checks,true);
+module.exports = { runJavaTypeRenameChecks, runJavaTypeRenameOptionalCommentChecks };

@@ -6,7 +6,7 @@ const { lexJava, rangeAt } = require('../spring/java');
 const MAIN_JAVA = path.join('src', 'main', 'java');
 const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-function reviewClosedModule(project, sources, { allowVisibility = false } = {}) {
+function reviewClosedModule(project, sources, { allowVisibility = false, qualifiedPeer, requirePeer = false } = {}) {
   const descriptors = sources.filter(source => path.basename(source.file).toLowerCase() === 'module-info.java');
   if (!descriptors.length) return null;
   const [source] = descriptors;
@@ -21,7 +21,9 @@ function reviewClosedModule(project, sources, { allowVisibility = false } = {}) 
   }
   const { tokens, issues } = lexJava(source.text);
   let cursor = 0;
-  const invalid = () => Error(allowVisibility
+  const invalid = () => Error(qualifiedPeer
+    ? 'Qualified Package Rename requires a closed named module with only its reviewed peer, java.base and literal visibility directives.'
+    : allowVisibility
     ? 'Package Rename requires a closed named module with java.base, literal uses/provides and unqualified exports/opens.'
     : 'Module service declarations require a closed named module with only java.base and literal uses/provides directives.');
   const match = word => tokens[cursor]?.text === word;
@@ -59,24 +61,32 @@ function reviewClosedModule(project, sources, { allowVisibility = false } = {}) 
     declarations.push({ ...value, role });
     return value;
   }
-  let explicitBase = false;
+  const dependencies = new Set();
+  const qualified = [];
   while (!match('}')) {
-    if (match('requires') && !explicitBase) {
+    if (match('requires')) {
       consume('requires');
-      if (directive('requires').name !== 'java.base') throw invalid();
-      explicitBase = true;
+      const value = directive('requires',{qualified:false}).name;
+      if (dependencies.has(value) || value !== 'java.base' && (!requirePeer || value !== qualifiedPeer)) throw invalid();
+      dependencies.add(value);
     } else if (allowVisibility && (match('exports') || match('opens'))) {
       const role = tokens[cursor++].text;
       const item = directive(role, { qualified: false });
       const key = role + ':' + item.name;
       if (visibility.has(key) || visibility.size === 32) throw invalid();
       visibility.add(key);
-    } else if (match('uses')) {
+      if (match('to')) {
+        consume('to');
+        const target = directive(role+'To',{qualified:false});
+        if (!qualifiedPeer || target.name !== qualifiedPeer) throw invalid();
+        qualified.push({role,packageName:item.name,target:target.name});
+      }
+    } else if (!qualifiedPeer && match('uses')) {
       consume('uses');
       const service = directive('uses');
       if (uses.has(service.name) || uses.size === 24) throw invalid();
       uses.set(service.name, service);
-    } else if (match('provides')) {
+    } else if (!qualifiedPeer && match('provides')) {
       consume('provides');
       const service = directive('provides');
       if (registrations.has(service.name) || registrations.size === 24) throw invalid();
@@ -93,10 +103,11 @@ function reviewClosedModule(project, sources, { allowVisibility = false } = {}) 
     consume(';');
   }
   consume('}');
-  if (cursor !== tokens.length) throw invalid();
+  if (cursor !== tokens.length || requirePeer && !dependencies.has(qualifiedPeer)) throw invalid();
 
   return {
     name: moduleName, uri: source.uri, file: source.file, uses, registrations, declarations,
+    ...(qualifiedPeer && {qualified, peer:qualifiedPeer}),
     makeEntry(replacements) {
       if (!replacements.length) return null;
       return { textDocument: { uri: source.uri, version: source.version ?? null },

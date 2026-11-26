@@ -8,6 +8,7 @@ const { validIdentifier } = require('./file-templates');
 const { editedText } = require('./refactoring');
 const { lexJava, parseJavaFile, rangeAt } = require('../spring/java');
 const { beanClassEdits } = require('./java-type-rename-xml');
+const { commentGroups, withCommentGroups } = require('./type-rename-comments');
 const { hasKotlinMentions, mixedJavaClasspath, boundKotlinSites, validateKotlinProjection } = require('./java-kotlin-type-rename');
 const scopeApi = require('./move-scope');
 
@@ -233,10 +234,11 @@ async function prepareJavaTypeRename(deps, { document, position, newName, cancel
     guard();
     const sites = await boundKotlinSites({ root:active.root, sources, owner, declaration:before.typeRename.declaration,
       fqn:selected.fqn, newName, runtime:active, cancellation });
-    kotlinEntries.push(...exactEntries(kotlin,sites,newName));
+    const changedSites = sites.filter(site=>!site.keepAlias);
+    kotlinEntries.push(...exactEntries(kotlin,changedSites,newName));
     const validation = await validateKotlinProjection({ root:active.root, sources, rename, entries:[...entries,...kotlinEntries],
       fqn:selected.fqn, newFqn, classpath, runtime:active, sites, cancellation });
-    kotlinReview = { sites, validation, check:active.check };
+    kotlinReview = { sites, changedSites, validation, check:active.check };
     for (const entry of kotlinEntries) {
       const source = kotlin.find(value=>value.uri===entry.textDocument.uri);
       kotlinPermissions.push({ uri:source.uri, beforeSha256:source.diskHash,
@@ -253,7 +255,7 @@ async function prepareJavaTypeRename(deps, { document, position, newName, cancel
     kotlinReview?.validation.validateRuntime();
   };
   preApply();
-  const plan = await refactoring.previewWorkspaceEdit({ documentChanges: [...entries, ...kotlinEntries, ...contracts.entries, rename] }, {
+  const options = {
     kind: KIND, title: 'Rename public Java class ' + oldName + ' to ' + newName,
     anchorDocument: document, cancellation, allowedResourceOperations: ['rename'], allowedBeanClassEdits: contracts.permissions,
     allowedJavaTypeKotlinEdits: kotlinPermissions,
@@ -268,13 +270,30 @@ async function prepareJavaTypeRename(deps, { document, position, newName, cancel
     },
     preApply,
     warnings: ['The public class name and filename change in this imported project, including the listed literal Spring XML bean classes. Review external consumers, binaries, reflection and generated sources separately.',
-      ...(kotlinReview?['The listed Kotlin edits cover exact main-source imports, explicit type positions and direct constructor calls in one imported Gradle project.']:[])]
-  });
+      ...(kotlinReview?['Kotlin edits cover exact main-source imports, explicit types, constructor calls and verified constructor references in one imported Gradle project. Import alias names are preserved.']:[])]
+  };
+  const candidates = commentGroups(java,entries,selected.fqn,newName,editedText);
+  const publicGroups = candidates.map(group=>({ id:group.id, uri:group.uri, count:group.edits.length }));
+  async function build(groups, token, offer) {
+    const chosen = candidates.filter(group=>groups.includes(group.id));
+    const javaEdits = withCommentGroups(entries,chosen);
+    const changed = chosen.reduce((sum,group)=>sum+group.edits.length,0);
+    return refactoring.previewWorkspaceEdit({ documentChanges:[...javaEdits,...kotlinEntries,...contracts.entries,rename] },{
+      ...options, cancellation:token,
+      warnings:[...options.warnings,...(changed?[changed+' optional TODO or NOTE comment name updates in '+chosen.length+' files.']:[])],
+      ...(offer&&publicGroups.length&&{ commentChoices:{ groups:publicGroups,
+        select:(selected,token)=>build(selected,token,false) } })
+    });
+  }
+  const plan = await build([],cancellation,true);
   return {
     ...plan, typeRename: { oldFqn: selected.fqn, newFqn, attributedSpans: spans.length, ...engine,
       xmlFiles: contracts.entries.length, xmlBeanClasses: contracts.entries.reduce((count, entry) => count + entry.edits.length, 0),
-      ...(kotlinReview&&{kotlinCallers:{files:kotlinEntries.length,sites:kotlinReview.sites.length,
-        constructorBindings:kotlinReview.validation.constructors,compilerVerified:true}}),
+      ...(kotlinReview&&{kotlinCallers:{files:kotlinEntries.length,sites:kotlinReview.changedSites.length,
+        constructorBindings:kotlinReview.validation.constructors,compilerVerified:true,
+        ...(kotlinReview.sites.some(site=>site.importAlias)&&{importAliases:kotlinReview.sites.filter(site=>site.importAlias).length,
+          retainedAliasSites:kotlinReview.sites.filter(site=>site.keepAlias).length}),
+        ...(kotlinReview.validation.callableReferences&&{constructorReferences:kotlinReview.validation.callableReferences})}}),
       sourceFiles: java.length, beforeErrors: 0, afterErrors: 0 }
   };
 }

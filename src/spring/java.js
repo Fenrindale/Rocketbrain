@@ -17,13 +17,17 @@ function rangeAt(text, start, end) { return { start: positionAt(text, start), en
 function decodeString(raw) {
   try { return raw.slice(1, -1).replace(/\\(?:u([a-fA-F0-9]{4})|([btnfr"'\\]))/g, (all, unicode, char) => unicode ? String.fromCharCode(parseInt(unicode, 16)) : ({ b: '\b', t: '\t', n: '\n', f: '\f', r: '\r', '"': '"', "'": "'", '\\': '\\' })[char]); } catch { return null; }
 }
-function lexJava(text) {
-  const tokens = [], issues = []; let i = 0;
+function lexJava(text, { collectLineComments = false } = {}) {
+  const tokens = [], issues = [], lineComments = collectLineComments ? [] : undefined; let i = 0;
   if (/\\u+[a-fA-F0-9]{4}/.test(text)) issues.push('Java Unicode pre-lexing escapes are not fully modeled');
   while (i < text.length) {
     const start = i, char = text[i];
     if (/\s/.test(char)) { i++; continue; }
-    if (text.startsWith('//', i)) { while (i < text.length && text[i] !== '\n') i++; continue; }
+    if (text.startsWith('//', i)) {
+      while (i < text.length && text[i] !== '\n') i++;
+      if (lineComments) lineComments.push({ start, end: i, text: text.slice(start,i) });
+      continue;
+    }
     if (text.startsWith('/*', i)) { const end = text.indexOf('*/', i + 2); if (end < 0) { issues.push('Unterminated block comment'); break; } i = end + 2; continue; }
     if (text.startsWith('"""', i)) {
       i += 3; let closed = false;
@@ -41,7 +45,7 @@ function lexJava(text) {
     if (/[0-9]/.test(char)) { i++; while (i < text.length && /[\w.]/.test(text[i])) i++; tokens.push({ kind: 'number', text: text.slice(start, i), start, end: i }); continue; }
     tokens.push({ kind: 'symbol', text: char, start, end: ++i });
   }
-  return { tokens, issues };
+  return { tokens, issues, ...(lineComments && { lineComments }) };
 }
 function matching(tokens, index, open = tokens[index]?.text, close = ({ '(': ')', '{': '}', '[': ']' })[open]) {
   let depth = 0;
