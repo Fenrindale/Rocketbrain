@@ -1,8 +1,6 @@
 services:
   workspace:
-    build:
-      context: .
-      dockerfile: Containerfile.txt
+    image: "${ROCKETBRAIN_PORT_FIXTURE_IMAGE:-rocketbrain-devcontainer-port-fixture:local}"
     command:
       - java
       - --add-modules=jdk.httpserver
