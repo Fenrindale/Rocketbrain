@@ -50,6 +50,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 `rocketbrain.localCodeModel.endpoint`와 `.model`에는 로컬 모델 서버 주소와 모델 이름을 지정합니다. **Ask Local Code Model**은 선택한 코드에 대한 응답을 엽니다. **Request a Reviewed Local Edit**로 변경 내용을 비교하고, 검토한 편집은 **Apply Reviewed Local Edit**로 적용합니다.
 
+**Start Local Workspace Conversation**에서 같은 신뢰된 로컬 워크스페이스에 저장한 소스 파일 2~4개를 선택합니다. 요청 검토 문서에 선택한 파일의 SHA-256, 모델 주소, 질문과 이전 대화가 표시됩니다. **Send Reviewed Local Model Request**를 실행하여 내용을 확인한 뒤 보내고, **Continue Local Workspace Conversation**으로 최대 네 번까지 이어갑니다. 선택한 파일의 저장본이 바뀌면 새 대화에서 다시 검토합니다. 대화는 현재 창의 메모리에 최대 15분간 남으며, **Close Local Workspace Conversation**으로 닫을 수 있습니다.
+
 **Allow Local Inline Completions for This File**은 현재 파일에 한해 커서 주변 코드를 지정한 루프백 모델에 보낼 수 있도록 합니다. Java, Kotlin, JavaScript, TypeScript, Python, SQL 파일을 지원합니다. 커서 앞 최대 1,600개와 뒤 최대 400개의 UTF-16 단위를 보내며, 제안은 VS Code에서 수락할 때 삽입됩니다. 파일을 닫거나 모델 설정을 바꾸면 허용이 만료됩니다. **Stop Local Inline Completions**로 즉시 중지할 수 있습니다.
 
 표준 `src/main/resources`의 FXML에서 Outline을 볼 수 있습니다. 컨트롤러, 이벤트 메서드, `fx:id` 필드와 같은 모듈에 있는 포함 파일·리소스는 정의로 이동할 수 있습니다. **Run or Package JavaFX Application**에서 JavaFX Maven 플러그인이 구성된 모듈을 선택해 앱을 실행하거나 `jlink` 런타임 이미지를 만들 수 있습니다.

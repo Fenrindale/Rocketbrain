@@ -5,6 +5,7 @@ const { randomUUID } = require('node:crypto');
 const { workspacePath, workspaceRoots } = require('../java/workbench-model');
 const { requestEditorModel, snapshotLocalEdit, applyLocalEditToText } = require('./editor-model');
 const { registerEditorInline } = require('./editor-inline-vscode');
+const { registerEditorConversation } = require('./editor-conversation-vscode');
 
 const scheme = 'rocketbrain-local-code-model';
 
@@ -37,6 +38,7 @@ function registerEditorModel(vscode) {
   }
 
   const inline = registerEditorInline(vscode, { localFile, configuration });
+  const conversation = registerEditorConversation(vscode, { configuration });
 
   function remember(result) {
     while (reviews.size >= 8) reviews.delete(reviews.keys().next().value);
@@ -138,9 +140,10 @@ function registerEditorModel(vscode) {
     try { return await run(); }
     catch (error) { void vscode.window.showErrorMessage(error.message); }
   }));
-  return { explain, prepareEdit, apply, inline, dispose() {
+  return { explain, prepareEdit, apply, inline, conversation, dispose() {
     disposed = true;
     inline.dispose();
+    conversation.dispose();
     for (const request of openRequests) request.abort();
     reviews.clear();
     provider.dispose();
