@@ -120,6 +120,37 @@ test('read-only scoped target refuses a parent guess and stale or dirty declarat
   } finally { await workbench.dispose(); }
 });
 
+test('Windows editor drive casing still resolves the exact imported Java source component', {
+  skip: process.platform !== 'win32'
+}, async t => {
+  const { root, targets } = await owned(t);
+  const parent = path.join(root, 'maven'), component = path.join(parent, 'service');
+  const jdtUri = file => url(file).replace(/^file:\/\/\/([a-z]):/iu, (_, drive) => 'file:///' + drive.toUpperCase() + ':');
+  const editorUri = targets.maven.replace(/^file:\/\/\/([a-z]):/iu, (_, drive) => 'file:///' + drive.toLowerCase() + '%3A');
+  assert.match(editorUri, /^file:\/\/\/[a-z]%3A/u);
+  assert.match(jdtUri(component), /^file:\/\/\/[A-Z]:/u);
+  let imported = true;
+  const calls = [];
+  const request = async command => {
+    calls.push(command);
+    if (command === 'java.project.getAll') return [jdtUri(parent), ...(imported ? [jdtUri(component)] : [])];
+    if (command === 'java.project.getClasspaths') return { projectRoot: jdtUri(component), classpaths: [], modulepaths: [] };
+    if (command === 'java.project.getSettings') return {
+      [settingsKeys[0]]: [path.join(component, 'src/main/java')],
+      [settingsKeys[3]]: ['org.eclipse.m2e.core.maven2Nature']
+    };
+    throw Error('Unexpected metadata request: ' + command);
+  };
+  const input = { sourceUri: editorUri, folders: [root], request };
+  const target = await resolveJavaSourceTarget(input);
+  assert.ok(same(target.projectRoot, component));
+  assert.equal(target.declaredBuild.reactorProject, 'service');
+  imported = false;
+  calls.length = 0;
+  await assert.rejects(resolveJavaSourceTarget(input), /Import the nested Java component/u);
+  assert.deepEqual(calls, ['java.project.getAll']);
+});
+
 test('literal Gradle aliases retain source ranges and computed membership omits an unproven path', async t => {
   const { root } = await owned(t), component = path.join(root, 'gradle/vendor/service');
   const inspect = () => resolveBuildTarget(component, root, () => false).build;

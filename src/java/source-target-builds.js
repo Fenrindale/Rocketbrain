@@ -23,7 +23,7 @@ function descriptor(file, dirty) {
 }
 
 function verifyNestedComponent(source, project) {
-  for (let folder = path.dirname(source); folder !== project && inside(project, folder); folder = path.dirname(folder)) {
+  for (let folder = path.dirname(source); path.relative(project, folder) !== '' && inside(project, folder); folder = path.dirname(folder)) {
     if ([...files, '.project'].some(name => fs.lstatSync(path.join(folder, name), { throwIfNoEntry: false }))) {
       throw fail('Import the nested Java component containing the selected source. Its parent cannot supply this target.');
     }
