@@ -9,20 +9,22 @@ dsym="$output/RocketbrainProbe.framework.dSYM"
 test -f "$framework/RocketbrainProbe"
 test -f "$framework/Headers/RocketbrainProbe.h"
 test ! -e "$output"
-mkdir -p "$app/Frameworks"
-cp "$fixture/Info.plist" "$app/Info.plist"
-cp -R "$framework" "$app/Frameworks/"
-xcrun --sdk iphonesimulator clang -arch arm64 -mios-simulator-version-min=17.0 -g -O0 -fobjc-arc \
-  -F "$(dirname "$framework")" -framework UIKit -framework RocketbrainProbe \
-  -Wl,-rpath,@executable_path/Frameworks "$fixture/main.m" -o "$app/RocketbrainIosFixture"
+mkdir -p "$output"
+xcrun xcodebuild -project "$fixture/Fixture.xcodeproj" -target RocketbrainIosFixture \
+  -sdk iphonesimulator -configuration Debug \
+  "BUILD_DIR=$output" "CONFIGURATION_BUILD_DIR=$output" "OBJROOT=$output/intermediates" build
+test -x "$app/RocketbrainIosFixture"
+test -f "$app/Frameworks/RocketbrainProbe.framework/RocketbrainProbe"
 if test -d "$framework.dSYM"; then
   cp -R "$framework.dSYM" "$dsym"
 else
   xcrun dsymutil "$framework/RocketbrainProbe" -o "$dsym"
 fi
 test -s "$dsym/Contents/Resources/DWARF/RocketbrainProbe"
-codesign --force --sign - "$app/Frameworks/RocketbrainProbe.framework"
-codesign --force --sign - --entitlements "$fixture/Debug.plist" "$app"
 codesign --verify --deep "$app"
+xcrun --sdk iphonesimulator vtool -show-build "$app/RocketbrainIosFixture"
+/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$app/Info.plist"
+/usr/libexec/PlistBuddy -c 'Print :DTPlatformName' "$app/Info.plist"
+codesign -d --entitlements :- "$app"
 xcrun dwarfdump --uuid "$app/Frameworks/RocketbrainProbe.framework/RocketbrainProbe"
 xcrun dwarfdump --uuid "$dsym/Contents/Resources/DWARF/RocketbrainProbe"

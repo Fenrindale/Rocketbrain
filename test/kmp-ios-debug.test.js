@@ -6,10 +6,11 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { createHash } = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { execFile, execFileSync } = require('node:child_process');
+const { promisify } = require('node:util');
 const { EventEmitter, once } = require('node:events');
 const { setTimeout: delay } = require('node:timers/promises');
-const { armSimulatorBuild, armUuid, bundleDigest } = require('../src/java/kmp-ios-review');
+const { armSimulatorBuild, armUuid, bundleDigest, uuid } = require('../src/java/kmp-ios-review');
 const { createKmpIosDebug, launchedPid, observeInstalledContainer } = require('../src/java/kmp-ios-debug');
 const { createKmpIosDebugAdapter } = require('../src/java/kmp-ios-debug-adapter');
 
@@ -131,6 +132,47 @@ function debugClient(service, review) {
   };
 }
 
+const xcrun = promisify(execFile);
+async function simctl(args, timeout = 45000) {
+  return (await xcrun('/usr/bin/xcrun', ['simctl', ...args], { timeout, maxBuffer: 512 * 1024, encoding: 'utf8' })).stdout.trim();
+}
+
+async function recordLaunchLog(t, id, bundleId) {
+  try {
+    const log = await simctl(['spawn', id, 'log', 'show', '--last', '2m', '--style', 'compact',
+      '--predicate', 'eventMessage CONTAINS[c] "' + bundleId + '"'], 16000);
+    t.diagnostic('Owned simulator launch log:\n' + log.split('\n').slice(-25).join('\n').slice(0, 12000));
+  } catch (error) {
+    t.diagnostic('Owned simulator log unavailable: ' + String(error.code ?? error.signal).slice(0, 100));
+  }
+}
+
+async function ordinaryLaunchControl(t, selection, service, baseline) {
+  const appId = 'org.rocketbrain.fixture.kotlinios';
+  const id = await simctl(['create', 'Rocketbrain ordinary launch control', selection.device, selection.runtime]);
+  assert.ok(uuid.test(id) && !baseline.includes(id), 'expected a newly created diagnostic simulator');
+  try {
+    await simctl(['boot', id], 45000);
+    await simctl(['bootstatus', id, '-b'], 240000);
+    await simctl(['install', id, selection.app], 65000);
+    launchedPid(await simctl(['launch', id, appId], 90000), appId);
+    const data = await simctl(['get_app_container', id, appId, 'data'], 75000);
+    const reply = path.join(data, 'Library', 'rocketbrain-ios-fixture.txt');
+    for (let attempt = 0; attempt < 100 && !fs.existsSync(reply); attempt++) await delay(150);
+    assert.equal(fs.readFileSync(reply, 'utf8'), 'UIKit Kotlin=42\n');
+    t.diagnostic('Ordinary UIKit launch wrote the same Kotlin result inside a separate owned simulator.');
+  } catch (error) {
+    t.diagnostic('Ordinary UIKit launch control failed: ' + String(error.stderr || error.message).slice(0, 2000));
+    await recordLaunchLog(t, id, appId);
+  } finally {
+    await simctl(['terminate', id, appId], 20000).catch(() => {});
+    await simctl(['shutdown', id], 35000).catch(() => {});
+    await simctl(['delete', id], 35000);
+    assert.deepEqual(Object.values((await service.devices()).devices).flat().map(item => item.udid).sort(), baseline);
+    t.diagnostic('Separate ordinary launch simulator removed.');
+  }
+}
+
 test('iOS adapter refuses wrong/conditional breakpoints and frames outside the paused scope', async () => {
   const source = path.resolve('Probe.kt');
   const calls = [];
@@ -165,7 +207,7 @@ test('iOS adapter refuses wrong/conditional breakpoints and frames outside the p
 });
 
 test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped teardown', {
-  skip: !process.env.ROCKETBRAIN_IOS_SIMULATOR_TEST, timeout: 635000
+  skip: !process.env.ROCKETBRAIN_IOS_SIMULATOR_TEST, timeout: 1080000
 }, async t => {
   assert.equal(process.platform, 'darwin');
   assert.equal(process.arch, 'arm64');
@@ -179,9 +221,10 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
   const line = original.toString('utf8').split('\n').findIndex(item => item.includes('// debugger-stop')) + 1;
   assert.ok(line > 0);
   const phases = [];
-  const service = createKmpIosDebug({ observe(phase) {
+  const service = createKmpIosDebug({ observe(phase, simulator) {
     phases.push(phase);
     t.diagnostic('iOS fixture: ' + phase);
+    if (phase === 'debuggee-launch-refused') return recordLaunchLog(t, simulator, bundleId);
   } });
   t.after(() => service.stop());
   const inventory = await service.devices();
@@ -230,7 +273,15 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
   const failure = client.event('output', 575000).then(event => { throw Error(event.output); });
   void failure.catch(() => {});
   assert.equal((await client.request('configurationDone')).success, true);
-  assert.equal((await Promise.race([observed, failure])).reason, 'breakpoint');
+  try {
+    assert.equal((await Promise.race([observed, failure])).reason, 'breakpoint');
+  } catch (debugFailure) {
+    if (phases.includes('debuggee-launch-refused')) {
+      await service.stop();
+      await ordinaryLaunchControl(t, selection, service, baseline);
+    }
+    throw debugFailure;
+  }
   const stack = await client.request('stackTrace', { threadId: 1 });
   assert.equal(stack.body.stackFrames[0].source.path, source);
   assert.equal(stack.body.stackFrames[0].line, line);
