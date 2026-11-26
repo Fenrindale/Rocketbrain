@@ -3,7 +3,8 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { createKotlinFieldInspector } = require('../src/java/debug-kotlin-fields');
-const { KOTLIN_FIELD_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_VALUES_BUILD } = require('../src/java/debug-runtime');
+const { KOTLIN_FIELD_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_VALUES_BUILD, GROOVY_LINE_BUILD, KOTLIN_BOX_BUILD } =
+  require('../src/java/debug-runtime');
 const { JavaDebugAdapter } = require('../src/java/debug-adapter');
 
 function fixture() {
@@ -121,4 +122,51 @@ test('native Java transport grants Kotlin field values only on the original veri
   transport.verifiedFieldPort=50321;
   attach('debug.example.invalid',50321);
   assert.equal(received.at(-1).arguments.rocketbrainLocalKotlinFieldValues,undefined);
+});
+
+test('one modal approves a new boxed Long and older adapters retain boxed-local copying', async () => {
+  const state={state:'stopped',threadId:1,stopVersion:2,appliedVersion:0,debugBuild:KOTLIN_BOX_BUILD};
+  const owner='fixture.WatchObject', name='freshLong', receiver='target', value='9007199254740999';
+  const reviewId='9dd8cc72-05ce-46ac-9514-9157c04582da', calls=[];
+  let approved=false;
+  const session={id:'boxes',type:'rocketbrain-java',async customRequest(command,args) {
+    if(command==='stackTrace') return {stackFrames:[{id:11,name:'paused'}]};
+    assert.equal(command,'rocketbrain/kotlinObjectFields');
+    calls.push(args.action);
+    if(args.action==='receivers') return {receivers:[{name:receiver,owner}]};
+    if(args.action==='fields') return {fields:[
+      {name,type:'Long (boxed)',value:'null',boxed:true,writable:true,boxSources:[],boxLiteral:true}
+    ]};
+    if(args.action==='prepareLiteral') {
+      assert.deepEqual([args.receiver,args.name,args.input],[receiver,name,value+'L']);
+      return {reviewId,receiver,owner,name,type:'Long (boxed)',before:'null',after:value,boxLiteral:true};
+    }
+    if(args.action==='cancel') return {state:'cancelled'};
+    if(args.action==='apply') return {state:'applied',receiver,name,value,boxLiteral:true};
+    throw Error('Unexpected field request.');
+  }};
+  const vscode={debug:{activeDebugSession:session},window:{
+    showQuickPick:async entries=>entries[0],showInputBox:async ()=>value+'L',
+    async showWarningMessage(title,options,button) {
+      assert.equal(options.modal,true);
+      assert.match(options.detail,/Create the reviewed JVM wrapper/u);
+      return approved?button:undefined;
+    },
+    showInformationMessage(){}
+  }};
+  const inspector=createKotlinFieldInspector(vscode,{getState:()=>state,ensureTrusted(){}});
+  for(const legacy of [KOTLIN_FIELD_VALUES_BUILD,GROOVY_LINE_BUILD]) {
+    state.debugBuild=legacy;
+    const report=await inspector.inspectFields(await inspector.list(),receiver);
+    assert.equal(report.fields[0].boxLiteral,undefined);
+    await assert.rejects(inspector.prepareLiteral(report,name,value+'L'),/verified local JVM/u);
+  }
+  state.debugBuild=KOTLIN_BOX_BUILD;
+  const report=await inspector.inspectFields(await inspector.list(),receiver);
+  await assert.rejects(inspector.prepareLiteral(report,name,'9223372036854775808L'),/in-range Kotlin Long/u);
+  await inspector.choose();
+  assert.deepEqual(calls.slice(-2),['prepareLiteral','cancel']);
+  approved=true;
+  assert.deepEqual(await inspector.choose(),{state:'applied',receiver,name,value});
+  assert.deepEqual(calls.slice(-2),['prepareLiteral','apply']);
 });

@@ -42,7 +42,7 @@ const CORE_PATCH_TO = '                try {\n                    Path fullpath 
 const PATCH_FROM = 'this.serverSocket = new ServerSocket(0, 1);';
 const PATCH_TO = 'this.serverSocket = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));';
 const PATCH_NOTICE = [
-  'Rocketbrain Java debug server patches v12',
+  'Rocketbrain Java debug server patches v13',
   'Managed Gradle Groovy applications accept exact compiled source lines after matching live class and method bytecodes.',
   'Upstream: microsoft/java-debug 0.53.1 (' + SOURCE_COMMIT + ')',
   'Patch 1 source: ' + SOURCE_URL,
@@ -64,6 +64,7 @@ const PATCH_NOTICE = [
   'Patch 9: inspect declared Kotlin JVM scalar fields and review one exact instance-field update without invoking target methods.',
   'Patch 10: bind managed Kotlin JVM source lines to actual JDI locations using compiled source and bytecode evidence.',
   'Patch 11: preview Kotlin strings and paged primitive array elements and review one exact write in a local JVM.',
+  'Patch 13: construct reviewed primitive wrappers through the verified initialized bootstrap constructor chain on a local breakpoint frame.',
   ...KOTLIN_LINE_UPSTREAM.map(site=>site.sourceUrl+' SHA-256 '+site.sha256),
   'Removed original signature files from modified JARs. Original project copyright and license notices are retained.',
   'Patched adapter and added helper sources are included under META-INF/rocketbrain-sources/.',
@@ -189,7 +190,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
       'adapter/KotlinLocalAssignment.class', 'adapter/KotlinLocalAssignment$Review.class', 'adapter/KotlinFieldAccess.class',
       'adapter/KotlinObjectFields.class', 'adapter/KotlinObjectFields$Frame.class', 'adapter/KotlinObjectFields$Receiver.class',
       'adapter/KotlinObjectFields$Replacement.class', 'adapter/KotlinObjectFields$Review.class', 'adapter/KotlinObjectFields$Page.class',
-      'adapter/KotlinFieldValues.class',
+      'adapter/KotlinFieldValues.class', 'adapter/KotlinFieldValues$Boxing.class',
       'Breakpoint.class','adapter/handler/SetBreakpointsRequestHandler.class','adapter/handler/StackTraceRequestHandler.class',
       'adapter/handler/StackTraceRequestHandler$StackFrameInfo.class','KotlinLineBreakpoints.class',
       'KotlinLineBreakpoints$Site.class','KotlinLineBreakpoints$Source.class','KotlinLineBreakpoints$Session.class']) {
@@ -221,7 +222,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     const meta = path.join(stage, 'META-INF');
     for (const name of fs.readdirSync(meta)) if (/\.(?:SF|RSA|DSA|EC)$|^SIG-/i.test(name)) await fs.promises.rm(path.join(meta, name));
     const manifestPath = path.join(meta, 'MANIFEST.MF');
-    const main = fs.readFileSync(manifestPath, 'utf8').split(/\r?\n\r?\n/)[0].replace(/Bundle-Version: 0\.53\.1\b/, 'Bundle-Version: 0.53.1.rocketbrain12');
+    const main = fs.readFileSync(manifestPath, 'utf8').split(/\r?\n\r?\n/)[0].replace(/Bundle-Version: 0\.53\.1\b/, 'Bundle-Version: 0.53.1.rocketbrain13');
     await fs.promises.writeFile(manifestPath, main.replace(/\r?\n/g, '\r\n') + '\r\n\r\n');
     const sourcesDir = path.join(meta, 'rocketbrain-sources'); await fs.promises.mkdir(sourcesDir);
     await fs.promises.writeFile(path.join(sourcesDir, 'JavaDebugServer.java'), patchedSource);

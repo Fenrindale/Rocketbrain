@@ -178,6 +178,8 @@ Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를
 
 ### Kotlin JVM 편집
 
+**Inspect Kotlin Object Fields**에서 검증된 로컬 JVM의 Kotlin 중단점 최상위 프레임을 열면 `Int?`, `Long?`, `Boolean?` 필드에 리터럴을 입력할 수 있습니다. Long은 `L` 접미사를 붙입니다. 변경 내용을 확인한 뒤 디버거는 JVM 표준 래퍼 객체를 만들고, 같은 프레임과 객체의 필드 값이 그대로인지 다시 확인한 다음 적용합니다. 래퍼 생성에 영향을 주는 메서드·예외 중단점이 활성화되어 있으면 리터럴 입력이 제한됩니다. v11·v12 어댑터에서는 기존의 박싱된 지역 변수 복사를 지원합니다.
+
 [MIT 라이선스의 standalone ktlsp 1.4.0-rc1](https://codeberg.org/winlogon/ktlsp/releases/tag/v1.4.0-rc1)을 압축 해제한 `server` 디렉터리를 `rocketbrain.kotlinEditor.serverHome`에 지정합니다. 독립 JDK 21 이상을 사용합니다. Gradle 프로젝트는 로컬 Kotlin 파일을 열어 시작합니다. Maven은 독립 Apache Maven 경로를 `rocketbrain.java.mavenHome`에 지정한 뒤, 단일 Maven 모듈의 `.kt` 파일에서 **Start Kotlin Language Support**를 실행합니다. 선택한 POM에서 Maven 의존성을 읽어 언어 서버에 연결합니다. Maven 리액터의 앱 모듈에 형제 모듈 의존성이 있으면 앱의 `.kt` 파일에서 **Start Kotlin Maven Reactor**를 선택합니다. 표시된 의존 모듈을 승인하면 해당 JAR을 편집 세션 전용 Maven 저장소에 빌드하고, 앱 모듈의 자동완성과 타입 진단에 사용합니다. 의존 소스나 POM이 바뀌면 다시 준비할 수 있습니다. 로컬 `.kt` 파일을 열면 값과 멤버 자동 완성, 타입 표시, 선언 이동 및 컴파일 진단을 사용할 수 있습니다. **Stop Kotlin Language Support**로 세션을 종료하고 **Show Kotlin Language Server Output**에서 서버 출력을 확인합니다.
 
 검증한 릴리스 ZIP의 SHA-256은 `27d33f2879d12076174741488721896098e8494f5d906f99ef1c85d6159d42b7`입니다. Windows에서는 Unicode 프로젝트 경로의 진단을 위해 임시 호환 JAR를 생성합니다. 실행 전 서버와 컴파일러 JAR의 SHA-256을 확인합니다.

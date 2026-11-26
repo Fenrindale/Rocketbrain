@@ -1,6 +1,6 @@
 'use strict';
 
-const { KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILDS } = require('./debug-runtime');
+const { KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILDS, KOTLIN_BOX_BUILD } = require('./debug-runtime');
 const { createKotlinFrameGuard } = require('./debug-kotlin-local');
 
 const request = 'rocketbrain/kotlinObjectFields';
@@ -27,13 +27,27 @@ function isText(value) {
 function isField(row) {
   if (!isName(row?.name) || typeof row.boxed!=='boolean' || typeof row.writable!=='boolean' || typeof row.type!=='string' ||
       !Array.isArray(row.boxSources) || row.boxSources.length>128 || row.boxSources.some(source=>!isName(source)) ||
-      ((!row.writable || !row.boxed) && row.boxSources.length)) return false;
+      ((!row.writable || !row.boxed) && row.boxSources.length) ||
+      (row.boxLiteral!==undefined && (row.boxLiteral!==true || !row.writable || !row.boxed || row.kind!==undefined))) return false;
   if (row.kind==='text') return row.type==='String' && !row.boxed &&
     (isText(row.value) || row.value==='null' || row.value===unavailableText && !row.writable);
   if (row.kind==='array') return !row.boxed && primitiveTypes.has(row.elementType) && row.type===row.elementType+'Array' &&
     index(row.length) && (row.value==='length '+row.length || row.value==='null' && row.length===0 && !row.writable);
   return row.kind===undefined && primitiveTypes.has(row.boxed?row.type.replace(/ \(boxed\)$/u,''):row.type) &&
     row.boxed===row.type.endsWith(' (boxed)') && isScalar(row.type,row.boxed,row.value);
+}
+
+function boxedLiteralValue(type, input) {
+  const scalar=type.split(' ')[0];
+  if (typeof input==='string' && input.length<=24) {
+    if (scalar==='Boolean' && /^(?:true|false)$/u.test(input)) return input;
+    const match=/^(-?(?:0|[1-9]\d*))(L)?$/u.exec(input);
+    if (scalar!=='Boolean' && match && Boolean(match[2])===(scalar==='Long')) {
+      const number=BigInt(match[1]), limit=1n << (scalar==='Long'?63n:31n);
+      if (number>=-limit && number<limit) return String(number);
+    }
+  }
+  throw Error('Enter an in-range Kotlin '+scalar+' literal. Use an L suffix for Long.');
 }
 
 function createKotlinFieldInspector(vscode, options) {
@@ -74,9 +88,10 @@ function createKotlinFieldInspector(vscode, options) {
     if (!Array.isArray(items)||items.length>256||items.some(row=>!isField(row))) {
       throw Error('The Java adapter returned an invalid field list.');
     }
-    const reportFields = Object.freeze({receiver, fields:Object.freeze(items.map(({name,type,value,boxed,writable,boxSources,kind,length,elementType})=>
+    const access=options.getState(context.session.id)?.debugBuild===KOTLIN_BOX_BUILD;
+    const reportFields = Object.freeze({receiver, fields:Object.freeze(items.map(({name,type,value,boxed,writable,boxSources,boxLiteral,kind,length,elementType})=>
       Object.freeze({name,type,value,boxed,writable,boxSources:Object.freeze([...boxSources]),...(kind&&{kind}),
-        ...(kind==='array'&&{length,elementType})})))});
+        ...(kind==='array'&&{length,elementType}),...(access&&boxLiteral&&{boxLiteral:true})})))});
     fields.set(reportFields,context);
     return reportFields;
   }
@@ -112,29 +127,36 @@ function createKotlinFieldInspector(vscode, options) {
     return review;
   }
 
-  async function prepare(report, name, input) {
+  async function reviewField(report, name, input, createBox=false) {
     const context = need(fields,report);
     const slot = report.fields.find(row=>row.name===name);
     const text=slot?.kind==='text';
+    if (createBox && !slot?.boxLiteral) throw Error('Choose a writable Kotlin boxed field on the top breakpoint frame of a verified local JVM.');
+    const literal = createBox ? boxedLiteralValue(slot.type,input) : undefined;
     if (text && (typeof input!=='string' || input.length>maxText || /[\u0000\uD800-\uDFFF]/u.test(input))) {
       throw Error('Use valid Kotlin field text of at most 2048 UTF-16 units.');
     }
-    if (!slot?.writable||slot.kind==='array'||typeof input!=='string'||(!text && (slot.boxed?!slot.boxSources.includes(input):input.length>24))) {
+    if (!slot?.writable||slot.kind==='array'||typeof input!=='string'||
+        (!createBox && !text && (slot.boxed?!slot.boxSources.includes(input):input.length>24))) {
       throw Error('Choose a writable Kotlin field and its matching primitive literal or boxed local.');
     }
     const {name:receiver,owner} = report.receiver;
-    const result = await send(context,'prepare',{receiver,name,input});
+    const result = await send(context,createBox?'prepareLiteral':'prepare',{receiver,name,input});
     if (!same(result,{receiver,owner,name,type:slot.type},['receiver','owner','name','type'])||
         typeof result.reviewId!=='string'||!tokens.test(result.reviewId)||
+        (createBox ? result.boxLiteral!==true || result.after!==literal : result.boxLiteral!==undefined) ||
         (text ? !(result.before==='null' || isText(result.before)) || !isText(result.after) || JSON.parse(result.after)!==input :
           !isScalar(slot.type,slot.boxed,result.before)||!isScalar(slot.type,slot.boxed,result.after)||result.after==='null')) {
       throw Error('The Java adapter returned an invalid Kotlin field review.');
     }
     const review = Object.freeze({receiver,owner,name,type:result.type,before:result.before,after:result.after,
-      ...(slot.boxed?{boxedLocal:input}:{})});
+      ...(createBox?{boxLiteral:input}:slot.boxed?{boxedLocal:input}:{})});
     reviews.set(review,{...context,reviewId:result.reviewId});
     return review;
   }
+
+  const prepare=(report,name,input)=>reviewField(report,name,input);
+  const prepareLiteral=(report,name,input)=>reviewField(report,name,input,true);
 
   async function apply(review) {
     const context = need(reviews,review);
@@ -142,7 +164,8 @@ function createKotlinFieldInspector(vscode, options) {
     const result = await send(context,'apply',{reviewId:context.reviewId});
     const expected={state:'applied',receiver:review.receiver,name:review.name,value:review.after};
     if (review.index!==undefined) expected.index=review.index;
-    if (!same(result,expected,['state','receiver','name','value','index'])) {
+    if (!same(result,expected,['state','receiver','name','value','index']) ||
+        result.boxLiteral!==(review.boxLiteral===undefined?undefined:true)) {
       throw Error('The Java adapter did not confirm the reviewed Kotlin field value.');
     }
     return expected;
@@ -158,7 +181,8 @@ function createKotlinFieldInspector(vscode, options) {
   async function confirm(review) {
     const slot=review.receiver+'.'+review.name+(review.index===undefined?'':'['+review.index+']');
     try {
-      const source=review.boxedLocal?'\nCopy reference from '+review.boxedLocal:'';
+      const source=review.boxedLocal?'\nCopy reference from '+review.boxedLocal:review.boxLiteral!==undefined?
+        '\nCreate the reviewed JVM wrapper for '+review.boxLiteral:'';
       const prompt=review.index===undefined?'Set this JVM field in the paused Kotlin object?':'Set this element in the paused Kotlin array?';
       const button=review.index===undefined?'Set Field Value':'Set Element Value';
       const answer=await vscode.window.showWarningMessage(prompt,{modal:true,
@@ -210,21 +234,29 @@ function createKotlinFieldInspector(vscode, options) {
     if (!selection) return;
     const {slot} = selection;
     if (slot.kind==='array') return chooseElement(observed,slot,title);
-    if (!slot.writable || (slot.boxed && !slot.boxSources.length)) {
-      const reason = slot.writable?'A matching non-null boxed local is required for replacement.':'This JVM field is read-only.';
+    if (!slot.writable || (slot.boxed && !slot.boxSources.length && !slot.boxLiteral)) {
+      const reason = slot.writable?'A matching boxed local or a supported local breakpoint is required.':'This JVM field is read-only.';
       void vscode.window.showInformationMessage(observed.receiver.name+'.'+slot.name+' = '+slot.value+' · '+slot.type+'\n'+reason);
       return;
     }
-    const input = slot.boxed
-      ? await vscode.window.showQuickPick([...slot.boxSources],{title,placeHolder:'Copy an existing non-null boxed '+slot.type.split(' ')[0]+' local'})
-      : await vscode.window.showInputBox({title,prompt:slot.kind==='text' ?
-        'Enter the replacement text for '+observed.receiver.name+'.'+slot.name :
-        'Enter a '+slot.type+' literal for '+observed.receiver.name+'.'+slot.name,ignoreFocusOut:true});
+    if (slot.boxed) {
+      const choices=slot.boxSources.map(name=>({label:name,local:name,description:'Copy this boxed local'}));
+      if (slot.boxLiteral) choices.push({label:'Enter a Kotlin literal',literal:true});
+      const source=choices.length===1 && slot.boxLiteral ? choices[0] : await vscode.window.showQuickPick(choices,{title});
+      if (!source) return;
+      if (source.local) return confirm(await prepare(observed,slot.name,source.local));
+      const literal=await vscode.window.showInputBox({title,prompt:'Enter a '+slot.type.split(' ')[0]+' literal for '+slot.name,ignoreFocusOut:true});
+      if (literal!==undefined) return confirm(await prepareLiteral(observed,slot.name,literal.trim()));
+      return;
+    }
+    const input = await vscode.window.showInputBox({title,prompt:slot.kind==='text' ?
+      'Enter the replacement text for '+observed.receiver.name+'.'+slot.name :
+      'Enter a '+slot.type+' literal for '+observed.receiver.name+'.'+slot.name,ignoreFocusOut:true});
     if (input === undefined) return;
     return confirm(await prepare(observed,slot.name,slot.kind==='text'?input:input.trim()));
   }
 
-  return {list,inspectFields,inspectArray,prepareElement,prepare,apply,cancel,choose};
+  return {list,inspectFields,inspectArray,prepareElement,prepare,prepareLiteral,apply,cancel,choose};
 }
 
 module.exports = {createKotlinFieldInspector};

@@ -20,6 +20,12 @@ class WatchObject(private val side: WatchSideEffect) {
     @JvmField var isOpen = true
     var exact = 9007199254740993L
     var nullable: Int? = null
+    var freshInt: Int? = null
+    var freshLong: Long? = null
+    var freshFlag: Boolean? = null
+    var freshRace: Int? = null
+    var guardedBox: Int? = null
+        set(value) { side.mutate(); field = value }
     val storedBox: Int? = 7
     val constant = 13
     var label = "original"
@@ -52,6 +58,7 @@ object KotlinWatchInspection {
             var countChanged = false
             var arrayChanged = false
             var elementChanged = false
+            var boxChanged = false
             while (System.nanoTime() < deadline) {
                 if (!countChanged && Files.isRegularFile(signal)) {
                     target.count = 34
@@ -67,6 +74,11 @@ object KotlinWatchInspection {
                     target.changingHistory[1] = 23
                     elementChanged = true
                     println("Rocketbrain Kotlin array element changed by fixture")
+                }
+                if (!boxChanged && Files.isRegularFile(Path.of(signalName + ".box"))) {
+                    target.freshRace = 771
+                    boxChanged = true
+                    println("Rocketbrain Kotlin boxed field changed by fixture")
                 }
                 Thread.sleep(25)
             }
@@ -126,6 +138,10 @@ object KotlinWatchInspection {
         println("Rocketbrain Kotlin Field Values|" + labelBytes + "|" + target.optionalLabel + "|" +
             target.history[65] + "|" + target.preciseHistory[0] + "|" + target.bits[1] + "|" +
             other.label + "|" + other.history[65] + "|" + side.calls)
+        val cachedFalse: Any = false
+        println("Rocketbrain Kotlin Fresh Boxes|" + target.freshInt + "|" + target.freshLong + "|" + target.freshFlag +
+            "|" + ((target.freshFlag as Any?) !== cachedFalse) + "|" + other.freshInt + "|" + other.freshLong + "|" +
+            other.freshFlag + "|" + side.calls)
         println("Rocketbrain Kotlin evaluated|" + subtotal + "|" + precise + "|" + length + "|" + fallback + "|" + boolean)
     }
 }

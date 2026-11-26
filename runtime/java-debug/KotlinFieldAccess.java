@@ -106,11 +106,35 @@ final class KotlinFieldAccess {
     }
 
     private boolean fieldMatches(int index, Field field) {
-        int[] ref = entry(index,9);
+        return memberMatches(index, 9, owner, field.name(), field.signature());
+    }
+
+    private boolean memberMatches(int index, int tag, String namespace, String member, String signature) {
+        int[] ref = entry(index,tag);
         if (ref == null) return false;
         int[] type = entry(ref[1],7), name = entry(ref[2],12);
-        return type != null && name != null && owner.equals(string(type[1]))
-            && field.name().equals(string(name[1])) && field.signature().equals(string(name[2]));
+        return type != null && name != null && namespace.equals(string(type[1]))
+            && member.equals(string(name[1])) && signature.equals(string(name[2]));
+    }
+
+    static Method bootstrapConstructor(ReferenceType type, ReferenceType parent, Field value) {
+        String signature = value == null ? "()V" : "(" + value.signature() + ")V";
+        Method constructor = method(type, "<init>", signature);
+        if (constructor == null || constructor.isNative() || constructor.isAbstract() ||
+                constructor.isSynchronized() || !constructor.isConstructor() ||
+                value != null && !constructor.isPublic()) return null;
+        if (!type.virtualMachine().canGetBytecodes()) return null;
+        byte[] code = constructor.bytecodes();
+        if (parent == null) return value == null && code.length == 1 && op(code,0) == 0xb1 ? constructor : null;
+        int expectedSize = value == null ? 5 : 10;
+        if (code.length != expectedSize || op(code,0) != 0x2a || op(code,1) != 0xb7 ||
+                op(code,expectedSize-1) != 0xb1) return null;
+        KotlinFieldAccess access = inspect(type);
+        if (access == null || !access.memberMatches(index(code,2), 10, parent.name().replace('.', '/'), "<init>", "()V")) return null;
+        if (value == null) return constructor;
+        int load = value.signature().equals("J") ? 0x1f : 0x1b;
+        return op(code,4) == 0x2a && op(code,5) == load && op(code,6) == 0xb5 &&
+            access.fieldMatches(index(code,7), value) ? constructor : null;
     }
 
     private int[] entry(int index, int tag) {

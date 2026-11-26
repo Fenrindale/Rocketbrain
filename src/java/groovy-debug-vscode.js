@@ -3,7 +3,7 @@
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
-const { GROOVY_LINE_BUILD } = require('./debug-runtime');
+const { GROOVY_LINE_BUILDS } = require('./debug-runtime');
 const { GROOVY_DEBUG_MARKER } = require('./debug');
 const { createOwnedJvmDebugger } = require('./micronaut-debugger');
 const { waitForOwnedListener } = require('./testing-debug');
@@ -113,7 +113,7 @@ function createGroovyApplicationDebugger(vscode, java, { projects, configuration
         }).catch(()=>{});
       });
       const state = java.getState(), inputs = verify();
-      if (state.debugBuild !== GROOVY_LINE_BUILD || typeof java.debug.registerGroovySourceLines !== 'function') {
+      if (!GROOVY_LINE_BUILDS.includes(state.debugBuild) || typeof java.debug.registerGroovySourceLines !== 'function') {
         throw fail('Update the independent Rocketbrain Java debugger for managed Groovy source lines.');
       }
       const run = await startGroovyApplicationDebug({ project: inputs.project, file: inputs.file, tools: inputs.tools,

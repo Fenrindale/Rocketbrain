@@ -6,11 +6,17 @@ import com.google.gson.JsonPrimitive;
 import com.sun.jdi.ArrayReference;
 import com.sun.jdi.ByteValue;
 import com.sun.jdi.CharValue;
+import com.sun.jdi.ClassNotLoadedException;
+import com.sun.jdi.ClassType;
 import com.sun.jdi.Field;
 import com.sun.jdi.IntegerValue;
+import com.sun.jdi.Method;
+import com.sun.jdi.ObjectReference;
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.StringReference;
+import com.sun.jdi.ThreadReference;
 import com.sun.jdi.Value;
+import com.sun.jdi.request.EventRequest;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
@@ -25,10 +31,84 @@ final class KotlinFieldValues {
     static final int MAX_TEXT = 2048;
     static final int PAGE_SIZE = 32;
     private static final Map<String,String> ARRAY_ELEMENTS = Map.of("[I", "Int", "[J", "Long", "[Z", "Boolean");
+    private static final Map<String,String> BOX_PRIMITIVES = Map.of(
+        "Ljava/lang/Integer;", "I", "Ljava/lang/Long;", "J", "Ljava/lang/Boolean;", "Z");
 
     private KotlinFieldValues() { }
 
     static String elementType(String signature) { return ARRAY_ELEMENTS.get(signature); }
+
+    private static boolean bootstrap(ReferenceType type, String signature) {
+        if (type == null || type.classLoader() != null || !type.isPrepared() || !type.isInitialized() ||
+                !signature.equals(type.signature())) return false;
+        // Eclipse JDI does not report module mirrors. The bootstrap loader and full constructor
+        // chain are required with either JDI implementation.
+        if (!type.virtualMachine().canGetModuleInfo()) return true;
+        var module = type.module();
+        return module != null && "java.base".equals(module.name());
+    }
+
+    static Boxing boxing(Field field, ThreadReference thread, int depth) {
+        String scalar = BOX_PRIMITIVES.get(field.signature());
+        if (scalar == null || depth != 0 || thread.suspendCount() != 1 ||
+                !bootstrap(thread.referenceType(), "Ljava/lang/Thread;")) return null;
+        ReferenceType actual;
+        try { actual = (ReferenceType) field.type(); }
+        catch (ClassNotLoadedException unavailable) { return null; }
+        if (!(actual instanceof ClassType) || !actual.isFinal() || !bootstrap(actual, field.signature())) return null;
+        ClassType owner = (ClassType) actual;
+        Field storage = owner.fieldByName("value");
+        if (!layoutField(owner, storage, scalar, false) || !storage.isPrivate()) return null;
+        ClassType parent = owner.superclass();
+        ClassType object = "Z".equals(scalar) ? parent : parent == null ? null : parent.superclass();
+        if (!bootstrap(object, "Ljava/lang/Object;") || object.superclass() != null ||
+                !"Z".equals(scalar) && !bootstrap(parent, "Ljava/lang/Number;")) return null;
+        Method constructor = KotlinFieldAccess.bootstrapConstructor(owner, parent, storage);
+        Method root = KotlinFieldAccess.bootstrapConstructor(object, null, null);
+        if (constructor == null || root == null) return null;
+        Method number = parent.equals(object) ? null : KotlinFieldAccess.bootstrapConstructor(parent, object, null);
+        if (!parent.equals(object) && number == null) return null;
+        var chain = number == null ? List.of(constructor, root) : List.of(constructor, number, root);
+        return transparentEvents(thread, storage, chain) ? new Boxing(owner, storage, chain) : null;
+    }
+
+    private static boolean suspends(EventRequest request) {
+        return request.isEnabled() && request.suspendPolicy() != EventRequest.SUSPEND_NONE;
+    }
+
+    private static boolean transparentEvents(ThreadReference thread, Field storage, List<Method> chain) {
+        var requests = thread.virtualMachine().eventRequestManager();
+        return requests.methodEntryRequests().stream().noneMatch(KotlinFieldValues::suspends) &&
+            requests.methodExitRequests().stream().noneMatch(KotlinFieldValues::suspends) &&
+            requests.exceptionRequests().stream().noneMatch(KotlinFieldValues::suspends) &&
+            requests.stepRequests().stream().noneMatch(r -> suspends(r) &&
+                (r.thread().equals(thread) || r.suspendPolicy() == EventRequest.SUSPEND_ALL)) &&
+            requests.breakpointRequests().stream().noneMatch(r -> suspends(r) &&
+                (chain.contains(r.location().method()) || r.suspendPolicy() == EventRequest.SUSPEND_ALL)) &&
+            requests.modificationWatchpointRequests().stream().noneMatch(r -> suspends(r) &&
+                (storage.equals(r.field()) || r.suspendPolicy() == EventRequest.SUSPEND_ALL)) &&
+            requests.accessWatchpointRequests().stream().noneMatch(r -> suspends(r) && r.suspendPolicy() == EventRequest.SUSPEND_ALL);
+    }
+
+    static final class Boxing {
+        final ClassType owner;
+        final Field storage;
+        final List<Method> chain;
+
+        Boxing(ClassType owner, Field storage, List<Method> chain) {
+            this.owner = owner;
+            this.storage = storage;
+            this.chain = chain;
+        }
+
+        boolean matches(Boxing latest) {
+            return latest != null && owner.equals(latest.owner) && storage.equals(latest.storage) && chain.equals(latest.chain);
+        }
+
+        ObjectReference construct(ThreadReference thread, Value value) throws Exception {
+            return owner.newInstance(thread, chain.get(0), List.of(value), ClassType.INVOKE_SINGLE_THREADED);
+        }
+    }
 
     static boolean isString(Field field) { return STRING.equals(field.signature()); }
 

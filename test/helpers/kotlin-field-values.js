@@ -137,4 +137,74 @@ function assertKotlinFieldValuesResumed(output) {
   return { text: textValue, optionalText: 'optional', arrayValues: [321, '9007199254741035', true], otherInstanceUnchanged: true, sideEffects: 0 };
 }
 
-module.exports = { assertKotlinFieldValues, assertNativeKotlinFieldValues, assertKotlinFieldValuesResumed };
+const newBoxes = [
+  ['freshInt', 'Int (boxed)', '12487', '12487'],
+  ['freshLong', 'Long (boxed)', '9007199254740999L', '9007199254740999'],
+  ['freshFlag', 'Boolean (boxed)', 'false', 'false']
+];
+
+async function assertFreshKotlinBoxes(send, frameId, change) {
+  const request = (action, args = {}) => send(fieldRequest, { action, frameId, receiver: 'target', ...args });
+  const rows = (receiver = 'target') => request('fields', { receiver }).then(value => value.fields);
+  const prepare = (name, input) => request('prepareLiteral', { name, input });
+  const apply = review => request('apply', { reviewId: review.reviewId });
+  await assert.rejects(prepare('freshInt', '12487'), /no intercepting debugger events/u);
+  await send('setFunctionBreakpoints', { breakpoints: [] });
+  await send('setExceptionBreakpoints', { filters: [] });
+  await assert.rejects(prepare('guardedBox', '17'), /writable Kotlin scalar field/u);
+  await assert.rejects(prepare('freshInt', 'target.mutate()'), /Kotlin Int literal/u);
+  await assert.rejects(prepare('freshLong', '9223372036854775808L'), /outside the Kotlin local type/u);
+  const cancelled = await prepare('freshInt', '17');
+  await request('cancel', { reviewId: cancelled.reviewId });
+  await assert.rejects(apply(cancelled), /same Kotlin frame suspended/u);
+  const changes = [];
+  for (const [name, type, input, value] of newBoxes) {
+    const row = (await rows()).find(item => item.name === name);
+    assert.deepEqual([row.type, row.value, row.boxLiteral], [type, 'null', true]);
+    if (name !== 'freshInt') assert.deepEqual(row.boxSources, []);
+    const review = await prepare(name, input);
+    assert.deepEqual([review.before, review.after, review.boxLiteral], ['null', value, true]);
+    assert.equal((await rows()).find(item => item.name === name).value, 'null');
+    assert.deepEqual(await apply(review), { state: 'applied', receiver: 'target', name, value, boxLiteral: true });
+    await assert.rejects(apply(review), /same Kotlin frame suspended/u);
+    assert.equal((await rows()).find(item => item.name === name).value, value);
+    assert.equal((await rows('other')).find(item => item.name === name).value, 'null');
+    changes.push({ name, type, value });
+  }
+  const conflict = await prepare('freshRace', '819');
+  await change('box', 'Rocketbrain Kotlin boxed field changed by fixture');
+  await assert.rejects(apply(conflict), /Kotlin object field changed/u);
+  assert.equal((await rows()).find(item => item.name === 'freshRace').value, '771');
+  const stale = await prepare('freshInt', '12999');
+  return { changes, cancelledRefused: true, replayRefused: true, eventConflictRefused: true, fieldConflictRefused: true,
+    arbitraryCallsRefused: true, staleId: stale.reviewId };
+}
+
+async function assertNativeFreshKotlinBoxes(inspector, session) {
+  const report = await inspector.inspectFields(await inspector.list(session), 'target');
+  const cancelled = await inspector.prepareLiteral(report, 'freshInt', '17');
+  await inspector.cancel(cancelled);
+  await assert.rejects(inspector.apply(cancelled), /Inspect this paused Kotlin object/u);
+  await assert.rejects(inspector.prepareLiteral(report, 'freshInt', 'other.mutate()'), /in-range Kotlin Int literal/u);
+  const changes = [];
+  for (const [name, type, input, value] of newBoxes) {
+    const field = report.fields.find(item => item.name === name);
+    assert.deepEqual([field.type, field.boxLiteral], [type, true]);
+    if (name !== 'freshInt') assert.deepEqual(field.boxSources, []);
+    const review = await inspector.prepareLiteral(report, name, input);
+    assert.deepEqual([review.before, review.after, review.boxLiteral], ['null', value, input]);
+    assert.deepEqual(await inspector.apply(review), { state: 'applied', receiver: 'target', name, value });
+    await assert.rejects(inspector.apply(review), /Inspect this paused Kotlin object/u);
+    changes.push({ name, type, value });
+  }
+  return { changes, nativeCommand: true, cancelledRefused: true, replayRefused: true, arbitraryCallsRefused: true };
+}
+
+function assertFreshBoxesResumed(output) {
+  assert.ok(output.includes('Rocketbrain Kotlin Fresh Boxes|12487|9007199254740999|false|true|null|null|null|0'), output);
+  return { int: 12487, long: '9007199254740999', boolean: false,
+    distinctFromBooleanSingleton: true, otherInstanceUnchanged: true, sideEffects: 0 };
+}
+
+module.exports = { assertKotlinFieldValues, assertNativeKotlinFieldValues, assertKotlinFieldValuesResumed,
+  assertFreshKotlinBoxes, assertNativeFreshKotlinBoxes, assertFreshBoxesResumed };
