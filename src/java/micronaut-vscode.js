@@ -6,17 +6,19 @@ const { inspectMicronautProject,micronautProject,snapshotMicronautDebugSources,C
 const { createMicronautRuntime,packagedJar } = require('./micronaut-runtime');
 const { createMicronautDebugger } = require('./micronaut-debugger');
 const { createMicronautRestart, captureRestartInputs } = require('./micronaut-restart');
+const { createMicronautNative } = require('./micronaut-native');
 const { distribution }=require('./micronaut-distribution');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 
 const COMMANDS={inspect:'rocketbrain.micronaut.inspect',run:'rocketbrain.micronaut.run',debug:'rocketbrain.micronaut.debug',
   tests:'rocketbrain.micronaut.test',build:'rocketbrain.micronaut.build',stop:'rocketbrain.micronaut.stop',
-  restart:'rocketbrain.micronaut.restart'};
+  restart:'rocketbrain.micronaut.restart',buildNative:'rocketbrain.micronaut.buildNative',runNative:'rocketbrain.micronaut.runNative'};
 const IMPORT='Import the Micronaut 5 Maven or Gradle application in Java Projects first.';
 
 function registerMicronautWorkbench(vscode,java) {
   const output=vscode.window.createOutputChannel('Rocketbrain Micronaut');
   const runtime=createMicronautRuntime({log:chunk => output.append(chunk)});
+  const native=createMicronautNative({log:chunk => output.append(chunk)});
   const subscriptions=[output], jobs=new Set();
   let pendingStart, debuggerControl, disposed=false, closing;
 
@@ -56,7 +58,7 @@ function registerMicronautWorkbench(vscode,java) {
     const config=vscode.workspace.getConfiguration('rocketbrain.java',vscode.Uri.parse(project.uri));
     const latest=java.workbench.getSnapshot().projects.find(item => item.uri===project.uri);
     return {javaHome:latest?.jdk || config.get('javaHome') || java.getState().javaHome,
-      mavenHome:config.get('mavenHome')};
+      mavenHome:config.get('mavenHome'),graalvmHome:config.get('micronautGraalvmHome')};
   }
 
   function validateRestart(project,cancellation) {
@@ -80,13 +82,13 @@ function registerMicronautWorkbench(vscode,java) {
 
   function prepareRestart({cancellation}={}) {
     trusted(cancellation);
-    if (pendingStart) throw fail('Finish the current Micronaut lifecycle operation first.');
+    if (pendingStart || native.running) throw fail('Finish the current Micronaut lifecycle operation first.');
     return restart.prepare(cancellation);
   }
 
   async function applyRestart({reviewId,allowProjectExecution,cancellation}={}) {
     trusted(cancellation);
-    if (pendingStart) throw fail('Finish the current Micronaut lifecycle operation first.');
+    if (pendingStart || native.running) throw fail('Finish the current Micronaut lifecycle operation first.');
     const controller=new AbortController();
     pendingStart=controller;
     const cancel=() => controller.abort();
@@ -106,6 +108,7 @@ function registerMicronautWorkbench(vscode,java) {
   }
 
   async function task(project,name,cancellation) {
+    if (native.running) throw fail('Finish the current Micronaut native operation first.');
     saveNeeded(project);
     const options={projectUri:project.uri,allowProjectExecution:true,cancellation};
     const selected=project.tool==='gradle'?':'+name:name;
@@ -146,7 +149,9 @@ function registerMicronautWorkbench(vscode,java) {
       'Explicitly run the Micronaut application before executing build tasks.');
     trusted(cancellation);
     if (typeof environment!=='string' || !PART.test(environment)) throw fail('Use a literal Micronaut environment name.');
-    if (pendingStart || runtime.getState().state!=='stopped') throw fail('Stop the current owned Micronaut application first.');
+    if (pendingStart || native.running || runtime.getState().state!=='stopped') {
+      throw fail('Stop the current owned Micronaut application first.');
+    }
     const controller=new AbortController();
     pendingStart=controller;
     const cancel=() => controller.abort();
@@ -205,16 +210,47 @@ function registerMicronautWorkbench(vscode,java) {
     }
   }
 
+  async function nativeOperation(action,{projectUri,buildId,environment='dev',allowProjectExecution,cancellation}={}) {
+    trusted(cancellation);
+    if (allowProjectExecution!==true) throw fail('Explicitly approve the selected Micronaut native operation.');
+    if (pendingStart || native.running || runtime.getState().state!=='stopped' || java.workbench.getSnapshot().taskRunning) {
+      throw fail('Stop the current owned Micronaut application or finish the Java task first.');
+    }
+    const controller=new AbortController();
+    pendingStart=controller;
+    const cancel=()=>controller.abort();
+    const subscription=cancellation?.onCancellationRequested?.(cancel);
+    cancellation?.addEventListener?.('abort',cancel,{once:true});
+    if (cancelled(cancellation)) cancel();
+    try {
+      const signal=controller.signal, project=await projectFor(projectUri,signal);
+      const current=()=>validateRestart(project,signal);
+      current();
+      const options={project,environment,buildId,cancellation:signal,current};
+      const result=action==='build' ? await native.build({...tools(project),...options}) : await native.start(options);
+      output.appendLine(action==='build' ? 'Micronaut native image · '+result.artifact : 'Micronaut native application · '+result.baseUrl);
+      output.appendLine('Application artifact SHA-256: '+result.sha256);
+      return result;
+    } finally {
+      pendingStart=undefined;
+      subscription?.dispose();
+      cancellation?.removeEventListener?.('abort',cancel);
+    }
+  }
+
   async function stop() {
     pendingStart?.abort();
     restart.forget();
-    let receipt;
+    const nativeWasRunning=native.running;
+    let receipt,nativeReceipt;
     try {await debuggerControl?.stop();}
-    finally {receipt=await runtime.stop();}
-    return receipt;
+    finally {[receipt,nativeReceipt]=await Promise.all([runtime.stop(),native.stop()]);}
+    return nativeWasRunning?nativeReceipt:receipt;
   }
 
   function getState() {
+    const nativeState=native.getState();
+    if (nativeState) return nativeState;
     const state=runtime.getState(), sessionId=debuggerControl?.sessionId(state.runId);
     return sessionId?{...state,sessionId}:state;
   }
@@ -356,6 +392,30 @@ function registerMicronautWorkbench(vscode,java) {
     const projectUri=await choose();
     if(projectUri)return progress('Build Micronaut Application',cancellation => build({projectUri,allowProjectExecution:true,cancellation}));
   });
+  async function runNativeCommand(action) {
+    const projectUri=await choose();
+    if (!projectUri) return;
+    const report=await inspect({projectUri});
+    if (report.tool!=='maven') throw fail('Choose an imported Maven Micronaut application for Native Image.');
+    let environment;
+    if (action==='run') {
+      const environments=[...new Set(['dev',...report.configured.map(item=>item.environment).filter(Boolean)])];
+      environment=await vscode.window.showQuickPick(environments,{title:'Select Micronaut Native Environment'});
+      if (!environment) return;
+    }
+    const label=action==='build'?'Build Micronaut Native Image':'Run Built Micronaut Native Image';
+    const approved=await vscode.window.showWarningMessage(label+'?',{modal:true,
+      detail:action==='build'?'Run Maven package with Native Image in the selected trusted module.':
+        'Start the exact image built in this session on an owned loopback port.'},label);
+    if (approved!==label) return;
+    output.show(true);
+    const result=await progress(label,cancellation=>nativeOperation(action,{projectUri,environment,allowProjectExecution:true,cancellation}));
+    void vscode.window.showInformationMessage(action==='build' ? 'Micronaut native image built at '+result.artifact :
+      'Micronaut native application is ready at '+result.baseUrl);
+    return result;
+  }
+  register(COMMANDS.buildNative,()=>runNativeCommand('build'));
+  register(COMMANDS.runNative,()=>runNativeCommand('run'));
   register(COMMANDS.restart,async () => {
     const review=await progress('Prepare Micronaut Restart Review',cancellation => prepareRestart({cancellation}));
     output.appendLine('Micronaut restart review · '+review.name+' · '+review.environment);
@@ -379,12 +439,13 @@ function registerMicronautWorkbench(vscode,java) {
   return {inspect:options => track(() => inspect(options)),run:options => track(() => run({...options,debug:false})),
     debug:options => track(() => run({...options,debug:true})),
     test:options => track(() => test(options)),build:options => track(() => build(options)),
+    buildNative:options=>track(()=>nativeOperation('build',options)),runNative:options=>track(()=>nativeOperation('run',options)),
     prepareRestart:options => track(() => prepareRestart(options)),restart:options => track(() => applyRestart(options)),
     getState,stop,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {
-        try {await stop();await runtime.dispose();}
+        try {await stop();await Promise.all([runtime.dispose(),native.dispose()]);}
         finally {await Promise.allSettled(jobs);for (const subscription of subscriptions) subscription.dispose();}
       })();
       return closing;
