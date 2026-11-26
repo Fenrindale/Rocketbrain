@@ -1,4 +1,4 @@
-param([switch]$VerifyWorkbench)
+param([switch]$VerifyWorkbench, [switch]$VerifyJavaDebug)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -51,7 +51,7 @@ try {
     if ($marker -ne 'rocketbrain-wsl-workspace') { throw 'WSL did not read the existing Windows workspace from the mapped working directory.' }
     $proof = [ordered]@{ verified = $true; wslVersion = 1; kernel = $kernel; ubuntuRootfsSha256 = $sha; localWorkspaceRoundTrip = $true; linuxWorkingDirectory = $true }
 
-    if ($VerifyWorkbench) {
+    if ($VerifyWorkbench -or $VerifyJavaDebug) {
         Write-Host 'Preparing the disposable Linux JDK and build tools.'
         $command = @('--distribution', $distro, '--exec')
         Invoke-WslFixture ($command + @('/usr/bin/apt-get', 'update', '-q')) | Out-Null
@@ -65,10 +65,13 @@ try {
         $proof['gradle'] = Invoke-WslFixture ($command + @('/usr/bin/gradle', '--version'))
 
         $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
-        $javaRuntime = Join-Path $root 'windows-java-runtime'
-        & node (Join-Path $repo 'scripts/java-provision.js') --target $javaRuntime --java-home $env:JAVA_HOME
-        if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the local JDT LS and Java debug adapter fixture.' }
-        $env:ROCKETBRAIN_JAVA_TEST_CONFIG = Join-Path $javaRuntime 'rocketbrain-java-runtime.json'
+        if ($VerifyJavaDebug) {
+            $javaRuntime = Join-Path $root 'windows-java-runtime'
+            & node (Join-Path $repo 'scripts/java-provision.js') --target $javaRuntime --java-home $env:JAVA_HOME
+            if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the local JDT LS and Java debug adapter fixture.' }
+            $env:ROCKETBRAIN_JAVA_TEST_CONFIG = Join-Path $javaRuntime 'rocketbrain-java-runtime.json'
+            $env:ROCKETBRAIN_WSL_TEST_JAVA_DEBUG = '1'
+        }
         Get-ChildItem -LiteralPath (Join-Path $repo 'test/fixtures/wsl-jvm') | Copy-Item -Destination $workspace -Recurse
         $linuxFixture = Invoke-WslFixture ($command + @('/usr/bin/mktemp', '-d', '/tmp/rocketbrain-wsl-XXXXXXXX'))
         if ($linuxFixture -cnotmatch '^/tmp/rocketbrain-wsl-[0-9A-Za-z]{8}$') { throw 'The owned Linux fixture path was not generated.' }
@@ -95,7 +98,9 @@ try {
         $env:ROCKETBRAIN_WSL_TEST_UNC_WORKSPACE = $linuxUnc
         $env:NODE_UNC_HOST_ALLOWLIST = 'wsl.localhost\wsl$'
         $workspaceFile = Join-Path $root 'rocketbrain-wsl.code-workspace'
-        @{ folders = @(@{ path = $workspace }, @{ path = $linuxUnc }) } | ConvertTo-Json -Depth 4 |
+        $folders = @(@{ path = $linuxUnc })
+        if (!$VerifyJavaDebug) { $folders = @(@{ path = $workspace }) + $folders }
+        @{ folders = $folders } | ConvertTo-Json -Depth 4 |
             Set-Content -LiteralPath $workspaceFile -Encoding utf8NoBOM
         $env:ROCKETBRAIN_JAVA_TEST_WORKSPACE = $workspaceFile
         $env:ROCKETBRAIN_NATIVE_CHECKS = 'wsl-workspace-host'
