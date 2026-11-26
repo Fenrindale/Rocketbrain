@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { agentProgram, runAgent } = require('../ai/acp-process');
 const { normalizeLocalChatTarget } = require('../ai/local-chat');
+const { startStructuredBridge } = require('../ai/acp-structured-bridge');
 const { projectGrounding, prepareGroundedIntent, compileGroundedQuery } = require('./local-sql-grounding');
 
 async function executableDigest(executable) {
@@ -46,15 +47,17 @@ async function executeDatabaseAgent(agent, intent, { signal, onUpdate } = {}) {
   signal?.throwIfAborted();
   const parent = await fs.realpath(os.tmpdir());
   const folder = await fs.mkdtemp(path.join(parent, 'rocketbrain-db-acp-'));
+  let bridge;
   try {
     const env = isolatedEnvironment(folder);
     if (agent.adapter === 'opencode-local') {
-      const { endpoint, model } = agent.localModel;
+      const { model } = agent.localModel;
+      bridge = await startStructuredBridge(agent.localModel, { prompt: intent.text, schema: intent.schema, name: 'rocketbrain_acp_sql', signal });
       const config = { model: 'rocketbrain/' + model, enabled_providers: ['rocketbrain'], autoupdate: false, snapshot: false,
         default_agent: 'rocketbrain-review', agent: { 'rocketbrain-review': { mode: 'primary', temperature: 0, top_p: 1,
           prompt: 'Follow the latest reviewed request literally. Return exactly the requested JSON object. Use no tools.' } },
         permission: 'deny', provider: { rocketbrain: { name: 'Approved loopback model', npm: '@ai-sdk/openai-compatible',
-          options: { baseURL: endpoint.replace('/chat/completions', ''), apiKey: 'local-loopback' },
+          options: { baseURL: bridge.baseURL, apiKey: bridge.key },
           models: { [model]: { name: model, tool_call: false, limit: { context: 4096, output: 1024 } } } } } };
       const filename = path.join(folder, 'opencode.json');
       await fs.writeFile(filename, JSON.stringify(config), { flag: 'wx', mode: 0o600 });
@@ -71,6 +74,7 @@ async function executeDatabaseAgent(agent, intent, { signal, onUpdate } = {}) {
     const result = compileGroundedQuery(intent.scope, answer);
     return { ...result, denied: reply.denied, stopReason: reply.stopReason };
   } finally {
+    await bridge?.close();
     const current = await fs.realpath(folder).catch(error => { if (error.code !== 'ENOENT') throw error; });
     if (current && (current !== folder || path.dirname(current) !== parent || !path.basename(current).startsWith('rocketbrain-db-acp-'))) {
       throw Error('The isolated database ACP directory changed before cleanup.');
@@ -85,12 +89,12 @@ function prepareDatabaseTasks({ catalog, choices, agents, tasks }) {
   const jobs = tasks.map(({ profile, input }) => {
     const agent = agents.find(item => item.label === profile);
     if (!agent) throw Error('Select a configured database ACP profile for each task.');
-    const { preview, instructions } = prepareGroundedIntent(scope, input);
+    const { preview, instructions, schema } = prepareGroundedIntent(scope, input);
     const text = `${instructions}\nWrite the explanation in one sentence under 140 characters. ` +
       'Always include the five keys columns, measures, sort, limit, explanation. Use [] for an empty array. ' +
       'A measure has column and function keys. A sort entry has key and direction keys, and key must exactly equal a selected column or measure expression. ' +
       'Use the exact requested aggregate function. Read the request after the available columns.\n' + JSON.stringify(preview);
-    return { agent, intent: { scope, text }, request: preview.request };
+    return { agent, intent: { scope, text, schema }, request: preview.request };
   });
   const keys = jobs.map(job => JSON.stringify([job.agent.label, job.request]));
   if (new Set(keys).size !== jobs.length) throw Error('Each ACP agent and request combination must be distinct.');
