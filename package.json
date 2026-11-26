@@ -221,8 +221,11 @@
       { "command": "rocketbrain.sqlite.refresh", "title": "Refresh SQLite Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sqlite.browse", "title": "Browse SQLite Tables and Indexes", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sqlite.newQuery", "title": "New SQLite Query", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted" },
-      { "command": "rocketbrain.sqlite.run", "title": "Review and Run SQLite Query", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot" },
+      { "command": "rocketbrain.sqlite.run", "title": "Review and Run SQLite Query", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected && isWorkspaceTrusted && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot && resourceScheme != rocketbrain-sqlite-edit" },
       { "command": "rocketbrain.sqlite.close", "title": "Close SQLite Snapshot", "category": "Rocketbrain", "enablement": "rocketbrain.sqliteConnected" },
+      { "command": "rocketbrain.sqlite.chooseEditRuntime", "title": "Choose Pinned SQLite Edit Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.sqliteEditPlatform" },
+      { "command": "rocketbrain.sqlite.reviewCellEdit", "title": "Review SQLite Cell Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.sqliteConnected && rocketbrain.sqliteEditRuntime" },
+      { "command": "rocketbrain.sqlite.applyCellEdit", "title": "Apply Reviewed SQLite Cell Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.sqliteConnected && rocketbrain.sqliteEditRuntime && resourceScheme == rocketbrain-sqlite-edit", "icon": "$(check)" },
       { "command": "rocketbrain.mongodb.open", "title": "Connect to MongoDB", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.mongodb.browse", "title": "Browse MongoDB Collections", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
       { "command": "rocketbrain.mongodb.newFind", "title": "New MongoDB Find", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mongoConnected" },
@@ -1415,6 +1418,8 @@
       "view/title": [
         { "command": "rocketbrain.sqlite.open", "when": "view == rocketbrain.databases && isWorkspaceTrusted", "group": "connection@3" },
         { "command": "rocketbrain.sqlite.browse", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && isWorkspaceTrusted", "group": "connection@4" },
+        { "command": "rocketbrain.sqlite.chooseEditRuntime", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && isWorkspaceTrusted && rocketbrain.sqliteEditPlatform", "group": "connection@5" },
+        { "command": "rocketbrain.sqlite.reviewCellEdit", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && rocketbrain.sqliteEditRuntime && isWorkspaceTrusted", "group": "connection@6" },
         { "command": "rocketbrain.focusQueryEditor", "when": "view == rocketbrain.results && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.select", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@1" },
         { "command": "rocketbrain.schemaCatalog.refresh", "when": "view == rocketbrain.schemaCatalog", "group": "navigation@2" },
@@ -1539,6 +1544,7 @@
         }
       ],
       "editor/title": [
+        { "command": "rocketbrain.sqlite.applyCellEdit", "when": "resourceScheme == rocketbrain-sqlite-edit && rocketbrain.sqliteConnected && rocketbrain.sqliteEditRuntime && isWorkspaceTrusted", "group": "navigation" },
         {
           "command": "rocketbrain.jdbc.run",
           "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.jdbcConnected && isWorkspaceTrusted",
@@ -1798,7 +1804,7 @@
       },
       { "command": "rocketbrain.jpa.console.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jpql && isWorkspaceTrusted" },
       { "command": "rocketbrain.duckdb.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == duckdb-sql && rocketbrain.duckdbConnected && isWorkspaceTrusted" },
-      { "command": "rocketbrain.sqlite.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot && rocketbrain.sqliteConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.sqlite.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-sqlite && resourceScheme != rocketbrain-sqlite-snapshot && resourceScheme != rocketbrain-sqlite-edit && rocketbrain.sqliteConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.jdbc.run", "key": "ctrl+enter", "mac": "cmd+enter", "when": "editorTextFocus && editorLangId == rocketbrain-jdbc && rocketbrain.jdbcConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.focusQueryResults", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "editorTextFocus && editorLangId == sql && !suggestWidgetVisible" },
       { "command": "rocketbrain.focusQueryEditor", "key": "ctrl+k ctrl+shift+j", "mac": "cmd+k cmd+shift+j", "when": "!editorTextFocus && (focusedView == rocketbrain.results || webviewId == rocketbrain.results) && isWorkspaceTrusted" },

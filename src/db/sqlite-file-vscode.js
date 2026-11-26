@@ -144,6 +144,10 @@ function registerSqliteFile(context, vscode, database) {
   const api = { open, close, source: () => vscode.workspace.isTrusted && selected?.source ? { ...selected.source } : null,
     refresh: options => open(active().file, options), catalog: options => use(session => session.catalog(options)),
     describe, prepare, run, discard };
+  api.editing = require('./sqlite-edit-vscode').registerSqliteCellEditor(context, vscode, { fileApi: api, currentSnapshot() {
+    const session = active();
+    return { session, file: session.file, fileIdentity: session.source.fileIdentity, name: session.source.name };
+  } });
 
   function progress(title, action) {
     return vscode.window.withProgress({ title, location: vscode.ProgressLocation.Notification, cancellable: true }, async (_, token) => {
@@ -214,7 +218,7 @@ function registerSqliteFile(context, vscode, database) {
   });
   command('run', async () => {
     const editor = vscode.window.activeTextEditor;
-    if (editor?.document.languageId !== language || editor.document.uri.scheme === scheme) throw Error('Open a SQLite SQL editor first.');
+    if (editor?.document.languageId !== language || [scheme, 'rocketbrain-sqlite-edit'].includes(editor.document.uri.scheme)) throw Error('Open a SQLite SQL editor first.');
     const { document } = editor, version = document.version;
     const sql = editor.selection.isEmpty ? statementAt(document.getText(), document.offsetAt(editor.selection.active), { dialect: 'sqlite' }) :
       document.getText(editor.selection);

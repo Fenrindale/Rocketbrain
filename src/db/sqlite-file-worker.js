@@ -6,11 +6,10 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
 const { prepareOne, sqliteReadQuery, skipTrivia } = require('./sqlite-read');
+const { SQLITE_FILE_LIMIT: maxFileBytes, SQLITE_MAGIC: magic, sqliteFileIdentity } = require('./sqlite-local-file');
 const LIMITS = require('./limits');
 
-const maxFileBytes = 32 * 1024 * 1024;
 const catalogLimit = 256, indexLimit = 32;
-const magic = Buffer.from('SQLite format 3\0', 'ascii');
 const utf8Text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const fail = message => new Error(message);
 const sameFile = (a, b) => ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].every(key => a[key] === b[key]);
@@ -55,7 +54,8 @@ async function readSnapshot(file) {
   if (!image.subarray(0, 16).equals(magic)) throw fail('The selected file is not a plain SQLite 3 database.');
   if (image[18] !== 1 || image[19] !== 1) throw fail('Select a clean rollback-journal format SQLite copy. WAL-mode file headers cannot be opened as snapshots.');
   const source = { name: path.basename(actual), bytes: image.byteLength,
-    snapshotSha256: createHash('sha256').update(image).digest('hex'), capturedAt: new Date().toISOString(), readOnly: true };
+    snapshotSha256: createHash('sha256').update(image).digest('hex'), fileIdentity: sqliteFileIdentity(actual, selected),
+    capturedAt: new Date().toISOString(), readOnly: true };
   return { image, source };
 }
 
