@@ -5,7 +5,7 @@ const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { workspacePath, workspaceRoots, fail } = require('./workbench-model');
 const { projectSbt } = require('./scala-sbt');
-const { scalaEditorLaunch } = require('./scala-editor-runtime');
+const { scalaEditorLaunch, configureScalaTransport } = require('./scala-editor-runtime');
 
 const ids = {start:'rocketbrain.scala.startLanguage',import:'rocketbrain.scala.importLanguageBuild',stop:'rocketbrain.scala.stopLanguage'};
 
@@ -70,7 +70,7 @@ function registerScalaEditor(vscode,java) {
     } finally {
       clearTimeout(deadline);
       cancel.dispose();
-      try { await record.client.stop(6500); }
+      try { if (record.client.needsStop()) await record.client.stop(6500); }
       finally { record.watcher.dispose(); }
     }
   }
@@ -103,8 +103,13 @@ function registerScalaEditor(vscode,java) {
         const document=event.document??event;
         if (forwarded.has(document.uri.toString()) && eligible(document,record)) return next(event);
       };
-      const configuration={metals:{autoImportBuilds:'off',targetBuildTool:'sbt',defaultBspToBuildTool:false,startMcpServer:false}};
-      record.client=new LanguageClient('rocketbrain-scala-language','Rocketbrain Scala Language',
+      class ScalaLanguageClient extends LanguageClient {
+        async createMessageTransports(encoding) {
+          return configureScalaTransport(await super.createMessageTransports(encoding),
+            error=>output.appendLine('Scala configuration response failed: '+error.message));
+        }
+      }
+      record.client=new ScalaLanguageClient('rocketbrain-scala-language','Rocketbrain Scala Language',
         {command:launch.command,args:launch.args,options:launch.options},{
           workspaceFolder:scope,outputChannel:output,markdown:{isTrusted:false},
           initializationOptions:{isHttpEnabled:false,statusBarProvider:'off'},
@@ -122,8 +127,6 @@ function registerScalaEditor(vscode,java) {
               if (forwarded.delete(document.uri.toString())) return next(document);
             },
             workspace:{
-              configuration:params=>params.items.map(item=>item.section?.split('.')
-                .reduce((section,key)=>section?.[key],configuration) ?? configuration),
               handleApplyEdit:()=>({applied:false,failureReason:'Use the editor action that requested the Scala source change.'})
             },
             async provideRenameEdits(document,position,newName,token) {
@@ -143,7 +146,7 @@ function registerScalaEditor(vscode,java) {
         record.ready=true;
         return state();
       } catch (error) {
-        await release();
+        await release().catch(cleanup=>output.appendLine('Scala startup cleanup failed: '+cleanup.message));
         throw error;
       }
     });
