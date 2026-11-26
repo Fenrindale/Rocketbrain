@@ -9,6 +9,7 @@ const { setTimeout: delay } = require('node:timers/promises');
 const { promisify } = require('node:util');
 const { sameWslPath, wslUnc } = require('../src/remote/wsl-paths');
 const { until } = require('./helpers/stdio-lsp');
+const { verifyWslSourceWatch } = require('./wsl-source-watch-host');
 
 const execute = promisify(execFile);
 const sourceFile = 'src/main/java/fixture/WslSpringConfiguration.java';
@@ -124,6 +125,12 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, j
   assert.ok(bytes.includes(newMarker));
   const linuxObservation = await linuxCommand(distribution, '/usr/bin/sha256sum', '--', linux + '/' + sourceFile);
   assert.equal(linuxObservation.split(/\s/u, 1)[0], createHash('sha256').update(bytes).digest('hex'));
+  const watch = process.env.ROCKETBRAIN_WSL_TEST_SOURCE_WATCH === '1' ? await verifyWslSourceWatch(wsl, vscode, {
+    document, peerUri: vscode.Uri.joinPath(folder.uri, 'pom.xml'),
+    appendFromLinux: marker => linuxCommand(distribution, '/usr/bin/python3', '-c',
+      'import sys; open(sys.argv[1], "a", encoding="utf-8").write("\\n" + sys.argv[2] + "\\n")',
+      linux + '/' + sourceFile, marker)
+  }) : undefined;
 
   const pom = vscode.Uri.joinPath(folder.uri, 'pom.xml').fsPath;
   const original = await fs.readFile(pom);
@@ -137,8 +144,13 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, j
   const compiled = 'build/classes/java/main/fixture/WslSpringConfiguration.class';
   await build(options, mapping.windows, 'maven', 'package', jar, /BUILD SUCCESS/u);
   const basic = { openedInWindowsVscode: true, exactDistroAndPath: true, caseMismatchRejected: true,
-    crossDistroRejected: true, editorSavedAndLinuxDigestMatched: true, rejectedChangedDescriptor: true, mavenGoal: 'package' };
-  if (javaDebugOnly) return { ...basic, javaDebug: await verifyWslDebugger(wsl.javaDebug, vscode, folder, source, document) };
+    crossDistroRejected: true, editorSavedAndLinuxDigestMatched: true, rejectedChangedDescriptor: true, mavenGoal: 'package',
+    ...(watch && { sourceWatch: watch.receipt }) };
+  if (javaDebugOnly) {
+    const debugSource = watch?.document || document;
+    await vscode.window.showTextDocument(debugSource, { preview: false });
+    return { ...basic, javaDebug: await verifyWslDebugger(wsl.javaDebug, vscode, folder, source, debugSource) };
+  }
   await build(options, mapping.windows, 'gradle', 'classes', compiled, /BUILD SUCCESSFUL/u);
   for (const produced of [jar, compiled]) await linuxCommand(distribution, '/usr/bin/test', '-s', linux + '/' + produced);
   assert.ok((await fs.readFile(path.join(mapping.windows, compiled))).includes('wsl-spring-linux-verified'));

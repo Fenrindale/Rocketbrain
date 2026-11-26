@@ -3,6 +3,7 @@
 const { workspacePath, workspaceRoots } = require('../java/workbench-model');
 const { createWslWorkbench, wslBuildTasks } = require('./wsl-workspace');
 const { sameWslPath, wslUnc } = require('./wsl-paths');
+const { registerWslSourceWatch } = require('./wsl-source-vscode');
 
 const commands = {
   distributions: 'rocketbrain.wsl.distributions',
@@ -11,10 +12,11 @@ const commands = {
   cancel: 'rocketbrain.wsl.cancelBuild'
 };
 
-function registerWslWorkbench(vscode, { createService = createWslWorkbench } = {}) {
+function registerWslWorkbench(vscode, { createService = createWslWorkbench, registerSourceWatch = registerWslSourceWatch } = {}) {
   const service = createService({ isTrusted: () => vscode.workspace.isTrusted && !vscode.env.remoteName });
   const output = vscode.window.createOutputChannel('Rocketbrain WSL Builds');
   const subscriptions = [];
+  const sourceWatch = registerSourceWatch(vscode, { mapping: service.mapping });
 
   function project(value) {
     const uri = typeof value === 'string' ? vscode.Uri.parse(value) : value;
@@ -120,8 +122,8 @@ function registerWslWorkbench(vscode, { createService = createWslWorkbench } = {
   }
 
   return { distributions: service.distributions, mapping: async (distribution, uri) => service.mapping(distribution, project(uri).root),
-    openProject, review, apply: service.apply, cancel: service.cancel,
-    dispose() { service.dispose(); for (const subscription of subscriptions) subscription.dispose(); output.dispose(); } };
+    openProject, review, apply: service.apply, cancel: service.cancel, sourceWatch,
+    dispose() { sourceWatch.dispose(); service.dispose(); for (const subscription of subscriptions) subscription.dispose(); output.dispose(); } };
 }
 
 module.exports = { registerWslWorkbench };

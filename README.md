@@ -50,6 +50,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 Linux 파일 시스템에 있는 프로젝트는 **Open WSL Project Folder**로 열 수 있습니다. Java 파일을 저장한 뒤 **Review and Debug WSL Java JAR**에서 프로젝트 안의 실행 가능한 JAR를 선택합니다. Rocketbrain은 검토한 소스와 JAR를 다시 확인하고, WSL JVM에 연결해 중단점·한 줄 이동·지역 변수 읽기를 제공합니다. 배포판에는 `/usr/bin/java`와 Python 3.11 이상의 `/usr/bin/python3`가 필요하며, Windows에서는 Rocketbrain의 Java 런타임을 먼저 설정합니다.
 
+Windows 편집기에 Linux 쪽 파일 변경이 늦게 반영되면, 열린 WSL 소스에서 **Watch Open WSL Source**를 실행합니다. 상태 표시줄에서 편집기와 Linux 디스크 버전을 읽기 전용으로 비교하고 **Reload Reviewed WSL Source**로 검토한 버전을 불러옵니다. 다시 불러오기는 수정사항이 없는 단일 소스 탭에 적용되며, 디스크나 편집본이 검토 후 바뀌면 다시 비교해야 합니다. 관찰 대상은 선택한 UTF-8 소스 하나이며 배포판의 `/usr/bin/python3`가 필요합니다.
+
 `rocketbrain.localCodeModel.endpoint`와 `.model`에는 로컬 모델 서버 주소와 모델 이름을 지정합니다. **Ask Local Code Model**은 선택한 코드에 대한 응답을 엽니다. **Request a Reviewed Local Edit**로 변경 내용을 비교하고, 검토한 편집은 **Apply Reviewed Local Edit**로 적용합니다.
 
 **Start Local Workspace Conversation**에서 같은 신뢰된 로컬 워크스페이스에 저장한 소스 파일 2~4개를 선택합니다. 요청 검토 문서에 선택한 파일의 SHA-256, 모델 주소, 질문과 이전 대화가 표시됩니다. **Send Reviewed Local Model Request**를 실행하여 내용을 확인한 뒤 보내고, **Continue Local Workspace Conversation**으로 최대 네 번까지 이어갑니다. 선택한 파일의 저장본이 바뀌면 새 대화에서 다시 검토합니다. 대화는 현재 창의 메모리에 최대 15분간 남으며, **Close Local Workspace Conversation**으로 닫을 수 있습니다.
