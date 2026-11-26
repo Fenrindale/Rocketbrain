@@ -1,24 +1,34 @@
 package rocketbrain.observer;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 public final class AutowireRuntime {
     private static final int LIMIT=48, PARAMETER_LIMIT=24, DEPTH_LIMIT=8;
     private static final String FACTORY="org.springframework.beans.factory.support.DefaultListableBeanFactory";
     private static final String DESCRIPTOR="org.springframework.beans.factory.support.ConstructorResolver$ConstructorDependencyDescriptor";
+    private static final String MEMBER_DESCRIPTOR="org.springframework.beans.factory.config.DependencyDescriptor";
     private static final String AMBIGUOUS="org.springframework.beans.factory.NoUniqueBeanDefinitionException";
+    private static final Set<Class<?>> AGGREGATES=Set.of(List.class,Set.class,Collection.class,Map.class);
+    private static final StackWalker CALLERS=StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
     private static final ThreadLocal<Frame> active=new ThreadLocal<>();
     private static final ArrayDeque<Map<String,Object>> retained=new ArrayDeque<>();
+    private static final ArrayDeque<Map<String,Object>> members=new ArrayDeque<>();
     private static volatile List<String> prefixes=List.of();
     private static volatile boolean enabled;
-    private static long sequence, dropped;
+    private static long sequence, dropped, droppedMembers;
 
     private AutowireRuntime(){}
 
@@ -36,7 +46,7 @@ public final class AutowireRuntime {
         if(flag==scopes.isEmpty())throw new IllegalArgumentException("Choose explicit constructor trace packages when enabling the trace");
         prefixes=List.copyOf(scopes);
         enabled=flag;
-        if(!enabled){retained.clear();sequence=0;dropped=0;}
+        if(!enabled){retained.clear();members.clear();sequence=0;dropped=0;droppedMembers=0;}
     }
     static boolean enabled(){return enabled;}
 
@@ -45,11 +55,19 @@ public final class AutowireRuntime {
         final Object factory, descriptor;
         final Map<String,Object> context, site;
         final int depth;
+        final boolean member,optional,aggregate;
+        Object nestedDescriptor;
+        List<String> aggregateNames;
         String selected, suggested;
-        boolean multiple, conflictingHint, reportedNonUnique;
-        Frame(Frame parent,Object factory,Object descriptor,Map<String,Object> context,Map<String,Object> site){
+        boolean multiple, conflictingHint, reportedNonUnique, noCandidates;
+        Frame(Frame parent,Object factory,Object descriptor,Map<String,Object> context,Map<String,Object> site,
+                boolean member,boolean optional,boolean aggregate){
             this.parent=parent;this.factory=factory;this.descriptor=descriptor;this.context=context;this.site=site;
+            this.member=member;this.optional=optional;this.aggregate=aggregate;
             depth=parent==null?1:parent.depth+1;
+        }
+        boolean matches(Object factory,Object descriptor){
+            return this.factory==factory&&(this.descriptor==descriptor||nestedDescriptor!=null&&nestedDescriptor==descriptor);
         }
     }
 
@@ -60,6 +78,12 @@ public final class AutowireRuntime {
         String name=value.getName();
         return !value.isArray()&&name.length()<=256&&name.matches("[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*")?name:null;
     }
+    private static String memberType(Class<?> value){
+        if(value.isArray()&&value.getComponentType().isArray())return null;
+        String name=type(value.isArray()?value.getComponentType():value);
+        return name==null?null:name+(value.isArray()?"[]":"");
+    }
+    private static boolean inScope(String name){return name!=null&&prefixes.stream().anyMatch(name::startsWith);}
     private static Object metadata(Object value,String declaring,String name)throws ReflectiveOperationException{
         if(value==null)return null;
         Method method=value.getClass().getMethod(name);
@@ -76,7 +100,7 @@ public final class AutowireRuntime {
             Object executable=metadata(parameter,"org.springframework.core.MethodParameter","getExecutable");
             if(!(executable instanceof Constructor<?> constructor)||constructor.isSynthetic()||constructor.getParameterCount()>PARAMETER_LIMIT)return null;
             String owner=type(constructor.getDeclaringClass());
-            if(owner==null||prefixes.stream().noneMatch(owner::startsWith))return null;
+            if(!inScope(owner))return null;
             Object rawIndex=metadata(parameter,"org.springframework.core.MethodParameter","getParameterIndex");
             if(!(rawIndex instanceof Integer index)||index<0||index>=constructor.getParameterCount())return null;
             Class<?>[] parameterTypes=constructor.getParameterTypes();
@@ -91,20 +115,116 @@ public final class AutowireRuntime {
             site.put("requestingBean",consumer);
             var javaParameter=constructor.getParameters()[index];
             if(javaParameter.isNamePresent()&&label(javaParameter.getName())!=null)site.put("parameterName",javaParameter.getName());
+            return frame(factory,descriptor,site,false,false,false);
+        }catch(Throwable ignored){return null;}
+    }
+
+    private static Frame frame(Object factory,Object descriptor,Map<String,Object> site,boolean member,boolean optional,boolean aggregate){
             Map<String,Object> context=PersistenceContextRuntime.beanFactoryIdentity(factory);
             if(context==null)return null;
             Frame previous=active.get();
             if(previous!=null&&previous.depth>=DEPTH_LIMIT)return null;
-            Frame frame=new Frame(previous,factory,descriptor,context,Map.copyOf(site));
+            Frame frame=new Frame(previous,factory,descriptor,context,Map.copyOf(site),member,optional,aggregate);
             active.set(frame);
             return frame;
+    }
+
+    private static boolean ordinaryMemberCaller(ClassLoader loader,boolean field){
+        String caller="org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$"+
+            (field?"AutowiredFieldElement":"AutowiredMethodElement");
+        String method=field?"resolveFieldValue":"resolveMethodArguments";
+        return CALLERS.walk(stack->stack.skip(3).findFirst().filter(frame->frame.getClassName().equals(caller)&&
+            frame.getMethodName().equals(method)&&frame.getDeclaringClass().getClassLoader()==loader).isPresent());
+    }
+    private static Class<?> elementType(Class<?> raw,Type generic){
+        if(raw.isArray())return raw.getComponentType();
+        if(raw!=Optional.class&&!AGGREGATES.contains(raw))return raw;
+        if(!(generic instanceof ParameterizedType parameterized)||
+            !generic.getClass().getName().equals("sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl"))return null;
+        Type[] types=parameterized.getActualTypeArguments();
+        int size=raw==Map.class?2:1;
+        return types.length==size&&(size==1||types[0]==String.class)&&types[size-1] instanceof Class<?> type?type:null;
+    }
+
+    public static Object startMember(Object factory,Object descriptor,String requestingBean,Object names){
+        try{
+            if(!enabled||factory==null||descriptor==null||!factory.getClass().getName().equals(FACTORY)||
+                !descriptor.getClass().getName().equals(MEMBER_DESCRIPTOR)||names==null||names.getClass()!=java.util.LinkedHashSet.class)return null;
+            String consumer=label(requestingBean);
+            if(consumer==null)return null;
+            Map<String,Object> site=new LinkedHashMap<>();
+            Class<?> raw;
+            Type generic;
+            Object springField=metadata(descriptor,"org.springframework.beans.factory.InjectionPoint","getField");
+            if(springField instanceof Field field){
+                String owner=type(field.getDeclaringClass()), name=label(field.getName());
+                if(!inScope(owner)||name==null||field.isSynthetic()||Modifier.isStatic(field.getModifiers())||
+                    !ordinaryMemberCaller(factory.getClass().getClassLoader(),true))return null;
+                site.put("kind","field");site.put("owner",owner);site.put("member",name);
+                raw=field.getType();generic=field.getGenericType();
+            }else{
+                Object parameter=metadata(descriptor,"org.springframework.beans.factory.InjectionPoint","getMethodParameter");
+                if(!(metadata(parameter,"org.springframework.core.MethodParameter","getExecutable") instanceof Method method)||
+                    method.isSynthetic()||method.isBridge()||Modifier.isStatic(method.getModifiers())||
+                    method.getParameterCount()>PARAMETER_LIMIT)return null;
+                String owner=type(method.getDeclaringClass()), name=label(method.getName());
+                if(!inScope(owner)||name==null||!ordinaryMemberCaller(factory.getClass().getClassLoader(),false))return null;
+                if(!(metadata(parameter,"org.springframework.core.MethodParameter","getParameterIndex") instanceof Integer index)||
+                    index<0||index>=method.getParameterCount())return null;
+                List<String> signature=new ArrayList<>();
+                for(Class<?> item:method.getParameterTypes()){
+                    String value=memberType(item);if(value==null)return null;
+                    signature.add(value);
+                }
+                site.put("kind","method");site.put("owner",owner);site.put("member",name);
+                site.put("parameterTypes",List.copyOf(signature));site.put("parameterIndex",index);
+                var javaParameter=method.getParameters()[index];
+                if(javaParameter.isNamePresent()&&label(javaParameter.getName())!=null)site.put("parameterName",javaParameter.getName());
+                raw=method.getParameterTypes()[index];generic=method.getGenericParameterTypes()[index];
+            }
+            Class<?> element=elementType(raw,generic);
+            String dependency=element==null?null:type(element), signature=memberType(raw);
+            if(!inScope(dependency)||signature==null)return null;
+            site.put("requestedType",signature);site.put("dependencyType",dependency);site.put("requestingBean",consumer);
+            return frame(factory,descriptor,site,true,raw==Optional.class,raw.isArray()||AGGREGATES.contains(raw));
         }catch(Throwable ignored){return null;}
+    }
+
+    public static void optional(Object nested,Object factory,Object descriptor){
+        try{
+            Frame frame=active.get();
+            if(frame!=null&&frame.member&&frame.optional&&frame.descriptor==descriptor&&frame.factory==factory&&nested!=null)
+                frame.nestedDescriptor=nested;
+        }catch(Throwable ignored){}
+    }
+
+    public static void emptyCandidates(boolean empty,Object factory,Object descriptor){
+        try{
+            Frame frame=active.get();
+            if(empty&&frame!=null&&frame.member&&frame.matches(factory,descriptor))frame.noCandidates=true;
+        }catch(Throwable ignored){}
+    }
+
+    public static void aggregated(Object names,Object factory,Object descriptor){
+        try{
+            Frame frame=active.get();
+            if(frame==null||!frame.aggregate||!frame.matches(factory,descriptor))return;
+            if(!(names instanceof Set<?> keys)||!names.getClass().getName().equals("java.util.LinkedHashMap$LinkedKeySet")||
+                keys.isEmpty()||keys.size()>12||frame.aggregateNames!=null){frame.multiple=true;return;}
+            List<String> observed=new ArrayList<>();
+            for(Object key:keys){
+                String bean=label(key);
+                if(bean==null){frame.multiple=true;return;}
+                observed.add(bean);
+            }
+            frame.aggregateNames=observed.stream().sorted().toList();
+        }catch(Throwable ignored){}
     }
 
     public static void selected(Object candidate,Object factory,Object descriptor){
         try{
             Frame frame=active.get();
-            if(frame==null||frame.factory!=factory||frame.descriptor!=descriptor)return;
+            if(frame==null||!frame.matches(factory,descriptor))return;
             String name=label(candidate);
             if(name==null){frame.multiple=true;return;}
             if(frame.selected!=null&&!frame.selected.equals(name))frame.multiple=true;
@@ -114,7 +234,7 @@ public final class AutowireRuntime {
     public static void suggested(Object candidate,Object factory,Object descriptor){
         try{
             Frame frame=active.get();
-            if(frame==null||frame.factory!=factory||frame.descriptor!=descriptor)return;
+            if(frame==null||!frame.matches(factory,descriptor))return;
             String name=label(candidate);
             if(name==null)return;
             if(frame.suggested!=null&&!frame.suggested.equals(name))frame.conflictingHint=true;
@@ -125,7 +245,7 @@ public final class AutowireRuntime {
     public static void ambiguous(Object factory,Object descriptor){
         try{
             Frame frame=active.get();
-            if(frame!=null&&frame.factory==factory&&frame.descriptor==descriptor)frame.reportedNonUnique=true;
+            if(frame!=null&&frame.matches(factory,descriptor))frame.reportedNonUnique=true;
         }catch(Throwable ignored){}
     }
 
@@ -135,32 +255,52 @@ public final class AutowireRuntime {
             if(frame.parent==null)active.remove();else active.set(frame.parent);
             Map<String,Object> event=new LinkedHashMap<>();
             event.put("context",frame.context);event.put("site",frame.site);
-            if(!frame.conflictingHint&&frame.suggested!=null)event.put("suggestedName",frame.suggested);
+            if(!frame.conflictingHint&&frame.suggested!=null&&(!frame.member||frame.suggested.equals(frame.selected)))
+                event.put("suggestedName",frame.suggested);
             if(frame.reportedNonUnique&&failure!=null&&failure.getClass().getName().equals(AMBIGUOUS)){
                 event.put("state","ambiguous");
-            }else if(failure==null&&resolved!=null&&!frame.multiple&&frame.selected!=null&&localDefinition(frame)){
+            }else if(failure==null&&frame.member&&frame.noCandidates&&frame.selected==null&&frame.aggregateNames==null&&
+                (resolved==null||resolved instanceof Optional<?> optional&&optional.isEmpty())){
+                event.put("state","missing");
+            }else if(failure==null&&resolved!=null&&!frame.multiple&&frame.aggregateNames!=null&&frame.selected==null&&
+                localDefinitions(frame,frame.aggregateNames)){
+                event.put("state","aggregated");
+                event.put("selectedBeans",frame.aggregateNames);
+            }else if(failure==null&&resolved!=null&&!frame.multiple&&frame.selected!=null&&frame.aggregateNames==null&&
+                (!(resolved instanceof Optional<?> optional)||optional.isPresent())&&localDefinitions(frame,List.of(frame.selected))){
                 event.put("state","resolved");event.put("selectedBean",frame.selected);
             }else if(failure==null){
                 event.put("state","unproved");
             }else return;
             synchronized(AutowireRuntime.class){
                 event.put("id",++sequence);
-                if(retained.size()>=LIMIT){retained.removeFirst();dropped++;}
-                retained.addLast(Map.copyOf(event));
+                ArrayDeque<Map<String,Object>> queue=frame.member?members:retained;
+                if(queue.size()>=LIMIT){
+                    queue.removeFirst();
+                    if(frame.member)droppedMembers++;else dropped++;
+                }
+                queue.addLast(Map.copyOf(event));
             }
         }catch(Throwable ignored){}
     }
 
-    private static boolean localDefinition(Frame frame)throws ReflectiveOperationException{
+    private static boolean localDefinitions(Frame frame,List<String> names)throws ReflectiveOperationException{
         // The exact Spring class's own map lookup. Never ask for a candidate instance.
         Method exists=frame.factory.getClass().getDeclaredMethod("containsBeanDefinition",String.class);
-        return Boolean.TRUE.equals(exists.invoke(frame.factory,frame.selected));
+        for(String name:names)if(!Boolean.TRUE.equals(exists.invoke(frame.factory,name)))return false;
+        return true;
     }
 
     static synchronized Map<String,Object> snapshot(List<String> instruments){
         boolean observed=instruments.containsAll(List.of(AutowireTransformer.CONSTRUCTOR,AutowireTransformer.FACTORY));
         return Map.of("state",!enabled?"disabled":observed?"observed":"awaiting-hooks",
             "events",observed&&enabled?List.copyOf(retained):List.of(),"omitted",dropped,
+            "inspectionInvokedBeans",false,"beanValuesRetained",false,"observerExecutedSql",false);
+    }
+    static synchronized Map<String,Object> memberSnapshot(List<String> instruments){
+        boolean observed=instruments.contains(AutowireTransformer.MEMBERS);
+        return Map.of("state",!enabled?"disabled":observed?"observed":"awaiting-hooks",
+            "events",observed&&enabled?List.copyOf(members):List.of(),"omitted",droppedMembers,
             "inspectionInvokedBeans",false,"beanValuesRetained",false,"observerExecutedSql",false);
     }
 }

@@ -802,6 +802,18 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectObservedMemberInjection",
+        "title": "Inspect Observed Spring Field and Method Injection",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.openObservedMemberSource",
+        "title": "Open Observed Spring Injection Source",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.inspectTransactions",
         "title": "Inspect Spring JPA Transaction Outcomes",
         "category": "Rocketbrain",

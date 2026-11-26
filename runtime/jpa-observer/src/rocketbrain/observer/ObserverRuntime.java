@@ -148,6 +148,14 @@ public final class ObserverRuntime {
             report.put("processId",ProcessHandle.current().pid());
             reply(exchange,200,report);return;
         }
+        if(path.equals("/spring-observed-member-injection")){
+            if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
+            List<String> classes;
+            synchronized(ObserverRuntime.class){classes=List.copyOf(instrumented);}
+            Map<String,Object> report=new LinkedHashMap<>(AutowireRuntime.memberSnapshot(classes));
+            report.put("processId",ProcessHandle.current().pid());
+            reply(exchange,200,report);return;
+        }
         if(path.equals("/spring-transactions")){
             if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
             reply(exchange,200,JpaTransactionTrace.snapshot());return;

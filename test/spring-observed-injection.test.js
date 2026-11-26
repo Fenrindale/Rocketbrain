@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
-const { normalizeObservedInjection, sourceParameter } = require('../src/spring/observed-injection');
+const { normalizeObservedInjection, normalizeObservedMembers, sourceParameter, sourceMember } = require('../src/spring/observed-injection');
 const { registerObserver } = require('../src/jpa/observer-vscode');
 
 const text = 'package example; import vendor.Value; class Consumer { Consumer(Value left, Value right) {} }';
@@ -15,6 +15,55 @@ const site = {owner:'example.Consumer',requestingBean:'consumer',parameterIndex:
 const event = {id:1,state:'resolved',context:{key:'context-2',id:'sample'},site,selectedBean:'registeredRight',suggestedName:'registeredRight'};
 const trace = {processId:999,state:'observed',omitted:0,events:[event],inspectionInvokedBeans:false,beanValuesRetained:false,observerExecutedSql:false};
 const uri = file => ({scheme:'file',fsPath:file,toString:()=>pathToFileURL(file).href});
+const memberSite={owner:'example.Consumer',requestingBean:'consumer',kind:'field',member:'named',
+  requestedType:'java.util.Map',dependencyType:'vendor.Value'};
+const memberEvent={id:5,context:event.context,site:memberSite,state:'aggregated',selectedBeans:['left','right']};
+
+test('member evidence accepts bounded local aggregate names and typed actual missing without changing constructor events',()=>{
+  const methodSite={...memberSite,kind:'method',member:'wire',parameterTypes:['vendor.Value','java.util.Map'],
+    parameterIndex:1,parameterName:'map'};
+  const fields={...trace,events:[{...memberEvent,returned:'private'}]};
+  assert.deepEqual(normalizeObservedMembers(fields).events,[memberEvent]);
+  assert.throws(()=>normalizeObservedInjection(fields),/event/u);
+  const absent={...memberEvent,state:'missing',site:methodSite};
+  delete absent.selectedBeans;
+  assert.deepEqual(normalizeObservedMembers({...fields,events:[absent]}).events,[absent]);
+  for(const bad of [
+    {...memberEvent,selectedBeans:['left','left']},
+    {...memberEvent,selectedBeans:Array.from({length:13},(_,i)=>'named'+i)},
+    {...memberEvent,site:{...memberSite,requestedType:'java.util.Optional'}},
+    {...memberEvent,site:{...memberSite,parameterTypes:['vendor.Value']}},
+    {...memberEvent,site:{...methodSite,parameterIndex:0}},
+    {...absent,selectedBean:'invented'},
+    {...memberEvent,suggestedName:'unchecked-hint'}
+  ])assert.throws(()=>normalizeObservedMembers({...fields,events:[bad]}),/Spring/u);
+});
+
+test('exact member navigation validates annotation, wrapped type specification and overload signature',()=>{
+  const source=`package example;
+    import vendor.Value;
+    import other.NewValue;
+    import java.util.Map;
+    import org.springframework.beans.factory.annotation.Autowired;
+    class Consumer {
+      @Autowired Map<String,Value> named;
+      @Autowired void wire(Value item, Map<String,Value> map){}
+      @Autowired void wire(NewValue unused, Map<String,Value> map){}
+      @Autowired Value[] array;
+    }`;
+  const found=sourceMember({text:source},memberSite);
+  assert.equal(source.slice(found.start,found.end),'named');
+  assert.equal(found.sameSourceRevisionVerified,false);
+  assert.equal(sourceMember({text:source.replace('Map<String,Value> named','Map<String,NewValue> named')},memberSite),undefined);
+  assert.equal(sourceMember({text:source.replace('@Autowired Map<String,Value> named','Map<String,Value> named')},memberSite),undefined);
+  const methodSite={...memberSite,kind:'method',member:'wire',parameterTypes:['vendor.Value','java.util.Map'],
+    parameterIndex:1,parameterName:'map'};
+  const param=sourceMember({text:source},methodSite);
+  assert.equal(param.start,source.indexOf('map)'));
+  assert.equal(sourceMember({text:source}, {...methodSite,parameterTypes:['vendor.Different','java.util.Map']}),undefined);
+  const field=sourceMember({text:source},{...memberSite,member:'array',requestedType:'vendor.Value[]'});
+  assert.equal(source.slice(field.start,field.end),'array');
+});
 
 test('constructor evidence preserves index, factory context and unresolved ambiguity boundaries', () => {
   const ambiguous = {...event,id:2,state:'ambiguous',context:{key:'context-3',id:'sample'}};

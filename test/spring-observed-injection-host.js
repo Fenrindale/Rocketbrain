@@ -114,4 +114,4 @@ if(require.main===module)fixture(async input=>{
   finally{client.dispose();}
 }).then(result=>console.log(JSON.stringify(result)),error=>{console.error(error.stack);process.exitCode=1;});
 
-module.exports={runSpringObservedInjectionChecks};
+module.exports={runSpringObservedInjectionChecks,withObservedInjectionFixture:fixture,verifyObservedConstructorInjection:verify};

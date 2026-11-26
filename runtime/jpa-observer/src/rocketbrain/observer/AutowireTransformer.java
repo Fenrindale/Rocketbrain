@@ -22,9 +22,12 @@ import java.util.Set;
 final class AutowireTransformer implements ClassFileTransformer {
     static final String CONSTRUCTOR="org/springframework/beans/factory/support/ConstructorResolver";
     static final String FACTORY="org/springframework/beans/factory/support/DefaultListableBeanFactory";
+    static final String MEMBERS=FACTORY+"#member-autowire";
     private static final String DESCRIPTOR="Lorg/springframework/beans/factory/config/DependencyDescriptor;";
     private static final String TRAILING="Ljava/lang/String;Ljava/util/Set;Lorg/springframework/beans/TypeConverter;";
     private static final String RESULT="Ljava/lang/Object;";
+    private static final String RESOLVE="("+DESCRIPTOR+TRAILING+")"+RESULT;
+    private static final String OPTIONAL="("+DESCRIPTOR+"Ljava/lang/String;Ljava/util/Set;[Ljava/lang/Object;)Ljava/util/Optional;";
     private static final ClassDesc HELPER=ClassDesc.of("rocketbrain.observer.AutowireRuntime");
     private static final ClassDesc OBJECT=ClassDesc.of("java.lang.Object"), STRING=ClassDesc.of("java.lang.String");
     private static final ClassDesc VOID=ClassDesc.ofDescriptor("V");
@@ -49,7 +52,7 @@ final class AutowireTransformer implements ClassFileTransformer {
             byte[] result=cf.transformClass(model,(builder,element)->{
                 if(element instanceof MethodModel method&&method.code().isPresent()&&supported(method,constructor)){
                     methods[0]++;
-                    builder.transformMethod(method,MethodTransform.transformingCode(constructor?new ConstructorScope():
+                    builder.transformMethod(method,MethodTransform.transformingCode(constructor?new ResolutionScope(true):
                         (code,instruction)->{
                             if(call(instruction,"java/util/Set","add","(Ljava/lang/Object;)Z")){
                                 selected[0]++;
@@ -72,11 +75,69 @@ final class AutowireTransformer implements ClassFileTransformer {
             if(methods[0]!=1||!constructor&&(selected[0]!=2||suggested[0]!=1||ambiguity[0]!=1))
                 throw new IllegalStateException("Unknown Spring constructor resolution shape");
             ObserverRuntime.instrumented(type);
+            if(!constructor){
+                try{
+                    byte[] members=memberHooks(cf,cf.parse(result));
+                    ObserverRuntime.instrumented(MEMBERS);
+                    return members;
+                }catch(Throwable ignored){
+                    ObserverRuntime.warning("Spring field and method observation unavailable for this resolution shape.");
+                }
+            }
             return result;
         }catch(Throwable ignored){
             ObserverRuntime.warning("Spring constructor observation unavailable: "+type);
             return null;
         }
+    }
+
+    private static byte[] memberHooks(ClassFile format,java.lang.classfile.ClassModel model){
+        // All added shapes are optional relative to the existing constructor instrumentation.
+        int[] matched={0,0,0,0,0,0,0,0};
+        byte[] result=format.transformClass(model,(builder,element)->{
+            if(!(element instanceof MethodModel method)||method.code().isEmpty()){builder.with(element);return;}
+            String name=method.methodName().stringValue(), signature=method.methodType().stringValue();
+            if(name.equals("resolveDependency")&&signature.equals(RESOLVE)&&method.code().orElseThrow().elementStream()
+                .filter(instruction->call(instruction,FACTORY,"doResolveDependency",RESOLVE)).count()==1){
+                matched[0]++;
+                builder.transformMethod(method,MethodTransform.transformingCode(new ResolutionScope(false)));
+            }else if(name.equals("doResolveDependency")&&signature.equals(RESOLVE)){
+                builder.transformMethod(method,MethodTransform.transformingCode((code,instruction)->{
+                    code.with(instruction);
+                    if(call(instruction,"java/util/Map","isEmpty","()Z")){
+                        matched[1]++;
+                        code.dup().aload(0).aload(1).invokestatic(HELPER,"emptyCandidates",
+                            MethodTypeDesc.of(VOID,ClassDesc.ofDescriptor("Z"),OBJECT,OBJECT));
+                    }
+                }));
+            }else if(name.equals("createOptionalDependency")&&signature.equals(OPTIONAL)){
+                matched[2]++;
+                builder.transformMethod(method,MethodTransform.transformingCode((code,instruction)->{
+                    code.with(instruction);
+                    if(instruction instanceof InvokeInstruction call&&call.owner().asInternalName().startsWith(FACTORY+"$")&&
+                        call.name().equalsString("<init>")&&call.type().equalsString("(L"+FACTORY+";"+DESCRIPTOR+"[Ljava/lang/Object;)V")){
+                        matched[3]++;
+                        code.dup().aload(0).aload(1)
+                            .invokestatic(HELPER,"optional",MethodTypeDesc.of(VOID,OBJECT,OBJECT,OBJECT));
+                    }
+                }));
+            }else if(Set.of("resolveMultipleBeans","resolveMultipleBeanCollection","resolveMultipleBeanMap").contains(name)&&
+                signature.equals(RESOLVE)){
+                int index=name.equals("resolveMultipleBeans")?4:name.equals("resolveMultipleBeanCollection")?5:6;
+                matched[7]++;
+                builder.transformMethod(method,MethodTransform.transformingCode((code,instruction)->{
+                    if(call(instruction,"java/util/Set","addAll","(Ljava/util/Collection;)Z")){
+                        matched[index]++;
+                        code.dup().aload(0).aload(1)
+                            .invokestatic(HELPER,"aggregated",MethodTypeDesc.of(VOID,OBJECT,OBJECT,OBJECT));
+                    }
+                    code.with(instruction);
+                }));
+            }else builder.with(element);
+        });
+        if(!java.util.Arrays.equals(matched,new int[]{1,1,1,1,2,1,1,3}))
+            throw new IllegalStateException("Unknown Spring member resolution shape");
+        return result;
     }
 
     private static boolean supported(MethodModel method,boolean constructor){
@@ -93,13 +154,21 @@ final class AutowireTransformer implements ClassFileTransformer {
             invoke.name().equalsString(name)&&invoke.type().equalsString(descriptor);
     }
 
-    private static final class ConstructorScope implements CodeTransform {
+    private static final class ResolutionScope implements CodeTransform {
+        private final boolean constructor;
         private Label start,end,handler;
         private int token;
+        ResolutionScope(boolean constructor){this.constructor=constructor;}
         public void atStart(CodeBuilder code){
             token=code.allocateLocal(TypeKind.REFERENCE);
-            code.aload(0).getfield(ClassDesc.of(CONSTRUCTOR.replace('/','.')),"beanFactory",BEANS).aload(1).aload(3)
-                .invokestatic(HELPER,"start",MethodTypeDesc.of(OBJECT,OBJECT,OBJECT,STRING)).astore(token);
+            if(constructor){
+                code.aload(0).getfield(ClassDesc.of(CONSTRUCTOR.replace('/','.')),"beanFactory",BEANS).aload(1).aload(3)
+                    .invokestatic(HELPER,"start",MethodTypeDesc.of(OBJECT,OBJECT,OBJECT,STRING));
+            }else{
+                code.aload(0).aload(1).aload(2).aload(3)
+                    .invokestatic(HELPER,"startMember",MethodTypeDesc.of(OBJECT,OBJECT,OBJECT,STRING,OBJECT));
+            }
+            code.astore(token);
             start=code.newLabel();end=code.newLabel();handler=code.newLabel();
             code.labelBinding(start);
         }
