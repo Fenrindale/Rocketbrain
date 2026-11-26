@@ -73,3 +73,45 @@ test('older or incomplete observers, truncation and malformed groups never imply
   assert.deepEqual(excluded.suspects,[]);
   assert.deepEqual(summarizePerformance(snapshot([sample([])],{rawBindValuesRetained:true})).requests,[]);
 });
+
+const compositeRole = {
+  role:role.role,entity:role.entity,ownerTable:role.ownerTable,childTable:role.childTable,
+  keyColumns:['team_id','tenant_id']
+};
+const composite = (sql,key,sequence) => event(sql,sequence,{collection:{...compositeRole,key}});
+
+test('composite collection reads bind each physical key column for one distinct owner tuple', () => {
+  const prefix='select m.id from members m where ';
+  const supported = [
+    'm.tenant_id=? and m.team_id=?',
+    'm.team_id=? and ?=m.tenant_id',
+    '(m.tenant_id,m.team_id)=(?,?)',
+    '(m.team_id,m.tenant_id) in ((?,?))'
+  ];
+  for(const predicate of supported) {
+    const statement=prefix+predicate;
+    const report=summarize([event(root,1),composite(statement,1,2),composite(statement,2,3)]);
+    assert.equal(report.coverage,'complete-within-supported-hooks');
+    assert.deepEqual(report.suspects[0].keyColumns,compositeRole.keyColumns);
+    assert.equal(report.suspects[0].child.distinctOwnerKeys,2);
+    const repeated=summarize([event(root,1),composite(statement,1,2),composite(statement,1,3)]);
+    assert.deepEqual(repeated.suspects,[]);
+  }
+});
+
+test('an incomplete tuple, another alias, or multiple tuple bindings cannot claim a composite collection match', () => {
+  const prefix='select m.id from members m where ';
+  for(const predicate of [
+    'm.team_id=?',
+    'm.team_id=? or m.tenant_id=?',
+    'm.team_id=? and m.team_id=?',
+    'm.team_id=? and x.tenant_id=?',
+    '(m.team_id,m.tenant_id) in ((?,?),(?,?))'
+  ]) {
+    const statement=prefix+predicate;
+    const result=summarize([event(root,1),composite(statement,1,2),composite(statement,2,3)]);
+    assert.equal(result.coverage,'partial');
+    assert.equal(result.omittedSelects,2);
+    assert.deepEqual(result.suspects,[]);
+  }
+});

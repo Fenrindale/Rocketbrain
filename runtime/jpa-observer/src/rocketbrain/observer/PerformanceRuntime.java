@@ -38,7 +38,7 @@ public final class PerformanceRuntime {
     static void configure(boolean requested){enabled=requested;}
     static boolean enabled(){return enabled;}
 
-    private record CollectionLoad(Object session,String role,String entity,String owner,String table,String keyColumn,int key){}
+    private record CollectionLoad(Object session,String role,String entity,String owner,String table,List<String> keyColumns,int key){}
     private static final CollectionLoad opaque=new CollectionLoad(null,null,null,null,null,null,0);
     private static final class Request {
         final Object servletRequest;
@@ -115,11 +115,11 @@ public final class PerformanceRuntime {
                 String entity=ownerClass instanceof Class<?> type?safeName(type.getName(),JAVA_NAME):null;
                 String parent=safeName(HibernateAccess.optional(owner,"getRootTableName"),SQL_NAME);
                 String child=safeName(HibernateAccess.optional(collection,"getTableName"),SQL_NAME);
-                Object columns=HibernateAccess.optional(collection,"getKeyColumnNames");
-                String column=columns instanceof String[] names&&names.length==1?safeName(names[0],SQL_NAME):null;
-                int id=keyOrdinal(current,key);
-                if(session!=null&&role!=null&&entity!=null&&parent!=null&&child!=null&&column!=null&&id>0){
-                    load=new CollectionLoad(session,role,entity,parent,child,column,id);
+                List<String> columns=keyColumns(collection);
+                Object[] values=keyParts(collection,key,columns.size());
+                int id=values==null?0:keyOrdinal(current,values);
+                if(session!=null&&role!=null&&entity!=null&&parent!=null&&child!=null&&!columns.isEmpty()&&id>0){
+                    load=new CollectionLoad(session,role,entity,parent,child,columns,id);
                 }
             }catch(Throwable ignored){}
             finally{
@@ -136,17 +136,46 @@ public final class PerformanceRuntime {
         }catch(Throwable ignored){}
     }
 
-    private static int keyOrdinal(Request current,Object key)throws Exception{
-        String rendered;
-        if(key instanceof String text&&text.length()<=128)rendered=text;
-        else if(key instanceof Long||key instanceof Integer||key instanceof Short||key instanceof Byte||key instanceof UUID)rendered=key.toString();
-        else return 0;
+    private static List<String> keyColumns(Object collection){
+        Object result=HibernateAccess.optional(collection,"getKeyColumnNames");
+        if(!(result instanceof String[] names)||names.length<1||names.length>4)return List.of();
+        List<String> columns=new ArrayList<>(names.length);
+        for(String value:names){
+            String name=safeName(value,SQL_NAME);
+            if(name==null||name.indexOf('.')>=0||columns.contains(name))return List.of();
+            columns.add(name);
+        }
+        return List.copyOf(columns);
+    }
+
+    private static Object[] keyParts(Object collection,Object key,int columns){
+        if(columns==1)return new Object[]{key};
+        if(columns<2||key==null)return null;
+        Object type=HibernateAccess.optional(collection,"getKeyType");
+        if(type==null||!type.getClass().getName().equals("org.hibernate.type.ComponentType"))return null;
+        Object result=HibernateAccess.optional(type,"getPropertyValues",key);
+        return result instanceof Object[] parts&&parts.length==columns?parts:null;
+    }
+
+    private static void appendPart(MessageDigest digest,byte[] value){
+        digest.update(ByteBuffer.allocate(Integer.BYTES).putInt(value.length).array());
+        digest.update(value);
+    }
+
+    private static int keyOrdinal(Request current,Object[] parts)throws Exception{
         if(current.salt==null){current.salt=new byte[24];random.nextBytes(current.salt);}
         MessageDigest digest=MessageDigest.getInstance("SHA-256");
         digest.update(current.salt);
-        digest.update(key.getClass().getName().getBytes(StandardCharsets.US_ASCII));
-        digest.update((byte)0);
-        ByteBuffer fingerprint=ByteBuffer.wrap(digest.digest(rendered.getBytes(StandardCharsets.UTF_8)));
+        digest.update((byte)parts.length);
+        for(Object key:parts){
+            String rendered;
+            if(key instanceof String text&&text.length()<=128)rendered=text;
+            else if(key instanceof Long||key instanceof Integer||key instanceof Short||key instanceof Byte||key instanceof UUID)rendered=key.toString();
+            else return 0;
+            appendPart(digest,key.getClass().getName().getBytes(StandardCharsets.US_ASCII));
+            appendPart(digest,rendered.getBytes(StandardCharsets.UTF_8));
+        }
+        ByteBuffer fingerprint=ByteBuffer.wrap(digest.digest());
         Integer previous=current.keys.get(fingerprint);
         if(previous!=null)return previous;
         if(current.keys.size()>=MAX_SELECTS)return 0;
@@ -185,8 +214,12 @@ public final class PerformanceRuntime {
             if(current.loadDepth>0&&(load==null||load.session!=session)){
                 current.incomplete=true;
             }else if(load!=null){
-                entry.put("collection",Map.of("role",load.role,"entity",load.entity,"ownerTable",load.owner,
-                    "childTable",load.table,"keyColumn",load.keyColumn,"key",load.key));
+                Map<String,Object> identified=new LinkedHashMap<>();
+                identified.put("role",load.role);identified.put("entity",load.entity);identified.put("ownerTable",load.owner);
+                identified.put("childTable",load.table);identified.put("key",load.key);
+                if(load.keyColumns.size()==1)identified.put("keyColumn",load.keyColumns.get(0));
+                else identified.put("keyColumns",load.keyColumns);
+                entry.put("collection",Map.copyOf(identified));
             }
             current.selects.add(Map.copyOf(entry));
         }catch(Throwable ignored){}
