@@ -117,6 +117,7 @@
       { "command": "rocketbrain.docker.lifecycle", "title": "Manage Docker Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.compose", "title": "Inspect Compose Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.manifest", "title": "Inspect Registry Manifest", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.registryPermissions", "title": "Check Registry Repository Permissions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.buildImage", "title": "Build Docker Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.pushImage", "title": "Push Docker Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.configureExceptionBreakpoints", "title": "Configure Java Exception Breakpoints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1548,6 +1549,7 @@
         { "command": "rocketbrain.coroutines.disconnect", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "connection" },
         { "command": "rocketbrain.docker.select", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.docker.refresh", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "navigation@2" },
+        { "command": "rocketbrain.docker.registryPermissions", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "registry" },
         { "command": "rocketbrain.kubernetes.connect", "when": "view == rocketbrain.kubernetes", "group": "navigation@1" },
         { "command": "rocketbrain.kubernetes.refresh", "when": "view == rocketbrain.kubernetes", "group": "navigation@2" },
         { "command": "rocketbrain.kubernetes.disconnect", "when": "view == rocketbrain.kubernetes", "group": "navigation@3" },
@@ -2103,6 +2105,27 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.docker.registryPermissionProfiles": {
+          "type": "array",
+          "default": [],
+          "scope": "machine",
+          "maxItems": 20,
+          "description": "Verified HTTPS Registry v2 Bearer endpoints and public signing certificate paths. Credentials are requested for each approved check.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "origin", "realm", "service", "issuer", "signerPath"],
+            "properties": {
+              "id": { "type": "string", "description": "A local label for this registry." },
+              "origin": { "type": "string", "description": "The exact HTTPS registry origin." },
+              "realm": { "type": "string", "description": "The exact HTTPS Bearer token service endpoint." },
+              "service": { "type": "string", "description": "The expected token audience." },
+              "issuer": { "type": "string", "description": "The expected token issuer." },
+              "signerPath": { "type": "string", "description": "An absolute path to the trusted RSA token signer public PEM certificate." },
+              "caPath": { "type": "string", "description": "An optional absolute path to the private HTTPS CA public PEM certificate." }
+            }
+          }
+        },
         "rocketbrain.sshWorkspace.profiles": {
           "type": "array",
           "scope": "machine",
