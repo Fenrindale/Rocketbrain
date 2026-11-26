@@ -65,14 +65,17 @@ async function runJavaTypeRenameChecks(api, vscode, checks) {
     const position = document.positionAt(document.getText().indexOf('class ' + fixture.oldName) + 'class '.length);
     const prepare = newName => api.java.typeRename.prepare({ document, position, newName });
     await assert.rejects(prepare(fixture.additional), /filename already exists/u);
-    const plan = await until(async () => {
+    let plan;
+    for (let attempt = 0; !plan; attempt++) {
       try {
-        return await prepare(fixture.newName);
+        plan = await prepare(fixture.newName);
       } catch (error) {
-        if (/JDT did not recognize|class(?:path| file membership) changed|source\/resource\/build buffer changed|source file changed after review/u.test(error.message)) return;
-        throw error;
+        if (attempt >= 2 || !/JDT did not recognize|classpath(?: file membership)? changed|source\/resource\/build buffer changed|source file changed after review/iu.test(error.message)) {
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, 600));
       }
-    }, 85000);
+    }
     assert.equal(plan.typeRename.attributedSpans, 8);
     assert.equal(plan.typeRename.files, 2);
     assert.equal(plan.typeRename.xmlBeanClasses, 1);
