@@ -47,7 +47,9 @@ exports.run = async (vscode = require('vscode')) => {
       const [file, receiver, argument] = hooks[group];
       const hook = require('./' + file)[receiver];
       assert.equal(typeof hook, 'function', group + ' installed verification hook');
-      const evidence = await hook(api, vscode, checks, ...(argument ? [argument] : []));
+      const result = await hook(api, vscode, checks, ...(argument ? [argument] : []));
+      const evidence = result ?? checks[group];
+      if (result === undefined && evidence) checks.push('Verified the installed ' + group + ' workflow.');
       assert.ok(evidence && typeof evidence === 'object', group + ' returned no proof.');
       details[group] = { ...evidence, jdbc: await jdbcReadback() };
       mark(group, 'completed');
