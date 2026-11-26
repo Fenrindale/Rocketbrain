@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Scope;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -53,7 +54,7 @@ public final class HierarchyInjectionProbe {
 }
 
 class HierarchyParentDefinitions {
-    @Bean HierarchyFallback hierarchyFallback() {
+    @Bean @Scope("prototype") HierarchyFallback hierarchyFallback() {
         HierarchyInjectionProbe.factories.incrementAndGet();
         return new HierarchyFallback("fixture-parent-fallback");
     }

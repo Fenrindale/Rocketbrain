@@ -17,7 +17,7 @@ async function verifyHierarchy({config,call,token},client) {
     replacement:'fixture-child-replacement',hidden:true,aggregate:['aggregateAncestor','aggregateLocal']
   });
   const before=await call('hierarchy-counters');
-  assert.ok(before.factories>=3);
+  assert.ok(before.factories>=4);
   const snapshot=await client.refresh();
   const ctor=await client.observedInjection(), fields=await client.observedMemberInjection();
   assert.equal(ctor.state,'observed',JSON.stringify(snapshot.warnings));
