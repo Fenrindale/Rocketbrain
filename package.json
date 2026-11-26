@@ -121,10 +121,13 @@
       { "command": "rocketbrain.kotlinEditor.stop", "title": "Stop Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.output", "title": "Show Kotlin Language Server Output", "category": "Rocketbrain" },
       { "command": "rocketbrain.coroutines.prepare", "title": "Prepare Kotlin Coroutine Probe", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.prepareDebug", "title": "Prepare Kotlin Coroutine Debug Attach", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.coroutines.connect", "title": "Connect Local Kotlin Coroutine Probe", "category": "Rocketbrain", "icon": "$(plug)", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.coroutines.refresh", "title": "Refresh Kotlin Coroutine Snapshot", "category": "Rocketbrain", "icon": "$(refresh)", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.coroutines.disconnect", "title": "Disconnect Kotlin Coroutine Probe", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.coroutines.openFrame", "title": "Open Kotlin Coroutine Frame", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.watchFrame", "title": "Debug a Parked Kotlin Coroutine", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.coroutines.detachDebugger", "title": "Detach Kotlin Coroutine Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.inspect", "title": "Inspect Dev Container Configuration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.start", "title": "Start Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.exec", "title": "Run in Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1338,7 +1341,7 @@
       },
       {
         "view": "rocketbrain.kotlinCoroutines",
-        "contents": "[Prepare JVM Probe](command:rocketbrain.coroutines.prepare)\n[Connect Local Probe](command:rocketbrain.coroutines.connect)",
+        "contents": "[Prepare JVM Probe](command:rocketbrain.coroutines.prepare)\n[Prepare Debug Attach](command:rocketbrain.coroutines.prepareDebug)\n[Connect Local Probe](command:rocketbrain.coroutines.connect)",
         "when": "isWorkspaceTrusted"
       },
       {

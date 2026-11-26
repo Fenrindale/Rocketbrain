@@ -152,6 +152,10 @@ Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를
 
 같은 스냅샷에서 부모 Job을 직접 관찰하면 자식 코루틴을 부모 아래에 표시합니다. 이름이 같아도 Job 객체가 다르면 분리하며, 캡처 범위 밖에 있는 부모는 별도로 표시합니다.
 
+Windows의 로컬 개발 JVM에서 **Prepare Kotlin Coroutine Debug Attach**를 선택해 IPv4 루프백 JDWP 포트와 프로브를 설정할 수 있습니다. Java 엔진 설치 명령으로 Rocketbrain Java 디버거를 업데이트한 뒤, 받은 VM 인수로 JVM을 실행하고 **Connect Local Probe**에서 해당 프로브를 엽니다. 대기 중인 코루틴에서 **Debug when this coroutine resumes**를 선택하면 실행 중인 JVM에 연결합니다. 선택한 continuation이 45초 안에 재개되면 VS Code 디버그 스택에 실제 Kotlin 프레임이 열립니다.
+
+이 흐름은 고정된 `kotlinx-coroutines-core-jvm`과 `kotlinx-coroutines-debug` 1.11.0의 소스 정보가 있는 suspend lambda를 지원합니다. **Detach Kotlin Coroutine Debugger**로 디버거를 분리하면 JVM이 계속 실행됩니다.
+
 ### Java CI 품질 게이트
 
 VSIX의 `extension/dist/java-quality-gate.js`를 추출하거나 소스의 `scripts/java-quality-gate.js`를 실행합니다. Node.js 20 이상과 Git이 있는 CI에서 대상 저장소와 기준선 커밋을 로컬로 준비합니다.
