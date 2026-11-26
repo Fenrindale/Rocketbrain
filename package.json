@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.96.0",
+  "version": "0.97.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -234,12 +234,14 @@
       { "command": "rocketbrain.spring.feignContracts", "title": "Inspect OpenFeign Runtime Contracts", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.openObjectSource", "title": "Open Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.inspectViewImpact", "title": "Inspect Database View Impact", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
+      { "command": "rocketbrain.db.findCatalogUsages", "title": "Find Database Catalog Usages", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewProcedureCall", "title": "Review Stored Procedure Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.reviewPackageCall", "title": "Review MariaDB Package Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.cacheMetadata", "title": "Save Database Metadata for Offline Use", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.openCachedMetadata", "title": "Open Cached Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && !rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.closeCachedMetadata", "title": "Close Cached Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.db.removeCachedMetadata", "title": "Remove Saved Database Metadata", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.db.inspectSequence", "title": "Inspect MariaDB Sequence", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected" },
       { "command": "rocketbrain.db.refreshObjectSource", "title": "Refresh Database Object Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && resourceScheme == rocketbrain-object-source" },
       { "command": "rocketbrain.java.move", "title": "Move Java Class File", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.moveCrossProject", "title": "Move Java Class Across Projects", "category": "Rocketbrain" },
@@ -1501,6 +1503,11 @@
           "group": "navigation"
         },
         {
+          "command": "rocketbrain.db.inspectSequence",
+          "when": "resourceScheme == rocketbrain-object-source && resourceFilename =~ /[.]sequence[.]sql$/ && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
           "command": "rocketbrain.http.run",
           "when": "resourceLangId == rocketbrain-http && isWorkspaceTrusted",
           "group": "navigation"
@@ -1561,6 +1568,11 @@
         },
         {
           "command": "rocketbrain.db.inspectViewImpact",
+          "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "group": "schema"
+        },
+        {
+          "command": "rocketbrain.db.findCatalogUsages",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",
           "group": "schema"
         },

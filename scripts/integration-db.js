@@ -63,10 +63,10 @@ async function waitForDatabase(config, child, timeoutMs = 45000) {
   throw new Error(`Disposable MariaDB did not become ready (${lastCode || 'timeout'}).`);
 }
 
-async function startFixture({tls,namedPipe=false,eventScheduler=false}={}) {
+async function startFixture({tls,namedPipe=false,eventScheduler=false,version}={}) {
   if(namedPipe&&process.platform!=='win32')throw Error('The MariaDB named pipe fixture needs a Windows host.');
   if(tls){if(Object.keys(tls).some(k=>!['ca','cert','key'].includes(k))||['ca','cert','key'].some(k=>typeof tls[k]!=='string'||!tls[k]||Buffer.byteLength(tls[k])>2*1024*1024||tls[k].includes('\0')))throw Error('Use bounded PEM ca/cert/key strings for the owned TLS fixture.');const cert=new crypto.X509Certificate(tls.cert);new crypto.X509Certificate(tls.ca);if(!cert.checkPrivateKey(crypto.createPrivateKey(tls.key)))throw Error('TLS fixture server certificate/key mismatch.');}
-  const runtime = await ensureMariaDbRuntime();
+  const runtime = await ensureMariaDbRuntime(version);
   await fsp.mkdir(INSTANCE_ROOT, { recursive: true });
   const id = crypto.randomUUID();
   const pipeName = namedPipe ? 'rocketbrain-mariadb-' + id : undefined;

@@ -131,6 +131,7 @@ public final class SignatureInspector {
     }
 
     static final class Flow {
+        record Value(List<Integer> inputs, Object fact) {}
         record Event(int id, String kind, String name, int start, int end, List<Integer> inputs,
                      String uri, String method, int frame) {
             Map<String,Object> output(boolean acrossCalls) {
@@ -140,10 +141,11 @@ public final class SignatureInspector {
             }
         }
         interface Calls {
-            List<Integer> invoke(Flow owner, TreePath at, MethodInvocationTree call);
+            Value invoke(Flow owner, TreePath at, MethodInvocationTree call);
         }
-        final Map<Element,Integer> definitions = new HashMap<>();
+        final Map<Element,Integer> definitions = new LinkedHashMap<>();
         final List<Event> events;
+        final Map<Integer,Object> facts;
         final CompilationUnitTree unit;
         final Trees trees;
         final SourcePositions positions;
@@ -151,17 +153,20 @@ public final class SignatureInspector {
         final String method;
         final int frame;
         final Calls calls;
+        List<Integer> controls = List.of();
 
         Flow(CompilationUnitTree unit, Trees trees, String text) {
-            this(unit,trees,text,new ArrayList<>(),"",0,null);
+            this(unit,trees,text,new ArrayList<>(),new HashMap<>(),"",0,null);
         }
 
-        Flow(CompilationUnitTree unit, Trees trees, String text, List<Event> events, String method, int frame, Calls calls) {
+        Flow(CompilationUnitTree unit, Trees trees, String text, List<Event> events, Map<Integer,Object> facts,
+             String method, int frame, Calls calls) {
             this.unit = unit;
             this.trees = trees;
             this.positions = trees.getSourcePositions();
             this.text = text;
             this.events = events;
+            this.facts = facts;
             this.method = method;
             this.frame = frame;
             this.calls = calls;
@@ -174,6 +179,18 @@ public final class SignatureInspector {
             int index = events.size();
             events.add(new Event(index,kind,name,start,end,List.copyOf(inputs),unit.getSourceFile().toUri().toString(),method,frame));
             return index;
+        }
+        int valueEvent(String kind, String name, int start, int end, List<Integer> inputs, Object fact) {
+            int id = add(kind,name,start,end,inputs);
+            if (calls != null && fact != FlowFacts.UNKNOWN) facts.put(id,fact);
+            return id;
+        }
+        Object fact(int event) { return facts.getOrDefault(event,FlowFacts.UNKNOWN); }
+        List<Integer> controlled(List<Integer> inputs) {
+            if (controls.isEmpty()) return inputs;
+            var union = new LinkedHashSet<>(inputs);
+            union.addAll(controls);
+            return List.copyOf(union);
         }
         int start(Tree node) { return (int) positions.getStartPosition(unit,node); }
         int end(Tree node) { return (int) positions.getEndPosition(unit,node); }
@@ -209,60 +226,98 @@ public final class SignatureInspector {
 
         void declaration(TreePath at, VariableTree tree, boolean parameter, List<Integer> arguments) {
             VariableElement value = variable(at);
-            if (!parameter && tree.getInitializer() == null) throw outsideScope();
-            List<Integer> inputs = parameter ? arguments : expression(new TreePath(at,tree.getInitializer()));
             int offset = nameAt(tree);
-            definitions.put(value,add(parameter ? "parameter" : "definition",value.getSimpleName().toString(),
-                offset,offset + tree.getName().length(),inputs));
+            if (!parameter && tree.getInitializer() == null) {
+                if (calls == null) throw outsideScope();
+                definitions.put(value,-1);
+                return;
+            }
+            Value input = parameter ? new Value(arguments,arguments.isEmpty()?FlowFacts.UNKNOWN:fact(arguments.getFirst())) :
+                expression(new TreePath(at,tree.getInitializer()));
+            definitions.put(value,valueEvent(parameter?"parameter":"definition",value.getSimpleName().toString(),
+                offset,offset+tree.getName().length(),controlled(input.inputs()),FlowFacts.stored(value.asType(),input.fact())));
         }
 
-        List<Integer> expression(TreePath route) {
+        Value expression(TreePath route) {
             Tree leaf = route.getLeaf();
             return switch (leaf.getKind()) {
                 case BOOLEAN_LITERAL, CHAR_LITERAL, DOUBLE_LITERAL, FLOAT_LITERAL, INT_LITERAL, LONG_LITERAL,
                      STRING_LITERAL, NULL_LITERAL -> {
                     int from = start(leaf), to = end(leaf);
                     String value = text.substring(from,to);
-                    yield List.of(add("literal",value.length() > 60 ? value.substring(0,57) + "..." : value,from,to,List.of()));
+                    Object fact = FlowFacts.literal(((LiteralTree)leaf).getValue());
+                    yield new Value(List.of(valueEvent("literal",value.length()>60?value.substring(0,57)+"...":value,
+                        from,to,controls,fact)),fact);
                 }
                 case IDENTIFIER -> {
                     VariableElement local = variable(route);
                     Integer from = definitions.get(local);
-                    if (from == null) throw outsideScope();
-                    yield List.of(add("read",local.getSimpleName().toString(),start(leaf),end(leaf),List.of(from)));
+                    if (from == null || from < 0) throw outsideScope();
+                    Object fact = fact(from);
+                    yield new Value(List.of(valueEvent("read",local.getSimpleName().toString(),start(leaf),end(leaf),
+                        controlled(List.of(from)),fact)),fact);
                 }
                 case PARENTHESIZED -> expression(new TreePath(route,((ParenthesizedTree) leaf).getExpression()));
-                case TYPE_CAST -> expression(new TreePath(route,((TypeCastTree) leaf).getExpression()));
+                case TYPE_CAST -> {
+                    Value input = expression(new TreePath(route,((TypeCastTree)leaf).getExpression()));
+                    yield new Value(input.inputs(),FlowFacts.cast(trees.getTypeMirror(route),input.fact()));
+                }
                 case METHOD_INVOCATION -> {
                     if (calls == null) throw outsideScope();
                     yield calls.invoke(this,route,(MethodInvocationTree) leaf);
                 }
-                case CONDITIONAL_EXPRESSION -> {
-                    if (calls == null) throw outsideScope();
-                    ConditionalExpressionTree ternary = (ConditionalExpressionTree) leaf;
-                    var trueValue = ternary.getTrueExpression();
-                    var falseValue = ternary.getFalseExpression();
-                    List<Integer> alternatives = new ArrayList<>(expression(new TreePath(route,ternary.getCondition())));
-                    if (!(ternary.getCondition() instanceof LiteralTree condition) || !Boolean.FALSE.equals(condition.getValue())) {
-                        alternatives.add(add("true-value","If true",start(trueValue),end(trueValue),expression(new TreePath(route,trueValue))));
-                    }
-                    if (!(ternary.getCondition() instanceof LiteralTree condition) || !Boolean.TRUE.equals(condition.getValue())) {
-                        alternatives.add(add("false-value","If false",start(falseValue),end(falseValue),expression(new TreePath(route,falseValue))));
-                    }
-                    yield List.of(add("choice","Conditional value",start(leaf),end(leaf),alternatives));
+                case CONDITIONAL_EXPRESSION -> conditionalValue(route,(ConditionalExpressionTree)leaf);
+                case LOGICAL_COMPLEMENT, UNARY_MINUS, UNARY_PLUS, BITWISE_COMPLEMENT -> {
+                    Value input = expression(new TreePath(route,((UnaryTree)leaf).getExpression()));
+                    yield new Value(input.inputs(),leaf.getKind()==Tree.Kind.LOGICAL_COMPLEMENT?FlowFacts.negated(input.fact()):FlowFacts.UNKNOWN);
                 }
-                case LOGICAL_COMPLEMENT, UNARY_MINUS, UNARY_PLUS, BITWISE_COMPLEMENT ->
-                    expression(new TreePath(route,((UnaryTree) leaf).getExpression()));
                 case PLUS, MINUS, MULTIPLY, DIVIDE, REMAINDER, LEFT_SHIFT, RIGHT_SHIFT, UNSIGNED_RIGHT_SHIFT,
                      LESS_THAN, LESS_THAN_EQUAL, GREATER_THAN, GREATER_THAN_EQUAL, EQUAL_TO, NOT_EQUAL_TO,
-                     AND, OR, XOR -> {
-                    BinaryTree binary = (BinaryTree) leaf;
-                    List<Integer> inputs = new ArrayList<>(expression(new TreePath(route,binary.getLeftOperand())));
-                    inputs.addAll(expression(new TreePath(route,binary.getRightOperand())));
-                    yield inputs;
-                }
+                     AND, OR, XOR, CONDITIONAL_AND, CONDITIONAL_OR -> binaryValue(route,(BinaryTree)leaf);
                 default -> throw outsideScope();
             };
+        }
+
+        private Value binaryValue(TreePath route, BinaryTree binary) {
+            Tree.Kind kind = binary.getKind();
+            boolean shortCircuit = kind == Tree.Kind.CONDITIONAL_AND || kind == Tree.Kind.CONDITIONAL_OR;
+            if (shortCircuit && calls == null) throw outsideScope();
+            Value first = expression(new TreePath(route,binary.getLeftOperand()));
+            if (shortCircuit && Boolean.valueOf(kind==Tree.Kind.CONDITIONAL_OR).equals(first.fact())) return first;
+            Value second = expression(new TreePath(route,binary.getRightOperand()));
+            List<Integer> inputs = new ArrayList<>(first.inputs());
+            inputs.addAll(second.inputs());
+            return new Value(inputs,FlowFacts.binary(kind,first.fact(),second.fact()));
+        }
+
+        private Value conditionalValue(TreePath route, ConditionalExpressionTree ternary) {
+            if (calls == null) throw outsideScope();
+            Value condition = expression(new TreePath(route,ternary.getCondition()));
+            List<Integer> inputs = new ArrayList<>(condition.inputs());
+            List<Object> facts = new ArrayList<>();
+            for (boolean side : new boolean[]{true,false}) {
+                if (Boolean.valueOf(!side).equals(condition.fact())) continue;
+                var node = side ? ternary.getTrueExpression() : ternary.getFalseExpression();
+                Value result = expression(new TreePath(route,node));
+                inputs.add(valueEvent(side?"true-value":"false-value",side?"If true":"If false",start(node),end(node),
+                    controlled(result.inputs()),result.fact()));
+                facts.add(result.fact());
+            }
+            Object merged = facts.size()==1 ? facts.getFirst() : FlowFacts.common(facts.getFirst(),facts.getLast());
+            Object fact = FlowFacts.stored(trees.getTypeMirror(route),merged);
+            return new Value(List.of(valueEvent("choice","Conditional value",start(ternary),end(ternary),controlled(inputs),fact)),fact);
+        }
+
+        void assign(TreePath route, AssignmentTree assignment, IdentifierTree target) {
+            VariableElement variable = variable(new TreePath(route,target));
+            Value input = expression(new TreePath(route,assignment.getExpression()));
+            definitions.put(variable,valueEvent("assignment",variable.getSimpleName().toString(),start(target),end(target),
+                controlled(input.inputs()),FlowFacts.stored(variable.asType(),input.fact())));
+        }
+
+        int returnValue(TreePath route, ReturnTree returned) {
+            Value input = expression(new TreePath(route,returned.getExpression()));
+            return valueEvent("return","return",start(returned),start(returned)+6,controlled(input.inputs()),input.fact());
         }
 
         int trace(TreePath methodPath, List<Integer> arguments) {
@@ -272,6 +327,7 @@ public final class SignatureInspector {
                 declaration(new TreePath(methodPath,parameter),parameter,true,arguments.isEmpty()?List.of():List.of(arguments.get(index)));
             }
             TreePath body = new TreePath(methodPath,node.getBody());
+            if (calls != null) return new BranchFlow(this).trace(body);
             int returnedValue = -1;
             for (StatementTree statement : node.getBody().getStatements()) {
                 TreePath line = new TreePath(body,statement);
@@ -279,13 +335,9 @@ public final class SignatureInspector {
                     declaration(line,local,false,List.of());
                 } else if (statement instanceof ExpressionStatementTree expr && expr.getExpression() instanceof AssignmentTree assignment
                         && assignment.getVariable() instanceof IdentifierTree target) {
-                    TreePath operation = new TreePath(line,assignment);
-                    var variable = variable(new TreePath(operation,target));
-                    List<Integer> inputs = expression(new TreePath(operation,assignment.getExpression()));
-                    definitions.put(variable,add("assignment",variable.getSimpleName().toString(),start(target),end(target),inputs));
+                    assign(new TreePath(line,assignment),assignment,target);
                 } else if (statement instanceof ReturnTree returned && returned.getExpression() != null) {
-                    List<Integer> inputs = expression(new TreePath(line,returned.getExpression()));
-                    returnedValue = add("return","return",start(returned),start(returned) + 6,inputs);
+                    returnedValue = returnValue(line,returned);
                 } else if (statement.getKind() != Tree.Kind.EMPTY_STATEMENT) {
                     throw outsideScope();
                 }

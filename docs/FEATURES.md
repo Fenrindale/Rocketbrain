@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.96.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.97.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 143 |
-| 부분 구현 | 59 |
+| 구현 | 146 |
+| 부분 구현 | 56 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **85.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **86.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.96에서는 Javac 소스와 Maven·Gradle 선언을 구분해 의존 경로와 순환을 탐색한다. Gradle 실제 클래스패스의 OSV 조회, SQL 문서 내 모드 전환, 생성 열 복합 외래 키 검토를 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 183.5점에서 184.5점으로 바뀌었다.
+v0.97에서는 Java 조건에 따른 값 흐름, 실제 코루틴 Job 계층, 교차 스키마 SQL 참조 탐색, MariaDB 릴리스별 시퀀스 검토를 추가했다. 상태가 바뀐 항목은 3개이고 가중 점수는 184.5점에서 186점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ v0.96에서는 Javac 소스와 Maven·Gradle 선언을 구분해 의존 경로�
 | IDEA-017 | IntelliJ IDEA | 호출 계층 | 구현 |
 | IDEA-018 | IntelliJ IDEA | 타입·상속 계층 | 구현 |
 | IDEA-019 | IntelliJ IDEA | Structure·현재 파일 기호 | 구현 |
-| IDEA-020 | IntelliJ IDEA | 정적 Data Flow to/from Here | 부분 구현 |
+| IDEA-020 | IntelliJ IDEA | 정적 Data Flow to/from Here | 구현 |
 | IDEA-021 | IntelliJ IDEA | 구조 검색·치환 | 구현 |
 | IDEA-022 | IntelliJ IDEA | 소스 연동 UML 클래스 다이어그램 | 구현 |
 | IDEA-023 | IntelliJ IDEA | 모듈·패키지 의존성과 순환 분석 | 구현 |
@@ -142,7 +142,7 @@ v0.96에서는 Javac 소스와 Maven·Gradle 선언을 구분해 의존 경로�
 | IDEA-119 | IntelliJ IDEA | 문자열 안 SQL/정규식/HTML 언어 주입 | 구현 |
 | IDEA-120 | IntelliJ IDEA | JavaFX·FXML·Scene Builder·패키징 | 부분 구현 |
 | DG-001 | DataGrip | MySQL 데이터 소스 생성·연결 검사 | 구현 |
-| DG-002 | DataGrip | MariaDB 전용 지원 | 부분 구현 |
+| DG-002 | DataGrip | MariaDB 전용 지원 | 구현 |
 | DG-003 | DataGrip | 다중 SQL·NoSQL DBMS 드라이버 | 부분 구현 |
 | DG-004 | DataGrip | 사용자 JDBC JAR·드라이버 클래스 추가 | 구현 |
 | DG-005 | DataGrip | 드라이버 버전 교체·추가 라이브러리 | 구현 |
@@ -178,7 +178,7 @@ v0.96에서는 Javac 소스와 Maven·Gradle 선언을 구분해 의존 경로�
 | DG-035 | DataGrip | 위험한 UPDATE/DELETE 경고 | 구현 |
 | DG-036 | DataGrip | schema-aware quick-fix·의도 동작 | 구현 |
 | DG-037 | DataGrip | 테이블·열·alias 의미적 Rename | 구현 |
-| DG-038 | DataGrip | 의미적 Find Usages·영향 추적 | 부분 구현 |
+| DG-038 | DataGrip | 의미적 Find Usages·영향 추적 | 구현 |
 | DG-039 | DataGrip | SQL 참조→정의·DDL·빠른 설명 | 구현 |
 | DG-040 | DataGrip | dialect별 SQL formatting | 구현 |
 | DG-041 | DataGrip | live template·snippet·문맥 변수 | 구현 |

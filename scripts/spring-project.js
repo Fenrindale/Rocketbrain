@@ -130,8 +130,9 @@ async function removeInstance(folder, id) {
   if (realRelative !== id) throw new Error('Spring fixture real path escaped its workspace.');
   await fsp.rm(absolute, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
 }
-async function startSpringProject({ engine = 'mysql', debug = false, debugPort,naming='standard',observer=process.env.ROCKETBRAIN_JPA_OBSERVER_TEST==='1' } = {}) {
+async function startSpringProject({ engine = 'mysql', debug = false, debugPort,naming='standard',observer=process.env.ROCKETBRAIN_JPA_OBSERVER_TEST==='1', mariadbVersion } = {}) {
   if (!['mysql', 'mariadb'].includes(engine)) throw new Error('Select mysql or mariadb.');
+  if (mariadbVersion !== undefined && engine !== 'mariadb') throw new Error('Select a MariaDB engine for a pinned MariaDB release.');
   if(!['standard','custom','opaque'].includes(naming))throw new Error('Select standard, custom or opaque fixture naming.');
   if (debugPort !== undefined && (!Number.isInteger(debugPort) || debugPort < 1 || debugPort > 65535)) throw new Error('Invalid JDWP port.');
   const jfrRepository=process.env.ROCKETBRAIN_FIXTURE_JFR_REPOSITORY;
@@ -194,7 +195,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
       serverRotation:tlsRotation });
     dbOptions.tls = clientCertificates.server;
   }
-  db=engine==='mysql'?await startMysqlFixture(dbOptions):await startMariaFixture(dbOptions);
+  db=engine==='mysql'?await startMysqlFixture(dbOptions):await startMariaFixture({ ...dbOptions, version: mariadbVersion });
   const sshAgentFixturePath = sshAgent && clientCertificates.folder;
   const clientIdentityFixturePath = clientIdentity && await require('../test/helpers/client-identity-fixture')
     .prepareClientIdentityFixture(db,clientCertificates,path.join(folder,'client-identity.json'));
@@ -262,11 +263,16 @@ async function main() {
   const engineIndex = process.argv.indexOf('--engine'), engine = engineIndex < 0 ? 'mysql' : process.argv[engineIndex + 1];
   const debugIndex = process.argv.indexOf('--debug-port');
   const namingIndex=process.argv.indexOf('--naming');
-  const fixture = await startSpringProject({ engine, observer:process.argv.includes('--observer')||process.env.ROCKETBRAIN_JPA_OBSERVER_TEST==='1',debug: process.argv.includes('--debug'), debugPort: debugIndex < 0 ? undefined : Number(process.argv[debugIndex + 1]),naming:namingIndex<0?'standard':process.argv[namingIndex+1] });
+  const separator = process.argv.indexOf('--');
+  const fixtureArgs = separator < 0 ? process.argv : process.argv.slice(0, separator);
+  const versionIndex = fixtureArgs.indexOf('--mariadb-version');
+  const mariadbVersion = versionIndex < 0 ? undefined : fixtureArgs[versionIndex + 1];
+  if (versionIndex >= 0 && (!mariadbVersion || !/^\d+\.\d+\.\d+$/.test(mariadbVersion))) throw new Error('Pass a pinned release after --mariadb-version.');
+  const fixture = await startSpringProject({ engine, mariadbVersion, observer:process.argv.includes('--observer')||process.env.ROCKETBRAIN_JPA_OBSERVER_TEST==='1',debug: process.argv.includes('--debug'), debugPort: debugIndex < 0 ? undefined : Number(process.argv[debugIndex + 1]),naming:namingIndex<0?'standard':process.argv[namingIndex+1] });
   console.log(JSON.stringify({ status: 'ready', runtimeUrl: fixture.runtimeUrl, projectPath: fixture.projectPath, configPath: fixture.configPath, engine, debugPort: fixture.debugPort }));
   try {
     if (mode === 'run') {
-      const separator = process.argv.indexOf('--'), args = separator < 0 ? process.argv.slice(3) : process.argv.slice(separator + 1);
+      const args = separator < 0 ? process.argv.slice(3) : process.argv.slice(separator + 1);
       if (!args.length) throw new Error('Pass Node arguments after --.');
       const allowPrincipalCreation = process.env.ROCKETBRAIN_ENABLE_DBPRINCIPAL_FIXTURE === '1';
       const allowRoleInheritance = process.env.ROCKETBRAIN_ENABLE_ROLE_INHERITANCE_FIXTURE === '1';

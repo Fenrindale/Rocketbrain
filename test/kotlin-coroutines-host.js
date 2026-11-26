@@ -37,6 +37,14 @@ async function runKotlinCoroutineChecks(api,vscode,checks) {
     const awaiting=refreshed.coroutines[ordinal], processing=refreshed.coroutines.find(item=>item.name==='processing-order');
     assert.equal(awaiting.state,'SUSPENDED');
     assert.equal(processing.state,'RUNNING');
+    const rootOrdinal=refreshed.coroutines.findIndex(item=>item.name==='fixture-root');
+    const branchOrdinal=refreshed.coroutines.findIndex(item=>item.name==='fixture-branch');
+    assert.ok(rootOrdinal>=0&&branchOrdinal>=0);
+    assert.equal(awaiting.parentOrdinal,rootOrdinal);
+    assert.equal(processing.parentOrdinal,rootOrdinal);
+    assert.equal(refreshed.coroutines[branchOrdinal].parentOrdinal,rootOrdinal);
+    assert.deepEqual(new Set(refreshed.coroutines.filter(item=>item.name==='same-name').map(item=>item.parentOrdinal)),
+      new Set([rootOrdinal,branchOrdinal]));
     const creation=awaiting.creation.findIndex(frame=>frame.file==='Main.kt' && frame.line===17);
     const observation=awaiting.observed.findIndex(frame=>frame.file==='Main.kt' && frame.line===18);
     assert.ok(creation>=0 && observation>=0);
@@ -57,7 +65,8 @@ async function runKotlinCoroutineChecks(api,vscode,checks) {
     const jdbc=await jdbcReadback();
     checks.push('Opened the Kotlin Coroutines view on an explicitly launched local JVM, refreshed independent RUNNING/SUSPENDED states, opened real creation and observed stack frames, and disconnected without stopping the JVM.');
     return {version:prepared.version,states:[{name:awaiting.name,state:awaiting.state},{name:processing.name,state:processing.state}],
-      creationLine:17,observedLine:18,detachedAppStillReady:true,ownedShutdown:true,springWorkspace:true,jdbc};
+      creationLine:17,observedLine:18,detachedAppStillReady:true,ownedShutdown:true,springWorkspace:true,
+      builtInJobHierarchy:true,sameNameBranchesDistinct:true,jdbc};
   } finally {
     service.disconnect();
     if (child) await child.stop();

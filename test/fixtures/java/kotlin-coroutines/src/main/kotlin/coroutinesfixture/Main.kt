@@ -21,6 +21,11 @@ fun main() = runBlocking(CoroutineName("fixture-root")) {
         entered.countDown()
         release.await(90, TimeUnit.SECONDS)
     }
+    val sibling = launch(CoroutineName("same-name"), start = CoroutineStart.UNDISPATCHED) { pending.await() }
+    val branch = launch(CoroutineName("fixture-branch"), start = CoroutineStart.UNDISPATCHED) {
+        launch(CoroutineName("same-name"), start = CoroutineStart.UNDISPATCHED) { pending.await() }
+        pending.await()
+    }
     try {
         check(entered.await(10, TimeUnit.SECONDS))
         println("Rocketbrain coroutine fixture ready")
@@ -29,6 +34,8 @@ fun main() = runBlocking(CoroutineName("fixture-root")) {
     } finally {
         release.countDown()
         suspended.cancelAndJoin()
+        sibling.cancelAndJoin()
+        branch.cancelAndJoin()
         running.join()
     }
 }

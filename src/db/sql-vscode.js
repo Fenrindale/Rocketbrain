@@ -406,6 +406,26 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   }
   function publicProjectReport(scan){return structuredClone({target:scan.target,references:scan.references,coverage:scan.coverage,executedSql:false});}
   async function findCatalogReferences(target,token,scanOptions={}){const scan=await scanProject(target,token,scanOptions);return lastProjectReport=publicProjectReport(scan);}
+  async function captureCatalogFileUsages(target,token,scanOptions={}){
+    const scan=await scanProject(target,token,scanOptions);
+    const references=scan.references.slice(0,512);
+    return {
+      report:structuredClone({target:scan.target,references,coverage:scan.coverage,truncated:scan.references.length>references.length}),
+      async open(index){
+        assertProjectFrame(scan.frame,undefined);
+        const hit=references[index], record=hit&&scan.documents.find(document=>document.uri===hit.uri);
+        if(!record)throw Error('The captured SQL location is unavailable. Find usages again.');
+        try{assertSourceRecord(record);}
+        catch{throw Error('The SQL source changed. Find usages again.');}
+        const selection=new vscode.Range(record.document.positionAt(hit.start),record.document.positionAt(hit.end));
+        const editor=await vscode.window.showTextDocument(record.document,{preview:false,selection});
+        assertProjectFrame(scan.frame,undefined);
+        try{assertSourceRecord(record);}
+        catch{throw Error('The SQL source changed. Find usages again.');}
+        return {documentUri:editor.document.uri.toString()};
+      }
+    };
+  }
   function javaReport(document,observed){
     if(document.uri.scheme!=='file'||sourceLanguage(document.uri)!=='java'||document.isClosed)return null;
     const configured=vscode.workspace.getConfiguration('rocketbrain.sql.project').get('javaRoots',[]);
@@ -815,6 +835,6 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
   command('rocketbrain.sql.analyze',async()=>{const document=vscode.window.activeTextEditor?.document;if(!document||document.languageId!=='sql')throw new Error('Open a SQL document first.');if(!virtualActive(document)&&!metadata?.cachedMetadata)await refreshMetadata();const report=analyzeDocument(document);output?.appendLine('SQL source analysis: '+report.state+'; '+report.statements.length+' statements. No user query was executed.');return report;});
   if(vscode.workspace.onDidChangeWorkspaceFolders)subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{projectGeneration++;projectPlans.clear();lastProjectReport=null;}));
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.project')){projectGeneration++;projectPlans.clear();lastProjectReport=null;}}));
-  return {analyzeDocument,refreshMetadata,useDdlPreview,clearDdlPreview,virtualActive,analysisOnly,scriptContextAt,virtualSchemas,resolveColumnOrigin,prepareRename,renameDocument,findCatalogReferences,catalogTargetAt,planCatalogRename,validateCatalogRename,catalogRenameEdit,projectSnapshot:()=>lastProjectReport?structuredClone(lastProjectReport):null,invalidate,onDidChange:events.event,snapshot:()=>metadata?{database:metadata.database,dialect:metadata.dialect,loadedAt:metadata.loadedAt}:null,dispose(){disposed=true;scopeCache.clear();ddlPreviews.clear();preparedRenames.clear();projectPlans.clear();invalidate();for(const sub of subscriptions)sub.dispose();}};
+  return {analyzeDocument,refreshMetadata,useDdlPreview,clearDdlPreview,virtualActive,analysisOnly,scriptContextAt,virtualSchemas,resolveColumnOrigin,prepareRename,renameDocument,findCatalogReferences,captureCatalogFileUsages,catalogTargetAt,planCatalogRename,validateCatalogRename,catalogRenameEdit,projectSnapshot:()=>lastProjectReport?structuredClone(lastProjectReport):null,invalidate,onDidChange:events.event,snapshot:()=>metadata?{database:metadata.database,dialect:metadata.dialect,loadedAt:metadata.loadedAt}:null,dispose(){disposed=true;scopeCache.clear();ddlPreviews.clear();preparedRenames.clear();projectPlans.clear();invalidate();for(const sub of subscriptions)sub.dispose();}};
 }
 module.exports={registerSQLAnalysis};

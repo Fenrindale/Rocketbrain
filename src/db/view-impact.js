@@ -66,12 +66,15 @@ async function snapshot(query, schemas) {
   return { context: { version, database, account, role, lowerCaseTableNames: Number(caseMode), sqlMode }, relations, definitions };
 }
 
-function staticReferences(definition, schema, sqlMode) {
+function staticReferences(definition, schema, sqlMode, creationModeObserved = false) {
   // The creation SQL mode is unavailable for views in this catalog.
-  if (definition.includes('\\')) throw fail('Backslash escapes need the view creation SQL mode.');
+  if (!creationModeObserved && definition.includes('\\')) throw fail('Backslash escapes need the view creation SQL mode.');
   // Grouped comma joins may hide a relation in a nested parenthesis. Keep them opaque.
   const tokens = AST.lex(definition, { sqlMode });
   const word = token => token.kind === 'word' ? token.value.toUpperCase() : '';
+  if (tokens.filter(token => word(token) === 'SELECT').length !== 1) {
+    throw fail('Nested SELECT scopes are outside the observed relation subset.');
+  }
   const from = tokens.findIndex(token => word(token) === 'FROM');
   const where = tokens.findIndex((token, index) => index > from && ['WHERE', 'GROUP', 'HAVING', 'ORDER', 'LIMIT'].includes(word(token)));
   if (from >= 0 && tokens.slice(from + 1, where < 0 ? undefined : where).some(token => token.value === ',')) {
@@ -173,4 +176,4 @@ async function observeViewImpact(query, request) {
   return buildGraph(target, schemas, first, fingerprint);
 }
 
-module.exports = { isApplicationSchema, limits, observeViewImpact };
+module.exports = { isApplicationSchema, limits, observeViewImpact, staticReferences };

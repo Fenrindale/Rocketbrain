@@ -1,25 +1,25 @@
 {
-  "version": "0.96.0",
-  "verifiedAt": "2026-11-25T23:45:03.453Z",
+  "version": "0.97.0",
+  "verifiedAt": "2026-11-26T00:22:24.141Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.96.0.vsix",
-    "sha256": "20457e85ff35b6cab45d8f328bee4b53d40b5ce25b3c30212d8d0081cfd04811",
-    "bytes": 3763619,
+    "name": "rocketbrain-0.97.0.vsix",
+    "sha256": "b996050582cbea780abdc2a5d8c780ae3b71ade1c9a84d5644349a65bf6dfb16",
+    "bytes": 3774752,
     "files": 22
   },
   "source": {
-    "frozenPublicInputs": 2253,
-    "inputVectorSha256": "11f993f7a6b275f05397a97dad918797dd6701e331de7e7bbe625dcd882b1ac5",
+    "frozenPublicInputs": 2266,
+    "inputVectorSha256": "bb9e3889e238d60ba05025bb3ef9b213b97da47020b7a8c2f1bb4703dc778c4c",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1873,
-    "pass": 1724,
+    "tests": 1882,
+    "pass": 1731,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 149,
+    "skipped": 151,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaAttributedDependencies",
+          "group": "javaBranchFlow",
           "checks": 1
         },
         {
-          "group": "gradleAdvisories",
+          "group": "kotlinJobHierarchy",
           "checks": 1
         },
         {
-          "group": "sqlDocumentModes",
+          "group": "catalogUsages",
           "checks": 1
         },
         {
-          "group": "generatedCompositeForeignKey",
+          "group": "mariadbSequenceDetails",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaAttributedDependencies",
+          "group": "javaBranchFlow",
           "checks": 1
         },
         {
-          "group": "gradleAdvisories",
+          "group": "kotlinJobHierarchy",
           "checks": 1
         },
         {
-          "group": "sqlDocumentModes",
+          "group": "catalogUsages",
           "checks": 1
         },
         {
-          "group": "generatedCompositeForeignKey",
+          "group": "mariadbSequenceDetails",
           "checks": 1
         }
       ],
@@ -84,76 +84,116 @@
       }
     }
   ],
+  "additionalInstalledRuntimes": [
+    {
+      "engine": "mariadb",
+      "database": {
+        "version": "10.11.20-MariaDB",
+        "product": "MariaDB Server"
+      },
+      "groups": [
+        "mariadbSequenceDetails"
+      ],
+      "artifactSha256": "44b5db1bb95ff934c0c58bae64c901806033030330d6486ad82f7ecdaf011028",
+      "sourceManifestSha256": "d38a08c591a506e06eed707837e96c2d5842690841865ee81d01c4b9c7f5a929",
+      "origin": "byte-identical-package"
+    },
+    {
+      "engine": "mariadb",
+      "database": {
+        "version": "12.3.4-MariaDB",
+        "product": "MariaDB Server"
+      },
+      "groups": [
+        "mariadbSequenceDetails"
+      ],
+      "artifactSha256": "44b5db1bb95ff934c0c58bae64c901806033030330d6486ad82f7ecdaf011028",
+      "sourceManifestSha256": "d38a08c591a506e06eed707837e96c2d5842690841865ee81d01c4b9c7f5a929",
+      "origin": "byte-identical-package"
+    }
+  ],
   "newlyVerified": {
-    "IDEA-023": {
-      "scope": "두 모듈의 실제 소스·선언 순환을 검증했다. 정확한 pick(int)과 Maven 선언을 열고 소스 수정 후 소스 순환만 사라짐을 확인했다.",
+    "IDEA-020": {
+      "scope": "두 DB에 연결한 실제 Spring 작업 영역에서 분기 결합과 호출 인자 필터, null 축소, 정확한 조건 위치, 변경 후 재분석을 확인했다.",
       "runtimeGroups": [
-        "javaAttributedDependencies"
+        "javaBranchFlow"
       ]
     },
-    "IDEA-040": {
-      "scope": "실제 Spring Gradle runtimeClasspath의 88개 패키지를 확인했다. 설치판에서 선택한 공개 좌표 두 개만 OSV에 조회하고 읽기 전용 보고서를 열었다.",
+    "IDEA-083": {
+      "scope": "같은 표시명을 가진 서로 다른 Job을 구분하고 실제 부모·자식 관계를 확인했다. 관찰 도구 분리 후 앱은 계속 실행됐다.",
       "runtimeGroups": [
-        "gradleAdvisories"
+        "kotlinJobHierarchy"
       ]
     },
-    "DG-031": {
-      "scope": "두 DB에서 실제 여섯 문장의 세 모드 변경을 대조했다. ANSI_QUOTES의 역슬래시 포함 식별자, NO_BACKSLASH_ESCAPES, 기본 모드 복귀 및 미확정 계산을 검증했다.",
+    "DG-002": {
+      "scope": "설치판에서 10.11, 11.4, 12.3의 양·음 증가와 캐시 상태를 확인했다. 12.3에서는 UNSIGNED 고정밀 메타데이터를 확인했고 MySQL은 엔진 전용 경로를 차단했다.",
       "runtimeGroups": [
-        "sqlDocumentModes"
+        "mariadbSequenceDetails"
       ]
     },
-    "DG-078": {
-      "scope": "생성 자식 키와 뒤쪽 생성 인덱스 열을 포함한 실제 복합 FK를 MySQL·MariaDB에서 생성·변경·복구했다. 고아 행 차단, CASCADE·SET NULL 및 각 엔진의 제한을 검증했다.",
+    "DG-038": {
+      "scope": "동일 이름 개체 구분, 교차 스키마 루틴 두 곳과 SQL 파일 한 곳, 동적/숨은 범위 표시, 원본 또는 SQL 모드 변경 후 탐색 거부를 두 DB에서 확인했다.",
       "runtimeGroups": [
-        "generatedCompositeForeignKey"
+        "catalogUsages"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 494,
+    "sourceCorrespondences": 497,
     "sourceConfidence": "inferred",
     "archiveEntries": 22,
     "archiveConfidence": "observed"
   },
+  "nativePayloadEquivalence": {
+    "files": 22,
+    "testedArchiveSha256": "44b5db1bb95ff934c0c58bae64c901806033030330d6486ad82f7ecdaf011028",
+    "testedInputVectorSha256": "d38a08c591a506e06eed707837e96c2d5842690841865ee81d01c4b9c7f5a929",
+    "onlySourceChanges": [
+      "test/catalog-usages-host.js"
+    ]
+  },
   "progress": {
     "counts": {
-      "implemented": 143,
-      "partial": 59,
+      "implemented": 146,
+      "partial": 56,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 184.5,
-    "previousWeightedPoints": 183.5,
+    "weightedPoints": 186,
+    "previousWeightedPoints": 184.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 85.4,
+    "referencePercent": 86.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-023",
+        "id": "IDEA-020",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-078",
+        "id": "DG-002",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "DG-038",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "Java 컴파일러 의존 그래프는 관찰한 로컬 프로덕션 소스와 검증한 클래스패스에 한한다. 빌드 순환과 소스 순환은 각각 표시한다.",
-    "Gradle 감사에서는 선택한 공개 패키지 이름·버전을 OSV로 보내며 사용 지점에서의 취약성 판단은 별도다.",
-    "SQL 모드 전환은 정확히 해석한 리터럴 문장에 적용한다. 실행 결과가 필요한 설정은 이후 문법 판단을 미확정으로 둔다.",
-    "생성 열 외래 키는 검토한 동일 스키마 구성과 DB별 허용 동작을 다룬다.",
+    "Java 값 흐름은 컴파일러가 결합한 직접 호출과 지원 분기에 한정한다. 임의 가상 디스패치·힙·예외 흐름은 미해결로 표시한다.",
+    "동적 루틴 본문과 접근할 수 없는 스키마는 확인이 필요한 범위로 표시한다.",
+    "시퀀스 보고서의 캐시 경계는 다음에 배정될 값을 뜻하지 않는다. MySQL에서는 MariaDB 전용 작업을 제한한다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Java 분기별 값 흐름과 Kotlin 코루틴 부모·자식",
-    "교차 스키마 루틴·파일 참조와 MariaDB 버전별 시퀀스"
+    "Java 향상된 for 흐름과 HTTP 파일 본문",
+    "PostgreSQL 실행 계획과 SSH 인증"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

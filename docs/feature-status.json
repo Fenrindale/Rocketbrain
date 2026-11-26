@@ -1,5 +1,5 @@
 {
-  "version": "0.96.0",
+  "version": "0.97.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 143,
-    "partial": 59,
+    "implemented": 146,
+    "partial": 56,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 85.4,
+    "percent": 86.1,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-023",
-    "IDEA-040",
-    "DG-031",
-    "DG-078"
+    "IDEA-020",
+    "IDEA-083",
+    "DG-002",
+    "DG-038"
   ],
   "expandedFeatures": [
-    "IDEA-023",
-    "IDEA-040",
-    "DG-031",
-    "DG-078"
+    "IDEA-020",
+    "IDEA-083",
+    "DG-002",
+    "DG-038"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -602,25 +602,23 @@
       "category": "탐색·구조 분석",
       "feature": "정적 Data Flow to/from Here",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "none",
-      "scope": "Java 소스의 정확한 직접 호출에서 인자·매개변수·반환값, null 가능성 및 호출자 문맥을 양방향으로 추적한다.",
-      "remaining": [
-        "일반 분기·루프·예외와 동적 호출 및 힙·별칭 해석을 확장한다."
-      ],
+      "scope": "Javac에서 결합한 Java 값의 원점과 분기를 따라가 조건 축소, 조기 반환, 호출 인자의 영향을 탐색한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.94-installed-coverage",
+        "state": "v0.97-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.94.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring 프로젝트에서 같은 메서드의 오버로드를 구분하고, 소스 이동·호출자 분리·null 경로·오래된 탐색과 재귀 거부를 설치판에서 확인했다.",
+        "testedScope": "두 DB에 연결한 실제 Spring 작업 영역에서 분기 결합과 호출 인자 필터, null 축소, 정확한 조건 위치, 변경 후 재분석을 확인했다.",
         "publicEvidence": [
-          "docs/java-call-flow.md",
-          "test/java-call-flow-host.js"
+          "src/java/source-analysis-model.js",
+          "test/java-branch-flow-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -697,8 +695,8 @@
       "verification": {
         "state": "v0.96-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.96.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1241,8 +1239,8 @@
       "verification": {
         "state": "v0.96-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.96.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2507,21 +2505,20 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "사용자가 시작한 로컬 Kotlin JVM의 코루틴 상태와 생성·마지막 관찰 스택을 조회하고 연결된 Kotlin 파일의 해당 줄을 연다.",
+      "scope": "계측한 실제 코루틴에서 생성·대기 위치와 Job의 정확한 부모·자식 관계를 조회한다.",
       "remaining": [
-        "부모 작업과 자식 관계, 임의 실행 중인 JVM에 연결, JDI 디버거 프레임으로 전환하는 동작이 남아 있다."
+        "외부 JVM에 동적으로 연결하고 코루틴 선택을 JDI 디버그 프레임 이동에 연계한다."
       ],
       "verification": {
-        "state": "v0.56-installed-coverage",
+        "state": "v0.97-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.56.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Kotlin 2.4.21과 공식 kotlinx-coroutines-debug 1.11.0에서 실행 중과 일시 중단된 두 코루틴, 생성·관찰 프레임 및 연결 해제 뒤 JVM 유지와 소유 프로브 종료를 확인했다.",
+        "testedScope": "같은 표시명을 가진 서로 다른 Job을 구분하고 실제 부모·자식 관계를 확인했다. 관찰 도구 분리 후 앱은 계속 실행됐다.",
         "publicEvidence": [
-          "src/java/kotlin-coroutine-probe.js",
           "src/java/kotlin-coroutines-vscode.js",
           "test/kotlin-coroutines-host.js"
         ],
@@ -3659,25 +3656,23 @@
       "category": "연결·드라이버",
       "feature": "MariaDB 전용 지원",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "MariaDB 고유 시퀀스·JSON·패키지 메타데이터와 Oracle 모드의 스칼라 패키지 함수 출력을 처리한다.",
-      "remaining": [
-        "MariaDB 10.11·12의 시퀀스·패키지·JSON·메타데이터를 각각 검증한다."
-      ],
+      "scope": "MariaDB 주요 지원 계열의 시퀀스·패키지·JSON·메타데이터와 엔진별 세션 차이를 처리한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.94-installed-coverage",
+        "state": "v0.97-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.94.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "MariaDB 11.4.8에서 실제 스칼라 함수 반환과 IN OUT 소수, OUT BIGINT·NULL을 검증했다. MySQL에서는 일반 OUT 프로시저가 계속 동작했다.",
+        "testedScope": "설치판에서 10.11, 11.4, 12.3의 양·음 증가와 캐시 상태를 확인했다. 12.3에서는 UNSIGNED 고정밀 메타데이터를 확인했고 MySQL은 엔진 전용 경로를 차단했다.",
         "publicEvidence": [
-          "src/db/routine-package.js",
-          "test/routine-package-output-host.js"
+          "src/db/sequence-details.js",
+          "test/mariadb-sequence-details-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -4516,8 +4511,8 @@
       "verification": {
         "state": "v0.96-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.96.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -4706,25 +4701,23 @@
       "category": "SQL 의미 분석·편집",
       "feature": "의미적 Find Usages·영향 추적",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "계정이 볼 수 있는 선택 스키마에서 뷰의 직접·간접 의존 경로와 확인이 어려운 원본을 조사한다.",
-      "remaining": [
-        "루틴 본문과 작업 공간 SQL 파일의 교차 스키마 참조 탐색이 남는다."
-      ],
+      "scope": "스키마와 개체 종류를 구분해 참조를 찾고 루틴과 작업 영역 SQL의 정확한 위치로 이동한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.93-installed-coverage",
+        "state": "v0.97-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.93.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 스키마의 동명 객체를 구별했고, 두 직접 뷰·한 간접 뷰, 숨은 스키마와 정의 접근 경계를 실제 서버에서 검증했다.",
+        "testedScope": "동일 이름 개체 구분, 교차 스키마 루틴 두 곳과 SQL 파일 한 곳, 동적/숨은 범위 표시, 원본 또는 SQL 모드 변경 후 탐색 거부를 두 DB에서 확인했다.",
         "publicEvidence": [
-          "src/db/view-impact.js",
-          "test/view-impact-host.js"
+          "src/db/catalog-routine-usages.js",
+          "test/catalog-usages-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5921,8 +5914,8 @@
       "verification": {
         "state": "v0.96-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.96.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6468,8 +6461,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "20457e85ff35b6cab45d8f328bee4b53d40b5ce25b3c30212d8d0081cfd04811",
-    "sourceManifestSha256": "11f993f7a6b275f05397a97dad918797dd6701e331de7e7bbe625dcd882b1ac5",
+    "vsixSha256": "b996050582cbea780abdc2a5d8c780ae3b71ade1c9a84d5644349a65bf6dfb16",
+    "sourceManifestSha256": "bb9e3889e238d60ba05025bb3ef9b213b97da47020b7a8c2f1bb4703dc778c4c",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6483,23 +6476,28 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-023",
+      "id": "IDEA-020",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-078",
+      "id": "DG-002",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "DG-038",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1873,
-    "pass": 1724,
+    "tests": 1882,
+    "pass": 1731,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 149,
+    "skipped": 151,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"
