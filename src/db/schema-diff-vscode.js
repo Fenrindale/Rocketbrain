@@ -226,8 +226,7 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
  command('rocketbrain.schema.applyMigration',async()=>{trusted();const choices=[...plans.values()].filter(p=>applications.has(p.id)).map(p=>({label:p.database+' · '+p.steps.length+' selected step(s)',description:p.createdAt,plan:p}));if(!choices.length)throw new Error('Create a selected migration review first.');const selected=await vscode.window.showQuickPick(choices,{title:'Apply Reviewed Schema Migration'});if(!selected)return;const document=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+selected.plan.id+'/migration.sql'));await vscode.window.showTextDocument(document,{preview:false});const accepted=await vscode.window.showWarningMessage('Apply this reviewed SQL? Each schema statement can commit implicitly. Earlier successful steps remain when a later one fails; automatic retry and rollback are unavailable.',{modal:true},'Apply Reviewed Schema');if(accepted!=='Apply Reviewed Schema')return;trusted();const report=await vscode.window.withProgress({title:'Applying reviewed schema changes',location:vscode.ProgressLocation.Notification,cancellable:true},(_progress,cancellation)=>api.apply(selected.plan.id,{allowImplicitCommit:true,cancellation}));const outcome=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+report.id+'/application.md'));await vscode.window.showTextDocument(outcome,{preview:false});return report;});
  async function reviewRebuildTarget(comparisonId,current,desired,tables,selectedChanges){
   const conversion=require('./schema-conversion-vscode');
-  const includesView=selectedChanges?.some(change=>change.kind==='change-view');
-  const columnMappings=includesView?{}:await conversion.chooseColumnMappings(vscode,current,desired,tables);
+  const columnMappings=await conversion.chooseColumnMappings(vscode,current,desired,tables);
   if(columnMappings===null)return;
   let selectedColumns;
   if(selectedChanges){
@@ -279,7 +278,7 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
   const choicesForChanges=report.changes.filter(change=>isSelectableRebuildChange(change,current,desired)).map(change=>{
    if(change.kind==='change-view')return {label:current.database+'.'+change.table,
     description:rebuildChangeLabels[change.kind],changeId:change.id,
-    detail:'Also select a change to its base table. Column value mapping is unavailable with view changes.'};
+    detail:'Select a base table change and every view that references a column you map.'};
    const dependencies=(change.dependencies||[]).map(id=>byId.get(id)).filter(Boolean);
    const required=dependencies.slice(0,3).map(item=>item.table+'.'+item.object).join(', ');
    return {label:change.table+'.'+change.object,description:rebuildChangeLabels[change.kind],changeId:change.id,

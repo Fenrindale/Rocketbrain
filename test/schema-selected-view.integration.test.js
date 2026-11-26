@@ -39,10 +39,7 @@ async function springQuery(work, config, engine, javaHome, nested) {
   return {version: result.server, rows: result.output};
 }
 
-test('actual selected table and dependent view rebuild validates nested reads, preserves staged-out data, and restores exact original definitions', {
-  skip: !database || !runtime || !cpFile,
-  timeout: 240000
-}, async () => {
+async function verifySelectedView({mappedRename}) {
   const {config, engine} = await ownedConfig(database);
   const {javaHome} = JSON.parse(await fs.readFile(runtime, 'utf8'));
   const actor = await mysql.createConnection(config);
@@ -50,7 +47,9 @@ test('actual selected table and dependent view rebuild validates nested reads, p
   const table = 'rb_selview_' + randomBytes(5).toString('hex');
   const view = table + '_view';
   const nested = table + '_nested';
-  const scope = {tables: [table, view, nested]};
+  const stable = table + '_stable';
+  const omitted = table + '_omitted';
+  const scope = {tables: [table, view, nested, stable]};
   const capture = () => captureSchema(service, scope);
   const tempRoot = await fs.realpath(os.tmpdir());
   const work = await fs.mkdtemp(path.join(tempRoot, 'rb-selview-spring-'));
@@ -60,29 +59,38 @@ test('actual selected table and dependent view rebuild validates nested reads, p
   const keys = changes => changes.map(({kind, table, object}) => [kind, table, object]);
   const condition = projected => projected ? 'ALPha%' : 'Alpha%';
 
-  async function writeView(action, match) {
+  const physicalColumn = projected => projected && mappedRename ? 'headline' : 'note';
+
+  async function writeView(action, match, projected = false) {
+    const column = q(physicalColumn(projected));
+    const relation = mappedRename ? q('item') + '.' : '';
+    const alias = mappedRename ? ' AS ' + q('item') : '';
     await actor.query(action + ' ALGORITHM=MERGE SQL SECURITY INVOKER VIEW ' + q(view) +
-      ' AS SELECT id,note AS display_note FROM ' + q(table) + " WHERE note LIKE '" + match + "'");
+      ' AS SELECT ' + relation + 'id,' + relation + column + ' AS display_note FROM ' + q(table) + alias +
+      ' WHERE ' + relation + column + " LIKE '" + match + "'");
   }
   async function create(projected) {
-    await actor.query('CREATE TABLE ' + q(table) + ' (id INT PRIMARY KEY,note VARCHAR(' +
+    await actor.query('CREATE TABLE ' + q(table) + ' (id INT PRIMARY KEY,' + q(physicalColumn(projected)) + ' VARCHAR(' +
       (projected ? '64' : '32') + ') NOT NULL' + (projected ? '' : ',retained VARCHAR(32) NOT NULL') +
       ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin');
-    await writeView('CREATE', condition(projected));
+    await writeView('CREATE', condition(projected), projected);
     await actor.query('CREATE ALGORITHM=MERGE SQL SECURITY INVOKER VIEW ' + q(nested) +
       ' AS SELECT id,display_note FROM ' + q(view));
+    await actor.query('CREATE ALGORITHM=MERGE SQL SECURITY INVOKER VIEW ' + q(stable) + ' AS SELECT id FROM ' + q(table));
   }
   async function dropFixture() {
     await actor.query('DROP VIEW IF EXISTS ' + q(nested));
     await actor.query('DROP VIEW IF EXISTS ' + q(view));
+    await actor.query('DROP VIEW IF EXISTS ' + q(stable));
+    await actor.query('DROP VIEW IF EXISTS ' + q(omitted));
     await actor.query('DROP TABLE IF EXISTS ' + q(table));
   }
   async function definitions() {
     const snapshots = await capture();
-    return [view, nested].map(name => snapshots.tables.find(value => value.name === name).createSql);
+    return [view, nested, stable].map(name => snapshots.tables.find(value => value.name === name).createSql);
   }
-  async function rows() {
-    const [result] = await actor.query({sql:'SELECT id,note,retained FROM ' + q(table) + ' ORDER BY id', rowsAsArray:true});
+  async function rows(projected = false) {
+    const [result] = await actor.query({sql:'SELECT id,' + q(physicalColumn(projected)) + ',retained FROM ' + q(table) + ' ORDER BY id', rowsAsArray:true});
     return result;
   }
 
@@ -98,16 +106,29 @@ test('actual selected table and dependent view rebuild validates nested reads, p
     assert.equal(before.rows, '[1]');
     assert.deepEqual(await rows(), initialRows);
     const differences = compareSnapshots(current, desired).changes;
+    const columnChanges = mappedRename
+      ? new Set(['add-column:headline', 'drop-column:note'])
+      : new Set(['change-column:note']);
     const selected = differences.filter(change => change.kind === 'change-view' && change.table === view ||
-      change.kind === 'change-column' && change.table === table && change.object === 'note');
+      change.table === table && columnChanges.has(change.kind + ':' + change.object));
     const unselected = differences.find(change => change.kind === 'drop-column' && change.object === 'retained');
-    assert.equal(selected.length, 2);
+    assert.equal(selected.length, mappedRename ? 3 : 2);
     assert.ok(unselected);
     const changeIds = selected.map(change => change.id);
-    const input = {current, desired, changeIds};
+    const input = {current, desired, changeIds,
+      ...(mappedRename && {columnMappings:{[table]:[{from:'note',to:'headline'}]}})};
     const opts = {...flags, allowDependencyChanges:true};
     await assert.rejects(service.previewSchemaRebuild({...input, changeIds: selected.filter(c => c.kind === 'change-view').map(c => c.id)}),
       /table|dependen|select/iu);
+
+    if (mappedRename) {
+      await actor.query('CREATE ALGORITHM=MERGE SQL SECURITY INVOKER VIEW ' + q(omitted) +
+        ' AS SELECT id,note AS retained_alias FROM ' + q(table));
+      try {
+        await assert.rejects(service.previewSchemaRebuild(input), /mapped|rename|selection|view/iu);
+        assert.deepEqual(await rows(),initialRows);
+      } finally { await actor.query('DROP VIEW ' + q(omitted)); }
+    }
 
     const stale = await service.previewSchemaRebuild(input);
     plans.push(stale.plan);
@@ -120,7 +141,12 @@ test('actual selected table and dependent view rebuild validates nested reads, p
 
     const review = await service.previewSchemaRebuild(input);
     plans.push(review.plan);
-    assert.equal(review.plan.formatVersion, 7);
+    assert.equal(review.plan.formatVersion, mappedRename ? 8 : 7);
+    if (mappedRename) {
+      assert.deepEqual(review.plan.columnMappings[table],[{from:'note',to:'headline'}]);
+      assert.ok(review.plan.steps[0].sourceColumns.includes('note'));
+      assert.ok(review.plan.steps[0].common.includes('headline'));
+    }
     assert.deepEqual(review.plan.steps.map(s => s.table), [table]);
     assert.deepEqual([...review.plan.selectedChangeIds].sort(), [...changeIds].sort());
     assert.ok(review.plan.requiresDependencyChangeApproval);
@@ -134,6 +160,7 @@ test('actual selected table and dependent view rebuild validates nested reads, p
     assert.match(review.plan.sql, /'ALPha%'/u);
     await assert.rejects(service.applySchemaRebuild({...opts, reviewId:review.reviewId, allowDependencyChanges:false}), /dependenc|approve|fence/iu);
     input.changeIds.push(unselected.id);
+    if (mappedRename) input.columnMappings[table][0].to = 'unreviewed_headline';
     proposed.definition = previous.definition;
     const applied = await service.applySchemaRebuild({...opts, reviewId:review.reviewId});
     assert.equal(applied.state, 'applied', JSON.stringify(applied));
@@ -141,9 +168,9 @@ test('actual selected table and dependent view rebuild validates nested reads, p
     const after = await jdbc();
     assert.equal(after.rows, '[2]');
     assert.equal(after.version, before.version);
-    assert.deepEqual(await rows(), initialRows);
+    assert.deepEqual(await rows(true), initialRows);
     assert.deepEqual(keys(compareSnapshots(await capture(),desired).changes), keys([unselected]));
-    assert.equal((await definitions())[1], originalDefinitions[1]);
+    assert.deepEqual((await definitions()).slice(1),originalDefinitions.slice(1));
     const [[saved]] = await actor.execute('SELECT payload FROM ' + q(JOURNAL) + ' WHERE operation_id=?', [review.plan.id]);
     const tampered = JSON.parse(saved.payload);
     const graph = tampered.plan.dependencies;
@@ -154,7 +181,7 @@ test('actual selected table and dependent view rebuild validates nested reads, p
     await service.dispose();
     service = new MysqlService(config);
     await assert.rejects(service.recoverSchemaRebuild({...opts, operationId:review.plan.id}), /journal|selected|view|project|scope/iu);
-    assert.deepEqual(await rows(), initialRows);
+    assert.deepEqual(await rows(true), initialRows);
     await actor.execute('UPDATE ' + q(JOURNAL) + ' SET payload=? WHERE operation_id=?', [saved.payload, review.plan.id]);
     const recovered = await service.recoverSchemaRebuild({...opts, operationId:review.plan.id});
     assert.equal(recovered.state, 'recovered', JSON.stringify(recovered));
@@ -163,13 +190,15 @@ test('actual selected table and dependent view rebuild validates nested reads, p
     assert.deepEqual(await definitions(), originalDefinitions);
     assert.deepEqual(await rows(), initialRows);
     assert.deepEqual(compareSnapshots(await capture(),current).changes, []);
-    const receipt = process.env.ROCKETBRAIN_SCHEMA_SELECTED_VIEW_RECEIPT;
+    const receipt = mappedRename ? process.env.ROCKETBRAIN_SCHEMA_MAPPED_VIEW_RECEIPT : process.env.ROCKETBRAIN_SCHEMA_SELECTED_VIEW_RECEIPT;
     if (receipt) await fs.writeFile(path.resolve(receipt), JSON.stringify({
       engine, version:before.version, before, after, restored,
       exactOriginalDefinitionsRecovered:true, selectedViewBodyVerified:true,
       nestedViewUnchangedAndReadable:true, unselectedRowsPreserved:true,
       dependencyApprovalRequired:true, staleBeforeApplyRefused:true,
-      tamperedSelectedViewRefused:true, selectedReviewImmutable:true, atomicAcrossTables:false
+      tamperedSelectedViewRefused:true, selectedReviewImmutable:true, atomicAcrossTables:false,
+      ...(mappedRename && {valuesMappedThroughExplicitColumnRename:true, omittedMappedViewRefused:true,
+        unaffectedDirectViewUnchanged:true})
     }, null, 2) + '\n', {flag:'wx'});
   } finally {
     try {
@@ -190,4 +219,10 @@ test('actual selected table and dependent view rebuild validates nested reads, p
       await fs.rm(ownedWork, {recursive:true, force:false, maxRetries:8, retryDelay:250});
     }
   }
-});
+}
+
+const integration = {skip: !database || !runtime || !cpFile, timeout: 240000};
+test('actual selected table and dependent view rebuild validates nested reads, preserves staged-out data, and restores exact original definitions', integration,
+  () => verifySelectedView({mappedRename:false}));
+test('actual mapped column and selected dependent view preserves values and refuses an omitted binding before recovery', integration,
+  () => verifySelectedView({mappedRename:true}));
