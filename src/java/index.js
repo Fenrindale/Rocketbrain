@@ -8,12 +8,15 @@ const { registerJavaFormatting } = require('./format-vscode');
 const { registerFileStructure } = require('./file-structure-vscode');
 const { resolveNullChecks, nullCheckUpdates } = require('./null-checks');
 const { configureNullChecks } = require('./null-checks-vscode');
+const { hash, indexScope, indexStorage, readGeneration } = require('./workspace-index');
+const { registerWorkspaceIndex } = require('./workspace-index-vscode');
 
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 29);
   status.command = 'rocketbrain.javaSupport';
-  let client, lastSettings, debuggerController, disposing, containerOwner, disposed = false, configuring = false, installing = false, pending = Promise.resolve();
+  let client, lastSettings, fileWatcher, debuggerController, disposing, containerOwner, epoch = 0;
+  let disposed = false, configuring = false, installing = false, pending = Promise.resolve();
   let state = { state: 'stopped', message: 'Java server is stopped.' };
   const subscriptions = [output, status];
   const spring = registerSpringFeatures(vscode, context, output, { verifiedLocalPid: session => debuggerController?.verifiedLocalPid(session) });
@@ -23,7 +26,7 @@ function registerJavaFeatures(context, vscode) {
     status.text = `$(coffee) Rocketbrain Java · ${next === 'running' ? 'Ready' : next === 'starting' ? 'Starting' : next === 'configuration-required' ? 'Setup' : next}`;
     status.tooltip = message; status.show(); output.appendLine(`${next}: ${message}`);
   }
-  const serial = action => { const run = pending.then(action, action); pending = run.catch(() => {}); return run; };
+  const serial = action => { const run = pending.then(() => action(), () => action()); pending = run.catch(() => {}); return run; };
   function readNullChecks(config) {
     const selected=config.get('nullChecks');
     try { return resolveNullChecks(selected); }
@@ -43,14 +46,39 @@ function registerJavaFeatures(context, vscode) {
     }
     state={...state,nullChecks:profile};
   }
-  async function stopNow() {
-    await api.workbench?.stop();
-    await debuggerController?.stopSessions();
+  async function stopNow(strict = false) {
+    if (!strict) {
+      await api.workbench?.stop();
+      await debuggerController?.stopSessions();
+    }
     const previous = client; client = undefined; lastSettings = undefined;
-    if (previous) await previous.stop(5000).catch(error => output.appendLine(`Java shutdown: ${error.message}`));
+    if (previous) await previous.stop(5000).catch(error => {
+      output.appendLine(`Java shutdown: ${error.message}`);
+      if (strict) {
+        update('error', 'Could not confirm the Java engine stopped. Its active index files were retained.');
+        throw Error(state.message);
+      }
+    });
     if (!disposed) update('stopped', 'Java server is stopped.');
   }
-  async function startNow() {
+  function currentIndex() {
+    if (!client?.isRunning() || state.state !== 'running') return undefined;
+    return { session: epoch, generation: state.indexGeneration, runtimeIdentity: state.runtimeIdentity,
+      workspaceData: state.workspaceData, applied: hash(lastSettings ?? null) };
+  }
+  function storedIndex() {
+    const legacy = { storage: path.join((context.storageUri || context.globalStorageUri).fsPath,'java'), generation: null };
+    if (vscode.env.remoteName || !context.storageUri || !vscode.workspace.workspaceFolders?.length) return legacy;
+    try {
+      const scope = indexScope(vscode.workspace.workspaceFolders, context.storageUri);
+      const generation = readGeneration(scope, context.workspaceState);
+      return { storage: indexStorage(scope, generation), generation };
+    } catch (error) {
+      output.appendLine('Using the original Java cache location. ' + error.message);
+      return legacy;
+    }
+  }
+  async function startNow(override) {
     if (disposed || client) return { ...state };
     if (containerOwner) {
       update('container', 'The managed container Java session owns editor navigation and diagnostics.');
@@ -61,11 +89,11 @@ function registerJavaFeatures(context, vscode) {
     if (!vscode.workspace.isTrusted) { update('restricted', 'Java project import requires a trusted workspace.'); return { ...state }; }
     if (!config.get('serverPath') || !config.get('javaHome')) { update('configuration-required', 'Set rocketbrain.java.serverPath to an extracted official JDT LS distribution and rocketbrain.java.javaHome to an independent JDK 25+.'); return { ...state }; }
     try {
-      const storage = context.storageUri || context.globalStorageUri;
+      const index = override || storedIndex();
       const gradleAnnotationProcessing = config.get('annotationProcessing.gradleEnabled',false) === true;
       const launch = resolveLaunch({
         serverPath:config.get('serverPath'),javaHome:config.get('javaHome'),debugBundlePath:config.get('debugBundlePath'),
-        storagePath:path.join(storage.fsPath,'java'),trustedWorkspace:vscode.workspace.isTrusted,
+        storagePath:index.storage,trustedWorkspace:vscode.workspace.isTrusted,
         lombokJar:config.get('annotationProcessing.lombokJar',''),gradleAnnotationProcessing,
         cacheContext:{projectJdks:config.get('projectJdks',[]),gradleHome:config.get('gradleHome',''),gradleJavaHome:config.get('gradleJavaHome','')}
       });
@@ -76,13 +104,15 @@ function registerJavaFeatures(context, vscode) {
       const {profile:nullChecks,...nullAnalysis}=readNullChecks(config);
       settings.java.compile.nullAnalysis=nullAnalysis;
       const { LanguageClient, ErrorAction, CloseAction } = require('vscode-languageclient/node');
-      const watcher = vscode.workspace.createFileSystemWatcher('**/{*.java,pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,gradle.properties}');
-      subscriptions.push(watcher);
+      if (!fileWatcher) {
+        fileWatcher = vscode.workspace.createFileSystemWatcher('**/{*.java,pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,gradle.properties}');
+        subscriptions.push(fileWatcher);
+      }
       const next = new LanguageClient('rocketbrain-java', 'Rocketbrain Java', { command: launch.command, args: launch.args, options: launch.options }, {
         documentSelector: [{ scheme: 'file', language: 'java' }],
         outputChannel: output,
         initializationOptions: { bundles: launch.bundles, workspaceFolders: (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.toString()), settings, extendedClientCapabilities: { progressReportProvider: true, classFileContentsSupport: true, overrideMethodsPromptSupport: false, hashCodeEqualsPromptSupport: false, advancedOrganizeImportsSupport: false,advancedExtractRefactoringSupport:false } },
-        synchronize: { fileEvents: watcher },
+        synchronize: { fileEvents: fileWatcher },
         middleware: {
           workspace:{willRenameFiles(event,next){
             // This exact folder change already includes approved JDT-equivalent text edits.
@@ -117,17 +147,18 @@ function registerJavaFeatures(context, vscode) {
             return Object.values(ACTIONS).some(action => action.command === item.command?.command) ? item : resolve(item,token);
           }
         },
-        errorHandler: { error: () => ({ action: ErrorAction.Continue }), closed: () => { if (!disposed) { client = undefined; lastSettings = undefined; update('error', 'Java server exited. Check Rocketbrain Java output, then restart.'); } return { action: CloseAction.DoNotRestart }; } },
+        errorHandler: { error: () => ({ action: ErrorAction.Continue }), closed: () => { if (!disposed && client === next) { client = undefined; lastSettings = undefined; update('error', 'Java server exited. Check Rocketbrain Java output, then restart.'); } return { action: CloseAction.DoNotRestart }; } },
         markdown: { isTrusted: false }
       });
       state = { ...state, serverPath: launch.serverPath, javaHome: launch.javaHome, debugBundlePath: launch.bundles[0], debugBuild: launch.debugBuild, runtimeIdentity: launch.identity,
-        workspaceData: launch.data,extractInterfaceReplaceUsages,annotationProcessing:launch.annotationProcessing,nullChecks };
+        workspaceData: launch.data,indexGeneration:index.generation,extractInterfaceReplaceUsages,annotationProcessing:launch.annotationProcessing,nullChecks };
       client = next; update('starting', 'Starting the independent Eclipse JDT Language Server.');
       next.onNotification('language/status', event => { if (event.type === 'Error') output.appendLine(`JDT LS: ${event.message}`); else output.appendLine(`JDT LS ${event.type}: ${event.message}`); });
       next.onNotification('language/progressReport', event => { status.tooltip = `Java: ${event.task || ''} ${event.subTask || ''}`; });
       await next.start();
       await next.sendNotification('workspace/didChangeConfiguration', { settings });
       lastSettings=settings;
+      epoch++;
       const processing = launch.annotationProcessing;
       output.appendLine('Java editor annotation processing: Maven follows the POM, Gradle processor sync '+
         (processing.gradle ? 'enabled' : 'disabled')+', Lombok editor agent '+(processing.lombok?.version || 'disabled')+'.');
@@ -266,6 +297,24 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(api.move,api.memberMove,api.changeSignature,api.safeDelete);
   api.workbench=require('./workbench').registerJavaWorkbench(context,vscode,api,output);
   subscriptions.push(api.workbench);
+  api.workspaceIndex = registerWorkspaceIndex(vscode, {
+    extension: context, serial, current: currentIndex,
+    assertIdle() {
+      if (disposed || containerOwner || configuring || installing || debuggerController.hasActiveSessions() || api.workbench.hasActiveRunsOrTasks()) {
+        throw Error('Finish active Java builds, runs, debugging or configuration before rebuilding its index.');
+      }
+    },
+    request(command, args, token) {
+      if (!currentIndex()) throw Error('The independent Java engine is unavailable.');
+      return client.sendRequest('workspace/executeCommand', { command, arguments: args }, token);
+    },
+    stop: () => stopNow(true),
+    async start(scope, generation) {
+      await startNow({ storage: indexStorage(scope, generation), generation });
+      return currentIndex();
+    }
+  });
+  subscriptions.push(api.workspaceIndex);
   api.delegatedBuild=require('./delegated-build-vscode').registerDelegatedBuild(vscode,{workbench:api.workbench,output});
   subscriptions.push(api.delegatedBuild);
   api.groovy=require('./groovy-vscode').registerGroovyWorkbench(vscode,api);

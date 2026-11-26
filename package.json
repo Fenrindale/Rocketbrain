@@ -95,6 +95,7 @@
       { "command": "rocketbrain.java.showAsyncTaskStack", "title": "Show Java Async Submission Stack", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.smartStepInto", "title": "Step Into a Java Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.restartStackFrame", "title": "Restart Java Stack Frame", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
+      { "command": "rocketbrain.java.rebuildWorkspaceIndex", "title": "Rebuild Java Workspace Index", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.inspectLocalValue", "title": "Inspect Java Local Value", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.setKotlinLocal", "title": "Set Kotlin Local Value", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.inspectKotlinObjectFields", "title": "Inspect Kotlin Object Fields", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },

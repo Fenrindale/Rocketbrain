@@ -293,6 +293,7 @@ function registerJavaDebugger(vscode, api, output, request) {
         buildVersion: info.buildVersion, capabilities: info.capabilities, hcrEvents: [...info.hcrEvents],
         lastHcrResult: info.lastHcrResult } : undefined;
     },
+    hasActiveSessions() { return sessions.size > 0 || pendingAttaches.size > 0; },
     async stopSessions() { await Promise.allSettled([...sessions.values()].map(info => vscode.debug.stopDebugging(info.session))); },
     dispose() { disposed = true; pendingAttaches.clear(); pendingKotlinLines.clear(); void this.stopSessions(); for (const item of disposables) item.dispose(); } };
 }
