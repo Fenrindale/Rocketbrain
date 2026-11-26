@@ -197,7 +197,7 @@ function registerWslSourceWatch(vscode, { mapping, reader = createWslSourceReade
       cleanReview(plan);
       if (latest.fingerprint !== plan.snapshot.fingerprint) throw Error('The Linux source changed after review. Compare it again.');
       const { group, tab } = tabTarget(plan.document);
-      const column = group.viewColumn, address = plan.document.uri;
+      const address = plan.document.uri;
       review = undefined;
       // The tab API targets the selected file. VS Code retains its own dirty-close protection.
       if (!await vscode.window.tabGroups.close(tab, true)) throw Error('The WSL source tab was not closed.');
@@ -211,7 +211,10 @@ function registerWslSourceWatch(vscode, { mapping, reader = createWslSourceReade
       if (beforeReopen.fingerprint !== latest.fingerprint) {
         throw Error('The Linux source changed during reload. Open the source and compare it again.');
       }
-      const editor = await vscode.window.showTextDocument(address, { preserveFocus: true, preview: false, viewColumn: column });
+      // Closing a group's last tab can remove the group and shift the active peer into its old column.
+      const originalGroupAvailable = vscode.window.tabGroups.all.includes(group) && (!group.isActive || !group.activeTab);
+      const viewColumn = originalGroupAvailable ? group.viewColumn : vscode.ViewColumn.Beside;
+      const editor = await vscode.window.showTextDocument(address, { preserveFocus: true, preview: false, viewColumn });
       const opened = editor.document;
       if (opened.uri.toString() !== address.toString() || opened.isDirty) throw Error('The re-opened WSL source is no longer clean.');
       record.document = opened;
