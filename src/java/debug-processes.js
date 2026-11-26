@@ -6,6 +6,7 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { independentJavaExecutable } = require('./debug-runtime');
 const { waitForOwnedListener } = require('./testing-debug');
+const { readLinuxListeners } = require('./linux-debug-listeners');
 
 const limit = 32;
 const listenerLimit = 2048;
@@ -29,7 +30,7 @@ class RocketbrainDebugProcesses {
             var info = process.info();
             if (!owner.equalsIgnoreCase(info.user().orElse(""))) return null;
             var binary = Path.of(info.command().orElseThrow()).getFileName().toString();
-            if (!binary.matches("(?i)javaw?\\.exe")) return null;
+            if (!binary.equals("java") && !binary.matches("(?i)javaw?\\.exe")) return null;
             var started = info.startInstant().orElseThrow().toEpochMilli();
             var vm = VirtualMachine.attach(descriptor);
             String address;
@@ -134,6 +135,16 @@ async function onCancellation(cancellation, task) {
 }
 
 async function socketOwners(signal) {
+  if (process.platform === 'linux') {
+    const owners = new Map();
+    for (const [port, listener] of await readLinuxListeners({ signal })) {
+      if (!listener.pid) continue;
+      const ports = owners.get(listener.pid) || new Set();
+      ports.add(port);
+      owners.set(listener.pid, ports);
+    }
+    return owners;
+  }
   const windowsRoot = process.env.SystemRoot || 'C:\\Windows';
   const powershell = path.join(windowsRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   return readSocketOwners(await invoke(powershell, ['-NoProfile', '-NonInteractive', '-Command', SOCKETS],
@@ -166,11 +177,15 @@ function createDebugProcessDiscovery({ javaHome, trusted } = {}) {
   async function discover(pid, signal) {
     trusted();
     if (signal?.aborted) throw Error('Java process discovery was cancelled.');
-    if (process.platform !== 'win32') throw Error('Local PID discovery uses Windows listener ownership. Enter the JVM host and port for manual attach.');
+    if (!['win32', 'linux'].includes(process.platform)) throw Error('Local PID discovery verifies listener ownership on Windows and Linux. Enter the JVM host and port for manual attach.');
     const home = javaHome();
     if (!path.isAbsolute(home || '')) throw Error('Configure the independent Java engine before finding JVMs.');
-    const launcher = independentJavaExecutable(path.join(home, 'bin', 'java.exe'));
-    const owners = await socketOwners(signal);
+    const launcher = independentJavaExecutable(path.join(home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java'));
+    let owners;
+    try { owners = await socketOwners(signal); } catch (error) {
+      if (signal?.aborted) throw Error('Java process discovery was cancelled.');
+      throw error;
+    }
     const pids = pid ? (owners.has(pid) ? [pid] : []) : [...owners.keys()].slice(0, listenerLimit);
     const results = readyProcesses(await queryJvm(launcher, pids, signal), owners).slice(0, limit);
     trusted();
