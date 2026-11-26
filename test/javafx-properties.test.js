@@ -61,7 +61,7 @@ function headlessHost(folder, javaHome) {
     },
     languages:{
       createDiagnosticCollection:()=>({set(){},delete(){},...disposable()}),
-      registerDefinitionProvider:noop, registerDocumentSymbolProvider:noop
+      registerDefinitionProvider:noop, registerDocumentSymbolProvider:noop, registerCompletionItemProvider:noop
     },
     commands:{
       registerCommand(name,invoke){handlers.set(name,invoke);return disposable();},

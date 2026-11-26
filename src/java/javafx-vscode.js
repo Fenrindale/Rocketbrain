@@ -9,6 +9,7 @@ const { buildSpec, nativeTaskRunner } = require('./workbench-tasks');
 const { readModule, planImage, observeImage } = require('./javafx-gradle-image');
 const { renderFxmlPreview } = require('./javafx-preview-runtime');
 const { captureFxmlPreview } = require('./javafx-preview-fxml');
+const { registerFxmlCompletion } = require('./javafx-completion');
 const { REFRESH, EDIT, APPLY, DISCARD, commandUris, previewHtml } = require('./javafx-preview-panel');
 
 const PREVIEW = 'rocketbrain.javafx.preview';
@@ -16,8 +17,9 @@ const PREVIEW = 'rocketbrain.javafx.preview';
 function registerJavaFx(vscode, { java, context }) {
   const selector = { scheme: 'file', pattern: '**/*.fxml' };
   const diagnostics = vscode.languages.createDiagnosticCollection('rocketbrain-fxml');
+  const completion = registerFxmlCompletion(vscode, java, selector);
   const tasks = nativeTaskRunner(vscode);
-  const disposables = [diagnostics],images=new WeakMap();
+  const disposables = [diagnostics,completion],images=new WeakMap();
   let panel, shown, rendering, pending, applying;
 
   function root(document) {

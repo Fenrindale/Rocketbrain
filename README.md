@@ -56,6 +56,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 표준 `src/main/resources`의 FXML에서 Outline을 볼 수 있습니다. 컨트롤러, 이벤트 메서드, `fx:id` 필드와 같은 모듈에 있는 포함 파일·리소스는 정의로 이동할 수 있습니다. **Run or Package JavaFX Application**에서 JavaFX Maven 플러그인이 구성된 모듈을 선택해 앱을 실행하거나 `jlink` 런타임 이미지를 만들 수 있습니다. Windows x64에서 JDK 24 이상을 연결하고 저장된 FXML에서 **Preview JavaFX FXML**을 실행하면 OpenJFX로 정적 레이아웃과 지원되는 포함 파일·CSS를 표시합니다. 미리보기의 요소나 **Editable elements**에서 원본 문서에 고유한 `fx:id`가 있는 지원 요소를 선택합니다. 이미 지정된 텍스트, 색, 크기, 위치 등의 리터럴을 바꾸고 변경 전후 이미지를 비교한 뒤 **Apply to FXML Editor**를 선택합니다. 컨트롤러, 이벤트, CSS, 포함 파일과 바인딩은 편집 대상에서 제외됩니다. FXML 편집기에서 변경을 저장한 다음 **Refresh Preview**로 다시 그립니다.
 
+JDT가 가져온 Java 모듈의 `src/main/resources`와 `src/test/resources` FXML에서는 실제 OpenJFX 의존성에서 태그, 가져오기, 읽고 쓸 수 있는 속성과 Boolean 값을 완성합니다. 같은 비모듈 Java 프로젝트에서 저장하고 컴파일한 공개 사용자 정의 JavaFX 컨트롤도 제안합니다. 완성은 Java 클래스의 메타데이터를 읽으며 컨트롤을 실행하지 않습니다.
+
 **Audit Maven Dependencies with OSV**는 선택한 Maven 모듈의 실제 의존성 트리를 해석합니다. OSV로 전송할 패키지 이름·버전을 직접 선택하면 직접·전이 의존 경로와 조회 시각, 등록된 권고 ID를 보고서에 표시합니다. [OSV API](https://google.github.io/osv.dev/post-v1-querybatch/)
 
 Maven·Gradle 권고 보고서에서 **Inspect Java Advisory Call Sites**로 선택 모듈의 컴파일 클래스 경로를 확인하면, 지원하는 권고의 API 호출을 정확한 JAR과 Java 소스 위치에 연결합니다. 보고서에는 공급자가 제시한 수정 버전과 권고 링크가 표시됩니다. [Java 권고 호출 위치 검토](docs/java-advisory-calls.md)
