@@ -209,6 +209,8 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 
 **Review FTPS Project Deployment**는 제어 연결과 데이터 연결의 TLS 인증서를 검증하고 원격 폴더를 엽니다. 파일을 비교한 후 **Publish Reviewed FTPS Change**에서 새 파일 이름의 접두사를 승인하면 서버가 고유 이름으로 저장하고 Rocketbrain이 정확한 바이트를 다시 읽어 확인합니다. [FTPS 배포 설정과 검토 절차](docs/ftps-deployment.md)
 
+**Review Local and Remote Deployment Changes**는 SFTP·FTPS·WebDAV에 연결한 두 폴더의 파일 해시를 기준으로 로컬 변경, 원격 변경과 충돌을 구분합니다. 양쪽 스냅샷을 비교하고 로컬 파일은 해당 프로토콜의 게시 검토로 넘길 수 있습니다. [배포 변경 감시와 검토 절차](docs/deployment-change-review.md)
+
 ```http
 @host = http://127.0.0.1:8080
 # @expect status 200

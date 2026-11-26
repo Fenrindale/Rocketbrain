@@ -18,10 +18,15 @@ function registerRemoteDeployment(vscode, options) {
     if (disposed || !vscode.workspace.isTrusted) throw Error('Open a trusted local workspace before using ' + protocol + ' deployment.');
   }
 
-  function route(label, expected) {
+  function configuredProfiles() {
     trusted();
     const profiles = vscode.workspace.getConfiguration(section).get('profiles', []);
     if (!Array.isArray(profiles) || profiles.length > 32) throw Error('Set up to 32 ' + protocol + ' profiles in Rocketbrain user settings.');
+    return profiles;
+  }
+
+  function route(label, expected) {
+    const profiles = configuredProfiles();
     const matches = profiles.filter(value => value?.label?.trim?.() === label);
     if (matches.length !== 1) throw Error('Choose a unique ' + protocol + ' profile label from Rocketbrain user settings.');
     const profile = profileFor(matches[0]);
@@ -152,6 +157,11 @@ function registerRemoteDeployment(vscode, options) {
     title: credentialTitle(profile),
     prompt: profile.user + '@' + profile.host + ':' + profile.port + ' · ' + identity(profile) });
 
+  async function showReview(result) {
+    reviewFor(result.id);
+    return vscode.window.showTextDocument(await vscode.workspace.openTextDocument(result.uri), { preview: false });
+  }
+
   async function selectRemote(profile, credential) {
     let remote = '';
     for (;;) {
@@ -177,7 +187,7 @@ function registerRemoteDeployment(vscode, options) {
   command('review' + suffix, async () => {
     const folder = vscode.workspace.workspaceFolders?.find(folder => folder.uri.scheme === 'file');
     if (!folder) throw Error('Open a local workspace folder.');
-    const configured = vscode.workspace.getConfiguration(section).get('profiles', []);
+    const configured = configuredProfiles();
     if (!configured.length) throw Error('Add a ' + protocol + ' profile under Rocketbrain user settings.');
     const label = await vscode.window.showQuickPick(configured.map(profile => profileFor(profile).label), { title: 'Choose a ' + protocol + ' Profile' });
     if (!label) return;
@@ -208,7 +218,7 @@ function registerRemoteDeployment(vscode, options) {
     const result = await progress('Preparing the ' + protocol + ' deployment review', signal => prepare({
       label, expected: profile, remote, action: selected.action === 'mkdir' ? 'mkdir' : 'upload', source, credential, signal,
     }));
-    return vscode.window.showTextDocument(await vscode.workspace.openTextDocument(result.uri), { preview: false });
+    return showReview(result);
   });
 
   command('compare' + suffix, () => openDiff(activeReview().review.id));
@@ -223,7 +233,8 @@ function registerRemoteDeployment(vscode, options) {
     return progress('Publishing the reviewed ' + protocol + ' change', signal => apply(review.id, { confirmed: true, hash: review.hash, credential, signal }));
   });
 
-  return { browse, prepare, apply, openDiff, dispose() {
+  return { browse, prepare, apply, openDiff, route, routes: () => configuredProfiles().map(profileFor),
+    promptCredential: credentialPrompt, showReview, dispose() {
     disposed = true;
     reviews.clear();
     core.dispose();

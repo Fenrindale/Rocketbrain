@@ -215,4 +215,4 @@ if (require.main === module) runFtpsDeploymentChecks().then(result => console.lo
   process.exitCode = 1;
 });
 
-module.exports = { runFtpsDeploymentChecks };
+module.exports = { runFtpsDeploymentChecks, ownedFtps, springRoot };

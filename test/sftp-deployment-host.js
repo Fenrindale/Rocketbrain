@@ -233,4 +233,4 @@ if (require.main === module) runSftpDeploymentChecks().then(result => console.lo
   process.exitCode = 1;
 });
 
-module.exports = { runSftpDeploymentChecks };
+module.exports = { runSftpDeploymentChecks, startSftp };

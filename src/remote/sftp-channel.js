@@ -112,7 +112,7 @@ function channel(sftp, profile, signal) {
   }
 
   return { atomicReplace, target,
-    async list(relative) {
+    async list(relative, includeObservations = false) {
       const folder = await directory(relative);
       const handle = await call('opendir', folder);
       return withHandle(handle, async () => {
@@ -125,7 +125,8 @@ function channel(sftp, profile, signal) {
           for (const item of batch) {
             if (!segment(item.filename)) continue;
             const kind = item.attrs.isSymbolicLink() ? 'link' : item.attrs.isDirectory() ? 'directory' : item.attrs.isFile() ? 'file' : 'other';
-            entries.push({ name: item.filename, kind, ...(kind === 'file' && { bytes: item.attrs.size }) });
+            entries.push({ name: item.filename, kind, ...(kind === 'file' && { bytes: item.attrs.size,
+              ...(includeObservations && { tag: [item.attrs.mtime, item.attrs.uid, item.attrs.gid, item.attrs.mode] }) }) });
             if (entries.length > 256) throw Error('Choose a remote folder with at most 256 listed entries.');
           }
         }
