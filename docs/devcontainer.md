@@ -25,3 +25,9 @@ Start a managed Linux Dev Container with your open local workspace mounted at a 
 Use native hover, Go to Definition and diagnostics in mounted Java editors. Definitions resolve to files in the verified mount. Use **Review Container Java Formatting** to preview and apply a format change to the exact current editor version. VS Code applies the edit to the open document, which you can save or undo.
 
 Use **Stop Managed Container Java** to restore the previous local editor route. Container Java uses an exact managed container generation and temporary JDT state. It closes after a container exit or restart, removal of the workspace or shutdown of the VS Code window. This route accepts one mount per active session and Java source files up to 256 KiB. It covers workspace source navigation and formatting. Host-external class files, automatic Gradle wrapper import, and remote multi-file edits require separate workflows.
+
+## Attach the debugger to a container JVM
+
+Run a JVM in the managed Linux container with JDWP bound to its IPv4 loopback address. Keep the matching Java sources in the mounted workspace. Use **Attach to Managed Container JVM** to review the target port, container mount and local source directory. The command uses the local independent JDT and Java debug bundle. Stop the container Java editor route before attaching.
+
+Rocketbrain opens an unused local IPv4 loopback port for the reviewed debugger session. Set breakpoints and inspect variables in the regular Java debugger. The port closes when the debugger disconnects, the attach fails, or the managed container stops. Other local processes can access the listener while it is open.

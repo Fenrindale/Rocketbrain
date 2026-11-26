@@ -12,6 +12,7 @@ const { promisify } = require('node:util');
 const { test } = require('node:test');
 const { createDevContainers, cliVersion, sessionLabel } = require('../src/devcontainer/runtime');
 const { openFixtureForward, checkHttp, attachJdwp, waitForReleasedPort, fixtureStep } = require('./devcontainer-port-fixture');
+const { checkManagedJvmFixture } = require('./devcontainer-attach-fixture');
 
 const executeFile = promisify(execFile);
 const fixture = path.join(__dirname, 'fixtures', 'devcontainer');
@@ -503,6 +504,9 @@ test('actual local Docker starts image, Dockerfile and Compose Dev Containers an
     const dockerPublishedPorts = JSON.parse(await docker(['inspect','--format','{{json .HostConfig.PortBindings}}',started.id]));
     assert.equal(Object.keys(dockerPublishedPorts ?? {}).length, 0);
     const http = await fixtureStep('opening the HTTP forward', () => openFixtureForward(service, root, 8787));
+    await fixtureStep('checking the managed JVM source breakpoint and release', async () => {
+      proof.managedJavaAttach = await checkManagedJvmFixture(service, root, started, http);
+    }, 50000);
     const jdwp = await fixtureStep('opening the JDWP forward', () => openFixtureForward(service, root, 5005));
     assert.equal((await service.status(root)).forwards.length, 2);
     await fixtureStep('reading the HTTP service through its forward', () => checkHttp(http));

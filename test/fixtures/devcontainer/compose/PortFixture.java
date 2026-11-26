@@ -8,12 +8,17 @@ public class PortFixture {
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
     server.createContext("/ready", exchange -> {
       try (exchange) {
-        byte[] response = "rocketbrain-container-http\n".getBytes(StandardCharsets.UTF_8);
+        byte[] response = responseBody().getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(200, response.length);
         exchange.getResponseBody().write(response);
       }
     });
     server.start();
     System.out.println("Fixture HTTP listening on " + server.getAddress().getPort());
+  }
+
+  private static String responseBody() {
+    String body = "rocketbrain-container-http\n";
+    return body; // Managed debugger source breakpoint.
   }
 }

@@ -6,4 +6,4 @@ RUN apt-get -o Acquire::Retries=3 update \
 
 WORKDIR /opt/rocketbrain-fixture
 COPY PortFixture.java .
-RUN javac --add-modules jdk.httpserver PortFixture.java
+RUN javac -g --add-modules jdk.httpserver PortFixture.java
