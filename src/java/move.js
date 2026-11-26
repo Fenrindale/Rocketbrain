@@ -27,8 +27,8 @@ function inspectMoveClass(text,uri,sources,{compilerGenericPeers=false,serviceIn
  }
  return {className:selected.name,packageName:parsed.packageName,compilerGenericPeers:genericPeers};
 }
-async function resolveMoveProject(request,vscode,uri,cancellation){
- const cp=await request('workspace/executeCommand',{command:'java.project.getClasspaths',arguments:[uri.toString(),{scope:'runtime'}]},cancellation);
+async function resolveMoveProject(request,vscode,uri,cancellation,classpathScope='runtime'){
+ const cp=await request('workspace/executeCommand',{command:'java.project.getClasspaths',arguments:[uri.toString(),{scope:classpathScope}]},cancellation);
  const settings=await request('workspace/executeCommand',{command:'java.project.getSettings',arguments:[uri.toString(),['org.eclipse.jdt.ls.core.sourcePaths']]},cancellation);
  if(!cp?.projectRoot)throw Error('Import this Java project before moving its source files.');
  const rootUri=vscode.Uri.parse(cp.projectRoot),workspace=vscode.workspace.getWorkspaceFolder(uri);

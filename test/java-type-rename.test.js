@@ -9,6 +9,7 @@ const { test } = require('node:test');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { editedText } = require('../src/java/refactoring');
 const { prepareJavaTypeRename, classContracts, verifiedEngineEdits } = require('../src/java/java-type-rename');
+const { moveScope, snapshotScope, validateScope } = require('../src/java/move-scope');
 const { beanClassEdits } = require('../src/java/java-type-rename-xml');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { typeRenameFixture, springTypeRenameClasspath, runSpringTypeRename } = require('./helpers/java-type-rename-fixture');
@@ -64,6 +65,65 @@ test('a JDT grouped replacement must equal the reviewed Javac tokens byte for by
   assert.throws(() => verifiedEngineEdits(proposed, [source], expected, rename), /differs from the exact/u);
   assert.throws(() => verifiedEngineEdits({ ...proposed, documentChanges: [{ kind: 'delete', uri }] }, [source], expected, rename),
     /unexpected file operation/u);
+});
+
+test('type rename pins JDT test paths and reassesses clients while Move keeps runtime scope', async t => {
+  const parent = await fs.realpath(os.tmpdir());
+  const workspace = await fs.mkdtemp(path.join(parent, 'rb-type-rename-scope-'));
+  t.after(async () => {
+    assert.equal(await fs.realpath(workspace), workspace);
+    assert.equal(path.dirname(workspace), parent);
+    await fs.rm(workspace, { recursive: true, force: true });
+  });
+  const project = path.join(workspace, 'app'), client = path.join(workspace, 'client');
+  const main = path.join(project, 'src', 'main'), tests = path.join(project, 'src', 'test');
+  const runtimeOutput = path.join(project, 'bin', 'main');
+  const testLibrary = path.join(workspace, 'junit-jupiter-params.jar');
+  const declaration = path.join(main, 'Ledger.java'), testSource = path.join(tests, 'LedgerTests.java');
+  await Promise.all([main, tests, runtimeOutput, client].map(folder => fs.mkdir(folder, { recursive: true })));
+  await fs.writeFile(declaration, 'public class Ledger {}');
+  await fs.writeFile(testSource, 'import org.junit.jupiter.params.ParameterizedTest; class LedgerTests {}');
+  await fs.writeFile(testLibrary, 'fixture classpath entry');
+  const uri = file => ({ scheme: 'file', fsPath: file, toString: () => pathToFileURL(file).href });
+  const vscode = { Uri: { file: uri, parse: value => uri(fileURLToPath(value)) }, workspace: {
+    getWorkspaceFolder: () => ({ uri: uri(workspace) }),
+    openTextDocument: async range => {
+      const text = await fs.readFile(range.fsPath, 'utf8');
+      return { getText: () => text, version: 1, isDirty: false, isClosed: false };
+    }
+  } };
+  const calls = [];
+  let includeTestLibrary = true, clientDependsOnApp = false;
+  const request = async (_method, { command, arguments: args }) => {
+    if (command === 'java.project.getAll') return [project, client].map(file => uri(file).toString());
+    if (command === 'java.project.getSettings') return { 'org.eclipse.jdt.ls.core.sourcePaths': [main, tests] };
+    assert.equal(command, 'java.project.getClasspaths');
+    const [target, { scope }] = args;
+    const clientRequest = target === uri(client).toString();
+    calls.push(scope);
+    if (clientRequest) return {
+      classpaths: [], modulepaths: scope === 'test' && clientDependsOnApp ? [runtimeOutput] : []
+    };
+    return { projectRoot: uri(project).toString(), modulepaths: [],
+      classpaths: [runtimeOutput, ...(scope === 'test' && includeTestLibrary ? [testLibrary] : [])] };
+  };
+  const anchor = uri(declaration);
+  const rename = await moveScope(vscode, request, anchor, anchor, undefined, { classpathScope: 'test' });
+  assert.equal(rename.classpathScope, 'test');
+  assert.deepEqual(rename.source.classpaths.classpaths, [runtimeOutput, testLibrary]);
+  assert.ok((await snapshotScope(rename, vscode, () => {})).some(source => source.file === testSource));
+  await validateScope(rename, vscode, request, anchor, anchor);
+  assert.deepEqual(new Set(calls.splice(0)), new Set(['test']));
+  includeTestLibrary = false;
+  await assert.rejects(validateScope(rename, vscode, request, anchor, anchor), /classpath\/source-root metadata changed/);
+  includeTestLibrary = true;
+  clientDependsOnApp = true;
+  await assert.rejects(validateScope(rename, vscode, request, anchor, anchor), /additional imported Java project depends/);
+  calls.length = 0;
+  const move = await moveScope(vscode, request, anchor, anchor);
+  await validateScope(move, vscode, request, anchor, anchor);
+  assert.deepEqual(move.source.classpaths.classpaths, [runtimeOutput]);
+  assert.deepEqual(new Set(calls), new Set(['runtime']));
 });
 
 test('pinned JDT and Javac review one public class and saved Spring XML loads before and after on both actual databases', {

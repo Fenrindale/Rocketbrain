@@ -172,7 +172,7 @@ async function prepareJavaTypeRename(deps, { document, position, newName, cancel
     engineRange?.[endpoint]?.[field] !== selectedRange[endpoint][field]))) {
     throw Error('JDT did not recognize the exact public class declaration. Wait for project import, then retry.');
   }
-  const scope = await scopeApi.moveScope(vscode, request, document.uri, document.uri, cancellation);
+  const scope = await scopeApi.moveScope(vscode, request, document.uri, document.uri, cancellation, { classpathScope: 'test' });
   scope.includeClassRegistrations = true;
   const sources = await scopeApi.snapshotScope(scope, vscode, trusted, cancellation);
   const owner = sources.find(source => source.uri === uri);

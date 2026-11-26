@@ -17,8 +17,11 @@ function literalGradleGraph(root,projects){
  const visit=(name,active=new Set())=>{if(active.has(name))throw Error('Cyclic project dependencies prevent this Move.');for(const next of graph.get(name)||[])visit(next,new Set([...active,name]));};for(const name of names)visit(name);
  return {files,graph};
 }
-async function moveScope(vscode,send,sourceUri,targetUri,cancellation,{allowPackageModule=false}={}){
- const source=await resolveMoveProject(send,vscode,sourceUri,cancellation),target=await resolveMoveProject(send,vscode,targetUri,cancellation),same=key(source.root)===key(target.root);let projects=same?[source]:[source,target];
+async function moveScope(vscode,send,sourceUri,targetUri,cancellation,{allowPackageModule=false,classpathScope='runtime'}={}){
+ if(!['runtime','test'].includes(classpathScope))throw Error('Choose an observed Java runtime or test classpath scope.');
+ const resolve=uri=>resolveMoveProject(send,vscode,uri,cancellation,classpathScope);
+ const classpathsAt=uri=>send('workspace/executeCommand',{command:'java.project.getClasspaths',arguments:[uri,{scope:classpathScope}]},cancellation);
+ const source=await resolve(sourceUri),target=await resolve(targetUri),same=key(source.root)===key(target.root);let projects=same?[source]:[source,target];
  const namedPackageModule=allowPackageModule&&same&&fs.existsSync(path.join(source.root,'src','main','java','module-info.java'));
  const sourceWorkspace=vscode.workspace.getWorkspaceFolder(sourceUri),targetWorkspace=vscode.workspace.getWorkspaceFolder(targetUri);if(!sourceWorkspace||!targetWorkspace||sourceWorkspace.uri.toString()!==targetWorkspace.uri.toString())throw Error('Move requires both Java projects in the same open workspace folder.');
  let buildFiles=[],buildKind='same-project',buildProof=null,externalModels;
@@ -44,13 +47,13 @@ async function moveScope(vscode,send,sourceUri,targetUri,cancellation,{allowPack
    if(existing){projects.push(existing);continue;}
    const sample=projectFiles(folder).find(file=>file.endsWith('.java'));
    if(!sample)throw Error('Every reviewed build project requires imported Java source.');
-   projects.push(await resolveMoveProject(send,vscode,vscode.Uri.file(sample),cancellation));
+   projects.push(await resolve(vscode.Uri.file(sample)));
   }
  }
  for(const project of projects){
-  project.classpaths=await send('workspace/executeCommand',{command:'java.project.getClasspaths',arguments:[vscode.Uri.file(project.root).toString(),{scope:'runtime'}]},cancellation);
-  if(project.classpaths.modulepaths?.length&&!namedPackageModule)throw Error('Java modules require a separate cross-project Move analysis.');
-  if(!Array.isArray(project.classpaths.classpaths))throw Error('Build and import both Java projects before Move semantic validation.');
+  project.classpaths=await classpathsAt(vscode.Uri.file(project.root).toString());
+  if(project.classpaths?.modulepaths?.length&&!namedPackageModule)throw Error('Java modules require a separate cross-project Move analysis.');
+  if(!Array.isArray(project.classpaths?.classpaths))throw Error('Build and import both Java projects before Move semantic validation.');
   if(namedPackageModule){
    const paths=[...project.classpaths.classpaths,...(project.classpaths.modulepaths||[])];
    const outputs=new Set(['bin/main','build/classes/java/main','build/resources/main','target/classes'].map(relative=>key(path.join(project.root,relative))));
@@ -62,9 +65,22 @@ async function moveScope(vscode,send,sourceUri,targetUri,cancellation,{allowPack
  }
  if(!same&&!source.classpaths.classpaths.some(file=>inside(target.root,path.resolve(file))))throw Error('The imported source project does not expose the destination library on its runtime classpath.');
  const all=await send('workspace/executeCommand',{command:'java.project.getAll',arguments:[]},cancellation);if(!Array.isArray(all)||all.length>40)throw Error('Move requires a bounded observed Java project set.');
- for(const item of all){const raw=typeof item==='string'?item:item?.uri;if(!raw)throw Error('The Java engine returned an unknown project identity.');const uri=vscode.Uri.parse(raw);if(uri.scheme!=='file'||projects.some(p=>key(p.root)===key(uri.fsPath)))continue;const cp=await send('workspace/executeCommand',{command:'java.project.getClasspaths',arguments:[raw,{scope:'runtime'}]},cancellation);if([...(cp?.classpaths||[]),...(namedPackageModule?cp?.modulepaths||[]:[])].some(file=>projects.some(p=>inside(p.root,path.resolve(file)))))throw Error('An additional imported Java project depends on this Move scope. Review that client project separately: '+path.relative(sourceWorkspace.uri.fsPath,uri.fsPath));}
+ for(const item of all){
+  const raw=typeof item==='string'?item:item?.uri;
+  if(!raw)throw Error('The Java engine returned an unknown project identity.');
+  const uri=vscode.Uri.parse(raw);
+  if(uri.scheme!=='file'||projects.some(p=>key(p.root)===key(uri.fsPath)))continue;
+  const cp=await classpathsAt(raw);
+  if(classpathScope==='test'&&(!Array.isArray(cp?.classpaths)||(cp.modulepaths!==undefined&&!Array.isArray(cp.modulepaths)))){
+   throw Error('The test classpath of an additional imported Java project could not be verified.');
+  }
+  const paths=[...(cp?.classpaths||[]),...(namedPackageModule||classpathScope==='test'?cp?.modulepaths||[]:[])];
+  if(paths.some(file=>projects.some(p=>inside(p.root,path.resolve(file))))){
+   throw Error('An additional imported Java project depends on this Move scope. Review that client project separately: '+path.relative(sourceWorkspace.uri.fsPath,uri.fsPath));
+  }
+ }
  const classpathIdentity=projects.flatMap(project=>[...project.classpaths.classpaths,...(namedPackageModule?project.classpaths.modulepaths||[]:[])]).filter(file=>fs.existsSync(file)).map(file=>{const real=fs.realpathSync(file),stat=fs.statSync(real);return {file,real,size:stat.size,mtime:stat.mtimeMs,ino:stat.ino};});
- return {source,target,projects,buildFiles,buildKind,buildProof,externalModels,same,namedPackageModule,classpathIdentity,metadata:JSON.stringify(projects.map(p=>({root:p.root,roots:p.sourceRoots,cp:p.classpaths}))),all:JSON.stringify(all)};
+ return {source,target,projects,buildFiles,buildKind,buildProof,externalModels,same,namedPackageModule,classpathScope,classpathIdentity,metadata:JSON.stringify(projects.map(p=>({root:p.root,roots:p.sourceRoots,cp:p.classpaths}))),all:JSON.stringify(all)};
 }
 function scopeFiles(scope){return [...new Set([...scope.projects.flatMap(p=>projectFiles(p.root,{includeClassRegistrations:scope.includeClassRegistrations})),...scope.buildFiles])].sort();}
 async function snapshotScope(scope,vscode,trusted,cancellation){const result=[];let bytes=0;for(const file of scopeFiles(scope)){trusted(cancellation);const data=fs.readFileSync(file);bytes+=data.length;if(data.length>2*1024*1024||bytes>16*1024*1024)throw Error('Move exceeds its reference source size limit.');const uri=vscode.Uri.file(file),doc=await vscode.workspace.openTextDocument(uri);if(doc.isDirty||doc.isClosed||doc.getText()!==data.toString('utf8').replace(/^\uFEFF/,''))throw Error('Save and synchronize every source, resource and build descriptor before Move.');result.push({file,uri:uri.toString(),text:doc.getText(),version:doc.version,hash:digest(doc.getText()),diskHash:digest(data)});}return result;}
@@ -76,7 +92,10 @@ function scopeGuards(scope,sources,vscode,trusted,cancellation){const before=sou
   }
  }
  };}
-async function validateScope(scope,vscode,send,sourceUri,targetUri,cancellation){const fresh=await moveScope(vscode,send,sourceUri,targetUri,cancellation,{allowPackageModule:scope.namedPackageModule});if(fresh.metadata!==scope.metadata||fresh.all!==scope.all||fresh.namedPackageModule!==!!scope.namedPackageModule)throw Error('The imported Java Move project/classpath/source-root metadata changed after review.');}
+async function validateScope(scope,vscode,send,sourceUri,targetUri,cancellation){
+ const fresh=await moveScope(vscode,send,sourceUri,targetUri,cancellation,{allowPackageModule:scope.namedPackageModule,classpathScope:scope.classpathScope});
+ if(fresh.metadata!==scope.metadata||fresh.all!==scope.all||fresh.namedPackageModule!==!!scope.namedPackageModule)throw Error('The imported Java Move project/classpath/source-root metadata changed after review.');
+}
 function textEntries(edit,sources){if(!edit||edit.changeAnnotations&&Object.keys(edit.changeAnnotations).length)throw Error('The Java move engine returned missing edits or unsupported conflicts.');const entries=[...Object.entries(edit.changes||{}).map(([uri,edits])=>({textDocument:{uri,version:null},edits})),...(edit.documentChanges||[])].map(entry=>{if(entry.kind||!entry.textDocument?.uri?.startsWith('file:'))throw Error('The Java engine returned unexpected file operations.');const raw=new URL(entry.textDocument.uri);if(raw.search||raw.hash||raw.host&&raw.host!=='localhost')throw Error('The Java engine returned a non-local or qualified file identity.');const source=sources.find(s=>key(s.file)===key(fileURLToPath(raw)));if(!source||!source.file.endsWith('.java'))throw Error('The Java engine returned edits outside the reviewed Java sources.');return {...entry,textDocument:{...entry.textDocument,uri:source.uri}};});if(!entries.length||new Set(entries.map(e=>e.textDocument.uri)).size!==entries.length)throw Error('The Java engine returned duplicate file operations or edits outside the reviewed Java sources.');return entries;}
 function transformed(sources,entries,rename){const renames=Array.isArray(rename)?rename:rename?[rename]:[];return sources.filter(s=>s.file.endsWith('.java')).map(source=>{const entry=entries.find(e=>e.textDocument.uri===source.uri);let text=source.text;if(entry){const starts=[0];for(let i=0;i<text.length;i++)if(text[i]==='\n')starts.push(i+1);const offset=p=>{if(!p||!Number.isInteger(p.line)||!Number.isInteger(p.character)||p.line<0||p.line>=starts.length||p.character<0||starts[p.line]+p.character>(starts[p.line+1]??text.length))throw Error('Invalid Java Move text range.');return starts[p.line]+p.character;};const edits=entry.edits.map(e=>({start:offset(e.range.start),end:offset(e.range.end),text:e.newText})).sort((a,b)=>b.start-a.start);let previous=text.length+1;for(const edit of edits){if(edit.end<edit.start||edit.end>previous||typeof edit.text!=='string')throw Error('Overlapping or invalid Java Move text edits.');text=text.slice(0,edit.start)+edit.text+text.slice(edit.end);previous=edit.start;}}const moved=renames.find(r=>source.uri===r.oldUri);return {uri:moved?moved.newUri:source.uri,text};});}
 async function validateCompilation(scope,sources,entries,rename,runtime,cancellation,verifyBindings){
