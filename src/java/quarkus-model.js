@@ -7,15 +7,12 @@ const { parseJavaFile,literal,rangeAt } = require('../spring/java');
 const { parseProperties } = require('../spring/configuration');
 const { mavenTasks } = require('./workbench-tasks');
 const { fail,inside,cancelled,buildFingerprint } = require('./workbench-model');
+const { analyzeConfigMappings,profileFile,KEY:PROPERTY,PROFILE } = require('./quarkus-config-mapping');
 
-const PROPERTY=/^[A-Za-z][A-Za-z0-9._-]{0,159}$/;
-const PROFILE=/^[A-Za-z][A-Za-z0-9-]{0,45}$/;
 const VERBS=['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS'];
 const CONFIG='org.eclipse.microprofile.config.inject.ConfigProperty';
-const MAPPING='io.smallrye.config.ConfigMapping';
 const byName=(items,name) => items.find(item => item.name === name);
 const normalized=text => text.replace(/\r\n/g,'\n');
-const kebab=value => value.replace(/([a-z0-9])([A-Z])/g,'$1-$2').toLowerCase();
 
 function quarkusMavenProject(project) {
   if (project.tool !== 'maven') throw fail('Choose an imported Maven Quarkus application.');
@@ -89,9 +86,9 @@ function profileKey(text) {
 }
 
 function modelQuarkus(sources,properties) {
-  const configuration=[],endpoints=[],templates=[],issues=[];
-  for (const source of sources) {
-    const file={...source,text:normalized(source.text)}, parsed=parseJavaFile(file);
+  const parsedFiles=sources.map(source=>parseJavaFile({...source,text:normalized(source.text)},{nestedTypes:true}));
+  const {configuration,issues}=analyzeConfigMappings(parsedFiles),endpoints=[],templates=[];
+  for (const file of parsedFiles) {
     const sourceOf = member => ({uri:file.uri,range:rangeAt(file.text,member.start,member.end)});
     const register = (member,annotated) => {
       const key=literal(annotated,'name');
@@ -102,25 +99,7 @@ function modelQuarkus(sources,properties) {
       configuration.push({kind:'configProperty',key,type:member.type.raw,hasDefault:annotated.attributes.defaultValue!==undefined,
         source:sourceOf(member)});
     };
-    for (const type of parsed.types) {
-      const mapping=byName(type.annotations,MAPPING);
-      if (mapping && type.kind === 'interface') {
-        const prefix=literal(mapping,'prefix','');
-        if (typeof prefix !== 'string' || prefix && !PROPERTY.test(prefix) || mapping.attributes.namingStrategy) {
-          issues.push({message:'ConfigMapping needs a literal prefix and default naming strategy.',source:sourceOf(type)});
-        } else for (const method of type.methods) {
-          if (method.parameters.length || type.methods.some(item =>
-            item !== method && item.name === method.name) ||
-            byName(method.annotations,'io.smallrye.config.WithParentName')) continue;
-          const named=byName(method.annotations,'io.smallrye.config.WithName');
-          const standardName=/^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]+)*$/.test(method.name) ? kebab(method.name) : undefined;
-          const suffix=literal(named,'value',named ? undefined : standardName);
-          if (typeof suffix !== 'string' || !PROPERTY.test(suffix) ||
-              !/^(?:boolean|byte|short|int|long|float|double|String|java\.lang\.String|Boolean|Integer|Long|Double)$/.test(method.type.raw)) continue;
-          configuration.push({kind:'configMapping',key:prefix ? prefix+'.'+suffix : suffix,type:method.type.raw,
-            hasDefault:Boolean(byName(method.annotations,'io.smallrye.config.WithDefault')),source:sourceOf(method)});
-        }
-      }
+    for (const type of file.types) {
       for (const field of type.fields) {
         const property=byName(field.annotations,CONFIG);
         if (property) register(field,property);
@@ -145,10 +124,13 @@ function modelQuarkus(sources,properties) {
       }
     }
   }
-  const configured=properties ? parseProperties({...properties,text:normalized(properties.text)}).entries.flatMap(item => {
+  const files=properties?(Array.isArray(properties)?properties:[properties]):[];
+  const configured=[];
+  for(const file of files)for(const item of parseProperties({...file,text:normalized(file.text)}).entries){
     const name=profileKey(item.key);
-    return name ? [{...name,uri:item.uri,range:item.range}] : [];
-  }) : [];
+    if(name) configured.push({...name,profile:name.profile||file.profile||'',uri:item.uri,range:item.range});
+    if(configured.length>10000)throw fail('Quarkus profile sources exceed their property count limit.');
+  }
   return {configuration:configuration.sort((a,b) => a.key.localeCompare(b.key)),configured,endpoints,templates,issues};
 }
 
@@ -183,8 +165,22 @@ function inspectQuarkusProject(project,cancellation) {
     } finally { handle.closeSync(); }
   }
   if (fs.existsSync(base)) walk(base,0);
-  const properties=fs.existsSync(propertiesFile)
-    ? {uri:pathToFileURL(propertiesFile).href,text:readPhysical(propertiesFile)} : undefined;
+  const resources=path.dirname(propertiesFile), properties=[];
+  if (fs.existsSync(resources)) {
+    if(path.relative(resources,fs.realpathSync(resources)))throw fail('Quarkus resources must be a physical project directory.');
+    const handle=fs.opendirSync(resources);
+    try{
+      for(let item;(item=handle.readSync())!==null;){
+        if(++entries>10000||cancelled(cancellation))throw fail('Quarkus source inspection exceeded its directory limit or was cancelled.');
+        const profile=profileFile(item.name);
+        if(profile===null)continue;
+        if(properties.length>=16)throw fail('Inspect at most 16 Quarkus application properties files.');
+        const file=path.join(resources,item.name);
+        properties.push({uri:pathToFileURL(file).href,text:readPhysical(file),profile});
+      }
+    }finally{handle.closeSync();}
+    properties.sort((left,right)=>left.profile.localeCompare(right.profile));
+  }
   const report=modelQuarkus(sources,properties);
   for (const template of report.templates) {
     const file=path.join(root,'src/main/resources/templates',template.name);

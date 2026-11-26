@@ -8,6 +8,7 @@ const {normalizeFeignContracts}=require('../spring/feign-contract-trace');
 const { attributeTarget, attributeBindingReport } = require('./attribute-binding');
 const { factoryId: graphFactoryId, graphRegistry } = require('./entity-graphs');
 const { normalizePersistenceContexts } = require('./persistence-contexts');
+const { normalizeQuarkusConfigOrigins } = require('../java/quarkus-config-origin');
 const { normalizeObservedInjection } = require('../spring/observed-injection');
 const { normalizeTransactionTrace } = require('./transaction-trace');
 
@@ -189,6 +190,11 @@ class ObserverClient {
     const payload=await this.#request('security-trace');
     try {return normalizeSecurityTrace(payload);}
     catch {throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Spring Security trace metadata.');}
+  }
+  async quarkusConfigOrigins() {
+    const payload=await this.#request('quarkus-config-origins');
+    try { return normalizeQuarkusConfigOrigins(payload); }
+    catch { throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Quarkus configuration origin evidence.'); }
   }
   async reactiveSecurityTrace() {
     const payload = await this.#request('reactive-security-trace');

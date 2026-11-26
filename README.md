@@ -116,6 +116,10 @@ Spring Boot 설정 파일에서 현재 모듈의 생성 메타데이터로 설�
 
 Windows에서 Gradle 사용자 홈 경로에 한글 등 비ASCII 문자가 있으면 Gradle 9.7 이상을 사용합니다. `rocketbrain.java.gradleHome`에는 독립 Gradle 배포판을 지정합니다. Quarkus 3.40.1.2와 Gradle 9.7.1에서 빌드·테스트·개발 모드 및 fast-jar 디버깅을 검증했습니다. [Gradle 워커 경로 인코딩 수정](https://github.com/gradle/gradle/issues/30304)
 
+Quarkus 설정 탐색은 중첩 `ConfigMapping` 인터페이스와 다른 소스 파일의 그룹을 따라갑니다. `application.properties` 및 `application-<profile>.properties`에서 지원되는 스칼라와 `Optional` 키를 완성하고 정확한 Java 메서드로 이동할 수 있습니다. `@WithName`과 그룹의 `@WithParentName`을 키 경로에 반영합니다. [Quarkus ConfigMapping](https://quarkus.io/guides/config-mappings/)
+
+**Inspect Quarkus Config Origins**에서 실제 활성 프로필과 설정 출처를 확인할 수 있습니다. **Prepare Local JVM Observer**에서 생성한 설정에 확인할 키를 최대 24개까지 `quarkusConfigOriginKeys`로 적고, 표시된 JVM 인자를 사용해 Quarkus 앱을 다시 시작한 뒤 **Connect Local JVM Observer**로 연결합니다. 실행 중 SmallRye가 처리한 조회에서 출처 종류, 우선순위, 알려진 파일명과 줄 번호를 기록합니다. 설정 값에 접근하지 않으며 출처의 전체 경로는 저장하지 않습니다. 편집기에서 정의로 이동하려면 저장된 소스에서 고유한 선언이 확인되어야 합니다. [SmallRye ConfigValue 메타데이터](https://smallrye.io/smallrye-config/Main/config/config-value/)
+
 ### Jakarta WAR 배포
 
 독립 Apache Tomcat 11 설치 경로를 사용자 설정 `rocketbrain.java.jakarta.tomcatHome`에 지정합니다. Java Projects로 가져온 Maven WAR 모듈에서 **Build Jakarta WAR**를 실행한 뒤 **Deploy Jakarta WAR to Tomcat**으로 `target`의 WAR와 컨텍스트 이름을 선택합니다. **Show Jakarta Deployment**에서 로컬 주소와 출력을 확인하고 **Stop Jakarta Deployment**로 서버를 종료합니다.

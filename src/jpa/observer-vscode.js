@@ -13,14 +13,15 @@ const {registerSecurityTrace} = require('../spring/security-trace-vscode');
 const {registerTransactionTrace} = require('./transaction-trace-vscode');
 const {registerReactiveSecurityTrace} = require('../spring/reactive-security-trace-vscode');
 const {registerFeignContracts}=require('../spring/feign-contract-trace-vscode');
+const {registerQuarkusConfigOrigins}=require('../java/quarkus-config-origin-vscode');
 
 function registerObserver(context,vscode,output,{source}) {
   const events = new vscode.EventEmitter(), subscriptions=[events];
-  let current=emptySnapshot(), client, generation=0, snapshotRequest=0, validationRequest=0, disposed=false, consoleView,securityView,reactiveSecurityView,feignView,transactionView;
+  let current=emptySnapshot(), client, generation=0, snapshotRequest=0, validationRequest=0, disposed=false, consoleView,securityView,reactiveSecurityView,feignView,transactionView,quarkusView;
   const snapshot=()=>structuredClone(current);
   const performance=()=>summarizePerformance(current.performance);
   const emit=()=>{if(!disposed)events.fire(snapshot());};
-  function clearViews(){consoleView?.clear();securityView?.close();reactiveSecurityView?.close();feignView?.close();transactionView?.close();}
+  function clearViews(){consoleView?.clear();securityView?.close();reactiveSecurityView?.close();feignView?.close();transactionView?.close();quarkusView?.close();}
   function disconnect(){generation++;snapshotRequest++;client?.dispose();clearViews();client=undefined;current=emptySnapshot();emit();return snapshot();}
   function trusted(){if(disposed)throw new ObserverError('DISPOSED','Observer is closed.');if(!vscode.workspace.isTrusted){disconnect();throw new ObserverError('UNTRUSTED','Trust the workspace before connecting to a provider observer.');}}
   async function inputs(){
@@ -356,6 +357,15 @@ function registerObserver(context,vscode,output,{source}) {
   reactiveSecurityView=registerReactiveSecurityTrace(vscode,observerViewOptions);
   feignView=registerFeignContracts(vscode,observerViewOptions);
   transactionView=registerTransactionTrace(vscode,observerViewOptions);
+  quarkusView=registerQuarkusConfigOrigins(vscode,{command,target(){
+    const connection=observerViewOptions.target(), processId=current.processId;
+    return {assertCurrent:connection.assertCurrent,client:{async quarkusConfigOrigins(){
+      const report=await connection.client.quarkusConfigOrigins();
+      connection.assertCurrent();
+      if(report.processId!==processId)throw new ObserverError('STALE','The Quarkus JVM changed. Reconnect before inspecting configuration origins.');
+      return report;
+    }}};
+  }});
   command('rocketbrain.jpa.observer.connect',()=>connect());command('rocketbrain.jpa.observer.refresh',refresh);command('rocketbrain.jpa.observer.disconnect',disconnect);command('rocketbrain.jpa.observer.validate',validateSelection);
   command('rocketbrain.jpa.observer.inspect',async()=>{const report={snapshot:snapshot(),comparison:await compareSource()};const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(report,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return report;});
   command('rocketbrain.jpa.observer.inspectPerformance',inspectPerformance);

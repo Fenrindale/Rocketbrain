@@ -123,8 +123,8 @@ function parameters(tokens, info) {
     return { name: name.text, type: typeRef(rest.slice(0, -1), info), annotations, start: name.start, end: name.end, declarationStart:part[0].start };
   }).filter(Boolean);
 }
-function parseMembers(tokens, start, end, type, info, issues) {
-  const fields = [], methods = []; let i = start;
+function parseMembers(tokens, start, end, type, info, issues, collectNested) {
+  const fields = [], methods = [], nested = []; let i = start;
   while (i < end) {
     if (tokens[i].text === ';') { i++; continue; }
     const annotations = [];
@@ -132,7 +132,17 @@ function parseMembers(tokens, start, end, type, info, issues) {
     const headerStart = i;
     let cursor = i, delimiter;
     while (cursor < end) {
-      if (['class', 'record', 'interface', 'enum'].includes(tokens[cursor].text)) { issues.push('Nested types are excluded from the Spring model'); const body = tokens.findIndex((token, index) => index > cursor && token.text === '{'); i = body >= 0 ? matching(tokens, body) + 1 : end; delimiter = 'nested'; break; }
+      if (['class', 'record', 'interface', 'enum'].includes(tokens[cursor].text)) {
+        const body = tokens.findIndex((token, index) => index > cursor && token.text === '{');
+        const close = body >= 0 ? matching(tokens, body) : -1;
+        if (collectNested && close > cursor && close < end) {
+          const item = collectNested(cursor, annotations, close);
+          if (item) nested.push(item);
+        } else if (!collectNested) issues.push('Nested types are excluded from the Spring model');
+        i = close > cursor && close < end ? close + 1 : end;
+        delimiter = 'nested';
+        break;
+      }
       if (['(', ';', '{', '='].includes(tokens[cursor].text)) { delimiter = tokens[cursor].text; break; }
       cursor++;
     }
@@ -160,13 +170,47 @@ function parseMembers(tokens, start, end, type, info, issues) {
     }
     if (i <= headerStart) break;
   }
-  return { fields, methods };
+  return { fields, methods, ...(collectNested ? { nested } : {}) };
 }
-function parseJavaFile(file) { return parseJavaTokens(file,lexJava(file.text)); }
+function parseJavaFile(file, options) { return parseJavaTokens(file,lexJava(file.text),options); }
 
-function parseJavaTokens(file, lexical) {
+function parseJavaTokens(file, lexical, { nestedTypes = false } = {}) {
   const { tokens } = lexical, issues = [...lexical.issues];
   const info = { packageName: '', imports: {}, wildcards: [] }, types = [];
+  function declaration(at, annotations, owner, depth, expectedClose) {
+    const token=tokens[at], name=tokens[at+1];
+    if (name?.kind!=='id') return;
+    let open=at+2;
+    while (open<tokens.length&&tokens[open].text!=='{') open++;
+    const close=matching(tokens,open);
+    if (close<0 || expectedClose!==undefined&&close!==expectedClose) { issues.push('Unbalanced type body'); return; }
+    const fqn=(owner?owner+'.':info.packageName?info.packageName+'.':'')+name.text;
+    const type={name:name.text,fqn,kind:token.text,annotations,start:name.start,end:name.end,uri:file.uri,
+      range:rangeAt(file.text,name.start,name.end),superTypes:[],...(owner?{owner}:{} )};
+    const header=tokens.slice(at+2,open);
+    let section=[], inheritance=false;
+    for (const part of header) {
+      if (part.text==='extends'||part.text==='implements') {
+        if (inheritance&&section.length) type.superTypes.push(...splitTop(section).map(value=>typeRef(value,info).name));
+        section=[];inheritance=true;
+      } else if (part.text==='permits') {
+        if (inheritance&&section.length) type.superTypes.push(...splitTop(section).map(value=>typeRef(value,info).name));
+        section=[];inheritance=false;
+      } else if (inheritance) section.push(part);
+    }
+    if (section.length&&inheritance) type.superTypes.push(...splitTop(section).map(value=>typeRef(value,info).name));
+    if (header[0]?.text==='<') {
+      issues.push('Generic type specialization is not modeled');
+      if (nestedTypes) type.generic=true;
+    }
+    const children=nestedTypes?(index,annotations,last)=>{
+      if (depth>=12) { issues.push('Nested type depth exceeds its source limit');return; }
+      return declaration(index,annotations,fqn,depth+1,last)?.type;
+    }:undefined;
+    Object.assign(type,parseMembers(tokens,open+1,close,type,info,issues,children));
+    if (token.text==='record') issues.push('Record constructor/property binding is not analyzed');
+    return {type,close};
+  }
   let i = 0, pending = [];
   while (i < tokens.length) {
     const token = tokens[i];
@@ -179,16 +223,9 @@ function parseJavaTokens(file, lexical) {
     }
     if (token.text === '@') { const item = parseAnnotation(tokens, i, info); if (item) { pending.push(item); i = item.next; continue; } }
     if (['class', 'interface', 'record', 'enum'].includes(token.text) && tokens[i + 1]?.kind === 'id') {
-      const name = tokens[i + 1]; let open = i + 2; while (open < tokens.length && tokens[open].text !== '{') open++;
-      const close = matching(tokens, open); if (close < 0) { issues.push('Unbalanced type body'); break; }
-      const type = { name: name.text, fqn: (info.packageName ? info.packageName + '.' : '') + name.text, kind: token.text, annotations: pending, start: name.start, end: name.end, uri: file.uri, range: rangeAt(file.text, name.start, name.end), superTypes: [] };
-      const header = tokens.slice(i + 2, open); let section = [], inheritance = false;
-      for (const part of header) { if (part.text === 'extends' || part.text === 'implements') { if (inheritance && section.length) type.superTypes.push(...splitTop(section).map(value => typeRef(value, info).name)); section = []; inheritance = true; } else if (part.text === 'permits') { if (inheritance && section.length) type.superTypes.push(...splitTop(section).map(value => typeRef(value, info).name)); section = []; inheritance = false; } else if (inheritance) section.push(part); }
-      if (section.length && inheritance) type.superTypes.push(...splitTop(section).map(value => typeRef(value, info).name));
-      if (header[0]?.text === '<') issues.push('Generic type specialization is not modeled');
-      const members = parseMembers(tokens, open + 1, close, type, info, issues); Object.assign(type, members);
-      if (token.text === 'record') issues.push('Record constructor/property binding is not analyzed');
-      types.push(type); pending = []; i = close + 1; continue;
+      const read=declaration(i,pending,undefined,0);
+      if (!read) break;
+      types.push(read.type); pending=[]; i=read.close+1; continue;
     }
     if (!MODIFIERS.has(token.text)) pending = [];
     i++;
