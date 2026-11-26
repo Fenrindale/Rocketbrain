@@ -16,6 +16,7 @@ const hooks = Object.freeze({
   privateGenericReference: Object.freeze(["java-signature-references-host", "runJavaSignatureReferenceChecks"]),
   kotlinJsDebug: Object.freeze(["kmp-js-debug-host", "runKmpJsDebugChecks"]),
   tomcatRestore: Object.freeze(["jakarta-manager-host", "runJakartaManagerChecks"]),
+  quarkusInterceptors: Object.freeze(["quarkus-interceptors-host", "runQuarkusInterceptorsChecks"]),
   contextActions: Object.freeze(["context-actions-host", "runContextActionsChecks"]),
   groovyDynamic: Object.freeze(["groovy-static-members-host", "runGroovyStaticMemberChecks"])
 });
