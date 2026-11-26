@@ -1,8 +1,8 @@
 'use strict';
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { independentJavaExecutable, argumentString, launchCommandMode, KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILD,
-  GROOVY_LINE_BUILD } = require('./debug-runtime');
+const { independentJavaExecutable, argumentString, launchCommandMode, KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILDS,
+  GROOVY_LINE_BUILDS } = require('./debug-runtime');
 const { applyManagedSpringLaunch } = require('./spring-launch');
 const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
@@ -67,7 +67,7 @@ function registerJavaDebugger(vscode, api, output, request) {
   function registerSourceLines(token, target, evidence, groovy) {
     ensureTrusted();
     const build = api.getState().debugBuild;
-    if (!(groovy ? build===GROOVY_LINE_BUILD : KOTLIN_LINE_BUILDS.includes(build)) ||
+    if (!(groovy ? GROOVY_LINE_BUILDS : KOTLIN_LINE_BUILDS).includes(build) ||
         evidence?.format!==(groovy ? 'RocketbrainGroovySourceLines1' : 'RocketbrainKmpSourceLines1') ||
         pendingKotlinLines.has(token) || pendingKotlinLines.size>=8) {
       throw Error('A current managed source-line debugger is required.');
@@ -196,14 +196,14 @@ function registerJavaDebugger(vscode, api, output, request) {
     const marker=session.configuration[isGroovy ? GROOVY_DEBUG_MARKER : KMP_DEBUG_MARKER];
     const owned=pendingKotlinLines.get(marker);
     const evidence=owned && owned.groovy===isGroovy &&
-      (isGroovy ? info.debugBuild===GROOVY_LINE_BUILD : KOTLIN_LINE_BUILDS.includes(info.debugBuild)) && info.verifiedPid===owned.target.pid &&
+      (isGroovy ? GROOVY_LINE_BUILDS : KOTLIN_LINE_BUILDS).includes(info.debugBuild) && info.verifiedPid===owned.target.pid &&
       session.configuration.hostName===owned.target.hostName && session.configuration.port===owned.target.port ? owned.evidence : undefined;
     if (evidence) pendingKotlinLines.delete(marker);
     const adapter = new JavaDebugAdapter(vscode, port, message => observe(session, message), output, message => {
       if (message.type !== 'request') return;
       if (resumeCommands.has(message.command)) { info.stopVersion++; info.resuming = message.seq; }
       if (message.command === 'redefineClasses') info.stopVersion++;
-    },evidence,[KOTLIN_FIELD_VALUES_BUILD,GROOVY_LINE_BUILD].includes(info.debugBuild) && Number.isInteger(info.verifiedPid) &&
+    },evidence,KOTLIN_FIELD_VALUES_BUILDS.includes(info.debugBuild) && Number.isInteger(info.verifiedPid) &&
       session.configuration.hostName==='127.0.0.1' ? session.configuration.port : undefined,
       evidence ? owned.target.port : undefined);
     return new vscode.DebugAdapterInlineImplementation(adapter);

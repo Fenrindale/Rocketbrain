@@ -12,7 +12,7 @@ const { readLifecycleXml, resourceEntry, selfContainedJarIndex } = require('../s
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { headlessHost } = require('./helpers/java-signature-jdt-host');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
-const { xml, bean, config, owner, entry, beanPath, configPath, markers, populateResourceLifecycle, jarResource, createJar,
+const { xml, inheritedXml, bean, config, owner, entry, beanPath, configPath, markers, populateResourceLifecycle, jarResource, createJar,
   runXmlLifecycle, assertXmlCallback, position, maven } = require('./helpers/spring-xml-lifecycle-fixture');
 
 const javaConfig = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
@@ -51,6 +51,23 @@ test('archived Spring XML reads exact literal callback ranges and rejects dynami
   ]) assert.throws(() => readLifecycleXml(Buffer.from(candidate), owner), /unsupported-xml/u, candidate);
 });
 
+test('Spring XML resolves same-document abstract parents and preserves exact overridden callback provenance', () => {
+  const callbacks = readLifecycleXml(Buffer.from(inheritedXml), owner);
+  assert.deepEqual(callbacks.map(({ id, declaredOn, name, templateOnly }) => [id, declaredOn, name, templateOnly]), [
+    ['externalXmlBean', 'lifecycleBase', markers.init, undefined],
+    ['externalXmlBean', 'lifecycleChild', markers.inheritedDestroy, undefined],
+    ['lifecycleBase', undefined, markers.destroy, true]
+  ]);
+  for (const candidate of [
+    inheritedXml.replace('parent="lifecycleBase"', 'parent="missingParent"'),
+    inheritedXml.replace('abstract="true" class=', 'abstract="true" parent="lifecycleChild" class='),
+    inheritedXml.replace('parent="lifecycleBase"', 'parent="lifecycle&#66;ase"'),
+    inheritedXml.replace('abstract="true"', 'abstract="${abstractTemplate}"'),
+    inheritedXml.replace('destroy-method="' + markers.inheritedDestroy + '"', 'destroy-method=""'),
+    inheritedXml.replace('parent="lifecycleChild"', 'parent="lifecycleChild" class="fixture.other.CompetingBean"')
+  ]) assert.throws(() => readLifecycleXml(Buffer.from(candidate), owner), /unsupported-xml/u, candidate);
+});
+
 test('legacy JAR index metadata may name the same archive only', () => {
   const file = path.join('fixtures', 'driver.jar');
   const current = 'JarIndex-Version: 1.0\n\ndriver.jar\ncom\ncom/vendor\n';
@@ -61,7 +78,7 @@ test('legacy JAR index metadata may name the same archive only', () => {
   }
 });
 
-test('actual Safe Delete proves private init/destroy callbacks from an imported JAR XML and keeps Spring JDBC behavior', {
+test('actual Safe Delete proves inherited private callbacks from an imported JAR XML and keeps Spring JDBC behavior', {
   skip: !javaConfig || !mavenHome || !engines.every(([, file]) => file), timeout: 320000
 }, async context => {
   const parent = await fs.realpath(os.tmpdir());
@@ -80,9 +97,9 @@ test('actual Safe Delete proves private init/destroy callbacks from an imported 
     assert.match(path.basename(real), /^rb-xml-lifecycle-/u);
     await fs.rm(real, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
   });
-  const fixture = await populateResourceLifecycle(root, path.join(owned, 'aux'), tools, { addEclipse: true });
+  const fixture = await populateResourceLifecycle(root, path.join(owned, 'aux'), tools, { addEclipse: true, resource: inheritedXml });
   const databases = await Promise.all(engines.map(async ([engine, file]) => [engine, await read(file)]));
-  const runBoth = () => Promise.all(databases.map(([engine, database]) => runXmlLifecycle(fixture, tools, database, engine)));
+  const runBoth = () => Promise.all(databases.map(([engine, database]) => runXmlLifecycle(fixture, tools, database, engine, '42:7:777')));
   const before = await runBoth();
   const settings = serverSettings([{ name: 'JavaSE-25', path: tools.javaHome, default: true }]);
   settings.java.autobuild.enabled = false;
@@ -118,11 +135,16 @@ test('actual Safe Delete proves private init/destroy callbacks from an imported 
   const inspect = async name => (await safeDelete.inspect(document, position(document, name))).springAnalysis;
   const prepare = name => safeDelete.prepare(document, position(document, name));
   const inspected = [
-    assertXmlCallback(await inspect(markers.init), markers.init, 'init-method'),
-    assertXmlCallback(await inspect(markers.destroy), markers.destroy, 'destroy-method')
+    assertXmlCallback(await inspect(markers.init), markers.init, 'init-method', inheritedXml),
+    assertXmlCallback(await inspect(markers.inheritedDestroy), markers.inheritedDestroy, 'destroy-method', inheritedXml),
+    assertXmlCallback(await inspect(markers.destroy), markers.destroy, 'destroy-method', inheritedXml)
   ];
+  assert.deepEqual(inspected.slice(0, 2).map(({ beanId, declaredOn }) => [beanId, declaredOn]),
+    [['externalXmlBean', 'lifecycleBase'], ['externalXmlBean', 'lifecycleChild']]);
+  assert.equal(inspected[2].templateOnly, true);
   await assert.rejects(prepare(markers.init), error => error.code === 'ROCKETBRAIN_SAFE_DELETE_CONFLICT' &&
     error.springAnalysis.conflicts.some(item => item.kind === 'spring.binary-xml-lifecycle'));
+  await assert.rejects(prepare(markers.inheritedDestroy), { code: 'ROCKETBRAIN_SAFE_DELETE_CONFLICT' });
   assert.equal(document.getText(), bean);
   assert.equal(host.submitted.length, 0);
 
@@ -140,7 +162,7 @@ test('actual Safe Delete proves private init/destroy callbacks from an imported 
 
   const original = await fs.readFile(fixture.archive);
   try {
-    await jarResource(fixture, tools, xml.replace('</beans>', '<import resource="more.xml"/></beans>'));
+    await jarResource(fixture, tools, inheritedXml.replace('</beans>', '<import resource="more.xml"/></beans>'));
     refused = await inspect(markers.helper);
     assert.equal(refused.verdict, 'unknown');
     assert.equal(refused.binaryResourceLifecycle.reason, 'no-reviewed-resource');

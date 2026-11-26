@@ -55,7 +55,7 @@ function smartStepFixture(base) {
   };
 }
 
-async function exerciseSmartStep({ fixture, service, session, first, proceed, frame }) {
+async function exerciseSmartStep({ fixture, service, session, first, proceed, frame, choose }) {
   assert.equal((await frame(first)).line, fixture.line('TARGET_GATE'));
   const selection = await service.inspect(session);
   const integer = selection.targets.find(item => item.label === 'choose(4)');
@@ -64,11 +64,11 @@ async function exerciseSmartStep({ fixture, service, session, first, proceed, fr
   assert.notEqual(integer.id, string.id);
   assert.ok(integer.column < string.column);
   await assert.rejects(service.step({ ...selection }, string.id), /current Java step list/);
-  let stopped = await proceed(() => service.step(selection, string.id));
+  let stopped = await proceed(() => choose ? choose() : service.step(selection, string.id));
   let actual = await frame(stopped);
   assert.match(actual.name, /\.choose\(String\)$/);
   assert.equal(actual.line, fixture.line('STRING_METHOD'));
-  await assert.rejects(service.step(selection, integer.id), /current Java step list/);
+  await assert.rejects(service.step(selection, integer.id), choose ? /different position/ : /current Java step list/);
   const selected = { label: string.label, frame: actual.name.split('.').at(-1), line: actual.line };
 
   const skipped = {};

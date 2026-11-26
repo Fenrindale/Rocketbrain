@@ -11,13 +11,14 @@ const beanPath = path.join('src', 'main', 'java', 'fixture', 'xmlhooks', 'Depend
 const configPath = path.join('src', 'main', 'java', 'fixture', 'xmlhooks', 'DependencyXmlConfig.java');
 const owner = 'fixture.xmlhooks.DependencyXmlBean';
 const entry = 'external-assets/entrypoints.xml';
-const markers = { init: 'warmFromJar', destroy: 'coolFromJar', helper: 'unreferencedLocalHelper' };
+const markers = { init: 'warmFromJar', destroy: 'coolFromJar', inheritedDestroy: 'coolThroughChild', helper: 'unreferencedLocalHelper' };
 const bean = [
   'package fixture.xmlhooks;',
   'public final class DependencyXmlBean {',
   '    private int number;',
   '    private void warmFromJar() { number += 7; }',
   '    private void coolFromJar() { number += 70; }',
+  '    private void coolThroughChild() { number += 770; }',
   '    private void unreferencedLocalHelper() { number += 700; }',
   '    public int value() { return number; }',
   '}', ''
@@ -40,6 +41,9 @@ const xml = [
   '          init-method="' + markers.init + '" destroy-method="' + markers.destroy + '" />',
   '</beans>', ''
 ].join('\n');
+const inheritedXml = xml.replace('<bean id="externalXmlBean" class=', '<bean id="externalXmlBean" parent="lifecycleChild" />\n' +
+  '    <bean id="lifecycleChild" abstract="true" parent="lifecycleBase" destroy-method="' + markers.inheritedDestroy + '" />\n' +
+  '    <bean id="lifecycleBase" abstract="true" class=');
 const probe = [
   'package fixture.xmlprobe;',
   'import fixture.xmlhooks.DependencyXmlBean;',
@@ -77,11 +81,11 @@ async function jarResource(fixture, tools, text) {
   await createJar(tools, fixture.archive, fixture.assetRoot, entry);
 }
 
-async function populateResourceLifecycle(root, auxiliary, tools, { addEclipse = false } = {}) {
+async function populateResourceLifecycle(root, auxiliary, tools, { addEclipse = false, resource = xml } = {}) {
   const fixture = { root, auxiliary, assetRoot: path.join(auxiliary, 'archive-content'), archive: path.join(root, 'lib', 'xml-entrypoints.jar') };
   await Promise.all(['.mvn', 'lib', path.dirname(beanPath), 'bin'].map(dir => fs.mkdir(path.join(root, dir), { recursive: true })));
   await fs.mkdir(path.join(fixture.assetRoot, path.dirname(entry)), { recursive: true });
-  await jarResource(fixture, tools, xml);
+  await jarResource(fixture, tools, resource);
   const pom = [
     '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>',
     '<groupId>fixture</groupId><artifactId>' + path.basename(root) + '</artifactId><version>1</version>',
@@ -120,16 +124,16 @@ async function populateResourceLifecycle(root, auxiliary, tools, { addEclipse = 
   return fixture;
 }
 
-async function runXmlLifecycle(fixture, tools, database, engine) {
+async function runXmlLifecycle(fixture, tools, database, engine, expected = '42:7:77') {
   const compiled = await fs.mkdtemp(path.join(fixture.auxiliary, 'probe-classes-'));
   const result = await runJavaFixture({ javaHome: tools.javaHome, file: path.join(fixture.auxiliary, 'ExternalXmlProbe.java'),
     binaryDirectory: compiled, className: 'fixture.xmlprobe.ExternalXmlProbe', config: database, engine, jdbcPrefix: 'RB_XML_LIFECYCLE',
     classpath: [path.join(fixture.root, 'target', 'classes'), fixture.archive, ...fixture.dependencies] });
-  assert.equal(result.output, '42:7:77');
+  assert.equal(result.output, expected);
   return result;
 }
 
-function assertXmlCallback(report, name, attribute) {
+function assertXmlCallback(report, name, attribute, resource = xml) {
   assert.equal(report.verdict, 'blocked', JSON.stringify({
     unknowns: report.unknowns, binaryResourceLifecycle: report.binaryResourceLifecycle
   }));
@@ -145,13 +149,15 @@ function assertXmlCallback(report, name, attribute) {
   assert.equal(call.provenance.entry, entry);
   assert.match(call.provenance.archiveSha256, /^[\da-f]{64}$/u);
   assert.match(call.provenance.entrySha256, /^[\da-f]{64}$/u);
-  const line = xml.split('\n')[call.callback.range.start.line];
+  const line = resource.split('\n')[call.callback.range.start.line];
   assert.equal(line.slice(call.callback.range.start.character, call.callback.range.end.character), name);
   assert.equal(call.range.start.line, 4);
   assert.match(call.uri, /DependencyXmlConfig\.java$/u);
   return { owner, name, attribute, sourceRange: call.range, xmlRange: call.callback.range,
+    ...(call.callback.declaredOn && { beanId: call.callback.id, declaredOn: call.callback.declaredOn }),
+    ...(call.callback.templateOnly && { templateOnly: true }),
     signature: call.signature, entry, archiveSha256: call.provenance.archiveSha256, entrySha256: call.provenance.entrySha256 };
 }
 
-module.exports = { bean, config, xml, owner, entry, beanPath, configPath, markers, populateResourceLifecycle,
+module.exports = { bean, config, xml, inheritedXml, owner, entry, beanPath, configPath, markers, populateResourceLifecycle,
   runXmlLifecycle, jarResource, createJar, assertXmlCallback, position, maven };

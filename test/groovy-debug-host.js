@@ -16,7 +16,7 @@ const { withOwnedDatabase } = require('./micronaut-gradle-host');
 const { createGroovyApplicationDebugger } = require('../src/java/groovy-debug-vscode');
 const { createDebugProcessDiscovery } = require('../src/java/debug-processes');
 const { GROOVY_DEBUG_MARKER } = require('../src/java/debug');
-const { GROOVY_LINE_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
+const { GROOVY_LINE_BUILDS, resolveDebugBundle } = require('../src/java/debug-runtime');
 const { collectProjects, inside } = require('../src/java/workbench-model');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { buildSpec } = require('../src/java/workbench-tasks');
@@ -191,7 +191,7 @@ async function runHeadless(fixture) {
   const gradleHome=await fs.realpath(process.env.ROCKETBRAIN_GROOVY_DEBUG_GRADLE_HOME);
   const { javaHome }=runtime;
   const bundle=resolveDebugBundle(runtime.debugBundlePath,runtime.serverPath);
-  assert.equal(bundle.build,GROOVY_LINE_BUILD);
+  assert.ok(GROOVY_LINE_BUILDS.includes(bundle.build));
   await fs.appendFile(path.join(fixture.root,'build.gradle'),"\napply plugin: 'eclipse'\n");
   const projectDir={ root:fixture.root,uri:fixture.projectUri,name:'Owned Groovy app',tool:'gradle' };
   const eclipse=buildSpec(projectDir,{ javaHome,gradleHome },[':eclipse']);

@@ -18,6 +18,8 @@ An independent VS Code workbench for Java/Spring and MySQL/MariaDB. Support is d
 
 **Search Everywhere**는 파일, 워크스페이스 기호, 명령, 설정 키와 로컬 Git 브랜치·커밋을 함께 검색합니다. `#`, `>`, `@`, `%`는 각각 기호, 명령, 설정, Git으로 좁히고 `$`는 활성 MySQL·MariaDB 스키마의 객체를 검색합니다. Git 결과는 선택한 리비전을 읽기 전용으로 보여줍니다. 설정 검색에는 키와 공개 설정 설명을 사용합니다.
 
+**Keyboard Profile**에서 Java·Spring, SQL·결과 화면, 디버거, Git 단축키 52개와 확인 가능한 충돌을 검토합니다. 적용할 항목은 내보낸 JSONC에서 골라 VS Code 사용자 단축키에 직접 추가합니다. [Context Actions와 키보드 프로필](docs/context-actions.md#keyboard-profile)
+
 **Java Projects**에서 관찰된 main·test·생성 소스와 각각의 빌드 출력 위치를 봅니다. 다른 프로젝트의 출력으로 확인된 의존성 항목을 열면 그 프로젝트로 이동합니다.
 **Discover Build Tasks**는 열린 작업 영역에 있는 Gradle 포함 빌드의 작업을 전체 경로(예: `:library:service:classes`)로 표시합니다. Groovy 및 Kotlin DSL의 실제 작업 모델을 읽으며, 검토한 설정·빌드 파일이 바뀌면 다시 검색한 뒤 작업을 실행해야 합니다.
 
@@ -43,6 +45,8 @@ pnpm run package
 1. 신뢰하는 Java 프로젝트를 엽니다.
 2. 명령 팔레트에서 **Rocketbrain: Install and Configure Independent Java Engine**을 실행합니다. 고정된 공개 구성요소의 출처와 체크섬을 확인하고 확장 전용 폴더에 설치합니다. 현재 설치 도구는 Eclipse JDT LS 1.63.0과 독립 Temurin JDK 25 계열을 사용합니다.
 3. **Java Projects**에서 가져온 소스 루트·패키지·라이브러리를 확인합니다. Maven 작업에는 별도 Maven 설치와 `rocketbrain.java.mavenHome` 설정이 필요합니다.
+
+**Review Public Java Type Rename**은 공개 Java 클래스의 파일 이름과 확인된 Java 참조를 함께 바꿉니다. 가져온 단일 Gradle JVM 프로젝트에서 Kotlin 편집기를 설정하면, Kotlin의 명시적 import·타입 지정·직접 생성자 호출도 같은 검토에 표시됩니다. 이 혼합 경로는 명시적 공개 생성자 하나가 있는 비제네릭 클래스를 지원하며, Java와 Kotlin의 변경 전후 바인딩을 확인합니다.
 
 Java 중단점에서 **Restart Java Stack Frame**으로 현재 정지한 스레드의 프레임을 선택해 메서드를 다시 실행할 수 있습니다. 이미 수행된 부수 효과는 그대로 남습니다. **Inspect Java Local Value**는 지역 배열과 표준 `ArrayList`를 페이지로 보여주고, 최대 256 Ki UTF-16 단위의 문자열을 원문 그대로 표시합니다. [Java 스택 프레임과 변수 뷰어](docs/java-frame-debugging.md)
 
@@ -175,6 +179,10 @@ Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를
 **Open SSH Workspace**로 연결하면 **SSH Workspace** 트리에서 일반 파일과 디렉터리를 탐색하고 원격 파일을 편집기에서 읽을 수 있습니다. 기존 텍스트 파일을 교체하려면 파일의 **Review Local File Upload to SSH**에서 로컬 파일을 선택하고 VS Code 차이를 검토합니다. 검토 이후 원격 파일이나 로컬 파일이 바뀌면 다시 검토합니다. 파일 읽기와 교체는 2 MiB까지 지원합니다.
 
 ### Kotlin JVM 편집
+
+**Inspect Java Local Value**에서 검증된 로컬 Kotlin 프레임의 `LinkedHashMap`을 읽을 수 있습니다. 연결 순서대로 키와 값을 32개씩 표시하며, 최대 128개 항목의 맵과 두 단계의 지원되는 배열·리스트·맵을 펼쳐 볼 수 있습니다. 값은 캡처 시점의 스냅숏입니다. 코드 실행을 재개하거나 맵의 구조가 바뀌면 다시 캡처합니다.
+
+**Inspect Kotlin Object Fields**에서 검증된 로컬 JVM의 Kotlin 중단점 최상위 프레임을 열면 `Int?`, `Long?`, `Boolean?` 필드에 리터럴을 입력할 수 있습니다. Long은 `L` 접미사를 붙입니다. 변경 내용을 확인한 뒤 디버거는 JVM 표준 래퍼 객체를 만들고, 같은 프레임과 객체의 필드 값이 그대로인지 다시 확인한 다음 적용합니다. 래퍼 생성에 영향을 주는 메서드·예외 중단점이 활성화되어 있으면 리터럴 입력이 제한됩니다. v11·v12 어댑터에서는 기존의 박싱된 지역 변수 복사를 지원합니다.
 
 [MIT 라이선스의 standalone ktlsp 1.4.0-rc1](https://codeberg.org/winlogon/ktlsp/releases/tag/v1.4.0-rc1)을 압축 해제한 `server` 디렉터리를 `rocketbrain.kotlinEditor.serverHome`에 지정합니다. 독립 JDK 21 이상을 사용합니다. Gradle 프로젝트는 로컬 Kotlin 파일을 열어 시작합니다. Maven은 독립 Apache Maven 경로를 `rocketbrain.java.mavenHome`에 지정한 뒤, 단일 Maven 모듈의 `.kt` 파일에서 **Start Kotlin Language Support**를 실행합니다. 선택한 POM에서 Maven 의존성을 읽어 언어 서버에 연결합니다. Maven 리액터의 앱 모듈에 형제 모듈 의존성이 있으면 앱의 `.kt` 파일에서 **Start Kotlin Maven Reactor**를 선택합니다. 표시된 의존 모듈을 승인하면 해당 JAR을 편집 세션 전용 Maven 저장소에 빌드하고, 앱 모듈의 자동완성과 타입 진단에 사용합니다. 의존 소스나 POM이 바뀌면 다시 준비할 수 있습니다. 로컬 `.kt` 파일을 열면 값과 멤버 자동 완성, 타입 표시, 선언 이동 및 컴파일 진단을 사용할 수 있습니다. **Stop Kotlin Language Support**로 세션을 종료하고 **Show Kotlin Language Server Output**에서 서버 출력을 확인합니다.
 

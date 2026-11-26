@@ -453,7 +453,9 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,reviewReactor,startReactor,definition,references,formatting,rename,nullability,documentSymbols,selectionRanges,codeInformation,inlayHints,getState:()=>({...state}),dispose() {
+  return {start,stop,reviewReactor,startReactor,definition,references,formatting,rename,
+    beginJavaTypeRename:(document,token)=>beginProjectAnalysis(document,token,'Java type rename'),
+    nullability,documentSymbols,selectionRanges,codeInformation,inlayHints,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;

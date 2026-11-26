@@ -15,11 +15,28 @@ private class WatchTrapList(private val side: WatchSideEffect) : AbstractList<In
     override fun get(index: Int): Int = side.mutate()
 }
 
+private class WatchTrapKey(private val side: WatchSideEffect, private val nonce: Int) {
+    override fun hashCode(): Int { side.mutate(); return 31 }
+    override fun equals(other: Any?): Boolean { side.mutate(); return other === this }
+    override fun toString(): String { side.mutate(); return "opaque-" + nonce }
+}
+
+private class WatchTrapMap(private val side: WatchSideEffect) : LinkedHashMap<Any?, Any?>() {
+    override val entries: MutableSet<MutableMap.MutableEntry<Any?, Any?>>
+        get() { side.mutate(); return super.entries }
+}
+
 class WatchObject(private val side: WatchSideEffect) {
     var count = 4
     @JvmField var isOpen = true
     var exact = 9007199254740993L
     var nullable: Int? = null
+    var freshInt: Int? = null
+    var freshLong: Long? = null
+    var freshFlag: Boolean? = null
+    var freshRace: Int? = null
+    var guardedBox: Int? = null
+        set(value) { side.mutate(); field = value }
     val storedBox: Int? = 7
     val constant = 13
     var label = "original"
@@ -44,7 +61,33 @@ class WatchObject(private val side: WatchSideEffect) {
 }
 
 object KotlinWatchInspection {
-    private fun allowFixtureFieldChange(target: WatchObject) {
+    private fun observedEntries(amount: Int, side: WatchSideEffect): LinkedHashMap<Any?, Any?> {
+        // Force hash-bin tree nodes, while the public encounter order remains the same as insertion.
+        val tree = LinkedHashMap<WatchTrapKey, Int>(64)
+        for (index in 0..11) tree[WatchTrapKey(side, index)] = index
+        val map = LinkedHashMap<Any?, Any?>()
+        map["database"] = amount
+        map[null] = null
+        map["precision"] = 9007199254740999L
+        map[false] = true
+        map["unicode🙂"] = "fixture🙂"
+        val nested = ArrayList<Any?>()
+        nested.add(null)
+        nested.add(arrayOf<Any?>("label", 9007199254740997L))
+        val inside = LinkedHashMap<String, Boolean>()
+        inside["inside"] = false
+        nested.add(inside)
+        map["nested"] = nested
+        map["cycle"] = map
+        map["trap"] = WatchTrapList(side)
+        map["tree"] = tree
+        for (index in 9..74) map[index] = "key-" + index
+        // Clear only the normal application writes' known hash/equals calls before pause.
+        side.calls = 0
+        return map
+    }
+
+    private fun allowFixtureFieldChange(target: WatchObject, map: MutableMap<Any?, Any?>) {
         val signalName = System.getenv("RB_KOTLIN_TEST_FIELD_SIGNAL") ?: return
         val signal = Path.of(signalName)
         val worker = Thread {
@@ -52,6 +95,9 @@ object KotlinWatchInspection {
             var countChanged = false
             var arrayChanged = false
             var elementChanged = false
+            var boxChanged = false
+            var mapChanged = false
+            var mapValueChanged = false
             while (System.nanoTime() < deadline) {
                 if (!countChanged && Files.isRegularFile(signal)) {
                     target.count = 34
@@ -67,6 +113,21 @@ object KotlinWatchInspection {
                     target.changingHistory[1] = 23
                     elementChanged = true
                     println("Rocketbrain Kotlin array element changed by fixture")
+                }
+                if (!boxChanged && Files.isRegularFile(Path.of(signalName + ".box"))) {
+                    target.freshRace = 771
+                    boxChanged = true
+                    println("Rocketbrain Kotlin boxed field changed by fixture")
+                }
+                if (!mapValueChanged && Files.isRegularFile(Path.of(signalName + ".map-value"))) {
+                    map["database"] = 83
+                    mapValueChanged = true
+                    println("Rocketbrain Kotlin map value changed by fixture")
+                }
+                if (!mapChanged && Files.isRegularFile(Path.of(signalName + ".map"))) {
+                    map["added"] = true
+                    mapChanged = true
+                    println("Rocketbrain Kotlin map structure changed by fixture")
                 }
                 Thread.sleep(25)
             }
@@ -98,9 +159,16 @@ object KotlinWatchInspection {
             val immutable = java.util.List.of(9007199254740993L, 3L, 5L)
             val nested = arrayOf(numbers, intArrayOf(0))
             val target = WatchObject(side)
-            allowFixtureFieldChange(target)
+            val map = observedEntries(amount, side)
+            val oversized = LinkedHashMap<Int, Int>()
+            for (index in 0..128) oversized[index] = index
+            val accessOrdered = LinkedHashMap<Any?, Any?>(4, 0.75f, true)
+            val unsupported = WatchTrapMap(side)
+            val unordered = HashMap<String, Int>()
+            allowFixtureFieldChange(target, map)
             paused(amount, 9007199254740993L, caption, missing, boxed, true, side,
-                numbers, captions, mutable, singleton, immutable, nested, null, WatchTrapList(side), target, WatchObject(side), 113)
+                numbers, captions, mutable, singleton, immutable, nested, null, WatchTrapList(side), target, WatchObject(side), 113,
+                map, oversized, accessOrdered, unsupported, unordered)
             println("Rocketbrain Kotlin JDBC|" + version + "|" + amount + "|" + side.calls)
         }
     }
@@ -109,7 +177,9 @@ object KotlinWatchInspection {
     fun paused(amount: Int, large: Long, caption: String?, missing: String?, boxed: Int?, enabled: Boolean,
                side: WatchSideEffect, numbers: IntArray, captions: List<String?>, mutable: List<Int?>,
                singleton: List<Long?>, immutable: List<Long>, nested: Array<IntArray>, absentList: List<Int>?, trap: List<Int>,
-               target: WatchObject, other: WatchObject, replacementBox: Int?) {
+               target: WatchObject, other: WatchObject, replacementBox: Int?, orderedMap: Map<Any?, Any?>,
+               oversizedMap: Map<Int, Int>, accessOrderMap: Map<Any?, Any?>, customMap: Map<Any?, Any?>,
+               unorderedMap: Map<String, Int>) {
         val subtotal = amount + 2 * 3
         val precise = large + amount
         val length = caption?.length ?: 0
@@ -120,12 +190,18 @@ object KotlinWatchInspection {
         check(trap is WatchTrapList)
         check(side.calls == 0)
         check(replacementBox == 113)
+        check(oversizedMap.size == 129 && accessOrderMap.isEmpty() && customMap.isEmpty() && unorderedMap.isEmpty())
         println("Rocketbrain Kotlin Fields|" + target.count + "|" + target.isOpen + "|" + target.exact + "|" +
             target.nullable + "|" + other.count + "|" + side.calls)
         val labelBytes = target.label.toByteArray(Charsets.UTF_8).joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') }
         println("Rocketbrain Kotlin Field Values|" + labelBytes + "|" + target.optionalLabel + "|" +
             target.history[65] + "|" + target.preciseHistory[0] + "|" + target.bits[1] + "|" +
             other.label + "|" + other.history[65] + "|" + side.calls)
+        val cachedFalse: Any = false
+        println("Rocketbrain Kotlin Fresh Boxes|" + target.freshInt + "|" + target.freshLong + "|" + target.freshFlag +
+            "|" + ((target.freshFlag as Any?) !== cachedFalse) + "|" + other.freshInt + "|" + other.freshLong + "|" +
+            other.freshFlag + "|" + side.calls)
+        println("Rocketbrain Kotlin Ordered Map|" + orderedMap.size + "|" + orderedMap["database"] + "|" + side.calls)
         println("Rocketbrain Kotlin evaluated|" + subtotal + "|" + precise + "|" + length + "|" + fallback + "|" + boolean)
     }
 }

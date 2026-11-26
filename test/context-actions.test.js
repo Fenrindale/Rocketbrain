@@ -7,6 +7,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
 const { registerContextActions } = require('../src/context-actions');
+const { registerKeyboardProfile } = require('../src/keyboard-profile-vscode');
 const { registerFileStructure } = require('../src/java/file-structure-vscode');
 const { MysqlService } = require('../src/db/mysql');
 const { ResultsView } = require('../src/results');
@@ -209,6 +210,13 @@ test('Context Actions opens a JDT declaration and routes live Spring JDBC result
   const settings = serverSettings([{ name: 'JavaSE-25', path: javaHome, default: true }]);
   const rootUri = pathToFileURL(project).href;
   const h = createContextHarness(project);
+  h.vscode.extensions = { all: [h.context.extension] };
+  const keyboard = registerKeyboardProfile(h.vscode);
+  const keyboardRoute = async command => {
+    const rule = (await keyboard.inspect({platform: 'win32'})).routes.find(value => value.command === command);
+    assert.equal(rule?.available, true, command);
+    return rule.command;
+  };
   const java = { getState: () => ({ runtimeIdentity: 'owned-jdt' }), debug: { getState() {} }, async start() { return { state: 'running' }; } };
   const file = document(uri(source), 'java', fixtureSource);
   const symbols = () => lsp.request('textDocument/documentSymbol', { textDocument: { uri: file.uri.toString() } });
@@ -226,6 +234,7 @@ test('Context Actions opens a JDT declaration and routes live Spring JDBC result
     resultActionContext: () => results.actionContext()
   } });
   t.after(async () => {
+    keyboard.dispose();
     api.dispose();
     structureService.dispose();
     await lsp.close();
@@ -254,10 +263,14 @@ test('Context Actions opens a JDT declaration and routes live Spring JDBC result
   const declaration = h.vscode.window.activeTextEditor.selection.active;
   assert.equal(declaration.line, 4);
   assert.equal(h.errors.length, 0);
+  h.show(file);
+  await h.vscode.commands.executeCommand(await keyboardRoute(structure));
+  assert.equal(h.vscode.window.activeTextEditor.selection.active.line, declaration.line);
 
   const reports = [];
   h.vscode.commands.registerCommand(copy, target => results.copyResult(results.requireActionTarget(target)));
   h.vscode.commands.registerCommand(returnSource, target => results.returnToQuery(results.requireActionTarget(target).id));
+  h.vscode.commands.registerCommand('rocketbrain.focusQueryEditor', () => results.returnToQuery());
   for (const [engine, configFile] of engines) {
     const config = JSON.parse(await fs.readFile(configFile, 'utf8'));
     const spring = await runJavaFixture({ javaHome, file: source, binaryDirectory: await fs.mkdtemp(path.join(owned, 'classes-')),
@@ -293,14 +306,20 @@ test('Context Actions opens a JDT declaration and routes live Spring JDBC result
       h.show(file);
       await api.dispatch(await api.prepare('results'), returnSource);
       assert.equal(h.vscode.window.activeTextEditor.document, editor);
+      const keyboardId = await h.vscode.commands.executeCommand(await keyboardRoute(sqlCommand));
+      assert.deepEqual(results.history.find(item => item.id === keyboardId).result.rows[0].map(String), ['42', spring.server]);
+      h.show(file);
+      await h.vscode.commands.executeCommand(await keyboardRoute('rocketbrain.focusQueryEditor'));
+      assert.equal(h.vscode.window.activeTextEditor.document, editor);
       reports.push({ engine, server: spring.server, jdbcValue: Number(spring.output), liveRows: table.result.rows.length,
-        selectedCaptureCopied: true, restoredOwningSqlEditor: true });
+        selectedCaptureCopied: true, restoredOwningSqlEditor: true, keyboardRoutesRestoredOwningSqlEditor: true });
     } finally {
       await db.dispose();
     }
   }
   if (process.env.ROCKETBRAIN_CONTEXT_ACTIONS_RECEIPT) {
     await fs.writeFile(process.env.ROCKETBRAIN_CONTEXT_ACTIONS_RECEIPT, JSON.stringify({ reports, jdt: path.basename(serverPath),
-      navigatedMember: 'readAmount', sourceLine: declaration.line + 1, realVsCodeWindow: false }, null, 2) + '\n', { flag: 'wx' });
+      navigatedMember: 'readAmount', sourceLine: declaration.line + 1,
+      keyboardJavaDeclarationNavigation: true, realVsCodeWindow: false }, null, 2) + '\n', { flag: 'wx' });
   }
 });

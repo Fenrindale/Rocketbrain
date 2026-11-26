@@ -28,7 +28,8 @@ import java.util.concurrent.TimeUnit;
 final class KotlinObjectFields {
     private static final String REQUEST = "rocketbrain/kotlinObjectFields";
     private static final Set<String> INVALIDATING = Set.of("continue", "next", "stepIn", "stepOut", "restartFrame",
-        "restart", "redefineClasses", "disconnect", "terminate", "reverseContinue", "stepBack", "goto");
+        "restart", "redefineClasses", "disconnect", "terminate", "reverseContinue", "stepBack", "goto",
+        "setBreakpoints", "setFunctionBreakpoints", "setExceptionBreakpoints", "setDataBreakpoints", "setInstructionBreakpoints");
     private static final Map<String, String> PRIMITIVES = Map.of("I", "Int", "J", "Long", "Z", "Boolean");
     private static final Map<String, String> BOXES = Map.of("Ljava/lang/Integer;", "I", "Ljava/lang/Long;", "J", "Ljava/lang/Boolean;", "Z");
     private static final Map<IDebugAdapterContext, Review> REVIEWS = Collections.synchronizedMap(new WeakHashMap<>());
@@ -38,6 +39,8 @@ final class KotlinObjectFields {
     private static final int MAX_CLASS_FIELDS = 256;
 
     private KotlinObjectFields() { }
+
+    static boolean verifiedLocalAttach(IDebugAdapterContext context) { return REVIEWED_LOCAL_ATTACH.containsKey(context); }
 
     static CompletableFuture<Messages.Response> dispatch(Messages.Request request, Messages.Response response,
                                                          IDebugAdapterContext context) {
@@ -87,16 +90,18 @@ final class KotlinObjectFields {
         String receiverName = KotlinLocalAssignment.text(args, "receiver");
         Receiver receiver = receiver(frame.frame, visible(frame.frame, receiverName));
         if (receiver == null) throw invalid("Choose a visible Kotlin object local with its exact declared JVM class.");
-        if ("fields".equals(action)) return Map.of("fields", fields(frame.frame, receiver, extended));
+        if ("fields".equals(action)) return Map.of("fields", fields(frame, receiver, extended, REVIEWED_LOCAL_ATTACH.containsKey(context)));
         if ("page".equals(action)) {
             if (!extended) throw invalid("Inspect additional Kotlin field values in a verified local JVM session.");
             return page(context, args, frame, receiver);
         }
-        if (!"prepare".equals(action)) throw invalid("Review one Kotlin object field before editing it.");
+        boolean freshBox = "prepareLiteral".equals(action);
+        if (!"prepare".equals(action) && !freshBox) throw invalid("Review one Kotlin object field before editing it.");
         REVIEWS.remove(context);
         String name = KotlinLocalAssignment.text(args, "name");
         String input = KotlinLocalAssignment.text(args, "input");
         if (args.has("pageId") || args.has("index")) {
+            if (freshBox) throw invalid("Choose one writable boxed Kotlin field.");
             if (!extended) throw invalid("Edit Kotlin array elements in a verified local JVM session.");
             return prepareElement(context, args, frame, receiver, name, input);
         }
@@ -106,6 +111,16 @@ final class KotlinObjectFields {
         }
         if (!writable(receiver, field)) throw invalid("Choose a writable Kotlin scalar field with direct storage.");
         Value original = receiver.object.getValue(field);
+        if (freshBox) {
+            if (!REVIEWED_LOCAL_ATTACH.containsKey(context) || input == null || input.length() > 24) throw boxUnavailable();
+            var boxing = KotlinFieldValues.boxing(field, frame.reference.getThread(), frame.reference.getDepth());
+            if (boxing == null) throw boxUnavailable();
+            String scalar = PRIMITIVES.get(BOXES.get(field.signature()));
+            var literal = KotlinLocalAssignment.scalar(scalar, input);
+            var primitive = KotlinLocalAssignment.mirror(frame.frame.virtualMachine(), literal);
+            return review(context, frame, receiver, field, original, new Replacement(primitive, null, null, boxing), null, -1,
+                type(field), display(field, original), scalarDisplay(primitive));
+        }
         if (KotlinFieldValues.isString(field)) {
             String before = KotlinFieldValues.displayText(original);
             if (KotlinFieldValues.UNAVAILABLE_TEXT.equals(before)) throw invalid("This Kotlin String has no bounded value to review.");
@@ -134,7 +149,8 @@ final class KotlinObjectFields {
         return rows;
     }
 
-    private static List<Map<String,Object>> fields(StackFrame frame, Receiver receiver, boolean extended) throws Exception {
+    private static List<Map<String,Object>> fields(Frame selected, Receiver receiver, boolean extended, boolean verifiedAttach) throws Exception {
+        StackFrame frame = selected.frame;
         List<Field> supported = supportedFields(receiver, extended);
         var values = receiver.object.getValues(supported);
         var rows = new ArrayList<Map<String,Object>>();
@@ -167,8 +183,13 @@ final class KotlinObjectFields {
             if (boxed && canWrite) {
                 for (LocalVariable local : locals) if (boxSource(frame, field, local) != null) sources.add(local.name());
             }
-            rows.add(Map.of("name", field.name(), "type", type(field), "value", display(field, value),
+            var row = new LinkedHashMap<String,Object>(Map.of("name", field.name(), "type", type(field), "value", display(field, value),
                 "boxed", boxed, "writable", canWrite, "boxSources", sources));
+            if (boxed && canWrite && verifiedAttach &&
+                KotlinFieldValues.boxing(field, selected.reference.getThread(), selected.reference.getDepth()) != null) {
+                row.put("boxLiteral", true);
+            }
+            rows.add(row);
         }
         return rows;
     }
@@ -222,6 +243,7 @@ final class KotlinObjectFields {
         summary.putAll(Map.of("reviewId", review.id, "receiver", receiver.local.name(), "owner", receiver.owner.name(),
             "name", field.name(), "type", type, "before", before, "after", after));
         if (array != null) summary.put("index", index);
+        if (replacement.boxing != null) summary.put("boxLiteral", true);
         REVIEWS.put(context, review);
         return summary;
     }
@@ -229,6 +251,7 @@ final class KotlinObjectFields {
     private static Map<String,Object> apply(IDebugAdapterContext context, JsonObject args, Review review) throws Exception {
         Frame selected = selectedFrame(context, args);
         checkFrame(review.frame, review.prepared, selected);
+        if (review.replacement.boxing != null) return applyBox(context, args, review, selected);
         boolean needsLocal = review.array != null || review.replacement.text != null;
         if (needsLocal && !extended(context, selected)) throw stale();
         var vm = selected.frame.virtualMachine();
@@ -281,6 +304,56 @@ final class KotlinObjectFields {
         } finally {
             vm.resume();
         }
+    }
+
+    private static Map<String,Object> applyBox(IDebugAdapterContext context, JsonObject args, Review review, Frame selected) throws Exception {
+        if (!REVIEWED_LOCAL_ATTACH.containsKey(context)) throw boxUnavailable();
+        var thread = selected.reference.getThread();
+        var vm = selected.frame.virtualMachine();
+        var location = selected.frame.location();
+        checkedBoxReceiver(selected, review);
+        var boxing = KotlinFieldValues.boxing(review.field, thread, selected.reference.getDepth());
+        if (!review.replacement.boxing.matches(boxing)) throw boxUnavailable();
+        // JDWP only allows NewInstance on the event suspension. Keep every other thread's state
+        // and reload the invalidated frame before acquiring the separate compare-and-write freeze.
+        ObjectReference made;
+        try { made = boxing.construct(thread, review.replacement.value); }
+        finally {
+            if (thread.isSuspended()) context.getStackFrameManager().reloadStackFrames(thread);
+        }
+        if (made == null) throw boxUnavailable();
+        made.disableCollection();
+        try {
+            if (thread.suspendCount() != 1 || !boxing.owner.equals(made.referenceType()) ||
+                    !review.replacement.value.equals(made.getValue(boxing.storage))) throw boxUnavailable();
+            vm.suspend();
+            try {
+                Frame current = selectedFrame(context, args);
+                if (current.id != selected.id || current.reference != selected.reference || thread.suspendCount() != 2 ||
+                    !location.equals(current.frame.location()) || location.method().isObsolete() ||
+                    System.nanoTime() - review.prepared > TimeUnit.SECONDS.toNanos(30)) throw stale();
+                Receiver receiver = checkedBoxReceiver(current, review);
+                receiver.object.setValue(review.field, made);
+                if (!made.equals(receiver.object.getValue(review.field))) throw boxUnavailable();
+                return Map.of("state", "applied", "receiver", receiver.local.name(), "name", review.field.name(),
+                    "value", scalarDisplay(review.replacement.value), "boxLiteral", true);
+            } finally { vm.resume(); }
+        } finally { made.enableCollection(); }
+    }
+
+    private static Receiver checkedBoxReceiver(Frame frame, Review review) throws Exception {
+        Receiver receiver = receiver(frame.frame, visible(frame.frame, review.receiver.local.name()));
+        if (!sameReceiver(review.receiver, receiver)) throw stale();
+        Field field = field(receiver, review.field.name(), false);
+        if (!review.field.equals(field) || !writable(receiver, field) ||
+            !Objects.equals(review.original, receiver.object.getValue(field))) {
+            throw invalid("The Kotlin object field changed. Inspect its current value again.");
+        }
+        return receiver;
+    }
+
+    private static IllegalArgumentException boxUnavailable() {
+        return invalid("Create boxed literals only on the top breakpoint frame of a verified local JVM with supported wrappers and no intercepting debugger events.");
     }
 
     private static boolean sameReceiver(Receiver before, Receiver current) {
@@ -430,8 +503,12 @@ final class KotlinObjectFields {
         final Value value;
         final LocalVariable source;
         final String text;
+        final KotlinFieldValues.Boxing boxing;
         Replacement(Value value, LocalVariable source) { this(value,source,null); }
-        Replacement(Value value, LocalVariable source, String text) { this.value=value; this.source=source; this.text=text; }
+        Replacement(Value value, LocalVariable source, String text) { this(value,source,text,null); }
+        Replacement(Value value, LocalVariable source, String text, KotlinFieldValues.Boxing boxing) {
+            this.value=value; this.source=source; this.text=text; this.boxing=boxing;
+        }
     }
 
     private static final class Page {

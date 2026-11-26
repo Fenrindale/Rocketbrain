@@ -4,11 +4,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { bean, beanPath, markers, populateResourceLifecycle, runXmlLifecycle, assertXmlCallback, position, maven } =
+const { bean, beanPath, markers, xml, inheritedXml, populateResourceLifecycle, runXmlLifecycle, assertXmlCallback, position, maven } =
   require('./helpers/spring-xml-lifecycle-fixture');
 const { until } = require('./helpers/stdio-lsp');
 
-async function runSpringXmlLifecycleChecks(api, vscode, checks) {
+async function runSpringXmlLifecycleChecks(api, vscode, checks, { requireInheritance = false } = {}) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const temp = await fs.realpath(os.tmpdir());
   const root = await fs.mkdtemp(path.join(workspace, 'rb-xml-lifecycle-'));
@@ -24,7 +24,8 @@ async function runSpringXmlLifecycleChecks(api, vscode, checks) {
     const tools = { javaHome: api.java.getState().javaHome,
       mavenHome: vscode.workspace.getConfiguration('rocketbrain.java').get('mavenHome') };
     assert.ok(tools.mavenHome, 'Use the configured independent Maven installation.');
-    const fixture = await populateResourceLifecycle(root, aux, tools);
+    const resource = requireInheritance ? inheritedXml : xml;
+    const fixture = await populateResourceLifecycle(root, aux, tools, { resource });
     await api.java.workbench.resyncProject({ projectUri, allowProjectExecution: true });
     imported = true;
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(root, beanPath)));
@@ -36,14 +37,21 @@ async function runSpringXmlLifecycleChecks(api, vscode, checks) {
     }, 90000);
     const built = await api.java.buildWorkspace();
     assert.ok(built === 0 || built === 1 || built?.status === 'succeed', 'JDT fixture build ' + JSON.stringify(built));
-    const before = await runXmlLifecycle(fixture, tools, database, spring.dbEngine);
+    const expected = requireInheritance ? '42:7:777' : '42:7:77';
+    const before = await runXmlLifecycle(fixture, tools, database, spring.dbEngine, expected);
     const safe = api.java.safeDelete;
     assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.java.safeDelete'));
     const inspect = async name => (await safe.inspect(doc, position(doc, name))).springAnalysis;
     const checked = [
-      assertXmlCallback(await inspect(markers.init), markers.init, 'init-method'),
-      assertXmlCallback(await inspect(markers.destroy), markers.destroy, 'destroy-method')
+      assertXmlCallback(await inspect(markers.init), markers.init, 'init-method', resource),
+      assertXmlCallback(await inspect(markers.destroy), markers.destroy, 'destroy-method', resource)
     ];
+    if (requireInheritance) {
+      checked.push(assertXmlCallback(await inspect(markers.inheritedDestroy), markers.inheritedDestroy, 'destroy-method', resource));
+      assert.equal(checked[0].declaredOn, 'lifecycleBase');
+      assert.equal(checked[1].templateOnly, true);
+      assert.equal(checked[2].declaredOn, 'lifecycleChild');
+    }
     await assert.rejects(safe.prepare(doc, position(doc, markers.init)), error => error.code === 'ROCKETBRAIN_SAFE_DELETE_CONFLICT' &&
       error.springAnalysis.conflicts.some(item => item.kind === 'spring.binary-xml-lifecycle'));
     assert.equal(doc.getText(), bean);
@@ -56,7 +64,7 @@ async function runSpringXmlLifecycleChecks(api, vscode, checks) {
     // Preserve the actual editor's Undo stack while verifying the saved product outcome.
     assert.equal(await doc.save(), true);
     await maven(tools, root, ['compile']);
-    const after = await runXmlLifecycle(fixture, tools, database, spring.dbEngine);
+    const after = await runXmlLifecycle(fixture, tools, database, spring.dbEngine, expected);
     assert.deepEqual(after, before);
     await vscode.window.showTextDocument(doc, { preview: false });
     await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');

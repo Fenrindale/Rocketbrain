@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.148.0",
+  "version": "0.150.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -188,6 +188,8 @@
       { "command": "rocketbrain.quarkus.stopDev", "title": "Stop Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.runTests", "title": "Run Quarkus Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.build", "title": "Build Quarkus Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.buildNative", "title": "Build Quarkus Native Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.runNative", "title": "Run Quarkus Native Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.debug", "title": "Debug Quarkus Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.debugDev", "title": "Debug Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.select", "title": "Select Python Interpreter", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -538,6 +540,7 @@
       },
       { "command": "rocketbrain.contextActions", "title": "Context Actions", "category": "Rocketbrain" },
       { "command": "rocketbrain.contextActions.results", "title": "Query Result Actions", "category": "Rocketbrain" },
+      { "command": "rocketbrain.keyboardProfile", "title": "Keyboard Profile", "category": "Rocketbrain" },
       {
         "command": "rocketbrain.gitWorktree.context",
         "title": "Manage Git Worktree Context",
@@ -3001,6 +3004,11 @@
           "type": "boolean",
           "default": false,
           "description": "Include proven native SQL query literals in selected Java roots when reviewing source updates for a database rename."
+        },
+        "rocketbrain.java.quarkusGraalvmHome": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to an independent Linux GraalVM JDK 25 or newer with Native Image for the Quarkus Maven native build."
         },
         "rocketbrain.java.mavenHome": {
           "type": "string",

@@ -258,7 +258,8 @@ function registerJavaFeatures(context, vscode) {
     await client.sendNotification('workspace/didChangeWatchedFiles',{changes});
   };
   api.move=require('./move').registerJavaMove(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
-  api.typeRename=require('./java-type-rename-vscode').registerJavaTypeRename(vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
+  api.typeRename=require('./java-type-rename-vscode').registerJavaTypeRename(vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles,
+    beginKotlin:(document,token)=>api.kotlinEditor.beginJavaTypeRename(document,token)});
   api.memberMove=require('./member-move').registerJavaMemberMove(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
   api.changeSignature=require('./change-signature').registerJavaChangeSignature(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,getJavaHome:()=>api.getState().javaHome});
   api.safeDelete=require('./safe-delete').registerJavaSafeDelete(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime});

@@ -35,8 +35,8 @@ function readLifecycleXml(bytes, owner) {
   const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
   if (text.startsWith('\uFEFF')) throw unavailable('unsupported-xml-encoding');
   const parser = new SaxesParser({ xmlns: true, defaultXMLVersion: '1.0', forceXMLVersion: true });
-  const callbacks = [], ids = new Set();
-  let depth = 0, beans = 0;
+  const definitions = new Map();
+  let depth = 0;
   const unsupported = () => { throw unavailable('unsupported-xml'); };
   for (const event of ['doctype', 'processinginstruction', 'cdata', 'error']) parser.on(event, unsupported);
   parser.on('xmldecl', declaration => {
@@ -54,27 +54,61 @@ function readLifecycleXml(bytes, owner) {
           SCHEMAS.has(item.value.trim().replace(/[ \t\n\r]+/gu, ' '))))) unsupported();
       return;
     }
-    if (depth !== 2 || tag.local !== 'bean' || ++beans > 128 || attributes.some(item =>
-      item.uri !== '' || !['id', 'class', 'init-method', 'destroy-method'].includes(item.name))) unsupported();
-    const id = tag.attributes.id?.value, declaredOwner = tag.attributes.class?.value;
-    if (typeof id !== 'string' || !/^[A-Za-z_$][\w$.-]{0,127}$/u.test(id) || ids.has(id) || declaredOwner !== owner) unsupported();
-    ids.add(id);
+    if (depth !== 2 || tag.local !== 'bean' || definitions.size >= 128 || attributes.some(item =>
+      item.uri !== '' || !['id', 'class', 'abstract', 'parent', 'init-method', 'destroy-method'].includes(item.name))) unsupported();
     const opening = text.lastIndexOf('<', parser.position - 1);
     const raw = text.slice(opening, parser.position);
-    const literal = new Map([...raw.matchAll(/\s(class|init-method|destroy-method)\s*=\s*(["'])([^"']*)\2/dgu)]
+    const literal = new Map([...raw.matchAll(/\s(id|class|abstract|parent|init-method|destroy-method)\s*=\s*(["'])([^"']*)\2/dgu)]
       .map(match => [match[1], { value: match[3], offset: match.indices[3][0], end: match.indices[3][1] }]));
-    if (literal.get('class')?.value !== owner) unsupported();
+    if (attributes.some(item => literal.get(item.name)?.value !== item.value)) unsupported();
+    const id = literal.get('id')?.value, declaredOwner = literal.get('class')?.value;
+    const parent = literal.get('parent')?.value, abstract = literal.get('abstract')?.value;
+    const beanId = /^[A-Za-z_$][\w$.-]{0,127}$/u;
+    if (!beanId.test(id || '') || definitions.has(id) || parent !== undefined && !beanId.test(parent) ||
+        abstract !== undefined && !['true', 'false'].includes(abstract) ||
+        declaredOwner !== undefined && declaredOwner !== owner || !parent && !declaredOwner) unsupported();
+    const callbacks = new Map();
     for (const attribute of ['init-method', 'destroy-method']) {
-      if (!tag.attributes[attribute]) continue;
       const matched = literal.get(attribute);
-      if (!matched || !boundedName.test(matched.value) || matched.value !== tag.attributes[attribute].value) unsupported();
-      callbacks.push({ id, owner, attribute, name: matched.value,
+      if (!matched) continue;
+      if (!boundedName.test(matched.value)) unsupported();
+      callbacks.set(attribute, { id, owner, attribute, name: matched.value,
         range: rangeAt(text, opening + matched.offset, opening + matched.end) });
     }
+    definitions.set(id, { parent, abstract: abstract === 'true', callbacks });
   });
   parser.on('closetag', () => { depth--; });
   parser.write(text).close();
-  if (depth !== 0 || beans === 0) throw unavailable('unsupported-xml');
+  if (depth !== 0 || definitions.size === 0) unsupported();
+
+  const resolving = new Set(), resolved = new Map();
+  const resolve = id => {
+    if (resolved.has(id)) return resolved.get(id);
+    const bean = definitions.get(id);
+    if (!bean || resolving.has(id)) unsupported();
+    resolving.add(id);
+    const inherited = bean.parent ? resolve(bean.parent) : new Map();
+    const merged = new Map(inherited);
+    for (const [kind, callback] of bean.callbacks) merged.set(kind, callback);
+    resolving.delete(id);
+    resolved.set(id, merged);
+    return merged;
+  };
+  const callbacks = [], used = new Set();
+  for (const [id, bean] of definitions) {
+    const effective = resolve(id);
+    if (bean.abstract) continue;
+    for (const callback of effective.values()) {
+      used.add(callback);
+      callbacks.push(callback.id === id ? callback : { ...callback, id, declaredOn: callback.id });
+    }
+  }
+  // An abstract name remains a contract for consumers which inherit it outside this document.
+  for (const bean of definitions.values()) {
+    for (const callback of bean.callbacks.values()) {
+      if (!used.has(callback)) callbacks.push({ ...callback, templateOnly: true });
+    }
+  }
   return callbacks;
 }
 

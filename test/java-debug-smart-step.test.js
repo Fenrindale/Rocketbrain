@@ -11,6 +11,7 @@ const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { DapClient } = require('./java-debug-dap');
 const { smartStepFixture, exerciseSmartStep } = require('./helpers/java-smart-step-fixture');
+const { auditProfile } = require('../src/keyboard-profile');
 
 const configPath = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
 
@@ -114,7 +115,12 @@ test('real JDT step targets select the second overloaded call and JDI skips both
     const first = await dap.event('stopped', 0, 18000);
     const state = { state: 'stopped', stopVersion: 0, threadId: first.threadId, capabilities };
     const session = { type: 'rocketbrain-java', id: 'fixture', customRequest: (...args) => dap.request(...args) };
-    const service = createSmartStep({ debug: { activeDebugSession: session } }, { getState: () => state, ensureTrusted() {} });
+    const service = createSmartStep({ debug: { activeDebugSession: session },
+      window: { async showQuickPick(items) { return items.find(item => item.label === 'choose("abc")'); } }
+    }, { getState: () => state, ensureTrusted() {} });
+    const commands = new Map([['rocketbrain.java.smartStepInto', () => service.choose()]]);
+    const keyboard = auditProfile('win32', { commands: commands.keys() }).routes.find(rule => rule.command === 'rocketbrain.java.smartStepInto');
+    assert.ok(keyboard.available);
     const frame = async stop => (await dap.request('stackTrace', { threadId: stop.threadId, startFrame: 0, levels: 1 })).stackFrames[0];
     const proceed = async resume => {
       const after = dap.events.length;
@@ -124,11 +130,12 @@ test('real JDT step targets select the second overloaded call and JDI skips both
       state.threadId = stopped.threadId;
       return stopped;
     };
-    const outcome = await exerciseSmartStep({ fixture, service, first, session, frame, proceed });
+    const outcome = await exerciseSmartStep({ fixture, service, first, session, frame, proceed,
+      choose: () => commands.get(keyboard.command)() });
     const index = dap.events.length;
     await session.customRequest('continue', { threadId: outcome.stopped.threadId });
     await dap.event('terminated', index, 18000);
-    proof = { debugBuild: launch.debugBuild, ...outcome.proof, finished: true };
+    proof = { debugBuild: launch.debugBuild, ...outcome.proof, finished: true, keyboardRouteInvokedRealJdiSmartStep: true };
   } finally {
     await dap?.close();
     await lsp.close();

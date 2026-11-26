@@ -38,6 +38,10 @@ async function populate(root, tools, beforeBuild) {
   await fs.cp(input, root, { recursive: true });
   await beforeBuild?.();
   await rebuild(root, tools);
+  await configureJdt(root);
+}
+
+async function configureJdt(root) {
   const jars = await classpath(root, 'compile');
   await fs.writeFile(path.join(root, '.project'), '<projectDescription><name>' + xmlAttribute(path.basename(root)) +
     '</name><buildSpec><buildCommand><name>org.eclipse.jdt.core.javabuilder</name><arguments/></buildCommand></buildSpec>' +
@@ -49,7 +53,9 @@ async function populate(root, tools, beforeBuild) {
     '<classpathentry kind="output" path="bin"/></classpath>', { flag: 'wx' });
 }
 
-async function runJdbc(root, tools, config, engine) {
+async function runJdbc(root, tools, config, engine, {
+  mainClass = 'mixed.rename.app.JdbcConsumer', expectedOutput = expected
+} = {}) {
   assert.ok(engine === 'mysql' || engine === 'mariadb');
   assert.equal(config.host, '127.0.0.1');
   assert.ok(Number.isInteger(config.port) && config.port > 0 && config.port < 65536);
@@ -62,14 +68,14 @@ async function runJdbc(root, tools, config, engine) {
   env.RB_KRENAME_JDBC_PASSWORD = config.password;
   const java = path.join(tools.javaHome, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
   const cp = [...classes.map(entry => path.join(root, entry)), ...await classpath(root, 'runtime')];
-  const result = await execute(java, ['-cp', cp.join(path.delimiter), 'mixed.rename.app.JdbcConsumer'],
+  const result = await execute(java, ['-cp', cp.join(path.delimiter), mainClass],
     { cwd: root, env, timeoutMs: 20000 });
   assert.equal(result.code, 0, result.output);
   const [server, output] = result.output.trim().split('|');
   assert.match(server, engine === 'mysql' ? /^8\.4\.13$/u : /^11\.4\.8.*MariaDB/u);
-  assert.equal(output, expected);
+  assert.equal(output, expectedOutput);
   return { engine, server, output };
 }
 
 module.exports = { input, ownerFile, kotlinCaller, javaCaller, sameName, resource, newName, expected,
-  populate, rebuild, runJdbc };
+  populate, rebuild, configureJdt, runJdbc };
