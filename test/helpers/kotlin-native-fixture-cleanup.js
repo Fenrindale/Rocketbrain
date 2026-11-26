@@ -38,7 +38,8 @@ async function stageCleanup(manifest, workspace, fixture, hostPid = process.pid)
   checkPid(hostPid);
   const root = await fs.realpath(workspace);
   const name = path.basename(fixture);
-  assert.equal(path.relative(root, path.dirname(fixture)), '', 'The native fixture must be a direct workspace child.');
+  const parent = await fs.realpath(path.dirname(fixture));
+  assert.equal(path.relative(root, parent), '', 'The native fixture must be a direct workspace child.');
   const { physical, identity } = await physicalFixture(root, name);
   const token = randomUUID();
   await fs.writeFile(path.join(physical, ownerFile), token, { flag: 'wx' });
