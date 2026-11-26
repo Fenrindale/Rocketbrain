@@ -204,7 +204,9 @@ function reconcileRename({files,uri,position,prepared,definitions,references,edi
   }
   const expected = new Set([...uses,declaration.id]);
   if (!exact.has(anchor.id) || exact.size !== expected.size || [...expected].some(id=>!exact.has(id))) {
-    throw fail('Kotlin rename does not agree with the verified declaration and reference ranges.');
+    const error=fail('Kotlin rename does not agree with the verified declaration and reference ranges.');
+    error.referenceDisagreement=true;
+    throw error;
   }
   const mixed = [...files.values()].some(file=>file.file.endsWith('.java'));
   if (mixed && (!filePrivateFunction(declaration) || [...changed.keys()].some(id=>id!==declaration.file.key))) {

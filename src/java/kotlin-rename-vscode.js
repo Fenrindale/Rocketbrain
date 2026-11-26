@@ -43,10 +43,23 @@ function registerKotlinRename(vscode,{begin,refactoring,output}) {
     const prepared = await session.request('textDocument/prepareRename',params,cancellation);
     if (!prepared) throw fail('The Kotlin compiler could not prepare a rename for this selection.');
     const definitions = await session.request('textDocument/definition',params,cancellation);
-    const references = await session.request('textDocument/references',referenceParameters(params,definitions,sources),cancellation);
+    const declarationSearch = referenceParameters(params,definitions,sources);
+    const references = await session.request('textDocument/references',declarationSearch,cancellation);
     const edit = await session.request('textDocument/rename',{...params,newName},cancellation);
     check();
-    const reviewed = reconcileRename({files:sources,uri,position:params.position,prepared,definitions,references,edit,newName});
+    const evidence={files:sources,uri,position:params.position,prepared,definitions,references,edit,newName};
+    let reviewed;
+    try { reviewed=reconcileRename(evidence); }
+    catch(error) {
+      if(!error.referenceDisagreement || declarationSearch.textDocument.uri===uri &&
+        declarationSearch.position.line===params.position.line && declarationSearch.position.character===params.position.character) throw error;
+      // After an editor refresh the provider's declaration lookup can lag the
+      // selection lookup. Every edit still has to match independently found spans.
+      const selection = await session.request('textDocument/references',{...params,context:{includeDeclaration:true}},cancellation);
+      check();
+      if(!Array.isArray(selection)) throw error;
+      reviewed=reconcileRename({...evidence,references:[...references,...selection]});
+    }
     const changes = Object.fromEntries([...reviewed.changed.values()].map(({file,edits})=>[vscode.Uri.file(file.file).toString(),edits]));
     const plan = await refactoring.previewWorkspaceEdit({changes},{
       title:'Rename Kotlin symbol '+reviewed.oldName+' to '+newName,kind:'refactor.rename.kotlin',

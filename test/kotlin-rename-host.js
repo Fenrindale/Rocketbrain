@@ -52,7 +52,17 @@ async function runKotlinRenameChecks(api,vscode,checks) {
     await vscode.commands.executeCommand('undo');
     await until(()=>declaration.getText()===originalsText[1]&&!declaration.isDirty,10000);
 
-    const plan = await prepare(kotlinOnly.newName);
+    let plan, pending;
+    try {
+      await until(async()=>{
+        try { plan=await prepare(kotlinOnly.newName); return true; }
+        catch(error) {
+          if(!/verified declaration and reference ranges/.test(error.message)) throw error;
+          pending=error;
+          return false;
+        }
+      },12000);
+    } catch(error) { throw pending||error; }
     assert.equal(plan.documents.length,2);
     assert.equal(plan.rename.scope,'kotlin-project');
     assert.equal(plan.rename.referenceCount,1);

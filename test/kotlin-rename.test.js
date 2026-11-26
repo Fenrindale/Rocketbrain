@@ -7,6 +7,7 @@ const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {test} = require('node:test');
 const {sourceKey,inventory,reconcileRename,referenceParameters,verifyName} = require('../src/java/kotlin-rename');
+const {registerKotlinRename} = require('../src/java/kotlin-rename-vscode');
 const {editedText} = require('../src/java/refactoring');
 const {StdioLsp,until,positionOf} = require('./helpers/stdio-lsp');
 const {buildSpec} = require('../src/java/workbench-tasks');
@@ -38,6 +39,45 @@ test('Kotlin rename reconciles real symbol spans and refuses unrelated edits, re
   assert.throws(()=>reconcileRename({...input,edit:{changes:{[uri(file)]:[{range:range(4,10),newText:'code; injected'}]}}}),/outside the reviewed identifier/u);
   assert.throws(()=>verifyName('when'),/plain Kotlin identifier/u);
   assert.throws(()=>verifyName('foo$bar'),/plain Kotlin identifier/u);
+});
+
+test('Kotlin rename verifies the selected reference when the declaration lookup lags after an editor refresh',async t=>{
+  const root = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()),'rb-kotlin-refresh-'));
+  t.after(async()=>{assert.equal(await fs.realpath(root),root); await fs.rm(root,{recursive:true});});
+  const folder=path.join(root,'src/main/kotlin');
+  await fs.mkdir(folder,{recursive:true});
+  await fs.writeFile(path.join(root,'settings.gradle.kts'),'rootProject.name = "rename-refresh"\n');
+  await fs.writeFile(path.join(root,'build.gradle.kts'),'plugins { kotlin("jvm") version "2.3.20" }\n');
+  const declaration=path.join(folder,'Invoice.kt'), use=path.join(folder,'Order.kt');
+  const text='invoice.number';
+  await fs.writeFile(declaration,'val number = "unchanged"');
+  await fs.writeFile(use,text);
+  const uri=file=>({scheme:'file',fsPath:file,toString:()=>kotlinProtocolUri(file)});
+  const range=(from,to)=>({start:{line:0,character:from},end:{line:0,character:to}});
+  const declared={uri:kotlinProtocolUri(declaration),range:range(4,10)};
+  const site={uri:kotlinProtocolUri(use),range:range(8,14)};
+  const edit={changes:{[declared.uri]:[{range:declared.range,newText:'code'}],[site.uri]:[{range:site.range,newText:'code'}]}};
+  const document={uri:uri(use),languageId:'kotlin',version:3,getText:()=>text,validatePosition:position=>position};
+  const referenceUris=[];
+  const service=registerKotlinRename({
+    workspace:{textDocuments:[document]},Uri:{file:uri},commands:{registerCommand:()=>({dispose(){}})}
+  },{
+    begin:async()=>({root,check(){},async request(method,params){
+      if(method==='textDocument/prepareRename') return {range:site.range,placeholder:'number'};
+      if(method==='textDocument/definition') return [declared];
+      if(method==='textDocument/rename') return edit;
+      assert.equal(method,'textDocument/references');
+      const observed=params.textDocument.uri;
+      referenceUris.push(observed);
+      return observed===declared.uri?[declared]:[declared,site];
+    }}),
+    refactoring:{async previewWorkspaceEdit({changes}){ assert.deepEqual(changes,edit.changes); return {id:'review'}; }}
+  });
+  try {
+    const result=await service.prepare({document,position:{line:0,character:9},newName:'code'});
+    assert.equal(result.rename.referenceCount,1);
+    assert.deepEqual(referenceUris,[declared.uri,site.uri]);
+  } finally { service.dispose(); }
 });
 
 const runtime = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;

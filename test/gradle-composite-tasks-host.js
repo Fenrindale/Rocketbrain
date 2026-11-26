@@ -89,11 +89,9 @@ async function runGradleCompositeTaskChecks(api, vscode, checks) {
   const root = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.java.workbench.tasks'));
   const workbench = api.java.workbench;
+  await importedSpring(api, root);
   const evidence = await verify(root, {
-    async discover(options) {
-      await importedSpring(api, root);
-      return workbench.discoverTasks(options);
-    },
+    discover: options => workbench.discoverTasks(options),
     run: options => workbench.runTask(options),
     checkTree(exact) {
       const project = workbench.getTreeChildren().find(item => item.id === exact.projectId);
