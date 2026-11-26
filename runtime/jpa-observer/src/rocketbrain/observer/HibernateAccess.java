@@ -541,6 +541,23 @@ public final class HibernateAccess {
         return value instanceof String name&&name.matches("[A-Za-z0-9_.$: -]{1,128}")&&!name.isBlank()?name:null;
     }
 
+    static List<Class<?>> observedManagedClasses(Object factory,int limit){
+        if(!classIs(factory,"org.hibernate.internal.SessionFactoryImpl")||!Boolean.FALSE.equals(optional(factory,"isClosed")))return null;
+        Object metamodel=optional(factory,"getMetamodel");
+        if(!providerObject(factory,metamodel)||!(optional(metamodel,"getManagedTypes") instanceof Set<?> types)||types.size()>limit)return null;
+        List<Class<?>> classes=new ArrayList<>();
+        Set<String> names=new java.util.HashSet<>();
+        for(Object model:types){
+            if(!providerFamily(factory,model,JPA_DOMAIN))return null;
+            Class<?> type=bindingJavaClass(factory,optional(model,"getExpressibleJavaType"));
+            if(type==null||type.getName().length()>256||
+                !type.getName().matches("[A-Za-z_$][A-Za-z0-9_$.]{0,255}")||!names.add(type.getName()))return null;
+            classes.add(type);
+        }
+        classes.sort(Comparator.comparing(Class::getName));
+        return List.copyOf(classes);
+    }
+
     private static Map<String, Object> function(Object registry, String name) {
         Map<String, Object> result = map("name", text(name, 256), "state", "observed");
         Object descriptor = optional(registry, "findFunctionDescriptor", name);

@@ -760,6 +760,18 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectPersistenceContexts",
+        "title": "Inspect Spring Persistence Contexts",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.comparePersistenceBuild",
+        "title": "Compare Spring Persistence Build",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.inspectEntityGraph",
         "title": "Inspect JPA Entity Graph",
         "category": "Rocketbrain",

@@ -5,6 +5,7 @@ const {validateRuntimeUrl} = require('../spring/runtime-client');
 const {summarizePerformance} = require('./fetch-performance');
 const { attributeTarget, observedPropertyPaths } = require('./attribute-binding');
 const { graphName, registeredGraphApplications } = require('./entity-graphs');
+const { comparePersistenceBuild } = require('./persistence-contexts');
 const {registerJpaConsole} = require('./console-vscode');
 const {registerSecurityTrace} = require('../spring/security-trace-vscode');
 const {registerReactiveSecurityTrace} = require('../spring/reactive-security-trace-vscode');
@@ -75,6 +76,52 @@ function registerObserver(context,vscode,output,{source}) {
     trusted();const model=await source(),observed=snapshot();
     const entities=model.entities.map(entity=>({fqn:entity.fqn,sourceTable:entity.table?.physicalName||null,sourceState:entity.status,observations:observed.factories.flatMap(factory=>(factory.entities||[]).filter(e=>e.javaType===entity.fqn).map(e=>({factoryId:factory.id,entity:e})))}));
     return {mode:'source-and-runtime-side-by-side',observedAt:observed.fetchedAt,sourceRevision:model.revision,sameSourceRevisionVerified:false,entities};
+  }
+  async function inspectPersistenceContexts(options, compare = false) {
+    trusted();
+    if (!client) throw new ObserverError('NOT_CONNECTED','Connect a local JPA observer first.');
+    if (current.capabilities?.springPersistenceContexts !== true) {
+      throw new ObserverError('UNSUPPORTED_CONTEXTS','Start the application with an observer that supports Spring persistence contexts.');
+    }
+    const candidate = client, frame = generation;
+    function assertCurrent() {
+      trusted();
+      if (client !== candidate || generation !== frame) throw new ObserverError('STALE','The observer connection changed during inspection.');
+    }
+    let report = await candidate.persistenceContexts();
+    assertCurrent();
+    if (current.processId !== report.processId) throw new ObserverError('STALE_CONTEXT','The JVM process changed. Reconnect before inspecting.');
+    const factories = report.contexts.flatMap(context => context.factories.filter(factory => factory.build.state === 'known').map(factory => ({
+      label: factory.persistenceUnit, description: [context.id,context.key,factory.factoryId].filter(Boolean).join(' · '), contextKey:context.key, factory
+    })));
+    if (compare) {
+      if (!factories.length) throw new ObserverError('NO_BUILD_PROOF','No persistence unit has a complete captured build fingerprint.');
+      const selected = options ? factories.find(option => option.factory.factoryId === options.factoryId) :
+        await vscode.window.showQuickPick(factories,{title:'Select a Spring Persistence Unit to Compare'});
+      if (!selected) {
+        if (options) throw new ObserverError('UNKNOWN_FACTORY','Select a factory with an observed managed build fingerprint.');
+        return;
+      }
+      assertCurrent();
+      const folder = options?.directory ?? (await vscode.window.showOpenDialog({ canSelectFiles:false, canSelectFolders:true,
+        canSelectMany:false, openLabel:'Compare Compiled Output Directory' }))?.[0];
+      if (!folder) return;
+      assertCurrent();
+      const comparison = await comparePersistenceBuild(selected.factory.build,folder,vscode.workspace.workspaceFolders);
+      assertCurrent();
+      const latest = await candidate.persistenceContexts();
+      assertCurrent();
+      const owner = latest.contexts.find(context => context.key === selected.contextKey);
+      const matched = owner?.factories.find(factory => factory.factoryId === selected.factory.factoryId);
+      if (latest.processId !== report.processId || matched?.build.fingerprint !== selected.factory.build.fingerprint) {
+        throw new ObserverError('STALE_CONTEXT','The selected Spring persistence unit changed during comparison.');
+      }
+      report = { ...latest, comparison:{ factoryId:selected.factory.factoryId, ...comparison } };
+    }
+    const doc = await vscode.workspace.openTextDocument({ language:'json',content:JSON.stringify(report,null,2)+'\n' });
+    assertCurrent();
+    await vscode.window.showTextDocument(doc,{preview:true});
+    return report;
   }
   async function inspectEntityGraph(selection) {
     trusted();
@@ -236,7 +283,9 @@ function registerObserver(context,vscode,output,{source}) {
   command('rocketbrain.jpa.observer.inspectPerformance',inspectPerformance);
   command('rocketbrain.jpa.observer.inspectAttributeBinding',inspectAttributeBinding);
   command('rocketbrain.jpa.observer.inspectEntityGraph',inspectEntityGraph);
+  command('rocketbrain.jpa.observer.inspectPersistenceContexts',()=>inspectPersistenceContexts());
+  command('rocketbrain.jpa.observer.comparePersistenceBuild',options=>inspectPersistenceContexts(options,true));
   command('rocketbrain.jpa.observer.prepare',async()=>{trusted();const result=await require('./observer-install').prepareObserver(context,vscode);const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(result,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return result;});
-  return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,inspectAttributeBinding,inspectEntityGraph,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
+  return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,inspectAttributeBinding,inspectEntityGraph,inspectPersistenceContexts,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
 }
 module.exports={registerObserver};
