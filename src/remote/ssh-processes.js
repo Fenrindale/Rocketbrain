@@ -11,6 +11,8 @@ const { rootParts } = require('./ssh-java-mapping');
 const { debugSupervisorInvocation } = require('./ssh-java-debug-runtime');
 const { compileProgram, compileRequest } = require('./ssh-java-compile-runtime');
 const { compileConfig, compileProof, validCompileReview, validCompileResult } = require('./ssh-java-compile');
+const { mavenProgram, mavenRequest } = require('./ssh-maven-runtime');
+const { mavenConfig, mavenProof, validMavenReview, validMavenResult } = require('./ssh-maven');
 const { javaSupervisorInvocation } = require('../devcontainer/java-process');
 
 const bytesHash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -44,7 +46,7 @@ function commandWithArgs(python, program, argv) {
 }
 
 function collectRuntime(child, valid, message, { input, timeout = 18000, maxBytes = 8192, keepInput = false,
-  reportRemoteError = false, signal } = {}) {
+  reportRemoteError = false, signal, cancelMessage = 'The SSH Java compile was cancelled.' } = {}) {
   return new Promise((resolve, reject) => {
     let count = 0, invalid = false;
     let stopTimer, reason;
@@ -59,7 +61,7 @@ function collectRuntime(child, valid, message, { input, timeout = 18000, maxByte
         stopTimer.unref();
       } else child.kill();
     }
-    const abort = () => stop('The SSH Java compile was cancelled.');
+    const abort = () => stop(cancelMessage);
     const timer = setTimeout(() => stop(), timeout);
     child.stdin.on('error', () => {});
     if (keepInput) child.stdin.write(input);
@@ -173,9 +175,19 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       { input, signal, keepInput: Boolean(expected), reportRemoteError: true, timeout: expected ? 47000 : 18000, maxBytes: 65536 });
   }
 
+  function mavenProcess(config, expected, signal) {
+    signal?.throwIfAborted();
+    const input = mavenRequest(config, expected);
+    const child = processFor(expected ? 'maven' : 'probe', pythonCommand(profile.python, mavenProgram));
+    return collectRuntime(child, expected ? info => validMavenResult(info, config) : info => validMavenReview(info, config),
+      'Verify the reviewed Maven project, remote runtimes and prepared offline Maven repository.',
+      { input, signal, keepInput: Boolean(expected), reportRemoteError: true, timeout: expected ? 120000 : 38000,
+        cancelMessage: 'The SSH Maven build was cancelled.' });
+  }
+
   return {
     async inspect(kind, requested) {
-      if (!['terminal', 'java', 'debug', 'compile'].includes(kind)) throw Error('Choose a supported reviewed SSH workspace process.');
+      if (!['terminal', 'java', 'debug', 'compile', 'maven'].includes(kind)) throw Error('Choose a supported reviewed SSH workspace process.');
       rootParts(remoteRoot);
       let config;
       if (kind === 'java') {
@@ -196,10 +208,12 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
         config = { platform: windows ? 'win32' : 'linux', javaHome, pid, port, root: remoteRoot };
       }
       if (kind === 'compile') config = compileConfig(remoteRoot, requested);
+      if (kind === 'maven') config = mavenConfig(remoteRoot, requested);
       await verifyRoot();
       let info;
       if (kind === 'debug') info = await debugProcess(config);
       else if (kind === 'compile') info = await compileProcess(config);
+      else if (kind === 'maven') info = await mavenProcess(config);
       else if (kind === 'java') info = await javaRuntime(config);
       if (closed) throw Error('The SSH workspace closed.');
       const now = Date.now();
@@ -210,7 +224,9 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       return { token, kind, host: profile.host, port: profile.port ?? 22, user: profile.user, root: remoteRoot,
         ...(kind === 'java' && { jdk: info.jdk, javaHome: config.javaHome, serverPath: config.serverPath }),
         ...(kind === 'debug' && { platform: info.platform, javaHome: config.javaHome, pid: info.pid, debugPort: info.port, startedAt: info.startedAt }),
-        ...(kind === 'compile' && { ...info, file: config.file, javaHome: config.javaHome, jars: config.jars }) };
+        ...(kind === 'compile' && { ...info, file: config.file, javaHome: config.javaHome, jars: config.jars }),
+        ...(kind === 'maven' && { ...info, file: config.file, javaHome: config.javaHome,
+          mavenHome: config.mavenHome, repository: config.repository }) };
     },
     async open(kind, approval) {
       if (closed || approval?.allowRemoteProcess !== true) throw Error('Review and approve the remote workspace process first.');
@@ -220,6 +236,9 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       if (kind === 'compile' && approval.file !== offer.config.file) {
         throw Error('Open the exact remote Java source that was reviewed for compilation.');
       }
+      if (kind === 'maven' && (approval.file !== offer.config.file || approval.task !== offer.config.task)) {
+        throw Error('Open the exact remote Maven POM and task that were reviewed.');
+      }
       if (started || active.size >= 3 || [...active.values()].includes(kind)) throw Error('Close the existing SSH workspace process of this kind first.');
       started = true;
       try {
@@ -227,6 +246,7 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
         if (kind === 'terminal') return processFor(kind, commandWithArgs(profile.python, terminalProgram, [remoteRoot]), true);
         if (kind === 'debug') return debugProcess(offer.config, offer.info);
         if (kind === 'compile') return compileProcess(offer.config, compileProof(offer.info), approval.signal);
+        if (kind === 'maven') return mavenProcess(offer.config, mavenProof(offer.info), approval.signal);
         const current = await javaRuntime(offer.config);
         if (current.sha256 !== offer.info.sha256) throw Error('The remote JDK or JDT LS changed after review.');
         await verifyRoot();
@@ -241,7 +261,7 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       closed = true;
       offers.clear();
       for (const [child, kind] of active) {
-        if (kind === 'compile') {
+        if (kind === 'compile' || kind === 'maven') {
           child.stdin.end();
           const timeout = setTimeout(() => child.kill(), 2200);
           timeout.unref();

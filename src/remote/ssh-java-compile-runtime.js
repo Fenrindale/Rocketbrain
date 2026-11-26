@@ -2,7 +2,7 @@
 
 const { deflateSync } = require('node:zlib');
 
-const worker = String.raw`import hashlib, json, os, pathlib, re, stat, subprocess, sys, tempfile, threading, zipfile
+const javaRuntimePrimitives = String.raw`import hashlib, json, os, pathlib, re, stat, subprocess, sys, tempfile, threading, zipfile
 
 class Refused(ValueError):
     pass
@@ -74,7 +74,9 @@ def compiler(home):
     if "jetbrains" in release.lower() or not re.search(r'^JAVA_VERSION="25(?:\.|")', release, re.M):
         raise Refused("Choose an independent JDK 25 directory.")
     return home / "bin" / ("javac.exe" if windows else "javac"), fingerprint.hexdigest()
+`;
 
+const worker = javaRuntimePrimitives + String.raw`
 def source_tree(directory):
     count = 0
     pending = [(directory, ())]
@@ -264,4 +266,4 @@ function compileRequest(config, expected) {
   return body;
 }
 
-module.exports = { compileProgram, compileRequest };
+module.exports = { compileProgram, compileRequest, javaRuntimePrimitives };

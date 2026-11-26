@@ -114,6 +114,7 @@
       { "command": "rocketbrain.sshWorkspace.javaDebug", "title": "Attach Reviewed SSH Java Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaDebugStop", "title": "Disconnect SSH Java Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaCompile", "title": "Compile Reviewed SSH Java Module", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-ssh && resourceLangId == java" },
+      { "command": "rocketbrain.sshWorkspace.mavenBuild", "title": "Run Reviewed Maven Task over SSH", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-ssh" },
       { "command": "rocketbrain.acp.compare", "title": "Compare Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.review", "title": "Review Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.select", "title": "Select Docker Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
@@ -1526,6 +1527,7 @@
       ],
       "editor/context": [
         { "command": "rocketbrain.sshWorkspace.javaCompile", "when": "editorLangId == java && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
+        { "command": "rocketbrain.sshWorkspace.mavenBuild", "when": "resourceFilename == pom.xml && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.java.workbench.sourceTarget", "when": "editorLangId == java && resourceScheme == file && isWorkspaceTrusted", "group": "navigation" },
         {
           "command": "rocketbrain.openSharedConsole",
