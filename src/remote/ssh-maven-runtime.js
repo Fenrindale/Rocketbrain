@@ -128,6 +128,7 @@ def fingerprint(value):
 def maven_tool(home, destination):
     identity = identify(physical(home, True))[:2]
     data = [copy_tree(child(home, [name], True), destination / name, 256, 64*MiB, 32*MiB) for name in ("boot", "lib")]
+    data.append(copy_tree(child(home, ["conf", "logging"], True), destination / "conf" / "logging", 8, MiB, MiB))
     config = read(child(home, ["bin", "m2.conf"]), 64 * 1024)
     (destination / "bin").mkdir()
     (destination / "bin" / "m2.conf").write_bytes(config)
