@@ -52,7 +52,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.python.typeServerHome", "rocketbrain.python.typeNodePath", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
@@ -164,6 +164,8 @@
       { "command": "rocketbrain.python.select", "title": "Select Python Interpreter", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.run", "title": "Run Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
       { "command": "rocketbrain.python.debug", "title": "Debug Python File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == python && resourceScheme == file" },
+      { "command": "rocketbrain.python.startTypes", "title": "Start Python Type Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.python.stopTypes", "title": "Stop Python Type Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.checkProject", "title": "Check Vue Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.startDevServer", "title": "Start Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -2187,6 +2189,18 @@
         "rocketbrain.python.path": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Absolute path to the Python interpreter for local source inspection, tasks and debugpy."
+        },
+        "rocketbrain.python.typeServerHome": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute folder of an installed open-source Pyright distribution for Python type analysis."
+        },
+        "rocketbrain.python.typeNodePath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute standalone Node.js executable for Pyright. An empty value uses Node.js from PATH."
+        },
+        "rocketbrain.python.typeCheckingMode": {
+          "type": "string", "default": "standard", "scope": "resource", "enum": ["basic", "standard", "strict"],
+          "description": "Default Pyright checking mode. A Python project's own Pyright configuration can override it."
         },
         "rocketbrain.localCodeModel.endpoint": {
           "type": "string", "default": "", "scope": "machine-overridable",
