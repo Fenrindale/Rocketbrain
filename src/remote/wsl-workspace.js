@@ -6,11 +6,11 @@ const fs = require('node:fs/promises');
 const { win32 } = require('node:path');
 const { promisify } = require('node:util');
 const { setTimeout: delay } = require('node:timers/promises');
+const { distroName, linuxProjectPath, wslUnc, sameWslPath } = require('./wsl-paths');
 
 const execute = promisify(execFile);
 const outputLimit = 512 * 1024;
 const descriptorLimit = 2 * 1024 * 1024;
-const distroName = /^[\p{L}\p{N}][\p{L}\p{N}._ -]{0,127}$/u;
 const windowsPath = /^[a-z]:\\[^\x00-\x1f\x7f]*$/i;
 const toolSpecifications = {
   maven: { executable: '/usr/bin/mvn', files: ['pom.xml'], goals: ['validate', 'compile', 'test', 'package'], args: ['--batch-mode', '--no-transfer-progress'] },
@@ -19,11 +19,40 @@ const toolSpecifications = {
 };
 
 const runGroup = 'printf "%s %s\\n" "$1" "$$"; shift; "$@"; status=$?; exit "$status"';
+const runLinuxGroup = `
+  printf "%s %s\\n" "$1" "$$"
+  [ "$(pwd -P)" = "$2" ] && [ "$(/usr/bin/stat -c '%d:%i' -- .)" = "$3" ] || {
+    printf '%s\\n' 'The Linux project identity changed before launch. Review the build again.' >&2
+    exit 6
+  }
+  shift 3
+  "$@"
+  status=$?
+  exit "$status"`;
 const killGroup = `
   pid=$1
   [ -r "/proc/$pid/cmdline" ] || exit 0
   /usr/bin/tr '\\000' '\\n' < "/proc/$pid/cmdline" | /usr/bin/grep -Fqx -- "$2" || exit 5
   /usr/bin/kill -KILL -- "-$pid"`;
+const linuxReview = String.raw`
+  set -eu
+  project=$1
+  shift
+  [ -d "$project" ] && [ "$(/usr/bin/readlink -e -- "$project")" = "$project" ] || exit 3
+  identity=$(/usr/bin/stat -c '%d:%i' -- "$project")
+  printf 'root %s\n' "$identity"
+  for descriptor do
+    file="$project/$descriptor"
+    [ ! -L "$file" ] || exit 4
+    [ -e "$file" ] || continue
+    [ -f "$file" ] || exit 4
+    before=$(/usr/bin/stat -c '%d:%i:%s:%y:%z' -- "$file")
+    [ "$(/usr/bin/stat -c '%s' -- "$file")" -le 2097152 ] || exit 4
+    sha=$(/usr/bin/head -c 2097153 -- "$file" | /usr/bin/sha256sum)
+    [ "$before" = "$(/usr/bin/stat -c '%d:%i:%s:%y:%z' -- "$file")" ] || exit 5
+    printf 'file %s %s\n' "$descriptor" "$(printf '%s' "$sha" | /usr/bin/cut -d ' ' -f 1)"
+  done
+  [ "$identity" = "$(/usr/bin/stat -c '%d:%i' -- "$project")" ] || exit 5`;
 
 function readWslText(bytes) {
   const buffer = Buffer.from(bytes);
@@ -88,10 +117,45 @@ function createWslWorkbench({ platform = process.platform, fileSystem = fs, run 
     return names;
   }
 
+  async function registered(distribution) {
+    if (!(await distributions()).includes(distribution)) throw Error('Choose a distribution from the current WSL list.');
+  }
+
+  async function linuxMapping(distribution, linux, originalWindows) {
+    const selected = { distribution, linux: linuxProjectPath(linux) };
+    const canonical = await call(distroArgs(distribution, ['/usr/bin/readlink', '-e', '--', linux]));
+    if (canonical !== linux) throw Error('Use the exact physical Linux folder and its original letter case.');
+    const returned = await call(distroArgs(distribution, ['/usr/bin/wslpath', '-a', '-w', linux]));
+    if (!sameWslPath(wslUnc(returned), selected)) throw Error('The Linux project did not map to the same WSL distribution and folder.');
+    const input = originalWindows || returned;
+    const linuxBack = await call(distroArgs(distribution, ['/usr/bin/wslpath', '-a', '-u', input]));
+    if (linuxBack !== linux) throw Error('The WSL UNC path did not map back to the exact Linux folder.');
+    const windows = await fileSystem.realpath(input);
+    if (!sameWslPath(wslUnc(windows), selected) || !(await fileSystem.stat(windows)).isDirectory()) {
+      throw Error('Open the existing WSL folder from the verified Linux path.');
+    }
+    const directoryIdentity = await call(distroArgs(distribution, ['/usr/bin/stat', '-c', '%d:%i', '--', linux]));
+    if (!/^\d{1,24}:\d{1,24}$/u.test(directoryIdentity)) throw Error('The Linux project directory identity could not be verified.');
+    return { distribution, windows, linux, storage: 'wsl', directoryIdentity };
+  }
+
+  async function openProject(distribution, linux) {
+    requireTrust();
+    linuxProjectPath(linux);
+    await registered(distribution);
+    return linuxMapping(distribution, linux);
+  }
+
   async function mapping(distribution, workspaceRoot) {
     requireTrust();
+    const unc = wslUnc(workspaceRoot);
+    if (unc) {
+      if (unc.distribution !== distribution) throw Error('The selected folder belongs to a different WSL distribution.');
+      await registered(distribution);
+      return linuxMapping(distribution, unc.linux, workspaceRoot);
+    }
     localIdentity(workspaceRoot);
-    if (!(await distributions()).includes(distribution)) throw Error('Choose a distribution from the current WSL list.');
+    await registered(distribution);
     const windows = await fileSystem.realpath(workspaceRoot);
     const identity = localIdentity(windows);
     if (!(await fileSystem.stat(windows)).isDirectory()) throw Error('Select an existing Windows workspace directory.');
@@ -101,6 +165,22 @@ function createWslWorkbench({ platform = process.platform, fileSystem = fs, run 
     localIdentity(returned);
     if (localIdentity(await fileSystem.realpath(returned)) !== identity) throw Error('The WSL workspace path did not map back to the same Windows directory.');
     return { distribution, windows, linux };
+  }
+
+  async function linuxDescriptors(scope, files) {
+    const response = await call(distroArgs(scope.distribution,
+      ['/bin/sh', '-c', linuxReview, 'rocketbrain-wsl-review', scope.linux, ...files]));
+    const [identity, ...rows] = response.split(/\r?\n/u);
+    if (identity !== 'root ' + scope.directoryIdentity || rows.length > files.length) {
+      throw Error('The Linux project changed during build review.');
+    }
+    const evidence = {};
+    for (const row of rows) {
+      const [, name, sha] = /^file ([a-z.]+) ([a-f0-9]{64})$/u.exec(row) || [];
+      if (!files.includes(name) || Object.hasOwn(evidence, name)) throw Error('WSL reported an invalid build descriptor digest.');
+      evidence[name] = sha;
+    }
+    return evidence;
   }
 
   async function snapshot(input) {
@@ -114,10 +194,18 @@ function createWslWorkbench({ platform = process.platform, fileSystem = fs, run 
       let resolved;
       try { resolved = await fileSystem.realpath(file); }
       catch (error) { if (error.code === 'ENOENT') continue; throw error; }
-      if (localIdentity(resolved) !== localIdentity(file)) throw Error('The build descriptor must resolve inside the selected project.');
+      if (scope.storage === 'wsl' ? !sameWslPath(wslUnc(resolved), wslUnc(file)) : localIdentity(resolved) !== localIdentity(file)) {
+        throw Error('The build descriptor must resolve inside the selected project with its exact name.');
+      }
       descriptors[filename] = await descriptorDigest(fileSystem, resolved);
     }
     if (Object.keys(descriptors).length === 0) throw Error('The selected folder needs a Maven or Gradle build descriptor.');
+    if (scope.storage === 'wsl') {
+      const observed = await linuxDescriptors(scope, spec.files);
+      if (JSON.stringify(observed) !== JSON.stringify(descriptors)) {
+        throw Error('Windows and Linux did not observe the same WSL build descriptors.');
+      }
+    }
     await call(distroArgs(scope.distribution, ['/usr/bin/test', '-x', spec.executable]));
     return { ...scope, system: input.system, goal: input.goal, descriptors, command: [spec.executable, ...spec.args, input.goal] };
   }
@@ -164,8 +252,10 @@ function createWslWorkbench({ platform = process.platform, fileSystem = fs, run 
     if (active) throw Error('A managed WSL build is already running.');
     const nonce = randomUUID();
     const options = { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] };
+    const group = current.storage === 'wsl' ? [runLinuxGroup, 'rocketbrain-wsl', nonce, current.linux, current.directoryIdentity]
+      : [runGroup, 'rocketbrain-wsl', nonce];
     const child = start(osWslPath(platform), ['--distribution', current.distribution, '--cd', current.linux, '--exec',
-      '/usr/bin/setsid', '--wait', '/bin/sh', '-c', runGroup, 'rocketbrain-wsl', nonce,
+      '/usr/bin/setsid', '--wait', '/bin/sh', '-c', ...group,
       '/usr/bin/timeout', '--foreground', '--kill-after=5s', '9m', ...current.command], options);
     let signalGroup;
     const groupReady = new Promise(resolve => { signalGroup = resolve; });
@@ -226,7 +316,7 @@ function createWslWorkbench({ platform = process.platform, fileSystem = fs, run 
     }
   }
 
-  return { distributions, mapping, review, apply, cancel: cancelActive,
+  return { distributions, mapping, openProject, review, apply, cancel: cancelActive,
     dispose() { disposed = true; reviews.clear(); void cancelActive().catch(() => {}); } };
 }
 

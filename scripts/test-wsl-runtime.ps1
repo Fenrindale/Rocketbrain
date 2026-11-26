@@ -66,14 +66,32 @@ try {
 
         $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
         Get-ChildItem -LiteralPath (Join-Path $repo 'test/fixtures/wsl-jvm') | Copy-Item -Destination $workspace -Recurse
+        $linuxFixture = Invoke-WslFixture ($command + @('/usr/bin/mktemp', '-d', '/tmp/rocketbrain-wsl-XXXXXXXX'))
+        if ($linuxFixture -cnotmatch '^/tmp/rocketbrain-wsl-[0-9A-Za-z]{8}$') { throw 'The owned Linux fixture path was not generated.' }
+        $linuxProject = "$linuxFixture/Case Project"
+        Invoke-WslFixture ($command + @('/usr/bin/mkdir', '--', $linuxProject)) | Out-Null
+        Invoke-WslFixture ($command + @('/usr/bin/cp', '-R', '--', "$linux/.", $linuxProject)) | Out-Null
+        $linuxUnc = Invoke-WslFixture ($command + @('/usr/bin/wslpath', '-a', '-w', $linuxProject))
+        $linuxSuffix = [Regex]::Escape("\$distro" + $linuxProject.Replace('/', '\'))
+        if ($linuxUnc -cnotmatch ('^\\\\(?:wsl\.localhost|wsl\$)' + $linuxSuffix + '$')) {
+            throw 'The owned Linux project did not map to the exact registered WSL share.'
+        }
+        if (-not (Test-Path -LiteralPath $linuxUnc -PathType Container)) { throw 'Windows could not read the owned Linux project via WSL UNC.' }
+        if ((Invoke-WslFixture ($command + @('/usr/bin/wslpath', '-a', '-u', $linuxUnc))) -cne $linuxProject) {
+            throw 'The WSL UNC path did not preserve the exact owned Linux project path.'
+        }
+
         $version = (Get-Content -LiteralPath (Join-Path $repo 'package.json') -Raw | ConvertFrom-Json).version
         $vsix = Join-Path $repo "rocketbrain-$version.vsix"
         $proof['vsixSha256'] = (Get-FileHash -LiteralPath $vsix -Algorithm SHA256).Hash.ToLowerInvariant()
         $proof['vsixBytes'] = (Get-Item -LiteralPath $vsix).Length
         $env:ROCKETBRAIN_WSL_TEST_DISTRIBUTION = $distro
         $env:ROCKETBRAIN_WSL_TEST_WORKSPACE = $workspace
+        $env:ROCKETBRAIN_WSL_TEST_LINUX_PROJECT = $linuxProject
+        $env:ROCKETBRAIN_WSL_TEST_UNC_WORKSPACE = $linuxUnc
+        $env:NODE_UNC_HOST_ALLOWLIST = 'wsl.localhost\wsl$'
         $workspaceFile = Join-Path $root 'rocketbrain-wsl.code-workspace'
-        @{ folders = @(@{ path = $workspace }) } | ConvertTo-Json -Depth 4 |
+        @{ folders = @(@{ path = $workspace }, @{ path = $linuxUnc }) } | ConvertTo-Json -Depth 4 |
             Set-Content -LiteralPath $workspaceFile -Encoding utf8NoBOM
         $env:ROCKETBRAIN_JAVA_TEST_WORKSPACE = $workspaceFile
         $env:ROCKETBRAIN_NATIVE_CHECKS = 'wsl-workspace-host'
@@ -88,7 +106,7 @@ try {
         $proof['native'] = Get-Content -LiteralPath $env:ROCKETBRAIN_TEST_OUTPUT -Raw | ConvertFrom-Json
     }
     $proof |
-        ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rocketbrain-wsl-runtime.json') -Encoding utf8NoBOM
+        ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rocketbrain-wsl-runtime.json') -Encoding utf8NoBOM
 } finally {
     if ($registered) { Invoke-WslFixture @('--unregister', $distro) | Out-Null }
 }
