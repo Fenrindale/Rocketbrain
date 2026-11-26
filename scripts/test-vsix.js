@@ -20,6 +20,7 @@ const expected = new Set(['[Content_Types].xml', 'extension.vsixmanifest', ...[
   'dist/java-debug/KotlinLocalAssignment.java', 'dist/java-debug/KotlinObjectFields.java', 'dist/java-debug/KotlinFieldAccess.java',
   'dist/java-debug/KotlinFieldValues.java',
   'dist/java-debug/KotlinCollectionInspection.java',
+  'dist/java-debug/JvmStringPages.java',
   'dist/java-debug/KmpClassLines.java', 'dist/java-debug/KotlinLineBreakpoints.java',
   'themes/rocketbrain-dark.json', 'media/rocketbrain.svg', 'media/duckdb.tmLanguage.json', 'media/sqlite.tmLanguage.json', 'media/jdbc.tmLanguage.json',
   'media/scala.tmLanguage.json', 'media/jpql.tmLanguage.json', 'media/java-regex.tmLanguage.json'

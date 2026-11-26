@@ -28,6 +28,7 @@ const DISPATCH_TO = '        try {\n' +
   '            return AdapterUtils.createAsyncErrorResponse(response, ErrorCode.ATTACH_FAILURE, "Invalid owned JVM source-line evidence.");\n' +
   '        }\n' +
   '        KotlinCollectionInspection.invalidate(debugContext, request.command, request.arguments);\n' +
+  '        JvmStringPages.observe(debugContext, request.command, request.arguments);\n' +
   '        if ("rocketbrain/readJavaValues".equals(request.command)) {\n' +
   '            return LocalValueInspection.read(request, response, debugContext);\n        }\n' +
   '        if ("rocketbrain/watchKotlinCoroutine".equals(request.command)) {\n' +
@@ -43,7 +44,8 @@ const CORE_PATCH_TO = '                try {\n                    Path fullpath 
 const PATCH_FROM = 'this.serverSocket = new ServerSocket(0, 1);';
 const PATCH_TO = 'this.serverSocket = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));';
 const PATCH_NOTICE = [
-  'Rocketbrain Java debug server patches v14',
+  'Rocketbrain Java debug server patches v15',
+  'Long Java and Kotlin Strings use bounded direct reads of verified OpenJDK backing storage while the same frame stays suspended.',
   'Managed Gradle Groovy applications accept exact compiled source lines after matching live class and method bytecodes.',
   'Upstream: microsoft/java-debug 0.53.1 (' + SOURCE_COMMIT + ')',
   'Patch 1 source: ' + SOURCE_URL,
@@ -112,6 +114,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
   const kotlinFieldsName = 'KotlinObjectFields.java', kotlinAccessName = 'KotlinFieldAccess.java';
   const kotlinValuesName = 'KotlinFieldValues.java';
   const kotlinCollectionsName = 'KotlinCollectionInspection.java';
+  const stringPagesName = 'JvmStringPages.java';
   const kotlinLinesName = 'KotlinLineBreakpoints.java';
   const readHelper = name => {
     const helper = [path.join(__dirname, 'java-debug', name), path.join(__dirname, '../runtime/java-debug', name)]
@@ -125,6 +128,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
   const kotlinFieldsSource = readHelper(kotlinFieldsName), kotlinAccessSource = readHelper(kotlinAccessName);
   const kotlinValuesSource = readHelper(kotlinValuesName);
   const kotlinCollectionsSource = readHelper(kotlinCollectionsName);
+  const stringPagesSource = readHelper(stringPagesName);
   const kotlinLinesSource = readHelper(kotlinLinesName);
   const buildDir = await fs.promises.mkdtemp(path.join(target, '.loopback-build-'));
   const stage = path.join(buildDir, 'stage'), classes = path.join(buildDir, 'classes'), sourceDir = path.join(buildDir, 'source');
@@ -172,6 +176,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     const kotlinAccessJava = path.join(sourceDir, kotlinAccessName); await fs.promises.writeFile(kotlinAccessJava, kotlinAccessSource);
     const kotlinValuesJava = path.join(sourceDir, kotlinValuesName); await fs.promises.writeFile(kotlinValuesJava, kotlinValuesSource);
     const kotlinCollectionsJava = path.join(sourceDir, kotlinCollectionsName); await fs.promises.writeFile(kotlinCollectionsJava, kotlinCollectionsSource);
+    const stringPagesJava = path.join(sourceDir, stringPagesName); await fs.promises.writeFile(stringPagesJava, stringPagesSource);
     const kotlinLinesJava = path.join(sourceDir, kotlinLinesName); await fs.promises.writeFile(kotlinLinesJava, kotlinLinesSource);
     const patchedLineFiles=[];
     for (const site of lineSources) {
@@ -185,7 +190,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     dependencies.push(...['rxjava-2.2.21.jar', 'reactive-streams-1.0.4.jar', 'commons-io-2.11.0.jar'].map(name => path.join(stage, 'lib', name)));
     run(executable('javac'), ['--release', '11', '-encoding', 'UTF-8', '-cp', [coreJar, ...dependencies].join(path.delimiter),
       '-d', coreClasses, coreJava, exceptionJava, adapterJava, inspectionJava, coroutineJava, kotlinWatchJava, kotlinLocalJava, kotlinFieldsJava, kotlinAccessJava,
-      kotlinValuesJava, kotlinCollectionsJava, kotlinLinesJava,...patchedLineFiles]);
+      kotlinValuesJava, kotlinCollectionsJava, stringPagesJava, kotlinLinesJava,...patchedLineFiles]);
     const corePackage = path.join('com', 'microsoft', 'java', 'debug', 'core');
     for (const file of ['DebugSession.class', 'adapter/AdapterUtils.class', 'adapter/DebugAdapter.class',
       'adapter/LocalValueInspection.class', 'adapter/LocalValueInspection$IndexedValue.class', 'adapter/CoroutineFrameWatch.class',
@@ -199,6 +204,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
       'adapter/KotlinCollectionInspection.class', 'adapter/KotlinCollectionInspection$Ordered.class',
       'adapter/KotlinCollectionInspection$Builder.class', 'adapter/KotlinCollectionInspection$View.class',
       'adapter/KotlinCollectionInspection$Snapshot.class',
+      'adapter/JvmStringPages.class', 'adapter/JvmStringPages$Storage.class', 'adapter/JvmStringPages$Inspection.class',
       'Breakpoint.class','adapter/handler/SetBreakpointsRequestHandler.class','adapter/handler/StackTraceRequestHandler.class',
       'adapter/handler/StackTraceRequestHandler$StackFrameInfo.class','KotlinLineBreakpoints.class',
       'KotlinLineBreakpoints$Site.class','KotlinLineBreakpoints$Source.class','KotlinLineBreakpoints$Session.class']) {
@@ -221,6 +227,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     await fs.promises.writeFile(path.join(coreSources, kotlinAccessName), kotlinAccessSource);
     await fs.promises.writeFile(path.join(coreSources, kotlinValuesName), kotlinValuesSource);
     await fs.promises.writeFile(path.join(coreSources, kotlinCollectionsName), kotlinCollectionsSource);
+    await fs.promises.writeFile(path.join(coreSources, stringPagesName), stringPagesSource);
     await fs.promises.writeFile(path.join(coreSources, kotlinLinesName), kotlinLinesSource);
     for (const site of lineSources) await fs.promises.writeFile(path.join(coreSources,site.name),site.patched);
     await fs.promises.writeFile(path.join(coreMeta, 'ROCKETBRAIN-PATCH.txt'), PATCH_NOTICE);
@@ -231,7 +238,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     const meta = path.join(stage, 'META-INF');
     for (const name of fs.readdirSync(meta)) if (/\.(?:SF|RSA|DSA|EC)$|^SIG-/i.test(name)) await fs.promises.rm(path.join(meta, name));
     const manifestPath = path.join(meta, 'MANIFEST.MF');
-    const main = fs.readFileSync(manifestPath, 'utf8').split(/\r?\n\r?\n/)[0].replace(/Bundle-Version: 0\.53\.1\b/, 'Bundle-Version: 0.53.1.rocketbrain14');
+    const main = fs.readFileSync(manifestPath, 'utf8').split(/\r?\n\r?\n/)[0].replace(/Bundle-Version: 0\.53\.1\b/, 'Bundle-Version: 0.53.1.rocketbrain15');
     await fs.promises.writeFile(manifestPath, main.replace(/\r?\n/g, '\r\n') + '\r\n\r\n');
     const sourcesDir = path.join(meta, 'rocketbrain-sources'); await fs.promises.mkdir(sourcesDir);
     await fs.promises.writeFile(path.join(sourcesDir, 'JavaDebugServer.java'), patchedSource);
@@ -246,6 +253,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     await fs.promises.writeFile(path.join(sourcesDir, kotlinAccessName), kotlinAccessSource);
     await fs.promises.writeFile(path.join(sourcesDir, kotlinValuesName), kotlinValuesSource);
     await fs.promises.writeFile(path.join(sourcesDir, kotlinCollectionsName), kotlinCollectionsSource);
+    await fs.promises.writeFile(path.join(sourcesDir, stringPagesName), stringPagesSource);
     await fs.promises.writeFile(path.join(sourcesDir, kotlinLinesName), kotlinLinesSource);
     for (const site of lineSources) await fs.promises.writeFile(path.join(sourcesDir,site.name),site.patched);
     await fs.promises.writeFile(path.join(meta, 'ROCKETBRAIN-PATCH.txt'), PATCH_NOTICE);
@@ -263,6 +271,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
       kotlinFieldsSourceSha256: hash(Buffer.from(kotlinFieldsSource)), kotlinFieldAccessSourceSha256: hash(Buffer.from(kotlinAccessSource)),
       kotlinFieldValuesSourceSha256: hash(Buffer.from(kotlinValuesSource)),
       kotlinCollectionSourceSha256: hash(Buffer.from(kotlinCollectionsSource)),
+      jvmStringPageSourceSha256: hash(Buffer.from(stringPagesSource)),
       kotlinLinesSourceSha256:hash(Buffer.from(kotlinLinesSource)),
       kotlinLinesUpstream:lineSources.map(({name,sourceUrl,sha256,patched})=>({name,sourceUrl,sha256,patchedSha256:hash(Buffer.from(patched))})),
       rebuiltCoreSha256: hash(fs.readFileSync(coreJar)), sourceCommit: SOURCE_COMMIT, sourceUrl: SOURCE_URL,

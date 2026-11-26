@@ -45,6 +45,9 @@ final class LocalValueInspection {
             else if ("mapOpen".equals(action) || "mapPage".equals(action)) {
                 try { response.body = KotlinCollectionInspection.read(context, frameRef, frame, frameId, text(args, "name"), action, args); }
                 catch (IllegalArgumentException denied) { return error(response, denied.getMessage()); }
+            } else if ("stringOpen".equals(action) || "stringPage".equals(action)) {
+                try { response.body = JvmStringPages.read(context, frameRef, frame, frameId, action, args, MAX_STRING); }
+                catch (IllegalArgumentException denied) { return error(response, denied.getMessage()); }
             }
             else {
                 String name = text(args, "name");
@@ -82,7 +85,8 @@ final class LocalValueInspection {
             if (variable.name().length() > 256) continue;
             if (value instanceof StringReference) {
                 int length = storageUnits((StringReference) value);
-                entries.add(Map.of("name", variable.name(), "kind", "string", "length", length, "complete", length <= MAX_STRING));
+                entries.add(Map.of("name", variable.name(), "kind", "string", "length", length, "complete", length <= MAX_STRING,
+                    "pageable", length > MAX_STRING && JvmStringPages.available(context, (StringReference) value)));
             } else {
                 IndexedValue collection = indexed(value);
                 if (collection != null) entries.add(Map.of("name", variable.name(), "kind", collection.kind, "length", collection.length));
@@ -174,7 +178,7 @@ final class LocalValueInspection {
         return node != null && node.isJsonPrimitive() && node.getAsJsonPrimitive().isString() ? node.getAsString() : null;
     }
 
-    private static Integer integer(JsonObject args, String key) {
+    static Integer integer(JsonObject args, String key) {
         JsonElement node = args.get(key);
         return node != null && node.isJsonPrimitive() && node.getAsJsonPrimitive().isNumber() ? node.getAsBigDecimal().intValueExact() : null;
     }

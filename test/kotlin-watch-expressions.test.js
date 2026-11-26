@@ -7,7 +7,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
 const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILDS,
-  KOTLIN_FIELD_VALUES_BUILDS, KOTLIN_BOX_BUILDS, KOTLIN_MAP_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
+  KOTLIN_FIELD_VALUES_BUILDS, KOTLIN_BOX_BUILDS, KOTLIN_MAP_BUILDS, resolveDebugBundle } = require('../src/java/debug-runtime');
 const { assignment, assertKotlinLocalChanges } = require('./helpers/kotlin-local-write');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { DapClient, freePort } = require('./java-debug-dap');
@@ -151,7 +151,7 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
         await fs.writeFile(fieldSignal+'.'+suffix,'change',{flag:'wx'});
         await running.waitFor(message);
       }) : undefined;
-      const orderedMaps=bundle.build===KOTLIN_MAP_BUILD ? await assertKotlinCollections(send,frame.id,async (suffix,message)=>{
+      const orderedMaps=KOTLIN_MAP_BUILDS.includes(bundle.build) ? await assertKotlinCollections(send,frame.id,async (suffix,message)=>{
         await fs.writeFile(fieldSignal+'.'+suffix,'change',{flag:'wx'});
         await running.waitFor(message);
       }) : undefined;
@@ -212,7 +212,7 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
   }
   if (KOTLIN_FIELD_VALUES_BUILDS.includes(bundle.build)) reports[0].manualPortOnlyExtendedRefused=await assertManualAttachLimited(lsp,fixture,
     sourceRoot,{engine:dbFiles[0][0],configFile:dbFiles[0][1],classpathFile},KOTLIN_BOX_BUILDS.includes(bundle.build),
-    bundle.build===KOTLIN_MAP_BUILD);
+    KOTLIN_MAP_BUILDS.includes(bundle.build));
   const receipt = process.env.ROCKETBRAIN_KOTLIN_EXPRESSION_RECEIPT;
   if (receipt) await fs.writeFile(receipt, JSON.stringify({ build: bundle.build, sha256: bundle.sha256,
     kotlin: '2.4.21', reports }, null, 2) + '\n');

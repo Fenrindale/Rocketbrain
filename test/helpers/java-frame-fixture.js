@@ -91,13 +91,18 @@ async function exerciseLocalValues(service, fixture, session) {
   assert.match(list.rows[1].type, /\$ObservedValue$/);
   const message = await service.read(review, 'message');
   assert.equal(message.text, fixture.fullString);
-  assert.equal(entry('beyondLimit')?.complete, false);
-  await assert.rejects(service.read(review, 'beyondLimit'), /256 Ki/);
+  const longer = entry('beyondLimit');
+  assert.equal(longer?.complete, false);
+  if (longer.pageable) {
+    const page = await service.read(review, 'beyondLimit', { start: 262143 });
+    assert.deepEqual(page, { kind: 'stringPage', length: 262145, start: 262143, text: 'xx' });
+  } else await assert.rejects(service.read(review, 'beyondLimit'), /256 Ki/);
   await assert.rejects(service.read(review, 'samples', { start: 1300 }), /in-range/);
   await assert.rejects(service.read({ ...review }, 'message'), /current Java inspection/);
   return { review, proof: { totalArrayElements: tail.length, totalListElements: list.length, boundedMiddleRows: middle.rows.length,
     tailVerified: true, objectTypeOnly: true, unsupportedSubclassExcluded: true, longStringUnits: message.length,
-    exactUnicodeAndNewlines: true, oversizedStringRefused: true } };
+    exactUnicodeAndNewlines: true, oversizedStringRefused: !longer.pageable,
+    ...(longer.pageable && { oversizedStringPaged: true }) } };
 }
 
 module.exports = { frameFixture, exerciseFrameRestart, exerciseLocalValues };

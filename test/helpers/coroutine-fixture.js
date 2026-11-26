@@ -23,8 +23,8 @@ async function buildCoroutineFixture(root,{javaHome,gradleHome,gradleUserHome}) 
   return {lib,debugJar,java:spec.command,env,root};
 }
 
-function launchCoroutineFixture(fixture,prepared,{mainClass='coroutinesfixture.MainKt',classpath=[],env={}}={}) {
-  const child=spawn(fixture.java,[...prepared.vmArgs,'-cp',[path.join(fixture.lib,'*'),...classpath].join(path.delimiter),mainClass],
+function launchCoroutineFixture(fixture,prepared,{mainClass='coroutinesfixture.MainKt',classpath=[],env={},args=[]}={}) {
+  const child=spawn(fixture.java,[...prepared.vmArgs,'-cp',[path.join(fixture.lib,'*'),...classpath].join(path.delimiter),mainClass,...args],
     {cwd:fixture.root,windowsHide:true,env:{...fixture.env,...env},stdio:['pipe','pipe','pipe']});
   let output='',closed=false,failure;
   const done=new Promise(resolve=>child.once('close',code=>{closed=true;resolve(code);}));
@@ -33,10 +33,11 @@ function launchCoroutineFixture(fixture,prepared,{mainClass='coroutinesfixture.M
   for (const stream of [child.stdout,child.stderr]) stream.setEncoding('utf8').on('data',chunk=>{output=(output+chunk).slice(-10000);});
   async function waitFor(marker,timeout=20000){
     const by=Date.now()+timeout;
-    while (Date.now()<by && !closed && !failure) {
-      if (output.includes(marker)) return output;
+    const matched = () => typeof marker === 'string' ? output.includes(marker) : marker.test(output);
+    while (!matched() && Date.now()<by && !closed && !failure) {
       await new Promise(resolve=>setTimeout(resolve,125));
     }
+    if (matched()) return output;
     throw failure || Error('The Kotlin coroutine fixture did not report '+marker+'. '+output);
   }
   return {pid:child.pid,ready:()=>waitFor('Rocketbrain coroutine fixture ready'),waitFor,

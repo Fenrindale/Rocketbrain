@@ -6,7 +6,7 @@ const path = require('node:path');
 const { fileURLToPath,pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILDS,
-  KOTLIN_FIELD_VALUES_BUILDS, KOTLIN_BOX_BUILDS, KOTLIN_MAP_BUILD } = require('../src/java/debug-runtime');
+  KOTLIN_FIELD_VALUES_BUILDS, KOTLIN_BOX_BUILDS, KOTLIN_MAP_BUILDS } = require('../src/java/debug-runtime');
 const { freePort } = require('./java-debug-dap');
 const { until } = require('./helpers/stdio-lsp');
 const { buildCoroutineFixture } = require('./helpers/coroutine-fixture');
@@ -28,7 +28,7 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields
   if (requireFields) assert.ok([KOTLIN_FIELD_BUILD,...KOTLIN_LINE_BUILDS].includes(debugBuild));
   if (requireValues) assert.ok(KOTLIN_FIELD_VALUES_BUILDS.includes(debugBuild));
   if (requireBoxLiterals) assert.ok(KOTLIN_BOX_BUILDS.includes(debugBuild));
-  if (requireOrderedMaps) assert.equal(debugBuild,KOTLIN_MAP_BUILD);
+  if (requireOrderedMaps) assert.ok(KOTLIN_MAP_BUILDS.includes(debugBuild));
   const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const project = await fs.mkdtemp(path.join(workspace, 'rb-kotlin-expressions-'));
@@ -126,7 +126,7 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields
         freshBoxes = await assertNativeFreshKotlinBoxes(inspector, session);
       }
     }
-    const orderedMaps = debugBuild===KOTLIN_MAP_BUILD ? await assertNativeKotlinCollections(api.java.debug.localValues,session) : undefined;
+    const orderedMaps = KOTLIN_MAP_BUILDS.includes(debugBuild) ? await assertNativeKotlinCollections(api.java.debug.localValues,session) : undefined;
     await send('continue', { threadId: stop.threadId });
     const output = await running.waitFor('Rocketbrain Kotlin JDBC|');
     const application = kotlinWatchJdbcResult(output, spring.dbEngine);
