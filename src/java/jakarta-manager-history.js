@@ -1,6 +1,7 @@
 'use strict';
 
 const { fail } = require('./workbench-model');
+const { createManagerJournal, digest } = require('./jakarta-manager-journal');
 
 const MAX_CONTEXTS = 16;
 const MAX_VERSIONS = 8;
@@ -35,29 +36,33 @@ function exactRows(applications, context, revisions) {
   return true;
 }
 
-function createManagerHistory() {
+function createManagerHistory({ storagePath } = {}) {
   const histories = new Map(), retained = new Set();
+  const journal = storagePath && createManagerJournal(storagePath, { maxContexts: MAX_CONTEXTS,
+    maxVersions: MAX_VERSIONS, maxBytes: MAX_RETAINED_BYTES });
+  const load = (key, context) => journal ? journal.read(key, context) : histories.get(key);
   let retainedBytes = 0;
 
-  function verifyCapacity(size) {
-    if (retainedBytes + size > MAX_RETAINED_BYTES || retained.size >= MAX_CONTEXTS * MAX_VERSIONS) {
-      throw fail('This Tomcat Manager session reached its retained WAR archive capacity.');
+  function verifyCapacity(tracked, size) {
+    const existing = journal ? tracked.before?.bytes || 0 : retainedBytes;
+    if (existing + size > MAX_RETAINED_BYTES || !journal && retained.size >= MAX_CONTEXTS * MAX_VERSIONS) {
+      throw fail('This tracked Tomcat history reached its retained WAR archive capacity.');
     }
   }
 
-  function inspect({ action, origin, context, username, certificateSha256, caSha256, virtualHost }, applications) {
-    const key = JSON.stringify([origin, context]), before = histories.get(key);
-    const owner = JSON.stringify([username, certificateSha256, caSha256, virtualHost]);
+  async function inspect({ action, origin, context, username, certificateSha256, caSha256, virtualHost }, applications) {
+    const key = digest(JSON.stringify([origin, context])), before = await load(key, context);
+    const owner = digest(JSON.stringify([key, username, certificateSha256, caSha256, virtualHost]));
     if (action === 'track-deploy') {
       if (before || contextRows(applications, context).length) throw fail('Start tracked deployment in an empty Tomcat context.');
-      if (histories.size >= MAX_CONTEXTS) throw fail('This Tomcat Manager session is already tracking sixteen contexts.');
+      if (!journal && histories.size >= MAX_CONTEXTS) throw fail('This Tomcat Manager session is already tracking sixteen contexts.');
     } else if (!before || before.owner !== owner) {
-      throw fail('Choose a context tracked by this Tomcat Manager session under the same endpoint, account and certificate.');
+      throw fail('Choose a context tracked by this Tomcat Manager under the same endpoint, account and certificate.');
     }
 
     const revisions = before?.revisions ?? [];
     if (!exactRows(applications, context, revisions)) {
-      throw fail('The live Tomcat versions no longer match this session’s confirmed deployments. Review the server state.');
+      throw fail('The live Tomcat versions no longer match the confirmed deployments. Review the server state.');
     }
     if (revisions.length >= MAX_VERSIONS) throw fail('This tracked Tomcat context already has eight versions.');
     const current = before?.revisions.at(-1), previous = before?.revisions.at(-2);
@@ -66,20 +71,31 @@ function createManagerHistory() {
       previous: action === 'restore' ? previous : undefined };
   }
 
-  function beforeUpload(tracked, observed) {
-    if (histories.get(tracked.key) !== tracked.before || observed.virtualHost !== tracked.virtualHost ||
-        !exactRows(observed.applications, tracked.context, tracked.revisions)) {
+  function verifyRemote(tracked, observed) {
+    if (observed.virtualHost !== tracked.virtualHost || !exactRows(observed.applications, tracked.context, tracked.revisions)) {
       throw fail('The reviewed live Tomcat versions changed. Review the server state again.');
     }
-    if (!tracked.before && histories.size >= MAX_CONTEXTS) {
+  }
+
+  async function beforeUpload(tracked, observed) {
+    verifyRemote(tracked, observed);
+    const current = await load(tracked.key, tracked.context);
+    if (journal ? current?.head !== tracked.before?.head : current !== tracked.before) {
+      throw fail('The saved Tomcat history changed. Review it again.');
+    }
+    if (!journal && !tracked.before && histories.size >= MAX_CONTEXTS) {
       throw fail('This Tomcat Manager session is already tracking sixteen contexts.');
     }
   }
 
-  function confirm(tracked, version, observed, uploadedSha256, retainedArchive) {
+  async function confirm(tracked, version, observed, uploadedSha256, retainedArchive, reservation) {
     if (observed.virtualHost !== tracked.virtualHost ||
         !exactRows(observed.applications, tracked.context, [...tracked.revisions, { version }])) return undefined;
     const found = observed.applications.find(item => item.context === tracked.context && publicVersion(item) === version);
+    if (reservation) {
+      await reservation.confirm(version, found.location);
+      return found;
+    }
     let artifact = tracked.previous?.artifact;
     if (retainedArchive) {
       const lease = retainedArchive();
@@ -92,8 +108,9 @@ function createManagerHistory() {
     return found;
   }
 
-  return { inspect, beforeUpload, confirm, verifyCapacity,
-    invalidate(tracked) { histories.delete(tracked.key); },
+  return { inspect, beforeUpload, verifyRemote, confirm, verifyCapacity, persistent: !!journal,
+    reserve: (tracked, archive, sha256) => journal?.reserve(tracked, archive, sha256),
+    invalidate(tracked) { if (!journal) histories.delete(tracked.key); },
     async dispose() {
       histories.clear();
       const removed = await Promise.allSettled([...retained].map(lease => lease.release()));

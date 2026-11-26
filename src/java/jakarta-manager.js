@@ -178,10 +178,10 @@ async function withStagedWar(artifact, digest, work) {
   }
 }
 
-function createTomcatManager() {
+function createTomcatManager({ storagePath } = {}) {
   let disposed = false, mutating, closing;
   const plans = new Map(), attempts = new Set();
-  const history = createManagerHistory();
+  const history = createManagerHistory({ storagePath });
   function approved(allowed, cancellation) {
     if (disposed || allowed !== true) throw fail('Explicitly approve access to the selected Tomcat Manager endpoint.');
     if (cancelled(cancellation)) throw fail('The Tomcat Manager operation was cancelled.');
@@ -226,7 +226,7 @@ function createTomcatManager() {
     const target = managerContext(context), endpoint = managerOrigin(origin), auth = credentials(username, password);
     const verified = await authority(caFile);
     const observed = await attempt(cancellation, signal => list({ origin: endpoint, authorization: auth, ca: verified.ca }, signal));
-    const tracked = managed && history.inspect({ action, origin: endpoint, context: target, username,
+    const tracked = managed && await history.inspect({ action, origin: endpoint, context: target, username,
       certificateSha256: observed.fingerprint, caSha256: verified.caSha256, virtualHost: observed.virtualHost }, observed.applications);
     const baseline = managed ? undefined : appAt(observed.applications, target);
     if (!managed && (action === 'deploy' ? baseline : !baseline)) {
@@ -236,7 +236,7 @@ function createTomcatManager() {
       item.context === target && item.location === tracked.current.location));
     const sourceArtifact = action === 'restore' ? tracked.previous.artifact : action === 'undeploy' ? undefined : artifact;
     if (tracked?.current) await hashArchive(tracked.current.artifact, { expectedSha256: tracked.current.sha256 });
-    if (tracked && action !== 'restore') history.verifyCapacity(sourceArtifact.size);
+    if (tracked && action !== 'restore') history.verifyCapacity(tracked, sourceArtifact.size);
     const uploadedSha256 = sourceArtifact && await hashArchive(sourceArtifact, { expectedSha256: tracked?.previous?.sha256 });
     if (action === 'track-update' && uploadedSha256 === tracked.current.sha256) {
       throw fail('Select a WAR with different bytes from the latest tracked deployment.');
@@ -245,7 +245,8 @@ function createTomcatManager() {
     const plan = { id: randomUUID(), origin: endpoint, context: target, action,
       certificateSha256: observed.fingerprint, expiresAt: Date.now() + PLAN_MS,
       application: current && visibleApp(current), ...(sourceArtifact && { artifact: sourceArtifact.name, uploadedSha256 }),
-      ...(tracked && { nextRevision: tracked.nextRevision, retainedVersions: tracked.revisions.map(revision => revision.version),
+      ...(tracked && { historyScope: history.persistent ? 'profile' : 'session',
+        nextRevision: tracked.nextRevision, retainedVersions: tracked.revisions.map(revision => revision.version),
         ...(tracked.current && { currentVersion: tracked.current.version, currentSha256: tracked.current.sha256 }),
         ...(tracked.previous && { restoreFromVersion: tracked.previous.version }) }) };
     for (const [id, entry] of plans) if (Date.now() >= entry.plan.expiresAt) plans.delete(id);
@@ -273,14 +274,24 @@ function createTomcatManager() {
       const settings = { origin, authorization, ca };
       return await attempt(cancellation, signal => withStagedWar(entry.artifact, uploadedSha256, async (archive, retain) => {
         if (tracked?.current) await hashArchive(tracked.current.artifact, { expectedSha256: tracked.current.sha256 });
-        if (tracked && action !== 'restore') history.verifyCapacity(archive.size);
+        if (tracked && action !== 'restore') history.verifyCapacity(tracked, archive.size);
         const before = await list(settings, signal, pin);
-        if (tracked) history.beforeUpload(tracked, before);
+        if (tracked) await history.beforeUpload(tracked, before);
         else if (entry.baseline !== targetIdentity(appAt(before.applications, context))) {
           throw fail('The reviewed application state changed. Review the Tomcat context again.');
         }
-        approved(allowExecute, signal);
-        if (Date.now() >= plan.expiresAt) throw fail('The Tomcat deployment review expired before execution.');
+        const reservation = tracked && await history.reserve(tracked, { ...archive, name: entry.artifact.name }, uploadedSha256);
+        try {
+          if (reservation) {
+            history.verifyRemote(tracked, await list(settings, signal, pin));
+            await reservation.assertActive();
+          }
+          approved(allowExecute, signal);
+          if (Date.now() >= plan.expiresAt) throw fail('The Tomcat deployment review expired before execution.');
+        } catch (error) {
+          await reservation?.abort();
+          throw error;
+        }
         // The server checks listed contexts, so allocate a fresh doc base only at upload.
         const version = tracked && 'rb' + String(tracked.nextRevision).padStart(3, '0') + '-' + randomUUID().replaceAll('-', '');
         const receipt = { origin, action, context, ...(uploadedSha256 && { uploadedSha256 }), ...(version && { version }) };
@@ -298,7 +309,8 @@ function createTomcatManager() {
           }
           const after = await list(settings, signal, pin);
           if (tracked) {
-            const found = history.confirm(tracked, version, after, uploadedSha256, action === 'restore' ? undefined : retain);
+            const found = await history.confirm(tracked, version, after, uploadedSha256,
+              action === 'restore' ? undefined : retain, reservation);
             if (!found) {
               return unconfirmed('application-state');
             }

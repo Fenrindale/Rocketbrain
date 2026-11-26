@@ -4,8 +4,8 @@ const { createTomcatManager, managerOrigin, managerContext } = require('./jakart
 const { fail } = require('./workbench-model');
 const artifactActions = new Set(['deploy', 'update', 'track-deploy', 'track-update']);
 
-function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, listWarArtifacts, resolveArtifact, output }) {
-  const manager = createTomcatManager();
+function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, listWarArtifacts, resolveArtifact, output, storageUri }) {
+  const manager = createTomcatManager({ storagePath: storageUri?.scheme === 'file' ? storageUri.fsPath : undefined });
   const observe = options => { trusted(options?.cancellation); return manager.observe(options); };
   async function review(options = {}) {
     trusted(options.cancellation);
@@ -98,7 +98,9 @@ function registerJakartaManager(vscode, { trusted, withProgress, chooseProject, 
       if (plan.currentVersion) details.push('Current tracked version ' + plan.currentVersion, 'Current retained WAR SHA-256 ' + plan.currentSha256);
       if (plan.restoreFromVersion) details.push('Restore from ' + plan.restoreFromVersion);
       details.push('New sessions use the latest parallel deployment. Existing sessions may continue on their original versions.',
-        'Restore history and archived WAR files belong to this extension session. Tomcat Manager reports versions and running state.');
+        plan.historyScope === 'profile' ? 'Restore history and archived WAR files are saved in this local VS Code profile.'
+          : 'Restore history and archived WAR files belong to this extension session.',
+        'Tomcat Manager reports versions and running state.');
     }
     const approve = choice.approve || 'Apply Change';
     const verb = choice.approve ? choice.approve + ' for' : action[0].toUpperCase() + action.slice(1);

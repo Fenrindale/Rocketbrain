@@ -14,7 +14,7 @@ const COMMANDS={build:'rocketbrain.jakarta.buildWar',deploy:'rocketbrain.jakarta
   manager:'rocketbrain.jakarta.manager',
   debug:'rocketbrain.jakarta.debug',status:'rocketbrain.jakarta.status',stop:'rocketbrain.jakarta.stop'};
 
-function registerJakartaWorkbench(vscode,java) {
+function registerJakartaWorkbench(vscode,java,{ storageUri }={}) {
   const output=vscode.window.createOutputChannel('Rocketbrain Jakarta');
   const backend=createTomcatDeployment({log:chunk => output.append(chunk)});
   const subscriptions=[output], jobs=new Set(), pending=new Map();
@@ -225,7 +225,7 @@ function registerJakartaWorkbench(vscode,java) {
       (_progress,cancellation) => action(cancellation));
   }
 
-  const remote=registerJakartaManager(vscode,{trusted,withProgress,chooseProject,listWarArtifacts,output,
+  const remote=registerJakartaManager(vscode,{trusted,withProgress,chooseProject,listWarArtifacts,output,storageUri,
     resolveArtifact:async (projectUri,warUri,cancellation) => resolveWarArtifact(await projectFor(projectUri,cancellation),warUri)});
   register(COMMANDS.manager,remote.command);
   const wildfly=registerWildFly(vscode,{trusted,withProgress,projectFor,chooseProject,saved,output,
