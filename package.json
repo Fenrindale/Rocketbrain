@@ -187,6 +187,8 @@
       { "command": "rocketbrain.quarkus.stopDev", "title": "Stop Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.runTests", "title": "Run Quarkus Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.build", "title": "Build Quarkus Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.buildNative", "title": "Build Quarkus Native Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.runNative", "title": "Run Quarkus Native Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.debug", "title": "Debug Quarkus Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.debugDev", "title": "Debug Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.select", "title": "Select Python Interpreter", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -2993,6 +2995,11 @@
           "type": "boolean",
           "default": false,
           "description": "Include proven native SQL query literals in selected Java roots when reviewing source updates for a database rename."
+        },
+        "rocketbrain.java.quarkusGraalvmHome": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to an independent Linux GraalVM JDK 25 or newer with Native Image for the Quarkus Maven native build."
         },
         "rocketbrain.java.mavenHome": {
           "type": "string",

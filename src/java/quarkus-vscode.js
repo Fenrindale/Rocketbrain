@@ -6,6 +6,7 @@ const { setTimeout:delay } = require('node:timers/promises');
 const { inspectQuarkusProject,quarkusProject,profileKey } = require('./quarkus-model');
 const { profileFile } = require('./quarkus-config-mapping');
 const { createQuarkusDev,fastJar } = require('./quarkus-dev');
+const { createQuarkusNative } = require('./quarkus-native');
 const { createQuarkusProject } = require('./quarkus-create');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 const { DEBUG_TYPE,processAttachTarget } = require('./debug');
@@ -15,7 +16,8 @@ const COMMANDS = Object.freeze({
   create:'rocketbrain.quarkus.create',
   inspect:'rocketbrain.quarkus.inspect', start:'rocketbrain.quarkus.startDev',
   stop:'rocketbrain.quarkus.stopDev', test:'rocketbrain.quarkus.runTests',
-  build:'rocketbrain.quarkus.build', debug:'rocketbrain.quarkus.debug', debugDev:'rocketbrain.quarkus.debugDev'
+  build:'rocketbrain.quarkus.build', debug:'rocketbrain.quarkus.debug', debugDev:'rocketbrain.quarkus.debugDev',
+  buildNative:'rocketbrain.quarkus.buildNative',runNative:'rocketbrain.quarkus.runNative'
 });
 
 function registerQuarkusWorkbench(vscode,java) {
@@ -24,6 +26,7 @@ function registerQuarkusWorkbench(vscode,java) {
   const output=vscode.window.createOutputChannel('Rocketbrain Quarkus');
   const dev=createQuarkusDev({log:chunk => output.append(chunk),
     resolveDescendant:(target,cancellation) => java.debug.processes.resolveDescendant(target,cancellation)});
+  const native=createQuarkusNative({log:chunk=>output.append(chunk)});
   subscriptions.push(output);
 
   function trusted(cancellation) {
@@ -73,7 +76,7 @@ function registerQuarkusWorkbench(vscode,java) {
 
   async function exclusive(options,action,message) {
     if (options.allowProjectExecution!==true) throw fail(message);
-    if (busy||dev.running||java.workbench.getSnapshot().taskRunning) throw fail('Finish the current Java task or stop the owned Quarkus application.');
+    if (busy||dev.running||native.running||java.workbench.getSnapshot().taskRunning) throw fail('Finish the current Java task or stop the owned Quarkus application.');
     const ticket=generation;
     busy=true;
     try {
@@ -108,6 +111,15 @@ function registerQuarkusWorkbench(vscode,java) {
     return result.state==='succeeded'?{...result,tool:project.tool,artifact:fastJar(project)}:result;
   },'Explicitly choose the Quarkus build before executing the project.');
 
+  const buildNative=(options={})=>exclusive(options,(project,current)=>{
+    const config=vscode.workspace.getConfiguration('rocketbrain.java');
+    return native.build({project,graalvmHome:config.get('quarkusGraalvmHome'),mavenHome:config.get('mavenHome'),
+      cancellation:options.cancellation,current(){current();saved(project);}});
+  },'Explicitly approve the Quarkus native build before executing the Maven module.');
+  const runNative=(options={})=>exclusive(options,(project,current)=>native.start({project,buildId:options.buildId,
+    cancellation:options.cancellation,current(){current();saved(project);}}),
+  'Explicitly approve running the selected Quarkus native image.');
+
   subscriptions.push(vscode.debug.onDidStartDebugSession(session=>{
     const record=pending.get(session.configuration?.[DEBUG_MARKER]);
     if (session.type!==DEBUG_TYPE||!record) return;
@@ -122,10 +134,11 @@ function registerQuarkusWorkbench(vscode,java) {
     generation++;
     const owned=[debugSession,...Array.from(pending.values(),record=>record.session)].filter(Boolean);
     debugSession=undefined;
-    let receipt;
+    const nativeWasRunning=native.running;
+    let receipt,nativeReceipt;
     try { await Promise.allSettled([...new Set(owned)].map(session=>vscode.debug.stopDebugging(session))); }
-    finally { receipt=await dev.stop(); }
-    return receipt;
+    finally { [receipt,nativeReceipt]=await Promise.all([dev.stop(),native.stop()]); }
+    return nativeWasRunning?nativeReceipt:receipt;
   }
 
   const startDebug=(options={},profile='prod')=>exclusive(options,async(project,current)=>{
@@ -310,6 +323,22 @@ function registerQuarkusWorkbench(vscode,java) {
     const projectUri=await choose();
     return projectUri&&progress('Build Quarkus Application',cancellation=>build({projectUri,allowProjectExecution:true,cancellation}));
   });
+  register(COMMANDS.buildNative,async()=>{
+    const projectUri=await choose();
+    if(!projectUri)return;
+    output.show(true);
+    const result=await progress('Build Quarkus Native Image',cancellation=>buildNative({projectUri,allowProjectExecution:true,cancellation}));
+    void vscode.window.showInformationMessage('Quarkus native image built at '+result.artifact);
+    return result;
+  });
+  register(COMMANDS.runNative,async()=>{
+    const projectUri=await choose();
+    if(!projectUri)return;
+    output.show(true);
+    const result=await progress('Run Quarkus Native Image',cancellation=>runNative({projectUri,allowProjectExecution:true,cancellation}));
+    void vscode.window.showInformationMessage('Quarkus native application is ready at '+result.baseUrl);
+    return result;
+  });
   register(COMMANDS.debug,async()=>{
     const projectUri=await choose();
     if (!projectUri) return;
@@ -328,6 +357,7 @@ function registerQuarkusWorkbench(vscode,java) {
     create:options => track(() => create(options)),
     inspect:options => track(() => inspect(options)), startDev:options => track(() => start(options)),
     runTests:options => track(() => tests(options)),build:options=>track(()=>build(options)),
+    buildNative:options=>track(()=>buildNative(options)),runNative:options=>track(()=>runNative(options)),
     debug:options=>track(()=>startDebug(options)),debugDev:options=>track(()=>startDebug(options,'dev')),stopDev:stop,
     dispose() {
       if (closing) return closing;
@@ -336,7 +366,7 @@ function registerQuarkusWorkbench(vscode,java) {
         try { await stop(); }
         finally {
           await Promise.allSettled(jobs);
-          try { await dev.dispose(); }
+          try { await Promise.all([dev.dispose(),native.dispose()]); }
           finally { for (const item of subscriptions) item.dispose(); }
         }
       })();
