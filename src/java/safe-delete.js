@@ -15,7 +15,7 @@ function referenceFiles(root){return [...new Set([...projectFiles(root),...['bui
 function inspectCandidate(text,symbols,p,{describeOnly=false}={}){
  const parsed=lexJava(text);if(parsed.issues.length)throw Error('Safe Delete cannot prove this source syntax: '+parsed.issues.join('; '));
  const at=offset(text,p),matches=candidates(symbols).filter(({symbol:s})=>s.selectionRange&&at>=offset(text,s.selectionRange.start)&&at<=offset(text,s.selectionRange.end));
- if(matches.length!==1)throw Error('Select one Java class or private method declaration name.');
+ if(matches.length!==1)throw Error('Select one Java class, private method or private field declaration name.');
  const {symbol:s,parent}=matches[0],start=offset(text,s.range.start),end=offset(text,s.range.end),nameStart=offset(text,s.selectionRange.start),nameEnd=offset(text,s.selectionRange.end),name=text.slice(nameStart,nameEnd),tokens=parsed.tokens;
  if(!/^[A-Za-z_$][\w$]*$/.test(name))throw Error('Safe Delete supports simple Java declaration identifiers.');
  const eligibilityConflicts=[],finish=value=>{if(!describeOnly&&eligibilityConflicts.length)throw Error(eligibilityConflicts.join(' '));return {...value,eligibilityConflicts};};
@@ -33,7 +33,19 @@ function inspectCandidate(text,symbols,p,{describeOnly=false}={}){
   if(text.slice(start,end).includes('::'))eligibilityConflicts.push('Method-reference semantics need separate review.');
   return finish({kind:'method',name,start,end,range:s.range,declarationRange:s.selectionRange});
  }
- throw Error('Safe Delete currently supports package-private final class files and unused plain private methods.');
+ if (s.kind === 8 && parent?.kind === 5) {
+  const declaration = tokens.filter(token => token.start >= start && token.end <= end);
+  const [type, fieldName, terminator] = declaration.slice(-3);
+  const modifiers = declaration.slice(0, -3).map(token => token.text);
+  const privateField = modifiers.includes('private') &&
+    (modifiers.length === 1 || modifiers.length === 2 && modifiers.includes('static'));
+  const supportedType = /^(?:boolean|byte|short|int|long|char|float|double|String)$/u.test(type?.text || '');
+  const eligible = privateField && supportedType && fieldName?.start === nameStart && fieldName.end === nameEnd &&
+    terminator?.text === ';' && name !== 'serialVersionUID';
+  if (!eligible) eligibilityConflicts.push('Field Safe Delete requires one unannotated private field with no initializer and a primitive or String type.');
+  return finish({kind:'field',name,start,end,range:s.range,declarationRange:s.selectionRange});
+ }
+ throw Error('Safe Delete currently supports package-private final classes, plain private methods and simple uninitialized private fields.');
 }
 function registerJavaSafeDelete(context,vscode,{request,refactoring,runtime}={}){
  const operations=new Set(),subscriptions=[],pending=new Map(),recoveries=new Map(),reports=new Map();let closed=false;
