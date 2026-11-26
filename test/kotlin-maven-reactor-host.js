@@ -19,13 +19,18 @@ async function runKotlinMavenReactorChecks(api,vscode,checks) {
     changed.push([config,name,config.inspect(name)?.globalValue]);
     await config.update(name,value,target);
   }
-  let editor,original;
+  let editor,original,outside;
   try {
     await fs.cp(fixture.fixture,root,{recursive:true});
     await setting('rocketbrain.kotlinEditor','serverHome',process.env.ROCKETBRAIN_KOTLIN_EDITOR_HOME);
     await setting('rocketbrain.java','mavenHome',process.env.ROCKETBRAIN_KOTLIN_MAVEN_HOME);
     const settings=vscode.workspace.getConfiguration('rocketbrain.java');
     const javaHome=settings.get('javaHome')||api.java.getState().javaHome,mavenHome=settings.get('mavenHome');
+    const siblingDocument=path.join(root,'unrelated','src','main','kotlin','PreviouslyOpened.kt');
+    await fs.mkdir(path.dirname(siblingDocument),{recursive:true});
+    await fs.writeFile(siblingDocument,'package unrelated\nval broken: String = 42\n',{flag:'wx'});
+    outside=await vscode.workspace.openTextDocument(vscode.Uri.file(siblingDocument));
+    await vscode.window.showTextDocument(outside,{preview:false});
     const text=await fs.readFile(entry,'utf8');
     await fs.writeFile(entry,fixture.invalid(text));
     const document=await vscode.workspace.openTextDocument(vscode.Uri.file(entry));
@@ -45,11 +50,14 @@ async function runKotlinMavenReactorChecks(api,vscode,checks) {
     assert.equal(prepared.reactor.module,'app');
     assert.equal(prepared.reactor.dependencies[0].coordinates,'rocketbrain.fixture:inventory-contract:1.0.0');
     assert.equal(path.relative(project,vscode.Uri.parse(prepared.projectUri).fsPath),'');
+    assert.equal(outside.isClosed,false);
+    await fs.unlink(outside.uri.fsPath);
     await assert.rejects(fs.stat(path.join(project,'target')));
     await assert.rejects(fs.stat(path.join(root,'unrelated','target')));
     const mismatch=await until(()=>vscode.languages.getDiagnostics(document.uri).find(item=>
       item.severity===vscode.DiagnosticSeverity.Error&&fixture.mismatch(item)),65000);
     assert.equal(mismatch.range.start.line,9);
+    assert.ok(!vscode.languages.getDiagnostics(outside.uri).some(item=>item.source==='kotlin'));
     const replace=text=>editor.edit(edit=>edit.replace(new vscode.Range(editor.document.positionAt(0),
       editor.document.positionAt(editor.document.getText().length)),text));
     const partial=fixture.partial(original);
@@ -71,7 +79,7 @@ async function runKotlinMavenReactorChecks(api,vscode,checks) {
     checks.push('The installed Kotlin editor prepared the reviewed Maven dependency only, resolved its typed member in an unbuildable application, and invalidated the editor session after the sibling source changed.');
     return {module:prepared.reactor.module,dependency:prepared.reactor.dependencies[0].coordinates,
       completion:completion.label.label||completion.label,diagnostic:{code:'TYPE_MISMATCH',line:10,unsavedFixCleared:true},
-      jdbc,staleReviewRefused:true,upstreamSavedChangeStopped:true,repositoryCleaned:true};
+      jdbc,staleReviewRefused:true,unrelatedPreviouslyOpenIgnored:true,upstreamSavedChangeStopped:true,repositoryCleaned:true};
   } finally {
     await service.stop();
     if (editor) {
@@ -82,6 +90,10 @@ async function runKotlinMavenReactorChecks(api,vscode,checks) {
         await document.save();
       }
       await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    }
+    if (outside) {
+      const tabs=vscode.window.tabGroups.all.flatMap(group=>group.tabs).filter(tab=>tab.input.uri?.toString()===outside.uri.toString());
+      if (tabs.length) await vscode.window.tabGroups.close(tabs);
     }
     for (const [config,name,value] of changed.reverse()) await config.update(name,value,target);
     const owned=await fs.realpath(root);
