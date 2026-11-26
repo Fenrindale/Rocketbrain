@@ -23,11 +23,13 @@ function family(entry, classes) {
   return [];
 }
 
-function classFor(tag, imports, classes) {
+function classFor(tag, imports, classes, packages) {
   if (tag.includes('.')) return classes.get(tag.replaceAll('.','/'));
-  const direct = imports.filter(name=>name.endsWith('.'+tag));
-  const names = direct.length ? direct : imports.filter(name=>name.endsWith('.*')).map(name=>name.slice(0,-1)+tag);
-  const candidates = [...new Set(names)].filter(name=>classes.has(name.replaceAll('.','/')));
+  const direct = [...new Set(imports.filter(name=>name.endsWith('.'+tag)))];
+  if (direct.length) return direct.length===1 ? classes.get(direct[0].replaceAll('.','/')) : undefined;
+  const wildcards = [...new Set(imports.filter(name=>name.endsWith('.*')).map(name=>name.slice(0,-2)))];
+  if (wildcards.some(name=>!packages.has(name))) return;
+  const candidates = wildcards.map(name=>name+'.'+tag).filter(name=>classes.has(name.replaceAll('.','/')));
   return candidates.length===1 ? classes.get(candidates[0].replaceAll('.','/')) : undefined;
 }
 
@@ -53,28 +55,29 @@ function properties(lineage) {
   return available;
 }
 
-function acceptsNodes(hole, classes) {
+function acceptsNodes(hole, classes, packages) {
   if (!hole.parents.length) return true;
   const parent = hole.parents.at(-1);
   if (parent.includes(':')) return false;
   if (/^[a-z][\w]*$/u.test(parent) && hole.parents.length>1) {
-    const receiver = classFor(hole.parents.at(-2),hole.imports,classes);
+    const receiver = classFor(hole.parents.at(-2),hole.imports,classes,packages);
     const lineage = family(receiver,classes);
     if (parent==='children' && lineage.some(entry=>containers.has(entry.name))) return true;
     return properties(lineage).get(parent)==='Ljavafx/scene/Node;';
   }
-  const receiver = classFor(parent,hole.imports,classes);
+  const receiver = classFor(parent,hole.imports,classes,packages);
   return family(receiver,classes).some(entry=>containers.has(entry.name));
 }
 
 function suggestions(hole, classes) {
-  if (hole.kind==='tag' && !acceptsNodes(hole,classes)) return [];
+  const packages = new Set([...classes.keys()].map(packageOf));
+  if (hole.kind==='tag' && !acceptsNodes(hole,classes,packages)) return [];
   if (hole.kind==='tag' || hole.kind==='import') {
     const result = [];
     for (const entry of classes.values()) {
       if (!entry.visible || !entry.constructor || !family(entry,classes).length) continue;
       const qualified = dotted(entry.name), name = simple(entry.name);
-      const imported = classFor(name,hole.imports,classes)===entry;
+      const imported = classFor(name,hole.imports,classes,packages)===entry;
       if (hole.kind==='import' && hole.imports.includes(qualified)) continue;
       if (!prefix(qualified,hole.prefix) && (hole.kind==='import' || !prefix(name,hole.prefix))) continue;
       const text = hole.kind==='tag' && imported && !hole.prefix.includes('.') ? name : qualified;
@@ -83,7 +86,7 @@ function suggestions(hole, classes) {
     }
     return result.sort((left,right)=>left.score-right.score||left.name.localeCompare(right.name)).slice(0,80);
   }
-  const entry = classFor(hole.className,hole.imports,classes);
+  const entry = classFor(hole.className,hole.imports,classes,packages);
   if (!entry?.visible || !entry.constructor) return [];
   const available = properties(family(entry,classes));
   if (hole.kind==='value') {

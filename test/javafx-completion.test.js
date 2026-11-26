@@ -55,6 +55,14 @@ test('FXML completion observes actual Gradle and Eclipse JDT metadata with both 
   timeout:220000
 },async t=>{
   const parent=await fs.realpath(os.tmpdir()), owned=await fs.mkdtemp(path.join(parent,'rb-fxml-completion-live-'));
+  let lsp;
+  t.after(async()=>{
+    await lsp?.close();
+    const verified=await fs.realpath(owned);
+    assert.equal(path.dirname(verified),parent);
+    assert.ok(path.basename(verified).startsWith('rb-fxml-completion-live-'));
+    await fs.rm(verified,{recursive:true,force:true,maxRetries:10,retryDelay:400});
+  });
   const workspace=path.join(owned,'workspace'), root=path.join(workspace,'owned-fxml-module');
   const {javaHome,gradleHome,serverPath}=JSON.parse(await fs.readFile(config,'utf8'));
   const fixture=await createFixture(root,libs);
@@ -63,14 +71,7 @@ test('FXML completion observes actual Gradle and Eclipse JDT metadata with both 
   const settings=serverSettings([{name:'JavaSE-25',path:javaHome,default:true}],{gradleHome,gradleJavaHome:javaHome});
   settings.java.import.gradle.wrapper.enabled=false;
   launch.options.env.GRADLE_USER_HOME=gradleCache;
-  const lsp=new StdioLsp(launch);
-  t.after(async()=>{
-    await lsp.close();
-    const verified=await fs.realpath(owned);
-    assert.equal(path.dirname(verified),parent);
-    assert.ok(path.basename(verified).startsWith('rb-fxml-completion-live-'));
-    await fs.rm(verified,{recursive:true,force:true,maxRetries:10,retryDelay:400});
-  });
+  lsp=new StdioLsp(launch);
   const initialize=await lsp.request('initialize',{processId:process.pid,rootUri:uri(workspace),
     workspaceFolders:[{uri:uri(workspace),name:'fxml-completion'}],capabilities:{workspace:{workspaceFolders:true},textDocument:{}},
     initializationOptions:{bundles:[],workspaceFolders:[uri(workspace)],settings}},70000);

@@ -28,6 +28,8 @@ const variants = [
   ['builtin-tag',fxImported+'<La|bel/>','Label'],
   ['custom-tag',customImported+'<Rock|etLabel/>','RocketLabel'],
   ['qualified-tag','<owned.controls.Rock|etLabel/>','owned.controls.RocketLabel'],
+  ['unverified-wildcard','<?import owned.controls.*?>\n<?import external.widgets.*?>\n<Roc|/>','owned.controls.RocketLabel'],
+  ['collision-property','<?import owned.controls.RocketLabel?>\n<?import external.widgets.RocketLabel?>\n<RocketLabel cap|/>'],
   ['custom-property',customImported+'<RocketLabel cap|tion/>','caption'],
   ['inherited-property',customImported+'<RocketLabel te|xt="" />','text'],
   ['boolean-value',customImported+'<RocketLabel wrapText="t|r"/>','true'],
