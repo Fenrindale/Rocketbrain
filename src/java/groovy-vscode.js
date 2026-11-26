@@ -3,6 +3,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { startGroovyConsole } = require('./groovy-console');
+const { createGroovyProjectConsole } = require('./groovy-project-console');
 const { workspaceRoots,workspacePath,inside,cancelled,fail } = require('./workbench-model');
 
 const maxScriptBytes = 64 * 1024;
@@ -23,7 +24,8 @@ async function readSavedScript(file) {
 const COMMANDS = Object.freeze({
   console:'rocketbrain.groovy.console', reset:'rocketbrain.groovy.resetConsole',
   selection:'rocketbrain.groovy.evaluateSelection', script:'rocketbrain.groovy.runScript',
-  tests:'rocketbrain.groovy.runTests'
+  tests:'rocketbrain.groovy.runTests', project:'rocketbrain.groovy.projectSelection',
+  stopProject:'rocketbrain.groovy.stopProject'
 });
 
 function registerGroovyWorkbench(vscode,java) {
@@ -50,6 +52,8 @@ function registerGroovyWorkbench(vscode,java) {
       javaHome:config.get('javaHome') || java.getState().javaHome,gradleHome:config.get('gradleHome'),
       groovyJar:config.get('groovyConsoleJar'),workspaceTrusted:vscode.workspace.isTrusted};
   }
+
+  const projectConsole = createGroovyProjectConsole(vscode, java, { trusted, configuration, readSavedScript });
 
   async function openWorker(options,ticket) {
     const child = await startGroovyConsole(options);
@@ -217,21 +221,49 @@ function registerGroovyWorkbench(vscode,java) {
     if (selected) return progress('Run Groovy and Spock Tests',cancellation =>
       runTests({projectUri:selected.uri,allowProjectExecution:true,cancellation}));
   });
+  register(COMMANDS.project,async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.languageId !== 'groovy' || editor.selection.isEmpty) throw fail('Select saved Groovy code to review.');
+    const { document, selection: range } = editor;
+    const projects = await progress('Find Imported Java Projects', cancellation => projectConsole.list({ cancellation }));
+    if (!projects.length) throw fail('Import a local Maven or Gradle project before reviewing its Groovy classpath.');
+    const selected = await vscode.window.showQuickPick(projects.map(project => ({
+      label: project.name, description: project.tool, detail: project.root, project
+    })), { title: 'Groovy Project Classpath' });
+    if (!selected) return;
+    const scope = await vscode.window.showQuickPick([
+      { label: 'Runtime', value: 'runtime' }, { label: 'Test', value: 'test' }
+    ], { title: 'Choose Groovy Project Classpath Scope' });
+    if (!scope) return;
+    const plan = await progress('Review Groovy Project Selection', cancellation =>
+      projectConsole.review({ document, range, projectUri: selected.project.uri, scope: scope.value, cancellation }));
+    await projectConsole.show(plan.id);
+    const choice = await vscode.window.showWarningMessage('Run the reviewed Groovy project selection?',
+      { modal: true, detail: selected.project.root + ' · ' + scope.label + ' classpath' }, 'Run Reviewed Code');
+    if (choice !== 'Run Reviewed Code') return;
+    const receipt = await progress('Run Reviewed Groovy Project Code', cancellation =>
+      projectConsole.run({ id: plan.id, allowExecution: true, cancellation }));
+    return show('Groovy project · ' + selected.project.name, receipt);
+  });
+  register(COMMANDS.stopProject,() => projectConsole.stop());
   subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => diagnostics.delete(event.document.uri)));
   if (vscode.workspace.onDidChangeWorkspaceFolders) subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
     void reset().catch(() => {});
+    void projectConsole.invalidate().catch(() => {});
     for (const child of processes) void child.dispose().catch(() => {});
   }));
 
   return {
     evaluate:options => track(() => evaluate(options)),runScript:options => track(() => runScript(options)),
     runTests:options => track(() => runTests(options)),reset,
+    project:{list:options => track(() => projectConsole.list(options)),review:options => track(() => projectConsole.review(options)),
+      show:id => track(() => projectConsole.show(id)),run:options => track(() => projectConsole.run(options)),stop:projectConsole.stop},
     dispose() {
       if (closing) return closing;
       disposed=true;
       epoch++;
       closing=(async () => {
-        await Promise.allSettled([...processes].map(child => child.dispose()));
+        await Promise.allSettled([projectConsole.dispose(), ...[...processes].map(child => child.dispose())]);
         await Promise.allSettled(jobs);
         for (const item of subscriptions) item.dispose();
       })();

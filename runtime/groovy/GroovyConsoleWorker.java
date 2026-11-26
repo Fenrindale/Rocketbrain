@@ -1,3 +1,4 @@
+import groovy.grape.Grape;
 import groovy.lang.Binding;
 import groovy.lang.GroovyShell;
 import groovy.lang.GroovySystem;
@@ -7,7 +8,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Base64;
 import org.codehaus.groovy.control.MultipleCompilationErrorsException;
 import org.codehaus.groovy.control.messages.SyntaxErrorMessage;
@@ -17,10 +22,30 @@ public final class GroovyConsoleWorker {
     private static final int LIMIT = 32768;
 
     public static void main(String[] arguments) throws Exception {
+        if (arguments.length == 0) {
+            serve(new GroovyShell(new Binding()));
+            return;
+        }
+        if (arguments.length != 1) throw new IllegalArgumentException("Invalid Groovy project loader.");
+        var entries = Files.readAllLines(Path.of(arguments[0]), StandardCharsets.UTF_8);
+        if (entries.isEmpty() || entries.size() > 120) throw new IllegalArgumentException("Invalid Groovy project classpath.");
+        var urls = new URL[entries.size()];
+        for (int i = 0; i < entries.size(); i++) urls[i] = Path.of(entries.get(i)).toUri().toURL();
+        var thread = Thread.currentThread();
+        var original = thread.getContextClassLoader();
+        try (var loader = new URLClassLoader(urls, GroovyShell.class.getClassLoader())) {
+            thread.setContextClassLoader(loader);
+            Grape.setEnableGrapes(false);
+            serve(new GroovyShell(loader, new Binding()));
+        } finally {
+            thread.setContextClassLoader(original);
+        }
+    }
+
+    private static void serve(GroovyShell shell) throws Exception {
         var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         var protocol = new PrintStream(System.out, false, StandardCharsets.UTF_8);
         System.setIn(InputStream.nullInputStream());
-        var shell = new GroovyShell(new Binding());
         protocol.println("READY\t" + GroovySystem.getVersion());
         protocol.flush();
         for (String line; (line = input.readLine()) != null;) {

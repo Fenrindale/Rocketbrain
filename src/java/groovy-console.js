@@ -7,6 +7,7 @@ const { createHash } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { independentJavaExecutable } = require('./debug-runtime');
 const source = require('./groovy-console-source.json');
+const { stageClasspath } = require('./groovy-project-classpath');
 
 const GROOVY_VERSION = '4.0.28';
 const GROOVY_SIZE = 7712577;
@@ -133,7 +134,7 @@ class GroovyConsole {
   }
 }
 
-async function startGroovyConsole({workspacePath,javaHome,gradleHome,groovyJar,workspaceTrusted} = {}) {
+async function startGroovyConsole({workspacePath,javaHome,gradleHome,groovyJar,workspaceTrusted,projectClasspath,beforeStart,check = () => {}} = {}) {
   if (workspaceTrusted !== true) throw fail('Trust the workspace before executing Groovy code.');
   if (!path.isAbsolute(workspacePath || '') || !path.isAbsolute(javaHome || '')) {
     throw fail('Choose a local trusted workspace and configured independent Java runtime.');
@@ -146,9 +147,18 @@ async function startGroovyConsole({workspacePath,javaHome,gradleHome,groovyJar,w
     const worker=path.join(root,'GroovyConsoleWorker.java'), runtime=path.join(root,GROOVY_JAR);
     await fs.writeFile(worker,source,{flag:'wx'});
     await fs.writeFile(runtime,bytes,{flag:'wx'});
+    const extra = [];
+    if (projectClasspath) {
+      const staged = await stageClasspath(projectClasspath, root, check);
+      const list = path.join(root, 'project-classpath.txt');
+      await fs.writeFile(list, staged.join('\n'), { flag: 'wx', encoding: 'utf8' });
+      extra.push(list);
+    }
     const env={...process.env};
-    for (const key of Object.keys(env)) if (['JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS','CLASSPATH'].includes(key.toUpperCase())) delete env[key];
-    const child=spawn(binary,['-Xmx192m','-cp',runtime,'--source','25',worker],{
+    for (const key of Object.keys(env)) if (['JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS','JDK_JAVAC_OPTIONS','CLASSPATH'].includes(key.toUpperCase())) delete env[key];
+    if(beforeStart) await beforeStart();
+    check();
+    const child=spawn(binary,['-Xmx192m','-cp',runtime,'--source','25',worker,...extra],{
       cwd:workspacePath,env,windowsHide:true,stdio:['pipe','pipe','pipe']
     });
     return new GroovyConsole(child,() => removeOwned(parent,root));
