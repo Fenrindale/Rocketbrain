@@ -12,7 +12,8 @@ const hooks = Object.freeze({
   javafxGradleImage: ['javafx-gradle-image-host', 'runJavaFxGradleImageChecks'],
   javafxProperties: ['javafx-properties-host', 'runJavaFxPropertyChecks'],
   kmpJvmDebug: ['kmp-jvm-debug-host', 'runKmpJvmDebugChecks'],
-  mavenSnapshot: ['maven-snapshot-host', 'runMavenSnapshotChecks']
+  mavenSnapshot: ['maven-snapshot-host', 'runMavenSnapshotChecks'],
+  mavenSnapshotMove: ['maven-snapshot-model-move-host', 'runMavenSnapshotMoveChecks']
 });
 
 function selectGroups(value) {
