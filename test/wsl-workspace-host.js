@@ -151,6 +151,15 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, d
   assert.ok(gitDiff.split(/\r?\n/u).some(line => line.startsWith('+') && line.includes(newMarker)));
   assert.ok(gitDiff.split(/\r?\n/u).some(line => line.startsWith('-') && line.includes(oldMarker)));
 
+  const fromLinux = '// WSL Linux filesystem editor synchronization';
+  await linuxCommand(distribution, '/usr/bin/python3', '-c',
+    'import sys; open(sys.argv[1], "a", encoding="utf-8").write("\\n" + sys.argv[2] + "\\n")',
+    linux + '/' + sourceFile, fromLinux);
+  await until(() => document.getText().includes(fromLinux), 25000);
+  assert.equal(document.isDirty, false);
+  const onDiskAfterLinuxEdit = await fs.readFile(source.fsPath);
+  const afterLinuxSha = await linuxCommand(distribution, '/usr/bin/sha256sum', '--', linux + '/' + sourceFile);
+  assert.equal(afterLinuxSha.split(/\s/u, 1)[0], createHash('sha256').update(onDiskAfterLinuxEdit).digest('hex'));
   const pom = vscode.Uri.joinPath(folder.uri, 'pom.xml').fsPath;
   const original = await fs.readFile(pom);
   const stale = await wsl.review({ ...options, system: 'maven', goal: 'package' });
@@ -164,7 +173,7 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, d
   await build(options, mapping.windows, 'maven', 'package', jar, /BUILD SUCCESS/u);
   const basic = { openedInWindowsVscode: true, exactDistroAndPath: true, caseMismatchRejected: true,
     crossDistroRejected: true, editorSavedAndLinuxDigestMatched: true, linuxGitObservedEditorChange: true,
-    rejectedChangedDescriptor: true, mavenGoal: 'package' };
+    linuxEditorReloaded: true, rejectedChangedDescriptor: true, mavenGoal: 'package' };
   if (debuggerOptions) {
     const database = await verifyForwardedDatabase(debuggerOptions.api, vscode);
     await vscode.window.showTextDocument(document, { preview: false });
