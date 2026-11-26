@@ -62,11 +62,12 @@ function registerRemoteDeployment(vscode, options) {
 
   async function prepare({ label, expected, remote, action, source, credential, signal }) {
     const profile = route(label, expected);
-    const local = action === 'upload' ? savedSource(source) : {};
+    const localSource = action === 'upload' ? source : undefined;
+    const local = action === 'upload' ? savedSource(localSource) : {};
     const review = await core.prepare({ profile, remote, action, ...local, credential, signal });
     trusted();
     while (reviews.size >= 8) reviews.delete(reviews.keys().next().value);
-    reviews.set(review.id, { review, source, local, profile });
+    reviews.set(review.id, { review, source: localSource, local, profile });
     return { ...review, uri: uriFor(review) };
   }
 
