@@ -19,6 +19,7 @@ const bundleLimit = 128 * 1024 * 1024;
 const maxLibraries = 6;
 const outputLimit = 4 * 1024 * 1024;
 const protocol = 'RBJDBC1';
+const planOperations = new Set(['plan', 'plan-review', 'plan-measure']);
 const fail = (code, message) => Object.assign(Error(message), { code: 'ROCKETBRAIN_JDBC_' + code });
 const text = (value, maximum) => typeof value === 'string' && Buffer.byteLength(value) <= maximum && !/[\x00-\x1f\x7f]/.test(value);
 const isHash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -149,6 +150,7 @@ function credentials(value) {
 function wire(value) { return Buffer.from(String(value), 'utf8').toString('base64'); }
 
 function response(output, operation) {
+  const isPlan = planOperations.has(operation);
   const lines = output.trimEnd().split(/\r?\n/);
   const columns = [], rows = [], objects = [];
   let connection, truncated, plan, relation, updated;
@@ -165,13 +167,21 @@ function response(output, operation) {
       if (fields[0] === 'RB006') throw fail('PLAN_SCOPE', 'Estimate a visible ordinary PostgreSQL table with built-in columns and an in-range integer filter. Table policies, inheritance and custom planner expressions are outside this workflow.');
       if (fields[0] === 'RB007') throw fail('GRID_SCOPE', 'Choose an ordinary PostgreSQL table with one integer primary key and supported text or integer cells. Triggers, generated columns, and custom planner expressions are outside this workflow.');
       if (fields[0] === 'RB008') throw fail('GRID_STALE', 'The PostgreSQL row or table changed since review. Reload the grid and review a new edit.');
+      if (fields[0] === 'RB009') throw fail('PLAN_STALE', 'The reviewed PostgreSQL relation, query identity or server changed. Prepare a new measurement review.');
+      if (fields[0] === 'RB010') throw fail('PLAN_LOCK', 'Measured PostgreSQL plans require scoped MAINTAIN permission, table ownership or equivalent lock privileges.');
+      if (fields[0] === 'RB011') throw fail('PLAN_BUSY', 'The PostgreSQL table has a conflicting schema or maintenance lock. Prepare another review when the table is available.');
       if (fields[0] === 'JDBC0') throw fail('DRIVER', 'The JDBC driver could not be initialized. Check its class and separate dependencies.');
       throw fail('SERVER', 'The JDBC operation failed (SQLSTATE ' + fields[0] + ').');
     }
-    if (type === 'P' && operation === 'plan' && !plan && fields.length === 3 &&
-        fields[0] && /^\d+$/.test(fields[1] || '') && fields[2]) {
-      const [version, relation, raw] = fields;
-      plan = { version, relation, raw };
+    if (type === 'P' && isPlan && !plan) {
+      const [version, relation] = fields;
+      const raw = fields.at(-1);
+      const reviewed = operation !== 'plan';
+      if (!version || !/^\d{1,10}$/u.test(relation || '') || !raw || fields.length !== (reviewed ? 5 : 3) ||
+          reviewed && (!isHash(fields[2]) || !fields[3]?.startsWith('SELECT ') || fields[3].length > 4096)) {
+        throw fail('PROTOCOL', 'The JDBC driver returned an invalid reviewed plan response.');
+      }
+      plan = { version, relation, raw, ...(reviewed && { scopeFingerprint: fields[2], executionSql: fields[3] }) };
     } else if (type === 'G' && operation === 'grid-read' && relation === undefined && fields.length === 1 && /^\d{1,10}$/.test(fields[0])) {
       [relation] = fields;
     } else if (type === 'F' && operation === 'grid-read' && relation && columns.length < 32 && !rows.length && fields.length === 5) {
@@ -199,17 +209,17 @@ function response(output, operation) {
         nullable === '0' || nullable === 'NO' ? false : null,
       precision: precision === null ? null : Number(precision), scale: scale === null ? null : Number(scale) });
     } else if (type === 'R' && operation === 'query' && rows.length < 500 && fields.length === columns.length) rows.push(fields);
-    else if (type === 'D' && !['plan', 'grid-update'].includes(operation) && fields.length === 1 && ['true', 'false'].includes(fields[0]) &&
+    else if (type === 'D' && !isPlan && operation !== 'grid-update' && fields.length === 1 && ['true', 'false'].includes(fields[0]) &&
         truncated === undefined) truncated = fields[0] === 'true';
     else throw fail('PROTOCOL', 'The JDBC driver returned an unsupported response.');
   }
-  const incomplete = operation === 'plan' ? !plan : operation === 'grid-update' ? !updated :
+  const incomplete = isPlan ? !plan : operation === 'grid-update' ? !updated :
     truncated === undefined || operation === 'catalog' && !connection || operation === 'query' && !columns.length ||
       operation === 'grid-read' && (!relation || columns.length < 2);
   if (incomplete) {
     throw fail('PROTOCOL', 'The JDBC driver response is incomplete.');
   }
-  if (operation === 'plan') return plan;
+  if (isPlan) return plan;
   if (operation === 'grid-update') return updated;
   if (operation === 'grid-read') return { relation, columns, rows, truncated };
   if (operation === 'catalog') return { connection, objects, truncated };
@@ -256,8 +266,9 @@ function execute(java, operation, directory, args, signal) {
   }).finally(() => { clearTimeout(timer); clearTimeout(grace); signal?.removeEventListener('abort', cancel); });
 }
 
-async function runJdbc({ javaHome, profile, credential, operation, sql = '', object = {}, grid, maxRows = 200, signal }) {
-  if (!['catalog', 'describe', 'query', 'plan', 'grid-read', 'grid-update'].includes(operation)) {
+async function runJdbc({ javaHome, profile, credential, operation, sql = '', object = {}, grid, planApproval, maxRows = 200, signal }) {
+  const isPlan = planOperations.has(operation);
+  if (!isPlan && !['catalog', 'describe', 'query', 'grid-read', 'grid-update'].includes(operation)) {
     throw fail('OPERATION', 'Select a supported JDBC operation.');
   }
   if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > 500) throw fail('LIMIT', 'Choose a JDBC result size between one and 500 rows.');
@@ -268,17 +279,21 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
     if (/^jdbc:postgresql:/i.test(auth.url)) validatePostgreSqlQuery(sql);
     else validateQuery(sql, { readOnly: true, allowOptimizerHints: false });
   }
-  if (operation === 'plan' && (!profile.postgresql || driver !== 'org.postgresql.Driver')) {
+  if (isPlan && (!profile.postgresql || driver !== 'org.postgresql.Driver')) {
     throw fail('PLAN_SCOPE', 'Open an approved PostgreSQL JDBC profile to estimate a plan.');
   }
-  const request = operation === 'plan' ? parsePostgreSqlPlanQuery(sql, profile.postgresql.schema) : null;
+  const request = isPlan ? parsePostgreSqlPlanQuery(sql, profile.postgresql.schema) : null;
+  const measured = operation === 'plan-measure';
+  if (measured && (!isHash(planApproval?.scopeFingerprint) || !/^\d{1,10}$/u.test(planApproval?.relation || '') ||
+      planApproval.canonicalSql !== request.canonicalSql)) throw fail('PLAN_STALE', 'Review the exact PostgreSQL SELECT before measurement.');
   const gridRoute = ['grid-read', 'grid-update'].includes(operation) ? gridNames(profile, grid?.table) : null;
   const names = request ? [request.schema, request.table, request.columns.join(',')] : gridRoute ? [gridRoute.schema, gridRoute.table, grid.column?.name || ''] :
     [object.catalog ?? '', object.schema ?? '', object.name ?? ''];
   if (!request && (names.some(name => !text(name, 1024)) || operation === 'describe' && !names[2])) {
     throw fail('OBJECT', 'Choose an observed JDBC table or view.');
   }
-  const payload = request ? request.predicate : operation === 'grid-update' ? wireGridEdit(grid) : sql;
+  const payload = measured ? [planApproval.scopeFingerprint, planApproval.relation, request.predicate].join('\t') :
+    request ? request.predicate : operation === 'grid-update' ? wireGridEdit(grid) : sql;
   const java = await javaExecutable(javaHome);
   const approved = [profile, ...(Array.isArray(profile.libraries) ? profile.libraries : [])];
   return scratch(async paths => {
@@ -292,7 +307,7 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
       payload, ...names,
       maxRows, approved.length - 1, ...approved.slice(1).map(item => item.sha256),
       profile.postgresql?.database || '', profile.postgresql?.schema || ''], signal);
-    return request ? normalizePostgreSqlPlan({ ...result, database: profile.postgresql.database, request }) : result;
+    return request ? normalizePostgreSqlPlan({ ...result, database: profile.postgresql.database, request, measured }) : result;
   });
 }
 

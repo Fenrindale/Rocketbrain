@@ -4,7 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { createJdbcProfiles } = require('./jdbc-profiles');
 const { maxLibraries } = require('./jdbc');
 const { postgresqlRoute } = require('./postgresql-jdbc');
-const { renderPostgreSqlPlan } = require('./postgresql-plan');
+const { renderPostgreSqlPlan, renderPostgreSqlPlanReview } = require('./postgresql-plan');
 const { openPostgreSqlGrid } = require('./postgresql-grid-vscode');
 
 const language = 'rocketbrain-jdbc';
@@ -14,6 +14,7 @@ function registerJdbc(vscode, context) {
   const api = createJdbcProfiles({ state: context.workspaceState, isTrusted: () => vscode.workspace.isTrusted,
     getJavaHome: () => vscode.workspace.getConfiguration('rocketbrain.java').get('javaHome') });
   const output = new Map();
+  const planPreviews = new Map();
   const command = (name, fn) => context.subscriptions.push(vscode.commands.registerCommand('rocketbrain.jdbc.' + name, async (...args) => {
     try { return await fn(...args); }
     catch (cause) {
@@ -21,6 +22,7 @@ function registerJdbc(vscode, context) {
     } finally {
       void vscode.commands.executeCommand('setContext', 'rocketbrain.jdbcConnected', Boolean(api.active()));
       void vscode.commands.executeCommand('setContext', 'rocketbrain.postgreSqlPlans', api.supportsPostgreSqlPlans());
+      void vscode.commands.executeCommand('setContext', 'rocketbrain.postgreSqlMeasurements', api.supportsPostgreSqlMeasurements());
       void vscode.commands.executeCommand('setContext', 'rocketbrain.postgreSqlGrid', api.supportsPostgreSqlGrid());
     }
   }));
@@ -28,12 +30,18 @@ function registerJdbc(vscode, context) {
     provideTextDocumentContent(uri) { return output.get(uri.path.split('/')[1]) || 'This JDBC result has expired.'; }
   }));
 
-  async function show(title, value, text) {
+  async function showDocument(title, text, options = { preview: true }) {
     const id = randomUUID();
     while (output.size >= 8) output.delete(output.keys().next().value);
-    output.set(id, text ?? JSON.stringify(value, null, 2));
+    output.set(id, text);
     const uri = vscode.Uri.from({ scheme, path: '/' + id + '/' + title });
-    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri), { preview: true });
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document, options);
+    return document;
+  }
+
+  async function show(title, value, text) {
+    await showDocument(title, text ?? JSON.stringify(value, null, 2));
     return value;
   }
 
@@ -45,7 +53,7 @@ function registerJdbc(vscode, context) {
 
   function chooseCapture(title, captures) {
     return vscode.window.showQuickPick(captures.map(item => ({ id: item.id, label: item.table,
-      description: item.capturedAt, detail: item.canonicalSql })), { title });
+      description: (item.measured ? 'Measured' : 'Estimated') + ' · ' + item.capturedAt, detail: item.canonicalSql })), { title });
   }
 
   function progress(title, action) {
@@ -189,22 +197,55 @@ function registerJdbc(vscode, context) {
     const result = await progress('Estimating PostgreSQL Plan', signal => api.estimatePostgreSqlPlan(sql, { signal }));
     return show('postgresql-estimated-plan.txt', result, renderPostgreSqlPlan(result));
   });
+  command('reviewPostgreSqlMeasurement', async () => {
+    const sql = jdbcSql(), source = vscode.window.activeTextEditor.document, version = source.version;
+    const review = await progress('Reviewing PostgreSQL Measurement', signal => api.reviewPostgreSqlMeasurement(sql, { signal }));
+    try {
+      if (source.isClosed || source.version !== version) throw Error('The JDBC SQL changed. Review the exact current selection again.');
+      const text = renderPostgreSqlPlanReview(review);
+      const document = await showDocument('postgresql-measurement-review.txt', text,
+        { preview: false, viewColumn: vscode.ViewColumn.Beside });
+      while (planPreviews.size >= 4) {
+        const key = planPreviews.keys().next().value;
+        api.discardPostgreSqlMeasurement(planPreviews.get(key).review.id);
+        planPreviews.delete(key);
+      }
+      planPreviews.set(document.uri.toString(), { review, source, version, text });
+      return { ...review, reviewUri: document.uri.toString() };
+    } catch (error) { api.discardPostgreSqlMeasurement(review.id); throw error; }
+  });
+  command('measurePostgreSqlPlan', async () => {
+    const document = vscode.window.activeTextEditor?.document;
+    const key = document?.uri.toString(), preview = planPreviews.get(key);
+    const fresh = () => preview && planPreviews.get(key) === preview && preview.review.expiresAt > Date.now() &&
+      !preview.source.isClosed && preview.source.version === preview.version && document.getText() === preview.text;
+    if (!fresh()) throw Error('Open a current PostgreSQL measurement review for the unchanged JDBC SQL editor.');
+    const { estimate, id } = preview.review;
+    const choice = await vscode.window.showWarningMessage('Run the reviewed SELECT on PostgreSQL to measure execution and buffers?',
+      { modal: true, detail: 'Target ' + estimate.database + '.' + estimate.schema + '.' + estimate.table +
+        '. PostgreSQL holds a short, read-only measurement lock and releases it on rollback.' }, 'Measure Reviewed SELECT');
+    if (choice !== 'Measure Reviewed SELECT') return;
+    if (!fresh()) throw Error('The approved SQL or review changed during confirmation. Review it again.');
+    planPreviews.delete(key);
+    const result = await progress('Measuring PostgreSQL Plan', signal => api.measurePostgreSqlPlan(id, true, { signal }));
+    return show('postgresql-measured-plan.txt', result, renderPostgreSqlPlan(result));
+  });
   command('openPostgreSqlPlanJson', async () => {
     const captures = api.postgreSqlPlanCaptures();
-    if (!captures.length) throw Error('Capture a PostgreSQL estimate first.');
-    const selected = await chooseCapture('Open Original PostgreSQL Estimate JSON', captures);
+    if (!captures.length) throw Error('Capture a PostgreSQL plan first.');
+    const selected = await chooseCapture('Open Original PostgreSQL Plan JSON', captures);
     if (!selected) return;
     const result = api.postgreSqlPlanCapture(selected.id);
-    return show('postgresql-estimated-plan.json', result, result.raw);
+    return show(result.measured ? 'postgresql-measured-plan.json' : 'postgresql-estimated-plan.json', result, result.raw);
   });
   command('comparePostgreSqlPlans', async () => {
     const captures = api.postgreSqlPlanCaptures();
-    if (captures.length < 2) throw Error('Capture two PostgreSQL estimates from this connection first.');
-    const left = await chooseCapture('Choose Baseline PostgreSQL Estimate', captures);
+    if (captures.length < 2) throw Error('Capture two PostgreSQL plans from this connection first.');
+    const left = await chooseCapture('Choose Baseline PostgreSQL Plan', captures);
     if (!left) return;
-    const right = await chooseCapture('Choose Candidate PostgreSQL Estimate', captures.filter(item => item.id !== left.id));
+    const right = await chooseCapture('Choose Candidate PostgreSQL Plan', captures.filter(item => item.id !== left.id));
     if (!right) return;
-    return show('postgresql-estimated-plan-comparison.json', api.comparePostgreSqlPlans(left.id, right.id));
+    return show('postgresql-plan-comparison.json', api.comparePostgreSqlPlans(left.id, right.id));
   });
   command('openPostgreSqlGrid', table => openPostgreSqlGrid({ vscode, api, progress, table }));
   command('browse', async () => {
@@ -215,7 +256,7 @@ function registerJdbc(vscode, context) {
     if (!selected) return;
     return show('table-columns.json', await progress('Inspecting JDBC Columns', signal => api.describe(selected.index, { signal })));
   });
-  command('close', () => { api.close(); output.clear(); });
+  command('close', () => { api.close(); output.clear(); planPreviews.clear(); });
   return api;
 }
 

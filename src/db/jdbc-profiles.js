@@ -58,6 +58,7 @@ function view(item) { return structuredClone({ ...selected(item), ...item }); }
 function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
   const approvals = new Map();
   const captures = new Map();
+  const planReviews = new Map();
   const grids = new Map();
   const edits = new Map();
   let active, operation, disposed = false;
@@ -70,7 +71,7 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
       saved.profiles.map(item => profile(item, saved.version === 1)).filter(Boolean) : [];
   }
   const persist = items => state.update(key, { version: 2, profiles: items });
-  function clearSessionWork() { captures.clear(); grids.clear(); edits.clear(); }
+  function clearSessionWork() { captures.clear(); planReviews.clear(); grids.clear(); edits.clear(); }
   async function run(action, signal) {
     trusted();
     if (operation) throw fail('Finish the current JDBC operation first.');
@@ -124,6 +125,21 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
       throw fail('Review this JDBC driver again and explicitly approve its exact JARs.');
     }
     return value;
+  }
+
+  function retainPlan(plan) {
+    const capture = { ...plan, id: randomUUID(), capturedAt: new Date().toISOString() };
+    if (captures.size >= 8) captures.delete(captures.keys().next().value);
+    captures.set(capture.id, capture);
+    return capture;
+  }
+
+  async function capturePlan(connection, operation, sql, cancellation, planApproval) {
+    const { profile, credential } = connection;
+    const plan = await runJdbc({ javaHome: getJavaHome(), profile, credential, operation, sql, signal: cancellation, planApproval });
+    trusted();
+    if (cancellation.aborted || current() !== connection) throw fail('The PostgreSQL plan capture was cancelled.');
+    return retainPlan(plan);
   }
 
   return {
@@ -220,32 +236,49 @@ function createJdbcProfiles({ state, isTrusted, getJavaHome }) {
       }, signal);
     },
     supportsPostgreSqlPlans() { return Boolean(isTrusted() && active?.profile.postgresql); },
+    supportsPostgreSqlMeasurements() {
+      return Boolean(isTrusted() && active?.profile.postgresql && Number(/^\d+/u.exec(active.catalog.connection.version)?.[0]) >= 17);
+    },
     estimatePostgreSqlPlan(sql, { signal } = {}) {
+      return run(async cancellation => structuredClone(await capturePlan(current(), 'plan', sql, cancellation)), signal);
+    },
+    reviewPostgreSqlMeasurement(sql, { signal } = {}) {
       return run(async cancellation => {
-        const connection = current(), { profile, credential } = connection;
-        const plan = await runJdbc({ javaHome: getJavaHome(), profile, credential, operation: 'plan', sql, signal: cancellation });
-        trusted();
-        if (cancellation.aborted || current() !== connection) throw fail('The PostgreSQL plan capture was cancelled.');
-        const capture = { ...plan, id: randomUUID(), capturedAt: new Date().toISOString() };
-        if (captures.size >= 8) captures.delete(captures.keys().next().value);
-        captures.set(capture.id, capture);
-        return structuredClone(capture);
+        const connection = current();
+        if (!this.supportsPostgreSqlMeasurements()) throw fail('Choose an approved PostgreSQL 17 or newer profile for measurement.');
+        const estimate = await capturePlan(connection, 'plan-review', sql, cancellation);
+        const review = { id: randomUUID(), expiresAt: Date.now() + 120000, estimate };
+        while (planReviews.size >= 4) planReviews.delete(planReviews.keys().next().value);
+        planReviews.set(review.id, { connection, sql, review });
+        return structuredClone(review);
+      }, signal);
+    },
+    discardPostgreSqlMeasurement(id) { planReviews.delete(id); },
+    measurePostgreSqlPlan(id, approved, { signal } = {}) {
+      return run(async cancellation => {
+        const connection = current(), saved = planReviews.get(id);
+        if (approved !== true || !saved || saved.connection !== connection || saved.review.expiresAt <= Date.now()) {
+          throw fail('Review this exact PostgreSQL SELECT and explicitly approve its measurement.');
+        }
+        if (cancellation.aborted) throw fail('The PostgreSQL plan measurement was cancelled.');
+        planReviews.delete(id);
+        return structuredClone(await capturePlan(connection, 'plan-measure', saved.sql, cancellation, saved.review.estimate));
       }, signal);
     },
     postgreSqlPlanCaptures() {
       trusted();
       current();
-      return [...captures.values()].map(({ id, canonicalSql, capturedAt, table }) => ({ id, canonicalSql, capturedAt, table }));
+      return [...captures.values()].map(({ id, canonicalSql, capturedAt, table, measured }) => ({ id, canonicalSql, capturedAt, table, measured }));
     },
     postgreSqlPlanCapture(id) {
       trusted();
       current();
       const capture = captures.get(id);
-      if (!capture) throw fail('Choose a PostgreSQL estimate from the active connection.');
+      if (!capture) throw fail('Choose a PostgreSQL plan from the active connection.');
       return structuredClone(capture);
     },
     comparePostgreSqlPlans(left, right) {
-      if (left === right) throw fail('Choose two different PostgreSQL estimates.');
+      if (left === right) throw fail('Choose two different PostgreSQL plans.');
       return comparePostgreSqlPlans(this.postgreSqlPlanCapture(left), this.postgreSqlPlanCapture(right));
     },
     supportsPostgreSqlGrid() { return Boolean(isTrusted() && active?.profile.postgresqlGridEditing); },

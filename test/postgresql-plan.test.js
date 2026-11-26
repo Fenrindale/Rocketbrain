@@ -36,6 +36,24 @@ test('PostgreSQL estimated JSON retains exact decimals and nested operator ident
   assert.throws(() => normalizePostgreSqlPlan({ ...fields, raw: raw.replace('120.40', '1,"Actual Rows":1') }), /unsupported/);
 });
 
+test('PostgreSQL measured JSON distinguishes optimizer units, exact runtime numbers and actual rows per loop', () => {
+  const request = parsePostgreSqlPlanQuery('select id from events', 'pilot');
+  const fields = { request, database: 'fixture', relation: '123', version: '17', scopeFingerprint: 'a'.repeat(64), executionSql: request.canonicalSql };
+  const estimate = normalizePostgreSqlPlan({ ...fields, raw: '[{"Plan":{"Node Type":"Seq Scan","Relation Name":"events","Total Cost":120.40,"Plan Rows":2}}]' });
+  const raw = '[{"Plan":{"Node Type":"Seq Scan","Relation Name":"events","Total Cost":120.40,"Plan Rows":2,"Actual Startup Time":0.000,' +
+    '"Actual Total Time":0.234,"Actual Rows":3,"Actual Loops":1,"Shared Hit Blocks":9007199254740994},"Triggers":[],' +
+    '"Planning Time":0.321,"Execution Time":0.345}]';
+  const measured = normalizePostgreSqlPlan({ ...fields, raw, measured: true });
+  assert.equal(measured.nodes[0].actual.find(entry => entry.label === 'Shared Hit Blocks').value, '9007199254740994');
+  assert.equal(measured.nodes[0].costs[0].value, '120.40');
+  assert.match(renderPostgreSqlPlan(measured), /Actual rows and node timing are per-loop averages/);
+  const report = comparePostgreSqlPlans(estimate, measured);
+  assert.deepEqual(report.rowEstimates, [{ operator: 'Seq Scan · events', estimatedRows: '2', actualRowsPerLoop: '3', loops: '1' }]);
+  assert.throws(() => comparePostgreSqlPlans(estimate, { ...measured, scopeFingerprint: 'b'.repeat(64) }), /verified relation shape/);
+  assert.throws(() => normalizePostgreSqlPlan({ ...fields, raw: raw.replace('"Triggers":[]', '"Triggers":[{}]'), measured: true }), /trigger activity/);
+  assert.throws(() => normalizePostgreSqlPlan({ ...fields, raw: raw.replace('"Actual Rows":3,', ''), measured: true }), /capture mode/);
+});
+
 const { ROCKETBRAIN_POSTGRES_TEST_BIN: bin, ROCKETBRAIN_POSTGRES_TEST_JAR: jar, ROCKETBRAIN_POSTGRES_JAVA_HOME: javaHome } = process.env;
 test('actual PostgreSQL JDBC captures a sequential and indexed estimate for the same statement', { skip: !bin || !jar || !javaHome, timeout: 90000 }, async t => {
   let saved;

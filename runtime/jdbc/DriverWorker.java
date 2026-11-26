@@ -355,10 +355,54 @@ class DriverWorker {
         return columns;
     }
 
-    private static void estimatedPlan(Connection connection, DatabaseMetaData metadata, String expectedSchema,
-            String schema, String table, String project, String predicate) throws Exception {
-        if (!isPostgres(metadata) || metadata.getDatabaseMajorVersion() < 14 || !schema.equals(expectedSchema) ||
+    private static String planFingerprint(Connection connection, String relation, String query, String predicate) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            SELECT pg_catalog.jsonb_build_array(
+              pg_catalog.current_database(), SESSION_USER, CURRENT_USER, pg_catalog.pg_postmaster_start_time(),
+              r.oid, r.relnamespace, r.relfilenode, r.relowner, r.relacl, r.reloptions, r.reltablespace,
+              (SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_array(a.attnum,a.attname,a.atttypid,a.atttypmod,
+                  a.attcollation,a.attnotnull,a.attgenerated,a.attacl) ORDER BY a.attnum)
+                FROM pg_catalog.pg_attribute a WHERE a.attrelid=r.oid AND a.attnum>0 AND NOT a.attisdropped),
+              (SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_array(i.indexrelid,x.relname,x.relfilenode,x.relam,
+                  i.indisvalid,i.indisready,i.indislive,i.indisunique,i.indkey,i.indclass,i.indcollation,i.indoption)
+                  ORDER BY i.indexrelid)
+                FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class x ON x.oid=i.indexrelid
+                WHERE i.indrelid=r.oid))::text
+            FROM pg_catalog.pg_class r WHERE r.oid=?::pg_catalog.oid
+            """)) {
+            statement.setQueryTimeout(5);
+            statement.setString(1, relation);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) throw planScope();
+                String observed = readText(result, 1);
+                if (observed == null || result.next()) throw planScope();
+                return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest((observed + "\n" + query + "\n" + predicate).getBytes(StandardCharsets.UTF_8)));
+            }
+        }
+    }
+
+    private static void lockPlanRelation(Statement setup, String qualified, boolean reviewed) throws SQLException {
+        try {
+            setup.execute("LOCK TABLE ONLY " + qualified + " IN " +
+                (reviewed ? "SHARE UPDATE EXCLUSIVE" : "ACCESS SHARE") + " MODE NOWAIT");
+        } catch (SQLException error) {
+            if (reviewed && "42501".equals(error.getSQLState())) throw new SQLException("Measuring requires PostgreSQL MAINTAIN", "RB010");
+            if (reviewed && "55P03".equals(error.getSQLState())) throw new SQLException("PostgreSQL relation is busy", "RB011");
+            throw error;
+        }
+    }
+
+    private static void postgresPlan(Connection connection, DatabaseMetaData metadata, String expectedSchema,
+            String schema, String table, String project, String payload, String operation) throws Exception {
+        boolean reviewed = !"plan".equals(operation), measured = "plan-measure".equals(operation);
+        if (!isPostgres(metadata) || metadata.getDatabaseMajorVersion() < (reviewed ? 17 : 14) || !schema.equals(expectedSchema) ||
                 schema.startsWith("pg_") || schema.equals("information_schema")) throw planScope();
+        String[] approval = measured ? payload.split("\\t", -1) : new String[0];
+        if (measured && (approval.length != 3 || !approval[0].matches("[a-f0-9]{64}") || !approval[1].matches("[0-9]{1,10}"))) {
+            throw new SQLException("Invalid PostgreSQL plan review", "RB009");
+        }
+        String predicate = measured ? approval[2] : payload;
         String qualified = planIdentifier(schema) + "." + planIdentifier(table);
         var names = List.of(project.split(",", -1));
         boolean all = names.equals(List.of("*"));
@@ -375,18 +419,32 @@ class DriverWorker {
             setup.execute("SET LOCAL search_path=pg_catalog,pg_temp");
             setup.execute("SET LOCAL row_security=off");
             setup.execute("SET LOCAL constraint_exclusion=off");
+            if (reviewed) {
+                setup.execute("SET LOCAL statement_timeout='8s'");
+                setup.execute("SET LOCAL lock_timeout='1s'");
+                setup.execute("SET LOCAL idle_in_transaction_session_timeout='10s'");
+                setup.execute("SET LOCAL application_name='Rocketbrain PostgreSQL Plan'");
+            }
             String relation = planRelation(connection, schema, table);
-            setup.execute("LOCK TABLE ONLY " + qualified + " IN ACCESS SHARE MODE NOWAIT");
-            if (!relation.equals(planRelation(connection, schema, table))) throw planScope();
+            lockPlanRelation(setup, qualified, reviewed);
+            if (!relation.equals(planRelation(connection, schema, table)) || measured && !relation.equals(approval[1])) {
+                if (measured) throw new SQLException("PostgreSQL plan relation changed", "RB009");
+                throw planScope();
+            }
             final var columns = planColumns(connection, relation);
             if (all ? columns.isEmpty() || columns.containsValue(null) : names.stream().anyMatch(name -> columns.get(name) == null)) {
                 throw planScope();
             }
+            if (reviewed && (columns.size() > 128 || columns.containsValue(null))) throw planScope();
             String type = filter.length == 2 ? columns.get(filter[0]) : "";
             if (filter.length == 2 && (type == null || !List.of("int2", "int4", "int8").contains(type))) throw planScope();
-            String sql = "EXPLAIN (ANALYZE FALSE, VERBOSE TRUE, COSTS TRUE, FORMAT JSON) SELECT " +
+            String query = "SELECT " +
                 (all ? "*" : String.join(", ", projections)) + " FROM ONLY " + qualified +
                 (filter.length == 2 ? " WHERE " + filterName + " OPERATOR(pg_catalog.=) ?::pg_catalog." + type : "");
+            String fingerprint = reviewed ? planFingerprint(connection, relation, query, predicate) : "";
+            if (measured && !fingerprint.equals(approval[0])) throw new SQLException("PostgreSQL plan evidence changed", "RB009");
+            String sql = (measured ? "EXPLAIN (ANALYZE TRUE, BUFFERS TRUE, TIMING TRUE, SUMMARY TRUE, VERBOSE TRUE, COSTS TRUE, FORMAT JSON) " :
+                "EXPLAIN (ANALYZE FALSE, VERBOSE TRUE, COSTS TRUE, FORMAT JSON) ") + query;
             String document;
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setQueryTimeout(8);
@@ -410,7 +468,12 @@ class DriverWorker {
                 } finally { ACTIVE.set(null); }
             }
             if (!relation.equals(planRelation(connection, schema, table))) throw planScope();
-            emit("P", metadata.getDatabaseProductVersion(), relation, document);
+            if (reviewed) {
+                if (!fingerprint.equals(planFingerprint(connection, relation, query, predicate))) {
+                    throw new SQLException("PostgreSQL plan evidence changed", "RB009");
+                }
+                emit("P", metadata.getDatabaseProductVersion(), relation, fingerprint, query, document);
+            } else emit("P", metadata.getDatabaseProductVersion(), relation, document);
         } finally { connection.rollback(); }
     }
 
@@ -639,7 +702,8 @@ class DriverWorker {
                         case "catalog" -> catalog(connection, metadata);
                         case "describe" -> describe(metadata, catalog, schema, object);
                         case "query" -> query(connection, metadata, sql, maxRows);
-                        case "plan" -> estimatedPlan(connection, metadata, expectedSchema, catalog, schema, object, sql);
+                        case "plan", "plan-review", "plan-measure" -> postgresPlan(connection, metadata, expectedSchema,
+                            catalog, schema, object, sql, operation);
                         case "grid-read", "grid-update" -> PostgresGrid.run(connection, metadata, expectedSchema,
                             catalog, schema, object, sql, "grid-update".equals(operation));
                         default -> throw new Exception("Protocol operation invalid");

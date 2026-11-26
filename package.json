@@ -233,8 +233,10 @@
       { "command": "rocketbrain.jdbc.newQuery", "title": "New JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.jdbc.run", "title": "Run JDBC Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected && editorLangId == rocketbrain-jdbc", "icon": "$(play)" },
       { "command": "rocketbrain.jdbc.estimatePostgreSqlPlan", "title": "Estimate PostgreSQL Query Plan", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans && editorLangId == rocketbrain-jdbc", "icon": "$(graph)" },
+      { "command": "rocketbrain.jdbc.reviewPostgreSqlMeasurement", "title": "Review PostgreSQL Plan Measurement", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlMeasurements && editorLangId == rocketbrain-jdbc", "icon": "$(graph)" },
+      { "command": "rocketbrain.jdbc.measurePostgreSqlPlan", "title": "Measure Reviewed PostgreSQL Plan", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlMeasurements && resourceScheme == rocketbrain-jdbc-output && resourceFilename == postgresql-measurement-review.txt", "icon": "$(debug-start)" },
       { "command": "rocketbrain.jdbc.openPostgreSqlPlanJson", "title": "Open Original PostgreSQL Plan JSON", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
-      { "command": "rocketbrain.jdbc.comparePostgreSqlPlans", "title": "Compare PostgreSQL Estimated Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
+      { "command": "rocketbrain.jdbc.comparePostgreSqlPlans", "title": "Compare PostgreSQL Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
       { "command": "rocketbrain.jdbc.openPostgreSqlGrid", "title": "Open PostgreSQL Table Grid", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlGrid" },
       { "command": "rocketbrain.jdbc.browse", "title": "Browse JDBC Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.jdbc.close", "title": "Close JDBC Connection", "category": "Rocketbrain", "enablement": "rocketbrain.jdbcConnected" },
@@ -1541,6 +1543,16 @@
         {
           "command": "rocketbrain.jdbc.estimatePostgreSqlPlan",
           "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.postgreSqlPlans && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.jdbc.reviewPostgreSqlMeasurement",
+          "when": "resourceLangId == rocketbrain-jdbc && rocketbrain.postgreSqlMeasurements && isWorkspaceTrusted",
+          "group": "navigation"
+        },
+        {
+          "command": "rocketbrain.jdbc.measurePostgreSqlPlan",
+          "when": "resourceScheme == rocketbrain-jdbc-output && resourceFilename == postgresql-measurement-review.txt && rocketbrain.postgreSqlMeasurements && isWorkspaceTrusted",
           "group": "navigation"
         },
         {
