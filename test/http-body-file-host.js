@@ -11,7 +11,7 @@ const {readWorkspaceBodyFile}=require('../src/http/body-file');
 const payload=Buffer.from([0,255,13,10,0,128,192,16,254,65,1,99]);
 const digest=createHash('sha256').update(payload).digest('hex');
 
-async function exerciseHttpBodyFile(root,config,run) {
+async function exerciseHttpBodyFile(root,config,run,{native=false}={}) {
   assert.match(config.baseUrl,/^http:\/\/127\.0\.0\.1:\d+$/);
   const directory=await fs.mkdtemp(path.join(root,'rb-binary-request-'));
   const file=path.join(directory,'payload.bin'), request=path.join(directory,'upload.http');
@@ -35,7 +35,8 @@ async function exerciseHttpBodyFile(root,config,run) {
   } finally {
     await fs.unlink(request).catch(error=>{if(error.code!=='ENOENT')throw error;});
     await fs.unlink(file).catch(error=>{if(error.code!=='ENOENT')throw error;});
-    await fs.rmdir(directory);
+    if (native) assert.deepEqual(await fs.readdir(directory),[]);
+    else await fs.rmdir(directory);
   }
 }
 
@@ -53,7 +54,7 @@ async function runHttpBodyFileChecks(api,vscode,checks) {
     finally {
       if (vscode.window.activeTextEditor?.document===document) await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     }
-  });
+  },{native:true});
   checks.push('The installed request command uploaded exact binary workspace bytes and verified a real Spring digest and JDBC count.');
   return {...proof,nativeCommand:true};
 }

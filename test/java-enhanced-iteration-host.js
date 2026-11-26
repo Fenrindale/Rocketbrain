@@ -38,6 +38,7 @@ async function runJavaEnhancedIterationChecks(api,vscode,checks) {
   await fs.writeFile(file,original,{flag:'wx'});
   try {
     document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+    await vscode.window.showTextDocument(document,{preview:false,preserveFocus:true});
     await build();
     for (const index of [0,1,3]) {
       await assert.rejects(prepare(negativeLoops[index]),/supported indexed array or immutable List/u);
