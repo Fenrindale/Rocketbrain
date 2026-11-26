@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('node:path');
-const { kotlinEditorLaunch,hasGradleFiles,kotlinProtocolUri } = require('./kotlin-editor-runtime');
+const { kotlinEditorLaunch,kotlinBuildTool,kotlinProjectRoot,kotlinProtocolUri,isMavenClasspathFile,validateMavenComponent } = require('./kotlin-editor-runtime');
 const { inside,workspacePath,workspaceRoots,fail } = require('./workbench-model');
 const {registerSourceFormatting} = require('./format-vscode');
 const {kotlinFormatterOptions,buildKotlinFormatEdits} = require('./kotlin-format-edits');
@@ -33,13 +33,7 @@ function registerKotlinEditor(context,vscode,java) {
     const source=workspacePath(document.uri.fsPath,boundary,{directory:false});
     const outer=boundary.filter(root => inside(root,source)).sort((a,b)=>b.length-a.length)[0];
     if (!outer) return undefined;
-    let directory=path.dirname(source);
-    for (let depth=0; depth<24 && inside(outer,directory); depth++) {
-      if (hasGradleFiles(directory)) return directory;
-      const parent=path.dirname(directory);
-      if (!path.relative(directory,parent)) break;
-      directory=parent;
-    }
+    return kotlinProjectRoot(source,outer);
   }
 
   function report(next,details={}) {
@@ -76,8 +70,9 @@ function registerKotlinEditor(context,vscode,java) {
     const settings=vscode.workspace.getConfiguration('rocketbrain.kotlinEditor');
     const serverHome=settings.get('serverHome');
     if (!serverHome) throw fail('Configure the extracted open ktlsp server in rocketbrain.kotlinEditor.serverHome.');
-    if (!root) throw fail('Open a Kotlin source file in a local Gradle project first.');
-    if (active && !path.relative(active.launch.root,root) && state.state==='running') return {...state};
+    if (!root) throw fail('Open a Kotlin source file in a local Gradle or Maven project first.');
+    const buildTool=kotlinBuildTool(root);
+    if (active && !path.relative(active.launch.root,root) && active.launch.buildTool===buildTool && state.state==='running') return {...state};
     if (active) await stopNow();
     const javaSettings=vscode.workspace.getConfiguration('rocketbrain.java');
     report('starting',{message:'Starting Rocketbrain Kotlin editing for '+path.basename(root)+'.'});
@@ -85,17 +80,20 @@ function registerKotlinEditor(context,vscode,java) {
     try {
       const launch=await kotlinEditorLaunch({serverHome,root,
         javaHome:javaSettings.get('javaHome')||java.getState().javaHome,gradleHome:javaSettings.get('gradleHome'),
+        mavenHome:javaSettings.get('mavenHome'),
         gradleUserHome:settings.get('gradleUserHome'),storageRoot:(context.storageUri||context.globalStorageUri).fsPath});
       record={launch};
       active=record;
       trusted();
       if (suspended) throw fail('Kotlin editing was stopped while its server was preparing.');
       const uri=vscode.Uri.file(launch.root), folder=vscode.workspace.getWorkspaceFolder(uri);
-      if (!folder) throw fail('Keep the Kotlin Gradle project inside an open workspace.');
+      if (!folder) throw fail('Keep the Kotlin project inside an open workspace.');
       const scope={uri,name:path.basename(launch.root),index:folder.index};
       const { LanguageClient,ErrorAction,CloseAction }=require('vscode-languageclient/node');
-      record.watcher=vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(scope,
-        '**/{*.kt,*.kts,build.gradle,settings.gradle,gradle.properties}'));
+      const files=launch.buildTool==='maven'
+        ? '**/{*.kt,*.kts,*.java,pom.xml,build.gradle,build.gradle.kts,kls-classpath*,kotlinLspClasspath*}'
+        : '**/{*.kt,*.kts,build.gradle,settings.gradle,gradle.properties}';
+      record.watcher=vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(scope,files));
       record.client=new LanguageClient('rocketbrain-kotlin-editor','Rocketbrain Kotlin Editor',
         {command:launch.command,args:launch.args,options:launch.options},{
           workspaceFolder:scope,outputChannel:output,
@@ -116,7 +114,24 @@ function registerKotlinEditor(context,vscode,java) {
             provideDocumentRangeFormattingEdits(document,range,options,token,next) {
               return formatting.native(document,range,options,token,()=>next(document,range,options,token));
             },
-            workspace:{handleApplyEdit:() => ({applied:false,failureReason:'Apply Kotlin editor changes through the VS Code action that initiated them.'})}
+            workspace:{
+              handleApplyEdit:() => ({applied:false,failureReason:'Apply Kotlin editor changes through the VS Code action that initiated them.'}),
+              async didChangeWatchedFile(event,next) {
+                if (active!==record || !vscode.workspace.isTrusted) return;
+                if (launch.buildTool==='maven' && isMavenClasspathFile(path.basename(vscode.Uri.parse(event.uri).fsPath))) {
+                  try {await validateMavenComponent(launch.root);}
+                  catch (error) {
+                    void serial(async()=>{
+                      if (active!==record) return;
+                      await stopNow();
+                      report('error',{message:'Kotlin Maven project changed. '+error.message});
+                    }).catch(failure=>output.appendLine(failure.message));
+                    return;
+                  }
+                }
+                if (active===record) await next(event);
+              }
+            }
           },
           errorHandler:{error:()=>({action:ErrorAction.Shutdown}),closed:()=>{
             if (active===record && !record.stopping) {
@@ -136,7 +151,7 @@ function registerKotlinEditor(context,vscode,java) {
       await record.client.sendNotification('workspace/didChangeConfiguration',{settings:{
         kotlin:{inlayHints:{typeHints:true,parameterHints:true,chainedHints:false}}
       }});
-      const running=report('running',{projectUri:uri.toString(),serverVersion:launch.serverVersion,
+      const running=report('running',{projectUri:uri.toString(),buildTool:launch.buildTool,serverVersion:launch.serverVersion,
         compilerVersion:launch.compilerVersion,windowsPathAdapter:launch.windowsPathAdapter,message:'Kotlin language features are connected.'});
       java.codeHints?.refresh();
       return running;
@@ -165,7 +180,7 @@ function registerKotlinEditor(context,vscode,java) {
       trusted();
       const record=active,root=projectOf(document);
       if (!record||!root||state.state!=='running'||path.relative(record.launch.root,root)||cancellation?.isCancellationRequested) {
-        throw fail('Start Kotlin editing for the current Gradle project.');
+        throw fail('Start Kotlin editing for the current project.');
       }
       const capability=params.range?'documentRangeFormattingProvider':'documentFormattingProvider';
       if (!record.client.initializeResult?.capabilities?.[capability]) throw fail('The Kotlin provider does not support this formatting mode.');
@@ -180,7 +195,7 @@ function registerKotlinEditor(context,vscode,java) {
     trusted();
     const record=active,root=projectOf(document);
     if (!record?.client?.isRunning()||!root||path.relative(record.launch.root,root)||token?.isCancellationRequested) {
-      throw fail('Start Kotlin editing for the current Gradle project.');
+      throw fail('Start Kotlin editing for the current project.');
     }
     const symbols=await record.client.sendRequest('textDocument/documentSymbol',{
       textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)}
@@ -195,7 +210,7 @@ function registerKotlinEditor(context,vscode,java) {
     trusted();
     const record=active,root=projectOf(document);
     if (!record?.client?.isRunning()||!root||path.relative(record.launch.root,root)||token?.isCancellationRequested) {
-      throw fail('Start Kotlin editing for the current Gradle project.');
+      throw fail('Start Kotlin editing for the current project.');
     }
     if (!record.client.initializeResult?.capabilities?.selectionRangeProvider) return undefined;
     const response=await record.client.sendRequest('textDocument/selectionRange',{
@@ -211,7 +226,7 @@ function registerKotlinEditor(context,vscode,java) {
     const record=active,root=projectOf(document);
     if(!['textDocument/hover','textDocument/signatureHelp'].includes(method)||
         !record?.client?.isRunning()||!root||path.relative(record.launch.root,root)||token?.isCancellationRequested) {
-      throw fail('Start Kotlin editing for the current Gradle project.');
+      throw fail('Start Kotlin editing for the current project.');
     }
     if(!record.client.initializeResult?.capabilities?.[capability])throw fail('The configured Kotlin provider does not supply this code information.');
     const response=await record.client.sendRequest(method,{textDocument:{uri:kotlinProtocolUri(document.uri.fsPath)},position},token);
@@ -233,7 +248,7 @@ function registerKotlinEditor(context,vscode,java) {
     trusted();
     const current=active,root=projectOf(document);
     if (!current||!root||state.state!=='running'||path.relative(current.launch.root,root)||cancellation?.isCancellationRequested) {
-      throw fail('Start Kotlin editing for the current Gradle project.');
+      throw fail('Start Kotlin editing for the current project.');
     }
     if (method==='textDocument/references' && !current.client.initializeResult?.capabilities?.referencesProvider) {
       throw fail('The connected Kotlin language server does not offer semantic references.');
@@ -257,7 +272,7 @@ function registerKotlinEditor(context,vscode,java) {
       trusted();
       if (!record?.client?.isRunning() || active!==record || !root || state.state!=='running' ||
           path.relative(record.launch.root,root) || cancellation?.isCancellationRequested) {
-        throw fail('Keep the Kotlin language server and selected Gradle project open during '+feature+'.');
+        throw fail('Keep the Kotlin language server and selected project open during '+feature+'.');
       }
     };
     check();
@@ -299,7 +314,7 @@ function registerKotlinEditor(context,vscode,java) {
     void serial(async () => {
       if (disposed || suspended || !vscode.workspace.isTrusted) return;
       const root=projectOf(document);
-      if (root) await startNow(root);
+      if (root && (kotlinBuildTool(root)==='gradle'||(active && !path.relative(active.launch.root,root)))) await startNow(root);
     }).catch(error=>output.appendLine(error.message));
   }
 
@@ -310,7 +325,7 @@ function registerKotlinEditor(context,vscode,java) {
   vscode.commands.registerCommand(COMMANDS.output,()=>output.show()),
   vscode.window.onDidChangeActiveTextEditor(editor=>automatic(editor?.document)),
   vscode.workspace.onDidChangeConfiguration(event=>{
-    if (!['rocketbrain.kotlinEditor','rocketbrain.java.javaHome','rocketbrain.java.gradleHome'].some(name=>event.affectsConfiguration(name))) return;
+    if (!['rocketbrain.kotlinEditor','rocketbrain.java.javaHome','rocketbrain.java.gradleHome','rocketbrain.java.mavenHome'].some(name=>event.affectsConfiguration(name))) return;
     void serial(stopNow).then(()=>automatic(vscode.window.activeTextEditor?.document)).catch(error=>output.appendLine(error.message));
   }),vscode.workspace.onDidChangeWorkspaceFolders(()=>{
     void serial(stopNow).then(()=>automatic(vscode.window.activeTextEditor?.document)).catch(error=>output.appendLine(error.message));

@@ -3,8 +3,9 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const { SaxesParser } = require('saxes');
 const { createHash } = require('node:crypto');
-const { createReadStream,existsSync,realpathSync } = require('node:fs');
+const { constants,createReadStream,existsSync,realpathSync } = require('node:fs');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { pathToFileURL } = require('node:url');
@@ -25,9 +26,89 @@ const RELEASES=new Map([
 
 const BUILD=['build.gradle','build.gradle.kts'];
 const SETTINGS=['settings.gradle','settings.gradle.kts'];
+const MAVEN_POM='pom.xml';
+const CLASS_PATH_SCRIPT=/^(?:kls-classpath|kotlinLspClasspath)(?:\.(?:sh|bash|bat|cmd|ps1))?$/iu;
 
 function hasGradleFiles(root) {
   return BUILD.some(name => existsSync(path.join(root,name))) && SETTINGS.some(name => existsSync(path.join(root,name)));
+}
+
+function kotlinBuildTool(root) {
+  const gradle=hasGradleFiles(root),maven=existsSync(path.join(root,MAVEN_POM));
+  if (gradle && maven) throw fail('This Kotlin folder has both Maven and Gradle build files. Open a component with one build tool.');
+  return maven?'maven':gradle?'gradle':undefined;
+}
+
+function kotlinProjectRoot(source, boundary) {
+  let directory=path.dirname(source);
+  for (let depth=0; depth<24 && inside(boundary,directory); depth++) {
+    if (kotlinBuildTool(directory)) return directory;
+    const parent=path.dirname(directory);
+    if (!path.relative(directory,parent)) break;
+    directory=parent;
+  }
+}
+
+function isMavenClasspathFile(name) {
+  return name===MAVEN_POM || BUILD.includes(name) || CLASS_PATH_SCRIPT.test(name);
+}
+
+async function validateMavenComponent(project) {
+  const pom=await physical(path.join(project,MAVEN_POM),project,1024*1024);
+  const parser=new SaxesParser({xmlns:true});
+  let rootElement,modules=false;
+  const elements=[];
+  parser.on('opentag',tag=>{
+    rootElement??=tag.local;
+    elements.push(tag.local);
+    if (tag.local==='modules') {
+      const location=elements.join('/');
+      modules ||= location==='project/modules'||location==='project/profiles/profile/modules';
+    }
+  });
+  parser.on('closetag',()=>elements.pop());
+  parser.on('doctype',()=>{throw fail('Use a Maven POM without a document type declaration.');});
+  parser.write(await fs.readFile(pom,'utf8')).close();
+  if (rootElement!=='project') throw fail('Choose a valid Maven project POM for Kotlin editing.');
+  if (modules) throw fail('Open a Kotlin source in a Maven component with its own POM. Reactor aggregation is outside this editor session.');
+
+  // ktlsp joins every classpath provider it finds below the workspace root.
+  const queue=[project];
+  let count=0;
+  for (const directory of queue) {
+    for (const entry of await fs.readdir(directory,{withFileTypes:true})) {
+      if (++count>20000) throw fail('Open a smaller physical Maven component for Kotlin editing.');
+      const file=path.join(directory,entry.name);
+      if (entry.isSymbolicLink()) throw fail('Use a physical Maven component without linked files or directories for Kotlin editing.');
+      if (entry.isDirectory()) queue.push(file);
+      else if (isMavenClasspathFile(entry.name) && path.relative(file,pom)) {
+        throw fail('Open an individual Maven Kotlin component with one POM and no additional classpath provider.');
+      }
+    }
+  }
+  return pom;
+}
+
+function addPath(env,bin) {
+  const inherited=Object.keys(env).find(name=>name.toLowerCase()==='path')||'PATH';
+  env[inherited]=[bin,env[inherited]].filter(Boolean).join(path.delimiter);
+}
+
+async function configureMaven(env,mavenHome) {
+  if (!path.isAbsolute(mavenHome||'')) throw fail('Set rocketbrain.java.mavenHome to an independent Apache Maven distribution for Kotlin editing.');
+  const home=await fs.realpath(mavenHome),bin=path.join(home,'bin');
+  const launcher=await physical(path.join(bin,process.platform==='win32'?'mvn.cmd':'mvn'),home,1024*1024);
+  await fs.access(launcher,constants.X_OK);
+  await physical(path.join(bin,'m2.conf'),home,1024*1024);
+  if (!(await fs.readdir(path.join(home,'boot'))).some(name=>/^plexus-classworlds-[\d.]+\.jar$/u.test(name))) {
+    throw fail('Choose an independent Apache Maven distribution with its classworlds runtime.');
+  }
+  for (const key of Object.keys(env)) {
+    if (['MAVEN_ARGS','MAVEN_OPTS','MAVEN_HOME','M2_HOME','MAVEN_SKIP_RC'].includes(key.toUpperCase())) delete env[key];
+  }
+  env.MAVEN_HOME=home;
+  env.MAVEN_SKIP_RC='1';
+  addPath(env,bin);
 }
 
 function kotlinProtocolUri(file) {
@@ -39,7 +120,7 @@ function kotlinProtocolUri(file) {
 async function physical(file,root,max) {
   const real=await fs.realpath(file), stat=await fs.lstat(file);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size>max || path.relative(real,file) || !inside(root,real)) {
-    throw fail('Choose regular physical files in the extracted Kotlin engine or Gradle project.');
+    throw fail('Choose regular physical files in the extracted Kotlin engine or selected JVM project.');
   }
   return real;
 }
@@ -78,13 +159,19 @@ async function windowsOverlay(jdk,java,library,env) {
   }
 }
 
-async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome,storageRoot,root}) {
+async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome,mavenHome,storageRoot,root}) {
   if (!path.isAbsolute(serverHome || '')) throw fail('Set rocketbrain.kotlinEditor.serverHome to the extracted open ktlsp '+VERSION+' server directory.');
-  if (!path.isAbsolute(root || '') || !hasGradleFiles(root)) throw fail('Start Kotlin editing in a local Gradle root with settings and build files.');
+  if (!path.isAbsolute(root||'')) throw fail('Start Kotlin editing in a local Gradle or Maven project.');
   const project=await fs.realpath(root);
-  for (const name of [...BUILD,...SETTINGS]) {
-    const file=path.join(project,name);
-    if (existsSync(file)) await physical(file,project,1024*1024);
+  if (path.relative(project,root)) throw fail('Choose the physical local Kotlin project directory.');
+  const buildTool=kotlinBuildTool(project);
+  if (!buildTool) throw fail('Start Kotlin editing in a local Gradle or Maven project.');
+  if (buildTool==='maven') await validateMavenComponent(project);
+  else {
+    for (const name of [...BUILD,...SETTINGS]) {
+      const file=path.join(project,name);
+      if (existsSync(file)) await physical(file,project,1024*1024);
+    }
   }
   const home=await fs.realpath(serverHome), library=path.join(home,'lib');
   if (path.relative(library,await fs.realpath(library))) throw fail('Use the physical ktlsp distribution library directory.');
@@ -104,18 +191,18 @@ async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome
   const jdk=path.dirname(path.dirname(command)), release=await fs.readFile(path.join(jdk,'release'),'utf8');
   if (Number(/^JAVA_VERSION="(\d+)/m.exec(release)?.[1] || 0)<21) throw fail('Standalone ktlsp needs an independent JDK 21 or later.');
   if (!path.isAbsolute(storageRoot || '')) throw fail('Kotlin language support needs a local extension storage directory.');
-  const identity=createHash('sha256').update(home+'\0'+project+'\0'+jdk).digest('hex').slice(0,20);
+  const identity=createHash('sha256').update(home+'\0'+project+'\0'+jdk+'\0'+buildTool).digest('hex').slice(0,20);
   const storage=path.join(storageRoot,'ktlsp',identity);
   const env={...process.env,JAVA_HOME:jdk};
   for (const key of ['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','KOTLIN_LANGUAGE_SERVER_OPTS']) delete env[key];
-  if (gradleHome) {
+  if (buildTool==='maven') await configureMaven(env,mavenHome);
+  if (buildTool==='gradle' && gradleHome) {
     if (!path.isAbsolute(gradleHome)) throw fail('Use an absolute Gradle installation path for Kotlin support.');
     const bin=path.join(await fs.realpath(gradleHome),'bin');
     if (!(await fs.stat(path.join(bin,process.platform==='win32'?'gradle.bat':'gradle'))).isFile()) throw fail('Choose an independent Gradle distribution.');
-    const inherited=Object.keys(env).find(name => name.toLowerCase()==='path') || 'PATH';
-    env[inherited]=[bin,env[inherited]].filter(Boolean).join(path.delimiter);
+    addPath(env,bin);
   }
-  if (gradleUserHome) {
+  if (buildTool==='gradle' && gradleUserHome) {
     if (!path.isAbsolute(gradleUserHome)) throw fail('Use an absolute Gradle user home for Kotlin editing.');
     await fs.mkdir(gradleUserHome,{recursive:true});
     env.GRADLE_USER_HOME=await fs.realpath(gradleUserHome);
@@ -133,9 +220,10 @@ async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome
   const classpath=[overlay.file,path.join(library,'*')].filter(Boolean).join(path.delimiter);
   return {command,args:['-Dfile.encoding=UTF-8','-DkotlinLanguageServer.version='+VERSION,'-Xmx1536m','-XX:ActiveProcessorCount=4',
     '-cp',classpath,'org.javacs.kt.MainKt'],options:{cwd:project,env,windowsHide:true},
-    root:project,serverVersion:VERSION,compilerVersion:COMPILER,windowsPathAdapter:Boolean(overlay.file),dispose:overlay.dispose,
+    root:project,buildTool,serverVersion:VERSION,compilerVersion:COMPILER,windowsPathAdapter:Boolean(overlay.file),dispose:overlay.dispose,
     compiler:{javaHome:jdk,java:command,libraries:jars.map(entry=>path.join(library,entry.name)).sort(),
       stdlib:path.join(library,`kotlin-stdlib-${COMPILER}.jar`)}};
 }
 
-module.exports={kotlinEditorLaunch,hasGradleFiles,kotlinProtocolUri,VERSION,COMPILER,DISTRIBUTION,ARCHIVE_SHA256};
+module.exports={kotlinEditorLaunch,hasGradleFiles,kotlinBuildTool,kotlinProjectRoot,kotlinProtocolUri,
+  isMavenClasspathFile,validateMavenComponent,VERSION,COMPILER,DISTRIBUTION,ARCHIVE_SHA256};
