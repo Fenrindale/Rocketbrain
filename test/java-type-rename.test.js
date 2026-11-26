@@ -65,6 +65,13 @@ test('a JDT grouped replacement must equal the reviewed Javac tokens byte for by
   assert.throws(() => verifiedEngineEdits(proposed, [source], expected, rename), /differs from the exact/u);
   assert.throws(() => verifiedEngineEdits({ ...proposed, documentChanges: [{ kind: 'delete', uri }] }, [source], expected, rename),
     /unexpected file operation/u);
+  const callerUri = pathToFileURL(path.resolve('Caller.java')).href;
+  const caller = { ...source, uri: callerUri, file: fileURLToPath(callerUri) };
+  const callerEdit = { ...expected[0], textDocument: { uri: callerUri, version: 1 } };
+  assert.throws(() => verifiedEngineEdits(proposed, [source, caller], [...expected, callerEdit], rename),
+    /omitted 1 reviewed Java file \(Caller\.java\)/u);
+  assert.throws(() => verifiedEngineEdits({ changes: { [callerUri]: callerEdit.edits } }, [source, caller], expected, rename),
+    /omitted 1 reviewed Java file \(Old\.java\).*returned 1 additional Java file \(Caller\.java\)/u);
 });
 
 test('type rename pins JDT test paths and reassesses clients while Move keeps runtime scope', async t => {

@@ -76,7 +76,18 @@ function verifiedEngineEdits(edit, sources, expectedEntries, rename) {
   const engineEntries = scopeApi.textEntries(edit && {
     ...edit, documentChanges: (edit.documentChanges || []).filter(change => !change.kind)
   }, sources);
-  if (engineEntries.length !== expectedEntries.length) throw Error('JDT and Javac disagree on the Java files that need renaming.');
+  const expectedPaths = new Set(expectedEntries.map(entry => entry.textDocument.uri));
+  const enginePaths = new Set(engineEntries.map(entry => entry.textDocument.uri));
+  const difference = (source, other) => [...source].filter(uri => !other.has(uri));
+  const missing = difference(expectedPaths, enginePaths), unexpected = difference(enginePaths, expectedPaths);
+  if (engineEntries.length !== expectedEntries.length || missing.length || unexpected.length) {
+    const fileNames = values => values.slice(0, 4).map(uri => path.basename(fileURLToPath(uri))).join(', ');
+    const details = [
+      missing.length && `JDT omitted ${missing.length} reviewed Java file${missing.length === 1 ? '' : 's'} (${fileNames(missing)}).`,
+      unexpected.length && `JDT returned ${unexpected.length} additional Java file${unexpected.length === 1 ? '' : 's'} (${fileNames(unexpected)}).`
+    ].filter(Boolean).join(' ');
+    throw Error('JDT and Javac disagree on the Java files that need renaming. ' + details);
+  }
   for (const expected of expectedEntries) {
     const source = sources.find(value => value.uri === expected.textDocument.uri);
     const actual = engineEntries.find(entry => entry.textDocument.uri === source.uri);

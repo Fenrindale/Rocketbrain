@@ -55,7 +55,7 @@ const files = new Map([
   ].join('\n')]
 ]);
 
-async function populate(root, tools) {
+async function populate(root, tools, { deployedRoot = root } = {}) {
   await fs.mkdir(root, { recursive: true });
   for (const file of ['settings.gradle', 'build.gradle', 'gradle.properties']) {
     await fs.copyFile(path.join(input, file), path.join(root, file));
@@ -65,7 +65,7 @@ async function populate(root, tools) {
     await fs.writeFile(path.join(root, file), text, { flag: 'wx' });
   }
   await rebuild(root, tools);
-  await configureJdt(root);
+  await configureJdt(root, { deployedRoot });
 }
 
 function readDatabase(root, tools, config, engine) {
