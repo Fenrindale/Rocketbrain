@@ -36,8 +36,8 @@ test('reviewed SSH Maven selects exact saved POMs and fixed lifecycle tasks', ()
     tests: { tests: 0, failures: 0, errors: 0, skipped: 0, reports: 0 } }, { task: 'package' }), false);
 });
 
-async function until(check, message) {
-  for (let index = 0; index < 220; index++) {
+async function until(check, message, maxChecks = 220) {
+  for (let index = 0; index < maxChecks; index++) {
     if (await check()) return;
     await delay(100);
   }
@@ -45,7 +45,7 @@ async function until(check, message) {
 }
 
 test('real pinned SSH reviews Maven, runs tests and packages a private offline snapshot', {
-  timeout: 600000, skip: !(javaHome && mavenHome && (daemon || (python && pythonPackage)))
+  timeout: 690000, skip: !(javaHome && mavenHome && (daemon || (python && pythonPackage)))
 }, async context => {
   const abort = new AbortController();
   let fixture, connection;
@@ -98,16 +98,22 @@ test('real pinned SSH reviews Maven, runs tests and packages a private offline s
     const failed = await run(await inspect());
     assert.equal(failed.state, 'failed');
     assert.equal(failed.tests.failures, 1);
-    await fs.writeFile(scoped.testFile, testSource.replace('assertEquals(2,', 'Thread.sleep(12000); assertEquals(2,'));
+    const cancellationCheckpoint = [
+      'java.nio.file.Files.writeString(java.nio.file.Path.of(System.getProperty("maven.multiModuleProjectDirectory"), "remote-cancel-ready"), "ready");',
+      'Thread.sleep(60000);',
+      'assertEquals(2,'
+    ].join('\n    ');
+    await fs.writeFile(scoped.testFile, testSource.replace('assertEquals(2,', cancellationCheckpoint));
     const pending = assert.rejects(run(await inspect(), { signal: abort.signal }), /Maven build was cancelled/u);
     try {
       await until(async () => {
         for (const item of await fs.readdir(fixture.workerTemp)) {
-          if (item.startsWith('rb-ssh-maven-') && (await fs.stat(path.join(fixture.workerTemp, item, 'project', 'target', 'test-classes'))
-            .catch(error => error.code === 'ENOENT' ? undefined : Promise.reject(error)))?.isDirectory()) return true;
+          if (item.startsWith('rb-ssh-maven-') &&
+              (await fs.readFile(path.join(fixture.workerTemp, item, 'project', 'remote-cancel-ready'), 'utf8')
+                .catch(error => error.code === 'ENOENT' ? undefined : Promise.reject(error))) === 'ready') return true;
         }
         return false;
-      }, 'a running Maven test snapshot');
+      }, 'the active JUnit test in the Maven snapshot', 720);
     } finally { abort.abort(); }
     await pending;
     await until(async () => !(await fs.readdir(fixture.workerTemp)).length, 'owned Maven scratch cleanup');
