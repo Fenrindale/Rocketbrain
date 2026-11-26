@@ -51,6 +51,7 @@ async function executeDatabaseAgent(agent, intent, { signal, onUpdate } = {}) {
     if (agent.adapter === 'opencode-local') {
       const { endpoint, model } = agent.localModel;
       const config = { model: 'rocketbrain/' + model, enabled_providers: ['rocketbrain'], autoupdate: false, snapshot: false,
+        default_agent: 'plan', agent: { plan: { temperature: 0, top_p: 1 } },
         permission: 'deny', provider: { rocketbrain: { name: 'Approved loopback model', npm: '@ai-sdk/openai-compatible',
           options: { baseURL: endpoint.replace('/chat/completions', ''), apiKey: 'local-loopback' },
           models: { [model]: { name: model, tool_call: false, limit: { context: 4096, output: 1024 } } } } } };
@@ -84,7 +85,8 @@ function prepareDatabaseTasks({ catalog, choices, agents, tasks }) {
     const agent = agents.find(item => item.label === profile);
     if (!agent) throw Error('Select a configured database ACP profile for each task.');
     const { preview, instructions } = prepareGroundedIntent(scope, input);
-    const text = `${instructions}\nReturn only a single JSON object with this shape. ` +
+    const text = `${instructions}\nWrite the explanation in one sentence under 140 characters. ` +
+      'Always include all five keys. Use [] for an empty list. Return only a JSON object with this shape. ' +
       '{"columns":["table.column"],"measures":[{"column":"table.column","function":"COUNT"}],' +
       '"sort":[{"key":"table.column","direction":"ASC"}],"limit":100,"explanation":"brief summary"}\n' + JSON.stringify(preview);
     return { agent, intent: { scope, text }, request: preview.request };
