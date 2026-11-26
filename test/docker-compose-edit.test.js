@@ -69,7 +69,8 @@ test('Compose editor stages exact ordered inputs, rejects change conflicts and a
     assert.ok([source[1], changed].includes(input));
     stages.push(cwd);
     return JSON.stringify({ name: title, services: { api: {
-      image: input === source[1] ? 'old-image' : 'new-image', environment: { sample: input === source[1] ? 'private-one' : 'private-two' }
+      image: input === source[1] ? 'old-image' : 'new-image', environment: { sample: input === source[1] ? 'private-one' : 'private-two' },
+      labels: input === source[1] ? { owner: 'api=fixture' } : ['owner=api=fixture']
     } } });
   } });
   context.after(() => service.dispose());
@@ -80,6 +81,7 @@ test('Compose editor stages exact ordered inputs, rejects change conflicts and a
   await assert.rejects(service.review(draft.id, source[1]), /Edit the selected/);
   const review = await service.review(draft.id, changed);
   assert.deepEqual(review.changes, [['services', 'api', 'environment'], ['services', 'api', 'image']]);
+  assert.deepEqual(review.after.services.api.labels, { owner: 'api=fixture' });
   assert.equal(review.after.services.api.environment, '[redacted]');
   assert.ok(!JSON.stringify(review).includes('private-two'));
   await assert.rejects(service.apply(review.token, { approved: false }), /Approve a current/);
@@ -132,10 +134,16 @@ test('actual Compose resolves an edited middle override without environment expa
   assert.equal(String(proposed.services.api.ports[0].published), '8290');
   assert.equal(proposed.services.api.ports.length, 1);
   assert.equal(proposed.services.api.restart, 'on-failure');
-  assert.deepEqual(proposed.services.api.labels, { 'from-base': 'yes-value', 'from-later': 'final-value' });
+  assert.deepEqual(review.after.services.api.labels, { 'from-base': 'yes-value', 'from-later': 'final-value' });
   assert.deepEqual(proposed.services.jobs.profiles, ['jobs']);
-  assert.equal(proposed.services.api.environment.ORDER_TEST, '${DELIBERATE_SOURCE_VALUE}');
-  assert.equal(proposed.services.api.environment.EDIT_TEST, 'two');
+  const environment = proposed.services.api.environment;
+  if (Array.isArray(environment)) {
+    assert.ok(environment.includes('ORDER_TEST=${DELIBERATE_SOURCE_VALUE}'));
+    assert.ok(environment.includes('EDIT_TEST=two'));
+  } else {
+    assert.equal(environment.ORDER_TEST, '${DELIBERATE_SOURCE_VALUE}');
+    assert.equal(environment.EDIT_TEST, 'two');
+  }
   assert.equal(review.after.services.api.environment, '[redacted]');
   assert.ok(review.changes.some(entry => entry.join('/') === 'services/api/environment'));
   await service.apply(review.token, { approved: true, async edit({ file, beforeText, text }) {
@@ -150,7 +158,11 @@ test('actual Compose resolves an edited middle override without environment expa
   assert.ok((await fs.readFile(files[1], 'utf8')).startsWith('# Selected override'));
   const saved = await service.prepare(files, 1);
   const redundant = await service.review(saved.id, '# Recheck saved model\n' + changed);
-  assert.deepEqual(calls[2].model, proposed);
+  assert.deepEqual(redundant.before, review.after);
+  assert.deepEqual(redundant.after, review.after);
+  const savedEnvironment = calls[2].model.services.api.environment;
+  if (Array.isArray(environment)) assert.deepEqual([...savedEnvironment].sort(), [...environment].sort());
+  else assert.deepEqual(savedEnvironment, environment);
   assert.equal(redundant.changes.length, 0);
   const afterContainers = await docker(['ps', '-aq', '--filter', 'label=com.docker.compose.project=' + title]);
   assert.equal(afterContainers.stdout, beforeContainers.stdout);
