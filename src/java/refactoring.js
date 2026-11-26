@@ -11,7 +11,7 @@ function offset(text,position){if(!Number.isInteger(position?.line)||!Number.isI
 function editedText(text,edits){const spans=edits.map(edit=>{if(typeof edit.newText!=='string')throw Error('Invalid refactoring replacement.');return {start:offset(text,edit.range?.start),end:offset(text,edit.range?.end),text:edit.newText};}).sort((a,b)=>b.start-a.start||b.end-a.end);let previous=text.length+1,result=text;for(const span of spans){if(span.end<span.start||span.end>previous)throw Error('Overlapping refactoring edits were rejected.');result=result.slice(0,span.start)+span.text+result.slice(span.end);previous=span.start;}return result;}
 
 function registerJavaRefactoring(context,vscode,{request}={}) {
- const plans=new Map(),checkedPlans=new Map(),validators=new Map(),subscriptions=[],operations=new Set(),applyingPackageRenames=new Set();let closed=false,prepareConstant;
+ const plans=new Map(),checkedPlans=new Map(),validators=new Map(),subscriptions=[],operations=new Set(),applyingPackageRenames=new Map();let closed=false,prepareConstant;
  const trusted=()=>{if(closed)throw Error('Java refactoring is closed.');if(!vscode.workspace.isTrusted)throw Error('Trust the workspace before refactoring Java sources.');};
  const cancelled=token=>{if(token?.isCancellationRequested)throw Error('Java refactoring was cancelled.');};
  async function send(method,params,cancellation){let timer;try{return await Promise.race([request(method,params,cancellation),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Java refactoring request timed out. Try again after project import completes.')),30000);})]);}finally{clearTimeout(timer);}}
@@ -44,8 +44,9 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
  }
  const packagePair=(old,next)=>key(old.fsPath)+'\0'+key(next.fsPath);
  function isApplyingPackageRename(files){
-  return files?.length===1&&files[0]?.oldUri?.scheme==='file'&&files[0]?.newUri?.scheme==='file'&&
-   applyingPackageRenames.has(packagePair(files[0].oldUri,files[0].newUri));
+  if(!files?.length||files.some(file=>file?.oldUri?.scheme!=='file'||file?.newUri?.scheme!=='file'))return false;
+  const pairs=files.map(file=>packagePair(file.oldUri,file.newUri));
+  return new Set(pairs).size===pairs.length&&[...applyingPackageRenames.values()].some(approved=>pairs.every(pair=>approved.has(pair)));
  }
  function vacantJavaDestination(value,expectedParent){
   const uri=sourceUri(value,{destination:true}),parent=path.dirname(uri.fsPath);
@@ -88,11 +89,17 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   if(!Array.isArray(allowedResourceRenames)||allowedResourceRenames.length>30)throw Error('Invalid reviewed resource rename set.');
   const resourcePermissions=new Map();for(const entry of allowedResourceRenames){if(!entry||!/^[a-f0-9]{64}$/.test(entry.sha256)||entry.binary!==undefined&&entry.binary!==true)throw Error('A reviewed resource rename requires its exact byte hash and valid binary permission.');if(entry.binary&&(!Number.isSafeInteger(entry.bytes)||entry.bytes<0||entry.bytes>64*1024))throw Error('Reviewed binary resource permissions require an exact bounded byte length.');const old=sourceUri(entry.oldUri,{resource:true}),next=sourceUri(entry.newUri,{destination:true,resource:true}),id=key(old.fsPath);if(old.fsPath.endsWith('.java')||next.fsPath.endsWith('.java')||entry.binary&&(!['.bin','.png','.jpg','.jpeg'].includes(path.extname(old.fsPath))||path.extname(old.fsPath)!==path.extname(next.fsPath))||resourcePermissions.has(id)||hash(fs.readFileSync(old.fsPath))!==entry.sha256||entry.binary&&fs.statSync(old.fsPath).size!==entry.bytes)throw Error('Invalid, duplicate or stale reviewed resource rename.');resourcePermissions.set(id,{oldUri:old.toString(),newUri:next.toString(),sha256:entry.sha256,...(entry.binary?{binary:true,bytes:entry.bytes}:{})});}
   const servicePermissions=new Map();
-  if(!Array.isArray(allowedServiceEdits)||allowedServiceEdits.length>24||allowedServiceEdits.length&&kind!=='refactor.move.package')throw Error('Invalid Package Move service descriptor permissions.');
+  const packageServiceRename=kind==='refactor.rename.java.package'&&allowedDirectoryRename!==undefined;
+  if(!Array.isArray(allowedServiceEdits)||allowedServiceEdits.length>24||
+     allowedServiceEdits.length&&kind!=='refactor.move.package'&&!packageServiceRename)throw Error('Invalid Java package service descriptor permissions.');
   for(const entry of allowedServiceEdits){
    if(!entry||!/^[a-f0-9]{64}$/.test(entry.beforeSha256)||!/^[a-f0-9]{64}$/.test(entry.afterSha256)||entry.beforeSha256===entry.afterSha256&&!entry.newUri)throw Error('Service descriptor changes require both exact byte hashes.');
    const uri=sourceUri(entry.uri,{resource:true}),id=key(uri.fsPath);
    if(!metadataFile(uri.fsPath)||servicePermissions.has(id)||resourcePermissions.has(id)||fs.statSync(uri.fsPath).size>8192||hash(fs.readFileSync(uri.fsPath))!==entry.beforeSha256)throw Error('Invalid, duplicate or stale service descriptor permission.');
+   if(packageServiceRename&&(!anchor||!path.dirname(uri.fsPath).endsWith(path.sep+path.join('src','main','resources','META-INF','services'))||
+      vscode.workspace.getWorkspaceFolder(uri)?.uri.toString()!==vscode.workspace.getWorkspaceFolder(anchor.document.uri)?.uri.toString())){
+    throw Error('Package Rename service descriptors must occupy the reviewed workspace’s conventional main resource paths.');
+   }
    const destination=entry.newUri===undefined?null:sourceUri(entry.newUri,{destination:true,resource:true});
    if(destination&&(!metadataFile(destination.fsPath)||path.dirname(destination.fsPath)!==path.dirname(uri.fsPath)))throw Error('The reviewed descriptor rename must remain in the same META-INF/services directory.');
    servicePermissions.set(id,{uri:uri.toString(),beforeSha256:entry.beforeSha256,afterSha256:entry.afterSha256,...(destination?{newUri:destination.toString()}:{})});
@@ -114,7 +121,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   let packagePermission;
   if(allowedDirectoryRename!==undefined){
    if(kind!=='refactor.rename.java.package'||!anchor||anchorDocument.languageId!=='java'||anchorDocument.isDirty||
-      allowedResourceOperations.length!==1||allowedResourceOperations[0]!=='rename'||resourcePermissions.size||servicePermissions.size||
+      allowedResourceOperations.length!==1||allowedResourceOperations[0]!=='rename'||resourcePermissions.size||
       beanPermissions.size||createJavaFile||typeof extraValidate!=='function'||typeof preApply!=='function')throw Error('A directory rename requires one guarded Java package review.');
    const {old,next}=packageRenameUris(allowedDirectoryRename.oldUri,allowedDirectoryRename.newUri);
    if(key(path.dirname(anchorDocument.uri.fsPath))!==key(old.fsPath))throw Error('Open a saved Java source directly in the package being renamed.');
@@ -143,8 +150,8 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    if(change.textDocument&&Array.isArray(change.edits)){if(resourceSeen)throw Error('Text edits following file operations require a separate review workflow.');addText(change.textDocument.uri,change.edits,change.textDocument.version);continue;}
    resourceSeen=true;if(!allowedResourceOperations.includes(change.kind)||!['rename','delete'].includes(change.kind))throw Error('File creation, deletion and movement need a separate review workflow.');
    if(Object.values(change.options||{}).some(Boolean))throw Error('Overwriting, recursive deletion and ignored file conflicts are not allowed.');
-   if(packagePermission){
-    if(resources.length||change.kind!=='rename'||change.oldUri!==packagePermission.oldUri||change.newUri!==packagePermission.newUri||
+   if(packagePermission&&change.oldUri===packagePermission.oldUri){
+    if(resources.some(operation=>operation.directory)||change.kind!=='rename'||change.newUri!==packagePermission.newUri||
        !edits.get(key(anchorDocument.uri.fsPath))?.edits.length)throw Error('Only the approved package directory and its exact text changes can be reviewed.');
     const {old,next}=packageRenameUris(change.oldUri,change.newUri),parent=path.dirname(next.fsPath);
     if(fs.readdirSync(parent).some(name=>name.toLowerCase()===path.basename(next.fsPath).toLowerCase()))throw Error('The package rename destination already exists or collides by case.');
@@ -154,6 +161,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    }
    const candidate=typeof (change.oldUri||change.uri)==='string'?vscode.Uri.parse(change.oldUri||change.uri):null;
    const id=candidate&&key(candidate.fsPath),permission=resourcePermissions.get(id),service=servicePermissions.get(id);
+   if(packagePermission&&!service?.newUri)throw Error('Only the approved package directory and exact service descriptor filenames may change.');
    if((permission||service)&&(change.kind!=='rename'||change.newUri!==(permission||service).newUri||service&&candidate.toString()!==service.uri))throw Error('A reviewed resource or service descriptor may only move to its exact approved destination.');
    const old=sourceUri(change.kind==='rename'?change.oldUri:change.uri,{resource:!!permission||!!service}),oldKey=key(old.fsPath);if(resourceKeys.has(oldKey))throw Error('Repeated or chained file operations require a separate review workflow.');resourceKeys.add(oldKey);const operation={kind:change.kind,uri:old.toString(),...(permission?{resourceSha256:permission.sha256,...(permission.binary?{binary:true,bytes:permission.bytes}:{})}:{}),...(service?{serviceDescriptor:true}:{})};
    if(change.kind==='rename'){
@@ -165,7 +173,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    }
    resources.push(operation);if(!edits.has(oldKey))edits.set(oldKey,{uri:old,edits:[]});
   }
-  if(packagePermission&&resources.length!==1)throw Error('The reviewed Java package rename operation is missing.');
+  if(packagePermission&&resources.filter(operation=>operation.directory).length!==1)throw Error('The reviewed Java package rename operation is missing.');
   if([...resourcePermissions.values()].some(permission=>!resources.some(operation=>operation.uri===permission.oldUri&&operation.newUri===permission.newUri&&operation.resourceSha256===permission.sha256)))throw Error('Every reviewed resource rename must appear exactly once.');
   for(const [id,service]of servicePermissions){
    if(service.newUri&&!resources.some(operation=>operation.uri===service.uri&&operation.newUri===service.newUri&&operation.serviceDescriptor)||
@@ -333,7 +341,8 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    const directory=plan.resourceOperations.find(operation=>operation.directory);
    const pair=directory&&packagePair(vscode.Uri.parse(directory.uri),vscode.Uri.parse(directory.newUri));
    if(pair&&applyingPackageRenames.has(pair))throw Error('This package rename is already applying.');
-   if(pair)applyingPackageRenames.add(pair);
+   if(pair)applyingPackageRenames.set(pair,new Set(plan.resourceOperations.map(operation=>
+    packagePair(vscode.Uri.parse(operation.uri),vscode.Uri.parse(operation.newUri)))));
    removePlan(id);
    try{applied=await vscode.workspace.applyEdit(edit);}
    finally{if(pair)applyingPackageRenames.delete(pair);}
@@ -342,11 +351,11 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    resourceOperations:structuredClone(plan.resourceOperations),savedToDisk:false,
    resourceOperationsSavedToDisk:plan.resourceOperations.length?(applied?true:'unknown'):false,atomicAcrossExternalWriters:false};
  }
- const provider={provideTextDocumentContent(uri){const parts=uri.path.split('/').filter(Boolean),plan=plans.get(parts[0]),file=plan?.documents[Number(parts[1])],before=/^before\.(java|kt|xml|imports)$/.test(parts[2]);return file?(file.binary?'Opaque binary resource: '+file.bytes+' bytes; SHA-256 '+file.resourceSha256+(before?' (source)':' (same bytes at destination)'):(before?file.before:file.after)):'This refactoring review expired.';}};subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-java-refactor',provider));
+ const provider={provideTextDocumentContent(uri){const parts=uri.path.split('/').filter(Boolean),plan=plans.get(parts[0]),file=plan?.documents[Number(parts[1])],before=/^before\.(java|kt|xml|imports|txt)$/.test(parts[2]);return file?(file.binary?'Opaque binary resource: '+file.bytes+' bytes; SHA-256 '+file.resourceSha256+(before?' (source)':' (same bytes at destination)'):(before?file.before:file.after)):'This refactoring review expired.';}};subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-java-refactor',provider));
  async function review(plan){
   await validate(plan.id);plan=plans.get(plan.id);
   for(let index=0;index<plan.documents.length;index++){
-   const file=plan.documents[index];if(file.binary)continue;const extension=file.bootImportsReference?'imports':file.beanClassReference?'xml':file.kotlinFormatting||file.kotlinRename||file.kotlinMixedRename&&file.uri.endsWith('.kt')?'kt':'java';
+   const file=plan.documents[index];if(file.binary)continue;const extension=file.serviceDescriptor?'txt':file.bootImportsReference?'imports':file.beanClassReference?'xml':file.kotlinFormatting||file.kotlinRename||file.kotlinMixedRename&&file.uri.endsWith('.kt')?'kt':'java';
    await vscode.commands.executeCommand('vscode.diff',
     vscode.Uri.parse('rocketbrain-java-refactor:/'+plan.id+'/'+index+'/before.'+extension),
     vscode.Uri.parse('rocketbrain-java-refactor:/'+plan.id+'/'+index+'/after.'+extension),

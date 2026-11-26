@@ -415,6 +415,7 @@ public final class SignatureInspector {
     }
 
     public static void main(String[] args) throws Exception {
+        boolean packageServiceBindings = args.length == 7 && args[4].equals("packageRenameServices");
         if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy","attributedDependencies").contains(args[4])) &&
                 !(args.length >= 6 && args.length <= 37 && args[4].equals("advisoryCalls")) &&
                 !(args.length == 7 && args[4].equals("dataflow")) &&
@@ -433,6 +434,7 @@ public final class SignatureInspector {
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
                 !(args.length == 7 && args[4].equals("cleanup")) &&
                 !(args.length == 7 && Set.of("typeRename","typeRenameBinary","packageRename").contains(args[4])) &&
+                !packageServiceBindings &&
                 !(args.length == 9 && Set.of("typeImport", "staticImport").contains(args[4])) &&
                 !(args.length == 5 && args[4].equals("check")) &&
                 !(args.length >= 9 && args.length <= 57 && (args.length - 9) % 3 == 0 && args[4].equals("structural"))) {
@@ -463,7 +465,7 @@ public final class SignatureInspector {
             JavacTask task = (JavacTask) compiler.getTask(compilerOutput, files, diagnostics, options, null, sources);
             List<CompilationUnitTree> units = new ArrayList<>(); task.parse().forEach(units::add); task.analyze();
             Trees trees = Trees.instance(task); Elements elements = task.getElements(); Types types=task.getTypes(); SourcePositions positions = trees.getSourcePositions();
-            if (args.length > 4) {
+            if (args.length > 4 && !packageServiceBindings) {
                 System.setOut(new PrintStream(System.out,false,StandardCharsets.UTF_8));
                 var problems = errors(diagnostics);
                 Map<String,Object> report = object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,
@@ -641,6 +643,19 @@ public final class SignatureInspector {
                         return super.visitLambdaExpression(tree,p);
                     }
                 }.scan(unit,null);
+            }
+            if (packageServiceBindings) {
+                System.setOut(new PrintStream(System.out,false,StandardCharsets.UTF_8));
+                var problems = errors(diagnostics);
+                var report = object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,
+                    "classGenerationEnabled",false,"errors",problems);
+                if (problems.isEmpty()) {
+                    report.put("packageRename",new PackageRenameInspector(task,args[5],args[6]).inspect(units));
+                    report.put("methods",methods.stream().map(method -> method.model).toList());
+                    report.put("calls",calls);
+                }
+                System.out.print(json(report));
+                return;
             }
             List<Map<String,Object>> edges=new ArrayList<>(); Set<String> external=new TreeSet<>();
             for(Method left:methods) {

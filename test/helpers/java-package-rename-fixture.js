@@ -21,6 +21,24 @@ const bootContents = [
   '# fixture.billing is retained in this comment\r\n  fixture.billing.LedgerAutoConfiguration  # ledger factory\r\nfixture.billings.OtherAutoConfiguration\r\n',
   '# test classpath entry\nfixture.billing.LedgerAutoConfiguration\n'
 ];
+const servicesRoot = path.join('src', 'main', 'resources', 'META-INF', 'services');
+const serviceInterfaces = [originalPackage + '.LedgerService', 'fixture.contract.BackupService'];
+const serviceProviders = [originalPackage + '.detail.MainLedgerProvider', originalPackage + '.BackupProvider'];
+const serviceContents = [
+  '# ' + serviceInterfaces[0] + ' retained as documentation\r\n  ' + serviceProviders[0] + '\t# preferred\r\n\r\nfixture.billings.OtherLedgerProvider\r\n',
+  '# backup provider order\n\t' + serviceProviders[1] + '  # fallback\n'
+];
+const serviceResult = '[11, 17]:19';
+const serviceFile = (index, renamed = false) => path.join(servicesRoot, index === 0 && renamed
+  ? renamedPackage + '.LedgerService' : serviceInterfaces[index]);
+const serviceText = (index, renamed = false) => renamed
+  ? serviceContents[index].replace(serviceProviders[index], renamedPackage + serviceProviders[index].slice(originalPackage.length))
+  : serviceContents[index];
+function javaLocation(relative, withServices) {
+  if (!withServices) return relative;
+  const [sourceSet, ...parts] = relative.split(path.sep);
+  return path.join('src', sourceSet === 'test' ? 'test' : 'main', 'java', ...parts);
+}
 
 const sources = new Map([
   [ownerPath, [
@@ -75,38 +93,64 @@ const sources = new Map([
   ].join('\n')]
 ]);
 
-function fixtureSources(withBoot = false) {
-  if (!withBoot) return sources;
+function fixtureSources(withBoot = false, withServices = false) {
+  if (!withBoot && !withServices) return sources;
   const selected = new Map(sources);
-  selected.set(bootProvider, [
-    'package fixture.billing;',
-    'import org.springframework.boot.autoconfigure.AutoConfiguration;',
-    'import org.springframework.context.annotation.Bean;',
-    '@AutoConfiguration',
-    'public final class LedgerAutoConfiguration {',
-    '    @Bean public Ledger ledger() { return new Ledger(); }',
-    '}', ''
+  if (withBoot) {
+    selected.set(bootProvider, [
+      'package fixture.billing;',
+      'import org.springframework.boot.autoconfigure.AutoConfiguration;',
+      'import org.springframework.context.annotation.Bean;',
+      '@AutoConfiguration',
+      'public final class LedgerAutoConfiguration {',
+      '    @Bean public Ledger ledger() { return new Ledger(); }',
+      '}', ''
+    ].join('\n'));
+    selected.set(path.join('src', 'fixture', 'billings', 'OtherAutoConfiguration.java'), [
+      'package fixture.billings;',
+      '@org.springframework.boot.autoconfigure.AutoConfiguration',
+      'public final class OtherAutoConfiguration {}', ''
+    ].join('\n'));
+    const caller = selected.get(clientPath)
+      .replace('import org.springframework.beans.factory.support.DefaultListableBeanFactory;', [
+        'import org.springframework.boot.SpringApplication;',
+        'import org.springframework.boot.SpringBootConfiguration;',
+        'import org.springframework.boot.WebApplicationType;',
+        'import org.springframework.boot.autoconfigure.EnableAutoConfiguration;'
+      ].join('\n'))
+      .replace('public final class RunBilling {', '@SpringBootConfiguration(proxyBeanMethods = false)\n@EnableAutoConfiguration\npublic final class RunBilling {')
+      .replace('        var beans = new DefaultListableBeanFactory();\n        beans.registerSingleton("ledger", new fixture.billing.Ledger());',
+        '        var app = new SpringApplication(RunBilling.class);\n        app.setWebApplicationType(WebApplicationType.NONE);\n' +
+        '        try (var beans = app.run("--spring.main.banner-mode=off", "--spring.main.log-startup-info=false")) {\n' +
+        '        System.out.println("RB_BOOT_OWNER=" + beans.getBeanFactory().getBeanDefinition("ledger").getFactoryBeanName());')
+      .replace('    }\n}', '        }\n    }\n}');
+    selected.set(clientPath, caller);
+  }
+  if (!withServices) return selected;
+  const declare = (file, source) => selected.set(path.join('src', 'fixture', ...file.split('/')), source + '\n');
+  declare('billing/LedgerService.java', 'package fixture.billing; public interface LedgerService { int amount(); }');
+  declare('contract/BackupService.java', 'package fixture.contract; public interface BackupService { int amount(); }');
+  declare('billing/detail/MainLedgerProvider.java', 'package fixture.billing.detail; public final class MainLedgerProvider ' +
+    'implements fixture.billing.LedgerService { public int amount() { return 11; } }');
+  declare('billings/OtherLedgerProvider.java', 'package fixture.billings; public final class OtherLedgerProvider ' +
+    'implements fixture.billing.LedgerService { public int amount() { return 17; } }');
+  declare('billing/BackupProvider.java', 'package fixture.billing; public final class BackupProvider ' +
+    'implements fixture.contract.BackupService { public int amount() { return 19; } }');
+  declare('servicetest/Probe.java', [
+    'package fixture.servicetest;',
+    'public final class Probe {',
+    '    public static String values() {',
+    '        var main = java.util.ServiceLoader.load(fixture.billing.LedgerService.class,',
+    '            fixture.billing.LedgerService.class.getClassLoader()).stream().map(provider -> provider.get().amount()).toList();',
+    '        int backup = java.util.ServiceLoader.load(fixture.contract.BackupService.class,',
+    '            fixture.contract.BackupService.class.getClassLoader()).findFirst().orElseThrow().amount();',
+    '        return main.toString() + ":" + backup;',
+    '    }',
+    '}'
   ].join('\n'));
-  selected.set(path.join('src', 'fixture', 'billings', 'OtherAutoConfiguration.java'), [
-    'package fixture.billings;',
-    '@org.springframework.boot.autoconfigure.AutoConfiguration',
-    'public final class OtherAutoConfiguration {}', ''
-  ].join('\n'));
-  const caller = selected.get(clientPath)
-    .replace('import org.springframework.beans.factory.support.DefaultListableBeanFactory;', [
-      'import org.springframework.boot.SpringApplication;',
-      'import org.springframework.boot.SpringBootConfiguration;',
-      'import org.springframework.boot.WebApplicationType;',
-      'import org.springframework.boot.autoconfigure.EnableAutoConfiguration;'
-    ].join('\n'))
-    .replace('public final class RunBilling {', '@SpringBootConfiguration(proxyBeanMethods = false)\n@EnableAutoConfiguration\npublic final class RunBilling {')
-    .replace('        var beans = new DefaultListableBeanFactory();\n        beans.registerSingleton("ledger", new fixture.billing.Ledger());',
-      '        var app = new SpringApplication(RunBilling.class);\n        app.setWebApplicationType(WebApplicationType.NONE);\n' +
-      '        try (var beans = app.run("--spring.main.banner-mode=off", "--spring.main.log-startup-info=false")) {\n' +
-      '        System.out.println("RB_BOOT_OWNER=" + beans.getBeanFactory().getBeanDefinition("ledger").getFactoryBeanName());')
-    .replace('    }\n}', '        }\n    }\n}');
-  selected.set(clientPath, caller);
-  return selected;
+  selected.set(clientPath, selected.get(clientPath).replace('        int adjustment',
+    '        System.out.println("RB_SERVICES=" + fixture.servicetest.Probe.values());\n        int adjustment'));
+  return new Map([...selected].map(([file, text]) => [javaLocation(file, true), text]));
 }
 
 function bootText(index, renamed) {
@@ -123,8 +167,9 @@ async function packageClasspath(classpathFile, engine, withBoot = false) {
   return [...jdbc, ...boot];
 }
 
-async function populatePackageRename(root, classpath, { withBoot = false } = {}) {
+async function populatePackageRename(root, classpath, { withBoot = false, withServices = false } = {}) {
   await fs.mkdir(path.join(root, 'bin', 'test'), { recursive: true });
+  if (withServices) await fs.mkdir(path.join(root, 'bin', 'main'), { recursive: true });
   await fs.mkdir(path.join(root, '.settings'));
   const javaVersion = 'eclipse.preferences.version=1\n' +
     'org.eclipse.jdt.core.compiler.compliance=25\norg.eclipse.jdt.core.compiler.source=25\n' +
@@ -134,13 +179,14 @@ async function populatePackageRename(root, classpath, { withBoot = false } = {})
   await fs.writeFile(path.join(root, '.project'), '<projectDescription><name>' + xml(path.basename(root)) +
     '</name><buildSpec><buildCommand><name>org.eclipse.jdt.core.javabuilder</name><arguments/></buildCommand></buildSpec>' +
     '<natures><nature>org.eclipse.jdt.core.javanature</nature></natures></projectDescription>', { flag: 'wx' });
-  const cp = '<classpath><classpathentry kind="src" path="src"/>' +
-    '<classpathentry kind="src" path="test" output="bin/test"><attributes><attribute name="test" value="true"/></attributes></classpathentry>' +
+  const cp = '<classpath><classpathentry kind="src" path="' + (withServices ? 'src/main/java' : 'src') + '"/>' +
+    '<classpathentry kind="src" path="' + (withServices ? 'src/test/java' : 'test') + '" output="bin/test">' +
+    '<attributes><attribute name="test" value="true"/></attributes></classpathentry>' +
     '<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>' +
     classpath.map(file => '<classpathentry kind="lib" path="' + xml(file) + '"/>').join('') +
-    '<classpathentry kind="output" path="bin"/></classpath>';
+    '<classpathentry kind="output" path="' + (withServices ? 'bin/main' : 'bin') + '"/></classpath>';
   await fs.writeFile(path.join(root, '.classpath'), cp, { flag: 'wx' });
-  for (const [relative, text] of fixtureSources(withBoot)) {
+  for (const [relative, text] of fixtureSources(withBoot, withServices)) {
     const file = path.join(root, relative);
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, text, { flag: 'wx' });
@@ -152,9 +198,15 @@ async function populatePackageRename(root, classpath, { withBoot = false } = {})
       await fs.writeFile(file, bootText(index, false), { flag: 'wx' });
     }
   }
+  if (withServices) {
+    await fs.mkdir(path.join(root, servicesRoot), { recursive: true });
+    for (const index of serviceInterfaces.keys()) {
+      await fs.writeFile(path.join(root, serviceFile(index)), serviceText(index), { flag: 'wx' });
+    }
+  }
 }
 
-async function runPackageSpring({ javaHome, root, classes, database, engine, classpathFile, renamed = false, withBoot = false }) {
+async function runPackageSpring({ javaHome, root, classes, database, engine, classpathFile, renamed = false, withBoot = false, withServices = false }) {
   const java = name => path.join(javaHome, 'bin', name + (process.platform === 'win32' ? '.exe' : ''));
   const classpath = await packageClasspath(classpathFile, engine, withBoot);
   assert.ok(['mysql', 'mariadb'].includes(engine));
@@ -167,8 +219,9 @@ async function runPackageSpring({ javaHome, root, classes, database, engine, cla
     (engine === 'mysql' ? '?allowPublicKeyRetrieval=true&sslMode=DISABLED' : '');
   env.RB_PACKAGE_JDBC_USER = database.user;
   env.RB_PACKAGE_JDBC_PASSWORD = database.password;
-  const files = [...fixtureSources(withBoot).keys()].map(file => renamed && file.startsWith(sourceFolder + path.sep)
-    ? path.join(root, targetFolder, path.relative(sourceFolder, file)) : path.join(root, file));
+  const from = javaLocation(sourceFolder, withServices), into = javaLocation(targetFolder, withServices);
+  const files = [...fixtureSources(withBoot, withServices).keys()].map(file => renamed && file.startsWith(from + path.sep)
+    ? path.join(root, into, path.relative(from, file)) : path.join(root, file));
   const compiled = await execute(java('javac'), ['-proc:none', '-encoding', 'UTF-8', '-classpath',
     classpath.join(path.delimiter), '-d', classes, ...files], { cwd: root, env, timeoutMs: 30000 });
   assert.equal(compiled.code, 0, compiled.output);
@@ -176,8 +229,8 @@ async function runPackageSpring({ javaHome, root, classes, database, engine, cla
   const retired = path.join(classes, 'fixture', renamed ? 'billing' : 'settlement', 'Ledger.class');
   assert.equal((await fs.lstat(binary)).isFile(), true);
   await assert.rejects(fs.stat(retired), { code: 'ENOENT' });
-  const resources = withBoot ? [path.join(root, 'src/main/resources'),
-    ...(engine === 'mariadb' ? [path.join(root, 'src/test/resources')] : [])] : [];
+  const resources = withBoot || withServices ? [path.join(root, 'src/main/resources'),
+    ...(withBoot && engine === 'mariadb' ? [path.join(root, 'src/test/resources')] : [])] : [];
   const run = await execute(java('java'), ['-classpath', [classes, ...resources, ...classpath].join(path.delimiter), client],
     { cwd: root, env, timeoutMs: 30000 });
   assert.equal(run.code, 0, run.output);
@@ -190,8 +243,11 @@ async function runPackageSpring({ javaHome, root, classes, database, engine, cla
     assert.equal(/^RB_BOOT_OWNER=([^\r\n]+)$/mu.exec(run.output)?.[1],
       (renamed ? renamedPackage : originalPackage) + '.LedgerAutoConfiguration');
   }
-  return { engine, server, output, ...(withBoot && { bootRegistrationResolved: true }) };
+  if (withServices) assert.equal(/^RB_SERVICES=([^\r\n]+)$/mu.exec(run.output)?.[1], serviceResult);
+  return { engine, server, output, ...(withBoot && { bootRegistrationResolved: true }),
+    ...(withServices && { serviceProviders: serviceResult, serviceLoaderResolved: true }) };
 }
 
 module.exports = { originalPackage, renamedPackage, ownerPath, sourceFolder, targetFolder, clientPath, unrelated,
-  sources, populatePackageRename, runPackageSpring, fixtureSources, bootProvider, bootFiles, bootText, packageClasspath };
+  sources, populatePackageRename, runPackageSpring, fixtureSources, bootProvider, bootFiles, bootText, packageClasspath,
+  serviceFile, serviceText, javaLocation };
