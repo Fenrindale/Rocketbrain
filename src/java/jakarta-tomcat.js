@@ -135,9 +135,10 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
   function release(session) {
     if (session.release) return session.release;
     session.stopping=true;
-    session.operation?.reject(fail('The owned Tomcat deployment stopped during context removal.'));
+    session.operation?.reject(fail('The owned Tomcat deployment stopped during a context change.'));
     session.release=(async () => {
       try { await session.prepared; } catch { /* Startup errors are reported separately. */ }
+      if (session.staging) await session.staging.catch(()=>{});
       if (session.child && !session.exited) {
         session.child.stdin.end('\n');
         if (!await exitedBy(session,6000)) {
@@ -166,7 +167,7 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
       if (session.stopping || disposed || cancelled(cancellation)) throw fail('Tomcat deployment cancelled.');
       const destination=path.join(session.base,'war-'+index+'.war');
       const sha256=await hashArchive(artifact,{destination,expectedSha256});
-      staged.push({context,artifact:artifact.name,sha256,destination});
+      staged.push({context,artifact:artifact.name,sha256,destination,size:artifact.size});
     }
     await fsp.writeFile(entry,hostSource,{flag:'wx'});
     const logging=path.join(session.base,'logging.properties');
@@ -191,9 +192,13 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
       buffered=lines.pop().slice(-1000);
       for (const line of lines) {
         const operation=session.operation;
-        if (operation && line===`rocketbrain-tomcat:${token}:removed:${operation.id}:${operation.name}`) {
-          operation.resolve();
-          continue;
+        if (operation) {
+          const acknowledged=operation.replies.find(reply =>
+            line===`rocketbrain-tomcat:${token}:${reply}:${operation.id}:${operation.name}`);
+          if (acknowledged) {
+            operation.resolve(acknowledged);
+            continue;
+          }
         }
         const ready=pattern.exec(line);
         if (ready && Number(ready[2])>0 && Number(ready[2])<=65535) {
@@ -219,7 +224,7 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
     validateApplications(applications,{set,pinned:set});
     if (active) throw fail('Stop the current owned Tomcat deployment first.');
     if (cancelled(cancellation)) throw fail('Tomcat deployment cancelled.');
-    const session={id:crypto.randomUUID(),stopping:false,ready:false,exited:false};
+    const session={id:crypto.randomUUID(),stopping:false,ready:false,exited:false,revision:0,additionReviews:new Map()};
     active=session;
     session.prepared=prepare(session,options);
     const cancel=cancellation?.onCancellationRequested?.(() => {void release(session).catch(()=>{});});
@@ -232,6 +237,8 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
         if (session.port && (debug!==true || session.debugPort) && await loopbackReady(session.port) &&
             !session.stopping && !session.exited) {
           session.ready=true;
+          session.archives=new Map(staged.map(item=>['/'+item.context,{file:item.destination,size:item.size}]));
+          session.stagedBytes=staged.reduce((total,item)=>total+item.size,0);
           const baseUrl='http://127.0.0.1:'+session.port;
           const deployed=staged.map(({context,artifact,sha256}) => ({context:'/'+context,url:baseUrl+'/'+context,artifact,sha256}));
           session.result={state:'running',deploymentId:session.id,version:session.version,
@@ -257,25 +264,126 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
     return start({...options,debug:false},true);
   }
 
-  async function undeploy({deploymentId,context,expectedSha256,allowUndeploy}={}) {
-    if (allowUndeploy!==true) throw fail('Explicitly confirm the selected Tomcat context removal.');
+  function requireSet(deploymentId) {
     const session=active;
     if (!session?.ready || session.stopping || session.id!==deploymentId || !session.result.applications) {
       throw fail('The reviewed Tomcat deployment set is no longer running.');
     }
+    if (session.operation) throw fail('Wait for the current Tomcat context change to finish.');
+    return session;
+  }
+
+  function validateAddition(session,context,artifact) {
+    validateApplications([{context,artifact}]);
+    if (session.result.applications.some(app=>app.context==='/'+context)) throw fail('The requested Tomcat context is already in use.');
+    if (session.result.applications.length>=MAX_APPLICATIONS || session.stagedBytes+artifact.size>MAX_SET_BYTES) {
+      throw fail('Adding this WAR would exceed the Tomcat deployment set limit.');
+    }
+  }
+
+  async function reviewAddition({deploymentId,context,artifact,cancellation}) {
+    const session=requireSet(deploymentId), revision=session.revision;
+    validateAddition(session,context,artifact);
+    const expectedSha256=await hashArchive(artifact);
+    if (cancelled(cancellation)) throw fail('Tomcat application review cancelled.');
+    if (requireSet(deploymentId)!==session || session.revision!==revision) throw fail('The Tomcat application set changed during review.');
+    const token=crypto.randomUUID(), expires=Date.now()+60000;
+    for (const [id,review] of session.additionReviews) if (review.expires<=Date.now()) session.additionReviews.delete(id);
+    if (session.additionReviews.size>=32) session.additionReviews.delete(session.additionReviews.keys().next().value);
+    session.additionReviews.set(token,{revision,expires,context,artifact:{...artifact},expectedSha256});
+    return {token,deploymentId,context,artifact:artifact.name,size:artifact.size,expectedSha256};
+  }
+
+  async function addApplication({deploymentId,token,artifact,allowDeploy,cancellation}) {
+    if (allowDeploy!==true) throw fail('Explicitly confirm adding the reviewed WAR.');
+    const session=requireSet(deploymentId);
+    const review=session.additionReviews.get(token);
+    session.additionReviews.delete(token);
+    if (!review || review.revision!==session.revision || review.expires<=Date.now() ||
+        artifact?.file!==review.artifact.file || artifact.size!==review.artifact.size) {
+      throw fail('Review the current Tomcat WAR and deployment set before adding it.');
+    }
+    const {context,expectedSha256}=review, id=crypto.randomUUID();
+    validateAddition(session,context,artifact);
+    const destination=path.join(session.base,'war-live-'+id+'.war');
+    const archive={file:destination,size:artifact.size};
+    let timer, submitted=false, rejected=false, staged=false;
+    session.operation={id,name:context,replies:[],reject() {}};
+    try {
+      if (cancelled(cancellation)) throw fail('Tomcat application addition cancelled.');
+      session.staging=(async()=>{
+        const base=await fsp.lstat(session.base,{bigint:true});
+        if (!base.isDirectory() || base.isSymbolicLink() || base.ino!==session.identity.ino || base.dev!==session.identity.dev ||
+            path.relative(session.base,await fsp.realpath(session.base))) {
+          throw fail('The owned Tomcat staging directory changed.');
+        }
+        if (session.stopping || disposed) throw fail('The owned Tomcat deployment is stopping.');
+        session.stagedBytes+=archive.size;
+        staged=true;
+        return hashArchive(artifact,{destination,expectedSha256});
+      })();
+      const sha256=await session.staging;
+      if (cancelled(cancellation)) throw fail('Tomcat application addition cancelled.');
+      if (active!==session || session.stopping || session.exited || disposed || session.revision!==review.revision || Date.now()>=review.expires) {
+        throw fail('Review the current Tomcat deployment set before adding the WAR.');
+      }
+      const disposition=await new Promise((resolve,reject) => {
+        session.operation={id,name:context,replies:['added','rejected'],resolve,reject};
+        timer=setTimeout(() => reject(fail('Tomcat did not acknowledge the reviewed WAR addition.')),startupMs);
+        submitted=true;
+        session.child.stdin.write(`add ${id} ${context}\n`,error => {if (error) reject(error);});
+      });
+      if (session.stopping || session.exited) throw fail('The owned Tomcat deployment stopped during a context change.');
+      if (disposition==='rejected') {
+        rejected=true;
+        throw fail('Tomcat rejected the reviewed WAR. The existing applications remain running. See the Output channel.');
+      }
+      const application={context:'/'+context,url:session.result.url+'/'+context,artifact:artifact.name,sha256};
+      session.result.applications.push(application);
+      session.archives.set(application.context,archive);
+      session.revision++;
+      return {state:'added',deploymentId,application:{...application},running:session.result.applications.length};
+    } catch (error) {
+      if (submitted && !rejected) await release(session);
+      else if (staged && !session.stopping) await discardArchive(session,archive);
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      session.staging=undefined;
+      if (session.operation?.id===id) session.operation=undefined;
+    }
+  }
+
+  async function discardArchive(session,archive) {
+    try { await fsp.unlink(archive.file); }
+    catch (error) {
+      if (error.code!=='ENOENT') {
+        log('Tomcat kept a staged archive for cleanup when the owned server stops.\n');
+        return;
+      }
+    }
+    session.stagedBytes-=archive.size;
+  }
+
+  async function undeploy({deploymentId,context,expectedSha256,allowUndeploy}={}) {
+    if (allowUndeploy!==true) throw fail('Explicitly confirm the selected Tomcat context removal.');
+    const session=requireSet(deploymentId);
     const app=session.result.applications.find(item => item.context===context);
     if (!app || app.sha256!==expectedSha256) throw fail('The reviewed Tomcat application has changed.');
-    if (session.operation) throw fail('Wait for the current Tomcat context removal to finish.');
     const id=crypto.randomUUID(), name=app.context.slice(1);
     let timer;
     try {
       await new Promise((resolve,reject) => {
-        session.operation={id,name,resolve,reject};
+        session.operation={id,name,replies:['removed'],resolve,reject};
         timer=setTimeout(() => reject(fail('Tomcat did not acknowledge the reviewed context removal.')),15000);
         session.child.stdin.write(`remove ${id} ${name}\n`,error => {if (error) reject(error);});
       });
-      if (session.stopping || session.exited) throw fail('The owned Tomcat deployment stopped during context removal.');
+      if (session.stopping || session.exited) throw fail('The owned Tomcat deployment stopped during a context change.');
       session.result.applications=session.result.applications.filter(item => item!==app);
+      const archive=session.archives.get(app.context);
+      session.archives.delete(app.context);
+      await discardArchive(session,archive);
+      session.revision++;
       if (!session.result.applications.length) await release(session);
       return {state:'undeployed',deploymentId,application:{...app},remaining:session.result.applications.length};
     } catch (error) {
@@ -297,7 +405,7 @@ function createTomcatDeployment({log=()=>{},startupMs=90000} = {}) {
     if (!result) return {state:'starting',deploymentId:active.id};
     return result.applications ? {...result,applications:result.applications.map(item => ({...item}))} : {...result};
   }
-  return {deploy,deploySet,undeploy,stop,getState,async dispose(){disposed=true;await stop();}};
+  return {deploy,deploySet,reviewAddition,addApplication,undeploy,stop,getState,async dispose(){disposed=true;await stop();}};
 }
 
 module.exports = { createTomcatDeployment,reviewTomcatWarSet,hashArchive,MAX_APPLICATIONS };
