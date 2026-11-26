@@ -2,10 +2,13 @@
 
 const {compareSnapshots, normalizeSnapshot, LIMITS} = require('./schema-diff');
 const generated = require('./schema-generated-column');
+const {assertSelectedViewPair} = require('./schema-rebuild-view');
 
 const columnChanges = new Set(['add-column', 'drop-column', 'change-column']);
 const indexChanges = new Set(['add-index', 'drop-index', 'change-index']);
 const foreignKeyChange = 'change-foreignKeys';
+const viewChange = 'change-view';
+const selectedViewLimit = 4;
 const rebuildTableLimit = 10;
 const fail = message => Object.assign(new Error(message), {code: 'ROCKETBRAIN_REBUILD_SELECTION'});
 const byName = items => new Map(items.map(item => [item.name, item]));
@@ -18,16 +21,20 @@ const caseCollision = items => new Set(items.map(item => fold(item.name))).size 
 
 function selectionContext(current, desired) {
   return {before: byName(current.tables), proposed: byName(desired.tables),
-    compatible: current.server.dialect === desired.server.dialect && complete(current) && complete(desired)};
+    compatible: current.server.dialect === desired.server.dialect && complete(current) && complete(desired),
+    sameViewContext: current.database === desired.database && current.server.sqlMode === desired.server.sqlMode &&
+      current.server.currentUser === desired.server.currentUser};
 }
 
-function eligible(change, {before, proposed, compatible}) {
+function eligible(change, {before, proposed, compatible, sameViewContext}) {
   if (!change || !compatible || change.reason === 'Comparison options are review-only.' ||
-      (!columnChanges.has(change.kind) && !indexChanges.has(change.kind) && change.kind !== foreignKeyChange)) return false;
+      /^__rb_/iu.test(change.table)) return false;
   const source = before.get(change.table), target = proposed.get(change.table);
+  if (change.kind === viewChange) return sameViewContext && source?.kind === 'view' && target?.kind === 'view';
+  if (!columnChanges.has(change.kind) && !indexChanges.has(change.kind) && change.kind !== foreignKeyChange) return false;
   // The current rebuild keeps original CHECK names on the backup and gives the
   // shadow different names. Selected changes must preserve unselected names.
-  if (!isInnoDb(source) || !isInnoDb(target) || /^__rb_/iu.test(change.table) ||
+  if (!isInnoDb(source) || !isInnoDb(target) ||
       source.partitions.length || source.checks.length) return false;
   return true;
 }
@@ -164,14 +171,22 @@ function projectSelectedRebuild(currentValue, desiredValue, changeIds) {
     throw fail('Select the required dependency changes together.');
   }
   changes.sort((left, right) => left.id < right.id ? -1 : 1);
+  const selectedViewChanges = changes.filter(change => change.kind === viewChange);
+  if (selectedViewChanges.length > selectedViewLimit) throw fail('Select at most four dependent view changes.');
+  const selectedViews = selectedViewChanges.map(change =>
+    assertSelectedViewPair(current, proposed, context.before.get(change.table), context.proposed.get(change.table)));
+  const viewNames = new Set(selectedViewChanges.map(change => change.table));
   const byTable = new Map();
   for (const change of changes) {
+    if (change.kind === viewChange) continue;
     if (!byTable.has(change.table)) byTable.set(change.table, []);
     byTable.get(change.table).push(change);
   }
   const tables = [...byTable.keys()].sort();
+  if (!tables.length) throw fail('Select a rebuild change to a base table along with its dependent view.');
   if (tables.length > rebuildTableLimit) throw fail('Select changes for at most 10 existing tables.');
   const desired = normalizeSnapshot({...current, tables: current.tables.map(table => {
+    if (viewNames.has(table.name)) return context.proposed.get(table.name);
     const chosen = byTable.get(table.name);
     if (!chosen) return table;
     const target = context.proposed.get(table.name);
@@ -183,7 +198,7 @@ function projectSelectedRebuild(currentValue, desiredValue, changeIds) {
   if (actual.length !== ids.size || actual.some(id => !ids.has(id))) {
     throw fail('The selected changes do not describe the complete projected schema difference.');
   }
-  return {desired, tables, changes};
+  return {desired, tables, changes, ...(selectedViews.length && {selectedViews})};
 }
 
 function assertSelectedRebuildConversions(changes, rules) {

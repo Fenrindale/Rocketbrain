@@ -1,27 +1,27 @@
 {
-  "version": "0.170.0",
-  "verifiedAt": "2026-11-26T20:21:01.164Z",
+  "version": "0.172.0",
+  "verifiedAt": "2026-11-26T20:42:54.530Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.170.0.vsix",
-    "sha256": "ed98bf9d3eaf0598c0c4b277debaff36a4621275f12a5e36684c393876e43692",
-    "bytes": 4741849,
+    "name": "rocketbrain-0.172.0.vsix",
+    "sha256": "6295fb8ae4f40a7959531343f45da9000c2dba920e9db44cc394c1090d4089e1",
+    "bytes": 4748213,
     "files": 39
   },
   "source": {
-    "frozenPublicInputs": 3164,
-    "inputVectorSha256": "af41d44b1581ea4905a8b7abe1f549b2100e2d2a2ad1f0c68fe83e8d78c740f7",
+    "frozenPublicInputs": 3167,
+    "inputVectorSha256": "b03660171e5b92a63cd804d3e517dd8bd86719bf274e732c31e7b429d73f6bba",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "d42526c7df9b3b10e0c4d8c55ed77a7792afc427",
-    "run": 45889836492,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45889836492",
-    "tests": 2273,
+    "head": "006273d706d80e611699379e271cef144b1891de",
+    "run": 45892601595,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45892601595",
+    "tests": 2282,
     "suites": 0,
-    "pass": 2020,
+    "pass": 2029,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
@@ -42,127 +42,81 @@
     }
   ],
   "vendorRuntime": {
-    "selectedSchemaRebuild": {
-      "scope": "Spring JDBC on disposable real MySQL and MariaDB with selected column, index and foreign-key changes, immutable projection and fresh-session recovery.",
-      "packageSource": "d42526c7df9b3b10e0c4d8c55ed77a7792afc427",
-      "logSha256": "59207769d5e9b3a45ae8d0d3ef572867ab2dcb3ba655ed004777b56a8b2456a7",
+    "selectedSchemaViews": {
+      "scope": "Spring JDBC and real MySQL/MariaDB, exact table and existing same-schema dependent view selection, a retained nested view, staged-out rows preserved, stale/tampered refusal and fresh-session recovery.",
+      "packageSource": "006273d706d80e611699379e271cef144b1891de",
+      "logSha256": "16656f58f3adfc29dcf98029cdff2d3f1fc3267df5996b1df1ff51b163c5cfb6",
       "results": [
         {
           "engine": "mysql",
           "version": "8.4.13",
-          "testsPassed": 6,
+          "before": {
+            "version": "8.4.13",
+            "rows": "[1]"
+          },
+          "after": {
+            "version": "8.4.13",
+            "rows": "[2]"
+          },
+          "restored": {
+            "version": "8.4.13",
+            "rows": "[1]"
+          },
+          "exactOriginalDefinitionsRecovered": true,
+          "selectedViewBodyVerified": true,
+          "nestedViewUnchangedAndReadable": true,
+          "unselectedRowsPreserved": true,
+          "dependencyApprovalRequired": true,
+          "staleBeforeApplyRefused": true,
+          "tamperedSelectedViewRefused": true,
+          "selectedReviewImmutable": true,
+          "atomicAcrossTables": false,
+          "testsPassed": 7,
           "freshSessionRestored": true,
-          "selection": {
-            "engine": "mysql",
-            "version": "8.4.13",
-            "before": {
-              "engine": "mysql",
-              "version": "8.4.13",
-              "joined": "[2147483647, -2147483648]"
-            },
-            "after": {
-              "engine": "mysql",
-              "version": "8.4.13",
-              "joined": "[2147483647, -2147483648]"
-            },
-            "restored": {
-              "engine": "mysql",
-              "version": "8.4.13",
-              "joined": "[2147483647, -2147483648]"
-            },
-            "selectedChanges": [
-              "add-column",
-              "change-column",
-              "change-foreignKeys",
-              "change-index",
-              "drop-column"
-            ],
-            "unselectedColumnKeptThroughApplyAndRecovery": true,
-            "selectedScopeImmuneToExternalMutation": true,
-            "dependencyRefusedBeforeApply": true,
-            "compositeIndexAndForeignKeyPreserved": true,
-            "unrelatedPeerAndNullValuesPreserved": true,
-            "storedProjectedTargetRecovered": true,
-            "atomicAcrossTables": false
-          },
-          "firstForeignKey": {
-            "engine": "mysql",
-            "version": "8.4.13",
-            "joined": "[2147483647, -2147483648]",
-            "newForeignKeyInstalled": true,
-            "missingDependencyApprovalRefused": true,
-            "freshRecoveryRemovedOnlyNewForeignKey": true
-          },
-          "receiptDigests": [
-            "b94573efee67106c0935cdee1a00adebbaec53d9b2616322d3804a5894cd8ab6",
-            "e70fac24c7c719028baa3d4c2cbc858de00de60d436ab9db15b09747f749bec9"
-          ]
+          "receiptSha256": "69eb58453e936bd1d4f3b867c9c8b08be0071cd5045bebd21dbe9b5dcfc7eb53"
         },
         {
           "engine": "mariadb",
           "version": "11.4.8-MariaDB",
-          "testsPassed": 6,
+          "before": {
+            "version": "11.4.8-MariaDB",
+            "rows": "[1]"
+          },
+          "after": {
+            "version": "11.4.8-MariaDB",
+            "rows": "[2]"
+          },
+          "restored": {
+            "version": "11.4.8-MariaDB",
+            "rows": "[1]"
+          },
+          "exactOriginalDefinitionsRecovered": true,
+          "selectedViewBodyVerified": true,
+          "nestedViewUnchangedAndReadable": true,
+          "unselectedRowsPreserved": true,
+          "dependencyApprovalRequired": true,
+          "staleBeforeApplyRefused": true,
+          "tamperedSelectedViewRefused": true,
+          "selectedReviewImmutable": true,
+          "atomicAcrossTables": false,
+          "testsPassed": 7,
           "freshSessionRestored": true,
-          "selection": {
-            "engine": "mariadb",
-            "version": "11.4.8-MariaDB",
-            "before": {
-              "engine": "mariadb",
-              "version": "11.4.8-MariaDB",
-              "joined": "[2147483647, -2147483648]"
-            },
-            "after": {
-              "engine": "mariadb",
-              "version": "11.4.8-MariaDB",
-              "joined": "[2147483647, -2147483648]"
-            },
-            "restored": {
-              "engine": "mariadb",
-              "version": "11.4.8-MariaDB",
-              "joined": "[2147483647, -2147483648]"
-            },
-            "selectedChanges": [
-              "add-column",
-              "change-column",
-              "change-foreignKeys",
-              "change-index",
-              "drop-column"
-            ],
-            "unselectedColumnKeptThroughApplyAndRecovery": true,
-            "selectedScopeImmuneToExternalMutation": true,
-            "dependencyRefusedBeforeApply": true,
-            "compositeIndexAndForeignKeyPreserved": true,
-            "unrelatedPeerAndNullValuesPreserved": true,
-            "storedProjectedTargetRecovered": true,
-            "atomicAcrossTables": false
-          },
-          "firstForeignKey": {
-            "engine": "mariadb",
-            "version": "11.4.8-MariaDB",
-            "joined": "[2147483647, -2147483648]",
-            "newForeignKeyInstalled": true,
-            "missingDependencyApprovalRefused": true,
-            "freshRecoveryRemovedOnlyNewForeignKey": true
-          },
-          "receiptDigests": [
-            "29073ab1b35d55376dee867b1ef1e19b612ca45bc588693b2a6b935a565a918d",
-            "fbdaac70a1313ecefb9d786674acc10ffe4ce5aa096952564c1871895f1a58c5"
-          ]
+          "receiptSha256": "a10fb4a9d74bfbba21759c54eae9a932e85c9b47d639140ceebef637abad7987"
         }
       ]
     }
   },
   "newlyVerified": {
     "DG-083": {
-      "scope": "실제 Spring JDBC와 MySQL·MariaDB에서 이름·타입 변경 및 복합 인덱스·외래 키를 적용하고 누락된 종속 변경을 거부했다. 목표 정의에서 삭제될 컬럼을 선택에서 빼 값을 보존하고 새 세션에서 원본을 복구했다.",
+      "scope": "실제 Spring JDBC와 MySQL·MariaDB에서 선택한 테이블 타입과 뷰 조건을 함께 변경하고 하위 뷰의 결과를 확인했다. 선택하지 않은 값을 보존했고 새 세션에서 원래 뷰 정의와 조회 결과를 복구했다.",
       "runtimeGroups": [
-        "selectedSchemaRebuild"
+        "selectedSchemaViews"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 735,
+    "sourceCorrespondences": 736,
     "sourceConfidence": "inferred",
     "archiveEntries": 39,
     "archiveConfidence": "observed"
@@ -260,7 +214,7 @@
   },
   "limits": [
     "216개 기능의 기존 가중치를 유지했다.",
-    "선택 재구성은 같은 엔진의 일반 스키마 비교와 기존 테이블의 지원되는 컬럼·인덱스 및 테이블별 외래 키 변경에 적용한다.",
+    "선택 뷰는 같은 스키마의 기존 객체이며, 참조 관계·출력 이름·소유자·보안 설정을 유지한다. 직접 부여된 객체별 권한도 검토한다.",
     "별도 MySQL·MariaDB 서버 사이의 원자적 DDL과 원본 제품 전체 창 배치는 현재 서버 및 VS Code 호스트의 구조 제약을 받는다."
   ],
   "next": [
