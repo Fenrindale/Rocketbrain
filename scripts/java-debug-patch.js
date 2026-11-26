@@ -25,7 +25,7 @@ const DISPATCH_FROM = '        Command command = Command.parse(request.command);
 const DISPATCH_TO = '        try {\n' +
   '            com.microsoft.java.debug.core.KotlinLineBreakpoints.updateSession(debugContext, request);\n' +
   '        } catch (RuntimeException invalidSourceLines) {\n' +
-  '            return AdapterUtils.createAsyncErrorResponse(response, ErrorCode.ATTACH_FAILURE, "Invalid owned Kotlin source-line evidence.");\n' +
+  '            return AdapterUtils.createAsyncErrorResponse(response, ErrorCode.ATTACH_FAILURE, "Invalid owned JVM source-line evidence.");\n' +
   '        }\n' +
   '        if ("rocketbrain/readJavaValues".equals(request.command)) {\n' +
   '            return LocalValueInspection.read(request, response, debugContext);\n        }\n' +
@@ -42,7 +42,8 @@ const CORE_PATCH_TO = '                try {\n                    Path fullpath 
 const PATCH_FROM = 'this.serverSocket = new ServerSocket(0, 1);';
 const PATCH_TO = 'this.serverSocket = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));';
 const PATCH_NOTICE = [
-  'Rocketbrain Java debug server patches v11',
+  'Rocketbrain Java debug server patches v12',
+  'Managed Gradle Groovy applications accept exact compiled source lines after matching live class and method bytecodes.',
   'Upstream: microsoft/java-debug 0.53.1 (' + SOURCE_COMMIT + ')',
   'Patch 1 source: ' + SOURCE_URL,
   'Original source SHA-256: ' + SOURCE_SHA256,
@@ -220,7 +221,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     const meta = path.join(stage, 'META-INF');
     for (const name of fs.readdirSync(meta)) if (/\.(?:SF|RSA|DSA|EC)$|^SIG-/i.test(name)) await fs.promises.rm(path.join(meta, name));
     const manifestPath = path.join(meta, 'MANIFEST.MF');
-    const main = fs.readFileSync(manifestPath, 'utf8').split(/\r?\n\r?\n/)[0].replace(/Bundle-Version: 0\.53\.1\b/, 'Bundle-Version: 0.53.1.rocketbrain11');
+    const main = fs.readFileSync(manifestPath, 'utf8').split(/\r?\n\r?\n/)[0].replace(/Bundle-Version: 0\.53\.1\b/, 'Bundle-Version: 0.53.1.rocketbrain12');
     await fs.promises.writeFile(manifestPath, main.replace(/\r?\n/g, '\r\n') + '\r\n\r\n');
     const sourcesDir = path.join(meta, 'rocketbrain-sources'); await fs.promises.mkdir(sourcesDir);
     await fs.promises.writeFile(path.join(sourcesDir, 'JavaDebugServer.java'), patchedSource);

@@ -172,6 +172,8 @@
       { "command": "rocketbrain.groovy.runSpecification", "title": "Run Selected Spock Specification", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
       { "command": "rocketbrain.groovy.projectSelection", "title": "Review Groovy Selection with Project Classpath", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file && editorHasSelection" },
       { "command": "rocketbrain.groovy.stopProject", "title": "Stop Groovy Project Evaluation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.groovy.debugApplication", "title": "Debug Groovy Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
+      { "command": "rocketbrain.groovy.stopDebugApplication", "title": "Stop Groovy Gradle Application Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.completeTypedMember", "title": "Complete Typed Groovy Member", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
       { "command": "rocketbrain.groovy.openTypedMemberDeclaration", "title": "Open Typed Groovy Member Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
       { "command": "rocketbrain.quarkus.create", "title": "Create Quarkus Maven Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1557,6 +1559,7 @@
       "editor/context": [
         { "command": "rocketbrain.contextActions", "when": "editorLangId =~ /^(java|kotlin|sql|xml|properties|yaml)$/", "group": "navigation@9" },
         { "command": "rocketbrain.groovy.runSpecification", "when": "editorLangId == groovy && resourceScheme == file && isWorkspaceTrusted", "group": "navigation" },
+        { "command": "rocketbrain.groovy.debugApplication", "when": "editorLangId == groovy && resourceScheme == file && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.sshWorkspace.javaCompile", "when": "editorLangId == java && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.sshWorkspace.mavenBuild", "when": "resourceFilename == pom.xml && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.sshWorkspace.gradleBuild", "when": "resourceFilename == build.gradle && resourceScheme == rocketbrain-ssh && isWorkspaceTrusted", "group": "navigation" },
@@ -2042,7 +2045,7 @@
         "when": "editorTextFocus && editorHasCodeActionsProvider"
       }
     ],
-    "breakpoints": [{ "language": "scala" }, { "language": "kotlin" }],
+    "breakpoints": [{ "language": "scala" }, { "language": "kotlin" }, { "language": "groovy" }],
     "debuggers": [
       {
         "type": "rocketbrain-scala",

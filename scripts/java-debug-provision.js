@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { DEBUG_VERSION, KOTLIN_FIELD_VALUES_BUILD: DEBUG_BUILD, KOTLIN_FIELD_VALUES_FILE: DEBUG_FILE, KOTLIN_FIELD_VALUES_SHA256: DEBUG_SHA256,
+const { DEBUG_VERSION, GROOVY_LINE_BUILD: DEBUG_BUILD, GROOVY_LINE_FILE: DEBUG_FILE, GROOVY_LINE_SHA256: DEBUG_SHA256,
   DEBUG_URL, UPSTREAM_FILE, UPSTREAM_SHA256, resolveDebugBundles, independentJavaExecutable } = require('../src/java/debug-runtime');
 const { buildPatchedBundle, SOURCE_COMMIT, SOURCE_URL, SOURCE_SHA256, CORE_SOURCE_URL, CORE_SOURCE_SHA256,
   EXCEPTION_SOURCE_URL, EXCEPTION_SOURCE_SHA256, INSPECTION_SOURCE_URL, INSPECTION_SOURCE_SHA256,
@@ -34,7 +34,7 @@ async function provisionDebugger(target, progress = () => {}, { javaHome, server
     await download(DEBUG_URL, UPSTREAM_SHA256, upstreamJar);
     await download(sourceJarUrl, SOURCE_JAR_SHA256, sourceJar);
     await download(coreSourceJarUrl, CORE_SOURCE_JAR_SHA256, coreSourceJar);
-    progress('Building the loopback DAP server with Java inspection and Kotlin debugging, including managed Kotlin source lines and local Kotlin field values.');
+    progress('Building the loopback DAP server with Java inspection, Kotlin field values, and managed Kotlin and Groovy source lines.');
     const build = await buildPatchedBundle({ target, javaHome, serverPath: serverPath || path.join(path.dirname(target), 'jdtls-1.63.0'), upstreamJar, sourceJar, coreSourceJar, outputJar: file });
     if (build.sha256 !== DEBUG_SHA256) throw new Error(`Java debug local build does not match the reproducible ${DEBUG_BUILD} artifact (${build.sha256}).`);
     await fs.promises.writeFile(path.join(target, 'build.json'), JSON.stringify(build, null, 2) + '\n');

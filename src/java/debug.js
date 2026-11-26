@@ -1,7 +1,8 @@
 'use strict';
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { independentJavaExecutable, argumentString, launchCommandMode, KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILD } = require('./debug-runtime');
+const { independentJavaExecutable, argumentString, launchCommandMode, KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILD,
+  GROOVY_LINE_BUILD } = require('./debug-runtime');
 const { applyManagedSpringLaunch } = require('./spring-launch');
 const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
@@ -17,6 +18,7 @@ const DEBUG_TYPE = 'rocketbrain-java';
 const PROCESS_SELECTION = '__rocketbrainJavaProcessSelection';
 const VERIFIED_ATTACH = '__rocketbrainVerifiedAttach';
 const KMP_DEBUG_MARKER = '__rocketbrainKmpDebugSession';
+const GROOVY_DEBUG_MARKER = '__rocketbrainGroovyDebugSession';
 const resumeCommands = new Set(['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue', 'restart',
   'restartFrame', 'goto', 'terminate', 'disconnect']);
 
@@ -62,12 +64,15 @@ function registerJavaDebugger(vscode, api, output, request) {
     }
   }
   const ensureTrusted = () => { if (disposed) throw new Error('Java debugger is disposed.'); if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before running or attaching Java code.'); };
-  function registerKotlinSourceLines(token, target, evidence) {
+  function registerSourceLines(token, target, evidence, groovy) {
     ensureTrusted();
-    if (!KOTLIN_LINE_BUILDS.includes(api.getState().debugBuild) || pendingKotlinLines.has(token) || pendingKotlinLines.size>=8) {
-      throw Error('A current managed Kotlin source-line debugger is required.');
+    const build = api.getState().debugBuild;
+    if (!(groovy ? build===GROOVY_LINE_BUILD : KOTLIN_LINE_BUILDS.includes(build)) ||
+        evidence?.format!==(groovy ? 'RocketbrainGroovySourceLines1' : 'RocketbrainKmpSourceLines1') ||
+        pendingKotlinLines.has(token) || pendingKotlinLines.size>=8) {
+      throw Error('A current managed source-line debugger is required.');
     }
-    const record={target,evidence};
+    const record={target,evidence,groovy};
     pendingKotlinLines.set(token,record);
     return {dispose() {if (pendingKotlinLines.get(token)===record) pendingKotlinLines.delete(token);}};
   }
@@ -187,17 +192,20 @@ function registerJavaDebugger(vscode, api, output, request) {
     assertManagedAttach(session.configuration, session.workspaceFolder);
     const info = record(session);
     info.debugBuild = api.getState().debugBuild;
-    const marker=session.configuration[KMP_DEBUG_MARKER];
+    const isGroovy=typeof session.configuration[GROOVY_DEBUG_MARKER]==='string';
+    const marker=session.configuration[isGroovy ? GROOVY_DEBUG_MARKER : KMP_DEBUG_MARKER];
     const owned=pendingKotlinLines.get(marker);
-    const evidence=owned && KOTLIN_LINE_BUILDS.includes(info.debugBuild) && info.verifiedPid===owned.target.pid &&
+    const evidence=owned && owned.groovy===isGroovy &&
+      (isGroovy ? info.debugBuild===GROOVY_LINE_BUILD : KOTLIN_LINE_BUILDS.includes(info.debugBuild)) && info.verifiedPid===owned.target.pid &&
       session.configuration.hostName===owned.target.hostName && session.configuration.port===owned.target.port ? owned.evidence : undefined;
     if (evidence) pendingKotlinLines.delete(marker);
     const adapter = new JavaDebugAdapter(vscode, port, message => observe(session, message), output, message => {
       if (message.type !== 'request') return;
       if (resumeCommands.has(message.command)) { info.stopVersion++; info.resuming = message.seq; }
       if (message.command === 'redefineClasses') info.stopVersion++;
-    },evidence,info.debugBuild===KOTLIN_FIELD_VALUES_BUILD && Number.isInteger(info.verifiedPid) &&
-      session.configuration.hostName==='127.0.0.1' ? session.configuration.port : undefined);
+    },evidence,[KOTLIN_FIELD_VALUES_BUILD,GROOVY_LINE_BUILD].includes(info.debugBuild) && Number.isInteger(info.verifiedPid) &&
+      session.configuration.hostName==='127.0.0.1' ? session.configuration.port : undefined,
+      evidence ? owned.target.port : undefined);
     return new vscode.DebugAdapterInlineImplementation(adapter);
   } };
   async function attachProcess(selection, { folder, projectName, sourcePaths, name } = {}) {
@@ -273,7 +281,8 @@ function registerJavaDebugger(vscode, api, output, request) {
     if (chosen?.length) return breakpoints.addInline(report,chosen.map(item => item.column));
   })];
   return { breakpoints, exceptions, smartStep, frames, localValues, kotlinLocals, kotlinFields, processes: { ...discovery, attach: attachProcess }, hotCodeReplace,
-    registerKotlinSourceLines,
+    registerKotlinSourceLines: (token,target,evidence) => registerSourceLines(token,target,evidence,false),
+    registerGroovySourceLines: (token,target,evidence) => registerSourceLines(token,target,evidence,true),
     verifiedLocalPid(session) {
       const info = session && sessions.get(session.id);
       return info?.attached && info.state !== 'terminated' ? info.verifiedPid : undefined;
@@ -288,4 +297,4 @@ function registerJavaDebugger(vscode, api, output, request) {
     dispose() { disposed = true; pendingAttaches.clear(); pendingKotlinLines.clear(); void this.stopSessions(); for (const item of disposables) item.dispose(); } };
 }
 
-module.exports = { DEBUG_TYPE, KMP_DEBUG_MARKER, registerJavaDebugger, processAttachTarget };
+module.exports = { DEBUG_TYPE, KMP_DEBUG_MARKER, GROOVY_DEBUG_MARKER, registerJavaDebugger, processAttachTarget };

@@ -109,14 +109,65 @@ async function stopProcess(record) {
       }
     }
   }
-  if (!await within(done,12000)) throw fail('The owned Kotlin JVM Gradle task did not exit after stopping.');
+  if (!await within(done,12000)) throw fail('The owned Gradle debug task did not exit after stopping.');
   if (record.target) {
     const deadline=Date.now()+5000;
     while (alive(record.target.pid) && Date.now()<deadline) await delay(125);
-    if (alive(record.target.pid)) throw fail('The owned Kotlin debug JVM did not confirm termination.');
+    if (alive(record.target.pid)) throw fail('The owned debug JVM did not confirm termination.');
   }
   return done;
 }
+
+async function startGradleDebugProcess({launch,task,label,marker,resolveDescendant,cancellation,startupMs,
+  onOutput,cleanup,ready}) {
+  let record,lastError;
+  try {
+    const child=spawn(launch.command,launch.args,{cwd:launch.cwd,env:launch.env,windowsHide:true,
+      detached:process.platform!=='win32',stdio:['ignore','pipe','pipe']});
+    record={child,error:undefined,exited:false,tail:'',target:undefined};
+    let stopping;
+    const stop=()=>stopping??=stopProcess(record).catch(error=>{stopping=undefined;throw error;});
+    child.once('error',error=>{record.error=error;});
+    const capture=chunk=>{record.tail=(record.tail+chunk).slice(-64000);onOutput(chunk);};
+    child.stdout.setEncoding('utf8').on('data',capture);
+    child.stderr.setEncoding('utf8').on('data',capture);
+    record.done=new Promise(resolve=>child.once('close',(code,signal)=>{
+      record.exited=true;
+      resolve({code,signal,task});
+    })).finally(cleanup);
+    void record.done.catch(()=>{});
+    record.stop=stop;
+    const assertRunning=()=>{
+      if (cancelled(cancellation)) throw fail(label+' debugging was cancelled.');
+      if (record.exited || record.error) throw fail('The '+label+' Gradle run task exited before exposing its owned debugger. Check its output.');
+    };
+    const deadline=Date.now()+startupMs;
+    while(Date.now()<deadline) {
+      assertRunning();
+      const ports=[...new Set([...record.tail.matchAll(/^Listening for transport dt_socket at address: (\d{1,5})\s*$/gm)]
+        .map(match=>Number(match[1])).filter(port=>port>=1&&port<=65535))];
+      if (ports.length>8) throw fail('Gradle reported too many possible '+label+' debugger ports.');
+      for (const port of ports) {
+        const candidate=await resolveDescendant({ancestorPid:child.pid,port,marker},cancellation)
+          .catch(error=>{lastError=error;return undefined;});
+        if (!candidate) continue;
+        assertRunning();
+        record.target=candidate;
+        const details=await ready(assertRunning);
+        assertRunning();
+        return {target:candidate,...details,task,done:record.done,stop};
+      }
+      await delay(175);
+    }
+    throw fail('Gradle did not start a verified '+label+' debug listener. Check its output.'+
+      (lastError?' '+lastError.message:''));
+  } catch(error) {
+    if (record) await record.stop();
+    else await cleanup();
+    throw error;
+  }
+}
+
 
 async function startKmpJvmDebug({model,modulePath,targetName,tools,workspaceTrusted,allowProjectExecution,cancellation,
   resolveDescendant,onOutput=()=>{},startupMs=180000,sourceLineJavaHome}) {
@@ -129,7 +180,7 @@ async function startKmpJvmDebug({model,modulePath,targetName,tools,workspaceTrus
   const parent=await fs.realpath(os.tmpdir()), folder=await fs.mkdtemp(path.join(parent,'rb-kmp-debug-'));
   const stage={parent,folder,identity:await fs.lstat(folder,{bigint:true})};
   const script=path.join(folder,'debug.init.gradle'), settings=path.join(folder,'selection.json'), lineOutput=path.join(folder,'kotlin-classes.json');
-  let record, lastError;
+  let ownedByRunner=false;
   try {
     await fs.writeFile(script,init,{flag:'wx'});
     await fs.writeFile(settings,JSON.stringify({module:modulePath,target:targetName,task:target.runTask,marker:marker.value,
@@ -140,35 +191,11 @@ async function startKmpJvmDebug({model,modulePath,targetName,tools,workspaceTrus
     if (before.fingerprint!==checkSources().fingerprint) throw fail('Kotlin source files changed before starting the JVM debugger.');
     if (cancelled(cancellation)) throw fail('Kotlin JVM debugging was cancelled.');
 
-    const child=spawn(launch.command,launch.args,{cwd:launch.cwd,env:launch.env,windowsHide:true,
-      detached:process.platform!=='win32',stdio:['ignore','pipe','pipe']});
-    record={child,error:undefined,exited:false,tail:'',target:undefined};
-    let stopping;
-    const stop=()=>stopping??=stopProcess(record);
-    child.once('error',error=>{record.error=error;});
-    const capture=chunk=>{record.tail=(record.tail+chunk).slice(-64000);onOutput(chunk);};
-    child.stdout.setEncoding('utf8').on('data',capture);
-    child.stderr.setEncoding('utf8').on('data',capture);
-    record.done=new Promise(resolve=>child.once('close',(code,signal)=>{
-      record.exited=true;
-      resolve({code,signal,task:target.runTask});
-    })).finally(()=>removeStage(stage));
-    void record.done.catch(()=>{});
-    record.stop=stop;
-
-    const deadline=Date.now()+startupMs;
-    while (Date.now()<deadline) {
-      if (cancelled(cancellation)) throw fail('Kotlin JVM debugging was cancelled.');
-      if (record.exited || record.error) throw fail('The Gradle Kotlin JVM run task exited before exposing its owned debugger. Check Kotlin output.');
-      const ports=[...new Set([...record.tail.matchAll(/^Listening for transport dt_socket at address: (\d{1,5})\s*$/gm)]
-        .map(match=>Number(match[1])).filter(port=>port>=1 && port<=65535))];
-      if (ports.length>8) throw fail('Gradle reported too many possible Kotlin JVM debugger ports.');
-      for (const port of ports) {
-        const candidate=await resolveDescendant({ancestorPid:child.pid,port,marker},cancellation)
-          .catch(error=>{lastError=error;return undefined;});
-        if (!candidate) continue;
-        if (record.exited || record.error || cancelled(cancellation)) throw fail('The owned Kotlin JVM changed during debugger startup.');
-        record.target=candidate;
+    ownedByRunner=true;
+    return await startGradleDebugProcess({
+      launch,task:target.runTask,label:'Kotlin JVM',marker,resolveDescendant,cancellation,startupMs,onOutput,
+      cleanup:()=>removeStage(stage),
+      async ready(assertRunning) {
         verifyKmpModel(model);
         if (before.fingerprint!==checkSources().fingerprint) throw fail('Kotlin source files changed while Gradle prepared the debugger.');
         let sourceLines;
@@ -183,21 +210,17 @@ async function startKmpJvmDebug({model,modulePath,targetName,tools,workspaceTrus
             sourceLines=undefined;
             onOutput('Kotlin source-line evidence was unavailable. '+error.message+'\n');
           }
-          if (record.exited || record.error || cancelled(cancellation)) throw fail('The owned Kotlin JVM changed during source verification.');
+          assertRunning();
           verifyKmpModel(model);
           if (before.fingerprint!==checkSources().fingerprint) throw fail('Kotlin sources changed during debugger source verification.');
         }
-        return {target:candidate,sourcePaths,sourceLines,task:target.runTask,done:record.done,stop};
+        return {sourcePaths,sourceLines};
       }
-      await delay(175);
-    }
-    throw fail('Gradle did not start a verified Kotlin JVM debug listener. Check Kotlin output.'+
-      (lastError ? ' '+lastError.message : ''));
+    });
   } catch (error) {
-    if (record) await record.stop();
-    else await removeStage(stage);
+    if (!ownedByRunner) await removeStage(stage);
     throw error;
   }
 }
 
-module.exports = { startKmpJvmDebug, selectKmpJvmTarget };
+module.exports = { startKmpJvmDebug, selectKmpJvmTarget, startGradleDebugProcess };

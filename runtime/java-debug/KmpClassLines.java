@@ -11,9 +11,13 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.stream.Collectors;
 
-/** Inspects selected Kotlin JVM output bytes without loading project classes. */
+/** Inspects selected JVM output bytes without loading project classes. */
 public final class KmpClassLines {
     public static void main(String[] args) throws Exception {
+        if (args.length < 1 || args.length > 2 || (args.length == 2 && !args[1].equals("groovy"))) {
+            throw new IllegalArgumentException("Invalid JVM source selection.");
+        }
+        String suffix = args.length == 2 ? ".groovy" : ".kt";
         System.setOut(new PrintStream(System.out, false, StandardCharsets.UTF_8));
         var inputs = Files.readAllLines(Path.of(args[0]), StandardCharsets.UTF_8);
         if (inputs.size() > 1200) throw new IllegalArgumentException("Kotlin class-file limit.");
@@ -24,7 +28,7 @@ public final class KmpClassLines {
             if (Files.size(file) > 512 * 1024) throw new IllegalArgumentException("Kotlin class-file byte limit.");
             var model = ClassFile.of().parse(file);
             var name = model.findAttribute(Attributes.sourceFile()).map(attr -> attr.sourceFile().stringValue()).orElse("");
-            if (!name.endsWith(".kt")) continue;
+            if (!name.endsWith(suffix)) continue;
             var debug = model.findAttribute(Attributes.sourceDebugExtension()).map(attr -> attr.contents()).orElse(new byte[0]);
             if (debug.length > 96 * 1024) throw new IllegalArgumentException("Kotlin source map byte limit.");
             row("class", i, model.thisClass().asInternalName(), name, Base64.getEncoder().encodeToString(debug));

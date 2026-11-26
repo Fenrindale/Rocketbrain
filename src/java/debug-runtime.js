@@ -13,7 +13,8 @@ const KOTLIN_LOCAL_WRITE_BUILD = DEBUG_VERSION + '.rocketbrain8';
 const KOTLIN_FIELD_BUILD = DEBUG_VERSION + '.rocketbrain9';
 const KOTLIN_LINE_BUILD = DEBUG_VERSION + '.rocketbrain10';
 const KOTLIN_FIELD_VALUES_BUILD = DEBUG_VERSION + '.rocketbrain11';
-const KOTLIN_LINE_BUILDS = Object.freeze([KOTLIN_LINE_BUILD, KOTLIN_FIELD_VALUES_BUILD]);
+const GROOVY_LINE_BUILD = DEBUG_VERSION + '.rocketbrain12';
+const KOTLIN_LINE_BUILDS = Object.freeze([KOTLIN_LINE_BUILD, KOTLIN_FIELD_VALUES_BUILD, GROOVY_LINE_BUILD]);
 const EXCEPTION_BUILD = DEBUG_VERSION + '.rocketbrain3';
 const LEGACY_BUILD = DEBUG_VERSION + '.rocketbrain2';
 const UPSTREAM_FILE = `com.microsoft.java.debug.plugin-${DEBUG_VERSION}.jar`;
@@ -35,12 +36,14 @@ const KOTLIN_LINE_FILE = `com.microsoft.java.debug.plugin-${KOTLIN_LINE_BUILD}.j
 const KOTLIN_LINE_SHA256 = '326ebe30bd4911ff77b512d98d299ef44f102134775809863412d331ea0eb138';
 const KOTLIN_FIELD_VALUES_FILE = 'com.microsoft.java.debug.plugin-' + KOTLIN_FIELD_VALUES_BUILD + '.jar';
 const KOTLIN_FIELD_VALUES_SHA256 = 'b7cfde5ea8f33850941efcf8678e28e56e357db8d0756a169d19ffddcd38f2c0';
+const GROOVY_LINE_FILE = 'com.microsoft.java.debug.plugin-' + GROOVY_LINE_BUILD + '.jar';
+const GROOVY_LINE_SHA256 = '0234ae136f2e81486ee1b6d46c36961c59f48fe2e9f847e2745f3a3e13e96049';
 const EXCEPTION_SHA256 = '48225381bae43e320041096e1996e4d519614a018d1eaac19341ac66686a26f8';
 const LEGACY_SHA256 = 'dd70e3cf8dc599c7a91b0c01efa86aa7bcf7677e3924ab4c4012e85895ab8605';
 
 function resolveDebugBundle(value, serverPath) {
   const defaults = serverPath && path.join(path.dirname(serverPath), 'java-debug');
-  const candidate = value || (defaults && [KOTLIN_FIELD_VALUES_BUILD, KOTLIN_LINE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LOCAL_WRITE_BUILD, INDEXED_WATCH_BUILD, WATCH_BUILD, COROUTINE_BUILD, DEBUG_BUILD, EXCEPTION_BUILD, LEGACY_BUILD].map(build => `com.microsoft.java.debug.plugin-${build}.jar`)
+  const candidate = value || (defaults && [GROOVY_LINE_BUILD, KOTLIN_FIELD_VALUES_BUILD, KOTLIN_LINE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LOCAL_WRITE_BUILD, INDEXED_WATCH_BUILD, WATCH_BUILD, COROUTINE_BUILD, DEBUG_BUILD, EXCEPTION_BUILD, LEGACY_BUILD].map(build => `com.microsoft.java.debug.plugin-${build}.jar`)
     .map(name => path.join(defaults, name)).find(file => fs.existsSync(file)));
   if (!candidate) return undefined;
   if (!path.isAbsolute(candidate)) throw new Error('rocketbrain.java.debugBundlePath must be an absolute JAR path.');
@@ -48,7 +51,7 @@ function resolveDebugBundle(value, serverPath) {
   const stat = fs.statSync(file);
   if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error('Java debug bundle is not a regular JAR within the supported size.');
   const checksum = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-  const build = { [KOTLIN_FIELD_VALUES_SHA256]: KOTLIN_FIELD_VALUES_BUILD, [KOTLIN_LINE_SHA256]: KOTLIN_LINE_BUILD, [KOTLIN_FIELD_SHA256]: KOTLIN_FIELD_BUILD, [KOTLIN_LOCAL_WRITE_SHA256]: KOTLIN_LOCAL_WRITE_BUILD, [INDEXED_WATCH_SHA256]: INDEXED_WATCH_BUILD,
+  const build = { [GROOVY_LINE_SHA256]: GROOVY_LINE_BUILD, [KOTLIN_FIELD_VALUES_SHA256]: KOTLIN_FIELD_VALUES_BUILD, [KOTLIN_LINE_SHA256]: KOTLIN_LINE_BUILD, [KOTLIN_FIELD_SHA256]: KOTLIN_FIELD_BUILD, [KOTLIN_LOCAL_WRITE_SHA256]: KOTLIN_LOCAL_WRITE_BUILD, [INDEXED_WATCH_SHA256]: INDEXED_WATCH_BUILD,
     [WATCH_SHA256]: WATCH_BUILD, [COROUTINE_SHA256]: COROUTINE_BUILD, [DEBUG_SHA256]: DEBUG_BUILD,
     [EXCEPTION_SHA256]: EXCEPTION_BUILD, [LEGACY_SHA256]: LEGACY_BUILD }[checksum];
   if (!build) throw new Error('Java debug bundle must match a pinned Rocketbrain loopback-only build. Run the Java engine installer.');
@@ -106,4 +109,5 @@ module.exports = { DEBUG_VERSION, DEBUG_BUILD, DEBUG_FILE, DEBUG_SHA256, DEBUG_U
   KOTLIN_FIELD_BUILD, KOTLIN_FIELD_FILE, KOTLIN_FIELD_SHA256,
   KOTLIN_LINE_BUILD, KOTLIN_LINE_FILE, KOTLIN_LINE_SHA256,
   KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILD, KOTLIN_FIELD_VALUES_FILE, KOTLIN_FIELD_VALUES_SHA256,
+  GROOVY_LINE_BUILD, GROOVY_LINE_FILE, GROOVY_LINE_SHA256,
   independentJavaExecutable, argumentString, launchCommandMode };
