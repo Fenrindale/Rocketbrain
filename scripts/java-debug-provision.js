@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { DEBUG_VERSION, KOTLIN_MAP_BUILD: DEBUG_BUILD, KOTLIN_MAP_FILE: DEBUG_FILE, KOTLIN_MAP_SHA256: DEBUG_SHA256,
+const { DEBUG_VERSION, JVM_STRING_PAGE_BUILD: DEBUG_BUILD, JVM_STRING_PAGE_FILE: DEBUG_FILE, JVM_STRING_PAGE_SHA256: DEBUG_SHA256,
   DEBUG_URL, UPSTREAM_FILE, UPSTREAM_SHA256, resolveDebugBundles, independentJavaExecutable } = require('../src/java/debug-runtime');
 const { buildPatchedBundle, SOURCE_COMMIT, SOURCE_URL, SOURCE_SHA256, CORE_SOURCE_URL, CORE_SOURCE_SHA256,
   EXCEPTION_SOURCE_URL, EXCEPTION_SOURCE_SHA256, INSPECTION_SOURCE_URL, INSPECTION_SOURCE_SHA256,
@@ -34,7 +34,7 @@ async function provisionDebugger(target, progress = () => {}, { javaHome, server
     await download(DEBUG_URL, UPSTREAM_SHA256, upstreamJar);
     await download(sourceJarUrl, SOURCE_JAR_SHA256, sourceJar);
     await download(coreSourceJarUrl, CORE_SOURCE_JAR_SHA256, coreSourceJar);
-    progress('Building the loopback DAP server with Java inspection, Kotlin field values, and managed Kotlin and Groovy source lines.');
+    progress('Building the loopback DAP server with Java and Kotlin value inspection, long String pages, and managed JVM source lines.');
     const build = await buildPatchedBundle({ target, javaHome, serverPath: serverPath || path.join(path.dirname(target), 'jdtls-1.63.0'), upstreamJar, sourceJar, coreSourceJar, outputJar: file });
     if (build.sha256 !== DEBUG_SHA256) throw new Error(`Java debug local build does not match the reproducible ${DEBUG_BUILD} artifact (${build.sha256}).`);
     await fs.promises.writeFile(path.join(target, 'build.json'), JSON.stringify(build, null, 2) + '\n');
@@ -44,7 +44,7 @@ async function provisionDebugger(target, progress = () => {}, { javaHome, server
     name: 'Microsoft Java Debug Server with Rocketbrain loopback and Java and Kotlin debugging patches', version: DEBUG_BUILD,
     upstream: { version: DEBUG_VERSION, url: DEBUG_URL, sha256: UPSTREAM_SHA256, sourceJarUrl, sourceJarSha256: SOURCE_JAR_SHA256, coreSourceJarUrl, coreSourceJarSha256: CORE_SOURCE_JAR_SHA256, sourceCommit: SOURCE_COMMIT, source: `https://github.com/microsoft/java-debug/tree/${SOURCE_COMMIT}` },
     artifact: { file: DEBUG_FILE, sha256: DEBUG_SHA256, locallyBuilt: true, signed: false },
-    patch: { name: 'loopback-stack-exception-jdi-values-coroutine-kotlin-fields-v14', sourceUrl: SOURCE_URL, sourceSha256: SOURCE_SHA256,
+    patch: { name: 'loopback-stack-exception-jdi-values-coroutine-kotlin-fields-v15', sourceUrl: SOURCE_URL, sourceSha256: SOURCE_SHA256,
       coreSourceUrl: CORE_SOURCE_URL, coreSourceSha256: CORE_SOURCE_SHA256, exceptionSourceUrl: EXCEPTION_SOURCE_URL,
       exceptionSourceSha256: EXCEPTION_SOURCE_SHA256, inspectionSourceUrl: INSPECTION_SOURCE_URL,
       inspectionSourceSha256: INSPECTION_SOURCE_SHA256, notice: PATCH_NOTICE },

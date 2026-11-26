@@ -2,11 +2,12 @@
 
 const { randomBytes } = require('node:crypto');
 const { DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD,
-  KOTLIN_LINE_BUILDS, KOTLIN_MAP_BUILD } = require('./debug-runtime');
+  KOTLIN_LINE_BUILDS, KOTLIN_MAP_BUILDS, JVM_STRING_PAGE_BUILD } = require('./debug-runtime');
 
 const command = 'rocketbrain/readJavaValues';
 const pageSize = 100;
 const collectionPageSize = 32, collectionLimit = 128;
+const stringPageSize = 8192;
 const maxString = 256 * 1024;
 const positiveId = value => Number.isSafeInteger(value) && value > 0;
 const validLength = value => Number.isInteger(value) && value >= 0 && value <= 2147483647;
@@ -21,7 +22,7 @@ function cell(result) {
 }
 
 function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
-  const reviews = new WeakMap(), snapshots = new WeakMap();
+  const reviews = new WeakMap(), snapshots = new WeakMap(), stringPages = new WeakMap();
   let panel;
 
   function paused(session) {
@@ -61,13 +62,14 @@ function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
     const data = await session.customRequest(command, { action: 'list', frameId: frame.id });
     verify(session, stop);
     if (!Array.isArray(data?.values) || data.values.length > 128) throw Error('The Java adapter returned an invalid local-values list.');
-    const mapBuild = getState(session.id)?.debugBuild === KOTLIN_MAP_BUILD;
+    const build = getState(session.id)?.debugBuild;
     const values = data.values.filter(entry => entry && typeof entry.name === 'string' && entry.name.length > 0 &&
       entry.name.length <= 256 && validLength(entry.length) &&
-      (['array', 'arrayList', 'list', 'string'].includes(entry.kind) || mapBuild &&
+      (['array', 'arrayList', 'list', 'string'].includes(entry.kind) || KOTLIN_MAP_BUILDS.includes(build) &&
         entry.kind === 'orderedMap' && entry.length <= collectionLimit))
-      .map(({ name, kind, length, complete }) => Object.freeze({ name, kind, length,
-        complete: kind !== 'string' || complete === true && length <= maxString }));
+      .map(({ name, kind, length, complete, pageable }) => Object.freeze({ name, kind, length,
+        complete: kind !== 'string' || complete === true && length <= maxString,
+        ...(kind === 'string' && build === JVM_STRING_PAGE_BUILD && length > maxString && pageable === true && { pageable: true }) }));
     const report = Object.freeze({ frame: String(frame.name || '').slice(0, 512), values: Object.freeze(values), limited: data.limited === true });
     reviews.set(report, { session, stop, frameId: frame.id });
     return report;
@@ -81,6 +83,7 @@ function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
     if (entry.kind === 'orderedMap') {
       return readCollection({ review, name, length: entry.length, kind: entry.kind }, options);
     }
+    if (entry.pageable) return readString({ review, name, length: entry.length }, options);
     const { start = 0, count = pageSize } = options;
     verify(session, stop);
     if (!entry.complete) throw Error('The full Java string is unavailable within the 256 Ki UTF-16 unit limit.');
@@ -105,6 +108,33 @@ function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
       throw Error('The Java adapter returned an invalid collection page.');
     }
     return { kind: value.kind, length: value.length, start, rows: value.rows.map(({ index, type, display }) => ({ index, type, display })) };
+  }
+
+  async function readString(expected, { start = 0, count = stringPageSize } = {}) {
+    const { review: { session, stop, frameId }, name, length, pageId } = expected;
+    verify(session, stop, true);
+    if (!validLength(start) || start > length || !positiveId(count) || count > stringPageSize) {
+      throw Error('Choose an in-range String page of up to 8192 UTF-16 code units.');
+    }
+    const result = await session.customRequest(command, { action: pageId ? 'stringPage' : 'stringOpen', frameId, name, start, count,
+      ...(pageId && { pageId }) });
+    verify(session, stop, true);
+    const units = Math.min(count, length - start);
+    const invalid = () => Error('The Java adapter returned an invalid String page.');
+    if (result?.kind !== 'stringPage' || !token(result.pageId) || pageId && pageId !== result.pageId ||
+        result.start !== start || result.length !== length || result.units !== units || result.encoding !== 'utf16le' ||
+        typeof result.base64 !== 'string' || result.base64.length !== 4 * Math.ceil(units * 2 / 3)) throw invalid();
+    const bytes = Buffer.from(result.base64, 'base64');
+    if (bytes.length !== units * 2 || bytes.toString('base64') !== result.base64) throw invalid();
+    const page = Object.freeze({ kind: 'stringPage', length, start, text: bytes.toString('utf16le') });
+    stringPages.set(page, { ...expected, pageId: result.pageId });
+    return page;
+  }
+
+  async function readStringPage(page, options) {
+    const current = stringPages.get(page);
+    if (!current) throw Error('Open the current long String first.');
+    return readString(current, options);
   }
 
   async function readCollection(expected, { start = 0, count = collectionPageSize } = {}) {
@@ -172,8 +202,9 @@ function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
             if (!parent) return;
             result = await readCollectionPage(parent, { start: parent.start });
             history.pop();
-          } else result = result.snapshot ? await readCollectionPage(result, { start: message.start }) :
-            await read(report, name, { start: message.start });
+          } else if (result.snapshot) result = await readCollectionPage(result, { start: message.start });
+          else if (result.kind === 'stringPage') result = await readStringPage(result, { start: message.start });
+          else result = await read(report, name, { start: message.start });
           await opened.webview.postMessage({ type: 'value', result, depth: history.length });
         } catch (error) {
           await opened.webview.postMessage({ type: 'error', message: String(error.message || error).slice(0, 400) });
@@ -189,12 +220,13 @@ function createLocalValueInspection(vscode, { getState, ensureTrusted }) {
     const report = await inspect();
     if (!report.values.length) throw Error('The paused frame has no supported local collections or strings.');
     const picked = await vscode.window.showQuickPick(report.values.map(entry => ({ label: entry.name,
-      description: entry.complete ? (entry.kind === 'orderedMap' ? 'LinkedHashMap' : entry.kind) + ' · ' + entry.length : 'String beyond viewer limit' })),
+      description: entry.pageable ? 'String · ' + entry.length + ' UTF-16 units · Paged' :
+        entry.complete ? (entry.kind === 'orderedMap' ? 'LinkedHashMap' : entry.kind) + ' · ' + entry.length : 'String beyond viewer limit' })),
     { title: 'Inspect Java Local Value', placeHolder: report.frame + (report.limited ? ' · First 128 locals' : '') });
     if (picked) return show(report, picked.label);
   }
 
-  return { inspect, read, readCollectionPage, readNestedCollection, show, choose, dispose() { panel?.dispose(); } };
+  return { inspect, read, readStringPage, readCollectionPage, readNestedCollection, show, choose, dispose() { panel?.dispose(); } };
 }
 
 function localValuePage(nonce) {
@@ -244,25 +276,33 @@ window.addEventListener('message', event => {
   if (event.data?.type !== 'value') return;
   find('error').textContent = '';
   const result = event.data.result;
-  const isString = result.kind === 'string';
+  const isLongString = result.kind === 'stringPage';
+  const isString = isLongString || result.kind === 'string';
   const isMap = result.kind === 'orderedMap';
   const snapshot = result.snapshot === true;
-  pageSize = snapshot ? 32 : 100;
+  pageSize = isLongString ? ${stringPageSize} : snapshot ? 32 : 100;
   enclosing.hidden = !(snapshot && event.data.depth > 0);
   find('string').hidden = !isString;
   table.hidden = isString;
-  paging.hidden = isString || result.length === 0;
-  if (isString) {
+  paging.hidden = result.kind === 'string' || result.length === 0;
+  if (result.kind === 'string') {
     find('summary').textContent = result.length + ' UTF-16 units';
     find('string').textContent = result.text;
     return;
   }
   start = result.start;
-  nextIndex = start + result.rows.length;
+  nextIndex = start + (isString ? result.text.length : result.rows.length);
   input.value = start;
   input.max = Math.max(0, result.length - 1);
   previous.disabled = start === 0;
   next.disabled = nextIndex >= result.length;
+  if (isString) {
+    find('summary').textContent = (result.text.length ? 'Code units ' + start + '–' + (nextIndex - 1) : 'End') +
+      ' of ' + result.length + ' · Isolated surrogates shown as escapes';
+    find('string').textContent = result.text.replace(/[\\u0000-\\u0008\\u000b-\\u000c\\u000e-\\u001f\\u007f\\ud800-\\udfff]/gu,
+      unit => '\\\\u' + unit.charCodeAt(0).toString(16).padStart(4, '0'));
+    return;
+  }
   const summary = result.rows.length ? (isMap ? 'Entries ' : 'Indices ') + start + '–' + (nextIndex - 1) + ' of ' + result.length : '0 rows';
   find('summary').textContent = snapshot ? summary + ' · Captured values' : summary;
   table.tHead.rows[0].cells[1].textContent = isMap ? 'Key' : 'Type';

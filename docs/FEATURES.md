@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-27 기준 Rocketbrain 0.154.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-27 기준 Rocketbrain 0.156.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 189 |
-| 부분 구현 | 13 |
+| 구현 | 193 |
+| 부분 구현 | 9 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **96.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **97%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.154에서는 Spring AOT 빈 등록 비교, 실행 중인 Quarkus 개발 JVM에 대한 디버거 재연결, Quarkus Gradle GraalVM 실행 및 Linux x64 Kotlin/Native 소스 디버깅을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 207점에서 207.5점으로 바뀌었다.
+v0.156에서는 Maven·Gradle 작업공간의 JDT 색인 재생성, 비공개 Java 생성자 매개변수 Safe Delete, CompletableFuture 후속 단계 추적과 Java·Kotlin 긴 문자열의 구간 읽기를 추가했다. 상태가 바뀐 항목은 4개이고 가중 점수는 207.5점에서 209.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -50,7 +50,7 @@ v0.154에서는 Spring AOT 빈 등록 비교, 실행 중인 Quarkus 개발 JVM�
 | IDEA-027 | IntelliJ IDEA | 변수·메서드 인라인 | 구현 |
 | IDEA-028 | IntelliJ IDEA | 클래스·멤버 이동 | 부분 구현 |
 | IDEA-029 | IntelliJ IDEA | Change Signature·파라미터 전파 | 부분 구현 |
-| IDEA-030 | IntelliJ IDEA | Safe Delete | 부분 구현 |
+| IDEA-030 | IntelliJ IDEA | Safe Delete | 구현 |
 | IDEA-031 | IntelliJ IDEA | 인터페이스 추출 | 구현 |
 | IDEA-032 | IntelliJ IDEA | 멤버 Pull Up·Push Down | 구현 |
 | IDEA-033 | IntelliJ IDEA | 리팩터링 미리보기·충돌·일괄 undo | 부분 구현 |
@@ -91,7 +91,7 @@ v0.154에서는 Spring AOT 빈 등록 비교, 실행 중인 Quarkus 개발 JVM�
 | IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 구현 |
 | IDEA-069 | IntelliJ IDEA | Maven 프로젝트·목표·의존성 | 구현 |
 | IDEA-070 | IntelliJ IDEA | Gradle·Kotlin DSL·Task 탐색 | 구현 |
-| IDEA-071 | IntelliJ IDEA | 모듈·혼합 빌드·프로젝트 인덱스 | 부분 구현 |
+| IDEA-071 | IntelliJ IDEA | 모듈·혼합 빌드·프로젝트 인덱스 | 구현 |
 | IDEA-072 | IntelliJ IDEA | 증분 빌드·빌드 도구 위임 | 구현 |
 | IDEA-073 | IntelliJ IDEA | 실행 구성·환경·사전 작업·공유 | 구현 |
 | IDEA-074 | IntelliJ IDEA | 복수 서비스·Compound·실행 순서 | VS Code 재사용 |
@@ -99,8 +99,8 @@ v0.154에서는 Spring AOT 빈 등록 비교, 실행 중인 Quarkus 개발 JVM�
 | IDEA-076 | IntelliJ IDEA | 조건·적중 횟수·로그 중단점 | 구현 |
 | IDEA-077 | IntelliJ IDEA | 메서드·필드·행 내부 중단점 | 구현 |
 | IDEA-078 | IntelliJ IDEA | 예외 종류·Caught/Uncaught 필터 | 구현 |
-| IDEA-079 | IntelliJ IDEA | Smart Step·라이브러리 필터·비동기 스택 | 부분 구현 |
-| IDEA-080 | IntelliJ IDEA | 표현식 평가·Watch·변수 수정·프레임 | 부분 구현 |
+| IDEA-079 | IntelliJ IDEA | Smart Step·라이브러리 필터·비동기 스택 | 구현 |
+| IDEA-080 | IntelliJ IDEA | 표현식 평가·Watch·변수 수정·프레임 | 구현 |
 | IDEA-081 | IntelliJ IDEA | HotSwap·변경 클래스 재적용 | 구현 |
 | IDEA-082 | IntelliJ IDEA | Java Stream 값 변환 시각화 | 구현 |
 | IDEA-083 | IntelliJ IDEA | Kotlin 코루틴 상태·생성 스택 | 구현 |

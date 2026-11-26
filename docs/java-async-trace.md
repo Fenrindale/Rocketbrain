@@ -35,6 +35,22 @@ With the current helper, Rocketbrain also checks the recorded worker ID and thre
 
 The trace records submissions at the wrapped executor boundary. A submission made within a traced task links to that parent. An already-completed future can schedule later continuations from a caller thread, so those submissions can have an independent root. Use new paths for each run. The trace retains up to 2,048 jobs and 4 MiB and contains labels, thread names, and source frames. The application's trace instance exposes `isHealthy()` to check for write failures.
 
+## CompletableFuture stages
+
+Use the current Java trace helper to follow an explicit chain of suppliers and asynchronous continuations. Give each stage a label and its normal executor. A dependent stage retains its predecessor even when the application registers the continuation on a different thread.
+
+```java
+try (var trace = TaskTrace.open(Path.of(args[0]).toAbsolutePath());
+     var orders = Executors.newSingleThreadExecutor();
+     var totals = Executors.newSingleThreadExecutor()) {
+    var amount = trace.supplyAsync("read-order", () -> 41, orders);
+    var total = amount.thenApplyAsync("calculate-total", price -> price + 1, totals);
+    System.out.println(total.stage().toCompletableFuture().join());
+}
+```
+
+Use `thenComposeAsync` when the next callback produces a `CompletionStage`. `stage()` exposes the result as a read-only completion stage, and `cancel()` uses normal CompletableFuture cancellation. Trace records describe callback entry and return. A continuation bypassed by an upstream failure and a canceled task that never runs both keep their submission records without a worker. Pause a tracked callback and select **Rocketbrain: Show Java Async Submission Stack** to inspect the recorded registration locations.
+
 ## Reactor scheduler submissions
 
 In a project that already uses Reactor Core 3.8, copy the current Java helper first. Run **Rocketbrain: Copy Reactor Async Trace Helper** and choose the same Java source root. If you already customized `TaskTrace.java`, retain it in source control and review the new helper source before merging. Both copy commands preserve existing files.

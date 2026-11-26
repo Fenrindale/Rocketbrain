@@ -101,7 +101,7 @@ function registerJavaAsyncTrace(context, vscode, debuggerController) {
     const report = await inspect(file, session);
     const items = report.chain.flatMap(task => [{
       label: task.label + ' (#' + task.id + ')' + ({
-        'virtual-thread': ' · virtual thread launch', 'reactor-scheduler': ' · Reactor scheduler'
+        'virtual-thread': ' · virtual thread launch', 'reactor-scheduler': ' · Reactor scheduler', 'completable-future': ' · CompletableFuture'
       }[task.handoff] || ''),
       kind: vscode.QuickPickItemKind.Separator
     }, ...task.submissionFrames.map(frame => ({

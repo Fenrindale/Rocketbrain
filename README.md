@@ -46,11 +46,15 @@ pnpm run package
 2. 명령 팔레트에서 **Rocketbrain: Install and Configure Independent Java Engine**을 실행합니다. 고정된 공개 구성요소의 출처와 체크섬을 확인하고 확장 전용 폴더에 설치합니다. 현재 설치 도구는 Eclipse JDT LS 1.63.0과 독립 Temurin JDK 25 계열을 사용합니다.
 3. **Java Projects**에서 가져온 소스 루트·패키지·라이브러리를 확인합니다. Maven 작업에는 별도 Maven 설치와 `rocketbrain.java.mavenHome` 설정이 필요합니다.
 
+**Rebuild Java Workspace Index**에서 현재 가져온 프로젝트와 JDK를 확인한 뒤 새 Eclipse JDT LS 인덱스를 만들 수 있습니다. 정규 프로젝트 가져오기에는 Maven이나 Gradle 설정 실행이 포함될 수 있습니다. 검토한 프로젝트와 소스 경로가 새 인덱스에 다시 연결된 뒤 전환하며, 기존 인덱스는 보존됩니다. 재빌드 전에는 워크스페이스의 Java 소스와 빌드 설정을 저장하고 실행 중인 Java 작업을 마치세요.
+
+**Safe Delete**는 지원되는 비공개 생성자의 사용하지 않는 매개변수 이름에서도 실행할 수 있습니다. 선언과 직접 호출에서 해당 인자만 제거하는 편집을 검토합니다. Spring 주입 및 리플렉션 계약, 사용 중인 매개변수, 오버로드, 생성자 참조와 삭제하면 평가 동작이 달라지는 인자는 보호합니다.
+
 **Rename Java Package**는 패키지 디렉터리와 확인된 Java 참조를 한 번에 변경합니다. 단일 JPMS 모듈의 표준 주 소스에서는 `module-info.java`의 비한정 `exports`·`opens`, `uses`, `provides … with`를 같은 검토에서 확인할 수 있습니다. 모듈 이름과 공급자 순서는 유지되며, 이 경로는 `java.base`만 사용하는 일반 모듈을 지원합니다.
 
 **Review Public Java Type Rename**은 공개 Java 클래스의 파일 이름과 확인된 Java 참조를 함께 바꿉니다. 가져온 단일 Gradle JVM 프로젝트에서 Kotlin 편집기를 설정하면, Kotlin의 명시적 import·타입 지정·직접 생성자 호출도 같은 검토에 표시됩니다. 이 혼합 경로는 명시적 공개 생성자 하나가 있는 비제네릭 클래스를 지원하며, Java와 Kotlin의 변경 전후 바인딩을 확인합니다.
 
-Java 중단점에서 **Restart Java Stack Frame**으로 현재 정지한 스레드의 프레임을 선택해 메서드를 다시 실행할 수 있습니다. 이미 수행된 부수 효과는 그대로 남습니다. **Inspect Java Local Value**는 지역 배열과 표준 `ArrayList`를 페이지로 보여주고, 최대 256 Ki UTF-16 단위의 문자열을 원문 그대로 표시합니다. [Java 스택 프레임과 변수 뷰어](docs/java-frame-debugging.md)
+Java 중단점에서 **Restart Java Stack Frame**으로 현재 정지한 스레드의 프레임을 선택해 메서드를 다시 실행할 수 있습니다. 이미 수행된 부수 효과는 그대로 남습니다. **Inspect Java Local Value**는 지역 배열과 표준 `ArrayList`를 페이지로 보여줍니다. 검증된 로컬 JVM의 Java·Kotlin 프레임에서 긴 문자열도 8,192 UTF-16 코드 단위씩 볼 수 있습니다. [Java 스택 프레임과 변수 뷰어](docs/java-frame-debugging.md)
 
 Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map Workspace**로 배포판과 Linux 경로를 확인합니다. **Review and Run WSL Workspace Build**에서 프로젝트 경로와 명령을 확인한 뒤 배포판의 Maven 또는 Gradle을 실행합니다. 배포판 안에 Linux JDK와 `/usr/bin/mvn` 또는 `/usr/bin/gradle`이 필요합니다. **Cancel Managed WSL Build**로 실행한 빌드를 중단할 수 있습니다.
 
@@ -165,7 +169,11 @@ Gradle 앱은 표준 이름의 클래스패스 배포판을 사용하며 JVM에�
 
 Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compile and Index Scala**를 실행합니다. `.scala` 편집기의 **Go to Definition**은 컴파일러가 해석한 심볼을 사용하므로 하위 프로젝트 간 오버로드도 올바른 선언으로 이동합니다. 소스나 빌드가 바뀌면 다시 컴파일합니다.
 
-### Kotlin Multiplatform
+#### Java CompletableFuture 비동기 스택
+
+선택한 CompletableFuture 공급자와 비동기 후속 단계의 소스 등록 위치를 디버거에서 추적할 수 있습니다. [Java 비동기 추적 사용법](docs/java-async-trace.md)
+
+## Kotlin Multiplatform
 
 **Inspect Kotlin Multiplatform Targets**에서 Gradle이 구성한 JVM·JavaScript 타깃과 소스셋 의존 관계를 확인합니다. **Compile Kotlin Multiplatform Targets**, **Test Kotlin Multiplatform Targets**, **Run Kotlin Multiplatform Target**은 관찰된 타깃의 컴파일·테스트·실행 작업을 사용합니다. JavaScript 실행과 테스트는 Node.js 타깃을 대상으로 합니다.
 

@@ -17,11 +17,13 @@ function point(text,p){const lines=text.split('\n');return lines.slice(0,p.line)
 function contains(range,p){return p.line>range.start.line&&p.line<range.end.line||p.line===range.start.line&&p.character>=range.start.character&&(p.line<range.end.line||p.character<=range.end.character)||p.line===range.end.line&&p.character<=range.end.character&&p.line>range.start.line;}
 function analyzeSpringDelete({sources,uri,candidate,javaReferences=[]}){
  const java=sources.filter(s=>/\.java$/i.test(s.uri)),files=java.map(parseJavaFile),selected=files.find(f=>f.uri===uri);
+ const constructor = candidate.kind === 'constructor-parameter';
  const memberKey = candidate.kind === 'field' ? 'fields' : 'methods';
- const selectedMember = member => member.name === candidate.name &&
-   contains(candidate.declarationRange, rangeAt(selected.text,member.start,member.end).start);
+ const selectedMember = member => member.name === (constructor?candidate.constructorName:candidate.name) &&
+   (!constructor || member.constructor) &&
+   contains(constructor?candidate.constructorRange:candidate.declarationRange, rangeAt(selected.text,member.start,member.end).start);
  const parsed = selected?.types.find(type => candidate.kind === 'file' ?
-   type.name === candidate.name : type[memberKey].some(selectedMember));
+   type.name === candidate.name : (!constructor || type.fqn===candidate.owner) && type[memberKey].some(selectedMember));
  const member = candidate.kind === 'file' ? null : parsed?.[memberKey].find(selectedMember);
  const relatedReferences=[],conflicts=[],unknowns=[],seen=new Set();let truncated=false,lookupCharacters=0,aliasCount=0;
  const budget=(source,range,message)=>{if(truncated)return;truncated=true;const item={kind:'analysis.budget',uri:source,range,message};unknowns.push(item);relatedReferences.push(item);};
@@ -36,7 +38,7 @@ function analyzeSpringDelete({sources,uri,candidate,javaReferences=[]}){
  }
  if(!selected||!parsed||candidate.kind!=='file'&&!member)add('model.incomplete',uri,candidate.declarationRange,'The selected declaration cannot be identified in the local Spring source model.',{unknown:true});
  for(const message of candidate.eligibilityConflicts||[])add('declaration.contract',uri,candidate.declarationRange,message);
- const targetAnnotations=candidate.kind==='file'?(parsed?.annotations||[]):(member?.annotations||[]);
+ const targetAnnotations=candidate.kind==='file'?(parsed?.annotations||[]):[...(member?.annotations||[]),...(constructor?parsed?.annotations||[]:[])];
  for(const item of targetAnnotations){const entry=CONTRACTS.has(item.shortName)||TYPE_CONTRACTS.has(item.shortName)||COMPONENTS.has(item.shortName)||/Mapping$/.test(item.shortName);add(entry?'spring.framework-entrypoint':'spring.annotated-declaration',uri,rangeAt(selected.text,item.start,item.end),`@${item.shortName} is a framework-bound or annotated declaration; zero Java callers does not establish safe deletion.`);}
  if(candidate.kind!=='file')for(const item of parsed?.annotations||[]){const reviewedCondition=conditionSpans.get(uri)?.some(span=>span.kind==='composed-condition'&&span.start===item.start&&span.end===item.end);if(!official(item)&&!resolvedAnnotations.has(item.name)&&!reviewedCondition)add('spring.custom-owner-annotation',uri,rangeAt(selected.text,item.start,item.end),'Custom owner/meta-annotation behavior cannot establish absence of reflective member consumers.',{unknown:true});if(/^(?:Entity|MappedSuperclass|Embeddable|Converter|EntityListeners|ConfigurationProperties)$/.test(item.shortName))add('spring.reflective-owner-contract',uri,rangeAt(selected.text,item.start,item.end),'JPA/property-binding owner contracts require provider/accessor metadata analysis before removing even an unannotated private member.',{unknown:true});}
  if (candidate.kind === 'field' && parsed?.superTypes.length) {
@@ -45,7 +47,7 @@ function analyzeSpringDelete({sources,uri,candidate,javaReferences=[]}){
  }
  const beanTargets=candidate.kind==='field'?[]:model.beans.filter(bean=>bean.uri===uri&&(candidate.kind==='file'?bean.type===parsed?.fqn:bean.origin==='factory-method'&&bean.range.start.line===candidate.declarationRange.start.line&&bean.range.start.character===candidate.declarationRange.start.character));
  const names=new Set(),addName=name=>{if(!name||names.has(name)||truncated)return;if(name.length>ANALYSIS_LIMITS.nameCharacters||names.size>=ANALYSIS_LIMITS.targetNames){budget(uri,candidate.declarationRange,'Spring Safe Delete target-name budget exceeded; dynamic/large alias coverage is incomplete.');return;}names.add(name);};
- addName(candidate.name);if(candidate.kind==='file')addName(parsed?.fqn);for(const bean of beanTargets){addName(bean.name);for(const name of bean.aliases){addName(name);if(truncated)break;}for(const name of bean.qualifiers)addName(name);if(truncated)break;}
+ addName(candidate.name);if(candidate.kind==='file'||constructor)addName(parsed?.fqn);for(const bean of beanTargets){addName(bean.name);for(const name of bean.aliases){addName(name);if(truncated)break;}for(const name of bean.qualifiers)addName(name);if(truncated)break;}
  const aliases=new Map();aliasInput:for(const source of sources.filter(item=>/\.xml$/i.test(item.uri)))for(const match of source.text.matchAll(/<(?:[\w.-]+:)?alias\b[^>]*>/g)){
   if(++aliasCount>ANALYSIS_LIMITS.aliases){budget(source.uri,rangeAt(source.text,match.index,match.index+match[0].length),'Spring Safe Delete XML alias budget exceeded; alias coverage is incomplete.');break aliasInput;}
   const attributes=Object.fromEntries([...match[0].matchAll(/\b(name|alias)\s*=\s*(["'])([^"']*)\2/g)].map(attribute=>[attribute[1],attribute[3]]));
@@ -60,11 +62,15 @@ function analyzeSpringDelete({sources,uri,candidate,javaReferences=[]}){
  sourceReview:for(const source of sources){if(truncated)break;const isJava=/\.java$/i.test(source.uri),tokens=isJava?lexJava(source.text):null;
   if(tokens?.issues.length)add('java.coverage',source.uri,rangeAt(source.text,0,0),'A workspace Java source has unsupported syntax; Safe Delete coverage is incomplete.',{unknown:true});
   if(isJava){
-   for(const token of tokens.tokens){
+   for(const [index,token] of tokens.tokens.entries()){
+    if(constructor&&token.text===candidate.constructorName&&tokens.tokens[index+1]?.text==='.'&&
+      tokens.tokens[index+2]?.text==='class')add('spring.constructor-type-literal',source.uri,
+      rangeAt(source.text,token.start,tokens.tokens[index+2].end),
+      'A class literal can register or reflectively instantiate the selected constructor owner.',{unknown:true});
     if(truncated)break sourceReview;
     if(token.kind==='id'&&DYNAMIC_NAMES.has(token.text)&&!extensionContracts.resolvedTokenSpans.some(span=>span.uri===source.uri&&token.start>=span.start&&token.end<=span.end))add('spring.dynamic-lookup',source.uri,rangeAt(source.text,token.start,token.end),'Workspace dynamic Java/reflection lookup or programmatic Spring registration prevents Safe Delete.',{unknown:true});
     if(source.uri===uri&&(candidate.kind==='file'||token.start>=candidate.start&&token.end<=candidate.end))continue;
-    if(token.text===candidate.name)add('java.lexical-reference',source.uri,rangeAt(source.text,token.start,token.end),'Safe Delete is blocked by a source or string reference.');
+    if(!constructor&&token.text===candidate.name)add('java.lexical-reference',source.uri,rangeAt(source.text,token.start,token.end),'Safe Delete is blocked by a source or string reference.');
     if((token.kind==='string'||token.kind==='text-block')&&lookup(String(token.value??token.text),source.uri,rangeAt(source.text,token.start,token.end)))add('spring.string-reference',source.uri,rangeAt(source.text,token.start,token.end),'Safe Delete is blocked by a source or string reference, including Spring names/SpEL/resource contracts.');
     if(token.kind==='string'&&String(token.value).includes('#{')&&!conditionSpans.get(source.uri)?.some(span=>span.kind==='closed-spel-expression'&&span.start<=token.start&&span.end>=token.end)){const expressions=[...String(token.value).matchAll(/#\{([^{}]*)\}/g)];if(!expressions.length||expressions.some(match=>!/^\s*@?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*$/.test(match[1])))add('spring.dynamic-spel',source.uri,rangeAt(source.text,token.start,token.end),'Arbitrary or dynamically computed SpEL is not executed; its reference coverage is unknown.',{unknown:true});}
    }
