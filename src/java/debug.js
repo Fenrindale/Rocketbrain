@@ -18,6 +18,14 @@ const VERIFIED_ATTACH = '__rocketbrainVerifiedAttach';
 const resumeCommands = new Set(['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue', 'restart',
   'restartFrame', 'goto', 'terminate', 'disconnect']);
 
+function processAttachTarget(selection) {
+  const reviewed = selection && typeof selection === 'object' ? selection : undefined;
+  const pid = processId(reviewed?.pid ?? selection);
+  return {processId:pid,...(reviewed?{[PROCESS_SELECTION]:{
+    pid,startedAt:reviewed.startedAt,hostName:reviewed.hostName,port:reviewed.port
+  }}:{})};
+}
+
 function registerJavaDebugger(vscode, api, output, request) {
   const sessions = new Map(), pendingAttaches = new Map(); let disposed = false;
   function record(session) {
@@ -174,8 +182,7 @@ function registerJavaDebugger(vscode, api, output, request) {
   } };
   async function attachProcess(selection, { folder, projectName, sourcePaths, name } = {}) {
     ensureTrusted();
-    const reviewed = selection && typeof selection === 'object' ? selection : undefined;
-    const pid = processId(reviewed?.pid ?? selection);
+    const target = processAttachTarget(selection);
     if (!folder) {
       const uri = vscode.window.activeTextEditor?.document.uri || vscode.workspace.workspaceFolders?.[0]?.uri;
       if (uri) folder = vscode.workspace.getWorkspaceFolder(uri);
@@ -183,9 +190,8 @@ function registerJavaDebugger(vscode, api, output, request) {
     // An external JVM is already running its own bytecode. Attaching is
     // independent of local editor saves, including unrelated untitled editors.
     return vscode.debug.startDebugging(folder, {
-      type: DEBUG_TYPE, request: 'attach', name: name || 'Attach to Java PID ' + pid,
-      processId: pid, projectName, sourcePaths,
-      ...(reviewed ? { [PROCESS_SELECTION]: { pid, startedAt: reviewed.startedAt, hostName: reviewed.hostName, port: reviewed.port } } : {})
+      type: DEBUG_TYPE, request: 'attach', name: name || 'Attach to Java PID ' + target.processId,
+      ...target, projectName, sourcePaths
     }, { suppressSaveBeforeStart: true });
   }
   async function hotCodeReplace(sessionId) {
@@ -260,4 +266,4 @@ function registerJavaDebugger(vscode, api, output, request) {
     dispose() { disposed = true; pendingAttaches.clear(); void this.stopSessions(); for (const item of disposables) item.dispose(); } };
 }
 
-module.exports = { DEBUG_TYPE, registerJavaDebugger };
+module.exports = { DEBUG_TYPE, registerJavaDebugger, processAttachTarget };

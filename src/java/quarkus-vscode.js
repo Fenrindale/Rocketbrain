@@ -1,20 +1,25 @@
 'use strict';
 
 const path = require('node:path');
-const { inspectQuarkusProject,quarkusMavenProject,profileKey } = require('./quarkus-model');
-const { createQuarkusDev } = require('./quarkus-dev');
+const { randomUUID } = require('node:crypto');
+const { setTimeout:delay } = require('node:timers/promises');
+const { inspectQuarkusProject,quarkusProject,profileKey } = require('./quarkus-model');
+const { createQuarkusDev,fastJar } = require('./quarkus-dev');
 const { createQuarkusProject } = require('./quarkus-create');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
+const { DEBUG_TYPE,processAttachTarget } = require('./debug');
 
+const DEBUG_MARKER='__rocketbrainQuarkusOwnedLaunch';
 const COMMANDS = Object.freeze({
   create:'rocketbrain.quarkus.create',
   inspect:'rocketbrain.quarkus.inspect', start:'rocketbrain.quarkus.startDev',
-  stop:'rocketbrain.quarkus.stopDev', test:'rocketbrain.quarkus.runTests'
+  stop:'rocketbrain.quarkus.stopDev', test:'rocketbrain.quarkus.runTests',
+  build:'rocketbrain.quarkus.build', debug:'rocketbrain.quarkus.debug'
 });
 
 function registerQuarkusWorkbench(vscode,java) {
-  let disposed=false, closing, testing=false;
-  const subscriptions=[], jobs=new Set();
+  let disposed=false, closing, busy=false, generation=0, debugSession;
+  const subscriptions=[], jobs=new Set(), pending=new Map();
   const output=vscode.window.createOutputChannel('Rocketbrain Quarkus');
   const dev=createQuarkusDev({log:chunk => output.append(chunk)});
   subscriptions.push(output);
@@ -30,7 +35,7 @@ function registerQuarkusWorkbench(vscode,java) {
     return java.workbench.getSnapshot().projects.filter(project => {
       try {
         workspacePath(project.root,roots());
-        quarkusMavenProject(project);
+        quarkusProject(project);
         return true;
       } catch { return false; }
     });
@@ -42,7 +47,7 @@ function registerQuarkusWorkbench(vscode,java) {
     trusted(cancellation);
     const root=workspacePath(projectUri,roots());
     const project=available().find(item => !path.relative(item.root,root));
-    if (!project) throw fail('Import the Maven Quarkus project in Java Projects first.');
+    if (!project) throw fail('Import the Maven or Gradle Quarkus project in Java Projects first.');
     return project;
   }
 
@@ -52,35 +57,115 @@ function registerQuarkusWorkbench(vscode,java) {
 
   function saved(project) {
     if (vscode.workspace.textDocuments.some(document => document.isDirty && document.uri.scheme === 'file' &&
-        inside(project.root,document.uri.fsPath))) throw fail('Save modified Quarkus project files before executing Maven.');
+        inside(project.root,document.uri.fsPath))) throw fail('Save modified Quarkus project files before execution.');
   }
 
-  async function start({projectUri,allowProjectExecution,cancellation} = {}) {
-    if (allowProjectExecution!==true) throw fail('Explicitly choose Quarkus dev mode before executing Maven.');
-    const project=await projectFor(projectUri,cancellation);
-    saved(project);
-    if (testing || java.workbench.getSnapshot().taskRunning) throw fail('Finish the current managed Java build before starting Quarkus dev mode.');
+  function launch(project,{allowProjectExecution,cancellation},debug=false) {
     const config=vscode.workspace.getConfiguration('rocketbrain.java');
     trusted(cancellation);
+    saved(project);
     return dev.start({project,javaHome:project.jdk || config.get('javaHome') || java.getState().javaHome,
-      mavenHome:config.get('mavenHome'),workspaceTrusted:vscode.workspace.isTrusted,allowProjectExecution,cancellation});
+      mavenHome:config.get('mavenHome'),gradleHome:config.get('gradleHome'),
+      workspaceTrusted:vscode.workspace.isTrusted,allowProjectExecution,cancellation,debug});
   }
 
-  async function tests({projectUri,allowProjectExecution,cancellation} = {}) {
-    if (allowProjectExecution!==true) throw fail('Explicitly choose Quarkus tests before executing Maven.');
-    if (testing || dev.running) throw fail('Finish Quarkus tests or stop the owned dev session before running tests.');
-    testing=true;
+  async function exclusive(options,action,message) {
+    if (options.allowProjectExecution!==true) throw fail(message);
+    if (busy||dev.running||java.workbench.getSnapshot().taskRunning) throw fail('Finish the current Java task or stop the owned Quarkus application.');
+    const ticket=generation;
+    busy=true;
     try {
-      const project=await projectFor(projectUri,cancellation);
+      const project=await projectFor(options.projectUri,options.cancellation);
       saved(project);
-      const options={projectUri:project.uri,allowProjectExecution,cancellation};
-      const task=(await java.workbench.discoverTasks(options)).find(item => item.name==='test');
-      if (!task) throw fail('The Quarkus project has no observed Maven test task.');
-      trusted(cancellation);
-      saved(project);
-      return await java.workbench.runTask({...options,taskId:task.id});
-    } finally { testing=false; }
+      function current() {
+        trusted(options.cancellation);
+        if (ticket!==generation) throw fail('The Quarkus operation was stopped.');
+      }
+      current();
+      return await action(project,current);
+    } finally { busy=false; }
   }
+
+  async function task(project,action,options,current) {
+    const taskName=project.tool==='gradle'?(action==='build'?':quarkusBuild':':test'):(action==='build'?'package':'test');
+    const selection={projectUri:project.uri,allowProjectExecution:true,cancellation:options.cancellation};
+    const observed=(await java.workbench.discoverTasks(selection)).find(item=>item.name===taskName);
+    if (!observed) throw fail('The selected Quarkus project has no observed '+taskName+' task.');
+    current();
+    saved(project);
+    const result=await java.workbench.runTask({...selection,taskId:observed.id});
+    if (result.state!=='cancelled') current();
+    return result;
+  }
+
+  const start=(options={})=>exclusive(options,project=>launch(project,options),'Explicitly choose Quarkus dev mode before executing the project.');
+  const tests=(options={})=>exclusive(options,(project,current)=>task(project,'test',options,current),
+    'Explicitly choose Quarkus tests before executing the project.');
+  const build=(options={})=>exclusive(options,async(project,current)=>{
+    const result=await task(project,'build',options,current);
+    return result.state==='succeeded'?{...result,tool:project.tool,artifact:fastJar(project)}:result;
+  },'Explicitly choose the Quarkus build before executing the project.');
+
+  subscriptions.push(vscode.debug.onDidStartDebugSession(session=>{
+    const record=pending.get(session.configuration?.[DEBUG_MARKER]);
+    if (session.type!==DEBUG_TYPE||!record) return;
+    record.session=session;
+    record.resolve(session);
+  }),vscode.debug.onDidTerminateDebugSession(session=>{
+    if (debugSession?.id===session.id) debugSession=undefined;
+    for (const record of pending.values()) if (record.session?.id===session.id) record.terminated=true;
+  }));
+
+  async function stop() {
+    generation++;
+    const owned=[debugSession,...Array.from(pending.values(),record=>record.session)].filter(Boolean);
+    debugSession=undefined;
+    let receipt;
+    try { await Promise.allSettled([...new Set(owned)].map(session=>vscode.debug.stopDebugging(session))); }
+    finally { receipt=await dev.stop(); }
+    return receipt;
+  }
+
+  const startDebug=(options={})=>exclusive(options,async(project,current)=>{
+    const result=await task(project,'build',options,current);
+    if (result.state!=='succeeded') throw fail('The Quarkus fast-jar build did not succeed.');
+    const receipt=await launch(project,options,true);
+    const key=randomUUID(), record={};
+    let timer;
+    try {
+      current();
+      const candidate=await java.debug.processes.resolve(receipt.debug.pid,options.cancellation);
+      const proof=await dev.verifyDebugTarget(options.cancellation);
+      if (candidate.hostName!==proof.address||candidate.pid!==proof.pid||candidate.port!==proof.port)
+        throw fail('The observed JDWP address differs from the owned Quarkus listener.');
+      current();
+      saved(project);
+      const began=new Promise(resolve=>{record.resolve=resolve;});
+      pending.set(key,record);
+      const attached=await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(project.uri)),{
+        type:DEBUG_TYPE,request:'attach',name:'Rocketbrain Quarkus '+project.name,
+        ...processAttachTarget(candidate),[DEBUG_MARKER]:key,
+        sourcePaths:project.sourceRoots.filter(item=>!item.unavailable).map(item=>item.path)
+      },{suppressSaveBeforeStart:true});
+      if (!attached) throw fail('Could not start the debugger for the owned Quarkus JVM.');
+      const session=await Promise.race([began,new Promise((_,reject)=>{
+        timer=setTimeout(()=>reject(fail('The owned Quarkus debugger session did not start.')),18000);
+      })]);
+      const deadline=Date.now()+22000;
+      while (java.debug.verifiedLocalPid(session)!==candidate.pid) {
+        current();
+        if (record.terminated||Date.now()>=deadline) throw fail('The Java debugger did not acknowledge the owned Quarkus listener.');
+        await delay(100);
+      }
+      current();
+      debugSession=session;
+      return {...receipt,sessionId:session.id};
+    } catch(error) {
+      if (record.session) await vscode.debug.stopDebugging(record.session).catch(()=>{});
+      await dev.stop();
+      throw error;
+    } finally { clearTimeout(timer);pending.delete(key); }
+  },'Explicitly choose Quarkus debugging before building and launching the project.');
 
   async function create({parent,name,allowProjectWrites,cancellation} = {}) {
     trusted(cancellation);
@@ -150,7 +235,7 @@ function registerQuarkusWorkbench(vscode,java) {
     trusted();
     const active=vscode.window.activeTextEditor?.document.uri;
     const items=available().sort((a,b) => b.root.length-a.root.length);
-    if (!items.length) throw fail('Import the Maven Quarkus project in Java Projects first.');
+    if (!items.length) throw fail('Import the Maven or Gradle Quarkus project in Java Projects first.');
     const selected=active?.scheme==='file' && items.find(item => inside(item.root,active.fsPath));
     if (selected) return selected.uri;
     return (await vscode.window.showQuickPick(items.map(item => ({label:item.name,uri:item.uri})),
@@ -211,24 +296,36 @@ function registerQuarkusWorkbench(vscode,java) {
     void vscode.window.showInformationMessage('Quarkus dev application is ready at '+session.baseUrl);
     return session;
   });
-  register(COMMANDS.stop,() => dev.stop());
+  register(COMMANDS.stop,stop);
   register(COMMANDS.test,async () => {
     const projectUri=await choose();
     return projectUri && progress('Run Quarkus Tests',cancellation => tests({projectUri,allowProjectExecution:true,cancellation}));
+  });
+  register(COMMANDS.build,async()=>{
+    const projectUri=await choose();
+    return projectUri&&progress('Build Quarkus Application',cancellation=>build({projectUri,allowProjectExecution:true,cancellation}));
+  });
+  register(COMMANDS.debug,async()=>{
+    const projectUri=await choose();
+    if (!projectUri) return;
+    output.show(true);
+    return progress('Debug Quarkus Application',cancellation=>startDebug({projectUri,allowProjectExecution:true,cancellation}));
   });
 
   return {
     create:options => track(() => create(options)),
     inspect:options => track(() => inspect(options)), startDev:options => track(() => start(options)),
-    runTests:options => track(() => tests(options)),stopDev:dev.stop,
+    runTests:options => track(() => tests(options)),build:options=>track(()=>build(options)),
+    debug:options=>track(()=>startDebug(options)),stopDev:stop,
     dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {
-        try { await dev.dispose(); }
+        try { await stop(); }
         finally {
           await Promise.allSettled(jobs);
-          for (const item of subscriptions) item.dispose();
+          try { await dev.dispose(); }
+          finally { for (const item of subscriptions) item.dispose(); }
         }
       })();
       return closing;

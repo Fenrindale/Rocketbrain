@@ -106,11 +106,15 @@ Spring Boot 설정 파일에서 현재 모듈의 생성 메타데이터로 설�
 
 **Inspect Spring Authentication Decisions**는 관찰을 켠 로컬 Servlet 앱에서 Spring이 호출한 인증 제공자, 각 제공자가 반환한 결과 및 `ProviderManager`의 최종 결과를 표시합니다. 자격 증명과 요청 값은 수집하지 않습니다. [인증 제공자 관찰 설정](docs/spring-security-filter-trace.md#authentication-providers)
 
-### Quarkus Maven
+### Quarkus Maven과 Gradle
 
 **Create Quarkus Maven Project**로 시작 프로젝트를 만든 뒤 **Java Projects**에서 가져옵니다. 시작 프로젝트는 JDK 25와 Maven을 사용합니다. `application.properties`에서 Java에 선언된 MicroProfile Config와 SmallRye ConfigMapping 키를 완성하고 선언으로 이동할 수 있습니다. **Inspect Quarkus Configuration and Endpoints**에서는 프로필별 키, REST 경로와 Qute 템플릿을 엽니다.
 
-**Start Quarkus Dev Mode**는 루프백에서 개발 서버가 준비되면 주소를 표시합니다. **Stop Quarkus Dev Mode**로 세션을 종료하고 **Run Quarkus Tests**로 Maven 테스트를 실행합니다. 이 흐름은 모듈 POM에 Quarkus 3 플러그인을 직접 선언한 프로젝트와 리터럴 어노테이션을 지원합니다.
+기존 Gradle 프로젝트는 **Java Projects**에서 가져옵니다. 저장된 Gradle 파일에 Quarkus 3 플러그인 버전이 선언된 애플리케이션에서 같은 소스 탐색을 사용할 수 있습니다. **Run Quarkus Tests**와 **Build Quarkus Application**은 가져온 프로젝트에서 확인한 테스트 및 빌드 작업을 실행합니다. **Start Quarkus Dev Mode**는 루프백에서 개발 서버가 준비되면 주소를 표시합니다.
+
+**Debug Quarkus Application**은 표준 fast-jar를 빌드하고 Rocketbrain이 직접 시작한 JVM에 Java 디버거를 연결합니다. 앱과 JDWP는 별도의 루프백 포트에 바인딩됩니다. 이전 명령이 시작한 JVM과 리스너 소유권을 다시 확인한 뒤 소스 브레이크포인트를 연결합니다. **Stop Quarkus Dev Mode**에서 해당 앱과 디버그 세션을 종료할 수 있습니다. 이 디버그 흐름은 패키징된 앱을 실행합니다. [Quarkus Gradle 도구](https://quarkus.io/guides/gradle-tooling/)
+
+Windows에서 Gradle 사용자 홈 경로에 한글 등 비ASCII 문자가 있으면 Gradle 9.7 이상을 사용합니다. `rocketbrain.java.gradleHome`에는 독립 Gradle 배포판을 지정합니다. Quarkus 3.40.1.2와 Gradle 9.7.1에서 빌드·테스트·개발 모드 및 fast-jar 디버깅을 검증했습니다. [Gradle 워커 경로 인코딩 수정](https://github.com/gradle/gradle/issues/30304)
 
 ### Jakarta WAR 배포
 
