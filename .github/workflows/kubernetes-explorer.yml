@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   kind:
-    name: Read-only Kubernetes and Helm on kind
+    name: Kubernetes explorer and reviewed Deployment scale on kind
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -62,4 +62,10 @@ jobs:
             --kubeconfig "$admin" --kube-context "kind-$name" --namespace rocketbrain-observed --wait --timeout 120s
           export ROCKETBRAIN_KUBE_ADMIN_CONFIG="$admin" ROCKETBRAIN_KUBE_KIND_NAME="$name"
           export ROCKETBRAIN_KUBECTL="$(command -v kubectl)" ROCKETBRAIN_HELM="$(command -v helm)"
-          node scripts/test-kubernetes-kind.js
+          node scripts/test-kubernetes-kind.js | tee "$RUNNER_TEMP/rocketbrain-kube-actions.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-kube-actions
+          path: ${{ runner.temp }}/rocketbrain-kube-actions.json
+          if-no-files-found: error
+          retention-days: 7

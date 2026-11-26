@@ -173,6 +173,7 @@
       { "command": "rocketbrain.kubernetes.refresh", "title": "Refresh Kubernetes Resources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(refresh)" },
       { "command": "rocketbrain.kubernetes.namespace", "title": "Choose Kubernetes Namespace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kubernetes.podLogs", "title": "Open Kubernetes Pod Logs", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(output)" },
+      { "command": "rocketbrain.kubernetes.scaleDeployment", "title": "Scale Kubernetes Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kubernetes.disconnect", "title": "Close Kubernetes Explorer Session", "category": "Rocketbrain", "icon": "$(debug-disconnect)" },
       { "command": "rocketbrain.jakarta.buildWar", "title": "Build Jakarta WAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.deploy", "title": "Deploy Jakarta WAR to Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1734,6 +1735,7 @@
         { "command": "rocketbrain.docker.logs", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.docker.pushImage", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.image && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.kubernetes.podLogs", "when": "view == rocketbrain.kubernetes && viewItem == rocketbrain-kube-pod", "group": "inline" },
+        { "command": "rocketbrain.kubernetes.scaleDeployment", "when": "view == rocketbrain.kubernetes && viewItem == rocketbrain-kube-deployment && isWorkspaceTrusted", "group": "rocketbrain" },
         {
           "command": "rocketbrain.db.openObjectSource",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",

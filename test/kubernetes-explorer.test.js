@@ -101,3 +101,42 @@ test('uses a private frozen context, bounded projections and current pod UID for
   await prepared.close();
   await assert.rejects(fs.stat(privateRoot), error => error.code === 'ENOENT');
 });
+
+test('previews Deployment scale on the server and uses the exact approved replica count and resource version once', async t => {
+  const root = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rb-kube-scale-'));
+  const file = path.join(root, 'scale.kubeconfig');
+  await fs.writeFile(file, JSON.stringify(config), { flag: 'wx' });
+  t.after(async () => { await fs.unlink(file); await fs.rmdir(root); });
+  let uid = 'uid-original', resourceVersion = 'version-1', replicas = 1, dryRuns = 0, writes = 0;
+  const prepared = await prepareKubernetesConfig({ file, kubectl: 'kubectl' }, async (_tool, argv) => {
+    if (argv.includes('view')) return JSON.stringify(config);
+    assert.ok(argv.includes('--namespace=journal'));
+    if (argv.includes('get')) return JSON.stringify({ apiVersion: 'apps/v1', kind: 'Deployment',
+      metadata: { name: 'app', namespace: 'journal', uid, resourceVersion }, spec: { replicas } });
+    assert.ok(argv.includes('scale'));
+    assert.ok(argv.includes('--resource-version=' + resourceVersion));
+    assert.ok(argv.includes('--current-replicas=' + replicas));
+    if (argv.includes('--dry-run=server')) dryRuns += 1;
+    else { writes += 1; replicas = Number(argv.find(value => value.startsWith('--replicas=')).slice(11)); }
+    return 'deployment.apps/app\n';
+  });
+  t.after(() => prepared.close());
+  const session = await prepared.select('selected');
+  await assert.rejects(session.reviewDeploymentScale('journal', '--all', 3), /listed Deployment/);
+  await assert.rejects(session.reviewDeploymentScale('journal', 'app', -1), /replica count/);
+  const stale = await session.reviewDeploymentScale('journal', 'app', 3);
+  assert.equal(dryRuns, 1);
+  assert.equal(writes, 0);
+  await assert.rejects(session.applyDeploymentScale(stale), /Approve a current/);
+  await assert.rejects(session.applyDeploymentScale({ ...stale }, { approved: true }), /Approve a current/);
+  uid = 'uid-replacement';
+  resourceVersion = 'version-2';
+  await assert.rejects(session.applyDeploymentScale(stale, { approved: true }), /Deployment changed/);
+  assert.equal(writes, 0);
+  const next = await session.reviewDeploymentScale('journal', 'app', 3);
+  assert.deepEqual(await session.applyDeploymentScale(next, { approved: true }),
+    { namespace: 'journal', name: 'app', desired: 3, observed: 3 });
+  await assert.rejects(session.applyDeploymentScale(next, { approved: true }), /Approve a current/);
+  assert.equal(writes, 1);
+  assert.equal(dryRuns, 2);
+});
