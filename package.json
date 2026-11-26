@@ -180,6 +180,8 @@
       { "command": "rocketbrain.quarkus.inspect", "title": "Inspect Quarkus Configuration and Endpoints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.inspectConfigOrigins", "title": "Inspect Quarkus Config Origins", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.inspectArcLookups", "title": "Inspect Quarkus Arc Lookups", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.inspectInterceptors", "title": "Inspect Quarkus CDI Interceptors", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.openInterceptorSource", "title": "Open Observed Quarkus Interceptor Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.openArcProducerSource", "title": "Open Observed Arc Producer Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.startDev", "title": "Start Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.stopDev", "title": "Stop Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },

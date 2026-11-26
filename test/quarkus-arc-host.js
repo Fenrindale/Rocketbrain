@@ -50,7 +50,7 @@ async function database(){
   }};
 }
 
-async function boot(db,gate,enabled,work){
+async function boot(db,gate,enabled,work,{interceptorPackages=[]}={}){
   const javaHome=await fs.realpath(process.env.ROCKETBRAIN_SPRING_JAVA_HOME);
   const app=await fs.realpath(process.env.ROCKETBRAIN_QUARKUS_ARC_APP||fixture);
   assert.equal(path.basename(app),'quarkus-arc-app');
@@ -63,7 +63,8 @@ async function boot(db,gate,enabled,work){
   let child,exited,log='',ended=false;
   try{
     await fs.writeFile(tokenFile,token,{flag:'wx',mode:0o600});
-    await fs.writeFile(configFile,JSON.stringify({tokenFile,descriptorFile,quarkusArcPackages:enabled?packages:[]}),{flag:'wx',mode:0o600});
+    await fs.writeFile(configFile,JSON.stringify({tokenFile,descriptorFile,quarkusArcPackages:enabled?packages:[],
+      quarkusInterceptorPackages:interceptorPackages}),{flag:'wx',mode:0o600});
     const {jarPath}=await buildObserver({target:path.join(output,'arc-observer'),javaHome});
     const env=Object.fromEntries(Object.entries({...process.env,...db.env})
       .filter(([key])=>!/^(?:JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$/i.test(key)));
@@ -80,6 +81,7 @@ async function boot(db,gate,enabled,work){
     assert.ok(log.includes('Listening on: '+url),'Owned Quarkus Arc fixture did not finish startup.');
     const descriptor=await read(descriptorFile);
     assert.equal(descriptor.quarkusArcLookupsEnabled,enabled);
+    assert.equal(descriptor.quarkusInterceptorsEnabled,interceptorPackages.length>0);
     assert.equal(descriptor.processId,child.pid);
     assert.match(descriptor.baseUrl,/^http:\/\/127\.0\.0\.1:\d+$/u);
     return await work({async http(route){
@@ -209,7 +211,7 @@ async function runQuarkusArcChecks(api,vscode,checks){
   }
 }
 
-module.exports={runQuarkusArcChecks};
+module.exports={runQuarkusArcChecks,database,boot};
 if(require.main===module)headless().then(report=>console.log(JSON.stringify(report))).catch(error=>{
   console.error(error.stack);process.exitCode=1;
 });

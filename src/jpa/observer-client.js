@@ -10,6 +10,7 @@ const { factoryId: graphFactoryId, graphRegistry } = require('./entity-graphs');
 const { normalizePersistenceContexts } = require('./persistence-contexts');
 const { normalizeQuarkusConfigOrigins } = require('../java/quarkus-config-origin');
 const { normalizeArcLookups } = require('../java/quarkus-arc-lookups');
+const { normalizeArcInterceptors } = require('../java/quarkus-interceptors');
 const { normalizeObservedInjection, normalizeObservedMembers, normalizeObservedProviders } = require('../spring/observed-injection');
 const { normalizeTransactionTrace } = require('./transaction-trace');
 
@@ -201,6 +202,11 @@ class ObserverClient {
     const payload=await this.#request('quarkus-arc-lookups');
     try {return normalizeArcLookups(payload);}
     catch {throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Quarkus Arc lookup evidence.');}
+  }
+  async quarkusArcInterceptors() {
+    const payload=await this.#request('quarkus-arc-interceptors');
+    try {return normalizeArcInterceptors(payload);}
+    catch {throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Quarkus interceptor evidence.');}
   }
   async reactiveSecurityTrace() {
     const payload = await this.#request('reactive-security-trace');
