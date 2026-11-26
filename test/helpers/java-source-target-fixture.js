@@ -201,4 +201,64 @@ async function runObservedGradleComposite(service, root, targets) {
   } finally { await fs.writeFile(settings, original); }
 }
 
-module.exports = { links, populateTargets, buildTargets, runTargets, executionCases, runObservedGradleComposite };
+async function populateMavenSourceExecution(root) {
+  const reactor = path.join(root, 'maven/pom.xml');
+  const saved = await fs.readFile(reactor, 'utf8');
+  assert.match(saved, /<\/modules>/u);
+  await fs.writeFile(reactor, saved.replace('</modules>', '  <module>execution-worker</module>\n</modules>'));
+  const execution = (name, directory) => '<execution><id>' + name + '</id><phase>none</phase>' +
+    '<goals><goal>compile</goal></goals><configuration><outputDirectory>${project.build.directory}/' + directory +
+    '</outputDirectory></configuration></execution>';
+  const modulePom = pom('execution-worker', '<build><plugins><plugin><artifactId>maven-compiler-plugin</artifactId>' +
+    '<version>3.15.0</version><executions>\n' + execution('first-slice', 'first-output') + '\n' +
+    execution('second-slice', 'second-output') + '\n</executions></plugin></plugins></build>', true);
+  const source = 'maven/execution-worker/src/main/java/fixture/declared/DeclaredAction.java';
+  await write(root, 'maven/execution-worker/pom.xml', modulePom);
+  await write(root, source, 'package fixture.declared; public final class DeclaredAction {}\n');
+  return pathToFileURL(path.join(root, source)).href;
+}
+
+async function runDeclaredMavenExecution(service, root, source, checkSelection) {
+  const moduleRoot = path.join(root, 'maven/execution-worker'), pomFile = path.join(moduleRoot, 'pom.xml');
+  const sourceTarget = await service.inspect({ sourceUri: source });
+  assert.equal(sourceTarget.executedProjectCode, false);
+  assert.equal(sourceTarget.declaredBuild.reactorProject, 'execution-worker');
+  const catalog = await service.listMavenExecutions(sourceTarget.id);
+  assert.deepEqual(catalog.map(item => item.executionId), ['first-slice', 'second-slice']);
+  const second = catalog[1];
+  const goal = 'org.apache.maven.plugins:maven-compiler-plugin:3.15.0:compile@second-slice';
+  assert.equal(second.task, goal);
+  const opened = await service.openMavenExecution(sourceTarget.id, second.id);
+  assert.equal(opened.declaration.uri, pathToFileURL(pomFile).href);
+  const sourceText = await fs.readFile(pomFile, 'utf8');
+  const declaration = sourceText.split('\n')[opened.declaration.range.start.line];
+  assert.match(declaration, /<id>second-slice<\/id>/u);
+  assert.doesNotMatch(declaration, /first-slice/u);
+  await checkSelection?.(opened);
+
+  await assert.rejects(service.reviewBuild(sourceTarget.id, { mavenExecutionId: '0'.repeat(64) }), /changed or is unavailable/u);
+  const stale = await service.reviewBuild(sourceTarget.id, { mavenExecutionId: second.id });
+  const sibling = path.join(root, 'maven/core/pom.xml'), preserved = await fs.readFile(sibling);
+  try {
+    await fs.appendFile(sibling, '<!-- unrelated reactor descriptor changed after review -->\n');
+    await assert.rejects(service.runBuild(stale.id, { allowProjectExecution: true }), /command or inputs changed/u);
+  } finally { await fs.writeFile(sibling, preserved); }
+
+  const reviewed = await service.reviewBuild(sourceTarget.id, { mavenExecutionId: second.id });
+  assert.equal(reviewed.task, goal);
+  assert.equal(reviewed.selector, 'execution-worker');
+  assert.equal(reviewed.reactorDependenciesIncluded, false);
+  assert.deepEqual(reviewed.args.slice(-6), [goal, '--file', path.join(root, 'maven/pom.xml'), '--projects', 'execution-worker', '--offline']);
+  const output = path.join(moduleRoot, 'target/second-output/fixture/declared/DeclaredAction.class');
+  await assert.rejects(fs.access(output), { code: 'ENOENT' });
+  await assert.rejects(service.runBuild(reviewed.id), /Approve.*explicitly/u);
+  assert.equal((await service.runBuild(reviewed.id, { allowProjectExecution: true })).state, 'succeeded');
+  assert.equal((await fs.readFile(output)).readUInt32BE(0), 0xcafebabe);
+  await assert.rejects(fs.access(path.join(moduleRoot, 'target/first-output')), { code: 'ENOENT' });
+  await assert.rejects(service.runBuild(reviewed.id, { allowProjectExecution: true }), /already used/u);
+  return { module: reviewed.selector, executionId: reviewed.mavenExecution.executionId, goal: reviewed.task,
+    declarationOpened: true, siblingDriftRejected: true, oneUse: true, exactOutput: true, alternativeOutputAbsent: true };
+}
+
+module.exports = { links, populateTargets, buildTargets, runTargets, executionCases, runObservedGradleComposite,
+  populateMavenSourceExecution, runDeclaredMavenExecution };

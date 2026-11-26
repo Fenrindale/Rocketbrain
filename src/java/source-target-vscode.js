@@ -4,7 +4,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { cancelled, fail } = require('./workbench-model');
 const { resolveJavaSourceTarget } = require('./source-target');
-const { prepareSourceExecution, route } = require('./source-target-execution');
+const { prepareSourceExecution, route, listMavenSourceExecutions } = require('./source-target-execution');
 const { prepareGradleObservation, observeGradleTarget } = require('./gradle-source-model');
 const { fileURLToPath } = require('node:url');
 
@@ -109,11 +109,11 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
 
   const folderList = () => vscode.workspace.workspaceFolders || [];
 
-  function prepare(entry, observation) {
+  function prepare(entry, observation, mavenExecutionId) {
     trusted();
     if (entry.ticket !== generation()) throw fail('The workspace changed after the Java source target review.');
     entry.validateInputs();
-    return prepareSourceExecution(entry.report, folderList(), getTools(entry.report), dirty, observation);
+    return prepareSourceExecution(entry.report, folderList(), getTools(entry.report), dirty, observation, mavenExecutionId);
   }
 
   async function reviewGradleModel(id, { rootUri, cancellation } = {}) {
@@ -144,15 +144,36 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
     return structuredClone({ ...model, observationId, executedProjectCode: true });
   }
 
-  async function reviewBuild(id, { cancellation, observationId } = {}) {
+  async function listMavenExecutions(id, cancellation) {
+    const entry = await fresh(id, cancellation);
+    return listMavenSourceExecutions(entry.report, folderList(), dirty);
+  }
+
+  async function openMavenExecution(id, executionId, cancellation) {
+    const choices = await listMavenExecutions(id, cancellation);
+    const selected = choices.find(item => item.id === executionId);
+    if (!selected) throw fail('Refresh the declared Maven executions before opening a declaration.');
+    const { uri, range: { start, end } } = selected.declaration;
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.parse(uri));
+    if (!(await listMavenExecutions(id, cancellation)).some(item => item.id === executionId)) {
+      throw fail('The Maven execution changed before opening its declaration.');
+    }
+    await vscode.window.showTextDocument(document, {
+      preview: true, selection: new vscode.Range(start.line, start.character, end.line, end.character)
+    });
+    return selected;
+  }
+
+  async function reviewBuild(id, { cancellation, observationId, mavenExecutionId } = {}) {
     const entry = await fresh(id, cancellation);
     const observation = observationId === undefined ? undefined : observations.get(observationId);
     if (observationId !== undefined && (observation?.targetId !== id || observation.expiresAt < Date.now())) {
       throw fail('Observe the current Gradle composite before reviewing its build.');
     }
-    const result = prepare(entry, observation?.model), reviewId = randomUUID();
+    const result = prepare(entry, observation?.model, mavenExecutionId), reviewId = randomUUID();
     while (reviews.size >= 8) reviews.delete(reviews.keys().next().value);
-    reviews.set(reviewId, { targetId: id, observation: observation?.model, key: result.key, expiry: Date.now() + reviewLifetime });
+    reviews.set(reviewId, { targetId: id, observation: observation?.model, mavenExecutionId,
+      key: result.key, expiry: Date.now() + reviewLifetime });
     return structuredClone({ ...result.review, id: reviewId, expiresAt: reviews.get(reviewId).expiry });
   }
 
@@ -176,24 +197,40 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
     return executePrepared(() => {
       if (runGeneration() !== operation) throw fail('The reviewed Java build was stopped before launch.');
       if (Date.now() > review.expiry) throw fail('The Java source build review expired.');
-      const result = prepare(entry, review.observation);
+      const result = prepare(entry, review.observation, review.mavenExecutionId);
       if (result.key !== review.key) throw fail('The reviewed Java build command or inputs changed. Review it again.');
       return { spec: result.spec, task: result.review.task, projectId: result.projectId };
     }, { allowProjectExecution, cancellation });
   }
 
-  async function chooseBuild(id, observationId) {
-    const review = await reviewBuild(id, { observationId });
+  async function chooseBuild(id, options) {
+    const review = await reviewBuild(id, options);
     const label = 'Run Reviewed Build';
-    const selected = await vscode.window.showWarningMessage('Compile the selected Java component?', {
+    const selected = await vscode.window.showWarningMessage(review.mavenExecution ?
+      'Run the selected Maven plugin execution?' : 'Compile the selected Java component?', {
       modal: true,
       detail: 'Target: ' + review.selector + '\n' + (review.reactorDependenciesIncluded ?
-        'Required Maven reactor dependencies can also build.\n' : 'Required Gradle task dependencies can also run.\n') +
+        'Required Maven reactor dependencies can also build.\n' : review.mavenExecution ?
+          'Maven runs the saved plugin configuration for this module. Build dependencies must already be available offline.\n' :
+          'Required Gradle task dependencies can also run.\n') +
         (review.gradleModel ? 'Observed settings: ' + review.gradleModel.settingsFile + '\n' : '') +
         'Working directory: ' + review.cwd + '\n' + JSON.stringify([review.command, ...review.args], null, 2)
     }, label);
     if (selected !== label) { reviews.delete(review.id); return; }
     return runBuild(review.id, { allowProjectExecution: true });
+  }
+
+  async function chooseMavenExecution(id) {
+    const executions = await listMavenExecutions(id);
+    if (!executions.length) throw fail('Declare a literal plugin version, execution ID and goal in this Maven module.');
+    const choice = await vscode.window.showQuickPick(executions.map(execution => ({
+      label: execution.goal + '@' + execution.executionId,
+      description: [execution.group, execution.artifact, execution.version].join(':'),
+      execution
+    })), { title: 'Choose a Declared Maven Execution', matchOnDescription: true });
+    if (!choice) return;
+    await openMavenExecution(id, choice.execution.id);
+    return chooseBuild(id, { mavenExecutionId: choice.execution.id });
   }
 
   async function chooseGradleModel(id) {
@@ -210,7 +247,7 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
     const model = await vscode.window.withProgress({ title: 'Observe Gradle Composite Model',
       location: vscode.ProgressLocation.Notification, cancellable: true }, (_progress, cancellation) =>
       observeGradleModel(review.id, { allowProjectExecution: true, cancellation }));
-    return chooseBuild(id, model.observationId);
+    return chooseBuild(id, { observationId: model.observationId });
   }
 
   async function command(value) {
@@ -226,6 +263,9 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
       label: 'Open Build Declaration', description: item.label, open: () => openBuild(report.id, index)
     }));
     if (route(report)) choices.push({ label: 'Review Compile for This Source', open: () => chooseBuild(report.id) });
+    if (route(report)?.tool === 'maven') choices.push({
+      label: 'Review Declared Maven Execution', open: () => chooseMavenExecution(report.id)
+    });
     if (report.provider === 'gradle' && ['main', 'test'].includes(report.sourceRole) && !report.generated) {
       choices.push({ label: 'Observe Gradle Composite and Review Compile', open: () => chooseGradleModel(report.id) });
     }
@@ -237,6 +277,7 @@ function registerSourceTarget(vscode, { trusted, request, generation, runGenerat
 
   const clear = () => { records.clear(); reviews.clear(); modelReviews.clear(); observations.clear(); };
   return { inspect, show, openBuild, command, reviewBuild, runBuild, reviewGradleModel, observeGradleModel,
+    listMavenExecutions, openMavenExecution,
     clear, dispose() { clear(); provider?.dispose(); } };
 }
 

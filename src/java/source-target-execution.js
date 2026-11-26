@@ -7,6 +7,7 @@ const M = require('./workbench-model');
 const { pomFacts, gradleSettings } = require('./dependency-builds');
 const { buildSpec } = require('./workbench-tasks');
 const { verifyGradleObservation } = require('./gradle-source-model');
+const { declaredExecutions, reactorParent } = require('./maven-source-execution');
 
 const segment = /^[A-Za-z0-9_][\w.-]*$/u;
 const configFiles = ['settings.gradle', 'settings.gradle.kts'];
@@ -41,7 +42,7 @@ function capture(dirty) {
   return { read, fingerprint: () => M.hash([...captured].map(([file, item]) => [file, item?.digest ?? null])) };
 }
 
-function reviewedMaven(target, root, read) {
+function mavenReactor(target, root, read) {
   const expected = target.declaredBuild.reactorProject;
   if (typeof expected !== 'string' || expected.length > 240 || !expected.split('/').every(value => segment.test(value)) ||
       path.relative(path.resolve(root, expected), target.projectRoot)) {
@@ -56,13 +57,12 @@ function reviewedMaven(target, root, read) {
     if (read(path.join(root, '.mvn', name))) throw M.fail('Maven project extensions or JVM options require separate execution.');
   }
 
-  const modules = new Set();
+  const modules = new Map();
   function visit(directory) {
     const physical = localPath(directory, [root]);
     if (modules.has(physical) || modules.size >= M.LIMITS.projects) {
       throw M.fail('Review only a bounded Maven reactor with distinct modules.');
     }
-    modules.add(physical);
     const file = read(path.join(physical, 'pom.xml'));
     if (!file || /<(?:[\w.-]+:)?extensions(?:\s|>)/iu.test(file.text)) {
       throw M.fail('Maven module POMs and their extension boundary must be available for review.');
@@ -71,12 +71,57 @@ function reviewedMaven(target, root, read) {
     if (model.profiles || model.modules.some(value => !value.split('/').every(part => segment.test(part)))) {
       throw M.fail('Profile-dependent or computed Maven reactor modules require separate execution.');
     }
+    modules.set(physical, model);
     for (const relative of model.modules) visit(path.join(physical, relative));
   }
   visit(root);
   if (!modules.has(target.projectRoot)) throw M.fail('The selected Java component is outside the reviewed Maven reactor.');
+  return { selector: expected, modules };
+}
+
+function executionChoices(target, root, reactor) {
+  const { modules } = reactor;
+  const owner = modules.get(target.projectRoot);
+  if (owner.packaging === 'pom' || owner.modules.length) {
+    throw M.fail('Choose a Java source in a leaf Maven reactor module for execution.');
+  }
+  // Maven may merge parent execution configuration. Only reviewed physical reactor ancestors are accepted.
+  for (let current = owner, parent = reactorParent(current.file); parent; parent = reactorParent(current.file)) {
+    if (!/^(?:\.\.\/)+pom\.xml$/u.test(parent.relative)) {
+      throw M.fail('Declared Maven execution review requires conventional local reactor parents.');
+    }
+    const folder = path.dirname(path.resolve(current.root, parent.relative));
+    if (!folder || folder === current.root || !M.inside(root, folder)) {
+      throw M.fail('Declared Maven execution review requires conventional local reactor parents.');
+    }
+    const ancestor = modules.get(folder);
+    if (!ancestor || ancestor.gav.group !== parent.group || ancestor.gav.artifact !== parent.artifact ||
+        ancestor.gav.version !== parent.version) {
+      throw M.fail('The Maven parent does not match a reviewed physical reactor module.');
+    }
+    current = ancestor;
+  }
+  return declaredExecutions(owner.file);
+}
+
+function listMavenSourceExecutions(target, folders, dirty) {
+  const selected = route(target);
+  if (selected?.tool !== 'maven') throw M.fail('Select a Java source in an imported Maven reactor module.');
+  const root = localPath(selected.root, M.workspaceRoots(folders));
+  const { read } = capture(dirty);
+  return executionChoices(target, root, mavenReactor(target, root, read));
+}
+
+function reviewedMaven(target, root, read, executionChoice) {
+  const reactor = mavenReactor(target, root, read);
+  const tail = ['--file', path.join(root, 'pom.xml'), '--projects', reactor.selector];
+  if (executionChoice !== undefined) {
+    const execution = executionChoices(target, root, reactor).find(choice => choice.id === executionChoice);
+    if (!execution) throw M.fail('The exact Maven execution changed or is unavailable. Refresh the declared goals.');
+    return { task: execution.task, selector: reactor.selector, tail: [...tail, '--offline'], execution };
+  }
   const task = target.scope === 'test' ? 'test-compile' : 'compile';
-  return { task, selector: expected, tail: ['--file', path.join(root, 'pom.xml'), '--projects', expected, '--also-make'] };
+  return { task, selector: reactor.selector, tail: [...tail, '--also-make'] };
 }
 
 function reviewedGradle(target, root, read) {
@@ -124,9 +169,13 @@ function route(target) {
   }
 }
 
-function prepareSourceExecution(target, folders, tools, dirty, observedGradle) {
+function prepareSourceExecution(target, folders, tools, dirty, observedGradle, executionChoice) {
   const selected = observedGradle ? { tool: 'gradle', root: observedGradle.compositeRoot } : route(target);
   if (!selected) throw M.fail('Select an observed main or test source in a supported literal Maven reactor or Gradle build tree.');
+  if (executionChoice !== undefined && (selected.tool !== 'maven' || typeof executionChoice !== 'string' ||
+      !/^[0-9a-f]{64}$/u.test(executionChoice))) {
+    throw M.fail('Choose a current Maven execution from this Java source target.');
+  }
   const root = localPath(selected.root, M.workspaceRoots(folders));
   const { read, fingerprint } = capture(dirty);
   let details;
@@ -137,10 +186,10 @@ function prepareSourceExecution(target, folders, tools, dirty, observedGradle) {
     details = { task: selector + ':' + suffix, selector, tail: ['--offline', '--no-configuration-cache',
       '-Dorg.gradle.java.installations.auto-download=false'] };
   } else {
-    details = selected.tool === 'maven' ? reviewedMaven(target, root, read) : reviewedGradle(target, root, read);
+    details = selected.tool === 'maven' ? reviewedMaven(target, root, read, executionChoice) : reviewedGradle(target, root, read);
   }
   const project = { tool: selected.tool, root, uri: pathToFileURL(root).href, name: path.basename(root) };
-  const spec = buildSpec(project, tools, [details.task]);
+  const spec = buildSpec(project, tools, [details.task], { declaredMavenExecution: Boolean(details.execution) });
   spec.args.push(...details.tail);
   spec.reviewedSourceTarget = true;
   for (const key of Object.keys(spec.env)) {
@@ -156,14 +205,22 @@ function prepareSourceExecution(target, folders, tools, dirty, observedGradle) {
   toolFile(spec.args[spec.args.indexOf('-cp') + 1]);
   const classworlds = spec.args.find(arg => arg.startsWith('-Dclassworlds.conf='));
   if (classworlds) toolFile(classworlds.slice('-Dclassworlds.conf='.length));
+  if (details.execution) {
+    const home = spec.args.find(arg => arg.startsWith('-Dmaven.home=')).slice('-Dmaven.home='.length);
+    const lib = path.join(home, 'lib');
+    const core = fs.readdirSync(lib).filter(name => /^maven-core-3\.9\.\d+\.jar$/u.test(name));
+    if (core.length !== 1) throw M.fail('Configure one independent Apache Maven 3.9 distribution for declared execution.');
+    toolFile(path.join(lib, core[0]));
+  }
   const projectId = M.id('project', target.projectRoot);
   const review = { sourceUri: target.sourceUri, projectRoot: target.projectRoot, tool: selected.tool, scope: target.scope,
     cwd: spec.cwd, command: spec.command, args: spec.args, task: details.task, selector: details.selector,
     ...(observedGradle && { gradleModel: { buildRoot: observedGradle.selected.buildRoot,
       settingsFile: observedGradle.selected.settingsFile, buildCount: observedGradle.buildCount,
       projectCount: observedGradle.projectCount, buildInputs: observedGradle.key, membershipSha256: observedGradle.membershipSha256 } }),
-    reactorDependenciesIncluded: selected.tool === 'maven' };
+    ...(details.execution && { mavenExecution: details.execution }),
+    reactorDependenciesIncluded: selected.tool === 'maven' && !details.execution };
   return { spec, projectId, review, key: M.hash({ review, env: spec.env, files: fingerprint() }) };
 }
 
-module.exports = { prepareSourceExecution, route };
+module.exports = { prepareSourceExecution, route, listMavenSourceExecutions };

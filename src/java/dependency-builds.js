@@ -13,7 +13,7 @@ function below(root, file) {
   return relative === '' || !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep);
 }
 
-function pomFacts(file) {
+function pomTree(file) {
   if (/<!\s*(?:DOCTYPE|ENTITY)/i.test(file.text)) throw Error('XML document type and entity declarations are outside dependency inspection.');
   const parser = new SaxesParser({ xmlns: true });
   const frames = [];
@@ -32,6 +32,11 @@ function pomFacts(file) {
   if (project?.name !== 'project' || !['', 'http://maven.apache.org/POM/4.0.0'].includes(project.namespace)) {
     throw Error('The Maven descriptor does not declare a supported project.');
   }
+  return project;
+}
+
+function pomFacts(file) {
+  const project = pomTree(file);
   const children = (node, name) => node?.children.filter(child => child.name === name && child.namespace === project.namespace) || [];
   const one = (node, name) => {
     const values = children(node, name);
@@ -311,4 +316,4 @@ function buildDescriptors(files) {
   };
 }
 
-module.exports = { buildDescriptors, pomFacts, gradleSettings, gradleDependencies, gradleStatements, fileKey, below };
+module.exports = { buildDescriptors, pomFacts, pomTree, gradleSettings, gradleDependencies, gradleStatements, fileKey, below };
