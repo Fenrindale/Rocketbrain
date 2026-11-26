@@ -366,4 +366,4 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
   };
 }
 
-module.exports = { metadataFile, parseDescriptor, reviewPackageServices };
+module.exports = { metadataFile, parseDescriptor, reviewPackageServices, scalarService };

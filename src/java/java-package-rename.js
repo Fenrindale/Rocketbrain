@@ -133,7 +133,8 @@ function reconciledEngineEdits(edit, sources, expected, oldPackage, newPackage, 
 }
 
 function enforceContracts(sources, oldPackage, moved, boot, services, qualifiedModules) {
-  const reviewedModules = new Set([services?.moduleDescriptor?.uri,qualifiedModules?.provider.uri,qualifiedModules?.client.uri]);
+  const reviewedModules = new Set([services?.moduleDescriptor?.uri,qualifiedModules?.provider.uri,qualifiedModules?.client.uri,
+    ...(services?.reviewedModuleUris || [])]);
   const escaped = oldPackage.replace(/[$.]/gu, character => '\\' + character);
   const qualified = new RegExp('(?<![\\p{L}\\p{N}_$.])' + escaped + '(?=$|[^\\p{L}\\p{N}_$])', 'u');
   const slash = oldPackage.replaceAll('.', '/');
@@ -386,4 +387,4 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
     bindings, ...observed } };
 }
 
-module.exports = { preparePackageRename, kind, siblingTree, reconciledEngineEdits };
+module.exports = { preparePackageRename, kind, siblingTree, reconciledEngineEdits, attributedFiles, verifyBindings, clauses, enforceContracts };

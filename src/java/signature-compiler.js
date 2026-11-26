@@ -41,7 +41,7 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
  const query=[];
  if(inspection){
   if(['diagram','check','hierarchy','attributedDependencies'].includes(inspection.kind))query.push(inspection.kind);
-  else if(['typeRename','typeRenameBinary','packageRename','packageRenameServices','packageRenameModules','innerMove'].includes(inspection.kind)&&[inspection.fqn,inspection.other].every(value=>
+  else if(['typeRename','typeRenameBinary','packageRename','packageRenameServices','packageRenameModules','packageRenameServiceModules','innerMove'].includes(inspection.kind)&&[inspection.fqn,inspection.other].every(value=>
     typeof value==='string'&&value.length<1024&&(inspection.kind.startsWith('packageRename')||value.includes('.'))&&value.split('.').every(validIdentifier)))
    query.push(inspection.kind,inspection.fqn,inspection.other);
   else if(inspection.kind==='advisoryCalls'&&Array.isArray(inspection.targets)&&inspection.targets.length>0&&inspection.targets.length<=32){
@@ -136,9 +136,12 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   }
   else throw Error('Use a supported compiler analysis mode and source offset.');
  }
+ const serviceModules=inspection?.kind==='packageRenameServiceModules';
  const qualifiedModules=inspection?.kind==='packageRenameModules';
+ const stagedModules=qualifiedModules||serviceModules;
+ const validModuleCount=count=>serviceModules?count>=4&&count<=6:count===(qualifiedModules?2:1);
  const descriptors=sources.filter(source=>source.uri.toLowerCase().endsWith('/module-info.java'));
- if(namedModule!==true&&descriptors.length||namedModule===true&&(descriptors.length!==(qualifiedModules?2:1)||!Array.isArray(classpath)||classpath.length||release<9))throw Error(qualifiedModules?'Compiler module inspection requires exactly two reviewed source module descriptors.':'Compiler module inspection requires one reviewed module descriptor and no additional dependencies.');
+ if(namedModule!==true&&descriptors.length||namedModule===true&&(!validModuleCount(descriptors.length)||!Array.isArray(classpath)||classpath.length||release<9))throw Error(stagedModules?'Compiler module inspection requires the bounded reviewed source module graph.':'Compiler module inspection requires one reviewed module descriptor and no additional dependencies.');
  if(sources.reduce((n,s)=>n+Buffer.byteLength(s.text),0)>8*1024*1024)throw Error('Compiler source inspection exceeds8MiB.');if(!Array.isArray(classpath)||classpath.length>250)throw Error('Compiler classpath entry limit exceeded.');const snapshot=snapshotClasspath(javaHome,classpath),jarMetadata=new Map();for(const entry of snapshot.entries)if(entry.toLowerCase().endsWith('.jar'))jarMetadata.set(entry,await inspectCompilerJar(entry,manifestLimit));snapshot.validate();
  const preferred=path.resolve(storagePath||os.tmpdir());
  // Allow room for the random directory and Java helper paths under long VS Code Windows profiles.
@@ -156,9 +159,9 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   fs.mkdirSync(empty);
   fs.mkdirSync(path.dirname(source),{recursive:true});
   for(const [name,text]of Object.entries(helpers))fs.writeFileSync(path.join(path.dirname(source),name),text);
-  if(qualifiedModules){
+  if(stagedModules){
    const moduleRoot=path.join(folder,'modules'), modules=new Set(), moduleFiles=new Set(), stagedFiles=[];
-   if(namedModule!==true)throw Error('Select a reviewed two-source-module compiler graph.');
+   if(namedModule!==true)throw Error('Select a reviewed named source module graph.');
    for(const source of sources){
     const {moduleName,modulePath}=source;
     if(typeof moduleName!=='string'||moduleName.length>200||!moduleName.split('.').every(validIdentifier)||
@@ -176,14 +179,14 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
     fs.mkdirSync(path.dirname(file),{recursive:true});
     fs.writeFileSync(file,source.text,{flag:'wx'});
    }
-   if(modules.size!==2||moduleFiles.size!==2)throw Error('Choose exactly two reviewed named source modules with main module descriptors.');
+   if(!validModuleCount(modules.size)||modules.size!==moduleFiles.size)throw Error('Each reviewed named source module needs exactly one main module descriptor.');
    fs.writeFileSync(list,stagedFiles.join('\n'));
    query.push(moduleRoot);
   }else fs.writeFileSync(list,sources.map(s=>s.uri+'\t'+Buffer.from(s.text).toString('base64')).join('\n'));
   const effective=[];for(const [index,entry]of snapshot.entries.entries()){if(jarMetadata.get(entry)?.sanitized){const output=path.join(folder,'classpath-'+index+'.jar');await sanitizeCompilerJar(entry,output);effective.push(output);}else effective.push(entry);}fs.writeFileSync(cp,effective.join(path.delimiter));snapshot.validate();
   const output=await new Promise((resolve,reject)=>{const stdout=[];let total=0,stderr='',timer,cancel,settled=false;const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);cancel?.dispose();error?reject(error):resolve(value);};child=spawn(path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'),['--source','25',source,cp,list,empty,String(release),...query],{cwd:folder,env,windowsHide:true,stdio:['ignore','pipe','pipe']});exit=new Promise(r=>child.once('exit',(code)=>{exited=true;r(code);}));child.stdout.on('data',b=>{total+=b.length;if(total>8*1024*1024){child.kill();finish(Error('Compiler result exceeds its size limit.'));}else stdout.push(b);});child.stderr.on('data',b=>{stderr=(stderr+b.toString('utf8')).slice(-8000);});child.once('error',e=>{exited=true;finish(e);});child.once('close',code=>code===0?finish(null,Buffer.concat(stdout).toString('utf8')):finish(Error('Read-only Java compiler inspection failed: '+stderr)));timer=setTimeout(()=>{child.kill();finish(Error('Java compiler inspection timed out.'));},45000);cancel=cancellation?.onCancellationRequested?.(()=>{child.kill();finish(Error('Compiler inspection cancelled.'));});if(cancellation?.isCancellationRequested){child.kill();finish(Error('Compiler inspection cancelled.'));}});
   if(cancellation?.isCancellationRequested)throw Error('Compiler inspection cancelled.');snapshot.validate();const report=JSON.parse(output);if(report.format!=='RocketbrainSignatureCompiler-v20'||report.processorsEnabled!==false||report.classGenerationEnabled!==false)throw Error('Invalid read-only compiler response.');
-  if(qualifiedModules){
+  if(stagedModules){
    const original=uri=>{
     if(!uri)return uri;
     const file=fileURLToPath(uri), key=process.platform==='win32'?file.toLowerCase():file;

@@ -17,13 +17,14 @@ final class PackageRenameInspector {
     private final String other;
     private int bindingCount;
     private final boolean qualifiedModules;
+    private final boolean serviceModules;
     private Set<String> ownedModules = Set.of();
 
     PackageRenameInspector(JavacTask task, String prefix, String other) {
-        this(task,prefix,other,false);
+        this(task,prefix,other,false,false);
     }
 
-    PackageRenameInspector(JavacTask task, String prefix, String other, boolean qualifiedModules) {
+    PackageRenameInspector(JavacTask task, String prefix, String other, boolean qualifiedModules, boolean serviceModules) {
         this.trees = Trees.instance(task);
         this.positions = trees.getSourcePositions();
         this.elements = task.getElements();
@@ -31,13 +32,14 @@ final class PackageRenameInspector {
         this.prefix = prefix;
         this.other = other;
         this.qualifiedModules = qualifiedModules;
+        this.serviceModules = serviceModules;
     }
 
     List<Map<String, Object>> inspect(List<CompilationUnitTree> units) {
         if (qualifiedModules) {
             var names = new LinkedHashSet<String>();
             for (var unit : units) if (unit.getModule()!=null) names.add(unit.getModule().getName().toString());
-            if (names.size()!=2) throw unprovedDirective();
+            if (serviceModules ? names.size()<4 || names.size()>6 : names.size()!=2) throw unprovedDirective();
             ownedModules = Set.copyOf(names);
         }
         Set<String> localPackages = new HashSet<>();
@@ -57,6 +59,7 @@ final class PackageRenameInspector {
         String packageName = unit.getPackageName() == null ? "" : unit.getPackageName().toString();
         var spans = new TreeMap<Integer, Map<String, Object>>();
         var bindings = new ArrayList<List<Object>>();
+        var serviceReads = new ArrayList<Map<String,Object>>();
         String uri = unit.getSourceFile().toUri().toString();
         String text;
         try { text = unit.getSourceFile().getCharContent(true).toString(); }
@@ -151,7 +154,22 @@ final class PackageRenameInspector {
             }
 
             @Override public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
-                binding(node, trees.getElement(getCurrentPath()));
+                Element resolved = trees.getElement(getCurrentPath());
+                binding(node, resolved);
+                if (serviceModules && resolved instanceof ExecutableElement method &&
+                        method.getEnclosingElement() instanceof TypeElement owner &&
+                        owner.getQualifiedName().contentEquals("java.util.ServiceLoader") &&
+                        elements.getModuleOf(owner).getQualifiedName().contentEquals("java.base") &&
+                        method.getSimpleName().contentEquals("load") && node.getArguments().size()==2 &&
+                        types.erasure(method.getParameters().getFirst().asType()).toString().equals("java.lang.ModuleLayer") &&
+                        node.getArguments().get(1) instanceof MemberSelectTree literal &&
+                        literal.getIdentifier().contentEquals("class")) {
+                    var symbol = trees.getElement(TreePath.getPath(unit,literal.getExpression()));
+                    if (symbol instanceof TypeElement service && ownedModules.contains(elements.getModuleOf(service).getQualifiedName().toString())) {
+                        serviceReads.add(object("end",end(node),"service",service.getQualifiedName().toString(),
+                            "owner",elements.getModuleOf(service).getQualifiedName().toString()));
+                    }
+                }
                 return super.visitMethodInvocation(node, unused);
             }
 
@@ -166,10 +184,26 @@ final class PackageRenameInspector {
             }
         }.scan(unit, null);
         boolean opposingNamespace = packageName.equals(other) || packageName.startsWith(other + ".");
+        var module = unit.getModule() == null ? null : moduleProof(unit, localPackages, sourceUris);
+        if (serviceModules && module != null) addServiceDirectiveSpans(module, spans, text);
         var result = object("uri", uri, "name", packageName, "competingNamespace", opposingNamespace,
             "spans", spans.values().stream().toList(), "bindings", bindings);
-        if (unit.getModule() != null) result.put("module", moduleProof(unit, localPackages, sourceUris));
+        if (module != null) result.put("module", module);
+        if (serviceModules) result.put("serviceReads",serviceReads);
         return result;
+    }
+
+    private void addServiceDirectiveSpans(Map<String, Object> module,
+            Map<Integer,Map<String,Object>> spans, String text) {
+        for (var directive : (List<?>) module.get("declarations")) {
+            if (!(directive instanceof Map<?,?> entry) ||
+                    !Set.of("uses","provides","with").contains(entry.get("role")) ||
+                    !inside((String) entry.get("name"))) continue;
+            int start = ((Number) entry.get("start")).intValue();
+            int end = start + prefix.length();
+            if (end > text.length() || !text.regionMatches(start,prefix,0,prefix.length())) throw unprovedDirective();
+            spans.putIfAbsent(start,object("start",start,"end",end,"role","reference"));
+        }
     }
 
     private Map<String, Object> moduleProof(CompilationUnitTree unit, Set<String> localPackages, Set<String> sourceUris) {
@@ -234,12 +268,18 @@ final class PackageRenameInspector {
     private Map<String, Object> typeDirective(CompilationUnitTree unit, ModuleElement module, ExpressionTree source,
             String role, Set<String> sourceUris) {
         String name = source.toString();
-        TypeElement resolved = elements.getTypeElement(module, name);
-        var declaration = resolved == null ? null : trees.getPath(resolved);
-        if (declaration == null || !module.equals(elements.getModuleOf(resolved)) ||
+        Element attributed = serviceModules ? trees.getElement(TreePath.getPath(unit,source)) : elements.getTypeElement(module,name);
+        if (!(attributed instanceof TypeElement resolved)) throw unprovedDirective();
+        var declaration = trees.getPath(resolved);
+        var owner = elements.getModuleOf(resolved);
+        boolean owned = module.equals(owner) || serviceModules && !role.equals("with") &&
+            owner != null && ownedModules.contains(owner.getQualifiedName().toString());
+        if (declaration == null || !owned ||
                 resolved.getNestingKind() != NestingKind.TOP_LEVEL || !resolved.getQualifiedName().contentEquals(name) ||
                 !sourceUris.contains(declaration.getCompilationUnit().getSourceFile().toUri().toString())) throw unprovedDirective();
-        return moduleEntry(unit, source, role);
+        var entry = moduleEntry(unit, source, role);
+        if (serviceModules) entry.put("owner", owner.getQualifiedName().toString());
+        return entry;
     }
 
     private Map<String, Object> moduleEntry(CompilationUnitTree unit, ExpressionTree source, String role) {

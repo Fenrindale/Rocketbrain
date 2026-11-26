@@ -442,7 +442,7 @@ public final class SignatureInspector {
             var report = object("format", "RocketbrainSignatureCompiler-v20", "processorsEnabled", false,
                 "classGenerationEnabled", false, "errors", problems);
             if (problems.isEmpty()) {
-                report.put("packageRename",new PackageRenameInspector(task,args[5],args[6],true).inspect(units));
+                report.put("packageRename",new PackageRenameInspector(task,args[5],args[6],true,args[4].equals("packageRenameServiceModules")).inspect(units));
             }
             System.setOut(new PrintStream(System.out,false,StandardCharsets.UTF_8));
             System.out.print(json(report));
@@ -450,7 +450,7 @@ public final class SignatureInspector {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length==8 && args[4].equals("packageRenameModules")) {
+        if (args.length==8 && Set.of("packageRenameModules","packageRenameServiceModules").contains(args[4])) {
             inspectSourceModules(args);
             return;
         }
