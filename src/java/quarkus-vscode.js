@@ -7,6 +7,7 @@ const { inspectQuarkusProject,quarkusProject,profileKey } = require('./quarkus-m
 const { profileFile } = require('./quarkus-config-mapping');
 const { createQuarkusDev,fastJar } = require('./quarkus-dev');
 const { createQuarkusNative } = require('./quarkus-native');
+const { gradleNativeInputs } = require('./quarkus-native-gradle');
 const { createQuarkusProject } = require('./quarkus-create');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 const { DEBUG_TYPE,processAttachTarget } = require('./debug');
@@ -113,9 +114,9 @@ function registerQuarkusWorkbench(vscode,java) {
 
   const buildNative=(options={})=>exclusive(options,(project,current)=>{
     const config=vscode.workspace.getConfiguration('rocketbrain.java');
-    return native.build({project,graalvmHome:config.get('quarkusGraalvmHome'),mavenHome:config.get('mavenHome'),
-      cancellation:options.cancellation,current(){current();saved(project);}});
-  },'Explicitly approve the Quarkus native build before executing the Maven module.');
+    return native.build({project,graalvmHome:config.get('quarkusGraalvmHome'),mavenHome:config.get('mavenHome'),gradleHome:config.get('gradleHome'),
+      reviewedSourceDigest:options.reviewedSourceDigest,cancellation:options.cancellation,current(){current();saved(project);}});
+  },'Explicitly approve the Quarkus native build before executing the selected module.');
   const runNative=(options={})=>exclusive(options,(project,current)=>native.start({project,buildId:options.buildId,
     cancellation:options.cancellation,current(){current();saved(project);}}),
   'Explicitly approve running the selected Quarkus native image.');
@@ -326,8 +327,21 @@ function registerQuarkusWorkbench(vscode,java) {
   register(COMMANDS.buildNative,async()=>{
     const projectUri=await choose();
     if(!projectUri)return;
+    const project=await projectFor(projectUri);
+    let reviewedSourceDigest;
+    if(project.tool==='gradle'){
+      saved(project);
+      reviewedSourceDigest=gradleNativeInputs(project);
+      const action='Build Native Image';
+      const approval=await vscode.window.showWarningMessage('Build the selected Quarkus Gradle Native Image?',{
+        modal:true,detail:project.name+' · :quarkusBuild · saved input SHA-256 '+reviewedSourceDigest+
+          '\nGradle runs locally with the configured GraalVM and a private build directory.'
+      },action);
+      if(approval!==action)return;
+    }
     output.show(true);
-    const result=await progress('Build Quarkus Native Image',cancellation=>buildNative({projectUri,allowProjectExecution:true,cancellation}));
+    const result=await progress('Build Quarkus Native Image',cancellation=>buildNative({projectUri,allowProjectExecution:true,
+      reviewedSourceDigest,cancellation}));
     void vscode.window.showInformationMessage('Quarkus native image built at '+result.artifact);
     return result;
   });
