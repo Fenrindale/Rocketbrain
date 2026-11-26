@@ -13,9 +13,10 @@ const { debugSupervisorInvocation } = require('../../src/remote/ssh-java-debug-r
 const { compileProgram } = require('../../src/remote/ssh-java-compile-runtime');
 const { mavenProgram } = require('../../src/remote/ssh-maven-runtime');
 const { gradleProgram } = require('../../src/remote/ssh-gradle-runtime');
+const { batchProgram } = require('../../src/remote/ssh-batch-runtime');
 const { fixtureStep } = require('../devcontainer-port-fixture');
 
-async function startSshProcessFixture({ python, pythonPackage, ownWorkerTemp = false }, registerCleanup) {
+async function startSshProcessFixture({ python, pythonPackage, ownWorkerTemp = false, batchFaults = false }, registerCleanup) {
   const boundary = await fs.realpath(os.tmpdir());
   const owned = await fs.mkdtemp(path.join(boundary, 'rb-ssh-exec-'));
   const root = path.join(owned, 'workspace');
@@ -31,10 +32,12 @@ async function startSshProcessFixture({ python, pythonPackage, ownWorkerTemp = f
       { timeout: 12000, stdio: 'ignore', windowsHide: true });
   }
   const input = path.join(owned, 'input.json'), host = path.join(owned, 'host');
+  const batchFaultFile = path.join(owned, 'next-batch-fault');
   const workerTemp = ownWorkerTemp ? path.join(owned, 'temporary') : undefined;
   if (workerTemp) await fs.mkdir(workerTemp);
   await fs.writeFile(input, JSON.stringify({ host, client: path.join(owned, 'client.pub'), programs: [source, terminalProgram,
-    javaSupervisorInvocation({}, undefined, 'ssh').program, debugSupervisorInvocation({}).program, compileProgram, mavenProgram, gradleProgram] }));
+    javaSupervisorInvocation({}, undefined, 'ssh').program, debugSupervisorInvocation({}).program, compileProgram, mavenProgram, gradleProgram, batchProgram],
+  ...(batchFaults && { batchProgram, batchFaultFile }) }));
   const worker = spawn(python, [path.join(__dirname, '..', 'fixtures', 'ssh-process-server.txt'), input],
     { cwd: owned, env: { ...process.env, PYTHONPATH: pythonPackage,
       ...(workerTemp && { TMPDIR: workerTemp, TEMP: workerTemp, TMP: workerTemp }) },
@@ -71,7 +74,11 @@ async function startSshProcessFixture({ python, pythonPackage, ownWorkerTemp = f
   }
   const profile = { id: 'rb-ssh-process', host: '127.0.0.1', port: information.port, user: 'rb_process',
     root, python: 'python', privateKeyPath: path.join(owned, 'client'), knownHostsPath };
-  return { profile, wrongPin, example, sourceText, asyncssh: information.asyncssh, workerTemp };
+  return { profile, wrongPin, example, sourceText, asyncssh: information.asyncssh, workerTemp,
+    armBatchFault: batchFaults ? async value => {
+      assert.ok(['reject-second', 'drop-reply'].includes(value));
+      await fs.writeFile(batchFaultFile, value, { flag: 'wx' });
+    } : undefined };
 }
 
 module.exports = { startSshProcessFixture };

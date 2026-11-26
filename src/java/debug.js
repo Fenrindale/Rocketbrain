@@ -1,7 +1,7 @@
 'use strict';
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { independentJavaExecutable, argumentString, KOTLIN_LINE_BUILD } = require('./debug-runtime');
+const { independentJavaExecutable, argumentString, KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILD } = require('./debug-runtime');
 const { applyManagedSpringLaunch } = require('./spring-launch');
 const { JavaDebugAdapter } = require('./debug-adapter');
 const { createJavaBreakpointTools } = require('./debug-breakpoints');
@@ -64,7 +64,7 @@ function registerJavaDebugger(vscode, api, output, request) {
   const ensureTrusted = () => { if (disposed) throw new Error('Java debugger is disposed.'); if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before running or attaching Java code.'); };
   function registerKotlinSourceLines(token, target, evidence) {
     ensureTrusted();
-    if (api.getState().debugBuild!==KOTLIN_LINE_BUILD || pendingKotlinLines.has(token) || pendingKotlinLines.size>=8) {
+    if (!KOTLIN_LINE_BUILDS.includes(api.getState().debugBuild) || pendingKotlinLines.has(token) || pendingKotlinLines.size>=8) {
       throw Error('A current managed Kotlin source-line debugger is required.');
     }
     const record={target,evidence};
@@ -188,14 +188,15 @@ function registerJavaDebugger(vscode, api, output, request) {
     info.debugBuild = api.getState().debugBuild;
     const marker=session.configuration[KMP_DEBUG_MARKER];
     const owned=pendingKotlinLines.get(marker);
-    const evidence=owned && info.debugBuild===KOTLIN_LINE_BUILD && info.verifiedPid===owned.target.pid &&
+    const evidence=owned && KOTLIN_LINE_BUILDS.includes(info.debugBuild) && info.verifiedPid===owned.target.pid &&
       session.configuration.hostName===owned.target.hostName && session.configuration.port===owned.target.port ? owned.evidence : undefined;
     if (evidence) pendingKotlinLines.delete(marker);
     const adapter = new JavaDebugAdapter(vscode, port, message => observe(session, message), output, message => {
       if (message.type !== 'request') return;
       if (resumeCommands.has(message.command)) { info.stopVersion++; info.resuming = message.seq; }
       if (message.command === 'redefineClasses') info.stopVersion++;
-    },evidence);
+    },evidence,info.debugBuild===KOTLIN_FIELD_VALUES_BUILD && Number.isInteger(info.verifiedPid) &&
+      session.configuration.hostName==='127.0.0.1' ? session.configuration.port : undefined);
     return new vscode.DebugAdapterInlineImplementation(adapter);
   } };
   async function attachProcess(selection, { folder, projectName, sourcePaths, name } = {}) {

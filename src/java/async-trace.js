@@ -12,9 +12,9 @@ const shortText = (value, max) => typeof value === 'string' && value.length <= m
 
 function parseError() { return Error('The Java async trace contains an invalid record.'); }
 
-function thread(value) {
-  if (!validId(value?.id) || !shortText(value.name, 120)) throw parseError();
-  return { id: value.id, name: value.name };
+function thread(value, typed) {
+  if (!validId(value?.id) || !shortText(value.name, 120) || typed && typeof value.virtual !== 'boolean') throw parseError();
+  return typed ? { id: value.id, name: value.name, virtual: value.virtual } : { id: value.id, name: value.name };
 }
 
 function sourceFrames(frames) {
@@ -48,8 +48,15 @@ function parseAsyncTrace(text) {
     if (item.kind === 'submitted') {
       if (item.id !== tasks.size + 1 || !Number.isSafeInteger(item.parent) || item.parent < 0 ||
           item.parent && !tasks.has(item.parent) || !shortText(item.label, 160)) throw parseError();
+      const typed = item.handoff !== undefined;
+      if (typed && !['executor', 'virtual-thread'].includes(item.handoff)) throw parseError();
+      const submittedBy = thread(item.thread, typed);
+      const parent = tasks.get(item.parent);
+      if (typed && parent && (parent.state !== 'entered' ||
+          parent.worker.id !== submittedBy.id || parent.worker.virtual !== submittedBy.virtual)) throw parseError();
       tasks.set(item.id, {
-        id: item.id, parentId: item.parent, label: item.label, submittedBy: thread(item.thread),
+        id: item.id, parentId: item.parent, label: item.label, submittedBy,
+        ...(typed ? { handoff: item.handoff } : {}),
         submissionFrames: sourceFrames(item.frames), state: 'submitted'
       });
       continue;
@@ -57,8 +64,10 @@ function parseAsyncTrace(text) {
     const task = tasks.get(item.id);
     if (!task) throw parseError();
     if (item.kind === 'entered' && task.state === 'submitted') {
+      const worker = thread(item.thread, task.handoff !== undefined);
+      if (task.handoff === 'virtual-thread' && (!worker.virtual || worker.id === task.submittedBy.id)) throw parseError();
       task.state = 'entered';
-      task.worker = thread(item.thread);
+      task.worker = worker;
     } else if (item.kind === 'rejected' && task.state === 'submitted' ||
         ['completed', 'failed'].includes(item.kind) && task.state === 'entered') {
       task.state = item.kind;
@@ -108,7 +117,15 @@ function traceValue(variables) {
   const task = variables.find(v => v.name === 'rocketbrainTaskId')?.value;
   const value = typeof traceId === 'string' && traceId.startsWith('"') && traceId.endsWith('"') ? traceId.slice(1, -1) : traceId;
   if (typeof value === 'string' && traceIdPattern.test(value) && typeof task === 'string' && /^[1-9][0-9]{0,3}$/.test(task)) {
-    return { traceId: value, taskId: Number(task) };
+    const workerId = variables.find(v => v.name === 'rocketbrainWorkerThreadId');
+    const workerVirtual = variables.find(v => v.name === 'rocketbrainWorkerVirtual');
+    if (!workerId && !workerVirtual) return { traceId: value, taskId: Number(task) };
+    const id = workerId?.value;
+    const virtual = workerVirtual?.value;
+    if (typeof id === 'string' && /^[1-9][0-9]{0,15}$/.test(id) && validId(Number(id)) &&
+        ['true', 'false'].includes(virtual)) {
+      return { traceId: value, taskId: Number(task), worker: { id: Number(id), virtual: virtual === 'true' } };
+    }
   }
 }
 
@@ -138,6 +155,7 @@ function createAsyncInspection({ activeSession, getState, ensureTrusted, readTra
     const wrapper = stackFrames?.find(frame => validId(frame.id) && wrapperFrame.test(frame.name));
     if (!wrapper) throw Error('No recorded Java task is active in the paused stack.');
     const { scopes } = await session.customRequest('scopes', { frameId: wrapper.id });
+    selected();
     const locals = scopes?.find(scope => /^locals?$/i.test(scope.name) && validId(scope.variablesReference));
     if (!locals) throw Error('Compile the Java trace helper with local debug variables enabled.');
     const { variables } = await session.customRequest('variables', { variablesReference: locals.variablesReference });
@@ -148,6 +166,11 @@ function createAsyncInspection({ activeSession, getState, ensureTrusted, readTra
     const chain = chainFor(trace, identity.taskId);
     const task = chain.at(-1);
     if (task?.state !== 'entered') throw Error('The trace does not contain an active execution record for the paused Java task.');
+    if (identity.worker || task.handoff) {
+      if (!identity.worker || identity.worker.id !== task.worker.id || identity.worker.virtual !== task.worker.virtual) {
+        throw Error('The trace worker identity differs from the paused Java thread.');
+      }
+    }
     return { traceId: trace.traceId, pid: trace.pid, taskId: identity.taskId, chain, truncated: trace.truncated };
   }
 

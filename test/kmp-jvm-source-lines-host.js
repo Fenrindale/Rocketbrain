@@ -11,7 +11,7 @@ const { resolveLaunch,serverSettings } = require('../src/java/runtime');
 const { loadKmpModel } = require('../src/java/kmp-gradle');
 const { startKmpJvmDebug } = require('../src/java/kmp-jvm-debug');
 const { createDebugProcessDiscovery } = require('../src/java/debug-processes');
-const { KOTLIN_LINE_BUILD } = require('../src/java/debug-runtime');
+const { KOTLIN_LINE_BUILDS } = require('../src/java/debug-runtime');
 const { StdioLsp,until } = require('./helpers/stdio-lsp');
 const { DapClient } = require('./java-debug-dap');
 const { ownedFixture,frameLocal,readCompletion,toolsFor } = require('./kmp-jvm-debug-host');
@@ -34,7 +34,7 @@ async function runKmpJvmSourceLinesHeadless() {
       await fs.cp(path.join(__dirname,'fixtures/java/maven'),javaRoot,{recursive:true});
       const rootUri=pathToFileURL(javaRoot).href, settings=serverSettings([{name:'JavaSE-25',path:config.javaHome,default:true}]);
       const launch=resolveLaunch({...config,storagePath:path.join(fixture.root,'jdt')});
-      assert.equal(launch.debugBuild,KOTLIN_LINE_BUILD);
+      assert.ok(KOTLIN_LINE_BUILDS.includes(launch.debugBuild));
       engine=new StdioLsp(launch);
       await engine.request('initialize',{processId:process.pid,rootUri,workspaceFolders:[{uri:rootUri,name:'kotlin-lines'}],
         capabilities:{workspace:{configuration:true}},initializationOptions:{bundles:launch.bundles,workspaceFolders:[rootUri],settings}},90000);
@@ -103,7 +103,7 @@ async function runKmpJvmSourceLinesHeadless() {
 async function runKmpJvmSourceLinesChecks(api,vscode,checks) {
   const project=vscode.workspace.workspaceFolders[0].uri.fsPath, service=api.java.kotlinMultiplatform;
   await api.java.start();
-  assert.equal(api.java.getState().debugBuild,KOTLIN_LINE_BUILD);
+  assert.ok(KOTLIN_LINE_BUILDS.includes(api.java.getState().debugBuild));
   const config=vscode.workspace.getConfiguration('rocketbrain.kotlin'), scope=vscode.ConfigurationTarget.Global, previous=[];
   try {
     for (const [name,value] of Object.entries({

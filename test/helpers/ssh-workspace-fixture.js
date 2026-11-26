@@ -40,6 +40,7 @@ async function startSshWorkspace(python, parent = os.tmpdir()) {
     const clientKey = utils.parseKey(await fs.readFile(path.join(folder, 'client.pub')));
     assert.ok(!(clientKey instanceof Error));
     let executions = 0;
+    let observations = 0;
     server = new Server({ hostKeys: [await fs.readFile(path.join(folder,'host'))] }, client => {
       clients.add(client);
       client.on('error', () => {});
@@ -60,11 +61,20 @@ async function startSshWorkspace(python, parent = os.tmpdir()) {
           const worker = spawn(python, ['-I','-u','-c',source], { shell: false, windowsHide: true, stdio: ['pipe','pipe','pipe'] });
           workers.add(worker);
           worker.stdin.on('error', () => {});
+          let header = '';
+          stream.on('data', data => {
+            if (!header.includes('\n') && header.length < 4096) header += data.toString('utf8').slice(0, 4096 - header.length);
+          });
           stream.once('close', () => { if (workers.has(worker)) worker.kill(); });
           stream.pipe(worker.stdin);
           worker.stdout.pipe(stream, { end: false });
           worker.stderr.pipe(stream.stderr, { end: false });
-          worker.once('close', code => { workers.delete(worker); stream.exit(code ?? 1); stream.end(); });
+          worker.once('close', code => {
+            if (code === 0 && header.includes('\n')) {
+              try { if (JSON.parse(header).operation === 'observe') observations++; } catch { /* A large frame was truncated. */ }
+            }
+            workers.delete(worker); stream.exit(code ?? 1); stream.end();
+          });
         });
       }));
     });
@@ -77,7 +87,7 @@ async function startSshWorkspace(python, parent = os.tmpdir()) {
       (await fs.readFile(path.join(folder,key + '.pub'),'utf8')).trim().split(/\s+/).slice(0, 2).join(' ') + '\n';
     await fs.writeFile(knownHostsPath, await record('host'));
     await fs.writeFile(wrongHosts, await record('wrong'));
-    return { close, folder, file, original, wrongHosts, executions: () => executions,
+    return { close, folder, file, original, wrongHosts, executions: () => executions, observations: () => observations,
       profile: { id: 'rb-ssh', host: '127.0.0.1', port, user: 'rb_workspace', root: serverRoot,
         python: 'python', privateKeyPath: path.join(folder,'client'), knownHostsPath } };
   } catch (error) { await close(); throw error; }

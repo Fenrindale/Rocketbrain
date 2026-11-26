@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.140.0",
+  "version": "0.142.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -108,6 +108,8 @@
       { "command": "rocketbrain.sshWorkspace.close", "title": "Close SSH Workspace", "category": "Rocketbrain" },
       { "command": "rocketbrain.sshWorkspace.refresh", "title": "Refresh SSH Files", "category": "Rocketbrain", "icon": "$(refresh)" },
       { "command": "rocketbrain.sshWorkspace.upload", "title": "Review Local File Upload to SSH", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.uploadBatch", "title": "Review SSH Batch Replacements", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.checkBatch", "title": "Check SSH Batch Replacement Results", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.terminal", "title": "Open Reviewed SSH Workspace Terminal", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaStart", "title": "Start Reviewed SSH Java Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaStop", "title": "Stop SSH Java Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -214,8 +216,13 @@
       { "command": "rocketbrain.jakarta.debug", "title": "Debug Jakarta WAR on Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.status", "title": "Show Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.stop", "title": "Stop Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.wildfly.deploy", "title": "Review and Deploy Jakarta WAR on WildFly", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.wildfly.deployEar", "title": "Review and Deploy Jakarta EAR on WildFly", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.wildfly.status", "title": "Show WildFly Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.wildfly.stop", "title": "Stop WildFly Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.inspect", "title": "Inspect Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.run", "title": "Build and Run Micronaut", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.micronaut.debug", "title": "Debug Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.test", "title": "Run Micronaut Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.build", "title": "Build Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.stop", "title": "Stop Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -832,6 +839,18 @@
       {
         "command": "rocketbrain.jpa.observer.openObservedMemberSource",
         "title": "Open Observed Spring Injection Source",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.inspectObservedProviderInjection",
+        "title": "Inspect Observed Spring Provider Dereference",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.openObservedProviderSource",
+        "title": "Open Observed Spring Provider Source",
         "category": "Rocketbrain",
         "enablement": "isWorkspaceTrusted"
       },
@@ -1601,6 +1620,8 @@
         { "command": "rocketbrain.db.refreshIncrementalMetadata", "when": "view == rocketbrain.databases && rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "navigation@2" },
         { "command": "rocketbrain.sshWorkspace.attach", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.sshWorkspace.refresh", "when": "view == rocketbrain.sshWorkspace", "group": "navigation@2" },
+        { "command": "rocketbrain.sshWorkspace.uploadBatch", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "setup@2" },
+        { "command": "rocketbrain.sshWorkspace.checkBatch", "when": "view == rocketbrain.sshWorkspace && isWorkspaceTrusted", "group": "setup@3" },
         { "command": "rocketbrain.sshWorkspace.close", "when": "view == rocketbrain.sshWorkspace", "group": "setup@1" },
         { "command": "rocketbrain.coroutines.connect", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "navigation" },
         { "command": "rocketbrain.coroutines.refresh", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "navigation" },
@@ -2975,6 +2996,12 @@
           "default": "",
           "scope": "machine",
           "description": "Absolute directory of an independently installed Apache Tomcat 11 distribution for local Jakarta WAR deployments."
+        },
+        "rocketbrain.java.jakarta.wildflyHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute directory of the extracted stock WildFly 42.0.0.Final distribution for reviewed localhost WAR deployments with JDK 25."
         },
         "rocketbrain.scala.sbtLauncher": {
           "type": "string",

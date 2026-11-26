@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { independentJavaExecutable } = require('./debug-runtime');
+const { waitForOwnedListener } = require('./testing-debug');
 const { micronautMavenProject,micronautProject,PART } = require('./micronaut-model');
 const { distribution,physical,matches }=require('./micronaut-distribution');
 const { cancelled,fail,hash } = require('./workbench-model');
@@ -95,7 +96,7 @@ async function removeOwned(session) {
   session.staging=undefined;
 }
 
-function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
+function createMicronautRuntime({log=()=>{},startupMs=90000,checkListener=waitForOwnedListener} = {}) {
   let active, disposed=false;
 
   function release(session) {
@@ -111,6 +112,7 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
         }
       }
       if (session.port && await reachable(session.port)) throw fail('The owned Micronaut HTTP listener did not close.');
+      if (session.debugPort && await reachable(session.debugPort)) throw fail('The owned Micronaut JDWP listener did not close.');
       await removeOwned(session);
       if (active===session) active=undefined;
       return {state:'stopped'};
@@ -118,7 +120,7 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
     return session.release;
   }
 
-  async function processFor(session,{project,javaHome,environment,cancellation,buildFingerprint}) {
+  async function processFor(session,{project,javaHome,environment,cancellation,buildFingerprint,debug}) {
     const java=independentJavaExecutable(javaHome && path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
     const reviewed=micronautProject(project);
     if(buildFingerprint!==undefined&&reviewed.buildFingerprint!==buildFingerprint)throw fail('The Micronaut Gradle build changed. Build again.');
@@ -131,8 +133,11 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
       throw fail('The Micronaut Gradle build changed during staging. Build again.');
     if (cancelledNow()) throw fail('Micronaut startup was cancelled.');
     const env={...process.env};
-    for (const name of ['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','MICRONAUT_ENVIRONMENTS']) delete env[name];
-    const args=['-Dfile.encoding=UTF-8','-Dmicronaut.server.host=127.0.0.1','-Dmicronaut.server.port=-1',
+    for (const name of Object.keys(env)) {
+      if (/^(?:JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS|MICRONAUT_ENVIRONMENTS)$/i.test(name)) delete env[name];
+    }
+    const args=[...(debug?['-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:0']:[]),
+      '-Dfile.encoding=UTF-8','-Dmicronaut.server.host=127.0.0.1','-Dmicronaut.server.port=-1',
       '-Dmicronaut.env.deduction=false','-Dmicronaut.environments='+environment,...launch];
     const child=spawn(java,args,{cwd:project.root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
     session.child=child;
@@ -143,8 +148,15 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
       stream.setEncoding('utf8').on('data',chunk => {
         log(chunk);
         tail=(tail+chunk).slice(-8192);
-        const found=/Startup completed[^\n]*Server Running:\s+http:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})(?:[\/\s\x1B]|$)/i.exec(tail);
-        if (found && Number(found[1])>0 && Number(found[1])<=65535) session.port=Number(found[1]);
+        const complete=tail.slice(0,tail.lastIndexOf('\n')+1);
+        const found=/Startup completed[^\n]*Server Running:\s+http:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})(?:[\/\s\x1B]|$)/i.exec(complete);
+        if (found && !session.result && Number(found[1])>0 && Number(found[1])<=65535) session.port=Number(found[1]);
+        if (debug && !session.result) {
+          for (const match of complete.matchAll(/^Listening for transport dt_socket at address: (\d{1,5})[ \t]*\r?$/gm)) {
+            const port=Number(match[1]);
+            if (port>0 && port<=65535) session.debugPorts.add(port);
+          }
+        }
       });
     };
     listen(child.stdout);
@@ -153,27 +165,65 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
     return artifact;
   }
 
+  async function verifyListener(session,port,cancellation) {
+    const pid=session.child?.pid;
+    if (disposed || active!==session || session.exited || session.stopping || cancelled(cancellation) ||
+        !Number.isInteger(pid) || !Number.isInteger(port)) throw fail('The owned Micronaut process or listener changed.');
+    const proof=await checkListener({pid,port,cancellation,timeoutMs:6000});
+    if (proof?.verified!==true || proof.address!=='127.0.0.1' || proof.pid!==pid || proof.port!==port ||
+        active!==session || session.exited || session.stopping || disposed || cancelled(cancellation)) {
+      throw fail('The selected Micronaut listener did not remain on the owned JVM.');
+    }
+    return proof;
+  }
+
+  async function verifyDebugTarget({runId,cancellation}={}) {
+    const session=active;
+    if (!session?.result?.debug || session.id!==runId) throw fail('Choose the current owned Micronaut debugger.');
+    return verifyListener(session,session.debugPort,cancellation);
+  }
+
   async function start(options = {}) {
-    const {project,allowProjectExecution,workspaceTrusted,environment='dev',cancellation}=options;
+    const {project,allowProjectExecution,workspaceTrusted,environment='dev',cancellation,debug=false}=options;
     if (disposed || workspaceTrusted!==true || allowProjectExecution!==true) {
       throw fail('Explicitly start the Micronaut application from a trusted workspace.');
     }
     if (typeof environment!=='string' || !PART.test(environment)) throw fail('Use a literal Micronaut environment name.');
     if (active) throw fail('Stop the current owned Micronaut application first.');
     if (cancelled(cancellation)) throw fail('Micronaut startup was cancelled.');
-    const session={id:crypto.randomUUID(),stopping:false,exited:false};
+    const session={id:crypto.randomUUID(),stopping:false,exited:false,debugPorts:new Set()};
     active=session;
-    session.prepare=processFor(session,{...options,environment});
-    const subscription=cancellation?.onCancellationRequested?.(() => {void release(session).catch(()=>{});});
+    session.prepare=processFor(session,{...options,environment,debug});
+    const stop=()=>{void release(session).catch(()=>{});};
+    const subscription=cancellation?.onCancellationRequested?.(stop);
+    cancellation?.addEventListener?.('abort',stop,{once:true});
     try {
       const artifact=await session.prepare;
       const deadline=Date.now()+startupMs;
       while (Date.now()<deadline) {
         if (session.stopping || disposed || cancelled(cancellation)) throw fail('Micronaut startup was cancelled.');
         if (session.error || session.exited) throw fail('The Micronaut application exited before readiness. Check its output and built distribution.');
-        if (session.port && await reachable(session.port) && !session.exited && !session.stopping && !cancelled(cancellation)) {
+        if (debug && session.debugPorts.size>1) throw fail('Micronaut reported competing debugger listeners.');
+        if (session.port && (!debug || session.debugPorts.size===1)) {
+          let debugProof;
+          if (debug) {
+            const [port]=session.debugPorts;
+            const httpPort=session.port;
+            if (port===httpPort) throw fail('Micronaut HTTP and JDWP must have distinct listeners.');
+            session.debugPort=port;
+            const [listener]=await Promise.all([verifyListener(session,port,cancellation),
+              verifyListener(session,httpPort,cancellation)]);
+            if (session.debugPorts.size!==1 || session.port!==httpPort) throw fail('The Micronaut listeners changed during verification.');
+            debugProof=Object.freeze({pid:listener.pid,port,address:listener.address,verified:true,httpOwnershipVerified:true});
+          } else if (!await reachable(session.port)) {
+            await delay(160);
+            continue;
+          }
+          if (session.exited || session.stopping || disposed || cancelled(cancellation)) {
+            throw fail('The Micronaut process changed before startup completed.');
+          }
           session.result={state:'running',runId:session.id,baseUrl:'http://127.0.0.1:'+session.port,environment,
-            projectUri:project.uri,...artifact};
+            projectUri:project.uri,...artifact,...(debugProof&&{debug:debugProof})};
           return {...session.result};
         }
         await delay(160);
@@ -182,7 +232,7 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
     } catch (error) {
       await release(session);
       throw error;
-    } finally {subscription?.dispose();}
+    } finally {subscription?.dispose();cancellation?.removeEventListener?.('abort',stop);}
   }
 
   function stop() {return active ? release(active) : Promise.resolve({state:'stopped'});}
@@ -190,7 +240,7 @@ function createMicronautRuntime({log=()=>{},startupMs=90000} = {}) {
     if (!active) return {state:'stopped'};
     return active.result && !active.stopping ? {...active.result} : {state:active.stopping ? 'stopping' : 'starting',runId:active.id};
   }
-  return {start,stop,getState,async dispose(){disposed=true;await stop();}};
+  return {start,stop,getState,verifyDebugTarget,async dispose(){disposed=true;await stop();}};
 }
 
 module.exports = { createMicronautRuntime,packagedJar };

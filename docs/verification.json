@@ -1,28 +1,28 @@
 {
-  "version": "0.140.0",
-  "verifiedAt": "2026-11-26T12:26:48.832Z",
+  "version": "0.142.0",
+  "verifiedAt": "2026-11-26T13:42:23.627Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.140.0.vsix",
-    "sha256": "bb9753b3040fc7cbd865279be334aefb00fde186843ad87c7e81ea968d354d12",
-    "bytes": 4482430,
-    "files": 31
+    "name": "rocketbrain-0.142.0.vsix",
+    "sha256": "6938f971ba6e6139a2f00926f66336589fbcd788330696e09dd52602d05c7885",
+    "bytes": 4521304,
+    "files": 32
   },
   "source": {
-    "frozenPublicInputs": 2899,
-    "inputVectorSha256": "8a70eb9cdd8aa186dd50f6a8c4742c1654dd32c21303e1d2ba6fd63cebb707ea",
+    "frozenPublicInputs": 2942,
+    "inputVectorSha256": "56f9ca95f4fb6c4c48cc909154179d100a930d5b21ef8681afb811eb581cd13c",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45818075464",
-    "tests": 2120,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45828455896",
+    "tests": 2138,
     "suites": 0,
-    "pass": 1899,
+    "pass": 1914,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 221,
+    "skipped": 224,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,39 +32,52 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 8,
+      "groupCount": 9,
       "groups": [
         {
-          "group": "springAutowireHierarchy",
-          "checks": 1
+          "group": "kotlinFieldValues",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
         },
         {
-          "group": "javaSignatureArity",
-          "checks": 1
+          "group": "javaVirtualAsyncTrace",
+          "checks": 1,
+          "origin": "before-gradle-repair-rechecked-harness"
         },
         {
-          "group": "spockSpecification",
-          "checks": 1
+          "group": "micronautMavenDebug",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
         },
         {
-          "group": "reactProps",
-          "checks": 1
+          "group": "micronautGradleDebug",
+          "checks": 1,
+          "origin": "before-gradle-repair-rechecked-harness"
         },
         {
-          "group": "angularTemplateTools",
-          "checks": 1
+          "group": "wildflyWar",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
         },
         {
-          "group": "sshMaven",
-          "checks": 1
+          "group": "observedGradleComposite",
+          "checks": 1,
+          "origin": "final-frozen"
         },
         {
-          "group": "sshGradle",
-          "checks": 1
+          "group": "springProviderInjection",
+          "checks": 1,
+          "origin": "before-gradle-repair-rechecked-harness"
         },
         {
-          "group": "javafxHierarchy",
-          "checks": 1
+          "group": "sshWatch",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
+        },
+        {
+          "group": "sshBatch",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
         }
       ],
       "observations": {
@@ -78,39 +91,52 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 8,
+      "groupCount": 9,
       "groups": [
         {
-          "group": "springAutowireHierarchy",
-          "checks": 1
+          "group": "kotlinFieldValues",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
         },
         {
-          "group": "javaSignatureArity",
-          "checks": 1
+          "group": "javaVirtualAsyncTrace",
+          "checks": 1,
+          "origin": "before-gradle-repair-rechecked-harness"
         },
         {
-          "group": "spockSpecification",
-          "checks": 1
+          "group": "micronautMavenDebug",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
         },
         {
-          "group": "reactProps",
-          "checks": 1
+          "group": "micronautGradleDebug",
+          "checks": 1,
+          "origin": "before-gradle-repair-rechecked-harness"
         },
         {
-          "group": "angularTemplateTools",
-          "checks": 1
+          "group": "wildflyWar",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
         },
         {
-          "group": "sshMaven",
-          "checks": 1
+          "group": "observedGradleComposite",
+          "checks": 1,
+          "origin": "final-frozen"
         },
         {
-          "group": "sshGradle",
-          "checks": 1
+          "group": "springProviderInjection",
+          "checks": 1,
+          "origin": "before-gradle-repair-rechecked-harness"
         },
         {
-          "group": "javafxHierarchy",
-          "checks": 1
+          "group": "sshWatch",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
+        },
+        {
+          "group": "sshBatch",
+          "checks": 1,
+          "origin": "before-gradle-repair-original-harness"
         }
       ],
       "observations": {
@@ -119,102 +145,181 @@
       }
     }
   ],
+  "nativeCandidateStages": {
+    "earlierArchiveSha256": "7e298ee8c7b82308d63bc09237ea92fa770315c3c879f2b16f1e025926e4ec10",
+    "earlierSourceManifestSha256": "30bbb5f802cd37672138eca4db1a053139f0ddae08a41808d616f5ce4a03ae17",
+    "recheckArchiveSha256": "f7712037cd92f17e44efb38ddc839fe0cb16e2314d4489099cd38f7460ad54df",
+    "recheckSourceManifestSha256": "584c94dbd5ac26cdd1a37e775faa7750596cc141e5e4367c2d8cd0a87da825b6",
+    "harnessChanges": [
+      "test/java-async-trace-host.js"
+    ],
+    "productAndRegressionChanges": [
+      "src/java/gradle-source-model.js",
+      "test/java-source-target.test.js"
+    ],
+    "changedPayloads": [
+      "extension/dist/extension.js"
+    ],
+    "requiredFinalCandidateGroups": [
+      "observedGradleComposite"
+    ]
+  },
+  "vendorRuntime": {
+    "wildflyEar": [
+      {
+        "engine": "mysql",
+        "mode": "source-workbench-stock-vendor-runtime",
+        "reportSha256": "441b91bf30b5f99e4afb543ba17d447623e645a030caf15a63149b715f0f43e0",
+        "sourceCommit": "3e1840ae07a02e765edcd22044f4f4de60ad734e",
+        "databaseVersion": "8.4.13",
+        "jdbc": {
+          "departments": 1,
+          "rolledBackNames": 0,
+          "people": 2
+        },
+        "version": "42.0.0.Final",
+        "descriptorContext": true,
+        "explicitModulePair": true,
+        "commonContractLib": true,
+        "actualCrossModuleEjb": true,
+        "actualSpringJdbcTemplate": true,
+        "webAndEjbDistinctFromContractClassLoader": true,
+        "originalEarNameAndDigest": true,
+        "oneShotReviewedStagedArchive": true,
+        "contextOverrideRejected": true,
+        "reviewSnapshotIndependent": true,
+        "ownedCleanup": true,
+        "selectedStockUnmodified": true,
+        "fixtureCredentialAbsentFromReceipt": true,
+        "modules": [
+          "inventory-web.war",
+          "inventory-beans.jar"
+        ],
+        "libraries": 10,
+        "nativeView": false
+      },
+      {
+        "engine": "mariadb",
+        "mode": "source-workbench-stock-vendor-runtime",
+        "reportSha256": "6b47c233509adaa208c38db56d3a54ca09f5b3e698b4cd48e6609fc57bf3445a",
+        "sourceCommit": "3e1840ae07a02e765edcd22044f4f4de60ad734e",
+        "databaseVersion": "11.4.8-MariaDB",
+        "jdbc": {
+          "people": 2,
+          "rolledBackNames": 0,
+          "departments": 1
+        },
+        "version": "42.0.0.Final",
+        "descriptorContext": true,
+        "explicitModulePair": true,
+        "commonContractLib": true,
+        "actualCrossModuleEjb": true,
+        "actualSpringJdbcTemplate": true,
+        "webAndEjbDistinctFromContractClassLoader": true,
+        "originalEarNameAndDigest": true,
+        "oneShotReviewedStagedArchive": true,
+        "contextOverrideRejected": true,
+        "reviewSnapshotIndependent": true,
+        "ownedCleanup": true,
+        "selectedStockUnmodified": true,
+        "fixtureCredentialAbsentFromReceipt": true,
+        "modules": [
+          "inventory-web.war",
+          "inventory-beans.jar"
+        ],
+        "libraries": 10,
+        "nativeView": false
+      }
+    ]
+  },
   "newlyVerified": {
-    "IDEA-029": {
-      "scope": "실제 JDT와 Javac으로 참조 배열·원시 배열 호출 11곳을 확인했다. 설치형 편집기에서 적용·Undo·Redo를 했고, 인수의 평가 순서와 명시적 배열 동일성 및 실제 JDBC 결과를 두 DB에서 보존했다.",
-      "runtimeGroups": [
-        "javaSignatureArity"
-      ]
-    },
-    "IDEA-047": {
-      "scope": "실제 Gradle·Groovy·Spock에서 옆 명세는 실행되지 않았고, 선택한 명세의 성공·실패·건너뜀과 Spring JDBC 검증 실패의 정확한 소스 줄을 두 DB에서 확인했다.",
-      "runtimeGroups": [
-        "spockSpecification"
-      ]
-    },
     "IDEA-053": {
-      "scope": "실제 Spring 7.0.10에서 계층 주입 여섯 경우, 구성원 소스와 네 선언 이동을 확인했다. 보고서를 보아도 prototype 생성 횟수가 늘지 않았으며, 두 DB의 JDBC 상태가 유지됐다.",
+      "scope": "두 Spring DB 환경의 Spring 7.0.10에서 주입 위치 5곳, 선택된 정의 3곳, 상위 공장 경로, 누락·모호함을 확인했다. 보고서 확인 중 공급자를 재실행하지 않았다.",
       "runtimeGroups": [
-        "springAutowireHierarchy"
+        "springProviderInjection"
+      ]
+    },
+    "IDEA-067": {
+      "scope": "두 Spring DB 환경에서 Maven과 Gradle의 실제 JVM에 각각 연결했다. HTTP 요청에서 Java 줄 중단점과 JDBC 로컬을 확인하고 재개한 후 두 리스너가 닫혔다.",
+      "runtimeGroups": [
+        "micronautMavenDebug",
+        "micronautGradleDebug"
+      ]
+    },
+    "IDEA-068": {
+      "scope": "설치본에서 실제 WildFly 42 WAR를 두 엔진으로 배포했다. 같은 릴리스의 소스 작업대와 실제 WildFly 42에서 EAR 모듈 간 EJB 호출, Spring JDBC 결과, 소유 프로세스 종료를 두 엔진으로 확인했다. EAR 설치본에서는 JDT의 프로젝트 가져오기가 시간 초과됐다.",
+      "runtimeGroups": [
+        "wildflyWar"
+      ]
+    },
+    "IDEA-071": {
+      "scope": "실제 JDT와 Gradle로 Windows 편집기와 JVM의 드라이브 문자 대소문자가 다른 경우에도 계산된 포함 서비스 모듈의 testClasses를 실행했다. 형제 스크립트 변경 후 기존 검토가 거부됐고 Maven·Gradle Spring JDBC 결과를 두 엔진에서 확인했다.",
+      "runtimeGroups": [
+        "observedGradleComposite"
+      ]
+    },
+    "IDEA-079": {
+      "scope": "실제 JVM과 두 DB에서 가상 스레드 두 개와 Executor 경계 한 개의 원본 위치를 찾았다. 작업자와 추적 ID 일치, 추적 없는 스택 거부와 재개한 작업의 JDBC 42 응답을 검증했다.",
+      "runtimeGroups": [
+        "javaVirtualAsyncTrace"
+      ]
+    },
+    "IDEA-080": {
+      "scope": "실제 JDI에서 한글·이모지가 있는 문자열과 Int·Long·Boolean 배열을 수정했다. 두 DB 환경에서 JVM 재개 후 다섯 변경과 다른 인스턴스 보존, 사용자 접근자의 부작용 0을 확인했다.",
+      "runtimeGroups": [
+        "kotlinFieldValues"
       ]
     },
     "IDEA-096": {
-      "scope": "설치형 편집기에서 두 빌드 파일을 열고 승인한 작업이 실제 원격 JVM에서 실행됐다. JUnit과 JAR 식별자, 동일 검토 재사용 거부, 원본 파일 및 Spring JDBC 보존을 두 DB에서 확인했다.",
+      "scope": "두 환경의 설치된 VS Code에서 SSH 원격 문서 두 개가 외부 변경에 따라 갱신됐다. 검토 전 변경 거부, 부분 전송, 접속 중단 후 재접속 바이트 대조와 JDBC 보존을 확인했다.",
       "runtimeGroups": [
-        "sshMaven",
-        "sshGradle"
-      ]
-    },
-    "IDEA-107": {
-      "scope": "실제 React 렌더와 TypeScript 5.9.3의 미저장 TSX 오류, 공식 Angular 22.3 언어 서비스와 TypeScript 6의 컨트롤 흐름·별칭·이벤트 탐색 및 저장한 오류 수정의 진단 해제를 두 DB에서 확인했다.",
-      "runtimeGroups": [
-        "reactProps",
-        "angularTemplateTools"
-      ]
-    },
-    "IDEA-120": {
-      "scope": "실제 OpenJFX에서 노드 순서 변경, 팔레트 삽입과 안전한 잎 노드 제거 후 저장한 FXML이 제안한 픽셀과 일치했다. 두 DB 환경에서 검토 재사용 거부와 읽기 결과를 확인했다.",
-      "runtimeGroups": [
-        "javafxHierarchy"
+        "sshWatch",
+        "sshBatch"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 663,
+    "sourceCorrespondences": 674,
     "sourceConfidence": "inferred",
-    "archiveEntries": 31,
+    "archiveEntries": 32,
     "archiveConfidence": "observed"
-  },
-  "nativePayloadEquivalence": {
-    "files": 31,
-    "testedArchiveSha256": "e4afcc33656d7cd43069800743c3bb24cc799811d90e7ac203054a19204f0115",
-    "testedInputVectorSha256": "48f5e8ad966489166af262dda88d04502507bd53cf194167c6245129c9d28c3a",
-    "onlySourceChanges": [
-      "test/angular-workbench-host.js",
-      "test/java-signature-arity-host.js",
-      "test/react-props-host.js"
-    ]
   },
   "progress": {
     "counts": {
-      "implemented": 183,
-      "partial": 19,
+      "implemented": 184,
+      "partial": 18,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 204.5,
-    "previousWeightedPoints": 203.5,
+    "weightedPoints": 205,
+    "previousWeightedPoints": 204.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 94.7,
+    "referencePercent": 94.9,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-107",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-120",
+        "id": "IDEA-096",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "가중 점수는 216개 기능표 기준으로 집계한다.",
-    "React는 로컬 TypeScript로 읽는 TSX 속성과 진단을 지원한다. Angular는 선택한 프로젝트의 공식 언어 서비스와 컴파일러를 사용한다. 두 프레임워크의 프로젝트 생성이나 전체 런타임 디버깅은 이 범위에 포함하지 않는다.",
-    "FXML 시각 편집은 Windows x64에서 내장 레이아웃과 컴포넌트를 지원한다. 사용자 정의 컴포넌트의 시각 렌더링과 이벤트 실행은 제외한다.",
-    "SSH 빌드는 검토한 표준 단일 프로젝트와 고정된 오프라인 의존성을 실행한다. 원격 복합 빌드나 동적으로 실행되는 빌드 확장은 다루지 않는다."
+    "216개 기능표의 기존 가중치를 유지한다.",
+    "SSH 여러 파일 전송은 파일별 교체와 검토된 연결에서의 사후 확인을 지원한다. 각 파일의 반영 상태를 따로 기록한다.",
+    "WildFly는 검토한 로컬 standalone 서버에서 단일 WAR 또는 선언된 WAR·EJB JAR 쌍의 EAR를 배포한다. 클러스터와 관리 도메인은 별도 범위다.",
+    "Kotlin 필드 편집은 중단된 로컬 JVM의 원시 배열과 일부 문자열을 지원한다. 비동기 호출 탐색은 제공한 소스 도우미가 기록한 경계를 연결한다.",
+    "Windows에서 긴 Java 클래스 경로를 쓴 가상 스레드 검증은 디버그 구성에 shortenCommandLine을 argfile로 지정했다."
   ],
   "next": [
-    "WildFly standalone에서 EJB와 WAR 배포",
-    "실행 중인 Micronaut Maven·Gradle JVM 디버깅",
-    "Kotlin String 및 배열을 중단한 프레임에서 검토하고 수정",
-    "SSH 외부 변경 감지와 여러 파일의 검토 후 전송",
-    "Gradle의 실제 모델로 계산된 포함 빌드 타깃 확인"
+    "Java 패키지 이름 변경과 Spring Boot 자동 구성 등록",
+    "의존성 JAR의 Spring XML 생명주기와 Safe Delete",
+    "Java 소스에서 Maven 플러그인 실행 ID 선택",
+    "Micronaut 소스 변경 후 검토한 JVM 재시작",
+    "WSL Linux 작업 폴더와 빌드, 편집기 컨텍스트별 명령"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

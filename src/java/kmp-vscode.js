@@ -9,7 +9,7 @@ const { projectForRoot,loadKmpModel } = require('./kmp-gradle');
 const { runKmpTasks } = require('./kmp-workbench');
 const { startKmpJvmDebug } = require('./kmp-jvm-debug');
 const { DEBUG_TYPE,KMP_DEBUG_MARKER:debugMarker,processAttachTarget } = require('./debug');
-const { KOTLIN_LINE_BUILD } = require('./debug-runtime');
+const { KOTLIN_LINE_BUILDS } = require('./debug-runtime');
 const { definitionForKmp } = require('./kmp-sources');
 const {previewCandidates,renderComposePreview}=require('./kmp-compose-preview');
 const { fileKey } = require('./dependency-builds');
@@ -147,7 +147,7 @@ function registerKmpWorkbench(vscode,java) {
       if (!runtime.debugBundlePath) throw fail('Configure the independent Java debug bundle before debugging Kotlin.');
       output.show(true);
       const run=await startKmpJvmDebug({...details,model,resolveDescendant:java.debug.processes.resolveDescendant,
-        sourceLineJavaHome:runtime.debugBuild===KOTLIN_LINE_BUILD ? runtime.javaHome : undefined,
+        sourceLineJavaHome:KOTLIN_LINE_BUILDS.includes(runtime.debugBuild) ? runtime.javaHome : undefined,
         onOutput:chunk=>output.append(chunk)});
       const token=randomUUID(), record={run,token,session:undefined,sessionEnded:false,closing:undefined,attached:false};
       ownedDebug=record;

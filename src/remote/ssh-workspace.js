@@ -3,10 +3,13 @@
 const { spawn } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { remoteCommand } = require('./ssh-files-worker');
+const { batchCommand, batchFrame } = require('./ssh-batch-runtime');
+const { createSshBatchOperations } = require('./ssh-batch');
 const { createPinnedSshPeer, createSshProcesses } = require('./ssh-processes');
 
 const maxFileBytes = 2 * 1024 * 1024;
 const maxFrameBytes = 4 * 1024 * 1024;
+const maximumWatchPaths = 64;
 const uriScheme = 'rocketbrain-ssh';
 const digest = data => createHash('sha256').update(data).digest('hex');
 const sourceErrors = {
@@ -19,10 +22,13 @@ const sourceErrors = {
   permission: 'The remote account lacks permission for this file.',
   indirection: 'The remote path contains file system indirection.',
   unsupported: 'The remote object is outside the supported regular files and directories.',
+  duplicate: 'Review distinct physical SSH files and remove any duplicate paths.',
+  binary: 'Review only UTF-8 text files in an SSH batch.',
   missing: 'The remote file no longer exists.'
 };
 
 function partsFor(value) {
+  if (typeof value !== 'string') throw Error('The remote path contains an unsupported segment.');
   const parts = value === '/' ? [] : value.split('/').slice(1);
   if (!value.startsWith('/') || parts.length > 32 || parts.some(part =>
     !part || part === '.' || part === '..' || part.length > 255 || /[\\:\x00-\x1f]/.test(part))) {
@@ -44,6 +50,7 @@ function profileFor(value) {
 async function connectWorkspace(raw) {
   const profile = profileFor(raw);
   const command = remoteCommand(profile.python);
+  const batch = batchCommand(profile.python);
   const peer = await createPinnedSshPeer(profile);
   const ssh = peer.target;
   let resolvedRoot;
@@ -54,9 +61,11 @@ async function connectWorkspace(raw) {
     if (closed) throw Error('Reopen the SSH workspace connection.');
     await peer.verify();
     if (closed) throw Error('The SSH workspace connection closed.');
-    const body = JSON.stringify({ root: profile.root, resolvedRoot, operation, parts, ...fields }) + '\n';
+    const batchOperation = ['inspect-batch', 'apply-batch', 'readback-batch'].includes(operation);
+    const requestBody = JSON.stringify({ root: profile.root, resolvedRoot, operation, parts, ...fields }) + '\n';
+    const body = batchOperation ? batchFrame(requestBody) : requestBody;
     if (Buffer.byteLength(body) >= maxFrameBytes) throw Error('The SSH file request exceeds its size limit.');
-    const args = [...ssh.options, ...ssh.destination, command];
+    const args = [...ssh.options, ...ssh.destination, batchOperation ? batch : command];
     return new Promise((resolve, reject) => {
       const child = spawn(ssh.executable, args, { shell: false, windowsHide: true, stdio: ['pipe','pipe','pipe'] });
       active.add(child);
@@ -113,12 +122,27 @@ async function connectWorkspace(raw) {
     throw error;
   }
   const processes = createSshProcesses(profile, resolvedRoot, ssh, () => request('stat'));
+  const batchBinding = digest(Buffer.from(JSON.stringify([profile.id, profile.host, profile.port ?? 22, profile.user,
+    resolvedRoot, peer.anchorSha256])));
   return Object.freeze({
-    id: profile.id, host: profile.host, root: resolvedRoot,
+    id: profile.id, host: profile.host, root: resolvedRoot, batchBinding,
+    ...createSshBatchOperations(request, partsFor),
     inspectProcess: (kind, requested) => processes.inspect(kind, requested),
     openProcess: (kind, approval) => processes.open(kind, approval),
     stat(value) { return request('stat', partsFor(value)); },
     list(value) { return request('list', partsFor(value)); },
+    async observe(values) {
+      if (!Array.isArray(values) || !values.length || values.length > maximumWatchPaths) {
+        throw Error('Watch up to 64 exact SSH paths together.');
+      }
+      const result = await request('observe', [], { targets: values.map(partsFor) });
+      if (!Array.isArray(result) || result.length !== values.length || result.some(state=>
+        state !== null && state !== false &&
+        (!['file','directory'].includes(state?.kind) || !/^[a-f0-9]{64}$/u.test(state?.stamp || '')))) {
+        throw Error('The remote SSH file observation was incomplete.');
+      }
+      return result;
+    },
     async read(value) {
       const { content, sha256 } = await request('read', partsFor(value));
       const data = Buffer.from(content, 'base64');
@@ -142,4 +166,4 @@ async function connectWorkspace(raw) {
   });
 }
 
-module.exports = { connectWorkspace, maxFileBytes, uriScheme, digest };
+module.exports = { connectWorkspace, maxFileBytes, maximumWatchPaths, uriScheme, digest, partsFor };

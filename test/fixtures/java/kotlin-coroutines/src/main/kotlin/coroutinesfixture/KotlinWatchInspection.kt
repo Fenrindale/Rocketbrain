@@ -22,6 +22,18 @@ class WatchObject(private val side: WatchSideEffect) {
     var nullable: Int? = null
     val storedBox: Int? = 7
     val constant = 13
+    var label = "original"
+    val knownSupplementary = "fixture🙂"
+    var optionalLabel: String? = null
+    val largeLabel = "x".repeat(5000)
+    var guardedLabel = "custom"
+        set(value) { side.mutate(); field = value }
+    val history = IntArray(70) { it + 10 }
+    var changingHistory = intArrayOf(11, 22, 33)
+    val preciseHistory = longArrayOf(9007199254740993L, 7L)
+    val bits = booleanArrayOf(true, false)
+    val guardedArray = intArrayOf(9)
+        get() { side.mutate(); return field }
     var guarded = 11
         set(value) { side.mutate(); field = value }
     var computed: Int
@@ -37,11 +49,24 @@ object KotlinWatchInspection {
         val signal = Path.of(signalName)
         val worker = Thread {
             val deadline = System.nanoTime() + 50_000_000_000L
+            var countChanged = false
+            var arrayChanged = false
+            var elementChanged = false
             while (System.nanoTime() < deadline) {
-                if (Files.isRegularFile(signal)) {
+                if (!countChanged && Files.isRegularFile(signal)) {
                     target.count = 34
+                    countChanged = true
                     println("Rocketbrain Kotlin field changed by fixture")
-                    return@Thread
+                }
+                if (!arrayChanged && Files.isRegularFile(Path.of(signalName + ".array"))) {
+                    target.changingHistory = target.changingHistory.copyOf()
+                    arrayChanged = true
+                    println("Rocketbrain Kotlin array replaced by fixture")
+                }
+                if (!elementChanged && Files.isRegularFile(Path.of(signalName + ".element"))) {
+                    target.changingHistory[1] = 23
+                    elementChanged = true
+                    println("Rocketbrain Kotlin array element changed by fixture")
                 }
                 Thread.sleep(25)
             }
@@ -97,6 +122,10 @@ object KotlinWatchInspection {
         check(replacementBox == 113)
         println("Rocketbrain Kotlin Fields|" + target.count + "|" + target.isOpen + "|" + target.exact + "|" +
             target.nullable + "|" + other.count + "|" + side.calls)
+        val labelBytes = target.label.toByteArray(Charsets.UTF_8).joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') }
+        println("Rocketbrain Kotlin Field Values|" + labelBytes + "|" + target.optionalLabel + "|" +
+            target.history[65] + "|" + target.preciseHistory[0] + "|" + target.bits[1] + "|" +
+            other.label + "|" + other.history[65] + "|" + side.calls)
         println("Rocketbrain Kotlin evaluated|" + subtotal + "|" + precise + "|" + length + "|" + fallback + "|" + boolean)
     }
 }

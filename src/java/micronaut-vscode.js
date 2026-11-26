@@ -2,12 +2,13 @@
 
 const path = require('node:path');
 const { parseYaml } = require('../spring/configuration');
-const { inspectMicronautProject,micronautProject,CONFIG_FILE,PART } = require('./micronaut-model');
+const { inspectMicronautProject,micronautProject,snapshotMicronautDebugSources,CONFIG_FILE,PART } = require('./micronaut-model');
 const { createMicronautRuntime,packagedJar } = require('./micronaut-runtime');
+const { createMicronautDebugger } = require('./micronaut-debugger');
 const { distribution }=require('./micronaut-distribution');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 
-const COMMANDS={inspect:'rocketbrain.micronaut.inspect',run:'rocketbrain.micronaut.run',
+const COMMANDS={inspect:'rocketbrain.micronaut.inspect',run:'rocketbrain.micronaut.run',debug:'rocketbrain.micronaut.debug',
   tests:'rocketbrain.micronaut.test',build:'rocketbrain.micronaut.build',stop:'rocketbrain.micronaut.stop'};
 const IMPORT='Import the Micronaut 5 Maven or Gradle application in Java Projects first.';
 
@@ -15,7 +16,7 @@ function registerMicronautWorkbench(vscode,java) {
   const output=vscode.window.createOutputChannel('Rocketbrain Micronaut');
   const runtime=createMicronautRuntime({log:chunk => output.append(chunk)});
   const subscriptions=[output], jobs=new Set();
-  let pendingStart, disposed=false, closing;
+  let pendingStart, debuggerControl, disposed=false, closing;
 
   function trusted(cancellation) {
     if (disposed || !vscode.workspace.isTrusted) throw fail('Trust the local workspace before using Micronaut tools.');
@@ -85,8 +86,9 @@ function registerMicronautWorkbench(vscode,java) {
       ...(verified.jars&&{libraryCount:verified.jars.length})};
   }
 
-  async function run({projectUri,environment='dev',allowProjectExecution,cancellation}={}) {
-    if (allowProjectExecution!==true) throw fail('Explicitly run the Micronaut application before executing build tasks.');
+  async function run({projectUri,environment='dev',allowProjectExecution,cancellation,debug=false}={}) {
+    if (allowProjectExecution!==true) throw fail(debug?'Explicitly choose Micronaut debugging before executing build tasks.':
+      'Explicitly run the Micronaut application before executing build tasks.');
     trusted(cancellation);
     if (typeof environment!=='string' || !PART.test(environment)) throw fail('Use a literal Micronaut environment name.');
     if (pendingStart || runtime.getState().state!=='stopped') throw fail('Stop the current owned Micronaut application first.');
@@ -98,13 +100,42 @@ function registerMicronautWorkbench(vscode,java) {
     try {
       const signal=controller.signal;
       const project=await projectFor(projectUri,signal);
+      let sources;
+      if (debug) {
+        await java.start();
+        trusted(signal);
+        if (!java.getState().debugBundlePath) throw fail('Set up the independent Rocketbrain Java debugger before debugging Micronaut.');
+        saveNeeded(project);
+        sources=snapshotMicronautDebugSources(project,signal);
+      }
+      const verify=() => {
+        trusted(signal);
+        workspacePath(project.root,roots());
+        saveNeeded(project);
+        if (sources && sources.digest!==snapshotMicronautDebugSources(project,signal).digest) {
+          throw fail('Micronaut Java, configuration or build files changed while preparing the debugger. Build again.');
+        }
+      };
       const {reviewed}=await packageProject(project,signal);
       const javaHome=project.jdk || vscode.workspace.getConfiguration('rocketbrain.java').get('javaHome') || java.getState().javaHome;
+      if (debug) verify();
       const result=await runtime.start({project,javaHome,environment,cancellation:signal,allowProjectExecution,
-        workspaceTrusted:vscode.workspace.isTrusted,buildFingerprint:reviewed.buildFingerprint});
+        workspaceTrusted:vscode.workspace.isTrusted,buildFingerprint:reviewed.buildFingerprint,debug});
+      let sessionId;
+      if (debug) {
+        debuggerControl ||= createMicronautDebugger(vscode,java,runtime);
+        sessionId=await debuggerControl.attach({project,receipt:result,sourcePaths:sources.sourcePaths,
+          cancellation:signal,validate:verify});
+      }
       output.appendLine(`Micronaut ${environment} · ${result.artifact} · ${result.baseUrl}`);
       output.appendLine('Application artifact SHA-256: '+result.sha256);
-      return result;
+      return sessionId?{...result,sessionId}:result;
+    } catch(error) {
+      if (debug) {
+        try {await debuggerControl?.stop();}
+        finally {await runtime.stop();}
+      }
+      throw error;
     } finally {
       pendingStart=undefined;
       subscription?.dispose();
@@ -114,7 +145,15 @@ function registerMicronautWorkbench(vscode,java) {
 
   async function stop() {
     pendingStart?.abort();
-    return runtime.stop();
+    let receipt;
+    try {await debuggerControl?.stop();}
+    finally {receipt=await runtime.stop();}
+    return receipt;
+  }
+
+  function getState() {
+    const state=runtime.getState(), sessionId=debuggerControl?.sessionId(state.runId);
+    return sessionId?{...state,sessionId}:state;
   }
 
   function nativeRange(range) {
@@ -231,7 +270,7 @@ function registerMicronautWorkbench(vscode,java) {
       return vscode.window.showTextDocument(target.uri,{selection:target.range,preview:true});
     }
   });
-  register(COMMANDS.run,async () => {
+  async function runCommand(debug) {
     const projectUri=await choose();
     if (!projectUri) return;
     const report=await inspect({projectUri});
@@ -239,10 +278,13 @@ function registerMicronautWorkbench(vscode,java) {
     const environment=await vscode.window.showQuickPick(environments,{title:'Select Micronaut Environment'});
     if (!environment) return;
     output.show(true);
-    const result=await progress('Build and Run Micronaut',cancellation => run({projectUri,environment,allowProjectExecution:true,cancellation}));
+    const result=await progress(debug?'Debug Micronaut Application':'Build and Run Micronaut',
+      cancellation => run({projectUri,environment,allowProjectExecution:true,cancellation,debug}));
     void vscode.window.showInformationMessage('Micronaut '+environment+' is ready at '+result.baseUrl);
     return result;
-  });
+  }
+  register(COMMANDS.run,() => runCommand(false));
+  register(COMMANDS.debug,() => runCommand(true));
   register(COMMANDS.tests,async () => {
     const projectUri=await choose();
     if (projectUri) return progress('Run Micronaut Tests',cancellation => test({projectUri,allowProjectExecution:true,cancellation}));
@@ -253,8 +295,9 @@ function registerMicronautWorkbench(vscode,java) {
   });
   register(COMMANDS.stop,stop);
 
-  return {inspect:options => track(() => inspect(options)),run:options => track(() => run(options)),
-    test:options => track(() => test(options)),build:options => track(() => build(options)),getState:runtime.getState,stop,dispose() {
+  return {inspect:options => track(() => inspect(options)),run:options => track(() => run({...options,debug:false})),
+    debug:options => track(() => run({...options,debug:true})),
+    test:options => track(() => test(options)),build:options => track(() => build(options)),getState,stop,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {

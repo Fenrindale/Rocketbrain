@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { realpathSync } = require('node:fs');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -9,11 +10,14 @@ const { nativeTaskRunner } = require('../src/java/workbench-tasks');
 const { test } = require('node:test');
 const { resolveJavaSourceTarget, settingsKeys } = require('../src/java/source-target');
 const { resolveBuildTarget } = require('../src/java/source-target-builds');
+const { bindModel, prepareGradleObservation, observeGradleTarget } = require('../src/java/gradle-source-model');
+const { prepareSourceExecution } = require('../src/java/source-target-execution');
+const { execute } = require('../src/java/testing/provision');
 const { registerJavaWorkbench } = require('../src/java/workbench');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { fakeVscode, fixture } = require('./java-workbench-fixture');
-const { populateTargets, buildTargets, runTargets, executionCases } = require('./helpers/java-source-target-fixture');
+const { populateTargets, buildTargets, runTargets, executionCases, runObservedGradleComposite } = require('./helpers/java-source-target-fixture');
 
 const read = async file => JSON.parse(await fs.readFile(file, 'utf8'));
 const url = file => pathToFileURL(file).href;
@@ -23,6 +27,7 @@ const classpathFile = process.env.ROCKETBRAIN_SOURCE_TARGET_CLASSPATH;
 const mavenHome = process.env.ROCKETBRAIN_TARGET_MAVEN_HOME;
 const gradleCache = process.env.ROCKETBRAIN_SOURCE_TARGET_GRADLE_CACHE;
 const executeFromSource = process.env.ROCKETBRAIN_SOURCE_TARGET_EXECUTION === '1';
+const observeComposite = process.env.ROCKETBRAIN_SOURCE_TARGET_GRADLE_MODEL === '1';
 const environments = ['mysql', 'mariadb'].map(engine => [engine, process.env['ROCKETBRAIN_SOURCE_TARGET_' + engine.toUpperCase() + '_CONFIG']]);
 
 async function owned(t) {
@@ -243,6 +248,76 @@ test('source build review preserves exact argv, requires approval and invalidate
   } finally { await workbench.dispose(); }
 });
 
+test('the observed Gradle composite rejects outside, duplicate and guessed source ownership', async t => {
+  const { root, directory } = await owned(t);
+  const composite = realpathSync.native(path.join(root, 'gradle')), included = path.join(composite, 'vendor');
+  const component = path.join(included, 'service'), workbench = path.join(composite, 'workbench');
+  const context = { project: { root: composite }, component, files: [
+    path.join(composite, 'settings.gradle'), path.join(included, 'settings.gradle.kts'),
+    path.join(component, 'build.gradle.kts'), path.join(workbench, 'build.gradle')
+  ].map(file => [file, 'digest']) };
+  const rootRecord = { kind: 'B', buildRoot: composite, parent: '' };
+  const includeRecord = { kind: 'B', buildRoot: included, parent: composite };
+  const project = { kind: 'P', buildRoot: included, component, projectPath: ':service', treePath: ':observed:service' };
+  const rootRecords = [rootRecord, { kind: 'P', buildRoot: composite, component: composite, projectPath: ':', treePath: ':' }];
+  const records = [...rootRecords, includeRecord, project];
+  const model = bindModel(records, context);
+  assert.equal(model.selected.treePath, ':observed:service');
+  assert.match(model.membershipSha256, /^[0-9a-f]{64}$/u);
+  assert.throws(() => bindModel([...records, project], context), /ambiguous/u);
+  assert.throws(() => bindModel([...rootRecords, { ...includeRecord, buildRoot: directory }], context), /workspace/u);
+  assert.throws(() => bindModel([...rootRecords, { ...includeRecord, parent: included }, project], context), /disconnected/u);
+  assert.throws(() => bindModel(records, { ...context, component: workbench }), /does not belong/u);
+  if (process.platform === 'win32') {
+    const alternate = value => value && value.replace(/^[A-Z]:/u, drive => drive.toLowerCase());
+    assert.notEqual(alternate(composite), composite);
+    const aliases = records.map(row => row.kind === 'B' ? { ...row, buildRoot: alternate(row.buildRoot), parent: alternate(row.parent) } :
+      { ...row, buildRoot: alternate(row.buildRoot), component: alternate(row.component) });
+    assert.deepEqual(bindModel(aliases, context), model);
+    assert.throws(() => bindModel([...records, aliases.at(-1)], context), /ambiguous/u);
+  }
+
+  const caseVariant = path.join(included, 'SERVICE');
+  try { await fs.mkdir(caseVariant); }
+  catch (error) { if (error.code === 'EEXIST') return; throw error; }
+  const caseFile = path.join(caseVariant, 'build.gradle.kts');
+  await fs.writeFile(caseFile, '');
+  const caseRecord = { kind: 'P', buildRoot: included, component: caseVariant, projectPath: ':SERVICE', treePath: ':observed:SERVICE' };
+  const distinct = bindModel([...records, caseRecord], { ...context, component: caseVariant, files: [...context.files, [caseFile, 'digest']] });
+  assert.equal(distinct.selected.projectRoot, caseVariant);
+  assert.equal(distinct.selected.treePath, caseRecord.treePath);
+});
+
+test('actual Windows Gradle tooling observes and compiles the source reached through a lowercase drive URI', {
+  skip: process.platform !== 'win32' || !runtimeFile || process.env.ROCKETBRAIN_SOURCE_TARGET_NATIVE_CASE !== '1', timeout: 180000
+}, async t => {
+  const { root, directory, targets } = await owned(t);
+  const configured = await read(runtimeFile), tools = { javaHome: configured.javaHome, gradleHome: configured.gradleHome };
+  const native = realpathSync.native(path.join(root, 'gradle'));
+  const lowered = file => file.replace(/^[A-Z]:/u, drive => drive.toLowerCase());
+  const alias = lowered(native);
+  assert.notEqual(alias, native);
+  const settings = path.join(native, 'settings.gradle');
+  const old = await fs.readFile(settings, 'utf8');
+  await fs.writeFile(settings, old.replace("includeBuild('vendor') { name = 'linked-tools' }",
+    "def nameParts = ['verified', 'case']\nincludeBuild('vendor') { name = nameParts.join('-') }"));
+  const component = path.join(alias, 'vendor', 'service');
+  const target = { provider: 'gradle', declaredBuild: { kind: 'gradle' }, sourceRole: 'main', scope: 'runtime',
+    projectRoot: component, sourceRoot: path.join(component, 'src/main/java'), sourceUri: url(lowered(fileURLToPath(targets.included))) };
+  const folders = [url(lowered(realpathSync.native(root)))], saved = () => false;
+  const review = prepareGradleObservation(target, alias, folders, tools, saved);
+  const model = await observeGradleTarget(target, review, folders, saved);
+  assert.equal(review.project.root, native);
+  assert.equal(model.selected.projectRoot, path.join(native, 'vendor', 'service'));
+  assert.equal(model.selected.treePath, ':verified-case:service');
+  const { spec } = prepareSourceExecution(target, folders, tools, saved, model);
+  assert.ok(spec.args.includes(':verified-case:service:classes'));
+  const result = await execute(spec.command, spec.args, { cwd: spec.cwd,
+    env: { ...spec.env, GRADLE_USER_HOME: path.join(directory, 'build-cache') }, timeoutMs: 90000 });
+  assert.equal(result.code, 0, result.output);
+  assert.equal((await fs.readFile(path.join(component, 'build/classes/java/main/fixture/linked/Value.class'))).readUInt32BE(0), 0xcafebabe);
+});
+
 test('reviewed builds launch the exact process and stop without registering a replayable VS Code task', { timeout: 20000 }, async () => {
   const output = [];
   let ready;
@@ -263,7 +338,7 @@ test('reviewed builds launch the exact process and stop without registering a re
 });
 
 test('actual JDT selects Maven reactor and Gradle composite sources inside one workspace on both Spring DBs', {
-  skip: !runtimeFile || !classpathFile || !mavenHome || !gradleCache || !environments.every(([, file]) => file), timeout: 490000
+  skip: !runtimeFile || !classpathFile || !mavenHome || !gradleCache || !environments.every(([, file]) => file), timeout: 650000
 }, async t => {
   const { directory, root, targets } = await owned(t);
   const runtime = await read(runtimeFile), tools = { javaHome: runtime.javaHome, mavenHome, gradleHome: runtime.gradleHome };
@@ -298,7 +373,7 @@ test('actual JDT selects Maven reactor and Gradle composite sources inside one w
     host.java.requestWorkspaceCommand = request;
     const ui = presentation(host), executed = [];
     const actual = nativeTaskRunner(host.vscode, { output: host.output });
-    const runner = executeFromSource ? { ...actual, async execute(spec, options) {
+    const runner = executeFromSource || observeComposite ? { ...actual, async execute(spec, options) {
       executed.push({ args: [...spec.args], cwd: spec.cwd });
       const result = await actual.execute(spec, options);
       assert.equal(result.code, 0, result.output);
@@ -352,12 +427,14 @@ test('actual JDT selects Maven reactor and Gradle composite sources inside one w
       }
       const db = (await Promise.all(configs.map(([engine, database]) =>
         runTargets(root, tools, classpathFile, database, engine)))).flat();
+      const observedComposite = observeComposite ? await runObservedGradleComposite(workbench.sourceTarget, root, targets) : undefined;
       assert.ok(commands.every(item => ['java.project.getAll', 'java.project.getSettings', 'java.project.getClasspaths'].includes(item.command)));
       const proof = { selected: Object.fromEntries(Object.entries(observations).map(([key, value]) => [key, {
         project: path.relative(root, value.projectRoot).split(path.sep).join('/'), provider: value.provider, scope: value.scope,
         buildPath: value.declaredBuild.buildTreePath || value.declaredBuild.projectPath || value.declaredBuild.reactorProject,
         testClasspath: value.classpath.some(file => file.endsWith('junit-jupiter-api-6.1.3.jar'))
-      }])), jdbc: db, builds, readOnlyMetadata: true, openedGradleSourceDeclaration: true };
+      }])), jdbc: db, builds, readOnlyMetadata: true, openedGradleSourceDeclaration: true,
+        ...(observedComposite && { observedComposite }) };
       if (process.env.ROCKETBRAIN_SOURCE_TARGET_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_SOURCE_TARGET_RECEIPT,
         JSON.stringify(proof, null, 2) + '\n');
     } finally { await workbench.dispose(); }

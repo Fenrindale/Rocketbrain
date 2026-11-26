@@ -221,7 +221,7 @@ async function runMicronautGradleChecks(api,vscode,checks){
   return result;
 }
 
-module.exports={runMicronautGradleChecks};
+module.exports={runMicronautGradleChecks,withOwnedDatabase};
 if(require.main===module)withOwnedDatabase(headless).then(value=>console.log(JSON.stringify(value))).catch(error=>{
   console.error(error.stack);process.exitCode=1;
 });

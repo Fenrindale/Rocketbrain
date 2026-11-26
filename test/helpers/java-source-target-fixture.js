@@ -150,4 +150,55 @@ const executionCases = [
     'gradle/workbench/build/rocketbrain-reviewed-classes']
 ];
 
-module.exports = { links, populateTargets, buildTargets, runTargets, executionCases };
+async function runObservedGradleComposite(service, root, targets) {
+  const composite = path.join(root, 'gradle');
+  const settings = path.join(composite, 'settings.gradle');
+  const sibling = path.join(composite, 'workbench/build.gradle');
+  const receipt = path.join(composite, 'vendor/service/build/rocketbrain-reviewed-test-classes');
+  const compiled = path.join(composite, 'vendor/service/build/classes/java/test/fixture/linked/Scope.class');
+  const original = await fs.readFile(settings, 'utf8');
+  assert.match(original, /name = 'linked-tools'/u);
+  const script = original.replace("includeBuild('vendor') { name = 'linked-tools' }",
+    "def segments = ['verified', 'models']\nincludeBuild('vendor') { name = segments.join('-') }");
+  await fs.writeFile(settings, script);
+  try {
+    const target = await service.inspect({ sourceUri: targets.includedTest });
+    assert.equal(target.declaredBuild.buildTreePath, undefined);
+    assert.equal(target.executedProjectCode, false);
+    const review = await service.reviewGradleModel(target.id, { rootUri: pathToFileURL(composite).href });
+    assert.equal(path.relative(composite, review.compositeRoot), '');
+    assert.ok(review.inputCount >= 6);
+    await assert.rejects(service.observeGradleModel(review.id), /Approve.*explicitly/u);
+    const model = await service.observeGradleModel(review.id, { allowProjectExecution: true });
+    assert.equal(model.executedProjectCode, true);
+    assert.equal(model.selected.treePath, ':verified-models:service');
+    assert.equal(model.selected.projectPath, ':service');
+    assert.equal(path.relative(path.join(composite, 'vendor/service'), model.selected.projectRoot), '');
+    assert.equal(model.buildCount, 2);
+    await assert.rejects(service.observeGradleModel(review.id, { allowProjectExecution: true }), /already used/u);
+    const other = await service.inspect({ sourceUri: targets.included });
+    await assert.rejects(service.reviewBuild(other.id, { observationId: model.observationId }), /Observe the current/u);
+
+    const compiledReview = await service.reviewBuild(target.id, { observationId: model.observationId });
+    const originalSibling = await fs.readFile(sibling);
+    await fs.appendFile(sibling, '\n// changed sibling files must also invalidate the model review\n');
+    try {
+      await assert.rejects(service.runBuild(compiledReview.id, { allowProjectExecution: true }), /model changed/u);
+    } finally { await fs.writeFile(sibling, originalSibling); }
+
+    await fs.unlink(receipt).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    const confirmed = await service.reviewBuild(target.id, { observationId: model.observationId });
+    assert.equal(confirmed.selector, ':verified-models:service');
+    assert.equal(confirmed.task, ':verified-models:service:testClasses');
+    assert.equal(confirmed.gradleModel.membershipSha256, model.membershipSha256);
+    await assert.rejects(service.runBuild(confirmed.id), /Approve.*explicitly/u);
+    const outcome = await service.runBuild(confirmed.id, { allowProjectExecution: true });
+    assert.equal(outcome.state, 'succeeded');
+    assert.equal((await fs.readFile(compiled)).readUInt32BE(0), 0xcafebabe);
+    assert.equal(await fs.readFile(receipt, 'utf8'), 'testClasses');
+    return { selector: confirmed.selector, task: confirmed.task, exactModel: true, sourceBinding: true,
+      siblingDriftRejected: true, approvalAndReplay: true, compileReceipt: true, projects: model.projectCount };
+  } finally { await fs.writeFile(settings, original); }
+}
+
+module.exports = { links, populateTargets, buildTargets, runTargets, executionCases, runObservedGradleComposite };

@@ -8,10 +8,11 @@ const { fail,local,buildFingerprint,LIMITS } = require('./workbench-model');
 
 const MAX_WAR_BYTES=256*1024*1024;
 const contextPattern=/^[a-z][a-z0-9-]{0,47}$/;
-const archivePattern=/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.war$/;
+const artifactName=/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:war|ear)$/;
 
-function mavenWarProject(project) {
-  if (project?.tool!=='maven') throw fail('Choose an imported Maven WAR module.');
+function mavenArchiveProject(project,packaging) {
+  const label=packaging.toUpperCase();
+  if (project?.tool!=='maven') throw fail('Choose an imported Maven '+label+' module.');
   const file=path.join(project.root,'pom.xml'), stat=fs.lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size>LIMITS.fileBytes) throw fail('Use a bounded regular Maven POM.');
   const source=fs.readFileSync(file,'utf8');
@@ -26,21 +27,22 @@ function mavenWarProject(project) {
   });
   parser.on('closetag',() => {stack.pop();});
   parser.write(source).close();
-  if (model.packaging?.trim()!=='war') throw fail('The Maven module must explicitly declare WAR packaging.');
+  if (model.packaging?.trim()!==packaging) throw fail('The Maven module must explicitly declare '+label+' packaging.');
   const context=model.artifactId?.trim();
   return {context:contextPattern.test(context || '') ? context : 'app',buildFingerprint:buildFingerprint(project.root)};
 }
 
-function verifyArchive(file) {
+function verifyArchive(file,packaging) {
   const stat=fs.lstatSync(file), resolved=fs.realpathSync(file);
   if (path.relative(file,resolved) || !stat.isFile() || stat.isSymbolicLink() || stat.size<4 || stat.size>MAX_WAR_BYTES) {
-    throw fail('Use a regular local WAR artifact no larger than 256 MiB.');
+    throw fail('Use a regular local '+packaging.toUpperCase()+' artifact no larger than 256 MiB.');
   }
   return {name:path.basename(resolved),uri:pathToFileURL(resolved).href,file:resolved,size:stat.size};
 }
 
-function listWarArtifacts(project) {
-  mavenWarProject(project);
+function listArchives(project,packaging) {
+  mavenArchiveProject(project,packaging);
+  const label=packaging.toUpperCase();
   const target=path.join(project.root,'target');
   if (!fs.existsSync(target)) return [];
   const stat=fs.lstatSync(target);
@@ -52,20 +54,27 @@ function listWarArtifacts(project) {
   const folder=fs.opendirSync(target);
   try {
     for (let entry; (entry=folder.readSync())!==null;) {
-      if (++scanned>10000 || artifacts.length>=100) throw fail('The Maven target folder exceeds the WAR artifact discovery limit.');
-      if (entry.isFile() && !entry.isSymbolicLink() && archivePattern.test(entry.name)) {
-        artifacts.push(verifyArchive(path.join(target,entry.name)));
+      if (++scanned>10000 || artifacts.length>=100) throw fail('The Maven target folder exceeds the '+label+' artifact discovery limit.');
+      if (entry.isFile() && !entry.isSymbolicLink() && artifactName.test(entry.name)&&entry.name.endsWith('.'+packaging)) {
+        artifacts.push(verifyArchive(path.join(target,entry.name),packaging));
       }
     }
   } finally { folder.closeSync(); }
   return artifacts.sort((a,b) => a.name.localeCompare(b.name));
 }
 
-function resolveWarArtifact(project,warUri) {
-  const wanted=local(warUri);
-  const artifact=listWarArtifacts(project).find(item => !path.relative(item.file,wanted));
-  if (!artifact) throw fail('Choose a built WAR artifact directly under this Maven module’s target folder.');
+function resolveArchive(project,uri,packaging) {
+  const wanted=local(uri);
+  const artifact=listArchives(project,packaging).find(item => !path.relative(item.file,wanted));
+  if (!artifact) throw fail('Choose a built '+packaging.toUpperCase()+' artifact directly under this Maven module’s target folder.');
   return artifact;
 }
 
-module.exports = { mavenWarProject,listWarArtifacts,resolveWarArtifact,contextPattern,MAX_WAR_BYTES };
+const mavenWarProject=project=>mavenArchiveProject(project,'war');
+const mavenEarProject=project=>mavenArchiveProject(project,'ear');
+const listWarArtifacts=project=>listArchives(project,'war');
+const listEarArtifacts=project=>listArchives(project,'ear');
+const resolveWarArtifact=(project,uri)=>resolveArchive(project,uri,'war');
+const resolveEarArtifact=(project,uri)=>resolveArchive(project,uri,'ear');
+module.exports = { mavenWarProject,listWarArtifacts,resolveWarArtifact,mavenEarProject,listEarArtifacts,resolveEarArtifact,
+  contextPattern,artifactName,MAX_WAR_BYTES };

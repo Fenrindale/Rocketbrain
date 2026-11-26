@@ -1,0 +1,9 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>rocketbrain.fixture</groupId><artifactId>wildfly-ear-reactor</artifactId><version>1.0.0</version></parent>
+  <artifactId>wildfly-ear-contract</artifactId>
+  <packaging>jar</packaging>
+  <dependencies>
+    <dependency><groupId>jakarta.ejb</groupId><artifactId>jakarta.ejb-api</artifactId><version>4.0.1</version><scope>provided</scope></dependency>
+  </dependencies>
+</project>

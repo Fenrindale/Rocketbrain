@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { parseJavaFile,lexJava,matching,literal,rangeAt } = require('../spring/java');
 const { parseProperties,parseYaml } = require('../spring/configuration');
@@ -30,7 +31,8 @@ function readPhysical(project,file,limit=512*1024) {
   }
   const bytes=fs.readFileSync(real);
   if (bytes.length>limit) throw fail('A Micronaut source file exceeds its analysis limit.');
-  return {path:real,uri:pathToFileURL(real).href,text:normalize(new TextDecoder('utf-8',{fatal:true}).decode(bytes))};
+  return {path:real,uri:pathToFileURL(real).href,text:normalize(new TextDecoder('utf-8',{fatal:true}).decode(bytes)),
+    digest:createHash('sha256').update(bytes).digest('hex')};
 }
 
 function micronautMavenProject(project) {
@@ -190,8 +192,8 @@ function modelMicronaut(javaSources,configurationSources) {
   return {settings:settings.sort((a,b) => a.key.localeCompare(b.key)),configured,routes,bindings,issues};
 }
 
-function inspectMicronautProject(project,cancellation) {
-  const build=micronautProject(project), java=[], configuration=[];
+function micronautInputs(project,cancellation,{debug=false}={}) {
+  const java=[], configuration=[];
   const sourceRoot=path.join(project.root,'src/main/java'), resources=path.join(project.root,'src/main/resources');
   let examined=0,bytes=0;
   function add(target,file) {
@@ -206,7 +208,10 @@ function inspectMicronautProject(project,cancellation) {
     try {
       for (let entry; (entry=handle.readSync())!==null;) {
         if (++examined>10000 || cancelled(cancellation)) throw fail('Micronaut source inspection exceeded its budget or was cancelled.');
-        if (entry.isSymbolicLink()) continue;
+        if (entry.isSymbolicLink()) {
+          if (debug) throw fail('Use unlinked Micronaut source and configuration for debugging.');
+          continue;
+        }
         const file=path.join(directory,entry.name);
         if (recursive && entry.isDirectory()) visit(file,depth+1,files,predicate,recursive);
         else if (entry.isFile() && predicate(entry.name)) {
@@ -219,7 +224,19 @@ function inspectMicronautProject(project,cancellation) {
   if (fs.existsSync(sourceRoot)) visit(sourceRoot,0,java,name => name.endsWith('.java'),true);
   if (fs.existsSync(resources)) visit(resources,0,configuration,name => CONFIG_FILE.test(name),false);
   configuration.sort((a,b) => a.name.localeCompare(b.name));
+  return {java,configuration,resources,sourceRoot};
+}
+
+function snapshotMicronautDebugSources(project,cancellation) {
+  const {java,configuration,sourceRoot}=micronautInputs(project,cancellation,{debug:true});
+  if (!java.length) throw fail('Debug a Micronaut application with saved Java sources in src/main/java.');
+  const files=[...java,...configuration].map(({path:file,digest})=>[file,digest]).sort((a,b)=>a[0].localeCompare(b[0]));
+  return {sourcePaths:[sourceRoot],digest:buildFingerprint(project.root)+'/'+JSON.stringify(files)};
+}
+
+function inspectMicronautProject(project,cancellation) {
+  const build=micronautProject(project), {java,configuration,resources}=micronautInputs(project,cancellation);
   return {...build,...modelMicronaut(java,configuration),projectUri:project.uri,resources};
 }
 
-module.exports = { modelMicronaut,inspectMicronautProject,micronautMavenProject,micronautProject,CONFIG_FILE,PART };
+module.exports = { modelMicronaut,inspectMicronautProject,micronautMavenProject,micronautProject,snapshotMicronautDebugSources,CONFIG_FILE,PART };

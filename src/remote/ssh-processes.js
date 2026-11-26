@@ -113,7 +113,7 @@ async function createPinnedSshPeer(profile) {
     await fs.writeFile(leaf, anchor.bytes, { flag: 'wx', mode: 0o600 });
     const target = await secureSshTarget({ ...profile, knownHostsPath: leaf });
     return {
-      target, close,
+      target, close, anchorSha256: anchor.sha256,
       async verify() {
         if (closed) throw Error('Reopen the SSH workspace before connecting.');
         const now = await observeKnownHosts(profile.knownHostsPath).catch(() => undefined);

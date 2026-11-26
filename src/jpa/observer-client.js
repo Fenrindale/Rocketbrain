@@ -10,7 +10,7 @@ const { factoryId: graphFactoryId, graphRegistry } = require('./entity-graphs');
 const { normalizePersistenceContexts } = require('./persistence-contexts');
 const { normalizeQuarkusConfigOrigins } = require('../java/quarkus-config-origin');
 const { normalizeArcLookups } = require('../java/quarkus-arc-lookups');
-const { normalizeObservedInjection, normalizeObservedMembers } = require('../spring/observed-injection');
+const { normalizeObservedInjection, normalizeObservedMembers, normalizeObservedProviders } = require('../spring/observed-injection');
 const { normalizeTransactionTrace } = require('./transaction-trace');
 
 class ObserverError extends Error { constructor(code, message) { super(message); this.code = code; } }
@@ -220,6 +220,11 @@ class ObserverClient {
   async observedMemberInjection() {
     const value = await this.#request('spring-observed-member-injection');
     try { return normalizeObservedMembers(value); }
+    catch (error) { throw new ObserverError('INVALID_SCHEMA',error.message); }
+  }
+  async observedProviderInjection() {
+    const value = await this.#request('spring-observed-provider-injection');
+    try { return normalizeObservedProviders(value); }
     catch (error) { throw new ObserverError('INVALID_SCHEMA',error.message); }
   }
   async transactions() {

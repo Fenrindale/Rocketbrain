@@ -41,6 +41,19 @@ async def run(process):
     if supervisor and lines[2].startswith("import os, pathlib, subprocess, sys") and not process.get_terminal_type():
         process.exit(126)
         return
+    fault = None
+    if program == config.get("batchProgram"):
+        control = pathlib.Path(config["batchFaultFile"])
+        if control.is_file():
+            fault = control.read_text(encoding="ascii")
+            control.unlink()
+        if fault == "reject-second":
+            program = """import pathlib, sys
+def reject_target(event, args):
+    if event == "os.rename" and pathlib.PurePath(args[1]).name == "Blocked.java":
+        raise PermissionError("Owned test fault on second replacement")
+sys.addaudithook(reject_target)
+""" + program
     worker = await asyncio.create_subprocess_exec(
         sys.executable, "-I", "-u", "-c", program,
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -58,13 +71,18 @@ async def run(process):
 
     async def relay(source, target):
         while chunk := await source.read(32768):
-            target.write(chunk)
-            await target.drain()
+            if target is not None:
+                target.write(chunk)
+                await target.drain()
 
     incoming = asyncio.create_task(transmit())
     try:
-        await asyncio.gather(relay(worker.stdout, process.stdout), relay(worker.stderr, process.stderr))
-        process.exit(await worker.wait())
+        await asyncio.gather(relay(worker.stdout, None if fault == "drop-reply" else process.stdout), relay(worker.stderr, process.stderr))
+        code = await worker.wait()
+        if fault == "drop-reply":
+            process.close()
+        else:
+            process.exit(code)
     finally:
         incoming.cancel()
         if worker.returncode is None:

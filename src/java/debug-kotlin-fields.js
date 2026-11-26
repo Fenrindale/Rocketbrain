@@ -1,14 +1,16 @@
 'use strict';
 
-const { KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILD } = require('./debug-runtime');
+const { KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILDS } = require('./debug-runtime');
 const { createKotlinFrameGuard } = require('./debug-kotlin-local');
 
 const request = 'rocketbrain/kotlinObjectFields';
 const names = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u;
 const tokens = /^[a-f0-9-]{36}$/u;
 const primitiveTypes = new Set(['Int','Long','Boolean']);
+const maxText = 2048, pageSize = 32, unavailableText = '<String preview unavailable>';
 const isName = value => typeof value === 'string' && names.test(value);
 const same = (actual, expected, keys) => keys.every(key=>actual?.[key]===expected[key]);
+const index = value => Number.isSafeInteger(value) && value>=0 && value<=2147483647;
 
 function isScalar(type, boxed, value) {
   if (typeof value!=='string') return false;
@@ -16,9 +18,27 @@ function isScalar(type, boxed, value) {
   return type.startsWith('Boolean') ? /^(?:false|true)$/u.test(value) : /^-?\d{1,20}$/u.test(value);
 }
 
+function isText(value) {
+  if (typeof value!=='string' || value.length>maxText*6+2 || !value.startsWith('"')) return false;
+  try { const parsed=JSON.parse(value); return typeof parsed==='string' && parsed.length<=maxText; }
+  catch { return false; }
+}
+
+function isField(row) {
+  if (!isName(row?.name) || typeof row.boxed!=='boolean' || typeof row.writable!=='boolean' || typeof row.type!=='string' ||
+      !Array.isArray(row.boxSources) || row.boxSources.length>128 || row.boxSources.some(source=>!isName(source)) ||
+      ((!row.writable || !row.boxed) && row.boxSources.length)) return false;
+  if (row.kind==='text') return row.type==='String' && !row.boxed &&
+    (isText(row.value) || row.value==='null' || row.value===unavailableText && !row.writable);
+  if (row.kind==='array') return !row.boxed && primitiveTypes.has(row.elementType) && row.type===row.elementType+'Array' &&
+    index(row.length) && (row.value==='length '+row.length || row.value==='null' && row.length===0 && !row.writable);
+  return row.kind===undefined && primitiveTypes.has(row.boxed?row.type.replace(/ \(boxed\)$/u,''):row.type) &&
+    row.boxed===row.type.endsWith(' (boxed)') && isScalar(row.type,row.boxed,row.value);
+}
+
 function createKotlinFieldInspector(vscode, options) {
-  const {inspect,validate} = createKotlinFrameGuard(vscode,{...options,builds:[KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD]});
-  const receivers = new WeakMap(), fields = new WeakMap(), reviews = new WeakMap();
+  const {inspect,validate} = createKotlinFrameGuard(vscode,{...options,builds:[KOTLIN_FIELD_BUILD,...KOTLIN_LINE_BUILDS]});
+  const receivers = new WeakMap(), fields = new WeakMap(), pages = new WeakMap(), reviews = new WeakMap();
 
   function need(records, report) {
     const context = records.get(report);
@@ -51,29 +71,63 @@ function createKotlinFieldInspector(vscode, options) {
     const receiver = report.receivers.find(row=>row.name===name);
     if (!receiver) throw Error('Choose a visible Kotlin object from this paused frame.');
     const items = (await send(context,'fields',{receiver:name}))?.fields;
-    if (!Array.isArray(items)||items.length>256||items.some(row=>!isName(row?.name)||
-        typeof row.boxed!=='boolean'||typeof row.writable!=='boolean'||typeof row.type!=='string'||
-        !primitiveTypes.has(row.boxed?row.type.replace(/ \(boxed\)$/u,''):row.type)||
-        row.boxed!==row.type.endsWith(' (boxed)')||!isScalar(row.type,row.boxed,row.value)||
-        !Array.isArray(row.boxSources)||row.boxSources.length>128||row.boxSources.some(source=>!isName(source))||
-        ((!row.writable||!row.boxed)&&row.boxSources.length>0))) throw Error('The Java adapter returned an invalid field list.');
-    const reportFields = Object.freeze({receiver, fields:Object.freeze(items.map(({name,type,value,boxed,writable,boxSources})=>
-      Object.freeze({name,type,value,boxed,writable,boxSources:Object.freeze([...boxSources])})))});
+    if (!Array.isArray(items)||items.length>256||items.some(row=>!isField(row))) {
+      throw Error('The Java adapter returned an invalid field list.');
+    }
+    const reportFields = Object.freeze({receiver, fields:Object.freeze(items.map(({name,type,value,boxed,writable,boxSources,kind,length,elementType})=>
+      Object.freeze({name,type,value,boxed,writable,boxSources:Object.freeze([...boxSources]),...(kind&&{kind}),
+        ...(kind==='array'&&{length,elementType})})))});
     fields.set(reportFields,context);
     return reportFields;
+  }
+
+  async function inspectArray(report, name, start=0) {
+    const context=need(fields,report), slot=report.fields.find(row=>row.name===name && row.kind==='array');
+    if (!slot || !index(start) || start>=slot.length) throw Error('Choose a current Kotlin array field and a valid element offset.');
+    const result=await send(context,'page',{receiver:report.receiver.name,name,start,count:pageSize});
+    const expected={receiver:report.receiver.name,name,start,length:slot.length,elementType:slot.elementType};
+    if (!same(result,expected,['receiver','name','start','length','elementType']) || !tokens.test(result?.pageId || '') ||
+        !Array.isArray(result.items) || result.items.length!==Math.min(pageSize,slot.length-start) ||
+        result.items.some((item,offset)=>item?.index!==start+offset || !isScalar(slot.elementType,false,item.value))) {
+      throw Error('The Java adapter returned an invalid Kotlin array page.');
+    }
+    const page=Object.freeze({...expected,writable:slot.writable,items:Object.freeze(result.items.map(({index,value})=>Object.freeze({index,value})))});
+    pages.set(page,{...context,pageId:result.pageId,report});
+    return page;
+  }
+
+  async function prepareElement(page, at, input) {
+    const context=need(pages,page);
+    const item=page.items.find(value=>value.index===at);
+    if (!page.writable || !item || typeof input!=='string' || input.length>24) {
+      throw Error('Choose an editable Kotlin array element from this page and its matching literal.');
+    }
+    const {name:receiver,owner}=context.report.receiver;
+    const result=await send(context,'prepare',{receiver,name:page.name,index:at,input,pageId:context.pageId});
+    const expected={receiver,owner,name:page.name,type:page.elementType,index:at,before:item.value};
+    if (!same(result,expected,['receiver','owner','name','type','index','before']) || !tokens.test(result?.reviewId || '') ||
+        !isScalar(page.elementType,false,result.after)) throw Error('The Java adapter returned an invalid Kotlin element review.');
+    const review=Object.freeze({...expected,after:result.after});
+    reviews.set(review,{...context,reviewId:result.reviewId});
+    return review;
   }
 
   async function prepare(report, name, input) {
     const context = need(fields,report);
     const slot = report.fields.find(row=>row.name===name);
-    if (!slot?.writable||typeof input!=='string'||(slot.boxed?!slot.boxSources.includes(input):input.length>24)) {
+    const text=slot?.kind==='text';
+    if (text && (typeof input!=='string' || input.length>maxText || /[\u0000\uD800-\uDFFF]/u.test(input))) {
+      throw Error('Use valid Kotlin field text of at most 2048 UTF-16 units.');
+    }
+    if (!slot?.writable||slot.kind==='array'||typeof input!=='string'||(!text && (slot.boxed?!slot.boxSources.includes(input):input.length>24))) {
       throw Error('Choose a writable Kotlin field and its matching primitive literal or boxed local.');
     }
     const {name:receiver,owner} = report.receiver;
     const result = await send(context,'prepare',{receiver,name,input});
     if (!same(result,{receiver,owner,name,type:slot.type},['receiver','owner','name','type'])||
         typeof result.reviewId!=='string'||!tokens.test(result.reviewId)||
-        !isScalar(slot.type,slot.boxed,result.before)||!isScalar(slot.type,slot.boxed,result.after)||result.after==='null') {
+        (text ? !(result.before==='null' || isText(result.before)) || !isText(result.after) || JSON.parse(result.after)!==input :
+          !isScalar(slot.type,slot.boxed,result.before)||!isScalar(slot.type,slot.boxed,result.after)||result.after==='null')) {
       throw Error('The Java adapter returned an invalid Kotlin field review.');
     }
     const review = Object.freeze({receiver,owner,name,type:result.type,before:result.before,after:result.after,
@@ -86,10 +140,12 @@ function createKotlinFieldInspector(vscode, options) {
     const context = need(reviews,review);
     reviews.delete(review);
     const result = await send(context,'apply',{reviewId:context.reviewId});
-    if (!same(result,{state:'applied',receiver:review.receiver,name:review.name,value:review.after},['state','receiver','name','value'])) {
+    const expected={state:'applied',receiver:review.receiver,name:review.name,value:review.after};
+    if (review.index!==undefined) expected.index=review.index;
+    if (!same(result,expected,['state','receiver','name','value','index'])) {
       throw Error('The Java adapter did not confirm the reviewed Kotlin field value.');
     }
-    return {state:'applied',receiver:result.receiver,name:result.name,value:result.value};
+    return expected;
   }
 
   async function cancel(review) {
@@ -97,6 +153,47 @@ function createKotlinFieldInspector(vscode, options) {
     if (!context) return;
     reviews.delete(review);
     await context.session.customRequest(request,{action:'cancel',reviewId:context.reviewId}).catch(()=>{});
+  }
+
+  async function confirm(review) {
+    const slot=review.receiver+'.'+review.name+(review.index===undefined?'':'['+review.index+']');
+    try {
+      const source=review.boxedLocal?'\nCopy reference from '+review.boxedLocal:'';
+      const prompt=review.index===undefined?'Set this JVM field in the paused Kotlin object?':'Set this element in the paused Kotlin array?';
+      const button=review.index===undefined?'Set Field Value':'Set Element Value';
+      const answer=await vscode.window.showWarningMessage(prompt,{modal:true,
+        detail:slot+' · '+review.owner+'\n'+review.before+' → '+review.after+source},button);
+      if (answer!==button) return;
+      const result=await apply(review);
+      void vscode.window.showInformationMessage(slot+' = '+result.value);
+      return result;
+    } finally { await cancel(review); }
+  }
+
+  async function chooseElement(report, slot, title) {
+    if (!slot.length) {
+      void vscode.window.showInformationMessage(report.receiver.name+'.'+slot.name+' = '+slot.value);
+      return;
+    }
+    let start=0;
+    for (;;) {
+      const page=await inspectArray(report,slot.name,start);
+      const choices=page.items.map(item=>({label:'['+item.index+']',description:item.value,at:item.index}));
+      if (start>0) choices.push({label:'Previous elements',offset:Math.max(0,start-pageSize)});
+      if (start+page.items.length<page.length) choices.push({label:'Next elements',offset:start+page.items.length});
+      const selected=await vscode.window.showQuickPick(choices,{title,
+        placeHolder:report.receiver.name+'.'+slot.name+' · '+slot.type+' · '+(start+1)+'–'+(start+page.items.length)+' of '+page.length});
+      if (!selected) return;
+      if (selected.offset!==undefined) { start=selected.offset; continue; }
+      if (!page.writable) {
+        void vscode.window.showInformationMessage(selected.label+' = '+selected.description+' · Read-only JVM storage');
+        return;
+      }
+      const input=await vscode.window.showInputBox({title,prompt:'Enter a '+page.elementType+' literal for '+slot.name+selected.label,
+        ignoreFocusOut:true});
+      if (input===undefined) return;
+      return confirm(await prepareElement(page,selected.at,input.trim()));
+    }
   }
 
   async function choose() {
@@ -112,6 +209,7 @@ function createKotlinFieldInspector(vscode, options) {
       {title,placeHolder:observed.receiver.name+' · '+observed.receiver.owner});
     if (!selection) return;
     const {slot} = selection;
+    if (slot.kind==='array') return chooseElement(observed,slot,title);
     if (!slot.writable || (slot.boxed && !slot.boxSources.length)) {
       const reason = slot.writable?'A matching non-null boxed local is required for replacement.':'This JVM field is read-only.';
       void vscode.window.showInformationMessage(observed.receiver.name+'.'+slot.name+' = '+slot.value+' · '+slot.type+'\n'+reason);
@@ -119,21 +217,14 @@ function createKotlinFieldInspector(vscode, options) {
     }
     const input = slot.boxed
       ? await vscode.window.showQuickPick([...slot.boxSources],{title,placeHolder:'Copy an existing non-null boxed '+slot.type.split(' ')[0]+' local'})
-      : await vscode.window.showInputBox({title,prompt:'Enter a '+slot.type+' literal for '+observed.receiver.name+'.'+slot.name,ignoreFocusOut:true});
+      : await vscode.window.showInputBox({title,prompt:slot.kind==='text' ?
+        'Enter the replacement text for '+observed.receiver.name+'.'+slot.name :
+        'Enter a '+slot.type+' literal for '+observed.receiver.name+'.'+slot.name,ignoreFocusOut:true});
     if (input === undefined) return;
-    const review = await prepare(observed,slot.name,input.trim());
-    try {
-      const source = review.boxedLocal ? '\nCopy reference from '+review.boxedLocal : '';
-      const answer = await vscode.window.showWarningMessage('Set this JVM field in the paused Kotlin object?',{modal:true,
-        detail:review.receiver+'.'+review.name+' · '+review.owner+'\n'+review.before+' → '+review.after+source},'Set Field Value');
-      if (answer!=='Set Field Value') return;
-      const result = await apply(review);
-      void vscode.window.showInformationMessage(result.receiver+'.'+result.name+' = '+result.value);
-      return result;
-    } finally { await cancel(review); }
+    return confirm(await prepare(observed,slot.name,slot.kind==='text'?input:input.trim()));
   }
 
-  return {list,inspectFields,prepare,apply,cancel,choose};
+  return {list,inspectFields,inspectArray,prepareElement,prepare,apply,cancel,choose};
 }
 
 module.exports = {createKotlinFieldInspector};

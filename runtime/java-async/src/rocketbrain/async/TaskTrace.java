@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
-/** Opt-in submission stacks for work sent through a wrapped Executor. */
+/** Opt-in submission stacks for wrapped executors and explicitly launched virtual threads. */
 public final class TaskTrace implements AutoCloseable {
     private static final int FILE_BYTES = 4 * 1024 * 1024;
     private static final int MAX_TASKS = 2048;
@@ -51,23 +51,39 @@ public final class TaskTrace implements AutoCloseable {
         Objects.requireNonNull(label, "label");
         return runnable -> {
             Objects.requireNonNull(runnable, "runnable");
-            Task task = submitted(label);
-            if (task == null) {
-                delegate.execute(runnable);
-                return;
-            }
+            Task task = submitted(label, "executor");
             try {
-                delegate.execute(() -> runRecorded(task, runnable));
+                delegate.execute(wrap(task, runnable));
             } catch (RuntimeException | Error failure) {
-                if (!task.started) phase("rejected", task.id);
+                rejected(task);
                 throw failure;
             }
         };
     }
 
+    public Thread startVirtualThread(String label, Runnable runnable) {
+        Objects.requireNonNull(label, "label");
+        Objects.requireNonNull(runnable, "runnable");
+        Task task = submitted(label, "virtual-thread");
+        try {
+            return Thread.startVirtualThread(wrap(task, runnable));
+        } catch (RuntimeException | Error failure) {
+            rejected(task);
+            throw failure;
+        }
+    }
+
+    private Runnable wrap(Task task, Runnable runnable) {
+        return task == null ? runnable : () -> runRecorded(task, runnable);
+    }
+
+    private void rejected(Task task) {
+        if (task != null && !task.started) phase("rejected", task.id);
+    }
+
     public synchronized boolean isHealthy() { return healthy; }
 
-    private synchronized Task submitted(String label) {
+    private synchronized Task submitted(String label, String handoff) {
         if (closed || !recording) return null;
         if (nextTask >= MAX_TASKS) {
             truncate();
@@ -79,19 +95,23 @@ public final class TaskTrace implements AutoCloseable {
             .filter(frame -> !frame.getClassName().equals(OWN_CLASS))
             .limit(MAX_FRAMES).map(TaskTrace::frame).toList());
         var entry = "{\"kind\":\"submitted\",\"id\":" + id + ",\"parent\":" + (parent == null ? 0 : parent)
-            + ",\"label\":" + json(shorten(label, 160)) + ",\"thread\":" + thread()
+            + ",\"label\":" + json(shorten(label, 160)) + ",\"handoff\":" + json(handoff)
+            + ",\"thread\":" + thread(Thread.currentThread())
             + ",\"frames\":[" + String.join(",", frames) + "]}";
         return append(entry) ? new Task(id) : null;
     }
 
     private void runRecorded(Task task, Runnable runnable) {
-        // The debugger reads these two locals around the user's task call.
+        // The debugger reads these locals around the user's task call.
         String rocketbrainTraceId = traceId;
         long rocketbrainTaskId = task.id;
+        Thread worker = Thread.currentThread();
+        long rocketbrainWorkerThreadId = worker.threadId();
+        boolean rocketbrainWorkerVirtual = worker.isVirtual();
         task.started = true;
         Long previous = activeTask.get();
         activeTask.set(rocketbrainTaskId);
-        entered(rocketbrainTraceId, rocketbrainTaskId);
+        entered(rocketbrainTraceId, rocketbrainTaskId, worker, rocketbrainWorkerThreadId, rocketbrainWorkerVirtual);
         boolean returned = false;
         try {
             runnable.run();
@@ -103,17 +123,22 @@ public final class TaskTrace implements AutoCloseable {
         }
     }
 
-    private synchronized void entered(String trace, long id) {
-        if (traceId.equals(trace)) append("{\"kind\":\"entered\",\"id\":" + id + ",\"thread\":" + thread() + "}");
+    private synchronized void entered(String trace, long id, Thread worker, long threadId, boolean virtual) {
+        if (traceId.equals(trace)) {
+            append("{\"kind\":\"entered\",\"id\":" + id + ",\"thread\":" + thread(worker, threadId, virtual) + "}");
+        }
     }
 
     private synchronized void phase(String kind, long id) {
         append("{\"kind\":" + json(kind) + ",\"id\":" + id + "}");
     }
 
-    private static String thread() {
-        Thread thread = Thread.currentThread();
-        return "{\"id\":" + thread.threadId() + ",\"name\":" + json(shorten(thread.getName(), 120)) + "}";
+    private static String thread(Thread thread) {
+        return thread(thread, thread.threadId(), thread.isVirtual());
+    }
+
+    private static String thread(Thread thread, long id, boolean virtual) {
+        return "{\"id\":" + id + ",\"name\":" + json(shorten(thread.getName(), 120)) + ",\"virtual\":" + virtual + "}";
     }
 
     private static String frame(StackWalker.StackFrame frame) {
