@@ -1,6 +1,6 @@
 'use strict';
 
-const { KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD } = require('./debug-runtime');
+const { KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILD } = require('./debug-runtime');
 
 const command = 'rocketbrain/setKotlinLocal';
 const types = new Set(['Int','Long','Boolean']);
@@ -48,7 +48,7 @@ function createKotlinFrameGuard(vscode, { getState, ensureTrusted, builds }) {
 }
 
 function createKotlinLocalEditor(vscode, options) {
-  const {inspect,validate} = createKotlinFrameGuard(vscode,{...options,builds:[KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD]});
+  const {inspect,validate} = createKotlinFrameGuard(vscode,{...options,builds:[KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD]});
   const frames = new WeakMap(), pending = new WeakMap();
 
   async function list(session = vscode.debug.activeDebugSession) {

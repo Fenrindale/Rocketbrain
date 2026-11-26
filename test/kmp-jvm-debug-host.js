@@ -20,7 +20,7 @@ const invoke = promisify(execFile);
 const permission = {workspaceTrusted:true,allowProjectExecution:true};
 const names = ['kmpfixture.MainKt#commonProbe','kmpfixture.PlatformJvmKt#jvmProbe'];
 
-async function ownedFixture(parent,work) {
+async function ownedFixture(parent,work,{sourceLines=false}={}) {
   const directory=await fs.realpath(parent), root=await fs.mkdtemp(path.join(directory,'rb-kmp-jvm-proof-'));
   try {
     const project=path.join(root,'project');
@@ -37,14 +37,22 @@ async function ownedFixture(parent,work) {
     await fs.writeFile(common,[
       'package kmpfixture','',
       'fun commonProbe(seed: Int): Int {',
-      '    val commonValue = seed + 5',
+      sourceLines ? '    val commonValue = (seed + 5).also { check(it == 12) }' : '    val commonValue = seed + 5',
       '    return commonValue * 2',
       '}','',
       'fun main() {',
+      ...(sourceLines?['    check(shadow.matchingName() == 99)']:[]),
       '    val result = commonProbe(7)',
       '    println("Rocketbrain KMP ${describe(result)}")',
       '}',''
     ].join('\n'));
+    if (sourceLines) {
+      const duplicate=path.join(project,'src/commonMain/kotlin/shadow/Main.kt');
+      await fs.mkdir(path.dirname(duplicate),{recursive:true});
+      await fs.writeFile(duplicate,[
+        'package shadow','','fun matchingName(): Int {','    val commonValue = 99','    return commonValue','}',''
+      ].join('\n'),{flag:'wx'});
+    }
     await fs.writeFile(actual,[
       'package kmpfixture','',
       'actual val platformLabel: String = "JVM"',
@@ -227,7 +235,7 @@ async function runKmpJvmDebugChecks(api,vscode,checks) {
   }
 }
 
-module.exports={runKmpJvmDebugHeadless,runKmpJvmDebugChecks};
+module.exports={runKmpJvmDebugHeadless,runKmpJvmDebugChecks,ownedFixture,frameLocal,readCompletion,toolsFor};
 if (require.main===module) runKmpJvmDebugHeadless().then(proof=>console.log(JSON.stringify(proof))).catch(error=>{
   console.error(error.stack);
   process.exitCode=1;

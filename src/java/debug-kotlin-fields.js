@@ -1,6 +1,6 @@
 'use strict';
 
-const { KOTLIN_FIELD_BUILD } = require('./debug-runtime');
+const { KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILD } = require('./debug-runtime');
 const { createKotlinFrameGuard } = require('./debug-kotlin-local');
 
 const request = 'rocketbrain/kotlinObjectFields';
@@ -17,7 +17,7 @@ function isScalar(type, boxed, value) {
 }
 
 function createKotlinFieldInspector(vscode, options) {
-  const {inspect,validate} = createKotlinFrameGuard(vscode,{...options,builds:[KOTLIN_FIELD_BUILD]});
+  const {inspect,validate} = createKotlinFrameGuard(vscode,{...options,builds:[KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD]});
   const receivers = new WeakMap(), fields = new WeakMap(), reviews = new WeakMap();
 
   function need(records, report) {

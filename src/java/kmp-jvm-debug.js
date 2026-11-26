@@ -7,15 +7,17 @@ const { randomUUID } = require('node:crypto');
 const { spawn, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { setTimeout: delay } = require('node:timers/promises');
-const { kmpSpec } = require('./kmp-gradle');
+const { kmpSpec,regular } = require('./kmp-gradle');
 const { verifyKmpModel } = require('./kmp-workbench');
 const { snapshotKmpSources } = require('./kmp-sources');
+const { inspectKmpDebugSources } = require('./kmp-debug-sources');
 const { cancelled, fail } = require('./workbench-model');
 
 const execute = promisify(execFile);
 const markerKey = 'rocketbrain.kmp.debug.owner';
 const bootOptions = /^(?:JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$/i;
 const init = `import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
 import org.gradle.api.tasks.JavaExec
 
 gradle.projectsEvaluated {
@@ -46,6 +48,14 @@ gradle.projectsEvaluated {
           selected.jvmArgs.any { it.startsWith('-agentlib:jdwp') || it.startsWith('-Xrunjdwp') } ||
           selected.environment.any { key, value -> key.toUpperCase(java.util.Locale.ROOT) in ['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS'] && value })
         throw new GradleException('Disable existing Kotlin JVM debug or launcher options before starting a managed session.')
+      if (config.lineOutput) {
+        def compilation = target.compilations.findByName('main')
+        def classpath = selected.classpath.files.collect { it.canonicalPath }.toSet()
+        def roots = compilation.output.classesDirs.files.collect { it.canonicalPath }.findAll { classpath.contains(it) }.sort()
+        def output = new File(config.lineOutput)
+        if (!output.createNewFile()) throw new GradleException('Kotlin class output evidence already exists.')
+        output.setText(JsonOutput.toJson([marker: config.marker, task: selected.path, roots: roots]), 'UTF-8')
+      }
     }
   }
 }
@@ -109,24 +119,25 @@ async function stopProcess(record) {
 }
 
 async function startKmpJvmDebug({model,modulePath,targetName,tools,workspaceTrusted,allowProjectExecution,cancellation,
-  resolveDescendant,onOutput=()=>{},startupMs=180000}) {
+  resolveDescendant,onOutput=()=>{},startupMs=180000,sourceLineJavaHome}) {
   if (workspaceTrusted!==true || allowProjectExecution!==true) throw fail('Explicitly choose Kotlin JVM debugging in a trusted workspace.');
   if (cancelled(cancellation)) throw fail('Kotlin JVM debugging was cancelled.');
   if (typeof resolveDescendant!=='function') throw fail('Configure independent Java debugger ownership checks before Kotlin JVM debugging.');
   const {module,target,sourcePaths}=selectKmpJvmTarget(model,modulePath,targetName);
-  const checkSources=()=>snapshotKmpSources(model,module,[targetName],cancellation).fingerprint;
+  const checkSources=()=>snapshotKmpSources(model,module,[targetName],cancellation);
   const before=checkSources(), marker={key:markerKey,value:randomUUID()};
   const parent=await fs.realpath(os.tmpdir()), folder=await fs.mkdtemp(path.join(parent,'rb-kmp-debug-'));
   const stage={parent,folder,identity:await fs.lstat(folder,{bigint:true})};
-  const script=path.join(folder,'debug.init.gradle'), settings=path.join(folder,'selection.json');
+  const script=path.join(folder,'debug.init.gradle'), settings=path.join(folder,'selection.json'), lineOutput=path.join(folder,'kotlin-classes.json');
   let record, lastError;
   try {
     await fs.writeFile(script,init,{flag:'wx'});
-    await fs.writeFile(settings,JSON.stringify({module:modulePath,target:targetName,task:target.runTask,marker:marker.value}),{flag:'wx'});
+    await fs.writeFile(settings,JSON.stringify({module:modulePath,target:targetName,task:target.runTask,marker:marker.value,
+      ...(sourceLineJavaHome&&{lineOutput})}),{flag:'wx'});
     const launch=await kmpSpec(model.root,tools,[target.runTask],{discovery:true,initFile:script,output:settings});
     for (const key of Object.keys(launch.env)) if (bootOptions.test(key)) delete launch.env[key];
     verifyKmpModel(model);
-    if (before!==checkSources()) throw fail('Kotlin source files changed before starting the JVM debugger.');
+    if (before.fingerprint!==checkSources().fingerprint) throw fail('Kotlin source files changed before starting the JVM debugger.');
     if (cancelled(cancellation)) throw fail('Kotlin JVM debugging was cancelled.');
 
     const child=spawn(launch.command,launch.args,{cwd:launch.cwd,env:launch.env,windowsHide:true,
@@ -159,8 +170,24 @@ async function startKmpJvmDebug({model,modulePath,targetName,tools,workspaceTrus
         if (record.exited || record.error || cancelled(cancellation)) throw fail('The owned Kotlin JVM changed during debugger startup.');
         record.target=candidate;
         verifyKmpModel(model);
-        if (before!==checkSources()) throw fail('Kotlin source files changed while Gradle prepared the debugger.');
-        return {target:candidate,sourcePaths,task:target.runTask,done:record.done,stop};
+        if (before.fingerprint!==checkSources().fingerprint) throw fail('Kotlin source files changed while Gradle prepared the debugger.');
+        let sourceLines;
+        if (sourceLineJavaHome) {
+          try {
+            const evidence=JSON.parse(regular(lineOutput,folder,65536).toString('utf8'));
+            if (evidence.marker!==marker.value || evidence.task!==target.runTask) throw fail('Kotlin class output evidence belongs to a different task.');
+            sourceLines=await inspectKmpDebugSources({model,module,snapshot:before,outputs:evidence.roots,folder,
+              javaHome:sourceLineJavaHome,cancellation});
+            if (Buffer.byteLength(JSON.stringify(sourceLines))>8*1024*1024) throw fail('Kotlin source line evidence exceeds its session limit.');
+          } catch (error) {
+            sourceLines=undefined;
+            onOutput('Kotlin source-line evidence was unavailable. '+error.message+'\n');
+          }
+          if (record.exited || record.error || cancelled(cancellation)) throw fail('The owned Kotlin JVM changed during source verification.');
+          verifyKmpModel(model);
+          if (before.fingerprint!==checkSources().fingerprint) throw fail('Kotlin sources changed during debugger source verification.');
+        }
+        return {target:candidate,sourcePaths,sourceLines,task:target.runTask,done:record.done,stop};
       }
       await delay(175);
     }

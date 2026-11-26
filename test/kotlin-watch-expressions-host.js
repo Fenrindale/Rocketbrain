@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { fileURLToPath,pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
-const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD } = require('../src/java/debug-runtime');
+const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILD } = require('../src/java/debug-runtime');
 const { freePort } = require('./java-debug-dap');
 const { until } = require('./helpers/stdio-lsp');
 const { buildCoroutineFixture } = require('./helpers/coroutine-fixture');
@@ -18,8 +18,8 @@ const { stageCleanup } = require('./helpers/kotlin-native-fixture-cleanup');
 async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields = false, { cleanupManifest } = {}) {
   await api.java.start();
   const debugBuild = api.java.getState().debugBuild;
-  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD].includes(debugBuild));
-  if (requireFields) assert.equal(debugBuild, KOTLIN_FIELD_BUILD);
+  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD].includes(debugBuild));
+  if (requireFields) assert.ok([KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD].includes(debugBuild));
   const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const project = await fs.mkdtemp(path.join(workspace, 'rb-kotlin-expressions-'));
@@ -68,7 +68,7 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields
     const values = await assertKotlinWatchValues(send, frame.id);
     const indexed = debugBuild !== WATCH_BUILD ? await assertIndexedKotlinWatchValues(send, frame.id) : undefined;
     let write;
-    if([KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD].includes(debugBuild)){
+    if([KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD].includes(debugBuild)){
       assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.java.setKotlinLocal'));
       const locals=api.java.debug.kotlinLocals;
       const original=await locals.list(session);
@@ -85,7 +85,7 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields
     }
     let fieldResult, staleField;
     const inspector = api.java.debug.kotlinFields;
-    if (debugBuild === KOTLIN_FIELD_BUILD) {
+    if ([KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD].includes(debugBuild)) {
       assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.java.inspectKotlinObjectFields'));
       const objects = await inspector.list(session);
       const actual = await inspector.inspectFields(objects,'target');

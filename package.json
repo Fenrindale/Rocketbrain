@@ -2001,7 +2001,7 @@
         "when": "editorTextFocus && editorHasCodeActionsProvider"
       }
     ],
-    "breakpoints": [{ "language": "scala" }],
+    "breakpoints": [{ "language": "scala" }, { "language": "kotlin" }],
     "debuggers": [
       {
         "type": "rocketbrain-scala",

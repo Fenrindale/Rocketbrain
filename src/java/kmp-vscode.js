@@ -8,7 +8,8 @@ const { nativeTaskRunner } = require('./workbench-tasks');
 const { projectForRoot,loadKmpModel } = require('./kmp-gradle');
 const { runKmpTasks } = require('./kmp-workbench');
 const { startKmpJvmDebug } = require('./kmp-jvm-debug');
-const { DEBUG_TYPE,processAttachTarget } = require('./debug');
+const { DEBUG_TYPE,KMP_DEBUG_MARKER:debugMarker,processAttachTarget } = require('./debug');
+const { KOTLIN_LINE_BUILD } = require('./debug-runtime');
 const { definitionForKmp } = require('./kmp-sources');
 const {previewCandidates,renderComposePreview}=require('./kmp-compose-preview');
 const { fileKey } = require('./dependency-builds');
@@ -19,7 +20,6 @@ const COMMANDS={inspect:'rocketbrain.kotlin.multiplatform.inspect',compile:'rock
   debug:'rocketbrain.kotlin.multiplatform.debugJvm',
   definition:'rocketbrain.kotlin.multiplatform.definition',stop:'rocketbrain.kotlin.multiplatform.stop',
   preview:'rocketbrain.kotlin.multiplatform.previewCompose',refreshPreview:'rocketbrain.kotlin.multiplatform.refreshComposePreview'};
-const debugMarker='__rocketbrainKmpDebugSession';
 
 async function withDeadline(work,timeout,message,cancellation) {
   const timer=new AbortController();
@@ -143,16 +143,20 @@ function registerKmpWorkbench(vscode,java) {
       if (!model) throw fail('Inspect the Kotlin Multiplatform Gradle model before selecting a JVM application.');
       await withDeadline(Promise.resolve(java.start()),45000,'The independent Java debugger did not start.',details.cancellation);
       trusted(details.cancellation);
-      if (!java.getState().debugBundlePath) throw fail('Configure the independent Java debug bundle before debugging Kotlin.');
+      const runtime=java.getState();
+      if (!runtime.debugBundlePath) throw fail('Configure the independent Java debug bundle before debugging Kotlin.');
       output.show(true);
       const run=await startKmpJvmDebug({...details,model,resolveDescendant:java.debug.processes.resolveDescendant,
+        sourceLineJavaHome:runtime.debugBuild===KOTLIN_LINE_BUILD ? runtime.javaHome : undefined,
         onOutput:chunk=>output.append(chunk)});
       const token=randomUUID(), record={run,token,session:undefined,sessionEnded:false,closing:undefined,attached:false};
       ownedDebug=record;
       pendingDebug.set(token,record);
+      let registration;
       try {
         trusted(details.cancellation);
         saved(details.root);
+        if (run.sourceLines) registration=java.debug.registerKotlinSourceLines(token,run.target,run.sourceLines);
         const folder=vscode.workspace.getWorkspaceFolder(vscode.Uri.file(details.root));
         const launched=Promise.resolve().then(()=>vscode.debug.startDebugging(folder,{
           type:DEBUG_TYPE,request:'attach',name:'Kotlin JVM: '+run.task,...processAttachTarget(run.target),
@@ -175,7 +179,7 @@ function registerKmpWorkbench(vscode,java) {
       } catch (error) {
         await finishDebug(record);
         throw error;
-      }
+      } finally {registration?.dispose();}
     });
   }
 
