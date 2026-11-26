@@ -5,6 +5,7 @@ const { kotlinEditorLaunch,hasGradleFiles,kotlinProtocolUri } = require('./kotli
 const { inside,workspacePath,workspaceRoots,fail } = require('./workbench-model');
 const {registerSourceFormatting} = require('./format-vscode');
 const {kotlinFormatterOptions,buildKotlinFormatEdits} = require('./kotlin-format-edits');
+const {registerKotlinRename} = require('./kotlin-rename-vscode');
 
 const COMMANDS={start:'rocketbrain.kotlinEditor.start',stop:'rocketbrain.kotlinEditor.stop',output:'rocketbrain.kotlinEditor.output'};
 
@@ -246,6 +247,38 @@ function registerKotlinEditor(context,vscode,java) {
   const references=(document,position,includeDeclaration,cancellation)=>sourceRequest('textDocument/references',
     document,position,{includeDeclaration:Boolean(includeDeclaration)},cancellation);
 
+  async function beginRename(document,cancellation) {
+    await start({document});
+    const record = active, root = projectOf(document);
+    const check = () => {
+      trusted();
+      if (!record?.client?.isRunning() || active!==record || !root || state.state!=='running' ||
+          path.relative(record.launch.root,root) || cancellation?.isCancellationRequested) {
+        throw fail('Keep the Kotlin language server and selected Gradle project open while reviewing the rename.');
+      }
+    };
+    check();
+    const capabilities = record.client.initializeResult?.capabilities;
+    if (!capabilities?.renameProvider?.prepareProvider || !capabilities.referencesProvider || !capabilities.definitionProvider) {
+      throw fail('The connected Kotlin language server does not offer reviewed semantic rename.');
+    }
+    return {root,check,async request(method,params,token) {
+      check();
+      let timer;
+      try {
+        const response = await Promise.race([
+          record.client.sendRequest(method,params,...(token ? [token] : [])),
+          new Promise((_,reject)=>{timer=setTimeout(()=>reject(fail('Kotlin rename analysis timed out. Wait for project indexing and try again.')),30000);})
+        ]);
+        check();
+        return response;
+      } finally {clearTimeout(timer);}
+    }};
+  }
+
+  const rename = registerKotlinRename(vscode,{begin:beginRename,refactoring:java.refactoring,output});
+  subscriptions.push(rename);
+
   function automatic(document) {
     if (disposed || suspended || !vscode.workspace.isTrusted || !vscode.workspace.getConfiguration('rocketbrain.kotlinEditor').get('serverHome')) return;
     if (document?.languageId!=='kotlin') return;
@@ -270,7 +303,7 @@ function registerKotlinEditor(context,vscode,java) {
   }));
   automatic(vscode.window.activeTextEditor?.document);
 
-  return {start,stop,definition,references,formatting,documentSymbols,selectionRanges,codeInformation,inlayHints,getState:()=>({...state}),dispose() {
+  return {start,stop,definition,references,formatting,rename,documentSymbols,selectionRanges,codeInformation,inlayHints,getState:()=>({...state}),dispose() {
     if (closing) return closing;
     disposed=true;
     suspended=true;
