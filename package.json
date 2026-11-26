@@ -313,6 +313,7 @@
       { "command": "rocketbrain.localSqlAssistant.explain", "title": "Explain SQL with Local Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive && editorLangId == sql" },
       { "command": "rocketbrain.localSqlAssistant.grounded", "title": "Explore Schema with Local SQL Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.acp.reviewDatabase", "title": "Review Database ACP Tasks", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
+      { "command": "rocketbrain.acp.reviewWorkspaceEdit", "title": "Review an ACP Multi-File Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localSqlAssistant.compareProposals", "title": "Compare Local SQL Proposals", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.measurePlan", "title": "Measure SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
@@ -2022,6 +2023,10 @@
               "args": { "type": "array", "maxItems": 32, "items": { "type": "string" } }
             }
           }
+        },
+        "rocketbrain.acp.workspaceEditOpenCodePath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute path to the optional OpenCode executable for ACP source edit reviews with the configured loopback code model."
         },
         "rocketbrain.acp.databaseAgents": {
           "type": "array", "default": [], "scope": "machine-overridable", "maxItems": 20,
