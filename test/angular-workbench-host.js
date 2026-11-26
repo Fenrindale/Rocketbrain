@@ -41,7 +41,9 @@ async function exerciseAngular(angular,vscode,root) {
     const at=document.getText().indexOf(where)+offset;
     assert.ok(at>=offset,where);
     const values=await vscode.commands.executeCommand('vscode.executeHoverProvider',document.uri,document.positionAt(at));
-    assert.ok((values||[]).some(value=>value.contents.some(item=>match.test(String(item.value||item).replace(/\\([^\w\s])/gu,'$1')))),where);
+    // VS Code escapes MarkdownString plain text punctuation and encodes its spaces.
+    const text=item=>String(item.value||item).replace(/\\([^\w\s])/gu,'$1').replace(/&nbsp;|\u00a0/gu,' ');
+    assert.ok((values||[]).some(value=>value.contents.some(item=>match.test(text(item)))),where);
   };
   const editor=await vscode.window.showTextDocument(html,{preview:false});
   try {
