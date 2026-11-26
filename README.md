@@ -54,6 +54,8 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 **Audit Maven Dependencies with OSV**는 선택한 Maven 모듈의 실제 의존성 트리를 해석합니다. OSV로 전송할 패키지 이름·버전을 직접 선택하면 직접·전이 의존 경로와 조회 시각, 등록된 권고 ID를 보고서에 표시합니다. [OSV API](https://google.github.io/osv.dev/post-v1-querybatch/)
 
+Maven·Gradle 권고 보고서에서 **Inspect Java Advisory Call Sites**로 선택 모듈의 컴파일 클래스 경로를 확인하면, 지원하는 권고의 API 호출을 정확한 JAR과 Java 소스 위치에 연결합니다. 보고서에는 공급자가 제시한 수정 버전과 권고 링크가 표시됩니다. [Java 권고 호출 위치 검토](docs/java-advisory-calls.md)
+
 **Audit Gradle Dependencies with OSV**에서 신뢰한 모듈과 Java 컴파일·런타임·테스트 런타임 구성 중 하나를 선택합니다. Gradle이 실제로 선택한 버전과 직접·전이 경로를 보고, 전송할 패키지 이름·버전을 개별 선택합니다. 해결하지 못한 의존 관계의 수는 별도로 표시합니다.
 
 `.ipynb`는 **Rocketbrain Jupyter Notebook**에서 열 수 있습니다. `jupyter_client`와 `ipykernel`이 설치된 Python 실행 파일을 `rocketbrain.jupyter.pythonPath`에 지정하면 셀을 실행하고 커널 세션을 유지할 수 있습니다. 셀 소스, 출력과 Markdown 첨부 파일은 노트북에 저장됩니다. [Jupyter 파일 형식](https://nbformat.readthedocs.io/en/v5.10.0/format_description.html)

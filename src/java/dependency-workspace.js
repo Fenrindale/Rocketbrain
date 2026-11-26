@@ -284,6 +284,14 @@ async function attributionScope(vscode,requested,folders) {
   return scope;
 }
 
+async function scanScopedJavaInputs(vscode, uri, cancellation) {
+  check(vscode,cancellation);
+  const folders=(vscode.workspace.workspaceFolders||[]).filter(folder=>localUri(folder.uri));
+  const scope=await attributionScope(vscode,uri,folders);
+  const [descriptors,sources]=await scanInputs(vscode,[{uri:scope}],cancellation,scope);
+  return {scope,descriptors,sources};
+}
+
 function dependencyLinks(report) {
   const links=new Map();
   const add=link=>{if(link?.uri)links.set(linkKey(link),structuredClone(link));};
@@ -352,4 +360,4 @@ async function workspaceDependencyGraph(vscode, java, { includeCompiled = false,
   return result;
 }
 
-module.exports = {workspaceDependencyGraph,verifyDependencyLink,observeBytecode,compiledOutputs,localUri,check};
+module.exports = {workspaceDependencyGraph,verifyDependencyLink,observeBytecode,compiledOutputs,localUri,check,scanScopedJavaInputs};

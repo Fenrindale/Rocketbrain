@@ -44,6 +44,17 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   else if(inspection.kind==='typeRename'&&[inspection.fqn,inspection.other].every(value=>
     typeof value==='string'&&value.length<1024&&value.includes('.')&&value.split('.').every(validIdentifier)))
    query.push('typeRename',inspection.fqn,inspection.other);
+  else if(inspection.kind==='advisoryCalls'&&Array.isArray(inspection.targets)&&inspection.targets.length>0&&inspection.targets.length<=32){
+    const name=/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/u;
+    const method=/^[A-Za-z_$][\w$]*$/u;
+    const encoded=inspection.targets.map(target=>{
+      if(!target||!name.test(target.owner)||!method.test(target.name)||!name.test(target.returns)||typeof target.isStatic!=='boolean')
+        throw Error('Use an exact supported Java advisory signature.');
+      return [target.owner,target.name,target.returns,target.isStatic?'static':'instance'].join('\t');
+    });
+    if(new Set(encoded).size!==encoded.length||encoded.join('').length>10000)throw Error('Use bounded distinct Java advisory signatures.');
+    query.push('advisoryCalls',...encoded);
+  }
   else if(inspection.kind==='conversion'&&sources.some(item=>item.uri===inspection.uri))query.push('conversion',inspection.uri);
   else if(inspection.kind==='cleanup'&&['plan','verify'].includes(inspection.stage)&&
     sources.some(item=>item.uri===inspection.uri))query.push('cleanup',inspection.uri,inspection.stage);
@@ -125,7 +136,9 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   fs.writeFileSync(list,sources.map(s=>s.uri+'\t'+Buffer.from(s.text).toString('base64')).join('\n'));
   const effective=[];for(const [index,entry]of snapshot.entries.entries()){if(jarMetadata.get(entry)?.sanitized){const output=path.join(folder,'classpath-'+index+'.jar');await sanitizeCompilerJar(entry,output);effective.push(output);}else effective.push(entry);}fs.writeFileSync(cp,effective.join(path.delimiter));snapshot.validate();
   const output=await new Promise((resolve,reject)=>{const stdout=[];let total=0,stderr='',timer,cancel,settled=false;const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);cancel?.dispose();error?reject(error):resolve(value);};child=spawn(path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'),['--source','25',source,cp,list,empty,String(release),...query],{cwd:folder,env,windowsHide:true,stdio:['ignore','pipe','pipe']});exit=new Promise(r=>child.once('exit',(code)=>{exited=true;r(code);}));child.stdout.on('data',b=>{total+=b.length;if(total>8*1024*1024){child.kill();finish(Error('Compiler result exceeds its size limit.'));}else stdout.push(b);});child.stderr.on('data',b=>{stderr=(stderr+b.toString('utf8')).slice(-8000);});child.once('error',e=>{exited=true;finish(e);});child.once('close',code=>code===0?finish(null,Buffer.concat(stdout).toString('utf8')):finish(Error('Read-only Java compiler inspection failed: '+stderr)));timer=setTimeout(()=>{child.kill();finish(Error('Java compiler inspection timed out.'));},45000);cancel=cancellation?.onCancellationRequested?.(()=>{child.kill();finish(Error('Compiler inspection cancelled.'));});if(cancellation?.isCancellationRequested){child.kill();finish(Error('Compiler inspection cancelled.'));}});
-  if(cancellation?.isCancellationRequested)throw Error('Compiler inspection cancelled.');snapshot.validate();const report=JSON.parse(output);if(report.format!=='RocketbrainSignatureCompiler-v20'||report.processorsEnabled!==false||report.classGenerationEnabled!==false)throw Error('Invalid read-only compiler response.');return {...report,classpathFingerprint:snapshot.key,validateClasspath:()=>snapshot.validate()};
+  if(cancellation?.isCancellationRequested)throw Error('Compiler inspection cancelled.');snapshot.validate();const report=JSON.parse(output);if(report.format!=='RocketbrainSignatureCompiler-v20'||report.processorsEnabled!==false||report.classGenerationEnabled!==false)throw Error('Invalid read-only compiler response.');
+  const classes=inspection?.kind==='advisoryCalls'?snapshot.entries.map(file=>({file,sha256:snapshot.files.find(row=>row.file===file)?.hash})):undefined;
+  return {...report,...(classes&&{classpathEntries:classes}),classpathFingerprint:snapshot.key,validateClasspath:()=>snapshot.validate()};
  }finally{
   if(child&&!exited){child.kill();await Promise.race([exit,new Promise(r=>setTimeout(r,5000))]);}
   if(!child||exited){const marker=JSON.parse(fs.readFileSync(markerFile,'utf8'));if(marker.kind!==kind||marker.id!==id||path.dirname(fs.realpathSync(folder))!==parentReal)throw Error('Compiler inspection cleanup ownership changed.');fs.rmSync(folder,{recursive:true,force:false});}

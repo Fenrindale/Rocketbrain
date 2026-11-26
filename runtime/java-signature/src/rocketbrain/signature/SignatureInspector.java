@@ -396,6 +396,7 @@ public final class SignatureInspector {
 
     public static void main(String[] args) throws Exception {
         if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy","attributedDependencies").contains(args[4])) &&
+                !(args.length >= 6 && args.length <= 37 && args[4].equals("advisoryCalls")) &&
                 !(args.length == 7 && args[4].equals("dataflow")) &&
                 !(args.length == 9 && args[4].equals("callFlow")) &&
                 !(args.length == 6 && args[4].equals("conversion")) &&
@@ -449,6 +450,10 @@ public final class SignatureInspector {
                         report.put("attributedDependencies",new AttributedDependencies(trees,byUri.keySet()).inspect(units));
                     }
                     else if (args[4].equals("typeRename")) report.put("typeRename",TypeRenameInspector.inspect(task,units,args[5],args[6]));
+                    else if (args[4].equals("advisoryCalls")) {
+                        report.put("advisoryCalls",new AdvisoryCalls(trees,elements,types,files,classpath,
+                            Arrays.asList(args).subList(5,args.length)).inspect(units));
+                    }
                     else if (args[4].equals("hierarchy")) report.put("hierarchy",new HierarchyInspector(task).inspect(units,byUri));
                     else if (args[4].equals("dataflow")) report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
                     else if (args[4].equals("callFlow")) {

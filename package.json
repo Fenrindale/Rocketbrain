@@ -1039,6 +1039,18 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.java.inspectAdvisoryCalls",
+        "title": "Inspect Java Advisory Call Sites",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-maven-advisories"
+      },
+      {
+        "command": "rocketbrain.java.openAdvisoryCall",
+        "title": "Open Java Advisory Call Site",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-java-advisory-calls"
+      },
+      {
         "command": "rocketbrain.java.workbench.refresh",
         "title": "Refresh Java Projects",
         "category": "Rocketbrain",
