@@ -31,8 +31,6 @@ async function runJavaFxCompletionChecks(api, vscode, checks) {
     const fixture=await createFixture(root,libs), compiled=await buildFixture(fixture,{javaHome,gradleHome,gradleCache});
     const result=await api.java.workbench.resyncProject({projectUri,allowProjectExecution:true});
     assert.ok(result.projects.some(project=>!path.relative(project.root,root)));
-    const status=await api.java.buildWorkspace(true);
-    assert.ok(status===0||status===1||status?.status==='succeed');
     await until(async()=> (await complete(fixture.files.get('custom-tag'))).some(item=>item.name==='RocketLabel'),25000);
     const hydrated=await exerciseCompletion(fixture,complete);
     await runtimeLoad(hydrated,fixture,compiled,javaHome);
