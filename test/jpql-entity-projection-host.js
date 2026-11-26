@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const mysql = require('mysql2/promise');
 const { ObserverClient } = require('../src/jpa/observer-client');
 const { readConfig } = require('./jpql-console-host');
+const { until } = require('./helpers/stdio-lsp');
 
 const ROOT = 'select p from Person p where p.id >= :floor order by p.id';
 const DISTINCT = 'select distinct d from Person p join p.department d where p.id >= ?1 order by d.id';
@@ -136,7 +137,11 @@ async function runJpaEntityProjectionChecks(api, vscode, checks) {
       assert.equal(result?.view, 'rocketbrain.jpql.result');
       assert.equal(result.entityProjection?.javaType, 'fixture.boot.Department');
       assert.deepEqual(result.rows, [Array(4).fill(null), Array(4).fill(null)]);
-      assert.ok(vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.label === 'JPQL Results')));
+      await until(() => {
+        const tab = vscode.window.tabGroups.all.flatMap(group => group.tabs).find(item => item.label === 'JPQL Results');
+        if (!tab) throw Error('The native JPQL Results tab is not visible yet.');
+        return tab;
+      }, 3000);
       checks.push('Reviewed root and joined Hibernate entity fields in the JPQL console and returned exactly one read-only SELECT per run.');
       return { ...report, nativeView: true };
     } finally {

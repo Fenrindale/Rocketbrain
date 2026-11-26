@@ -2,11 +2,14 @@ package rocketbrain.observer;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.lang.ref.WeakReference;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.sql.JDBCType;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -21,7 +24,7 @@ import java.util.regex.Pattern;
 
 /** Short, opt-in request samples. Neither bind values nor raw request URLs enter snapshots. */
 public final class PerformanceRuntime {
-    private static final int MAX_REQUESTS=12, MAX_SELECTS=40, MAX_SQL=768, MAX_LOADERS=12;
+    private static final int MAX_REQUESTS=12, MAX_SELECTS=40, MAX_SQL=768, MAX_LOADERS=12, MAX_BINDS=16;
     private static final Pattern SQL_TOKEN=Pattern.compile("[A-Za-z_$][A-Za-z0-9_$]*|`[A-Za-z_$][A-Za-z0-9_$]*`|[?.,()=*<>!+/\\-% ]");
     private static final Pattern SQL_NAME=Pattern.compile("(?:[A-Za-z_$][A-Za-z0-9_$]*|`[A-Za-z_$][A-Za-z0-9_$]*`)(?:\\.(?:[A-Za-z_$][A-Za-z0-9_$]*|`[A-Za-z_$][A-Za-z0-9_$]*`)){0,2}");
     private static final Pattern JAVA_NAME=Pattern.compile("[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)+");
@@ -48,10 +51,17 @@ public final class PerformanceRuntime {
         final IdentityHashMap<Object,Integer> sessions=new IdentityHashMap<>();
         final Map<ByteBuffer,Integer> keys=new HashMap<>();
         final ArrayDeque<CollectionLoad> loads=new ArrayDeque<>();
+        final ArrayDeque<BindFrame> bindFrames=new ArrayDeque<>();
         byte[] salt;
-        int depth=1, loadDepth, omitted;
+        int depth=1, loadDepth, selectDepth, omitted;
         boolean incomplete;
         Request(Object servletRequest){this.servletRequest=servletRequest;}
+    }
+    private record Binding(String jdbcType,String source){}
+    private static final class BindFrame {
+        final Binding[] positions=new Binding[MAX_BINDS];
+        WeakReference<Object> statement;
+        boolean binding,bound,outOfRange;
     }
 
     public static void requestStart(Object servletRequest){
@@ -77,7 +87,7 @@ public final class PerformanceRuntime {
                 sample.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(System.nanoTime()-current.started));
                 Object dispatch=HibernateAccess.optional(current.servletRequest,"getDispatcherType");
                 boolean direct=dispatch instanceof Enum<?> value&&value.name().equals("REQUEST");
-                sample.put("complete",success&&!current.incomplete&&current.omitted==0&&current.loadDepth==0&&direct&&
+                sample.put("complete",success&&!current.incomplete&&current.omitted==0&&current.loadDepth==0&&current.selectDepth==0&&direct&&
                     Boolean.FALSE.equals(HibernateAccess.optional(current.servletRequest,"isAsyncStarted")));
                 Object method=HibernateAccess.optional(current.servletRequest,"getMethod");
                 if(method instanceof String value&&METHODS.contains(value))sample.put("method",value);
@@ -197,7 +207,94 @@ public final class PerformanceRuntime {
         return at==sql.length()?sql:null;
     }
 
-    public static void selectExecuted(Object context,String raw,long elapsed){
+    public static void selectStart(){
+        try{
+            Request current=request.get();
+            if(current!=null&&++current.selectDepth<=MAX_LOADERS)current.bindFrames.push(new BindFrame());
+        }catch(Throwable ignored){}
+    }
+
+    public static void selectEnd(){
+        try{
+            Request current=request.get();
+            if(current!=null&&current.selectDepth>0&&current.selectDepth--<=MAX_LOADERS)current.bindFrames.poll();
+        }catch(Throwable ignored){}
+    }
+
+    private static BindFrame bindFrame(Request current){
+        return current!=null&&current.selectDepth>0&&current.selectDepth<=MAX_LOADERS?current.bindFrames.peek():null;
+    }
+
+    public static void bindStart(Object statement){
+        try{
+            BindFrame frame=bindFrame(request.get());
+            if(frame!=null){
+                frame.statement=new WeakReference<>(statement);
+                frame.binding=true;
+            }
+        }catch(Throwable ignored){}
+    }
+
+    public static void bindEnd(){
+        try{
+            BindFrame frame=bindFrame(request.get());
+            if(frame!=null){
+                frame.binding=false;
+                frame.bound=true;
+            }
+        }catch(Throwable ignored){}
+    }
+
+    public static void typedBind(Object statement,int index,int type){recordBind(statement,index,type,"setter");}
+    public static void explicitBind(Object statement,int index,int type){recordBind(statement,index,type,"explicit");}
+    public static void explicitBindType(Object statement,int index,Object type){
+        if(type instanceof JDBCType jdbc)explicitBind(statement,index,jdbc.getVendorTypeNumber());
+        else untypedBind(statement,index);
+    }
+    public static void untypedBind(Object statement,int index){recordBind(statement,index,0,"untyped");}
+
+    public static void clearBinds(Object statement){
+        try{
+            BindFrame frame=bindFrame(request.get());
+            if(frame!=null&&frame.binding&&frame.statement!=null&&frame.statement.get()==statement){
+                Arrays.fill(frame.positions,null);
+                frame.outOfRange=false;
+            }
+        }catch(Throwable ignored){}
+    }
+
+    private static void recordBind(Object statement,int index,int code,String source){
+        try{
+            BindFrame frame=bindFrame(request.get());
+            if(frame==null||!frame.binding||frame.statement==null||frame.statement.get()!=statement)return;
+            if(index<1||index>MAX_BINDS){frame.outOfRange=true;return;}
+            String type=null;
+            if(code!=0){
+                try{type=JDBCType.valueOf(code).name();}catch(IllegalArgumentException unrecognized){}
+            }
+            frame.positions[index-1]=new Binding(type,type==null?"untyped":source);
+        }catch(Throwable ignored){}
+    }
+
+    private static Map<String,Object> bindings(Request current,Object statement,String sql){
+        // shape() admits no string literals, comments or '?' inside identifiers.
+        int count=(int)sql.chars().filter(character->character=='?').count();
+        BindFrame frame=bindFrame(current);
+        if(frame==null||!frame.bound||frame.statement==null||frame.statement.get()!=statement){
+            return Map.of("state","unavailable","placeholders",count,"positions",List.of());
+        }
+        boolean complete=count<=MAX_BINDS&&!frame.outOfRange;
+        List<Map<String,Object>> positions=new ArrayList<>();
+        for(int index=0;index<Math.min(count,MAX_BINDS);index++){
+            Binding binding=frame.positions[index];
+            if(binding==null||binding.jdbcType==null)complete=false;
+            if(binding!=null)positions.add(binding.jdbcType==null?Map.of("index",index+1,"source","untyped"):
+                Map.of("index",index+1,"jdbcType",binding.jdbcType,"source",binding.source));
+        }
+        return Map.of("state",complete?"complete":"partial","placeholders",count,"positions",List.copyOf(positions));
+    }
+
+    public static void selectExecuted(Object statement,Object context,String raw,long elapsed){
         try{
             Request current=request.get();
             if(current==null)return;
@@ -210,6 +307,7 @@ public final class PerformanceRuntime {
             Map<String,Object> entry=new LinkedHashMap<>();
             entry.put("sequence",id);entry.put("session",sessionId);entry.put("sql",sql);
             entry.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(elapsed));
+            entry.put("binds",bindings(current,statement,sql));
             CollectionLoad load=current.loads.peek();
             if(current.loadDepth>0&&(load==null||load.session!=session)){
                 current.incomplete=true;
@@ -231,6 +329,6 @@ public final class PerformanceRuntime {
         return Map.of("enabled",enabled,"scope","synchronous-spring-mvc",
             "available",enabled&&instruments.containsAll(List.of(PerformanceTransformer.MVC,PerformanceTransformer.LOADER,PerformanceTransformer.JDBC)),
             "maxRequests",MAX_REQUESTS,"maxSelectsPerRequest",MAX_SELECTS,"omittedRequests",omittedRequests.get(),
-            "requests",retained,"rawBindValuesRetained",false,"observerExecutedSql",false);
+            "requests",retained,"rawBindValuesRetained",false,"observerExecutedSql",false,"bindObservation","hibernate-jdbc-setters-v1");
     }
 }

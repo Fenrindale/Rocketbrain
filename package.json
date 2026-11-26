@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.108.0",
+  "version": "0.111.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -117,6 +117,12 @@
       { "command": "rocketbrain.localCodeModel.explain", "title": "Ask Local Code Model", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.edit", "title": "Request a Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
       { "command": "rocketbrain.localCodeModel.apply", "title": "Apply Reviewed Local Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-model" },
+      { "command": "rocketbrain.localCodeModel.enableInline", "title": "Allow Local Inline Completions for This File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
+      { "command": "rocketbrain.localCodeModel.disableInline", "title": "Stop Local Inline Completions", "category": "Rocketbrain" },
+      { "command": "rocketbrain.localCodeModel.startConversation", "title": "Start Local Workspace Conversation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file" },
+      { "command": "rocketbrain.localCodeModel.continueConversation", "title": "Continue Local Workspace Conversation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.localCodeModel.sendConversation", "title": "Send Reviewed Local Model Request", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-local-code-conversation" },
+      { "command": "rocketbrain.localCodeModel.closeConversation", "title": "Close Local Workspace Conversation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.start", "title": "Start Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.stop", "title": "Stop Kotlin Language Support", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlinEditor.output", "title": "Show Kotlin Language Server Output", "category": "Rocketbrain" },
@@ -133,6 +139,8 @@
       { "command": "rocketbrain.devcontainer.exec", "title": "Run in Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.status", "title": "Check Managed Dev Container Status", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.stop", "title": "Stop Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.devcontainer.forwardPort", "title": "Forward Managed Dev Container Port", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.devcontainer.closePort", "title": "Close Managed Dev Container Port", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
@@ -1037,6 +1045,18 @@
         "title": "Audit Gradle Dependencies with OSV",
         "category": "Rocketbrain",
         "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.java.inspectAdvisoryCalls",
+        "title": "Inspect Java Advisory Call Sites",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-maven-advisories"
+      },
+      {
+        "command": "rocketbrain.java.openAdvisoryCall",
+        "title": "Open Java Advisory Call Site",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-java-advisory-calls"
       },
       {
         "command": "rocketbrain.java.workbench.refresh",

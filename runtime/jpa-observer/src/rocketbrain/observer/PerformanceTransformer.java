@@ -34,7 +34,8 @@ final class PerformanceTransformer implements ClassFileTransformer {
     PerformanceTransformer(Instrumentation instrumentation){this.instrumentation=instrumentation;}
 
     public byte[] transform(Module module,ClassLoader loader,String name,Class<?> redefining,ProtectionDomain domain,byte[] bytes){
-        if(!MVC.equals(name)&&!LOADER.equals(name)&&!JDBC.equals(name))return null;
+        boolean descriptor=JdbcBindHook.owner(name);
+        if(!MVC.equals(name)&&!LOADER.equals(name)&&!JDBC.equals(name)&&!descriptor)return null;
         try{
             if(Class.forName(PerformanceRuntime.class.getName(),false,loader)!=PerformanceRuntime.class)
                 throw new IllegalStateException("Performance observer is not visible to this class loader");
@@ -43,6 +44,7 @@ final class PerformanceTransformer implements ClassFileTransformer {
             }
             ClassFile cf=ClassFile.of(ClassFile.ClassHierarchyResolverOption.of(ClassHierarchyResolver.ofResourceParsing(loader)));
             var model=cf.parse(bytes);
+            if(descriptor)return JdbcBindHook.transform(cf,model);
             if(JDBC.equals(name)&&(!field(model,"executionContext",CONTEXT.descriptorString())||!field(model,"finalSql",STRING.descriptorString()))){
                 throw new IllegalStateException("Unrecognized JDBC fields");
             }
@@ -50,7 +52,9 @@ final class PerformanceTransformer implements ClassFileTransformer {
             byte[] result=cf.transformClass(model,(builder,element)->{
                 if(element instanceof MethodModel method&&supported(name,method)){
                     matches[0]++;
-                    CodeTransform hook=JDBC.equals(name)?jdbcHook(executions):new ScopedHook(MVC.equals(name));
+                    CodeTransform hook=JDBC.equals(name)?jdbcHook(executions,method.code()
+                        .map(code->code.elementStream().filter(PerformanceTransformer::bindParameters).count()==1).orElse(false)):
+                        new ScopedHook(MVC.equals(name));
                     builder.transformMethod(method,MethodTransform.transformingCode(hook));
                 }else builder.with(element);
             });
@@ -77,21 +81,54 @@ final class PerformanceTransformer implements ClassFileTransformer {
         };
     }
 
-    private static CodeTransform jdbcHook(int[] executions){
+    private static boolean bindParameters(CodeElement element){
+        return element instanceof InvokeInstruction call&&call.owner().asInternalName().equals(JDBC)&&
+            call.name().equalsString("bindParameters")&&call.type().equalsString("(Ljava/sql/PreparedStatement;)V");
+    }
+
+    private static CodeTransform jdbcHook(int[] executions,boolean observeBindings){
         ClassDesc owner=ClassDesc.of(JDBC.replace('/','.'));
-        return (code,instruction)->{
-            if(instruction instanceof InvokeInstruction call
-                &&call.owner().asInternalName().equals("java/sql/PreparedStatement")
-                &&call.name().equalsString("executeQuery")&&call.type().equalsString("()Ljava/sql/ResultSet;")){
-                executions[0]++;
-                int started=code.allocateLocal(TypeKind.LONG);
-                code.invokestatic(SYSTEM,"nanoTime",MethodTypeDesc.of(LONG)).lstore(started);
+        return new CodeTransform(){
+            private Label start,end,handler;
+
+            public void atStart(CodeBuilder code){
+                code.invokestatic(HELPER,"selectStart",MethodTypeDesc.of(VOID));
+                start=code.newLabel();end=code.newLabel();handler=code.newLabel();
+                code.labelBinding(start);
+            }
+
+            public void accept(CodeBuilder code,CodeElement instruction){
+                if(instruction instanceof InvokeInstruction call){
+                    if(observeBindings&&bindParameters(call)){
+                        code.dup().invokestatic(HELPER,"bindStart",MethodTypeDesc.of(VOID,OBJECT));
+                        code.with(instruction);
+                        code.invokestatic(HELPER,"bindEnd",MethodTypeDesc.of(VOID));
+                        return;
+                    }
+                    if(call.owner().asInternalName().equals("java/sql/PreparedStatement")&&
+                        call.name().equalsString("executeQuery")&&call.type().equalsString("()Ljava/sql/ResultSet;")){
+                        executions[0]++;
+                        int statement=code.allocateLocal(TypeKind.REFERENCE),started=code.allocateLocal(TypeKind.LONG);
+                        code.dup().astore(statement).invokestatic(SYSTEM,"nanoTime",MethodTypeDesc.of(LONG)).lstore(started);
+                        code.with(instruction);
+                        code.invokestatic(SYSTEM,"nanoTime",MethodTypeDesc.of(LONG)).lload(started).lsub().lstore(started);
+                        code.aload(statement).aload(0).getfield(owner,"executionContext",CONTEXT);
+                        code.aload(0).getfield(owner,"finalSql",STRING).lload(started)
+                            .invokestatic(HELPER,"selectExecuted",MethodTypeDesc.of(VOID,OBJECT,OBJECT,STRING,LONG));
+                        return;
+                    }
+                }
+                if(instruction instanceof ReturnInstruction result&&result.typeKind()==TypeKind.VOID)finish(code);
                 code.with(instruction);
-                code.invokestatic(SYSTEM,"nanoTime",MethodTypeDesc.of(LONG)).lload(started).lsub().lstore(started);
-                code.aload(0).getfield(owner,"executionContext",CONTEXT);
-                code.aload(0).getfield(owner,"finalSql",STRING).lload(started)
-                    .invokestatic(HELPER,"selectExecuted",MethodTypeDesc.of(VOID,OBJECT,STRING,LONG));
-            }else code.with(instruction);
+            }
+
+            private void finish(CodeBuilder code){code.invokestatic(HELPER,"selectEnd",MethodTypeDesc.of(VOID));}
+
+            public void atEnd(CodeBuilder code){
+                code.labelBinding(end).labelBinding(handler);
+                finish(code);
+                code.athrow().exceptionCatchAll(start,end,handler);
+            }
         };
     }
 

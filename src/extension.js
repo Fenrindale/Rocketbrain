@@ -109,7 +109,7 @@ async function activate(context) {
   const javaFx = require('./java/javafx-vscode').registerJavaFx(vscode, { java });
   java.fx = javaFx;
   context.subscriptions.push(javaFx);
-  java.dependencyAdvisories = require('./java/dependency-advisories-vscode').registerDependencyAdvisories(vscode);
+  java.dependencyAdvisories = require('./java/dependency-advisories-vscode').registerDependencyAdvisories(vscode, context);
   context.subscriptions.push(java.dependencyAdvisories);
   activeJava = java;
   const javaInspections=require('./java/inspections-vscode').registerJavaInspections(context,vscode);

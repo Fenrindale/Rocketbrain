@@ -50,15 +50,23 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 `rocketbrain.localCodeModel.endpoint`와 `.model`에는 로컬 모델 서버 주소와 모델 이름을 지정합니다. **Ask Local Code Model**은 선택한 코드에 대한 응답을 엽니다. **Request a Reviewed Local Edit**로 변경 내용을 비교하고, 검토한 편집은 **Apply Reviewed Local Edit**로 적용합니다.
 
+**Start Local Workspace Conversation**에서 같은 신뢰된 로컬 워크스페이스에 저장한 소스 파일 2~4개를 선택합니다. 요청 검토 문서에 선택한 파일의 SHA-256, 모델 주소, 질문과 이전 대화가 표시됩니다. **Send Reviewed Local Model Request**를 실행하여 내용을 확인한 뒤 보내고, **Continue Local Workspace Conversation**으로 최대 네 번까지 이어갑니다. 선택한 파일의 저장본이 바뀌면 새 대화에서 다시 검토합니다. 대화는 현재 창의 메모리에 최대 15분간 남으며, **Close Local Workspace Conversation**으로 닫을 수 있습니다.
+
+**Allow Local Inline Completions for This File**은 현재 파일에 한해 커서 주변 코드를 지정한 루프백 모델에 보낼 수 있도록 합니다. Java, Kotlin, JavaScript, TypeScript, Python, SQL 파일을 지원합니다. 커서 앞 최대 1,600개와 뒤 최대 400개의 UTF-16 단위를 보내며, 제안은 VS Code에서 수락할 때 삽입됩니다. 파일을 닫거나 모델 설정을 바꾸면 허용이 만료됩니다. **Stop Local Inline Completions**로 즉시 중지할 수 있습니다.
+
 표준 `src/main/resources`의 FXML에서 Outline을 볼 수 있습니다. 컨트롤러, 이벤트 메서드, `fx:id` 필드와 같은 모듈에 있는 포함 파일·리소스는 정의로 이동할 수 있습니다. **Run or Package JavaFX Application**에서 JavaFX Maven 플러그인이 구성된 모듈을 선택해 앱을 실행하거나 `jlink` 런타임 이미지를 만들 수 있습니다.
 
 **Audit Maven Dependencies with OSV**는 선택한 Maven 모듈의 실제 의존성 트리를 해석합니다. OSV로 전송할 패키지 이름·버전을 직접 선택하면 직접·전이 의존 경로와 조회 시각, 등록된 권고 ID를 보고서에 표시합니다. [OSV API](https://google.github.io/osv.dev/post-v1-querybatch/)
+
+Maven·Gradle 권고 보고서에서 **Inspect Java Advisory Call Sites**로 선택 모듈의 컴파일 클래스 경로를 확인하면, 지원하는 권고의 API 호출을 정확한 JAR과 Java 소스 위치에 연결합니다. 보고서에는 공급자가 제시한 수정 버전과 권고 링크가 표시됩니다. [Java 권고 호출 위치 검토](docs/java-advisory-calls.md)
 
 **Audit Gradle Dependencies with OSV**에서 신뢰한 모듈과 Java 컴파일·런타임·테스트 런타임 구성 중 하나를 선택합니다. Gradle이 실제로 선택한 버전과 직접·전이 경로를 보고, 전송할 패키지 이름·버전을 개별 선택합니다. 해결하지 못한 의존 관계의 수는 별도로 표시합니다.
 
 `.ipynb`는 **Rocketbrain Jupyter Notebook**에서 열 수 있습니다. `jupyter_client`와 `ipykernel`이 설치된 Python 실행 파일을 `rocketbrain.jupyter.pythonPath`에 지정하면 셀을 실행하고 커널 세션을 유지할 수 있습니다. 셀 소스, 출력과 Markdown 첨부 파일은 노트북에 저장됩니다. [Jupyter 파일 형식](https://nbformat.readthedocs.io/en/v5.10.0/format_description.html)
 
 **Docker** 보기에서 시스템 Docker CLI가 제공하는 컨텍스트를 선택해 컨테이너·이미지·Compose 프로젝트를 탐색할 수 있습니다. 컨테이너 로그와 승인된 시작·중지·재시작, 레지스트리 매니페스트 조회를 제공합니다. [Docker 워크벤치](docs/docker.md)
+
+Dev Container 명령은 이미지나 Dockerfile 구성과 함께 명시한 Docker Compose 파일을 지원합니다. 작업 서비스와 종속 서비스를 검토해 시작한 뒤 명령을 실행할 수 있습니다. 실행 중인 컨테이너의 TCP 포트를 검토해 로컬 루프백으로 연결하고, 열린 포트를 확인하거나 닫을 수 있습니다. [Dev Container 사용 절차](docs/devcontainer.md)
 
 **Select Python Interpreter**로 프로젝트 가상환경을 선택합니다. Python Outline과 구문 오류는 해당 인터프리터의 AST에서 얻습니다. **Run Python File**로 저장한 파일을 실행하고 `debugpy`가 설치된 환경에서 **Debug Python File**로 중단점·변수를 볼 수 있습니다. [debugpy](https://github.com/microsoft/debugpy)
 4. **Build Java Project / Choose Build Task**, 저장한 **Run / Debug / Stop** 구성을 사용합니다.

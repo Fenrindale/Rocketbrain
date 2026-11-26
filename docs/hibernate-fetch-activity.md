@@ -8,6 +8,10 @@ The capture retains up to 12 request samples and 40 SELECTs per request. A trunc
 
 The observer records method and route pattern when available. It omits request parameters, raw bind values, SQL literals, and query rows. Owner key ordinals are scoped to the request. The identified timings measure JDBC execution and exclude row iteration. The observer reads already executed application queries and does not issue SQL itself.
 
-The supported hooks were verified with Spring MVC 7.0.10 and Hibernate 7.4.13.Final. The current rule covers single-key collection loads. Other provider/runtime versions, to-one loaders, async dispatch, and general database query attribution have separate coverage.
+The reviewed request also lists observed JDBC bind positions for each SQL template. A position is the one-based index used by a successful `PreparedStatement` setter on that execution. The reported JDBC type comes from the standard setter family or an explicit JDBC type argument. It describes the bind operation. The database column type and driver wire representation have independent type rules. Untyped `setObject` calls have no inferred type. No actual bind values are collected.
+
+Each SELECT retains up to 16 observed positions. Unknown, unsupported or excess positions produce partial bind coverage. The earlier observer versions show request activity without bind evidence. Collection N+1 findings keep their own coverage and key checks, including the supported embedded keys.
+
+The supported hooks were verified with Spring MVC 7.0.10 and Hibernate 7.4.13.Final. The collection rule covers scalar keys and supported composite keys. Other provider/runtime versions, to-one loaders, async dispatch, and general database query attribution have separate coverage.
 
 [Hibernate ORM fetch strategies](https://docs.hibernate.org/stable/core/userguide/html_single/) · [Hibernate 7.4 fetch joins](https://docs.hibernate.org/orm/7.4/querylanguage/html_single/)

@@ -1,0 +1,4 @@
+services:
+  workspace:
+    environment:
+      ROCKETBRAIN_COMPOSE_FIXTURE: "${ROCKETBRAIN_COMPOSE_VALUE:-managed-compose}"

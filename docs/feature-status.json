@@ -1,5 +1,5 @@
 {
-  "version": "0.108.0",
+  "version": "0.111.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,37 @@
     }
   },
   "summary": {
-    "implemented": 166,
-    "partial": 36,
+    "implemented": 168,
+    "partial": 34,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 90.7,
+    "percent": 91.2,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-052",
-    "IDEA-084",
-    "IDEA-105",
-    "IDEA-111"
+    "IDEA-024",
+    "IDEA-040",
+    "IDEA-043",
+    "IDEA-063",
+    "IDEA-075",
+    "IDEA-080",
+    "IDEA-098",
+    "IDEA-115"
   ],
   "expandedFeatures": [
-    "IDEA-052",
-    "IDEA-084",
-    "IDEA-105",
-    "IDEA-111"
+    "IDEA-024",
+    "IDEA-040",
+    "IDEA-043",
+    "IDEA-063",
+    "IDEA-075",
+    "IDEA-080",
+    "IDEA-098",
+    "IDEA-115"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -717,22 +725,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "공개 Java 타입과 파일 이름을 함께 바꾸고 실제로 연결된 Java import·참조와 Spring XML을 갱신한다.",
+      "scope": "Java 공개 타입과 Spring XML 이름 변경 외에 한 Gradle 프로젝트의 Kotlin 공개 클래스와 Java·Kotlin 참조를 한 번에 검토하고 편집한다.",
       "remaining": [
-        "패키지 이름 변경과 더 복잡한 교차 언어 호출 계약이 남아 있다."
+        "비어 있는 새 디렉터리로의 패키지 이름 변경과 더 넓은 교차 언어 계약이 남아 있다."
       ],
       "verification": {
-        "state": "v0.104-installed-coverage",
+        "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.104.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring 프로젝트에서 적용 전후 컴파일과 빈 동작, Java·XML을 묶은 Undo/Redo를 확인했다.",
+        "testedScope": "실제 Kotlin LSP와 Javac이 각각 참조를 검증했다. 세 파일의 Undo·Redo 후 다시 빌드했고 두 Spring DB의 결과와 동명이인 클래스가 보존됐다.",
         "publicEvidence": [
-          "test/java-type-rename-host.js",
-          "test/workflows-v104-host.js"
+          "src/java/kotlin-mixed-type-rename.js",
+          "test/kotlin-mixed-type-rename-host.js",
+          "test/workflows-v111-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1224,25 +1233,24 @@
       "category": "검사·품질·보안",
       "feature": "의존성 취약점·취약 API 사용 분석",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "Maven과 Gradle의 실제 직접·전이 버전 의존 경로를 읽고 선택한 패키지의 OSV 권고를 비교한다.",
-      "remaining": [
-        "Java 코드의 실제 호출 사용 여부와 수정 제안이 남는다."
-      ],
+      "scope": "Maven과 Gradle의 실제 의존 그래프를 감사하고, 지원하는 공급사 권고에 해당하는 Java 호출과 메서드 참조를 정확한 JAR과 비교한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.96-installed-coverage",
+        "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.96.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring Gradle runtimeClasspath의 88개 패키지를 확인했다. 설치판에서 선택한 공개 좌표 두 개만 OSV에 조회하고 읽기 전용 보고서를 열었다.",
+        "testedScope": "두 빌드 도구의 실제 Spring 소스에서 권고 두 건의 호출 세 곳과 메서드 참조 한 곳을 찾았다. 권고에 연결된 수정 버전을 표시하고 파일이 바뀐 뒤 이전 참조 열기를 거부했다.",
         "publicEvidence": [
-          "src/java/gradle-advisory-graph.js",
-          "test/gradle-advisories-host.js"
+          "src/java/advisory-calls.js",
+          "test/java-advisory-calls-host.js",
+          "test/workflows-v111-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1314,24 +1322,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Java Projects에서 Maven·Gradle Kotlin/JVM 소스를 탐색하고, 빌드한 JVM 참조를 사용해 Java와 Kotlin 사이의 호출, 오버로드, getter, 상속 선언으로 이동한다. Gradle 애플리케이션 실행을 연결한다.",
+      "scope": "Java와 Kotlin 선언을 오가며 단일 Gradle JVM 프로젝트의 공개 Kotlin 클래스 이름과 정확한 두 언어 참조를 리뷰한다.",
       "remaining": [
-        "교차 언어 이름 변경, Kotlin nullability 및 일반 언어 서버 기능이 남아 있다."
+        "Java에서 들어온 nullability 계약과 일반 혼합 언어 이름 계약이 남아 있다."
       ],
       "verification": {
-        "state": "v0.50-installed-coverage",
+        "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.50.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Kotlin 2.3.20 혼합 프로젝트를 Maven·Gradle에서 컴파일하고 JUnit과 양방향 선언 이동을 실행했다. 실제 Gradle 실행 결과와 소스 또는 클래스 변경 이후 이전 링크 거부를 확인했다.",
+        "testedScope": "실제 JVM 클래스 경로에서 Kotlin·Java 참조를 검증했다. 충돌, 저장 후 바뀐 소스, 경쟁 바이너리 클래스는 거부했다.",
         "publicEvidence": [
-          "src/java/mixed-jvm-index.js",
-          "src/java/mixed-jvm-vscode.js",
-          "runtime/java-mixed/MixedClassInspector.java",
-          "test/mixed-jvm-host.js"
+          "src/java/kotlin-mixed-type-rename.js",
+          "test/kotlin-mixed-type-rename.test.js",
+          "test/kotlin-mixed-type-rename-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1585,8 +1592,8 @@
       "verification": {
         "state": "v0.108-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.108.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1904,22 +1911,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "실제 Hibernate가 수행한 복합 키 컬렉션 조회에서 지연 로딩의 반복을 fetch join 및 명시적 반복 조회와 구분한다.",
+      "scope": "동기 Spring 요청의 Hibernate SELECT에서 실제 JDBC 바인드 인덱스와 타입을 보고 복합 키 컬렉션 N+1을 검토한다.",
       "remaining": [
-        "다른 계측 범위와 비동기 요청의 실제 연결을 확장한다."
+        "Spring MVC 비동기 작업의 연결과 다른 관찰 범위가 남아 있다."
       ],
       "verification": {
-        "state": "v0.104-installed-coverage",
+        "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.104.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 각 SQL 호출 수 4·1·4회를 대조했다. 지연 로딩에만 N+1을 표시했다.",
+        "testedScope": "두 DB에서 바인드가 있는 SELECT 여섯 개와 타입을 확인했다. 값은 공개하지 않았으며 지연 조회, fetch join, 명시 반복을 구분했다.",
         "publicEvidence": [
+          "src/jpa/fetch-performance.js",
           "test/hibernate-composite-fetch-host.js",
-          "test/workflows-v104-host.js"
+          "test/workflows-v111-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2250,22 +2258,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Windows에서 현재 사용자 권한으로 읽을 수 있는 Java JVM의 JDWP 루프백 포트를 PID에서 찾는다. 자동 할당 포트와 프로세스 동일성을 확인해 VS Code 디버그 세션에 연결한다.",
+      "scope": "Windows와 Linux에서 읽을 수 있는 JVM의 정확한 루프백 JDWP 소유권을 확인한 뒤 연결한다.",
       "remaining": [
-        "자동 PID 탐색은 Windows IPv4 루프백에 한한다. 다른 플랫폼의 자동 탐색과 원격 호스트 통합 검증이 남아 있다."
+        "다른 운영체제의 자동 PID 탐색과 원격 편집기 통합 범위가 남아 있다."
       ],
       "verification": {
-        "state": "v0.59-installed-coverage",
+        "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.59.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Spring 작업 공간의 실제 JVM에서 자동 포트를 찾고 일반 리스너와 오래된 PID를 거부했다. 미저장 SQL 초안을 열어 둔 상태로 중단점과 변수 평가를 수행했다. 연결을 끊은 뒤 JVM이 계속 실행되는지 확인했다.",
+        "testedScope": "Windows 설치형 디버거에서 실제 중단·해제를 확인했다. Ubuntu CI의 별도 JVM에서도 동적 포트, 소유 PID, 중단 줄과 해제 후 재개를 확인했다.",
         "publicEvidence": [
-          "src/java/debug-processes.js",
-          "src/java/debug.js",
+          "src/java/linux-debug-listeners.js",
+          "test/java-debug-processes-linux.test.js",
           "test/java-debug-processes-host.js"
         ],
         "originalProductParityVerified": false
@@ -2402,24 +2410,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "중단된 Java 스택에서 검토한 호출 프레임을 재시작한다. 직접 JDI 읽기로 배열과 표준 ArrayList를 페이지 단위로 열고 제한 내 문자열을 원문으로 표시한다.",
+      "scope": "일시 정지한 Kotlin JVM 프레임에 읽기 전용 Watch·Hover·Debug Console 스칼라 식을 제공한다.",
       "remaining": [
-        "Kotlin 평가와 일반·사용자 정의 컬렉션 값 탐색이 남아 있다."
+        "사용자 정의 Kotlin 컬렉션, 변수 수정과 임의 getter 또는 함수 평가가 남아 있다."
       ],
       "verification": {
-        "state": "v0.61-installed-coverage",
+        "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.61.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 실제 Spring DB의 설치 환경에서 프레임 재진입과 이전 부수 효과 보존, 1,201개 배열과 301개 리스트, 14,010 코드 단위의 Unicode 문자열을 확인했다.",
+        "testedScope": "실제 Kotlin 프레임의 타입과 값 열 개, 정밀도, null 처리, 변경식 거부와 다시 멈추기 전 프레임 만료를 검증했다.",
         "publicEvidence": [
-          "src/java/debug-frames.js",
-          "src/java/debug-local-values.js",
-          "runtime/java-debug/LocalValueInspection.java",
-          "test/java-debug-frames-host.js"
+          "runtime/java-debug/KotlinWatchEvaluation.java",
+          "test/kotlin-watch-expressions-host.js",
+          "test/workflows-v111-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2523,8 +2530,8 @@
       "verification": {
         "state": "v0.108-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.108.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2923,23 +2930,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "공개 Dev Container CLI로 로컬 구성의 이미지나 Dockerfile을 읽고 단일 관리 컨테이너를 시작한다. 작업 폴더에서 명령을 실행하고 소유 확인 뒤 그 컨테이너를 중지한다.",
+      "scope": "검토한 이미지·Dockerfile·Compose 앱을 관리하고 승인한 컨테이너 포트를 로컬 루프백으로 전달한다.",
       "remaining": [
-        "Compose, 포트 전달, 컨테이너 언어 서버·디버거 연결이 남아 있다."
+        "컨테이너 안의 Java 언어 서버와 편집기의 연동이 남아 있다."
       ],
       "verification": {
-        "state": "v0.57-installed-coverage",
+        "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.57.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Ubuntu Docker와 공식 CLI 0.91.0에서 두 구성의 마운트·초기화·환경·인수와 종료 코드, 정확한 컨테이너 정지를 확인했다. 설치한 Windows VS Code의 다섯 명령과 빈 세션 제어도 확인했다.",
+        "testedScope": "실제 Ubuntu Docker에서 두 서비스의 앱을 시작했고 HTTP와 JDWP 바이너리 요청을 보냈다. 종료와 재시작 시 소유한 포트만 해제했다.",
         "publicEvidence": [
-          "src/devcontainer/runtime.js",
-          "src/devcontainer/vscode.js",
-          "test/devcontainer-host.js"
+          "src/devcontainer/ports.js",
+          ".github/workflows/devcontainer-runtime.yml",
+          "test/devcontainer-port-fixture.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3133,8 +3140,8 @@
       "verification": {
         "state": "v0.108-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.108.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3308,8 +3315,8 @@
       "verification": {
         "state": "v0.108-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.108.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3416,26 +3423,25 @@
       "category": "설정·확장·AI",
       "feature": "AI 완성·채팅·프로젝트 문맥",
       "priority": "P2",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "로컬 모델이 선택한 코드에 답하고 교체할 텍스트를 제안한다. VS Code 차이 보기에서 검토한 뒤 일회성 변경을 적용한다.",
-      "remaining": [
-        "자동완성과 여러 파일의 프로젝트 문맥, 장기 대화가 남아 있다."
-      ],
+      "scope": "로컬 모델의 인라인 완성, 적용을 검토하는 편집과 저장 파일을 선택한 프로젝트 문맥 대화를 제공한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.54-installed-coverage",
+        "state": "v0.111-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.54.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "llama.cpp의 실제 Qwen2.5-Coder에서 선택한 Java 명령문의 반환값 42를 답하고 43으로 바꾸는 차이를 검토·적용했다.",
+        "testedScope": "실제 Qwen이 Java 커서에 제안하고 두 Spring 소스의 문맥에 답했다. 설정하거나 선택하지 않은 파일은 보내지 않았고 현재 창에서 이전 승인 대화를 이어갔다.",
         "publicEvidence": [
-          "src/ai/editor-model.js",
-          "src/ai/editor-model-vscode.js",
-          "test/editor-model-host.js"
+          "src/ai/editor-inline-vscode.js",
+          "src/ai/editor-conversation-vscode.js",
+          "test/editor-inline-model-host.js",
+          "test/editor-conversation-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6418,8 +6424,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "0e8aeef557d8e025f770b624d349b4bdc5f7de0cb29a1dced76b3d1b01325f40",
-    "sourceManifestSha256": "ef614a31efe4a530d500b96524b0cac788d792b629315ea052fe8aa545267699",
+    "vsixSha256": "3680b936619fbcaef95599fbe59f361461376a4733694bd94b1e596570aceb62",
+    "sourceManifestSha256": "774583d90f508adfa78ba8f0e0e0bb28aba20026b17a0f640c70c5453a662b47",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6433,33 +6439,23 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-052",
+      "id": "IDEA-040",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-084",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-105",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-111",
+      "id": "IDEA-115",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1986,
-    "pass": 1823,
+    "tests": 2003,
+    "pass": 1837,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 163,
+    "skipped": 166,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

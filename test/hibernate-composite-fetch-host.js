@@ -70,10 +70,23 @@ function verifyReports(observer,report,secrets){
   assert.equal(match.child.distinctOwnerKeys,3);
   assert.deepEqual(match.child.sequences,[2,3,4]);
   assert.ok(match.child.totalDurationMicros>=0);
+  assert.equal(report.bindObservation,'hibernate-jdbc-setters-v1');
+  const types=sql=>Array.from(sql.slice(sql.toLowerCase().indexOf(' where ')).matchAll(/\b(number_ref|realm_ref)\b/gu),
+    ([,name],index)=>({index:index+1,jdbcType:name==='number_ref'?'BIGINT':'VARCHAR',source:'setter'}));
+  for(const request of [lazy,manual]){
+    assert.deepEqual(request.selects[0].binds,{state:'complete',placeholders:0,positions:[]});
+    for(const select of request.selects.slice(1)){
+      const positions=types(select.sql);
+      assert.equal(positions.length,2,select.sql);
+      assert.deepEqual(select.binds,{state:'complete',placeholders:2,positions},JSON.stringify(select));
+    }
+  }
+  assert.deepEqual(joined.selects[0].binds,{state:'complete',placeholders:0,positions:[]});
   const serialized=JSON.stringify({observer:observer.performance,report});
   for(const secret of secrets) assert.ok(!serialized.includes(String(secret)),'A runtime key or request value reached the report.');
   return {request:lazy.id,counts:[4,1,4],findings:[1,0,0],distinctOwnerKeys:3,
-    keyColumns:match.keyColumns,bindValuesRetained:false,observerExecutedSql:false};
+    keyColumns:match.keyColumns,typedPositions:lazy.selects[1].binds.positions,typedSelects:6,
+    bindValuesRetained:false,observerExecutedSql:false};
 }
 
 async function runHibernateCompositeFetchChecks(api,vscode,checks){
@@ -86,11 +99,12 @@ async function runHibernateCompositeFetchChecks(api,vscode,checks){
       const observed=verifyReports(snapshot,report,fixture.secrets);
       const shown=await vscode.commands.executeCommand('rocketbrain.jpa.observer.inspectPerformance',observed.request);
       assert.deepEqual(shown.request.suspects[0].keyColumns,observed.keyColumns);
+      assert.deepEqual(shown.request.selects[1].binds.positions,observed.typedPositions);
       assert.deepEqual(JSON.parse(vscode.window.activeTextEditor.document.getText()),JSON.parse(JSON.stringify(shown)));
       return {...observed,nativeCompositeReport:true};
     }finally{observer.disconnect();}
   });
-  checks.push('Real Hibernate lazy collection loads with two key columns were separated from a fetch join and repeated manual reads. The installed report retained SQL shapes and exact key columns without bind values.');
+  checks.push('Real Hibernate lazy collection loads with two key columns were separated from a fetch join and repeated manual reads. The installed report showed exact JDBC positions and types without bind values.');
   return proof;
 }
 

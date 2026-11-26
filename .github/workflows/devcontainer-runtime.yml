@@ -8,13 +8,21 @@ on:
       - '.github/workflows/devcontainer-runtime.yml'
       - 'src/devcontainer/**'
       - 'test/devcontainer.test.js'
+      - 'test/devcontainer-port-fixture.js'
       - 'test/fixtures/devcontainer/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
   pull_request:
     paths:
       - '.github/workflows/devcontainer-runtime.yml'
       - 'src/devcontainer/**'
       - 'test/devcontainer.test.js'
+      - 'test/devcontainer-port-fixture.js'
       - 'test/fixtures/devcontainer/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
 
 permissions:
   contents: read
@@ -27,12 +35,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: pnpm
+      - name: Install locked project dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Install the locked specification CLI
         run: npm ci --prefix test/fixtures/devcontainer/tooling --ignore-scripts --no-audit --no-fund
-      - name: Verify the image and Dockerfile project lifecycles with real Docker
+      - name: Verify image, Dockerfile, Compose, HTTP and JDWP lifecycles with real Docker
         env:
           ROCKETBRAIN_DEVCONTAINER_LIVE: 'true'
           ROCKETBRAIN_DEVCONTAINER_CLI_PATH: ${{ github.workspace }}/test/fixtures/devcontainer/tooling/node_modules/@devcontainers/cli

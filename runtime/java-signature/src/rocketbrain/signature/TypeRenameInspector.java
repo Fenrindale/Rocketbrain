@@ -10,13 +10,17 @@ import static rocketbrain.signature.SignatureInspector.object;
 /** Reports exact source tokens that Javac binds to one public top-level class. */
 final class TypeRenameInspector {
     static Map<String, Object> inspect(JavacTask task, List<CompilationUnitTree> units, String fqn, String conflict) {
+        return inspect(task,units,fqn,conflict,false);
+    }
+
+    static Map<String, Object> inspect(JavacTask task, List<CompilationUnitTree> units, String fqn, String conflict, boolean binary) {
         var elements = task.getElements();
         var trees = Trees.instance(task);
         var positions = trees.getSourcePositions();
         var target = elements.getTypeElement(fqn);
         var owner = target == null ? null : trees.getPath(target);
         boolean occupied = elements.getTypeElement(conflict) != null;
-        if (owner == null || !(owner.getLeaf() instanceof ClassTree definition) ||
+        if (target == null || (binary ? owner != null : owner == null || !(owner.getLeaf() instanceof ClassTree)) ||
                 target.getKind() != ElementKind.CLASS || target.getNestingKind() != NestingKind.TOP_LEVEL ||
                 !target.getModifiers().contains(Modifier.PUBLIC)) {
             return object("supported", false, "destinationOccupied", occupied);
@@ -75,10 +79,12 @@ final class TypeRenameInspector {
                 }
             }.scan(unit,null);
         }
+        if (binary) return object("supported",true,"destinationOccupied",occupied,"binaryOwner",true,
+            "spans",spans.values().stream().toList());
         return object("supported",true,"destinationOccupied",occupied,
             "declaration",object("uri",owner.getCompilationUnit().getSourceFile().toUri().toString(),
-                "start",positions.getStartPosition(owner.getCompilationUnit(),definition),
-                "end",positions.getEndPosition(owner.getCompilationUnit(),definition),
+                "start",positions.getStartPosition(owner.getCompilationUnit(),owner.getLeaf()),
+                "end",positions.getEndPosition(owner.getCompilationUnit(),owner.getLeaf()),
                 "annotations",target.getAnnotationMirrors().stream().map(annotation->annotation.getAnnotationType().toString()).toList()),
             "spans",spans.values().stream().toList());
     }

@@ -8,6 +8,8 @@ function registerDevContainers(context, vscode) {
   const sessionKey = key => 'rocketbrain.devcontainer.session.' + key;
   const service = createDevContainers({
     trusted: () => vscode.workspace.isTrusted,
+    workspaceOpen: root => vscode.workspace.workspaceFolders?.some(folder =>
+      folder.uri.scheme === 'file' && !path.relative(folder.uri.fsPath, root)),
     settings: root => {
       const config = settingsByRoot(root);
       return { cliPath: config.get('cliPath'), nodePath: config.get('nodePath'), dockerPath: config.get('dockerPath') };
@@ -16,7 +18,7 @@ function registerDevContainers(context, vscode) {
     writeSession: (key, value) => context.workspaceState.update(sessionKey(key), value)
   });
   const output = vscode.window.createOutputChannel('Rocketbrain Dev Container');
-  const registrations = [output];
+  const registrations = [service, output];
 
   async function pickWorkspace() {
     const candidates = (vscode.workspace.workspaceFolders || []).filter(folder => folder.uri.scheme === 'file');
@@ -37,10 +39,15 @@ function registerDevContainers(context, vscode) {
       plan.name && 'Name: ' + plan.name,
       plan.image && 'Image: ' + plan.image,
       plan.dockerfile && 'Dockerfile: ' + plan.dockerfile,
+      ...(plan.compose ? [
+        'Compose workspace service  ' + plan.compose.service,
+        'Compose files  ' + plan.compose.files.join(', '),
+        'Reviewed services  ' + plan.compose.services.join(', '),
+      ] : []),
       plan.workspaceFolder && 'Container workspace: ' + plan.workspaceFolder,
       plan.workspaceMount && 'Workspace mount: ' + plan.workspaceMount,
       plan.remoteUser && 'Container user: ' + plan.remoteUser,
-      plan.features.length && 'Features: ' + plan.features.join(', '),
+      plan.features?.length && 'Features: ' + plan.features.join(', '),
       plan.lifecycleHooks.length && 'Lifecycle: ' + plan.lifecycleHooks.join(', ')
     ];
     output.appendLine(lines.filter(Boolean).join('\n') + '\n');
@@ -71,7 +78,7 @@ function registerDevContainers(context, vscode) {
   register('start', async root => {
     const plan = await progress('Reading Dev Container configuration', () => service.inspect(root));
     describe(root, plan);
-    if (plan.kind !== 'image' && plan.kind !== 'dockerfile') throw Error('Choose a single-image or Dockerfile Dev Container configuration.');
+    if (!['image','dockerfile','compose'].includes(plan.kind)) throw Error('Choose an image, Dockerfile, or explicit Compose Dev Container configuration.');
     const approved = await vscode.window.showWarningMessage('Start the Dev Container for ' + path.basename(root) + '?', {
       modal: true,
       detail: 'The Dev Container CLI applies project image, build, workspace mounts and lifecycle commands. The initializeCommand can run on this computer.'
@@ -80,6 +87,7 @@ function registerDevContainers(context, vscode) {
     const result = await progress('Starting the workspace Dev Container',
       () => service.start(root, { file: plan.file, fingerprint: plan.fingerprint, allowProjectExecution: true }));
     output.appendLine('Started ' + result.id.slice(0, 12) + (result.workspaceFolder ? ' in ' + result.workspaceFolder : ''));
+    if(result.services)output.appendLine('Compose services  '+result.services.map(row=>row.service+' '+row.id.slice(0,12)).join(', '));
     return result;
   });
   register('exec', async root => {
@@ -101,6 +109,8 @@ function registerDevContainers(context, vscode) {
   register('status', async root => {
     const result = await progress('Checking the workspace Dev Container', () => service.status(root));
     output.appendLine('Dev Container: ' + result.state + (result.id ? ' (' + result.id.slice(0, 12) + ')' : ''));
+    if(result.services)for(const row of result.services)output.appendLine(row.service+' · '+row.id.slice(0,12)+' · '+(row.running?'running':'stopped'));
+    for (const forward of result.forwards || []) output.appendLine(forwardAddress(forward));
     output.show(true);
     return result;
   });
@@ -109,6 +119,55 @@ function registerDevContainers(context, vscode) {
     output.appendLine('Dev Container: ' + result.state + (result.id ? ' (' + result.id.slice(0, 12) + ')' : ''));
     output.show(true);
     return result;
+  });
+
+  function forwardAddress(forward) {
+    return forward.host + ':' + forward.localPort + ' → container loopback TCP ' + forward.containerPort;
+  }
+
+  async function portInput(title, allowAutomatic) {
+    const value = await vscode.window.showInputBox({
+      title,
+      prompt: allowAutomatic ? 'Enter 0 to choose an unused IPv4 loopback port automatically' : 'Enter the TCP port listening on container loopback',
+      value: allowAutomatic ? '0' : '',
+      validateInput: input => {
+        const port = Number(input);
+        return /^\d{1,5}$/.test(input) && (allowAutomatic && port === 0 || port >= (allowAutomatic ? 1024 : 1) && port <= 65535)
+          ? undefined : 'Enter a valid TCP port number.';
+      }
+    });
+    return value === undefined ? undefined : Number(value);
+  }
+
+  register('forwardPort', async root => {
+    const containerPort = await portInput('Container TCP Port', false);
+    if (containerPort === undefined) return;
+    const localPort = await portInput('Local TCP Port', true);
+    if (localPort === undefined) return;
+    const review = await progress('Checking the exact managed Dev Container',
+      () => service.inspectPort(root, { containerPort, localPort }));
+    const source = review.localPort === 0 ? 'an available 127.0.0.1 port' : review.host + ':' + review.localPort;
+    const approved = await vscode.window.showWarningMessage('Forward a port from this Dev Container?', {
+      modal: true,
+      detail: 'Forward ' + source + ' to 127.0.0.1:' + review.containerPort + ' in container ' + review.containerId.slice(0, 12) +
+        '. Other local processes can connect. The listener closes when this VS Code window or the verified container stops.'
+    }, 'Forward Port');
+    if (!approved) return;
+    const result = await progress('Opening local Dev Container port',
+      () => service.forwardPort(root, { token: review.token, allowLoopbackAccess: true }));
+    output.appendLine(forwardAddress(result));
+    output.show(true);
+    return result;
+  });
+  register('closePort', async root => {
+    const active = await service.forwardedPorts(root);
+    if (!active.length) {
+      void vscode.window.showInformationMessage('This workspace has no active Dev Container port forwards.');
+      return;
+    }
+    const choice = await vscode.window.showQuickPick(active.map(forward => ({ label: forwardAddress(forward), id: forward.id })),
+      { placeHolder: 'Choose the local port to close' });
+    if (choice) await service.closePort(root, choice.id);
   });
 
   function openRoot(input) {
@@ -127,6 +186,10 @@ function registerDevContainers(context, vscode) {
     execute: (root, argv) => service.execute(openRoot(root), argv),
     status: root => service.status(openRoot(root)),
     stop: root => service.stop(openRoot(root)),
+    inspectPort: (root, requested) => service.inspectPort(openRoot(root), requested),
+    forwardPort: (root, confirmation) => service.forwardPort(openRoot(root), confirmation),
+    forwardedPorts: root => service.forwardedPorts(openRoot(root)),
+    closePort: (root, id) => service.closePort(openRoot(root), id),
     dispose() { for (const subscription of registrations) subscription.dispose(); }
   };
 }

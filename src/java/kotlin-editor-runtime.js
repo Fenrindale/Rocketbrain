@@ -133,7 +133,9 @@ async function kotlinEditorLaunch({serverHome,javaHome,gradleHome,gradleUserHome
   const classpath=[overlay.file,path.join(library,'*')].filter(Boolean).join(path.delimiter);
   return {command,args:['-Dfile.encoding=UTF-8','-DkotlinLanguageServer.version='+VERSION,'-Xmx1536m','-XX:ActiveProcessorCount=4',
     '-cp',classpath,'org.javacs.kt.MainKt'],options:{cwd:project,env,windowsHide:true},
-    root:project,serverVersion:VERSION,compilerVersion:COMPILER,windowsPathAdapter:Boolean(overlay.file),dispose:overlay.dispose};
+    root:project,serverVersion:VERSION,compilerVersion:COMPILER,windowsPathAdapter:Boolean(overlay.file),dispose:overlay.dispose,
+    compiler:{javaHome:jdk,java:command,libraries:jars.map(entry=>path.join(library,entry.name)).sort(),
+      stdlib:path.join(library,`kotlin-stdlib-${COMPILER}.jar`)}};
 }
 
 module.exports={kotlinEditorLaunch,hasGradleFiles,kotlinProtocolUri,VERSION,COMPILER,DISTRIBUTION,ARCHIVE_SHA256};

@@ -4,6 +4,8 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { workspacePath, workspaceRoots } = require('../java/workbench-model');
 const { requestEditorModel, snapshotLocalEdit, applyLocalEditToText } = require('./editor-model');
+const { registerEditorInline } = require('./editor-inline-vscode');
+const { registerEditorConversation } = require('./editor-conversation-vscode');
 
 const scheme = 'rocketbrain-local-code-model';
 
@@ -12,13 +14,17 @@ function registerEditorModel(vscode) {
   const openRequests = new Set();
   let disposed = false;
 
-  function capture(document, range) {
+  function localFile(document) {
     if (disposed || !vscode.workspace.isTrusted || document?.uri.scheme !== 'file' || document.isClosed) {
       throw Error('Choose a local source file in a trusted workspace.');
     }
     const folder = vscode.workspace.getWorkspaceFolder(document.uri);
     if (folder?.uri.scheme !== 'file') throw Error('Choose a file inside an open local workspace folder.');
-    const file = workspacePath(document.uri.toString(), workspaceRoots([folder]), { directory: false });
+    return workspacePath(document.uri.toString(), workspaceRoots([folder]), { directory: false });
+  }
+
+  function capture(document, range) {
+    const file = localFile(document);
     const text = document.getText();
     const start = document.offsetAt(range.start);
     const end = document.offsetAt(range.end);
@@ -30,6 +36,9 @@ function registerEditorModel(vscode) {
     const preferences = vscode.workspace.getConfiguration('rocketbrain.localCodeModel', uri);
     return { endpoint: preferences.get('endpoint'), model: preferences.get('model') };
   }
+
+  const inline = registerEditorInline(vscode, { localFile, configuration });
+  const conversation = registerEditorConversation(vscode, { configuration });
 
   function remember(result) {
     while (reviews.size >= 8) reviews.delete(reviews.keys().next().value);
@@ -131,8 +140,10 @@ function registerEditorModel(vscode) {
     try { return await run(); }
     catch (error) { void vscode.window.showErrorMessage(error.message); }
   }));
-  return { explain, prepareEdit, apply, dispose() {
+  return { explain, prepareEdit, apply, inline, conversation, dispose() {
     disposed = true;
+    inline.dispose();
+    conversation.dispose();
     for (const request of openRequests) request.abort();
     reviews.clear();
     provider.dispose();
