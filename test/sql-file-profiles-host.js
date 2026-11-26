@@ -218,4 +218,155 @@ async function verifySqlFileProfiles(mysqlSpring, mariaSpring) {
   }
 }
 
-module.exports = { verifySqlFileProfiles };
+async function runSqlFileProfilesChecks(api, vscode, checks) {
+  const read = async file => JSON.parse(await fs.readFile(file, 'utf8'));
+  const descriptor = await fs.realpath(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG);
+  const fixtureFolder = path.dirname(descriptor);
+  const owner = await read(path.join(fixtureFolder, 'owner.json'));
+  assert.equal(owner.kind, 'RocketbrainSpringProjectFixture-v1');
+  assert.equal(owner.id, path.basename(fixtureFolder));
+  const runtime = await read(descriptor);
+  const engine = process.env.ROCKETBRAIN_TEST_MYSQL_ENGINE;
+  assert.ok(['mysql', 'mariadb'].includes(engine));
+  assert.equal(runtime.dbEngine, engine);
+  const jdbcProbe = new URL('/probe/testing-state', runtime.baseUrl);
+  assert.equal(jdbcProbe.hostname, '127.0.0.1');
+  assert.equal(jdbcProbe.port, String(runtime.port));
+  const workspace = await fs.realpath(process.env.ROCKETBRAIN_JAVA_TEST_WORKSPACE);
+  assert.ok(workspace.split(path.sep).includes('test-output'));
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(workspace));
+  assert.ok(workspaceFolder, 'Open the disposable SQL test workspace before running this hook.');
+  assert.equal(await fs.realpath(workspaceFolder.uri.fsPath), workspace);
+
+  const prefix = randomUUID().replaceAll('-', '').slice(0, 12);
+  const table = 'rb_sql_profile_' + prefix;
+  const fixtures = [], profiles = [], targets = [], documents = [], files = [];
+  const manager = api.dbConnections;
+  const spring = async () => {
+    const response = await fetch(jdbcProbe, { signal: AbortSignal.timeout(10000) });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { people: 2, departments: 1, rolledBackNames: 0 });
+  };
+  async function open(profile) {
+    const opened = await manager.openDedicatedConsole({ id: profile.id, revision: profile.revision });
+    const target = { sessionId: opened.sessionId, profileId: profile.id };
+    targets.push(target);
+    return target;
+  }
+  async function bind(document, target, profile, index) {
+    const approved = await api.changeSqlFileProfile(document, target, review => {
+      assert.equal(path.basename(review.path), path.basename(files[index]));
+      assert.match(review.after, /rocketbrain_fixture$/);
+      assert.ok(review.after.startsWith(profile.name + ' · '));
+      assert.equal(review.readOnly, true);
+      assert.equal(review.inTransaction, false);
+      return true;
+    });
+    assert.deepEqual(approved, { state: 'bound', uri: document.uri.toString(), ...target });
+  }
+  async function execute(document, index, target) {
+    const editor = await vscode.window.showTextDocument(document, { preview: false });
+    editor.selection = new vscode.Selection(document.positionAt(0), document.positionAt(document.getText().length));
+    const id = await vscode.commands.executeCommand('rocketbrain.runQuery');
+    const row = api.results().find(item => item.id === id);
+    assert.ok(row?.result, row?.error || 'The installed extension should return a result for the selected SQL file.');
+    assert.equal(row.sessionId, target.sessionId);
+    assert.ok(row.source.includes(profiles[index].name));
+    assert.deepEqual(row.result.rows, [[fixtures[index].version, profiles[index].name]]);
+    return id;
+  }
+  let spawned, folder;
+  try {
+    await spring();
+    const declaredPeer = process.env.ROCKETBRAIN_SECONDARY_DB_CONFIG;
+    if (!declaredPeer) spawned = engine === 'mysql' ? await require('../scripts/integration-db-fixture').startFixture() :
+      await require('../scripts/integration-mysql').startMysqlFixture();
+    for (const [index, configPath] of [runtime.dbConfigPath, declaredPeer || spawned.configPath].entries()) {
+      const fixture = await owned(configPath);
+      fixtures.push(fixture);
+      assert.equal(/mariadb/i.test(fixture.version), index === 0 ? engine === 'mariadb' : engine !== 'mariadb');
+      const { host, port, user, database, password } = fixture.config;
+      const name = (index === 0 ? 'Primary' : 'Peer') + ' SQL file fixture ' + prefix;
+      await fixture.actor.query('CREATE TABLE ' + table + ' (id INT PRIMARY KEY, label VARCHAR(80)) ENGINE=InnoDB');
+      fixture.createdTable = true;
+      await fixture.actor.execute('INSERT INTO ' + table + ' VALUES (1,?)', [name]);
+      profiles.push(await manager.save({ profile: { id: randomUUID(), name, host, port, user, database, tls: { mode: 'disabled' } },
+        password, rememberPassword: true }));
+    }
+    assert.notEqual(fixtures[0].config.port, fixtures[1].config.port);
+    folder = await fs.mkdtemp(path.join(workspace, 'rb-sql-file-profiles-'));
+    const text = 'SELECT VERSION(), label FROM ' + table + ' WHERE id = 1;\n';
+    await manager.connect({ id: profiles[0].id });
+    await open(profiles[0]);
+    await open(profiles[1]);
+    for (const [index, profile] of profiles.entries()) {
+      const file = path.join(folder, index === 0 ? 'primary.sql' : 'peer.sql');
+      await fs.writeFile(file, text, { flag: 'wx' });
+      files.push(file);
+      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+      documents.push(document);
+      await bind(document, targets[index], profile, index);
+    }
+
+    const ids = [];
+    for (const [index, document] of documents.entries()) ids.push(await execute(document, index, targets[index]));
+    for (const [index, id] of ids.entries()) {
+      await api.activateResult(id);
+      await vscode.commands.executeCommand('rocketbrain.focusQueryEditor');
+      assert.equal(vscode.window.activeTextEditor?.document.uri.toString(), documents[index].uri.toString());
+      assert.equal(await fs.readFile(files[index], 'utf8'), text);
+    }
+    assert.equal(api.activeConnectionProfile()?.id, profiles[0].id);
+    const peer = documents[1];
+    assert.equal((await api.closeProfileSession(targets[1], risk => risk.editorCount === 2 && !risk.inTransaction)).state, 'closed');
+    assert.equal(api.isProfileSql(peer), true);
+    const before = api.results().map(item => item.id);
+    // This enters the same bindInteractive guard as runQuery without opening an error notification.
+    await assert.rejects(api.inspectConsoleIsolation(peer), /profile session is closed/);
+    await assert.rejects(api.describeSqlScript('SELECT 1', { document: peer }), /uses the active database/);
+    await assert.rejects(api.changeSqlFileProfile(peer, { sessionId: targets[0].sessionId, profileId: profiles[1].id }, () => true),
+      /selected profile session is no longer available/);
+    assert.deepEqual(api.results().map(item => item.id), before);
+    await execute(documents[0], 0, targets[0]);
+
+    const reopened = await open(profiles[1]);
+    assert.notEqual(reopened.sessionId, targets[1].sessionId);
+    await bind(peer, reopened, profiles[1], 1);
+    await execute(peer, 1, reopened);
+    await spring();
+    checks.push('The installed extension bound two saved SQL files to owned MySQL and MariaDB sessions. The tagged results returned to their originating files.');
+    checks.push('Closing the peer route blocked its binding and active-catalog script paths, kept the other SQL file usable, and required explicit reassociation to a new peer session.');
+    return { primaryEngine: engine, engines: fixtures.map(fixture => fixture.version), physicalServers: 2, savedFiles: 2,
+      separateTaggedResults: true, exactResultEditor: true, preservedFileContents: true, noFallbackAfterClose: true,
+      mismatchedProfileRejected: true, independentSurvivingSession: true, reviewedReattach: true, springIsolation: true };
+  } finally {
+    try {
+      for (const [index, document] of documents.entries()) {
+        const opened = document.isClosed ? await vscode.workspace.openTextDocument(vscode.Uri.file(files[index])) : document;
+        if (api.isProfileSql(opened)) await api.changeSqlFileProfile(opened, undefined, () => true);
+      }
+      for (const target of targets) {
+        if (api.profileSessionList().some(row => row.id === target.sessionId)) await api.closeProfileSession(target, () => true);
+      }
+      if (profiles.some(profile => profile.id === api.activeConnectionProfile()?.id)) await api.disconnectMysql();
+      for (const profile of profiles) await manager.remove({ id: profile.id, expectedRevision: profile.revision });
+      const ownedUris = new Set(files.map(file => vscode.Uri.file(file).toString()));
+      const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => ownedUris.has(tab.input?.uri?.toString()));
+      if (tabs.length) await vscode.window.tabGroups.close(tabs);
+    } finally {
+      try {
+        await Promise.all(fixtures.map(async fixture => {
+          try { if (fixture.createdTable) await fixture.actor.query('DROP TABLE ' + table); }
+          finally { await fixture.actor.end(); }
+        }));
+      } finally {
+        try {
+          await Promise.all(files.map(file => fs.unlink(file)));
+          if (folder) await fs.rmdir(folder);
+        } finally { await spawned?.stop(); }
+      }
+    }
+  }
+}
+
+module.exports = { verifySqlFileProfiles, runSqlFileProfilesChecks };
