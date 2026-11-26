@@ -4,6 +4,7 @@ const {inside}=require('./testing-projects');
 const {parseJavaFile,lexJava}=require('../spring/java');
 const {analyzeJavaSources}=require('./signature-compiler');
 const {analyzeSpringContracts,inspectSpringMethodContract}=require('./spring-contract-analysis');
+const {adaptSignatureReferences,verifyReferenceAdapters}=require('./change-signature-references');
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const escapeRegex=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const fileKey=value=>{const actual=fs.realpathSync(value);return process.platform==='win32'?actual.toLowerCase():actual;};
@@ -79,27 +80,34 @@ function inspectSemanticFamily(before,uri,nameStart){
  if(family.some(method=>method.generic&&(!Array.isArray(method.typeParameters)||!Array.isArray(method.ownerTypeParameters)||!Array.isArray(method.ownerSupertypes)||typeof method.erasureKey!=='string'||method.parameters.some(p=>typeof p.erasure!=='string'))))throw new Error('Generic source contracts require complete compiler bounds, substitutions and erasures.');
  if(family.filter(method=>method.ownerKind==='INTERFACE').length>1)throw new Error('Diamond or multiple interface signature contracts need separate family analysis.');
  if(before.externalOverrides.some(key=>keys.has(key)))throw new Error('The selected family overrides an external binary contract; its complete source family is unavailable.');
- if(before.methodReferences.some(reference=>keys.has(reference.methodKey)))throw new Error('Method or constructor references need additional signature adaptation analysis.');
+ const methodReferences=before.methodReferences.filter(reference=>keys.has(reference.methodKey));
+ if(methodReferences.length>40||methodReferences.some(reference=>!reference.adapter)||
+    methodReferences.length&&family.some(method=>method.ownerKind==='INTERFACE'||method.generic))
+  throw new Error('Method or constructor references need additional signature adaptation analysis.');
  const calls=before.calls.filter(call=>keys.has(call.methodKey));if(calls.length>200||calls.some(call=>!call.safeArguments))throw new Error('Caller expressions with evaluation effects need additional ordering analysis; use literal or local-name arguments.');
- return {family,keys,calls};
+ return {family,keys,calls,methodReferences};
 }
 function editedSources(sources,targets){
  const keyFor=uri=>{const file=path.resolve(require('node:url').fileURLToPath(uri));return process.platform==='win32'?file.toLowerCase():file;},changes=new Map();for(const [uri,edits]of targets){const key=keyFor(uri);changes.set(key,[...(changes.get(key)||[]),...edits]);}
  return sources.map(source=>{const edits=changes.get(keyFor(source.uri));if(!edits)return source;const values=edits.map(edit=>{if(typeof edit.newText!=='string')throw new Error('The Java engine returned an invalid text edit.');const start=offset(source.text,edit.range?.start),end=offset(source.text,edit.range?.end);if(end<start)throw new Error('The Java engine returned a reversed text edit.');return {start,end,text:edit.newText};}).sort((a,b)=>b.start-a.start||b.end-a.end);let text=source.text,last=source.text.length;for(const edit of values){if(edit.end>last)throw new Error('The Java engine returned overlapping signature edits.');text=text.slice(0,edit.start)+edit.text+text.slice(edit.end);last=edit.start;}return {...source,text};});
 }
-function verifySemanticChange(semantic,after,parameters){
+function verifySemanticChange(semantic,after,parameters,adapters=[]){
  if(after.errors.length)throw new Error('Signature conflict: '+after.errors[0].message);
  const canonical=type=>['String','Object'].includes(type)?'java.lang.'+type:type,mapping=new Map(semantic.family.map(method=>[method.key,method.owner+'#'+(method.constructor?'<init>':method.name)+'('+parameters.map(p=>p.originalIndex<0?canonical(p.type):method.parameters[p.originalIndex]?.type).join(',')+')']));
  if(new Set(mapping.values()).size!==mapping.size)throw new Error('Signature collision in the reviewed source family.');
  const expected=new Map(semantic.before.methods.map(method=>[mapping.get(method.key)||method.key,method]));if(expected.size!==semantic.before.methods.length||after.methods.length!==expected.size)throw new Error('Signature collision or unexpected declaration membership change.');
  for(const method of after.methods){const prior=expected.get(method.key);if(!prior||prior.uri!==method.uri||prior.returnType!==method.returnType||['throwsTypes','modifiers','annotations','typeParameters','ownerTypeParameters','ownerSupertypes'].some(key=>JSON.stringify(prior[key])!==JSON.stringify(method[key])))throw new Error('The engine changed an unreviewed declaration contract: '+method.key+' ('+(!prior?'unexpected binding':JSON.stringify({before:[prior.uri,prior.returnType,prior.throwsTypes,prior.modifiers],after:[method.uri,method.returnType,method.throwsTypes,method.modifiers]}))+').');
-  if(semantic.keys.has(prior.key)&&prior.erasureKey){const expectedErasure=prior.owner+'#'+(prior.constructor?'<init>':prior.name)+'('+parameters.map(p=>p.originalIndex<0?canonical(p.type):prior.parameters[p.originalIndex].erasure).join(',')+')';if(method.erasureKey!==expectedErasure)throw new Error('The signature edit changes a generic erasure contract.');}
+  if(semantic.keys.has(prior.key)){
+   const names=parameters.map(p=>p.originalIndex<0?p.name:prior.parameters[p.originalIndex].name);
+   if(JSON.stringify(method.parameters.map(p=>p.name))!==JSON.stringify(names))throw new Error('The engine changed the reviewed parameter order or names.');
+   if(prior.erasureKey){const expectedErasure=prior.owner+'#'+(prior.constructor?'<init>':prior.name)+'('+parameters.map(p=>p.originalIndex<0?canonical(p.type):prior.parameters[p.originalIndex].erasure).join(',')+')';if(method.erasureKey!==expectedErasure)throw new Error('The signature edit changes a generic erasure contract.');}
+  }
  }
  const edges=(values,transform)=>values.map(edge=>[transform?(mapping.get(edge.from)||edge.from):edge.from,transform?(mapping.get(edge.to)||edge.to):edge.to].join('|')).sort();if(JSON.stringify(edges(semantic.before.overrideEdges,true))!==JSON.stringify(edges(after.overrideEdges,false)))throw new Error('The signature edit changes an override or generic substitution family contract.');
  const externalBefore=semantic.before.externalOverrides.map(key=>mapping.get(key)||key).sort(),externalAfter=[...after.externalOverrides].sort();if(JSON.stringify(externalBefore)!==JSON.stringify(externalAfter))throw new Error('The signature edit creates or changes an external binary override contract.');
  const fingerprint=(calls,transformed)=>calls.map(call=>[call.uri,transformed?(mapping.get(call.enclosingKey)||call.enclosingKey):call.enclosingKey,call.ordinal,transformed?(mapping.get(call.methodKey)||call.methodKey):call.methodKey,call.constructor,call.resultType??''].join('|')).sort();
- if(JSON.stringify(fingerprint(semantic.before.calls,true))!==JSON.stringify(fingerprint(after.calls,false)))throw new Error('The signature edit changes overload resolution or an unrelated caller binding.');
- if(JSON.stringify(semantic.before.methodReferences.map(r=>r.uri+'|'+r.methodKey).sort())!==JSON.stringify(after.methodReferences.map(r=>r.uri+'|'+r.methodKey).sort()))throw new Error('An unrelated method reference binding changed.');
+ const remainingCalls=verifyReferenceAdapters(semantic.before,after,adapters,mapping);
+ if(JSON.stringify(fingerprint(semantic.before.calls,true))!==JSON.stringify(fingerprint(remainingCalls,false)))throw new Error('The signature edit changes overload resolution or an unrelated caller binding.');
 }
 function registerJavaChangeSignature(context,vscode,{request,refactoring,getJavaHome}={}){
  const infos=new Map(),operations=new Set();let closed=false;
@@ -136,16 +144,16 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
   const references=await send('textDocument/references',{textDocument:{uri:anchor.uri},position:params.range.start,context:{includeDeclaration:false}},cancellation);if(!Array.isArray(references)||references.length>200)throw new Error('Signature references are incomplete or exceed the supported review limit.');
   const documents=new Map([[uriKey(anchor.uri),anchor]]);
   if(semantic){
-   const relevant=new Set([...semantic.family.map(method=>method.uri),...semantic.calls.map(call=>call.uri)]);
+   const relevant=new Set([...semantic.family,...semantic.calls,...semantic.methodReferences].map(item=>item.uri));
    for(const value of relevant){const uri=local(value);if(!inside(scope.root,fs.realpathSync(uri.fsPath)))throw new Error('A signature family or caller is outside the reviewed project.');if(!documents.has(uriKey(uri.toString())))documents.set(uriKey(uri.toString()),await snapshot(await vscode.workspace.openTextDocument(uri)));if(documents.size>30)throw new Error('Signature changes are limited to 30 source documents.');}
    for(const method of semantic.family){const saved=documents.get(uriKey(method.uri));const declaration=selectedMethod(saved.text,saved.uri,{start:positionAt(saved.text,method.nameStart),end:positionAt(saved.text,method.nameStart+method.name.length)},{advanced:true});await declarationBarrier(saved,declaration,[...documents.values()],scope,cancellation);}
   }
-  for(const reference of references){const uri=local(reference.uri),key=uriKey(uri.toString());if(!inside(scope.root,fs.realpathSync(uri.fsPath)))throw new Error('Callers outside this Maven/Gradle project require a wider signature review.');let saved=documents.get(key);if(!saved){if(semantic)throw new Error('The engine reported a caller outside the compiler-resolved signature family.');saved=await snapshot(await vscode.workspace.openTextDocument(uri));documents.set(key,saved);}if(documents.size>30)throw new Error('Signature changes are limited to 30 source documents.');const referenceAt=offset(saved.text,reference.range.start);if(semantic){if(![...semantic.family,...semantic.calls].some(item=>uriKey(item.uri)===key&&referenceAt>=(item.nameStart??item.start)&&referenceAt<=(item.end)))throw new Error('An indirect or unresolved reference requires separate signature review.');continue;}if(uriKey(saved.uri)===uriKey(anchor.uri)&&referenceAt===target.method.start)continue;const arity=callArguments(saved.text,reference.range,target.method.constructor);if(arity!==signature.parameters.length)throw new Error('A caller has an unresolved argument list.');}
+  for(const reference of references){const uri=local(reference.uri),key=uriKey(uri.toString());if(!inside(scope.root,fs.realpathSync(uri.fsPath)))throw new Error('Callers outside this Maven/Gradle project require a wider signature review.');let saved=documents.get(key);if(!saved){if(semantic)throw new Error('The engine reported a caller outside the compiler-resolved signature family.');saved=await snapshot(await vscode.workspace.openTextDocument(uri));documents.set(key,saved);}if(documents.size>30)throw new Error('Signature changes are limited to 30 source documents.');const referenceAt=offset(saved.text,reference.range.start);if(semantic){if(![...semantic.family,...semantic.calls,...semantic.methodReferences].some(item=>uriKey(item.uri)===key&&referenceAt>=(item.nameStart??item.start)&&referenceAt<=(item.end)))throw new Error('An indirect or unresolved reference requires separate signature review.');continue;}if(uriKey(saved.uri)===uriKey(anchor.uri)&&referenceAt===target.method.start)continue;const arity=callArguments(saved.text,reference.range,target.method.constructor);if(arity!==signature.parameters.length)throw new Error('A caller has an unresolved argument list.');}
   fresh([...documents.values()],cancellation);
   for(const saved of documents.values()){const tokens=lexJava(saved.text).tokens;if(tokens.some(t=>(t.kind==='string'||t.kind==='text-block')&&typeof t.value==='string'&&t.value.includes(signature.methodName)))throw new Error('A known string or reflection reference needs a separate contract review.');}
   for(const [id,saved]of infos)if(Date.now()>saved.expiresAt)infos.delete(id);while(infos.size>=10)infos.delete(infos.keys().next().value);
-  scope.validate();const id=crypto.randomUUID(),record={id,signature:structuredClone(signature),target,params,anchor,scope,semantic,documents:[...documents.values()],references:semantic?semantic.calls.length:references.length,expiresAt:Date.now()+120000};infos.set(id,record);
-  return {id,...structuredClone(signature),references:record.references,familyDeclarations:semantic?.family.length||1,genericContractsVerified:!!semantic?.family.some(method=>method.generic),expiresAt:record.expiresAt,scope:semantic?'Compiler-resolved source override families, generic bounds/substitutions/erasures and exact direct callers in the reviewed project; varargs, framework method contracts, external binary overrides and indirect references are refused.':'Plain non-polymorphic source declarations and resolved direct callers; framework, reflection, external binaries and advanced Java contracts are not verified.'};
+  scope.validate();const id=crypto.randomUUID(),record={id,signature:structuredClone(signature),target,params,anchor,scope,semantic,documents:[...documents.values()],references:semantic?semantic.calls.length+semantic.methodReferences.length:references.length,expiresAt:Date.now()+120000};infos.set(id,record);
+  return {id,...structuredClone(signature),references:record.references,adaptableMethodReferences:semantic?.methodReferences.length||0,familyDeclarations:semantic?.family.length||1,genericContractsVerified:!!semantic?.family.some(method=>method.generic),expiresAt:record.expiresAt,scope:semantic?'Compiler-resolved source families, exact direct callers and supported Java method reference adapters within this project.':'Plain non-polymorphic source declarations and resolved direct callers; framework, reflection, external binaries and advanced Java contracts are not verified.'};
  }
  async function preview(id,changes,{cancellation}={}){
   trusted(cancellation);const record=infos.get(id);if(!record||Date.now()>record.expiresAt)throw new Error('The signature inspection expired. Inspect it again.');fresh(record.documents,cancellation);record.scope.validate();record.semantic?.validate();
@@ -168,8 +176,28 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
   for(const change of response.edit.documentChanges||[]){if(!change.textDocument||!Array.isArray(change.edits))throw new Error('Signature edits may only change the inspected declaration and direct source callers.');targets.push([change.textDocument.uri,change.edits]);}
   for(const [value,edits]of targets){const uri=local(value),key=fileKey(uri.fsPath);if(!inside(record.scope.root,fs.realpathSync(uri.fsPath))||!expectedTargets.has(key))throw new Error('The Java engine returned a signature edit outside the inspected declaration and direct source callers.');if(!Array.isArray(edits))throw new Error('The Java engine returned invalid signature edits.');if(key===anchorKey&&edits.length)declarationEdited=true;}
   if(!declarationEdited)throw new Error('The Java engine did not edit the inspected signature declaration.');
-  if(record.semantic){const after=await analyzeJavaSources({...record.semantic.compilerOptions,cancellation,sources:editedSources(record.scope.sources,targets)});fresh(record.documents,cancellation);record.scope.validate();record.semantic.validate();verifySemanticChange(record.semantic,after,parameters);}
-  const validate=()=>{fresh(record.documents,cancellation);record.scope.validate();record.semantic?.validate();},plan=await refactoring.previewWorkspaceEdit(response.edit,{title:'Change Signature · '+s.methodName,kind:'refactor.rewrite.changeSignature',anchorDocument:record.anchor.document,cancellation,guards:record.documents.map(({uri,version,hash,diskHash})=>({uri,version,hash,diskHash})),validate,preApply:validate});validate();infos.delete(id);return {...plan,signature:{methodName:s.methodName,before:structuredClone(s.parameters),after:parameters,resolvedReferences:record.references,contractFiles:record.scope.files,familyDeclarations:record.semantic?.family.length||1,overloadBindingsVerified:!!record.semantic,genericContractsVerified:!!record.semantic?.family.some(method=>method.generic)},limitations:['Only the reviewed project source callers are covered.','Computed reflection and external binary callers require a separate review.']};
+  let edit=response.edit,adapters=[];
+  if(record.semantic){
+   let sources=editedSources(record.scope.sources,targets);
+   if(record.semantic.methodReferences.length){
+    if(targets.some(([,edits])=>edits.some(value=>value.annotationId)))throw Error('Annotated signature changes require separate review.');
+    const adapted=adaptSignatureReferences(record.scope.sources,sources,record.semantic.methodReferences,parameters);
+    adapters=adapted.adapters;
+    const replacements=new Map([...adapted.changed].map(([uri,text])=>[uriKey(uri),{uri,text}]));
+    sources=sources.map(source=>replacements.has(uriKey(source.uri))?{...source,text:replacements.get(uriKey(source.uri)).text}:source);
+    edit={...response.edit,
+     changes:Object.fromEntries(Object.entries(response.edit.changes||{}).filter(([uri])=>!replacements.has(uriKey(uri)))),
+     ...(response.edit.documentChanges&&{documentChanges:response.edit.documentChanges.filter(change=>
+      !replacements.has(uriKey(change.textDocument.uri)))})};
+    for(const [key,{uri,text}] of replacements){
+     const original=record.documents.find(saved=>uriKey(saved.uri)===key).text;
+     edit.changes[uri]=[{range:{start:{line:0,character:0},end:positionAt(original,original.length)},newText:text}];
+    }
+   }
+   const after=await analyzeJavaSources({...record.semantic.compilerOptions,cancellation,sources});
+   fresh(record.documents,cancellation);record.scope.validate();record.semantic.validate();verifySemanticChange(record.semantic,after,parameters,adapters);
+  }
+  const validate=()=>{fresh(record.documents,cancellation);record.scope.validate();record.semantic?.validate();},plan=await refactoring.previewWorkspaceEdit(edit,{title:'Change Signature · '+s.methodName,kind:'refactor.rewrite.changeSignature',anchorDocument:record.anchor.document,cancellation,guards:record.documents.map(({uri,version,hash,diskHash})=>({uri,version,hash,diskHash})),validate,preApply:validate});validate();infos.delete(id);return {...plan,signature:{methodName:s.methodName,before:structuredClone(s.parameters),after:parameters,resolvedReferences:record.references,adaptedMethodReferences:adapters.length,contractFiles:record.scope.files,familyDeclarations:record.semantic?.family.length||1,overloadBindingsVerified:!!record.semantic,genericContractsVerified:!!record.semantic?.family.some(method=>method.generic)},limitations:['Only the reviewed project source callers are covered.','Computed reflection and external binary callers require a separate review.']};
  }
  function tracked(fn){return(...args)=>{const operation=fn(...args);operations.add(operation);void operation.finally(()=>operations.delete(operation)).catch(()=>{});return operation;};}
  const command=vscode.commands.registerCommand('rocketbrain.java.changeSignature',async()=>{try{const editor=vscode.window.activeTextEditor;if(!editor)throw new Error('Select a Java method declaration.');const discovered=await api.info(editor.document,editor.selection),value=await vscode.window.showInputBox({title:'Change Signature · '+discovered.methodName,prompt:'Edit parameter order; remove unused parameters; add {originalIndex:-1,type,name,defaultValue} using a literal default.',value:JSON.stringify({parameters:discovered.parameters}),ignoreFocusOut:true});if(value===undefined)return;let changes;try{changes=JSON.parse(value);}catch{throw new Error('Enter a valid JSON parameters list.');}const plan=await api.preview(discovered.id,changes);return await refactoring.review(plan);}catch(error){if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);}});
