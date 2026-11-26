@@ -180,6 +180,8 @@ Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를
 
 ### Kotlin JVM 편집
 
+**Inspect Java Local Value**에서 검증된 로컬 Kotlin 프레임의 `LinkedHashMap`을 읽을 수 있습니다. 연결 순서대로 키와 값을 32개씩 표시하며, 최대 128개 항목의 맵과 두 단계의 지원되는 배열·리스트·맵을 펼쳐 볼 수 있습니다. 값은 캡처 시점의 스냅숏입니다. 코드 실행을 재개하거나 맵의 구조가 바뀌면 다시 캡처합니다.
+
 **Inspect Kotlin Object Fields**에서 검증된 로컬 JVM의 Kotlin 중단점 최상위 프레임을 열면 `Int?`, `Long?`, `Boolean?` 필드에 리터럴을 입력할 수 있습니다. Long은 `L` 접미사를 붙입니다. 변경 내용을 확인한 뒤 디버거는 JVM 표준 래퍼 객체를 만들고, 같은 프레임과 객체의 필드 값이 그대로인지 다시 확인한 다음 적용합니다. 래퍼 생성에 영향을 주는 메서드·예외 중단점이 활성화되어 있으면 리터럴 입력이 제한됩니다. v11·v12 어댑터에서는 기존의 박싱된 지역 변수 복사를 지원합니다.
 
 [MIT 라이선스의 standalone ktlsp 1.4.0-rc1](https://codeberg.org/winlogon/ktlsp/releases/tag/v1.4.0-rc1)을 압축 해제한 `server` 디렉터리를 `rocketbrain.kotlinEditor.serverHome`에 지정합니다. 독립 JDK 21 이상을 사용합니다. Gradle 프로젝트는 로컬 Kotlin 파일을 열어 시작합니다. Maven은 독립 Apache Maven 경로를 `rocketbrain.java.mavenHome`에 지정한 뒤, 단일 Maven 모듈의 `.kt` 파일에서 **Start Kotlin Language Support**를 실행합니다. 선택한 POM에서 Maven 의존성을 읽어 언어 서버에 연결합니다. Maven 리액터의 앱 모듈에 형제 모듈 의존성이 있으면 앱의 `.kt` 파일에서 **Start Kotlin Maven Reactor**를 선택합니다. 표시된 의존 모듈을 승인하면 해당 JAR을 편집 세션 전용 Maven 저장소에 빌드하고, 앱 모듈의 자동완성과 타입 진단에 사용합니다. 의존 소스나 POM이 바뀌면 다시 준비할 수 있습니다. 로컬 `.kt` 파일을 열면 값과 멤버 자동 완성, 타입 표시, 선언 이동 및 컴파일 진단을 사용할 수 있습니다. **Stop Kotlin Language Support**로 세션을 종료하고 **Show Kotlin Language Server Output**에서 서버 출력을 확인합니다.

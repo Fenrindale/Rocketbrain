@@ -15,7 +15,9 @@ const KOTLIN_LINE_BUILD = DEBUG_VERSION + '.rocketbrain10';
 const KOTLIN_FIELD_VALUES_BUILD = DEBUG_VERSION + '.rocketbrain11';
 const GROOVY_LINE_BUILD = DEBUG_VERSION + '.rocketbrain12';
 const KOTLIN_BOX_BUILD = DEBUG_VERSION + '.rocketbrain13';
-const GROOVY_LINE_BUILDS = Object.freeze([GROOVY_LINE_BUILD, KOTLIN_BOX_BUILD]);
+const KOTLIN_MAP_BUILD = DEBUG_VERSION + '.rocketbrain14';
+const KOTLIN_BOX_BUILDS = Object.freeze([KOTLIN_BOX_BUILD, KOTLIN_MAP_BUILD]);
+const GROOVY_LINE_BUILDS = Object.freeze([GROOVY_LINE_BUILD, ...KOTLIN_BOX_BUILDS]);
 const KOTLIN_FIELD_VALUES_BUILDS = Object.freeze([KOTLIN_FIELD_VALUES_BUILD, ...GROOVY_LINE_BUILDS]);
 const KOTLIN_LINE_BUILDS = Object.freeze([KOTLIN_LINE_BUILD, ...KOTLIN_FIELD_VALUES_BUILDS]);
 const EXCEPTION_BUILD = DEBUG_VERSION + '.rocketbrain3';
@@ -43,12 +45,14 @@ const GROOVY_LINE_FILE = 'com.microsoft.java.debug.plugin-' + GROOVY_LINE_BUILD 
 const GROOVY_LINE_SHA256 = '0234ae136f2e81486ee1b6d46c36961c59f48fe2e9f847e2745f3a3e13e96049';
 const KOTLIN_BOX_FILE = 'com.microsoft.java.debug.plugin-' + KOTLIN_BOX_BUILD + '.jar';
 const KOTLIN_BOX_SHA256 = 'c5f652dc3d213e95e085911c0776ced8a7a47b9559a7deebde0d505f5a07271f';
+const KOTLIN_MAP_FILE = 'com.microsoft.java.debug.plugin-' + KOTLIN_MAP_BUILD + '.jar';
+const KOTLIN_MAP_SHA256 = '329e1d9f142b180c8b28d06c16840bef28ee1182b76b884fff735ebccc60305a';
 const EXCEPTION_SHA256 = '48225381bae43e320041096e1996e4d519614a018d1eaac19341ac66686a26f8';
 const LEGACY_SHA256 = 'dd70e3cf8dc599c7a91b0c01efa86aa7bcf7677e3924ab4c4012e85895ab8605';
 
 function resolveDebugBundle(value, serverPath) {
   const defaults = serverPath && path.join(path.dirname(serverPath), 'java-debug');
-  const candidate = value || (defaults && [KOTLIN_BOX_BUILD, GROOVY_LINE_BUILD, KOTLIN_FIELD_VALUES_BUILD, KOTLIN_LINE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LOCAL_WRITE_BUILD, INDEXED_WATCH_BUILD, WATCH_BUILD, COROUTINE_BUILD, DEBUG_BUILD, EXCEPTION_BUILD, LEGACY_BUILD].map(build => `com.microsoft.java.debug.plugin-${build}.jar`)
+  const candidate = value || (defaults && [KOTLIN_MAP_BUILD, KOTLIN_BOX_BUILD, GROOVY_LINE_BUILD, KOTLIN_FIELD_VALUES_BUILD, KOTLIN_LINE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LOCAL_WRITE_BUILD, INDEXED_WATCH_BUILD, WATCH_BUILD, COROUTINE_BUILD, DEBUG_BUILD, EXCEPTION_BUILD, LEGACY_BUILD].map(build => `com.microsoft.java.debug.plugin-${build}.jar`)
     .map(name => path.join(defaults, name)).find(file => fs.existsSync(file)));
   if (!candidate) return undefined;
   if (!path.isAbsolute(candidate)) throw new Error('rocketbrain.java.debugBundlePath must be an absolute JAR path.');
@@ -56,7 +60,7 @@ function resolveDebugBundle(value, serverPath) {
   const stat = fs.statSync(file);
   if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error('Java debug bundle is not a regular JAR within the supported size.');
   const checksum = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-  const build = { [KOTLIN_BOX_SHA256]: KOTLIN_BOX_BUILD, [GROOVY_LINE_SHA256]: GROOVY_LINE_BUILD, [KOTLIN_FIELD_VALUES_SHA256]: KOTLIN_FIELD_VALUES_BUILD, [KOTLIN_LINE_SHA256]: KOTLIN_LINE_BUILD, [KOTLIN_FIELD_SHA256]: KOTLIN_FIELD_BUILD, [KOTLIN_LOCAL_WRITE_SHA256]: KOTLIN_LOCAL_WRITE_BUILD, [INDEXED_WATCH_SHA256]: INDEXED_WATCH_BUILD,
+  const build = { [KOTLIN_MAP_SHA256]: KOTLIN_MAP_BUILD, [KOTLIN_BOX_SHA256]: KOTLIN_BOX_BUILD, [GROOVY_LINE_SHA256]: GROOVY_LINE_BUILD, [KOTLIN_FIELD_VALUES_SHA256]: KOTLIN_FIELD_VALUES_BUILD, [KOTLIN_LINE_SHA256]: KOTLIN_LINE_BUILD, [KOTLIN_FIELD_SHA256]: KOTLIN_FIELD_BUILD, [KOTLIN_LOCAL_WRITE_SHA256]: KOTLIN_LOCAL_WRITE_BUILD, [INDEXED_WATCH_SHA256]: INDEXED_WATCH_BUILD,
     [WATCH_SHA256]: WATCH_BUILD, [COROUTINE_SHA256]: COROUTINE_BUILD, [DEBUG_SHA256]: DEBUG_BUILD,
     [EXCEPTION_SHA256]: EXCEPTION_BUILD, [LEGACY_SHA256]: LEGACY_BUILD }[checksum];
   if (!build) throw new Error('Java debug bundle must match a pinned Rocketbrain loopback-only build. Run the Java engine installer.');
@@ -115,5 +119,6 @@ module.exports = { DEBUG_VERSION, DEBUG_BUILD, DEBUG_FILE, DEBUG_SHA256, DEBUG_U
   KOTLIN_LINE_BUILD, KOTLIN_LINE_FILE, KOTLIN_LINE_SHA256,
   KOTLIN_LINE_BUILDS, KOTLIN_FIELD_VALUES_BUILD, KOTLIN_FIELD_VALUES_FILE, KOTLIN_FIELD_VALUES_SHA256,
   KOTLIN_FIELD_VALUES_BUILDS, GROOVY_LINE_BUILDS, GROOVY_LINE_BUILD, GROOVY_LINE_FILE, GROOVY_LINE_SHA256,
-  KOTLIN_BOX_BUILD, KOTLIN_BOX_FILE, KOTLIN_BOX_SHA256,
+  KOTLIN_BOX_BUILD, KOTLIN_BOX_BUILDS, KOTLIN_BOX_FILE, KOTLIN_BOX_SHA256,
+  KOTLIN_MAP_BUILD, KOTLIN_MAP_FILE, KOTLIN_MAP_SHA256,
   independentJavaExecutable, argumentString, launchCommandMode };

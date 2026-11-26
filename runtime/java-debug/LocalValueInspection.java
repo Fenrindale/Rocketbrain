@@ -41,7 +41,11 @@ final class LocalValueInspection {
             StackFrame frame = context.getStackFrameManager().getStackFrame(frameRef);
             if (frame == null) return error(response, "The reviewed Java stack frame is unavailable.");
             String action = text(args, "action");
-            if ("list".equals(action)) response.body = list(frame);
+            if ("list".equals(action)) response.body = list(context, frame);
+            else if ("mapOpen".equals(action) || "mapPage".equals(action)) {
+                try { response.body = KotlinCollectionInspection.read(context, frameRef, frame, frameId, text(args, "name"), action, args); }
+                catch (IllegalArgumentException denied) { return error(response, denied.getMessage()); }
+            }
             else {
                 String name = text(args, "name");
                 LocalVariable variable = name == null || name.isEmpty() || name.length() > 256 ? null : frame.visibleVariableByName(name);
@@ -68,7 +72,7 @@ final class LocalValueInspection {
         }
     }
 
-    private static Map<String, Object> list(StackFrame frame) throws Exception {
+    private static Map<String, Object> list(IDebugAdapterContext context, StackFrame frame) throws Exception {
         List<LocalVariable> all = frame.visibleVariables();
         List<LocalVariable> visible = all.subList(0, Math.min(MAX_LOCALS, all.size()));
         Map<LocalVariable, Value> values = frame.getValues(visible);
@@ -82,6 +86,7 @@ final class LocalValueInspection {
             } else {
                 IndexedValue collection = indexed(value);
                 if (collection != null) entries.add(Map.of("name", variable.name(), "kind", collection.kind, "length", collection.length));
+                else KotlinCollectionInspection.list(context, frame, variable, value, entries);
             }
         }
         return Map.of("values", entries, "limited", all.size() > visible.size());

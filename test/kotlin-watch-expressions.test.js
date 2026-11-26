@@ -7,7 +7,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
 const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILDS,
-  KOTLIN_FIELD_VALUES_BUILDS, KOTLIN_BOX_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
+  KOTLIN_FIELD_VALUES_BUILDS, KOTLIN_BOX_BUILDS, KOTLIN_MAP_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
 const { assignment, assertKotlinLocalChanges } = require('./helpers/kotlin-local-write');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { DapClient, freePort } = require('./java-debug-dap');
@@ -19,13 +19,14 @@ const { request, breakpointName, launchKotlinWatches, assertKotlinWatchValues, a
 
 const { fieldRequest, assertKotlinFields, assertFieldsResumed } = require('./helpers/kotlin-object-fields');
 const { assertKotlinFieldValues, assertKotlinFieldValuesResumed, assertFreshKotlinBoxes, assertFreshBoxesResumed } = require('./helpers/kotlin-field-values');
+const { localValuesRequest, assertKotlinCollections, assertKotlinCollectionsResumed } = require('./helpers/kotlin-collection-values');
 
 const runtimeFile = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
 const gradleHome = process.env.ROCKETBRAIN_COROUTINE_GRADLE_HOME;
 const classpathFile = process.env.ROCKETBRAIN_COROUTINE_WATCH_CLASSPATH;
 const dbFiles = ['mysql', 'mariadb'].map(engine => [engine, process.env['ROCKETBRAIN_COROUTINE_WATCH_' + engine.toUpperCase() + '_CONFIG']]);
 
-async function assertManualAttachLimited(lsp, fixture, sourceRoot, database, boxes) {
+async function assertManualAttachLimited(lsp, fixture, sourceRoot, database, boxes, maps) {
   const target = await freePort(), running = await launchKotlinWatches(fixture, database, target);
   let dap;
   try {
@@ -52,6 +53,12 @@ async function assertManualAttachLimited(lsp, fixture, sourceRoot, database, box
       assert.ok(!result.fields.some(row=>row.boxLiteral));
       await assert.rejects(send(fieldRequest,{action:'prepareLiteral',frameId:frame.id,receiver:'target',name:'freshInt',input:'77'}),
         /verified local JVM/u);
+    }
+    if (maps) {
+      const observed = await send(localValuesRequest, {action:'list',frameId:frame.id});
+      assert.ok(!observed.values.some(row => row.kind === 'orderedMap'));
+      await assert.rejects(send(localValuesRequest, {action:'mapOpen',frameId:frame.id,name:'orderedMap',start:0,count:32}),
+        /verified local Kotlin frame/u);
     }
     await send('continue',{threadId:stopped.threadId});
     await running.waitFor('Rocketbrain Kotlin JDBC|');
@@ -140,7 +147,11 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
         await fs.writeFile(fieldSignal+'.'+suffix,'change',{flag:'wx'});
         await running.waitFor(message);
       }) : undefined;
-      const freshBoxes=bundle.build===KOTLIN_BOX_BUILD ? await assertFreshKotlinBoxes(send,frame.id,async (suffix,message)=>{
+      const freshBoxes=KOTLIN_BOX_BUILDS.includes(bundle.build) ? await assertFreshKotlinBoxes(send,frame.id,async (suffix,message)=>{
+        await fs.writeFile(fieldSignal+'.'+suffix,'change',{flag:'wx'});
+        await running.waitFor(message);
+      }) : undefined;
+      const orderedMaps=bundle.build===KOTLIN_MAP_BUILD ? await assertKotlinCollections(send,frame.id,async (suffix,message)=>{
         await fs.writeFile(fieldSignal+'.'+suffix,'change',{flag:'wx'});
         await running.waitFor(message);
       }) : undefined;
@@ -166,6 +177,14 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
         delete freshBoxes.staleId;
         freshBoxes.resumedWriteRefused = true;
       }
+      if (orderedMaps) {
+        orderedMaps.resumed = assertKotlinCollectionsResumed(output, true);
+        await assert.rejects(send(localValuesRequest, {action:'mapPage',frameId:frame.id,name:'orderedMap',start:0,count:32,
+          snapshotId:orderedMaps.snapshotId,viewId:orderedMaps.viewId}), /frame|resumed/u);
+        delete orderedMaps.snapshotId;
+        delete orderedMaps.viewId;
+        orderedMaps.resumedSnapshotRefused = true;
+      }
       await assert.rejects(send('evaluate', { frameId: frame.id, expression: 'amount', context: 'watch' }), /current suspended frame/u);
       await assert.rejects(send(request, { frameId: frame.id, expression: 'amount' }), /current suspended frame/u);
       if(write){
@@ -174,7 +193,7 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
         write.resumedWriteRefused=true;
       }
       previousSessionFrame = frame.id;
-      reports.push({ ...completion, line: frame.line, values, indexed, write, fields, fieldValues, freshBoxes, staleFrameRefused: true,
+      reports.push({ ...completion, line: frame.line, values, indexed, write, fields, fieldValues, freshBoxes, orderedMaps, staleFrameRefused: true,
         otherDebugSessionFrameRefused: reports.length > 0, liveFrameSource: 'KotlinWatchInspection.kt' });
       await send('disconnect', { terminateDebuggee: false }).catch(error => {
         if (!dap.events.some(event => event.event === 'terminated')) throw error;
@@ -192,7 +211,8 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
     }
   }
   if (KOTLIN_FIELD_VALUES_BUILDS.includes(bundle.build)) reports[0].manualPortOnlyExtendedRefused=await assertManualAttachLimited(lsp,fixture,
-    sourceRoot,{engine:dbFiles[0][0],configFile:dbFiles[0][1],classpathFile},bundle.build===KOTLIN_BOX_BUILD);
+    sourceRoot,{engine:dbFiles[0][0],configFile:dbFiles[0][1],classpathFile},KOTLIN_BOX_BUILDS.includes(bundle.build),
+    bundle.build===KOTLIN_MAP_BUILD);
   const receipt = process.env.ROCKETBRAIN_KOTLIN_EXPRESSION_RECEIPT;
   if (receipt) await fs.writeFile(receipt, JSON.stringify({ build: bundle.build, sha256: bundle.sha256,
     kotlin: '2.4.21', reports }, null, 2) + '\n');

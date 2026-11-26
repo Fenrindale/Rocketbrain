@@ -40,6 +40,8 @@ final class KotlinObjectFields {
 
     private KotlinObjectFields() { }
 
+    static boolean verifiedLocalAttach(IDebugAdapterContext context) { return REVIEWED_LOCAL_ATTACH.containsKey(context); }
+
     static CompletableFuture<Messages.Response> dispatch(Messages.Request request, Messages.Response response,
                                                          IDebugAdapterContext context) {
         if ("attach".equals(request.command) || "launch".equals(request.command)) {

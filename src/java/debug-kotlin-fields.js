@@ -1,6 +1,6 @@
 'use strict';
 
-const { KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILDS, KOTLIN_BOX_BUILD } = require('./debug-runtime');
+const { KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILDS, KOTLIN_BOX_BUILDS } = require('./debug-runtime');
 const { createKotlinFrameGuard } = require('./debug-kotlin-local');
 
 const request = 'rocketbrain/kotlinObjectFields';
@@ -88,7 +88,7 @@ function createKotlinFieldInspector(vscode, options) {
     if (!Array.isArray(items)||items.length>256||items.some(row=>!isField(row))) {
       throw Error('The Java adapter returned an invalid field list.');
     }
-    const access=options.getState(context.session.id)?.debugBuild===KOTLIN_BOX_BUILD;
+    const access=KOTLIN_BOX_BUILDS.includes(options.getState(context.session.id)?.debugBuild);
     const reportFields = Object.freeze({receiver, fields:Object.freeze(items.map(({name,type,value,boxed,writable,boxSources,boxLiteral,kind,length,elementType})=>
       Object.freeze({name,type,value,boxed,writable,boxSources:Object.freeze([...boxSources]),...(kind&&{kind}),
         ...(kind==='array'&&{length,elementType}),...(access&&boxLiteral&&{boxLiteral:true})})))});
