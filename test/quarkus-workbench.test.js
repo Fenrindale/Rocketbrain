@@ -11,6 +11,7 @@ const { promisify } = require('node:util');
 const { createQuarkusProject } = require('../src/java/quarkus-create');
 const { inspectQuarkusProject,modelQuarkus,quarkusGradleProject } = require('../src/java/quarkus-model');
 const { createQuarkusDev,fastJar } = require('../src/java/quarkus-dev');
+const { createDebugProcessDiscovery } = require('../src/java/debug-processes');
 const { buildSpec } = require('../src/java/workbench-tasks');
 
 const execute = promisify(execFile);
@@ -106,8 +107,8 @@ test('Quarkus pins saved Gradle plugins and validates the standard fast-jar outp
   assert.throws(()=>fastJar(project),/standard Quarkus fast-jar/);
 });
 
-test('scaffold runs actual Quarkus Maven tests and serves, reloads and stops owned dev mode',{
-  skip:!javaConfig || !mavenHome,timeout:250000
+test('scaffold runs actual Quarkus Maven tests and reloads with owned development debugging',{
+  skip:!javaConfig || !mavenHome,timeout:300000
 },async context => {
   const project = await projectIn(context);
   const { javaHome } = JSON.parse(await fs.readFile(javaConfig,'utf8'));
@@ -118,14 +119,17 @@ test('scaffold runs actual Quarkus Maven tests and serves, reloads and stops own
   const spec = buildSpec(project,{javaHome,mavenHome},['test']);
   const built = await execute(spec.command,spec.args,{cwd:spec.cwd,env:spec.env,windowsHide:true,timeout:160000,maxBuffer:6*1024*1024});
   assert.match(built.stdout,/Tests run: 2, Failures: 0, Errors: 0, Skipped: 0/);
-  const dev = createQuarkusDev();
+  const processes = createDebugProcessDiscovery({javaHome:()=>javaHome,trusted(){}});
+  const dev = createQuarkusDev({resolveDescendant:processes.resolveDescendant});
   const options = {project,javaHome,mavenHome,workspaceTrusted:true,allowProjectExecution:true};
   await assert.rejects(dev.start({...options,workspaceTrusted:false}),/trusted workspace/);
   await assert.rejects(dev.start({...options,allowProjectExecution:false}),/trusted workspace/);
   let ready, snapshot;
   try {
-    ready = await dev.start(options);
+    ready = await dev.start({...options,debug:'development'});
     assert.equal(ready.profile,'dev');
+    assert.equal(ready.debug.verified,true);
+    assert.notEqual(ready.debug.port,Number(new URL(ready.baseUrl).port));
     await assert.rejects(dev.start(options),/current owned Quarkus dev session/);
     assert.equal(await read(ready.baseUrl,'/greeting'),'dev-world!;dev-world!;');
     assert.match(await read(ready.baseUrl,'/greeting/page'),/<p class="greeting">dev-world!<\/p>/);
@@ -141,11 +145,13 @@ test('scaffold runs actual Quarkus Maven tests and serves, reloads and stops own
       reloaded = await read(ready.baseUrl,'/greeting');
     }
     assert.equal(reloaded,'live-world!;live-world!;');
-    snapshot = {version:ready.version,tests:2,profile:ready.profile,health:health.status,liveReload:reloaded};
+    assert.deepEqual(await dev.verifyDebugTarget(),ready.debug);
+    snapshot = {version:ready.version,tests:2,profile:ready.profile,health:health.status,liveReload:reloaded,ownedDebugVerified:true};
   } finally {
     await dev.dispose();
   }
   await assert.rejects(fetch(ready.baseUrl+'/greeting',{signal:AbortSignal.timeout(1000)}));
+  await assert.rejects(dev.verifyDebugTarget(),/unavailable/);
   if (process.env.ROCKETBRAIN_QUARKUS_RECEIPT) {
     await fs.writeFile(process.env.ROCKETBRAIN_QUARKUS_RECEIPT,JSON.stringify({...snapshot,ownedProcessStopped:true},null,2)+'\n');
   }
