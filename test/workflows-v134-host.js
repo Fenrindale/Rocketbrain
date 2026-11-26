@@ -24,7 +24,8 @@ exports.run = async (vscode = require('vscode')) => {
     kotlinMavenReactor:()=>require('./kotlin-maven-reactor-host').runKotlinMavenReactorChecks(api,vscode,checks),
     springParentAuth:()=>require('./spring-parent-authentication-host').runSpringParentAuthenticationChecks(api,vscode,checks),
     springReactiveRegression:()=>require('./spring-reactive-authentication-host').runReactiveAuthenticationChecks(api,vscode,checks),
-    micronautGradle:()=>require('./micronaut-gradle-host').runMicronautGradleChecks(api,vscode,checks)
+    micronautGradle:()=>require('./micronaut-gradle-host').runMicronautGradleChecks(api,vscode,checks),
+    quarkusGradle:()=>require('./quarkus-gradle-host').runQuarkusGradleChecks(api,vscode,checks)
   };
   const names=process.env.ROCKETBRAIN_V134_ONLY?.split(',') || Object.keys(groups);
   assert.ok(names.length && names.every(name=>Object.hasOwn(groups,name)) && new Set(names).size===names.length);
