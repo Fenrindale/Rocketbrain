@@ -77,7 +77,7 @@ public final class ObserverRuntime {
         try{return registerFactory(publicMethod(session.getClass(),"getFactory").invoke(session));}
         catch(Throwable ignored){warning("Session factory public API unavailable");return null;}
     }
-    private static synchronized String registerFactory(Object factory){if(factory==null)return null;factories.removeIf(f->f.value.get()==null);for(Factory entry:factories)if(entry.value.get()==factory)return entry.id;if(factories.size()>=4){warning("Factory limit reached");return null;}String id="factory-"+ids.incrementAndGet();factories.add(new Factory(id,new WeakReference<>(factory)));return id;}
+    static synchronized String registerFactory(Object factory){if(factory==null)return null;factories.removeIf(f->f.value.get()==null);for(Factory entry:factories)if(entry.value.get()==factory)return entry.id;if(factories.size()>=4){warning("Factory limit reached");return null;}String id="factory-"+ids.incrementAndGet();factories.add(new Factory(id,new WeakReference<>(factory)));return id;}
     public static void factorySeen(Object factory){try{registerFactory(factory);}catch(Throwable ignored){}}
     public static synchronized void factoryClosed(Object factory){try{factories.removeIf(entry->entry.value.get()==factory);}catch(Throwable ignored){}}
     private static Method publicMethod(Class<?> type,String name)throws NoSuchMethodException {
@@ -95,7 +95,7 @@ public final class ObserverRuntime {
     private static void finish(ThreadLocal<Frame> local,String operation,String state,Map<String,Object> metadata,Throwable error){Frame frame=local.get();if(frame==null)return;if(--frame.depth>0)return;local.remove();Map<String,Object> event=new LinkedHashMap<>();event.put("id",eventIds.incrementAndGet());event.put("at",Instant.now().toString());event.put("operation",operation);event.put("state",state);event.put("origin",frame.origin);event.put("factoryId",frame.factoryId);event.put("query",frame.query);event.put("queryTruncated",frame.query!=null&&frame.query.length()==maxQueryChars);event.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(System.nanoTime()-frame.started));event.put("metadata",metadata);event.put("observerExecutedSql",false);event.put("boundParameterValuesRetained",false);if(error!=null){event.put("errorClass",error.getClass().getName());event.put("message",cut(error.getMessage(),1024));}synchronized(ObserverRuntime.class){if(events.size()>=maxEvents){events.removeFirst();dropped++;}events.addLast(event);}}
     private static Map<String,Object> snapshot(){List<Factory> references;List<Map<String,Object>> captured;List<String> problems,classes;long omitted;synchronized(ObserverRuntime.class){references=List.copyOf(factories);captured=List.copyOf(events);problems=List.copyOf(warnings);classes=List.copyOf(instrumented);omitted=dropped;}
         List<Map<String,Object>> providerMetadata=new ArrayList<>();for(Factory entry:references){Object factory=entry.value.get();if(factory==null)continue;Map<String,Object> item=new LinkedHashMap<>(HibernateAccess.snapshot(factory));item.put("id",entry.id);providerMetadata.add(item);}
-        Map<String,Object> result=new LinkedHashMap<>();result.put("schemaVersion",1);result.put("agentVersion",VERSION);result.put("processId",ProcessHandle.current().pid());result.put("state",providerMetadata.isEmpty()?"waiting":"observed");result.put("capturedAt",Instant.now().toString());result.put("capabilities",Map.of("queries",queries,"validate",validate,"attributeBinding",true));result.put("queryEventsEnabled",queries);result.put("semanticValidationEnabled",validate);result.put("consoleSelectEnabled",consoleSelect);result.put("consoleFetchSnapshotsEnabled",consoleFetchSnapshots);result.put("consoleEntityProjectionsEnabled",consoleEntityProjections);result.put("factories",providerMetadata);result.put("performance",PerformanceRuntime.snapshot(classes));result.put("events",captured);result.put("droppedEvents",omitted);result.put("instrumentedClasses",classes);result.put("warnings",problems);result.put("boundParameterValuesRetained",false);result.put("observerExecutedSql",false);return result;
+        Map<String,Object> result=new LinkedHashMap<>();result.put("schemaVersion",1);result.put("agentVersion",VERSION);result.put("processId",ProcessHandle.current().pid());result.put("state",providerMetadata.isEmpty()?"waiting":"observed");result.put("capturedAt",Instant.now().toString());result.put("capabilities",Map.of("queries",queries,"validate",validate,"attributeBinding",true,"entityGraphs",true));result.put("queryEventsEnabled",queries);result.put("semanticValidationEnabled",validate);result.put("consoleSelectEnabled",consoleSelect);result.put("consoleFetchSnapshotsEnabled",consoleFetchSnapshots);result.put("consoleEntityProjectionsEnabled",consoleEntityProjections);result.put("factories",providerMetadata);result.put("performance",PerformanceRuntime.snapshot(classes));result.put("events",captured);result.put("droppedEvents",omitted);result.put("instrumentedClasses",classes);result.put("warnings",problems);result.put("boundParameterValuesRetained",false);result.put("observerExecutedSql",false);return result;
     }
     private static Object factory(String selected){synchronized(ObserverRuntime.class){List<Factory> live=factories.stream().filter(f->f.value.get()!=null).toList();if(selected==null&&live.size()==1)return live.getFirst().value.get();for(Factory item:live)if(item.id.equals(selected))return item.value.get();return null;}}
     private static void handle(HttpExchange exchange)throws IOException {boolean acquired=false;try {
@@ -116,6 +116,10 @@ public final class ObserverRuntime {
         if(path.equals("/feign-contracts")){
             if(!method.equals("GET")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
             reply(exchange,200,FeignContractTrace.snapshot());return;
+        }
+        if(path.equals("/entity-graphs")){
+            if(!method.equals("POST")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
+            handleEntityGraphs(exchange);return;
         }
         if(path.equals("/attribute-binding")){
             if(!method.equals("POST")){reply(exchange,405,Map.of("error","unsupported_route_or_method"));return;}
@@ -138,6 +142,27 @@ public final class ObserverRuntime {
         }
         reply(exchange,path.equals("/snapshot")||path.equals("/validate")?405:404,Map.of("error","unsupported_route_or_method"));
     }catch(IllegalArgumentException failure){reply(exchange,400,Map.of("error","invalid_bounded_request"));}catch(Throwable failure){reply(exchange,500,Map.of("state","unknown","reason","Provider metadata unavailable","errorClass",failure.getClass().getName()));}finally{if(acquired)requests.release();exchange.close();}}
+
+    private static void handleEntityGraphs(HttpExchange exchange) throws IOException {
+        String contentType=exchange.getRequestHeaders().getFirst("Content-Type");
+        if(contentType==null||!contentType.split(";",2)[0].trim().equalsIgnoreCase("application/json")){
+            reply(exchange,415,Map.of("error","json_required"));return;
+        }
+        byte[] bytes=exchange.getRequestBody().readNBytes(257);
+        if(bytes.length>256){reply(exchange,413,Map.of("error","request_limit"));return;}
+        Map<String,Object> body=Json.object(new String(bytes,StandardCharsets.UTF_8));
+        if(!body.keySet().equals(Set.of("factoryId")))throw new IllegalArgumentException("Invalid factory selection");
+        String factoryId=requiredText(body,"factoryId");
+        if(!factoryId.matches("factory-[1-9][0-9]{0,15}"))throw new IllegalArgumentException("Invalid factory selection");
+        Map<String,Object> report=HibernateAccess.namedEntityGraphs(factory(factoryId));
+        report.put("factoryId",factoryId);
+        if(!"unknown".equals(report.get("state"))){
+            List<String> classes;
+            synchronized(ObserverRuntime.class){classes=List.copyOf(instrumented);}
+            report.put("activity",PerformanceRuntime.graphApplications(factoryId,classes));
+        }
+        reply(exchange,200,report);
+    }
 
     private static void handleAttributeBinding(HttpExchange exchange) throws IOException {
         String contentType=exchange.getRequestHeaders().getFirst("Content-Type");

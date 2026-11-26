@@ -1,0 +1,58 @@
+name: Managed Dev Container Java
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'verify-devcontainer-java-*']
+    paths:
+      - '.github/workflows/devcontainer-java.yml'
+      - 'src/devcontainer/**'
+      - 'src/java/runtime.js'
+      - 'test/devcontainer-java.test.js'
+      - 'test/fixtures/devcontainer/java/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  pull_request:
+    paths:
+      - '.github/workflows/devcontainer-java.yml'
+      - 'src/devcontainer/**'
+      - 'src/java/runtime.js'
+      - 'test/devcontainer-java.test.js'
+      - 'test/fixtures/devcontainer/java/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  docker-java:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Install locked Rocketbrain and specification CLI dependencies
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          npm ci --prefix test/fixtures/devcontainer/tooling --ignore-scripts --no-audit --no-fund
+      - name: Run Eclipse JDT over the exact mounted Docker workspace
+        env:
+          ROCKETBRAIN_DEVCONTAINER_JAVA_LIVE: 'true'
+          ROCKETBRAIN_DEVCONTAINER_CLI_PATH: ${{ github.workspace }}/test/fixtures/devcontainer/tooling/node_modules/@devcontainers/cli
+          ROCKETBRAIN_DEVCONTAINER_JAVA_RECEIPT: ${{ runner.temp }}/rocketbrain-devcontainer-java-receipt.json
+        run: node --test test/devcontainer-java.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-devcontainer-java
+          path: ${{ runner.temp }}/rocketbrain-devcontainer-java-receipt.json
+          if-no-files-found: error
+          retention-days: 7

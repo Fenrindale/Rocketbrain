@@ -90,7 +90,7 @@ final class LocalValueInspection {
     private static Map<String, Object> page(IndexedValue collection, int start, int count) {
         List<Map<String, Object>> rows = new java.util.ArrayList<>();
         int length = Math.min(count, collection.length - start);
-        if (length > 0) for (Value value : collection.array.getValues(start, length)) {
+        if (length > 0) for (Value value : collection.values(start, length)) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("index", start + rows.size());
             item.put("type", value == null ? "null" : value.type().name());
@@ -116,25 +116,48 @@ final class LocalValueInspection {
         return backing instanceof ArrayReference ? ((ArrayReference) backing).length() : Integer.MAX_VALUE;
     }
 
-    private static IndexedValue indexed(Value value) {
+    static IndexedValue indexed(Value value) {
         if (value instanceof ArrayReference) {
             ArrayReference array = (ArrayReference) value;
             return new IndexedValue("array", array, array.length());
         }
         if (!(value instanceof ObjectReference)) return null;
         ObjectReference object = (ObjectReference) value;
-        if (!"java.util.ArrayList".equals(object.referenceType().name()) || object.referenceType().classLoader() != null) return null;
-        Value size = field(object, "size", "I");
-        Value backing = field(object, "elementData", "[Ljava/lang/Object;");
-        if (!(size instanceof IntegerValue) || !(backing instanceof ArrayReference)) return null;
-        int total = ((IntegerValue) size).intValue();
-        ArrayReference array = (ArrayReference) backing;
-        return total >= 0 && total <= array.length() ? new IndexedValue("arrayList", array, total) : null;
+        if (object.referenceType().classLoader() != null) return null;
+        switch (object.referenceType().name()) {
+            case "java.util.ArrayList": {
+                Value size = field(object, "size", "I");
+                Value backing = field(object, "elementData", "[Ljava/lang/Object;");
+                if (!(size instanceof IntegerValue) || !(backing instanceof ArrayReference)) return null;
+                int total = ((IntegerValue) size).intValue();
+                ArrayReference array = (ArrayReference) backing;
+                return total >= 0 && total <= array.length() ? new IndexedValue("arrayList", array, total) : null;
+            }
+            case "java.util.Arrays$ArrayList": return arrayList(field(object, "a", "[Ljava/lang/Object;"));
+            case "java.util.ImmutableCollections$ListN": return arrayList(field(object, "elements", "[Ljava/lang/Object;"));
+            case "java.util.Collections$EmptyList": return new IndexedValue(List.of());
+            case "java.util.Collections$SingletonList": {
+                var element = instanceField(object, "element", "Ljava/lang/Object;");
+                return element == null ? null : new IndexedValue(java.util.Collections.singletonList(object.getValue(element)));
+            }
+            default: return null;
+        }
+    }
+
+    private static IndexedValue arrayList(Value value) {
+        if (!(value instanceof ArrayReference)) return null;
+        ArrayReference array = (ArrayReference) value;
+        return new IndexedValue("list", array, array.length());
     }
 
     private static Value field(ObjectReference object, String name, String signature) {
+        var field = instanceField(object, name, signature);
+        return field == null ? null : object.getValue(field);
+    }
+
+    private static com.sun.jdi.Field instanceField(ObjectReference object, String name, String signature) {
         com.sun.jdi.Field field = object.referenceType().fieldByName(name);
-        return field != null && !field.isStatic() && signature.equals(field.signature()) ? object.getValue(field) : null;
+        return field != null && !field.isStatic() && signature.equals(field.signature()) ? field : null;
     }
 
     private static CompletableFuture<Messages.Response> error(Messages.Response response, String message) {
@@ -151,15 +174,32 @@ final class LocalValueInspection {
         return node != null && node.isJsonPrimitive() && node.getAsJsonPrimitive().isNumber() ? node.getAsBigDecimal().intValueExact() : null;
     }
 
-    private static final class IndexedValue {
+    static final class IndexedValue {
         final String kind;
-        final ArrayReference array;
         final int length;
+        private final ArrayReference array;
+        private final List<Value> inline;
 
         IndexedValue(String kind, ArrayReference array, int length) {
             this.kind = kind;
             this.array = array;
             this.length = length;
+            this.inline = null;
+        }
+
+        IndexedValue(List<Value> inline) {
+            this.kind = "list";
+            this.array = null;
+            this.length = inline.size();
+            this.inline = inline;
+        }
+
+        Value value(int index) {
+            return array == null ? inline.get(index) : array.getValue(index);
+        }
+
+        List<Value> values(int start, int count) {
+            return array == null ? inline.subList(start,start+count) : array.getValues(start,count);
         }
     }
 }

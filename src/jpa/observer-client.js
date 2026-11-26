@@ -6,6 +6,7 @@ const { normalizeSecurityTrace } = require('../spring/security-trace');
 const { normalizeReactiveSecurityTrace } = require('../spring/reactive-security-trace');
 const {normalizeFeignContracts}=require('../spring/feign-contract-trace');
 const { attributeTarget, attributeBindingReport } = require('./attribute-binding');
+const { factoryId: graphFactoryId, graphRegistry } = require('./entity-graphs');
 
 class ObserverError extends Error { constructor(code, message) { super(message); this.code = code; } }
 const consoleTypes = new Set(['java.lang.String','java.lang.Long','java.lang.Integer','java.lang.Short','java.lang.Byte','java.lang.Boolean',
@@ -195,6 +196,14 @@ class ObserverClient {
     const payload=await this.#request('feign-contracts');
     try {return normalizeFeignContracts(payload);}
     catch {throw new ObserverError('INVALID_SCHEMA','Observer returned invalid OpenFeign contract metadata.');}
+  }
+  async entityGraphs(id) {
+    let factoryId;
+    try { factoryId = graphFactoryId(id); }
+    catch (error) { throw new ObserverError('INVALID_FACTORY', error.message); }
+    const payload = await this.#request('entity-graphs', { factoryId });
+    try { return graphRegistry(payload, factoryId); }
+    catch (error) { throw new ObserverError('INVALID_SCHEMA', error.message); }
   }
   async inspectAttributeBinding(selection) {
     let target;

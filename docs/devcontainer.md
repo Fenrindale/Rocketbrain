@@ -17,3 +17,17 @@ Start a managed Linux Dev Container with its own network namespace. Ensure it ha
 Connect with the address shown in **Check Managed Dev Container Status**. Rocketbrain forwards from `127.0.0.1` on this machine to `127.0.0.1` inside the verified container. Other local processes can connect, so review sensitive services such as JDWP before opening them. This works without publishing Docker ports and supports up to four simultaneous forwards per workspace and eight connections per forward. Connections idle for thirty minutes close automatically.
 
 Use **Close Managed Dev Container Port** to release one listener. A managed stop, detected container exit or restart, workspace removal, or VS Code shutdown releases the affected listeners and connections. Restarting the container requires a fresh port review.
+
+## Run Java tooling inside the container
+
+Start a managed Linux Dev Container with your open local workspace mounted at a single container path. Prepare Python 3, an independent JDK 25 or newer, and an extracted Eclipse JDT LS distribution inside the container. Use **Start Managed Container Java** to review the workspace mount and runtime paths. Starting this route pauses the local Java language engine and may import Maven build configuration inside the container.
+
+Use native hover, Go to Definition and diagnostics in mounted Java editors. Definitions resolve to files in the verified mount. Use **Review Container Java Formatting** to preview and apply a format change to the exact current editor version. VS Code applies the edit to the open document, which you can save or undo.
+
+Use **Stop Managed Container Java** to restore the previous local editor route. Container Java uses an exact managed container generation and temporary JDT state. It closes after a container exit or restart, removal of the workspace or shutdown of the VS Code window. This route accepts one mount per active session and Java source files up to 256 KiB. It covers workspace source navigation and formatting. Host-external class files, automatic Gradle wrapper import, and remote multi-file edits require separate workflows.
+
+## Attach the debugger to a container JVM
+
+Run a JVM in the managed Linux container with JDWP bound to its IPv4 loopback address. Keep the matching Java sources in the mounted workspace. Use **Attach to Managed Container JVM** to review the target port, container mount and local source directory. The command uses the local independent JDT and Java debug bundle. Stop the container Java editor route before attaching.
+
+Rocketbrain opens an unused local IPv4 loopback port for the reviewed debugger session. Set breakpoints and inspect variables in the regular Java debugger. The port closes when the debugger disconnects, the attach fails, or the managed container stops. Other local processes can access the listener while it is open.

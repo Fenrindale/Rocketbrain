@@ -519,6 +519,7 @@ public final class SignatureInspector {
                 return;
             }
             List<Method> methods = new ArrayList<>(); List<Map<String, Object>> calls = new ArrayList<>(); List<Map<String, Object>> references = new ArrayList<>();
+            List<Map<String,Object>> lambdas = new ArrayList<>();
             for (CompilationUnitTree unit : units) {
                 String uri = unit.getSourceFile().toUri().toString(), text = byUri.get(uri).text;
                 new TreePathScanner<Void, Void>() {
@@ -554,8 +555,23 @@ public final class SignatureInspector {
                     }
                     public Void visitMethodInvocation(MethodInvocationTree tree, Void p) { call(tree,tree.getArguments(),false); return super.visitMethodInvocation(tree,p); }
                     public Void visitNewClass(NewClassTree tree, Void p) { call(tree,tree.getArguments(),true); return super.visitNewClass(tree,p); }
+                    String enclosingKey() { return current==null?"<initializer>":key(current.element); }
                     public Void visitMemberReference(MemberReferenceTree tree, Void p) {
-                        Element e=trees.getElement(getCurrentPath()); if(e instanceof ExecutableElement method) references.add(object("uri",uri,"methodKey",key(method),"start",positions.getStartPosition(unit,tree))); return super.visitMemberReference(tree,p);
+                        TreePath member = getCurrentPath();
+                        if (trees.getElement(member) instanceof ExecutableElement method) {
+                            TypeMirror target = trees.getTypeMirror(member);
+                            references.add(object("uri",uri,"methodKey",key(method),"enclosingKey",enclosingKey(),
+                                "start",positions.getStartPosition(unit,tree),"end",positions.getEndPosition(unit,tree),
+                                "targetType",target==null?null:target.toString(),
+                                "adapter",SignatureReferences.adapter(tree,method,member,trees,types,elements,text)));
+                        }
+                        return super.visitMemberReference(tree,p);
+                    }
+                    public Void visitLambdaExpression(LambdaExpressionTree tree, Void p) {
+                        TypeMirror target = trees.getTypeMirror(getCurrentPath());
+                        lambdas.add(object("uri",uri,"enclosingKey",enclosingKey(),"start",positions.getStartPosition(unit,tree),
+                            "end",positions.getEndPosition(unit,tree),"targetType",target==null?null:target.toString()));
+                        return super.visitLambdaExpression(tree,p);
                     }
                 }.scan(unit,null);
             }
@@ -573,7 +589,7 @@ public final class SignatureInspector {
                 }
             }
             List<Map<String,Object>> errors=errors(diagnostics);
-            System.out.print(json(object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,"classGenerationEnabled",false,"errors",errors,"methods",methods.stream().map(m->m.model).toList(),"calls",calls,"methodReferences",references,"overrideEdges",edges,"externalOverrides",external)));
+            System.out.print(json(object("format","RocketbrainSignatureCompiler-v20","processorsEnabled",false,"classGenerationEnabled",false,"errors",errors,"methods",methods.stream().map(m->m.model).toList(),"calls",calls,"methodReferences",references,"lambdas",lambdas,"overrideEdges",edges,"externalOverrides",external)));
         }
     }
 }

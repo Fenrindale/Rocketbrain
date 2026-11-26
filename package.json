@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.113.0",
+  "version": "0.116.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -141,6 +141,10 @@
       { "command": "rocketbrain.devcontainer.stop", "title": "Stop Managed Dev Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.forwardPort", "title": "Forward Managed Dev Container Port", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.closePort", "title": "Close Managed Dev Container Port", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.devcontainer.javaStart", "title": "Start Managed Container Java", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.devcontainer.javaStop", "title": "Stop Managed Container Java", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.devcontainer.javaFormat", "title": "Review Container Java Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java" },
+      { "command": "rocketbrain.devcontainer.javaAttach", "title": "Attach to Managed Container JVM", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },
@@ -754,6 +758,12 @@
         "command": "rocketbrain.jpa.observer.inspectPerformance",
         "title": "Inspect Hibernate Fetch Activity",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.inspectEntityGraph",
+        "title": "Inspect JPA Entity Graph",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "rocketbrain.jpa.observer.inspectAttributeBinding",

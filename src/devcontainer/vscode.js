@@ -1,21 +1,29 @@
 'use strict';
 
 const path = require('node:path');
+const fs = require('node:fs');
 const { createDevContainers } = require('./runtime');
+const { registerContainerJava } = require('./java-vscode');
+const { createManagedJavaAttach } = require('./java-attach');
 
-function registerDevContainers(context, vscode) {
+function registerDevContainers(context, vscode, localJava) {
   const settingsByRoot = root => vscode.workspace.getConfiguration('rocketbrain.devcontainer', vscode.Uri.file(root));
   const sessionKey = key => 'rocketbrain.devcontainer.session.' + key;
+  let containerJava;
   const service = createDevContainers({
     trusted: () => vscode.workspace.isTrusted,
-    workspaceOpen: root => vscode.workspace.workspaceFolders?.some(folder =>
-      folder.uri.scheme === 'file' && !path.relative(folder.uri.fsPath, root)),
+    workspaceOpen: root => vscode.workspace.workspaceFolders?.some(folder => {
+      if (folder.uri.scheme !== 'file') return false;
+      try { return !path.relative(fs.realpathSync(folder.uri.fsPath), root); } catch { return false; }
+    }),
     settings: root => {
       const config = settingsByRoot(root);
       return { cliPath: config.get('cliPath'), nodePath: config.get('nodePath'), dockerPath: config.get('dockerPath') };
     },
     readSession: key => context.workspaceState.get(sessionKey(key)),
-    writeSession: (key, value) => context.workspaceState.update(sessionKey(key), value)
+    writeSession: (key, value) => context.workspaceState.update(sessionKey(key), value),
+    onJavaDiagnostics: (...args) => containerJava?.publish(...args),
+    onJavaClosed: root => containerJava?.closed(root)
   });
   const output = vscode.window.createOutputChannel('Rocketbrain Dev Container');
   const registrations = [service, output];
@@ -169,6 +177,43 @@ function registerDevContainers(context, vscode) {
       { placeHolder: 'Choose the local port to close' });
     if (choice) await service.closePort(root, choice.id);
   });
+  containerJava = registerContainerJava(vscode, service, localJava, register, progress, output);
+  registrations.push(containerJava);
+  const javaAttach = createManagedJavaAttach({
+    debug: vscode.debug, openForward: service.forwardPort, closeForward: service.closePort,
+    async ready() {
+      if (!localJava) throw Error('Start the local Rocketbrain Java Debug engine first.');
+      const state = await localJava.start();
+      if (state.state === 'container') throw Error('Stop the container Java editor engine before opening a managed JVM attach.');
+      if (state.state !== 'running' || !state.debugBundlePath) {
+        throw Error('Configure the independent local JDK, Eclipse JDT LS and Java debug bundle.');
+      }
+    }
+  });
+  registrations.push(javaAttach);
+
+  register('javaAttach', async root => {
+    const port = await portInput('Container JVM Debug Port', false);
+    if (port === undefined) return;
+    const containerRoot = await vscode.window.showInputBox({ title: 'Mounted Workspace in Container',
+      value: '/workspaces/' + path.basename(root) });
+    if (!containerRoot) return;
+    const sourceDirectory = await vscode.window.showInputBox({ title: 'Java Source Directory in This Workspace',
+      prompt: 'Use a relative directory, or . for the workspace root', value: 'src/main/java' });
+    if (!sourceDirectory) return;
+    const review = await progress('Checking the exact JVM attach route', () => service.inspectJavaAttach(root,
+      { port, containerRoot, sourceDirectory }));
+    const approved = await vscode.window.showWarningMessage('Attach to this managed container JVM?', {
+      modal: true,
+      detail: 'Container ' + review.containerId.slice(0, 12) + ' will forward JDWP port ' + review.containerPort +
+        ' to an assigned IPv4 loopback port. Local processes can connect while the debugger is attached. Sources use ' +
+        (path.relative(root, review.sourceRoot) || '.') + ' in this workspace.'
+    }, 'Attach Debugger');
+    if (!approved) return;
+    const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(root));
+    return progress('Starting the managed JVM attach', () => javaAttach.start(root, folder,
+      { token: review.token, allowContainerDebugging: true }));
+  });
 
   function openRoot(input) {
     const fsPath = input?.fsPath || input;
@@ -190,6 +235,18 @@ function registerDevContainers(context, vscode) {
     forwardPort: (root, confirmation) => service.forwardPort(openRoot(root), confirmation),
     forwardedPorts: root => service.forwardedPorts(openRoot(root)),
     closePort: (root, id) => service.closePort(openRoot(root), id),
+    inspectJava: (root, requested) => service.inspectJava(openRoot(root), requested),
+    startJava: (root, confirmation) => containerJava.start(openRoot(root), confirmation),
+    stopJava: root => service.stopJava(openRoot(root)),
+    javaStatus: root => service.javaStatus(openRoot(root)),
+    javaDefinition: (root, document, position) => service.javaDefinition(openRoot(root), document, position),
+    javaHover: (root, document, position) => service.javaHover(openRoot(root), document, position),
+    javaFormat: (root, document, options) => service.javaFormat(openRoot(root), document, options),
+    inspectJavaAttach: (root, requested) => service.inspectJavaAttach(openRoot(root), requested),
+    startJavaAttach: (root, confirmation) => {
+      const exact = openRoot(root);
+      return javaAttach.start(exact, vscode.workspace.getWorkspaceFolder(vscode.Uri.file(exact)), confirmation);
+    },
     dispose() { for (const subscription of registrations) subscription.dispose(); }
   };
 }

@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.113.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.116.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 169 |
-| 부분 구현 | 33 |
+| 구현 | 171 |
+| 부분 구현 | 31 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **91.4%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **91.9%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.113에서는 Java 패키지 이름 변경, Kotlin의 Java 타입 계약 진단, Spring MVC Callable 요청의 Hibernate SQL 관측, 실행 중인 JPA 속성 바인딩 검사를 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 197점에서 197.5점으로 바뀌었다.
+v0.116에서는 메서드 참조 Change Signature, 이름 있는 JPA 엔티티 그래프와 실제 조회 연결, Kotlin 배열·리스트 Watch, 관리 컨테이너 Java 언어 서버와 디버거 연결을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 197.5점에서 198.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -83,7 +83,7 @@ v0.113에서는 Java 패키지 이름 변경, Kotlin의 Java 타입 계약 진�
 | IDEA-060 | IntelliJ IDEA | JPQL/HQL 작성·JPA Console | 구현 |
 | IDEA-061 | IntelliJ IDEA | DB 스키마→JPA 엔티티·매핑 생성 | 구현 |
 | IDEA-062 | IntelliJ IDEA | Persistence 트리·엔티티 관계도 | 구현 |
-| IDEA-063 | IntelliJ IDEA | Hibernate 디버거·SQL 바인딩·N+1 | 부분 구현 |
+| IDEA-063 | IntelliJ IDEA | Hibernate 디버거·SQL 바인딩·N+1 | 구현 |
 | IDEA-064 | IntelliJ IDEA | Spring Security 런타임 진단 | 부분 구현 |
 | IDEA-065 | IntelliJ IDEA | MVC·WebFlux·Feign 엔드포인트 탐색 | 구현 |
 | IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 부분 구현 |
@@ -118,7 +118,7 @@ v0.113에서는 Java 패키지 이름 변경, Kotlin의 Java 타입 계약 진�
 | IDEA-095 | IntelliJ IDEA | GitHub PR·GitLab MR 리뷰 | 구현 |
 | IDEA-096 | IntelliJ IDEA | SSH 원격 개발 | 부분 구현 |
 | IDEA-097 | IntelliJ IDEA | WSL 실행·개발 | 부분 구현 |
-| IDEA-098 | IntelliJ IDEA | Dev Container 환경 | 부분 구현 |
+| IDEA-098 | IntelliJ IDEA | Dev Container 환경 | 구현 |
 | IDEA-099 | IntelliJ IDEA | Docker·Compose·Registry 관리 | 부분 구현 |
 | IDEA-100 | IntelliJ IDEA | Kubernetes·Helm·클러스터 탐색 | 부분 구현 |
 | IDEA-101 | IntelliJ IDEA | 내장 터미널·셸·세션 | VS Code 재사용 |

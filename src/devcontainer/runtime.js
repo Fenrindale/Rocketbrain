@@ -6,6 +6,10 @@ const { execFile } = require('node:child_process');
 const { createHash, randomUUID } = require('node:crypto');
 const { observeCompose, assertComposeSources, projectIds, locateProject, validateSavedCompose } = require('./compose');
 const { bridgeArgs, createPortForwards } = require('./ports');
+const { javaRequest, javaArguments, openJavaProcess } = require('./java-process');
+const { createJavaMountMapping } = require('./java-mapping');
+const { createContainerJavaLsp } = require('./java-lsp');
+const { serverSettings } = require('../java/runtime');
 
 const cliVersion = '0.91.0';
 const sessionLabel = 'rocketbrain.devcontainer.session';
@@ -159,12 +163,15 @@ function summarize(result, file) {
   };
 }
 
-function createDevContainers({ trusted, settings, run = invoke, readSession, writeSession, workspaceOpen, startBridge } = {}) {
+function createDevContainers({ trusted, settings, run = invoke, readSession, writeSession, workspaceOpen, startBridge,
+  startJavaProcess = openJavaProcess, javaProtocol, onJavaDiagnostics = () => {}, onJavaClosed = () => {} } = {}) {
   const memory = new Map();
   const load = readSession || (key => memory.get(key));
   const save = writeSession || ((key, value) => value ? memory.set(key, value) : memory.delete(key));
   const busy = new Set(), offers = new Map();
-  const forwards = createPortForwards({ startBridge, observe: observeForward, healthy: verifyForward });
+  const forwards = createPortForwards({ startBridge, observe: observeForward, healthy: verifyManagedBinding });
+  const javaOffers = new Map(), javaSessions = new Map();
+  let javaStarting = false, disposed = false;
 
   function rootFor(workspace) {
     if (!trusted?.()) throw Error('Trust the selected local workspace to use Dev Containers.');
@@ -173,7 +180,7 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
 
   async function exclusive(workspace, work) {
     const root = rootFor(workspace);
-    const key = sha256(process.platform === 'win32' ? root.toLowerCase() : root);
+    const key = workspaceKey(root);
     if (busy.has(key)) throw Error('A Dev Container operation is already running for this workspace.');
     busy.add(key);
     try { return await work(root, key); } finally { busy.delete(key); }
@@ -245,7 +252,8 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
     if (actual?.Id !== id || actual.Config?.Labels?.[sessionLabel] !== session.session || typeof actual.State?.Running !== 'boolean') {
       throw Error('Container ownership could not be verified for this workspace session.');
     }
-    return { id, running: actual.State.Running, startedAt: actual.State.StartedAt, networkMode: actual.HostConfig?.NetworkMode };
+    return { id, running: actual.State.Running, startedAt: actual.State.StartedAt,
+      networkMode: actual.HostConfig?.NetworkMode, mounts: actual.Mounts };
   }
 
   async function locate(target, session) {
@@ -386,7 +394,7 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
     return {state:observed.length?'stopped':'missing',kind:'compose',project:session.compose.project,...(app&&{id:app.id}),services:after};
   }
 
-  async function verifyForward(binding) {
+  async function verifyManagedBinding(binding) {
     const { root, key, target, session, containerId, startedAt } = binding;
     if (!trusted?.() || workspaceOpen && !workspaceOpen(root)) throw Error('The trusted local workspace is no longer open.');
     const saved = checkedSession(key);
@@ -397,10 +405,52 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
     const exact = await verifyContainer(target, session, containerId, 4500);
     if (!exact.running || !startedAt || exact.startedAt !== startedAt) throw Error('The reviewed Dev Container stopped or restarted.');
     if (exact.networkMode !== binding.networkMode) throw Error('The verified container network identity changed.');
+    if (binding.attachedSource) {
+      createJavaMountMapping(root, binding.attachedSource.containerRoot, exact.mounts);
+      if (debugSourceRoot(root, binding.attachedSource.relative) !== binding.attachedSource.sourceRoot) {
+        throw Error('The reviewed Java source directory changed.');
+      }
+    }
+    return exact;
   }
 
-  async function observeForward(binding) {
-    await verifyForward(binding);
+  function debugSourceRoot(root, relative) {
+    if (typeof relative !== 'string' || !relative || relative.length > 1024 || path.isAbsolute(relative) ||
+        /[:\x00-\x1f]/u.test(relative) || relative.split(/[\\/]/u).some(part => part === '..' || part.toLowerCase() === '.git')) {
+      throw Error('Choose a physical Java source directory within the mounted workspace.');
+    }
+    const sourceRoot = path.resolve(root, relative);
+    let physical;
+    try { physical = fs.realpathSync(sourceRoot); } catch {}
+    if (!physical || path.relative(sourceRoot, physical) || !fs.statSync(physical).isDirectory()) {
+      throw Error('Choose a physical Java source directory within the mounted workspace.');
+    }
+    return physical;
+  }
+
+  async function prepareForward(root, key, requested, attached) {
+    const session = checkedSession(key);
+    if (!session?.id) throw Error('Start the managed Dev Container before forwarding a port.');
+    const target = await dockerEnvironment(root, settings(root));
+    if (target.host !== session.host) throw Error('Switch back to the local Docker context used for this session.');
+    const exact = await verifyContainer(target, session, session.id, 4500);
+    if (!exact.running || typeof exact.startedAt !== 'string' || !Date.parse(exact.startedAt)) {
+      throw Error('The managed Dev Container is no longer running.');
+    }
+    if (!exact.networkMode || /^(?:host$|container:)/i.test(exact.networkMode)) {
+      throw Error('Direct port forwarding requires the managed container to have its own network namespace.');
+    }
+    const binding = { root, key, target, session, containerId: session.id, startedAt: exact.startedAt, networkMode: exact.networkMode };
+    if (attached) {
+      const { containerRoot, sourceDirectory: relative } = attached;
+      createJavaMountMapping(root, containerRoot, exact.mounts);
+      binding.attachedSource = { containerRoot, relative, sourceRoot: debugSourceRoot(root, relative) };
+    }
+    return forwards.inspect(key, binding, requested);
+  }
+
+  async function verifyReviewedConfiguration(binding) {
+    await verifyManagedBinding(binding);
     const { root, target, session, containerId } = binding;
     const options = settings(root);
     const selected = await dockerEnvironment(root, options);
@@ -416,9 +466,112 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
       }
       assertComposeSources(root, plan.compose);
     }
-    commandOutput(await docker(target, bridgeArgs(containerId, undefined, true), 4500),
+  }
+
+  async function observeForward(binding) {
+    await verifyReviewedConfiguration(binding);
+    commandOutput(await docker(binding.target, bridgeArgs(binding.containerId, undefined, true), 4500),
       'Port forwarding requires Python 3 in the managed Linux Dev Container.');
-    await verifyForward(binding);
+    await verifyManagedBinding(binding);
+  }
+
+  async function observeJava(binding, config) {
+    await verifyReviewedConfiguration(binding);
+    const exact = await verifyManagedBinding(binding);
+    const mapping = createJavaMountMapping(binding.root, config.containerRoot, exact.mounts);
+    const info = json(await docker(binding.target, javaArguments(binding.containerId, config), 12000),
+      'Use Python 3, an independent JDK 25+, and an extracted Eclipse JDT LS distribution inside the Linux container.');
+    if (!Number.isSafeInteger(info.jdk) || info.jdk < 25 || !/^[a-f0-9]{64}$/.test(info.sha256 || '')) {
+      throw Error('The exact container Java runtime could not be verified.');
+    }
+    await verifyManagedBinding(binding);
+    return { ...info, mapping };
+  }
+
+  async function startManagedJava(key, confirmation) {
+    if (confirmation?.allowContainerProjectImport !== true) throw Error('Review the mounted workspace and container Java runtime first.');
+    const reviewed = javaOffers.get(confirmation.token);
+    if (reviewed?.binding.key !== key || reviewed.expires <= Date.now()) throw Error('Open a current container Java review first.');
+    javaOffers.delete(confirmation.token);
+    if (disposed || javaStarting || javaSessions.size) throw Error('Stop the current container Java session before starting another.');
+    javaStarting = true;
+    try {
+      return await launchManagedJava(key, reviewed);
+    } finally {
+      javaStarting = false;
+    }
+  }
+
+  async function launchManagedJava(key, reviewed) {
+    const { binding, config, info } = reviewed;
+    const observed = await observeJava(binding, config);
+    if (observed.sha256 !== info.sha256) throw Error('The container JDK or JDT LS changed after review.');
+    if (disposed) throw Error('The container Java service is closed.');
+    const protocol = javaProtocol?.() || require('vscode-languageclient/node');
+    const lspSettings = serverSettings();
+    // The managed route does not execute a project's Gradle wrapper on startup.
+    lspSettings.java.import.gradle.enabled = false;
+    const child = startJavaProcess(binding.target, binding.containerId, config, observed.sha256);
+    const route = { binding, config };
+    const lsp = createContainerJavaLsp({
+      child, protocol, mapping: observed.mapping, settings: lspSettings,
+      onDiagnostics: (file, diagnostics, version) => {
+        if (javaSessions.get(key) === route) onJavaDiagnostics(binding.root, file, diagnostics, version);
+      },
+      onExit: () => {
+        if (javaSessions.get(key) === route) {
+          javaSessions.delete(key);
+          clearInterval(route.timer);
+          onJavaClosed(binding.root);
+        }
+      }
+    });
+    route.lsp = lsp;
+    javaSessions.set(key, route);
+    try {
+      await lsp.initialize();
+      await verifyJavaRoute(route);
+      startJavaHealthWatch(route);
+    } catch (error) {
+      lsp.dispose();
+      throw error;
+    }
+    return { state: 'running', containerId: binding.containerId, containerRoot: config.containerRoot, jdk: observed.jdk };
+  }
+
+  async function verifyJavaRoute(route) {
+    try {
+      const exact = await verifyManagedBinding(route.binding);
+      createJavaMountMapping(route.binding.root, route.config.containerRoot, exact.mounts);
+      if (javaSessions.get(route.binding.key) !== route) throw Error('The container Java session stopped.');
+    } catch (error) {
+      route.lsp.dispose();
+      throw error;
+    }
+  }
+
+  function startJavaHealthWatch(route) {
+    let checking = false;
+    route.timer = setInterval(async () => {
+      if (checking) return;
+      checking = true;
+      try { await verifyJavaRoute(route); } catch { /* The outdated route was disposed. */ }
+      finally { checking = false; }
+    }, 1000);
+    route.timer.unref();
+  }
+
+  async function javaAction(workspace, action) {
+    const root = rootFor(workspace);
+    const key = workspaceKey(root);
+    const route = javaSessions.get(key);
+    if (!route) throw Error('Start Container Java for this workspace first.');
+    await verifyJavaRoute(route);
+    return action(route.lsp);
+  }
+
+  function workspaceKey(root) {
+    return sha256(process.platform === 'win32' ? root.toLowerCase() : root);
   }
 
   function withForwards(key, outcome) {
@@ -510,6 +663,7 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
     stop(workspace) {
       return exclusive(workspace, async (root, key) => {
         forwards.closeWorkspace(key);
+        await javaSessions.get(key)?.lsp.stop();
         const session = checkedSession(key);
         if (!session) return { state: 'none' };
         const target = await dockerEnvironment(root, settings(root));
@@ -529,21 +683,11 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
       });
     },
     inspectPort(workspace, requested) {
-      return exclusive(workspace, async (root, key) => {
-        const session = checkedSession(key);
-        if (!session?.id) throw Error('Start the managed Dev Container before forwarding a port.');
-        const target = await dockerEnvironment(root, settings(root));
-        if (target.host !== session.host) throw Error('Switch back to the local Docker context used for this session.');
-        const exact = await verifyContainer(target, session, session.id, 4500);
-        if (!exact.running || typeof exact.startedAt !== 'string' || !Date.parse(exact.startedAt)) {
-          throw Error('The managed Dev Container is no longer running.');
-        }
-        if (!exact.networkMode || /^(?:host$|container:)/i.test(exact.networkMode)) {
-          throw Error('Direct port forwarding requires the managed container to have its own network namespace.');
-        }
-        return forwards.inspect(key, { root, key, target, session, containerId: session.id,
-          startedAt: exact.startedAt, networkMode: exact.networkMode }, requested);
-      });
+      return exclusive(workspace, (root, key) => prepareForward(root, key, requested));
+    },
+    inspectJavaAttach(workspace, requested) {
+      return exclusive(workspace, (root, key) => prepareForward(root, key, { containerPort: requested?.port },
+        { containerRoot: requested?.containerRoot, sourceDirectory: requested?.sourceDirectory }));
     },
     forwardPort(workspace, confirmation) {
       return exclusive(workspace, async (_root, key) => forwards.open(key, confirmation));
@@ -552,9 +696,52 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
       return exclusive(workspace, async (_root, key) => forwards.list(key));
     },
     closePort(workspace, id) {
-      return exclusive(workspace, async (_root, key) => forwards.close(key, id));
+      return Promise.resolve().then(() => forwards.close(workspaceKey(localDirectory(workspace,
+        'Choose the local workspace used for this port forward.')), id));
     },
-    dispose() { forwards.dispose(); }
+    inspectJava(workspace, requested) {
+      return exclusive(workspace, async (root, key) => {
+        const config = javaRequest(requested);
+        const session = checkedSession(key);
+        if (!session?.id) throw Error('Start the managed Dev Container before reviewing Java support.');
+        const target = await dockerEnvironment(root, settings(root));
+        if (target.host !== session.host) throw Error('Switch back to the local Docker context used for this session.');
+        const exact = await verifyContainer(target, session, session.id, 4500);
+        const binding = { root, key, target, session, containerId: session.id, startedAt: exact.startedAt, networkMode: exact.networkMode };
+        const info = await observeJava(binding, config);
+        const now = Date.now();
+        for (const [token, offer] of javaOffers) if (offer.expires <= now) javaOffers.delete(token);
+        while (javaOffers.size >= 8) javaOffers.delete(javaOffers.keys().next().value);
+        const token = randomUUID();
+        javaOffers.set(token, { binding, info, config, expires: now + 120000 });
+        return { token, containerId: session.id, ...config, jdk: info.jdk };
+      });
+    },
+    startJava(workspace, confirmation) {
+      return exclusive(workspace, (_root, key) => startManagedJava(key, confirmation));
+    },
+    stopJava(workspace) {
+      return exclusive(workspace, async (_root, key) => { await javaSessions.get(key)?.lsp.stop(); });
+    },
+    javaStatus(workspace) {
+      return exclusive(workspace, async (_root, key) => {
+        const route = javaSessions.get(key);
+        if (!route) return { state: 'none' };
+        await verifyJavaRoute(route);
+        return { state: 'running', containerId: route.binding.containerId, containerRoot: route.config.containerRoot };
+      });
+    },
+    javaSynchronize: (workspace, document) => javaAction(workspace, lsp => lsp.synchronize(document)),
+    javaClose: (workspace, file) => javaAction(workspace, lsp => lsp.close(file)),
+    javaHover: (workspace, document, position, cancellation) => javaAction(workspace, lsp => lsp.hover(document, position, cancellation)),
+    javaDefinition: (workspace, document, position, cancellation) => javaAction(workspace, lsp => lsp.definition(document, position, cancellation)),
+    javaFormat: (workspace, document, options) => javaAction(workspace, lsp => lsp.formatting(document, options)),
+    dispose() {
+      disposed = true;
+      forwards.dispose();
+      javaOffers.clear();
+      for (const route of javaSessions.values()) route.lsp.dispose();
+    }
   };
 }
 

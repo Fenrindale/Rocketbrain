@@ -7,6 +7,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Inheritance;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.NamedAttributeNode;
+import jakarta.persistence.NamedEntityGraph;
+import jakarta.persistence.NamedSubgraph;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.PostLoad;
@@ -61,6 +64,9 @@ class FetchProbe {
 }
 
 @Entity
+@NamedEntityGraph(name=FetchGraphRepository.GRAPH,
+    attributeNodes=@NamedAttributeNode(value="items", subgraph="itemMetadata"),
+    subgraphs=@NamedSubgraph(name="itemMetadata", attributeNodes=@NamedAttributeNode("snapshotLabel")))
 @Table(name="rb_perf_owner")
 class PerformanceOwner {
     @Id Long id;

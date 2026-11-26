@@ -167,7 +167,8 @@ function createPortForwards({ startBridge = spawnBridge, observe, healthy }) {
       for (const [id, offer] of offers) if (offer.expires <= now) offers.delete(id);
       while (offers.size >= 12) offers.delete(offers.keys().next().value);
       const token = randomUUID();
-      const reply = { token, containerId: binding.containerId, host: loopback, ...ports };
+      const reply = { token, containerId: binding.containerId, host: loopback, ...ports,
+        ...(binding.attachedSource && { containerRoot: binding.attachedSource.containerRoot, sourceRoot: binding.attachedSource.sourceRoot }) };
       offers.set(token, { key, binding, reply, expires: now + offerLifetime });
       return { ...reply };
     },
