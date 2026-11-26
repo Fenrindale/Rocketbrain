@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: rocketbrain-workload
+  annotations:
+    rocketbrain/revision-fixture: {{ .Values.marker | default "original" | quote }}
 spec:
   replicas: 1
   selector:

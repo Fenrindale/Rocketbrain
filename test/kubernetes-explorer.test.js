@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 const { approvedContexts, prepareKubernetesConfig } = require('../src/infra/kubernetes');
+const { createHelmReleaseActions } = require('../src/infra/kubernetes-helm');
 const { authorizationDenied } = require('../scripts/test-kubernetes-kind');
 
 const token = 'fixture-embedded-token';
@@ -139,4 +140,43 @@ test('previews Deployment scale on the server and uses the exact approved replic
   await assert.rejects(session.applyDeploymentScale(next, { approved: true }), /Approve a current/);
   assert.equal(writes, 1);
   assert.equal(dryRuns, 2);
+});
+
+test('Helm rollback compares exact manifests, refuses changed reviews, and verifies the recorded revision', async () => {
+  let current = 2, writes = 0, dryRuns = 0;
+  const document = (marker, kind = 'ConfigMap', namespace = 'journal') =>
+    JSON.stringify({ apiVersion: 'v1', kind, metadata: { name: 'fixture', namespace }, data: { marker } });
+  const revisions = new Map([[1, document('owned-first')], [2, document('owned-second')]]);
+  const operations = createHelmReleaseActions(async (namespace, args) => {
+    assert.equal(namespace, 'journal');
+    if (args[0] === 'history') return JSON.stringify([...revisions.keys()].map(revision =>
+      ({ revision, status: revision === current ? 'deployed' : 'superseded', description: 'excluded-value', chart: 'sample-1.0.0' })));
+    if (args[0] === 'get') return revisions.get(Number(args[3].slice('--revision='.length)));
+    assert.deepEqual(args.slice(0, 5), ['rollback', 'release', '1', '--no-hooks', '--timeout=8s']);
+    if (args.includes('--dry-run=server')) dryRuns += 1;
+    else { writes += 1; revisions.set(++current, revisions.get(1)); }
+    return 'fixture response';
+  });
+  await assert.rejects(operations.history('journal', '--all'), /listed Helm release/);
+  assert.deepEqual((await operations.history('journal', 'release')).map(row => row.revision), [2, 1]);
+  revisions.set(1, document('owned-first', 'ConfigMap', 'another-namespace'));
+  await assert.rejects(operations.review('journal', 'release', 1), /selected namespace/);
+  revisions.set(1, document('owned-first', 'Secret'));
+  await assert.rejects(operations.review('journal', 'release', 1), /supported resources/);
+  revisions.set(1, document('owned-first'));
+  const stale = await operations.review('journal', 'release', 1);
+  assert.equal(dryRuns, 1);
+  assert.equal(writes, 0);
+  assert.deepEqual(stale.resources, [{ kind: 'ConfigMap', name: 'fixture', changed: true }]);
+  assert.doesNotMatch(JSON.stringify(stale), /owned-first|owned-second|excluded-value/);
+  revisions.set(2, document('changed-current'));
+  await assert.rejects(operations.apply(stale, { approved: true }), /Helm release changed/);
+  assert.equal(writes, 0);
+  const valid = await operations.review('journal', 'release', 1);
+  await assert.rejects(operations.apply({ ...valid }, { approved: true }), /Approve a current/);
+  await assert.rejects(operations.apply(valid), /Approve a current/);
+  assert.deepEqual(await operations.apply(valid, { approved: true }),
+    { namespace: 'journal', release: 'release', previousRevision: 2, restoredFrom: 1, recordedRevision: 3 });
+  await assert.rejects(operations.apply(valid, { approved: true }), /Approve a current/);
+  assert.equal(writes, 1);
 });

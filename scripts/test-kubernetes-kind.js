@@ -56,7 +56,7 @@ async function verifyKindFixture() {
   const config = (clusters, contexts) => JSON.stringify({ apiVersion: 'v1', kind: 'Config',
     'current-context': ambient, users: [auth], clusters, contexts });
   const oldAmbient = process.env.KUBECONFIG;
-  let staged, scaler;
+  let staged, scaler, helmFixture;
   try {
     await fs.writeFile(selectedFile, config([observed, dead], [context(chosen, observed), context(ambient, dead)]), { mode: 0o600, flag: 'wx' });
     await fs.writeFile(ambientFile, config([dead], [context(ambient, dead)]), { mode: 0o600, flag: 'wx' });
@@ -83,7 +83,7 @@ async function verifyKindFixture() {
     assert.deepEqual([...pod.containers].sort(), ['main', 'sidecar']);
     const release = releases.rows.find(row => row.name === 'rocketbrain-fixture');
     assert.equal(release?.status, 'deployed');
-    assert.equal(release.revision, '1');
+    assert.equal(release.revision, '2');
     assert.equal(release.chart, 'rocketbrain-explorer-fixture-1.0.0');
     const primaryLogs = await session.podLogs(namespace, pod, 'main');
     const sidecarLogs = await session.podLogs(namespace, pod, 'sidecar');
@@ -125,6 +125,26 @@ async function verifyKindFixture() {
     const restore = await scaleSession.reviewDeploymentScale(namespace, deploymentName, 1);
     assert.equal((await scaleSession.applyDeploymentScale(restore, { approved: true })).observed, 1);
     assert.equal(await readDesired(), 1);
+    helmFixture = await prepareKubernetesConfig({ file: admin, kubectl, helm });
+    const helmSession = await helmFixture.select('kind-rocketbrain-explorer');
+    const releaseName = 'rocketbrain-fixture';
+    const history = () => helmSession.helm.history(namespace, releaseName);
+    assert.deepEqual((await history()).map(row => [row.revision, row.status]), [[2, 'deployed'], [1, 'superseded']]);
+    const readMarker = async () => JSON.parse(await command(['--namespace=' + namespace, 'get', 'deployment', deploymentName,
+      '-o=json'])).metadata.annotations['rocketbrain/revision-fixture'];
+    assert.equal(await readMarker(), 'second');
+    const rollback = await helmSession.helm.review(namespace, releaseName, 1);
+    assert.deepEqual(rollback.resources.find(item => item.name === deploymentName),
+      { kind: 'Deployment', name: deploymentName, changed: true });
+    assert.equal(await readMarker(), 'second');
+    assert.equal((await history())[0].revision, 2);
+    await assert.rejects(helmSession.helm.apply(rollback), /Approve a current/);
+    await assert.rejects(helmSession.helm.apply({ ...rollback }, { approved: true }), /Approve a current/);
+    const restored = await helmSession.helm.apply(rollback, { approved: true });
+    assert.deepEqual(restored, { namespace, release: releaseName, previousRevision: 2, restoredFrom: 1, recordedRevision: 3 });
+    await assert.rejects(helmSession.helm.apply(rollback, { approved: true }), /Approve a current/);
+    assert.equal(await readMarker(), 'first');
+    assert.deepEqual((await history()).map(row => [row.revision, row.status]), [[3, 'deployed'], [2, 'superseded'], [1, 'superseded']]);
     assert.ok((await fs.readFile(admin)).equals(adminBytes), 'The fixture admin kubeconfig must remain unchanged.');
     return { sourceCommit: process.env.GITHUB_SHA, kubernetes: version.serverVersion.gitVersion, kubectl: version.clientVersion.gitVersion,
       pinnedContext: true, wrongAmbientIgnored: true, sourceChangeIgnored: true, namespaceRows: namespaces.rows.length,
@@ -132,9 +152,12 @@ async function verifyKindFixture() {
       stalePodRejected: true, helmReleaseRevision: release.revision, otherNamespaceDenied: true,
       readerDeleteDenied: true, adminConfigUnchanged: true,
       scale: { dryRunPreserved: true, staleRejected: true, approvalRequired: true, changedAndRestored: [1, 0, 1],
-        replayRejected: true, readerDenied: true, singleResourceAccount: true } };
+        replayRejected: true, readerDenied: true, singleResourceAccount: true },
+      helmRollback: { approvedRevision: 1, previousRevision: 2, recordedRevision: 3,
+        serverDryRunPreserved: true, changedResourceRestored: true, approvalRequired: true,
+        forgedRejected: true, replayRejected: true } };
   } finally {
-    try { await Promise.all([staged?.close(), scaler?.close()]); }
+    try { await Promise.all([staged?.close(), scaler?.close(), helmFixture?.close()]); }
     finally {
       if (oldAmbient === undefined) delete process.env.KUBECONFIG;
       else process.env.KUBECONFIG = oldAmbient;

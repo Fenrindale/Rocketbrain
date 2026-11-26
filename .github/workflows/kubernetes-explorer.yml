@@ -20,16 +20,19 @@ permissions:
 
 jobs:
   kind:
-    name: Kubernetes explorer and reviewed Deployment scale on kind
+    name: Kubernetes explorer, Deployment scale and Helm rollback on kind
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Install pinned CLI binaries
         shell: bash
         run: |
@@ -59,7 +62,9 @@ jobs:
             --image 'kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed'
           kubectl --kubeconfig "$admin" --context "kind-$name" apply -f test/fixtures/kubernetes-explorer/access.yml
           helm upgrade --install rocketbrain-fixture test/fixtures/kubernetes-explorer/chart \
-            --kubeconfig "$admin" --kube-context "kind-$name" --namespace rocketbrain-observed --wait --timeout 120s
+            --kubeconfig "$admin" --kube-context "kind-$name" --namespace rocketbrain-observed --wait --timeout 120s --set-string marker=first
+          helm upgrade rocketbrain-fixture test/fixtures/kubernetes-explorer/chart \
+            --kubeconfig "$admin" --kube-context "kind-$name" --namespace rocketbrain-observed --wait --timeout 120s --set-string marker=second
           export ROCKETBRAIN_KUBE_ADMIN_CONFIG="$admin" ROCKETBRAIN_KUBE_KIND_NAME="$name"
           export ROCKETBRAIN_KUBECTL="$(command -v kubectl)" ROCKETBRAIN_HELM="$(command -v helm)"
           node scripts/test-kubernetes-kind.js | tee "$RUNNER_TEMP/rocketbrain-kube-actions.json"

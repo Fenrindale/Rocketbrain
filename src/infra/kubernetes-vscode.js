@@ -83,6 +83,7 @@ function registerKubernetesExplorer(context, vscode) {
         visible.command = { command: prefix + '.podLogs', title: 'Open Pod Logs', arguments: [node] };
       }
       if (node.type === 'deployments') visible.contextValue = 'rocketbrain-kube-deployment';
+      if (node.type === 'releases') visible.contextValue = 'rocketbrain-helm-release';
       if (node.type === 'scope') visible.iconPath = new vscode.ThemeIcon('cloud');
       return visible;
     }
@@ -245,6 +246,45 @@ function registerKubernetesExplorer(context, vscode) {
     return receipt;
   }
 
+  async function reviewHelmRollback(node) {
+    trusted();
+    const cluster = current;
+    if (!cluster) throw Error('Choose a Kubernetes context first.');
+    const { revision: version, namespace } = cluster;
+    const releases = cluster.results?.releases?.rows ?? [];
+    const stillCurrent = () => cluster === current && version === cluster.revision;
+    const release = node ? releases.find(item => item.name === node.label &&
+      node.type === 'releases' && node.revision === version)?.name :
+      (await vscode.window.showQuickPick(releases.map(item => ({ label: item.name, detail: item.chart })),
+        { title: 'Choose Helm Release' }))?.label;
+    if (!release || !stillCurrent()) return;
+    const history = await cluster.session.helm.history(namespace, release);
+    if (!stillCurrent()) return;
+    const [currentRevision] = history;
+    const eligible = history.filter(row => row.status === 'superseded' && row.revision < currentRevision.revision);
+    if (currentRevision.status !== 'deployed' || !eligible.length) throw Error('This release has no eligible superseded revision.');
+    const selected = await vscode.window.showQuickPick(eligible.map(row => ({ label: 'Revision ' + row.revision,
+      description: row.chart, row })), { title: 'Choose Revision to Restore', placeHolder: 'Current revision ' + currentRevision.revision });
+    if (!selected || !stillCurrent()) return;
+    trusted();
+    const review = await cluster.session.helm.review(namespace, release, selected.row.revision);
+    if (!stillCurrent()) return;
+    const scope = cluster.session.scope;
+    const detail = [scope.name + ' · ' + scope.server, namespace + '/' + release,
+      'Current revision ' + review.from + ' · restore revision ' + review.to,
+      'Server dry-run completed. Chart hooks will be skipped.',
+      ...review.resources.map(resource => (resource.changed ? 'Change ' : 'Keep ') + resource.kind + '/' + resource.name)].join('\n');
+    const action = await vscode.window.showWarningMessage('Roll back this Helm release?', { modal: true, detail }, 'Roll Back Release');
+    if (action !== 'Roll Back Release' || !stillCurrent()) return;
+    trusted();
+    const receipt = await cluster.session.helm.apply(review, { approved: true });
+    if (current === cluster) await refresh();
+    if (receipt.recordedRevision) void vscode.window.showInformationMessage('Helm recorded revision ' + receipt.recordedRevision +
+      ' from revision ' + receipt.restoredFrom + ' for ' + receipt.namespace + '/' + receipt.release + '.');
+    else void vscode.window.showWarningMessage('Helm completed the rollback command. Inspect the current release before retrying.');
+    return receipt;
+  }
+
   function publicSnapshot() {
     return current ? structuredClone({ scope: current.session.scope, namespace: current.namespace, results: current.results ?? null }) : null;
   }
@@ -259,6 +299,7 @@ function registerKubernetesExplorer(context, vscode) {
   context.subscriptions.push(documents, changed, logsChanged,
     command('connect', connect), command('disconnect', disconnect), command('refresh', refresh),
     command('namespace', changeNamespace), command('podLogs', showPodLogs), command('scaleDeployment', scaleDeployment),
+    command('reviewHelmRollback', reviewHelmRollback),
     { dispose() {
       disposed = true;
       opening?.abort();
