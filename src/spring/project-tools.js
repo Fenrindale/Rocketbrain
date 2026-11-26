@@ -87,9 +87,11 @@ class SpringProjectTools{
   if(names.length!==1)throw fail('BUILD','Select a project with one root Maven or Gradle build file.');
   const source=snapshot(path.join(root,names[0])),document=await this.options.documentSnapshot(source.uri);
   if(document?.dirty||document&&document.text!==source.text)throw fail('DIRTY','Save or reconcile the build file before reviewing starter changes.');
+  if(input.expectedSourceSha256!==undefined&&source.bytesSha256!==input.expectedSourceSha256)
+   throw fail('STALE','The build source changed while choosing starter edits.');
   const maven=names[0]==='pom.xml';
   const companions=maven?mavenParentSources(source,this.roots()):catalogSources(root);
-  const model=B.inspect(source.text,names[0],maven?{mavenParents:companions}:catalogContext(companions));
+  const model=B.inspect(source.text,names[0],maven?{mavenParents:companions,mavenProfile:input.mavenProfile}:catalogContext(companions));
   const readOnlySources=model.catalogContext||model.mavenContext?companions:[];
   await cleanBuildCompanions(this.options.documentSnapshot,readOnlySources,'DIRTY');
   const catalog=await this.metadata({endpoint:input.endpoint,bootVersion:model.bootVersion,signal:input.signal});
@@ -98,6 +100,7 @@ class SpringProjectTools{
   if(readOnlySources.length)verifyBuildCompanions(root,source,readOnlySources,this.roots());
   return {projectUri:pathToFileURL(root).toString(),buildUri:source.uri,kind:model.kind,bootVersion:model.bootVersion,
    management:model.management||null,sourceSha256:source.bytesSha256,choices:B.choices(model,catalog),endpoint:catalog.endpoint,
+   mavenProfiles:model.mavenProfiles,mavenProfile:model.mavenProfile,
    sources:readOnlySources.map(item=>({name:item.name,uri:item.uri,sha256:item.bytesSha256})),readOnlySources,source,document,model,catalog};
  }
  async previewDependencies(input){
@@ -108,6 +111,7 @@ class SpringProjectTools{
    cacheBytes:Buffer.byteLength(found.source.text)+Buffer.byteLength(change.after)+found.readOnlySources.reduce((sum,item)=>sum+Buffer.byteLength(item.text),0),
    public:{kind:'dependencies',projectUri:found.projectUri,buildUri:found.buildUri,bootVersion:found.bootVersion,management:found.management,
     sources:found.sources,buildKind:found.kind,endpoint:found.endpoint,metadataSha256:found.catalog.metadataSha256,
+    ...(found.mavenProfile&&{mavenProfile:found.mavenProfile}),
     catalogSha256:found.catalog.catalogSha256,before:found.source.text,after:change.after,beforeSha256:found.source.bytesSha256,
     afterSha256:sha(afterBytes),add:change.add,remove:change.remove,requiresProjectExecutionApproval:inside,
     automaticBuildStartedByTool:false,resyncRequired:true,review:'The diff changes selected direct dependencies. Maven and Gradle resolve their effective versions when you run the build. Use a separate action to import or refresh the project configuration.'}});

@@ -87,6 +87,21 @@ function mavenDependencies(text,root){
  return {block,deps};
 }
 
+function mavenProfiles(text,root){
+ const block=child(root,'profiles');
+ const profiles=block?.children||[];
+ if(profiles.length>16)throw fail('BUILD','Use at most sixteen explicitly selected Maven profiles.');
+ const byId=new Map();
+ for(const profile of profiles){
+  if(profile.name!=='profile'||profile.children.some(node=>!['id','dependencies'].includes(node.name)))
+   throw fail('BUILD','Only literal Maven profiles containing direct dependencies can be edited here.');
+  const id=value(text,child(profile,'id'));
+  if(!id||id.length>80||byId.has(id))throw fail('BUILD','Use distinct literal Maven profile IDs.');
+  byId.set(id,{node:profile,...mavenDependencies(text,profile)});
+ }
+ return byId;
+}
+
 function inheritedMavenModel(text,root,parents){
  if(!Array.isArray(parents)||!parents.length||parents.length>4)
   throw fail('BUILD','Review the physical local Maven parents before editing inherited starters.');
@@ -122,13 +137,19 @@ function inheritedMavenModel(text,root,parents){
 
 function pom(text,context){
  const root=xml(text);
- if(child(root,'profiles')||child(root,'modules'))throw fail('BUILD','Profile and multi-module POM editing requires a separate Maven model review.');
- const {block,deps}=mavenDependencies(text,root);
+ if(child(root,'modules'))throw fail('BUILD','Select an application POM within the Maven reactor.');
+ const profiles=mavenProfiles(text,root),selected=context?.mavenProfile;
+ if(selected!==undefined&&!profiles.has(selected))throw fail('BUILD','Choose an explicit Maven profile from this POM.');
+ const target=selected===undefined?{node:root,...mavenDependencies(text,root)}:profiles.get(selected);
+ const {block,deps}=target;
+ const neighbors=selected===undefined?[]:[mavenDependencies(text,root)];
+ for(const [id,profile] of profiles)if(id!==selected)neighbors.push(profile);
+ for(const neighbor of neighbors)deps.push(...neighbor.deps.map(dependency=>({...dependency,editable:false})));
  const resolved=context?.mavenParents?.length?inheritedMavenModel(text,root,context.mavenParents):null;
  const management=resolved?.management||mavenManagement(text,root);
  if(resolved)deps.push(...resolved.inherited);
- return {kind:'maven',bootVersion:management.version,management,deps,block,root,insertAt:block?block.closeStart:root.closeStart,
-  ...(resolved&&{mavenContext:context})};
+ return {kind:'maven',bootVersion:management.version,management,deps,block,root,insertAt:block?block.closeStart:target.node.closeStart,
+  mavenProfiles:[...profiles.keys()],mavenProfile:selected,...((resolved||profiles.size)&&{mavenContext:context})};
 }
 function tokens(text){if(Buffer.byteLength(text)>1024*1024)throw fail('BUILD','The build file exceeds1MiB.');const result=[];let i=0;while(i<text.length){const c=text[i];if(/\s/.test(c)){i++;continue;}if(text.startsWith('//',i)){i=text.indexOf('\n',i+2);if(i<0)break;continue;}if(text.startsWith('/*',i)){const end=text.indexOf('*/',i+2);if(end<0)throw fail('BUILD','Unclosed build comment.');i=end+2;continue;}if(c==='/'||text.startsWith('$/',i))throw fail('BUILD','Slashy Gradle literals or procedural expressions require manual editing.');if(c==='"'||c==="'"){const start=i,delimiter=text.startsWith(c.repeat(3),i)?c.repeat(3):c;i+=delimiter.length;let value='',escaped=false,closed=false;while(i<text.length){if(text.startsWith(delimiter,i)){i+=delimiter.length;closed=true;break;}if(text[i]==='\\'){escaped=true;value+=text[i++];if(i<text.length)value+=text[i++];}else value+=text[i++];}if(!closed)throw fail('BUILD','Unclosed Gradle string.');result.push({type:'string',value,start,end:i,literal:!escaped&&!value.includes('$')&&delimiter.length===1});continue;}const match=/^[A-Za-z_][\w$]*/.exec(text.slice(i));if(match){result.push({type:'id',value:match[0],start:i,end:i+match[0].length});i+=match[0].length;continue;}result.push({type:'punct',value:c,start:i,end:++i});if(result.length>50000)throw fail('BUILD','The build file exceeds its token limit.');}return result;}
 function activePlugin(ts,start,end,id){let matches=0;for(let i=start;i<end;i++)if(ts[i].value==='id'){let j=i+1;if(ts[j]?.value==='(')j++;if(ts[j]?.type!=='string'||!ts[j].literal||ts[j].value!==id)continue;j++;if(ts[j]?.value===')')j++;if(ts[j]?.value!=='version'||ts[j+1]?.type!=='string'||!ts[j+1].literal||ts[j+2]?.value==='apply')throw fail('BUILD','Use a directly applied literal '+id+' plugin.');matches++;}return matches===1;}
@@ -167,6 +188,7 @@ function change(text,model,catalog,{add=[],remove=[]}={}){
  if(!Array.isArray(add)||!Array.isArray(remove)||add.length+remove.length>50||!add.length&&!remove.length||new Set([...add,...remove]).size!==add.length+remove.length)
   throw fail('DEPENDENCY','Choose unique explicit dependencies to add or remove.');
  const edits=[],insert=[],seen=new Set(),newline=text.includes('\r\n')?'\r\n':'\n';
+ const mavenIndent=model.mavenProfile?'\t\t\t':'\t';
  for(const id of [...add,...remove]){
   const dep=catalog.dependencies.find(d=>d.id===id);
   if(!dep||!managed(dep))throw fail('DEPENDENCY','This dependency needs unsupported version/BOM/repository changes.');
@@ -182,8 +204,8 @@ function change(text,model,catalog,{add=[],remove=[]}={}){
   }
   if(existing.length)throw fail('DEPENDENCY','This module is already declared.');
   if(model.kind==='maven'){
-   insert.push(['\t\t<dependency>','\t\t\t<groupId>'+dep.groupId+'</groupId>','\t\t\t<artifactId>'+dep.artifactId+'</artifactId>',
-    ...(dep.scope==='compile'?[]:['\t\t\t<scope>'+dep.scope+'</scope>']),'\t\t</dependency>'].join(newline));
+   insert.push(['\t<dependency>','\t\t<groupId>'+dep.groupId+'</groupId>','\t\t<artifactId>'+dep.artifactId+'</artifactId>',
+    ...(dep.scope==='compile'?[]:['\t\t<scope>'+dep.scope+'</scope>']),'\t</dependency>'].map(line=>mavenIndent+line).join(newline));
   }else{
    const config={compile:'implementation',runtime:'runtimeOnly',test:'testImplementation'}[dep.scope];
    if(model.catalogLibraries){
@@ -195,8 +217,8 @@ function change(text,model,catalog,{add=[],remove=[]}={}){
  }
  if(insert.length){
   let addition=newline+insert.join(newline)+newline,end=model.insertAt;
-  if(model.kind==='maven'&&!model.block)addition=newline+'\t<dependencies>'+addition+'\t</dependencies>'+newline;
-  else if(model.block?.selfClosing){addition='>'+addition+'\t</dependencies>';end=model.block.end;}
+  if(model.kind==='maven'&&!model.block)addition=newline+mavenIndent+'<dependencies>'+addition+mavenIndent+'</dependencies>'+newline;
+  else if(model.block?.selfClosing){addition='>'+addition+mavenIndent+'</dependencies>';end=model.block.end;}
   edits.push({start:model.insertAt,end,text:addition});
  }
  let after=text;

@@ -140,7 +140,7 @@ function effectiveDependencies(text){
   parser.write(text).close();return dependencies;
 }
 
-async function mavenBuild(project,runtime){
+async function mavenBuild(project,runtime,{profile}={}){
   const settings=path.join(project,'fixture-maven-settings.xml');
   await fs.writeFile(settings,'<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"/>\n',{flag:'wx'});
   const repository=process.env.ROCKETBRAIN_MAVEN_BOM_TEST_REPOSITORY||path.join(output,'spring-maven-bom-repository');
@@ -150,7 +150,7 @@ async function mavenBuild(project,runtime){
   const effective=path.join(project,'target','effective-pom.xml');
   const args=['-Dfile.encoding=UTF-8','-Dmaven.home='+runtime.mavenHome,'-Dclassworlds.conf='+runtime.config,
     '-Dmaven.multiModuleProjectDirectory='+project,'-Dmaven.repo.local='+repository,'-cp',runtime.launcher,'org.codehaus.plexus.classworlds.launcher.Launcher',
-    '-B','-ntp','--strict-checksums','--settings',settings,'--global-settings',settings,'package',
+    '-B','-ntp','--strict-checksums','--settings',settings,'--global-settings',settings,...(profile?['--activate-profiles',profile]:[]),'package',
     'org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom','-Doutput='+effective];
   let result;
   try {result=await run(runtime.java,args,{cwd:project,env,windowsHide:true,maxBuffer:2*1024*1024,timeout:180000});}

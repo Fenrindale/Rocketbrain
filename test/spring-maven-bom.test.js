@@ -73,8 +73,8 @@ test('Maven refuses ambiguous management, external interpolation and project mod
     [original.replace(version,version+version),/Duplicate build configuration/],
     [original.replace(version,'<spring-boot.version>${other}</spring-boot.version>'),/uniquely declared literal property/],
     [original.replaceAll('spring-boot.version','env.VERSION'),/uniquely declared literal property/],
-    [original.replace('</project>','<profiles/></project>'),/Profile and multi-module/],
-    [original.replace('</project>','<modules/></project>'),/Profile and multi-module/],
+    [original.replace('</project>','<profiles><profile><id>implicit</id><activation><activeByDefault>true</activeByDefault></activation></profile></profiles></project>'),/literal Maven profiles/],
+    [original.replace('</project>','<modules/></project>'),/application POM within the Maven reactor/],
     [original.replace('</project>','<parent><groupId>example</groupId><artifactId>external</artifactId><version>1.0.0</version></parent></project>'),/parentless POM/],
     [original.replace('</project>','<parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>4.1.2</version></parent></project>'),/layered on a Spring Boot parent/]
   ];
