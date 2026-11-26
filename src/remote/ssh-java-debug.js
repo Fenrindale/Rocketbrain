@@ -86,7 +86,7 @@ function relayReady(child, marker, endpoint) {
   });
 }
 
-async function openSingleJdwpRelay(child, validateSource, endpoint = 'The SSH host') {
+async function openSingleJdwpRelay(child, validateSource, { endpoint = 'The SSH host', connectTimeout = 20000 } = {}) {
   const events = new EventEmitter();
   const server = net.createServer();
   let client, waitTimer, closing, invalid = false;
@@ -137,7 +137,7 @@ async function openSingleJdwpRelay(child, validateSource, endpoint = 'The SSH ho
     });
     server.on('error', () => { void close(); });
     if (invalid) throw Error('The reviewed Java debug channel closed.');
-    waitTimer = setTimeout(() => { void close(); }, 20000);
+    waitTimer = setTimeout(() => { void close(); }, connectTimeout);
     waitTimer.unref();
     return { host: loopback, localPort, close,
       isClosed: () => invalid,

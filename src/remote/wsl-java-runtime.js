@@ -86,7 +86,7 @@ def main():
         listener.listen(1)
         listener.settimeout(15)
         port = listener.getsockname()[1]
-        option = f"-agentlib:jdwp=transport=dt_socket,server=n,suspend=y,address=127.0.0.1:{port},timeout=15000"
+        option = f"-agentlib:jdwp=transport=dt_socket,server=n,suspend=y,address=127.0.0.1:{port},timeout=45000"
         process = subprocess.Popen([str(java), option, "-jar", str(jar)], cwd=root, env=environment,
                                    stdin=subprocess.DEVNULL, stdout=sys.stderr, start_new_session=True)
         try:

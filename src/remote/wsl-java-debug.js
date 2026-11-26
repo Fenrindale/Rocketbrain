@@ -108,16 +108,18 @@ function createWslJavaDebug({ mapping, trusted, saved, onOutput = () => {}, run 
         }
         const child = start(wsl, args(current.project, current.source, current.jar, current.proof),
           { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-        child.stderr.on('data', data => onOutput(data.toString('utf8')));
-        relay = await openSingleJdwpRelay(child, async () => {
+        child.stderr.setEncoding('utf8');
+        child.stderr.on('data', onOutput);
+        const checkSource = async () => {
           trusted();
           saved(review.input.sourceFile);
           const local = await sourceSnapshot(review.input.sourceFile, current.source, current.project.windows);
           if (local.hash !== current.proof.source) throw Error('The WSL Java source changed before attach.');
-        }, 'WSL');
+        };
+        relay = await openSingleJdwpRelay(child, checkSource, { endpoint: 'WSL', connectTimeout: 45000 });
         trusted();
         return { ...relay, id: randomUUID(), sourceFile: review.input.sourceFile, sourceRoot: current.sourceRoot,
-          wslRoot: current.project.linux };
+          wslRoot: current.project.linux, checkSource };
       } catch (error) {
         await relay?.close();
         throw error;
