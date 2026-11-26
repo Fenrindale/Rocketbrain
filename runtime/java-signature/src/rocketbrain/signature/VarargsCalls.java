@@ -114,7 +114,8 @@ final class VarargsCalls {
         var result = object("fixedCount",fixedCount,"mode",fixed ? "fixed-array" : "spread",
             "selector",selector,"arguments",arguments,"component",array.getComponentType().toString());
         if (fixed && args.getLast() instanceof NewArrayTree explicit && explicit.getInitializers() != null &&
-                explicit.getDimensions().isEmpty() && types.isSameType(trees.getTypeMirror(new TreePath(path,explicit)),array)) {
+                explicit.getInitializers().size() <= 64 && explicit.getDimensions().isEmpty() &&
+                types.isSameType(trees.getTypeMirror(new TreePath(path,explicit)),array)) {
             var elements = new ArrayList<Map<String,Object>>();
             var arrayPath = new TreePath(path,explicit);
             for (var expression : explicit.getInitializers()) {
