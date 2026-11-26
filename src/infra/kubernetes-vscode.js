@@ -82,6 +82,8 @@ function registerKubernetesExplorer(context, vscode) {
         visible.contextValue = 'rocketbrain-kube-pod';
         visible.command = { command: prefix + '.podLogs', title: 'Open Pod Logs', arguments: [node] };
       }
+      if (node.type === 'deployments') visible.contextValue = 'rocketbrain-kube-deployment';
+      if (node.type === 'releases') visible.contextValue = 'rocketbrain-helm-release';
       if (node.type === 'scope') visible.iconPath = new vscode.ThemeIcon('cloud');
       return visible;
     }
@@ -129,12 +131,17 @@ function registerKubernetesExplorer(context, vscode) {
         { title: 'Choose an Eligible Kubernetes Context', ignoreFocusOut: true });
       if (!choice || controller.signal.aborted) return;
       const { scope } = choice;
+      const executableReview = await staged.reviewCredential(scope.name);
+      if (controller.signal.aborted) return;
+      const credentialDetail = executableReview ? ['Credential executable ' + executableReview.file,
+        'Arguments ' + JSON.stringify(executableReview.args), 'SHA-256 ' + executableReview.sha256,
+        'Cluster tools will run this reviewed executable when they need credentials.'] : [];
       const approval = await vscode.window.showInformationMessage('Connect this Kubernetes explorer?',
         { modal: true, detail: [file.fsPath, scope.name, scope.server, 'Namespace ' + scope.namespace, 'Account ' + scope.user,
-          scope.tlsServerName && 'TLS name ' + scope.tlsServerName].filter(Boolean).join('\n') }, 'Open Explorer');
+          scope.tlsServerName && 'TLS name ' + scope.tlsServerName, ...credentialDetail].filter(Boolean).join('\n') }, 'Open Explorer');
       if (approval !== 'Open Explorer' || controller.signal.aborted) return;
       trusted();
-      const session = await staged.select(scope.name);
+      const session = await staged.select(scope.name, { credentialReview: executableReview, approvedExecutable: !!executableReview });
       if (controller.signal.aborted) return;
       const old = current;
       retained = true;
@@ -210,6 +217,79 @@ function registerKubernetesExplorer(context, vscode) {
     } finally { if (activeLog === operation) activeLog = undefined; }
   }
 
+  async function scaleDeployment(node) {
+    trusted();
+    const cluster = current;
+    if (!cluster) throw Error('Choose a Kubernetes context first.');
+    const { revision: version, namespace } = cluster;
+    const deployments = cluster.results?.deployments?.rows ?? [];
+    const stillCurrent = () => cluster === current && version === cluster.revision;
+    const listed = node ? deployments.find(item => item.name === node.label &&
+      node.type === 'deployments' && node.revision === version) :
+      (await vscode.window.showQuickPick(deployments.map(item => ({ label: item.name, deployment: item })),
+        { title: 'Choose Deployment to Scale' }))?.deployment;
+    if (!listed || !stillCurrent()) return;
+    const value = await vscode.window.showInputBox({ title: 'Desired Deployment Replicas',
+      value: String(listed.desired ?? ''), validateInput: text =>
+        /^(?:0|[1-9]\d{0,2}|1000)$/.test(text) ? undefined : 'Enter a whole number from 0 to 1000.' });
+    if (value === undefined || !stillCurrent()) return;
+    trusted();
+    const review = await cluster.session.reviewDeploymentScale(namespace, listed.name, Number(value));
+    if (!stillCurrent()) return;
+    const scope = cluster.session.scope;
+    const confirm = await vscode.window.showWarningMessage('Scale this Kubernetes Deployment?', { modal: true,
+      detail: [scope.name + ' · ' + scope.server, namespace + '/' + listed.name,
+        'Replicas ' + review.before + ' → ' + review.after,
+        'Server dry-run accepted this change for the reviewed Deployment.'].join('\n') }, 'Scale Deployment');
+    if (confirm !== 'Scale Deployment' || !stillCurrent()) return;
+    trusted();
+    const receipt = await cluster.session.applyDeploymentScale(review, { approved: true });
+    if (current === cluster) await refresh();
+    if (receipt.observed === receipt.desired) {
+      void vscode.window.showInformationMessage(receipt.namespace + '/' + receipt.name + ' now requests ' + receipt.desired + ' replicas.');
+    } else void vscode.window.showWarningMessage('The server accepted the scale request. Check the current Deployment state.');
+    return receipt;
+  }
+
+  async function reviewHelmRollback(node) {
+    trusted();
+    const cluster = current;
+    if (!cluster) throw Error('Choose a Kubernetes context first.');
+    const { revision: version, namespace } = cluster;
+    const releases = cluster.results?.releases?.rows ?? [];
+    const stillCurrent = () => cluster === current && version === cluster.revision;
+    const release = node ? releases.find(item => item.name === node.label &&
+      node.type === 'releases' && node.revision === version)?.name :
+      (await vscode.window.showQuickPick(releases.map(item => ({ label: item.name, detail: item.chart })),
+        { title: 'Choose Helm Release' }))?.label;
+    if (!release || !stillCurrent()) return;
+    const history = await cluster.session.helm.history(namespace, release);
+    if (!stillCurrent()) return;
+    const [currentRevision] = history;
+    const eligible = history.filter(row => row.status === 'superseded' && row.revision < currentRevision.revision);
+    if (currentRevision.status !== 'deployed' || !eligible.length) throw Error('This release has no eligible superseded revision.');
+    const selected = await vscode.window.showQuickPick(eligible.map(row => ({ label: 'Revision ' + row.revision,
+      description: row.chart, row })), { title: 'Choose Revision to Restore', placeHolder: 'Current revision ' + currentRevision.revision });
+    if (!selected || !stillCurrent()) return;
+    trusted();
+    const review = await cluster.session.helm.review(namespace, release, selected.row.revision);
+    if (!stillCurrent()) return;
+    const scope = cluster.session.scope;
+    const detail = [scope.name + ' · ' + scope.server, namespace + '/' + release,
+      'Current revision ' + review.from + ' · restore revision ' + review.to,
+      'Server dry-run completed. Chart hooks will be skipped.',
+      ...review.resources.map(resource => (resource.changed ? 'Change ' : 'Keep ') + resource.kind + '/' + resource.name)].join('\n');
+    const action = await vscode.window.showWarningMessage('Roll back this Helm release?', { modal: true, detail }, 'Roll Back Release');
+    if (action !== 'Roll Back Release' || !stillCurrent()) return;
+    trusted();
+    const receipt = await cluster.session.helm.apply(review, { approved: true });
+    if (current === cluster) await refresh();
+    if (receipt.recordedRevision) void vscode.window.showInformationMessage('Helm recorded revision ' + receipt.recordedRevision +
+      ' from revision ' + receipt.restoredFrom + ' for ' + receipt.namespace + '/' + receipt.release + '.');
+    else void vscode.window.showWarningMessage('Helm completed the rollback command. Inspect the current release before retrying.');
+    return receipt;
+  }
+
   function publicSnapshot() {
     return current ? structuredClone({ scope: current.session.scope, namespace: current.namespace, results: current.results ?? null }) : null;
   }
@@ -223,7 +303,8 @@ function registerKubernetesExplorer(context, vscode) {
 
   context.subscriptions.push(documents, changed, logsChanged,
     command('connect', connect), command('disconnect', disconnect), command('refresh', refresh),
-    command('namespace', changeNamespace), command('podLogs', showPodLogs),
+    command('namespace', changeNamespace), command('podLogs', showPodLogs), command('scaleDeployment', scaleDeployment),
+    command('reviewHelmRollback', reviewHelmRollback),
     { dispose() {
       disposed = true;
       opening?.abort();

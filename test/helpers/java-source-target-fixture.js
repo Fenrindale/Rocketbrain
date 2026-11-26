@@ -68,11 +68,19 @@ async function populateTargets(root) {
     'gradle/vendor/build.gradle.kts': 'plugins { base }\n',
     'gradle/vendor/service/build.gradle.kts': [
       'plugins { `java-library` }', 'group = "fixture.linked"', 'version = "1"', 'repositories { mavenLocal(); mavenCentral() }',
-      'dependencies { testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3") }', ''
+      'dependencies { testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3") }',
+      'tasks.named("testClasses") {',
+      '  val receipt = layout.buildDirectory.file("rocketbrain-reviewed-test-classes")',
+      '  doLast { receipt.get().asFile.writeText("testClasses") }',
+      '}', ''
     ].join('\n'),
     'gradle/workbench/build.gradle': [
       "plugins { id 'java' }", 'repositories { mavenLocal(); mavenCentral() }', 'dependencies {',
-      " implementation 'fixture.linked:service:1'", " implementation 'org.springframework:spring-jdbc:7.0.10'", '}', ''
+      " implementation 'fixture.linked:service:1'", " implementation 'org.springframework:spring-jdbc:7.0.10'", '}',
+      "tasks.named('classes') {",
+      "  def receipt = layout.buildDirectory.file('rocketbrain-reviewed-classes')",
+      "  doLast { receipt.get().asFile.text = 'classes' }",
+      '}', ''
     ].join('\n'),
     [links.included]: 'package fixture.linked; public final class Value { public static int answer() { return 2; } }\n',
     [links.includedTest]: test('fixture.linked'), [links.gradle]: probe('fixture.gradle', 'fixture.linked.Value.answer()')
@@ -133,4 +141,13 @@ async function runTargets(root, tools, classpathFile, database, engine) {
   }));
 }
 
-module.exports = { links, populateTargets, buildTargets, runTargets };
+const executionCases = [
+  ['mavenTest', 'maven', 'service', 'test-compile', 'maven/service/target/test-classes/fixture/maven/Scope.class',
+    'maven/service/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/createdFiles.lst'],
+  ['includedTest', 'gradle', ':linked-tools:service', ':linked-tools:service:testClasses',
+    'gradle/vendor/service/build/classes/java/test/fixture/linked/Scope.class', 'gradle/vendor/service/build/rocketbrain-reviewed-test-classes'],
+  ['gradle', 'gradle', ':workbench', ':workbench:classes', 'gradle/workbench/build/classes/java/main/fixture/gradle/Probe.class',
+    'gradle/workbench/build/rocketbrain-reviewed-classes']
+];
+
+module.exports = { links, populateTargets, buildTargets, runTargets, executionCases };

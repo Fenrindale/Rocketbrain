@@ -1,28 +1,28 @@
 {
-  "version": "0.122.0",
-  "verifiedAt": "2026-11-26T06:18:11.942Z",
+  "version": "0.125.0",
+  "verifiedAt": "2026-11-26T06:52:38.124Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.122.0.vsix",
-    "sha256": "2834fa418eb781a9285892fb7425e4819e313736d8dca0d3b560cf7990fea896",
-    "bytes": 4244066,
+    "name": "rocketbrain-0.125.0.vsix",
+    "sha256": "0084ac7cf2e091cfc34989e35f350c0321031bbf8c58fa8f8eb04f3b50785183",
+    "bytes": 4265514,
     "files": 26
   },
   "source": {
-    "frozenPublicInputs": 2618,
-    "inputVectorSha256": "880eda51abe31709a50886b20798aca395d225d7dc965152b41f908dc4a2d39f",
+    "frozenPublicInputs": 2634,
+    "inputVectorSha256": "6d80a05c5e47af53085c3c60752ee5162a39e9c0168a28ffb880fccfc5bb55f7",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45764694517",
-    "tests": 2025,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45769276148",
+    "tests": 2034,
     "suites": 0,
-    "pass": 1833,
+    "pass": 1840,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 192,
+    "skipped": 194,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,30 +32,26 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 6,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "javaLocalProcess",
+          "group": "javaReviewedBuild",
           "checks": 1
         },
         {
-          "group": "javaVarargs",
+          "group": "jpaTransactionOutcomes",
           "checks": 1
         },
         {
-          "group": "springObservedInjection",
+          "group": "jupyterCellDebug",
           "checks": 1
         },
         {
-          "group": "springAuthenticationProvider",
+          "group": "javaCheckedThrows",
           "checks": 1
         },
         {
-          "group": "javaSourceTarget",
-          "checks": 1
-        },
-        {
-          "group": "dockerImages",
+          "group": "kubernetesOperations",
           "checks": 1
         }
       ],
@@ -70,30 +66,26 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 6,
+      "groupCount": 5,
       "groups": [
         {
-          "group": "javaLocalProcess",
+          "group": "javaReviewedBuild",
           "checks": 1
         },
         {
-          "group": "javaVarargs",
+          "group": "jpaTransactionOutcomes",
           "checks": 1
         },
         {
-          "group": "springObservedInjection",
+          "group": "jupyterCellDebug",
           "checks": 1
         },
         {
-          "group": "springAuthenticationProvider",
+          "group": "javaCheckedThrows",
           "checks": 1
         },
         {
-          "group": "javaSourceTarget",
-          "checks": 1
-        },
-        {
-          "group": "dockerImages",
+          "group": "kubernetesOperations",
           "checks": 1
         }
       ],
@@ -105,147 +97,156 @@
   ],
   "newlyVerified": {
     "IDEA-029": {
-      "scope": "두 DB의 Spring 소스에서 가변 인자 호출 8건을 확인했다. 고정 배열 전달 5건과 펼친 인자 전달 3건을 보존하고 적용·실행 취소·다시 실행 뒤 JDBC와 평가 순서를 비교했다.",
+      "scope": "두 DB에서 Javac로 기존 catch와 호출자 계약을 확인했다. 선택한 선언만 적용·실행 취소·다시 실행하고 다시 빌드한 Spring 결과는 보존됐다.",
       "runtimeGroups": [
-        "javaVarargs"
+        "javaCheckedThrows"
       ]
     },
-    "IDEA-053": {
-      "scope": "두 DB에서 같은 이름의 컨텍스트를 구분했다. 후보가 선택된 매개변수 두 개와 모호한 매개변수 한 개를 열어 실제 소스와 일치시켰고 조회 중 공급자를 재실행하지 않았다.",
+    "IDEA-055": {
+      "scope": "실제 Spring 7.0.10과 두 DB에서 여섯 경계를 확인했다. REQUIRED는 하나, REQUIRES_NEW는 두 물리 트랜잭션이었다. 커밋·롤백과 중복 키 실패를 JDBC 행으로 대조했다.",
       "runtimeGroups": [
-        "springObservedInjection"
-      ]
-    },
-    "IDEA-064": {
-      "scope": "Spring Security 7.1.2에서 두 DB의 동시 성공·실패, 제공자 순서, 위임, 관리자의 반환과 애플리케이션 예외를 확인했다. 저장된 보고서에서 자격 증명과 요청 값이 제외됐다.",
-      "runtimeGroups": [
-        "springAuthenticationProvider"
+        "jpaTransactionOutcomes"
       ]
     },
     "IDEA-071": {
-      "scope": "단일 워크스페이스에서 Maven과 Gradle 소스 다섯 개를 점검했다. 이름이 지정된 Gradle 포함 빌드와 Maven 집계 선언으로 이동했으며, 두 빌드의 Spring JDBC가 두 DB 모두에서 42를 반환했다.",
+      "scope": "Maven reactor service와 Gradle 포함 모듈·소비자 각각의 승인한 목표가 기대한 클래스 파일을 생성했다. 두 Spring JDBC 앱은 두 DB에서 42를 반환했다.",
       "runtimeGroups": [
-        "javaSourceTarget"
+        "javaReviewedBuild"
       ]
     },
-    "IDEA-075": {
-      "scope": "Windows 설치형 확장에서 살아 있는 JVM의 PID와 실제 중단점을 확인했다. macOS ARM64의 Temurin에서 netstat와 lsof 교차 검증, 소스 중단, 지역 변수 73, 종료하지 않는 연결 해제를 검증했다. Linux 실제 연결 검증은 이전 기록이다.",
+    "IDEA-100": {
+      "scope": "실제 Kubernetes에서 복제본 1→0→1, 버전이 변한 승인 거부, Helm 리비전 2에서 1의 내용을 새 리비전 3으로 복원하는 것을 검증했다. kubectl과 Helm이 각각 동일한 승인 실행 파일의 자격 증명으로 접속했다.",
       "runtimeGroups": [
-        "javaLocalProcess",
-        "macosJavaProcess"
+        "kubernetesOperations",
+        "kubernetesScaleHelmExec"
       ]
     },
-    "IDEA-099": {
-      "scope": "실제 Engine 28.0.4의 격리된 레지스트리에서 빌드·푸시, 레지스트리 매니페스트 바이트와 이미지 설정을 대조했다. Windows 설치형은 명령과 워크스페이스 신뢰 조건을 확인했다.",
+    "IDEA-110": {
+      "scope": "실제 설치형 노트북에서 2행 중단점과 3행 이동, 35와 70의 지역 변수, 저장한 출력을 확인했다. 편집한 셀과 이미 재개한 중단 상태는 거부했다.",
       "runtimeGroups": [
-        "dockerImages",
-        "dockerRegistry"
+        "jupyterCellDebug"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 593,
+    "sourceCorrespondences": 599,
     "sourceConfidence": "inferred",
     "archiveEntries": 26,
     "archiveConfidence": "observed"
   },
+  "nativePayloadEquivalence": {
+    "files": 26,
+    "testedArchiveSha256": "c11b50a636c018d89aa280c26fb0ca52382b470c2d0c312fb091bb26ff67d937",
+    "testedInputVectorSha256": "820187bc376d320fb70d4e78434aec6ec82b90b3d9f4ec331886b51eb1ac30b3",
+    "onlySourceChanges": [
+      "test/java-source-target-host.js"
+    ]
+  },
   "hostedRuntime": {
-    "macosJavaProcess": {
-      "run": 45759271559,
-      "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45759271559",
-      "head": "215cb457813ba052becc15996fa3e8ae35c2bc9d",
+    "kubernetesScaleHelmExec": {
+      "run": 45765105674,
+      "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45765105674",
+      "head": "57c8009f5d7dc8aff890abe67680898c694fbec5",
       "artifact": {
-        "id": 15088254290,
-        "bytes": 500,
-        "sha256": "51e63114e57a95a200b0dc0d55048f4186e287ff9d00c7e59c12ef2c5c79b14d",
-        "receiptSha256": "9f69901f47e1dd1cf8f73a912d8dc37fc05215b61bf06bf5959103df44a2c8e7"
+        "id": 15092090120,
+        "bytes": 646,
+        "sha256": "a25c11e4118db58d88d222248c3a1e3d58c96f277df880880430f01284310b94",
+        "receiptSha256": "0de4b6cbb585d940afc50ca2616fee0e618dd910a66d9475414c24e931b6cbe0",
+        "craft": "ev_54f3c3e4a1aae379fbd55d46e6d96fc9f449eddda78394c3c9b71ca59c5f2b9f",
+        "receiptCraft": "ev_0d874c139756d78a9f16e1cc224b385dc025c1d55d364c2ca7cffe77f28c4bb7"
       },
+      "attachedEvidenceSha256": "df2cc00b9d0c61683f1a93d28b7b96d2aeb97b26f83442de01b4724797075407",
       "fileCount": 9,
-      "attachedEvidenceSha256": "f7f104a7a3dfbafb2357c6f20ccf4929da7b3eaeb9e21a554cac4484fbbee3b0",
       "checks": {
-        "sourceCommit": "215cb457813ba052becc15996fa3e8ae35c2bc9d",
-        "platform": "darwin",
-        "architecture": "arm64",
-        "release": "24.6.0",
-        "jdk": "openjdk 25.0.5 2026-10-20 LTS",
-        "exactListenerOwner": true,
-        "tools": [
-          "netstat",
-          "lsof",
-          "HotSpot Attach API",
-          "JDI"
-        ],
-        "normalSocketExcluded": true,
-        "foreignSocketRefused": true,
-        "staleIdentityRefused": true,
-        "mismatchedHostAndPortRefused": true,
-        "cancelledBeforeAttach": true,
-        "stoppedAt": 14,
-        "localValue": 73,
-        "detachedProcessResumed": true,
-        "exitedTargetRefused": true
-      }
-    },
-    "dockerRegistry": {
-      "run": 45760597609,
-      "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45760597609",
-      "head": "c765774528d2861ad59aa598dea5aa914ead97b0",
-      "artifact": {
-        "id": 15090171092,
-        "bytes": 437,
-        "sha256": "f33a50d5725f29eb47b3e83befd88ee55ee4a725f9ca7f8e28180d109a1c9d97",
-        "receiptSha256": "a508a0f55035595a951609eb6617fd401e8dc7efbd2f5d50bc3f8ce6167b0bd5",
-        "craft": "ev_b6275b03bb636d0e05d3be90a8ed19c9f64f53a00b4417dbb61631a2a33bf354",
-        "receiptCraft": "ev_ccbb6e318b2267ce7c30ff71ad1a27a50ee2f706a4ed64ffe501d7ebe2217918"
-      },
-      "fileCount": 5,
-      "attachedEvidenceSha256": "9d0c76ab4d3fbe8ea417a82bbbe357225faf3a933025a38b551e568596a67c98",
-      "checks": {
-        "sourceCommit": "c765774528d2861ad59aa598dea5aa914ead97b0",
-        "digest": "sha256:c7b834a498ed9e0a8bbe58c98732132992b4df13fcae701b429c830daacc17f7",
-        "engine": "28.0.4",
-        "contextFingerprint": "b3469306c1981e349db0a0b26bb01106bcf01504ca937dfa54a894f5b711dfd0",
-        "loopbackRegistry": true,
-        "manifestBytesMatch": true,
-        "imageConfigMatches": true,
-        "reviewedBuild": true,
-        "reviewedPush": true
+        "sourceCommit": "57c8009f5d7dc8aff890abe67680898c694fbec5",
+        "kubernetes": "v1.36.4",
+        "kubectl": "v1.36.4",
+        "pinnedContext": true,
+        "wrongAmbientIgnored": true,
+        "sourceChangeIgnored": true,
+        "namespaceRows": 7,
+        "deploymentReady": true,
+        "servicePorts": true,
+        "podContainers": 2,
+        "scopedLogSnapshots": true,
+        "stalePodRejected": true,
+        "helmReleaseRevision": "2",
+        "otherNamespaceDenied": true,
+        "readerDeleteDenied": true,
+        "adminConfigUnchanged": true,
+        "scale": {
+          "dryRunPreserved": true,
+          "staleRejected": true,
+          "approvalRequired": true,
+          "changedAndRestored": [
+            1,
+            0,
+            1
+          ],
+          "replayRejected": true,
+          "readerDenied": true,
+          "singleResourceAccount": true
+        },
+        "helmRollback": {
+          "approvedRevision": 1,
+          "previousRevision": 2,
+          "recordedRevision": 3,
+          "serverDryRunPreserved": true,
+          "changedResourceRestored": true,
+          "approvalRequired": true,
+          "forgedRejected": true,
+          "replayRejected": true
+        },
+        "execCredential": {
+          "kubectlAccepted": true,
+          "helmAccepted": true,
+          "authVersion": "client.authentication.k8s.io/v1",
+          "approvalRequired": true,
+          "noExecutionWhileReviewing": true,
+          "reviewedSnapshotStayedActive": true,
+          "otherNamespaceDenied": true
+        }
       }
     }
   },
   "progress": {
     "counts": {
-      "implemented": 173,
-      "partial": 29,
+      "implemented": 175,
+      "partial": 27,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 199.5,
-    "previousWeightedPoints": 199,
+    "weightedPoints": 200.5,
+    "previousWeightedPoints": 199.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 92.4,
+    "referencePercent": 92.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-075",
+        "id": "IDEA-100",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-110",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "IDEA-001과 DG-095의 전체 창 배치를 일반 확장의 공개 API로 교체할 수 없다. 기존 가중 상한은 214/216점이다.",
-    "Docker 엔진 검증은 Linux의 소유 테스트 레지스트리에서 실행했다. Windows에서는 설치형 명령을 확인했다.",
-    "Spring 관찰에 참여하는 사용자 코드를 재실행하지 않는다. 계측 밖의 동작은 별도 범위다."
+    "IDEA-001과 DG-095의 전체 창 배치로 인해 현재 채점의 상한은 214/216점이다.",
+    "노트북 셀 디버깅은 로컬 Python ipykernel 범위다. 원격 커널, 다른 언어 커널과 동적 위젯은 별도 범위다.",
+    "Kubernetes 실측은 Linux의 격리 클러스터 범위다. Helm 복원은 기존과 대상 리비전의 지원 리소스 집합이 같아야 하며 훅을 제외한다. 인증 실행 파일은 로컬·독립 실행·비대화형 ExecCredential v1을 지원한다.",
+    "트랜잭션은 실제 Spring의 명령형 자원 로컬 JpaTransactionManager를 관찰한다. 연결 단절 상태의 내구성 판정은 별개다."
   ],
   "next": [
-    "Jupyter의 실제 Python 셀 중단점과 스텝",
-    "Kubernetes Deployment 복제본 검토·변경",
-    "확인한 Maven과 Gradle 모듈 단위 빌드",
-    "Spring JPA 트랜잭션 결과 관찰"
+    "SSH에서 확인한 JVM으로 소스 디버거 연결",
+    "Quarkus Gradle 빌드와 소스 중단점",
+    "Python 편집기 타입 진단·완성·이름 변경"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

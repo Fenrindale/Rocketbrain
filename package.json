@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.122.0",
+  "version": "0.125.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -169,10 +169,14 @@
       { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
+      { "command": "rocketbrain.jupyter.debugCell", "title": "Debug Python Notebook Cell", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && notebookType == rocketbrain-jupyter", "icon": "$(debug-alt)" },
+      { "command": "rocketbrain.jupyter.debugControls", "title": "Python Notebook Debugger Controls", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && notebookType == rocketbrain-jupyter" },
       { "command": "rocketbrain.kubernetes.connect", "title": "Choose Kubernetes Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
       { "command": "rocketbrain.kubernetes.refresh", "title": "Refresh Kubernetes Resources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(refresh)" },
       { "command": "rocketbrain.kubernetes.namespace", "title": "Choose Kubernetes Namespace", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kubernetes.podLogs", "title": "Open Kubernetes Pod Logs", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(output)" },
+      { "command": "rocketbrain.kubernetes.scaleDeployment", "title": "Scale Kubernetes Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kubernetes.reviewHelmRollback", "title": "Review Helm Rollback", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kubernetes.disconnect", "title": "Close Kubernetes Explorer Session", "category": "Rocketbrain", "icon": "$(debug-disconnect)" },
       { "command": "rocketbrain.jakarta.buildWar", "title": "Build Jakarta WAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.deploy", "title": "Deploy Jakarta WAR to Tomcat", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -775,6 +779,12 @@
       {
         "command": "rocketbrain.jpa.observer.openObservedInjectionSource",
         "title": "Open Observed Spring Constructor Parameter",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.inspectTransactions",
+        "title": "Inspect Spring JPA Transaction Outcomes",
         "category": "Rocketbrain",
         "enablement": "isWorkspaceTrusted"
       },
@@ -1461,6 +1471,7 @@
         { "command": "rocketbrain.spring.debugProperty", "when": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java", "group": "navigation@40" }
       ],
       "notebook/cell/title": [
+        { "command": "rocketbrain.jupyter.debugCell", "when": "isWorkspaceTrusted && notebookType == rocketbrain-jupyter && notebookCellType == code", "group": "inline" },
         { "command": "rocketbrain.sqlNotebook.pinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" },
         { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }
       ],
@@ -1734,6 +1745,8 @@
         { "command": "rocketbrain.docker.logs", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.container && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.docker.pushImage", "when": "view == rocketbrain.docker && viewItem == rocketbrain.docker.image && isWorkspaceTrusted", "group": "rocketbrain" },
         { "command": "rocketbrain.kubernetes.podLogs", "when": "view == rocketbrain.kubernetes && viewItem == rocketbrain-kube-pod", "group": "inline" },
+        { "command": "rocketbrain.kubernetes.scaleDeployment", "when": "view == rocketbrain.kubernetes && viewItem == rocketbrain-kube-deployment && isWorkspaceTrusted", "group": "rocketbrain" },
+        { "command": "rocketbrain.kubernetes.reviewHelmRollback", "when": "view == rocketbrain.kubernetes && viewItem == rocketbrain-helm-release && isWorkspaceTrusted", "group": "rocketbrain" },
         {
           "command": "rocketbrain.db.openObjectSource",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && rocketbrain.mysqlConnected && isWorkspaceTrusted",

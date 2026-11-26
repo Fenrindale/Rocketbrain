@@ -12,7 +12,8 @@ const settingsKeys = [
   'org.eclipse.jdt.ls.core.outputPath',
   'org.eclipse.jdt.ls.core.classpathEntries',
   'org.eclipse.jdt.ls.core.natureIds',
-  'org.eclipse.jdt.core.compiler.compliance'
+  'org.eclipse.jdt.core.compiler.compliance',
+  'org.eclipse.jdt.ls.core.vm.location'
 ];
 const resolved = (left, right) => path.relative(left, right) === '';
 
@@ -101,10 +102,13 @@ async function resolveJavaSourceTarget({ sourceUri, folders, request, dirty = ()
   const classpaths = scope === 'runtime' ? runtimePaths :
     exactClasspaths(await request('java.project.getClasspaths', [source, { scope }], cancellation), project, roots);
   check();
-  verifyNestedComponent(selected, project);
-  if (sourceSnapshot(selected, dirty) !== sourceDigest || resolveBuildTarget(project, workspace, dirty).fingerprint !== declared.fingerprint) {
-    throw M.fail('The source or a build descriptor changed during inspection.');
-  }
+  const validateInputs = () => {
+    verifyNestedComponent(selected, project);
+    if (sourceSnapshot(selected, dirty) !== sourceDigest || resolveBuildTarget(project, workspace, dirty).fingerprint !== declared.fingerprint) {
+      throw M.fail('The source or a build descriptor changed after inspection.');
+    }
+  };
+  validateInputs();
   const natures = settings[settingsKeys[3]];
   const names = Array.isArray(natures) && natures.length <= 32
     ? natures.filter(name => typeof name === 'string' && /^[A-Za-z0-9_.-]{1,140}$/u.test(name)) : [];
@@ -112,14 +116,16 @@ async function resolveJavaSourceTarget({ sourceUri, folders, request, dirty = ()
   const gradle = names.includes('org.eclipse.buildship.core.gradleprojectnature');
   if (maven && gradle) throw M.fail('JDT reported competing Maven and Gradle providers for this Java component.');
   const provider = maven ? 'maven' : gradle ? 'gradle' : 'jdt';
+  const vm = settings[settingsKeys[5]];
+  const javaHome = typeof vm === 'string' && path.isAbsolute(vm) ? vm : undefined;
   return {
     sourceUri: source, projectUri: pathToFileURL(project).href, projectRoot: project,
     sourceRoot, sourceRole, ...(outputPath && { outputPath }), layoutSource, generated: Boolean(generated),
-    scope, provider, ...classpaths, observedProjectOutputs: layout.outputRoots,
+    scope, provider, ...(javaHome && { javaHome }), ...classpaths, observedProjectOutputs: layout.outputRoots,
     compliance: typeof settings[settingsKeys[4]] === 'string' ? settings[settingsKeys[4]] : undefined,
-    declaredBuild: declared.build, executedProjectCode: false,
+    declaredBuild: declared.build, executedProjectCode: false, validateInputs,
     fingerprint: M.hash({ sourceDigest, build: declared.fingerprint, project, candidates, sourceRoot, sourceRole, outputPath,
-      layoutSource, scope, provider, classpaths, compliance: settings[settingsKeys[4]] })
+      layoutSource, scope, provider, javaHome, classpaths, compliance: settings[settingsKeys[4]] })
   };
 }
 

@@ -37,6 +37,15 @@ public final class SignatureInspector {
     static Map<String, Object> object(Object... values) {
         Map<String, Object> map = new LinkedHashMap<>(); for (int i = 0; i < values.length; i += 2) map.put((String) values[i], values[i + 1]); return map;
     }
+    static List<String> checkedThrownTypes(ExecutableElement method, Types types, Elements elements) {
+        if (method.getThrownTypes().isEmpty()) return List.of();
+        TypeMirror throwable = elements.getTypeElement("java.lang.Throwable").asType();
+        TypeMirror unchecked = elements.getTypeElement("java.lang.RuntimeException").asType();
+        TypeMirror error = elements.getTypeElement("java.lang.Error").asType();
+        return method.getThrownTypes().stream().filter(type -> type.getKind() == TypeKind.DECLARED &&
+            types.isSubtype(type, throwable) && !types.isSubtype(type, unchecked) && !types.isSubtype(type, error))
+            .map(TypeMirror::toString).toList();
+    }
     static List<Map<String,Object>> typeParameters(List<? extends TypeParameterElement> parameters) {
         return parameters.stream().map(p -> object("name",p.getSimpleName().toString(),"bounds",p.getBounds().stream().map(Object::toString).toList())).toList();
     }
@@ -540,6 +549,9 @@ public final class SignatureInspector {
                         int nameAt = cursor - name.length(); method.nameStart = nameAt >= start && text.regionMatches(nameAt, name, 0, name.length()) ? nameAt : -1;
                         for (VariableElement variable : executable.getParameters()) method.parameters.add(object("type", variable.asType().toString(), "erasure", types.erasure(variable.asType()).toString(), "name", variable.getSimpleName().toString(), "used", false, "annotated", !variable.getAnnotationMirrors().isEmpty() || !variable.asType().getAnnotationMirrors().isEmpty()));
                         method.model = object("key", key(executable), "uri", uri, "owner", owner.getQualifiedName().toString(), "ownerKind", owner.getKind().toString(), "name", name, "constructor", executable.getKind() == ElementKind.CONSTRUCTOR, "start", start, "end", end, "nameStart", method.nameStart, "parameters", method.parameters, "returnType", executable.getReturnType().toString(), "throwsTypes", executable.getThrownTypes().stream().map(Object::toString).toList(), "modifiers", executable.getModifiers().stream().map(Object::toString).sorted().toList(), "annotations", executable.getAnnotationMirrors().stream().map(a -> a.getAnnotationType().toString()).toList(), "generic", !owner.getTypeParameters().isEmpty() || !executable.getTypeParameters().isEmpty(), "varargs", executable.isVarArgs());
+                        if (executable.getModifiers().contains(Modifier.PRIVATE)) {
+                            method.model.put("checkedThrows", checkedThrownTypes(executable, types, elements));
+                        }
                         method.model.put("typeParameters",typeParameters(executable.getTypeParameters()));
                         method.model.put("ownerTypeParameters",typeParameters(owner.getTypeParameters()));
                         method.model.put("ownerSupertypes",types.directSupertypes(owner.asType()).stream().map(Object::toString).toList());

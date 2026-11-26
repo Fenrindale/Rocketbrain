@@ -17,7 +17,7 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
  const trusted=()=>{if(disposed||!vscode.workspace.isTrusted)throw M.fail('Trust the local workspace before using Java project tools.');};
  const track=fn=>{const p=Promise.resolve().then(fn);operations.add(p);void p.finally(()=>operations.delete(p)).catch(()=>{});return p;};
  const config=()=>vscode.workspace.getConfiguration('rocketbrain.java'),roots=()=>M.workspaceRoots(vscode.workspace.workspaceFolders||[]),storage=path.join((context.storageUri||context.globalStorageUri).fsPath,'java-workbench');
- const tasks=new BuildTasks({runner:runner||nativeTaskRunner(vscode),storagePath:storage,roots,tools:p=>({javaHome:p.jdk||java.getState().javaHome,gradleHome:config().get('gradleHome'),mavenHome:config().get('mavenHome')})});
+ const tasks=new BuildTasks({runner:runner||nativeTaskRunner(vscode,{output}),storagePath:storage,roots,tools:p=>({javaHome:p.jdk||java.getState().javaHome,gradleHome:config().get('gradleHome'),mavenHome:config().get('mavenHome')})});
  async function requestOnce(name,args,cancellation,operation){trusted();if(!ALLOWED.has(name))throw M.fail('Unsupported Java project command.');if(M.cancelled(cancellation))throw M.fail('Java project operation cancelled.');const explicit=operation?.kind==='explicit-project-configuration',timeout=explicit?Math.min(IMPORT_BUDGET_MS,operation.deadline-Date.now()):M.LIMITS.metadataMs,timeoutError=()=>M.fail(explicit?'Java project configuration exceeded its 180-second limit. Its job may still be running. Check Java output, then refresh project metadata instead of replaying import.':'Java project metadata timed out. Wait for import to finish and refresh again.');if(timeout<=0)throw timeoutError();const source=new vscode.CancellationTokenSource();let sub,timer,rejectCancelled;const interrupted=new Promise((_,reject)=>{rejectCancelled=reject;}),cancel=()=>{source.cancel();rejectCancelled(M.fail(explicit?'Java project configuration wait cancelled. Its job may still be running; inspect Java output and refresh metadata instead of replaying import.':'Java project operation cancelled.'));};if(cancellation?.onCancellationRequested)sub=cancellation.onCancellationRequested(cancel);else if(cancellation?.addEventListener){cancellation.addEventListener('abort',cancel,{once:true});sub={dispose:()=>cancellation.removeEventListener('abort',cancel)};}try{return await Promise.race([java.requestWorkspaceCommand?java.requestWorkspaceCommand(name,args,source.token):java.executeWorkspaceCommand(name,...args),interrupted,new Promise((_,reject)=>{timer=setTimeout(()=>{source.cancel();reject(timeoutError());},timeout);})]);}finally{clearTimeout(timer);sub?.dispose();source.dispose();}}
 
  async function request(name,args,cancellation,operation){for(;;){try{return await requestOnce(name,args,cancellation,operation);}catch(error){if(operation?.kind!=='explicit-project-configuration'||name!=='java.project.getSettings'||error?.code!==-32001||!/^Path must include project and resource name: \/[^/\r\n]{1,255}$/.test(error.message||''))throw error;await new Promise(resolve=>setTimeout(resolve,200));}}}
@@ -261,7 +261,17 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
   })),{title:'Run two to four saved configurations in listed order',canPickMany:true});
   return selected&&startRunGroup({configurations:selected});
  }
- const sourceTarget=registerSourceTarget(vscode,{trusted,request,generation:()=>generation});
+ const sourceTarget=registerSourceTarget(vscode,{trusted,generation:()=>generation,runGeneration:()=>launchGeneration,
+  request(name,args,cancellation){
+   const state=java.getState().state;
+   if(state&&state!=='running')throw M.fail('Start Java support and import the component before inspecting its source build target.');
+   return request(name,args,cancellation);
+  },
+  getTools:target=>({javaHome:target.javaHome||java.getState().javaHome,gradleHome:config().get('gradleHome'),mavenHome:config().get('mavenHome')}),
+  executePrepared(prepare,options){
+   if(busy)throw M.fail('Finish the current managed Java operation first.');
+   return tasks.executePrepared(prepare,options);
+  }});
  subscriptions.push(sourceTarget);
  const mavenResolution=registerMavenResolution(vscode,{trusted,ensureProject,generation:()=>generation,
   getTools:p=>({javaHome:p.jdk||java.getState().javaHome,mavenHome:config().get('mavenHome')}),
@@ -354,6 +364,7 @@ function registerJavaWorkbench(context,vscode,java,output,{runner}={}){let dispo
    refreshProjects:()=>refresh(),discoverTasks,runTask,track});
  subscriptions.push(mixed);
  refreshTree();let disposing;return{sourceTarget:{inspect:options=>track(()=>sourceTarget.inspect(options)),
-  show:(id,cancellation)=>track(()=>sourceTarget.show(id,cancellation)),openBuild:(id,index,cancellation)=>track(()=>sourceTarget.openBuild(id,index,cancellation))},mavenResolution:{inspect:options=>track(()=>mavenResolution.inspect(options)),
+  show:(id,cancellation)=>track(()=>sourceTarget.show(id,cancellation)),openBuild:(id,index,cancellation)=>track(()=>sourceTarget.openBuild(id,index,cancellation)),
+  reviewBuild:(id,options)=>track(()=>sourceTarget.reviewBuild(id,options)),runBuild:(id,options)=>track(()=>sourceTarget.runBuild(id,options))},mavenResolution:{inspect:options=>track(()=>mavenResolution.inspect(options)),
   openPom:(id,node,kind)=>track(()=>mavenResolution.openPom(id,node,kind)),showReport:(id,node)=>track(()=>mavenResolution.showReport(id,node))},mixedJvm:{buildAndIndex:options=>track(()=>mixed.buildAndIndex(options)),definition:options=>track(()=>mixed.definition(options)),run:options=>track(()=>mixed.run(options))},refresh:options=>track(()=>refresh(options)),getSnapshot,mainClasses,resyncProject:options=>track(()=>resyncProject(options)),discoverTasks:options=>track(()=>discoverTasks(options)),runTask:options=>track(()=>runTask(options)),saveRunConfiguration:options=>track(()=>saveRunConfiguration(options)),reviewModuleRuntimes:options=>track(()=>runtimeReview.inspect(options)),applyRuntimeChoice:(report,options)=>track(()=>runtimeReview.apply(report,options)),exportSharedRun:options=>track(()=>sharedRuns.exportSharedRun(options)),reviewSharedRun:options=>track(()=>sharedRuns.reviewSharedRun(options)),applySharedRun:options=>track(()=>sharedRuns.applySharedRun(options)),listRunConfigurations:()=>structuredClone(configurations().map(publicConfiguration)),deleteRunConfiguration:id=>track(()=>deleteRunConfiguration(id)),start:options=>track(()=>start(options)),startRunGroup:options=>track(()=>startRunGroup(options)),stop:options=>track(()=>stop(options)),getTreeChildren:id=>structuredClone(id?nodes.get(id)?.children||[]:treeRoots),async dispose(){if(disposing)return disposing;disposed=true;generation++;sharedRuns.clear();disposing=(async()=>{await mavenResolution.dispose();await stop();await tasks.dispose();await Promise.allSettled([...operations]);for(const s of subscriptions)s.dispose();})();return disposing;}};}
 module.exports={registerJavaWorkbench,CONFIG_KEY,SECRET_PREFIX,RUN_MARKER,COMMANDS,IMPORT_BUDGET_MS};

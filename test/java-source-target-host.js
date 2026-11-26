@@ -5,9 +5,9 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { until } = require('./helpers/stdio-lsp');
-const { populateTargets, buildTargets, runTargets } = require('./helpers/java-source-target-fixture');
+const { populateTargets, buildTargets, runTargets, executionCases } = require('./helpers/java-source-target-fixture');
 
-async function runJavaSourceTargetChecks(api, vscode, checks) {
+async function runJavaSourceTargetChecks(api, vscode, checks, { executeFromSource = false } = {}) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const owner = JSON.parse(await fs.readFile(path.join(path.dirname(spring.dbConfigPath), 'owner.json'), 'utf8'));
@@ -27,7 +27,7 @@ async function runJavaSourceTargetChecks(api, vscode, checks) {
     const tools = { javaHome: api.java.getState().javaHome, gradleHome: config.get('gradleHome'), mavenHome: config.get('mavenHome') };
     const cache = process.env.ROCKETBRAIN_SOURCE_TARGET_GRADLE_CACHE || process.env.GRADLE_USER_HOME;
     assert.ok(cache, 'Use the populated independent Gradle fixture cache.');
-    await buildTargets(root, tools, cache);
+    if (!executeFromSource) await buildTargets(root, tools, cache);
     const files = ['maven/pom.xml', 'gradle/build.gradle'].map(file => vscode.Uri.file(path.join(root, file)).toString());
     await api.java.executeWorkspaceCommand('java.project.changeImportedProjects', files, [], []);
     const service = api.java.workbench.sourceTarget;
@@ -60,10 +60,34 @@ async function runJavaSourceTargetChecks(api, vscode, checks) {
     const maven = await service.openBuild(records.maven.id, 0);
     assert.equal(maven.kind, 'reactor-module');
     assert.match(vscode.window.activeTextEditor.document.getText(vscode.window.activeTextEditor.selection), /<module>service<\/module>/u);
+    const builds = [];
+    if (executeFromSource) {
+      assert.equal(path.relative(cache, process.env.GRADLE_USER_HOME), '', 'Use the reviewed Gradle cache for spawned tasks.');
+      for (const [name, folder, selector, task, output, receipt] of executionCases) {
+        const file = path.join(root, output);
+        const executionReceipt = path.join(root, receipt);
+        // JDT may autobuild class files while importing. Only the reviewed build tool emits this receipt.
+        await assert.rejects(fs.access(executionReceipt), { code: 'ENOENT' });
+        const target = await service.inspect({ sourceUri: targets[name] });
+        const review = await service.reviewBuild(target.id);
+        assert.equal(path.relative(path.join(root, folder), review.cwd), '');
+        assert.equal(review.selector, selector);
+        assert.equal(review.task, task);
+        await assert.rejects(service.runBuild(review.id), /Approve.*explicitly/u);
+        await assert.rejects(fs.access(executionReceipt), { code: 'ENOENT' });
+        assert.equal((await service.runBuild(review.id, { allowProjectExecution: true })).state, 'succeeded');
+        // Maven can record an empty created-files list when JDT has already compiled the unit.
+        assert.equal((await fs.stat(executionReceipt)).isFile(), true);
+        assert.equal((await fs.readFile(file)).readUInt32BE(0), 0xcafebabe);
+        await assert.rejects(service.runBuild(review.id, { allowProjectExecution: true }), /already used/u);
+        builds.push({ selector, task, compiledClass: output, executionReceipt: receipt });
+      }
+      checks.push('One-use approved task reviews compile the exact Maven reactor and Gradle composite Java components.');
+    }
     const jdbc = await runTargets(root, tools, classpath, database, spring.dbEngine);
     checks.push('The installed source action distinguishes imported Maven reactor and renamed included Gradle projects and their main and test scopes.');
     checks.push('Opening the report and exact aggregation declaration uses read-only JDT queries. Both built Spring JDBC applications returned 42.');
-    return { selected: Object.keys(records), jdbc, exactDeclarationLinks: true, readOnlyInspection: true };
+    return { selected: Object.keys(records), jdbc, builds, exactDeclarationLinks: true, readOnlyInspection: true };
   } finally {
     try {
       const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => {
@@ -81,4 +105,7 @@ async function runJavaSourceTargetChecks(api, vscode, checks) {
   }
 }
 
-module.exports = { runJavaSourceTargetChecks };
+const runJavaSourceBuildExecutionChecks = (api, vscode, checks) =>
+  runJavaSourceTargetChecks(api, vscode, checks, { executeFromSource: true });
+
+module.exports = { runJavaSourceTargetChecks, runJavaSourceBuildExecutionChecks };

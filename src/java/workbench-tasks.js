@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{SaxesParser}=require('saxes');
 const M=require('./workbench-model'),{independentJavaExecutable}=require('./debug-runtime');
+const {execute:executeProcess}=require('./testing/provision');
 const PHASES=['clean','validate','compile','test-compile','test','package','verify','install'];
 const gradle = require('./gradle-task-catalog');
 function taskName(value,tool){if(typeof value!=='string'||value.length>256||!(tool==='gradle'?/^:?[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)*$/:/^[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+){0,3}$/).test(value))throw M.fail('The discovered build task has an unsupported name.');return value;}
@@ -9,7 +10,29 @@ function buildSpec(project,tools,names,{discovery,output,initFile}={}){const jdk
  if(project.tool==='gradle'){if(!tools.gradleHome||!path.isAbsolute(tools.gradleHome))throw M.fail('Set rocketbrain.java.gradleHome to an independent Gradle distribution.');const home=fs.realpathSync(tools.gradleHome),lib=path.join(home,'lib'),launchers=fs.readdirSync(lib).filter(n=>/^gradle-launcher-[\d.]+\.jar$/.test(n));if(launchers.length!==1)throw M.fail('The configured Gradle distribution has no unique launcher.');args=['-Dorg.gradle.java.home='+path.dirname(path.dirname(command)),...(discovery?['-D'+gradle.specification+'='+output]:[]),'-cp',path.join(lib,launchers[0]),'org.gradle.launcher.GradleMain','--no-daemon','--console=plain','--max-workers=2',...(discovery?['--no-configuration-cache','--init-script',initFile]:[]),...names.map(n=>taskName(n,'gradle'))];}
  else if(project.tool==='maven'){if(!tools.mavenHome||!path.isAbsolute(tools.mavenHome))throw M.fail('Set rocketbrain.java.mavenHome to an independent Apache Maven distribution.');const home=fs.realpathSync(tools.mavenHome),boot=path.join(home,'boot'),launchers=fs.readdirSync(boot).filter(n=>/^plexus-classworlds-[\d.]+\.jar$/.test(n));if(launchers.length!==1||!fs.existsSync(path.join(home,'bin','m2.conf')))throw M.fail('The configured Maven distribution has no unique classworlds launcher.');args=['-Dmaven.home='+home,'-Dclassworlds.conf='+path.join(home,'bin','m2.conf'),'-Dmaven.multiModuleProjectDirectory='+project.root,'-cp',path.join(boot,launchers[0]),'org.codehaus.plexus.classworlds.launcher.Launcher','--batch-mode','--no-transfer-progress',...names.map(n=>taskName(n,'maven'))];}
  else throw M.fail('This project has no supported Maven or Gradle build file.');return{command,args,env,cwd:project.root,label:project.name+' · '+names.join(' '),tool:project.tool,projectUri:project.uri};}
-function nativeTaskRunner(vscode){const active=new Set();let disposed=false;async function execute(spec,{cancellation,timeoutMs=M.LIMITS.buildMs}={}){if(disposed||!vscode.workspace.isTrusted)throw M.fail('Trust the workspace before executing project build code.');if(M.cancelled(cancellation))return{code:null,cancelled:true,terminationConfirmed:true};const nonce=crypto.randomUUID(),folder=vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(spec.projectUri)),task=new vscode.Task({type:'rocketbrain-java-workbench',id:nonce,tool:spec.tool},folder||vscode.TaskScope.Workspace,spec.label,'Rocketbrain',new vscode.ProcessExecution(spec.command,spec.args,{cwd:spec.cwd,env:spec.env}),[]);task.presentationOptions={reveal:vscode.TaskRevealKind.Always,panel:vscode.TaskPanelKind.Dedicated,clear:true};let execution,finish,timer,endTimer,sub,settled=false,cancelled=false,timedOut=false;const pending=new Promise(resolve=>{finish=resolve;}),record={terminate:()=>execution?.terminate(),stop:null,pending};active.add(record);const close=(code,extra={})=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(endTimer);sub?.dispose();processEnd.dispose();taskEnd.dispose();active.delete(record);finish({code,cancelled,timedOut,...extra});};const belongs=e=>e.execution===execution||e.execution?.task?.definition?.id===nonce;const processEnd=vscode.tasks.onDidEndTaskProcess(e=>{if(belongs(e))close(e.exitCode??null);}),taskEnd=vscode.tasks.onDidEndTask(e=>{if(belongs(e)&&!settled)endTimer=setTimeout(()=>close(null,{terminationConfirmed:true}),250);});const stop=()=>{if(settled)return;cancelled=true;record.terminate();if(!settled&&!endTimer)endTimer=setTimeout(()=>close(null,{cancelled:true,terminationConfirmed:false}),10000);};if(cancellation?.onCancellationRequested)sub=cancellation.onCancellationRequested(stop);else if(cancellation?.addEventListener){cancellation.addEventListener('abort',stop,{once:true});sub={dispose:()=>cancellation.removeEventListener('abort',stop)};}record.stop=stop;timer=setTimeout(()=>{timedOut=true;stop();},timeoutMs);try{execution=await vscode.tasks.executeTask(task);if(M.cancelled(cancellation)||disposed)stop();return await pending;}catch(error){close(null,{startFailed:true});throw error;}}
+async function executeReviewedSource(spec, { active, output, cancellation, timeoutMs }) {
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  let subscription;
+  if (cancellation?.onCancellationRequested) subscription = cancellation.onCancellationRequested(stop);
+  else if (cancellation?.addEventListener) {
+    cancellation.addEventListener('abort', stop, { once: true });
+    subscription = { dispose: () => cancellation.removeEventListener('abort', stop) };
+  }
+  if (M.cancelled(cancellation)) stop();
+  output?.appendLine?.(spec.label);
+  output?.show?.(true);
+  const pending = executeProcess(spec.command, spec.args, {
+    cwd: spec.cwd, env: spec.env, timeoutMs, cancellation: controller.signal,
+    onOutput: value => output?.append?.(value)
+  });
+  const record = { stop, pending };
+  active.add(record);
+  try { return await pending; }
+  finally { active.delete(record); subscription?.dispose(); }
+}
+
+function nativeTaskRunner(vscode,{output}={}){const active=new Set();let disposed=false;async function execute(spec,{cancellation,timeoutMs=M.LIMITS.buildMs}={}){if(disposed||!vscode.workspace.isTrusted)throw M.fail('Trust the workspace before executing project build code.');if(M.cancelled(cancellation))return{code:null,cancelled:true,terminationConfirmed:true};if(spec.reviewedSourceTarget===true)return executeReviewedSource(spec,{active,output,cancellation,timeoutMs});const nonce=crypto.randomUUID(),folder=vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(spec.projectUri)),task=new vscode.Task({type:'rocketbrain-java-workbench',id:nonce,tool:spec.tool},folder||vscode.TaskScope.Workspace,spec.label,'Rocketbrain',new vscode.ProcessExecution(spec.command,spec.args,{cwd:spec.cwd,env:spec.env}),[]);task.presentationOptions={reveal:vscode.TaskRevealKind.Always,panel:vscode.TaskPanelKind.Dedicated,clear:true};let execution,finish,timer,endTimer,sub,settled=false,cancelled=false,timedOut=false;const pending=new Promise(resolve=>{finish=resolve;}),record={terminate:()=>execution?.terminate(),stop:null,pending};active.add(record);const close=(code,extra={})=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(endTimer);sub?.dispose();processEnd.dispose();taskEnd.dispose();active.delete(record);finish({code,cancelled,timedOut,...extra});};const belongs=e=>e.execution===execution||e.execution?.task?.definition?.id===nonce;const processEnd=vscode.tasks.onDidEndTaskProcess(e=>{if(belongs(e))close(e.exitCode??null);}),taskEnd=vscode.tasks.onDidEndTask(e=>{if(belongs(e)&&!settled)endTimer=setTimeout(()=>close(null,{terminationConfirmed:true}),250);});const stop=()=>{if(settled)return;cancelled=true;record.terminate();if(!settled&&!endTimer)endTimer=setTimeout(()=>close(null,{cancelled:true,terminationConfirmed:false}),10000);};if(cancellation?.onCancellationRequested)sub=cancellation.onCancellationRequested(stop);else if(cancellation?.addEventListener){cancellation.addEventListener('abort',stop,{once:true});sub={dispose:()=>cancellation.removeEventListener('abort',stop)};}record.stop=stop;timer=setTimeout(()=>{timedOut=true;stop();},timeoutMs);try{execution=await vscode.tasks.executeTask(task);if(M.cancelled(cancellation)||disposed)stop();return await pending;}catch(error){close(null,{startFailed:true});throw error;}}
  return{execute,async stop(){for(const r of active)r.stop();await Promise.allSettled([...active].map(r=>r.pending));},async dispose(){disposed=true;await this.stop();}};}
 class BuildTasks {
   constructor({ runner, storagePath, tools, roots } = {}) {
@@ -82,12 +105,20 @@ class BuildTasks {
       throw M.fail('Build files changed after task discovery. Refresh and review the task again.');
     }
     if (catalog.guards.length) gradle.verifyInputs(catalog.guards, this.roots(project));
+    return this.executePrepared(() => ({ spec: buildSpec(project, this.tools(project), [task.name]),
+      task: task.name, projectId: project.id }), { allowProjectExecution, cancellation });
+  }
+
+  async executePrepared(prepare, { allowProjectExecution = false, cancellation } = {}) {
+    if (allowProjectExecution !== true) throw M.fail('Run project build code only through an explicit trusted build action.');
+    if (this.running) throw M.fail('A managed build task is already running.');
+    if (M.cancelled(cancellation)) throw M.fail('The reviewed Java build was cancelled before launch.');
     this.running = true;
     try {
-      const spec = buildSpec(project, this.tools(project), [task.name]);
+      const { spec, task, projectId } = prepare();
       const result = await this.runner.execute(spec, { cancellation, timeoutMs: M.LIMITS.buildMs });
       return {
-        id: crypto.randomUUID(), task: task.name, projectId: project.id,
+        id: crypto.randomUUID(), task, projectId,
         state: result.code === 0 ? 'succeeded' : result.cancelled ? 'cancelled' : 'failed',
         exitCode: result.code, terminationConfirmed: result.terminationConfirmed !== false
       };

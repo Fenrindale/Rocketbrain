@@ -5,6 +5,8 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { stripVTControlCharacters } = require('node:util');
+const { createHelmReleaseActions } = require('./kubernetes-helm');
+const { parseExecCredential, createCredentialReview } = require('./kubernetes-credential');
 
 const maxConfigBytes = 512 * 1024;
 const maxListBytes = 1024 * 1024;
@@ -18,6 +20,7 @@ const resourceKinds = { deployments: 'Deployment', services: 'Service', pods: 'P
 const allowedContext = new Set(['cluster', 'namespace', 'user', 'extensions']);
 const allowedCluster = new Set(['server', 'tls-server-name', 'certificate-authority-data', 'insecure-skip-tls-verify', 'extensions']);
 const allowedUser = new Set(['token', 'client-certificate-data', 'client-key-data', 'extensions']);
+const allowedExecUser = new Set(['exec', 'extensions']);
 
 function podName(value) {
   return typeof value === 'string' && value.length <= 253 && value.split('.').every(name => label.test(name));
@@ -151,9 +154,13 @@ function approvedContexts(configuration) {
     const { cluster, user, namespace = 'default' } = context;
     if (!namespaceName(namespace)) continue;
     const route = validCluster(clusters.get(cluster)?.cluster);
-    const auth = validCredential(users.get(user)?.user);
+    const userConfig = users.get(user)?.user;
+    const provider = onlyFields(userConfig, allowedExecUser) ? parseExecCredential(userConfig.exec) : null;
+    const auth = provider ? {} : validCredential(userConfig);
     if (!route || !auth) continue;
-    approved.set(name, { display: { name, cluster, user, namespace, server: route.server, tlsServerName: route['tls-server-name'] },
+    approved.set(name, { ...(provider && { provider }),
+      display: { name, cluster, user, namespace, server: route.server, tlsServerName: route['tls-server-name'],
+        ...(provider && { credential: 'reviewed-executable' }) },
       config: { apiVersion: 'v1', kind: 'Config', 'current-context': name,
         clusters: [{ name: cluster, cluster: route }], users: [{ name: user, user: auth }],
         contexts: [{ name, context: { cluster, user, namespace } }] } });
@@ -208,12 +215,23 @@ function listProjection(rows, project) {
   return { rows: visible, omitted: Math.max(0, rows.length - visible.length) };
 }
 
+function scaleIdentity(data, namespace, name) {
+  const metadata = data?.metadata;
+  const replicas = data?.spec?.replicas;
+  if (data?.apiVersion !== 'apps/v1' || resourceName(data, 'Deployment', namespace) !== name ||
+      typeof metadata.uid !== 'string' || !/^[a-zA-Z0-9-]{1,128}$/.test(metadata.uid) ||
+      typeof metadata.resourceVersion !== 'string' || !/^[a-zA-Z0-9._:-]{1,128}$/.test(metadata.resourceVersion) ||
+      !Number.isSafeInteger(replicas) || replicas < 0) throw Error('The selected Deployment has an incomplete scale identity.');
+  return { uid: metadata.uid, resourceVersion: metadata.resourceVersion, replicas };
+}
+
 async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = runCli) {
   const source = await readKubeconfig(file);
   const temporary = await fs.realpath(os.tmpdir());
   const folder = await fs.mkdtemp(path.join(temporary, 'rocketbrain-kubernetes-'));
   const stageFile = path.join(folder, 'source.kubeconfig');
   const configFile = path.join(folder, 'approved.kubeconfig');
+  const credential = createCredentialReview(folder);
   const active = new Set();
   const stop = new AbortController();
   let closing, contexts, selected, disposed = false;
@@ -247,7 +265,7 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
       'Kubeconfig inspection', maxConfigBytes, signal);
     contexts = approvedContexts(parseJson(raw, 'Kubeconfig inspection'));
     await fs.unlink(stageFile);
-    if (!contexts.size) throw Error('No supported TLS context with an embedded token or client certificate was found.');
+    if (!contexts.size) throw Error('No TLS context with an eligible embedded or executable credential was found.');
   } catch (error) {
     await close();
     throw error;
@@ -265,20 +283,52 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
   return {
     choices: () => [...contexts.values()].map(item => ({ ...item.display })),
     close,
-    async select(name) {
+    async reviewCredential(name) {
+      if (disposed || selected) throw Error('Choose a fresh Kubernetes context.');
+      const entry = contexts.get(name);
+      if (!entry) throw Error('Choose an eligible context from the reviewed kubeconfig.');
+      return entry.provider ? credential.review(entry.provider) : null;
+    },
+    async select(name, { credentialReview, approvedExecutable } = {}) {
       if (disposed || selected) throw Error('Choose one context for this Kubernetes session.');
       const entry = contexts.get(name);
       if (!entry) throw Error('Choose an eligible context from the reviewed kubeconfig.');
+      if (entry.provider && (approvedExecutable !== true || !credentialReview)) {
+        throw Error('Approve the reviewed credential executable for this context.');
+      }
       selected = entry.display;
       contexts.clear();
-      const written = fs.writeFile(configFile, JSON.stringify(entry.config), { flag: 'wx', mode: 0o600 });
+      const written = (async () => {
+        if (entry.provider) entry.config.users[0].user = await credential.stage(entry.provider, credentialReview);
+        if (disposed) throw Error('The Kubernetes explorer session is closed.');
+        await fs.writeFile(configFile, JSON.stringify(entry.config), { flag: 'wx', mode: 0o600 });
+      })();
       active.add(written);
       try { await written; }
       finally { active.delete(written); }
       if (disposed) throw Error('The Kubernetes explorer session is closed.');
+      const scaleReviews = new WeakMap();
+      const readScale = async (namespace, name, externalSignal) => scaleIdentity(
+        await fetchJson(namespace, ['get', 'deployment', name, '-o=json'], 'Deployment scale identity check', externalSignal),
+        namespace, name);
+      const scaleArgs = (name, replicas, previous) => ['scale', 'deployment', name, '--replicas=' + replicas,
+        '--current-replicas=' + previous.replicas, '--resource-version=' + previous.resourceVersion, '-o=name'];
+      const scale = async (namespace, name, replicas, previous, dryRun, externalSignal) => {
+        const response = await configured(namespace, [...scaleArgs(name, replicas, previous), ...(dryRun ? ['--dry-run=server'] : [])],
+          dryRun ? 'Deployment scale preview' : 'Deployment scale', 4096, externalSignal);
+        if (response.trim() !== 'deployment.apps/' + name) throw Error('Could not confirm the scale result. Refresh the Deployment before retrying.');
+      };
+      const helmRequest = (namespace, args, operation, limit, externalSignal) => {
+        if (!namespaceName(namespace)) throw Error('Choose a Kubernetes namespace.');
+        if (!helm) throw Error('Install Helm or set its executable to inspect releases.');
+        return call(helm, [...args, '--kubeconfig=' + configFile, '--kube-context=' + selected.name,
+          '--namespace=' + namespace], operation, limit, externalSignal);
+      };
+      const helmActions = createHelmReleaseActions(helmRequest);
       return {
         scope: { ...selected },
         close,
+        helm: helmActions,
         async namespaces(externalSignal) {
           const data = await fetchJson(undefined, ['get', 'namespaces', '-o=json', '--chunk-size=100'], 'Namespace listing', externalSignal);
           return listProjection(listRows(data), item => item?.kind === 'Namespace' && namespaceName(item.metadata?.name) ?
@@ -290,11 +340,33 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
           const data = await fetchJson(namespace, ['get', kind, '-o=json', '--chunk-size=100'], operation, externalSignal);
           return listProjection(listRows(data), item => describe(item, resourceKinds[kind], namespace));
         },
+        async reviewDeploymentScale(namespace, name, replicas, externalSignal) {
+          if (!namespaceName(namespace) || !podName(name) || !Number.isSafeInteger(replicas) || replicas < 0 || replicas > 1000) {
+            throw Error('Choose a listed Deployment and a replica count from 0 to 1000.');
+          }
+          const previous = await readScale(namespace, name, externalSignal);
+          if (previous.replicas === replicas) throw Error('The Deployment already has this replica count.');
+          await scale(namespace, name, replicas, previous, true, externalSignal);
+          const review = Object.freeze({ namespace, name, before: previous.replicas, after: replicas, uid: previous.uid,
+            resourceVersion: previous.resourceVersion, expires: Date.now() + 120000 });
+          scaleReviews.set(review, previous);
+          return review;
+        },
+        async applyDeploymentScale(review, { approved, signal: externalSignal } = {}) {
+          const previous = scaleReviews.get(review);
+          if (!previous || Date.now() >= review.expires || approved !== true) throw Error('Approve a current Deployment scale review.');
+          scaleReviews.delete(review);
+          const { namespace, name, after: replicas } = review;
+          const observed = await readScale(namespace, name, externalSignal);
+          if (observed.uid !== previous.uid || observed.resourceVersion !== previous.resourceVersion ||
+              observed.replicas !== previous.replicas) throw Error('The Deployment changed. Refresh and review the new replica count.');
+          await scale(namespace, name, replicas, previous, false, externalSignal);
+          const applied = await readScale(namespace, name, externalSignal);
+          return { namespace, name, desired: replicas, observed: applied.uid === review.uid ? applied.replicas : null };
+        },
         async releases(namespace, externalSignal) {
-          if (!namespaceName(namespace)) throw Error('Choose a Kubernetes namespace.');
-          if (!helm) throw Error('Install Helm or set its executable to list releases.');
-          const raw = await call(helm, ['list', '--kubeconfig=' + configFile, '--kube-context=' + selected.name,
-            '--namespace=' + namespace, '--output=json', '--max=' + (maxRows + 1)], 'Helm release listing', maxListBytes, externalSignal);
+          const raw = await helmRequest(namespace, ['list', '--output=json', '--max=' + (maxRows + 1)],
+            'Helm release listing', maxListBytes, externalSignal);
           const data = raw.trim() ? parseJson(raw, 'Helm release listing') : [];
           if (!Array.isArray(data)) throw Error('Helm returned an invalid release list.');
           return { ...listProjection(data, item => item?.namespace === namespace && namespaceName(item?.name) ?
