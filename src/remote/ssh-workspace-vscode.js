@@ -2,7 +2,8 @@
 
 const { open } = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
-const { connectWorkspace, maxFileBytes, uriScheme, digest } = require('./ssh-workspace');
+const { connectWorkspace, maxFileBytes, uriScheme, digest, partsFor } = require('./ssh-workspace');
+const { createSshFileWatch } = require('./ssh-file-watch');
 const { registerSshProcesses } = require('./ssh-processes-vscode');
 const { registerSshJavaDebug } = require('./ssh-java-debug-vscode');
 const { registerSshJavaCompile } = require('./ssh-java-compile-vscode');
@@ -32,10 +33,20 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
   const pending = new Map();
   let connection, processes, javaDebug, javaCompile, mavenBuild, gradleBuild;
   let epoch = 0;
+  const documents = new Map();
+  const changes = { created: vscode.FileChangeType.Created, changed: vscode.FileChangeType.Changed,
+    deleted: vscode.FileChangeType.Deleted };
+  const watcher = createSshFileWatch({ connection:() => vscode.workspace.isTrusted ? connection : undefined,
+    notify(items) {
+      files.fire(items.map(({ uri, type }) => ({ uri, type:changes[type] })));
+      tree.fire();
+    } });
 
   function retire() {
     epoch++;
     pending.clear();
+    watcher.reset();
+    documents.clear();
     processes?.retire();
     void javaDebug?.retire();
     javaCompile?.retire();
@@ -44,6 +55,19 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
     connection?.close();
     connection = undefined;
     tree.fire();
+  }
+  function watch(uri) {
+    try {
+      requireConnection(uri);
+      partsFor(uri.path);
+      return watcher.watch(uri);
+    } catch { return { dispose() {} }; }
+  }
+  function watchDocument(document) {
+    const { uri } = document;
+    if (uri.scheme === uriScheme && uri.authority === connection?.authority && !documents.has(document)) {
+      documents.set(document, watch(uri));
+    }
   }
   function requireConnection(uri) {
     if (!vscode.workspace.isTrusted || !connection || uri?.scheme !== uriScheme ||
@@ -83,7 +107,7 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
   const readOnly = () => { throw vscode.FileSystemError.NoPermissions('Use the reviewed SSH upload command.'); };
   const provider = {
     onDidChangeFile: files.event,
-    watch: () => ({ dispose() {} }),
+    watch,
     stat(uri) {
       return operation(async () => {
         const { kind, size, modified } = await requireConnection(uri).stat(uri.path);
@@ -167,6 +191,11 @@ function registerSshWorkspace(context, vscode, { getLocalJava = () => undefined 
   gradleBuild = registerSshBuild(vscode, command, requireConnection, gradle);
   context.subscriptions.push(tree, files, { dispose: retire }, processes, javaDebug, javaCompile, mavenBuild, gradleBuild,
     vscode.workspace.registerFileSystemProvider(uriScheme, provider, { isReadonly: true }),
+    vscode.workspace.onDidOpenTextDocument(watchDocument),
+    vscode.workspace.onDidCloseTextDocument(document => {
+      documents.get(document)?.dispose();
+      documents.delete(document);
+    }),
     vscode.window.registerTreeDataProvider('rocketbrain.sshWorkspace', treeProvider),
     command('attach', async () => {
       const profiles = vscode.workspace.getConfiguration('rocketbrain.sshWorkspace').get('profiles', []);

@@ -9,15 +9,20 @@ def name_ok(s):
     return isinstance(s, str) and s not in ("", ".", "..") and len(s) <= 255 and not any(
         ord(c) < 32 or c in "/\\:" for c in s)
 
-def identify(p):
+def identify(p, stamped=False):
     info = p.lstat()
     if stat.S_ISLNK(info.st_mode) or (getattr(info, "st_file_attributes", 0) & 0x400):
         raise ValueError("indirection")
     if stat.S_ISREG(info.st_mode):
-        return {"kind": "file", "size": info.st_size, "modified": int(info.st_mtime * 1000)}
-    if stat.S_ISDIR(info.st_mode):
-        return {"kind": "directory", "size": 0, "modified": int(info.st_mtime * 1000)}
-    raise ValueError("unsupported")
+        result = {"kind": "file", "size": info.st_size, "modified": int(info.st_mtime * 1000)}
+    elif stat.S_ISDIR(info.st_mode):
+        result = {"kind": "directory", "size": 0, "modified": int(info.st_mtime * 1000)}
+    else:
+        raise ValueError("unsupported")
+    if stamped:
+        identity = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        result["stamp"] = hashlib.sha256(repr(identity).encode("ascii")).hexdigest()
+    return result
 
 def read_bytes(p):
     if identify(p)["kind"] != "file":
@@ -31,6 +36,32 @@ def read_bytes(p):
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
+def checked_path(root, parts):
+    if not isinstance(parts, list) or len(parts) > 32 or not all(map(name_ok, parts)):
+        raise ValueError("invalid-path")
+    for part in parts:
+        root = root / part
+        identify(root)
+    return root
+
+def watch_states(root, targets):
+    if not isinstance(targets, list) or not 1 <= len(targets) <= 64:
+        raise ValueError("invalid-data")
+    states = []
+    for parts in targets:
+        try:
+            entry = identify(checked_path(root, parts), stamped=True)
+            states.append({"kind": entry["kind"], "stamp": entry["stamp"]})
+        except (FileNotFoundError, NotADirectoryError):
+            states.append(None)
+        except ValueError as reason:
+            if str(reason) not in ("indirection", "unsupported"):
+                raise
+            states.append(None)
+        except OSError:
+            states.append(False)
+    return states
+
 def run(request):
     root = pathlib.Path(request["root"])
     if not root.is_absolute() or identify(root)["kind"] != "directory":
@@ -38,16 +69,12 @@ def run(request):
     root = root.resolve(strict=True)
     if request.get("resolvedRoot") not in (None, str(root)):
         raise ValueError("changed-root")
-    parts = request.get("parts", [])
-    if not isinstance(parts, list) or len(parts) > 32 or not all(map(name_ok, parts)):
-        raise ValueError("invalid-path")
-    p = root
-    for part in parts:
-        p = p / part
-        identify(p)
     operation = request["operation"]
+    p = checked_path(root, request.get("parts", []))
     if operation == "connect":
         return {"root": str(root)}
+    if operation == "observe":
+        return watch_states(root, request.get("targets"))
     if operation == "stat":
         return identify(p)
     if operation == "list":

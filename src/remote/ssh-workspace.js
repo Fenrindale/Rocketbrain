@@ -7,6 +7,7 @@ const { createPinnedSshPeer, createSshProcesses } = require('./ssh-processes');
 
 const maxFileBytes = 2 * 1024 * 1024;
 const maxFrameBytes = 4 * 1024 * 1024;
+const maximumWatchPaths = 64;
 const uriScheme = 'rocketbrain-ssh';
 const digest = data => createHash('sha256').update(data).digest('hex');
 const sourceErrors = {
@@ -23,6 +24,7 @@ const sourceErrors = {
 };
 
 function partsFor(value) {
+  if (typeof value !== 'string') throw Error('The remote path contains an unsupported segment.');
   const parts = value === '/' ? [] : value.split('/').slice(1);
   if (!value.startsWith('/') || parts.length > 32 || parts.some(part =>
     !part || part === '.' || part === '..' || part.length > 255 || /[\\:\x00-\x1f]/.test(part))) {
@@ -119,6 +121,18 @@ async function connectWorkspace(raw) {
     openProcess: (kind, approval) => processes.open(kind, approval),
     stat(value) { return request('stat', partsFor(value)); },
     list(value) { return request('list', partsFor(value)); },
+    async observe(values) {
+      if (!Array.isArray(values) || !values.length || values.length > maximumWatchPaths) {
+        throw Error('Watch up to 64 exact SSH paths together.');
+      }
+      const result = await request('observe', [], { targets: values.map(partsFor) });
+      if (!Array.isArray(result) || result.length !== values.length || result.some(state=>
+        state !== null && state !== false &&
+        (!['file','directory'].includes(state?.kind) || !/^[a-f0-9]{64}$/u.test(state?.stamp || '')))) {
+        throw Error('The remote SSH file observation was incomplete.');
+      }
+      return result;
+    },
     async read(value) {
       const { content, sha256 } = await request('read', partsFor(value));
       const data = Buffer.from(content, 'base64');
@@ -142,4 +156,4 @@ async function connectWorkspace(raw) {
   });
 }
 
-module.exports = { connectWorkspace, maxFileBytes, uriScheme, digest };
+module.exports = { connectWorkspace, maxFileBytes, maximumWatchPaths, uriScheme, digest, partsFor };
