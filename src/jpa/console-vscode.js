@@ -21,7 +21,13 @@ const ERROR_NAMES = {
   fetch_not_initialized:'Hibernate did not return an initialized value for the exact requested field.',
   fetch_root_limit:'Use at most 25 root rows for a fetch snapshot.',
   fetch_joined_row_limit:'The fetch join exceeded the 512 joined-row limit. Narrow its filter.',
-  scalar_projection_required:'Select scalar attributes or scalar aggregates explicitly.',
+  scalar_projection_required:'Select scalar attributes or aggregates, or enable consoleEntityProjections for reviewed Hibernate entity fields.',
+  unsupported_entity_projection_provider:'Reviewing entity fields requires the supported Hibernate 7.4 runtime.',
+  unsupported_entity_projection_shape:'Select one root or to-one joined entity alias without grouping, collection joins or fetches.',
+  unsupported_entity_projection_mapping:'The selected entity needs one basic identifier and supported scalar column mappings.',
+  entity_projection_parameter_changed:'The scalar field preview would change the Hibernate parameter types.',
+  entity_review_required:'Review the entity fields in the current Hibernate factory before running the selection.',
+  entity_projection_changed:'The entity mapping, factory or selection changed after review. Describe it again.',
   unsupported_parameter_type:'Use scalar parameters whose types Hibernate can infer.',
   invalid_parameter_value:'A parameter does not match its Hibernate type.',
   parameter_keys_mismatch:'Provide each typed parameter exactly once.',
@@ -46,11 +52,17 @@ function fetchSignature(report) {
     [item.path,item.targetType,item.toMany,item.collection,item.columns.map(column=>[column.alias,column.javaType])])]):null;
 }
 
+function entitySignature(report) {
+  const entity=report.entityProjection;
+  return entity?JSON.stringify([entity,report.columns.map(column=>[column.alias,column.javaType])]):null;
+}
+
 function htmlForResult(result,query) {
   const nonce=crypto.randomBytes(18).toString('base64');
   const headings=columns=>columns.map(({alias,javaType},index)=>'<th scope="col"><span>'+escape(alias||'Column '+(index+1))+'</span><small>'+escape(javaType)+'</small></th>').join('');
   const cells=row=>row.map(value=>value===null?'<td><em>NULL</em></td>':'<td>'+escape(value)+'</td>').join('');
   const fetch=fetchScope(result);
+  const entity=result.entityProjection;
   function association(path,item){
     if(item.state==='null')return '<td><em>NULL</em></td>';
     if(!item.rows.length)return '<td><em>Empty collection</em></td>';
@@ -58,11 +70,14 @@ function htmlForResult(result,query) {
     return '<td><details><summary>'+note+'</summary><table aria-label="'+escape(path.association)+'"><thead><tr>'+headings(path.columns)+
       '</tr></thead><tbody>'+item.rows.map(row=>'<tr>'+cells(row)+'</tr>').join('')+'</tbody></table></details></td>';
   }
-  const body=result.rows.map((row,index)=>'<tr>'+cells(row)+(fetch?fetch.associations.map(path=>association(path,path.linked[index])).join(''):'')+'</tr>').join('');
+  const body=result.rows.map((row,index)=>entity&&row[0]===null
+    ?'<tr><td colspan="'+result.columns.length+'"><em>No matching entity</em></td></tr>'
+    :'<tr>'+cells(row)+(fetch?fetch.associations.map(path=>association(path,path.linked[index])).join(''):'')+'</tr>').join('');
   const columns=headings(result.columns)+(fetch?fetch.associations.map(path=>'<th scope="col"><span>'+escape(path.association)+'</span><small>'+
     escape(path.targetType+(path.toMany?'[]':''))+'</small></th>').join(''):'');
   const size=result.rowCount+' row'+(result.rowCount===1?'':'s')+(result.hasMore?' · more rows available':'');
-  const scope=fetch?' · '+fetch.rootType+' · '+fetch.joinedRows+' joined rows':'';
+  const scope=fetch?' · '+fetch.rootType+' · '+fetch.joinedRows+' joined rows'
+    :entity?' · '+entity.javaType+' scalar fields':'';
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'"><title>JPQL Results</title>
   <style nonce="${nonce}">
@@ -134,6 +149,7 @@ function registerJpaConsole(vscode,{source,target,command}) {
     const description=executable(await connection.client.describeSelect(query,factoryId));
     connection.assertCurrent();
     const fetch=fetchScope(description);
+    const entity=description.entityProjection;
     let values=input?.values, limit=input?.limit??(fetch?fetch.maxRoots:100);
     if (!input) {
       values=Object.create(null);
@@ -153,13 +169,17 @@ function registerJpaConsole(vscode,{source,target,command}) {
       limit=Number(rows);
       const accepted=await vscode.window.showWarningMessage('Run this JPQL selection in '+factoryId+'?',{modal:true,
         detail:'Up to '+limit+' rows in a read-only MySQL or MariaDB transaction. The selected application mapping and provider configuration apply.'+
-          (fetch?'\nFetched associations\n'+fetch.associations.map(item=>item.path).join('\n')+'\nOnly initialized managed fields are shown.':'')+'\n\n'+query},'Run SELECT');
+          (fetch?'\nFetched associations\n'+fetch.associations.map(item=>item.path).join('\n')+'\nOnly initialized managed fields are shown.':'')+
+          (entity?'\n'+entity.javaType+' scalar fields\n'+description.columns.map(column=>entity.alias+'.'+column.alias+' · '+column.javaType).join('\n'):'')+
+          '\n\n'+query},'Run SELECT');
       if (accepted!=='Run SELECT') return;
       if (editor.document.version!==version) throw new ObserverError('STALE','The editor query changed during review. Run again.');
     }
     connection.assertCurrent();
-    const result=executable(await connection.client.select(query,factoryId,values,limit));
+    const result=executable(await (entity?connection.client.select(query,factoryId,values,limit,entity.review):
+      connection.client.select(query,factoryId,values,limit)));
     if(fetchSignature(result)!==fetchSignature(description))throw new ObserverError('STALE','The fetched associations changed after review. Describe the selection again.');
+    if(entitySignature(result)!==entitySignature(description))throw new ObserverError('STALE','The selected Hibernate entity mapping changed after review.');
     return show(result,query,connection);
   }
   command('rocketbrain.jpa.console.open',open);

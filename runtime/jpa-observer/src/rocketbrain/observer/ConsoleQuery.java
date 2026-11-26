@@ -39,9 +39,10 @@ final class ConsoleQuery {
         String key() { return name != null ? ":" + name : "?" + position; }
         Object selector() { return name != null ? name : position; }
     }
-    record Prepared(String query,List<Map<String,Object>> columns,List<Parameter> parameters,Map<String,Object> description,ConsoleFetchSnapshot.Plan fetch) {
+    record Prepared(String query,List<Map<String,Object>> columns,List<Parameter> parameters,Map<String,Object> description,
+                    ConsoleFetchSnapshot.Plan fetch,ConsoleEntityProjection.Plan entity) {
         Prepared(String query,List<Map<String,Object>> columns,List<Parameter> parameters,Map<String,Object> description) {
-            this(query,columns,parameters,description,null);
+            this(query,columns,parameters,description,null,null);
         }
     }
     record Shape(ConsoleSelectShape graph,ConsoleFetchSnapshot.Clause fetch) {}
@@ -51,15 +52,29 @@ final class ConsoleQuery {
         Refusal(String code) { super(code); this.code = code; }
     }
 
-    static Prepared describe(Object factory,String text,boolean fetchEnabled) {
+    static Prepared describe(Object factory,String text,boolean fetchEnabled,boolean entityEnabled) {
         Shape shape=inspect(text,false,fetchEnabled);
         Map<String,Object> semantic;
         ConsoleFetchSnapshot.Plan fetch=null;
+        ConsoleEntityProjection.Plan entity=null;
         try {
             Object statement=HibernateAccess.translate(factory,text);
             semantic=HibernateAccess.describeStatement(statement);
             if (shape.graph().advanced()) ConsoleSqmShape.assertCompatible(statement);
             if (shape.fetch()!=null) fetch=ConsoleFetchSnapshot.inspect(factory,statement,shape.fetch());
+            List<Map<String,Object>> initial=descriptors(semantic.get("selectionTypes"),MAX_COLUMNS);
+            if (entityEnabled && fetch==null && initial.size()==1 && !safeType((String)initial.getFirst().get("javaType"))) {
+                entity=ConsoleEntityProjection.plan(factory,statement,text,shape.graph().advanced());
+                if(entity!=null){
+                    inspect(entity.query(),false);
+                    Map<String,Object> scalar=HibernateAccess.describeStatement(HibernateAccess.translate(factory,entity.query()));
+                    if(!Set.copyOf(descriptors(semantic.get("parameters"),MAX_PARAMETERS)).equals(
+                            Set.copyOf(descriptors(scalar.get("parameters"),MAX_PARAMETERS)))){
+                        throw new Refusal("entity_projection_parameter_changed");
+                    }
+                    semantic=scalar;
+                }
+            }
         } catch(Refusal rejected) { throw rejected; }
         catch(Throwable failure) { throw new Refusal("provider_validation_failed"); }
         if (!"known".equals(semantic.get("state"))) throw new Refusal("provider_validation_failed");
@@ -69,6 +84,7 @@ final class ConsoleQuery {
         for (Map<String,Object> column : columns) {
             if (!(column.get("javaType") instanceof String type) || !SAFE_TYPES.contains(type)) throw new Refusal("scalar_projection_required");
         }
+        if(entity!=null)columns=entity.reviewedColumns(columns);
         List<Parameter> parameters = new ArrayList<>();
         for (Map<String,Object> item : descriptors(semantic.get("parameters"),MAX_PARAMETERS)) {
             Object type = item.get("javaType"), name = item.get("name"), ordinal = item.get("position");
@@ -87,7 +103,8 @@ final class ConsoleQuery {
         description.put("parameters",parameters.stream().map(parameter->Map.of("key",parameter.key(),"javaType",parameter.javaType())).toList());
         description.put("sqlExecuted",false);
         if(fetch!=null)fetch.describeInto(description);
-        return new Prepared(text,List.copyOf(columns),List.copyOf(parameters),description,fetch);
+        if(entity!=null)description.put("entityProjection",entity.description());
+        return new Prepared(entity==null?text:entity.query(),List.copyOf(columns),List.copyOf(parameters),description,fetch,entity);
     }
 
     static List<Bound> bind(Prepared prepared,Object input) {
@@ -202,9 +219,15 @@ final class ConsoleQuery {
             for (int i=0;i<cells.length;i++) {
                 encoded.add(budget.scalar(cells[i],(String)prepared.columns().get(i).get("javaType")));
             }
+            if(prepared.entity()!=null && encoded.getFirst()==null &&
+                    (!prepared.entity().nullable() || encoded.stream().anyMatch(value -> value != null))){
+                throw new Refusal("unsupported_result_shape");
+            }
             rows.add(encoded);
         }
-        return completed(prepared.columns(),rows,values.size()>maximum);
+        var response=completed(prepared.columns(),rows,values.size()>maximum);
+        if(prepared.entity()!=null)response.put("entityProjection",prepared.entity().description());
+        return response;
     }
 
     static Map<String,Object> completed(List<Map<String,Object>> columns,List<List<Object>> rows,boolean hasMore) {

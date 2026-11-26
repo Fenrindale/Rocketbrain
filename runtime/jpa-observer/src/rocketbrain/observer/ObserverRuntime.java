@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class ObserverRuntime {
     public static final String VERSION="0.14.0";
     private static volatile HttpServer server;private static volatile ThreadPoolExecutor executor;
-    private static byte[] expectedAuthorization;private static boolean queries,validate,consoleSelect,consoleFetchSnapshots;private static int maxEvents=128,maxQueryChars=4096;
+    private static byte[] expectedAuthorization;private static boolean queries,validate,consoleSelect,consoleFetchSnapshots,consoleEntityProjections;private static int maxEvents=128,maxQueryChars=4096;
     private static final ArrayDeque<Map<String,Object>> events=new ArrayDeque<>();private static final List<String> warnings=new ArrayList<>(),instrumented=new ArrayList<>();
     private static final List<Factory> factories=new ArrayList<>();private static final AtomicLong ids=new AtomicLong(),eventIds=new AtomicLong();private static long dropped;
     private static final ThreadLocal<Frame> queryFrames=new ThreadLocal<>(),translationFrames=new ThreadLocal<>();private static final ThreadLocal<Origin> origins=new ThreadLocal<>();private static final Semaphore requests=new Semaphore(2),consoleRequests=new Semaphore(1);
@@ -40,11 +40,12 @@ public final class ObserverRuntime {
     private record Origin(String kind,String factoryId){}
     private static final class Frame {int depth=1;final String query,factoryId,origin;final long started=System.nanoTime();Frame(String query,String factoryId,String origin){this.query=query;this.factoryId=factoryId;this.origin=origin;}}
     static synchronized void start(Map<String,Object> config)throws Exception {
-        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace","feignContractTrace");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
+        Set<String> allowed=Set.of("tokenFile","descriptorFile","port","queries","validate","maxEvents","maxQueryChars","performance","consoleSelect","consoleFetchSnapshots","consoleEntityProjections","securityTrace","securityMethodTrace","securityTraceRoles","securityReactiveTrace","feignContractTrace");if(!allowed.containsAll(config.keySet()))throw new IllegalArgumentException("Unknown observer option");
         Path tokenPath=Path.of(requiredText(config,"tokenFile"));if(!tokenPath.isAbsolute()||!Files.isRegularFile(tokenPath,LinkOption.NOFOLLOW_LINKS)||Files.size(tokenPath)>256)throw new IllegalArgumentException("Invalid token file");
         String token=Files.readString(tokenPath,StandardCharsets.UTF_8).trim();if(!token.matches("[A-Za-z0-9_-]{32,128}"))throw new IllegalArgumentException("Invalid bearer token");expectedAuthorization=("Bearer "+token).getBytes(StandardCharsets.US_ASCII);
         queries=flag(config,"queries");validate=flag(config,"validate");consoleSelect=flag(config,"consoleSelect");PerformanceRuntime.configure(flag(config,"performance"));maxEvents=integer(config,"maxEvents",128,1,256);maxQueryChars=integer(config,"maxQueryChars",4096,64,16384);int port=integer(config,"port",0,0,65535);
         consoleFetchSnapshots=flag(config,"consoleFetchSnapshots")&&consoleSelect;
+        consoleEntityProjections=flag(config,"consoleEntityProjections")&&consoleSelect;
         SecurityTraceRuntime.configure(flag(config,"securityTrace"));
         ReactiveSecurityTrace.configure(flag(config,"securityReactiveTrace"));
         FeignContractTrace.configure(flag(config,"feignContractTrace"));
@@ -56,6 +57,7 @@ public final class ObserverRuntime {
         Thread starter=new Thread(next::start,"Rocketbrain observer starter");starter.setDaemon(true);starter.start();starter.join();
         Map<String,Object> descriptor=new LinkedHashMap<>();descriptor.put("agentVersion",VERSION);descriptor.put("baseUrl","http://127.0.0.1:"+next.getAddress().getPort());descriptor.put("processId",ProcessHandle.current().pid());descriptor.put("queryEvents",queries);descriptor.put("semanticValidation",validate);descriptor.put("consoleSelectEnabled",consoleSelect);descriptor.put("performanceCapture",PerformanceRuntime.enabled());descriptor.put("javaFeature",Runtime.version().feature());
         descriptor.put("consoleFetchSnapshotsEnabled",consoleFetchSnapshots);
+        descriptor.put("consoleEntityProjectionsEnabled",consoleEntityProjections);
         descriptor.put("securityTraceEnabled",SecurityTraceRuntime.enabled());
         descriptor.put("securityReactiveTraceEnabled",ReactiveSecurityTrace.enabled());
         descriptor.put("feignContractTraceEnabled",FeignContractTrace.enabled());
@@ -93,7 +95,7 @@ public final class ObserverRuntime {
     private static void finish(ThreadLocal<Frame> local,String operation,String state,Map<String,Object> metadata,Throwable error){Frame frame=local.get();if(frame==null)return;if(--frame.depth>0)return;local.remove();Map<String,Object> event=new LinkedHashMap<>();event.put("id",eventIds.incrementAndGet());event.put("at",Instant.now().toString());event.put("operation",operation);event.put("state",state);event.put("origin",frame.origin);event.put("factoryId",frame.factoryId);event.put("query",frame.query);event.put("queryTruncated",frame.query!=null&&frame.query.length()==maxQueryChars);event.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(System.nanoTime()-frame.started));event.put("metadata",metadata);event.put("observerExecutedSql",false);event.put("boundParameterValuesRetained",false);if(error!=null){event.put("errorClass",error.getClass().getName());event.put("message",cut(error.getMessage(),1024));}synchronized(ObserverRuntime.class){if(events.size()>=maxEvents){events.removeFirst();dropped++;}events.addLast(event);}}
     private static Map<String,Object> snapshot(){List<Factory> references;List<Map<String,Object>> captured;List<String> problems,classes;long omitted;synchronized(ObserverRuntime.class){references=List.copyOf(factories);captured=List.copyOf(events);problems=List.copyOf(warnings);classes=List.copyOf(instrumented);omitted=dropped;}
         List<Map<String,Object>> providerMetadata=new ArrayList<>();for(Factory entry:references){Object factory=entry.value.get();if(factory==null)continue;Map<String,Object> item=new LinkedHashMap<>(HibernateAccess.snapshot(factory));item.put("id",entry.id);providerMetadata.add(item);}
-        Map<String,Object> result=new LinkedHashMap<>();result.put("schemaVersion",1);result.put("agentVersion",VERSION);result.put("processId",ProcessHandle.current().pid());result.put("state",providerMetadata.isEmpty()?"waiting":"observed");result.put("capturedAt",Instant.now().toString());result.put("capabilities",Map.of("queries",queries,"validate",validate));result.put("queryEventsEnabled",queries);result.put("semanticValidationEnabled",validate);result.put("consoleSelectEnabled",consoleSelect);result.put("consoleFetchSnapshotsEnabled",consoleFetchSnapshots);result.put("factories",providerMetadata);result.put("performance",PerformanceRuntime.snapshot(classes));result.put("events",captured);result.put("droppedEvents",omitted);result.put("instrumentedClasses",classes);result.put("warnings",problems);result.put("boundParameterValuesRetained",false);result.put("observerExecutedSql",false);return result;
+        Map<String,Object> result=new LinkedHashMap<>();result.put("schemaVersion",1);result.put("agentVersion",VERSION);result.put("processId",ProcessHandle.current().pid());result.put("state",providerMetadata.isEmpty()?"waiting":"observed");result.put("capturedAt",Instant.now().toString());result.put("capabilities",Map.of("queries",queries,"validate",validate));result.put("queryEventsEnabled",queries);result.put("semanticValidationEnabled",validate);result.put("consoleSelectEnabled",consoleSelect);result.put("consoleFetchSnapshotsEnabled",consoleFetchSnapshots);result.put("consoleEntityProjectionsEnabled",consoleEntityProjections);result.put("factories",providerMetadata);result.put("performance",PerformanceRuntime.snapshot(classes));result.put("events",captured);result.put("droppedEvents",omitted);result.put("instrumentedClasses",classes);result.put("warnings",problems);result.put("boundParameterValuesRetained",false);result.put("observerExecutedSql",false);return result;
     }
     private static Object factory(String selected){synchronized(ObserverRuntime.class){List<Factory> live=factories.stream().filter(f->f.value.get()!=null).toList();if(selected==null&&live.size()==1)return live.getFirst().value.get();for(Factory item:live)if(item.id.equals(selected))return item.value.get();return null;}}
     private static void handle(HttpExchange exchange)throws IOException {boolean acquired=false;try {
@@ -142,7 +144,10 @@ public final class ObserverRuntime {
         byte[] bytes=exchange.getRequestBody().readNBytes(32769);
         if(bytes.length>32768){reply(exchange,413,Map.of("error","request_limit"));return;}
         Map<String,Object> body=Json.object(new String(bytes,StandardCharsets.UTF_8));
-        if(!(run?Set.of("query","factoryId","values","limit"):Set.of("query","factoryId")).equals(body.keySet()))
+        boolean hasReview=body.containsKey("entityReview");
+        if(!(run?(hasReview?Set.of("query","factoryId","values","limit","entityReview"):Set.of("query","factoryId","values","limit")):
+                Set.of("query","factoryId")).equals(body.keySet()) ||
+                hasReview && (!(body.get("entityReview") instanceof String review) || !review.matches("[a-f0-9]{64}")))
             throw new IllegalArgumentException("Invalid console request options");
         String query=requiredText(body,"query"), id=requiredText(body,"factoryId");
         if(query.length()>Math.min(ConsoleQuery.MAX_QUERY,maxQueryChars)||!id.matches("factory-[1-9][0-9]{0,15}"))
@@ -155,7 +160,10 @@ public final class ObserverRuntime {
         if(!consoleRequests.tryAcquire()){reply(exchange,429,Map.of("error","console_busy"));return;}
         origins.set(new Origin("explicit-jpql-console",id));
         try {
-            ConsoleQuery.Prepared prepared=ConsoleQuery.describe(factory,query,consoleFetchSnapshots);
+            ConsoleQuery.Prepared prepared=ConsoleQuery.describe(factory,query,consoleFetchSnapshots,consoleEntityProjections);
+            if(run && prepared.entity()!=null && !hasReview) throw new ConsoleQuery.Refusal("entity_review_required");
+            if(run && hasReview && (prepared.entity()==null||!prepared.entity().review().equals(body.get("entityReview"))))
+                throw new ConsoleQuery.Refusal("entity_projection_changed");
             Map<String,Object> result=run?ConsoleJdbc.select(factory,prepared,ConsoleQuery.bind(prepared,body.get("values")),((Long)requestedLimit).intValue()):prepared.description();
             result.put("factoryId",id);
             reply(exchange,200,result);
