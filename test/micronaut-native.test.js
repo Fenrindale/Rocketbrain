@@ -6,7 +6,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { COMMANDS } = require('../src/java/micronaut-vscode');
 const { micronautMavenProject } = require('../src/java/micronaut-model');
-const { createMicronautNative, buildFlags } = require('../src/java/micronaut-native');
+const { createMicronautNative, buildFlags, goals } = require('../src/java/micronaut-native');
 const manifest = require('../package.json');
 
 test('Micronaut Native Image targets the saved Maven artifact ID and projects only fixed packaging flags', () => {
@@ -17,8 +17,9 @@ test('Micronaut Native Image targets the saved Maven artifact ID and projects on
   assert.equal(selected.imageName,'micronaut-native-linux');
   assert.equal(selected.platformVersion,'5.2.8');
   assert.throws(()=>micronautMavenProject({...project,tool:'gradle'},{native:true}),/Maven Micronaut application/u);
-  assert.deepEqual(buildFlags('/local workspace/target/native-a'),['--non-recursive','-Dpackaging=native-image','-DskipTests',
-    '-DoutputDir=/local workspace/target/native-a','-Dmicronaut.native-image.jib.enabled=false','-DsharedLibrary=false']);
+  assert.deepEqual(goals,['package','org.graalvm.buildtools:native-maven-plugin:compile-no-fork']);
+  assert.deepEqual(buildFlags('/local workspace/target/native-a'),['--non-recursive','-DskipTests',
+    '-DoutputDir=/local workspace/target/native-a','-DnativeDryRun=false','-DsharedLibrary=false']);
   for (const name of [COMMANDS.buildNative,COMMANDS.runNative]) {
     assert.equal(manifest.contributes.commands.find(command=>command.command===name).enablement,'isWorkspaceTrusted');
   }

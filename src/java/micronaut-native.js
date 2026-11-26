@@ -10,12 +10,12 @@ const { allocatePort, waitForOwnedListener } = require('./testing-debug');
 const { nativePlatform, inspectImage, toolchain, directory, ownProcess } = require('./linux-native-executable');
 
 const framework = 'Micronaut';
+const goals = Object.freeze(['package','org.graalvm.buildtools:native-maven-plugin:compile-no-fork']);
 const changed = () => fail('The reviewed Micronaut native image changed. Build it again.');
 const model = project => micronautMavenProject(project,{native:true});
 
 function buildFlags(output) {
-  return ['--non-recursive','-Dpackaging=native-image','-DskipTests','-DoutputDir='+output,
-    '-Dmicronaut.native-image.jib.enabled=false','-DsharedLibrary=false'];
+  return ['--non-recursive','-DskipTests','-DoutputDir='+output,'-DnativeDryRun=false','-DsharedLibrary=false'];
 }
 
 function createMicronautNative({ log = () => {} } = {}) {
@@ -61,7 +61,8 @@ function createMicronautNative({ log = () => {} } = {}) {
     const operation=begin(cancellation);
     try {
       const reviewed=model(project), graal=await toolchain(graalvmHome);
-      const spec=buildSpec(project,{javaHome:graal.javaHome,mavenHome},['package']);
+      // A literal JAR POM keeps its ordinary lifecycle; invoke the Native Build Tools goal explicitly.
+      const spec=buildSpec(project,{javaHome:graal.javaHome,mavenHome},goals);
       const version=await command(operation,graal.nativeImage,['--version'],spec,12000,current);
       const banner=version.split(/\r?\n/u).map(line=>line.trim()).find(line=>/graalvm/iu.test(line));
       if (!banner || banner.length > 256) throw fail('The selected GraalVM did not identify its Native Image compiler.');
@@ -142,4 +143,4 @@ function createMicronautNative({ log = () => {} } = {}) {
     async dispose() { disposed=true; await stop(); builds.clear(); } };
 }
 
-module.exports={createMicronautNative,buildFlags};
+module.exports={createMicronautNative,buildFlags,goals};
