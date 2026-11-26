@@ -1,49 +1,12 @@
 'use strict';
 
 const fs = require('node:fs/promises');
-const { constants } = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { profileFor, relativePath, withSftp, digest, maxBytes } = require('./sftp-channel');
+const { profileFor, relativePath, withSftp, digest } = require('./sftp-channel');
+const { readSavedWorkspaceFile, previewText } = require('./reviewed-file');
 
-async function readLocal(root, relative) {
-  const safe = relativePath(relative), canonical = await fs.realpath(root);
-  if (canonical !== root) throw Error('The local workspace root changed. Review the current source again.');
-  let filename = canonical;
-  for (const part of safe.split('/')) {
-    filename = path.join(filename, part);
-    const current = await fs.lstat(filename);
-    if (current.isSymbolicLink()) throw Error('Review a local source without symbolic links.');
-  }
-  const observed = await fs.lstat(filename);
-  if (!observed.isFile() || observed.size > maxBytes || observed.nlink !== 1 || await fs.realpath(filename) !== filename) {
-    throw Error('Review one regular saved workspace file of at most 2 MiB.');
-  }
-  const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const current = await handle.stat();
-    if (current.dev !== observed.dev || current.ino !== observed.ino || current.size !== observed.size || !current.isFile()) {
-      throw Error('The local source changed while opening it.');
-    }
-    const data = Buffer.alloc(current.size);
-    for (let offset = 0; offset < data.length;) {
-      const { bytesRead } = await handle.read(data, offset, data.length - offset, offset);
-      if (!bytesRead) throw Error('The local source changed while reading it.');
-      offset += bytesRead;
-    }
-    const final = await handle.stat();
-    if (final.size !== current.size || final.mtimeMs !== current.mtimeMs || await fs.realpath(filename) !== filename) {
-      throw Error('The local source changed while reading it.');
-    }
-    return { bytes: data, sha256: digest(data) };
-  } finally { await handle.close(); }
-}
-
-function textOf(data) {
-  if (!data || data.length > 64 * 1024 || data.includes(0)) return undefined;
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(data); }
-  catch { return undefined; }
-}
+const readLocal = (root, relative) => readSavedWorkspaceFile(root, relativePath(relative));
 
 function bindFailure(message, relative, stage, error) {
   return Object.assign(Error(message), { code: 'ROCKETBRAIN_SFTP_UNCONFIRMED', target: relative,
@@ -95,8 +58,8 @@ function createSftpDeployment() {
     const canApply = action === 'mkdir' || Boolean(changed && (!target.exists || target.atomicReplace));
     const preview = { id, hash, action, profile: route.label, root: route.root, remote: relative, host: route.host, port: route.port,
       user: route.user, hostFingerprint: route.hostFingerprint, local, canApply,
-      ...(source && { localHash: source.sha256, localBytes: source.bytes.length, localText: textOf(source.bytes),
-        remoteHash: target.sha256, remoteBytes: target.bytes?.length, remoteText: textOf(target.bytes),
+      ...(source && { localHash: source.sha256, localBytes: source.bytes.length, localText: previewText(source.bytes),
+        remoteHash: target.sha256, remoteBytes: target.bytes?.length, remoteText: previewText(target.bytes),
         disposition: !target.exists ? 'create' : changed ? 'replace' : 'identical', atomicReplace: target.atomicReplace }) };
     while (reviews.size >= cap) reviews.delete(reviews.keys().next().value);
     reviews.set(id, { epoch, route, relative, action, localRoot, local, sourceHash: source?.sha256, targetHash: target.sha256,

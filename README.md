@@ -207,6 +207,8 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 
 **Review SFTP Project Deployment**에서 고정한 SSH 호스트 키로 원격 폴더를 열고, 저장한 파일을 비교하거나 새 폴더를 검토합니다. **Publish Reviewed SFTP Change**는 승인한 경로와 파일 내용을 다시 확인하고 업로드한 바이트를 검증합니다. [SFTP 배포 설정과 검토 절차](docs/sftp-deployment.md)
 
+**Review FTPS Project Deployment**는 제어 연결과 데이터 연결의 TLS 인증서를 검증하고 원격 폴더를 엽니다. 파일을 비교한 후 **Publish Reviewed FTPS Change**에서 새 파일 이름의 접두사를 승인하면 서버가 고유 이름으로 저장하고 Rocketbrain이 정확한 바이트를 다시 읽어 확인합니다. [FTPS 배포 설정과 검토 절차](docs/ftps-deployment.md)
+
 ```http
 @host = http://127.0.0.1:8080
 # @expect status 200
