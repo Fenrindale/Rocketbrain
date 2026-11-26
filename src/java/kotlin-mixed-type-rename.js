@@ -12,7 +12,7 @@ const { offsetsForClassRename, sourceKey, sourceSpan, sameRange } = require('./k
 const { kotlinProtocolUri } = require('./kotlin-editor-runtime');
 const { validIdentifier } = require('./file-templates');
 const { inside, packageName, fail } = require('./workbench-model');
-const { analyzeJavaSources, inspectCompilerJar, sanitizeCompilerJar, snapshotClasspath } = require('./signature-compiler');
+const { analyzeJavaSources, inspectCompilerJar, sanitizeCompilerJar, snapshotClasspath, visitJar } = require('./signature-compiler');
 const { execute } = require('./testing/provision');
 
 const outputs = ['build/classes/java/main', 'build/classes/kotlin/main', 'build/resources/main',
@@ -43,7 +43,8 @@ function classCandidate(files, uri, position, root) {
     throw fail('Select an ordinary unannotated public top-level Kotlin class.');
   }
   const namespace = packageName(file.text, 'kotlin');
-  if (!namespace || !namespace.split('.').every(part => identifier.test(part))) {
+  if (!namespace || /^(?:java|kotlin)(?:\.|$)/u.test(namespace) ||
+      !namespace.split('.').every(part => identifier.test(part))) {
     throw fail('Use a reviewed Kotlin class in an ordinary named JVM package.');
   }
   const close = tokens[index + 1]?.text === '(' ? matching(tokens,index + 1) : -1;
@@ -142,7 +143,7 @@ function reviewedClasspath(root, cp) {
     if (/^kotlin-stdlib(?:-[A-Za-z0-9_.-]+)?\.jar$/u.test(path.basename(file))) continue;
     result.set(pathKey(file), file);
   }
-  return [...result.values()].sort((a, b) => pathKey(a).localeCompare(pathKey(b)));
+  return [...result.values()];
 }
 
 async function stagedCompilation({ root, directory, files, classpath, compiler, fqn, other, cancellation }) {
@@ -196,12 +197,17 @@ async function mixedTypeEdits({ root, sources, selection, newName, kotlin, compi
     throw fail('Kotlin type rename requires reviewed main callers in this mixed project.');
   }
   const oldFqn = selection.namespace + '.' + selection.oldName, newFqn = selection.namespace + '.' + newName;
+  const selectedBinaries = new Set([oldFqn, newFqn].map(name=>name.replaceAll('.','/')+'.class'));
   const runtime = snapshotClasspath(compiler.javaHome, [...compiler.libraries, ...classpath]);
   const parent = await fsp.realpath(os.tmpdir()), stage = await fsp.mkdtemp(path.join(parent, 'rb-mixed-type-'));
   const identity = await fsp.lstat(stage, { bigint: true });
   try {
     const isolated = [];
     for (const [index, file] of classpath.entries()) {
+      await visitJar(file,async entry=>{
+        const classFile=entry.fileName.replace(/^META-INF\/versions\/\d+\//u,'');
+        if(selectedBinaries.has(classFile))throw fail('An observed dependency already supplies the selected or destination JVM class.');
+      });
       const metadata = await inspectCompilerJar(file, 256 * 1024);
       if (metadata.sanitized) {
         const target = path.join(stage, index + '.jar');

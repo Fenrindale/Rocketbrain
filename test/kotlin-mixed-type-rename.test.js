@@ -12,6 +12,7 @@ const { classCandidate, kotlinTypeReferences } = require('../src/java/kotlin-mix
 const { registerJavaRefactoring, editedText } = require('../src/java/refactoring');
 const { kotlinEditorLaunch } = require('../src/java/kotlin-editor-runtime');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
+const { execute } = require('../src/java/testing/provision');
 const { StdioLsp, until, positionOf } = require('./helpers/stdio-lsp');
 const { input, ownerFile, kotlinCaller, javaCaller, sameName, resource, newName, populate, rebuild, runJdbc } =
   require('./helpers/mixed-type-rename-fixture');
@@ -110,8 +111,13 @@ test('Kotlin LSP and Javac jointly review a compiled public class rename on real
     commands:{registerCommand:()=>({dispose(){}})}
   };
   review=registerJavaRefactoring({},vscode);
+  let competingArtifact;
   service=registerKotlinRename(vscode,{
-    begin:async()=>({root,compiler:launch.compiler,check(){},classpath,request:(method,params)=>kotlin.request(method,params,30000)}),
+    begin:async()=>({root,compiler:launch.compiler,check(){},request:(method,params)=>kotlin.request(method,params,30000),
+      classpath:async()=>{
+        const cp=await classpath();
+        return competingArtifact?{...cp,classpaths:[...cp.classpaths,competingArtifact]}:cp;
+      }}),
     refactoring:review,output:{appendLine(){}}
   });
   const document=await vscode.workspace.openTextDocument(uri(path.join(root,ownerFile)));
@@ -121,6 +127,13 @@ test('Kotlin LSP and Javac jointly review a compiled public class rename on real
   await assert.rejects(service.prepare({document,position,newName:'InvoiceExtra'}), /name already appears|destination name/u);
 
   const prepare=()=>service.prepare({document,position,newName});
+  const jar=path.join(tools.javaHome,'bin',process.platform==='win32'?'jar.exe':'jar');
+  competingArtifact=path.join(scope,'competing-type.jar');
+  const packed=await execute(jar,['--create','--file',competingArtifact,'-C',path.join(root,'build/classes/kotlin/main'),
+    'mixed/rename/domain/Invoice.class'],{cwd:root,timeoutMs:12000});
+  assert.equal(packed.code,0,packed.output);
+  await assert.rejects(prepare(), /dependency already supplies/u);
+  competingArtifact=undefined;
   const stale=await prepare();
   await fs.appendFile(path.join(root,resource), '\nreport.modified=true\n');
   await assert.rejects(review.apply(stale.id), /source or membership changed/u);
@@ -154,6 +167,6 @@ test('Kotlin LSP and Javac jointly review a compiled public class rename on real
   if(process.env.ROCKETBRAIN_MIXED_RENAME_RECEIPT)await fs.writeFile(process.env.ROCKETBRAIN_MIXED_RENAME_RECEIPT,
     JSON.stringify({scope:plan.rename.scope,javaReferences:plan.rename.javaReferences,kotlinReferences:plan.rename.referenceCount,
       editedFiles:plan.documents.length,verifiedJdtClasspath:true,kotlinServer:launch.serverVersion,compiler:launch.compilerVersion,
-      caseOrNameCollisionRefused:true,staleResourceRefused:true,configuredClassRefused:true,shadowAndPrefixUntouched:true,
+      caseOrNameCollisionRefused:true,competingDependencyRefused:true,staleResourceRefused:true,configuredClassRefused:true,shadowAndPrefixUntouched:true,
       gradleRebuilt:true,previousBinaryGone:true,results:after},null,2)+'\n');
 });
