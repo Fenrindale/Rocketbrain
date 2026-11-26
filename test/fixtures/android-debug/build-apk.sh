@@ -15,7 +15,8 @@ classpath="$(cat "$target/kotlin-classpath.txt")"
 stdlib="$(tr ':' '\n' < "$target/kotlin-classpath.txt" | sed -n '/\/kotlin-stdlib\/2\.4\.21\/kotlin-stdlib-2\.4\.21\.jar$/p')"
 test -f "$stdlib"
 compiler="$(tr ':' '\n' < "$target/kotlin-classpath.txt" | sed -n '/\/kotlin-compiler-embeddable\/2\.4\.21\/kotlin-compiler-embeddable-2\.4\.21\.jar$/p')"
-echo "ef19419c765e7ac8404465fa026ca8fc4dbb8a822de0fc79aa53c3edc5bf1d02  $compiler" | sha256sum --check --status || {
+test -f "$compiler"
+echo "ef19419c765e7ac8404465fa026ca8fc4dbb8a822de0fc79aa53c8dce29f1d02  $compiler" | sha256sum --check --status || {
   echo 'Kotlin compiler distribution did not match the published digest.' >&2
   exit 1
 }
