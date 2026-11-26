@@ -38,6 +38,7 @@
     "onDebug:rocketbrain-java",
     "onDebug:rocketbrain-python",
     "onDebug:rocketbrain-scala",
+    "onDebug:rocketbrain-kotlin-js",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
@@ -247,6 +248,7 @@
       { "command": "rocketbrain.kotlin.multiplatform.test", "title": "Test Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.run", "title": "Run Kotlin Multiplatform Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugJvm", "title": "Debug Kotlin Multiplatform JVM Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.debugJs", "title": "Debug Kotlin Multiplatform JS Node Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.previewCompose", "title": "Preview Kotlin Compose", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
@@ -2047,6 +2049,11 @@
     ],
     "breakpoints": [{ "language": "scala" }, { "language": "kotlin" }, { "language": "groovy" }],
     "debuggers": [
+      {
+        "type": "rocketbrain-kotlin-js",
+        "label": "Rocketbrain Kotlin/JS Node",
+        "languages": ["kotlin"]
+      },
       {
         "type": "rocketbrain-scala",
         "label": "Rocketbrain Scala (sbt)",

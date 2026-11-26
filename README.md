@@ -156,6 +156,8 @@ Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compil
 
 **Inspect Kotlin Multiplatform Targets**에서 Gradle이 구성한 JVM·JavaScript 타깃과 소스셋 의존 관계를 확인합니다. **Compile Kotlin Multiplatform Targets**, **Test Kotlin Multiplatform Targets**, **Run Kotlin Multiplatform Target**은 관찰된 타깃의 컴파일·테스트·실행 작업을 사용합니다. JavaScript 실행과 테스트는 Node.js 타깃을 대상으로 합니다.
 
+**Debug Kotlin Multiplatform JS Node Target**에서 로컬 Kotlin/JS Node 개발 타깃을 선택하고 Gradle 빌드를 승인합니다. `rocketbrain.kotlin.nodeHome`에 독립 Node.js 설치 디렉터리를 지정합니다. 컴파일러가 저장된 Kotlin 소스를 포함해 생성한 맵을 검증한 뒤 `commonMain`과 `jsMain`에서 중단점, 한 줄씩 넘기기, 스택과 지역 변수 읽기, 계속 실행을 지원합니다. 외부 npm 런타임 의존성이 없는 CommonJS 개발 실행 파일을 대상으로 하며, 소스나 빌드 설정을 바꾼 뒤에는 다시 검토합니다. **Stop Kotlin Multiplatform Task** 또는 디버그 중지 버튼으로 해당 Node.js 세션을 종료합니다.
+
 공통 Kotlin UI의 저장된 `commonMain` 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수와 JVM 타깃을 선택할 수 있습니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. 소스를 저장한 뒤 미리보기 패널의 **Refresh Preview**로 같은 타깃을 다시 그립니다.
 
 Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를 시작하지 못하면 `rocketbrain.kotlin.gradleHome`에 Gradle 9.7.0 설치 경로를 지정합니다. 이 설정은 Kotlin Multiplatform 작업에 적용됩니다.
