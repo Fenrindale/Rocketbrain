@@ -12,6 +12,7 @@ const {scalaEditorLaunch}=require('../src/java/scala-editor-runtime');
 const {indexSemanticdb,renameAt}=require('../src/java/scala-semanticdb');
 const {validateRename}=require('../src/java/scala-editor-vscode');
 const {jdbcReadback}=require('./java-source-analysis-host');
+const {stageCleanup}=require('./helpers/kotlin-native-fixture-cleanup');
 
 const execute=promisify(execFile);
 const appRelative='app/src/main/scala/scalafixture/Application.scala';
@@ -37,23 +38,40 @@ async function runSbt(root,settings,...tasks) {
   return (await execute(java,args,{cwd:root,env,windowsHide:true,encoding:'utf8',timeout:180000,maxBuffer:8*1024*1024})).stdout;
 }
 
-async function fixture(parent,version,work) {
+async function preservingFailure(work,cleanup) {
+  let original;
+  try {return await work();}
+  catch (error) {original=error;throw error;}
+  finally {
+    try {await cleanup();}
+    catch (error) {
+      if (original) throw new AggregateError([original,error],original.message+'\nFixture cleanup also failed: '+error.message);
+      throw error;
+    }
+  }
+}
+
+async function fixture(parent,version,work,{cleanupManifest,progress=()=>{}}={}) {
   const owning=await fs.realpath(parent);
   const root=await fs.mkdtemp(path.join(owning,'rb-scala-language-'));
-  const settings=runtimeSettings();
-  try {
+  if (cleanupManifest) await stageCleanup(cleanupManifest,owning,root,process.pid,{fixtureKind:'scalaLanguage'});
+  progress('scala-fixture-created',{version});
+  return preservingFailure(async()=>{
+    const settings=runtimeSettings();
     await populateScala(root,version);
     await fs.writeFile(path.join(root,'project/plugins.sbt'),
       'addSbtPlugin("ch.epfl.scala" % "sbt-bloop" % "2.1.3")\n',{flag:'wx'});
     await runSbt(root,settings,'bloopInstall');
     await fs.stat(path.join(root,'.bloop/app.json'));
+    progress('scala-bloop-configured',{version});
     return await work(root,settings);
-  } finally {
+  },async()=>{
+    if (cleanupManifest) return;
     const physical=await fs.realpath(root);
     assert.equal(path.relative(path.dirname(physical),owning),'');
     assert.match(path.basename(physical),/^rb-scala-language-/);
     await fs.rm(physical,{recursive:true,force:true,maxRetries:15,retryDelay:300});
-  }
+  });
 }
 
 function editsByFile(edit) {
@@ -145,14 +163,14 @@ async function headless(version) {
   });
 }
 
-async function runScalaLanguageChecks(api,vscode,checks,version=scala2) {
+async function runScalaLanguageChecks(api,vscode,checks,version=scala2,{cleanupManifest,progress=()=>{}}={}) {
   const workspace=vscode.workspace.workspaceFolders[0];
   const config=vscode.workspace.getConfiguration('rocketbrain.scala');
   const scope=vscode.ConfigurationTarget.Global;
   const settings=runtimeSettings();
   const old=new Map();
   const service=api.java.scalaEditor;
-  try {
+  return preservingFailure(async()=>{
     for(const [key,value] of [['languageClasspath',settings.classpathFile],['cacheDirectory',settings.cache],
       ['sbtLauncher',settings.launcher],['repositoryConfig',settings.repositories]]) {
       old.set(key,config.inspect(key)?.globalValue);
@@ -161,44 +179,62 @@ async function runScalaLanguageChecks(api,vscode,checks,version=scala2) {
     return await fixture(workspace.uri.fsPath,version,async root=>{
       const file=path.join(root,appRelative);
       const folder={uri:vscode.Uri.file(root),name:path.basename(root),index:workspace.index};
-      try {
+      const evidence=await preservingFailure(async()=>{
         assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.scala.startLanguage'));
         await assert.rejects(service.start({folder}),/explicitly start/);
+        progress('scala-language-starting',{version});
         assert.equal((await service.start({folder,allowProjectExecution:true})).state,'ready');
+        progress('scala-language-ready',{version});
         const document=await vscode.workspace.openTextDocument(file);
         await vscode.window.showTextDocument(document);
         const where=positionOf(document.getText(),'Message.hello',10);
         const position=new vscode.Position(where.line,where.character);
+        progress('scala-completion-waiting',{version});
+        let observed=[];
         const labels=await until(async()=>{
           const completion=await vscode.commands.executeCommand('vscode.executeCompletionItemProvider',document.uri,position);
-          const labels=(completion?.items||[]).map(item=>typeof item.label==='string'?item.label:item.label?.label)
+          observed=(completion?.items||[]).map(item=>typeof item.label==='string'?item.label:item.label?.label)
             .filter(label=>label?.startsWith('hello('));
-          return labels.length===2?labels:undefined;
-        },90000);
-        assert.ok(labels.some(label=>label.includes('name: String')));
-        assert.ok(labels.some(label=>label.includes('number: Int')));
-        const targets=await vscode.commands.executeCommand('vscode.executeDefinitionProvider',document.uri,position);
-        assert.ok(targets.some(item=>!path.relative((item.uri||item.targetUri).fsPath,path.join(root,coreRelative))));
+          return observed.length===2 && observed.some(label=>label.includes('name: String')) &&
+            observed.some(label=>label.includes('number: Int')) ? observed : undefined;
+        },90000).catch(error=>{
+          throw new Error('Native Scala completion did not return both typed overloads. Observed '+JSON.stringify(observed.slice(0,5)),{cause:error});
+        });
+        progress('scala-completion-verified',{version,labels});
+        const core=path.join(root,coreRelative);
+        const expected=positionOf(await fs.readFile(core,'utf8'),'def hello(name:',4);
+        progress('scala-definition-waiting',{version});
+        await until(async()=>{
+          const targets=await vscode.commands.executeCommand('vscode.executeDefinitionProvider',document.uri,position);
+          return (targets||[]).some(item=>{
+            const uri=item.uri||item.targetUri, range=item.targetSelectionRange||item.range;
+            return uri?.scheme==='file' && !path.relative(uri.fsPath,core) && range?.start.line===expected.line;
+          });
+        },90000).catch(error=>{throw new Error('Native Scala definition did not resolve the exact string-overload declaration.',{cause:error});});
+        progress('scala-definition-verified',{version,line:expected.line+1});
+        progress('scala-rename-index-starting',{version});
         const index=await api.java.scala.prepareRenameIndex({projectUri:folder.uri.toString(),allowProjectExecution:true});
         assert.equal(index.state,'succeeded');
         assert.ok(index.indexedDocuments>=3);
         const edit=await vscode.commands.executeCommand('vscode.executeDocumentRenameProvider',document.uri,position,'greet');
         assert.ok(edit);
         assert.equal(edit.entries().length,2);
+        progress('scala-rename-verified',{version,files:edit.entries().length});
+        return {version,typedOverloads:labels.length,definition:true,crossFileRename:true,jdbc:await jdbcReadback()};
+      },async()=>{
         await service.stop();
         assert.equal(service.getState().state,'stopped');
-        checks.push('Installed Scala language support completed both sbt module overloads, opened the exact definition and proposed a scoped source rename.');
-        return {version,typedOverloads:labels.length,definition:true,crossFileRename:true,jdbc:await jdbcReadback()};
-      } finally {
-        await service.stop();
+        progress('scala-language-stopped',{version});
         const tabs=vscode.window.tabGroups.all.flatMap(group=>group.tabs).filter(tab=>
           tab.input?.uri?.scheme==='file' && !path.relative(tab.input.uri.fsPath,file));
         if(tabs.length)await vscode.window.tabGroups.close(tabs);
-      }
-    });
-  } finally {
+      });
+      checks.push('Installed Scala language support completed both sbt module overloads, opened the exact definition and proposed a scoped source rename.');
+      return evidence;
+    },{cleanupManifest,progress});
+  },async()=>{
     for(const [key,value] of old)await config.update(key,value,scope);
-  }
+  });
 }
 
 module.exports={runScalaLanguageChecks};

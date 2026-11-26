@@ -6,7 +6,10 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
 
-const fixtureName = /^rb-kotlin-expressions-[a-z0-9]{6}$/i;
+const fixtureNames = Object.freeze({
+  kotlinExpressions: /^rb-kotlin-expressions-[a-z0-9]{6}$/i,
+  scalaLanguage: /^rb-scala-language-[a-z0-9]{6}$/i
+});
 const ownerFile = '.rocketbrain-native-fixture-owner';
 
 function manifestPath(root, prefix, engine) {
@@ -25,8 +28,9 @@ async function directoryIdentity(directory) {
   return [String(stat.dev), String(stat.ino)];
 }
 
-async function physicalFixture(workspace, name) {
-  assert.match(name, fixtureName);
+async function physicalFixture(workspace, name, fixtureKind) {
+  assert.ok(Object.hasOwn(fixtureNames, fixtureKind), 'Expected a known native fixture kind.');
+  assert.match(name, fixtureNames[fixtureKind]);
   const target = path.join(workspace, name);
   const identity = await directoryIdentity(target);
   const physical = await fs.realpath(target);
@@ -34,16 +38,16 @@ async function physicalFixture(workspace, name) {
   return { physical, identity };
 }
 
-async function stageCleanup(manifest, workspace, fixture, hostPid = process.pid) {
+async function stageCleanup(manifest, workspace, fixture, hostPid = process.pid, { fixtureKind = 'kotlinExpressions' } = {}) {
   checkPid(hostPid);
   const root = await fs.realpath(workspace);
   const name = path.basename(fixture);
   const parent = await fs.realpath(path.dirname(fixture));
   assert.equal(path.relative(root, parent), '', 'The native fixture must be a direct workspace child.');
-  const { physical, identity } = await physicalFixture(root, name);
+  const { physical, identity } = await physicalFixture(root, name, fixtureKind);
   const token = randomUUID();
   await fs.writeFile(path.join(physical, ownerFile), token, { flag: 'wx' });
-  const ownership = { workspace: root, workspaceIdentity: await directoryIdentity(root), name, identity, hostPid, token };
+  const ownership = { workspace: root, workspaceIdentity: await directoryIdentity(root), name, identity, hostPid, token, fixtureKind };
   await fs.writeFile(manifest, JSON.stringify(ownership), { flag: 'wx' });
   return {
     async recordJvm(pid) {
@@ -65,8 +69,9 @@ function active(pid) {
   }
 }
 
-async function cleanupAfterHostExit({ manifest, workspace, hostPid, expectJvm = false, waitMs = 15000 }) {
+async function cleanupAfterHostExit({ manifest, workspace, hostPid, expectJvm = false, waitMs = 15000, fixtureKind = 'kotlinExpressions' }) {
   const ownership = JSON.parse(await fs.readFile(manifest, 'utf8'));
+  assert.equal(ownership.fixtureKind ?? 'kotlinExpressions', fixtureKind, 'The native fixture kind does not match the runner.');
   checkPid(ownership.hostPid);
   if (hostPid !== undefined) assert.equal(ownership.hostPid, hostPid, 'The native fixture host does not match the driver receipt.');
   let jvm;
@@ -90,7 +95,7 @@ async function cleanupAfterHostExit({ manifest, workspace, hostPid, expectJvm = 
   const root = await fs.realpath(workspace);
   assert.equal(path.relative(root, ownership.workspace), '', 'The native fixture workspace does not match the runner.');
   assert.deepEqual(await directoryIdentity(root), ownership.workspaceIdentity, 'The native fixture workspace was replaced.');
-  const { physical, identity } = await physicalFixture(root, ownership.name);
+  const { physical, identity } = await physicalFixture(root, ownership.name, fixtureKind);
   assert.deepEqual(identity, ownership.identity, 'The native fixture directory was replaced.');
   const owner = path.join(physical, ownerFile);
   const ownerStat = await fs.lstat(owner);
