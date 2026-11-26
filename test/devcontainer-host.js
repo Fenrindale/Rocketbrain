@@ -31,7 +31,8 @@ async function runDevContainerAvailabilityChecks(api, vscode, checks) {
 }
 
 // The caller opens a disposable workspace with one of the Dev Container fixtures
-// and provisions a real local Docker service and the locked CLI.
+// and provisions a real local Docker service and the locked CLI. For Compose,
+// build Containerfile.txt in that fixture as rocketbrain-devcontainer-port-fixture:local.
 async function runDevContainerChecks(api, vscode, checks) {
   const service = api.devContainers;
   const folders = vscode.workspace.workspaceFolders || [];

@@ -452,13 +452,21 @@ test('actual local Docker starts image, Dockerfile and Compose Dev Containers an
   const service=createDevContainers({trusted:()=>true,settings:()=>({nodePath:process.execPath,cliPath,dockerPath}),
     readSession:key=>sessions.get(key),writeSession:(key,value)=>value?sessions.set(key,value):sessions.delete(key),
     run:runWithFixtureTrace});
-  const docker=async args=>(await executeFile(dockerPath||'docker',args,{cwd:root,windowsHide:true,timeout:60000,maxBuffer:1024*1024})).stdout.trim();
+  const docker=async (args,timeout=60000)=>(await executeFile(dockerPath||'docker',args,{cwd:root,windowsHide:true,timeout,maxBuffer:4*1024*1024})).stdout.trim();
   const marker=randomUUID();
   const unrelatedLabel='rocketbrain.devcontainer.fixture-isolation='+marker;
-  const unrelated=await docker(['run','--detach','--label',unrelatedLabel,'ubuntu:24.04','sleep','infinity']);
-  assert.match(unrelated,/^[a-f0-9]{64}$/u);
-  let started, recorded;
+  const image='rocketbrain-devcontainer-port-fixture:rb'+marker.replaceAll('-','');
+  const imageLabel='rocketbrain.devcontainer.fixture-image';
+  let started, recorded, unrelated, imageBuilt=false;
   try {
+    await docker(['build','--label',imageLabel+'='+marker,'--tag',image,'--file','Containerfile.txt','.'],240000);
+    imageBuilt=true;
+    unrelated=await docker(['run','--detach','--label',unrelatedLabel,'ubuntu:24.04','sleep','infinity']);
+    assert.match(unrelated,/^[a-f0-9]{64}$/u);
+    const composeFile=path.join(root,'compose.yaml');
+    const composeSource=await fs.readFile(composeFile,'utf8');
+    assert.match(composeSource,/\$\{ROCKETBRAIN_PORT_FIXTURE_IMAGE:/u);
+    await fs.writeFile(composeFile,composeSource.replace(/\$\{ROCKETBRAIN_PORT_FIXTURE_IMAGE:[^}]+\}/u,image));
     await fs.writeFile(path.join(root,'.env'),'ROCKETBRAIN_COMPOSE_VALUE=fixture-secret-'+marker+'\n');
     const plan=await service.inspect(root);
     assert.equal(plan.kind,'compose');
@@ -537,10 +545,20 @@ test('actual local Docker starts image, Dockerfile and Compose Dev Containers an
       }
     } finally {
       service.dispose();
-      const unrelatedActual=JSON.parse(await docker(['inspect','--format','{{json .}}',unrelated]));
-      assert.equal(unrelatedActual.Id,unrelated);
-      assert.equal(unrelatedActual.Config.Labels['rocketbrain.devcontainer.fixture-isolation'],marker);
-      await docker(['container','rm','-f',unrelated]);
+      try {
+        if(unrelated) {
+          const unrelatedActual=JSON.parse(await docker(['inspect','--format','{{json .}}',unrelated]));
+          assert.equal(unrelatedActual.Id,unrelated);
+          assert.equal(unrelatedActual.Config.Labels['rocketbrain.devcontainer.fixture-isolation'],marker);
+          await docker(['container','rm','-f',unrelated]);
+        }
+      } finally {
+        if(imageBuilt) {
+          const labels=JSON.parse(await docker(['image','inspect','--format','{{json .Config.Labels}}',image]));
+          assert.equal(labels[imageLabel],marker);
+          await docker(['image','rm',image]);
+        }
+      }
     }
   }
   if (receipt) await fs.writeFile(receipt, JSON.stringify(proof, null, 2) + '\n');
