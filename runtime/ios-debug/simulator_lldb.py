@@ -1,5 +1,6 @@
 """Fixed Xcode LLDB worker for one explicitly reviewed simulator process."""
 
+import hashlib
 import json
 import os
 import re
@@ -31,6 +32,11 @@ def source_at(line_entry, source, line):
     return line_entry.IsValid() and line_entry.GetLine() == line and real_file(line_entry.GetFileSpec()) == source
 
 
+def installed_module(module, plan):
+    return (module.IsValid() and (module.GetUUIDString() or "").lower() == plan["frameworkUuid"]
+            and plan["framework"] in (real_file(module.GetFileSpec()), real_file(module.GetPlatformFileSpec())))
+
+
 def inspect_locals(frame):
     values = frame.GetVariables(False, True, False, True, lldb.eNoDynamicValues)
     result = []
@@ -55,20 +61,30 @@ def quoted_lldb_path(file):
     return '"' + file.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def load_reviewed_symbols(debugger, target, plan, module=None):
-    if module is None:
-        module = target.AddModule(plan["framework"], "arm64", plan["frameworkUuid"], plan["symbols"])
-    if not module.IsValid() or (module.GetUUIDString() or "").lower() != plan["frameworkUuid"]:
-        raise RuntimeError("LLDB did not load the reviewed Kotlin framework.")
+def load_reviewed_symbols(debugger, target, plan, module):
+    if not installed_module(module, plan):
+        raise RuntimeError("LLDB did not observe the reviewed installed Kotlin framework.")
+    backing_file = real_file(module.GetFileSpec())
+    if backing_file != plan["framework"]:
+        if not backing_file or not os.path.isfile(backing_file) or os.path.getsize(backing_file) > 128 * 1024 * 1024:
+            raise RuntimeError("The stock debugger's framework backing file is unavailable or oversized.")
+        with open(backing_file, "rb") as contents:
+            digest = hashlib.sha256()
+            bytes_read = 0
+            for chunk in iter(lambda: contents.read(65536), b""):
+                bytes_read += len(chunk)
+                if bytes_read > 128 * 1024 * 1024:
+                    raise RuntimeError("The stock debugger's framework backing file exceeded the review limit.")
+                digest.update(chunk)
+        if digest.hexdigest() != plan["frameworkSha256"]:
+            raise RuntimeError("The stock debugger's framework backing file differs from the reviewed installed bytes.")
     if real_file(module.GetSymbolFileSpec()) != os.path.realpath(plan["symbols"]):
         result = lldb.SBCommandReturnObject()
         # LLDB binds the symbol file to a target module by the Mach-O UUID.
         debugger.GetCommandInterpreter().HandleCommand("target symbols add -- " + quoted_lldb_path(plan["symbols"]), result)
         if not result.Succeeded():
             raise RuntimeError("LLDB refused the reviewed Kotlin symbols: " + (result.GetError() or "unknown reason")[:400])
-        module = target.FindModule(lldb.SBFileSpec(plan["framework"]))
-    if (not module.IsValid() or (module.GetUUIDString() or "").lower() != plan["frameworkUuid"]
-            or real_file(module.GetFileSpec()) != plan["framework"]
+    if (not installed_module(module, plan)
             or real_file(module.GetSymbolFileSpec()) != os.path.realpath(plan["symbols"])):
         raise RuntimeError("LLDB did not bind the reviewed symbol file to the exact installed framework.")
     return module
@@ -130,17 +146,51 @@ def exact_address(target, module, plan):
     return candidates[min(candidates)]
 
 
-def live_framework_address(target, plan, file_address):
+def live_framework(target, plan, file_address=None):
     if target.GetNumModules() > 4096:
         raise RuntimeError("The live simulator module count exceeds the ownership inspection limit.")
-    matches = []
+    matches, observed = [], []
     for module in target.modules:
-        if ((module.GetUUIDString() or "").lower() != plan["frameworkUuid"]
-                or real_file(module.GetFileSpec()) != plan["framework"]):
+        module_uuid = (module.GetUUIDString() or "").lower()
+        if module_uuid != plan["frameworkUuid"] and not plan["reportMappings"]:
             continue
-        candidate = module.ResolveFileAddress(file_address)
-        if candidate.IsValid() and candidate.GetLoadAddress(target) != lldb.LLDB_INVALID_ADDRESS:
-            matches.append((module, candidate))
+        file = real_file(module.GetFileSpec()) or ""
+        platform_file = real_file(module.GetPlatformFileSpec()) or ""
+        if module_uuid != plan["frameworkUuid"] and plan["framework"] not in (file, platform_file):
+            continue
+        candidate = module.ResolveFileAddress(file_address) if file_address is not None else None
+        direct_load = candidate.GetLoadAddress(target) if candidate and candidate.IsValid() else lldb.LLDB_INVALID_ADDRESS
+        section = module.FindSection("__TEXT")
+        file_base = section.GetFileAddress() if section.IsValid() else lldb.LLDB_INVALID_ADDRESS
+        load_base = section.GetLoadAddress(target) if section.IsValid() else lldb.LLDB_INVALID_ADDRESS
+        def describe(address):
+            return hex(address) if address != lldb.LLDB_INVALID_ADDRESS else None
+        if plan["reportMappings"] and len(observed) < 8:
+            address_section = candidate.GetSection() if candidate and candidate.IsValid() else None
+            observed.append(dict(uuidMatches=module_uuid == plan["frameworkUuid"], file=file[-440:],
+                                 platformFile=platform_file[-440:], textFile=describe(file_base),
+                                 textLoad=describe(load_base), directLoad=describe(direct_load),
+                                 directSection=address_section.GetName() if address_section and address_section.IsValid() else None))
+        if not installed_module(module, plan):
+            continue
+        if file_address is None:
+            if load_base != lldb.LLDB_INVALID_ADDRESS:
+                matches.append((module, None))
+            continue
+        if file_base == lldb.LLDB_INVALID_ADDRESS or not file_base <= file_address < file_base + section.GetByteSize():
+            continue
+        if direct_load != lldb.LLDB_INVALID_ADDRESS:
+            native = target.ResolveLoadAddress(direct_load)
+        elif load_base != lldb.LLDB_INVALID_ADDRESS:
+            native = target.ResolveLoadAddress(load_base + file_address - file_base)
+        else:
+            continue
+        if native.IsValid() and installed_module(native.GetModule(), plan) and native.GetFileAddress() == file_address:
+            code = native.GetSection()
+            if code.IsValid() and code.GetPermissions() & lldb.ePermissionsExecutable:
+                matches.append((native.GetModule(), native))
+    if plan["reportMappings"]:
+        emit("framework", fileAddress=hex(file_address) if file_address is not None else None, modules=observed)
     if len(matches) > 1:
         raise RuntimeError("More than one runtime module matches the reviewed Kotlin framework.")
     return matches[0] if matches else None
@@ -169,9 +219,8 @@ def loader_stop(process):
     return bool(reasons) and all(reasons)
 
 
-def wait_for_runtime_address(debugger, target, process, plan, compiled):
-    file_address = compiled.GetFileAddress()
-    live = live_framework_address(target, plan, file_address)
+def wait_for_runtime_module(debugger, target, process, plan):
+    live = live_framework(target, plan)
     if live is None:
         emit("phase", stage="runtime-framework-pending")
         set_loader_stops(debugger, True)
@@ -181,20 +230,15 @@ def wait_for_runtime_address(debugger, target, process, plan, compiled):
                 if process.GetState() != lldb.eStateStopped or not loader_stop(process):
                     raise RuntimeError("The owned simulator app did not stop at a recognized dynamic-loader event.")
                 emit("phase", stage="runtime-loader-stopped")
-                live = live_framework_address(target, plan, file_address)
+                live = live_framework(target, plan)
                 if live is not None:
                     break
         finally:
             set_loader_stops(debugger, False)
     if live is None:
         raise RuntimeError("The reviewed Kotlin framework did not map into the owned app at a loader event.")
-    module, _ = live
-    load_reviewed_symbols(debugger, target, plan, module)
-    live = live_framework_address(target, plan, file_address)
-    if live is None or not source_at(live[1].GetLineEntry(), plan["source"], plan["line"]):
-        raise RuntimeError("The live Kotlin address did not match the reviewed framework UUID and exact source.")
     emit("phase", stage="runtime-framework-mapped")
-    return live[1]
+    return live[0]
 
 
 def run(plan):
@@ -216,9 +260,14 @@ def run(plan):
     if not info.IsValid() or real_file(info.GetExecutableFile()) != plan["executable"]:
         raise RuntimeError("LLDB did not observe the reviewed simulator executable.")
     emit("phase", stage="process-verified")
-    module = load_reviewed_symbols(debugger, target, plan)
+    module = wait_for_runtime_module(debugger, target, process, plan)
+    module = load_reviewed_symbols(debugger, target, plan, module)
     emit("phase", stage="module-verified")
-    address = wait_for_runtime_address(debugger, target, process, plan, exact_address(target, module, plan))
+    compiled = exact_address(target, module, plan)
+    live = live_framework(target, plan, compiled.GetFileAddress())
+    if live is None or not source_at(live[1].GetLineEntry(), plan["source"], plan["line"]):
+        raise RuntimeError("The live Kotlin address did not match the reviewed framework UUID and exact source.")
+    address = live[1]
     breakpoint = target.BreakpointCreateBySBAddress(address)
     if not breakpoint.IsValid() or breakpoint.GetNumLocations() != 1:
         raise RuntimeError("LLDB did not bind the exact Mach-O-relative Kotlin breakpoint address.")
@@ -258,5 +307,5 @@ def run(plan):
 
 try:
     run(json.loads(os.environ["ROCKETBRAIN_IOS_PLAN"]))
-except (RuntimeError, ValueError, TypeError, AttributeError) as failure:
+except (RuntimeError, ValueError, TypeError, AttributeError, OSError) as failure:
     emit("error", message=str(failure)[:1200])

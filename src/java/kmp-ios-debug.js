@@ -140,6 +140,10 @@ function startWorker({ env }, config, observe) {
         observe('lldb-' + item.stage);
         continue;
       }
+      if (item.event === 'framework' && Array.isArray(item.modules) && item.modules.length <= 8 && line.length <= 10000) {
+        observe('lldb-framework-observation', { fileAddress: item.fileAddress, modules: item.modules });
+        continue;
+      }
       if (!['ready', 'stopped', 'continued'].includes(item.event) || events.has(item.event)) continue;
       events.set(item.event, item);
       waiters.get(item.event)?.resolve(item);
@@ -188,7 +192,8 @@ async function observeInstalledContainer(tool, id, bundleId, signal, observe) {
 }
 
 function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemTool,
-  openWorker = startWorker, observe = () => {} } = {}) {
+  openWorker = startWorker, observe: observer } = {}) {
+  const observe = observer || (() => {});
   let active, pending;
   function validate(record) {
     trust();
@@ -294,7 +299,8 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
     if (await verifyProcess(tool, pid, executable, signal) !== processIdentity) throw Error('The reviewed simulator process changed.');
     observe('owned-pid-verified');
     const worker = record.worker = openWorker(record.system, { executable, framework, symbols, pid,
-      frameworkUuid: snapshot.frameworkUuid, source: snapshot.source, line: snapshot.line }, observe);
+      frameworkUuid: snapshot.frameworkUuid, frameworkSha256: snapshot.frameworkSha256,
+      source: snapshot.source, line: snapshot.line, reportMappings: Boolean(observer) }, observe);
     const stopOnCancel = () => { void worker.stop().catch(() => {}); };
     signal.addEventListener('abort', stopOnCancel, { once: true });
     try { await worker.expect('ready', 95000); }
