@@ -219,21 +219,82 @@ def loader_stop(process):
     return bool(reasons) and all(reasons)
 
 
+def owned_executable(module, plan):
+    return (module.IsValid() and (module.GetUUIDString() or "").lower() == plan["appUuid"]
+            and real_file(module.GetFileSpec()) == plan["executable"])
+
+
+def arm_application_entry(target, plan):
+    module = target.FindModule(lldb.SBFileSpec(plan["executable"]))
+    if not owned_executable(module, plan):
+        raise RuntimeError("LLDB has no verified Mach-O image for the owned app entry point.")
+    file_address = int(plan["entryFileAddress"], 16)
+    entry_point = getattr(module, "GetObjectFileEntryPointAddress", None)
+    entry = entry_point() if entry_point is not None else module.ResolveFileAddress(file_address)
+    if not entry.IsValid() or entry.GetFileAddress() != file_address:
+        raise RuntimeError("The debugger app entry differs from the reviewed Mach-O LC_MAIN.")
+    loaded = entry.GetLoadAddress(target)
+    if loaded == lldb.LLDB_INVALID_ADDRESS:
+        return None
+    resolved = target.ResolveLoadAddress(loaded)
+    code = resolved.GetSection()
+    if (not resolved.IsValid() or not owned_executable(resolved.GetModule(), plan)
+            or resolved.GetFileAddress() != file_address or not code.IsValid()
+            or not code.GetPermissions() & lldb.ePermissionsExecutable):
+        raise RuntimeError("The simulator app entry is outside the reviewed executable mapping.")
+    breakpoint = target.BreakpointCreateBySBAddress(resolved)
+    if not breakpoint.IsValid() or breakpoint.GetNumLocations() != 1:
+        raise RuntimeError("LLDB could not arm the reviewed simulator app entry.")
+    location = breakpoint.GetLocationAtIndex(0)
+    if not location.IsResolved() or location.GetAddress().GetLoadAddress(target) != loaded:
+        target.BreakpointDelete(breakpoint.GetID())
+        raise RuntimeError("LLDB did not resolve the reviewed simulator app entry.")
+    emit("phase", stage="app-entry-armed")
+    return breakpoint, loaded
+
+
+def at_application_entry(target, process, plan, fallback):
+    if fallback is None:
+        return False
+    breakpoint, load_address = fallback
+    threads = [thread for thread in process if thread.GetStopReason() == lldb.eStopReasonBreakpoint
+               and thread.GetStopReasonDataCount() and thread.GetStopReasonDataAtIndex(0) == breakpoint.GetID()]
+    if not threads:
+        return False
+    frame = threads[0].GetFrameAtIndex(0)
+    if (len(threads) != 1 or process.GetProcessID() != plan["pid"] or not owned_executable(frame.GetModule(), plan)
+            or frame.GetPCAddress().GetLoadAddress(target) != load_address):
+        raise RuntimeError("The provisional simulator stop did not match the owned app entry point.")
+    emit("phase", stage="app-entry-verified")
+    return True
+
+
 def wait_for_runtime_module(debugger, target, process, plan):
     live = live_framework(target, plan)
     if live is None:
         emit("phase", stage="runtime-framework-pending")
+        entry, passed_entry = None, False
         set_loader_stops(debugger, True)
         try:
             for _ in range(16):
+                if entry is None and not passed_entry:
+                    entry = arm_application_entry(target, plan)
                 checked(process.Continue(), "Could not run the owned app to its native loader event")
-                if process.GetState() != lldb.eStateStopped or not loader_stop(process):
+                if process.GetState() != lldb.eStateStopped:
+                    raise RuntimeError("The owned simulator app did not stop during native startup.")
+                if at_application_entry(target, process, plan, entry):
+                    target.BreakpointDelete(entry[0].GetID())
+                    entry, passed_entry = None, True
+                elif loader_stop(process):
+                    emit("phase", stage="runtime-loader-stopped")
+                else:
                     raise RuntimeError("The owned simulator app did not stop at a recognized dynamic-loader event.")
-                emit("phase", stage="runtime-loader-stopped")
                 live = live_framework(target, plan)
                 if live is not None:
                     break
         finally:
+            if entry is not None:
+                target.BreakpointDelete(entry[0].GetID())
             set_loader_stops(debugger, False)
     if live is None:
         raise RuntimeError("The reviewed Kotlin framework did not map into the owned app at a loader event.")
