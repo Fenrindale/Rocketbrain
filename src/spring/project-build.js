@@ -60,10 +60,22 @@ function mavenManagement(text,root){
  return {...controlling,overrides};
 }
 
-function pom(text){
- const root=xml(text);
- if(child(root,'profiles')||child(root,'modules'))throw fail('BUILD','Profile and multi-module POM editing requires a separate Maven model review.');
- const management=mavenManagement(text,root),block=child(root,'dependencies'),deps=[];
+function mavenParentReference(text,root=xml(text)){
+ const block=child(root,'parent');
+ if(!block)return undefined;
+ const group=value(text,child(block,'groupId')),artifact=value(text,child(block,'artifactId')),version=value(text,child(block,'version'));
+ if(!group||!artifact||!version||version.length>80||version.endsWith('-SNAPSHOT'))
+  throw fail('BUILD','Use exact release coordinates for the Maven parent being reviewed.');
+ const relative=child(block,'relativePath');
+ const relativePath=relative?(relative.selfClosing?'':content(text,relative)):'../pom.xml';
+ if(relativePath===null || relativePath.length>180 ||
+    (relativePath && (!/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(relativePath) || relativePath==='.' || relativePath==='..')))
+  throw fail('BUILD','Use a literal relative Maven parent POM within the open reactor.');
+ return {group,artifact,version,relativePath,officialBoot:group===BOOT_GROUP&&artifact===BOOT_PARENT};
+}
+
+function mavenDependencies(text,root){
+ const block=child(root,'dependencies'),deps=[];
  for(const node of block?.children||[]){
   if(node.name!=='dependency')throw fail('BUILD','Unsupported direct dependency structure.');
   const groupId=value(text,child(node,'groupId')),artifactId=value(text,child(node,'artifactId'));
@@ -72,13 +84,57 @@ function pom(text){
   const editable=ordinaryScopes.has(scope)&&node.children.every(item=>['groupId','artifactId','scope'].includes(item.name));
   deps.push({groupId,artifactId,scope,version,editable,start:node.start,end:node.end});
  }
- return {kind:'maven',bootVersion:management.version,management,deps,block,root,insertAt:block?block.closeStart:root.closeStart};
+ return {block,deps};
+}
+
+function inheritedMavenModel(text,root,parents){
+ if(!Array.isArray(parents)||!parents.length||parents.length>4)
+  throw fail('BUILD','Review the physical local Maven parents before editing inherited starters.');
+ let required=mavenParentReference(text,root), terminal;
+ const inherited=[],descendants=[root],chain=[];
+ for(const [index,source] of parents.entries()){
+  const parsed=xml(source.text), reference=mavenParentReference(source.text,parsed);
+  const groupElement=child(parsed,'groupId'),versionElement=child(parsed,'version');
+  const group=groupElement?value(source.text,groupElement):reference?.group;
+  const version=versionElement?value(source.text,versionElement):reference?.version;
+  const artifact=value(source.text,child(parsed,'artifactId'));
+  if(!required || required.officialBoot || group!==required.group || artifact!==required.artifact || version!==required.version ||
+     value(source.text,child(parsed,'packaging'))!=='pom' || child(parsed,'profiles'))
+   throw fail('BUILD','The local Maven parent identity, literal POM packaging, or profile scope needs review.');
+  chain.push({coordinate:[group,artifact,version].join(':'),source:source.name});
+  inherited.push(...mavenDependencies(source.text,parsed).deps.map(dependency=>({...dependency,editable:false,inherited:true})));
+  if(index===parents.length-1){
+   if(reference)throw fail('BUILD','End the local Maven chain at a parentless POM importing the Spring Boot BOM.');
+   terminal=mavenManagement(source.text,parsed);
+  }else{
+   if(child(parsed,'dependencyManagement'))throw fail('BUILD','Layered Maven dependency management in an intermediate parent needs a separate review.');
+   descendants.push(parsed);
+  }
+  required=reference;
+ }
+ if(child(root,'dependencyManagement'))throw fail('BUILD','Layered child dependency management needs a separate Maven model review.');
+ if(terminal.property && descendants.some(parsed=>{
+  const properties=child(parsed,'properties');
+  return properties && child(properties,terminal.property);
+ }))throw fail('BUILD','A child or intermediate POM redefines the inherited Boot BOM version property.');
+ return {management:{...terminal,kind:'inherited-boot-bom',chain},inherited};
+}
+
+function pom(text,context){
+ const root=xml(text);
+ if(child(root,'profiles')||child(root,'modules'))throw fail('BUILD','Profile and multi-module POM editing requires a separate Maven model review.');
+ const {block,deps}=mavenDependencies(text,root);
+ const resolved=context?.mavenParents?.length?inheritedMavenModel(text,root,context.mavenParents):null;
+ const management=resolved?.management||mavenManagement(text,root);
+ if(resolved)deps.push(...resolved.inherited);
+ return {kind:'maven',bootVersion:management.version,management,deps,block,root,insertAt:block?block.closeStart:root.closeStart,
+  ...(resolved&&{mavenContext:context})};
 }
 function tokens(text){if(Buffer.byteLength(text)>1024*1024)throw fail('BUILD','The build file exceeds1MiB.');const result=[];let i=0;while(i<text.length){const c=text[i];if(/\s/.test(c)){i++;continue;}if(text.startsWith('//',i)){i=text.indexOf('\n',i+2);if(i<0)break;continue;}if(text.startsWith('/*',i)){const end=text.indexOf('*/',i+2);if(end<0)throw fail('BUILD','Unclosed build comment.');i=end+2;continue;}if(c==='/'||text.startsWith('$/',i))throw fail('BUILD','Slashy Gradle literals or procedural expressions require manual editing.');if(c==='"'||c==="'"){const start=i,delimiter=text.startsWith(c.repeat(3),i)?c.repeat(3):c;i+=delimiter.length;let value='',escaped=false,closed=false;while(i<text.length){if(text.startsWith(delimiter,i)){i+=delimiter.length;closed=true;break;}if(text[i]==='\\'){escaped=true;value+=text[i++];if(i<text.length)value+=text[i++];}else value+=text[i++];}if(!closed)throw fail('BUILD','Unclosed Gradle string.');result.push({type:'string',value,start,end:i,literal:!escaped&&!value.includes('$')&&delimiter.length===1});continue;}const match=/^[A-Za-z_][\w$]*/.exec(text.slice(i));if(match){result.push({type:'id',value:match[0],start:i,end:i+match[0].length});i+=match[0].length;continue;}result.push({type:'punct',value:c,start:i,end:++i});if(result.length>50000)throw fail('BUILD','The build file exceeds its token limit.');}return result;}
 function activePlugin(ts,start,end,id){let matches=0;for(let i=start;i<end;i++)if(ts[i].value==='id'){let j=i+1;if(ts[j]?.value==='(')j++;if(ts[j]?.type!=='string'||!ts[j].literal||ts[j].value!==id)continue;j++;if(ts[j]?.value===')')j++;if(ts[j]?.value!=='version'||ts[j+1]?.type!=='string'||!ts[j+1].literal||ts[j+2]?.value==='apply')throw fail('BUILD','Use a directly applied literal '+id+' plugin.');matches++;}return matches===1;}
 function gradle(text,kind){const ts=tokens(text),blocks=[];let depth=0;for(let i=0;i<ts.length;i++){const t=ts[i];if(t.value==='{')depth++;else if(t.value==='}')depth--;else if(depth===0&&t.type==='id'&&ts[i+1]?.value==='{'){let d=1,j=i+2;for(;j<ts.length&&d;j++){if(ts[j].value==='{')d++;if(ts[j].value==='}')d--;}if(d)throw fail('BUILD','Unbalanced Gradle block.');blocks.push({name:t.value,start:i+2,end:j-1,closeStart:ts[j-1].start});}if(depth<0)throw fail('BUILD','Unbalanced Gradle braces.');}if(depth)throw fail('BUILD','Unbalanced Gradle braces.');const plugins=blocks.filter(b=>b.name==='plugins'),dependencies=blocks.filter(b=>b.name==='dependencies');if(plugins.length!==1||dependencies.length!==1)throw fail('BUILD','Use one literal plugins block and one direct dependencies block.');const p=plugins[0],boot=[];if(!activePlugin(ts,p.start,p.end,'io.spring.dependency-management')||!activePlugin(ts,p.start,p.end,'org.springframework.boot'))throw fail('BUILD','Use directly applied literal Boot/dependency-management plugins for versionless dependencies.');for(let i=p.start;i<p.end;i++)if(ts[i].value==='id'){let j=i+1;if(ts[j]?.value==='(')j++;if(ts[j]?.type==='string'&&ts[j].literal&&ts[j].value==='org.springframework.boot'){j++;if(ts[j]?.value===')')j++;boot.push(ts[j+1].value);}}if(boot.length!==1||!VERSION.test(boot[0]))throw fail('BUILD','Use one explicit Spring Boot plugin version.');const b=dependencies[0],deps=[],configs=new Set(['implementation','api','runtimeOnly','testImplementation','testRuntimeOnly','compileOnly','annotationProcessor','developmentOnly','testCompileOnly','testAnnotationProcessor']);for(let i=b.start;i<b.end;){const first=ts[i];if(first.value===';'){i++;continue;}if(first.type!=='id'||!configs.has(first.value))throw fail('BUILD','Only direct literal Gradle module dependencies can be edited; catalogs/platforms/projects/closures require manual editing.');let j=i+1,call=ts[j]?.value==='(';if(call)j++;const module=ts[j++];if(module?.type!=='string'||!module.literal||!/^[A-Za-z0-9_.\-]+:[A-Za-z0-9_.\-]+(?::[A-Za-z0-9_.\-]+)?$/.test(module.value))throw fail('BUILD','Use literal Gradle group:artifact[:version] dependencies.');if(call&&ts[j++]?.value!==')')throw fail('BUILD','Unsupported Gradle dependency call.');const end=ts[j-1].end;if(j<b.end&&ts[j].value!==';'&&!/[\r\n]/.test(text.slice(end,ts[j].start)))throw fail('BUILD','Unsupported Gradle dependency expression.');const[groupId,artifactId,version]=module.value.split(':'),scope=first.value.startsWith('test')?'test':first.value==='runtimeOnly'?'runtime':'compile';deps.push({groupId,artifactId,version,scope,configuration:first.value,editable:!version&&['implementation','runtimeOnly','testImplementation'].includes(first.value),start:first.start,end});i=j;}return{kind,bootVersion:boot[0],deps,insertAt:b.closeStart};}
 function inspect(text,filename,context){
- if(filename==='pom.xml')return pom(text);
+ if(filename==='pom.xml')return pom(text,context);
  const kind=filename.endsWith('.kts')?'gradle-kotlin':'gradle-groovy';
  if(context?.versionCatalog!==undefined){
   const parsed=tokens(text);
@@ -101,6 +157,7 @@ function choices(model,catalog){
   const existing=existingDependencies(model,dependency),override=localOverride(model,dependency);
   const alias=catalogAlias(model,coordinate(dependency)),needsAlias=!!model.catalogLibraries&&!existing.length;
   return {...dependency,selected:existing.length>0,editable:!override&&(existing.length===1&&existing[0].editable||!existing.length&&(!needsAlias||!!alias)),
+   ...(existing.some(item=>item.inherited)&&{inherited:true}),
    ...(alias&&{catalogAlias:alias.alias}),
    ...(override?{localManagementVersion:override.version}:{})};
  });
@@ -144,9 +201,10 @@ function change(text,model,catalog,{add=[],remove=[]}={}){
  }
  let after=text;
  for(const edit of edits.sort((a,b)=>b.start-a.start))after=after.slice(0,edit.start)+edit.text+after.slice(edit.end);
- const checked=inspect(after,model.kind==='maven'?'pom.xml':model.kind==='gradle-kotlin'?'build.gradle.kts':'build.gradle',model.catalogContext);
+ const checked=inspect(after,model.kind==='maven'?'pom.xml':model.kind==='gradle-kotlin'?'build.gradle.kts':'build.gradle',
+  model.mavenContext||model.catalogContext);
  if(checked.bootVersion!==model.bootVersion||JSON.stringify(checked.management)!==JSON.stringify(model.management))
   throw fail('BUILD','The Boot management declaration changed unexpectedly.');
  return {after,beforeSha256:sha(Buffer.from(text)),afterSha256:sha(Buffer.from(after)),add:[...add],remove:[...remove],kind:model.kind,bootVersion:model.bootVersion};
 }
-module.exports={inspect,choices,change,managed,tokens};
+module.exports={inspect,choices,change,managed,tokens,mavenParentReference};

@@ -25,7 +25,7 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
    change.guard();
    for(const source of change.readOnlySources){
     const open=documentSnapshot(source.uri);
-    if(open?.dirty||open&&open.text!==source.text)throw fail('STALE','The Gradle catalog or settings buffer changed before applying.');
+    if(open?.dirty||open&&open.text!==source.text)throw fail('STALE','A reviewed build input buffer changed before applying.');
    }
    if(doc.version!==version||doc.getText()!==change.before)throw fail('STALE','The build document changed before applying.');
    if(!await vscode.workspace.applyEdit(edit))throw fail('EDITOR','The editor declined the reviewed build-file edit.');
@@ -47,9 +47,11 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
    'Boot plugin alias '+management.pluginAlias+' · BOM alias '+management.platformAlias+
     (management.property?' · version.ref '+management.property:'')
   ];
-  const kind=management.kind==='boot-bom-import'?'Direct Maven BOM import':'Maven parent';
+  const kind=management.kind==='boot-bom-import'?'Direct Maven BOM import':
+   management.kind==='inherited-boot-bom'?'Inherited Maven BOM import':'Maven parent';
   const version=management.property?' via local property '+management.property:'';
   return [kind+' '+management.coordinate+' '+management.version+version,
+   ...(management.chain||[]).map(item=>'Local parent '+item.coordinate+' · '+item.source),
    ...management.overrides.map(item=>'Protected local override '+item.coordinate+' '+item.version)];
  }
  function reviewText(review){if(!review)return'# Spring project review unavailable';if(review.kind==='dependencies')return['# Review starter changes','',review.review,'','Build: '+review.buildUri,'Boot: '+review.bootVersion,...managementLines(review.management),
@@ -102,7 +104,9 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
   if(!choices.length)throw fail('DEPENDENCY','The project has no editable direct starters in the selected catalog.');
   const protectedCount=current.choices.length-choices.length;
   const title=current.management?.kind==='gradle-catalog-bom'?'Spring Boot starters and drivers · Gradle catalog '+current.bootVersion:
-   current.management?.kind==='boot-bom-import'?'Direct Spring Boot starters and drivers · Maven BOM '+current.bootVersion:'Direct Boot-managed starters and database drivers';
+   current.management?.kind==='boot-bom-import'?'Direct Spring Boot starters and drivers · Maven BOM '+current.bootVersion:
+   current.management?.kind==='inherited-boot-bom'?'Spring starters and drivers · Inherited Maven BOM '+current.bootVersion:
+    'Direct Boot-managed starters and database drivers';
   const selected=await vscode.window.showQuickPick(choices.map(item=>({label:item.name,description:item.id+' · '+item.groupId+':'+item.artifactId,
    detail:item.catalogAlias?'Gradle alias '+item.catalogAlias:undefined,picked:item.selected,id:item.id})),{
    title,canPickMany:true,ignoreFocusOut:true,...(protectedCount?{placeHolder:protectedCount+' protected declarations are excluded from editing'}:{})
