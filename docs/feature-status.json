@@ -1,5 +1,5 @@
 {
-  "version": "0.98.0",
+  "version": "0.99.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 148,
-    "partial": 54,
+    "implemented": 149,
+    "partial": 53,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 86.6,
+    "percent": 86.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-034",
+    "IDEA-059",
     "IDEA-102",
     "DG-003",
-    "DG-010"
+    "DG-081"
   ],
   "expandedFeatures": [
-    "IDEA-034",
+    "IDEA-059",
     "IDEA-102",
     "DG-003",
-    "DG-010"
+    "DG-081"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1059,8 +1059,8 @@
       "verification": {
         "state": "v0.98-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.98.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1792,27 +1792,24 @@
       "category": "Spring·영속성",
       "feature": "Spring Data 파생 메서드·쿼리",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "파생 메서드의 제한된 경로, JPQL 타입·동적 문자열·restricted SpEL 및 실제 provider 관찰을 구현했다.",
-      "remaining": [
-        "전체 메서드 문법·관찰하지 않은 동적 분기·모든 provider 규칙이 남는다."
-      ],
+      "scope": "Spring Data 파생 메서드의 복합 조건·경로·정렬·인자와 기존 JPQL·동적 쿼리 흐름을 분석하고 정확한 속성 선언으로 이동한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.99-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 한정 소스/실제 Spring·Hibernate7.4.13 fixture와 양DB 기본/opaque naming 표본. static known과 실제 의미 관찰은 분리한다.",
+        "testedScope": "설치판에서 파생 메서드 여섯 개, 다른 파일 속성 이동 두 곳, Pageable 인자 분리와 미저장 변경을 검증했다. 실제 Spring Data PartTree 대조도 마쳤다.",
         "publicEvidence": [
-          "src/jpa/model.js",
-          "src/jpa/query.js",
-          "src/jpa/types.js",
-          "src/jpa/observer-vscode.js"
+          "test/spring-derived-query-host.js",
+          "test/workflows-v99-host.js",
+          "test/jpa-vscode.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3059,22 +3056,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "none",
-      "scope": "저장된 작업 영역 파일의 원시 바이트를 HTTP 본문으로 보내고 이름 있는 응답 검사를 실행한다.",
+      "scope": "선택한 동일 작업 공간·환경·출처의 HTTP 요청에서 세션 쿠키를 사용한다.",
       "remaining": [
-        "쿠키 세션, 추가 인증과 일반 요청·응답 처리 단계를 확장한다."
+        "OAuth 인증과 여러 요청을 검토·연결하는 흐름을 추가한다."
       ],
       "verification": {
-        "state": "v0.98-installed-coverage",
+        "state": "v0.99-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "널·비UTF8을 포함한 12바이트, SHA-256, Content-Type 및 실제 JDBC 반환값을 설치판에서 확인했다.",
+        "testedScope": "두 개의 Set-Cookie 수신, 이름 있는 세션의 실제 JDBC 요청, 다른 세션의 거부, Max-Age 로그아웃, 값 가리기를 확인했다.",
         "publicEvidence": [
-          "test/http-body-file-host.js",
-          "test/workflows-v98-host.js"
+          "src/http/cookie-jar.js",
+          "test/http-cookie-jar-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3683,22 +3680,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "PostgreSQL 실제 세션의 JSON 예상 계획을 표시하고 같은 쿼리에 대한 순차·인덱스 스캔을 비교한다.",
+      "scope": "실제 PostgreSQL 결과에서 원래 행과 열 타입을 검토하고 승인한 셀을 수정한다.",
       "remaining": [
-        "PostgreSQL 편집과 실측 계획, 추가 DB 엔진, MongoDB TLS·집계·편집을 확장한다."
+        "PostgreSQL 실측 계획, 추가 엔진, MongoDB 원격·집계·편집을 확장한다."
       ],
       "verification": {
-        "state": "v0.98-installed-coverage",
+        "state": "v0.99-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "PostgreSQL 17.12와 JDBC 42.7.14에서 읽기 전용 계획, 쿼리 비교, 취소 및 정확한 큰 정수를 검증했다.",
+        "testedScope": "PostgreSQL17.12에서 큰 정수와 NULL·유니코드, 다른 행 보존, 충돌·재생 거부 및 제약 오류 롤백을 검증했다.",
         "publicEvidence": [
-          "test/postgresql-plan-host.js",
-          "test/workflows-v98-host.js"
+          "test/postgresql-grid-host.js",
+          "test/workflows-v99-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3885,8 +3882,8 @@
       "verification": {
         "state": "v0.98-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.98.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5983,22 +5980,22 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "감사된 스칼라 저장 함수 교체와 복구에서 DEFINER·생성 문맥과 지정한 두 로그인 계정의 직접 EXECUTE를 유지한다.",
+      "scope": "함수 배포와 복구에 더해 뷰의 CHECK OPTION을 검토하고 직접 권한과 생성 문맥을 보존한다.",
       "remaining": [
-        "임의의 루틴·이벤트와 역할에 의한 간접 권한, 뷰의 CHECK OPTION 변경을 확장한다."
+        "역할 기반 간접 권한과 추가 종속 개체의 검토·복원을 확장한다."
       ],
       "verification": {
-        "state": "v0.95-installed-coverage",
+        "state": "v0.99-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.95.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 두 DB 설치판에서 권한을 명시해 컴파일·교체·복원했고 이전 호출 경로를 유지했다. 적용 전후 다른 세션의 권한 변경을 거부했다.",
+        "testedScope": "두 DB에서 LOCAL·CASCADED·NONE의 실제 쓰기 결과, DEFINER·문자 집합·직접 권한 유지, 드리프트 거부, 원상복구를 확인했다.",
         "publicEvidence": [
-          "src/db/object-editor-function-grants.js",
-          "test/function-grant-deployment-host.js"
+          "test/view-check-policy-host.js",
+          "test/workflows-v99-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6454,8 +6451,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "aebdc6c3e7f6402181e4084b17c6e058d39407378cfb589486d27e67bc0e0ecb",
-    "sourceManifestSha256": "3be77137af3f0774a8a8a6c5943cd5162134040574dc2b8da903d8361f01a5b5",
+    "vsixSha256": "dab5e15719def22bf06677d5e87cc7494c5455af183b54b3ce052eadfd352f6f",
+    "sourceManifestSha256": "c080f20d877a32ad1564d814045ac6f1205991501e740173b90a14150867e8fd",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6469,23 +6466,18 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-034",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-010",
+      "id": "IDEA-059",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1894,
-    "pass": 1740,
+    "tests": 1908,
+    "pass": 1752,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 154,
+    "skipped": 156,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

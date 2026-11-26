@@ -201,6 +201,8 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     .prepareClientIdentityFixture(db,clientCertificates,path.join(folder,'client-identity.json'));
   const tlsRotationFixturePath = tlsRotation && await require('../test/helpers/server-tls-rotation-fixture')
     .prepareTlsRotationFixture(db,clientCertificates,engine);
+  const viewCheckFixturePath = process.env.ROCKETBRAIN_ENABLE_VIEW_CHECK_FIXTURE === '1' &&
+    await require('../test/helpers/view-check-fixture').prepareViewCheckFixture(db);
   const url = engine === 'mysql' ? 'jdbc:mysql://127.0.0.1:' + db.config.port + '/' + db.config.database + '?allowPublicKeyRetrieval=true&sslMode=DISABLED'
     : 'jdbc:mariadb://127.0.0.1:' + db.config.port + '/' + db.config.database;
   let log = '', stopping, child;
@@ -243,7 +245,7 @@ async function startSpringProject({ engine = 'mysql', debug = false, debugPort,n
     const configPath = path.join(folder, 'runtime.json');
     const observerConnection=observer?JSON.parse(await fsp.readFile(observerDescriptorFile,'utf8')):null;
     const config = { runtimeUrl, baseUrl, appURL: baseUrl, projectPath: PROJECT, sourcePaths: [path.join(PROJECT, 'src', 'main', 'java')],
-      port, dbEngine: engine, dbConfigPath: db.configPath, ...(clientIdentityFixturePath&&{clientIdentityFixturePath}), ...(sshAgentFixturePath&&{sshAgentFixturePath}), ...(tlsRotationFixturePath&&{tlsRotationFixturePath}), processId: child.pid, javaProcessId: child.pid, debugPort: debugPort || null,naming,
+      port, dbEngine: engine, dbConfigPath: db.configPath, ...(viewCheckFixturePath&&{viewCheckFixturePath}), ...(clientIdentityFixturePath&&{clientIdentityFixturePath}), ...(sshAgentFixturePath&&{sshAgentFixturePath}), ...(tlsRotationFixturePath&&{tlsRotationFixturePath}), processId: child.pid, javaProcessId: child.pid, debugPort: debugPort || null,naming,
       ...(observer?{observerUrl:observerConnection.baseUrl,observerTokenFile}:{}),
       ...(endpointProbePort?{endpointProbeUrl:'http://127.0.0.1:'+endpointProbePort}:{}),
       namingStrategy:naming==='opaque'?{physical:'fixture.boot.OpaquePhysicalNamingStrategy'}:naming==='custom'?{physical:'fixture.boot.FixturePhysicalNamingStrategy',implicit:'fixture.boot.FixtureImplicitNamingStrategy'}:null,

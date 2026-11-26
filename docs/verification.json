@@ -1,25 +1,25 @@
 {
-  "version": "0.98.0",
-  "verifiedAt": "2026-11-26T00:49:13.417Z",
+  "version": "0.99.0",
+  "verifiedAt": "2026-11-26T01:28:31.352Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.98.0.vsix",
-    "sha256": "aebdc6c3e7f6402181e4084b17c6e058d39407378cfb589486d27e67bc0e0ecb",
-    "bytes": 3915918,
+    "name": "rocketbrain-0.99.0.vsix",
+    "sha256": "dab5e15719def22bf06677d5e87cc7494c5455af183b54b3ce052eadfd352f6f",
+    "bytes": 3931787,
     "files": 22
   },
   "source": {
-    "frozenPublicInputs": 2280,
-    "inputVectorSha256": "3be77137af3f0774a8a8a6c5943cd5162134040574dc2b8da903d8361f01a5b5",
+    "frozenPublicInputs": 2296,
+    "inputVectorSha256": "c080f20d877a32ad1564d814045ac6f1205991501e740173b90a14150867e8fd",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1894,
-    "pass": 1740,
+    "tests": 1908,
+    "pass": 1752,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 154,
+    "skipped": 156,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,19 +32,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaEnhancedIteration",
+          "group": "springDerivedQuery",
           "checks": 1
         },
         {
-          "group": "httpBodyFile",
+          "group": "httpCookieJar",
           "checks": 1
         },
         {
-          "group": "postgreSqlEstimatedPlan",
+          "group": "postgreSqlGrid",
           "checks": 1
         },
         {
-          "group": "sshCredentials",
+          "group": "viewCheckPolicy",
           "checks": 1
         }
       ],
@@ -62,19 +62,19 @@
       "groupCount": 4,
       "groups": [
         {
-          "group": "javaEnhancedIteration",
+          "group": "springDerivedQuery",
           "checks": 1
         },
         {
-          "group": "httpBodyFile",
+          "group": "httpCookieJar",
           "checks": 1
         },
         {
-          "group": "postgreSqlEstimatedPlan",
+          "group": "postgreSqlGrid",
           "checks": 1
         },
         {
-          "group": "sshCredentials",
+          "group": "viewCheckPolicy",
           "checks": 1
         }
       ],
@@ -85,84 +85,70 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-034": {
-      "scope": "네 루프를 VS Code에서 적용한 후 매번 실제 Spring 프로젝트를 빌드했다. 세 개의 안전하지 않은 경우와 저장 전 원본 보존을 확인했다.",
+    "IDEA-059": {
+      "scope": "설치판에서 파생 메서드 여섯 개, 다른 파일 속성 이동 두 곳, Pageable 인자 분리와 미저장 변경을 검증했다. 실제 Spring Data PartTree 대조도 마쳤다.",
       "runtimeGroups": [
-        "javaEnhancedIteration"
+        "springDerivedQuery"
       ]
     },
     "IDEA-102": {
-      "scope": "널·비UTF8을 포함한 12바이트, SHA-256, Content-Type 및 실제 JDBC 반환값을 설치판에서 확인했다.",
+      "scope": "두 개의 Set-Cookie 수신, 이름 있는 세션의 실제 JDBC 요청, 다른 세션의 거부, Max-Age 로그아웃, 값 가리기를 확인했다.",
       "runtimeGroups": [
-        "httpBodyFile"
+        "httpCookieJar"
       ]
     },
     "DG-003": {
-      "scope": "PostgreSQL 17.12와 JDBC 42.7.14에서 읽기 전용 계획, 쿼리 비교, 취소 및 정확한 큰 정수를 검증했다.",
+      "scope": "PostgreSQL17.12에서 큰 정수와 NULL·유니코드, 다른 행 보존, 충돌·재생 거부 및 제약 오류 롤백을 검증했다.",
       "runtimeGroups": [
-        "postgreSqlEstimatedPlan"
+        "postgreSqlGrid"
       ]
     },
-    "DG-010": {
-      "scope": "두 DB에서 정상 비밀번호·암호화 Ed25519 키, 불일치 지문 시 인증 차단, 내보내기 비밀 제외 및 소유 포워드 정리를 검증했다.",
+    "DG-081": {
+      "scope": "두 DB에서 LOCAL·CASCADED·NONE의 실제 쓰기 결과, DEFINER·문자 집합·직접 권한 유지, 드리프트 거부, 원상복구를 확인했다.",
       "runtimeGroups": [
-        "sshCredentials"
+        "viewCheckPolicy"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 500,
+    "sourceCorrespondences": 505,
     "sourceConfidence": "inferred",
     "archiveEntries": 22,
     "archiveConfidence": "observed"
   },
-  "nativePayloadEquivalence": {
-    "files": 22,
-    "testedArchiveSha256": "1601865317e8ef153013dac3f97d24e587b0b027858eeaf162d77218aa586b44",
-    "testedInputVectorSha256": "9bd6e6f9eeeb98260a5ddfb157811e912db42a71cdc6d1be53d30908b717d14a",
-    "onlySourceChanges": [
-      "test/http-body-file-host.js",
-      "test/java-enhanced-iteration-host.js"
-    ]
-  },
   "progress": {
     "counts": {
-      "implemented": 148,
-      "partial": 54,
+      "implemented": 149,
+      "partial": 53,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 187,
-    "previousWeightedPoints": 186,
+    "weightedPoints": 187.5,
+    "previousWeightedPoints": 187,
     "targetWeightedPoints": 216,
-    "referencePercent": 86.6,
+    "referencePercent": 86.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-034",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-010",
+        "id": "IDEA-059",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "루프 변환은 배열과 컴파일러가 확인한 불변 리스트의 순차 위치에 한정한다. 인덱스 의존성과 부작용이 있는 변경은 보류한다.",
-    "HTTP 파일 본문은 신뢰한 현재 작업 영역의 상한 이내 파일을 사용한다.",
-    "PostgreSQL 계획은 읽기 전용 EXPLAIN JSON 예상치다. 실제 실행 통계는 별도 범위다.",
-    "SSH 검증은 독립 호스트 키와 실제 SQL을 연결하는 비밀번호·암호화된 키 및 기존 Windows agent 범위다.",
+    "Spring Data 파생 쿼리는 확인한 속성 경로와 인자 계약을 해석하며 관찰하지 않은 provider 확장은 확인이 필요한 범위로 남긴다.",
+    "HTTP 쿠키는 같은 출처, 작업 공간, 환경과 이름으로 구분하며 세션 메모리에 보관한다.",
+    "PostgreSQL 결과 편집은 원본 행·셀과 확인한 열 타입에 묶고 별도 승인을 거친다.",
+    "뷰 변경은 검증한 단일 관계 및 권한 문맥을 적용한다.",
     "IDEA-001과 DG-095는 정확한 호스트 창 배치를 요구한다. 현행 일반 VS Code 확장 방식의 점수 상한은 214/216점이다."
   ],
   "next": [
-    "Spring Data 파생 쿼리와 HTTP 세션 쿠키",
-    "PostgreSQL 결과 편집 및 뷰 CHECK OPTION과 권한"
+    "Gradle 카탈로그 Spring starter 편집과 MongoDB 집계",
+    "HTTP OAuth2와 MariaDB RETURNING"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

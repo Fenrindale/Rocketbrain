@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.98.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.99.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 148 |
-| 부분 구현 | 54 |
+| 구현 | 149 |
+| 부분 구현 | 53 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **86.6%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **86.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.98에서는 Java 배열·불변 리스트의 향상된 for 변환, HTTP 바이너리 파일 전송, PostgreSQL 예상 실행 계획과 SSH 대화형 인증을 추가했다. 상태가 바뀐 항목은 2개이고 가중 점수는 186점에서 187점으로 바뀌었다.
+v0.99에서는 Spring Data 복합 파생 쿼리, HTTP 세션 쿠키, PostgreSQL 결과 셀 편집, MySQL·MariaDB 뷰의 CHECK OPTION 검토를 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 187점에서 187.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -79,7 +79,7 @@ v0.98에서는 Java 배열·불변 리스트의 향상된 for 변환, HTTP 바�
 | IDEA-056 | IntelliJ IDEA | Boot properties·YAML 메타데이터 | 구현 |
 | IDEA-057 | IntelliJ IDEA | Actuator 런타임 Bean·Health·Mappings | 구현 |
 | IDEA-058 | IntelliJ IDEA | Spring 디버거의 실제 설정값·출처 | 구현 |
-| IDEA-059 | IntelliJ IDEA | Spring Data 파생 메서드·쿼리 | 부분 구현 |
+| IDEA-059 | IntelliJ IDEA | Spring Data 파생 메서드·쿼리 | 구현 |
 | IDEA-060 | IntelliJ IDEA | JPQL/HQL 작성·JPA Console | 부분 구현 |
 | IDEA-061 | IntelliJ IDEA | DB 스키마→JPA 엔티티·매핑 생성 | 구현 |
 | IDEA-062 | IntelliJ IDEA | Persistence 트리·엔티티 관계도 | 구현 |

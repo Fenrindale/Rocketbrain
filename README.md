@@ -190,6 +190,8 @@ VSIX에서 `extension/dist/ide-mcp-server.js`를 추출하고, 같은 계정의 
 
 본문을 받는 HTTP 요청 앞에 `# @body-file "fixtures/payload.bin"`을 두면 작업 공간의 파일을 원본 바이트로 전송합니다. 같은 요청의 인라인 본문은 비워 둡니다. 헤더를 포함해 512 KiB까지 지원하며, 별도 `Content-Type`이 없으면 `application/octet-stream`을 사용합니다.
 
+세션을 이어서 사용할 요청마다 `# @cookie-jar serviceSession`을 추가합니다. 같은 작업 공간, 환경, 스킴·호스트·포트와 이름을 쓰는 요청끼리만 쿠키를 공유합니다. 서버가 지정한 경로·만료·Secure 조건을 적용하고 VS Code 세션이 끝나면 쿠키를 지웁니다. [HTTP 쿠키 규격](https://datatracker.ietf.org/doc/html/rfc6265#section-5)
+
 gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 기준 `Proto: api/service.proto` 헤더를 사용합니다. 단일 요청은 JSON 객체, 클라이언트 스트림은 객체 배열을 입력합니다. 단항, 서버 스트림, 클라이언트 스트림, 양방향 스트림의 결과를 출력 창에서 확인할 수 있습니다. 현재는 자체 포함 `.proto` 파일을 사용합니다.
 
 **Review WebDAV Deployment**는 `rocketbrain.deploy.webdav`에 정의한 로컬·원격 폴더와 제외 패턴을 사용합니다. **Set WebDAV Password**로 필요한 비밀번호를 저장하고, 파일을 선택해 diff를 검토합니다. **Upload Reviewed WebDAV Files**는 비교한 ETag를 조건으로 전송하고 원격 파일이 바뀌면 충돌을 표시합니다. 기존 원격 폴더의 새 파일과 변경 파일을 업로드할 수 있습니다.
@@ -369,6 +371,7 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 - MariaDB 시퀀스의 소스 문서에서 **Inspect MariaDB Sequence**를 실행하면 정수 타입, 설정값과 캐시에 아직 할당되지 않은 다음 경계를 읽기 전용으로 볼 수 있습니다. 검사 자체는 시퀀스 값을 소비하지 않습니다. MariaDB 10.11과 11.4는 시퀀스 정의와 상태를, 12.3은 버전에 추가된 카탈로그 메타데이터와 상태를 사용합니다. [MariaDB 시퀀스 메타데이터](https://mariadb.com/docs/server/reference/sql-statements/administrative-sql-statements/show/show-create-sequence)
 - **Go to Database Column Origin**은 SQL 편집기에서 선택한 열의 CTE·파생 테이블 별칭과 연결 계정으로 확인한 뷰 정의를 따라 원본 테이블의 열 선언을 엽니다. **Explain Database Column Origin**에서 경로와 열 타입을 확인할 수 있습니다. 원본을 찾을 수 있는 단일 열 전달을 지원하며, 계산 결과·재귀·집합 연산이나 확인할 수 없는 뷰에서 추적을 중단합니다. 일반 **Go to Definition**은 편집기 안의 별칭 정의로 계속 이동합니다.
 - **Open Database Source for Editing**의 트리거 편집은 MySQL 8.4와 MariaDB 11.4에서 현재 계정이 정의한 InnoDB 테이블의 BEFORE INSERT·UPDATE 트리거를 지원합니다. NEW 열에 대한 대입과 조건문을 빈 복제 테이블에서 컴파일한 뒤, 검토한 DROP·CREATE를 테이블 쓰기 잠금 아래 실행합니다. 연결이 끊기면 두 DDL 사이에 작업이 멈출 수 있으므로 적용과 복원 중에는 쓰기와 외부 스키마 변경을 중지합니다. 저장된 원문·생성 문맥·실행 순서를 재연결 후 확인해 복원할 수 있습니다.
+- 기존 갱신 가능 뷰의 편집 문서에서 **Review View CHECK OPTION**으로 NONE, LOCAL, CASCADED 정책을 검토할 수 있습니다. 변경 전후에 같은 입력 관계, 출력 열, DEFINER와 직접 부여한 권한을 확인합니다. 적용하면 뷰를 통한 쓰기 조건이 달라질 수 있으며, 보관한 원래 정책은 별도 복원 검토에서 되돌릴 수 있습니다. [MySQL ALTER VIEW](https://dev.mysql.com/doc/refman/8.4/en/alter-view.html) · [MariaDB CREATE VIEW](https://mariadb.com/docs/server/server-usage/views/create-view)
 - **Open Database Source for Editing**에서는 기존의 결정적 `NO SQL` 스칼라 함수 중 숫자형 매개변수와 단일 `RETURN` 식을 편집할 수 있습니다. 원래 시그니처·소유자·보안·권한을 비교하고 검증용 객체를 컴파일한 뒤 실제 교체 SQL을 검토합니다. 앱 스키마의 의존 정의를 읽을 수 없거나 다른 객체의 참조·동적 SQL이 관찰되면 교체를 막습니다. `DROP`과 `CREATE` 사이에는 함수가 잠시 없어지므로 호출과 외부 스키마 변경을 중지해야 합니다. 보관된 원본은 검증된 상태에서 복원할 수 있습니다.
 - **Review MariaDB Package Call**은 MariaDB 11.4 이상의 현재 DB에서 SQL/PSM과 Oracle 모드로 저장된 패키지의 명세·본문 및 공개 멤버를 찾습니다. 공개 프로시저는 스칼라 IN·OUT·INOUT을, 공개 함수는 스칼라 입력과 반환 타입을 검토하고 승인 후 전용 세션에서 한 번 실행합니다. 함수는 서버 읽기 전용 트랜잭션에서 한 값을 반환한 뒤 롤백합니다. 명세·본문 변경은 호출 전후 검사하며, 결과와 출력 매개변수는 별도 그리드에 보관합니다. 패키지 호출 시 서버가 초기화 코드를 실행할 수 있습니다. 오버로드, 기본값이 있는 매개변수와 복합 타입은 검토 대상에서 제외합니다.
 - **Review Stored Procedure Call**은 현재 DB에서 정의가 보이는 독립 프로시저를 찾아 계정, 실제 정의와 `IN`·`OUT`·`INOUT` 파라미터를 검토합니다. 확인 후 별도 연결에서 한 번만 실행하며, 결과 집합과 출력 파라미터를 각각 읽기 전용 그리드로 열 수 있습니다. 최대 32개 파라미터와 결과 집합 8개까지 처리합니다. DB 권한은 서버가 적용하며, 쓰기 보호 프로필은 호출을 거부합니다. MariaDB에서는 호출 전후 정의를 비교합니다. 호출 중 다른 세션이 정의를 바꿀 수 있고, 프로시저가 직접 커밋한 변경은 돌이킬 수 없습니다.

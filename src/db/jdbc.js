@@ -11,6 +11,7 @@ const { visitJar } = require('../java/signature-compiler');
 const { validateQuery } = require('./sql-policy');
 const { postgresJdbcUrl, validatePostgreSqlQuery } = require('./postgresql-jdbc');
 const { parsePostgreSqlPlanQuery, normalizePostgreSqlPlan } = require('./postgresql-plan');
+const { gridNames, wireGridEdit } = require('./postgresql-grid');
 const source = require('./jdbc-worker-source.json');
 
 const jarLimit = 64 * 1024 * 1024;
@@ -150,7 +151,7 @@ function wire(value) { return Buffer.from(String(value), 'utf8').toString('base6
 function response(output, operation) {
   const lines = output.trimEnd().split(/\r?\n/);
   const columns = [], rows = [], objects = [];
-  let connection, truncated, plan;
+  let connection, truncated, plan, relation, updated;
   for (const line of lines) {
     const [marker, type, ...encoded] = line.split('\t');
     if (marker !== protocol) throw fail('PROTOCOL', 'The JDBC driver returned an unsupported response.');
@@ -162,6 +163,8 @@ function response(output, operation) {
       if (fields[0] === 'RB004') throw fail('CLASS', 'The approved JDBC driver class must be loaded from its primary JAR.');
       if (fields[0] === 'RB005') throw fail('CONNECTION', 'The connected PostgreSQL database or schema does not match the approved profile.');
       if (fields[0] === 'RB006') throw fail('PLAN_SCOPE', 'Estimate a visible ordinary PostgreSQL table with built-in columns and an in-range integer filter. Table policies, inheritance and custom planner expressions are outside this workflow.');
+      if (fields[0] === 'RB007') throw fail('GRID_SCOPE', 'Choose an ordinary PostgreSQL table with one integer primary key and supported text or integer cells. Triggers, generated columns, and custom planner expressions are outside this workflow.');
+      if (fields[0] === 'RB008') throw fail('GRID_STALE', 'The PostgreSQL row or table changed since review. Reload the grid and review a new edit.');
       if (fields[0] === 'JDBC0') throw fail('DRIVER', 'The JDBC driver could not be initialized. Check its class and separate dependencies.');
       throw fail('SERVER', 'The JDBC operation failed (SQLSTATE ' + fields[0] + ').');
     }
@@ -169,6 +172,21 @@ function response(output, operation) {
         fields[0] && /^\d+$/.test(fields[1] || '') && fields[2]) {
       const [version, relation, raw] = fields;
       plan = { version, relation, raw };
+    } else if (type === 'G' && operation === 'grid-read' && relation === undefined && fields.length === 1 && /^\d{1,10}$/.test(fields[0])) {
+      [relation] = fields;
+    } else if (type === 'F' && operation === 'grid-read' && relation && columns.length < 32 && !rows.length && fields.length === 5) {
+      const [name, type, nullable, number, typeModifier] = fields;
+      if (!/^[a-z_][a-z0-9_]{0,62}$/.test(name) || !['int2', 'int4', 'int8', 'text', 'varchar'].includes(type) ||
+          !['true', 'false'].includes(nullable) || !/^\d{1,4}$/.test(number) || !/^-?\d{1,9}$/.test(typeModifier)) {
+        throw fail('PROTOCOL', 'The PostgreSQL grid metadata is invalid.');
+      }
+      columns.push({ name, type, nullable: nullable === 'true', number: Number(number), typeModifier: Number(typeModifier) });
+    } else if (type === 'R' && operation === 'grid-read' && rows.length < 100 && columns.length >= 2 &&
+        fields.length === columns.length + 1 && /^\d{1,10}$/.test(fields[0]) && /^-?\d{1,19}$/.test(fields[1])) {
+      const [version, ...values] = fields;
+      rows.push({ version, values });
+    } else if (type === 'U' && operation === 'grid-update' && !updated && fields.length === 2 && /^-?\d{1,19}$/.test(fields[0])) {
+      updated = { identity: fields[0], value: fields[1], committed: true };
     } else if (type === 'I' && operation === 'catalog' && fields.length === 6) {
       const [product, version, driver, driverVersion, catalog, schema] = fields;
       connection = { product, version, driver, driverVersion, catalog, schema };
@@ -181,13 +199,19 @@ function response(output, operation) {
         nullable === '0' || nullable === 'NO' ? false : null,
       precision: precision === null ? null : Number(precision), scale: scale === null ? null : Number(scale) });
     } else if (type === 'R' && operation === 'query' && rows.length < 500 && fields.length === columns.length) rows.push(fields);
-    else if (type === 'D' && operation !== 'plan' && fields.length === 1 && ['true', 'false'].includes(fields[0]) && truncated === undefined) truncated = fields[0] === 'true';
+    else if (type === 'D' && !['plan', 'grid-update'].includes(operation) && fields.length === 1 && ['true', 'false'].includes(fields[0]) &&
+        truncated === undefined) truncated = fields[0] === 'true';
     else throw fail('PROTOCOL', 'The JDBC driver returned an unsupported response.');
   }
-  if (operation === 'plan' ? !plan : truncated === undefined || operation === 'catalog' && !connection || operation === 'query' && !columns.length) {
+  const incomplete = operation === 'plan' ? !plan : operation === 'grid-update' ? !updated :
+    truncated === undefined || operation === 'catalog' && !connection || operation === 'query' && !columns.length ||
+      operation === 'grid-read' && (!relation || columns.length < 2);
+  if (incomplete) {
     throw fail('PROTOCOL', 'The JDBC driver response is incomplete.');
   }
   if (operation === 'plan') return plan;
+  if (operation === 'grid-update') return updated;
+  if (operation === 'grid-read') return { relation, columns, rows, truncated };
   if (operation === 'catalog') return { connection, objects, truncated };
   return operation === 'query' ? { columns, rows, truncated } : { columns, truncated };
 }
@@ -232,8 +256,10 @@ function execute(java, operation, directory, args, signal) {
   }).finally(() => { clearTimeout(timer); clearTimeout(grace); signal?.removeEventListener('abort', cancel); });
 }
 
-async function runJdbc({ javaHome, profile, credential, operation, sql = '', object = {}, maxRows = 200, signal }) {
-  if (!['catalog', 'describe', 'query', 'plan'].includes(operation)) throw fail('OPERATION', 'Select a supported JDBC operation.');
+async function runJdbc({ javaHome, profile, credential, operation, sql = '', object = {}, grid, maxRows = 200, signal }) {
+  if (!['catalog', 'describe', 'query', 'plan', 'grid-read', 'grid-update'].includes(operation)) {
+    throw fail('OPERATION', 'Select a supported JDBC operation.');
+  }
   if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > 500) throw fail('LIMIT', 'Choose a JDBC result size between one and 500 rows.');
   if (!isHash(profile?.sha256)) throw fail('JAR', 'Review the JDBC driver and its exact SHA-256 before connecting.');
   const driver = driverClass(profile.driverClass);
@@ -246,10 +272,13 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
     throw fail('PLAN_SCOPE', 'Open an approved PostgreSQL JDBC profile to estimate a plan.');
   }
   const request = operation === 'plan' ? parsePostgreSqlPlanQuery(sql, profile.postgresql.schema) : null;
-  const names = request ? [request.schema, request.table, request.columns.join(',')] : [object.catalog ?? '', object.schema ?? '', object.name ?? ''];
+  const gridRoute = ['grid-read', 'grid-update'].includes(operation) ? gridNames(profile, grid?.table) : null;
+  const names = request ? [request.schema, request.table, request.columns.join(',')] : gridRoute ? [gridRoute.schema, gridRoute.table, grid.column?.name || ''] :
+    [object.catalog ?? '', object.schema ?? '', object.name ?? ''];
   if (!request && (names.some(name => !text(name, 1024)) || operation === 'describe' && !names[2])) {
     throw fail('OBJECT', 'Choose an observed JDBC table or view.');
   }
+  const payload = request ? request.predicate : operation === 'grid-update' ? wireGridEdit(grid) : sql;
   const java = await javaExecutable(javaHome);
   const approved = [profile, ...(Array.isArray(profile.libraries) ? profile.libraries : [])];
   return scratch(async paths => {
@@ -260,7 +289,7 @@ async function runJdbc({ javaHome, profile, credential, operation, sql = '', obj
     }
     await fs.writeFile(paths.worker, source, { flag: 'wx', mode: 0o600 });
     const result = await execute(java, operation, paths.folder, [profile.sha256, driver, auth.url, auth.user, auth.password, operation,
-      request ? request.predicate : sql, ...names,
+      payload, ...names,
       maxRows, approved.length - 1, ...approved.slice(1).map(item => item.sha256),
       profile.postgresql?.database || '', profile.postgresql?.schema || ''], signal);
     return request ? normalizePostgreSqlPlan({ ...result, database: profile.postgresql.database, request }) : result;

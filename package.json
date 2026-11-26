@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.98.0",
+  "version": "0.99.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -221,6 +221,7 @@
       { "command": "rocketbrain.jdbc.estimatePostgreSqlPlan", "title": "Estimate PostgreSQL Query Plan", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans && editorLangId == rocketbrain-jdbc", "icon": "$(graph)" },
       { "command": "rocketbrain.jdbc.openPostgreSqlPlanJson", "title": "Open Original PostgreSQL Plan JSON", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
       { "command": "rocketbrain.jdbc.comparePostgreSqlPlans", "title": "Compare PostgreSQL Estimated Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlPlans" },
+      { "command": "rocketbrain.jdbc.openPostgreSqlGrid", "title": "Open PostgreSQL Table Grid", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.postgreSqlGrid" },
       { "command": "rocketbrain.jdbc.browse", "title": "Browse JDBC Tables and Views", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.jdbc.close", "title": "Close JDBC Connection", "category": "Rocketbrain", "enablement": "rocketbrain.jdbcConnected" },
       { "command": "rocketbrain.sqlNotebook.create", "title": "New SQL Notebook", "category": "Rocketbrain" },
@@ -1209,6 +1210,11 @@
       {
         "command": "rocketbrain.schema.reviewObjectSource",
         "title": "Review Database Object Source",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.reviewViewCheckOption",
+        "title": "Review View CHECK OPTION",
         "category": "Rocketbrain"
       },
       {
