@@ -1,0 +1,100 @@
+name: Quarkus GraalVM Native Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['verify-quarkus-native-*']
+    paths:
+      - '.github/workflows/quarkus-native-linux.yml'
+      - 'src/java/quarkus-*.js'
+      - 'test/quarkus-native*'
+      - 'test/fixtures/java/quarkus-native-linux/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 32
+    services:
+      mysql:
+        image: mysql:8.4.13@sha256:8c233bad33d520a7aae1c1e619c3a9775f4a1ba2d463d692fada04ec7f40be00
+        env:
+          MYSQL_DATABASE: rocketbrain_native
+          MYSQL_USER: rb_native
+          MYSQL_PASSWORD: rb-native-${{ github.run_id }}-${{ github.run_attempt }}-jdbc
+          MYSQL_ROOT_PASSWORD: rb-root-${{ github.run_id }}-${{ github.run_attempt }}-mysql
+        ports: ['43306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping --host=127.0.0.1 --silent"
+          --health-interval 5s --health-timeout 4s --health-retries 22
+      mariadb:
+        image: mariadb:11.4.8@sha256:bc474f00629f0123c10f9e1bca193a45d18af15a274cf0656acda64f1086c3b6
+        env:
+          MARIADB_DATABASE: rocketbrain_native
+          MARIADB_USER: rb_native
+          MARIADB_PASSWORD: rb-native-${{ github.run_id }}-${{ github.run_attempt }}-jdbc
+          MARIADB_ROOT_PASSWORD: rb-root-${{ github.run_id }}-${{ github.run_attempt }}-mariadb
+        ports: ['43307:3306']
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 4s --health-retries 22
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061
+        with:
+          version: 10.29.3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.22.3
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Provision independent GraalVM Community and Maven
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rocketbrain-graalvm" "$RUNNER_TEMP/rocketbrain-maven"
+          curl --fail --silent --show-error --location --retry 3 \
+            'https://github.com/graalvm/graalvm-ce-builds/releases/download/graal-25.5.5.0.3/graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz' \
+            --output "$RUNNER_TEMP/rocketbrain-graalvm.tar.gz"
+          printf '%s  %s\n' 'c6438dee6c3ade2220d40b7ccdcad24b512d30e233e61bb4fc70519522de34ef' \
+            "$RUNNER_TEMP/rocketbrain-graalvm.tar.gz" | sha256sum --check
+          tar --extract --gzip --file "$RUNNER_TEMP/rocketbrain-graalvm.tar.gz" --directory "$RUNNER_TEMP/rocketbrain-graalvm" --strip-components=1
+          curl --fail --silent --show-error --location --retry 3 \
+            'https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.tar.gz' \
+            --output "$RUNNER_TEMP/rocketbrain-maven.tar.gz"
+          printf '%s  %s\n' 'bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978' \
+            "$RUNNER_TEMP/rocketbrain-maven.tar.gz" | sha512sum --check
+          tar --extract --gzip --file "$RUNNER_TEMP/rocketbrain-maven.tar.gz" --directory "$RUNNER_TEMP/rocketbrain-maven" --strip-components=1
+          "$RUNNER_TEMP/rocketbrain-graalvm/bin/native-image" --version
+          command -v gcc
+          command -v ss
+          test -f /usr/include/zlib.h
+          printf 'ROCKETBRAIN_GRAALVM_HOME=%s\nROCKETBRAIN_MAVEN_HOME=%s\n' \
+            "$RUNNER_TEMP/rocketbrain-graalvm" "$RUNNER_TEMP/rocketbrain-maven" >> "$GITHUB_ENV"
+      - name: Build the Spring JDBC comparison application
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAVA_HOME="$ROCKETBRAIN_GRAALVM_HOME" "$ROCKETBRAIN_MAVEN_HOME/bin/mvn" --batch-mode --no-transfer-progress \
+            -f test/fixtures/java/quarkus-native-linux/spring/pom.xml -DskipTests package
+      - name: Build and run the Quarkus ELF against both disposable database engines
+        env:
+          ROCKETBRAIN_NATIVE_LINUX_FIXTURE: '1'
+          RB_NATIVE_DB_USER: rb_native
+          RB_NATIVE_DB_PASSWORD: rb-native-${{ github.run_id }}-${{ github.run_attempt }}-jdbc
+        run: node test/quarkus-native-linux.cjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rocketbrain-quarkus-native-linux
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            test-output/quarkus-native-linux/receipt.json
+            test-output/quarkus-native-linux/quarkus-native-linux-x64
+            test-output/quarkus-native-linux/spring-jdbc-fixture.jar
