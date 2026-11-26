@@ -3015,7 +3015,7 @@
         "rocketbrain.java.quarkusGraalvmHome": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to an independent Linux GraalVM JDK 25 or newer with Native Image for the Quarkus Maven native build."
+          "description": "Absolute path to an independent Linux GraalVM JDK 25 or newer with Native Image for Quarkus Maven and standalone Gradle native builds."
         },
         "rocketbrain.java.micronautGraalvmHome": {
           "type": "string",
