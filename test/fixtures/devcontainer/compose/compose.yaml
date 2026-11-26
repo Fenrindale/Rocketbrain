@@ -1,0 +1,17 @@
+services:
+  workspace:
+    image: ubuntu:24.04
+    command: ["sleep", "infinity"]
+    volumes:
+      - .:/workspaces/compose:ro
+    depends_on:
+      dependency:
+        condition: service_healthy
+  dependency:
+    image: busybox:1.37.0
+    command: ["sh", "-c", "mkdir -p /tmp/site; printf ready-dependency > /tmp/site/ready; exec httpd -f -p 8080 -h /tmp/site"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/ready"]
+      interval: 1s
+      timeout: 2s
+      retries: 15

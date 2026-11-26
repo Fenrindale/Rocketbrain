@@ -32,7 +32,7 @@ jobs:
           node-version: '22'
       - name: Install the locked specification CLI
         run: npm ci --prefix test/fixtures/devcontainer/tooling --ignore-scripts --no-audit --no-fund
-      - name: Verify the image and Dockerfile project lifecycles with real Docker
+      - name: Verify image, Dockerfile and Compose project lifecycles with real Docker
         env:
           ROCKETBRAIN_DEVCONTAINER_LIVE: 'true'
           ROCKETBRAIN_DEVCONTAINER_CLI_PATH: ${{ github.workspace }}/test/fixtures/devcontainer/tooling/node_modules/@devcontainers/cli

@@ -37,10 +37,15 @@ function registerDevContainers(context, vscode) {
       plan.name && 'Name: ' + plan.name,
       plan.image && 'Image: ' + plan.image,
       plan.dockerfile && 'Dockerfile: ' + plan.dockerfile,
+      ...(plan.compose ? [
+        'Compose workspace service  ' + plan.compose.service,
+        'Compose files  ' + plan.compose.files.join(', '),
+        'Reviewed services  ' + plan.compose.services.join(', '),
+      ] : []),
       plan.workspaceFolder && 'Container workspace: ' + plan.workspaceFolder,
       plan.workspaceMount && 'Workspace mount: ' + plan.workspaceMount,
       plan.remoteUser && 'Container user: ' + plan.remoteUser,
-      plan.features.length && 'Features: ' + plan.features.join(', '),
+      plan.features?.length && 'Features: ' + plan.features.join(', '),
       plan.lifecycleHooks.length && 'Lifecycle: ' + plan.lifecycleHooks.join(', ')
     ];
     output.appendLine(lines.filter(Boolean).join('\n') + '\n');
@@ -71,7 +76,7 @@ function registerDevContainers(context, vscode) {
   register('start', async root => {
     const plan = await progress('Reading Dev Container configuration', () => service.inspect(root));
     describe(root, plan);
-    if (plan.kind !== 'image' && plan.kind !== 'dockerfile') throw Error('Choose a single-image or Dockerfile Dev Container configuration.');
+    if (!['image','dockerfile','compose'].includes(plan.kind)) throw Error('Choose an image, Dockerfile, or explicit Compose Dev Container configuration.');
     const approved = await vscode.window.showWarningMessage('Start the Dev Container for ' + path.basename(root) + '?', {
       modal: true,
       detail: 'The Dev Container CLI applies project image, build, workspace mounts and lifecycle commands. The initializeCommand can run on this computer.'
@@ -80,6 +85,7 @@ function registerDevContainers(context, vscode) {
     const result = await progress('Starting the workspace Dev Container',
       () => service.start(root, { file: plan.file, fingerprint: plan.fingerprint, allowProjectExecution: true }));
     output.appendLine('Started ' + result.id.slice(0, 12) + (result.workspaceFolder ? ' in ' + result.workspaceFolder : ''));
+    if(result.services)output.appendLine('Compose services  '+result.services.map(row=>row.service+' '+row.id.slice(0,12)).join(', '));
     return result;
   });
   register('exec', async root => {
@@ -101,6 +107,7 @@ function registerDevContainers(context, vscode) {
   register('status', async root => {
     const result = await progress('Checking the workspace Dev Container', () => service.status(root));
     output.appendLine('Dev Container: ' + result.state + (result.id ? ' (' + result.id.slice(0, 12) + ')' : ''));
+    if(result.services)for(const row of result.services)output.appendLine(row.service+' · '+row.id.slice(0,12)+' · '+(row.running?'running':'stopped'));
     output.show(true);
     return result;
   });
