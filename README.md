@@ -183,6 +183,8 @@ Scala 3 프로젝트에서 `semanticdbEnabled := true`를 설정한 뒤 **Compil
 
 **Debug Kotlin Multiplatform JS Node Target**에서 로컬 Kotlin/JS Node 개발 타깃을 선택하고 Gradle 빌드를 승인합니다. `rocketbrain.kotlin.nodeHome`에 독립 Node.js 설치 디렉터리를 지정합니다. 컴파일러가 저장된 Kotlin 소스를 포함해 생성한 맵을 검증한 뒤 `commonMain`과 `jsMain`에서 중단점, 한 줄씩 넘기기, 스택과 지역 변수 읽기, 계속 실행을 지원합니다. 외부 npm 런타임 의존성이 없는 CommonJS 개발 실행 파일을 대상으로 하며, 소스나 빌드 설정을 바꾼 뒤에는 다시 검토합니다. **Stop Kotlin Multiplatform Task** 또는 디버그 중지 버튼으로 해당 Node.js 세션을 종료합니다.
 
+Apple Silicon Mac의 로컬 신뢰 작업공간에서 **Debug Kotlin iOS Simulator App**을 실행합니다. 저장된 Kotlin 파일에 일반 중단점을 설정한 뒤, 같은 소스로 빌드한 arm64 iOS 시뮬레이터용 `.app`, 내장 Kotlin/Native Debug 프레임워크와 UUID가 일치하는 `.dSYM`을 선택합니다. 검토에 표시된 빌드와 소스가 유지되면 Xcode의 시뮬레이터와 LLDB로 해당 줄에 멈추고 스택 및 원시 타입 지역변수를 표시합니다. 계속 실행으로 앱을 재개하고, 디버그 중지 버튼으로 이 세션에서 만든 시뮬레이터를 삭제합니다. 실제 iOS 기기와 최적화 빌드는 지원 범위 밖입니다.
+
 Linux x64 확장 호스트에서는 **Debug Kotlin/Native Executable**에서 로컬 Gradle 디버그 실행 파일을 검토하고 GDB를 시작합니다. 미리 선택한 Kotlin 파일에 중단점을 설정하고, 한 줄 넘기기와 관찰된 32비트 정수 지역 변수를 확인할 수 있습니다. [Kotlin Multiplatform 디버깅](docs/kotlin-multiplatform-debug.md)
 
 Gradle JVM 타깃의 main 컴파일에 속하는 저장된 Kotlin 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수를 선택할 수 있습니다. `commonMain`, `desktopMain`, `jvmMain`과 Gradle에 등록한 Kotlin 소스 디렉터리를 지원합니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. Gradle 소스셋에 등록된 프로젝트 리소스와 Kotlin 파일을 저장한 뒤 **Refresh Preview**로 같은 소스셋을 다시 그립니다. 렌더링 도중 입력이 달라지면 해당 이미지를 표시하기 전에 다시 검토하도록 안내합니다.

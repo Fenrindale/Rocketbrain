@@ -1,5 +1,5 @@
 {
-  "version": "0.164.0",
+  "version": "0.166.0",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,25 +30,23 @@
     }
   },
   "summary": {
-    "implemented": 199,
-    "partial": 3,
+    "implemented": 200,
+    "partial": 2,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 98.4,
+    "percent": 98.6,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "DG-012",
-    "DG-083"
+    "IDEA-045"
   ],
   "expandedFeatures": [
-    "DG-012",
-    "DG-083"
+    "IDEA-045"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1316,27 +1314,25 @@
       "category": "JVM 언어·프로젝트",
       "feature": "Kotlin Multiplatform·Compose 개발",
       "priority": "P3",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "기존 Kotlin Multiplatform 디버깅에 소유한 Android 에뮬레이터의 검토된 APK를 실행하여 Kotlin 소스 중단점과 기본형 지역 변수를 검사하는 흐름을 추가했다.",
-      "remaining": [
-        "iOS Simulator의 실제 소스 중단점과 지역 변수 지원이 남아 있다."
-      ],
+      "scope": "Kotlin Multiplatform의 Android·JVM·JS·Linux 디버깅에 소유한 iOS Simulator 앱의 소스 중단점과 지역 변수 검사를 추가했다. 검토한 앱·디버그 심볼·소스와 일치할 때 실행한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.160-vendor-runtime-coverage",
+        "state": "v0.166-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.160.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Android API 35 실제 에뮬레이터에서 Kotlin 앱을 설치하고 MainActivity.kt의 목표 줄에서 멈췄다. 정수 42를 읽고 실행을 재개했다. 기존 앱, 변경한 소스, 다른 ADB 연결의 변경을 거부하는 경로도 검증했다.",
+        "testedScope": "실제 Xcode·Kotlin/Native·iOS Simulator에서 Kotlin 프레임의 중단점과 지역 변수, 재개한 실행 결과를 확인했다. 대상·심볼·소스 검증과 테스트 시뮬레이터 정리도 확인했다.",
         "publicEvidence": [
-          "src/java/android-debug-vscode.js",
-          "src/java/android-debug.js",
-          "test/android-kotlin-debug.test.js",
-          ".github/workflows/android-kotlin-debug.yml"
+          "src/java/kmp-ios-debug-vscode.js",
+          "src/java/kmp-ios-debug-adapter.js",
+          "runtime/ios-debug/simulator_lldb.py",
+          "test/kmp-ios-debug.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3838,8 +3834,8 @@
       "verification": {
         "state": "v0.164-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.164.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5935,8 +5931,8 @@
       "verification": {
         "state": "v0.164-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.164.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6332,8 +6328,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "eabaa395065edc98e612be05489ed46829906dd78c728c6b0439f54cc4585094",
-    "sourceManifestSha256": "e3397e281becc0cb108218321c31297edc4752a24270756dc27c9756a5b8b7d9",
+    "vsixSha256": "2b53bea2f862bcb9f3a38c3dcc169da6edb896be4997c3e63c4faabb29f40dd1",
+    "sourceManifestSha256": "4b390879063f1e02fbba9146ce5d1636285ff40579a496613731d3b8fb15d7f2",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6345,19 +6341,25 @@
       }
     ]
   },
-  "stateChanges": [],
+  "stateChanges": [
+    {
+      "id": "IDEA-045",
+      "before": "partial",
+      "after": "implemented"
+    }
+  ],
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "92388152aacf295ce0b6e99cf14be5e1670628d2",
-    "run": 45874716214,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45874716214",
-    "tests": 2256,
+    "head": "ffe1e6cad2cbbf63a83e541f8e7eb6ced19234de",
+    "run": 45882199819,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45882199819",
+    "tests": 2262,
     "suites": 0,
-    "pass": 2006,
+    "pass": 2011,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 250,
+    "skipped": 251,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

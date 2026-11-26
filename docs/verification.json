@@ -1,30 +1,30 @@
 {
-  "version": "0.164.0",
-  "verifiedAt": "2026-11-26T18:20:52.401Z",
+  "version": "0.166.0",
+  "verifiedAt": "2026-11-26T19:19:17.333Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.164.0.vsix",
-    "sha256": "eabaa395065edc98e612be05489ed46829906dd78c728c6b0439f54cc4585094",
-    "bytes": 4722208,
-    "files": 38
+    "name": "rocketbrain-0.166.0.vsix",
+    "sha256": "2b53bea2f862bcb9f3a38c3dcc169da6edb896be4997c3e63c4faabb29f40dd1",
+    "bytes": 4736513,
+    "files": 39
   },
   "source": {
-    "frozenPublicInputs": 3147,
-    "inputVectorSha256": "e3397e281becc0cb108218321c31297edc4752a24270756dc27c9756a5b8b7d9",
+    "frozenPublicInputs": 3162,
+    "inputVectorSha256": "4b390879063f1e02fbba9146ce5d1636285ff40579a496613731d3b8fb15d7f2",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "92388152aacf295ce0b6e99cf14be5e1670628d2",
-    "run": 45874716214,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45874716214",
-    "tests": 2256,
+    "head": "ffe1e6cad2cbbf63a83e541f8e7eb6ced19234de",
+    "run": 45882199819,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45882199819",
+    "tests": 2262,
     "suites": 0,
-    "pass": 2006,
+    "pass": 2011,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 250,
+    "skipped": 251,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -39,135 +39,120 @@
       "groups": []
     }
   ],
-  "vendorRuntime": {
-    "schemaColumnMapping": {
-      "sourceCommit": "d14fec9ac43aa91a2a94774adee96f1304a50356",
-      "sha256": "a8574f37fc728bcbd7994a6e51ffac935d4972b1137dc81d8d39fc89fb9b5649",
-      "results": [
-        {
-          "engine": "mysql",
-          "planVersion": 5,
-          "before": {
-            "engine": "mysql",
-            "version": "8.4.13",
-            "joined": "[2147483647, -2147483648]"
-          },
-          "after": {
-            "engine": "mysql",
-            "version": "8.4.13",
-            "joined": "[2147483647, -2147483648]"
-          },
-          "restored": {
-            "engine": "mysql",
-            "version": "8.4.13",
-            "joined": "[2147483647, -2147483648]"
-          },
-          "explicitColumnRename": true,
-          "preservedValuesAndNulls": true,
-          "retainedCompositeIndex": true,
-          "retainedCompositeFK": true,
-          "bothOwnersSelected": true,
-          "readOnlyPreflightRefusals": true,
-          "columnMappingDriftRefused": true,
-          "noRowValuesInJournal": true,
-          "liveRowDriftRefused": true,
-          "freshSessionRestored": true,
-          "peerPreserved": true,
-          "atomicAcrossTables": false,
-          "receiptSha256": "527ac842d6142398b01037c227ccf2fdc98fcfb8376daf4ab4fa87b89a12cfbc"
-        },
-        {
-          "engine": "mariadb",
-          "planVersion": 5,
-          "before": {
-            "engine": "mariadb",
-            "version": "11.4.8-MariaDB",
-            "joined": "[2147483647, -2147483648]"
-          },
-          "after": {
-            "engine": "mariadb",
-            "version": "11.4.8-MariaDB",
-            "joined": "[2147483647, -2147483648]"
-          },
-          "restored": {
-            "engine": "mariadb",
-            "version": "11.4.8-MariaDB",
-            "joined": "[2147483647, -2147483648]"
-          },
-          "explicitColumnRename": true,
-          "preservedValuesAndNulls": true,
-          "retainedCompositeIndex": true,
-          "retainedCompositeFK": true,
-          "bothOwnersSelected": true,
-          "readOnlyPreflightRefusals": true,
-          "columnMappingDriftRefused": true,
-          "noRowValuesInJournal": true,
-          "liveRowDriftRefused": true,
-          "freshSessionRestored": true,
-          "peerPreserved": true,
-          "atomicAcrossTables": false,
-          "receiptSha256": "2505d96708ca629bc79bfa661129412a08375c362a406d5ad08821be2b9f95c2"
-        }
-      ],
-      "legacySerializationSha256": "d3e3e02c872f990ba2e1e8a697983595ed37087f5ff6a643a284414676d5424c"
-    },
-    "cloudAuthVerifier": {
-      "sourceCommit": "1681cd6abc3ff8fe75b8397d1b28e31beb2500af",
-      "sha256": "5522051ee47fc7959ca4bf239a4605c02b4486868028b750e8ad3f828b589150",
-      "tests": 32,
-      "officialAwsCliWithSyntheticInput": true,
-      "realLocalTls": true,
-      "liveRdsVerified": false,
-      "liveAzureVerified": false,
-      "fixturePermissionRequired": true
-    }
-  },
   "newlyVerified": {
-    "DG-012": {
-      "scope": "실제 AWS CLI의 합성 입력과 로컬 MySQL TLS 연결로 인증 흐름과 잘못된 CA의 거부를 확인했다. 테스트에 사용한 Azure 토큰 발급은 모의 공급자였다.",
+    "IDEA-045": {
+      "scope": "실제 Xcode·Kotlin/Native·iOS Simulator에서 Kotlin 프레임의 중단점과 지역 변수, 재개한 실행 결과를 확인했다. 대상·심볼·소스 검증과 테스트 시뮬레이터 정리도 확인했다.",
       "runtimeGroups": [
-        "cloudAuthVerifier"
-      ]
-    },
-    "DG-083": {
-      "scope": "실제 MySQL·MariaDB에서 INT를 BIGINT로 바꾸면서 이름도 변경했다. 경계 정수와 NULL, 복합 인덱스·외래 키가 유지됐고 새 세션으로 복구해도 Spring JDBC 결과가 일치했다. 불완전한 외래 키와 승인 후 데이터 변경은 거부했다.",
-      "runtimeGroups": [
-        "schemaColumnMapping"
+        "kotlinIosSimulatorDebug"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 730,
+    "sourceCorrespondences": 734,
     "sourceConfidence": "inferred",
-    "archiveEntries": 38,
+    "archiveEntries": 39,
     "archiveConfidence": "observed"
+  },
+  "hostedRuntime": {
+    "kotlinIosSimulatorDebug": {
+      "actualSimulator": true,
+      "origin": "stock Xcode LLDB on a fresh Apple Silicon iOS Simulator",
+      "workflow": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45880708767",
+      "run": 45880708767,
+      "job": 140119046681,
+      "sourceCommit": "b7695d792604c18d3183f2b57421e3ced0de1417",
+      "workflowConclusion": "failure",
+      "runtimeObservation": "success",
+      "runnerCacheNote": "The runtime observation and receipt upload passed. The only failure was post-job saving of an unused pnpm cache. The packaged workflow removes that cache setting.",
+      "artifactId": 15147896056,
+      "hostedZipSha256": "c5ef961ac6b7f8c7fa897496145c300b8cf42719c68b8aa878e0ef426bbe9989",
+      "receiptSha256": "90e8252afb28e1d1708f3fda51458186d92e59d364fddd29ca80187473522d0f",
+      "platform": "darwin-arm64",
+      "xcode": "Xcode 26.4.1\nBuild version 17E202",
+      "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-4",
+      "runtimeVersion": "26.4.1",
+      "device": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+      "build": "Kotlin 2.4.21 iosSimulatorArm64 DEBUG framework + UIKit",
+      "appSha256": "a2d240e06fa90864f05b91ab7c43e767a684cc6afac09b4e0f92bc69316c2325",
+      "frameworkSha256": "7ed222fe5723e39bc3228d13ede8b908ae169799d95b6d3af7b3d47f1fe7381f",
+      "frameworkUuid": "8e7136ee-5f6b-3611-ab51-e2fff52a773f",
+      "symbolsSha256": "e7641a2ed9beba49d2db9f955929d914b79c8871072a0b82f65f92fe4aa3cbca",
+      "sourceSha256": "a194d77e08ab50b83eedca2a89cdcafbd6f44f1bab8e768aef9547414b2efd1e",
+      "editorBreakpoint": {
+        "file": "Probe.kt",
+        "line": 6,
+        "stack": "kfun:simulatorfixture.Probe#measure(kotlin.Int){}kotlin.Int",
+        "local": {
+          "name": "measured",
+          "type": "int",
+          "value": "42"
+        }
+      },
+      "resumed": "UIKit Kotlin=42",
+      "staleSourceRefused": true,
+      "staleDsymRefused": true,
+      "wrongDsymRefused": true,
+      "oneShot": true,
+      "simulatorRemoved": true,
+      "otherSimulatorsUnchanged": true,
+      "phases": [
+        "owned-device-created",
+        "owned-device-booted",
+        "owned-app-installed",
+        "installed-executable-and-framework-verified",
+        "debuggee-launched",
+        "owned-pid-verified",
+        "lldb-interpreter-entered",
+        "lldb-target-opened",
+        "lldb-attaching",
+        "lldb-process-verified",
+        "lldb-runtime-framework-pending",
+        "lldb-runtime-loader-stopped",
+        "lldb-runtime-loader-stopped",
+        "lldb-runtime-loader-stopped",
+        "lldb-runtime-framework-mapped",
+        "lldb-module-verified",
+        "lldb-runtime-breakpoint-resolved",
+        "lldb-process-continue",
+        "lldb-breakpoint-bound",
+        "lldb-process-continue-returned",
+        "owned-device-deleted"
+      ],
+      "coverage": "Production debug adapter with a stock Xcode LLDB and fresh iOS Simulator. Scope includes one reviewed Kotlin source line and scalar locals.",
+      "frozenSourceCommit": "ffe1e6cad2cbbf63a83e541f8e7eb6ced19234de"
+    }
   },
   "progress": {
     "counts": {
-      "implemented": 199,
-      "partial": 3,
+      "implemented": 200,
+      "partial": 2,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 212.5,
+    "weightedPoints": 213,
     "previousWeightedPoints": 212.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 98.4,
+    "referencePercent": 98.6,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
-    "stateChanges": []
+    "stateChanges": [
+      {
+        "id": "IDEA-045",
+        "before": "partial",
+        "after": "implemented"
+      }
+    ]
   },
   "limits": [
     "216개 기능의 기존 가중치를 유지했다.",
-    "컬럼 이행은 사용자가 일대일로 짝지은 동일 서버 InnoDB 테이블에 적용한다. 검토한 인덱스·외래 키를 보존할 수 없으면 실행 전에 중단한다.",
-    "클라우드 연결 검증은 소유자가 승인한 실제 연결 설정이 제공된 경우에 실행한다."
+    "iOS 디버깅은 검토한 arm64 시뮬레이터 앱, 원래 소스와 일치하는 디버그 심볼과 지원 범위의 지역 변수에 적용한다.",
+    "IDEA-001과 DG-095의 원본 전체 창 배치는 VS Code 공개 확장 API의 호스트 구조 제약을 받는다.",
+    "DG-083의 별도 MySQL·MariaDB 서버 간 원자적 DDL은 각 서버의 DDL 트랜잭션 제약을 받는다."
   ],
   "next": [
-    "macOS·Xcode에서 iOS Simulator의 Kotlin 중단점·지역 변수 흐름 검증",
-    "승인된 AWS RDS MySQL IAM과 Azure MySQL Entra 테스트 환경에서 실제 공급자 인증 검증",
-    "서로 다른 서버의 원자적 DDL과 VS Code 전체 창 배치의 구조 제약 기록"
+    "승인된 AWS RDS MySQL IAM과 Azure MySQL Entra 테스트 환경에서 DG-012의 실제 공급자 인증을 검증"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
