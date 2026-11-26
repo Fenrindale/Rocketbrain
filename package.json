@@ -540,6 +540,7 @@
       },
       { "command": "rocketbrain.contextActions", "title": "Context Actions", "category": "Rocketbrain" },
       { "command": "rocketbrain.contextActions.results", "title": "Query Result Actions", "category": "Rocketbrain" },
+      { "command": "rocketbrain.keyboardProfile", "title": "Keyboard Profile", "category": "Rocketbrain" },
       {
         "command": "rocketbrain.gitWorktree.context",
         "title": "Manage Git Worktree Context",

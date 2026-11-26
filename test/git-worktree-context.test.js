@@ -16,6 +16,7 @@ const {resolveLaunch,serverSettings}=require('../src/java/runtime');
 const {collectProjects}=require('../src/java/workbench-model');
 const {parseWorktrees,inspectWorktree,contextSettings,createWorktreeContextStore}=require('../src/vcs/worktree-context');
 const {registerWorktreeContexts}=require('../src/vcs/worktree-context-vscode');
+const {auditProfile}=require('../src/keyboard-profile');
 
 const config=process.env.ROCKETBRAIN_JAVA_TEST_CONFIG,run=promisify(execFile);
 const uri=file=>({scheme:'file',fsPath:file,toString:()=>pathToFileURL(file).href});
@@ -52,8 +53,13 @@ test('real Git/JDT project contexts use separate worktree settings and exact ser
   const profiles=[{id:'primary',revision:2,profile:{name:'Primary'}},{id:'linked',revision:1,profile:{name:'Linked'}}],opened=[];
   let snapshots;
   const java={workbench:{refresh:()=>collectProjects({folders,request:(command,args)=>lsp.request('workspace/executeCommand',{command,arguments:args},25000)})}};
-  const vscode={Uri:{file:uri},workspace:{isTrusted:true,getWorkspaceFolder:()=>({uri:uri(fixture.folder)})},window:{},
-    commands:{registerCommand:()=>disposable,async executeCommand(name,...args){commands.push([name,...args]);}}};
+  const registered=new Map(),pickers=[];
+  const vscode={Uri:{file:uri},workspace:{isTrusted:true,getWorkspaceFolder:()=>({uri:uri(fixture.folder)})},
+    window:{activeTextEditor:{document:{uri:uri(path.join(fixture.main,fixture.source))}},
+      async showQuickPick(items,options){pickers.push(options.title);return items.find(item=>item.key==='spring');},
+      showErrorMessage(message){throw Error(message);},showInformationMessage(){}},
+    commands:{registerCommand(name,run){registered.set(name,run);return disposable;},
+      async executeCommand(name,...args){if(registered.has(name))return registered.get(name)(...args);commands.push([name,...args]);}}};
   const dbConnections={list:()=>structuredClone(profiles),async openDedicatedConsole(value){opened.push(value);return {profile:value.id};}};
   const service=registerWorktreeContexts({globalState},vscode,{java,dbConnections});
   try {
@@ -77,6 +83,11 @@ test('real Git/JDT project contexts use separate worktree settings and exact ser
     const received=await Promise.all([service.spring(main),service.spring(linked)]);
     assert.deepEqual(received.map(row=>row.health.status),['UP','OUT_OF_SERVICE']);
     assert.deepEqual(calls.sort(),['/linked/actuator/health','/main/actuator/health']);
+    const keyboard=auditProfile('win32',{commands:registered.keys()}).routes.find(rule=>rule.command==='rocketbrain.gitWorktree.context');
+    assert.ok(keyboard.available);
+    assert.equal((await vscode.commands.executeCommand(keyboard.command)).health.status,'UP');
+    assert.deepEqual(pickers,['Git Worktree Context · rb-main']);
+    assert.equal(calls.at(-1),'/main/actuator/health');
     await service.openDatabase(main);
     await service.openDatabase(linked);
     assert.deepEqual(opened.map(row=>[row.id,row.revision]),[['primary',2],['linked',1]]);
@@ -111,7 +122,8 @@ test('real Git/JDT project contexts use separate worktree settings and exact ser
     const proof=process.env.ROCKETBRAIN_WORKTREE_CONTEXT_RECEIPT;
     if(proof)await fs.writeFile(proof,JSON.stringify({jdt:'1.63.0',worktrees:2,independentJdtProjects:true,outputs,
       loopbackRoutes:calls,databaseBindingRevisionsChecked:true,staleWorktreeRefused:true,staleProfileRefused:true,
-      localPersistence:true,isolatedClear:true,openNewWindowBoundToSibling:true},null,2)+'\n');
+      localPersistence:true,isolatedClear:true,openNewWindowBoundToSibling:true,
+      keyboardRouteObservedExactGitWorktree:true},null,2)+'\n');
   }finally{
     service.dispose();
     try{await lsp.close();}finally{

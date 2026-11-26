@@ -18,6 +18,8 @@ An independent VS Code workbench for Java/Spring and MySQL/MariaDB. Support is d
 
 **Search Everywhere**는 파일, 워크스페이스 기호, 명령, 설정 키와 로컬 Git 브랜치·커밋을 함께 검색합니다. `#`, `>`, `@`, `%`는 각각 기호, 명령, 설정, Git으로 좁히고 `$`는 활성 MySQL·MariaDB 스키마의 객체를 검색합니다. Git 결과는 선택한 리비전을 읽기 전용으로 보여줍니다. 설정 검색에는 키와 공개 설정 설명을 사용합니다.
 
+**Keyboard Profile**에서 Java·Spring, SQL·결과 화면, 디버거, Git 단축키 52개와 확인 가능한 충돌을 검토합니다. 적용할 항목은 내보낸 JSONC에서 골라 VS Code 사용자 단축키에 직접 추가합니다. [Context Actions와 키보드 프로필](docs/context-actions.md#keyboard-profile)
+
 **Java Projects**에서 관찰된 main·test·생성 소스와 각각의 빌드 출력 위치를 봅니다. 다른 프로젝트의 출력으로 확인된 의존성 항목을 열면 그 프로젝트로 이동합니다.
 **Discover Build Tasks**는 열린 작업 영역에 있는 Gradle 포함 빌드의 작업을 전체 경로(예: `:library:service:classes`)로 표시합니다. Groovy 및 Kotlin DSL의 실제 작업 모델을 읽으며, 검토한 설정·빌드 파일이 바뀌면 다시 검색한 뒤 작업을 실행해야 합니다.
 
