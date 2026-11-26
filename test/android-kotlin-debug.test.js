@@ -11,7 +11,7 @@ const { test } = require('node:test');
 const { createHash } = require('node:crypto');
 const { execute } = require('../src/java/testing/provision');
 const { createAndroidDebug, kotlinLocation } = require('../src/java/android-debug');
-const { androidTools, createAdb, connectAdbJdwp, emulatorDevices, apkBadging, processStartedAt } = require('../src/java/android-adb');
+const { androidTools, createAdb, connectAdbJdwp, activeJdwp, emulatorDevices, apkBadging, processStartedAt } = require('../src/java/android-adb');
 
 const packageName = 'dev.rocketbrain.androidfixture', activity = packageName + '.MainActivity';
 const manifest = "package: name='" + packageName + "' versionCode='1'\napplication-debuggable\nlaunchable-activity: name='" + activity + "'\n";
@@ -73,6 +73,32 @@ test('Android package installation requests explicit nonreplacement and binds al
   await adb.install({ serial: 'emulator-5570', transportId: '7' }, path.resolve('reviewed.apk'));
   assert.deepEqual(calls[0].slice(0, -1), ['-H', '127.0.0.1', '-P', '5037', '-t', '7', 'install',
     '--no-streaming', '--no-incremental', '-R', '--user', '0']);
+});
+
+test('read the first Android JDWP process list and close its persistent tracking stream', async t => {
+  let closed, messages = [];
+  const server = net.createServer(socket => {
+    closed = once(socket, 'close');
+    let seen = '';
+    socket.setEncoding('utf8').on('data', chunk => {
+      seen += chunk;
+      while (seen.length >= 4) {
+        const length = Number.parseInt(seen.slice(0, 4), 16);
+        if (seen.length < 4 + length) return;
+        const message = seen.slice(4, 4 + length);
+        seen = seen.slice(4 + length);
+        messages.push(message);
+        if (message === 'track-jdwp') socket.write('OKAY0007804\n25\n');
+        else socket.write('OKAY');
+      }
+    });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.close(); });
+  assert.deepEqual(await activeJdwp(server.address().port, '7'), ['804', '25']);
+  await closed;
+  assert.deepEqual(messages, ['host:transport-id:7', 'track-jdwp']);
 });
 
 const wanted = {

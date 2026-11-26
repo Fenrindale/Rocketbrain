@@ -142,10 +142,10 @@ function createAdb(tools, exec = execute) {
     const tr = args => transport(device, args);
     const [observed, jdwp] = await Promise.all([
       invoke(tr(['shell', 'run-as', packageName, 'cat', '/proc/' + pid + '/stat'])),
-      checked(tr(['jdwp']), 'The emulator did not report active Android JDWP processes.')
+      activeJdwp(tools.port, device.transportId)
     ]);
     const startedAt = observed.code === 0 && processStartedAt(observed.output, pid);
-    if (!startedAt || !lines(jdwp).includes(pid)) return undefined;
+    if (!startedAt || !jdwp.includes(pid)) return undefined;
     return { pid, startedAt };
   }
   return {
@@ -168,39 +168,41 @@ function createAdb(tools, exec = execute) {
   };
 }
 
-async function connectAdbJdwp(port, transportId, pid) {
-  if (!Number.isInteger(port) || port < 1024 || port > 65535 || !numberToken.test(transportId || '') ||
-      !numberToken.test(pid || '')) throw Error('Invalid reviewed Android JDWP route.');
-  const socket = net.createConnection({ host: loopback, port });
-  // The next reader consumes exactly an ADB status word, leaving following JDWP bytes in the stream.
-  function status() {
-    return new Promise((resolve, reject) => {
-      function clean() {
-        socket.off('readable', read);
-        socket.off('close', closed);
-        socket.off('error', closed);
-      }
-      function closed() { clean(); reject(Error('The local ADB JDWP transport closed.')); }
-      function read() {
-        const word = socket.read(4);
-        if (!word) return;
-        clean();
-        if (word.toString('ascii') !== 'OKAY') reject(Error('Local ADB refused the selected Android JDWP route.'));
-        else resolve();
-      }
-      socket.on('readable', read);
-      socket.once('close', closed);
-      socket.once('error', closed);
-      read();
-    });
+function readExact(socket, size) {
+  if (!size) return Promise.resolve(Buffer.alloc(0));
+  return new Promise((resolve, reject) => {
+    function clean() {
+      socket.off('readable', read);
+      socket.off('close', closed);
+      socket.off('error', closed);
+    }
+    function closed() { clean(); reject(Error('The local ADB JDWP transport closed.')); }
+    function read() {
+      const received = socket.read(size);
+      if (!received) return;
+      clean();
+      resolve(received);
+    }
+    if (socket.destroyed) return closed();
+    socket.on('readable', read);
+    socket.once('close', closed);
+    socket.once('error', closed);
+    read();
+  });
+}
+
+async function openAdbService(port, transportId, command) {
+  if (!Number.isInteger(port) || port < 1024 || port > 65535 || !numberToken.test(transportId || '')) {
+    throw Error('Invalid reviewed Android JDWP route.');
   }
+  const socket = net.createConnection({ host: loopback, port });
   socket.on('error', () => {});
   const timer = setTimeout(() => socket.destroy(Error('ADB JDWP connection timed out.')), 7000);
   try {
     await once(socket, 'connect');
-    for (const service of ['host:transport-id:' + transportId, 'jdwp:' + pid]) {
+    for (const service of ['host:transport-id:' + transportId, command]) {
       socket.write(service.length.toString(16).padStart(4, '0') + service, 'ascii');
-      await status();
+      if ((await readExact(socket, 4)).toString('ascii') !== 'OKAY') throw Error('Local ADB refused the selected Android JDWP route.');
     }
     return socket;
   } catch (error) {
@@ -209,4 +211,24 @@ async function connectAdbJdwp(port, transportId, pid) {
   } finally { clearTimeout(timer); }
 }
 
-module.exports = { androidTools, createAdb, connectAdbJdwp, apkBadging, emulatorDevices, processStartedAt, qualified, loopback };
+async function connectAdbJdwp(port, transportId, pid) {
+  if (!numberToken.test(pid || '')) throw Error('Invalid reviewed Android JDWP route.');
+  return openAdbService(port, transportId, 'jdwp:' + pid);
+}
+
+async function activeJdwp(port, transportId) {
+  const socket = await openAdbService(port, transportId, 'track-jdwp');
+  const timer = setTimeout(() => socket.destroy(), 5000);
+  try {
+    // ADB tracks JDWP continuously. Read its first length-prefixed list without waiting for EOF.
+    const length = (await readExact(socket, 4)).toString('ascii');
+    if (!/^[0-9a-f]{4}$/iu.test(length) || Number.parseInt(length, 16) > 16 * 1024) {
+      throw Error('The Android JDWP process list exceeded its bounds.');
+    }
+    const entries = lines((await readExact(socket, Number.parseInt(length, 16))).toString('utf8'));
+    if (entries.some(pid => !numberToken.test(pid))) throw Error('Unexpected Android JDWP process identity.');
+    return entries;
+  } finally { clearTimeout(timer); socket.destroy(); }
+}
+
+module.exports = { androidTools, createAdb, connectAdbJdwp, activeJdwp, apkBadging, emulatorDevices, processStartedAt, qualified, loopback };
