@@ -417,6 +417,130 @@ public final class HibernateAccess {
         }catch(ReflectiveOperationException unavailable){return null;}
     }
 
+    private static final String GRAPH="org.hibernate.graph.internal.";
+    private static final int GRAPH_COUNT_LIMIT=24, GRAPH_PATH_LIMIT=64, GRAPH_DEPTH_LIMIT=6;
+
+    static Map<String,Object> namedEntityGraphs(Object factory){
+        Map<String,Object> result=map("state","unknown","observerExecutedSql",false,"valuesRetained",false,
+            "applicationCallbacksInvoked",false,"graphs",List.of());
+        if(!classIs(factory,"org.hibernate.internal.SessionFactoryImpl")||!Boolean.FALSE.equals(optional(factory,"isClosed"))){
+            result.put("reason","factory_unavailable");
+            return result;
+        }
+        Object metamodel=optional(factory,"getMetamodel");
+        if(!providerObject(factory,metamodel)){
+            result.put("reason","graph_registry_unavailable");
+            return result;
+        }
+        Object entities=optional(metamodel,"getEntities");
+        if(!(entities instanceof Set<?> managed)){
+            result.put("reason","graph_registry_unavailable");
+            return result;
+        }
+        if(managed.size()>128){
+            result.put("reason","graph_registry_limit");
+            return result;
+        }
+        // The verified Hibernate implementation requires a concrete managed Java type here.
+        Map<String,Object> available=new LinkedHashMap<>();
+        Set<String> changed=new java.util.HashSet<>();
+        boolean complete=true;
+        for(Object entity:managed){
+            if(!classIs(entity,JPA_DOMAIN+"EntityTypeImpl")||!providerObject(factory,entity)){complete=false;continue;}
+            Class<?> type=bindingJavaClass(factory,optional(entity,"getExpressibleJavaType"));
+            Object registered=type==null?null:optional(factory,"getNamedEntityGraphs",type);
+            if(!(registered instanceof Map<?,?> names)){complete=false;continue;}
+            if(names.size()>GRAPH_COUNT_LIMIT){result.put("reason","graph_registry_limit");return result;}
+            for(var entry:names.entrySet()){
+                String name=graphName(entry.getKey());
+                Object graph=entry.getValue();
+                if(name==null||graph==null){complete=false;continue;}
+                Object prior=available.putIfAbsent(name,graph);
+                if(prior!=null&&prior!=graph){complete=false;changed.add(name);}
+            }
+            if(available.size()>GRAPH_COUNT_LIMIT){result.put("reason","graph_registry_limit");return result;}
+        }
+        List<Map<String,Object>> graphs=new ArrayList<>();
+        for(var entry:available.entrySet()){
+            String name=entry.getKey();
+            if(changed.contains(name))continue;
+            Map<String,Object> graph=readEntityGraph(factory,entry.getValue());
+            if(graph==null||!name.equals(graph.get("name"))){complete=false;continue;}
+            complete&=Boolean.TRUE.equals(graph.get("complete"));
+            graphs.add(graph);
+        }
+        graphs.sort(Comparator.comparing(value->(String)value.get("name")));
+        result.put("basis","jakarta-named-entity-graphs");
+        result.put("state",complete?"observed":"partial");
+        result.put("graphs",List.copyOf(graphs));
+        return result;
+    }
+
+    static Map<String,Object> appliedEntityGraph(Object factory,Object context){
+        try{
+            if(!classIs(factory,"org.hibernate.internal.SessionFactoryImpl")||
+                !providerFamily(factory,context,"org.hibernate."))return null;
+            Object queryOptions=optional(context,"getQueryOptions");
+            if(!providerFamily(factory,queryOptions,"org.hibernate."))return null;
+            Object applied=optional(queryOptions,"getAppliedGraph");
+            if(!providerFamily(factory,applied,"org.hibernate."))return null;
+            Object graph=optional(applied,"getGraph"), mode=optional(applied,"getSemantic");
+            if(!(mode instanceof Enum<?> semantic)||!Set.of("FETCH","LOAD").contains(semantic.name()))return null;
+            Map<String,Object> described=readEntityGraph(factory,graph);
+            if(described==null)return null;
+            return map("semantic",semantic.name(),"graph",described);
+        }catch(Throwable ignored){return null;}
+    }
+
+    private static Map<String,Object> readEntityGraph(Object factory,Object graph){
+        if(!classIs(graph,GRAPH+"RootGraphImpl")||!providerObject(factory,graph))return null;
+        Object model=optional(graph,"getGraphedType");
+        if(!classIs(model,JPA_DOMAIN+"EntityTypeImpl")||!providerObject(factory,model))return null;
+        Class<?> type=bindingJavaClass(factory,optional(model,"getExpressibleJavaType"));
+        if(type==null||type.getName().length()>256)return null;
+        Object rawName=optional(graph,"getName");
+        String name=graphName(rawName);
+        List<String> paths=new ArrayList<>();
+        boolean complete=(rawName==null||name!=null)&readGraphPaths(factory,graph,"",0,paths,new IdentityHashMap<>());
+        paths.sort(String::compareTo);
+        return map("name",name,"rootJavaType",type.getName(),"paths",List.copyOf(paths),"complete",complete);
+    }
+
+    private static boolean readGraphPaths(Object factory,Object graph,String prefix,int depth,List<String> paths,
+                                           IdentityHashMap<Object,Boolean> ancestors){
+        if(depth>=GRAPH_DEPTH_LIMIT||ancestors.put(graph,Boolean.TRUE)!=null)return false;
+        try{
+            Object attributes=invoke(graph,"getAttributeNodeList");
+            if(!(attributes instanceof List<?> nodes))return false;
+            boolean complete=invoke(graph,"getTreatedSubgraphs") instanceof Map<?,?> treated&&treated.isEmpty();
+            for(Object node:nodes){
+                if(paths.size()>=GRAPH_PATH_LIMIT)return false;
+                if(!providerFamily(factory,node,GRAPH+"AttributeNodeImpl$")){complete=false;continue;}
+                Object attribute=invoke(node,"getAttributeName");
+                if(!(attribute instanceof String name)||!name.matches("[A-Za-z_$][A-Za-z0-9_$]{0,127}")){
+                    complete=false;
+                    continue;
+                }
+                String path=prefix.isEmpty()?name:prefix+"."+name;
+                if(path.length()>256||paths.contains(path)){complete=false;continue;}
+                paths.add(path);
+                // Ordinary value-subgraphs retain their path; map-key and treated branches require separate semantics.
+                if(invoke(node,"getKeySubgraph")!=null)complete=false;
+                Object child=invoke(node,"getValueSubgraph");
+                if(child!=null){
+                    if(!classIs(child,GRAPH+"SubGraphImpl")||!providerObject(factory,child))complete=false;
+                    else complete&=readGraphPaths(factory,child,path,depth+1,paths,ancestors);
+                }
+            }
+            return complete;
+        }catch(Throwable unavailable){return false;}
+        finally{ancestors.remove(graph);}
+    }
+
+    private static String graphName(Object value){
+        return value instanceof String name&&name.matches("[A-Za-z0-9_.$: -]{1,128}")&&!name.isBlank()?name:null;
+    }
+
     private static Map<String, Object> function(Object registry, String name) {
         Map<String, Object> result = map("name", text(name, 256), "state", "observed");
         Object descriptor = optional(registry, "findFunctionDescriptor", name);

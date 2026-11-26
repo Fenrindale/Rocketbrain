@@ -756,6 +756,12 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectEntityGraph",
+        "title": "Inspect JPA Entity Graph",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.inspectAttributeBinding",
         "title": "Inspect JPA Attribute Binding",
         "category": "Rocketbrain",

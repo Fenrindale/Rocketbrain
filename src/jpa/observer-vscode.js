@@ -4,6 +4,7 @@ const {ObserverClient,ObserverError,emptySnapshot} = require('./observer-client'
 const {validateRuntimeUrl} = require('../spring/runtime-client');
 const {summarizePerformance} = require('./fetch-performance');
 const { attributeTarget, observedPropertyPaths } = require('./attribute-binding');
+const { graphName, registeredGraphApplications } = require('./entity-graphs');
 const {registerJpaConsole} = require('./console-vscode');
 const {registerSecurityTrace} = require('../spring/security-trace-vscode');
 const {registerReactiveSecurityTrace} = require('../spring/reactive-security-trace-vscode');
@@ -74,6 +75,63 @@ function registerObserver(context,vscode,output,{source}) {
     trusted();const model=await source(),observed=snapshot();
     const entities=model.entities.map(entity=>({fqn:entity.fqn,sourceTable:entity.table?.physicalName||null,sourceState:entity.status,observations:observed.factories.flatMap(factory=>(factory.entities||[]).filter(e=>e.javaType===entity.fqn).map(e=>({factoryId:factory.id,entity:e})))}));
     return {mode:'source-and-runtime-side-by-side',observedAt:observed.fetchedAt,sourceRevision:model.revision,sameSourceRevisionVerified:false,entities};
+  }
+  async function inspectEntityGraph(selection) {
+    trusted();
+    if (!client) throw new ObserverError('NOT_CONNECTED','Connect a JPA observer first.');
+    if (current.capabilities?.entityGraphs !== true) {
+      throw new ObserverError('UNSUPPORTED_ENTITY_GRAPHS','Start the application with an observer that supports named JPA entity graphs.');
+    }
+    const candidate = client, frame = generation;
+    function assertCurrent() {
+      trusted();
+      if (client !== candidate || generation !== frame) throw new ObserverError('STALE','The observer connection changed during inspection.');
+    }
+    let factoryId = selection?.factoryId, name = selection?.name;
+    if (!selection) {
+      if (!current.factories.length) throw new ObserverError('NO_JPA_FACTORY','Refresh the snapshot after the JPA factory has started.');
+      const factory = await vscode.window.showQuickPick(current.factories.map(value => ({
+        label: value.factoryName || value.id, description: [value.id, value.provider, value.version].filter(Boolean).join(' · '), value: value.id
+      })), { title: 'Select a Running JPA Factory' });
+      if (!factory) return;
+      assertCurrent();
+      factoryId = factory.value;
+    } else if (name !== undefined && !graphName(name)) {
+      throw new ObserverError('INVALID_ENTITY_GRAPH','Select a named entity graph from this factory.');
+    }
+    const registry = await candidate.entityGraphs(factoryId);
+    assertCurrent();
+    if (!name && registry.state !== 'unknown') {
+      const options = registry.graphs.map(graph => ({
+        label: graph.name, description: graph.rootJavaType, name: graph.name,
+        detail: graph.paths.length + ' registered paths' + (graph.complete ? '' : ' · partial')
+      }));
+      const chosen = await vscode.window.showQuickPick([...options,
+        { label: 'Check an Expected Graph Name', detail: 'Show whether it is registered in this running factory' }
+      ], { title: 'Inspect JPA Entity Graph' });
+      if (!chosen) return;
+      assertCurrent();
+      name = chosen.name ?? await vscode.window.showInputBox({
+        title: 'Check an Expected Graph Name', prompt: 'Enter the exact graph name used by the application',
+        validateInput: value => graphName(value) ? undefined : 'Enter a bounded JPA graph name.'
+      });
+      if (name === undefined) return;
+      assertCurrent();
+      if (!graphName(name)) throw new ObserverError('INVALID_ENTITY_GRAPH','Select a named entity graph from this factory.');
+    }
+    const graph = registry.graphs.find(value => value.name === name);
+    let registration = 'unavailable';
+    if (graph) registration = graph.complete ? 'observed' : 'partial';
+    else if (name && registry.state === 'observed') registration = 'absent';
+    const report = { factoryId: registry.factoryId, registryState: registry.state, registration,
+      ...(name && { name }), ...(registry.reason && { reason: registry.reason }),
+      ...(graph && { graph }), observerExecutedSql: false, applicationCallbacksInvoked: false, valuesRetained: false,
+      performanceCapture: registry.activity?.state ?? 'unavailable',
+      retainedApplications: graph ? registeredGraphApplications(registry, graph) : [] };
+    const doc = await vscode.workspace.openTextDocument({ language: 'json', content: JSON.stringify(report, null, 2) + '\n' });
+    assertCurrent();
+    await vscode.window.showTextDocument(doc, { preview: true });
+    return report;
   }
   async function inspectAttributeBinding(selection) {
     trusted();
@@ -177,7 +235,8 @@ function registerObserver(context,vscode,output,{source}) {
   command('rocketbrain.jpa.observer.inspect',async()=>{const report={snapshot:snapshot(),comparison:await compareSource()};const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(report,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return report;});
   command('rocketbrain.jpa.observer.inspectPerformance',inspectPerformance);
   command('rocketbrain.jpa.observer.inspectAttributeBinding',inspectAttributeBinding);
+  command('rocketbrain.jpa.observer.inspectEntityGraph',inspectEntityGraph);
   command('rocketbrain.jpa.observer.prepare',async()=>{trusted();const result=await require('./observer-install').prepareObserver(context,vscode);const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(result,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return result;});
-  return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,inspectAttributeBinding,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
+  return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,inspectAttributeBinding,inspectEntityGraph,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};
 }
 module.exports={registerObserver};

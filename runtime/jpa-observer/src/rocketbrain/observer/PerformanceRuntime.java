@@ -59,7 +59,7 @@ public final class PerformanceRuntime {
         final List<WeakReference<Object>> sessions=new ArrayList<>();
         final Map<ByteBuffer,Integer> keys=new HashMap<>();
         byte[] salt;
-        int omitted;
+        int omitted, graphSize, omittedGraphApplications;
 
         // These lifecycle fields belong to the asyncRequests lock.
         WeakReference<Object> manager;
@@ -260,6 +260,7 @@ public final class PerformanceRuntime {
                 if(capture.route!=null)sample.put("route",capture.route);
                 sample.put("selects",List.copyOf(capture.selects));
                 sample.put("omittedSelects",capture.omitted);
+                sample.put("omittedGraphApplications",capture.omittedGraphApplications);
                 synchronized(samples){
                     if(samples.size()>=MAX_REQUESTS){samples.removeFirst();omittedRequests.incrementAndGet();}
                     samples.addLast(Map.copyOf(sample));
@@ -474,6 +475,8 @@ public final class PerformanceRuntime {
             if(current==null)return;
             Object session=HibernateAccess.optional(context,"getSession");
             String sql=shape(raw);
+            var entityGraph=sql==null||session==null?null:appliedGraph(session,context);
+            int graphSize=entityGraph==null?0:Json.encode(entityGraph).length();
             Capture capture=current.capture;
             synchronized(capture){
                 if(capture.finished)return;
@@ -484,6 +487,12 @@ public final class PerformanceRuntime {
                 entry.put("phase",current.phase.label);
                 entry.put("durationMicros",TimeUnit.NANOSECONDS.toMicros(elapsed));
                 entry.put("binds",bindings(current,statement,sql));
+                if(entityGraph!=null){
+                    if(capture.graphSize+graphSize<=4096){
+                        entry.put("entityGraph",entityGraph);
+                        capture.graphSize+=graphSize;
+                    }else capture.omittedGraphApplications++;
+                }
                 CollectionLoad load=current.loads.peek();
                 if(current.loadDepth>0&&(load==null||load.session!=session)){
                     current.incomplete=true;
@@ -500,16 +509,54 @@ public final class PerformanceRuntime {
         }catch(Throwable ignored){}
     }
 
-    static Map<String,Object> snapshot(List<String> instruments){
+    private static Map<String,Object> appliedGraph(Object session,Object context){
+        try{
+            if(!Set.of("org.hibernate.internal.SessionImpl","org.hibernate.internal.StatelessSessionImpl").contains(session.getClass().getName()))return null;
+            Object factory=HibernateAccess.optional(session,"getFactory");
+            Map<String,Object> graph=HibernateAccess.appliedEntityGraph(factory,context);
+            if(graph==null)return null;
+            String id=ObserverRuntime.registerFactory(factory);
+            if(id==null)return null;
+            graph.put("factoryId",id);
+            return Map.copyOf(graph);
+        }catch(Throwable ignored){return null;}
+    }
+
+    private static List<Map<String,Object>> retainedSamples(){
         synchronized(asyncRequests){retireAsyncRequests();}
-        List<Map<String,Object>> retained;
-        synchronized(samples){retained=List.copyOf(samples);}
+        synchronized(samples){return List.copyOf(samples);}
+    }
+
+    static Map<String,Object> graphApplications(String factoryId,List<String> instruments){
+        boolean available=enabled&&instruments.containsAll(List.of(PerformanceTransformer.MVC,PerformanceTransformer.JDBC));
+        List<Map<String,Object>> applications=new ArrayList<>();
+        if(available)for(Map<String,Object> sample:retainedSamples()){
+            @SuppressWarnings("unchecked")
+            List<Map<String,Object>> selects=(List<Map<String,Object>>)sample.get("selects");
+            for(Map<String,Object> select:selects){
+                if(!(select.get("entityGraph") instanceof Map<?,?> graph)||!factoryId.equals(graph.get("factoryId")))continue;
+                Map<String,Object> result=new LinkedHashMap<>();
+                result.put("requestId",sample.get("id"));
+                result.put("completeRequest",sample.get("complete"));
+                if(sample.containsKey("route"))result.put("route",sample.get("route"));
+                result.put("select",select.get("sequence"));
+                result.put("phase",select.get("phase"));
+                result.put("applied",graph);
+                applications.add(Map.copyOf(result));
+            }
+        }
+        return Map.of("state",available?"observed":enabled?"awaiting-supported-hooks":"disabled","applications",List.copyOf(applications));
+    }
+
+    static Map<String,Object> snapshot(List<String> instruments){
+        List<Map<String,Object>> retained=retainedSamples();
         return Map.ofEntries(
             Map.entry("enabled",enabled),Map.entry("scope","spring-mvc"),
             Map.entry("available",enabled&&instruments.containsAll(List.of(PerformanceTransformer.MVC,PerformanceTransformer.LOADER,PerformanceTransformer.JDBC))),
             Map.entry("maxRequests",MAX_REQUESTS),Map.entry("maxSelectsPerRequest",MAX_SELECTS),Map.entry("omittedRequests",omittedRequests.get()),
             Map.entry("requests",retained),Map.entry("rawBindValuesRetained",false),Map.entry("observerExecutedSql",false),
             Map.entry("bindObservation","hibernate-jdbc-setters-v1"),
+            Map.entry("entityGraphObservation","hibernate-applied-query-graph-v1"),
             Map.entry("callableObservation",enabled&&instruments.contains(PerformanceTransformer.ASYNC)));
     }
 }

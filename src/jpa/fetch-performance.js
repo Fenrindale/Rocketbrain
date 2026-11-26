@@ -1,5 +1,7 @@
 'use strict';
 
+const { appliedGraph } = require('./entity-graphs');
+
 const { sourceLayout } = require('../db/sql-analysis');
 
 const maxRequests = 12, maxSelects = 40, maxSql = 768, maxBinds = 16;
@@ -213,12 +215,14 @@ function summarizePerformance(input) {
   const enabled = input?.enabled === true, available = enabled && input.available === true;
   const multiPhase = input?.scope === 'spring-mvc';
   const callableObservation = multiPhase && input.callableObservation === true;
+  const withGraphs = input?.entityGraphObservation === 'hibernate-applied-query-graph-v1';
   const withBinds = input?.bindObservation === 'hibernate-jdbc-setters-v1';
   const report = { state: available ? 'observed' : enabled ? 'awaiting-supported-hooks' : 'disabled',
     scope: multiPhase ? 'spring-mvc-hibernate-selects' : 'synchronous-spring-mvc-hibernate-selects',
     requests: [], omittedRequests: safeInt(input?.omittedRequests) ? input.omittedRequests : 0,
     ...(multiPhase && { callableObservation }),
     ...(withBinds && { bindObservation: input.bindObservation }),
+    ...(withGraphs && { entityGraphObservation: input.entityGraphObservation }),
     rawBindValuesRetained: false, observerExecutedSql: false };
   if (!enabled || (!multiPhase && input.scope !== 'synchronous-spring-mvc') || input.rawBindValuesRetained !== false || input.observerExecutedSql !== false ||
       !Array.isArray(input.requests) || input.requests.length > maxRequests) return report;
@@ -233,7 +237,11 @@ function summarizePerformance(input) {
       try {
         if (phases && !phases.has(select?.phase)) return [];
         const observed = readSelect(select,index,withBinds);
-        return observed ? [phases ? { ...observed, phase: select.phase } : observed] : [];
+        if (!observed) return [];
+        if (phases) observed.phase = select.phase;
+        const graph = withGraphs ? appliedGraph(select.entityGraph) : undefined;
+        if (graph) observed.entityGraph = graph;
+        return [observed];
       } catch { return []; }
     });
     const omittedSelects = value.omittedSelects + value.selects.length - selects.length;
@@ -245,6 +253,7 @@ function summarizePerformance(input) {
       route: validRoute(value.route) ? value.route : undefined,
       startedAt: typeof value.startedAt==='string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(value.startedAt) ? value.startedAt : undefined,
       durationMicros:value.durationMicros, coverage: complete ? 'complete-within-supported-hooks' : 'partial',
+      ...(withGraphs && { omittedGraphApplications: safeInt(value.omittedGraphApplications) ? value.omittedGraphApplications : 0 }),
       selectCount: selects.length, omittedSelects, selects, suspects: complete ? findings(selects) : [] });
   }
   return report;
