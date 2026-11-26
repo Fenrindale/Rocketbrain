@@ -3,6 +3,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { startGroovyConsole } = require('./groovy-console');
+const { openSpecification, runSpockSpecification } = require('./spock-specification');
+const { nativeTaskRunner } = require('./workbench-tasks');
 const { createGroovyProjectConsole } = require('./groovy-project-console');
 const { workspaceRoots,workspacePath,inside,cancelled,fail } = require('./workbench-model');
 
@@ -24,17 +26,18 @@ async function readSavedScript(file) {
 const COMMANDS = Object.freeze({
   console:'rocketbrain.groovy.console', reset:'rocketbrain.groovy.resetConsole',
   selection:'rocketbrain.groovy.evaluateSelection', script:'rocketbrain.groovy.runScript',
-  tests:'rocketbrain.groovy.runTests', project:'rocketbrain.groovy.projectSelection',
+  tests:'rocketbrain.groovy.runTests', specification:'rocketbrain.groovy.runSpecification', project:'rocketbrain.groovy.projectSelection',
   stopProject:'rocketbrain.groovy.stopProject', members:'rocketbrain.groovy.completeTypedMember',
   declaration:'rocketbrain.groovy.openTypedMemberDeclaration'
 });
 
-function registerGroovyWorkbench(vscode,java) {
+function registerGroovyWorkbench(vscode,java,{ specificationRunner } = {}) {
   const output = vscode.window.createOutputChannel('Rocketbrain Groovy Console');
   const diagnostics = vscode.languages.createDiagnosticCollection('rocketbrain-groovy');
   const subscriptions = [output,diagnostics];
+  const spockTasks = specificationRunner || nativeTaskRunner(vscode, { output });
   const jobs = new Set(), processes = new Set();
-  let console, consoleKey, busy = false, disposed = false, epoch = 0, closing;
+  let console, consoleKey, busy = false, disposed = false, epoch = 0, closing, spockRunning = false;
 
   function trusted() {
     if (disposed || !vscode.workspace.isTrusted) throw fail('Trust this local workspace before executing Groovy code.');
@@ -150,6 +153,7 @@ function registerGroovyWorkbench(vscode,java) {
 
   async function runTests({projectUri,allowProjectExecution,cancellation} = {}) {
     trusted();
+    if (spockRunning) throw fail('Wait for the selected Spock specification to finish.');
     if (allowProjectExecution !== true) throw fail('Choose the Groovy and Spock test action before executing Gradle.');
     const project=(await projects()).find(item => item.uri === projectUri);
     if (!project) throw fail('Choose a currently imported Gradle project with Groovy sources.');
@@ -167,6 +171,47 @@ function registerGroovyWorkbench(vscode,java) {
     trusted();
     saved();
     return java.workbench.runTask({...options,taskId:task.id});
+  }
+
+  async function runSpecification({ document, projectUri, allowProjectExecution, cancellation } = {}) {
+    trusted();
+    if (allowProjectExecution !== true) throw fail('Choose Run Selected Spock Specification before executing Gradle.');
+    if (spockRunning) throw fail('Wait for the selected Spock specification to finish.');
+    spockRunning = true;
+    const ticket = epoch;
+    try {
+      const candidates = (await projects()).filter(project =>
+        document?.uri?.scheme === 'file' && inside(project.root, document.uri.fsPath));
+      candidates.sort((left, right) => right.root.length - left.root.length);
+      const project = candidates[0];
+      if (!project || projectUri && project.uri !== projectUri) throw fail('Select the saved Groovy source in its imported Gradle project.');
+      const roots = workspaceRoots(vscode.workspace.workspaceFolders);
+      const selection = await openSpecification(document, project, roots, readSavedScript);
+      const verify = async () => {
+        trusted();
+        if (ticket !== epoch) throw fail('The Groovy workspace changed while preparing the Spock specification.');
+        if (java.workbench.getSnapshot().taskRunning) throw fail('Wait for the current Java workbench build to finish.');
+        if (vscode.workspace.textDocuments.some(source => source.isDirty && source.uri.scheme === 'file' &&
+            /\.(?:groovy|java|gradle|kts|properties)$/u.test(source.uri.fsPath) && inside(project.root, source.uri.fsPath))) {
+          throw fail('Save modified sources and Gradle build files before testing the specification.');
+        }
+        await selection.validate();
+      };
+      const tools = configuration(project.root);
+      const receipt = await runSpockSpecification({ selection, project, tools, runner: spockTasks, verify, cancellation });
+      if (receipt.state === 'cancelled') return receipt;
+      await verify();
+      const failures = receipt.cases.flatMap(result => {
+        if (result.state !== 'FAILURE' || !result.line || !result.message) return [];
+        const line = result.line - 1;
+        const diagnostic = new vscode.Diagnostic(new vscode.Range(line, 0, line, document.lineAt(line).text.length),
+          result.message, vscode.DiagnosticSeverity.Error);
+        diagnostic.source = 'Spock';
+        return [diagnostic];
+      });
+      diagnostics.set(document.uri, failures);
+      return receipt;
+    } finally { spockRunning = false; }
   }
 
   function show(label,receipt) {
@@ -222,6 +267,20 @@ function registerGroovyWorkbench(vscode,java) {
     if (selected) return progress('Run Groovy and Spock Tests',cancellation =>
       runTests({projectUri:selected.uri,allowProjectExecution:true,cancellation}));
   });
+  register(COMMANDS.specification, async () => {
+    const document = vscode.window.activeTextEditor?.document;
+    const receipt = await progress('Run Selected Spock Specification', cancellation =>
+      runSpecification({ document, allowProjectExecution: true, cancellation }));
+    if (receipt.state === 'cancelled') return receipt;
+    const counts = ['SUCCESS', 'FAILURE', 'SKIPPED'].map(state => receipt.cases.filter(item => item.state === state).length);
+    output.appendLine(receipt.specification + ' · ' + counts[0] + ' passed, ' + counts[1] + ' failed, ' + counts[2] + ' skipped');
+    for (const item of receipt.cases) {
+      output.appendLine(item.state + ' · ' + item.displayName + ' (' + item.durationMs + ' ms)');
+      if (item.message) output.appendLine(item.message);
+    }
+    output.show(true);
+    return receipt;
+  });
   async function chooseProject() {
     const projects = await progress('Find Imported Java Projects', cancellation => projectConsole.list({ cancellation }));
     if (!projects.length) throw fail('Import a local Maven or Gradle project before reviewing its Groovy classpath.');
@@ -276,12 +335,14 @@ function registerGroovyWorkbench(vscode,java) {
   if (vscode.workspace.onDidChangeWorkspaceFolders) subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
     void reset().catch(() => {});
     void projectConsole.invalidate().catch(() => {});
+    void spockTasks.stop?.().catch(() => {});
     for (const child of processes) void child.dispose().catch(() => {});
   }));
 
   return {
     evaluate:options => track(() => evaluate(options)),runScript:options => track(() => runScript(options)),
-    runTests:options => track(() => runTests(options)),reset,
+    runTests:options => track(() => runTests(options)),
+    runSpecification:options => track(() => runSpecification(options)),reset,
     project:{list:options => track(() => projectConsole.list(options)),review:options => track(() => projectConsole.review(options)),
       show:id => track(() => projectConsole.show(id)),run:options => track(() => projectConsole.run(options)),stop:projectConsole.stop,
       members: {
@@ -295,7 +356,7 @@ function registerGroovyWorkbench(vscode,java) {
       disposed=true;
       epoch++;
       closing=(async () => {
-        await Promise.allSettled([projectConsole.dispose(), ...[...processes].map(child => child.dispose())]);
+        await Promise.allSettled([projectConsole.dispose(), spockTasks.dispose?.(), ...[...processes].map(child => child.dispose())]);
         await Promise.allSettled(jobs);
         for (const item of subscriptions) item.dispose();
       })();
