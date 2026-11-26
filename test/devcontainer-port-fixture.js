@@ -33,6 +33,7 @@ async function checkHttp(forward) {
 
 async function attachJdwp(forward) {
   const socket = connect(forward);
+  const close = new Promise(resolve => socket.once('close', resolve));
   try {
     await once(socket, 'connect');
     const iterator = socket.iterator({ destroyOnReturn: false });
@@ -66,7 +67,8 @@ async function attachJdwp(forward) {
     }
     assert.match(version, /Java Debug Wire Protocol|JDWP/u);
     await iterator.return();
-    return { socket, close: new Promise(resolve => socket.once('close', resolve)) };
+    assert.ok(!socket.destroyed, 'The owned JDWP session remains connected after its version reply.');
+    return { socket, close };
   } catch (error) {
     socket.destroy();
     throw error;
@@ -89,4 +91,16 @@ async function waitForReleasedPort(forward) {
   assert.fail('The exact forward kept accepting local connections after it should have closed.');
 }
 
-module.exports = { openFixtureForward, checkHttp, attachJdwp, waitForReleasedPort };
+async function fixtureStep(description, operation, ms = 15000) {
+  let deadline;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise((_, reject) => { deadline = setTimeout(() => reject(Error('Timed out while ' + description)), ms); })
+    ]);
+  } finally {
+    clearTimeout(deadline);
+  }
+}
+
+module.exports = { openFixtureForward, checkHttp, attachJdwp, waitForReleasedPort, fixtureStep };
