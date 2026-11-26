@@ -40,6 +40,8 @@ function readFxml(source, { properties = false } = {}) {
       node.local = tag.local;
       node.namespace = tag.uri;
       node.properties = [];
+      node.openEnd = parser.position;
+      node.selfClosing = tag.isSelfClosing;
     }
     const siblings = stack.at(-1)?.children || elements;
     siblings.push(node);
@@ -67,7 +69,11 @@ function readFxml(source, { properties = false } = {}) {
       }
     }
   });
-  parser.on('closetag', () => { stack.pop().end = parser.position; });
+  parser.on('closetag', () => {
+    const node = stack.pop();
+    node.end = parser.position;
+    if (properties) node.closeStart = node.selfClosing ? node.openEnd - 2 : source.lastIndexOf('</', node.end - 1);
+  });
   parser.write(source).close();
   return { elements, references, controller, diagnostics };
 }

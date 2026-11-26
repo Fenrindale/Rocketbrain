@@ -6,6 +6,7 @@ const {createHash}=require('node:crypto');
 const {SaxesParser}=require('saxes');
 const {inside}=require('./workbench-model');
 const {targetsIn,propertyReplacement}=require('./javafx-preview-properties');
+const {hierarchyTargets,hierarchyReplacement}=require('./javafx-preview-hierarchy');
 
 const FX=/^https?:\/\/javafx\.com\/fxml(?:\/\d+)?$/u;
 const JAVAFX=/^https?:\/\/javafx\.com\/javafx(?:\/[\d.]+)?$/u;
@@ -84,7 +85,7 @@ function stageName(from,to) {
   return path.relative(path.dirname(from),to).split(path.sep).join('/');
 }
 
-function captureFxmlPreview(file,workspace,{dirty=()=>false,propertyEdit,expectedFingerprint}={}) {
+function captureFxmlPreview(file,workspace,{dirty=()=>false,propertyEdit,hierarchyEdit,expectedFingerprint}={}) {
   if (!path.isAbsolute(file)||!path.isAbsolute(workspace)||!inside(workspace,file)||path.extname(file)!=='.fxml') {
     throw Error('Select a saved local FXML document in the trusted workspace.');
   }
@@ -102,8 +103,9 @@ function captureFxmlPreview(file,workspace,{dirty=()=>false,propertyEdit,expecte
     let text=decode.decode(raw);
     if (source===file) {
       sourceText=text;
-      if (propertyEdit) {
-        edit=propertyReplacement(text,propertyEdit);
+      if (propertyEdit || hierarchyEdit) {
+        if (propertyEdit && hierarchyEdit) throw Error('Review one FXML change at a time.');
+        edit=propertyEdit ? propertyReplacement(text,propertyEdit) : hierarchyReplacement(text,hierarchyEdit);
         text=edit.text;
         const bom=raw.subarray(0,3).equals(Buffer.from([0xef,0xbb,0xbf]));
         projectedHash=hash(Buffer.from((bom?'\uFEFF':'')+text));
@@ -198,7 +200,9 @@ function captureFxmlPreview(file,workspace,{dirty=()=>false,propertyEdit,expecte
     throw Error('FXML or CSS changed. Refresh the saved preview before reviewing this edit.');
   }
   const effective=edit?hash(JSON.stringify(record.map(([name,digest])=>[name,name===file?projectedHash:digest]))):fingerprint;
-  return {root,file,files,summary,fingerprint,effective,sourceText,edit,targets:targetsIn(edit?.text||sourceText)};
+  const projectedSource=edit?.text||sourceText;
+  return {root,file,files,summary,fingerprint,effective,sourceText,edit,targets:targetsIn(projectedSource),
+    hierarchy:hierarchyTargets(projectedSource)};
 }
 
 module.exports={captureFxmlPreview};
