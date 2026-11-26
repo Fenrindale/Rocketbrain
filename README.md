@@ -19,6 +19,7 @@ An independent VS Code workbench for Java/Spring and MySQL/MariaDB. Support is d
 **Search Everywhere**는 파일, 워크스페이스 기호, 명령, 설정 키와 로컬 Git 브랜치·커밋을 함께 검색합니다. `#`, `>`, `@`, `%`는 각각 기호, 명령, 설정, Git으로 좁히고 `$`는 활성 MySQL·MariaDB 스키마의 객체를 검색합니다. Git 결과는 선택한 리비전을 읽기 전용으로 보여줍니다. 설정 검색에는 키와 공개 설정 설명을 사용합니다.
 
 **Java Projects**에서 관찰된 main·test·생성 소스와 각각의 빌드 출력 위치를 봅니다. 다른 프로젝트의 출력으로 확인된 의존성 항목을 열면 그 프로젝트로 이동합니다.
+**Discover Build Tasks**는 열린 작업 영역에 있는 Gradle 포함 빌드의 작업을 전체 경로(예: `:library:service:classes`)로 표시합니다. Groovy 및 Kotlin DSL의 실제 작업 모델을 읽으며, 검토한 설정·빌드 파일이 바뀌면 다시 검색한 뒤 작업을 실행해야 합니다.
 
 설치된 JetBrains 제품의 엔진·코드·복사한 화면 자산·내장 JBR을 사용하거나 배포하지 않습니다. 별도 JetBrains 구독이나 다른 Marketplace 확장을 요구하지 않습니다. 사용하는 공개 구성요소의 조건과 고지문은 [NOTICE](https://github.com/Fenrindale/Rocketbrain/blob/main/NOTICE.txt) 및 [third-party/licenses](https://github.com/Fenrindale/Rocketbrain/tree/main/third-party/licenses)에 보존합니다.
 
