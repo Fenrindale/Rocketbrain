@@ -48,7 +48,7 @@ function commandWithArgs(python, program, argv) {
 }
 
 function collectRuntime(child, valid, message, { input, timeout = 18000, maxBytes = 8192, keepInput = false,
-  reportRemoteError = false, signal, cancelMessage = 'The SSH Java compile was cancelled.' } = {}) {
+  reportRemoteError = false, signal, cancelMessage = 'The SSH Java compile was cancelled.', cancelGrace = 2200 } = {}) {
   return new Promise((resolve, reject) => {
     let count = 0, invalid = false;
     let stopTimer, reason;
@@ -59,7 +59,7 @@ function collectRuntime(child, valid, message, { input, timeout = 18000, maxByte
       reason = error;
       if (keepInput) {
         child.stdin.end();
-        stopTimer = setTimeout(() => child.kill(), 2200);
+        stopTimer = setTimeout(() => child.kill(), cancelGrace);
         stopTimer.unref();
       } else child.kill();
     }
@@ -194,7 +194,7 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
     return collectRuntime(child, expected ? info => validGradleResult(info, config) : info => validGradleReview(info, config),
       'Verify the reviewed Gradle project, independent runtimes and prepared offline dependency mirror.',
       { input, signal, keepInput: Boolean(expected), reportRemoteError: true, timeout: expected ? 200000 : 64000,
-        cancelMessage: 'The SSH Gradle build was cancelled.' });
+        cancelMessage: 'The SSH Gradle build was cancelled.', cancelGrace: 7000 });
   }
 
   return {
@@ -283,7 +283,7 @@ function createSshProcesses(profile, remoteRoot, target, verifyRoot) {
       for (const [child, kind] of active) {
         if (kind === 'compile' || kind === 'maven' || kind === 'gradle') {
           child.stdin.end();
-          const timeout = setTimeout(() => child.kill(), 2200);
+          const timeout = setTimeout(() => child.kill(), kind === 'gradle' ? 7000 : 2200);
           timeout.unref();
           child.once('close', () => clearTimeout(timeout));
         } else child.kill();

@@ -175,6 +175,49 @@ def gradle_reports(project):
         raise Refused(invalid)
     return totals
 
+def linux_build_scope():
+    if sys.platform != "linux":
+        return None
+    import ctypes
+    children = pathlib.Path("/proc/thread-self/children")
+    message = "The Linux SSH host cannot isolate and reap Gradle child processes."
+    if not children.is_file() or not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
+        raise Refused(message)
+    try:
+        os.close(os.pidfd_open(os.getpid()))
+    except OSError:
+        raise Refused(message)
+    set_child_subreaper = 36
+    if ctypes.CDLL(None).prctl(set_child_subreaper, 1, 0, 0, 0) != 0:
+        raise Refused(message)
+    return children
+
+def reap_gradle_children(children):
+    # Linux reparents detached Gradle workers to this dedicated worker after their parent exits.
+    deadline = time.monotonic() + 4
+    while time.monotonic() < deadline:
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if pid:
+            continue
+        with children.open("r", encoding="ascii") as scope:
+            members = scope.read(4097)
+        if len(members) > 4096:
+            raise Refused("The remote Gradle build exceeded its child process limit.")
+        for pid in members.split():
+            try:
+                endpoint = os.pidfd_open(int(pid))
+                try:
+                    signal.pidfd_send_signal(endpoint, signal.SIGKILL)
+                finally:
+                    os.close(endpoint)
+            except ProcessLookupError:
+                continue
+        time.sleep(.03)
+    raise Refused("The remote Gradle child processes did not stop within the cleanup limit.")
+
 def execute_gradle(task, jdk, launcher, cache, staged, temp, jar, cancelled):
     isolated = temp / "home"
     isolated.mkdir()
@@ -192,6 +235,7 @@ def execute_gradle(task, jdk, launcher, cache, staged, temp, jar, cancelled):
         "-Drocketbrain.offline.repository="+str(cache), "-Drocketbrain.task.graph="+str(graph),
         "-Dorg.gradle.java.installations.auto-download=false", "-Dorg.gradle.java.installations.auto-detect=false",
         "-Dorg.gradle.java.installations.paths="+str(jdk), "-Dorg.gradle.jvmargs=-Xmx512m", ":"+task]
+    children = linux_build_scope()
     process = subprocess.Popen(argv, cwd=staged, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL, start_new_session=os.name != "nt")
     try:
@@ -203,7 +247,11 @@ def execute_gradle(task, jdk, launcher, cache, staged, temp, jar, cancelled):
                 raise Refused("The reviewed remote Gradle build timed out.")
         code = process.returncode if 0 <= process.returncode <= 255 else 1
     finally:
-        stop_process(process, env)
+        try:
+            stop_process(process, env)
+        finally:
+            if children is not None:
+                reap_gradle_children(children)
     result = {"state": "succeeded" if code == 0 else "failed", "task": task, "exitCode": code, "tests": gradle_reports(staged),
               "taskGraph": read_graph(graph, task) if os.path.lexists(graph) or code == 0 else []}
     if task == "build" and code == 0:
@@ -244,6 +292,11 @@ def operation(request):
             os.read(sys.stdin.fileno(), 1)
             cancelled.set()
         threading.Thread(target=wait_for_cancellation, daemon=True).start()
+        if sys.platform == "linux":
+            def cancel_on_disconnect(signum, frame):
+                cancelled.set()
+            signal.signal(signal.SIGHUP, cancel_on_disconnect)
+            signal.signal(signal.SIGTERM, cancel_on_disconnect)
 
     with tempfile.TemporaryDirectory(prefix="rb-ssh-gradle-") as folder:
         temp = pathlib.Path(folder).resolve(strict=True)

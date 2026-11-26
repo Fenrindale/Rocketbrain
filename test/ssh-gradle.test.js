@@ -94,22 +94,32 @@ test('real pinned SSH runs the reviewed Gradle task graph against an isolated of
     await fs.writeFile(project.buildFile, build);
 
     const marker = [
-      'java.nio.file.Files.writeString(java.nio.file.Path.of(System.getProperty("user.dir"), "remote-cancel-ready"), "ready");',
+      'java.nio.file.Files.writeString(java.nio.file.Path.of(System.getProperty("user.dir"), "remote-cancel-ready"), String.valueOf(ProcessHandle.current().pid()));',
       'Thread.sleep(60000);', 'assertEquals(2,'
     ].join('\n    ');
     await fs.writeFile(project.testFile, testSource.replace('assertEquals(2,', marker));
     const pending = assert.rejects(run(await inspect(), cancellation.signal), /Gradle build was cancelled/u);
+    let workerPid;
     try {
       await until(async () => {
         for (const item of await fs.readdir(fixture.workerTemp)) {
-          if (item.startsWith('rb-ssh-gradle-') &&
-             (await fs.readFile(path.join(fixture.workerTemp, item, 'project', 'remote-cancel-ready'), 'utf8')
-               .catch(error => error.code === 'ENOENT' ? undefined : Promise.reject(error))) === 'ready') return true;
+          if (!item.startsWith('rb-ssh-gradle-')) continue;
+          const value = await fs.readFile(path.join(fixture.workerTemp, item, 'project', 'remote-cancel-ready'), 'utf8')
+            .catch(error => error.code === 'ENOENT' ? undefined : Promise.reject(error));
+          if (/^[1-9]\d{0,9}$/u.test(value || '') && Number(value) <= 0x7fffffff) {
+            workerPid = Number(value);
+            process.kill(workerPid, 0);
+            return true;
+          }
         }
         return false;
       }, 120000, 'the active remote Gradle JUnit test');
     } finally { cancellation.abort(); }
     await pending;
+    await until(() => {
+      try { process.kill(workerPid, 0); return false; }
+      catch (error) { if (error.code === 'ESRCH') return true; throw error; }
+    }, 25000, 'the exact Gradle test JVM to exit');
     await until(async () => !(await fs.readdir(fixture.workerTemp)).length, 25000, 'Gradle snapshot and worker cleanup');
     await fs.writeFile(project.testFile, testSource);
     assert.ok(!(await fs.readdir(project.module)).includes('build'));
