@@ -27,14 +27,20 @@ final class PackageRenameInspector {
     }
 
     List<Map<String, Object>> inspect(List<CompilationUnitTree> units) {
-        return units.stream().map(this::inspectUnit).toList();
+        Set<String> localPackages = new HashSet<>();
+        Set<String> sourceUris = new HashSet<>();
+        for (var unit : units) {
+            if (unit.getPackageName() != null) localPackages.add(unit.getPackageName().toString());
+            sourceUris.add(unit.getSourceFile().toUri().toString());
+        }
+        return units.stream().map(unit -> inspectUnit(unit, localPackages, sourceUris)).toList();
     }
 
     private boolean inside(String packageName) {
         return packageName.equals(prefix) || packageName.startsWith(prefix + ".");
     }
 
-    private Map<String, Object> inspectUnit(CompilationUnitTree unit) {
+    private Map<String, Object> inspectUnit(CompilationUnitTree unit, Set<String> localPackages, Set<String> sourceUris) {
         String packageName = unit.getPackageName() == null ? "" : unit.getPackageName().toString();
         var spans = new TreeMap<Integer, Map<String, Object>>();
         var bindings = new ArrayList<List<Object>>();
@@ -143,7 +149,77 @@ final class PackageRenameInspector {
             }
         }.scan(unit, null);
         boolean opposingNamespace = packageName.equals(other) || packageName.startsWith(other + ".");
-        return object("uri", uri, "name", packageName, "competingNamespace", opposingNamespace,
+        var result = object("uri", uri, "name", packageName, "competingNamespace", opposingNamespace,
             "spans", spans.values().stream().toList(), "bindings", bindings);
+        if (unit.getModule() != null) result.put("module", moduleProof(unit, localPackages, sourceUris));
+        return result;
+    }
+
+    private Map<String, Object> moduleProof(CompilationUnitTree unit, Set<String> localPackages, Set<String> sourceUris) {
+        ModuleTree tree = unit.getModule();
+        String moduleName = tree.getName().toString();
+        ModuleElement module = elements.getModuleElement(moduleName);
+        if (module == null || module.isOpen() || module.isUnnamed() || !module.getQualifiedName().contentEquals(moduleName)) {
+            throw new IllegalArgumentException("Javac could not prove the selected closed source module.");
+        }
+        var entries = new ArrayList<Map<String, Object>>();
+        for (var directive : tree.getDirectives()) {
+            switch (directive) {
+                case RequiresTree requirement -> {
+                    ExpressionTree source = requirement.getModuleName();
+                    ModuleElement dependency = elements.getModuleElement(source.toString());
+                    if (requirement.isStatic() || requirement.isTransitive() || dependency == null ||
+                            !dependency.getQualifiedName().contentEquals("java.base")) throw unprovedDirective();
+                    entries.add(moduleEntry(unit, source, "requires"));
+                }
+                case ExportsTree exported -> {
+                    if (exported.getModuleNames() != null && !exported.getModuleNames().isEmpty()) throw unprovedDirective();
+                    entries.add(packageDirective(unit, module, exported.getPackageName(), "exports", localPackages));
+                }
+                case OpensTree opened -> {
+                    if (opened.getModuleNames() != null && !opened.getModuleNames().isEmpty()) throw unprovedDirective();
+                    entries.add(packageDirective(unit, module, opened.getPackageName(), "opens", localPackages));
+                }
+                case UsesTree used -> entries.add(typeDirective(unit, module, used.getServiceName(), "uses", sourceUris));
+                case ProvidesTree provides -> {
+                    entries.add(typeDirective(unit, module, provides.getServiceName(), "provides", sourceUris));
+                    for (var provider : provides.getImplementationNames()) {
+                        entries.add(typeDirective(unit, module, provider, "with", sourceUris));
+                    }
+                }
+                default -> throw unprovedDirective();
+            }
+        }
+        return object("name", moduleName, "declarations", entries);
+    }
+
+    private Map<String, Object> packageDirective(CompilationUnitTree unit, ModuleElement module, ExpressionTree source,
+            String role, Set<String> localPackages) {
+        String name = source.toString();
+        PackageElement resolved = elements.getPackageElement(module, name);
+        if (!localPackages.contains(name) || resolved == null || !module.equals(elements.getModuleOf(resolved)) ||
+                !resolved.getQualifiedName().contentEquals(name)) throw unprovedDirective();
+        return moduleEntry(unit, source, role);
+    }
+
+    private Map<String, Object> typeDirective(CompilationUnitTree unit, ModuleElement module, ExpressionTree source,
+            String role, Set<String> sourceUris) {
+        String name = source.toString();
+        TypeElement resolved = elements.getTypeElement(module, name);
+        var declaration = resolved == null ? null : trees.getPath(resolved);
+        if (declaration == null || !module.equals(elements.getModuleOf(resolved)) ||
+                resolved.getNestingKind() != NestingKind.TOP_LEVEL || !resolved.getQualifiedName().contentEquals(name) ||
+                !sourceUris.contains(declaration.getCompilationUnit().getSourceFile().toUri().toString())) throw unprovedDirective();
+        return moduleEntry(unit, source, role);
+    }
+
+    private Map<String, Object> moduleEntry(CompilationUnitTree unit, ExpressionTree source, String role) {
+        long start = positions.getStartPosition(unit, source), end = positions.getEndPosition(unit, source);
+        if (start < 0 || end <= start) throw unprovedDirective();
+        return object("role", role, "name", source.toString(), "start", start, "end", end);
+    }
+
+    private IllegalArgumentException unprovedDirective() {
+        return new IllegalArgumentException("Javac could not prove an exact owned source module directive.");
     }
 }

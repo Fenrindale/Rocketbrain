@@ -12,6 +12,7 @@ const { inside } = require('./testing-projects');
 const scopeApi = require('./move-scope');
 const { planBootImports, conventionalRoots, autoConfiguration } = require('./package-boot-imports');
 const { reviewRenamedPackageServices } = require('./package-rename-services');
+const { bindModuleDescriptor, verifyModuleProjection, reconcileModuleText } = require('./package-rename-module');
 
 const kind = 'refactor.rename.java.package';
 const dynamic = new Set(['forName', 'loadClass', 'ClassLoader', 'getResource', 'getResourceAsStream', 'ServiceLoader',
@@ -86,7 +87,7 @@ function clauses(text) {
   return { packageClause, code: JSON.stringify([body, imports.sort()]) };
 }
 
-function reconciledEngineEdits(edit, sources, expected, oldPackage, newPackage, moved) {
+function reconciledEngineEdits(edit, sources, expected, oldPackage, newPackage, moved, module) {
   if (!edit || Object.keys(edit.changeAnnotations || {}).length) throw Error('JDT did not return a plain Java package edit.');
   const grouped = new Map();
   const entries = [...Object.entries(edit.changes || {}).map(([uri, edits]) =>
@@ -105,10 +106,14 @@ function reconciledEngineEdits(edit, sources, expected, oldPackage, newPackage, 
   if (!grouped.size || [...grouped.keys()].some(key => !expectedByFile.has(key))) {
     throw Error('JDT and Javac disagree about the sources affected by Package Rename.');
   }
-  let supplemented = 0;
+  let supplemented = 0, engineModuleDirectives = 0;
   for (const [id, entry] of expectedByFile) {
     const doc = sources.get(id), proposed = grouped.get(id) || [];
     let actual = editedText(doc.text, proposed);
+    if (id === module?.id) {
+      engineModuleDirectives = reconcileModuleText(doc.text, actual, module.spans, oldPackage, newPackage);
+      continue;
+    }
     const original = clauses(actual).packageClause;
     if (moved.has(id) && original && packageContains(oldPackage, original.name)) {
       const exact = original.name;
@@ -120,7 +125,10 @@ function reconciledEngineEdits(edit, sources, expected, oldPackage, newPackage, 
       throw Error('JDT proposed source changes that differ from the exact Javac package references.');
     }
   }
-  return { engineFiles: grouped.size, supplemented };
+  if (module && ![...grouped.keys()].some(id => id !== module.id)) {
+    throw Error('JDT did not verify the ordinary source edits for this named module.');
+  }
+  return { engineFiles: grouped.size, supplemented, ...(module && { engineModuleDirectives }) };
 }
 
 function enforceContracts(sources, oldPackage, moved, boot, services) {
@@ -138,7 +146,9 @@ function enforceContracts(sources, oldPackage, moved, boot, services) {
       continue;
     }
     const { tokens, issues } = lexJava(source.text);
-    if (issues.length || /\bmodule-info\.java$/u.test(source.file)) throw Error('Use ordinary Java sources outside named modules.');
+    if (issues.length || path.basename(source.file) === 'module-info.java' && services?.moduleDescriptor?.uri !== source.uri) {
+      throw Error('Use ordinary Java sources and at most one reviewed named module descriptor.');
+    }
     if (tokens.some((token, index) =>
       token.kind === 'id' && dynamic.has(token.text) &&
         (token.text !== 'ServiceLoader' || !services?.reviewedClients.has(source.uri)) ||
@@ -233,7 +243,7 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
   }
   const oldFolder = path.dirname(uri.fsPath), newFolder = path.join(path.dirname(oldFolder), newLeaf);
   const tree = siblingTree(oldFolder, newFolder);
-  const scope = await scopeApi.moveScope(vscode, send, uri, uri, cancellation, { classpathScope: 'test' });
+  const scope = await scopeApi.moveScope(vscode, send, uri, uri, cancellation, { classpathScope: 'test', allowPackageModule: true });
   const root = scope.source.sourceRoot, part = path.relative(root, oldFolder);
   const segments = part.split(path.sep);
   if (!part || !inside(root, oldFolder) || !segments.every(validIdentifier)) throw Error('Choose a named Java package inside an imported source root.');
@@ -280,9 +290,11 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
     moved.set(id, { oldUri: input.uri, newUri, nextKey, packageName: [oldPackage, ...directories].join('.') });
     prospectiveNames.set(nextKey, { packageName: [newPackage, ...directories].join('.') });
   }
-  const classpath = compilerClasspath(scope.source);
-  const jars = new Set(classpath.map(scopeApi.key));
-  scope.classpathIdentity = scope.classpathIdentity.filter(saved => jars.has(scopeApi.key(saved.file)));
+  const classpath = scope.namedPackageModule ? [] : compilerClasspath(scope.source);
+  if (!scope.namedPackageModule) {
+    const jars = new Set(classpath.map(scopeApi.key));
+    scope.classpathIdentity = scope.classpathIdentity.filter(saved => jars.has(scopeApi.key(saved.file)));
+  }
   const sourceGuard = scopeApi.scopeGuards(scope, sources, vscode, trusted, cancellation);
   const engine = runtime();
   if (!engine?.javaHome || !engine.storagePath) throw Error('Configure the independent Java runtime before reviewing Package Rename.');
@@ -300,12 +312,16 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
     uriFor: file => vscode.Uri.file(file).toString() });
   enforceContracts(sources, oldPackage, moved, boot, services);
   const analyze = (sources, fqn, other) => analyzeJavaSources({ ...engine, sources, classpath, cancellation,
+    namedModule: scope.namedPackageModule,
     manifestLimit: 256 * 1024, inspection: { kind: services ? 'packageRenameServices' : 'packageRename', fqn, other } });
   const first = await analyze([...java.values()], oldPackage, newPackage);
   if (first.errors.length) throw Error('Resolve existing Java compiler errors before renaming the package: ' + first.errors[0].message);
   await rejectBinaryPackages(classpath, oldPackage, newPackage, cancellation);
   first.validateClasspath();
   const before = attributedFiles(first, java, oldPackage, moved);
+  const descriptor = services?.moduleDescriptor;
+  const module = descriptor && { id: uriKey(descriptor.uri),
+    ...bindModuleDescriptor(before.get(uriKey(descriptor.uri)), descriptor, oldPackage) };
   const exact = exactEntries([...java.values()], [...before].flatMap(([id, unit]) =>
     unit.spans.map(span => ({ ...span, uri: java.get(id).uri }))), newPackage);
   const directory = { kind: 'rename', oldUri: vscode.Uri.file(oldFolder).toString(), newUri: vscode.Uri.file(newFolder).toString(),
@@ -318,11 +334,12 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
   }
   const raw = await send('workspace/willRenameFiles', { files: [{ oldUri: directory.oldUri, newUri: directory.newUri }] }, cancellation);
   checkTree();
-  const observed = reconciledEngineEdits(raw, java, exact, oldPackage, newPackage, moved);
+  const observed = reconciledEngineEdits(raw, java, exact, oldPackage, newPackage, moved, module);
   const prospective = scopeApi.transformed(sources, exact, [...moved.values()]);
   const second = await analyze(prospective, newPackage, oldPackage);
   if (second.errors.length) throw Error('Package Rename would introduce a Java compiler error: ' + second.errors[0].message);
   const after = attributedFiles(second, new Map(prospective.map(source => [uriKey(source.uri), source])), newPackage, prospectiveNames);
+  if (module) verifyModuleProjection(module, after.get(module.id), oldPackage, newPackage);
   const bindings = verifyBindings(before, after, moved, oldPackage, newPackage);
   services?.verify(first, second, prospective, exact);
   const preApply = () => { checkTree(); first.validateClasspath(); second.validateClasspath(); services?.validate(); };
@@ -340,12 +357,15 @@ async function preparePackageRename({ vscode, send, trusted, refactoring, runtim
     allowedServiceEdits: services?.permissions || [],
     warnings: ['Review the saved Java source tree and its nested packages. Binary and external callers require a separate review.',
       ...(boot.entries.length ? ['Review the exact Spring Boot imports alongside the Java package. External registrations and public compatibility require a separate review.'] : []),
-      ...(services ? ['Review the exact ServiceLoader filenames and provider lines. Registration order, comments and line endings are preserved.'] : [])]
+      ...(module ? ['Review the exact module-info.java package and service edits. Provider order, the module name and unrelated directives are preserved.'] :
+        services ? ['Review the exact ServiceLoader filenames and provider lines. Registration order, comments and line endings are preserved.'] : [])]
   });
   return { ...plan, packageRename: { oldPackage, newPackage, movedFiles: moved.size,
     editedFiles: exact.length + boot.entries.length + (services?.edits.length || 0),
     ...(boot.entries.length && { bootImports: { files: boot.entries.length, registrations: boot.registrations } }),
     ...(services && { services: services.receipt }),
+    ...(module && { namedModule: { name: module.name, directiveNamesChanged: module.spans.length,
+      directivesChecked: module.declarations.length, compilerVerified: true } }),
     bindings, ...observed } };
 }
 
