@@ -15,7 +15,7 @@ import {pathToFileURL} from 'node:url';
 const [compilerFile,typescriptFile,config,root,dependencies,result]=process.argv.slice(2);
 const angular=await import(pathToFileURL(compilerFile).href);
 const {default:ts}=await import(pathToFileURL(typescriptFile).href);
-const resolved=fs.realpathSync(root);
+const resolved=fs.realpathSync.native(root);
 function within(directory,file){
   const relative=path.relative(directory,file);
   return !path.isAbsolute(relative)&&relative!=='..'&&!relative.startsWith('..'+path.sep);
@@ -25,7 +25,9 @@ function allowed(file){
   const requested=path.resolve(file);
   if(!within(resolved,requested)&&!within(dependencies,requested))return false;
   try {
-    const physical=fs.realpathSync(file);
+    // TypeScript probes each dependency repeatedly. Use the native lookup to
+    // resolve the physical path without walking each pnpm link in JavaScript.
+    const physical=fs.realpathSync.native(file);
     return within(resolved,physical)||within(dependencies,physical);
   } catch {return false;}
 }
