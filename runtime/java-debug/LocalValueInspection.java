@@ -103,7 +103,7 @@ final class LocalValueInspection {
         return Map.of("kind", collection.kind, "length", collection.length, "start", start, "rows", rows);
     }
 
-    private static int storageUnits(StringReference string) {
+    static int storageUnits(StringReference string) {
         Value backing = field(string, "value", "[B");
         if (backing instanceof ArrayReference) {
             Value coder = field(string, "coder", "B");

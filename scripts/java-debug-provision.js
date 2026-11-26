@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { DEBUG_VERSION, COROUTINE_BUILD: DEBUG_BUILD, COROUTINE_FILE: DEBUG_FILE, COROUTINE_SHA256: DEBUG_SHA256,
+const { DEBUG_VERSION, WATCH_BUILD: DEBUG_BUILD, WATCH_FILE: DEBUG_FILE, WATCH_SHA256: DEBUG_SHA256,
   DEBUG_URL, UPSTREAM_FILE, UPSTREAM_SHA256, resolveDebugBundles, independentJavaExecutable } = require('../src/java/debug-runtime');
 const { buildPatchedBundle, SOURCE_COMMIT, SOURCE_URL, SOURCE_SHA256, CORE_SOURCE_URL, CORE_SOURCE_SHA256,
   EXCEPTION_SOURCE_URL, EXCEPTION_SOURCE_SHA256, INSPECTION_SOURCE_URL, INSPECTION_SOURCE_SHA256,
@@ -34,22 +34,22 @@ async function provisionDebugger(target, progress = () => {}, { javaHome, server
     await download(DEBUG_URL, UPSTREAM_SHA256, upstreamJar);
     await download(sourceJarUrl, SOURCE_JAR_SHA256, sourceJar);
     await download(coreSourceJarUrl, CORE_SOURCE_JAR_SHA256, coreSourceJar);
-    progress('Building the loopback DAP server with stack, exception, local value and Kotlin coroutine inspection.');
+    progress('Building the loopback DAP server with Java inspection, Kotlin coroutine debugging and Kotlin watches.');
     const build = await buildPatchedBundle({ target, javaHome, serverPath: serverPath || path.join(path.dirname(target), 'jdtls-1.63.0'), upstreamJar, sourceJar, coreSourceJar, outputJar: file });
     if (build.sha256 !== DEBUG_SHA256) throw new Error(`Java debug local build does not match the reproducible ${DEBUG_BUILD} artifact (${build.sha256}).`);
     await fs.promises.writeFile(path.join(target, 'build.json'), JSON.stringify(build, null, 2) + '\n');
   }
   resolveDebugBundles(file);
   const source = {
-    name: 'Microsoft Java Debug Server with Rocketbrain loopback, exception, JDI value and Kotlin continuation inspection patches', version: DEBUG_BUILD,
+    name: 'Microsoft Java Debug Server with Rocketbrain loopback, Java inspection, Kotlin coroutine and scalar watch patches', version: DEBUG_BUILD,
     upstream: { version: DEBUG_VERSION, url: DEBUG_URL, sha256: UPSTREAM_SHA256, sourceJarUrl, sourceJarSha256: SOURCE_JAR_SHA256, coreSourceJarUrl, coreSourceJarSha256: CORE_SOURCE_JAR_SHA256, sourceCommit: SOURCE_COMMIT, source: `https://github.com/microsoft/java-debug/tree/${SOURCE_COMMIT}` },
     artifact: { file: DEBUG_FILE, sha256: DEBUG_SHA256, locallyBuilt: true, signed: false },
-    patch: { name: 'loopback-stack-exception-jdi-values-coroutine-watch-v5', sourceUrl: SOURCE_URL, sourceSha256: SOURCE_SHA256,
+    patch: { name: 'loopback-stack-exception-jdi-values-coroutine-kotlin-evaluation-v6', sourceUrl: SOURCE_URL, sourceSha256: SOURCE_SHA256,
       coreSourceUrl: CORE_SOURCE_URL, coreSourceSha256: CORE_SOURCE_SHA256, exceptionSourceUrl: EXCEPTION_SOURCE_URL,
       exceptionSourceSha256: EXCEPTION_SOURCE_SHA256, inspectionSourceUrl: INSPECTION_SOURCE_URL,
       inspectionSourceSha256: INSPECTION_SOURCE_SHA256, notice: PATCH_NOTICE },
     license: 'EPL-1.0 (release LICENSE.txt and artifact Bundle-License); other upstream source files retain their own EPL notices', licenseUrl: LICENSE_URL, licenseSha256: LICENSE_SHA256,
-    verification: 'Upstream binary, plugin/core source JARs and source-file SHA-256 are pinned. A JDK compiler rebuilds the JavaDebugServer, AdapterUtils, DebugSession and DebugAdapter patches plus the local value and continuation helpers with --release 11. JARs retain reproducible timestamps, licenses, sources, a patch notice and a pinned plugin SHA-256.',
+    verification: 'Upstream binary, plugin/core source JARs and source-file SHA-256 are pinned. A JDK compiler rebuilds the debug adapter patches plus the local value, continuation and Kotlin watch helpers with --release 11. JARs retain reproducible timestamps, licenses, sources, a patch notice and a pinned plugin SHA-256.',
     includedComponents: [{ name: 'Microsoft java-debug core', version: DEBUG_VERSION }, { name: 'Apache Commons IO', version: '2.11.0', license: 'Apache-2.0' }, { name: 'RxJava', version: '2.2.21', license: 'Apache-2.0' }, { name: 'Reactive Streams', version: '1.0.4', license: 'CC0-1.0' }],
     integration: 'JDT LS initializationOptions.bundles; Rocketbrain owns the DAP client/provider. The DAP server listens only on 127.0.0.1. No Java Marketplace extension or original IDE is required.'
   };

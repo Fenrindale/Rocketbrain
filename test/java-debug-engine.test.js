@@ -47,6 +47,8 @@ test('independent Java debug bundle launches and attaches real JVMs with breakpo
     const { scopes } = await dap.request('scopes', { frameId: stackFrames[0].id }); const variables = [];
     for (const scope of scopes) if (scope.variablesReference) variables.push(...(await dap.request('variables', { variablesReference: scope.variablesReference })).variables);
     assert.ok(variables.some(variable => variable.name === 'name' && variable.value.includes('Rocketbrain')), JSON.stringify(variables));
+    const evaluation = await dap.request('evaluate', { frameId: stackFrames[0].id, expression: 'name.length()', context: 'watch' });
+    assert.equal(evaluation.result, '11');
     const after = dap.events.length; await dap.request('next', { threadId: stopped.threadId }); const stepped = await dap.event('stopped', after); assert.equal(stepped.reason, 'step');
     const steppedStack = await dap.request('stackTrace', { threadId: stepped.threadId }); assert.ok(steppedStack.stackFrames.length);
     await dap.request('continue', { threadId: stepped.threadId }); await dap.event('terminated');
