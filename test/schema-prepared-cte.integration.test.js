@@ -14,8 +14,11 @@ test('owned Spring prepared WITH UPDATE uses physical lookup dependencies and a 
   let fresh;
   try {
     const version = (await control.actor.query('SELECT VERSION() AS version'))[0][0].version;
+    const [serverModes] = (await control.actor.query('SELECT @@read_only AS readOnly, @@log_bin AS logBin'))[0];
+    assert.equal(serverModes.readOnly, version === '12.3.4-MariaDB' ? 'OFF' : 0);
+    assert.equal(serverModes.logBin, 0);
     const inspect = async () => control.db.analyzeSchemaPrograms({ routines: [control.root] });
-    const details = { sourceCommit: process.env.GITHUB_SHA || null, version };
+    const details = { sourceCommit: process.env.GITHUB_SHA || null, version, serverModes };
     if (version === '11.4.8-MariaDB') {
       await assert.rejects(inspect, /requires observed MySQL 8.4\+ or MariaDB 12.3\+/u);
       await control.dropAlien();

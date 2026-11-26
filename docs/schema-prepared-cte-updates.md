@@ -6,6 +6,8 @@ The CTE reads a schema-qualified InnoDB base table and projects up to 16 ordinar
 
 The inspection lists both physical read dependencies and the single physical write dependency. Rebuild review binds the observed engine version and includes both physical tables in its lock and fence scope. Apply rechecks the source and its lookup metadata. The procedure stays in place with its original creation context during rebuild and recovery. Inspection, rebuild and recovery never execute it.
 
+The existing writable server requirement recognizes MariaDB 12's observed `read_only=OFF` enum. Its read-only and lock-prohibiting modes are refused.
+
 Multiple or recursive CTEs, computed projections, arbitrary filters and joins, DDL in PREPARE and opaque program inputs remain outside this review. The reviewed schema workflow retains its existing same-server recovery boundaries.
 
-Upstream syntax references are [MySQL WITH](https://dev.mysql.com/doc/refman/8.4/en/with.html) and [MariaDB UPDATE](https://mariadb.com/docs/server/reference/sql-statements/data-manipulation/changing-deleting-data/update#cte-syntax).
+Upstream references are [MySQL WITH](https://dev.mysql.com/doc/refman/8.4/en/with.html), [MariaDB UPDATE](https://mariadb.com/docs/server/reference/sql-statements/data-manipulation/changing-deleting-data/update#cte-syntax) and [MariaDB read_only](https://mariadb.com/docs/server/server-management/variables-and-modes/server-system-variables#read_only).
