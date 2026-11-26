@@ -11,7 +11,7 @@ const { captureClasspath, stageClasspath } = require('../src/java/groovy-project
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { execute } = require('../src/java/testing/provision');
-const { resource, scripts, prepareGroovyProject, rangeFor, withGroovyDatabase, expectedOutput } =
+const { resource, scripts, typedMemberScript, prepareGroovyProject, rangeFor, withGroovyDatabase, expectedOutput } =
   require('./helpers/groovy-project-fixture');
 
 const runtimeFile = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
@@ -22,40 +22,52 @@ const uri = file => ({ fsPath: file, scheme: 'file', toString: () => pathToFileU
 const same = (a, b) => path.relative(a, b) === '';
 
 async function document(file) {
-  const text = await fs.readFile(file, 'utf8');
-  const lines = text.split('\n');
-  const starts = lines.map((_, line) => lines.slice(0, line).reduce((sum, item) => sum + item.length + 1, 0));
+  let text = await fs.readFile(file, 'utf8');
+  const starts = () => [0, ...Array.from(text.matchAll(/\n/gu), match => match.index + 1)];
   return {
-    uri: uri(file), languageId: 'groovy', version: 1, getText: () => text,
-    offsetAt(position) { return starts[position.line] + position.character; },
+    uri: uri(file), languageId: file.endsWith('.groovy') ? 'groovy' : 'java', version: 1,
+    getText(range) { return range ? text.slice(this.offsetAt(range.start), this.offsetAt(range.end)) : text; },
+    offsetAt(position) { return starts()[position.line] + position.character; },
     positionAt(offset) {
-      const line = starts.findLastIndex(start => start <= offset);
-      return { line, character: offset - starts[line] };
+      const lines = starts(), line = lines.findLastIndex(start => start <= offset);
+      return { line, character: offset - lines[line] };
+    },
+    replace(range, content) {
+      text = text.slice(0, this.offsetAt(range.start)) + content + text.slice(this.offsetAt(range.end));
+      this.version++;
     }
   };
 }
 
 function host(root, runtime, request) {
-  const commands = new Map(), views = new Map();
+  const commands = new Map(), views = new Map(), displayed = [];
   const dispose = () => ({ dispose() {} });
   const vscode = {
-    Uri: { parse: value => ({ path: new URL(value).pathname, scheme: new URL(value).protocol.slice(0, -1) }) },
+    Uri: { file: uri, parse: value => ({ path: new URL(value).pathname, scheme: new URL(value).protocol.slice(0, -1) }) },
+    Range: class {
+      constructor(first, second, endLine, endColumn) {
+        this.start = typeof first === 'object' ? first : { line: first, character: second };
+        this.end = typeof second === 'object' ? second : { line: endLine, character: endColumn };
+      }
+    },
     workspace: {
       isTrusted: true, workspaceFolders: [{ uri: uri(root) }], textDocuments: [],
       getConfiguration: () => ({ get: key => runtime[key] }), onDidChangeTextDocument: dispose,
       onDidChangeWorkspaceFolders: dispose,
       registerTextDocumentContentProvider(scheme, provider) { views.set(scheme, provider); return dispose(); },
-      async openTextDocument(uri) { return { uri, getText: () => views.get(uri.scheme).provideTextDocumentContent(uri) }; }
+      async openTextDocument(uri) {
+        return uri.scheme === 'file' ? document(uri.fsPath) : { uri, getText: () => views.get(uri.scheme).provideTextDocumentContent(uri) };
+      }
     },
     commands: { registerCommand(id, action) { commands.set(id, action); return dispose(); } },
     languages: { createDiagnosticCollection: () => ({ dispose(){}, delete(){} }) },
     window: {
       createOutputChannel: () => ({ dispose(){}, append(){}, appendLine(){}, show(){}, clear(){} }),
-      showTextDocument: async document => ({ document })
+      showTextDocument: async (document, options) => { displayed.push({ document, options }); return { document }; }
     }
   };
   const java = { getState: () => ({ state: 'running', javaHome: runtime.javaHome }), requestWorkspaceCommand: request };
-  return { service: registerGroovyWorkbench(vscode, java), commands, vscode };
+  return { service: registerGroovyWorkbench(vscode, java), commands, vscode, displayed };
 }
 
 test('a reviewed Groovy classpath stages independent bytes and refuses changed files', async t => {
@@ -243,4 +255,110 @@ test('real Buildship Groovy project loader resolves approved Gradle outputs on b
   if (process.env.ROCKETBRAIN_GROOVY_PROJECT_GRADLE_RECEIPT) await fs.writeFile(
     process.env.ROCKETBRAIN_GROOVY_PROJECT_GRADLE_RECEIPT,
     JSON.stringify({ tool: 'gradle', liveBuildship: true, actualGradleBuild: true, copiedProjectClassAndResources: true, database: jdbc }, null, 2) + '\n');
+});
+
+for (const tool of ['maven', 'gradle']) test('real ' + tool + ' typed Groovy methods complete and navigate via compiler attribution', {
+  skip: !runtimeFile || (tool === 'maven' ? !mavenHome : !process.env.ROCKETBRAIN_GROOVY_PROJECT_GRADLE_CACHE) ||
+    !dbs.every(([, file]) => file), timeout: 350000
+}, async t => {
+  const base = await fs.realpath(os.tmpdir()), owned = await fs.mkdtemp(path.join(base, 'rb-groovy-typed-'));
+  const root = path.join(owned, 'typed-' + tool), runtime = await read(runtimeFile);
+  const gradleCache = process.env.ROCKETBRAIN_GROOVY_PROJECT_GRADLE_CACHE;
+  const variable = 'RB_GROOVY_MEMBER_INITIALIZED', prior = process.env[variable], marker = path.join(owned, 'initialized.txt');
+  let lsp, service;
+  t.after(async () => {
+    if (prior === undefined) delete process.env[variable]; else process.env[variable] = prior;
+    await service?.dispose();
+    await lsp?.close();
+    const real = await fs.realpath(owned);
+    assert.ok(same(real, owned) && same(base, path.dirname(real)) && path.basename(real).startsWith('rb-groovy-typed-'));
+    await fs.rm(real, { recursive: true, force: true, maxRetries: 8, retryDelay: 200 });
+  });
+  const fixture = await prepareGroovyProject(root, { ...runtime, mavenHome, gradleCache, tool });
+  const script = typedMemberScript;
+  const scriptPath = path.join(root, 'scripts', 'typed.groovy');
+  await fs.writeFile(scriptPath, script, { flag: 'wx' });
+  const dynamicPath = path.join(root, 'scripts', 'dynamic.groovy');
+  await fs.writeFile(dynamicPath, script.replace('Probe service', 'def service'), { flag: 'wx' });
+  const settings = serverSettings([{ name: 'JavaSE-25', path: runtime.javaHome, default: true }],
+    { gradleHome: runtime.gradleHome, gradleJavaHome: runtime.javaHome });
+  settings.java.import.gradle.wrapper.enabled = false;
+  settings.java.import.gradle.enabled = tool === 'gradle';
+  settings.java.autobuild.enabled = tool === 'gradle';
+  const launch = resolveLaunch({ ...runtime, storagePath: path.join(owned, 'jdt') });
+  if (gradleCache) launch.options.env.GRADLE_USER_HOME = gradleCache;
+  lsp = new StdioLsp(launch);
+  const rootUri = uri(root).toString();
+  await lsp.request('initialize', { processId: process.pid, rootUri, workspaceFolders: [{ uri: rootUri, name: 'Typed Groovy' }],
+    capabilities: { workspace: { configuration: true, workspaceFolders: true }, textDocument: {} },
+    initializationOptions: { bundles: [], workspaceFolders: [rootUri], settings } }, 90000);
+  lsp.notify('initialized', {});
+  const calls = [];
+  const request = (command, args) => {
+    calls.push(command);
+    return lsp.request('workspace/executeCommand', { command, arguments: args }, 90000);
+  };
+  await until(async () => {
+    const projects = await request('java.project.getAll', []);
+    if (!projects.some(value => same(root, fileURLToPath(value)))) return false;
+    const metadata = await request('java.project.getClasspaths', [fixture.uri, { scope: 'runtime' }]);
+    if (!metadata.projectRoot || !same(root, fileURLToPath(metadata.projectRoot))) return false;
+    for (const candidate of metadata.classpaths) {
+      const directory = candidate.startsWith('file:') ? fileURLToPath(candidate) : candidate;
+      if (!path.isAbsolute(directory)) continue;
+      const actual = await fs.stat(path.join(directory, 'fixture/groovyproject/ProjectProbe.class')).catch(() => null);
+      if (actual?.isFile()) return true;
+    }
+    return false;
+  }, 150000);
+  const ui = host(root, runtime, request);
+  service = ui.service;
+  assert.ok(ui.commands.has(COMMANDS.members) && ui.commands.has(COMMANDS.declaration));
+  process.env[variable] = marker;
+  const source = await document(scriptPath), dynamic = await document(dynamicPath);
+  const caret = doc => doc.positionAt(doc.getText().indexOf('service.quer') + 'service.quer'.length);
+  const inspect = doc => service.project.members.inspect({ document: doc, position: caret(doc), projectUri: fixture.uri, scope: 'runtime' });
+  const edit = { document: source, edit: async perform => { perform({ replace: (range, value) => source.replace(range, value) }); return true; } };
+  const plan = await inspect(source);
+  assert.equal(plan.project.tool, tool);
+  assert.equal(plan.receiver.type, 'fixture.groovyproject.ProjectProbe');
+  assert.equal(source.getText(plan.receiver), 'service');
+  assert.equal(plan.prefix, 'quer');
+  assert.deepEqual(plan.members.map(member => [member.name, member.parameters.length]), [['query', 1], ['query', 3]]);
+  const selected = plan.members.find(member => member.parameters.length === 3);
+  const navigated = await service.project.members.openDeclaration({ id: plan.id, key: selected.key });
+  assert.ok(same(navigated.file, path.join(root, fixture.nativeSource)));
+  const shown = ui.displayed.at(-1);
+  assert.equal(shown.document.getText(shown.options.selection), 'query');
+  assert.match(shown.document.getText().split('\n')[shown.options.selection.start.line], /String url, String user, String password/u);
+  await assert.rejects(fs.stat(marker), { code: 'ENOENT' });
+  await assert.rejects(inspect(dynamic), /explicitly typed local receiver/u);
+  if (tool === 'maven') {
+    const artifact = path.join(root, resource);
+    await fs.writeFile(artifact, '3\n');
+    try { await assert.rejects(service.project.members.apply({ id: plan.id, key: selected.key, editor: edit }), /classpath changed/u); }
+    finally { await fs.writeFile(artifact, '2\n'); }
+    const stale = await inspect(source);
+    source.version++;
+    await assert.rejects(service.project.members.apply({ id: stale.id, key: selected.key, editor: edit }), /source changed/u);
+  }
+  const current = await inspect(source);
+  assert.equal((await service.project.members.apply({ id: current.id, key: selected.key, editor: edit })).name, 'query');
+  assert.equal(source.getText(), script.replace('service.quer(', 'service.query('));
+  await assert.rejects(fs.stat(marker), { code: 'ENOENT' });
+  await fs.writeFile(scriptPath, source.getText());
+  const jdbc = [];
+  for (const [engine, config] of dbs) jdbc.push(await withGroovyDatabase(await read(config), engine, async () => {
+    const text = source.getText();
+    const review = await service.project.review({ document: source,
+      range: { start: source.positionAt(0), end: source.positionAt(text.length) }, projectUri: fixture.uri, scope: 'runtime' });
+    return expectedOutput(await service.project.run({ id: review.id, allowExecution: true }), engine);
+  }));
+  assert.equal(await fs.readFile(marker, 'utf8'), 'initialized');
+  assert.ok(calls.every(command => ['java.project.getAll', 'java.project.getSettings', 'java.project.getClasspaths'].includes(command)));
+  if (process.env.ROCKETBRAIN_GROOVY_STATIC_RECEIPT) await fs.writeFile(
+    process.env.ROCKETBRAIN_GROOVY_STATIC_RECEIPT + '-' + tool + '.json',
+    JSON.stringify({ tool, receiver: plan.receiver.type, overloads: plan.members.length, exactSourceOverload: selected.key,
+      dynamicRefused: true, noProjectTypeInitializationDuringAnalysis: true, completedExactPrefix: true,
+      staleEditorAndClasspathRefused: tool === 'maven', database: jdbc }, null, 2) + '\n');
 });

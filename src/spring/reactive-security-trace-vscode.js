@@ -7,6 +7,23 @@ const TITLE = 'Reactive Spring Security Trace';
 const safe = value => String(value).replace(/[&<>"']/g, character =>
   ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[character]);
 const verification = {passed: 'Web verification passed', denied: 'Web verification denied', unobserved: 'Web verification unavailable'};
+const authenticationOutcomes = { returned: 'Authentication result emitted', empty: 'Completed without a result',
+  rejected: 'Authentication rejection', error: 'Manager error', canceled: 'Canceled', unobserved: 'Result unavailable' };
+
+function renderAuthentication(trace) {
+  if (!trace.authenticationAttempts) return '';
+  const attempts = trace.authenticationAttempts.map(attempt => {
+    const describe = entry => 'Manager ' + entry.managerId + ' · ' + safe(entry.managerType || 'Type unavailable') +
+      ' · ' + safe(authenticationOutcomes[entry.outcome]);
+    const steps = attempt.delegates.map(step => '<li>' + describe(step) +
+      ' · ' + (step.parent ? 'Dispatched by step ' + step.parent : 'Dispatched by this manager') + '</li>').join('');
+    const coverage = attempt.delegateCoverage === 'partial' ? '<p>Partial delegate evidence.</p>' :
+      attempt.delegateCoverage === 'opaque' ? '<p>Internal delegation unavailable for this manager.</p>' : '';
+    return '<article><h3>' + describe(attempt) + '</h3>' + coverage + (steps ? '<ol>' + steps + '</ol>' : '') + '</article>';
+  }).join('');
+  return '<section><h2>Reactive authentication</h2>' + (attempts || '<p>No supported manager result recorded.</p>') +
+    (trace.authenticationLimited ? '<p>Additional attempts were omitted.</p>' : '') + '</section>';
+}
 
 function renderReactiveSecurityTrace(report) {
   const nonce = randomBytes(16).toString('base64');
@@ -33,7 +50,8 @@ function renderReactiveSecurityTrace(report) {
       (matches ? '<ol>' + matches + '</ol>' : '<p>No matcher result recorded.</p>') +
       '</section><section><h2>Selected filter order</h2>' + (stages ? '<ol>' + stages + '</ol>' : '<p>No configured filters recorded.</p>') +
       '</section><section><h2>Reactive method authorization</h2>' +
-      (decisions ? '<ul>' + decisions + '</ul>' : '<p>No method decision recorded.</p>') + '</section></details>';
+      (decisions ? '<ul>' + decisions + '</ul>' : '<p>No method decision recorded.</p>') + '</section>' +
+      renderAuthentication(trace) + '</details>';
   }).join('');
   return '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'nonce-' + nonce + '\'">' +

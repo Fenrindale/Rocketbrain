@@ -162,7 +162,7 @@ function parseMembers(tokens, start, end, type, info, issues, collectNested) {
       let tail = cursor;
       while (tail < end) { if (tokens[tail].text === ';') break; if (['(', '[', '{'].includes(tokens[tail].text)) { const close = matching(tokens, tail); if (close < 0) break; tail = close; } tail++; }
       const header = tokens.slice(headerStart, cursor).filter(token => !MODIFIERS.has(token.text));
-      if (!header.some(token => token.text === ',') && header.length >= 2 && header.at(-1).kind === 'id') { const name = header.at(-1); fields.push({ name: name.text, type: typeRef(header.slice(0, -1), info), annotations, start: name.start, end: name.end,
+      if (splitTop(header).length === 1 && header.length >= 2 && header.at(-1).kind === 'id') { const name = header.at(-1); fields.push({ name: name.text, type: typeRef(header.slice(0, -1), info), annotations, start: name.start, end: name.end,
         declarationStart:annotations[0]?.start??tokens[headerStart].start,
         modifiers:tokens.slice(headerStart,cursor).filter(token=>MODIFIERS.has(token.text)).map(token=>token.text) }); }
       else if (annotations.length) issues.push('Unsupported annotated field declaration');

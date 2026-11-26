@@ -1,5 +1,5 @@
 {
-  "version": "0.130.0",
+  "version": "0.132.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,29 +30,35 @@
     }
   },
   "summary": {
-    "implemented": 176,
-    "partial": 26,
+    "implemented": 177,
+    "partial": 25,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 93.1,
+    "percent": 93.3,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
+    "IDEA-029",
     "IDEA-046",
     "IDEA-047",
+    "IDEA-053",
+    "IDEA-064",
     "IDEA-066",
-    "IDEA-096"
+    "IDEA-099"
   ],
   "expandedFeatures": [
+    "IDEA-029",
     "IDEA-046",
     "IDEA-047",
+    "IDEA-053",
+    "IDEA-064",
     "IDEA-066",
-    "IDEA-096"
+    "IDEA-099"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -870,24 +876,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "비공개 Java 메서드 반환형을 검증된 참조 하위 타입으로 좁히고, 폐쇄된 중첩 클래스의 메서드를 private으로 바꾼다. 체크 예외와 기존 인자 서명 검토를 계속 제공한다.",
+      "scope": "Java Change Signature에서 인터페이스와 구현체의 매개변수 이름을 한 번의 검토로 바꾼다. 본문 참조와 Javadoc을 연결하고 호출과 오버로드를 보존한다.",
       "remaining": [
-        "공개 API의 외부 소비자, 동적 호출, 추론된 소비자 타입 및 일반 상속 접근 변경을 별도 검토한다."
+        "닫힌 컴포넌트 밖의 외부 소비자와 일반 제네릭·가변 인자·동적 계약 분석이 남는다."
       ],
       "verification": {
-        "state": "v0.128-installed-coverage",
+        "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.128.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 직접 호출의 결합과 이전·이후 Spring JDBC가 같았다. 변경과 실행 취소·다시 실행은 선택한 선언에만 적용됐다.",
+        "testedScope": "실제 다중 모듈 Maven·Spring에서 선언 세 개, 본문 참조 세 개, Javadoc 두 개와 호출 네 개를 확인했다. 두 DB에서 변경 전후 조회 결과가 같았다.",
         "publicEvidence": [
-          "src/java/change-signature-return.js",
-          "src/java/change-signature-access.js",
-          "test/java-signature-return-host.js",
-          "test/java-signature-access-host.js"
+          "src/java/change-signature-parameter-name.js",
+          "runtime/java-signature/src/rocketbrain/signature/ParameterNameBindings.java",
+          "test/java-parameter-rename-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1391,23 +1396,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Scala 2와 3에 대해 sbt 모듈 컴파일·테스트를 실행하고 컴파일된 SemanticDB 기호를 이용해 오버로드별 선언과 사용처를 찾는다.",
+      "scope": "Scala 2·3 sbt 빌드에서 선택한 메인 클래스에 소스 중단점을 걸고 실제 지역 변수를 읽는다. 기존 컴파일된 정의·사용처와 테스트를 제공한다.",
       "remaining": [
-        "일반 코드 완성·편집 리팩터링과 설치된 Scala 디버거가 남는다."
+        "일반 Scala 타입 완성과 소스 리팩터링, Scala 전용 테스트 디버깅이 남는다."
       ],
       "verification": {
-        "state": "v0.130-installed-coverage",
+        "state": "v0.132-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Scala 2.13.18 및 Scala 3.9.0에서 같은 이름의 두 오버로드를 구분했다. 설치 VS Code에서는 Scala 2의 정의와 사용처를 실제로 확인했다.",
+        "testedScope": "실제 Scala 2.13.18과 3.9.0에서 7행에 멈춰 지역 변수 3을 확인했고 재개 후 프로그램이 종료됐다.",
         "publicEvidence": [
-          "src/java/scala-semanticdb.js",
-          "src/java/scala-vscode.js",
-          "test/scala-sbt-host.js",
+          "src/java/scala-debug-runtime.js",
+          "src/java/scala-sbt.js",
+          "test/scala-debug-host.js",
           "docs/scala-sbt-navigation.md"
         ],
         "originalProductParityVerified": false
@@ -1422,22 +1427,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "선택한 Groovy 코드를 가져온 Java 프로젝트의 런타임·테스트 클래스패스에서 사전 검토 후 실행한다.",
+      "scope": "명시적 타입의 Groovy 지역변수에서 가져온 Java 프로젝트의 메서드를 완성하고, 컴파일러가 확인한 오버로드의 선언을 연다. 승인한 프로젝트 클래스패스에서 콘솔을 실행한다.",
       "remaining": [
-        "Groovy 선언 자체의 정적 완성, 동적 타입 분석 및 리팩터링이 남는다."
+        "Groovy 선언 자체의 일반 정적 타입 완성과 리팩터링, 동적 타입 추론이 남는다."
       ],
       "verification": {
-        "state": "v0.130-installed-coverage",
+        "state": "v0.132-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Maven·Gradle 클래스패스에서 복사한 Java 클래스와 Spring JDBC를 사용해 두 DB가 각각 42를 반환했다. 설치 VS Code에서 Maven의 검토와 실행 승인을 확인했다.",
+        "testedScope": "실제 Maven·Gradle에서 공개 오버로드 두 개와 선언 위치를 확인했다. 분석 중 클래스 초기화 및 AST 매크로가 실행되지 않았고, 승인 후 두 DB의 결과는 42였다.",
         "publicEvidence": [
-          "src/java/groovy-project-console.js",
-          "test/groovy-project-console-host.js"
+          "src/java/groovy-static-members.js",
+          "runtime/groovy/GroovyStaticReceiver.java",
+          "test/groovy-static-members-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1595,23 +1601,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "실제 Spring 생성자 주입에서 동적으로 등록된 빈의 선택과 모호한 후보를 조회하고 저장한 Java의 매개변수로 이동한다.",
+      "scope": "실제 Spring의 생성자·필드·메서드 주입에서 Bean 선택, 모호함, 선택 주입의 누락 및 배열·컬렉션·맵에 전달된 Bean 이름을 공장별로 확인하고 저장한 소스로 이동한다.",
       "remaining": [
-        "관측할 수 없는 동적 등록과 임의 사용자 코드, 생성자 이외의 자동 연결 지점은 남아 있다."
+        "AOT·상위 공장·지연 Provider·캐시 단축 경로, 임의 사용자 코드의 내부 결정을 추가 검토한다."
       ],
       "verification": {
-        "state": "v0.122-installed-coverage",
+        "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.122.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "두 DB에서 같은 이름의 컨텍스트를 구분했다. 후보가 선택된 매개변수 두 개와 모호한 매개변수 한 개를 열어 실제 소스와 일치시켰고 조회 중 공급자를 재실행하지 않았다.",
+        "testedScope": "실제 Spring 7.0.10의 두 DB에서 필드·메서드 기록 12건과 생성자 세 건을 확인했다. 설치본에서 필드·메서드 소스 위치를 열고 공급자가 재실행되지 않는 것을 확인했다.",
         "publicEvidence": [
-          "docs/spring-observed-injection.md",
           "src/spring/observed-injection.js",
-          "test/spring-observed-injection-host.js"
+          "runtime/jpa-observer/src/rocketbrain/observer/AutowireRuntime.java",
+          "test/spring-member-injection-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1914,23 +1920,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Spring Security Servlet 요청의 ProviderManager 실측 결과에서 공급자 호출·판단 보류·거부·반환을 기록한다. 요청과 관리자별로 관측을 구분한다.",
+      "scope": "Servlet ProviderManager와 WebFlux의 실제 인증 시도·공급자 순서와 발생 결과를 관측한다. 중첩 Reactive 위임에서 반환·빈 완료·거부·오류를 표시한다.",
       "remaining": [
-        "상위 관리자 위임과 계측 밖의 사용자 정의 인증 구현은 부분 관측이다. 별도 Reactive 인증 제공자 흐름이 남아 있다."
+        "Servlet의 상위 ProviderManager 위임과 임의 사용자 정의 관리자의 내부 결정은 추가 관측이 남는다."
       ],
       "verification": {
-        "state": "v0.122-installed-coverage",
+        "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.122.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Spring Security 7.1.2에서 두 DB의 동시 성공·실패, 제공자 순서, 위임, 관리자의 반환과 애플리케이션 예외를 확인했다. 저장된 보고서에서 자격 증명과 요청 값이 제외됐다.",
+        "testedScope": "실제 Spring Security 7.1.2의 두 DB에서 중첩 위임 구독 16건과 네 가지 결과를 확인했다. 자격 증명을 읽거나 공급자를 재실행하지 않았다.",
         "publicEvidence": [
-          "docs/spring-security-filter-trace.md",
-          "runtime/jpa-observer/src/rocketbrain/observer/AuthenticationProviderTrace.java",
-          "test/spring-authentication-provider-host.js"
+          "runtime/jpa-observer/src/rocketbrain/observer/ReactiveSecurityTrace.java",
+          "src/spring/reactive-security-trace.js",
+          "test/spring-reactive-authentication-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1971,24 +1977,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "중첩 Quarkus ConfigMapping 키의 완성과 Java 선언 이동을 제공하고, 선택한 키의 관측된 SmallRye 우선순위와 파일 위치를 표시한다.",
+      "scope": "Quarkus 계층 구성 출처에 더해 실제 Arc Instance 조회의 선택·모호함·후보 없음, 생산자 메서드와 필드의 소스를 연다.",
       "remaining": [
-        "동적 Arc CDI, Quarkus Gradle의 설치본 종단, 네이티브 이미지가 남는다."
+        "자동 CDI·인터셉터와 구성 밖의 빌드 확장, 네이티브 이미지와 Gradle 전체 설치본 종단 검증이 남는다."
       ],
       "verification": {
-        "state": "v0.130-installed-coverage",
+        "state": "v0.132-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Quarkus 3.40.1.2의 활성 프로필에서 중첩 키의 출처를 확인했다. 원본 값을 표시하거나 사용자 소스를 다시 실행하지 않았다.",
+        "testedScope": "실제 Quarkus 3.40.1.2에서 두 DB를 연결하고 Arc 조회 여덟 건의 후보 및 메서드·필드 출처를 확인했다. 후속 조회는 생산자를 다시 부르지 않았다.",
         "publicEvidence": [
-          "src/java/quarkus-config-mapping.js",
-          "src/java/quarkus-config-origin.js",
-          "runtime/jpa-observer/src/rocketbrain/observer/QuarkusConfigTrace.java",
-          "test/quarkus-config-host.js"
+          "src/java/quarkus-arc-lookups.js",
+          "runtime/jpa-observer/src/rocketbrain/observer/QuarkusArcTrace.java",
+          "test/quarkus-arc-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2851,8 +2856,8 @@
       "verification": {
         "state": "v0.130-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.130.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2932,27 +2937,25 @@
       "category": "원격·컨테이너",
       "feature": "Docker·Compose·Registry 관리",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "검토한 Docker 컨텍스트에서 신뢰한 워크스페이스의 Dockerfile을 복사한 뒤 빌드하고, 명시한 레지스트리 태그의 로컬 이미지를 다시 확인해 푸시한다. 푸시 결과의 매니페스트 다이제스트를 표시한다.",
-      "remaining": [
-        "레지스트리 권한 관리와 복합 Compose 파일 편집이 남아 있다. 같은 Docker 태그를 다른 프로세스가 동시에 바꾸는 경우 별도 동시성 제약이 있다."
-      ],
+      "scope": "Docker 작업공간의 Compose 실행·관리와 JVM 연결, 승인한 이미지 빌드·푸시, 비공개 레지스트리 권한 검토, 순서가 지정된 Compose 오버라이드의 모델 비교와 편집을 제공한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.122-installed-coverage",
+        "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.122.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Engine 28.0.4의 격리된 레지스트리에서 빌드·푸시, 레지스트리 매니페스트 바이트와 이미지 설정을 대조했다. Windows 설치형은 명령과 워크스페이스 신뢰 조건을 확인했다.",
+        "testedScope": "실제 Docker Engine 28.0.4와 Distribution 3.0.0에서 TLS 읽기·푸시 권한과 읽기 전용 거부를 확인했다. 실제 Compose 2.38.2에서 세 파일의 적용 순서와 저장 후 모델을 대조했다. Windows 설치본에서 명령 및 미승인 요청 거부를 확인했다.",
         "publicEvidence": [
-          "src/docker/image-build-context.js",
-          "src/docker/workbench.js",
-          "test/docker-images.test.js",
-          ".github/workflows/docker-image-workbench.yml"
+          "src/docker/registry-permissions.js",
+          "src/docker/compose-edit.js",
+          "test/docker-registry-permissions.test.js",
+          "test/docker-compose-edit.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6395,30 +6398,36 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "77864beeb7e42de878e7a76860ac406efe0b4acf9c4e39381f7be3279d4cdc22",
-    "sourceManifestSha256": "56cde81aae67f73dd7a08afa1bc3fa66714b3f7966612fbc04dcd4023d7d0097",
+    "vsixSha256": "458a35fc0e6010ffd8945ec81757a9ba0e244dd589d39e5ff9d51e747323e429",
+    "sourceManifestSha256": "e789a31b42cd4d23f9f0dbe1fdf12d5f536816a6b5183a69763bfd9d52f024d5",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 5
+        "featureGroups": 9
       },
       {
         "engine": "mariadb",
-        "featureGroups": 5
+        "featureGroups": 9
       }
     ]
   },
-  "stateChanges": [],
+  "stateChanges": [
+    {
+      "id": "IDEA-099",
+      "before": "partial",
+      "after": "implemented"
+    }
+  ],
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45772287878",
-    "tests": 2052,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45777261462",
+    "tests": 2068,
     "suites": 0,
-    "pass": 1849,
+    "pass": 1859,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 203,
+    "skipped": 209,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

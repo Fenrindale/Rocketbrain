@@ -1,10 +1,13 @@
 'use strict';
 
 const { createDockerWorkbench } = require('./workbench');
+const { createRegistryPermissions } = require('./registry-permissions');
+const { registerComposeEditor } = require('./compose-edit-vscode');
 
 function registerDockerWorkbench(vscode) {
   const workbench = createDockerWorkbench({trusted:()=>vscode.workspace.isTrusted,workspaceRoots:()=>
     (vscode.workspace.workspaceFolders||[]).filter(folder=>folder.uri.scheme==='file'&&!folder.uri.authority).map(folder=>folder.uri.fsPath)});
+  const registryPermissions = createRegistryPermissions({ trusted: () => vscode.workspace.isTrusted });
   const changed = new vscode.EventEmitter();
   const output = vscode.window.createOutputChannel('Rocketbrain Docker');
   const subscriptions = [changed, output];
@@ -140,6 +143,44 @@ function registerDockerWorkbench(vscode) {
     await vscode.window.showTextDocument(document, { preview: false });
   });
 
+  register('rocketbrain.docker.registryPermissions', 'Check Registry Repository Permissions', async (_, signal) => {
+    const profiles = vscode.workspace.getConfiguration('rocketbrain.docker').get('registryPermissionProfiles', []);
+    const selected = await vscode.window.showQuickPick(profiles.slice(0, 20).map(profile => ({
+      label: profile.id, description: profile.origin, profile
+    })), { title: 'Select a Trusted Registry Permission Profile',
+      placeHolder: 'Configure rocketbrain.docker.registryPermissionProfiles in User Settings.' });
+    if (!selected) return;
+    const reference = await vscode.window.showInputBox({
+      title: 'Repository and Manifest', placeHolder: 'team/app:stable'
+    });
+    if (!reference) return;
+    const review = await registryPermissions.review(selected.profile, reference);
+    const mode = await vscode.window.showQuickPick(['Account credentials', 'Anonymous access'], { title: 'Registry Authentication' });
+    if (!mode) return;
+    const accepted = await vscode.window.showInformationMessage('Check pull and push grants for this repository?', {
+      modal: true,
+      detail: [
+        review.registry + '/' + reference, 'Token service ' + review.realm,
+        'Audience ' + review.audience + ' · issuer ' + review.issuer,
+        'Signer SHA-256 ' + review.signerSha256,
+        review.tlsCaSha256 ? 'HTTPS CA SHA-256 ' + review.tlsCaSha256 : 'System HTTPS trust',
+        mode + ' · verify signed pull and push grants and test read access to the manifest'
+      ].join('\n')
+    }, 'Check Reviewed Scope');
+    if (accepted !== 'Check Reviewed Scope') return;
+    let credentials;
+    if (mode === 'Account credentials') {
+      const username = await vscode.window.showInputBox({ title: 'Registry Account' });
+      if (!username) return;
+      const password = await vscode.window.showInputBox({ title: 'Registry Password or Access Token', password: true });
+      if (!password) return;
+      credentials = { username, password };
+    }
+    const result = await registryPermissions.check(review.token, { approved: true, credentials, signal });
+    const document = await vscode.workspace.openTextDocument({ language: 'json', content: JSON.stringify(result, null, 2) });
+    await vscode.window.showTextDocument(document, { preview: false });
+  });
+
   async function prepareImageReport(review,signal) {
     let result;
     try { result=await workbench.applyImage(review.token,{approved:true,signal}); }
@@ -178,7 +219,9 @@ function registerDockerWorkbench(vscode) {
     if(choice==='Push Image')return prepareImageReport(review,signal);
   });
 
-  return { ...workbench, dispose() { workbench.dispose(); subscriptions.forEach(item => item.dispose()); } };
+  const composeEditor = registerComposeEditor(vscode, register);
+  return { ...workbench, registryPermissions, composeEdit: composeEditor.service,
+    dispose() { composeEditor.dispose(); registryPermissions.dispose(); workbench.dispose(); subscriptions.forEach(item => item.dispose()); } };
 }
 
 module.exports = { registerDockerWorkbench };

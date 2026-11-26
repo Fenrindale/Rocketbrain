@@ -9,7 +9,8 @@ const { attributeTarget, attributeBindingReport } = require('./attribute-binding
 const { factoryId: graphFactoryId, graphRegistry } = require('./entity-graphs');
 const { normalizePersistenceContexts } = require('./persistence-contexts');
 const { normalizeQuarkusConfigOrigins } = require('../java/quarkus-config-origin');
-const { normalizeObservedInjection } = require('../spring/observed-injection');
+const { normalizeArcLookups } = require('../java/quarkus-arc-lookups');
+const { normalizeObservedInjection, normalizeObservedMembers } = require('../spring/observed-injection');
 const { normalizeTransactionTrace } = require('./transaction-trace');
 
 class ObserverError extends Error { constructor(code, message) { super(message); this.code = code; } }
@@ -196,6 +197,11 @@ class ObserverClient {
     try { return normalizeQuarkusConfigOrigins(payload); }
     catch { throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Quarkus configuration origin evidence.'); }
   }
+  async quarkusArcLookups() {
+    const payload=await this.#request('quarkus-arc-lookups');
+    try {return normalizeArcLookups(payload);}
+    catch {throw new ObserverError('INVALID_SCHEMA','Observer returned invalid Quarkus Arc lookup evidence.');}
+  }
   async reactiveSecurityTrace() {
     const payload = await this.#request('reactive-security-trace');
     try { return normalizeReactiveSecurityTrace(payload); }
@@ -209,6 +215,11 @@ class ObserverClient {
   async observedInjection() {
     const value = await this.#request('spring-observed-constructor-injection');
     try { return normalizeObservedInjection(value); }
+    catch (error) { throw new ObserverError('INVALID_SCHEMA',error.message); }
+  }
+  async observedMemberInjection() {
+    const value = await this.#request('spring-observed-member-injection');
+    try { return normalizeObservedMembers(value); }
     catch (error) { throw new ObserverError('INVALID_SCHEMA',error.message); }
   }
   async transactions() {

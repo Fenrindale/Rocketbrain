@@ -11,6 +11,8 @@ async function build() {
   fs.writeFileSync(path.join(__dirname, '../src/java/mixed-jvm-classfile-source.json'), JSON.stringify(mixedClasses));
   const groovyConsole = fs.readFileSync(path.join(__dirname, '../runtime/groovy/GroovyConsoleWorker.java'), 'utf8');
   fs.writeFileSync(path.join(__dirname, '../src/java/groovy-console-source.json'), JSON.stringify(groovyConsole));
+  const groovyReceiver = fs.readFileSync(path.join(__dirname, '../runtime/groovy/GroovyStaticReceiver.java'), 'utf8');
+  fs.writeFileSync(path.join(__dirname, '../src/java/groovy-static-receiver-source.json'), JSON.stringify(groovyReceiver));
   const sourceDir=path.join(__dirname,'../runtime/jpa-observer/src/rocketbrain/observer');
   const sources=Object.fromEntries(fs.readdirSync(sourceDir).filter(name=>name.endsWith('.java')).sort().map(name=>[name,fs.readFileSync(path.join(sourceDir,name),'utf8')]));
   fs.writeFileSync(path.join(__dirname,'../src/jpa/observer-sources.json'),JSON.stringify(sources));

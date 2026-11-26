@@ -32,6 +32,10 @@ final class ReactiveSecurityTraceTransformer implements ClassFileTransformer {
     private static final String FLUX = "Lreactor/core/publisher/Flux;";
     private static final String MANAGER = AUTH + "ReactiveAuthorizationManager";
     private static final String AUTH_CALL = "(" + MONO + "Ljava/lang/Object;)" + MONO;
+    private static final String AUTHENTICATION = "Lorg/springframework/security/core/Authentication;";
+    private static final String REACTIVE_MANAGER = "org/springframework/security/authentication/ReactiveAuthenticationManager";
+    private static final String AUTHENTICATE = "(" + AUTHENTICATION + ")" + MONO;
+    private static final String AUTHENTICATE_LAMBDA = "(" + AUTHENTICATION + "L" + REACTIVE_MANAGER + ";)" + MONO;
     private static final ClassDesc HELPER = ClassDesc.of("rocketbrain.observer.ReactiveSecurityTrace");
     private static final ClassDesc OBJECT = ClassDesc.of("java.lang.Object");
     private static final ClassDesc STRING = ClassDesc.of("java.lang.String");
@@ -41,7 +45,9 @@ final class ReactiveSecurityTraceTransformer implements ClassFileTransformer {
         FILTER("filter-execution", 1, "755611a2e42951785f6db638cdfc50f4ba82872d90977df82c30d36fa2aec491"),
         VERIFY("web-verification", 1, "4d19e5921101f5e0dcfa6f519ac92c0b3bf3d048617812fdcc5013747aff5366"),
         BEFORE("method-before", 2, "9713b03d6899e79302960204fa032bb3f542fd9b35f23955bba04e3670d829ad"),
-        AFTER("method-after", 1, "32ec647e3f5756bf9db6dd12de24c4dc6b707da3c30eab12eb23b04b76cc961e");
+        AFTER("method-after", 1, "32ec647e3f5756bf9db6dd12de24c4dc6b707da3c30eab12eb23b04b76cc961e"),
+        AUTHENTICATION("authentication-manager", 1, "ba14f98abca20836508409e245a3d0753cd9b4c0265f3259d18bb7099759f6da"),
+        DELEGATES("authentication-delegates", 1, "5cfbef864830f56dcd18c31810c89f5df9e442e3d09ce8ef30c38c6ff681f492");
 
         final String label;
         final int sites;
@@ -59,13 +65,16 @@ final class ReactiveSecurityTraceTransformer implements ClassFileTransformer {
         DEFAULT_CHAIN, Hook.FILTER,
         SECURITY + "authorization/AuthorizationWebFilter", Hook.VERIFY,
         AUTH + "method/AuthorizationManagerBeforeReactiveMethodInterceptor", Hook.BEFORE,
-        AUTH + "method/AuthorizationManagerAfterReactiveMethodInterceptor", Hook.AFTER);
+        AUTH + "method/AuthorizationManagerAfterReactiveMethodInterceptor", Hook.AFTER,
+        SECURITY + "authentication/AuthenticationWebFilter", Hook.AUTHENTICATION,
+        "org/springframework/security/authentication/DelegatingReactiveAuthenticationManager", Hook.DELEGATES);
 
     @Override
     public byte[] transform(Module module, ClassLoader loader, String name, Class<?> redefining,
                             ProtectionDomain domain, byte[] bytes) {
         Hook hook = name == null ? null : CLASSES.get(name);
-        if (hook == null) return null;
+        if (hook == null || (hook == Hook.AUTHENTICATION || hook == Hook.DELEGATES) &&
+            !ReactiveSecurityTrace.authenticationEnabled()) return null;
         try {
             String fingerprint = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
             if (!hook.sha256.equals(fingerprint)) throw new IllegalArgumentException("Unsupported artifact");
@@ -118,6 +127,10 @@ final class ReactiveSecurityTraceTransformer implements ClassFileTransformer {
             case AFTER -> name.equals("postAuthorize") &&
                 descriptor.equals("(" + MONO + INVOCATION + "Ljava/lang/Object;)" + MONO)
                 ? methodDecision("after", 2, sites) : null;
+            case AUTHENTICATION -> name.equals("lambda$authenticate$0") && descriptor.equals(AUTHENTICATE_LAMBDA)
+                ? afterCall(REACTIVE_MANAGER, "authenticate", AUTHENTICATE, "authentication", MONO, sites, 1) : null;
+            case DELEGATES -> name.equals("lambda$authenticate$0") && descriptor.equals(AUTHENTICATE_LAMBDA)
+                ? afterCall(REACTIVE_MANAGER, "authenticate", AUTHENTICATE, "authenticationDelegate", MONO, sites, 0, 2) : null;
         };
     }
 

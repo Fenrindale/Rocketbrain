@@ -120,6 +120,8 @@ Quarkus 설정 탐색은 중첩 `ConfigMapping` 인터페이스와 다른 소스
 
 **Inspect Quarkus Config Origins**에서 실제 활성 프로필과 설정 출처를 확인할 수 있습니다. **Prepare Local JVM Observer**에서 생성한 설정에 확인할 키를 최대 24개까지 `quarkusConfigOriginKeys`로 적고, 표시된 JVM 인자를 사용해 Quarkus 앱을 다시 시작한 뒤 **Connect Local JVM Observer**로 연결합니다. 실행 중 SmallRye가 처리한 조회에서 출처 종류, 우선순위, 알려진 파일명과 줄 번호를 기록합니다. 설정 값에 접근하지 않으며 출처의 전체 경로는 저장하지 않습니다. 편집기에서 정의로 이동하려면 저장된 소스에서 고유한 선언이 확인되어야 합니다. [SmallRye ConfigValue 메타데이터](https://smallrye.io/smallrye-config/Main/config/config-value/)
 
+**Inspect Quarkus Arc Lookups**로 앱이 수행한 `Instance.get()`과 `getHandle()`의 선택, 모호함, 후보 없음 결과를 확인할 수 있습니다. 같은 관찰 설정에서 `quarkusArcPackages`에 승인할 앱 패키지를 최대 4개 지정하고 JVM을 다시 시작합니다. 관찰에는 Arc가 실제 선택에 사용한 후보 수, 한정자 타입, 같은 로더의 후보 식별자가 포함됩니다. **Open Observed Arc Producer Source**에서 후보를 고르고 저장된 Java 파일을 선택하면, 관찰한 JVM 시그니처와 일치하는 `@Produces` 메서드 또는 필드로 이동합니다. 조회는 앱의 CDI 호출을 반복 실행하지 않습니다. 한정자 값은 수집하지 않으며, 직접 확인할 수 없는 생성 코드의 소스 위치는 표시하지 않습니다. [Quarkus Arc 프로그래밍 방식 조회](https://quarkus.io/version/3.40/guides/cdi-reference/#programmatic-lookup)
+
 ### Jakarta WAR 배포
 
 독립 Apache Tomcat 11 설치 경로를 사용자 설정 `rocketbrain.java.jakarta.tomcatHome`에 지정합니다. Java Projects로 가져온 Maven WAR 모듈에서 **Build Jakarta WAR**를 실행한 뒤 **Deploy Jakarta WAR to Tomcat**으로 `target`의 WAR와 컨텍스트 이름을 선택합니다. **Show Jakarta Deployment**에서 로컬 주소와 출력을 확인하고 **Stop Jakarta Deployment**로 서버를 종료합니다.

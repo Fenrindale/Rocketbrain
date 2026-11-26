@@ -55,6 +55,17 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
     if(new Set(encoded).size!==encoded.length||encoded.join('').length>10000)throw Error('Use bounded distinct Java advisory signatures.');
     query.push('advisoryCalls',...encoded);
   }
+  else if(inspection.kind==='groovyMembers'&&typeof inspection.receiver==='string'&&inspection.receiver.length<512&&
+    inspection.receiver.includes('.')&&inspection.receiver.split('.').every(validIdentifier)&&
+    typeof inspection.prefix==='string'&&/^[A-Za-z_$][\w$]{0,127}$|^$/u.test(inspection.prefix)){
+   query.push(inspection.kind,inspection.receiver,inspection.prefix);
+  }
+  else if(inspection.kind==='parameterNameBindings'&&Number.isInteger(inspection.ordinal)&&inspection.ordinal>=0&&inspection.ordinal<30&&
+    Array.isArray(inspection.methods)&&inspection.methods.length>0&&inspection.methods.length<=30&&
+    inspection.methods.every(key=>typeof key==='string'&&key.length>0&&key.length<=320&&!/[\u0000-\u001f]/u.test(key))&&
+    new Set(inspection.methods).size===inspection.methods.length&&inspection.methods.join('').length<=9000){
+   query.push(inspection.kind,String(inspection.ordinal),...inspection.methods);
+  }
   else if(inspection.kind==='binaryBeanLifecycle'&&typeof inspection.owner==='string'&&inspection.owner.length<512&&
     inspection.owner.includes('.')&&inspection.owner.split('.').every(validIdentifier))query.push(inspection.kind,inspection.owner);
   else if(inspection.kind==='conversion'&&sources.some(item=>item.uri===inspection.uri))query.push('conversion',inspection.uri);

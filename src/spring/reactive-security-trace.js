@@ -1,6 +1,9 @@
 'use strict';
 
-const hooks = new Set(['proxy', 'filter-execution', 'web-verification', 'method-before', 'method-after']);
+const baseHooks = ['proxy', 'filter-execution', 'web-verification', 'method-before', 'method-after'];
+const authHooks = ['authentication-manager', 'authentication-delegates'];
+const delegatingManager = 'org.springframework.security.authentication.DelegatingReactiveAuthenticationManager';
+const authenticationOutcomes = new Set(['returned', 'empty', 'rejected', 'error', 'canceled', 'unobserved']);
 const methods = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT', 'OTHER']);
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isCount = value => Number.isSafeInteger(value) && value >= 0;
@@ -10,8 +13,46 @@ const isType = value => typeof value === 'string' && value.length <= 192 && /^[A
 
 function invalid() { throw new Error('Invalid reactive security trace.'); }
 
+function normalizeAuthentication(trace, hooks) {
+  if (!bounded(trace.authenticationAttempts, 4) || typeof trace.authenticationLimited !== 'boolean' ||
+      (trace.authenticationAttempts.length && !hooks.includes('authentication-manager'))) invalid();
+  const managers = new Map();
+  function identity(raw) {
+    if (!isObject(raw) || !Number.isInteger(raw.managerId) || raw.managerId < 1 || raw.managerId > 32 ||
+        !isSymbol(raw.managerType) || !authenticationOutcomes.has(raw.outcome) ||
+        (managers.has(raw.managerId) && managers.get(raw.managerId) !== raw.managerType)) invalid();
+    managers.set(raw.managerId, raw.managerType);
+    return { managerId: raw.managerId, managerType: raw.managerType, outcome: raw.outcome };
+  }
+  const authenticationAttempts = trace.authenticationAttempts.map(attempt => {
+    const root = identity(attempt);
+    const { delegateCoverage } = attempt;
+    const delegated = root.managerType === delegatingManager;
+    if (!['observed', 'partial', 'opaque'].includes(delegateCoverage) || !bounded(attempt.delegates, 12) ||
+        (delegateCoverage === 'opaque' && delegated) ||
+        (attempt.delegates.length && (!delegated || !hooks.includes('authentication-delegates'))) ||
+        (delegateCoverage === 'observed' && (!attempt.delegates.length || root.outcome === 'unobserved'))) invalid();
+    const delegates = [];
+    for (const step of attempt.delegates) {
+      const details = identity(step);
+      if (step.sequence !== delegates.length + 1 || !isCount(step.parent) || step.parent >= step.sequence ||
+          (step.parent && delegates[step.parent - 1]?.managerType !== delegatingManager) ||
+          (delegateCoverage === 'observed' && step.outcome === 'unobserved')) invalid();
+      delegates.push({ sequence: step.sequence, parent: step.parent, ...details });
+    }
+    if (delegateCoverage === 'observed' && delegates.some(step => step.managerType === delegatingManager &&
+        !delegates.some(child => child.parent === step.sequence))) invalid();
+    return { ...root, delegateCoverage, delegates };
+  });
+  return { authenticationAttempts, authenticationLimited: trace.authenticationLimited };
+}
+
 function normalizeReactiveSecurityTrace(raw) {
   if (!isObject(raw) || raw.schemaVersion !== 1 || typeof raw.enabled !== 'boolean' ||
+      (raw.authenticationEnabled !== undefined && typeof raw.authenticationEnabled !== 'boolean') ||
+      (raw.authenticationEnabled && !raw.enabled)) invalid();
+  const hooks = new Set(raw.authenticationEnabled ? [...baseHooks, ...authHooks] : baseHooks);
+  if (
       !bounded(raw.hooks, hooks.size) || new Set(raw.hooks).size !== raw.hooks.length ||
       !raw.hooks.every(hook => hooks.has(hook)) || !bounded(raw.traces, 16) || !isCount(raw.dropped)) invalid();
   const state = !raw.enabled ? 'disabled' : raw.hooks.includes('proxy') ? 'ready' : 'waiting';
@@ -46,9 +87,11 @@ function normalizeReactiveSecurityTrace(raw) {
     });
     const { id, startedAt, durationMs, method, status, terminal, coverage, selectedChain, configured, entered, verification } = trace;
     return { id, startedAt, durationMs, method, status, terminal, coverage, matches, selectedChain,
-      configured: [...configured], entered, verification, methodDecisions };
+      configured: [...configured], entered, verification, methodDecisions,
+      ...(raw.authenticationEnabled && normalizeAuthentication(trace, raw.hooks)) };
   });
-  return { schemaVersion: 1, enabled: raw.enabled, state, hooks: [...raw.hooks], dropped: raw.dropped, traces: traces.reverse() };
+  return { schemaVersion: 1, enabled: raw.enabled, state, hooks: [...raw.hooks], dropped: raw.dropped, traces: traces.reverse(),
+    ...(raw.authenticationEnabled && { authenticationEnabled: true }) };
 }
 
 module.exports = { normalizeReactiveSecurityTrace };

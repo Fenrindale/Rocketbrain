@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.130.0",
+  "version": "0.132.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -37,6 +37,7 @@
     "onLanguage:rocketbrain-jdbc",
     "onDebug:rocketbrain-java",
     "onDebug:rocketbrain-python",
+    "onDebug:rocketbrain-scala",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
@@ -119,7 +120,10 @@
       { "command": "rocketbrain.docker.logs", "title": "Show Docker Logs", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.lifecycle", "title": "Manage Docker Container", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.compose", "title": "Inspect Compose Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.composeOverrideDraft", "title": "Open Compose Override Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.composeOverrideReview", "title": "Review Compose Override Draft", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == untitled && resourceLangId == yaml" },
       { "command": "rocketbrain.docker.manifest", "title": "Inspect Registry Manifest", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.docker.registryPermissions", "title": "Check Registry Repository Permissions", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.buildImage", "title": "Build Docker Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.pushImage", "title": "Push Docker Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.configureExceptionBreakpoints", "title": "Configure Java Exception Breakpoints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -161,9 +165,13 @@
       { "command": "rocketbrain.groovy.runTests", "title": "Run Groovy and Spock Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.projectSelection", "title": "Review Groovy Selection with Project Classpath", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file && editorHasSelection" },
       { "command": "rocketbrain.groovy.stopProject", "title": "Stop Groovy Project Evaluation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.groovy.completeTypedMember", "title": "Complete Typed Groovy Member", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
+      { "command": "rocketbrain.groovy.openTypedMemberDeclaration", "title": "Open Typed Groovy Member Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && resourceScheme == file" },
       { "command": "rocketbrain.quarkus.create", "title": "Create Quarkus Maven Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.inspect", "title": "Inspect Quarkus Configuration and Endpoints", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.inspectConfigOrigins", "title": "Inspect Quarkus Config Origins", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.inspectArcLookups", "title": "Inspect Quarkus Arc Lookups", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.quarkus.openArcProducerSource", "title": "Open Observed Arc Producer Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.startDev", "title": "Start Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.stopDev", "title": "Stop Quarkus Dev Mode", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.quarkus.runTests", "title": "Run Quarkus Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -201,6 +209,7 @@
       { "command": "rocketbrain.scala.compile", "title": "Compile and Index Scala", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.test", "title": "Run sbt Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.run", "title": "Run sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.scala.debug", "title": "Debug sbt Main Class", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.definition", "title": "Open Compiled Scala Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == scala" },
       { "command": "rocketbrain.scala.stop", "title": "Stop sbt Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.inspect", "title": "Inspect Kotlin Multiplatform Targets", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -789,6 +798,18 @@
       {
         "command": "rocketbrain.jpa.observer.openObservedInjectionSource",
         "title": "Open Observed Spring Constructor Parameter",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.inspectObservedMemberInjection",
+        "title": "Inspect Observed Spring Field and Method Injection",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.openObservedMemberSource",
+        "title": "Open Observed Spring Injection Source",
         "category": "Rocketbrain",
         "enablement": "isWorkspaceTrusted"
       },
@@ -1559,6 +1580,8 @@
         { "command": "rocketbrain.coroutines.disconnect", "when": "view == rocketbrain.kotlinCoroutines && isWorkspaceTrusted", "group": "connection" },
         { "command": "rocketbrain.docker.select", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.docker.refresh", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "navigation@2" },
+        { "command": "rocketbrain.docker.registryPermissions", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "registry" },
+        { "command": "rocketbrain.docker.composeOverrideDraft", "when": "view == rocketbrain.docker && isWorkspaceTrusted", "group": "compose" },
         { "command": "rocketbrain.kubernetes.connect", "when": "view == rocketbrain.kubernetes", "group": "navigation@1" },
         { "command": "rocketbrain.kubernetes.refresh", "when": "view == rocketbrain.kubernetes", "group": "navigation@2" },
         { "command": "rocketbrain.kubernetes.disconnect", "when": "view == rocketbrain.kubernetes", "group": "navigation@3" },
@@ -1961,7 +1984,13 @@
         "when": "editorTextFocus && editorHasCodeActionsProvider"
       }
     ],
+    "breakpoints": [{ "language": "scala" }],
     "debuggers": [
+      {
+        "type": "rocketbrain-scala",
+        "label": "Rocketbrain Scala (sbt)",
+        "languages": ["scala"]
+      },
       {
         "type": "rocketbrain-python",
         "label": "Rocketbrain Python",
@@ -2114,6 +2143,27 @@
     "configuration": {
       "title": "Rocketbrain",
       "properties": {
+        "rocketbrain.docker.registryPermissionProfiles": {
+          "type": "array",
+          "default": [],
+          "scope": "machine",
+          "maxItems": 20,
+          "description": "Verified HTTPS Registry v2 Bearer endpoints and public signing certificate paths. Credentials are requested for each approved check.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "origin", "realm", "service", "issuer", "signerPath"],
+            "properties": {
+              "id": { "type": "string", "description": "A local label for this registry." },
+              "origin": { "type": "string", "description": "The exact HTTPS registry origin." },
+              "realm": { "type": "string", "description": "The exact HTTPS Bearer token service endpoint." },
+              "service": { "type": "string", "description": "The expected token audience." },
+              "issuer": { "type": "string", "description": "The expected token issuer." },
+              "signerPath": { "type": "string", "description": "An absolute path to the trusted RSA token signer public PEM certificate." },
+              "caPath": { "type": "string", "description": "An optional absolute path to the private HTTPS CA public PEM certificate." }
+            }
+          }
+        },
         "rocketbrain.sshWorkspace.profiles": {
           "type": "array",
           "scope": "machine",

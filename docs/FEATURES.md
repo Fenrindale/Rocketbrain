@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.130.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.132.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 176 |
-| 부분 구현 | 26 |
+| 구현 | 177 |
+| 부분 구현 | 25 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **93.1%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **93.3%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.130에서는 Scala 2와 3의 오버로드 사용처, 프로젝트 클래스패스 Groovy 콘솔, 중첩 Quarkus 설정, 검토한 SSH Java 모듈 컴파일을 추가했다. 상태가 바뀐 항목은 0개이고 가중 점수는 201점으로 유지됐다.
+v0.132에서는 Scala 실행 중단점, Groovy 타입 완성, Java 구현체의 공통 매개변수 이름 변경, Spring 주입·인증 관측, Quarkus Arc 조회, Docker 레지스트리 권한과 Compose 오버라이드 검토를 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 201점에서 201.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -119,7 +119,7 @@ v0.130에서는 Scala 2와 3의 오버로드 사용처, 프로젝트 클래스�
 | IDEA-096 | IntelliJ IDEA | SSH 원격 개발 | 부분 구현 |
 | IDEA-097 | IntelliJ IDEA | WSL 실행·개발 | 부분 구현 |
 | IDEA-098 | IntelliJ IDEA | Dev Container 환경 | 구현 |
-| IDEA-099 | IntelliJ IDEA | Docker·Compose·Registry 관리 | 부분 구현 |
+| IDEA-099 | IntelliJ IDEA | Docker·Compose·Registry 관리 | 구현 |
 | IDEA-100 | IntelliJ IDEA | Kubernetes·Helm·클러스터 탐색 | 구현 |
 | IDEA-101 | IntelliJ IDEA | 내장 터미널·셸·세션 | VS Code 재사용 |
 | IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 구현 |

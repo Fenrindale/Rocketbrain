@@ -25,7 +25,8 @@ const COMMANDS = Object.freeze({
   console:'rocketbrain.groovy.console', reset:'rocketbrain.groovy.resetConsole',
   selection:'rocketbrain.groovy.evaluateSelection', script:'rocketbrain.groovy.runScript',
   tests:'rocketbrain.groovy.runTests', project:'rocketbrain.groovy.projectSelection',
-  stopProject:'rocketbrain.groovy.stopProject'
+  stopProject:'rocketbrain.groovy.stopProject', members:'rocketbrain.groovy.completeTypedMember',
+  declaration:'rocketbrain.groovy.openTypedMemberDeclaration'
 });
 
 function registerGroovyWorkbench(vscode,java) {
@@ -221,10 +222,7 @@ function registerGroovyWorkbench(vscode,java) {
     if (selected) return progress('Run Groovy and Spock Tests',cancellation =>
       runTests({projectUri:selected.uri,allowProjectExecution:true,cancellation}));
   });
-  register(COMMANDS.project,async () => {
-    const editor = vscode.window.activeTextEditor;
-    if (editor?.document.languageId !== 'groovy' || editor.selection.isEmpty) throw fail('Select saved Groovy code to review.');
-    const { document, selection: range } = editor;
+  async function chooseProject() {
     const projects = await progress('Find Imported Java Projects', cancellation => projectConsole.list({ cancellation }));
     if (!projects.length) throw fail('Import a local Maven or Gradle project before reviewing its Groovy classpath.');
     const selected = await vscode.window.showQuickPick(projects.map(project => ({
@@ -234,7 +232,16 @@ function registerGroovyWorkbench(vscode,java) {
     const scope = await vscode.window.showQuickPick([
       { label: 'Runtime', value: 'runtime' }, { label: 'Test', value: 'test' }
     ], { title: 'Choose Groovy Project Classpath Scope' });
-    if (!scope) return;
+    return scope ? { selected, scope } : undefined;
+  }
+
+  register(COMMANDS.project,async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.languageId !== 'groovy' || editor.selection.isEmpty) throw fail('Select saved Groovy code to review.');
+    const { document, selection: range } = editor;
+    const choiceOfProject = await chooseProject();
+    if (!choiceOfProject) return;
+    const { selected, scope } = choiceOfProject;
     const plan = await progress('Review Groovy Project Selection', cancellation =>
       projectConsole.review({ document, range, projectUri: selected.project.uri, scope: scope.value, cancellation }));
     await projectConsole.show(plan.id);
@@ -246,6 +253,25 @@ function registerGroovyWorkbench(vscode,java) {
     return show('Groovy project · ' + selected.project.name, receipt);
   });
   register(COMMANDS.stopProject,() => projectConsole.stop());
+  async function typedMember(action) {
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.languageId !== 'groovy') throw fail('Open a Groovy source editor to inspect a typed member.');
+    const { document, selection } = editor, position = selection.active;
+    const chosen = await chooseProject();
+    if (!chosen) return;
+    const plan = await progress('Inspect Typed Groovy Members', cancellation => projectConsole.members.inspect({
+      document, position, projectUri: chosen.selected.project.uri, scope: chosen.scope.value, cancellation
+    }));
+    if (!plan.members.length) throw fail('No attributable public Java methods match this Groovy member prefix.');
+    const selected = await vscode.window.showQuickPick(plan.members.map(member => ({
+      label: member.name, description: '(' + member.parameters.join(', ') + ')',
+      detail: member.owner + ' → ' + member.returnType, member
+    })), { title: action === 'apply' ? 'Complete Typed Groovy Member' : 'Open Typed Groovy Member Declaration' });
+    if (selected) return progress('Verify Typed Groovy Member', cancellation =>
+      projectConsole.members[action]({ id: plan.id, key: selected.member.key, editor, cancellation }));
+  }
+  register(COMMANDS.members,() => typedMember('apply'));
+  register(COMMANDS.declaration,() => typedMember('openDeclaration'));
   subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => diagnostics.delete(event.document.uri)));
   if (vscode.workspace.onDidChangeWorkspaceFolders) subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
     void reset().catch(() => {});
@@ -257,7 +283,13 @@ function registerGroovyWorkbench(vscode,java) {
     evaluate:options => track(() => evaluate(options)),runScript:options => track(() => runScript(options)),
     runTests:options => track(() => runTests(options)),reset,
     project:{list:options => track(() => projectConsole.list(options)),review:options => track(() => projectConsole.review(options)),
-      show:id => track(() => projectConsole.show(id)),run:options => track(() => projectConsole.run(options)),stop:projectConsole.stop},
+      show:id => track(() => projectConsole.show(id)),run:options => track(() => projectConsole.run(options)),stop:projectConsole.stop,
+      members: {
+        inspect:options => track(() => projectConsole.members.inspect(options)),
+        apply:options => track(() => projectConsole.members.apply(options)),
+        openDeclaration:options => track(() => projectConsole.members.openDeclaration(options))
+      }
+    },
     dispose() {
       if (closing) return closing;
       disposed=true;

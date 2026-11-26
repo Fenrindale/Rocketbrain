@@ -2,19 +2,21 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
 const { projectSbt,createSbtRunner,observedProjects,mainClasses } = require('./scala-sbt');
 const { indexSemanticdb,definitionAt,referencesAt,configSnapshot } = require('./scala-semanticdb');
 
 const COMMANDS={discover:'rocketbrain.scala.discover',compile:'rocketbrain.scala.compile',test:'rocketbrain.scala.test',
-  run:'rocketbrain.scala.run',definition:'rocketbrain.scala.definition',stop:'rocketbrain.scala.stop'};
+  run:'rocketbrain.scala.run',debug:'rocketbrain.scala.debug',definition:'rocketbrain.scala.definition',stop:'rocketbrain.scala.stop'};
+const debugType='rocketbrain-scala';
 
 function registerScalaWorkbench(context,vscode,java) {
   const output=vscode.window.createOutputChannel('Rocketbrain Scala / sbt');
   const runner=createSbtRunner({log:text => output.append(text)});
   const projects=new Map(), indexes=new Map(), subscriptions=[output], operations=new Set();
-  let disposed=false, closing, epoch=0;
+  let disposed=false, closing, epoch=0, debugSession;
 
   function trusted(cancellation) {
     if (disposed || !vscode.workspace.isTrusted) throw fail('Trust the local workspace before using Scala/sbt.');
@@ -43,19 +45,23 @@ function registerScalaWorkbench(context,vscode,java) {
     map.set(key,value);
   }
 
-  async function task(root,name,options,details={}) {
+  function executionOptions(root,options) {
     trusted(options.cancellation);
     if (options.allowProjectExecution!==true) throw fail('Explicitly choose the sbt task before executing project code.');
     ensureSaved(root);
     const scala=vscode.workspace.getConfiguration('rocketbrain.scala');
     const javaSettings=vscode.workspace.getConfiguration('rocketbrain.java');
+    return {root,projectId:options.projectId,javaHome:javaSettings.get('javaHome')||java.getState().javaHome,
+      launcher:scala.get('sbtLauncher'),cache:scala.get('cacheDirectory')||path.join(context.globalStorageUri.fsPath,'scala-sbt'),
+      repositoryConfig:scala.get('repositoryConfig'),cancellation:options.cancellation,
+      workspaceTrusted:vscode.workspace.isTrusted,allowProjectExecution:options.allowProjectExecution};
+  }
+
+  async function task(root,name,options,details={}) {
+    const owned=executionOptions(root,options);
     const config=() => JSON.stringify(configSnapshot(root));
     const reviewed=config(), version=epoch;
-    const result=await runner.run({root,action:name,projectId:options.projectId,main:details.main,
-      javaHome:javaSettings.get('javaHome')||java.getState().javaHome,launcher:scala.get('sbtLauncher'),
-      cache:scala.get('cacheDirectory')||path.join(context.globalStorageUri.fsPath,'scala-sbt'),
-      repositoryConfig:scala.get('repositoryConfig'),cancellation:options.cancellation,
-      workspaceTrusted:vscode.workspace.isTrusted,allowProjectExecution:options.allowProjectExecution});
+    const result=await runner.run({...owned,action:name,main:details.main});
     if (result.state==='succeeded' && (disposed || epoch!==version || reviewed!==config())) {
       throw fail('Scala build settings changed while the task was running. Discover or compile again.');
     }
@@ -92,12 +98,74 @@ function registerScalaWorkbench(context,vscode,java) {
     return result;
   }
 
-  async function runMain(options={}) {
+  async function admittedMain(options) {
     const observed=await selected(options,'mains');
     if (!observed.classes.includes(options.mainClass)) throw fail('Choose a main class reported by this sbt project.');
     if (observed.configs!==JSON.stringify(configSnapshot(observed.root))) throw fail('Discover main classes again after editing sbt settings.');
+    return observed;
+  }
+
+  async function runMain(options={}) {
+    const observed=await admittedMain(options);
     return task(observed.root,'run',options,{main:options.mainClass});
   }
+
+  async function stopDebug() {
+    const selected=debugSession;
+    debugSession=undefined;
+    try { if (selected?.session) await vscode.debug.stopDebugging(selected.session); }
+    finally { await runner.stop(); }
+    return {state:'stopped'};
+  }
+
+  async function debugMain(options={}) {
+    if (debugSession) throw fail('Stop the current Scala debugger before starting another.');
+    const observed=await admittedMain(options);
+    if (debugSession) throw fail('Stop the current Scala debugger before starting another.');
+    const owned=executionOptions(observed.root,options);
+    const selected={token:randomUUID(),version:epoch,root:observed.root,configs:observed.configs};
+    debugSession=selected;
+    try {
+      selected.target=await runner.debug({...owned,main:options.mainClass});
+      trusted(options.cancellation);
+      if (debugSession!==selected || selected.version!==epoch ||
+          selected.configs!==JSON.stringify(configSnapshot(observed.root))) {
+        throw fail('Scala build settings changed before the debugger connected.');
+      }
+      const folder=vscode.workspace.getWorkspaceFolder(vscode.Uri.file(observed.root));
+      const started=await vscode.debug.startDebugging(folder,{type:debugType,request:'launch',
+        name:'Scala: '+options.mainClass,rocketbrainOwnedSession:selected.token},{suppressSaveBeforeStart:true});
+      if (!started || !selected.session) throw fail('VS Code did not start the owned Scala debugger.');
+      return {sessionId:selected.session.id,mainClass:options.mainClass,verifiedLoopback:true};
+    } catch (error) {
+      if (debugSession===selected) await stopDebug();
+      throw error;
+    }
+  }
+
+  subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory(debugType,{
+    async createDebugAdapterDescriptor(session) {
+      trusted();
+      const selected=debugSession;
+      if (session.configuration.request!=='launch' || !selected?.target || selected.session ||
+          selected.token!==session.configuration.rocketbrainOwnedSession) {
+        throw fail('Start the debugger with Debug sbt Main Class.');
+      }
+      selected.session=session;
+      const target=await runner.verifyDebug(selected.target);
+      trusted();
+      if (debugSession!==selected || selected.version!==epoch ||
+          selected.configs!==JSON.stringify(configSnapshot(selected.root))) {
+        throw fail('The Scala debugging session changed before attaching.');
+      }
+      return new vscode.DebugAdapterServer(target.port,target.address);
+    }
+  }),vscode.debug.onDidTerminateDebugSession(session=>{
+    if (debugSession?.session?.id===session.id) {
+      debugSession=undefined;
+      void runner.stop().catch(error=>output.appendLine(error.message));
+    }
+  }));
 
   function indexedSource(document,cancellation) {
     trusted(cancellation);
@@ -149,7 +217,7 @@ function registerScalaWorkbench(context,vscode,java) {
   if (vscode.workspace.onDidChangeWorkspaceFolders) subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
     epoch++;
     indexes.clear();projects.clear();
-    void runner.stop().catch(error => output.appendLine(error.message));
+    void stopDebug().catch(error => output.appendLine(error.message));
   }));
 
   async function chooseRoot() {
@@ -218,13 +286,21 @@ function registerScalaWorkbench(context,vscode,java) {
     const options=await contextFor('Select sbt Project to Test');
     if (options) return progress('Run sbt Tests',cancellation => selected({...options,cancellation},'test'));
   });
-  register(COMMANDS.run,async () => {
-    const options=await contextFor('Select sbt Project to Run');
+  async function chooseMain(verb) {
+    const options=await contextFor('Select sbt Project to '+verb);
     if (!options) return;
     const report=await progress('Find sbt Main Classes',cancellation => selected({...options,cancellation},'mains'));
     if (!report.classes.length) throw fail('No main class was reported for this sbt project.');
     const mainClass=await vscode.window.showQuickPick(report.classes,{title:'Select sbt Main Class'});
-    if (mainClass) return progress('Run sbt Main Class',cancellation => runMain({...options,mainClass,cancellation}));
+    if (mainClass) return {...options,mainClass};
+  }
+  register(COMMANDS.run,async () => {
+    const options=await chooseMain('Run');
+    if (options) return progress('Run sbt Main Class',cancellation => runMain({...options,cancellation}));
+  });
+  register(COMMANDS.debug,async () => {
+    const options=await chooseMain('Debug');
+    if (options) return progress('Start Scala Debugger',cancellation => debugMain({...options,cancellation}));
   });
   register(COMMANDS.definition,async () => {
     const editor=vscode.window.activeTextEditor;
@@ -232,16 +308,21 @@ function registerScalaWorkbench(context,vscode,java) {
     if (!found) throw fail('Compile and index the sbt project, then select a resolved Scala reference.');
     return vscode.window.showTextDocument(found.uri,{preview:true,selection:found.range});
   });
-  register(COMMANDS.stop,runner.stop);
+  register(COMMANDS.stop,stopDebug);
 
   return {discover:options => track(() => discover(options)),compile:options => track(() => selected(options,'compile')),
     test:options => track(() => selected(options,'test')),mainClasses:options => track(() => selected(options,'mains')),
-    run:options => track(() => runMain(options)),definition,references,stop:runner.stop,dispose() {
+    run:options => track(() => runMain(options)),debug:options => track(() => debugMain(options)),definition,references,stop:stopDebug,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {
-        try {await runner.dispose();}
-        finally {await Promise.allSettled(operations);for (const item of subscriptions) item.dispose();}
+        try {
+          try {await stopDebug();}
+          finally {await runner.dispose();}
+        } finally {
+          await Promise.allSettled(operations);
+          for (const item of subscriptions) item.dispose();
+        }
       })();
       return closing;
     }};
