@@ -98,6 +98,9 @@ async function verifyArchive(archive, vsceManifest) {
     'dist/java-debug/LocalValueInspection.java',
     'dist/java-debug/CoroutineFrameWatch.java',
     'dist/java-debug/KotlinWatchEvaluation.java',
+    'dist/java-debug/KotlinLocalAssignment.java',
+    'dist/java-debug/KotlinObjectFields.java',
+    'dist/java-debug/KotlinFieldAccess.java',
     'themes/rocketbrain-dark.json', 'media/rocketbrain.svg', 'media/duckdb.tmLanguage.json', 'media/sqlite.tmLanguage.json', 'media/jdbc.tmLanguage.json', 'media/scala.tmLanguage.json', 'media/jpql.tmLanguage.json', 'media/java-regex.tmLanguage.json',
   ];
   const allowed = new Set(['[content_types].xml', 'extension.vsixmanifest', ...requiredPayloads.map((file) => `extension/${file.toLowerCase()}`)]);
