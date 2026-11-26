@@ -17,7 +17,8 @@ test('Micronaut Native Image targets the saved Maven artifact ID and projects on
   assert.equal(selected.imageName,'micronaut-native-linux');
   assert.equal(selected.platformVersion,'5.2.8');
   assert.throws(()=>micronautMavenProject({...project,tool:'gradle'},{native:true}),/Maven Micronaut application/u);
-  assert.deepEqual(goals,['package','org.graalvm.buildtools:native-maven-plugin:compile-no-fork']);
+  assert.deepEqual(goals,['prepare-package','org.graalvm.buildtools:native-maven-plugin:generateResourceConfig',
+    'org.graalvm.buildtools:native-maven-plugin:compile-no-fork']);
   assert.deepEqual(buildFlags('/local workspace/target/native-a'),['--non-recursive','-DskipTests',
     '-DoutputDir=/local workspace/target/native-a','-DnativeDryRun=false','-DsharedLibrary=false']);
   for (const name of [COMMANDS.buildNative,COMMANDS.runNative]) {
