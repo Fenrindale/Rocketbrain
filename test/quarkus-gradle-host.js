@@ -446,7 +446,7 @@ const runQuarkusLiveDebugChecks=(api,vscode,checks)=>runQuarkusGradleChecks(api,
 const runHeadless=()=>process.argv.includes('--live-debug')?
   withOwnedFixture(path.resolve(__dirname,'../test-output'),(_workspace,projectRoot)=>headless({live:true,projectRoot})):headless();
 
-module.exports={runQuarkusGradleChecks,runQuarkusLiveDebugChecks};
+module.exports={runQuarkusGradleChecks,runQuarkusLiveDebugChecks,ownedDatabase,web,assertStopped,assertDebugClosed};
 if(require.main===module)ownedDatabase(runHeadless).then(receipt=>console.log(JSON.stringify(receipt))).catch(error=>{
   console.error(error.stack);process.exitCode=1;
 });
