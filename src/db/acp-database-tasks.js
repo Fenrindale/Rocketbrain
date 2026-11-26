@@ -51,7 +51,8 @@ async function executeDatabaseAgent(agent, intent, { signal, onUpdate } = {}) {
     if (agent.adapter === 'opencode-local') {
       const { endpoint, model } = agent.localModel;
       const config = { model: 'rocketbrain/' + model, enabled_providers: ['rocketbrain'], autoupdate: false, snapshot: false,
-        default_agent: 'plan', agent: { plan: { temperature: 0, top_p: 1 } },
+        default_agent: 'rocketbrain-review', agent: { 'rocketbrain-review': { mode: 'primary', temperature: 0, top_p: 1,
+          prompt: 'Follow the latest reviewed request literally. Return exactly the requested JSON object. Use no tools.' } },
         permission: 'deny', provider: { rocketbrain: { name: 'Approved loopback model', npm: '@ai-sdk/openai-compatible',
           options: { baseURL: endpoint.replace('/chat/completions', ''), apiKey: 'local-loopback' },
           models: { [model]: { name: model, tool_call: false, limit: { context: 4096, output: 1024 } } } } } };
@@ -86,9 +87,9 @@ function prepareDatabaseTasks({ catalog, choices, agents, tasks }) {
     if (!agent) throw Error('Select a configured database ACP profile for each task.');
     const { preview, instructions } = prepareGroundedIntent(scope, input);
     const text = `${instructions}\nWrite the explanation in one sentence under 140 characters. ` +
-      'Always include all five keys. Use [] for an empty list. Return only a JSON object with this shape. ' +
-      '{"columns":["table.column"],"measures":[{"column":"table.column","function":"COUNT"}],' +
-      '"sort":[{"key":"table.column","direction":"ASC"}],"limit":100,"explanation":"brief summary"}\n' + JSON.stringify(preview);
+      'Always include the five keys columns, measures, sort, limit, explanation. Use [] for an empty array. ' +
+      'A measure has column and function keys. A sort entry has key and direction keys, and key must exactly equal a selected column or measure expression. ' +
+      'Use the exact requested aggregate function. Read the request after the available columns.\n' + JSON.stringify(preview);
     return { agent, intent: { scope, text }, request: preview.request };
   });
   const keys = jobs.map(job => JSON.stringify([job.agent.label, job.request]));
