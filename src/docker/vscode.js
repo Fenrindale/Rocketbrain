@@ -2,6 +2,7 @@
 
 const { createDockerWorkbench } = require('./workbench');
 const { createRegistryPermissions } = require('./registry-permissions');
+const { registerComposeEditor } = require('./compose-edit-vscode');
 
 function registerDockerWorkbench(vscode) {
   const workbench = createDockerWorkbench({trusted:()=>vscode.workspace.isTrusted,workspaceRoots:()=>
@@ -218,8 +219,9 @@ function registerDockerWorkbench(vscode) {
     if(choice==='Push Image')return prepareImageReport(review,signal);
   });
 
-  return { ...workbench, registryPermissions,
-    dispose() { registryPermissions.dispose(); workbench.dispose(); subscriptions.forEach(item => item.dispose()); } };
+  const composeEditor = registerComposeEditor(vscode, register);
+  return { ...workbench, registryPermissions, composeEdit: composeEditor.service,
+    dispose() { composeEditor.dispose(); registryPermissions.dispose(); workbench.dispose(); subscriptions.forEach(item => item.dispose()); } };
 }
 
 module.exports = { registerDockerWorkbench };

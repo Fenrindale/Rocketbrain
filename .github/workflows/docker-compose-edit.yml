@@ -1,0 +1,50 @@
+name: Docker Compose override editor
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'verify-compose-edit-*']
+    paths:
+      - '.github/workflows/docker-compose-edit.yml'
+      - 'src/docker/**'
+      - 'test/docker-compose-edit.test.js'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  pull_request:
+    paths:
+      - '.github/workflows/docker-compose-edit.yml'
+      - 'src/docker/**'
+      - 'test/docker-compose-edit.test.js'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-compose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Review and resolve three Compose files with the actual CLI
+        env:
+          ROCKETBRAIN_DOCKER_COMPOSE_EDIT_TEST: '1'
+          ROCKETBRAIN_DOCKER_COMPOSE_EDIT_RECEIPT: ${{ runner.temp }}/rocketbrain-docker-compose-edit.json
+        run: node --test test/docker-compose-edit.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-docker-compose-edit
+          path: ${{ runner.temp }}/rocketbrain-docker-compose-edit.json
+          if-no-files-found: error
+          retention-days: 7
