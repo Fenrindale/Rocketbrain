@@ -35,13 +35,26 @@ async function verifyMixedRename(api, vscode, checks, fixture) {
     const relative = path.relative(root, file);
     return relative && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
   }
-  let imported, plan, installed = false;
+  const phases = process.env.ROCKETBRAIN_JAVA_KOTLIN_RENAME_PHASE_RECEIPT;
+  let observedPhase = 'setup', initialFailure, imported, plan, installed = false;
+  async function record(phase, error) {
+    const event = { workflow: fixture.evidence ? "alias and constructor reference" : "ordinary Java type rename", phase,
+      at: new Date().toISOString(), ...(error&&{ error: String(error.message || error).slice(0, 2000) }) };
+    console.log("[Java Kotlin Rename] " + phase + (event.error ? " " + event.error : ""));
+    if (phases) await fs.appendFile(phases, JSON.stringify(event) + "\n").catch(writeError =>
+      console.log("[Java Kotlin Rename] phase receipt unavailable " + writeError.code));
+  }
+  function step(phase) {
+    observedPhase = phase;
+    return record(phase);
+  }
   try {
     const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
     const ownership = JSON.parse(await fs.readFile(path.join(path.dirname(spring.dbConfigPath), 'owner.json'), 'utf8'));
     assert.ok(['RocketbrainDisposableMariaDbFixture-v1', 'RocketbrainDisposableOracleMysqlFixture-v1'].includes(ownership.kind));
     const config = JSON.parse(await fs.readFile(spring.dbConfigPath, 'utf8'));
     // Finish the Eclipse descriptors before the native workspace watcher can import the Gradle fixture.
+    await step('gradle-fixture');
     await populate(staged, tools, { deployedRoot: root });
     const physical = await fs.realpath(staged);
     assert.equal(path.relative(physical, staged), '');
@@ -50,13 +63,17 @@ async function verifyMixedRename(api, vscode, checks, fixture) {
     assert.equal(path.relative(await fs.realpath(workspace), workspace), '');
     await fs.rename(physical, root);
     installed = true;
+    await step('spring-before');
     const before = await readDatabase(root, tools, config, spring.dbEngine);
+    await step('jdt-start');
     await java.start();
+    await step('jdt-import');
     await java.executeWorkspaceCommand('java.project.changeImportedProjects', [vscode.Uri.file(path.join(root, '.project')).toString()], [], []);
     const document = (await show(owner)).document, kt = (await show(kotlin)).document;
     const javaUse = await open(caller);
     const kotlinUnits = [...files.keys()].filter(unit=>unit.endsWith('.kt'));
     for (const unit of kotlinUnits) if (unit !== kotlin) await open(unit);
+    await step('jdt-classpaths');
     imported = await until(async () => {
       const metadata = await java.executeWorkspaceCommand('java.project.getClasspaths', document.uri.toString(), { scope: 'test' });
       const key = metadata?.projectRoot, physical = key?.startsWith('file:') ? fileURLToPath(key) : key;
@@ -65,7 +82,9 @@ async function verifyMixedRename(api, vscode, checks, fixture) {
         metadata.classpaths?.some(file => file.endsWith('spring-jdbc-7.0.10.jar')) &&
         metadata.classpaths.some(file => !path.relative(kotlinOutput, file)) ? key : undefined;
     }, 100000);
+    await step('kotlin-start');
     await java.kotlinEditor.start({ document: kt });
+    await step('kotlin-definition');
     const use = positionOf(kt.getText(), 'domain.Shipment', 8);
     await until(async () => {
       const defs = await java.kotlinEditor.definition(kt, new vscode.Position(use.line, use.character));
@@ -75,6 +94,7 @@ async function verifyMixedRename(api, vscode, checks, fixture) {
           !path.relative(path.join(root, owner), fileURLToPath(address));
       });
     }, 80000);
+    await step('jdt-references');
     const position = document.positionAt(document.getText().indexOf('class Shipment') + 6);
     await until(async () => {
       const references = await java.navigationLocations('references', { textDocument: { uri: document.uri.toString() },
@@ -85,9 +105,11 @@ async function verifyMixedRename(api, vscode, checks, fixture) {
       }
       return true;
     }, 25000);
+    await step('review-prepare');
     plan = await java.typeRename.prepare({ document, position, newName });
     assert.deepEqual(plan.typeRename.kotlinCallers, expectedSites);
     assert.equal(plan.resourceOperations.length, 1);
+    await step('review-diffs');
     const kotlinDiffs = plan.documents.map((file,index)=>({file,index})).filter(({file})=>file.javaTypeKotlinReference);
     assert.equal(kotlinDiffs.length,kotlinUnits.length);
     for (const {file,index} of kotlinDiffs) {
@@ -106,48 +128,66 @@ async function verifyMixedRename(api, vscode, checks, fixture) {
         assert.equal(loaded.getText(), after ? file.after : file.before);
       }
     }
+    await step('apply');
     assert.equal((await java.refactoring.apply(plan.id)).state, 'applied');
     await verify(true);
     await show(target);
+    await step('undo');
     await vscode.commands.executeCommand('undo');
     await until(async () => await exists(owner) && !await exists(target), 10000);
     await verify(false);
+    await step('redo');
     await vscode.commands.executeCommand('redo');
     await until(async () => !await exists(owner) && await exists(target), 10000);
     await verify(true);
+    await step('save');
     for (const file of [target, caller, ...kotlinUnits]) assert.equal(await (await open(file)).save(), true);
     assert.equal(await fs.readFile(path.join(root, shadow), 'utf8'), files.get(shadow));
+    await step('gradle-rebuild');
     await rebuild(root, tools);
+    await step('spring-after');
     const after = await readDatabase(root, tools, config, spring.dbEngine);
     assert.deepEqual(after, before);
     checks.push(fixture.evidence
       ? 'Reviewed Java class rename preserves Kotlin import aliases and verifies the exact JVM bindings of aliased and unaliased constructor references.'
       : 'Reviewed Java public class rename resolves Kotlin imports, direct constructors and explicit types with the exact Java owner.');
     checks.push('One native Undo and Redo covers the Java file rename and both languages. The Gradle Spring JDBC output is unchanged.');
+    await step('verified');
     return { ...plan.typeRename, kotlinDiff: true, nativeUndo: true, nativeRedo: true, spring: after };
+  } catch (error) {
+    initialFailure = error;
+    await record(observedPhase + '-failed', error);
+    throw error;
   } finally {
-    await java.kotlinEditor.stop().catch(() => {});
-    for (const document of vscode.workspace.textDocuments) {
-      if (document.uri.scheme !== 'file' || !owns(document.uri.fsPath) || !document.isDirty) continue;
-      await vscode.window.showTextDocument(document, { preview: false });
-      await vscode.commands.executeCommand('workbench.action.files.revert');
-    }
-    const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => {
-      const address = tab.input?.uri;
-      return address && (address.scheme === 'file' && owns(address.fsPath) ||
-        plan && address.scheme === 'rocketbrain-java-refactor' && address.path.startsWith('/' + plan.id + '/'));
-    });
-    if (tabs.length) await vscode.window.tabGroups.close(tabs);
-    if (imported) await java.executeWorkspaceCommand('java.project.changeImportedProjects', [], [], [imported]).catch(() => {});
-    for (const [temporary, owner, prefix] of [
-      ...(installed ? [[root, workspace, 'rb-java-kotlin-rename-']] : []),
-      [preparation, parent, 'rb-mixed-rename-prep-']
-    ]) {
-      const physical = await fs.realpath(temporary);
-      assert.equal(path.relative(physical, temporary), '');
-      assert.equal(path.relative(path.dirname(physical), owner), '');
-      assert.ok(path.basename(physical).startsWith(prefix));
-      await fs.rm(physical, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+    await record('cleanup');
+    try {
+      await java.kotlinEditor.stop().catch(() => {});
+      for (const document of vscode.workspace.textDocuments) {
+        if (document.uri.scheme !== 'file' || !owns(document.uri.fsPath) || !document.isDirty) continue;
+        await vscode.window.showTextDocument(document, { preview: false });
+        await vscode.commands.executeCommand('workbench.action.files.revert');
+      }
+      const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => {
+        const address = tab.input?.uri;
+        return address && (address.scheme === 'file' && owns(address.fsPath) ||
+          plan && address.scheme === 'rocketbrain-java-refactor' && address.path.startsWith('/' + plan.id + '/'));
+      });
+      if (tabs.length) await vscode.window.tabGroups.close(tabs);
+      if (imported) await java.executeWorkspaceCommand('java.project.changeImportedProjects', [], [], [imported]).catch(() => {});
+      for (const [temporary, owner, prefix] of [
+        ...(installed ? [[root, workspace, 'rb-java-kotlin-rename-']] : []),
+        [preparation, parent, 'rb-mixed-rename-prep-']
+      ]) {
+        const physical = await fs.realpath(temporary);
+        assert.equal(path.relative(physical, temporary), '');
+        assert.equal(path.relative(path.dirname(physical), owner), '');
+        assert.ok(path.basename(physical).startsWith(prefix));
+        await fs.rm(physical, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+      }
+      await record('cleaned');
+    } catch (cleanupError) {
+      await record('cleanup-failed', cleanupError);
+      if (!initialFailure) throw cleanupError;
     }
   }
 }
