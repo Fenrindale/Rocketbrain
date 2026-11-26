@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { fileURLToPath,pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD } = require('../src/java/debug-runtime');
 const { freePort } = require('./java-debug-dap');
@@ -126,7 +127,22 @@ async function runKotlinWatchExpressionChecks(api, vscode, checks, requireFields
     const owned = await fs.realpath(project);
     assert.equal(path.relative(workspace, path.dirname(owned)), '');
     assert.ok(path.basename(owned).startsWith('rb-kotlin-expressions-'));
-    await fs.rm(owned, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+    const tabs=vscode.window.tabGroups.all.flatMap(group=>group.tabs).filter(tab=>{
+      const uri=tab.input.uri;
+      if (uri?.scheme!=='file'||uri.authority) return false;
+      const relative=path.relative(owned,uri.fsPath);
+      return Boolean(relative)&&!path.isAbsolute(relative)&&relative!=='..'&&!relative.startsWith('..'+path.sep);
+    });
+    if (tabs.length) await vscode.window.tabGroups.close(tabs);
+    if (api.java.getState().state==='running') {
+      const projects=await api.java.requestWorkspaceCommand('java.project.getAll',[]);
+      const imported=Array.isArray(projects)&&projects.find(value=>{
+        try {return !path.relative(owned,fileURLToPath(value));}
+        catch {return false;}
+      });
+      if (imported) await api.java.requestWorkspaceCommand('java.project.changeImportedProjects',[[],[],[pathToFileURL(owned).href]]);
+    }
+    await fs.rm(owned, { recursive: true, force: true, maxRetries: 12, retryDelay: 350 });
   }
 }
 
