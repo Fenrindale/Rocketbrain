@@ -59,6 +59,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     relatedAction: chooseRelatedRows,
     relatedReturn: returnToRelatedSource,
     focusQueryEditor,
+    canFocusQueryEditor: editor => {
+      try { return Boolean(resolveQueryEditor(editor)); } catch { return false; }
+    },
     datasetAction: (id, input) => tableEditor.stageDatasetChanges(id, input),
     resultClosed: id => { relatedSources.delete(id); tableEditor.forget(id); }
   });
@@ -77,7 +80,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const allBindings = () => [...bindings.values(), ...profileBindings.values()];
   const openEditorUris = () => new Set(vscode.window.tabGroups.all.flatMap(group =>
     group.tabs.map(tab => tab.input?.uri?.toString()).filter(Boolean)));
-  async function focusQueryEditor({ uri, viewColumn, profileSessionId }) {
+  function resolveQueryEditor({ uri, viewColumn, profileSessionId }) {
     if (state.disposed || !vscode.workspace.isTrusted) throw Error('Open a trusted workspace to return to the query editor.');
     const groups = vscode.window.tabGroups.all;
     const locations = groups.filter(group => group.tabs.some(tab => tab.input?.uri?.toString() === uri));
@@ -89,7 +92,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       throw Error('The source SQL editor no longer uses this result’s database profile session.');
     }
     const group = locations.find(location => location.viewColumn === viewColumn) ?? locations[0];
-    await vscode.window.showTextDocument(document, { viewColumn: group.viewColumn, preserveFocus: false });
+    return { document, viewColumn: group.viewColumn };
+  }
+  async function focusQueryEditor(editor) {
+    const { document, viewColumn } = resolveQueryEditor(editor);
+    await vscode.window.showTextDocument(document, { viewColumn, preserveFocus: false });
   }
   function consoleSessions() {
     const sessions = new Map();
@@ -903,6 +910,29 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if (!allowProfile && isProfileConsole(editor.document)) throw Error('This operation requires a console on the active database.');
     return editor.selection.isEmpty ? statementAt(editor.document.getText(), editor.document.offsetAt(editor.selection.active), { dialect: state.mysql || isProfileConsole(editor.document) ? 'mysql' : 'sqlite' }) : editor.document.getText(editor.selection);
   }
+  function sqlActionContext(document) {
+    if (document?.languageId !== 'sql' || document.isClosed) return null;
+    const route = fileProfiles.get(document.uri);
+    const dedicated = isProfileConsole(document);
+    const binding = existingBinding(document);
+    const consoleOpen = Boolean(binding && profileSessions.has(binding.id));
+    const session = binding && (consoleOpen || state.mysql && !dedicated) && !state.disposed && !state.switching ?
+      consoleDatabase(binding.id).getSessionState(binding.id) : undefined;
+    const fileProfileChanging = fileProfiles.busy(document.uri);
+    const analysis = analysisOnlySql(document) || isVirtualSqlPreview(document);
+    const edit = !analysis && !require('./db/object-editor-vscode').isEventSourceDraft(document);
+    const operational = edit && !state.disposed && !state.switching && !fileProfileChanging && !state.running.has(binding?.id) &&
+      !sqlDrafts.isRecovered(document) &&
+      !require('./db/federated-select').isFederatedDocument(document);
+    const live = operational && !dedicated && state.mysql && !state.offlineMetadata && vscode.workspace.isTrusted;
+    const run = operational && (dedicated ? vscode.workspace.isTrusted && (Boolean(route) || consoleOpen) :
+      !state.offlineMetadata && (vscode.workspace.isTrusted || !state.mysql));
+    return { run, edit, live, offlineDemo: !dedicated && !state.mysql && !state.offlineMetadata,
+      epoch: state.epoch, binding: binding?.id, profile: route?.id, profileRevision: route?.key,
+      session: session && { connection: session.connectionId, schema: session.database, readOnly: session.readOnly,
+        autocommit: session.autocommit, inTransaction: session.inTransaction, outcomeUnknown: session.outcomeUnknown,
+        needsReconnect: session.needsReconnect } };
+  }
   command('rocketbrain.openConsole', async () => {
     if (state.offlineMetadata) {
       return openSql('-- Offline SQL editing · ' + state.offlineMetadata.provenance.database + '\n-- Connect to run SQL.\n');
@@ -916,6 +946,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   command('rocketbrain.openSharedConsole', () => openSharedConsole(currentDocument()));
   command('rocketbrain.focusQueryResults', () => results.focus());
   command('rocketbrain.focusQueryEditor', () => results.returnToQuery());
+  command('rocketbrain.results.returnToQuery', expected => results.returnToQuery(results.requireActionTarget(expected).id));
+  command('rocketbrain.results.copyTsv', expected => {
+    if (!vscode.workspace.isTrusted) throw Error('Trust the workspace before copying a result from Context Actions.');
+    return results.copyResult(results.requireActionTarget(expected));
+  });
   command('rocketbrain.runQuery', async () => {
     const editor = vscode.window.activeTextEditor;
     if (sqlDrafts.isRecovered(editor?.document)) {
@@ -1171,6 +1206,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     nativeDumps,
     queryDemo: sql => state.mysql ? Promise.reject(new Error('Demo checks require the demo connection.')) : state.db.query(sql),
     source: () => state.label, results: () => structuredClone(results.history), connectMysql,
+    sqlActionContext, resultActionContext: () => results.actionContext(),
     exportResult: (id, format, destination) => results.exportSnapshot(id, format, destination), resultSnapshots, gridReviewRecovery,
     dataExtractors,
     analyzeResult: (id, options) => results.analyzeSnapshot(id, options),
