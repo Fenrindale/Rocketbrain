@@ -16,6 +16,7 @@ const workerPrefix = 'ROCKETBRAIN_IOS:';
 const workerStages = new Set(['interpreter-entered', 'target-opened', 'attaching', 'process-verified', 'module-verified',
   'runtime-framework-pending', 'runtime-loader-stopped', 'runtime-framework-mapped',
   'app-entry-armed', 'app-entry-verified',
+  'async-continue-accepted', 'async-fresh-stop',
   'runtime-breakpoint-resolved', 'runtime-breakpoint-pending', 'process-continue', 'process-continue-returned']);
 const workerPaths = [path.join(__dirname, 'ios-debug', 'simulator_lldb.py'),
   path.join(__dirname, '../../runtime/ios-debug/simulator_lldb.py')];

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import time
 
 import lldb
 
@@ -269,19 +270,45 @@ def at_application_entry(target, process, plan, fallback):
     return True
 
 
-def wait_for_runtime_module(debugger, target, process, plan):
+def continue_to_stop(process, listener, expected_pid, deadline):
+    if time.monotonic() >= deadline or process.GetState() != lldb.eStateStopped:
+        raise RuntimeError("The owned simulator process is not ready for a bounded continue.")
+    earlier_stop = process.GetStopID()
+    checked(process.Continue(), "Could not continue the owned simulator process")
+    emit("phase", stage="async-continue-accepted")
+    last_state = process.GetState()
+    while time.monotonic() < deadline:
+        event = lldb.SBEvent()
+        if not listener.WaitForEvent(1, event):
+            continue
+        event_process = lldb.SBProcess.GetProcessFromEvent(event)
+        if (not event_process.IsValid() or event_process.GetProcessID() != expected_pid
+                or event_process.GetUniqueID() != process.GetUniqueID()):
+            raise RuntimeError("LLDB emitted a state event outside the owned simulator process.")
+        last_state = lldb.SBProcess.GetStateFromEvent(event)
+        if last_state in (lldb.eStateExited, lldb.eStateDetached, lldb.eStateCrashed):
+            raise RuntimeError("The owned simulator process left debugging before its approved stop (state "
+                               + str(last_state) + ").")
+        if (last_state == lldb.eStateStopped and not lldb.SBProcess.GetRestartedFromEvent(event)
+                and process.GetState() == lldb.eStateStopped and process.GetStopID() > earlier_stop):
+            emit("phase", stage="async-fresh-stop")
+            return
+    raise RuntimeError("No fresh owned LLDB stop before the deadline (event state " + str(last_state)
+                       + ", live state " + str(process.GetState()) + ").")
+
+
+def wait_for_runtime_module(debugger, target, process, plan, listener):
     live = live_framework(target, plan)
     if live is None:
         emit("phase", stage="runtime-framework-pending")
         entry, passed_entry = None, False
+        deadline = time.monotonic() + 73
         set_loader_stops(debugger, True)
         try:
             for _ in range(16):
                 if entry is None and not passed_entry:
                     entry = arm_application_entry(target, plan)
-                checked(process.Continue(), "Could not run the owned app to its native loader event")
-                if process.GetState() != lldb.eStateStopped:
-                    raise RuntimeError("The owned simulator app did not stop during native startup.")
+                continue_to_stop(process, listener, plan["pid"], deadline)
                 if at_application_entry(target, process, plan, entry):
                     target.BreakpointDelete(entry[0].GetID())
                     entry, passed_entry = None, True
@@ -321,7 +348,20 @@ def run(plan):
     if not info.IsValid() or real_file(info.GetExecutableFile()) != plan["executable"]:
         raise RuntimeError("LLDB did not observe the reviewed simulator executable.")
     emit("phase", stage="process-verified")
-    module = wait_for_runtime_module(debugger, target, process, plan)
+    events = lldb.SBProcess.eBroadcastBitStateChanged
+    listener = lldb.SBListener("Rocketbrain owned simulator process")
+    broadcaster = process.GetBroadcaster()
+    if not (listener.StartListeningForEvents(broadcaster, events) & events):
+        raise RuntimeError("Stock LLDB could not subscribe to the owned process state.")
+    debugger.SetAsync(True)
+    try:
+        debug_source(debugger, target, process, plan, listener)
+    finally:
+        listener.StopListeningForEvents(broadcaster, events)
+
+
+def debug_source(debugger, target, process, plan, listener):
+    module = wait_for_runtime_module(debugger, target, process, plan, listener)
     module = load_reviewed_symbols(debugger, target, plan, module)
     emit("phase", stage="module-verified")
     compiled = exact_address(target, module, plan)
@@ -338,7 +378,7 @@ def run(plan):
     emit("phase", stage="runtime-breakpoint-resolved" if location.IsResolved() else "runtime-breakpoint-pending")
     emit("ready")
     emit("phase", stage="process-continue")
-    checked(process.Continue(), "Could not run the owned simulator app to its Kotlin breakpoint")
+    continue_to_stop(process, listener, plan["pid"], time.monotonic() + 48)
     emit("phase", stage="process-continue-returned")
     if process.GetState() != lldb.eStateStopped:
         raise RuntimeError("The simulator app did not stop at a Kotlin source breakpoint.")

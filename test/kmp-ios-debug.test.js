@@ -9,6 +9,7 @@ const { createHash } = require('node:crypto');
 const { execFile, execFileSync } = require('node:child_process');
 const { promisify } = require('node:util');
 const { EventEmitter, once } = require('node:events');
+const { performance } = require('node:perf_hooks');
 const { setTimeout: delay } = require('node:timers/promises');
 const { armSimulatorBuild, armSimulatorEntry, armUuid, bundleDigest, uuid } = require('../src/java/kmp-ios-review');
 const { createKmpIosDebug, launchedPid, observeInstalledContainer } = require('../src/java/kmp-ios-debug');
@@ -237,13 +238,17 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
   const line = original.toString('utf8').split('\n').findIndex(item => item.includes('// debugger-stop')) + 1;
   assert.ok(line > 0);
   const phases = [];
+  const timeline = [];
+  const fixtureStarted = performance.now();
   const service = createKmpIosDebug({ observe(phase, simulator) {
     if (phase === 'lldb-framework-observation') {
       t.diagnostic('Owned LLDB framework map: ' + JSON.stringify(simulator));
       return;
     }
     phases.push(phase);
-    t.diagnostic('iOS fixture: ' + phase);
+    const elapsedMs = Math.round(performance.now() - fixtureStarted);
+    timeline.push({ phase, elapsedMs });
+    t.diagnostic('iOS fixture: ' + phase + ' at ' + elapsedMs + ' ms');
     if (phase === 'debuggee-launch-refused') return recordLaunchLog(t, simulator, bundleId);
     if (phase === 'source-stop-unobserved') {
       return simctl(['get_app_container', simulator.id, bundleId, 'data'], 22000).then(data => {
@@ -338,6 +343,6 @@ test('actual Apple Silicon iOS Simulator Kotlin line, scalar local and scoped te
     symbolsSha256: review.symbolsSha256, sourceSha256: digest(source), editorBreakpoint: { file: path.basename(source), line,
       stack: stack.body.stackFrames[0].name, local: { name: measured.name, type: measured.type, value: measured.value } },
     resumed: 'UIKit Kotlin=42', staleSourceRefused: true, staleDsymRefused: true, wrongDsymRefused: true, oneShot: true, simulatorRemoved: true,
-    otherSimulatorsUnchanged: true, phases
+    otherSimulatorsUnchanged: true, phases, timeline
   }, null, 2) + '\n');
 });
