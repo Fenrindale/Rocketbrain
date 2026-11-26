@@ -9,6 +9,8 @@ on:
       - 'src/devcontainer/**'
       - 'test/devcontainer.test.js'
       - 'test/devcontainer-port-fixture.js'
+      - 'test/devcontainer-attach-fixture.js'
+      - 'test/devcontainer-attach.test.js'
       - 'test/fixtures/devcontainer/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -19,6 +21,8 @@ on:
       - 'src/devcontainer/**'
       - 'test/devcontainer.test.js'
       - 'test/devcontainer-port-fixture.js'
+      - 'test/devcontainer-attach-fixture.js'
+      - 'test/devcontainer-attach.test.js'
       - 'test/fixtures/devcontainer/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -42,6 +46,10 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Install locked project dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Install the locked specification CLI
@@ -51,7 +59,7 @@ jobs:
           ROCKETBRAIN_DEVCONTAINER_LIVE: 'true'
           ROCKETBRAIN_DEVCONTAINER_CLI_PATH: ${{ github.workspace }}/test/fixtures/devcontainer/tooling/node_modules/@devcontainers/cli
           ROCKETBRAIN_DEVCONTAINER_RECEIPT: ${{ runner.temp }}/rocketbrain-devcontainer-receipt.json
-        run: node --test test/devcontainer.test.js
+        run: node --test test/devcontainer.test.js test/devcontainer-attach.test.js
       - uses: actions/upload-artifact@v4
         with:
           name: rocketbrain-devcontainer-runtime

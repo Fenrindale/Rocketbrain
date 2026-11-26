@@ -405,7 +405,48 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
     const exact = await verifyContainer(target, session, containerId, 4500);
     if (!exact.running || !startedAt || exact.startedAt !== startedAt) throw Error('The reviewed Dev Container stopped or restarted.');
     if (exact.networkMode !== binding.networkMode) throw Error('The verified container network identity changed.');
+    if (binding.attachedSource) {
+      createJavaMountMapping(root, binding.attachedSource.containerRoot, exact.mounts);
+      if (debugSourceRoot(root, binding.attachedSource.relative) !== binding.attachedSource.sourceRoot) {
+        throw Error('The reviewed Java source directory changed.');
+      }
+    }
     return exact;
+  }
+
+  function debugSourceRoot(root, relative) {
+    if (typeof relative !== 'string' || !relative || relative.length > 1024 || path.isAbsolute(relative) ||
+        /[:\x00-\x1f]/u.test(relative) || relative.split(/[\\/]/u).some(part => part === '..' || part.toLowerCase() === '.git')) {
+      throw Error('Choose a physical Java source directory within the mounted workspace.');
+    }
+    const sourceRoot = path.resolve(root, relative);
+    let physical;
+    try { physical = fs.realpathSync(sourceRoot); } catch {}
+    if (!physical || path.relative(sourceRoot, physical) || !fs.statSync(physical).isDirectory()) {
+      throw Error('Choose a physical Java source directory within the mounted workspace.');
+    }
+    return physical;
+  }
+
+  async function prepareForward(root, key, requested, attached) {
+    const session = checkedSession(key);
+    if (!session?.id) throw Error('Start the managed Dev Container before forwarding a port.');
+    const target = await dockerEnvironment(root, settings(root));
+    if (target.host !== session.host) throw Error('Switch back to the local Docker context used for this session.');
+    const exact = await verifyContainer(target, session, session.id, 4500);
+    if (!exact.running || typeof exact.startedAt !== 'string' || !Date.parse(exact.startedAt)) {
+      throw Error('The managed Dev Container is no longer running.');
+    }
+    if (!exact.networkMode || /^(?:host$|container:)/i.test(exact.networkMode)) {
+      throw Error('Direct port forwarding requires the managed container to have its own network namespace.');
+    }
+    const binding = { root, key, target, session, containerId: session.id, startedAt: exact.startedAt, networkMode: exact.networkMode };
+    if (attached) {
+      const { containerRoot, sourceDirectory: relative } = attached;
+      createJavaMountMapping(root, containerRoot, exact.mounts);
+      binding.attachedSource = { containerRoot, relative, sourceRoot: debugSourceRoot(root, relative) };
+    }
+    return forwards.inspect(key, binding, requested);
   }
 
   async function verifyReviewedConfiguration(binding) {
@@ -642,21 +683,11 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
       });
     },
     inspectPort(workspace, requested) {
-      return exclusive(workspace, async (root, key) => {
-        const session = checkedSession(key);
-        if (!session?.id) throw Error('Start the managed Dev Container before forwarding a port.');
-        const target = await dockerEnvironment(root, settings(root));
-        if (target.host !== session.host) throw Error('Switch back to the local Docker context used for this session.');
-        const exact = await verifyContainer(target, session, session.id, 4500);
-        if (!exact.running || typeof exact.startedAt !== 'string' || !Date.parse(exact.startedAt)) {
-          throw Error('The managed Dev Container is no longer running.');
-        }
-        if (!exact.networkMode || /^(?:host$|container:)/i.test(exact.networkMode)) {
-          throw Error('Direct port forwarding requires the managed container to have its own network namespace.');
-        }
-        return forwards.inspect(key, { root, key, target, session, containerId: session.id,
-          startedAt: exact.startedAt, networkMode: exact.networkMode }, requested);
-      });
+      return exclusive(workspace, (root, key) => prepareForward(root, key, requested));
+    },
+    inspectJavaAttach(workspace, requested) {
+      return exclusive(workspace, (root, key) => prepareForward(root, key, { containerPort: requested?.port },
+        { containerRoot: requested?.containerRoot, sourceDirectory: requested?.sourceDirectory }));
     },
     forwardPort(workspace, confirmation) {
       return exclusive(workspace, async (_root, key) => forwards.open(key, confirmation));
@@ -665,7 +696,8 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
       return exclusive(workspace, async (_root, key) => forwards.list(key));
     },
     closePort(workspace, id) {
-      return exclusive(workspace, async (_root, key) => forwards.close(key, id));
+      return Promise.resolve().then(() => forwards.close(workspaceKey(localDirectory(workspace,
+        'Choose the local workspace used for this port forward.')), id));
     },
     inspectJava(workspace, requested) {
       return exclusive(workspace, async (root, key) => {

@@ -144,6 +144,7 @@
       { "command": "rocketbrain.devcontainer.javaStart", "title": "Start Managed Container Java", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.javaStop", "title": "Stop Managed Container Java", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.devcontainer.javaFormat", "title": "Review Container Java Formatting", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java" },
+      { "command": "rocketbrain.devcontainer.javaAttach", "title": "Attach to Managed Container JVM", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.console", "title": "Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.resetConsole", "title": "Reset Groovy Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.groovy.evaluateSelection", "title": "Evaluate Groovy Selection", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == groovy && editorHasSelection" },

@@ -10,6 +10,7 @@ const { createSmartStep, mergeStepFilters } = require('./debug-step');
 const { createFrameRestart } = require('./debug-frames');
 const { createLocalValueInspection } = require('./debug-local-values');
 const { createDebugProcessDiscovery, processId } = require('./debug-processes');
+const { assertManagedAttach } = require('../devcontainer/java-attach');
 const DEBUG_TYPE = 'rocketbrain-java';
 const PROCESS_SELECTION = '__rocketbrainJavaProcessSelection';
 const VERIFIED_ATTACH = '__rocketbrainVerifiedAttach';
@@ -84,6 +85,7 @@ function registerJavaDebugger(vscode, api, output, request) {
   const localValues = createLocalValueInspection(vscode, { getState: id => sessions.get(id), ensureTrusted });
   async function resolve(folder, value, token) {
     ensureTrusted();
+    assertManagedAttach(value, folder);
     const config = { ...value, type: DEBUG_TYPE, name: value.name || 'Rocketbrain Java', request: value.request || 'launch' };
     delete config[VERIFIED_ATTACH];
     if (token?.isCancellationRequested) return undefined;
@@ -153,9 +155,12 @@ function registerJavaDebugger(vscode, api, output, request) {
   };
   const factory = { async createDebugAdapterDescriptor(session) {
     ensureTrusted();
+    assertManagedAttach(session.configuration, session.workspaceFolder);
     await api.start();
     await exceptions.sync();
+    assertManagedAttach(session.configuration, session.workspaceFolder);
     const port = await runReady('vscode.java.startDebugSession'); if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Java engine returned an invalid debugger port.');
+    assertManagedAttach(session.configuration, session.workspaceFolder);
     const info = record(session);
     info.debugBuild = api.getState().debugBuild;
     const adapter = new JavaDebugAdapter(vscode, port, message => observe(session, message), output, message => {
