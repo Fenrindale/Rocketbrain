@@ -90,7 +90,9 @@ function registerObserver(context,vscode,output,{source}) {
     if(!request){
       const selected=await vscode.window.showQuickPick([...report.requests].reverse().map(item=>({
         label:[item.method,item.route].filter(Boolean).join(' ')||'Hibernate request '+item.id,
-        description:item.selectCount+' SELECTs · '+item.suspects.length+' collection fetch finding(s)',
+        description:item.selectCount+' SELECTs · '+item.suspects.length+' collection fetch finding(s)'+
+          (report.bindObservation ? ' · '+item.selects.reduce((count,select)=>count+
+            (select.binds?.positions.filter(position=>position.jdbcType).length||0),0)+' typed binds' : ''),
         detail:item.startedAt,request:item
       })),{title:'Hibernate Fetch Activity'});
       if(!selected)return;

@@ -115,3 +115,34 @@ test('an incomplete tuple, another alias, or multiple tuple bindings cannot clai
     assert.deepEqual(result.suspects,[]);
   }
 });
+
+test('reviewed bind metadata is position-exact, bounded and independent of collection evidence', () => {
+  const observation = { bindObservation: 'hibernate-jdbc-setters-v1' };
+  const sql = 'select m.id from members m where (m.tenant_id,m.team_id) in ((?,?))';
+  const positions = [{ index: 1, jdbcType: 'VARCHAR', source: 'setter', value: 'never-show-this' },
+    { index: 2, jdbcType: 'BIGINT', source: 'explicit' }];
+  const block = { state: 'complete', placeholders: 2, positions };
+  const first = { ...composite(sql,1,2), binds: block };
+  const second = { ...composite(sql,2,3), binds: { state: 'partial', placeholders: 2,
+    positions: [{ index: 1, source: 'untyped' }] } };
+  const report = summarizePerformance(snapshot([sample([event(root,1),first,second])], observation)).requests[0];
+  assert.equal(report.suspects.length, 1);
+  assert.deepEqual(report.selects[1].binds, { ...block, positions: positions.map(({value,...entry}) => entry) });
+  assert.equal(report.selects[2].binds.state, 'partial');
+  assert.doesNotMatch(JSON.stringify(report), /never-show-this/);
+  for (const binds of [
+    { ...block, placeholders: 3 },
+    { ...block, positions: [positions[0]] },
+    { ...block, positions: [positions[0], {...positions[1], index: 1}] },
+    { ...block, positions: [positions[0], {...positions[1], jdbcType: 'invented'}] }
+  ]) {
+    const invalid = summarizePerformance(snapshot([sample([event(root,1),{...first,binds},second])], observation)).requests[0];
+    assert.deepEqual(invalid.selects[1].binds, { state:'unavailable', placeholders: 2, positions: [] });
+    assert.equal(invalid.suspects.length, 1);
+  }
+  const excessive = event('select m.id from members m where m.id in ('+Array(17).fill('?').join(',')+')',1,{
+    binds: { state:'partial', placeholders:17, positions:Array.from({length:16},(_,index)=>({index:index+1,jdbcType:'BIGINT',source:'setter'})) }
+  });
+  assert.equal(summarizePerformance(snapshot([sample([excessive])],observation)).requests[0].selects[0].binds.positions.length,16);
+  assert.equal(summarize([event(root,1),first]).selects[1].binds,undefined);
+});

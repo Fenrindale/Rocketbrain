@@ -2,7 +2,13 @@
 
 const { sourceLayout } = require('../db/sql-analysis');
 
-const maxRequests = 12, maxSelects = 40, maxSql = 768;
+const maxRequests = 12, maxSelects = 40, maxSql = 768, maxBinds = 16;
+const jdbcTypes = new Set([
+  'BIT', 'TINYINT', 'SMALLINT', 'INTEGER', 'BIGINT', 'FLOAT', 'REAL', 'DOUBLE', 'NUMERIC', 'DECIMAL', 'CHAR', 'VARCHAR',
+  'LONGVARCHAR', 'DATE', 'TIME', 'TIMESTAMP', 'BINARY', 'VARBINARY', 'LONGVARBINARY', 'OTHER', 'JAVA_OBJECT', 'DISTINCT',
+  'STRUCT', 'ARRAY', 'BLOB', 'CLOB', 'REF', 'DATALINK', 'BOOLEAN', 'ROWID', 'NCHAR', 'NVARCHAR', 'LONGNVARCHAR', 'NCLOB',
+  'SQLXML', 'REF_CURSOR', 'TIME_WITH_TIMEZONE', 'TIMESTAMP_WITH_TIMEZONE'
+]);
 const safeInt = (value, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) =>
   Number.isSafeInteger(value) && minimum <= value && value <= maximum;
 const names = token => ['word', 'identifier'].includes(token?.kind) && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(token.value);
@@ -119,12 +125,33 @@ function usesCompositeCollectionKey(sql, columns) {
   return complete(found);
 }
 
-function readSelect(value, index) {
+function observedBinds(input, shape) {
+  const placeholders = shape.tokens.filter(token => token.kind === 'parameter').length;
+  const unavailable = { state: 'unavailable', placeholders, positions: [] };
+  if (!input || input.placeholders !== placeholders || !Array.isArray(input.positions) ||
+      input.positions.length > Math.min(placeholders, maxBinds) || !['complete', 'partial'].includes(input.state)) return unavailable;
+  const positions = [];
+  let last = 0;
+  for (const value of input.positions) {
+    if (!safeInt(value?.index, last + 1, Math.min(placeholders, maxBinds))) return unavailable;
+    last = value.index;
+    if (value.source === 'untyped' && value.jdbcType === undefined) positions.push({ index: last, source: 'untyped' });
+    else if (['setter', 'explicit'].includes(value.source) && jdbcTypes.has(value.jdbcType)) {
+      positions.push({ index: last, jdbcType: value.jdbcType, source: value.source });
+    } else return unavailable;
+  }
+  const complete = positions.length === placeholders && positions.every(position => position.source !== 'untyped');
+  if (input.state === 'complete' && !complete) return unavailable;
+  return { state: input.state, placeholders, positions };
+}
+
+function readSelect(value, index, withBinds) {
   if (!value || value.sequence !== index + 1 || !safeInt(value.session, 1, maxSelects) || !safeInt(value.durationMicros)) return null;
   const shape = sqlShape(value.sql);
   if (!shape) return null;
   const select = { sequence: value.sequence, session: value.session, sql: value.sql, table: shape.table,
     durationMicros: value.durationMicros };
+  if (withBinds) select.binds = observedBinds(value.binds, shape);
   if (value.collection === undefined) return select;
   const load = value.collection;
   const ownerTable = tableName(load?.ownerTable), childTable = tableName(load?.childTable), keyColumn = tableName(load?.keyColumn);
@@ -178,8 +205,10 @@ function findings(selects) {
 
 function summarizePerformance(input) {
   const enabled = input?.enabled === true, available = enabled && input.available === true;
+  const withBinds = input?.bindObservation === 'hibernate-jdbc-setters-v1';
   const report = { state: available ? 'observed' : enabled ? 'awaiting-supported-hooks' : 'disabled',
     scope: 'synchronous-spring-mvc-hibernate-selects', requests: [], omittedRequests: safeInt(input?.omittedRequests) ? input.omittedRequests : 0,
+    ...(withBinds && { bindObservation: input.bindObservation }),
     rawBindValuesRetained: false, observerExecutedSql: false };
   if (!enabled || input.scope !== 'synchronous-spring-mvc' || input.rawBindValuesRetained !== false || input.observerExecutedSql !== false ||
       !Array.isArray(input.requests) || input.requests.length > maxRequests) return report;
@@ -191,7 +220,7 @@ function summarizePerformance(input) {
     }
     const selects = value.selects.flatMap((select,index)=>{
       try {
-        const observed = readSelect(select,index);
+        const observed = readSelect(select,index,withBinds);
         return observed ? [observed] : [];
       } catch { return []; }
     });
