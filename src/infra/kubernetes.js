@@ -5,6 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { stripVTControlCharacters } = require('node:util');
+const { createHelmReleaseActions } = require('./kubernetes-helm');
 
 const maxConfigBytes = 512 * 1024;
 const maxListBytes = 1024 * 1024;
@@ -297,9 +298,17 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
           dryRun ? 'Deployment scale preview' : 'Deployment scale', 4096, externalSignal);
         if (response.trim() !== 'deployment.apps/' + name) throw Error('Could not confirm the scale result. Refresh the Deployment before retrying.');
       };
+      const helmRequest = (namespace, args, operation, limit, externalSignal) => {
+        if (!namespaceName(namespace)) throw Error('Choose a Kubernetes namespace.');
+        if (!helm) throw Error('Install Helm or set its executable to inspect releases.');
+        return call(helm, [...args, '--kubeconfig=' + configFile, '--kube-context=' + selected.name,
+          '--namespace=' + namespace], operation, limit, externalSignal);
+      };
+      const helmActions = createHelmReleaseActions(helmRequest);
       return {
         scope: { ...selected },
         close,
+        helm: helmActions,
         async namespaces(externalSignal) {
           const data = await fetchJson(undefined, ['get', 'namespaces', '-o=json', '--chunk-size=100'], 'Namespace listing', externalSignal);
           return listProjection(listRows(data), item => item?.kind === 'Namespace' && namespaceName(item.metadata?.name) ?
@@ -336,10 +345,8 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
           return { namespace, name, desired: replicas, observed: applied.uid === review.uid ? applied.replicas : null };
         },
         async releases(namespace, externalSignal) {
-          if (!namespaceName(namespace)) throw Error('Choose a Kubernetes namespace.');
-          if (!helm) throw Error('Install Helm or set its executable to list releases.');
-          const raw = await call(helm, ['list', '--kubeconfig=' + configFile, '--kube-context=' + selected.name,
-            '--namespace=' + namespace, '--output=json', '--max=' + (maxRows + 1)], 'Helm release listing', maxListBytes, externalSignal);
+          const raw = await helmRequest(namespace, ['list', '--output=json', '--max=' + (maxRows + 1)],
+            'Helm release listing', maxListBytes, externalSignal);
           const data = raw.trim() ? parseJson(raw, 'Helm release listing') : [];
           if (!Array.isArray(data)) throw Error('Helm returned an invalid release list.');
           return { ...listProjection(data, item => item?.namespace === namespace && namespaceName(item?.name) ?
