@@ -37,10 +37,11 @@ function statMatches(a,b) {
 
 async function hashArchive(artifact,{destination,expectedSha256}={}) {
   const file=artifact.file;
-  if (path.relative(file,await fsp.realpath(file))) throw fail('The WAR path changed before staging.');
+  const kind=artifact.name?.endsWith('.ear')?'EAR':'WAR';
+  if (path.relative(file,await fsp.realpath(file))) throw fail('The '+kind+' path changed before staging.');
   const stat=await fsp.lstat(file,{bigint:true});
   if (!stat.isFile() || stat.isSymbolicLink() || Number(stat.size)!==artifact.size || stat.size>BigInt(MAX_WAR_BYTES)) {
-    throw fail('The WAR artifact changed before staging. Build or select it again.');
+    throw fail('The '+kind+' artifact changed before staging. Build or select it again.');
   }
   const source=await fsp.open(file,'r');
   const hash=crypto.createHash('sha256');
@@ -48,7 +49,7 @@ async function hashArchive(artifact,{destination,expectedSha256}={}) {
     const signature=Buffer.alloc(4);
     const {bytesRead}=await source.read(signature,0,4,0);
     if (bytesRead!==4 || signature.readUInt32BE()!==0x504b0304 || !statMatches(stat,await source.stat({bigint:true}))) {
-      throw fail('Select a readable ZIP-format Maven WAR artifact.');
+      throw fail('Select a readable ZIP-format Maven '+kind+' artifact.');
     }
     const data=source.createReadStream({start:0,autoClose:false});
     if (destination) {
@@ -60,7 +61,7 @@ async function hashArchive(artifact,{destination,expectedSha256}={}) {
     const checksum=hash.digest('hex');
     if (!statMatches(stat,await source.stat({bigint:true})) || !statMatches(stat,await fsp.lstat(file,{bigint:true})) ||
         (expectedSha256!==undefined && expectedSha256!==checksum)) {
-      throw fail('The WAR artifact changed while staging. Build or select it again.');
+      throw fail('The '+kind+' artifact changed while staging. Build or select it again.');
     }
     return checksum;
   } finally { await source.close(); }

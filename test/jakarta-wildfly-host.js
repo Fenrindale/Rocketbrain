@@ -224,7 +224,7 @@ async function headless() {
   }));
 }
 
-module.exports={runJakartaWildFlyChecks,headless};
+module.exports={runJakartaWildFlyChecks,headless,withOwnedDatabase,ownedDirectory,distributionState,runtimeBases};
 if (require.main===module) headless().then(record=>console.log(JSON.stringify(record))).catch(error=>{
   console.error(error.stack);process.exitCode=1;
 });

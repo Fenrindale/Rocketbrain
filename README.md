@@ -132,6 +132,8 @@ Quarkus 설정 탐색은 중첩 `ConfigMapping` 인터페이스와 다른 소스
 
 **Review and Deploy Jakarta WAR on WildFly**는 JDK 25와 별도로 설치한 정식 WildFly 42.0.0.Final에서 검토한 Maven WAR를 실행합니다. 설치 경로와 파일 SHA-256을 확인하고 배포하면 별도 루프백 서버에서 Servlet과 Jakarta Enterprise Beans를 사용할 수 있습니다. [WildFly 로컬 배포 절차](docs/jakarta-wildfly.md)
 
+**Review and Deploy Jakarta EAR on WildFly**는 Maven에서 패키징한 WAR와 EJB JAR의 경로, 웹 컨텍스트, EAR의 SHA-256을 검토한 뒤 로컬 서버에 배포합니다. [Maven EAR 구성과 배포](docs/jakarta-wildfly.md#maven-ear)
+
 ### Micronaut Maven과 Gradle
 
 Micronaut 5 Maven JAR 모듈이나 `io.micronaut.application`과 `application.mainClass`를 명시한 Gradle 앱을 **Java Projects**로 가져옵니다. **Inspect Micronaut Application**에서 타입이 지정된 설정 키, 환경별 설정 파일, HTTP 경로와 생성자 연결의 소스를 엽니다. `application*.properties`에서 키 완성과 선언 이동을 사용하고, 단일 문서 YAML의 스칼라 키에서 선언으로 이동합니다.

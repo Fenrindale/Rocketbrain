@@ -217,6 +217,7 @@
       { "command": "rocketbrain.jakarta.status", "title": "Show Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.stop", "title": "Stop Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.wildfly.deploy", "title": "Review and Deploy Jakarta WAR on WildFly", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.jakarta.wildfly.deployEar", "title": "Review and Deploy Jakarta EAR on WildFly", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.wildfly.status", "title": "Show WildFly Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jakarta.wildfly.stop", "title": "Stop WildFly Jakarta Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.inspect", "title": "Inspect Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },

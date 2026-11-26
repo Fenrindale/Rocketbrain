@@ -8,11 +8,12 @@ const {spawn}=require('node:child_process');
 const {createHash}=require('node:crypto');
 const {pathToFileURL}=require('node:url');
 const {StringDecoder}=require('node:string_decoder');
-const yauzl=require('yauzl');
 const {independentJavaExecutable}=require('./debug-runtime');
 const {fail,cancelled}=require('./workbench-model');
 const {hashArchive}=require('./jakarta-tomcat');
-const {contextPattern}=require('./jakarta-war');
+const {contextPattern,artifactName}=require('./jakarta-war');
+const {inspectWar}=require('./jakarta-archive');
+const {inspectEar}=require('./jakarta-ear');
 
 const VERSION='42.0.0.Final';
 const SHA=/^[a-f0-9]{64}$/u;
@@ -111,41 +112,6 @@ function stagedConfiguration(bytes) {
     .replace('name="txn-status-manager" port="4713"','name="txn-status-manager" port="0"');
 }
 
-function inspectWar(file) {
-  return new Promise((resolve,reject)=>{
-    const invalid=()=>fail('Use a regular WAR without unsafe ZIP entries or a WildFly context override.');
-    yauzl.open(file,{lazyEntries:true,autoClose:true,strictFileNames:true,validateEntrySizes:true},(error,zip)=>{
-      if (error) return reject(invalid());
-      const names=new Set();
-      let expanded=0,settled=false;
-      function refuse() {
-        if (settled) return;
-        settled=true;
-        zip.close();
-        reject(invalid());
-      }
-      zip.on('error',refuse);
-      zip.on('entry',entry=>{
-        const name=entry.fileName.toLowerCase(), mode=(entry.externalFileAttributes>>>16)&0xf000;
-        expanded+=entry.uncompressedSize;
-        if (name==='web-inf/jboss-web.xml'||names.has(name)||names.size>=50000||
-            expanded>512*1024*1024||entry.uncompressedSize>128*1024*1024||
-            entry.generalPurposeBitFlag&1||![0,8].includes(entry.compressionMethod)||
-            ![0,0x4000,0x8000].includes(mode)) {refuse();return;}
-        names.add(name);
-        zip.readEntry();
-      });
-      zip.on('end',()=>{
-        if (settled) return;
-        if (!names.size) {refuse();return;}
-        settled=true;
-        resolve();
-      });
-      zip.readEntry();
-    });
-  });
-}
-
 async function removeBase(session) {
   if (!session.base) return;
   const location=await fs.realpath(session.base), identity=await fs.lstat(location,{bigint:true});
@@ -228,7 +194,8 @@ function canConnect(port) {
 function createWildFlyDeployment({log=()=>{},startupMs=100000}={}) {
   let active, disposed=false;
   const status=()=>active?{state:active.state,version:VERSION,context:active.context,artifact:active.artifact,
-    sha256:active.sha256,...(active.url?{url:active.url}:{})}:{state:'stopped'};
+    sha256:active.sha256,...(active.ear?{kind:'ear',ear:structuredClone(active.ear)}:{}),
+    ...(active.url?{url:active.url}:{})}:{state:'stopped'};
 
   function release(session) {
     if (session.release) return session.release;
@@ -269,9 +236,13 @@ function createWildFlyDeployment({log=()=>{},startupMs=100000}={}) {
       await fs.writeFile(path.join(session.base,'configuration',name),
         name==='standalone.xml'?stagedConfiguration(bytes):bytes,{flag:'wx'});
     }
-    const staged=path.join(session.base,'deployments',session.context+'.war');
+    const staged=path.join(session.base,'deployments',session.ear?artifact.name:session.context+'.war');
     await hashArchive(artifact,{destination:staged,expectedSha256:session.sha256});
-    await inspectWar(staged);
+    if (session.ear) {
+      if(JSON.stringify(await inspectEar(staged))!==JSON.stringify(session.ear)) {
+        throw fail('The reviewed EAR module descriptors changed during staging.');
+      }
+    }else await inspectWar(staged);
     await fs.writeFile(staged+'.dodeploy','',{flag:'wx'});
     if ((await inspectWildFlyRuntime(wildflyHome,javaHome)).fingerprint!==expectedRuntime) {
       throw fail('The WildFly or Java installation changed during staging.');
@@ -288,7 +259,7 @@ function createWildFlyDeployment({log=()=>{},startupMs=100000}={}) {
     const deadline=Date.now()+startupMs;
     while (Date.now()<deadline) {
       ensureStarting(session,cancellation);
-      if (await marker(staged+'.failed')) throw fail('WildFly rejected the WAR. See the Jakarta output.');
+      if (await marker(staged+'.failed')) throw fail('WildFly rejected the '+session.kind+'. See the Jakarta output.');
       if (session.boot&&session.httpPort&&session.contextRegistered&&await marker(staged+'.deployed')&&
           await canConnect(session.httpPort)) {
         await hashArchive({...artifact,file:staged},{expectedSha256:session.sha256});
@@ -299,7 +270,7 @@ function createWildFlyDeployment({log=()=>{},startupMs=100000}={}) {
       }
       await pause(150);
     }
-    throw fail('Timed out waiting for the owned WildFly server and reviewed WAR to be ready.');
+    throw fail('Timed out waiting for the owned WildFly server and reviewed '+session.kind+' to be ready.');
   }
 
   async function marker(file) {
@@ -308,13 +279,16 @@ function createWildFlyDeployment({log=()=>{},startupMs=100000}={}) {
   }
 
   async function deploy(options) {
-    const {context,artifact,expectedSha256,expectedRuntime,workspaceTrusted,allowDeploy}=options;
-    if (disposed||!workspaceTrusted||allowDeploy!==true) throw fail('Approve the local WildFly WAR deployment first.');
-    if (active) throw fail('Stop the active WildFly deployment before deploying another WAR.');
-    if (!contextPattern.test(context||'')||!artifact?.name||!SHA.test(expectedSha256||'')||!SHA.test(expectedRuntime||'')) {
-      throw fail('Review a physical Maven WAR, its digest and the selected WildFly runtime before deploying.');
+    const {context,artifact,expectedSha256,expectedRuntime,workspaceTrusted,allowDeploy,ear}=options;
+    const kind=ear?'EAR':'WAR';
+    if (disposed||!workspaceTrusted||allowDeploy!==true) throw fail('Approve the local WildFly '+kind+' deployment first.');
+    if (active) throw fail('Stop the active WildFly deployment before deploying another '+kind+'.');
+    if (!contextPattern.test(context||'')||!artifact?.name||!SHA.test(expectedSha256||'')||!SHA.test(expectedRuntime||'')||
+        (ear&&(!artifactName.test(artifact.name)||!artifact.name.endsWith('.ear')||ear.context!==context))) {
+      throw fail('Review a physical Maven '+kind+', its digest and the selected WildFly runtime before deploying.');
     }
-    const session={state:'starting',context,artifact:artifact.name,sha256:expectedSha256,loggedCharacters:0};
+    const session={state:'starting',context,artifact:artifact.name,sha256:expectedSha256,kind,
+      ear:ear&&structuredClone(ear),loggedCharacters:0};
     active=session;
     session.operation=stageAndStart(session,options);
     try {return await session.operation;}

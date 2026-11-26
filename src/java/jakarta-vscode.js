@@ -3,7 +3,7 @@
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
-const { mavenWarProject,listWarArtifacts,resolveWarArtifact,contextPattern } = require('./jakarta-war');
+const { mavenWarProject,mavenEarProject,listWarArtifacts,resolveWarArtifact,contextPattern } = require('./jakarta-war');
 const { createTomcatDeployment,reviewTomcatWarSet,MAX_APPLICATIONS } = require('./jakarta-tomcat');
 const { registerJakartaManager } = require('./jakarta-manager-vscode');
 const { registerWildFly } = require('./jakarta-wildfly-vscode');
@@ -27,20 +27,22 @@ function registerJakartaWorkbench(vscode,java) {
 
   function roots() {return workspaceRoots(vscode.workspace.workspaceFolders||[]);}
   function config() {return vscode.workspace.getConfiguration('rocketbrain.java');}
-  function projects() {
+  const packagingLabel=model=>model===mavenEarProject?'EAR':'WAR';
+
+  function projects(model=mavenWarProject) {
     return java.workbench.getSnapshot().projects.filter(project => {
-      try {workspacePath(project.root,roots());mavenWarProject(project);return true;}
+      try {workspacePath(project.root,roots());model(project);return true;}
       catch {return false;}
     });
   }
 
-  async function projectFor(uri,cancellation) {
+  async function projectFor(uri,cancellation,model=mavenWarProject) {
     trusted(cancellation);
     if (!java.workbench.getSnapshot().projects.length) await java.workbench.refresh({cancellation});
     trusted(cancellation);
     const root=workspacePath(uri,roots());
-    const project=projects().find(item => !path.relative(item.root,root));
-    if (!project) throw fail('Import the Maven WAR module in Java Projects first.');
+    const project=projects(model).find(item => !path.relative(item.root,root));
+    if (!project) throw fail('Import the Maven '+packagingLabel(model)+' module in Java Projects first.');
     return project;
   }
 
@@ -173,15 +175,15 @@ function registerJakartaWorkbench(vscode,java) {
     } finally {clearTimeout(timer);pending.delete(id);}
   }
 
-  async function chooseProject() {
+  async function chooseProject(model=mavenWarProject) {
     if (!java.workbench.getSnapshot().projects.length) await java.workbench.refresh();
     trusted();
-    const observed=projects().sort((a,b) => b.root.length-a.root.length);
+    const observed=projects(model).sort((a,b) => b.root.length-a.root.length);
     const active=vscode.window.activeTextEditor?.document.uri;
     const current=active?.scheme==='file' && observed.find(project => inside(project.root,active.fsPath));
-    if (!observed.length) throw fail('Import the Maven WAR module in Java Projects first.');
+    if (!observed.length) throw fail('Import the Maven '+packagingLabel(model)+' module in Java Projects first.');
     return current || (await vscode.window.showQuickPick(observed.map(project => ({label:project.name,project})),
-      {title:'Select Maven WAR Module'}))?.project;
+      {title:'Select Maven '+packagingLabel(model)+' Module'}))?.project;
   }
 
   function track(action) {
@@ -307,7 +309,8 @@ function registerJakartaWorkbench(vscode,java) {
     deploy:options => track(async () => (await deployWar(options)).receipt),debug:options => track(() => debug(options)),stop,
     remoteManager:{observe:options => track(() => remote.observe(options)),review:options => track(() => remote.review(options)),
       execute:options => track(() => remote.execute(options))},
-    wildfly:{review:options=>track(()=>wildfly.review(options)),deploy:options=>track(()=>wildfly.deploy(options)),
+    wildfly:{review:options=>track(()=>wildfly.review(options)),reviewEar:options=>track(()=>wildfly.reviewEar(options)),
+      deploy:options=>track(()=>wildfly.deploy(options)),
       status:wildfly.status,stop:()=>track(()=>wildfly.stop())},
     reviewSet:options => track(() => reviewSet(options)),deploySet:options => track(() => deploySet(options)),
     undeploy:options => track(() => undeploy(options)),
