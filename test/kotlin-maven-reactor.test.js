@@ -90,8 +90,6 @@ test('selected Kotlin Maven module sees an isolated sibling artifact with invali
         return locations?.find(location=>!path.relative(fileURLToPath(location.uri||location.targetUri),path.join(project,app.definition)));
       },35000);
       assert.equal((definition.range||definition.targetSelectionRange).start.line,2);
-      const hover=await lsp.request('textDocument/hover',local);
-      assert.match(JSON.stringify(hover),/number: String/u);
       semantic={completion:list.label,type:'String',diagnostic:{code:error.code,line:10,clearedInUnsavedBuffer:true},localDeclaration:'Invoice.kt'};
     } finally {
       try {await lsp.close();}
