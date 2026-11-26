@@ -42,8 +42,9 @@ function adaptSource(original, staged, references, parameters, arrayConversion) 
     }
     const names = Array.from({length:adapter.arity},freshParameter);
     const receiver = adapter.kind === 'unbound' ? names[0] : adapter.qualifier;
-    const selector = adapter.kind === 'constructor' ? 'new ' + receiver : receiver + '.' + adapter.name;
-    let args, arrayProof;
+    const typeArgument = adapter.genericProof ? '<' + adapter.genericProof.typeArgument + '>' : '';
+    const selector = adapter.kind === 'constructor' ? 'new ' + receiver : receiver + '.' + typeArgument + adapter.name;
+    let args, arrayProof, genericProof;
     if (arrayConversion) {
       const {fixedCount,component,parameterTypes,returnType}=adapter;
       const reviewed=names.map((source,index)=>({source,type:parameterTypes[index]}));
@@ -54,10 +55,18 @@ function adaptSource(original, staged, references, parameters, arrayConversion) 
         arguments:[...fixed,{source:arraySource,type:component+'[]'}]};
     } else {
       args=parameters.map(parameter=>parameter.originalIndex<0?parameter.defaultValue:names[adapter.receiver+parameter.originalIndex]);
+      if (adapter.genericProof) {
+        const {parameterTypes, returnType} = adapter.genericProof;
+        const reordered = parameters.map(({originalIndex,type}) => {
+          if (originalIndex >= 0) return parameterTypes[originalIndex];
+          return ['String','Object'].includes(type) ? 'java.lang.'+type : type;
+        });
+        genericProof = {returnType,parameterTypes:reordered};
+      }
     }
     const header = '(' + names.join(', ') + ') -> ';
     const call = selector + '(' + args.join(', ') + ')';
-    edits.push({start,end,header,call,reference,arrayProof});
+    edits.push({start,end,header,call,reference,arrayProof,genericProof});
   }
 
   let text = '', cursor = 0;
@@ -66,7 +75,8 @@ function adaptSource(original, staged, references, parameters, arrayConversion) 
     text += staged.slice(cursor,edit.start);
     const lambdaStart = text.length, callStart = lambdaStart + edit.header.length;
     text += edit.header + edit.call;
-    adapters.push({...edit.reference,lambdaStart,callStart,callEnd:text.length,arrayProof:edit.arrayProof});
+    adapters.push({...edit.reference,lambdaStart,callStart,callEnd:text.length,
+      arrayProof:edit.arrayProof,genericProof:edit.genericProof});
     cursor = edit.end;
   }
   return {text:text+staged.slice(cursor),adapters};
@@ -101,6 +111,13 @@ function verifyReferenceAdapters(before, after, adapters, mapping) {
     if (calls.length !== 1 || calls[0].methodKey !== binding(entry.methodKey) ||
         lambdas.length !== 1 || lambdas[0].targetType !== entry.targetType) {
       throw Error('The method reference adapter changed its overload or functional interface binding.');
+    }
+    if (entry.genericProof) {
+      const actual = calls[0].instantiatedCall, {parameterTypes,returnType} = entry.genericProof;
+      if (!actual || actual.returnType !== returnType || calls[0].resultType !== returnType ||
+          JSON.stringify(actual.parameterTypes) !== JSON.stringify(parameterTypes)) {
+        throw Error('The generic reference adapter changed the instantiated parameter or return types.');
+      }
     }
     if (entry.arrayProof) {
       const proof=entry.arrayProof, actual=calls[0].arityConversion;

@@ -612,6 +612,8 @@ public final class SignatureInspector {
                             if (!varargs.isEmpty()) report.put("varargs",varargs);
                         }
                         if (!constructor && executable.getModifiers().contains(Modifier.PRIVATE) && trees.getPath(executable) != null) {
+                            var instantiated = SignatureReferences.instantiatedCall(getCurrentPath(),executable,trees);
+                            if (instantiated != null) report.put("instantiatedCall",instantiated);
                             var consumer = SignatureReturn.consumer(tree,getCurrentPath(),trees,text);
                             if (!consumer.isEmpty()) report.put("returnConsumer",consumer);
                             var arity = VarargsCalls.conversion(getCurrentPath(),executable,trees,types,text);

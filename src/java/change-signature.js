@@ -99,7 +99,7 @@ function inspectSemanticFamily(before,uri,nameStart){
  const convertArity=inspectArityConversion(family,calls,methodReferences);
  const varargs=inspectVarargsFamily(family,calls,methodReferences,{optional:Boolean(convertArity)});
  if(methodReferences.length>40||(!convertArity&&methodReferences.some(reference=>!reference.adapter))||
-    (methodReferences.length&&family.some(method=>method.ownerKind==='INTERFACE'||method.generic)))
+    (methodReferences.length&&family.some(method=>method.ownerKind==='INTERFACE')))
   throw new Error('Method or constructor references need additional signature adaptation analysis.');
  if(calls.length>200||(!varargs&&!convertArity&&calls.some(call=>!call.safeArguments)))throw new Error('Caller expressions with evaluation effects need additional ordering analysis; use literal or local-name arguments.');
  return {family,keys,calls,methodReferences,varargs,convertArity};
