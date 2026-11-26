@@ -69,7 +69,7 @@ async function populateVarargs(root, classpathFile, engine) {
   return populateSignatureReferences(root, await springJdbcClasspath(classpathFile, engine), sources);
 }
 
-async function runVarargsSpring({ javaHome, root, classes, database, engine, classpathFile }) {
+async function runVarargsSpring({ javaHome, root, classes, database, engine, classpathFile, units = sources, expectedResult = expected }) {
   assert.ok(['mysql', 'mariadb'].includes(engine));
   assert.equal(database.host, '127.0.0.1');
   assert.ok(Number.isInteger(database.port) && database.port > 0 && database.port < 65536);
@@ -83,7 +83,7 @@ async function runVarargsSpring({ javaHome, root, classes, database, engine, cla
   env.RB_VARARGS_JDBC_USER = database.user;
   env.RB_VARARGS_JDBC_PASSWORD = database.password;
   const compiled = await execute(binary('javac'), ['-proc:none', '-encoding', 'UTF-8', '-classpath', dependencies.join(path.delimiter),
-    '-d', classes, ...[...sources.keys()].map(source => path.join(root, source))], { env, cwd: root, timeoutMs: 30000 });
+    '-d', classes, ...[...units.keys()].map(source => path.join(root, source))], { env, cwd: root, timeoutMs: 30000 });
   assert.equal(compiled.code, 0, compiled.output);
   const run = await execute(binary('java'), ['-classpath', [classes, ...dependencies].join(path.delimiter),
     'fixture.sigvarargs.VarargsClient'], { env, cwd: root, timeoutMs: 30000 });
@@ -91,7 +91,7 @@ async function runVarargsSpring({ javaHome, root, classes, database, engine, cla
   const parts = /^RB_VARARGS=([^|\r\n]+)\|([^\r\n]+)$/mu.exec(run.output);
   assert.ok(parts, run.output);
   assert.match(parts[1], engine === 'mysql' ? /^8\.4\.13$/u : /^11\.4\.8.*MariaDB/u);
-  assert.equal(parts[2], expected);
+  assert.equal(parts[2], expectedResult);
   return { engine, server: parts[1], output: parts[2] };
 }
 

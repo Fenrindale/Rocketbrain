@@ -6,6 +6,7 @@ const {analyzeJavaSources}=require('./signature-compiler');
 const {analyzeSpringContracts,inspectSpringMethodContract}=require('./spring-contract-analysis');
 const {adaptSignatureReferences,verifyReferenceAdapters}=require('./change-signature-references');
 const {inspectVarargsFamily,verifyVarargsPermutation,verifyVarargsCalls}=require('./change-signature-varargs');
+const {inspectArityConversion,arityChange,prepareArityEdits,verifyArityCalls}=require('./change-signature-arity');
 const {checkedThrowsOption,checkedThrowsChange,verifyCheckedThrowsEdits}=require('./change-signature-throws');
 const {eligibleNarrowing,narrowedReturnChange,verifyNarrowedReturnEdits,verifyNarrowedDeclaration,verifyNarrowedCallers}=require('./change-signature-return');
 const {nestedAccessAnchor,bindNestedAccess,accessChange,verifyPrivateEdit}=require('./change-signature-access');
@@ -95,18 +96,19 @@ function inspectSemanticFamily(before,uri,nameStart){
  if(before.externalOverrides.some(key=>keys.has(key)))throw new Error('The selected family overrides an external binary contract; its complete source family is unavailable.');
  const calls=before.calls.filter(call=>keys.has(call.methodKey));
  const methodReferences=before.methodReferences.filter(reference=>keys.has(reference.methodKey));
- const varargs=inspectVarargsFamily(family,calls,methodReferences);
+ const convertArity=inspectArityConversion(family,calls,methodReferences);
+ const varargs=inspectVarargsFamily(family,calls,methodReferences,{optional:Boolean(convertArity)});
  if(methodReferences.length>40||methodReferences.some(reference=>!reference.adapter)||
     methodReferences.length&&family.some(method=>method.ownerKind==='INTERFACE'||method.generic))
   throw new Error('Method or constructor references need additional signature adaptation analysis.');
- if(calls.length>200||!varargs&&calls.some(call=>!call.safeArguments))throw new Error('Caller expressions with evaluation effects need additional ordering analysis; use literal or local-name arguments.');
- return {family,keys,calls,methodReferences,varargs};
+ if(calls.length>200||(!varargs&&!convertArity&&calls.some(call=>!call.safeArguments)))throw new Error('Caller expressions with evaluation effects need additional ordering analysis; use literal or local-name arguments.');
+ return {family,keys,calls,methodReferences,varargs,convertArity};
 }
 function editedSources(sources,targets){
  const keyFor=uri=>{const file=path.resolve(require('node:url').fileURLToPath(uri));return process.platform==='win32'?file.toLowerCase():file;},changes=new Map();for(const [uri,edits]of targets){const key=keyFor(uri);changes.set(key,[...(changes.get(key)||[]),...edits]);}
  return sources.map(source=>{const edits=changes.get(keyFor(source.uri));if(!edits)return source;const values=edits.map(edit=>{if(typeof edit.newText!=='string')throw new Error('The Java engine returned an invalid text edit.');const start=offset(source.text,edit.range?.start),end=offset(source.text,edit.range?.end);if(end<start)throw new Error('The Java engine returned a reversed text edit.');return {start,end,text:edit.newText};}).sort((a,b)=>b.start-a.start||b.end-a.end);let text=source.text,last=source.text.length;for(const edit of values){if(edit.end>last)throw new Error('The Java engine returned overlapping signature edits.');text=text.slice(0,edit.start)+edit.text+text.slice(edit.end);last=edit.start;}return {...source,text};});
 }
-function verifySemanticChange(semantic,after,parameters,adapters=[],{checkedThrows,narrowedReturn,visibility,parameterRename}={}){
+function verifySemanticChange(semantic,after,parameters,adapters=[],{checkedThrows,narrowedReturn,visibility,parameterRename,conversion}={}){
  if(after.errors.length)throw new Error('Signature conflict: '+after.errors[0].message);
  const canonical=type=>['String','Object'].includes(type)?'java.lang.'+type:type,mapping=new Map(semantic.family.map(method=>[method.key,method.owner+'#'+(method.constructor?'<init>':method.name)+'('+parameters.map(p=>p.originalIndex<0?canonical(p.type):method.parameters[p.originalIndex]?.type).join(',')+')']));
  if(new Set(mapping.values()).size!==mapping.size)throw new Error('Signature collision in the reviewed source family.');
@@ -119,8 +121,9 @@ function verifySemanticChange(semantic,after,parameters,adapters=[],{checkedThro
   const returnType=narrowed?narrowedReturn.after:prior?.returnType;
   const makePrivate=visibility&&prior?.key===visibility.member.key;
   const modifiers=makePrivate?[...prior.modifiers,'private'].sort():prior?.modifiers;
+  const varargs=conversion&&prior?.key===conversion.key?false:prior?.varargs;
   if(makePrivate&&method.hiddenAccessNest!==prior.hiddenAccessNest)throw Error('The method no longer belongs to the verified Java nest.');
-  if(!prior||prior.uri!==method.uri||returnType!==method.returnType||prior.varargs!==method.varargs||JSON.stringify(throwsTypes)!==JSON.stringify(method.throwsTypes)||JSON.stringify(modifiers)!==JSON.stringify(method.modifiers)||['annotations','typeParameters','ownerTypeParameters','ownerSupertypes'].some(key=>JSON.stringify(prior[key])!==JSON.stringify(method[key])))throw new Error('The engine changed an unreviewed declaration contract: '+method.key+' ('+(!prior?'unexpected binding':JSON.stringify({before:[prior.uri,prior.returnType,prior.throwsTypes,prior.modifiers],after:[method.uri,method.returnType,method.throwsTypes,method.modifiers]}))+').');
+  if(!prior||prior.uri!==method.uri||returnType!==method.returnType||varargs!==method.varargs||JSON.stringify(throwsTypes)!==JSON.stringify(method.throwsTypes)||JSON.stringify(modifiers)!==JSON.stringify(method.modifiers)||['annotations','typeParameters','ownerTypeParameters','ownerSupertypes'].some(key=>JSON.stringify(prior[key])!==JSON.stringify(method[key])))throw new Error('The engine changed an unreviewed declaration contract: '+method.key+' ('+(!prior?'unexpected binding':JSON.stringify({before:[prior.uri,prior.returnType,prior.throwsTypes,prior.modifiers],after:[method.uri,method.returnType,method.throwsTypes,method.modifiers]}))+').');
   if(semantic.keys.has(prior.key)){
    const names=parameters.map(p=>p.originalIndex<0||parameterRename?.originalIndex===p.originalIndex?p.name:prior.parameters[p.originalIndex].name);
    if(JSON.stringify(method.parameters.map(p=>p.name))!==JSON.stringify(names))throw new Error('The engine changed the reviewed parameter order or names.');
@@ -133,7 +136,11 @@ function verifySemanticChange(semantic,after,parameters,adapters=[],{checkedThro
  const remainingCalls=verifyReferenceAdapters(semantic.before,after,adapters,mapping);
  if(JSON.stringify(fingerprint(semantic.before.calls,true))!==JSON.stringify(fingerprint(remainingCalls,false)))throw new Error('The signature edit changes overload resolution or an unrelated caller binding.');
  if(narrowedReturn)verifyNarrowedCallers(semantic.before.calls,remainingCalls,narrowedReturn);
- verifyVarargsCalls(semantic,remainingCalls,parameters,mapping);
+ if(conversion)verifyArityCalls(semantic,remainingCalls,conversion);
+ else verifyVarargsCalls(semantic,remainingCalls,parameters,mapping);
+}
+function describeArity({componentType,spreadCalls,fixedArrayCalls}){
+ return {from:'varargs',to:'array',componentType,spreadCalls,fixedArrayCalls};
 }
 function registerJavaChangeSignature(context,vscode,{request,refactoring,getJavaHome}={}){
  const infos=new Map(),operations=new Set();let closed=false;
@@ -184,22 +191,26 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
   for(const saved of documents.values()){const tokens=lexJava(saved.text).tokens;if(tokens.some(t=>(t.kind==='string'||t.kind==='text-block')&&typeof t.value==='string'&&t.value.includes(signature.methodName)))throw new Error('A known string or reflection reference needs a separate contract review.');}
   for(const [id,saved]of infos)if(Date.now()>saved.expiresAt)infos.delete(id);while(infos.size>=10)infos.delete(infos.keys().next().value);
   scope.validate();const id=crypto.randomUUID(),record={id,signature:structuredClone(signature),target,params,anchor,scope,semantic,documents:[...documents.values()],references:semantic?semantic.calls.length+semantic.methodReferences.length:references.length,expiresAt:Date.now()+120000};infos.set(id,record);
-  const checkedThrows=checkedThrowsOption(semantic,target,signature),narrowedReturn=eligibleNarrowing(semantic,target,signature);
+  const arityOnly=semantic?.convertArity&&!semantic.varargs;
+  const checkedThrows=!arityOnly&&checkedThrowsOption(semantic,target,signature),narrowedReturn=!arityOnly&&eligibleNarrowing(semantic,target,signature);
   const visibility=target.accessOnly?accessChange(record,'private'):undefined;
-  const parameterRename=parameterRenameOption(semantic,target,signature);
-  return {id,...structuredClone(signature),...(checkedThrows&&{checkedThrows}),...(narrowedReturn&&{returnNarrowing:{before:narrowedReturn.before}}),...(visibility&&{visibilityChange:{before:visibility.before,after:visibility.after}}),...(parameterRename&&{parameterRename}),references:record.references,adaptableMethodReferences:semantic?.methodReferences.length||0,...(semantic?.varargs&&{varargs:structuredClone(semantic.varargs)}),familyDeclarations:semantic?.family.length||1,genericContractsVerified:!!semantic?.family.some(method=>method.generic),expiresAt:record.expiresAt,scope:semantic?'Compiler-resolved source families, exact direct callers and supported Java method reference adapters within this project.':'Plain non-polymorphic source declarations and resolved direct callers; framework, reflection, external binaries and advanced Java contracts are not verified.'};
+  const parameterRename=!arityOnly&&parameterRenameOption(semantic,target,signature);
+  return {id,...structuredClone(signature),...(checkedThrows&&{checkedThrows}),...(narrowedReturn&&{returnNarrowing:{before:narrowedReturn.before}}),...(visibility&&{visibilityChange:{before:visibility.before,after:visibility.after}}),...(parameterRename&&{parameterRename}),references:record.references,adaptableMethodReferences:semantic?.methodReferences.length||0,...(semantic?.varargs&&{varargs:structuredClone(semantic.varargs)}),...(semantic?.convertArity&&{arityConversion:describeArity(semantic.convertArity)}),familyDeclarations:semantic?.family.length||1,genericContractsVerified:!!semantic?.family.some(method=>method.generic),expiresAt:record.expiresAt,scope:semantic?'Compiler-resolved source families, exact direct callers and supported Java method reference adapters within this project.':'Plain non-polymorphic source declarations and resolved direct callers; framework, reflection, external binaries and advanced Java contracts are not verified.'};
  }
  async function preview(id,changes,{cancellation}={}){
   trusted(cancellation);const record=infos.get(id);if(!record||Date.now()>record.expiresAt)throw new Error('The signature inspection expired. Inspect it again.');fresh(record.documents,cancellation);record.scope.validate();record.semantic?.validate();
-  if(!changes||Object.keys(changes).length!==1)throw Error('Review either an ordered parameters list, one family parameter name, a checked throws list, one reference return type or one access change.');
+  if(!changes||Object.keys(changes).length!==1)throw Error('Review one parameter, checked exception, return type, access or varargs declaration change.');
+  const conversion=Object.hasOwn(changes,'arity')?arityChange(record.semantic,changes.arity):undefined;
+  if(!conversion&&record.semantic?.convertArity&&!record.semantic.varargs)throw Error('Only the reviewed array conversion is available for this varargs signature.');
   const checkedThrows=Object.hasOwn(changes,'throws')?checkedThrowsChange(record,changes.throws):undefined;
   const narrowedReturn=Object.hasOwn(changes,'returnType')?narrowedReturnChange(record,changes.returnType):undefined;
   const visibility=Object.hasOwn(changes,'visibility')?accessChange(record,changes.visibility):undefined;
   if(record.target.accessOnly&&!visibility)throw Error('Choose the reviewed access change for this nested method.');
   const parameterRename=Object.hasOwn(changes,'renameParameter')?parameterRenameChange(record,changes.renameParameter,identifier):undefined;
-  const parameters=checkedThrows||narrowedReturn||visibility||parameterRename?structuredClone(record.signature.parameters):[];
+  const parameters=checkedThrows||narrowedReturn||visibility||parameterRename||conversion?structuredClone(record.signature.parameters):[];
   if(parameterRename)parameters[parameterRename.originalIndex].name=parameterRename.name;
-  if(!checkedThrows&&!narrowedReturn&&!visibility&&!parameterRename){
+  if(conversion)parameters.at(-1).type=parameters.at(-1).type.replace(/\.\.\.$/u,'[]');
+  if(!checkedThrows&&!narrowedReturn&&!visibility&&!parameterRename&&!conversion){
    if(!Array.isArray(changes.parameters)||changes.parameters.length>30)throw Error('Review an ordered parameters list.');
    const indices=new Set(),names=new Set();
    for(const input of changes.parameters){if(!input||Object.keys(input).some(k=>!['originalIndex','name','type','defaultValue'].includes(k))||!Number.isInteger(input.originalIndex)||input.originalIndex< -1||input.originalIndex>=record.signature.parameters.length||!identifier(input.name)||names.has(input.name)||typeof input.type!=='string'||input.originalIndex<0&&!SIMPLE_TYPES.has(input.type))throw new Error('Parameter indices, names or types are invalid or duplicated.');names.add(input.name);
@@ -215,7 +226,8 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
   // In pinned JDT LS 1.63 this last flag only wraps edits in blanket confirmation
   // annotations. Rocketbrain performs its own complete diff and modal review.
   // It does not bypass the engine's initial/final refactoring checks.
-  const s=record.signature,response=await send('java/getRefactorEdit',{command:'changeSignature',context:record.params,commandArguments:[s.methodIdentifier,false,s.methodName,visibility?.after||s.modifier,narrowedReturn?.after||s.returnType,parameters,checkedThrows?.exceptions||s.exceptions,false]},cancellation);fresh(record.documents,cancellation);
+  const s=record.signature,response=conversion ? {edit:prepareArityEdits(record,conversion,positionAt)} :
+   await send('java/getRefactorEdit',{command:'changeSignature',context:record.params,commandArguments:[s.methodIdentifier,false,s.methodName,visibility?.after||s.modifier,narrowedReturn?.after||s.returnType,parameters,checkedThrows?.exceptions||s.exceptions,false]},cancellation);fresh(record.documents,cancellation);
   if(!response||response.errorMessage||response.confirmationToken||response.command||!response.edit)throw new Error(response?.errorMessage||'The Java engine refused the change or requires an unsupported interaction.');
   const expectedTargets=new Set(record.documents.map(saved=>fileKey(local(saved.uri).fsPath))),anchorKey=fileKey(record.anchor.document.uri.fsPath),targets=Object.entries(response.edit.changes||{});let declarationEdited=false;
   for(const change of response.edit.documentChanges||[]){if(!change.textDocument||!Array.isArray(change.edits))throw new Error('Signature edits may only change the inspected declaration and direct source callers.');targets.push([change.textDocument.uri,change.edits]);}
@@ -248,13 +260,13 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
     }
    }
    const after=await analyzeJavaSources({...record.semantic.compilerOptions,cancellation,sources});
-   fresh(record.documents,cancellation);record.scope.validate();record.semantic.validate();verifySemanticChange(record.semantic,after,parameters,adapters,{checkedThrows,narrowedReturn,visibility,parameterRename});
+   fresh(record.documents,cancellation);record.scope.validate();record.semantic.validate();verifySemanticChange(record.semantic,after,parameters,adapters,{checkedThrows,narrowedReturn,visibility,parameterRename,conversion});
    if(parameterEdits){
     await verifyParameterEdits(record,parameterRename,parameterEdits,sources,cancellation);
     fresh(record.documents,cancellation);record.scope.validate();record.semantic.validate();
    }
   }
-  const validate=()=>{fresh(record.documents,cancellation);record.scope.validate();record.semantic?.validate();},plan=await refactoring.previewWorkspaceEdit(edit,{title:(checkedThrows?'Change Checked Exceptions':narrowedReturn?'Narrow Return Type':visibility?'Make Method Private':parameterRename?'Rename Family Parameter':'Change Signature')+' · '+s.methodName,kind:'refactor.rewrite.changeSignature',anchorDocument:record.anchor.document,cancellation,guards:record.documents.map(({uri,version,hash,diskHash})=>({uri,version,hash,diskHash})),validate,preApply:validate});validate();infos.delete(id);return {...plan,signature:{methodName:s.methodName,before:structuredClone(s.parameters),after:parameters,...(checkedThrows&&{checkedThrows:{before:checkedThrows.before,after:checkedThrows.after,verified:true}}),...(narrowedReturn&&{returnNarrowing:{before:narrowedReturn.before,after:narrowedReturn.after,verified:true}}),...(visibility&&{visibilityChange:{before:visibility.before,after:visibility.after,verified:true}}),...(parameterRename&&{parameterRename:{originalIndex:parameterRename.originalIndex,after:parameterRename.name,before:parameterRename.declarations,declarations:record.semantic.family.length,references:parameterEdits.references,javadoc:parameterEdits.javadoc,providerSpans:parameterEdits.providerSpans,verified:true}}),resolvedReferences:record.references,adaptedMethodReferences:adapters.length,...(record.semantic?.varargs&&{varargs:{...record.semantic.varargs,verified:true}}),contractFiles:record.scope.files,familyDeclarations:record.semantic?.family.length||1,overloadBindingsVerified:!!record.semantic,genericContractsVerified:!!record.semantic?.family.some(method=>method.generic)},limitations:['Only the reviewed project source callers are covered.','Computed reflection and external binary callers require a separate review.']};
+  const validate=()=>{fresh(record.documents,cancellation);record.scope.validate();record.semantic?.validate();},plan=await refactoring.previewWorkspaceEdit(edit,{title:(conversion?'Convert Varargs to Array':checkedThrows?'Change Checked Exceptions':narrowedReturn?'Narrow Return Type':visibility?'Make Method Private':parameterRename?'Rename Family Parameter':'Change Signature')+' · '+s.methodName,kind:'refactor.rewrite.changeSignature',anchorDocument:record.anchor.document,cancellation,guards:record.documents.map(({uri,version,hash,diskHash})=>({uri,version,hash,diskHash})),validate,preApply:validate});validate();infos.delete(id);return {...plan,signature:{methodName:s.methodName,before:structuredClone(s.parameters),after:parameters,...(conversion&&{arityConversion:{...describeArity(conversion),verified:true}}),...(checkedThrows&&{checkedThrows:{before:checkedThrows.before,after:checkedThrows.after,verified:true}}),...(narrowedReturn&&{returnNarrowing:{before:narrowedReturn.before,after:narrowedReturn.after,verified:true}}),...(visibility&&{visibilityChange:{before:visibility.before,after:visibility.after,verified:true}}),...(parameterRename&&{parameterRename:{originalIndex:parameterRename.originalIndex,after:parameterRename.name,before:parameterRename.declarations,declarations:record.semantic.family.length,references:parameterEdits.references,javadoc:parameterEdits.javadoc,providerSpans:parameterEdits.providerSpans,verified:true}}),resolvedReferences:record.references,adaptedMethodReferences:adapters.length,...(!conversion&&record.semantic?.varargs&&{varargs:{...record.semantic.varargs,verified:true}}),contractFiles:record.scope.files,familyDeclarations:record.semantic?.family.length||1,overloadBindingsVerified:!!record.semantic,genericContractsVerified:!!record.semantic?.family.some(method=>method.generic)},limitations:['Only the reviewed project source callers are covered.','Computed reflection and external binary callers require a separate review.']};
  }
  function tracked(fn){return(...args)=>{const operation=fn(...args);operations.add(operation);void operation.finally(()=>operations.delete(operation)).catch(()=>{});return operation;};}
  const command=vscode.commands.registerCommand('rocketbrain.java.changeSignature',async()=>{
@@ -263,16 +275,19 @@ function registerJavaChangeSignature(context,vscode,{request,refactoring,getJava
    if(!editor)throw Error('Select a Java method declaration.');
    const discovered=await api.info(editor.document,editor.selection);
    if(discovered.visibilityChange)return await refactoring.review(await api.preview(discovered.id,{visibility:'private'}));
-   let change='parameters';
-   const choices=[{label:'Change Parameters',change:'parameters'}];
+   const choices=[];
+   if(!discovered.arityConversion||discovered.varargs)choices.push({label:'Change Parameters',change:'parameters'});
+   if(discovered.arityConversion)choices.push({label:'Convert Varargs to Array',change:'arity'});
    if(discovered.parameterRename)choices.push({label:'Rename Family Parameter',change:'renameParameter'});
    if(discovered.checkedThrows)choices.push({label:'Change Checked Exceptions',change:'throws'});
    if(discovered.returnNarrowing)choices.push({label:'Narrow Return Type',change:'returnType'});
+   let change=choices[0].change;
    if(choices.length>1){
     const selected=await vscode.window.showQuickPick(choices,{placeHolder:'Choose which part of the Java signature to change'});
     if(!selected)return;
     change=selected.change;
    }
+   if(change==='arity')return await refactoring.review(await api.preview(discovered.id,{arity:'array'}));
    if(change==='renameParameter'){
     const selected=await vscode.window.showQuickPick(discovered.parameterRename.slots.map(slot=>({
      label:slot.name,description:slot.type,detail:slot.declarations.map(item=>item.owner+': '+item.name).join(', '),slot
