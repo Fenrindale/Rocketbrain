@@ -78,6 +78,7 @@ async function runJvmLongStringChecks(api, vscode, checks) {
       }
     }
     checks.jvmLongStrings = { debugBuild: JVM_STRING_PAGE_BUILD, command: true, languages };
+    return checks.jvmLongStrings;
   } finally {
     assert.equal(await fs.realpath(project), project);
     assert.equal(path.dirname(project), root);
