@@ -3,6 +3,8 @@
 const { createHash, randomUUID } = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { captureDirectory } = require('../remote/directory-snapshot');
+const { parseCollection, properties } = require('./webdav-inventory');
 
 const MAX_FILES = 20;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -60,10 +62,10 @@ async function readLocal(root, relative) {
   } finally { await file.close(); }
 }
 
-async function remoteBytes(response) {
-  if (Number(response.headers.get('content-length')) > MAX_FILE_BYTES) {
+async function remoteBytes(response, limit = MAX_FILE_BYTES) {
+  if (Number(response.headers.get('content-length')) > limit) {
     await response.body?.cancel();
-    throw Error('The remote file exceeds 2 MiB.');
+    throw Error('The remote WebDAV response exceeds its size limit.');
   }
   if (!response.body) return Buffer.alloc(0);
   const reader = response.body.getReader(), chunks = [];
@@ -73,7 +75,7 @@ async function remoteBytes(response) {
       const {done,value}=await reader.read();
       if (done) return Buffer.concat(chunks,count);
       count += value.byteLength;
-      if (count > MAX_FILE_BYTES) throw Error('The remote file exceeds 2 MiB.');
+      if (count > limit) throw Error('The remote WebDAV response exceeds its size limit.');
       chunks.push(Buffer.from(value));
     }
   } finally { await reader.cancel().catch(()=>{}); reader.releaseLock(); }
@@ -99,6 +101,32 @@ function createWebDavDeployment({ fetcher=fetch, isTrusted=()=>true }={}) {
     if (response.status !== 200) { await response.body?.cancel();throw Error('WebDAV could not read the path (HTTP '+response.status+').'); }
     const bytes = await remoteBytes(response);
     return { bytes, sha256:hash(bytes), etag:response.headers.get('etag') };
+  }
+
+  async function snapshot(input, { signal } = {}) {
+    guard();
+    const profile = deploymentProfile(input);
+    if (profile.url.protocol !== 'https:' && !['127.0.0.1', '[::1]'].includes(profile.url.hostname)) {
+      throw Error('Use HTTPS for a remote WebDAV change review.');
+    }
+    const collection = async () => {
+      const response = await send(profile, null, 'PROPFIND', {
+        headers: { Depth: '1', 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'no-cache' },
+        body: properties, signal,
+      });
+      if (response.status !== 207) {
+        await response.body?.cancel();
+        throw Error('WebDAV could not inspect the selected directory (HTTP ' + response.status + ').');
+      }
+      return parseCollection(await remoteBytes(response, 256 * 1024), profile.url);
+    };
+    const result = await captureDirectory(collection, async row => {
+      const file = await remote(profile, row.name, signal);
+      if (strongTag(row.tag) && (file?.etag !== row.tag)) throw Error('The WebDAV file validator changed during review.');
+      return file;
+    }, { excluded: name => profile.exclusions.some(rule => path.posix.matchesGlob(name, rule)), signal });
+    guard();
+    return { ...result, identity: ['webdav', profile.url.href, input.user ?? '', profile.exclusions] };
   }
 
   async function prepare(input,{signal}={}) {
@@ -194,7 +222,7 @@ function createWebDavDeployment({ fetcher=fetch, isTrusted=()=>true }={}) {
     } finally {applying=false;}
   }
 
-  return {prepare,compare,apply,dispose() {disposed=true;plans.clear();}};
+  return {prepare,compare,apply,snapshot,dispose() {disposed=true;plans.clear();}};
 }
 
 module.exports = { createWebDavDeployment };

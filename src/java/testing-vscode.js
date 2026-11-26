@@ -16,7 +16,7 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
   const history=createTestHistory(context.workspaceState),historyView=registerTestHistoryView(vscode,{history,trusted,replay:replayHistory});
   subscriptions.push(historyView);
   const itemId=(project,id)=>JSON.stringify([project.id,id]);
-  const snapshot=()=>({state:disposed?'closed':busy?'running':dirty?'stale':'ready',projects:[...projects.values()].map(p=>({id:p.id,label:p.label,workspace:p.workspace,framework:p.framework||'junit'})),tests:[...items.values()].map(({data,item,project})=>({...data,nativeId:item.id,projectId:project.id,framework:project.framework||'junit'})),lastReport:lastReport?structuredClone(lastReport):null});
+  const snapshot=()=>({state:disposed?'closed':busy?'running':dirty?'stale':'ready',projects:[...projects.values()].map(p=>({id:p.id,label:p.label,workspace:p.workspace,framework:p.framework||'junit',...(p.testModule?{testModule:p.testModule}:{})})),tests:[...items.values()].map(({data,item,project})=>({...data,nativeId:item.id,projectId:project.id,framework:project.framework||'junit'})),lastReport:lastReport?structuredClone(lastReport):null});
   function markDirty(){generation++;dirty=true;}
   function upsert(project,data){
     if(!data||typeof data.id!=='string')return;
@@ -44,11 +44,25 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
     try{
       const unsaved=vscode.workspace.textDocuments.filter(d=>d.languageId==='java'&&d.isDirty);
       if(unsaved.length)throw new Error('Save Java sources before discovering compiled tests: '+unsaved.slice(0,3).map(d=>path.basename(d.uri.fsPath||d.uri.toString())).join(', '));
-      if(options.build!==false&&java?.buildWorkspace)await bounded(token=>java.buildWorkspace(token,{refreshTestSources:true}),cancellation);
+      const configured=options.projects||vscode.workspace.getConfiguration('rocketbrain.java.testing').get('projects',[]);
+      const prebuiltModules=Array.isArray(configured)&&configured.length>0&&configured.every(project=>project?.testModule);
+      if(options.build!==false&&!prebuiltModules&&java?.buildWorkspace)await bounded(token=>java.buildWorkspace(token,{refreshTestSources:true}),cancellation);
       const resolved=await bounded(token=>resolveTestingProjects(context,vscode,java,options.projects,token),cancellation);
       assertSaved(resolved);trusted();
       const results=[];
-      for(const project of resolved){trusted();const result=await engine().discoverTests(project,{cancellation:cancellation.token});if(result.state==='cancelled'||cancellation.token.isCancellationRequested)throw new Error('Java test discovery cancelled.');if(result.state!=='completed')throw new Error(result.errors?.[0]?.message||'Java test discovery did not complete. Check the runner output.');results.push({project,result});}
+      for(const project of resolved){
+        trusted();
+        const result=await engine().discoverTests(project,{cancellation:cancellation.token});
+        if(result.state==='cancelled'||cancellation.token.isCancellationRequested)throw new Error('Java test discovery cancelled.');
+        if(result.state!=='completed')throw new Error(result.errors?.[0]?.message||'Java test discovery did not complete. Check the runner output.');
+        if(project.testModule){
+          if(result.module?.name!==project.testModule||!/^[a-f0-9]{64}$/.test(result.module.fingerprint||'')){
+            throw new Error('Java test discovery did not confirm the configured test module.');
+          }
+          project.moduleReview=result.module.fingerprint;
+        }
+        results.push({project,result});
+      }
       if(generation!==before||cancellation.token.isCancellationRequested)throw new Error('Java sources or configuration changed during discovery. Discover again.');trusted();
       if(results.reduce((count,value)=>count+(value.result.tests?.length||0),0)>15000)throw new Error('The native test tree is limited to 15000 entries. Narrow the project configuration.');
       controller.items.replace([]);items.clear();projects.clear();
@@ -116,7 +130,10 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
   async function execute(request={},token,options={}){
     trusted();
     if(options.debug&&(options.coverage||options.perTestCoverage))throw new Error('Use separate test debugging and coverage profiles.');
-    if(dirty||options.projects)await discover({projects:options.projects,build:options.build,cancellation:token});
+    // A refresh can pair old compiled classes with newly saved sources. Run an
+    // existing named selection against its previous discovery instead.
+    const reviewedModule=dirty&&[...selectedProjects(request).keys()].some(project=>project.testModule);
+    if(options.projects||dirty&&!reviewedModule)await discover({projects:options.projects,build:options.build,cancellation:token});
     if(busy)throw new Error('Wait for the current Java test operation or cancel it.');
     assertSaved([...projects.values()]);
     const historySelection=options.historySelection;
@@ -166,12 +183,12 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
         };
         for(const record of items.values())if(record.project===project&&record.data.kind==='test'&&(!selectors||selectors.some(s=>within(record.data.id,s.value)))&&!excludes.some(s=>within(record.data.id,s.value))){run.enqueued(record.item);pendingItems.set(record.item.id,record.item);}
         const config={...project,env:{...project.env,...options.env},jvmArgs:options.jvmArgs||project.jvmArgs};
-        const backendOptions={selectors,excludes,coverage:Boolean(options.coverage||options.perTestCoverage),perTestCoverage:Boolean(options.perTestCoverage),cancellation:cancellation.token,onEvent:eventHandler,onOutput:text=>run.appendOutput(String(text).replace(/\r?\n/g,'\r\n'))};
+        const backendOptions={selectors,excludes,coverage:Boolean(options.coverage||options.perTestCoverage),perTestCoverage:Boolean(options.perTestCoverage),moduleReview:project.moduleReview,cancellation:cancellation.token,onEvent:eventHandler,onOutput:text=>run.appendOutput(String(text).replace(/\r?\n/g,'\r\n'))};
         const result=await(options.debug?testDebugger.runTests(config,backendOptions,engine()):engine().runTests(config,backendOptions));
         trusted();if(handlerError)throw handlerError;if(result.state==='cancelled')cancellation.cancel();
         if(result.state==='errored')throw new Error(result.error?.message||result.errors?.[0]?.message||'Java test runner did not complete.');
         for(const [id,item] of pendingItems){if(items.get(id)?.project!==project)continue;if(result.summary?.containersFailed){run.errored(item,new vscode.TestMessage('A test container failed before this test could complete.'));failed.add(id);}else run.skipped(item);pendingItems.delete(id);}
-        reports.push({projectId:project.id,framework:project.framework||'junit',state:result.state,summary:result.summary,runDirectory:result.runDirectory,coverage:result.coverage,perTestCoverage:result.perTestCoverage,debug:result.debug});
+        reports.push({projectId:project.id,framework:project.framework||'junit',state:result.state,summary:result.summary,runDirectory:result.runDirectory,coverage:result.coverage,perTestCoverage:result.perTestCoverage,debug:result.debug,...(result.module?{module:result.module}:{})});
         if(keepHistory)historyProjects.push({project,summary:result.summary});
         if(generation===before&&!cancellation.token.isCancellationRequested)publishCoverage(run,result.coverage,project,result.perTestCoverage);
         else run.appendOutput('Source changed or run was cancelled; coverage was not applied to editor lines.\r\n');
@@ -184,7 +201,7 @@ function registerJavaTesting(context,vscode,{java,backend}={}) {
         }catch(error){channel.appendLine('Java test history could not be saved. '+error.message);}
       }
       return structuredClone(lastReport);
-    }catch(error){if(!disposed&&vscode.workspace.isTrusted){run.appendOutput(error.message+'\r\n');for(const project of selection.keys())run.errored(project.root,new vscode.TestMessage(error.message));for(const item of pendingItems.values())run.errored(item,new vscode.TestMessage(error.message));}throw error;}
+    }catch(error){if(error.code==='STALE_MODULE_TEST')markDirty();if(!disposed&&vscode.workspace.isTrusted){run.appendOutput(error.message+'\r\n');for(const project of selection.keys())run.errored(project.root,new vscode.TestMessage(error.message));for(const item of pendingItems.values())run.errored(item,new vscode.TestMessage(error.message));}throw error;}
     finally{run.end();external?.dispose();cancellation.dispose();activeCancellation=undefined;busy=false;}
   }
   function run(options={}){const request=options.request||new vscode.TestRunRequest(options.includeIds?.map(id=>items.get(id)?.item).filter(Boolean),options.excludeIds?.map(id=>items.get(id)?.item).filter(Boolean),options.debug?debugProfile:options.perTestCoverage?perTestProfile:options.coverage?coverageProfile:runProfile);return track(execute(request,options.cancellation,options));}

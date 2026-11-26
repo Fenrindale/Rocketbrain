@@ -44,6 +44,7 @@ function registerLocalSqlAssistant(context, vscode, database) {
   function selectedSql() {
     const editor = vscode.window.activeTextEditor;
     if (editor?.document.languageId !== 'sql') throw Error('Open a SQL editor and choose one SELECT statement to explain.');
+    if (database.isProfileSql?.(editor.document)) throw Error('Use an active database console to explain SQL with the local model.');
     return editor.selection.isEmpty ? editor.document.getText() : editor.document.getText(editor.selection);
   }
 

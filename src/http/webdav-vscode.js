@@ -15,10 +15,10 @@ function registerWebDav(context,vscode) {
   const updates=new vscode.EventEmitter();
   const reviewUri=id=>vscode.Uri.from({scheme,path:`/${id}/Deployment Review.txt`});
 
-  function workspace() {
+  function workspace(selectedFolder) {
     if(!trusted())throw Error('Open a trusted workspace before deploying files.');
     const active=vscode.window.activeTextEditor?.document.uri;
-    const folder=(active && vscode.workspace.getWorkspaceFolder(active)) || vscode.workspace.workspaceFolders?.[0];
+    const folder=selectedFolder || (active && vscode.workspace.getWorkspaceFolder(active)) || vscode.workspace.workspaceFolders?.[0];
     if(folder?.uri.scheme!=='file')throw Error('Open a local workspace folder.');
     const config=vscode.workspace.getConfiguration('rocketbrain.deploy.webdav',folder.uri);
     const url=config.get('url',''), user=config.get('user','');
@@ -31,6 +31,20 @@ function registerWebDav(context,vscode) {
     const key=createHash('sha256').update(JSON.stringify([folder.uri.toString(),url,user])).digest('hex');
     input.workspaceRoot=folder.uri.fsPath;
     return {key,root:path.join(folder.uri.fsPath,...(local?local.split('/'):[])),input};
+  }
+
+  function monitorProfile(folder) {
+    const { key, input } = workspace(folder);
+    const { url, user, remoteDirectory, exclusions } = input;
+    return { key, profile: { url, user, remoteDirectory, exclusions } };
+  }
+
+  async function monitorCredential(folder) {
+    const { key, profile } = monitorProfile(folder);
+    if (!profile.user) return '';
+    return await context.secrets.get('rocketbrain.webdav.' + key) ?? vscode.window.showInputBox({
+      title: 'WebDAV Password for Change Review', password: true, ignoreFocusOut: true, prompt: profile.url,
+    });
   }
 
   async function publish(result) {
@@ -124,7 +138,7 @@ function registerWebDav(context,vscode) {
     if(password)await context.secrets.store('rocketbrain.webdav.'+key,password);
     else await context.secrets.delete('rocketbrain.webdav.'+key);
   });
-  return {...core,publish,diff,dispose(){disposed=true;documents.clear();core.dispose();for(const subscription of subscriptions)subscription.dispose();}};
+  return {...core,publish,diff,monitorProfile,monitorCredential,dispose(){disposed=true;documents.clear();core.dispose();for(const subscription of subscriptions)subscription.dispose();}};
 }
 
 module.exports={registerWebDav};

@@ -2,10 +2,11 @@
 const fs=require('node:fs'),fsp=fs.promises,path=require('node:path'),os=require('node:os'),crypto=require('node:crypto');
 const {pathToFileURL}=require('node:url');
 const {StringDecoder}=require('node:string_decoder');
-const {parseJavaFile}=require('../../spring/java');
+const {parseJavaFile,rangeAt}=require('../../spring/java');
 const {provisionTestingRuntime,validateJavaHome,execute,TestingError,ARTIFACTS,sha}=require('./provision');
 const {parseCoverageXml,snapshotInputs,locateSource}=require('./coverage');
 const {readBranchEvidence,applyBranchEvidence}=require('./coverage-branches');
+const {MAX_MODULE_ENTRIES,validateModuleConfig,validateModuleCoverage,prepareModulePath}=require('./module-path');
 const LIMITS={classPaths:1000,roots:40,selectors:2000,events:50000,eventBytes:32*1024*1024};
 const isCancelled=value=>Boolean(value?.isCancellationRequested||value?.aborted);
 function absolute(value,label,directory=false){if(typeof value!=='string'||!path.isAbsolute(value)||value.length>4096||value.includes('\0'))throw new TestingError('INVALID_CONFIG',label+' must be an absolute local path.');const real=fs.realpathSync(value);if(directory&&!fs.statSync(real).isDirectory())throw new TestingError('INVALID_CONFIG',label+' must be a directory.');return real;}
@@ -21,6 +22,7 @@ function normalizeConfig(input){
   if(!input||typeof input!=='object')throw new TestingError('INVALID_CONFIG','A Java testing project is required.');
   const jdk=validateJavaHome(input.javaHome),workspace=absolute(input.workspace,'Project workspace',true),runtime=resolveRuntime(input.runtimePath||input.runtime);
   const classPath=paths(input.classPath||[],'Test classpath',LIMITS.classPaths),testClassPaths=paths(input.testClassPaths||[],'Test output roots',LIMITS.roots,true),sourceRoots=paths(input.sourceRoots||[],'Source roots',LIMITS.roots,true),classDirectories=paths(input.classDirectories||[],'Main class directories',LIMITS.roots,true);
+  const modulePath=paths(input.modulePath||[],'Test module path',MAX_MODULE_ENTRIES);
   if(!testClassPaths.length)throw new TestingError('INVALID_CONFIG','Build the project and provide test output roots.');
   const timeoutMs=input.timeoutMs??180000;if(!Number.isInteger(timeoutMs)||timeoutMs<1000||timeoutMs>30*60*1000)throw new TestingError('INVALID_CONFIG','Testing timeout must be 1 second to 30 minutes.');
   const jvmArgs=input.jvmArgs||[];if(!Array.isArray(jvmArgs)||jvmArgs.length>100||jvmArgs.some(arg=>typeof arg!=='string'||arg.includes('\0')||arg.length>8192||/^(?:-cp|-classpath|--class-path|-jar|--module-path|-p|@)/.test(arg)))throw new TestingError('INVALID_CONFIG','JVM options cannot replace the managed testing classpath or argument file.');
@@ -29,7 +31,9 @@ function normalizeConfig(input){
   for(const key of ['CLIENT_PORT','CLIENT_HOST','CLIENT_PIPE'])delete env[key];
   const outputRoot=input.outputRoot||path.join(os.tmpdir(),'rocketbrain-java-testing');if(!path.isAbsolute(outputRoot))throw new TestingError('INVALID_CONFIG','Testing output root must be absolute.');
   const framework=input.framework||'junit';if(!['junit','testng'].includes(framework))throw new TestingError('INVALID_CONFIG','Select junit or testng as the testing framework.');
-  return {...input,...jdk,workspace,runtime,framework,classPath,testClassPaths,sourceRoots,classDirectories,timeoutMs,jvmArgs,env,outputRoot};
+  const config={...input,...jdk,workspace,runtime,framework,classPath,modulePath,testClassPaths,sourceRoots,classDirectories,timeoutMs,jvmArgs,env,outputRoot};
+  validateModuleConfig(config);
+  return config;
 }
 function normalizeSelectors(selectors=[]){
   if(!Array.isArray(selectors)||selectors.length>LIMITS.selectors)throw new TestingError('INVALID_SELECTORS','Invalid test selection.');
@@ -44,7 +48,16 @@ function sourceLocator(roots){
       const top=className.split('$')[0],relative=top.replaceAll('.','/')+'.java',location=locateSource(roots,relative);
       if(location){result.uri=location.uri;if(!cache.has(location.file)){try{const text=fs.readFileSync(location.file,'utf8');cache.set(location.file,text.length<=2*1024*1024?parseJavaFile({uri:location.uri,text}):null);}catch{cache.set(location.file,null);}}
         const file=cache.get(location.file),type=file?.types?.find(value=>value.fqn===className.replaceAll('$','.'))||(!className.includes('$')?file?.types?.find(value=>value.fqn===top):undefined);
-        if(item.methodName&&file){const methods=(type?.methods||[]).filter(method=>method.name===item.methodName);const parameterCount=typeof item.methodParameterTypes==='string'?(item.methodParameterTypes?item.methodParameterTypes.split(',').length:0):undefined;const choices=parameterCount===undefined?methods:methods.filter(method=>method.parameters?.length===parameterCount);if(choices.length===1&&choices[0].range){result.range=choices[0].range;result.line=result.range.start.line;}}
+        if(item.methodName&&file){
+          const methods=(type?.methods||[]).filter(method=>method.name===item.methodName);
+          const parameterCount=typeof item.methodParameterTypes==='string'?(item.methodParameterTypes?item.methodParameterTypes.split(',').length:0):undefined;
+          const choices=parameterCount===undefined?methods:methods.filter(method=>method.parameters?.length===parameterCount);
+          if(choices.length===1){
+            const method=choices[0];
+            result.range=method.range||rangeAt(file.text,method.start,method.end);
+            result.line=result.range.start.line;
+          }
+        }
         if(result.line===undefined&&type?.range){result.range=type.range;result.line=type.range.start.line;}
       }
     }
@@ -101,37 +114,62 @@ async function perform(mode,input,options={}){
   const config=normalizeConfig(input),selectors=normalizeSelectors(options.selectors),excluded=normalizeSelectors(options.excludes);
   if(excluded.some(item=>item.kind!=='uniqueId'||config.framework==='junit'&&/\[(?:dynamic-test|test-template-invocation):/.test(item.value)))throw new TestingError('UNSUPPORTED_EXCLUSION','Exclude discovered containers/tests by unique ID. Select positive JUnit dynamic invocation IDs instead of excluding late-created invocations.');
   if(isCancelled(options.cancellation))return {state:'cancelled',tests:[],events:[],summary:{},output:'',coverage:undefined};
-  const perTestCoverage=mode==='run'&&options.perTestCoverage===true,coverage=mode==='run'&&(options.coverage===true||perTestCoverage);if(coverage&&!config.classDirectories.length)throw new TestingError('COVERAGE_INPUT','Provide compiled main class directories for coverage.');
+  const perTestCoverage=mode==='run'&&options.perTestCoverage===true,coverage=mode==='run'&&(options.coverage===true||perTestCoverage);
+  if(coverage)validateModuleCoverage(config,perTestCoverage);
+  if(coverage&&!config.classDirectories.length)throw new TestingError('COVERAGE_INPUT','Provide compiled main class directories for coverage.');
+  if(config.testModule&&mode==='run'&&(typeof options.moduleReview!=='string'||!/^[a-f0-9]{64}$/.test(options.moduleReview))){
+    throw new TestingError('MODULE_TEST_REVIEW_REQUIRED','Discover the current named tests before running them.');
+  }
   const debug=options.debug;if(debug!==undefined&&(mode!=='run'||!debug||!Number.isInteger(debug.port)||debug.port<1024||debug.port>65535||typeof debug.onStarted!=='function'))throw new TestingError('INVALID_DEBUG','Managed test debugging requires a run, a local port and startup callback.');
   if(debug&&coverage)throw new TestingError('DEBUG_COVERAGE','Run debug and coverage profiles separately. Debugger evaluations can change coverage observations.');
   if(debug&&config.jvmArgs.some(arg=>/^-agentlib:jdwp|^-Xrunjdwp|^-agentpath:.*jdwp/i.test(arg)))throw new TestingError('INVALID_DEBUG','Remove the existing JDWP option; the test debugger manages its own local JVM agent.');
-  const childEnv={...config.env};if(debug)for(const key of Object.keys(childEnv))if(/^(?:JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$/i.test(key))delete childEnv[key];
+  const childEnv={...config.env};if(debug||config.testModule)for(const key of Object.keys(childEnv))
+    if(/^(?:JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$/i.test(key)||config.testModule&&/^CLASSPATH$/i.test(key))delete childEnv[key];
   await fsp.mkdir(config.outputRoot,{recursive:true});const directory=await fsp.mkdtemp(path.join(config.outputRoot,'run-')),nonce=crypto.randomBytes(32).toString('hex');
   const eventsFile=path.join(directory,'events.jsonl'),configFile=path.join(directory,'launcher.properties'),execFile=path.join(directory,'jacoco.exec');
   await fsp.writeFile(path.join(directory,'owner.json'),JSON.stringify({kind:'RocketbrainJavaTestingRun-v1',version:'0.9.0',id:path.basename(directory),createdAt:new Date().toISOString()}),{mode:0o600});await fsp.writeFile(eventsFile,'',{flag:'wx',mode:0o600});
   const entries={nonce,events:pathToFileURL(eventsFile).href,mode,framework:config.framework,perTestCoverage:String(perTestCoverage),coverageFile:coverage?pathToFileURL(execFile).href:'',rootCount:config.testClassPaths.length,selectorCount:selectors.length,excludeCount:excluded.length};
   config.testClassPaths.forEach((root,index)=>entries['root.'+index]=pathToFileURL(root).href);selectors.forEach((selector,index)=>{entries['selector.'+index+'.kind']=selector.kind;entries['selector.'+index+'.value']=selector.value;});excluded.forEach((selector,index)=>entries['exclude.'+index]=selector.value);
   const parameters=config.configurationParameters||{};if(!parameters||typeof parameters!=='object'||Array.isArray(parameters)||Object.keys(parameters).length>100)throw new TestingError('INVALID_CONFIG','Invalid JUnit configuration parameters.');entries.parameterCount=Object.keys(parameters).length;Object.entries(parameters).forEach(([key,value],index)=>{if(typeof value!=='string'||key.length>512||value.length>8192)throw new TestingError('INVALID_CONFIG','Invalid JUnit configuration value.');entries['parameter.'+index+'.key']=key;entries['parameter.'+index+'.value']=value;});
-  await fsp.writeFile(configFile,privateProperties(entries),{flag:'wx',mode:0o600});const cp=await classpathJar(config,directory,coverage);
+  let moduleSession,cp;
+  try{
+    if(config.testModule)moduleSession=await prepareModulePath(config,mode==='run'?options.moduleReview:undefined);
+    await fsp.writeFile(configFile,privateProperties({...entries,...moduleSession?.settings}),{flag:'wx',mode:0o600});
+    cp=moduleSession?config.runtime.launcherJar:await classpathJar(config,directory,coverage);
+  }catch(error){await moduleSession?.dispose();throw error;}
   const before=coverage?{classes:await snapshotInputs(config.classDirectories,'.class'),sources:await snapshotInputs(config.sourceRoots,'.java',{maximumFiles:10000,maximumBytes:64*1024*1024})}:null;
   const located=sourceLocator(config.sourceRoots),tests=new Map(),events=[],errors=[],decoder=new StringDecoder('utf8'),abort=new AbortController();let lastSequence=0,offset=0,tail='',reading,protocolError,externalCancellation;
   if(options.cancellation?.onCancellationRequested)externalCancellation=options.cancellation.onCancellationRequested(()=>abort.abort());else if(options.cancellation?.addEventListener){const stop=()=>abort.abort();options.cancellation.addEventListener('abort',stop,{once:true});externalCancellation={dispose:()=>options.cancellation.removeEventListener('abort',stop)};}if(isCancelled(options.cancellation))abort.abort();
   async function readEvents(){
     if(reading)return reading;
-    reading=(async()=>{const stat=await fsp.stat(eventsFile);if(stat.size>LIMITS.eventBytes)throw new TestingError('EVENT_LIMIT','Testing event file exceeds the size limit.');if(stat.size===offset)return;const handle=await fsp.open(eventsFile,'r');let bytes;try{const buffer=Buffer.alloc(stat.size-offset);const read=await handle.read(buffer,0,buffer.length,offset);offset+=read.bytesRead;bytes=buffer.subarray(0,read.bytesRead);}finally{await handle.close();}tail+=decoder.write(bytes);const lines=tail.split('\n');tail=lines.pop();for(const line of lines){if(!line.trim())continue;let event;try{event=JSON.parse(line);}catch{throw new TestingError('EVENT_PROTOCOL','Java testing event JSON is malformed.');}if(event.nonce!==nonce||event.sequence!==lastSequence+1||!['discovered','dynamic','started','finished','skipped','retry','plan','complete','error','coverageError','coverageWindow','perTestCoverage','perTestCoverageError'].includes(event.type))throw new TestingError('EVENT_PROTOCOL','Java testing event provenance/order is invalid.');lastSequence=event.sequence;delete event.nonce;if(event.test){event.test=located(event.test);tests.set(event.test.id,event.test);}if(event.error?.frames)event=located(event);events.push(event);if(events.length>LIMITS.events)throw new TestingError('EVENT_LIMIT','Too many testing events.');if(event.type==='error')errors.push(event.error);try{options.onEvent?.(structuredClone(event));}catch{}}})();
+    reading=(async()=>{const stat=await fsp.stat(eventsFile);if(stat.size>LIMITS.eventBytes)throw new TestingError('EVENT_LIMIT','Testing event file exceeds the size limit.');if(stat.size===offset)return;const handle=await fsp.open(eventsFile,'r');let bytes;try{const buffer=Buffer.alloc(stat.size-offset);const read=await handle.read(buffer,0,buffer.length,offset);offset+=read.bytesRead;bytes=buffer.subarray(0,read.bytesRead);}finally{await handle.close();}tail+=decoder.write(bytes);const lines=tail.split('\n');tail=lines.pop();for(const line of lines){if(!line.trim())continue;let event;try{event=JSON.parse(line);}catch{throw new TestingError('EVENT_PROTOCOL','Java testing event JSON is malformed.');}if(event.nonce!==nonce||event.sequence!==lastSequence+1||!['module','discovered','dynamic','started','finished','skipped','retry','plan','complete','error','coverageError','coverageWindow','perTestCoverage','perTestCoverageError'].includes(event.type))throw new TestingError('EVENT_PROTOCOL','Java testing event provenance/order is invalid.');lastSequence=event.sequence;delete event.nonce;if(event.test){event.test=located(event.test);tests.set(event.test.id,event.test);}if(event.error?.frames)event=located(event);events.push(event);if(events.length>LIMITS.events)throw new TestingError('EVENT_LIMIT','Too many testing events.');if(event.type==='error')errors.push(event.error);if(!moduleSession)try{options.onEvent?.(structuredClone(event));}catch{}}})();
     try{await reading;}finally{reading=null;}
   }
   const poll=setInterval(()=>{void readEvents().catch(error=>{protocolError=error;abort.abort();});},40);
   let execution;
   try{
-    const args=[...config.jvmArgs,...(debug?['-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:'+debug.port]:[]),...(coverage?['-javaagent:'+config.runtime.jacocoAgentJar+'=output=none,dumponexit=false,sessionid='+nonce]:[]),'-Dfile.encoding=UTF-8','-Dstdout.encoding=UTF-8','-Dstderr.encoding=UTF-8','-cp',cp,'rocketbrain.testing.Runner',pathToFileURL(configFile).href];
+    const args=[...config.jvmArgs,...(debug?['-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:'+debug.port]:[]),...(coverage?['-javaagent:'+config.runtime.jacocoAgentJar+'=output=none,dumponexit=false,sessionid='+nonce]:[]),'-Dfile.encoding=UTF-8','-Dstdout.encoding=UTF-8','-Dstderr.encoding=UTF-8',...(moduleSession?.arguments||[]),'-cp',cp,'rocketbrain.testing.Runner',pathToFileURL(configFile).href];
+    if(moduleSession&&args.reduce((size,arg)=>size+arg.length+3,0)>24000)throw new TestingError('MODULE_INPUT_LIMIT','The named test JVM command is too large.');
     execution=await execute(path.join(config.javaHome,'bin','java'+(process.platform==='win32'?'.exe':'')),args,{cwd:config.workspace,env:childEnv,timeoutMs:config.timeoutMs,onOutput:options.onOutput,cancellation:abort.signal,onStarted:debug?details=>debug.onStarted({...details,port:debug.port}):undefined});
     await readEvents();await readEvents();tail+=decoder.end();if(protocolError)throw protocolError;if(tail.trim())throw new TestingError('EVENT_PROTOCOL','Java testing event file ended mid-record.');
-  }finally{clearInterval(poll);externalCancellation?.dispose();}
+    if(moduleSession&&!execution.cancelled)await moduleSession.validate();
+  }finally{clearInterval(poll);externalCancellation?.dispose();await moduleSession?.dispose();}
+  const moduleEvents=events.filter(event=>event.type==='module'),moduleEvidence=moduleEvents[0];
+  if(moduleEvents.length&&(moduleEvents.length!==1||!moduleSession||moduleEvidence.sequence!==1||
+      moduleEvidence.name!==config.testModule||moduleEvidence.engine!==moduleSession.engine.id||
+      moduleEvidence.version!==moduleSession.engine.version||moduleEvidence.entries!==config.modulePath.length)||
+      moduleSession&&!moduleEvidence&&events.some(event=>event.type==='complete')){
+    throw new TestingError('EVENT_PROTOCOL','Named test boot-layer evidence is invalid.');
+  }
+  if(moduleSession&&!execution.cancelled&&moduleEvidence)
+    for(const event of events)try{options.onEvent?.(structuredClone(event));}catch{}
   const complete=events.findLast(event=>event.type==='complete'),state=execution.cancelled?'cancelled':execution.timedOut||!complete||errors.length||![0,1].includes(execution.code)?'errored':'completed';
-  const branchEvidence=coverage&&state!=='cancelled'?await readBranchEvidence(config,directory,before,options.cancellation):null;
+  const coverageConfig=moduleSession?{...config,env:childEnv}:config;
+  const branchEvidence=coverage&&state!=='cancelled'?await readBranchEvidence(coverageConfig,directory,before,options.cancellation):null;
   let intervals;if(perTestCoverage&&state!=='cancelled')try{intervals=await intervalCoverage(config,directory,cp,events,before,options,branchEvidence);}catch(error){intervals={state:'unavailable',scope:'test-execution-interval',tests:[],warnings:[error.message],concurrencyObserved:false};}
-  const result={state,mode,tests:[...tests.values()],events,summary:complete?.summary||{},output:execution.output,exitCode:execution.code,timedOut:execution.timedOut,cancelled:execution.cancelled,runDirectory:directory,eventsFile,errors,...(coverage?{coverage:state==='cancelled'?{state:'unavailable',scope:'run',perTestCoverage:false,files:[],warnings:['Run was cancelled; complete coverage was not established.']}:await generateCoverage(config,directory,before,options.onOutput,options.cancellation,branchEvidence)}:{})};
+  const result={state,mode,tests:[...tests.values()],events,summary:complete?.summary||{},output:execution.output,exitCode:execution.code,timedOut:execution.timedOut,cancelled:execution.cancelled,runDirectory:directory,eventsFile,errors,...(coverage?{coverage:state==='cancelled'?{state:'unavailable',scope:'run',perTestCoverage:false,files:[],warnings:['Run was cancelled; complete coverage was not established.']}:await generateCoverage(coverageConfig,directory,before,options.onOutput,options.cancellation,branchEvidence)}:{})};
+  if(moduleEvidence)result.module={name:moduleEvidence.name,engine:moduleEvidence.engine,version:moduleEvidence.version,
+    entries:moduleEvidence.entries,fingerprint:moduleSession.fingerprint};
   if(perTestCoverage){result.perTestCoverage=intervals||{state:'unavailable',scope:'test-execution-interval',tests:[],warnings:['Run was cancelled.'],concurrencyObserved:false};if(result.coverage)result.coverage.perTestCoverage=['available','partial'].includes(result.perTestCoverage.state);}
   await fsp.writeFile(path.join(directory,'result.json'),JSON.stringify(result,null,2)+'\n',{mode:0o600});return result;
 }

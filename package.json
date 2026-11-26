@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.106.0",
+  "version": "0.108.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -198,6 +198,18 @@
       { "command": "rocketbrain.deploy.compareWebDav", "title": "Compare WebDAV Deployment File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-webdav-review" },
       { "command": "rocketbrain.deploy.applyWebDav", "title": "Upload Reviewed WebDAV Files", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-webdav-review" },
       { "command": "rocketbrain.deploy.saveWebDavPassword", "title": "Set WebDAV Password", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.deploy.reviewSftp", "title": "Review SFTP Project Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.deploy.compareSftp", "title": "Compare SFTP Deployment File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-sftp-review" },
+      { "command": "rocketbrain.deploy.applySftp", "title": "Publish Reviewed SFTP Change", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-sftp-review" },
+      { "command": "rocketbrain.deploy.reviewFtps", "title": "Review FTPS Project Deployment", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.deploy.compareFtps", "title": "Compare FTPS Deployment File", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-ftps-review" },
+      { "command": "rocketbrain.deploy.applyFtps", "title": "Publish Reviewed FTPS Change", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-ftps-review" },
+      { "command": "rocketbrain.deploy.watchChanges", "title": "Review Local and Remote Deployment Changes", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.deploy.refreshChanges", "title": "Refresh Deployment Changes", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-deployment-changes" },
+      { "command": "rocketbrain.deploy.resetChanges", "title": "Set Deployment Change Baseline", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-deployment-changes" },
+      { "command": "rocketbrain.deploy.compareChange", "title": "Compare Deployment Change", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-deployment-changes" },
+      { "command": "rocketbrain.deploy.reviewChangeUpload", "title": "Review Deployment Change for Upload", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == rocketbrain-deployment-changes" },
+      { "command": "rocketbrain.deploy.stopWatchingChanges", "title": "Stop Monitoring Deployment Changes", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.newDataExtractor", "title": "Create Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.exportWithExtractor", "title": "Export with Data Extractor", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.db.newFederatedSelect", "title": "New Federated SELECT", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1171,6 +1183,18 @@
         "title": "Open Dedicated Profile SQL Console",
         "category": "Rocketbrain",
         "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.connections.bindSqlFile",
+        "title": "Bind SQL File to Database Profile",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && editorLangId == sql && resourceScheme == file"
+      },
+      {
+        "command": "rocketbrain.connections.forgetSqlFile",
+        "title": "Forget SQL File Database Profile",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && editorLangId == sql && resourceScheme == file && rocketbrain.profileConsole"
       },
       {
         "command": "rocketbrain.connections.revealSession",
@@ -2184,6 +2208,41 @@
         "rocketbrain.deploy.webdav.localDirectory": { "type": "string", "default": "", "scope": "resource", "description": "Workspace-relative root for deployment files." },
         "rocketbrain.deploy.webdav.remoteDirectory": { "type": "string", "default": "", "scope": "resource", "description": "Existing folder below the WebDAV endpoint." },
         "rocketbrain.deploy.webdav.exclusions": { "type": "array", "items": { "type": "string" }, "default": [], "scope": "resource", "description": "Relative path patterns to skip when comparing deployment files." },
+        "rocketbrain.deploy.sftp.profiles": {
+          "type": "array", "default": [], "maxItems": 32, "scope": "machine",
+          "description": "Pinned SFTP project deployment routes. Enter a password or encrypted-key passphrase only in the operation prompt.",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["label", "host", "user", "root", "hostFingerprint", "authentication"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "host": { "type": "string", "minLength": 1 },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 22 },
+              "user": { "type": "string", "minLength": 1 },
+              "root": { "type": "string", "pattern": "^/", "description": "Absolute remote SFTP directory." },
+              "hostFingerprint": { "type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$", "description": "Independently verified OpenSSH SHA-256 host-key fingerprint." },
+              "authentication": { "type": "string", "enum": ["password", "encrypted-key"] },
+              "privateKeyPath": { "type": "string", "description": "Absolute local path to the encrypted OpenSSH private key." }
+            }
+          }
+        },
+        "rocketbrain.deploy.ftps.profiles": {
+          "type": "array", "default": [], "maxItems": 32, "scope": "machine",
+          "description": "Explicit passive FTPS deployment routes. Supply the password in the operation prompt.",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["label", "host", "user", "root"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "host": { "type": "string", "minLength": 1 },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 21 },
+              "user": { "type": "string", "minLength": 1 },
+              "root": { "type": "string", "pattern": "^/", "description": "Absolute path within the scoped FTPS account." },
+              "tlsServerName": { "type": "string", "description": "Explicit certificate identity when it differs from the connection host." },
+              "caFile": { "type": "string", "description": "Absolute local path to a trusted CA PEM file for this route." }
+            }
+          }
+        },
         "rocketbrain.http.environments": {
           "type": "object",
           "scope": "resource",
@@ -2600,12 +2659,11 @@
         "rocketbrain.java.testing.projects": {
           "type": "array",
           "default": [],
-          "description": "Explicit compiled Java test project profiles. Empty resolves imported Maven/Gradle test classpaths through the independent Java language engine.",
+          "description": "Compiled Java test profiles. Empty reads imported Maven or Gradle paths from the independent Java language engine. For a separate named test module, build it before discovery and configure testModule, modulePath, testClassPaths and sourceRoots.",
           "items": {
             "type": "object",
             "required": [
-              "workspace",
-              "classPath"
+              "workspace"
             ],
             "properties": {
               "workspace": {
@@ -2613,6 +2671,18 @@
               },
               "classPath": {
                 "type": "array",
+                "description": "Class path for ordinary JUnit or TestNG discovery.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "testModule": {
+                "type": "string",
+                "description": "JPMS name of a separately compiled Jupiter 6.0.3 or TestNG 7.11.0 test module. For TestNG, declare requires org.testng and open test packages to org.testng in module-info.java."
+              },
+              "modulePath": {
+                "type": "array",
+                "description": "Named test and application output directories plus dependency JARs for one selected framework. Use the official Jupiter 6.0.3 artifacts or TestNG 7.11.0 with JCommander 1.83 and SLF4J 2.0.16.",
                 "items": {
                   "type": "string"
                 }
@@ -2631,6 +2701,7 @@
               },
               "classDirectories": {
                 "type": "array",
+                "description": "Compiled application outputs for coverage. Named TestNG whole-run coverage uses application module directories already on the reviewed module path.",
                 "items": {
                   "type": "string"
                 }
@@ -2651,7 +2722,7 @@
                   "testng"
                 ],
                 "default": "junit",
-                "description": "JUnit Platform or TestNG runner; automatic resolution creates separate profiles when both are imported."
+                "description": "JUnit Platform or TestNG runner. A named module profile selects one framework. For ordinary class paths, automatic resolution creates separate profiles when both are imported."
               }
             }
           }
@@ -2745,6 +2816,12 @@
           "default": "https://start.spring.io/",
           "scope": "machine-overridable",
           "description": "HTTPS Spring Initializr service used for explicit metadata and project creation requests."
+        },
+        "rocketbrain.spring.mavenModelRepository": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Local Maven repository for reviewing exact supplemental BOM pins. Leave empty for the standard Maven repository."
         }
       }
     },

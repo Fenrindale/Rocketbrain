@@ -22,7 +22,43 @@ function managementVersion(text,root,expression){
  return {version,expression,property};
 }
 
-function mavenManagement(text,root){
+function supplementalManagement(source,expected){
+ const raw=new TextDecoder('utf-8',{fatal:true}).decode(source.bytes),root=xml(raw);
+ if(value(raw,child(root,'groupId'))!==expected.group||value(raw,child(root,'artifactId'))!==expected.artifact||
+    value(raw,child(root,'version'))!==expected.version||value(raw,child(root,'packaging'))!=='pom'||
+    ['parent','profiles','build','dependencies'].some(name=>child(root,name))) {
+  throw fail('BUILD','Review a literal supplemental BOM with the exact pinned POM identity.');
+ }
+ return managementEntries(raw,root).map(entry=>{
+  const {coordinate,type,scope,expression}=entry;
+  const property=localProperty.exec(expression||'')?.[1];
+  const properties=property&&child(root,'properties');
+  const version=property?(properties&&!mavenReserved.test(property)?value(raw,child(properties,property)):null):expression;
+  if(type!=='jar'||!ordinaryScopes.has(scope)||!version||version.length>80||!/^[A-Za-z0-9_.-]+$/.test(version))
+   throw fail('BUILD','Supplemental BOMs need reviewed literal JAR management without nested imports.');
+  return {coordinate,version,source:source.id};
+ });
+}
+
+function managementEntries(text,root){
+ const management=child(root,'dependencyManagement'),dependencies=management&&child(management,'dependencies');
+ if(!dependencies||management.children.length!==1)throw fail('BUILD','Use a direct Spring Boot BOM import in dependency management.');
+ const seen=new Set();
+ return dependencies.children.map(node=>{
+  if(node.name!=='dependency'||node.children.some(item=>!['groupId','artifactId','version','scope','type'].includes(item.name)))
+   throw fail('BUILD','Use simple literal entries in Maven dependency management.');
+  const group=value(text,child(node,'groupId')),artifact=value(text,child(node,'artifactId'));
+  const typeNode=child(node,'type'),scopeNode=child(node,'scope');
+  const type=typeNode?value(text,typeNode):'jar',scope=scopeNode?value(text,scopeNode):'compile';
+  if(!group||!artifact||!type||!scope)throw fail('BUILD','Use literal Maven management coordinates, types and scopes.');
+  const coordinate=group+':'+artifact;
+  if(seen.has(coordinate))throw fail('BUILD','Duplicate Maven management coordinates are unsupported.');
+  seen.add(coordinate);
+  return {group,artifact,type,scope,coordinate,expression:content(text,child(node,'version'))};
+ });
+}
+
+function mavenManagement(text,root,context){
  const parent=child(root,'parent'),management=child(root,'dependencyManagement');
  if(parent){
   if(value(text,child(parent,'groupId'))!==BOOT_GROUP||value(text,child(parent,'artifactId'))!==BOOT_PARENT)
@@ -32,32 +68,28 @@ function mavenManagement(text,root){
   if(management)throw fail('BUILD','Dependency management layered on a Spring Boot parent requires a separate Maven model review.');
   return {kind:'boot-parent',coordinate:BOOT_GROUP+':'+BOOT_PARENT,version,expression:version,property:null,overrides:[]};
  }
- const dependencies=management&&child(management,'dependencies');
- if(!dependencies||management.children.length!==1)throw fail('BUILD','Use one direct Spring Boot BOM import in dependency management.');
  let controlling;
- const overrides=[],seen=new Set();
- for(const node of dependencies.children){
-  if(node.name!=='dependency'||node.children.some(item=>!['groupId','artifactId','version','scope','type'].includes(item.name)))
-   throw fail('BUILD','Use simple literal entries in Maven dependency management.');
-  const groupId=value(text,child(node,'groupId')),artifactId=value(text,child(node,'artifactId'));
-  const typeNode=child(node,'type'),scopeNode=child(node,'scope'),versionNode=child(node,'version');
-  const type=typeNode?value(text,typeNode):'jar',scope=scopeNode?value(text,scopeNode):'compile';
-  if(!groupId||!artifactId||!type||!scope)throw fail('BUILD','Use literal Maven management coordinates, types and scopes.');
-  const coordinate=groupId+':'+artifactId;
-  if(seen.has(coordinate))throw fail('BUILD','Duplicate Maven management coordinates are unsupported.');
-  seen.add(coordinate);
-  if(groupId===BOOT_GROUP&&artifactId===BOOT_BOM){
+ const overrides=[],supplemental=[],supplementalOverrides=[];
+ for(const {group,artifact,type,scope,coordinate,expression} of managementEntries(text,root)){
+  if(group===BOOT_GROUP&&artifact===BOOT_BOM){
    if(type!=='pom'||scope!=='import')throw fail('BUILD','The Spring Boot BOM requires pom type and import scope.');
-   controlling={kind:'boot-bom-import',coordinate,...managementVersion(text,root,content(text,versionNode))};
+   controlling={kind:'boot-bom-import',coordinate,...managementVersion(text,root,expression)};
    continue;
   }
-  const version=value(text,versionNode);
-  if(type!=='jar'||!ordinaryScopes.has(scope)||!version||version.length>80)
+  if(type==='pom'&&scope==='import'&&typeof context?.readMavenBom==='function'){
+   const {version,property}=managementVersion(text,root,expression);
+   const dependency={group,artifact,version};
+   const source=context.readMavenBom(dependency);
+   supplemental.push({coordinate:source.id,sha256:source.sha256,property});
+   supplementalOverrides.push(...supplementalManagement(source,dependency));
+   continue;
+  }
+  if(type!=='jar'||!ordinaryScopes.has(scope)||!expression||expression.length>80||!/^[A-Za-z0-9_.-]+$/.test(expression))
    throw fail('BUILD','Additional BOM imports or dynamic management overrides require a separate Maven model review.');
-  overrides.push({coordinate,version});
+  overrides.push({coordinate,version:expression});
  }
  if(!controlling)throw fail('BUILD','Use one direct Spring Boot BOM import in dependency management.');
- return {...controlling,overrides};
+ return {...controlling,overrides:[...overrides,...supplementalOverrides],...(supplemental.length&&{supplemental})};
 }
 
 function mavenParentReference(text,root=xml(text)){
@@ -102,7 +134,7 @@ function mavenProfiles(text,root){
  return byId;
 }
 
-function inheritedMavenModel(text,root,parents){
+function inheritedMavenModel(text,root,parents,context){
  if(!Array.isArray(parents)||!parents.length||parents.length>4)
   throw fail('BUILD','Review the physical local Maven parents before editing inherited starters.');
  let required=mavenParentReference(text,root), terminal;
@@ -120,7 +152,7 @@ function inheritedMavenModel(text,root,parents){
   inherited.push(...mavenDependencies(source.text,parsed).deps.map(dependency=>({...dependency,editable:false,inherited:true})));
   if(index===parents.length-1){
    if(reference)throw fail('BUILD','End the local Maven chain at a parentless POM importing the Spring Boot BOM.');
-   terminal=mavenManagement(source.text,parsed);
+   terminal=mavenManagement(source.text,parsed,context);
   }else{
    if(child(parsed,'dependencyManagement'))throw fail('BUILD','Layered Maven dependency management in an intermediate parent needs a separate review.');
    descendants.push(parsed);
@@ -128,9 +160,10 @@ function inheritedMavenModel(text,root,parents){
   required=reference;
  }
  if(child(root,'dependencyManagement'))throw fail('BUILD','Layered child dependency management needs a separate Maven model review.');
- if(terminal.property && descendants.some(parsed=>{
+ const importedVersions=[terminal.property,...(terminal.supplemental||[]).map(item=>item.property)].filter(Boolean);
+ if(importedVersions.length && descendants.some(parsed=>{
   const properties=child(parsed,'properties');
-  return properties && child(properties,terminal.property);
+  return properties && importedVersions.some(name=>child(properties,name));
  }))throw fail('BUILD','A child or intermediate POM redefines the inherited Boot BOM version property.');
  return {management:{...terminal,kind:'inherited-boot-bom',chain},inherited};
 }
@@ -145,11 +178,11 @@ function pom(text,context){
  const neighbors=selected===undefined?[]:[mavenDependencies(text,root)];
  for(const [id,profile] of profiles)if(id!==selected)neighbors.push(profile);
  for(const neighbor of neighbors)deps.push(...neighbor.deps.map(dependency=>({...dependency,editable:false})));
- const resolved=context?.mavenParents?.length?inheritedMavenModel(text,root,context.mavenParents):null;
- const management=resolved?.management||mavenManagement(text,root);
+ const resolved=context?.mavenParents?.length?inheritedMavenModel(text,root,context.mavenParents,context):null;
+ const management=resolved?.management||mavenManagement(text,root,context);
  if(resolved)deps.push(...resolved.inherited);
  return {kind:'maven',bootVersion:management.version,management,deps,block,root,insertAt:block?block.closeStart:target.node.closeStart,
-  mavenProfiles:[...profiles.keys()],mavenProfile:selected,...((resolved||profiles.size)&&{mavenContext:context})};
+  mavenProfiles:[...profiles.keys()],mavenProfile:selected,...((resolved||profiles.size||management.supplemental)&&{mavenContext:context})};
 }
 function tokens(text){if(Buffer.byteLength(text)>1024*1024)throw fail('BUILD','The build file exceeds1MiB.');const result=[];let i=0;while(i<text.length){const c=text[i];if(/\s/.test(c)){i++;continue;}if(text.startsWith('//',i)){i=text.indexOf('\n',i+2);if(i<0)break;continue;}if(text.startsWith('/*',i)){const end=text.indexOf('*/',i+2);if(end<0)throw fail('BUILD','Unclosed build comment.');i=end+2;continue;}if(c==='/'||text.startsWith('$/',i))throw fail('BUILD','Slashy Gradle literals or procedural expressions require manual editing.');if(c==='"'||c==="'"){const start=i,delimiter=text.startsWith(c.repeat(3),i)?c.repeat(3):c;i+=delimiter.length;let value='',escaped=false,closed=false;while(i<text.length){if(text.startsWith(delimiter,i)){i+=delimiter.length;closed=true;break;}if(text[i]==='\\'){escaped=true;value+=text[i++];if(i<text.length)value+=text[i++];}else value+=text[i++];}if(!closed)throw fail('BUILD','Unclosed Gradle string.');result.push({type:'string',value,start,end:i,literal:!escaped&&!value.includes('$')&&delimiter.length===1});continue;}const match=/^[A-Za-z_][\w$]*/.exec(text.slice(i));if(match){result.push({type:'id',value:match[0],start:i,end:i+match[0].length});i+=match[0].length;continue;}result.push({type:'punct',value:c,start:i,end:++i});if(result.length>50000)throw fail('BUILD','The build file exceeds its token limit.');}return result;}
 function activePlugin(ts,start,end,id){let matches=0;for(let i=start;i<end;i++)if(ts[i].value==='id'){let j=i+1;if(ts[j]?.value==='(')j++;if(ts[j]?.type!=='string'||!ts[j].literal||ts[j].value!==id)continue;j++;if(ts[j]?.value===')')j++;if(ts[j]?.value!=='version'||ts[j+1]?.type!=='string'||!ts[j+1].literal||ts[j+2]?.value==='apply')throw fail('BUILD','Use a directly applied literal '+id+' plugin.');matches++;}return matches===1;}

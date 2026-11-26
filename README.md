@@ -205,6 +205,12 @@ gRPC 호출은 `GRPC grpcs://host:443/package.Service/Method`와 작업 공간 �
 
 **Review WebDAV Deployment**는 `rocketbrain.deploy.webdav`에 정의한 로컬·원격 폴더와 제외 패턴을 사용합니다. **Set WebDAV Password**로 필요한 비밀번호를 저장하고, 파일을 선택해 diff를 검토합니다. **Upload Reviewed WebDAV Files**는 비교한 ETag를 조건으로 전송하고 원격 파일이 바뀌면 충돌을 표시합니다. 기존 원격 폴더의 새 파일과 변경 파일을 업로드할 수 있습니다.
 
+**Review SFTP Project Deployment**에서 고정한 SSH 호스트 키로 원격 폴더를 열고, 저장한 파일을 비교하거나 새 폴더를 검토합니다. **Publish Reviewed SFTP Change**는 승인한 경로와 파일 내용을 다시 확인하고 업로드한 바이트를 검증합니다. [SFTP 배포 설정과 검토 절차](docs/sftp-deployment.md)
+
+**Review FTPS Project Deployment**는 제어 연결과 데이터 연결의 TLS 인증서를 검증하고 원격 폴더를 엽니다. 파일을 비교한 후 **Publish Reviewed FTPS Change**에서 새 파일 이름의 접두사를 승인하면 서버가 고유 이름으로 저장하고 Rocketbrain이 정확한 바이트를 다시 읽어 확인합니다. [FTPS 배포 설정과 검토 절차](docs/ftps-deployment.md)
+
+**Review Local and Remote Deployment Changes**는 SFTP·FTPS·WebDAV에 연결한 두 폴더의 파일 해시를 기준으로 로컬 변경, 원격 변경과 충돌을 구분합니다. 양쪽 스냅샷을 비교하고 로컬 파일은 해당 프로토콜의 게시 검토로 넘길 수 있습니다. [배포 변경 감시와 검토 절차](docs/deployment-change-review.md)
+
 ```http
 @host = http://127.0.0.1:8080
 # @expect status 200
@@ -312,6 +318,10 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 **Save SQL Parameter Preset**은 선택한 SQL의 typed parameter 값을 VS Code Secret Storage에 저장합니다. SQL 실행에서 저장값을 선택하면 연결과 서버 계정, SQL 원문, 파라미터 정의와 관찰한 열 타입이 일치하는지 확인하고 실행 전에 검토를 받습니다. 단일 테이블의 열과 파라미터를 비교하는 SELECT와 열을 명시한 INSERT에는 확인한 열 타입을 제안합니다. **Remove SQL Parameter Preset**에서 저장값을 삭제할 수 있습니다.
 
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
+
+같은 작업공간의 SQL 파일을 서로 다른 연결에서 실행하려면 먼저 각 프로필의 **Open Dedicated Profile SQL Console**을 열고, 각 파일에서 **Bind SQL File to Database Profile**로 연결과 세션 모드를 확인합니다. **Run Selected SQL**의 결과에는 그 파일이 사용한 프로필과 세션이 표시됩니다. 쓰기 모드에서 연결한 파일은 해당 전용 세션의 트랜잭션을 공유합니다.
+
+파일 경로와 프로필 연결 정보는 작업공간에 남습니다. 세션을 닫거나 VS Code를 다시 열면 같은 경로의 SQL 파일에 라이브 세션을 다시 지정해야 실행할 수 있습니다. **Forget SQL File Database Profile**을 승인하면 파일에서 활성 연결을 다시 사용할 수 있습니다. 전용 연결 파일에서 활성 카탈로그 기반 분석, 검토 스크립트, 실행 계획 도구를 사용하려면 먼저 활성 연결용 SQL 편집기를 엽니다.
 
 **Duplicate Database Profile**은 기존 연결 설정을 새 이름으로 복사해 편집기를 엽니다. 복사본에는 새 프로필 ID가 부여되며 비밀번호가 필요한 연결은 별도로 입력합니다. 공유 파일을 가져올 때 같은 그룹에 이름이 겹치면 이름을 바꿔 가져오거나 해당 항목을 건너뜁니다.
 

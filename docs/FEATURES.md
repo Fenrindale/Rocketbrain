@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.106.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.108.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 162 |
-| 부분 구현 | 40 |
+| 구현 | 166 |
+| 부분 구현 | 36 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **89.8%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **90.7%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.106에서는 Spring Maven 부모·프로필과 JPQL 엔티티, SQLite 원본 셀, ACP 다중 파일 변경과 저장 세션, 로컬 모델의 SQL 탐색 이어하기를 추가했다. GitHub·GitLab 검토를 제출하고 대화에 답하거나 편집할 수 있다. 상태가 바뀐 항목은 5개이고 가중 점수는 191.5점에서 194점으로 바뀌었다.
+v0.108에서는 추가 Maven BOM을 고정해 스타터를 편집하고 저장 SQL 파일을 독립 DB 세션에 연결했다. JPMS의 JUnit·TestNG와 SFTP·FTPS·WebDAV의 배포 및 양쪽 변경 비교를 함께 추가했다. 상태가 바뀐 항목은 4개이고 가중 점수는 194점에서 196점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -72,7 +72,7 @@ v0.106에서는 Spring Maven 부모·프로필과 JPQL 엔티티, SQLite 원본 
 | IDEA-049 | IntelliJ IDEA | Scratch·JShell 실험 코드 | 구현 |
 | IDEA-050 | IntelliJ IDEA | 어노테이션 프로세서·Lombok 생성 코드 | 구현 |
 | IDEA-051 | IntelliJ IDEA | Spring Initializr 프로젝트 생성 | 구현 |
-| IDEA-052 | IntelliJ IDEA | 기존 프로젝트 starter 편집 | 부분 구현 |
+| IDEA-052 | IntelliJ IDEA | 기존 프로젝트 starter 편집 | 구현 |
 | IDEA-053 | IntelliJ IDEA | Bean·Autowiring 분석·빠른 수정 | 부분 구현 |
 | IDEA-054 | IntelliJ IDEA | Bean의 논리 구조·의존성 그래프 | 구현 |
 | IDEA-055 | IntelliJ IDEA | Application Context·분석용 프로필 | 부분 구현 |
@@ -104,7 +104,7 @@ v0.106에서는 Spring Maven 부모·프로필과 JPQL 엔티티, SQLite 원본 
 | IDEA-081 | IntelliJ IDEA | HotSwap·변경 클래스 재적용 | 구현 |
 | IDEA-082 | IntelliJ IDEA | Java Stream 값 변환 시각화 | 구현 |
 | IDEA-083 | IntelliJ IDEA | Kotlin 코루틴 상태·생성 스택 | 구현 |
-| IDEA-084 | IntelliJ IDEA | JUnit·TestNG 발견·실행·디버그 | 부분 구현 |
+| IDEA-084 | IntelliJ IDEA | JUnit·TestNG 발견·실행·디버그 | 구현 |
 | IDEA-085 | IntelliJ IDEA | 테스트 결과·실패 diff·재실행 | 구현 |
 | IDEA-086 | IntelliJ IDEA | 코드 커버리지·분기·테스트별 커버 | 구현 |
 | IDEA-087 | IntelliJ IDEA | CPU·할당·JFR 프로파일 | 구현 |
@@ -125,13 +125,13 @@ v0.106에서는 Spring Maven 부모·프로필과 JPQL 엔티티, SQLite 원본 
 | IDEA-102 | IntelliJ IDEA | HTTP 요청·환경·인증·검증 스크립트 | 구현 |
 | IDEA-103 | IntelliJ IDEA | OpenAPI·Swagger 편집·미리보기·코드 생성 | 구현 |
 | IDEA-104 | IntelliJ IDEA | GraphQL·gRPC·WebSocket 클라이언트 | 구현 |
-| IDEA-105 | IntelliJ IDEA | IDE 안의 DB 연결·SQL·데이터 편집 | 부분 구현 |
+| IDEA-105 | IntelliJ IDEA | IDE 안의 DB 연결·SQL·데이터 편집 | 구현 |
 | IDEA-106 | IntelliJ IDEA | JavaScript·TypeScript·Node/브라우저 디버그 | VS Code 재사용 |
 | IDEA-107 | IntelliJ IDEA | React·Angular·Vue 프레임워크 | 부분 구현 |
 | IDEA-108 | IntelliJ IDEA | HTML·CSS/SCSS·Emmet·Preview | VS Code 재사용 |
 | IDEA-109 | IntelliJ IDEA | Python 언어·환경·디버그 | 부분 구현 |
 | IDEA-110 | IntelliJ IDEA | Jupyter Notebook·커널·셀 디버그 | 부분 구현 |
-| IDEA-111 | IntelliJ IDEA | 원격 파일 배포·SFTP/FTPS/WebDAV | 부분 구현 |
+| IDEA-111 | IntelliJ IDEA | 원격 파일 배포·SFTP/FTPS/WebDAV | 구현 |
 | IDEA-112 | IntelliJ IDEA | 설정·스타일·프로필 동기화 | VS Code 재사용 |
 | IDEA-113 | IntelliJ IDEA | IDE 키맵·동작 컨텍스트·테마 | 부분 구현 |
 | IDEA-114 | IntelliJ IDEA | 플러그인 설치·호환·갱신 | VS Code 재사용 |

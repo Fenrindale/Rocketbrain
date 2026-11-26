@@ -22,8 +22,8 @@ const OPEN_SAMPLES = 'rocketbrain.sql.openPlanSamples';
 const MAX_PANELS = 8;
 const hash = text => createHash('sha256').update(text).digest('hex');
 
-function captureSource(document, selection) {
-  if (isProfileConsole(document)) throw Error('Switch the active database to this profile before reviewing an execution plan.');
+function captureSource(document, selection, profileScoped = isProfileConsole) {
+  if (profileScoped(document)) throw Error('Use an active database console for execution plan review. This SQL editor has a dedicated profile.');
   if (!document || document.isClosed || document.languageId !== 'sql' || !selection) {
     throw Error('Open a SQL editor and select a query or place the cursor in one.');
   }
@@ -57,6 +57,7 @@ function registerExplainPlans(context, vscode, { database }) {
   const panels = new Map(), comparisons = new Map(), reviews = new Map();
   const seriesPanels = new Map(), seriesReviews = new Map();
   const signingKeys = reviewKeyStore(context.secrets);
+  const profileScoped = database.isProfileSql ?? isProfileConsole;
   let disposed = false, opening = false;
 
   function trusted(cancellation) {
@@ -70,6 +71,7 @@ function registerExplainPlans(context, vscode, { database }) {
     if (!source) throw Error('Open an existing visual EXPLAIN plan with a source query.');
     if (source.document.isClosed && source.uri.scheme === 'untitled') throw Error('The unsaved source editor has closed.');
     const document = source.document.isClosed ? await vscode.workspace.openTextDocument(source.uri) : source.document;
+    if (profileScoped(document)) throw Error('The SQL editor now uses a dedicated database profile.');
     if (hash(document.getText()) !== source.digest) throw Error('The SQL source changed after capture. Explain the current query again.');
     trusted();
     const editor = await vscode.window.showTextDocument(document, { preview: false });
@@ -93,7 +95,7 @@ function registerExplainPlans(context, vscode, { database }) {
       if (!panels.has(id) || connection.key !== target.key || connection.connectionEpoch !== target.connectionEpoch) {
         throw Error('The plan or its database connection changed. Capture a new visual EXPLAIN plan.');
       }
-      if (source.document.isClosed || hash(source.document.getText()) !== source.digest) {
+      if (profileScoped(source.document) || source.document.isClosed || hash(source.document.getText()) !== source.digest) {
         throw Error('The SQL source changed after capture. Explain the current query again.');
       }
     };
@@ -108,12 +110,12 @@ function registerExplainPlans(context, vscode, { database }) {
   }
 
   async function open({ document, selection, cancellation } = {}) {
-    return capture({ source: captureSource(document, selection), target: database.savedQueryTarget(), cancellation });
+    return capture({ source: captureSource(document, selection, profileScoped), target: database.savedQueryTarget(), cancellation });
   }
 
   function prepareMeasurement({ document, selection }) {
     trusted();
-    const source = captureSource(document, selection);
+    const source = captureSource(document, selection, profileScoped);
     validatePlanQuery(source.sql, undefined, { measured: true });
     const target = database.savedQueryTarget();
     while (reviews.size >= MAX_PANELS) reviews.delete(reviews.keys().next().value);
@@ -178,7 +180,9 @@ function registerExplainPlans(context, vscode, { database }) {
 
   function checkCapture(source, target, cancellation) {
     trusted(cancellation);
-    if (source.document.isClosed || source.document.version !== source.version) throw Error('The SQL source changed before capture.');
+    if (profileScoped(source.document) || source.document.isClosed || source.document.version !== source.version) {
+      throw Error('The SQL source or its connection changed before capture.');
+    }
     const current = database.savedQueryTarget();
     if (target.connectionEpoch !== current.connectionEpoch || target.key !== current.key) {
       throw Error('The database connection changed. Review the query again.');
@@ -188,7 +192,7 @@ function registerExplainPlans(context, vscode, { database }) {
   function prepareSeries({ document, selection, samples }) {
     trusted();
     sampleCount(samples);
-    const source = captureSource(document, selection);
+    const source = captureSource(document, selection, profileScoped);
     validatePlanQuery(source.sql, undefined, { measured: true });
     const target = database.savedQueryTarget();
     while (seriesReviews.size >= 4) seriesReviews.delete(seriesReviews.keys().next().value);

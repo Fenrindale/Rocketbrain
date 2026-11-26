@@ -17,10 +17,6 @@ exports.run = async (vscode = require('vscode')) => {
   const api=await extension.activate();
   const checks=[],details={},failures=[];
   const groups={
-    springMavenParent:()=>require('./spring-maven-parent-host').runSpringMavenParentChecks(api,vscode,checks),
-    sqliteCellEdit:()=>require('./sqlite-cell-edit-host').runSqliteCellEditChecks(api,vscode,checks),
-    acpWorkspaceEdits:()=>require('./acp-workspace-edit-host').runAcpWorkspaceEditChecks(api,vscode,checks),
-    codeReviewActions:()=>require('./code-review-actions-host').runCodeReviewActionChecks(api,vscode,checks),
     jpaEntityProjection:()=>require('./jpql-entity-projection-host').runJpaEntityProjectionChecks(api,vscode,checks),
     acpRecovery:()=>require('./acp-recovery-host').runAcpRecoveryChecks(api,vscode,checks),
     localSqlExploration:()=>require('./local-sql-exploration-host').runLocalSqlExplorationChecks(api,vscode,checks),

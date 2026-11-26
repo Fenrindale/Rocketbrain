@@ -1,5 +1,5 @@
 {
-  "version": "0.106.0",
+  "version": "0.108.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,33 +30,29 @@
     }
   },
   "summary": {
-    "implemented": 162,
-    "partial": 40,
+    "implemented": 166,
+    "partial": 36,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 89.8,
+    "percent": 90.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
     "IDEA-052",
-    "IDEA-060",
-    "IDEA-095",
-    "IDEA-116",
-    "DG-003",
-    "DG-089"
+    "IDEA-084",
+    "IDEA-105",
+    "IDEA-111"
   ],
   "expandedFeatures": [
     "IDEA-052",
-    "IDEA-060",
-    "IDEA-095",
-    "IDEA-116",
-    "DG-003",
-    "DG-089"
+    "IDEA-084",
+    "IDEA-105",
+    "IDEA-111"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1581,26 +1577,23 @@
       "category": "Spring·영속성",
       "feature": "기존 프로젝트 starter 편집",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "로컬 Maven 부모 POM의 Boot BOM을 확인하고, 하위 POM의 일반 의존성이나 선택한 명시 프로필에서 starter 변경을 검토한다.",
-      "remaining": [
-        "추가 BOM의 정확한 모델을 검증한 변경 흐름을 연결한다."
-      ],
+      "scope": "Maven의 직접·부모 Boot BOM, 명시 프로필, 고정된 추가 BOM과 Gradle 버전 카탈로그에 묶인 Spring starter를 편집한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.106-installed-coverage",
+        "state": "v0.108-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Maven 부모 두 개와 명시 프로필에서 effective POM, 두 JDBC 드라이버, 새 Boot JAR 실행을 확인했다.",
+        "testedScope": "Maven에 실제 추가 BOM 두 개를 사용했다. 중복 관리 의존성을 보호하고 POM 변경과 미고정 모델을 거부했다. 새 Spring JAR로 실제 JDBC를 확인했다.",
         "publicEvidence": [
-          "test/spring-maven-parent-host.js",
-          "test/spring-maven-profile-host.js",
-          "test/workflows-v106-host.js"
+          "test/spring-maven-imports-host.js",
+          "test/workflows-v108-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1829,8 +1822,8 @@
       "verification": {
         "state": "v0.106-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.106.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2522,25 +2515,24 @@
       "category": "테스트·프로파일링",
       "feature": "JUnit·TestNG 발견·실행·디버그",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "JUnit Platform/Jupiter/Vintage와 TestNG의 실제 테스트 발견·선택 실행을 VS Code Testing API에 연결한다. Windows의 소유 JVM을 디버그하며 TestNG 단순 파라미터의 동일값 중복 행을 위치별로 선택한다.",
-      "remaining": [
-        "JPMS module-path, Windows 밖의 debug listener, 객체 파라미터·factory·invocationCount, 복합 TestNG 의존성 선택이 남아 있다."
-      ],
+      "scope": "JUnit·TestNG 탐색과 전체·선택 실행을 클래스로더와 검토한 이름 있는 JPMS 모듈에서 제공한다. 실행 단위 커버리지와 실제 디버깅을 지원한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.62-installed-coverage",
+        "state": "v0.108-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.62.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 TestNG 7.11에서 네 논리 호출과 다섯 시도를 관찰했다. 값이 같은 두 번째 데이터 제공자 행 하나를 실행하고 순서가 바뀐 재실행을 거부했다.",
+        "testedScope": "실제 명명 모듈에서 두 엔진의 선택 실행을 확인했다. TestNG의 동일 인자 행을 구분하고 JaCoCo 결과 및 별도 실제 JDI 중단·재개를 대조했다.",
         "publicEvidence": [
-          "src/java/testing/index.js",
-          "test/java-testng-invocations-host.js"
+          "test/java-testing-named-testng-host.js",
+          "test/java-testing-module-path-host.js",
+          "test/workflows-v108-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2849,8 +2841,8 @@
       "verification": {
         "state": "v0.106-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.106.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3133,26 +3125,23 @@
       "category": "웹·API·데이터 도구",
       "feature": "IDE 안의 DB 연결·SQL·데이터 편집",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "자체 MySQL/MariaDB 콘솔·세션·트랜잭션·수정 가능한 table grid를 구현했다.",
-      "remaining": [
-        "다중 데이터 소스·고급 SQL/DB 관리·편집/입출력 확장이 남는다."
-      ],
+      "scope": "Spring 작업 공간에서 저장된 SQL 파일별로 MySQL·MariaDB 세션과 결과를 독립적으로 사용하는 DB 작성과 편집 흐름을 제공한다.",
+      "remaining": [],
       "verification": {
-        "state": "source-and-scoped-execution",
+        "state": "v0.108-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다.",
+        "testedScope": "저장 파일 두 개에서 두 실제 DB의 동시 실행·결과 이동·롤백을 확인했다. 세션을 끊었을 때 다른 DB로 전환하지 않았고 명시적으로 다시 연결했다.",
         "publicEvidence": [
-          "src/database-workbench.js",
-          "src/db/mysql.js",
-          "src/db/metadata.js"
+          "test/sql-file-profiles-host.js",
+          "test/workflows-v108-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3311,26 +3300,25 @@
       "category": "설정·확장·AI",
       "feature": "원격 파일 배포·SFTP/FTPS/WebDAV",
       "priority": "P2",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "작업 공간과 WebDAV 폴더를 매핑하고 제외 패턴을 적용한다. 파일별 diff를 검토한 후 조건부로 업로드하고 원격에서 정확한 바이트를 다시 읽는다.",
-      "remaining": [
-        "SFTP·FTPS, 원격 폴더 생성과 양방향 배포 감시가 남아 있다."
-      ],
+      "scope": "SFTP·FTPS·WebDAV 파일 배포와 양쪽 변경 검토를 제공한다. 변경 방향과 충돌을 보고 현재 원본과 비교할 수 있다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.49-installed-coverage",
+        "state": "v0.108-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.49.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 루프백 WebDAV 서버에서 매핑, 제외, 에디터 diff, 유니코드 경로의 바이너리 업로드, 원격이 바뀐 뒤 HTTP 412 충돌을 확인했다.",
+        "testedScope": "실제 세 서버에서 두쪽 변경과 충돌을 대조했다. FTPS의 암호화 데이터 연결과 새 이름을 확인했고, 검토한 파일만 게시했다.",
         "publicEvidence": [
-          "src/http/webdav-deploy.js",
-          "src/http/webdav-vscode.js",
-          "test/webdav-deploy-host.js"
+          "test/sftp-deployment-host.js",
+          "test/ftps-deployment-host.js",
+          "test/deployment-watch-host.js",
+          "test/workflows-v108-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3466,8 +3454,8 @@
       "verification": {
         "state": "v0.106-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.106.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3675,8 +3663,8 @@
       "verification": {
         "state": "v0.106-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.106.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6210,8 +6198,8 @@
       "verification": {
         "state": "v0.106-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.106.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6430,53 +6418,48 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "fef8dffe1c9dcd68a8d6a7e0141a0acff41f4e7196cf4982cc3dd6f7a571e2c8",
-    "sourceManifestSha256": "a9c2ebc60fc9eb207f4ed085d3d1fd9b9e43377eeffe3d030048aee4b74cab90",
+    "vsixSha256": "0e8aeef557d8e025f770b624d349b4bdc5f7de0cb29a1dced76b3d1b01325f40",
+    "sourceManifestSha256": "ef614a31efe4a530d500b96524b0cac788d792b629315ea052fe8aa545267699",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 8
+        "featureGroups": 7
       },
       {
         "engine": "mariadb",
-        "featureGroups": 8
+        "featureGroups": 7
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-060",
+      "id": "IDEA-052",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-095",
+      "id": "IDEA-084",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "IDEA-116",
+      "id": "IDEA-105",
       "before": "partial",
       "after": "implemented"
     },
     {
-      "id": "DG-003",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "DG-089",
+      "id": "IDEA-111",
       "before": "partial",
       "after": "implemented"
     }
   ],
   "offline": {
     "node": "v24.22.3",
-    "tests": 1980,
-    "pass": 1819,
+    "tests": 1986,
+    "pass": 1823,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 161,
+    "skipped": 163,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

@@ -2,11 +2,12 @@
 
 명령 팔레트에서 **Rocketbrain: Edit Spring Starters**를 실행하고 프로젝트의 `pom.xml`을 선택합니다. `org.springframework.boot:spring-boot-dependencies`를 직접 가져오는 프로젝트와 열린 작업 영역에서 그 BOM을 로컬 부모 POM으로부터 상속하는 하위 프로젝트를 편집할 수 있습니다.
 
-- BOM은 `dependencyManagement`에 `type=pom`과 `scope=import`로 한 번 선언해야 합니다. 버전은 문자열 또는 같은 POM의 값이 하나로 정해진 속성으로 지정할 수 있습니다.
+- Spring Boot BOM을 `dependencyManagement`에 `type=pom`과 `scope=import`로 한 번 선언합니다. 버전에는 문자열이나 같은 POM의 속성을 사용할 수 있습니다.
+- JAR 버전을 직접 관리하는 추가 BOM은 그 POM의 Maven 좌표와 SHA-256을 `.rocketbrain-maven-models.json`에 기록합니다. 로컬 저장소에 설치된 POM을 읽고 추가 BOM이 관리하는 의존성을 보호합니다. `Rocketbrain › Spring: Maven Model Repository`에서 Maven 빌드에 사용할 물리적 로컬 저장소를 선택할 수 있습니다.
 - 로컬 부모 상속에는 작업 영역 안의 물리적 POM을 최대 네 개 사용합니다. 자식에 선언한 부모의 좌표와 실제 파일을 대조하고, 검토 화면에 각 부모의 경로와 지문을 표시합니다. 편집은 하위 POM의 직접 의존성에 적용되며 상속된 의존성은 보호합니다.
 - 부모 파일이나 열어 둔 부모 POM 버퍼가 바뀌면 새로 검토합니다.
 - POM에 직접 의존성만 담은 프로필이 있으면 편집할 프로필을 선택합니다. 검토 화면에 프로필 ID가 표시되며 같은 POM의 다른 범위에 선언된 의존성은 보호합니다. Maven 빌드에서는 `-P <프로필 ID>`로 해당 프로필을 선택합니다.
 - 편집할 스타터와 드라이버를 고른 뒤 BOM 출처와 삭제·추가될 의존성의 diff를 검토합니다. 로컬 `dependencyManagement`에서 버전을 직접 지정한 의존성은 선택에서 보호합니다.
 - 적용하면 Maven 직접 의존성 블록이 저장됩니다. Maven이 빌드할 때 실제 버전을 해석합니다. 저장한 뒤 필요하면 별도로 프로젝트를 다시 동기화하거나 Maven 빌드를 실행할 수 있습니다.
 
-자동 활성화 조건, 사용자 정의 외부 부모, 추가 BOM, 중간 계층의 의존성 관리나 BOM 버전 재정의는 해당 POM에서 직접 검토합니다.
+자동 활성화 조건, 사용자 정의 외부 부모, 중첩 BOM, 중간 계층의 의존성 관리나 BOM 버전 재정의는 해당 POM에서 직접 검토합니다.

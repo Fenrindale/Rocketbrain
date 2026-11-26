@@ -136,6 +136,13 @@ async function activate(context) {
   const httpTools = require('./http/vscode').registerHttpTools(context,vscode);
   const webdav = require('./http/webdav-vscode').registerWebDav(context,vscode);
   context.subscriptions.push(webdav);
+  const sftpDeployment = require('./remote/sftp-deploy-vscode').registerSftpDeployment(context, vscode);
+  context.subscriptions.push(sftpDeployment);
+  const ftpsDeployment = require('./remote/ftps-deploy-vscode').registerFtpsDeployment(vscode);
+  context.subscriptions.push(ftpsDeployment);
+  const deploymentChanges = require('./remote/deployment-watch-vscode').registerDeploymentWatch(vscode,
+    { sftp: sftpDeployment, ftps: ftpsDeployment, webdav });
+  context.subscriptions.push(deploymentChanges);
   const openApi = require('./http/openapi-vscode').registerOpenApiTools(context,vscode);
   context.subscriptions.push(httpTools,openApi);
   const jpa = require('./jpa/vscode').registerJPAFeatures(context, vscode, { catalog: database.databaseCatalog });
@@ -146,7 +153,8 @@ async function activate(context) {
   context.subscriptions.push(analysis);
   sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase,
     joinCatalog:database.joinCompletionCatalog,joinLogicalRelationships:database.joinLogicalRelationships,
-    objectDefinition:objectSources.definition,objectColumnOrigin:objectSources.columnOrigin,liveCatalogIdentity:database.liveCatalogIdentity});
+    objectDefinition:objectSources.definition,objectColumnOrigin:objectSources.columnOrigin,liveCatalogIdentity:database.liveCatalogIdentity,
+    isProfileConsole:database.isProfileSql,onDidChangeSqlFileProfile:database.onDidChangeSqlFileProfile});
   context.subscriptions.push(sqlAnalysis);
   const sqlCollations = require('./db/sql-collation-vscode').registerSqlCollations(vscode, {
     database, virtualActive: sqlAnalysis.virtualActive, onDidChangeAnalysis: sqlAnalysis.onDidChange
@@ -192,7 +200,7 @@ async function activate(context) {
   context.subscriptions.push(database.onDidChangeDatabase(() => { jpa.invalidateCatalog(); analysis.clearCatalog(); }));
   const wsl = require('./remote/wsl-vscode').registerWslWorkbench(vscode);
   context.subscriptions.push(wsl);
-  return { ...database, navigation, duckdb, sqlite, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlCollations, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, gitWorktrees, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
+  return { ...database, navigation, duckdb, sqlite, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, sftpDeployment, ftpsDeployment, deploymentChanges, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlCollations, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, gitWorktrees, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
 }
 async function deactivate() {
   const sourceAnalysis=activeJavaSourceAnalysis;

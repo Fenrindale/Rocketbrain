@@ -1,25 +1,25 @@
 {
-  "version": "0.106.0",
-  "verifiedAt": "2026-11-26T03:39:55.218Z",
+  "version": "0.108.0",
+  "verifiedAt": "2026-11-26T03:52:43.318Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.106.0.vsix",
-    "sha256": "fef8dffe1c9dcd68a8d6a7e0141a0acff41f4e7196cf4982cc3dd6f7a571e2c8",
-    "bytes": 4073226,
+    "name": "rocketbrain-0.108.0.vsix",
+    "sha256": "0e8aeef557d8e025f770b624d349b4bdc5f7de0cb29a1dced76b3d1b01325f40",
+    "bytes": 4112146,
     "files": 25
   },
   "source": {
-    "frozenPublicInputs": 2412,
-    "inputVectorSha256": "a9c2ebc60fc9eb207f4ed085d3d1fd9b9e43377eeffe3d030048aee4b74cab90",
+    "frozenPublicInputs": 2461,
+    "inputVectorSha256": "ef614a31efe4a530d500b96524b0cac788d792b629315ea052fe8aa545267699",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v24.22.3",
-    "tests": 1980,
-    "pass": 1819,
+    "tests": 1986,
+    "pass": 1823,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 161,
+    "skipped": 163,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -29,38 +29,34 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 8,
+      "groupCount": 7,
       "groups": [
         {
-          "group": "springMavenParent",
+          "group": "springMavenImports",
           "checks": 1
         },
         {
-          "group": "sqliteCellEdit",
+          "group": "sqlFileProfiles",
           "checks": 1
         },
         {
-          "group": "acpWorkspaceEdits",
+          "group": "sftpDeployment",
           "checks": 1
         },
         {
-          "group": "codeReviewActions",
+          "group": "namedTestNg",
           "checks": 1
         },
         {
-          "group": "jpaEntityProjection",
+          "group": "javaModuleTests",
           "checks": 1
         },
         {
-          "group": "acpRecovery",
+          "group": "ftpsDeployment",
           "checks": 1
         },
         {
-          "group": "localSqlExploration",
-          "checks": 1
-        },
-        {
-          "group": "springMavenProfile",
+          "group": "deploymentWatch",
           "checks": 1
         }
       ],
@@ -75,38 +71,34 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 8,
+      "groupCount": 7,
       "groups": [
         {
-          "group": "springMavenParent",
+          "group": "springMavenImports",
           "checks": 1
         },
         {
-          "group": "sqliteCellEdit",
+          "group": "sqlFileProfiles",
           "checks": 1
         },
         {
-          "group": "acpWorkspaceEdits",
+          "group": "sftpDeployment",
           "checks": 1
         },
         {
-          "group": "codeReviewActions",
+          "group": "namedTestNg",
           "checks": 1
         },
         {
-          "group": "jpaEntityProjection",
+          "group": "javaModuleTests",
           "checks": 1
         },
         {
-          "group": "acpRecovery",
+          "group": "ftpsDeployment",
           "checks": 1
         },
         {
-          "group": "localSqlExploration",
-          "checks": 1
-        },
-        {
-          "group": "springMavenProfile",
+          "group": "deploymentWatch",
           "checks": 1
         }
       ],
@@ -118,102 +110,96 @@
   ],
   "newlyVerified": {
     "IDEA-052": {
-      "scope": "실제 Maven 부모 두 개와 명시 프로필에서 effective POM, 두 JDBC 드라이버, 새 Boot JAR 실행을 확인했다.",
+      "scope": "Maven에 실제 추가 BOM 두 개를 사용했다. 중복 관리 의존성을 보호하고 POM 변경과 미고정 모델을 거부했다. 새 Spring JAR로 실제 JDBC를 확인했다.",
       "runtimeGroups": [
-        "springMavenParent",
-        "springMavenProfile"
+        "springMavenImports"
       ]
     },
-    "IDEA-060": {
-      "scope": "실제 Hibernate에서 루트·조인·NULL 행, 콜백 실행 없이 한 번의 읽기 전용 SELECT, 바뀐 매핑 거부를 확인했다.",
+    "IDEA-084": {
+      "scope": "실제 명명 모듈에서 두 엔진의 선택 실행을 확인했다. TestNG의 동일 인자 행을 구분하고 JaCoCo 결과 및 별도 실제 JDI 중단·재개를 대조했다.",
       "runtimeGroups": [
-        "jpaEntityProjection"
+        "namedTestNg",
+        "javaModuleTests"
       ]
     },
-    "IDEA-095": {
-      "scope": "소유 HTTP 시험 서버에서 정확한 커밋과 노트 승인, 수정된 원본과 불확정 응답의 재전송 거부를 확인했다.",
+    "IDEA-105": {
+      "scope": "저장 파일 두 개에서 두 실제 DB의 동시 실행·결과 이동·롤백을 확인했다. 세션을 끊었을 때 다른 DB로 전환하지 않았고 명시적으로 다시 연결했다.",
       "runtimeGroups": [
-        "codeReviewActions"
+        "sqlFileProfiles"
       ]
     },
-    "IDEA-116": {
-      "scope": "실제 OpenCode와 Qwen이 두 Java 파일의 변경을 제안했다. 컴파일 후 Spring에서 실행했고 새 OpenCode 프로세스가 암호화한 이력을 복구했다.",
+    "IDEA-111": {
+      "scope": "실제 세 서버에서 두쪽 변경과 충돌을 대조했다. FTPS의 암호화 데이터 연결과 새 이름을 확인했고, 검토한 파일만 게시했다.",
       "runtimeGroups": [
-        "acpWorkspaceEdits",
-        "acpRecovery"
-      ]
-    },
-    "DG-003": {
-      "scope": "실제 SQLite에서 64비트 한계, 실수, 유니코드, BLOB과 NULL을 원본에 반영했다. 다른 행, 잠금 및 파일·스키마·행 변경에 대한 검토를 확인했다.",
-      "runtimeGroups": [
-        "sqliteCellEdit"
-      ]
-    },
-    "DG-089": {
-      "scope": "실제 로컬 Qwen으로 읽기 SQL 두 차례, 결과 1행과 2행, 원본 편집기 다시 열기, 바뀐 FK 거부와 대화 기록을 확인했다.",
-      "runtimeGroups": [
-        "localSqlExploration"
+        "sftpDeployment",
+        "ftpsDeployment",
+        "deploymentWatch"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 542,
+    "sourceCorrespondences": 557,
     "sourceConfidence": "inferred",
     "archiveEntries": 25,
     "archiveConfidence": "observed"
   },
+  "nativePayloadEquivalence": {
+    "files": 25,
+    "testedArchiveSha256": "c7f1947dc627351b8ce091c5853e340da22418d29a5c3cf95fb5d57c1327941f",
+    "testedInputVectorSha256": "602a87431c1538279a87487ce65e360f2807680533afe05e7fde61baed2abcd8",
+    "onlySourceChanges": [
+      "test/sql-file-profiles-host.js"
+    ]
+  },
   "progress": {
     "counts": {
-      "implemented": 162,
-      "partial": 40,
+      "implemented": 166,
+      "partial": 36,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 194,
-    "previousWeightedPoints": 191.5,
+    "weightedPoints": 196,
+    "previousWeightedPoints": 194,
     "targetWeightedPoints": 216,
-    "referencePercent": 89.8,
+    "referencePercent": 90.7,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-060",
+        "id": "IDEA-052",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "IDEA-095",
+        "id": "IDEA-084",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "IDEA-116",
+        "id": "IDEA-105",
         "before": "partial",
         "after": "implemented"
       },
       {
-        "id": "DG-003",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "DG-089",
+        "id": "IDEA-111",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "JPQL 엔티티는 확인한 Hibernate의 기본 매핑과 단일 관계 조인에서 필드를 읽는다.",
-    "SQLite 원본 변경은 확인한 Windows 런타임과 검토한 단일 행·셀을 사용한다.",
-    "ACP는 선택한 로컬 동료와 작업 영역 및 모델에 연결된 암호화 세션을 사용한다.",
+    "추가 Maven BOM은 검토한 직접 관리 좌표와 로컬 POM 지문에 묶는다.",
+    "SQL 파일을 새 경로로 저장하면 연결을 다시 지정한다.",
+    "모듈 테스트는 확인한 이름 있는 JVM 모듈과 런타임을 사용한다.",
+    "FTPS 파일 게시는 서버가 고유하게 만든 이름과 확인한 내용을 사용한다.",
+    "배포 비교는 선택한 폴더를 읽고, 앞으로 보낼 파일이 있으면 기존 검토 화면에서 적용한다.",
     "IDEA-001과 DG-095가 요구하는 창 배치는 일반 VS Code 확장 API 범위를 벗어난다. 현행 가중 점수 상한은 214/216점이다."
   ],
   "next": [
-    "두 추가 BOM을 고정한 Maven 편집과 SQL 파일별 독립 DB 세션",
-    "JPMS JUnit·TestNG 및 SFTP·FTPS·WebDAV 배포"
+    "Kotlin 프레임의 표현식과 Watch",
+    "Java 의존성 경고의 실제 호출 위치 검토"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
