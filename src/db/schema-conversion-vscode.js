@@ -40,10 +40,25 @@ async function chooseColumnMappings(vscode, current, desired, tables) {
  return Object.fromEntries(choices);
 }
 
-async function chooseConversions(vscode,current,desired,tables,{columnMappings={}}={}){
+async function chooseConversions(vscode,current,desired,tables,{columnMappings={},selectedColumns}={}){
  const trusted=()=>{if(vscode.workspace?.isTrusted===false)throw Error('Trust the workspace before selecting schema conversions.');};trusted();
  if(!Array.isArray(tables)||!tables.length||tables.length>10)throw Error('Select 1 to 10 rebuild tables.');const changes=[];
- for(const name of tables){const before=current.tables.find(table=>table.name===name),after=desired.tables.find(table=>table.name===name);if(!before||!after)continue;for(const target of after.columns){const alias=Object.hasOwn(columnMappings,name)&&columnMappings[name].find(pair=>pair.to===target.name);const source=before.columns.find(column=>column.name===(alias?.from||target.name));if(!source)continue;const captured=logicalColumn(before,source),from=alias?{...captured,name:target.name}:captured,to=logicalColumn(after,target),a=C.describeType(from),b=C.describeType(to);if(a.type===b.type&&a.category===b.category&&a.srsId===b.srsId&&a.category!=='geometry')continue;const options=candidates(from,to,{dialect:current.server?.dialect,exactOnly:Boolean(alias)});if(!options.length)throw Error('No supported reviewed conversion exists for '+name+'.'+target.name+' ('+source.type+' to '+target.type+').');changes.push({table:name,column:target.name,from:source.type,to:target.type,options});}}
+ for(const name of tables){
+  const before=current.tables.find(table=>table.name===name),after=desired.tables.find(table=>table.name===name);
+  if(!before||!after)continue;
+  for(const target of after.columns){
+   if(selectedColumns&&!selectedColumns.get(name)?.has(target.name))continue;
+   const alias=Object.hasOwn(columnMappings,name)&&columnMappings[name].find(pair=>pair.to===target.name);
+   const source=before.columns.find(column=>column.name===(alias?.from||target.name));
+   if(!source)continue;
+   const captured=logicalColumn(before,source),from=alias?{...captured,name:target.name}:captured,to=logicalColumn(after,target);
+   const a=C.describeType(from),b=C.describeType(to);
+   if(a.type===b.type&&a.category===b.category&&a.srsId===b.srsId&&(a.category!=='geometry'||selectedColumns))continue;
+   const options=candidates(from,to,{dialect:current.server?.dialect,exactOnly:Boolean(alias)});
+   if(!options.length)throw Error('No supported reviewed conversion exists for '+name+'.'+target.name+' ('+source.type+' to '+target.type+').');
+   changes.push({table:name,column:target.name,from:source.type,to:target.type,options});
+  }
+ }
  if(changes.length>200)throw Error('The conversion dialog supports at most 200 changed columns per review.');const result={};
  for(const change of changes){trusted();const choice=await vscode.window.showQuickPick(change.options,{title:'Conversion for '+change.table+'.'+change.column,placeHolder:change.from+' → '+change.to+' · original values remain in the retained backup',ignoreFocusOut:true});trusted();if(!choice)return null;const canonical=change.options.find(option=>option===choice||option.label===choice.label);if(!canonical)throw Error('Choose an offered finite conversion policy.');(result[change.table]||=[]).push({...canonical.rule});}
  return result;

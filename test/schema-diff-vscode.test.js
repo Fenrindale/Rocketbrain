@@ -15,6 +15,142 @@ test('reprojection review can select an unchanged InnoDB geometry table without 
  try{const comparison=await h.api.compare(structuredClone(current));assert.equal(comparison.changes.length,0);await h.commands.get('rocketbrain.schema.reviewRebuild')();assert.deepEqual(offered,['locations']);assert.equal(picks,2);}finally{await h.api.dispose();}
 });
 
+test('the selected rebuild command previews only its exact IDs and maps columns against the projection',async()=>{
+ const {normalizeSnapshot}=require('../src/db/schema-diff');
+ const {projectSelectedRebuild}=require('../src/db/schema-rebuild-selection');
+ let current=addColumn(fixture(),'legacy');
+ current=addColumn(current,'score',{type:'int',charset:null,collation:null});
+ current=addColumn(current,'location',{type:'point',charset:null,collation:null,srsId:4326});
+ const proposal=structuredClone(current);
+ proposal.tables[0].columns=proposal.tables[0].columns.filter(column=>column.name!=='legacy');
+ proposal.tables[0].columns[1]={...proposal.tables[0].columns[1],type:'bigint',ordinal:2};
+ proposal.tables[0].columns[2].ordinal=3;
+ const proposed=addColumn(addColumn(normalizeSnapshot(proposal,{verifyFingerprint:false}),'preferred'),'unselected_note');
+ let expected,prepared=0,applied=0,approve=false;
+ const opened=[],errors=[],prompts=[];
+ const h=host(async()=>current,{
+  prepareRebuild:async request=>{
+   prepared++;
+   assert.deepEqual(request.desired,proposed);
+   assert.deepEqual(request.changeIds,expected);
+   assert.deepEqual(request.tables,['people']);
+   assert.deepEqual(request.columnMappings,{people:[{from:'legacy',to:'preferred'}]});
+   assert.deepEqual(request.conversions,{});
+   const projection=projectSelectedRebuild(request.current,request.desired,request.changeIds);
+   const plan=makePlan(request.current,projection.desired,{
+    tables:request.tables,conversions:request.conversions,columnMappings:request.columnMappings
+   });
+   plan.requiresDependencyChangeApproval=true;
+   return {plan,reviewId:plan.id,expiresAt:Date.now()+120000,connectionEpoch:3};
+  },
+  applyRebuild:async request=>{
+   applied++;
+   assert.equal(request.allowDestructive,true);
+   assert.equal(request.allowImplicitCommit,true);
+   assert.equal(request.allowDependencyChanges,true);
+   assert.equal(request.autoRecover,true);
+   return {id:request.reviewId,state:'applied',steps:[]};
+  }
+ });
+ h.vscode.Uri={parse:value=>({path:new URL(value).pathname})};
+ h.vscode.workspace.openTextDocument=async uri=>({uri});
+ h.vscode.window.showTextDocument=async document=>{opened.push(document.uri.path);};
+ h.vscode.window.showInformationMessage=async()=>{};
+ h.vscode.window.showErrorMessage=async message=>{errors.push(message);};
+ h.vscode.ProgressLocation={Notification:3};
+ h.vscode.window.withProgress=async(_,run)=>run(undefined,undefined);
+ h.vscode.window.showQuickPick=async(items,options)=>{
+  switch(options.title){
+   case 'Review Selected Schema Rebuild':return items[0];
+   case 'Select Individual Rebuild Changes':
+    assert.ok(options.canPickMany);
+    assert.ok(items.some(item=>item.label==='people.score'));
+    return items.filter(item=>expected.includes(item.changeId));
+   case 'Map a renamed column in people':
+    assert.deepEqual(items.map(item=>item.label),['Do not map columns','legacy']);
+    return items[1];
+   case 'Destination for people.legacy':
+    assert.deepEqual(items.map(item=>item.label),['preferred']);
+    return items[0];
+   case 'Apply Reviewed Schema Rebuild':
+    assert.equal(items[0].description,'2 selected change(s)');
+    return items[0];
+   default:assert.fail('Unexpected picker for an unselected difference: '+options.title);
+  }
+ };
+ h.vscode.window.showWarningMessage=async(message,_options,action)=>{
+  prompts.push(action);
+  if(action==='Accept Reviewed Dependency Disruption')return action;
+  assert.match(message,/2 selected change/);
+  assert.match(message,/named backups/);
+  return approve?action:undefined;
+ };
+ try{
+  const comparison=await h.api.compare(proposed);
+  expected=comparison.changes.filter(change=>['legacy','preferred'].includes(change.object)).map(change=>change.id).sort();
+  assert.equal(expected.length,2);
+  assert.match(h.api.reviewText(comparison.id),/Review Selected Schema Rebuild/);
+  await assert.rejects(h.api.planRebuild(comparison.id,['other'],{changeIds:expected}),/do not match/);
+  const review=await h.commands.get('rocketbrain.schema.reviewSelectedRebuild')();
+  assert.deepEqual(errors,[]);
+  assert.equal(prepared,1);
+  assert.deepEqual(review.selectedChanges.map(change=>change.id),expected);
+  assert.deepEqual(review.steps[0].after.columns.map(column=>[column.name,column.type]),[
+   ['id','int'],['score','int'],['location','point'],['preferred','varchar(30)']
+  ]);
+  const spatialCopy=review.steps[0].conversions.find(rule=>rule.column==='location');
+  assert.equal(spatialCopy.strategy,'exact');
+  assert.equal(spatialCopy.explicit,false);
+  assert.ok(opened[0].endsWith('/migration.sql'));
+  review.selectedChanges.length=0;
+  const sql=h.providers.get('rocketbrain-schema-compare').provideTextDocumentContent({path:opened[0]});
+  assert.match(sql,/Selected schema changes/);
+  for(const id of expected)assert.ok(sql.includes(id));
+  assert.match(sql,/__rb_backup_/);
+  assert.doesNotMatch(sql,/unselected_note|bigint/);
+  await h.commands.get('rocketbrain.schema.applyRebuild')();
+  assert.equal(applied,0);
+  approve=true;
+  const report=await h.commands.get('rocketbrain.schema.applyRebuild')();
+  assert.equal(report.state,'applied');
+  assert.equal(applied,1);
+  assert.deepEqual(prompts,['Accept Reviewed Dependency Disruption','Apply Rebuild with Guarded Recovery',
+   'Accept Reviewed Dependency Disruption','Apply Rebuild with Guarded Recovery']);
+  assert.ok(opened.at(-1).endsWith('/application.md'));
+ }finally{await h.api.dispose();}
+});
+
+test('selected rebuild requires explicit dependency selections and current workspace trust',async()=>{
+ const {normalizeSnapshot}=require('../src/db/schema-diff');
+ const current=fixture();
+ const proposed=addColumn(structuredClone(current),'added_note');
+ proposed.tables[0].indexes.push({name:'note_idx',unique:false,primaryKey:false,type:'BTREE',comment:'',
+  columns:[{name:'added_note',ordinal:1,prefixLength:null,collation:'A'}]});
+ const desired=normalizeSnapshot(proposed,{verifyFingerprint:false});
+ const messages=[];
+ let loseTrust=false;
+ const h=host(async()=>current,{prepareRebuild:async()=>assert.fail('An inadmissible selection reached the service.')});
+ h.vscode.window.showErrorMessage=async message=>{messages.push(message);};
+ h.vscode.window.showQuickPick=async(items,{title})=>{
+  if(title==='Review Selected Schema Rebuild')return items[0];
+  assert.equal(title,'Select Individual Rebuild Changes');
+  const index=items.find(item=>item.label==='people.note_idx');
+  assert.equal(index.detail,'Also select people.added_note');
+  if(!loseTrust)return [index];
+  h.vscode.workspace.isTrusted=false;
+  return items;
+ };
+ try{
+  await h.api.compare(desired);
+  const review=h.commands.get('rocketbrain.schema.reviewSelectedRebuild');
+  await review();
+  assert.match(messages[0],/Select the required dependency changes together/);
+  loseTrust=true;
+  await review();
+  assert.match(messages[1],/Trust the workspace/);
+ }finally{await h.api.dispose();}
+});
+
 test('dependency and lossy approvals are independent, strict and checked before consuming the immutable rebuild review',async()=>{
  const current=fixture(),desired=fixture();desired.tables[0].columns[0].type='bigint';const target=require('../src/db/schema-diff').normalizeSnapshot(desired,{verifyFingerprint:false});let applications=0,preparations=0;
  const h=host(async()=>current,{prepareRebuild:async request=>{preparations++;assert.deepEqual(request.conversions,{});const plan=makePlan(request.current,request.desired,{tables:request.tables});plan.requiresDependencyChangeApproval=true;plan.requiresLossyConversionApproval=true;return{plan,reviewId:plan.id,expiresAt:Date.now()+120000,connectionEpoch:5};},applyRebuild:async request=>{applications++;assert.equal(request.allowDependencyChanges,true);assert.equal(request.allowLossyConversions,true);return{id:request.reviewId,state:'applied',steps:[]};}});

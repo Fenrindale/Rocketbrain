@@ -34,7 +34,7 @@ async function ownedConfig(file) {
   return {config, engine};
 }
 
-async function fixture(config) {
+async function fixture(config, {unselectedDrop = false} = {}) {
   const actor = await mysql.createConnection({...config, supportBigNumbers: true, bigNumberStrings: true});
   const base = 'rb_mapped_' + randomBytes(5).toString('hex');
   const tables = {parent: base + '_parent', child: base + '_child', peer: base + '_peer'};
@@ -51,7 +51,8 @@ async function fixture(config) {
     const type = projected ? 'BIGINT' : 'INT';
     const name = projected ? names.to : names.from;
     await actor.query('CREATE TABLE ' + q(tables.parent) + ' (id INT PRIMARY KEY, zone_id INT NOT NULL, ' +
-      q(name) + ' ' + type + ' NOT NULL, note VARCHAR(64) NOT NULL, UNIQUE KEY named_code (zone_id,' + q(name) + '))' + definition);
+      q(name) + ' ' + type + ' NOT NULL, ' + (projected && unselectedDrop ? '' : 'note VARCHAR(64) NOT NULL, ') +
+      'UNIQUE KEY named_code (zone_id,' + q(name) + '))' + definition);
     await actor.query('CREATE TABLE ' + q(tables.child) + ' (id INT PRIMARY KEY, zone_id INT NOT NULL, link_code ' + type +
       ' NULL, KEY named_link(zone_id,link_code), CONSTRAINT ' + q(constraint) + ' FOREIGN KEY(zone_id,link_code) REFERENCES ' +
       q(tables.parent) + '(zone_id,' + q(name) + ') ON UPDATE CASCADE ON DELETE RESTRICT)' + definition);

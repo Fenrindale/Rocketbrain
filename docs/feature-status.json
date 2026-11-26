@@ -1,5 +1,5 @@
 {
-  "version": "0.166.0",
+  "version": "0.170.0",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -43,10 +43,10 @@
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-045"
+    "DG-083"
   ],
   "expandedFeatures": [
-    "IDEA-045"
+    "DG-083"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1322,8 +1322,8 @@
       "verification": {
         "state": "v0.166-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.166.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5924,24 +5924,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "동일 서버의 검토된 컬럼 매핑을 복사와 복구에 유지한다. 기존 정보를 새 타입으로 옮기면서 인덱스와 영향받는 두 테이블의 복합 외래 키를 보존한다.",
+      "scope": "동일 서버의 기존 테이블에서 컬럼·인덱스 변경과 테이블별 외래 키 변경을 선택해 검토한다. 매핑한 이름과 타입을 적용하고 선택하지 않은 컬럼과 값을 보존한다. 필요한 종속 변경이 빠지면 검토가 중단된다.",
       "remaining": [
         "별도 서버에 걸친 원자적 DDL과 임의 동적 SQL·사용자 정의 종속성은 남아 있다."
       ],
       "verification": {
-        "state": "v0.164-vendor-runtime-coverage",
+        "state": "v0.170-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.164.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 MySQL·MariaDB에서 INT를 BIGINT로 바꾸면서 이름도 변경했다. 경계 정수와 NULL, 복합 인덱스·외래 키가 유지됐고 새 세션으로 복구해도 Spring JDBC 결과가 일치했다. 불완전한 외래 키와 승인 후 데이터 변경은 거부했다.",
+        "testedScope": "실제 Spring JDBC와 MySQL·MariaDB에서 이름·타입 변경 및 복합 인덱스·외래 키를 적용하고 누락된 종속 변경을 거부했다. 목표 정의에서 삭제될 컬럼을 선택에서 빼 값을 보존하고 새 세션에서 원본을 복구했다.",
         "publicEvidence": [
-          "src/db/schema-column-mappings.js",
+          "src/db/schema-rebuild-selection.js",
           "src/db/schema-recovery.js",
-          "test/schema-column-mapping.test.js",
-          "test/schema-column-mapping-host.js"
+          "src/db/schema-diff-vscode.js",
+          "test/schema-column-mapping.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6328,8 +6328,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "2b53bea2f862bcb9f3a38c3dcc169da6edb896be4997c3e63c4faabb29f40dd1",
-    "sourceManifestSha256": "4b390879063f1e02fbba9146ce5d1636285ff40579a496613731d3b8fb15d7f2",
+    "vsixSha256": "ed98bf9d3eaf0598c0c4b277debaff36a4621275f12a5e36684c393876e43692",
+    "sourceManifestSha256": "af41d44b1581ea4905a8b7abe1f549b2100e2d2a2ad1f0c68fe83e8d78c740f7",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6341,25 +6341,19 @@
       }
     ]
   },
-  "stateChanges": [
-    {
-      "id": "IDEA-045",
-      "before": "partial",
-      "after": "implemented"
-    }
-  ],
+  "stateChanges": [],
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "ffe1e6cad2cbbf63a83e541f8e7eb6ced19234de",
-    "run": 45882199819,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45882199819",
-    "tests": 2262,
+    "head": "d42526c7df9b3b10e0c4d8c55ed77a7792afc427",
+    "run": 45889836492,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45889836492",
+    "tests": 2273,
     "suites": 0,
-    "pass": 2011,
+    "pass": 2020,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 251,
+    "skipped": 253,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

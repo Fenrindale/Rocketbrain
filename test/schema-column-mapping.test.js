@@ -6,7 +6,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const {MysqlService} = require('../src/db/mysql');
 const {makePlan, JOURNAL} = require('../src/db/schema-recovery');
-const {captureSchema, normalizeSnapshot} = require('../src/db/schema-diff');
+const {captureSchema, compareSnapshots, normalizeSnapshot} = require('../src/db/schema-diff');
 const {chooseColumnMappings, chooseConversions} = require('../src/db/schema-conversion-vscode');
 const {fixture: snapshot} = require('./helpers/schema-diff-fixture');
 const F = require('./helpers/schema-column-mapping-fixture');
@@ -169,6 +169,140 @@ test('actual schema rebuild maps renamed values and paired composite FK types wi
       bothOwnersSelected: true, readOnlyPreflightRefusals: true, columnMappingDriftRefused: true,
       noRowValuesInJournal: true, liveRowDriftRefused: true, freshSessionRestored: true,
       peerPreserved: true, atomicAcrossTables: false}, null, 2) + '\n', {flag: 'wx'});
+  } finally {
+    try {await service.dispose();}
+    finally {await s.close();}
+  }
+});
+
+test('actual selected rebuild retains an unselected live column and restores the selected FK pair through a new session', {
+  skip: !database || !runtime || !cpFile, timeout: 190000
+}, async () => {
+  const {config, engine} = await F.ownedConfig(database);
+  const {javaHome} = JSON.parse(await fs.readFile(runtime, 'utf8'));
+  const s = await F.fixture(config, {unselectedDrop: true});
+  let service = new MysqlService(config);
+  const capture = scope => captureSchema(service, scope);
+  const parent = s.tables.parent;
+  const child = s.tables.child;
+  const spring = projected => F.springRead(s, {javaHome, cpFile, engine, projected});
+  const signature = change => [change.kind, change.table, change.object].join(':');
+  const targetChangeKeys = new Set([
+    ['drop-column', parent, F.names.from].join(':'),
+    ['add-column', parent, F.names.to].join(':'),
+    ['change-index', parent, 'named_code'].join(':'),
+    ['change-column', child, 'link_code'].join(':'),
+    ['change-foreignKeys', child, child].join(':')
+  ]);
+  try {
+    const current = await s.prepare(capture);
+    const desired = s.desired;
+    const changes = compareSnapshots(current, desired).changes;
+    const selected = changes.filter(change => targetChangeKeys.has(signature(change)));
+    const ignored = changes.find(change => change.kind === 'drop-column' && change.table === parent && change.object === 'note');
+    assert.equal(selected.length, targetChangeKeys.size);
+    assert.ok(ignored);
+    assert.equal(changes.length, selected.length + 1);
+    const request = {current, desired, changeIds: selected.map(change => change.id), columnMappings: s.columnMappings};
+
+    const before = await spring(false);
+    const missingForeignKey = selected.filter(change => change.kind !== 'change-foreignKeys');
+    await assert.rejects(service.previewSchemaRebuild({...request, changeIds: missingForeignKey.map(change => change.id)}),
+      /foreign|dependency|referenc|affected/iu);
+    await assert.rejects(service.previewSchemaRebuild({...request, tables: [parent]}), /select|table|scope/iu);
+    await s.checkGraph(capture, false);
+
+    const review = await service.previewSchemaRebuild(request);
+    s.plans.push(review.plan);
+    assert.deepEqual(review.plan.steps.map(step => step.table).sort(), [child, parent].sort());
+    const parentStep = review.plan.steps.find(step => step.table === parent);
+    assert.deepEqual(parentStep.after.columns.map(column => column.name), ['id', 'zone_id', F.names.to, 'note']);
+    assert.ok(parentStep.common.includes('note'));
+    assert.ok(parentStep.sourceColumns.includes('note'));
+    assert.ok(review.plan.requiresDependencyChangeApproval);
+    assert.equal(review.plan.atomicAcrossTables, false);
+    request.changeIds.push(ignored.id);
+    parentStep.after.columns = parentStep.after.columns.filter(column => column.name !== 'note');
+
+    const applied = await service.applySchemaRebuild({...F.flags, reviewId: review.reviewId});
+    assert.equal(applied.state, 'applied', JSON.stringify(applied));
+    await s.checkGraph(capture, true);
+    const after = await spring(true);
+    assert.deepEqual(after, before);
+    const afterSnapshot = await capture(s.scope);
+    assert.deepEqual(compareSnapshots(afterSnapshot, desired).changes.map(signature), [signature(ignored)]);
+    const recorded = await s.journal(review.plan.id);
+    assert.ok(recorded.desired.tables.find(table => table.name === parent).columns.some(column => column.name === 'note'));
+    assert.equal(JSON.stringify(recorded).includes(F.expected.parent[0][3]), false);
+
+    await service.dispose();
+    service = new MysqlService(config);
+    const restored = await service.recoverSchemaRebuild({...F.flags, operationId: review.plan.id});
+    assert.equal(restored.state, 'recovered', JSON.stringify(restored));
+    await s.checkGraph(capture, false);
+    const restoredJdbc = await spring(false);
+    assert.deepEqual(restoredJdbc, before);
+    const recoveredSnapshot = await capture(s.scope);
+    assert.deepEqual(compareSnapshots(recoveredSnapshot, current).changes, []);
+    const receipt = process.env.ROCKETBRAIN_SCHEMA_SELECTED_REBUILD_RECEIPT;
+    if (receipt) await fs.writeFile(path.resolve(receipt), JSON.stringify({
+      engine, version: before.version, before, after, restored: restoredJdbc,
+      selectedChanges: [...targetChangeKeys].map(key => key.split(':')[0]).sort(),
+      unselectedColumnKeptThroughApplyAndRecovery: true,
+      selectedScopeImmuneToExternalMutation: true,
+      dependencyRefusedBeforeApply: true,
+      compositeIndexAndForeignKeyPreserved: true,
+      unrelatedPeerAndNullValuesPreserved: true,
+      storedProjectedTargetRecovered: true,
+      atomicAcrossTables: false
+    }, null, 2) + '\n', {flag: 'wx'});
+  } finally {
+    try {await service.dispose();}
+    finally {await s.close();}
+  }
+});
+
+
+test('actual selected rebuild installs and recovers a new foreign-key group on an existing table', {
+  skip: !database || !runtime || !cpFile, timeout: 190000
+}, async () => {
+  const {config, engine} = await F.ownedConfig(database);
+  const {javaHome} = JSON.parse(await fs.readFile(runtime, 'utf8'));
+  const s = await F.fixture(config);
+  let service = new MysqlService(config);
+  const capture = scope => captureSchema(service, scope);
+  try {
+    const desired = await s.prepare(capture);
+    await s.actor.query('ALTER TABLE ' + F.q(s.tables.child) + ' DROP FOREIGN KEY ' + F.q(s.constraint));
+    const current = await capture(s.scope);
+    const changes = compareSnapshots(current, desired).changes;
+    assert.equal(changes.length, 1);
+    assert.equal(changes[0].kind, 'change-foreignKeys');
+    const requested = await service.previewSchemaRebuild({current, desired, changeIds: [changes[0].id]});
+    s.plans.push(requested.plan);
+    assert.equal(requested.plan.steps.length, 1);
+    assert.equal(requested.plan.steps[0].table, s.tables.child);
+    assert.ok(requested.plan.requiresDependencyChangeApproval);
+    assert.equal(requested.plan.dependencies.before.foreignKeys.length, 0);
+    assert.equal(requested.plan.dependencies.after.foreignKeys.length, 1);
+    await assert.rejects(service.applySchemaRebuild({...F.flags, reviewId: requested.reviewId, allowDependencyChanges: false}),
+      /dependenc|approve|fence/iu);
+    const applied = await service.applySchemaRebuild({...F.flags, reviewId: requested.reviewId});
+    assert.equal(applied.state, 'applied', JSON.stringify(applied));
+    await s.checkGraph(capture, false);
+    const spring = await F.springRead(s, {javaHome, cpFile, engine, projected: false});
+
+    await service.dispose();
+    service = new MysqlService(config);
+    const recovered = await service.recoverSchemaRebuild({...F.flags, operationId: requested.plan.id});
+    assert.equal(recovered.state, 'recovered', JSON.stringify(recovered));
+    assert.deepEqual(compareSnapshots(await capture(s.scope), current).changes, []);
+    await s.checkPeer();
+    const receipt = process.env.ROCKETBRAIN_SCHEMA_SELECTED_REBUILD_NEW_FK_RECEIPT;
+    if (receipt) await fs.writeFile(path.resolve(receipt), JSON.stringify({
+      engine, version: spring.version, joined: spring.joined, newForeignKeyInstalled: true,
+      missingDependencyApprovalRefused: true, freshRecoveryRemovedOnlyNewForeignKey: true
+    }, null, 2) + '\n', {flag: 'wx'});
   } finally {
     try {await service.dispose();}
     finally {await s.close();}
