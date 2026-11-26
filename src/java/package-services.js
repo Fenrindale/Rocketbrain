@@ -158,9 +158,9 @@ function factoryShape(source, type, service) {
   return { implementation, privateConstructor };
 }
 
-function reviewPackageServices({ project, roots, directoryExists, sources, moved, oldPackage, newPackage, uriFor }) {
+function reviewPackageServices({ project, roots, directoryExists, sources, moved, oldPackage, newPackage, uriFor, moduleRename = false }) {
   const inventory = readServiceInventory(project, roots, directoryExists);
-  const module = reviewClosedModule(project, sources);
+  const module = reviewClosedModule(project, sources, { allowVisibility: moduleRename });
   if (module && inventory.length) throw Error('Module service declarations cannot be mixed with classpath service descriptors.');
   const registrations = module ? [...module.registrations.values()] : inventory;
   const data = new Map();
@@ -304,7 +304,7 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
       rewrites: rewrites.map(({ name, nextName: to }) => ({ from: name, to }))
     });
   }
-  if (module && !moduleReplacements.length && ![...services.values()].some(value =>
+  if (module && !moduleRename && !moduleReplacements.length && ![...services.values()].some(value =>
     value.providerFactories.some(factory => factory.implementation !== factory.nextImplementation))) {
     throw Error('Module Package Move requires a reviewed service interface, provider or factory implementation within the moved set.');
   }
@@ -312,7 +312,8 @@ function reviewPackageServices({ project, roots, directoryExists, sources, moved
   return {
     services, providers, factories, interfaces, edits, permissions, renames,
     moduleEntry: module?.makeEntry(moduleReplacements),
-    ...(module ? { module: { name: module.name, uri: module.uri, directiveEdits: moduleReplacements.length } } : {}),
+    ...(module ? { module: { name: module.name, uri: module.uri, directiveEdits: moduleReplacements.length },
+      ...(moduleRename ? { moduleDescriptor: module } : {}) } : {}),
     compilerContractCount: compilerMethods.length,
     verifyCompilerBindings(before, after, renames) {
       const relocated = new Map(renames.map(rename => [rename.oldUri, rename.newUri]));

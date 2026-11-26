@@ -16,24 +16,34 @@ function mentionsType(ref,name){return Boolean(ref&&(ref.name===name||(ref.argum
 function point(text,p){const lines=text.split('\n');return lines.slice(0,p.line).reduce((n,line)=>n+line.length+1,0)+p.character;}
 function contains(range,p){return p.line>range.start.line&&p.line<range.end.line||p.line===range.start.line&&p.character>=range.start.character&&(p.line<range.end.line||p.character<=range.end.character)||p.line===range.end.line&&p.character<=range.end.character&&p.line>range.start.line;}
 function analyzeSpringDelete({sources,uri,candidate,javaReferences=[]}){
- const java=sources.filter(s=>/\.java$/i.test(s.uri)),files=java.map(parseJavaFile),selected=files.find(f=>f.uri===uri),parsed=selected?.types.find(type=>candidate.kind==='file'?type.name===candidate.name:type.methods.some(m=>m.name===candidate.name&&contains(candidate.declarationRange,rangeAt(selected.text,m.start,m.end).start))),member=candidate.kind==='method'?parsed?.methods.find(m=>m.name===candidate.name&&contains(candidate.declarationRange,rangeAt(selected.text,m.start,m.end).start)):null;
+ const java=sources.filter(s=>/\.java$/i.test(s.uri)),files=java.map(parseJavaFile),selected=files.find(f=>f.uri===uri);
+ const memberKey = candidate.kind === 'field' ? 'fields' : 'methods';
+ const selectedMember = member => member.name === candidate.name &&
+   contains(candidate.declarationRange, rangeAt(selected.text,member.start,member.end).start);
+ const parsed = selected?.types.find(type => candidate.kind === 'file' ?
+   type.name === candidate.name : type[memberKey].some(selectedMember));
+ const member = candidate.kind === 'file' ? null : parsed?.[memberKey].find(selectedMember);
  const relatedReferences=[],conflicts=[],unknowns=[],seen=new Set();let truncated=false,lookupCharacters=0,aliasCount=0;
  const budget=(source,range,message)=>{if(truncated)return;truncated=true;const item={kind:'analysis.budget',uri:source,range,message};unknowns.push(item);relatedReferences.push(item);};
  const add=(kind,source,range,message,{unknown=false,related=true}={})=>{if(truncated)return;const item={kind,uri:source,range,message},key=JSON.stringify(item);if(seen.has(key))return;if(seen.size>=ANALYSIS_LIMITS.findings){budget(source,range,'Spring Safe Delete finding budget exceeded; the report is incomplete and deletion is refused.');return;}seen.add(key);(unknown?unknowns:conflicts).push(item);if(related)relatedReferences.push(item);};
  const configs=sources.filter(s=>/\.(?:properties|ya?ml)$/i.test(s.uri)),model=analyzeSpring(java,configs,{closedWorld:false,parameterNames:true}),extensionContracts=analyzeSpringContracts(sources),resolvedAnnotations=new Set(extensionContracts.annotations.map(item=>item.name));
  for(const item of extensionContracts.unknowns)add(item.kind,item.uri,item.range,item.message,{unknown:true});
- for(const item of extensionContracts.methodContracts)if(item.uri===uri&&item.name===candidate.name)add(item.kind,item.uri,item.range,item.message);
+ for(const item of extensionContracts.methodContracts)if(candidate.kind!=='field'&&item.uri===uri&&item.name===candidate.name)add(item.kind,item.uri,item.range,item.message);
  const conditionSpans=new Map();
  for(const span of extensionContracts.resolvedConditionSpans){
   if(!conditionSpans.has(span.uri))conditionSpans.set(span.uri,[]);
   conditionSpans.get(span.uri).push(span);
  }
- if(!selected||!parsed||candidate.kind==='method'&&!member)add('model.incomplete',uri,candidate.declarationRange,'The selected declaration cannot be identified in the local Spring source model.',{unknown:true});
+ if(!selected||!parsed||candidate.kind!=='file'&&!member)add('model.incomplete',uri,candidate.declarationRange,'The selected declaration cannot be identified in the local Spring source model.',{unknown:true});
  for(const message of candidate.eligibilityConflicts||[])add('declaration.contract',uri,candidate.declarationRange,message);
  const targetAnnotations=candidate.kind==='file'?(parsed?.annotations||[]):(member?.annotations||[]);
  for(const item of targetAnnotations){const entry=CONTRACTS.has(item.shortName)||TYPE_CONTRACTS.has(item.shortName)||COMPONENTS.has(item.shortName)||/Mapping$/.test(item.shortName);add(entry?'spring.framework-entrypoint':'spring.annotated-declaration',uri,rangeAt(selected.text,item.start,item.end),`@${item.shortName} is a framework-bound or annotated declaration; zero Java callers does not establish safe deletion.`);}
- if(candidate.kind==='method')for(const item of parsed?.annotations||[]){const reviewedCondition=conditionSpans.get(uri)?.some(span=>span.kind==='composed-condition'&&span.start===item.start&&span.end===item.end);if(!official(item)&&!resolvedAnnotations.has(item.name)&&!reviewedCondition)add('spring.custom-owner-annotation',uri,rangeAt(selected.text,item.start,item.end),'Custom owner/meta-annotation behavior cannot establish absence of reflective method consumers.',{unknown:true});if(/^(?:Entity|MappedSuperclass|Embeddable|Converter|EntityListeners|ConfigurationProperties)$/.test(item.shortName))add('spring.reflective-owner-contract',uri,rangeAt(selected.text,item.start,item.end),'JPA/property-binding owner contracts require provider/accessor metadata analysis before removing even an unannotated private member.',{unknown:true});}
- const beanTargets=model.beans.filter(bean=>bean.uri===uri&&(candidate.kind==='file'?bean.type===parsed?.fqn:bean.origin==='factory-method'&&bean.range.start.line===candidate.declarationRange.start.line&&bean.range.start.character===candidate.declarationRange.start.character));
+ if(candidate.kind!=='file')for(const item of parsed?.annotations||[]){const reviewedCondition=conditionSpans.get(uri)?.some(span=>span.kind==='composed-condition'&&span.start===item.start&&span.end===item.end);if(!official(item)&&!resolvedAnnotations.has(item.name)&&!reviewedCondition)add('spring.custom-owner-annotation',uri,rangeAt(selected.text,item.start,item.end),'Custom owner/meta-annotation behavior cannot establish absence of reflective member consumers.',{unknown:true});if(/^(?:Entity|MappedSuperclass|Embeddable|Converter|EntityListeners|ConfigurationProperties)$/.test(item.shortName))add('spring.reflective-owner-contract',uri,rangeAt(selected.text,item.start,item.end),'JPA/property-binding owner contracts require provider/accessor metadata analysis before removing even an unannotated private member.',{unknown:true});}
+ if (candidate.kind === 'field' && parsed?.superTypes.length) {
+  add('java.inherited-owner-contract',uri,candidate.declarationRange,
+    'Inherited or serialized field layouts require a separate compatibility model.',{unknown:true});
+ }
+ const beanTargets=candidate.kind==='field'?[]:model.beans.filter(bean=>bean.uri===uri&&(candidate.kind==='file'?bean.type===parsed?.fqn:bean.origin==='factory-method'&&bean.range.start.line===candidate.declarationRange.start.line&&bean.range.start.character===candidate.declarationRange.start.character));
  const names=new Set(),addName=name=>{if(!name||names.has(name)||truncated)return;if(name.length>ANALYSIS_LIMITS.nameCharacters||names.size>=ANALYSIS_LIMITS.targetNames){budget(uri,candidate.declarationRange,'Spring Safe Delete target-name budget exceeded; dynamic/large alias coverage is incomplete.');return;}names.add(name);};
  addName(candidate.name);if(candidate.kind==='file')addName(parsed?.fqn);for(const bean of beanTargets){addName(bean.name);for(const name of bean.aliases){addName(name);if(truncated)break;}for(const name of bean.qualifiers)addName(name);if(truncated)break;}
  const aliases=new Map();aliasInput:for(const source of sources.filter(item=>/\.xml$/i.test(item.uri)))for(const match of source.text.matchAll(/<(?:[\w.-]+:)?alias\b[^>]*>/g)){

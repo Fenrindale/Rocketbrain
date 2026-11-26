@@ -128,7 +128,7 @@ async function exercise(service,root,projectUri,{verifyTwoProfiles=true}={}){
     micronautJdbc:true,drivers:{mysql:'26.7.0',mariadb:'3.5.10'},compileTimeBeans:true,sourceRoutes:true,literalSettings:true};
 }
 
-async function headless(){
+async function withImportedGradle(exerciseProject){
   const config=await read(process.env.ROCKETBRAIN_JAVA_TEST_CONFIG), out=path.resolve(__dirname,'../test-output');
   const javaHome=await fs.realpath(process.env.ROCKETBRAIN_SPRING_JAVA_HOME||config.javaHome);
   const gradleHome=await fs.realpath(process.env.ROCKETBRAIN_MICRONAUT_GRADLE_HOME);
@@ -139,7 +139,7 @@ async function headless(){
     const launch=resolveLaunch({javaHome,serverPath:config.serverPath,storagePath:storage});
     launch.options.env.GRADLE_USER_HOME=cache;
     const lsp=new StdioLsp(launch), executed=[];
-    let service, log='';
+    let service, observeOutput, log='';
     try{
       const settings=serverSettings([{name:'JavaSE-25',path:javaHome,default:true}],{gradleHome,gradleJavaHome:javaHome});
       settings.java.import.gradle.wrapper.enabled=false;
@@ -152,7 +152,8 @@ async function headless(){
       const project=await until(async()=>{
         const snapshot=await collectProjects({request:(command,args)=>lsp.request('workspace/executeCommand',{command,arguments:args}),folders:[uri]});
         const found=snapshot.projects.find(item=>!path.relative(item.root,root));
-        return found?.sourceRoots.some(item=>!path.relative(item.path,path.join(root,'src/main/java')))&&found;
+        return found?.sourceRoots.some(item=>!path.relative(item.path,path.join(root,'src/main/java'))) &&
+          found.libraries.some(item=>/^micronaut-core-5\..*\.jar$/u.test(item.name)) && found;
       },150000);
       assert.equal(project.tool,'gradle');
       assert.ok(project.natures.some(nature=>nature.includes('buildship')));
@@ -176,21 +177,32 @@ async function headless(){
           return result;
         }}};
       service=registerMicronautWorkbench({
+        Uri:{parse:value=>value},
         workspace:{isTrusted:true,textDocuments:[],workspaceFolders:[{uri:{scheme:'file',toString:()=>uri}}],
-          getConfiguration:()=>({get:()=>javaHome})},
-        window:{createOutputChannel:()=>({append(value){log=(log+value).slice(-5000);},appendLine(){},dispose(){}})},
+          getConfiguration:()=>({get:key=>({javaHome,gradleHome})[key]})},
+        window:{createOutputChannel:()=>({append(value){log=(log+value).slice(-5000);observeOutput?.(value);},appendLine(){},dispose(){}})},
         commands:{registerCommand:disposable},languages:{registerCompletionItemProvider:disposable,registerDefinitionProvider:disposable}
       },java);
-      const proof=await exercise(service,root,uri);
-      assert.deepEqual(executed,[':test',':installDist',':installDist',':installDist']);
+      const proof=await exerciseProject({service,root,uri,executed,project,observe:listener=>{observeOutput=listener;}});
       return {platform:'5.2.8',core:'5.2.25',gradlePlugin:'5.0.2',realBuildshipImport:true,executed,nativeView:false,...proof};
     }catch(error){
-      if(log)process.stderr.write(log+'\n');
+      if(log){
+        const secret=process.env.RB_MICRONAUT_JDBC_PASSWORD;
+        process.stderr.write((secret?log.replaceAll(secret,'[redacted]'):log)+'\n');
+      }
       throw error;
     }finally{
       try{await service?.dispose();}
       finally{await lsp.close();}
     }
+  });
+}
+
+function headless(){
+  return withImportedGradle(async({service,root,uri,executed})=>{
+    const proof=await exercise(service,root,uri);
+    assert.deepEqual(executed,[':test',':installDist',':installDist',':installDist']);
+    return proof;
   });
 }
 
@@ -221,7 +233,7 @@ async function runMicronautGradleChecks(api,vscode,checks){
   return result;
 }
 
-module.exports={runMicronautGradleChecks,withOwnedDatabase};
+module.exports={runMicronautGradleChecks,withOwnedDatabase,copyUnder,withImportedGradle};
 if(require.main===module)withOwnedDatabase(headless).then(value=>console.log(JSON.stringify(value))).catch(error=>{
   console.error(error.stack);process.exitCode=1;
 });

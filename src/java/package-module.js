@@ -6,7 +6,7 @@ const { lexJava, rangeAt } = require('../spring/java');
 const MAIN_JAVA = path.join('src', 'main', 'java');
 const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-function reviewClosedModule(project, sources) {
+function reviewClosedModule(project, sources, { allowVisibility = false } = {}) {
   const descriptors = sources.filter(source => path.basename(source.file).toLowerCase() === 'module-info.java');
   if (!descriptors.length) return null;
   const [source] = descriptors;
@@ -21,7 +21,9 @@ function reviewClosedModule(project, sources) {
   }
   const { tokens, issues } = lexJava(source.text);
   let cursor = 0;
-  const invalid = () => Error('Module service declarations require a closed named module with only java.base and literal uses/provides directives.');
+  const invalid = () => Error(allowVisibility
+    ? 'Package Rename requires a closed named module with java.base, literal uses/provides and unqualified exports/opens.'
+    : 'Module service declarations require a closed named module with only java.base and literal uses/provides directives.');
   const match = word => tokens[cursor]?.text === word;
   function consume(word) {
     if (!match(word)) throw invalid();
@@ -50,27 +52,40 @@ function reviewClosedModule(project, sources) {
   consume('{');
   const uses = new Map();
   const registrations = new Map();
+  const declarations = [];
+  const visibility = new Set();
+  function directive(role, options) {
+    const value = name(options);
+    declarations.push({ ...value, role });
+    return value;
+  }
   let explicitBase = false;
   while (!match('}')) {
     if (match('requires') && !explicitBase) {
       consume('requires');
-      if (name().name !== 'java.base') throw invalid();
+      if (directive('requires').name !== 'java.base') throw invalid();
       explicitBase = true;
+    } else if (allowVisibility && (match('exports') || match('opens'))) {
+      const role = tokens[cursor++].text;
+      const item = directive(role, { qualified: false });
+      const key = role + ':' + item.name;
+      if (visibility.has(key) || visibility.size === 32) throw invalid();
+      visibility.add(key);
     } else if (match('uses')) {
       consume('uses');
-      const service = name();
+      const service = directive('uses');
       if (uses.has(service.name) || uses.size === 24) throw invalid();
       uses.set(service.name, service);
     } else if (match('provides')) {
       consume('provides');
-      const service = name();
+      const service = directive('provides');
       if (registrations.has(service.name) || registrations.size === 24) throw invalid();
       consume('with');
-      const providers = [name()];
+      const providers = [directive('with')];
       while (match(',')) {
         if (providers.length === 16) throw invalid();
         consume(',');
-        providers.push(name());
+        providers.push(directive('with'));
       }
       if (new Set(providers.map(provider => provider.name)).size !== providers.length) throw invalid();
       registrations.set(service.name, { service: service.name, serviceName: service, providers, moduleName });
@@ -81,7 +96,7 @@ function reviewClosedModule(project, sources) {
   if (cursor !== tokens.length) throw invalid();
 
   return {
-    name: moduleName, uri: source.uri, file: source.file, uses, registrations,
+    name: moduleName, uri: source.uri, file: source.file, uses, registrations, declarations,
     makeEntry(replacements) {
       if (!replacements.length) return null;
       return { textDocument: { uri: source.uri, version: source.version ?? null },

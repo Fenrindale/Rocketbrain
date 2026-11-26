@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.150.0",
+  "version": "0.152.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -90,6 +90,7 @@
     ],
     "commands": [
       { "command": "rocketbrain.java.copyAsyncTraceHelper", "title": "Copy Java Async Trace Helper", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.copyReactorAsyncTraceHelper", "title": "Copy Reactor Async Trace Helper", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.showAsyncTaskStack", "title": "Show Java Async Submission Stack", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.smartStepInto", "title": "Step Into a Java Call", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
       { "command": "rocketbrain.java.restartStackFrame", "title": "Restart Java Stack Frame", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
@@ -233,7 +234,9 @@
       { "command": "rocketbrain.micronaut.debug", "title": "Debug Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.test", "title": "Run Micronaut Tests", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.build", "title": "Build Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
-      { "command": "rocketbrain.micronaut.restart", "title": "Review and Restart Micronaut Maven Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.micronaut.buildNative", "title": "Build Micronaut Native Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.micronaut.runNative", "title": "Run Built Micronaut Native Image", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.micronaut.restart", "title": "Review and Restart Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.micronaut.stop", "title": "Stop Micronaut Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.discover", "title": "Discover sbt Projects", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.scala.compile", "title": "Compile and Index Scala", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -262,6 +265,10 @@
       { "command": "rocketbrain.wsl.reviewBuild", "title": "Review and Run WSL Workspace Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.cancelBuild", "title": "Cancel Managed WSL Build", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.wsl.debugJava", "title": "Review and Debug WSL Java JAR", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
+      { "command": "rocketbrain.wsl.watchSource", "title": "Watch Open WSL Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
+      { "command": "rocketbrain.wsl.compareSource", "title": "Compare WSL Source with Linux Disk", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
+      { "command": "rocketbrain.wsl.reloadSource", "title": "Reload Reviewed WSL Source", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
+      { "command": "rocketbrain.wsl.stopSourceWatch", "title": "Stop WSL Source Watch", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && isWindows" },
       { "command": "rocketbrain.java.mixed.build", "title": "Build and Index Mixed JVM Sources", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.mixed.definition", "title": "Go to Mixed JVM Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && (editorLangId == java || editorLangId == kotlin)" },
       { "command": "rocketbrain.java.mixed.run", "title": "Run Mixed Gradle Application", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -3009,6 +3016,12 @@
           "type": "string",
           "default": "",
           "description": "Absolute path to an independent Linux GraalVM JDK 25 or newer with Native Image for the Quarkus Maven native build."
+        },
+        "rocketbrain.java.micronautGraalvmHome": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "Absolute path to an independent Linux GraalVM JDK 25 or newer with Native Image for a Micronaut 5 Maven build."
         },
         "rocketbrain.java.mavenHome": {
           "type": "string",

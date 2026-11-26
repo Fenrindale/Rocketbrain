@@ -7,6 +7,7 @@ const traceLimit = 4 * 1024 * 1024;
 const taskLimit = 2048;
 const traceIdPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const wrapperFrame = /(?:^|\.)TaskTrace\.runRecorded\(/;
+const handoffs = new Set(['executor', 'virtual-thread', 'reactor-scheduler']);
 const validId = value => Number.isSafeInteger(value) && value > 0;
 const shortText = (value, max) => typeof value === 'string' && value.length <= max;
 
@@ -49,7 +50,7 @@ function parseAsyncTrace(text) {
       if (item.id !== tasks.size + 1 || !Number.isSafeInteger(item.parent) || item.parent < 0 ||
           item.parent && !tasks.has(item.parent) || !shortText(item.label, 160)) throw parseError();
       const typed = item.handoff !== undefined;
-      if (typed && !['executor', 'virtual-thread'].includes(item.handoff)) throw parseError();
+      if (typed && !handoffs.has(item.handoff)) throw parseError();
       const submittedBy = thread(item.thread, typed);
       const parent = tasks.get(item.parent);
       if (typed && parent && (parent.state !== 'entered' ||

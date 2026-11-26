@@ -1,5 +1,5 @@
 {
-  "version": "0.150.0",
+  "version": "0.152.0",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,33 +30,31 @@
     }
   },
   "summary": {
-    "implemented": 186,
-    "partial": 16,
+    "implemented": 188,
+    "partial": 14,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 95.4,
+    "percent": 95.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
     "IDEA-024",
     "IDEA-030",
-    "IDEA-066",
     "IDEA-067",
-    "IDEA-080",
-    "IDEA-113"
+    "IDEA-079",
+    "IDEA-097"
   ],
   "expandedFeatures": [
     "IDEA-024",
     "IDEA-030",
-    "IDEA-066",
     "IDEA-067",
-    "IDEA-080",
-    "IDEA-113"
+    "IDEA-079",
+    "IDEA-097"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -721,23 +719,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "Java 공개 타입과 파일을 바꿀 때 한 Gradle 모듈의 검증된 Kotlin 참조와 생성자 호출까지 함께 편집한다. 기존 Java·Spring 패키지와 등록 파일 이름 변경을 유지한다.",
+      "scope": "한 JPMS 모듈에서 패키지 이름을 바꿀 때 실제 타입 바인딩으로 검증한 exports·opens·uses·provides와 서비스 등록을 함께 편집한다. 기존 Java↔Kotlin 및 Spring 패키지 이름 변경을 유지한다.",
       "remaining": [
-        "JPMS 지시문, 외부 모듈, Kotlin 별칭·호출 가능 참조와 복합 생성자 계약이 남아 있다."
+        "외부 모듈, qualified exports·opens, Kotlin 별칭·호출 가능 참조와 복합 생성자 계약이 남아 있다."
       ],
       "verification": {
-        "state": "v0.150-vendor-runtime-coverage",
+        "state": "v0.152-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "최종 소스의 실제 JDT·Kotlin 분석기와 Gradle에서 Kotlin 참조 4곳과 생성자 바인딩을 확인했다. 한 편집으로 적용하고 재빌드했으며 두 DB에서 Spring JDBC 결과가 유지됐다. 설치본 시험은 함께 열린 Gradle 설정과 Eclipse 시험 파일 생성 경쟁으로 중단됐다.",
+        "testedScope": "실제 Javac와 JDT가 모듈 지시문 8개를 검토했다. 두 DB의 설치본에서 새 이름을 적용한 5개 위치와 Java 패키지를 한 번에 실행 취소하고 다시 실행했다. 공급자 순서와 값 29·17 및 외부 Spring 앱의 JDBC 결과 42가 유지됐다.",
         "publicEvidence": [
-          "src/java/java-kotlin-type-rename.js",
-          "src/java/kotlin-mixed-compilation.js",
-          "test/java-kotlin-type-rename-host.js"
+          "src/java/java-package-rename.js",
+          "src/java/package-rename-module.js",
+          "runtime/java-signature/src/rocketbrain/signature/PackageRenameInspector.java",
+          "test/java-jpms-package-rename.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -905,23 +904,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "의존성 JAR의 같은 Spring XML에 있는 부모·자식 빈에서 상속된 init-method와 재정의된 destroy-method를 찾아 Java 선언을 보호한다. 검토한 미사용 메서드는 삭제할 수 있다.",
+      "scope": "단독 선언한 미사용 private 기본형·String 필드를 검토하고 삭제한다. 참조나 초기화 부작용이 있거나 Spring 설정이 값을 넣는 필드는 보호한다.",
       "remaining": [
-        "다른 XML을 잇는 상속, 사용자 정의 설정 및 생성자·필드의 연쇄 삭제가 남아 있다."
+        "여러 XML에 걸친 상속, 사용자 정의 등록과 생성자·필드의 연쇄 삭제가 남아 있다."
       ],
       "verification": {
-        "state": "v0.150-installed-coverage",
+        "state": "v0.152-vendor-runtime-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring XML에서 부모의 초기화와 중간 빈의 종료 콜백을 확인했다. 설치본의 미사용 메서드 삭제와 실행 취소를 두 DB에서 확인했고 JDBC와 콜백 결과가 유지됐다.",
+        "testedScope": "실제 JDT와 Spring 컨텍스트에서 삭제한 필드만 사라졌다. MySQL·MariaDB의 JDBC 값 42, Spring 주입 값 71과 보호된 초기화 호출 횟수 1이 유지됐다.",
         "publicEvidence": [
-          "src/java/spring-xml-lifecycle.js",
-          "test/spring-xml-lifecycle-host.js",
-          "test/spring-xml-lifecycle.test.js"
+          "src/java/safe-delete.js",
+          "src/java/spring-delete-analysis.js",
+          "test/java-safe-field-delete.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1962,8 +1961,8 @@
       "verification": {
         "state": "v0.150-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.150.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1982,26 +1981,26 @@
       "category": "기타 JVM 프레임워크",
       "feature": "Micronaut 개발",
       "priority": "P3",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "단일 Micronaut Maven 앱의 저장된 소스를 검토해 다시 빌드하고 새 JVM을 시작한다. 기존 Maven·Gradle 앱 디버깅을 유지한다.",
-      "remaining": [
-        "Gradle 재빌드·재시작 및 배포본에 반영할 Linux 네이티브 이미지 기능이 남아 있다."
-      ],
+      "scope": "Micronaut 설정·빈·컨트롤러 분석과 Maven·Gradle 앱 디버깅을 제공한다. 두 빌드의 JVM 재시작을 검토할 수 있고 Linux x64 Maven 앱의 GraalVM 네이티브 이미지를 빌드·실행·중지한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.150-installed-coverage",
+        "state": "v0.152-vendor-runtime-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Micronaut Maven JVM을 설치본으로 재빌드·교체했다. 두 DB에서 새 HTTP 및 JDBC 결과를 확인했고, 컴파일 실패나 시작 전에 취소한 경우 기존 프로세스가 유지됐다.",
+        "testedScope": "별도 Linux에서 Micronaut GraalVM ELF를 실제 실행하고 두 DB의 Spring 비교 앱과 결과를 대조했다. 실제 JDT Buildship과 Gradle로 재시작 후보를 검증했으며 실패하거나 취소했을 때 기존 HTTP·JDBC JVM이 계속 동작했다.",
         "publicEvidence": [
+          "src/java/micronaut-native.js",
           "src/java/micronaut-restart.js",
           "src/java/micronaut-vscode.js",
-          "test/micronaut-restart-host.js"
+          "test/micronaut-gradle-restart-host.js",
+          "test/micronaut-native-linux.cjs"
         ],
         "originalProductParityVerified": false
       }
@@ -2338,23 +2337,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "중단한 Java 프레임에서 Executor·CompletableFuture와 가상 스레드의 관찰된 작업 제출·실행 경계를 상위 호출까지 탐색한다.",
+      "scope": "Reactor의 Mono.subscribeOn 및 지연 스케줄러에 제출한 작업을 디버그 세션에서 관찰해 실제 제출 위치와 이어지는 비동기 스택을 보여준다.",
       "remaining": [
-        "별도로 계측되지 않은 비동기 프레임워크와 프로세스 간 인과 관계 분석이 남아 있다."
+        "별도 계측이 없는 프레임워크와 JVM을 넘나드는 비동기 인과 관계 분석이 남아 있다."
       ],
       "verification": {
-        "state": "v0.142-installed-coverage",
+        "state": "v0.152-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.142.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 JVM과 두 DB에서 가상 스레드 두 개와 Executor 경계 한 개의 원본 위치를 찾았다. 작업자와 추적 ID 일치, 추적 없는 스택 거부와 재개한 작업의 JDBC 42 응답을 검증했다.",
+        "testedScope": "설치본에서 Reactor Core 3.8.8의 실제 두 스케줄러 작업의 부모와 워커를 확인했다. 별도 실제 JDT 연결도 통과했다. 두 DB의 Spring JDBC 결과 42가 유지됐고 재개한 프레임과 등록하지 않은 워커는 거부했다.",
         "publicEvidence": [
-          "runtime/java-async/src/rocketbrain/async/TaskTrace.java",
+          "runtime/java-async/src/rocketbrain/async/ReactorTaskTrace.java",
           "src/java/async-trace-vscode.js",
-          "test/java-async-trace-host.js"
+          "test/java-async-trace.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2375,8 +2374,8 @@
       "verification": {
         "state": "v0.150-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.150.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2854,27 +2853,25 @@
       "category": "원격·컨테이너",
       "feature": "WSL 실행·개발",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "Windows VS Code에서 WSL의 Linux 작업 폴더를 열고 편집한다. Linux Maven·Gradle 실행과 검토한 Java JAR의 줄 중단점, 스텝, 지역 변수 조회를 지원한다.",
-      "remaining": [
-        "Linux에서 외부 프로세스가 파일을 수정하면 Windows VS Code가 열어 둔 편집기에 자동 반영하는 동작이 남아 있다. WSL 2의 기본 UNC 감시가 두 환경에서 실패했다."
-      ],
+      "scope": "Windows VS Code에서 WSL 작업 폴더를 사용하고 Linux Maven·Gradle·Git 및 Java 디버그를 연결한다. 열린 UTF-8 파일의 Linux 변경을 감지해 비교하고 승인한 편집기에 반영한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.148-vendor-runtime-coverage",
+        "state": "v0.152-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.148.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 WSL 1·2에서 편집 저장을 Linux 해시와 Git으로 대조했다. Maven·Gradle 빌드와 Spring JVM 디버깅을 확인했다. 별도 WSL 2 설치 검증에서 Windows VS Code와 Spring JDBC가 각각 실제 MySQL과 MariaDB 연결을 확인했다.",
+        "testedScope": "별도 실제 WSL 2 설치본에서 변경 감지·읽기 전용 차이·저장하지 않은 편집 보존·다른 편집기 포커스 유지와 선택 재로드를 확인했다. 줄 중단점과 스텝으로 실제 Spring JVM을 제어했고 MySQL·MariaDB의 Linux JDBC와 Windows 쿼리가 각각 42로 일치했다.",
         "publicEvidence": [
-          "src/remote/wsl-workspace.js",
-          "src/remote/wsl-java-debug-vscode.js",
-          "test/wsl-workspace-host.js",
-          "scripts/test-wsl-runtime.ps1"
+          "src/remote/wsl-source-runtime.js",
+          "src/remote/wsl-source-vscode.js",
+          "test/wsl-source-watch-host.js",
+          "test/wsl-workspace-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3326,8 +3323,8 @@
       "verification": {
         "state": "v0.150-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.150.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6370,32 +6367,43 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "75a6a11f6bfc4e403f82f934b7cb22fcc4b0cb778f4b2a17094d5893eaa4d1d1",
-    "sourceManifestSha256": "65b1bb91a7915d10f3cfcbc1f94d77bb6168a46ee6be8c1ca9a2ff53644fe534",
+    "vsixSha256": "6d72e4ed7c9c5a7009295e35f47d00045c22f3f97035ba7fbbd57a8915f3dfaf",
+    "sourceManifestSha256": "6a0249306feb7178816c268715087ba9438a989eed086573db4280c021a8fb14",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 4
+        "featureGroups": 2
       },
       {
         "engine": "mariadb",
-        "featureGroups": 4
+        "featureGroups": 2
       }
     ]
   },
-  "stateChanges": [],
+  "stateChanges": [
+    {
+      "id": "IDEA-067",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "IDEA-097",
+      "before": "partial",
+      "after": "implemented"
+    }
+  ],
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "6aa55c7aeea6afd8e533daa0230b883891513bb0",
-    "run": 45843663146,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45843663146",
-    "tests": 2190,
+    "head": "c81b1ff3f1010ad548f83d83b9fa2162dd8f3af3",
+    "run": 45851084229,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45851084229",
+    "tests": 2202,
     "suites": 0,
-    "pass": 1962,
+    "pass": 1971,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 228,
+    "skipped": 231,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

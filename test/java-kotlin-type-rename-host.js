@@ -4,13 +4,18 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
+const { randomUUID } = require('node:crypto');
 const { until, positionOf } = require('./helpers/stdio-lsp');
 const { owner, target, caller, shadow, kotlin, newName, files, populate, rebuild, readDatabase } =
   require('./helpers/java-kotlin-rename-fixture');
 
 async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
-  const root = await fs.mkdtemp(path.join(workspace, 'rb-java-kotlin-rename-'));
+  const parent = await fs.realpath(path.dirname(workspace));
+  const preparation = await fs.mkdtemp(path.join(parent, 'rb-mixed-rename-prep-'));
+  const projectName = 'rb-java-kotlin-rename-' + randomUUID().slice(0, 12);
+  const root = path.join(workspace, projectName);
+  const staged = path.join(preparation, projectName);
   const configuration = (key) => vscode.workspace.getConfiguration(key, vscode.Uri.file(root));
   const java = api.java;
   const tools = {
@@ -28,13 +33,21 @@ async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
     const relative = path.relative(root, file);
     return relative && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
   }
-  let imported, plan;
+  let imported, plan, installed = false;
   try {
     const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
     const ownership = JSON.parse(await fs.readFile(path.join(path.dirname(spring.dbConfigPath), 'owner.json'), 'utf8'));
     assert.ok(['RocketbrainDisposableMariaDbFixture-v1', 'RocketbrainDisposableOracleMysqlFixture-v1'].includes(ownership.kind));
     const config = JSON.parse(await fs.readFile(spring.dbConfigPath, 'utf8'));
-    await populate(root, tools);
+    // Finish the Eclipse descriptors before the native workspace watcher can import the Gradle fixture.
+    await populate(staged, tools);
+    const physical = await fs.realpath(staged);
+    assert.equal(path.relative(physical, staged), '');
+    assert.equal(path.relative(path.dirname(physical), preparation), '');
+    assert.equal(path.relative(path.dirname(root), workspace), '');
+    assert.equal(path.relative(await fs.realpath(workspace), workspace), '');
+    await fs.rename(physical, root);
+    installed = true;
     const before = await readDatabase(root, tools, config, spring.dbEngine);
     await java.start();
     await java.executeWorkspaceCommand('java.project.changeImportedProjects', [vscode.Uri.file(path.join(root, '.project')).toString()], [], []);
@@ -106,10 +119,16 @@ async function runJavaKotlinTypeRenameChecks(api, vscode, checks) {
     });
     if (tabs.length) await vscode.window.tabGroups.close(tabs);
     if (imported) await java.executeWorkspaceCommand('java.project.changeImportedProjects', [], [], [imported]).catch(() => {});
-    const physical = await fs.realpath(root);
-    assert.equal(path.relative(path.dirname(physical), workspace), '');
-    assert.match(path.basename(physical), /^rb-java-kotlin-rename-[^/\\]+$/u);
-    await fs.rm(physical, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+    for (const [temporary, owner, prefix] of [
+      ...(installed ? [[root, workspace, 'rb-java-kotlin-rename-']] : []),
+      [preparation, parent, 'rb-mixed-rename-prep-']
+    ]) {
+      const physical = await fs.realpath(temporary);
+      assert.equal(path.relative(physical, temporary), '');
+      assert.equal(path.relative(path.dirname(physical), owner), '');
+      assert.ok(path.basename(physical).startsWith(prefix));
+      await fs.rm(physical, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+    }
   }
 }
 

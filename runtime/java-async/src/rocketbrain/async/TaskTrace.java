@@ -9,8 +9,9 @@ import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.function.Function;
 
-/** Opt-in submission stacks for wrapped executors and explicitly launched virtual threads. */
+/** Opt-in submission stacks for explicitly selected asynchronous boundaries. */
 public final class TaskTrace implements AutoCloseable {
     private static final int FILE_BYTES = 4 * 1024 * 1024;
     private static final int MAX_TASKS = 2048;
@@ -73,6 +74,18 @@ public final class TaskTrace implements AutoCloseable {
         }
     }
 
+    // Used by the separate Reactor helper. The JDK-only helper has no Reactor dependency.
+    <T> T scheduleReactor(String label, Runnable runnable, Function<Runnable, T> submit) {
+        Objects.requireNonNull(runnable, "runnable");
+        Task task = submitted(label, "reactor-scheduler");
+        try {
+            return submit.apply(wrap(task, runnable));
+        } catch (RuntimeException | Error failure) {
+            rejected(task);
+            throw failure;
+        }
+    }
+
     private Runnable wrap(Task task, Runnable runnable) {
         return task == null ? runnable : () -> runRecorded(task, runnable);
     }
@@ -92,13 +105,18 @@ public final class TaskTrace implements AutoCloseable {
         long id = ++nextTask;
         Long parent = activeTask.get();
         var frames = STACKS.walk(stream -> stream
-            .filter(frame -> !frame.getClassName().equals(OWN_CLASS))
+            .filter(frame -> !helperFrame(frame.getClassName()))
             .limit(MAX_FRAMES).map(TaskTrace::frame).toList());
         var entry = "{\"kind\":\"submitted\",\"id\":" + id + ",\"parent\":" + (parent == null ? 0 : parent)
             + ",\"label\":" + json(shorten(label, 160)) + ",\"handoff\":" + json(handoff)
             + ",\"thread\":" + thread(Thread.currentThread())
             + ",\"frames\":[" + String.join(",", frames) + "]}";
         return append(entry) ? new Task(id) : null;
+    }
+
+    private static boolean helperFrame(String name) {
+        return name.equals(OWN_CLASS) || name.equals("rocketbrain.async.ReactorTaskTrace")
+            || name.startsWith("rocketbrain.async.ReactorTaskTrace$");
     }
 
     private void runRecorded(Task task, Runnable runnable) {

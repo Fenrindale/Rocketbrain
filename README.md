@@ -46,6 +46,8 @@ pnpm run package
 2. 명령 팔레트에서 **Rocketbrain: Install and Configure Independent Java Engine**을 실행합니다. 고정된 공개 구성요소의 출처와 체크섬을 확인하고 확장 전용 폴더에 설치합니다. 현재 설치 도구는 Eclipse JDT LS 1.63.0과 독립 Temurin JDK 25 계열을 사용합니다.
 3. **Java Projects**에서 가져온 소스 루트·패키지·라이브러리를 확인합니다. Maven 작업에는 별도 Maven 설치와 `rocketbrain.java.mavenHome` 설정이 필요합니다.
 
+**Rename Java Package**는 패키지 디렉터리와 확인된 Java 참조를 한 번에 변경합니다. 단일 JPMS 모듈의 표준 주 소스에서는 `module-info.java`의 비한정 `exports`·`opens`, `uses`, `provides … with`를 같은 검토에서 확인할 수 있습니다. 모듈 이름과 공급자 순서는 유지되며, 이 경로는 `java.base`만 사용하는 일반 모듈을 지원합니다.
+
 **Review Public Java Type Rename**은 공개 Java 클래스의 파일 이름과 확인된 Java 참조를 함께 바꿉니다. 가져온 단일 Gradle JVM 프로젝트에서 Kotlin 편집기를 설정하면, Kotlin의 명시적 import·타입 지정·직접 생성자 호출도 같은 검토에 표시됩니다. 이 혼합 경로는 명시적 공개 생성자 하나가 있는 비제네릭 클래스를 지원하며, Java와 Kotlin의 변경 전후 바인딩을 확인합니다.
 
 Java 중단점에서 **Restart Java Stack Frame**으로 현재 정지한 스레드의 프레임을 선택해 메서드를 다시 실행할 수 있습니다. 이미 수행된 부수 효과는 그대로 남습니다. **Inspect Java Local Value**는 지역 배열과 표준 `ArrayList`를 페이지로 보여주고, 최대 256 Ki UTF-16 단위의 문자열을 원문 그대로 표시합니다. [Java 스택 프레임과 변수 뷰어](docs/java-frame-debugging.md)
@@ -53,6 +55,8 @@ Java 중단점에서 **Restart Java Stack Frame**으로 현재 정지한 스레�
 Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map Workspace**로 배포판과 Linux 경로를 확인합니다. **Review and Run WSL Workspace Build**에서 프로젝트 경로와 명령을 확인한 뒤 배포판의 Maven 또는 Gradle을 실행합니다. 배포판 안에 Linux JDK와 `/usr/bin/mvn` 또는 `/usr/bin/gradle`이 필요합니다. **Cancel Managed WSL Build**로 실행한 빌드를 중단할 수 있습니다.
 
 Linux 파일 시스템에 있는 프로젝트는 **Open WSL Project Folder**로 열 수 있습니다. Java 파일을 저장한 뒤 **Review and Debug WSL Java JAR**에서 프로젝트 안의 실행 가능한 JAR를 선택합니다. Rocketbrain은 검토한 소스와 JAR를 다시 확인하고, WSL JVM에 연결해 중단점·한 줄 이동·지역 변수 읽기를 제공합니다. 배포판에는 `/usr/bin/java`와 Python 3.11 이상의 `/usr/bin/python3`가 필요하며, Windows에서는 Rocketbrain의 Java 런타임을 먼저 설정합니다.
+
+Windows 편집기에 Linux 쪽 파일 변경이 늦게 반영되면, 열린 WSL 소스에서 **Watch Open WSL Source**를 실행합니다. 상태 표시줄에서 편집기와 Linux 디스크 버전을 읽기 전용으로 비교하고 **Reload Reviewed WSL Source**로 검토한 버전을 불러옵니다. 다시 불러오기는 수정사항이 없는 단일 소스 탭에 적용되며, 디스크나 편집본이 검토 후 바뀌면 다시 비교해야 합니다. 관찰 대상은 선택한 UTF-8 소스 하나이며 배포판의 `/usr/bin/python3`가 필요합니다.
 
 `rocketbrain.localCodeModel.endpoint`와 `.model`에는 로컬 모델 서버 주소와 모델 이름을 지정합니다. **Ask Local Code Model**은 선택한 코드에 대한 응답을 엽니다. **Request a Reviewed Local Edit**로 변경 내용을 비교하고, 검토한 편집은 **Apply Reviewed Local Edit**로 적용합니다.
 
@@ -344,7 +348,7 @@ Java·Kotlin의 **Format Document**와 **Format Selection**은 상위 폴더와 
 | **Move Java Instance Method** | 포착한 참조를 명시적으로 전달한다. 검토한 private 가변 필드를 갱신하는 여러 호출자와 불리언 매개변수의 `if`·`else` 경로를 보존한다 | 순환·외부 객체 그래프, 계산·중첩 분기, 외부 작성자, 소유권 이전, 모호한 생성자와 상속·오버로드 |
 | **Move Java Package** | 리소스의 바이트와 서비스 등록 순서를 보존한다. 검토한 클래스 경로 등록과 단일 JPMS 모듈의 서비스 소비·제공 선언을 함께 이동하고, 제한된 정적 서비스 팩터리를 확인한다 | 다중·외부 모듈의 서비스 계약, 동적·사용자 정의 로더, 복합 팩터리, 복잡한 메타데이터와 새 대상 폴더 생성 |
 | **Change Java Signature** | 인자 순서·리터럴 기본값 추가·미사용 인자 제거. 소스 상속·오버로드, 제한된 제네릭 타입 치환·공변 반환형·메서드 타입 변수·경계·와일드카드를 변경 전후 컴파일러로 검사 | 이름·기존 타입·반환형·접근성·예외 변경, 임의 제네릭·가변 인자·외부 바이너리·메서드 참조·framework 계약 |
-| **Safe Delete Java Declaration** | 미사용 private 보조 메서드와 제한된 클래스 삭제. Spring Bean·주입·설정·XML·JPA 참조와 검토한 조건을 분석한다. 소스 합성 어노테이션의 메타 조건과 확인 가능한 `@AliasFor`도 따라간다 | 임의 조건·호출·효과·루프, 바이트코드 전용 합성 어노테이션과 불명확한 별칭 계약 |
+| **Safe Delete Java Declaration** | 미사용 private 보조 메서드, 초기화식과 어노테이션이 없는 단독 private 기본형·String 필드, 제한된 클래스 삭제. Spring Bean·주입·설정·XML·JPA 참조와 검토한 조건을 분석한다. 소스 합성 어노테이션의 메타 조건과 확인 가능한 `@AliasFor`도 따라간다 | 공유 필드 선언, 초기화식, 프레임워크·직렬화 계약이 있는 필드, 임의 조건·호출·효과·루프, 바이트코드 전용 합성 어노테이션과 불명확한 별칭 계약 |
 | **Restore Deleted Java File** | Safe Delete가 확인한 원본 바이트를 덮어쓰기 없이 복원 | 최근 최대 10건을 같은 실행 세션에서 1시간 동안 제공하며, 대상 파일이 새로 생겼거나 상위 폴더가 바뀌면 거부 |
 
 Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 기존 인자의 이름·타입은 유지하며 새 인자에는 명시적인 리터럴 기본값이 필요합니다. 평가 순서에 영향을 줄 수 있는 복잡한 호출식과 확인된 문자열·리소스 참조는 거부합니다. 이 기능들은 검토한 프로젝트 범위에 한정되며 임의 리플렉션과 외부 사용자의 계약까지 자동 증명하지 않습니다.

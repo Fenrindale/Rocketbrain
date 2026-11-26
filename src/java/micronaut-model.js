@@ -35,7 +35,7 @@ function readPhysical(project,file,limit=512*1024) {
     digest:createHash('sha256').update(bytes).digest('hex')};
 }
 
-function micronautMavenProject(project) {
+function micronautMavenProject(project,{native=false}={}) {
   if (project?.tool!=='maven') throw fail('Choose an imported Maven Micronaut application.');
   const model=pomFacts(readPhysical(project,path.join(project.root,'pom.xml'),LIMITS.fileBytes));
   const parent=model.parent;
@@ -43,6 +43,12 @@ function micronautMavenProject(project) {
       !RELEASE.test(parent.version)) throw fail('Use a JAR module with a literal Micronaut 5 Maven platform parent.');
   const name=model.finalName || (model.gav.artifact && model.gav.version && model.gav.artifact+'-'+model.gav.version);
   if (!JAR_NAME.test(name || '')) throw fail('Use a literal Maven artifact name and version or finalName.');
+  if (native) {
+    if (!JAR_NAME.test(model.gav.artifact) || model.modules.length) {
+      throw fail('Select one Micronaut Maven application with a literal artifactId and no child modules.');
+    }
+    return {platformVersion:parent.version,imageName:model.gav.artifact,buildFingerprint:buildFingerprint(project.root)};
+  }
   return {platformVersion:parent.version,jarName:name+'.jar'};
 }
 
