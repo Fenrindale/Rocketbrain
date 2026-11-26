@@ -23,9 +23,9 @@ def fingerprint(files):
                 digest.update(chunk)
     return digest.hexdigest()
 
-mode, java_home, jdt, workspace, expected, encoded = sys.argv[1:]
-if sys.platform != "linux":
-    raise ValueError("Use a Linux Dev Container")
+mode, java_home, jdt, workspace, expected, encoded, scope = sys.argv[1:]
+if sys.platform != "linux" and not (scope == "ssh" and sys.platform == "win32"):
+    raise ValueError("Use a supported remote Java system")
 java, server, project = (physical(value) for value in (java_home, jdt, workspace))
 release = java / "release"
 if release.stat().st_size > 65536:
@@ -36,7 +36,7 @@ if not version or int(version.group(1)) < 25 or "jetbrains" in release_text.lowe
     raise ValueError("Use an independent JDK 25 or later")
 launcher, = sorted((server / "plugins").glob("org.eclipse.equinox.launcher_*.jar"))
 core, = sorted((server / "plugins").glob("org.eclipse.jdt.ls.core_*.jar"))
-config_name = "config_linux_arm" if platform.machine() in ("aarch64", "arm64") else "config_linux"
+config_name = "config_win" if sys.platform == "win32" else ("config_linux_arm" if platform.machine() in ("aarch64", "arm64") else "config_linux")
 template = physical(str(server / config_name))
 config_files = sorted(template.rglob("*"))
 if len(config_files) > 64 or any(item.is_symlink() for item in config_files):
@@ -44,7 +44,7 @@ if len(config_files) > 64 or any(item.is_symlink() for item in config_files):
 configuration = [item for item in config_files if item.is_file()]
 if template / "config.ini" not in configuration or sum(item.stat().st_size for item in configuration) > 2097152:
     raise ValueError("Invalid JDT configuration")
-binary = physical(str(java / "bin" / "java"))
+binary = physical(str(java / "bin" / ("java.exe" if sys.platform == "win32" else "java")))
 identity = fingerprint([release, binary, launcher, core, *configuration])
 if mode == "inspect":
     print(json.dumps({"jdk": int(version.group(1)), "sha256": identity}))
@@ -92,11 +92,15 @@ function javaRequest(input) {
   return { javaHome, serverPath, containerRoot };
 }
 
-function javaArguments(containerId, requested, identity) {
-  const common = ['container', 'exec', '--interactive', containerId, 'python3', '-I', '-S', '-u', '-c', supervisor];
+function javaSupervisorInvocation(requested, identity, scope = 'container') {
   const flags = identity ? jdtLaunchArguments({ launcher: '@launcher', configuration: '@configuration', data: '@data' }) : [];
-  return [...common, identity ? 'start' : 'inspect', requested.javaHome, requested.serverPath, requested.containerRoot,
-    identity || '', JSON.stringify(flags)];
+  return { program: supervisor, argv: [identity ? 'start' : 'inspect', requested.javaHome, requested.serverPath, requested.containerRoot,
+    identity || '', JSON.stringify(flags), scope] };
+}
+
+function javaArguments(containerId, requested, identity) {
+  const { program, argv } = javaSupervisorInvocation(requested, identity);
+  return ['container', 'exec', '--interactive', containerId, 'python3', '-I', '-S', '-u', '-c', program, ...argv];
 }
 
 function openJavaProcess(target, containerId, requested, identity) {
@@ -105,4 +109,4 @@ function openJavaProcess(target, containerId, requested, identity) {
   });
 }
 
-module.exports = { javaArguments, javaRequest, openJavaProcess };
+module.exports = { javaArguments, javaRequest, openJavaProcess, javaSupervisorInvocation };

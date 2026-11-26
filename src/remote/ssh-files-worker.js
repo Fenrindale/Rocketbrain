@@ -109,9 +109,11 @@ except OSError:
 print(json.dumps(response, ensure_ascii=True), flush=True)
 `;
 
-function remoteCommand(python) {
+function pythonCommand(python, program) {
   if (!['python3', 'python', 'py -3'].includes(python)) throw Error('Choose a supported remote Python launcher.');
-  return python + ' -I -u -c "exec(__import__(\'base64\').b64decode(\'' + Buffer.from(source).toString('base64') + '\'))"';
+  return python + ' -I -u -c "exec(__import__(\'base64\').b64decode(\'' + Buffer.from(program).toString('base64') + '\'))"';
 }
 
-module.exports = { remoteCommand, source };
+function remoteCommand(python) { return pythonCommand(python, source); }
+
+module.exports = { remoteCommand, pythonCommand, source };

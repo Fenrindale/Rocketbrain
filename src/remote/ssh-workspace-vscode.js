@@ -3,6 +3,7 @@
 const { open } = require('node:fs/promises');
 const { randomUUID } = require('node:crypto');
 const { connectWorkspace, maxFileBytes, uriScheme, digest } = require('./ssh-workspace');
+const { registerSshProcesses } = require('./ssh-processes-vscode');
 
 async function localText(uri) {
   if (uri?.scheme !== 'file') throw Error('Choose a local UTF-8 file.');
@@ -26,12 +27,13 @@ function registerSshWorkspace(context, vscode) {
   const tree = new vscode.EventEmitter();
   const files = new vscode.EventEmitter();
   const pending = new Map();
-  let connection;
+  let connection, processes;
   let epoch = 0;
 
   function retire() {
     epoch++;
     pending.clear();
+    processes?.retire();
     connection?.close();
     connection = undefined;
     tree.fire();
@@ -151,7 +153,8 @@ function registerSshWorkspace(context, vscode) {
       catch (error) { vscode.window.showErrorMessage('Rocketbrain SSH: ' + error.message); }
     });
   }
-  context.subscriptions.push(tree, files, { dispose: retire },
+  processes = registerSshProcesses(vscode, command, () => connection, uriFor);
+  context.subscriptions.push(tree, files, { dispose: retire }, processes,
     vscode.workspace.registerFileSystemProvider(uriScheme, provider, { isReadonly: true }),
     vscode.window.registerTreeDataProvider('rocketbrain.sshWorkspace', treeProvider),
     command('attach', async () => {
@@ -176,7 +179,7 @@ function registerSshWorkspace(context, vscode) {
       } finally { pending.delete(review.id); }
     })
   );
-  return { attach, close: retire, reviewUpload, applyUpload };
+  return { attach, close: retire, reviewUpload, applyUpload, processes };
 }
 
 module.exports = { registerSshWorkspace };

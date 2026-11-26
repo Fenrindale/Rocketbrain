@@ -2,8 +2,8 @@
 
 const { spawn } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { secureSshTarget } = require('../db/connection-tunnel');
 const { remoteCommand } = require('./ssh-files-worker');
+const { createPinnedSshPeer, createSshProcesses } = require('./ssh-processes');
 
 const maxFileBytes = 2 * 1024 * 1024;
 const maxFrameBytes = 4 * 1024 * 1024;
@@ -43,14 +43,17 @@ function profileFor(value) {
 
 async function connectWorkspace(raw) {
   const profile = profileFor(raw);
-  const ssh = await secureSshTarget(profile);
   const command = remoteCommand(profile.python);
+  const peer = await createPinnedSshPeer(profile);
+  const ssh = peer.target;
   let resolvedRoot;
   let closed = false;
   const active = new Set();
 
   async function request(operation, parts = [], fields = {}) {
     if (closed) throw Error('Reopen the SSH workspace connection.');
+    await peer.verify();
+    if (closed) throw Error('The SSH workspace connection closed.');
     const body = JSON.stringify({ root: profile.root, resolvedRoot, operation, parts, ...fields }) + '\n';
     if (Buffer.byteLength(body) >= maxFrameBytes) throw Error('The SSH file request exceeds its size limit.');
     const args = [...ssh.options, ...ssh.destination, command];
@@ -101,11 +104,19 @@ async function connectWorkspace(raw) {
     });
   }
 
-  const opened = await request('connect');
-  if (typeof opened?.root !== 'string' || !opened.root) throw Error('The remote file root could not be resolved.');
-  resolvedRoot = opened.root;
+  try {
+    const opened = await request('connect');
+    if (typeof opened?.root !== 'string' || !opened.root) throw Error('The remote file root could not be resolved.');
+    resolvedRoot = opened.root;
+  } catch (error) {
+    await peer.close();
+    throw error;
+  }
+  const processes = createSshProcesses(profile, resolvedRoot, ssh, () => request('stat'));
   return Object.freeze({
     id: profile.id, host: profile.host, root: resolvedRoot,
+    inspectProcess: (kind, requested) => processes.inspect(kind, requested),
+    openProcess: (kind, approval) => processes.open(kind, approval),
     stat(value) { return request('stat', partsFor(value)); },
     list(value) { return request('list', partsFor(value)); },
     async read(value) {
@@ -124,7 +135,9 @@ async function connectWorkspace(raw) {
     },
     close() {
       closed = true;
+      processes.close();
       for (const child of active) child.kill();
+      void peer.close().catch(() => {});
     }
   });
 }
