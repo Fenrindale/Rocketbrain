@@ -16,8 +16,8 @@ import platform.posix.connect
 import platform.posix.fclose
 import platform.posix.fopen
 import platform.posix.fputs
+import platform.posix.htonl
 import platform.posix.htons
-import platform.posix.inet_pton
 import platform.posix.recv
 import platform.posix.send
 import platform.posix.sockaddr_in
@@ -31,7 +31,7 @@ private fun springProbe(port: Int, engine: String): String = memScoped {
         val address = alloc<sockaddr_in>()
         address.sin_family = AF_INET.convert()
         address.sin_port = htons(port.convert())
-        check(inet_pton(AF_INET, "127.0.0.1", address.sin_addr.ptr) == 1)
+        address.sin_addr.s_addr = htonl(0x7f000001u)
         check(connect(fd, address.ptr.reinterpret(), sizeOf<sockaddr_in>().convert()) == 0)
         val request = ("GET /probe/" + engine + " HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").encodeToByteArray()
         request.usePinned { bytes ->
