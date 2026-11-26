@@ -755,6 +755,12 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectAttributeBinding",
+        "title": "Inspect JPA Attribute Binding",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.validate",
         "title": "Validate Query with Running Hibernate",
         "category": "Rocketbrain"

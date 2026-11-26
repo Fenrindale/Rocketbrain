@@ -5,6 +5,7 @@ const { validateRuntimeUrl } = require('../spring/runtime-client');
 const { normalizeSecurityTrace } = require('../spring/security-trace');
 const { normalizeReactiveSecurityTrace } = require('../spring/reactive-security-trace');
 const {normalizeFeignContracts}=require('../spring/feign-contract-trace');
+const { attributeTarget, attributeBindingReport } = require('./attribute-binding');
 
 class ObserverError extends Error { constructor(code, message) { super(message); this.code = code; } }
 const consoleTypes = new Set(['java.lang.String','java.lang.Long','java.lang.Integer','java.lang.Short','java.lang.Byte','java.lang.Boolean',
@@ -194,6 +195,14 @@ class ObserverClient {
     const payload=await this.#request('feign-contracts');
     try {return normalizeFeignContracts(payload);}
     catch {throw new ObserverError('INVALID_SCHEMA','Observer returned invalid OpenFeign contract metadata.');}
+  }
+  async inspectAttributeBinding(selection) {
+    let target;
+    try { target = attributeTarget(selection); }
+    catch (error) { throw new ObserverError('INVALID_ATTRIBUTE', error.message); }
+    const payload = await this.#request('attribute-binding', target);
+    try { return attributeBindingReport(payload, target); }
+    catch (error) { throw new ObserverError('INVALID_SCHEMA', error.message); }
   }
   async validate(query, factoryId) {
     if (typeof query !== 'string' || !query.trim() || Buffer.byteLength(query) > 16384 || query.includes('\0')) throw new ObserverError('INVALID_QUERY','Select a query of at most 16 KiB.');
