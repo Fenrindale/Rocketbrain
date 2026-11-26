@@ -50,7 +50,10 @@ async function runDevContainerChecks(api, vscode, checks) {
     const plan = await vscode.commands.executeCommand(`rocketbrain.devcontainer.inspect`);
     assert.equal(plan?.cliVersion, '0.91.0');
     assert.equal(plan.kind, expected);
-    assert.match(plan.workspaceMount, /type=bind/);
+    if(expected==='compose') {
+      assert.deepEqual(plan.compose.files,['compose.yaml','compose.workspace.yaml']);
+      assert.deepEqual(plan.compose.services,['workspace','dependency']);
+    } else assert.match(plan.workspaceMount, /type=bind/);
     const started = await service.start(root, { file: plan.file, fingerprint: plan.fingerprint, allowProjectExecution: true });
     const result = await service.execute(root, ['cat', 'fixture.txt']);
     assert.equal(result.id, started.id);
@@ -58,9 +61,13 @@ async function runDevContainerChecks(api, vscode, checks) {
     assert.equal(result.stdout.trim(), 'Rocketbrain mounted workspace');
     const lifecycle = await service.execute(root, ['cat', '/tmp/rocketbrain-devcontainer-ready']);
     assert.equal(lifecycle.code, 0, lifecycle.stderr);
-    assert.match(lifecycle.stdout, /^ready-(image|build)$/);
+    assert.match(lifecycle.stdout, /^ready-(image|build|compose)$/);
     const stopped = await vscode.commands.executeCommand(`rocketbrain.devcontainer.stop`);
-    assert.deepEqual(stopped, { state: 'stopped', id: started.id });
+    if(expected==='compose') {
+      assert.equal(stopped.state,'stopped');
+      assert.equal(stopped.id,started.id);
+      assert.ok(stopped.services.every(row=>!row.running));
+    } else assert.deepEqual(stopped, { state: 'stopped', id: started.id });
     checks.push('Inspected a workspace Dev Container from the VS Code command, started the actual fixture, read its bind mount and lifecycle marker, and stopped the exact managed container.');
     return { cliVersion: plan.cliVersion, kind: expected, mountedFile: result.stdout.trim(), lifecycle: lifecycle.stdout, stopped: true };
   } finally {
