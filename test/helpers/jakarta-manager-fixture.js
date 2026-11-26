@@ -92,7 +92,7 @@ async function startOwnedManager({ base, javaHome, tomcatHome, springUrl }) {
     while (!exited && Date.now() < deadline) {
       if (output.includes('Server startup in [')) {
         assert.match(output, /Apache Tomcat\/11\.0\.29/u);
-        return { origin: 'https://127.0.0.1:' + port, caFile, username, password, stop };
+        return { origin: 'https://127.0.0.1:' + port, caFile, username, password, applicationBase: applications, stop };
       }
       await new Promise(resolve => setTimeout(resolve, 120));
     }

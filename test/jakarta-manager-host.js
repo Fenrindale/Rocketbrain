@@ -61,7 +61,8 @@ async function modulesAt(root) {
     if (process.env.ROCKETBRAIN_JAKARTA_MAVEN_REPO) {
       await fs.mkdir(path.join(folder, '.mvn'));
       await fs.writeFile(path.join(folder, '.mvn/maven.config'),
-        '-Dmaven.repo.local=' + path.resolve(process.env.ROCKETBRAIN_JAKARTA_MAVEN_REPO) + '\n');
+        '-Dmaven.repo.local=' + path.resolve(process.env.ROCKETBRAIN_JAKARTA_MAVEN_REPO) + '\n' +
+        (process.env.ROCKETBRAIN_JAKARTA_MAVEN_OFFLINE === '1' ? '--offline\n' : ''));
     }
     modules.push({ root: folder, name, uri: uri(folder), tool: 'maven' });
   }
@@ -108,6 +109,7 @@ async function exerciseRestore(server, { observe, exec, review, archives }) {
     assert.equal(updatePlan.uploadedSha256, digest(updated));
     const update = await exec(updatePlan);
     assert.equal(update.state, 'confirmed');
+    assert.match(update.version, /^rb002-[a-f0-9]{32}$/u);
     await expectApp(server, context, 'update');
     const oldSession = await applicationResponse(server, context, '/ping?ownedSession=1', 200, { captureSession: true });
     assert.equal(oldSession.body, 'manager-update:' + context + ':people=2');
@@ -135,6 +137,11 @@ async function exerciseRestore(server, { observe, exec, review, archives }) {
     const listed = (await observe()).applications.filter(item => item.context === context);
     assert.deepEqual(listed.map(item => item.version).sort(), [first.version, update.version, restored.version]);
     assert.ok(listed.find(item => item.version === update.version).sessions >= 1);
+    for (const revision of [first, update, restored]) {
+      const warName = context.slice(1) + '##' + revision.version + '.war';
+      const deployedBytes = await fs.readFile(path.join(server.applicationBase, warName));
+      assert.equal(digest(deployedBytes), revision.uploadedSha256);
+    }
 
     const obsolete = await review('restore', context);
     assert.equal(obsolete.nextRevision, 4);
@@ -150,7 +157,8 @@ async function exerciseRestore(server, { observe, exec, review, archives }) {
     return { originalSha256: first.uploadedSha256, currentSha256: update.uploadedSha256,
       restoredSha256: restored.uploadedSha256, versionsBeforeRestore: 2, versionsAfterRestore: 3,
       sameSourcePathRebuilt: true, currentBytesRetained: true, freshSessionRestored: true, existingSessionPreserved: true,
-      exactLocalReviewedUpload: true, replayRefused: true, foreignVersionAndOrdinaryContextRefused: true, staleWarRefused: true };
+      exactLocalReviewedUpload: true, ownedServerArchiveSha256Matched: true, replayRefused: true,
+      foreignVersionAndOrdinaryContextRefused: true, staleWarRefused: true };
   } finally { await fs.writeFile(file, bytes); }
 }
 
