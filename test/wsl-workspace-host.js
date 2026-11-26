@@ -41,8 +41,8 @@ async function verifyForwardedDatabase(api, vscode) {
     await vscode.commands.executeCommand('rocketbrain.runQuery');
     const result = api.results().at(-1);
     assert.equal(result.state, 'done');
-    assert.equal(result.rows.length, 1);
-    const [score, serverVersion] = result.rows[0];
+    assert.equal(result.result.rows.length, 1);
+    const [score, serverVersion] = result.result.rows[0];
     assert.equal(Number(score), 42);
     assert.match(serverVersion, /^[0-9]+\.[0-9]+\.[0-9]+/u);
     return { score: 42, serverVersion, reachedFromWindowsVsCode: true };
