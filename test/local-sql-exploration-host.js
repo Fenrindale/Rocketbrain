@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
+const { setTimeout: delay } = require('node:timers/promises');
 const mysql = require('mysql2/promise');
 const { MysqlService } = require('../src/db/mysql');
 const { registerGroundedSqlAssistant } = require('../src/db/local-sql-grounding-vscode');
@@ -170,10 +171,85 @@ async function verifyExploration(config, model) {
   }
 }
 
+async function runLocalSqlExplorationChecks(api, vscode, checks) {
+  const config = await fixtureConfig();
+  const database = new MysqlService(config);
+  const settings = vscode.workspace.getConfiguration('rocketbrain.localSqlAssistant');
+  const keys = ['endpoint', 'model'];
+  const old = keys.map(key => settings.inspect(key)?.workspaceValue);
+  const scope = vscode.ConfigurationTarget.Workspace;
+  const tools = api.localSqlAssistant.grounded;
+  const verified = [];
+  const model = await startLocalModel();
+  let connector;
+  try {
+    connector = await mysql.createConnection(config);
+    await fixtures(connector);
+    for (const key of keys) await settings.update(key, model[key], scope);
+    const commands = await vscode.commands.getCommands(true);
+    for (const mode of ['grounded', 'continueGrounded', 'groundedTranscript']) assert.ok(commands.includes(section + mode));
+    await api.connectMysql(config);
+    const catalog = await database.metadata(), choices = selectRoute(catalog);
+    await database.openSession('default', { readOnly: true });
+    const turn = async (input, index, bind) => {
+      const request = await tools.stage({ input, ...bind });
+      for (const hidden of [config.password, 'secret_label', 'fixture-private-sentinel', 'North', 'South']) {
+        assert.ok(!JSON.stringify(request.input).includes(hidden));
+      }
+      if (index) assert.equal(Object.hasOwn(request.input.previousPlan, 'explanation'), false);
+      const result = await tools.draft(request.id, { confirmed: true });
+      tools.review(result.id, { confirmed: true, digest: result.digest });
+      const editor = await tools.openDraft(result.id, result.digest);
+      assert.equal(editor.document.getText().trim(), result.sql);
+      const plan = await tools.inspect(result.id, { confirmed: true, digest: result.digest });
+      const control = await database.query(expected[index]), actual = await database.query(result.sql);
+      assert.deepEqual(actual.rows, control.rows);
+      verified.push({ rows: actual.rows.length, estimatedOperators: plan.nodes.length });
+      return { result, editor };
+    };
+    const first = await turn(original, 0, { choices });
+    const [exploration] = tools.sessions();
+    assert.equal(exploration.turns, 1);
+    assert.equal(vscode.window.activeTextEditor.document, first.editor.document);
+    await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+    const closeDeadline = Date.now() + 10000;
+    while (!first.editor.document.isClosed && Date.now() < closeDeadline) await delay(50);
+    assert.equal(first.editor.document.isClosed, true);
+    await assert.rejects(tools.stage({ previousId: first.result.id, input: followup }), /editor changed or closed/);
+    const previousId = await tools.resume(exploration.id);
+    assert.equal(previousId, first.result.id);
+    assert.notEqual(vscode.window.activeTextEditor.document.uri.toString(), first.editor.document.uri.toString());
+    const second = await turn(followup, 1, { previousId });
+    const progress = tools.transcript(exploration.id);
+    assert.deepEqual(Object.keys(progress.turns.at(-1).changes), ['columns', 'measures', 'sort']);
+    const transcript = await vscode.workspace.openTextDocument(vscode.Uri.parse(
+      'rocketbrain-sql-exploration:/Reviewed%20SQL%20Exploration.txt?' + exploration.id + '/2'));
+    assert.equal(transcript.isDirty, false);
+    assert.match(transcript.getText(), /Plan changes/);
+    for (const item of progress.turns) assert.ok(transcript.getText().includes(item.sql));
+    await assert.rejects(tools.stage({ previousId, input: followup }), /latest reviewed turn/);
+    await connector.query('ALTER TABLE rb_grounding_assignment DROP FOREIGN KEY rb_grounding_branch_fk');
+    await assert.rejects(tools.inspect(second.result.id, { confirmed: true, digest: second.result.digest }), /reviewed key|metadata changed/);
+    checks.push('The installed local-model workbench reopened a closed reviewed SQL draft, completed a second grounded turn and exposed its exact read-only transcript.');
+    return { engine: catalog.dialect, serverVersion: catalog.serverVersion, verified, planDelta: Object.keys(progress.turns.at(-1).changes),
+      nativeTranscript: true, reviewedSourceReopened: true, staleForeignKeyRefused: true, ancestorReplayRefused: true, jdbc: await jdbcReadback() };
+  } finally {
+    try {
+      await api.disconnectMysql();
+      for (const [index,key] of keys.entries()) await settings.update(key, old[index], scope);
+      await connector?.query('DROP TABLE IF EXISTS rb_grounding_assignment');
+      await connector?.query('DROP TABLE IF EXISTS rb_grounding_branch');
+    } finally {
+      const clean = await Promise.allSettled([database.dispose(), connector?.end(), model.close()]);
+      for (const item of clean) if (item.status === 'rejected') throw item.reason;
+    }
+  }
+}
+
 if (require.main === module) fixtureConfig().then(async config => {
   const model = await startLocalModel();
   try { console.log(JSON.stringify(await verifyExploration(config, model))); }
   finally { await model.close(); }
 }).catch(error => { console.error(error.stack); process.exitCode = 1; });
 
-module.exports = { verifyExploration };
+module.exports = { verifyExploration, runLocalSqlExplorationChecks };
