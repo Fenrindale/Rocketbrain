@@ -1,0 +1,137 @@
+name: Kotlin Native Linux debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['verify-kotlin-native-*']
+    paths:
+      - '.github/workflows/kotlin-native-linux-debug.yml'
+      - 'src/java/kmp-native-*.js'
+      - 'src/java/linux-native-executable.js'
+      - 'test/kmp-native-debug.test.js'
+      - 'test/fixtures/java/kmp-native-linux/**'
+      - 'test/fixtures/java/quarkus-native-linux/spring/**'
+      - 'test/quarkus-native-linux.cjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 32
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061
+        with:
+          version: 10.29.3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.22.3
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25.0.5'
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Provision GDB and verified Gradle and Maven distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends gdb
+          /usr/bin/gdb --version
+          mkdir -p "$RUNNER_TEMP/rocketbrain-gradle" "$RUNNER_TEMP/rocketbrain-maven"
+          curl --fail --silent --show-error --location --retry 3 \
+            'https://downloads.gradle.org/distributions/gradle-9.1.0-bin.zip' \
+            --output "$RUNNER_TEMP/rocketbrain-gradle.zip"
+          printf '%s  %s\n' 'a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806' \
+            "$RUNNER_TEMP/rocketbrain-gradle.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/rocketbrain-gradle.zip" -d "$RUNNER_TEMP/rocketbrain-gradle"
+          curl --fail --silent --show-error --location --retry 3 \
+            'https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.tar.gz' \
+            --output "$RUNNER_TEMP/rocketbrain-maven.tar.gz"
+          printf '%s  %s\n' 'bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978' \
+            "$RUNNER_TEMP/rocketbrain-maven.tar.gz" | sha512sum --check
+          tar --extract --gzip --file "$RUNNER_TEMP/rocketbrain-maven.tar.gz" --directory "$RUNNER_TEMP/rocketbrain-maven" --strip-components=1
+      - name: Compile the Kotlin Native debug ELF and Spring JDBC HTTP app
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/rocketbrain-gradle/gradle-9.1.0/bin/gradle" --no-daemon --console=plain --max-workers 2 \
+            -p test/fixtures/java/kmp-native-linux linkDebugExecutableLinuxX64
+          "$RUNNER_TEMP/rocketbrain-maven/bin/mvn" --batch-mode --no-transfer-progress \
+            -f test/fixtures/java/quarkus-native-linux/spring/pom.xml -DskipTests package
+      - name: Start owned MySQL and MariaDB with masked one-run credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          owner="kotlin-native-debug-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          state="$RUNNER_TEMP/$owner"
+          mkdir -- "$state"
+          password="$(openssl rand -hex 24)"
+          mysql_root="$(openssl rand -hex 24)"
+          mariadb_root="$(openssl rand -hex 24)"
+          for value in "$password" "$mysql_root" "$mariadb_root"; do printf '::add-mask::%s\n' "$value"; done
+          printf 'MYSQL_DATABASE=rocketbrain_native\nMYSQL_USER=rb_native\nMYSQL_PASSWORD=%s\nMYSQL_ROOT_PASSWORD=%s\n' \
+            "$password" "$mysql_root" > "$state/mysql.env"
+          printf 'MARIADB_DATABASE=rocketbrain_native\nMARIADB_USER=rb_native\nMARIADB_PASSWORD=%s\nMARIADB_ROOT_PASSWORD=%s\n' \
+            "$password" "$mariadb_root" > "$state/mariadb.env"
+          docker run --detach --label "org.rocketbrain.fixture=$owner" --publish 127.0.0.1:43306:3306 \
+            --env-file "$state/mysql.env" --health-cmd 'mysqladmin ping --host=127.0.0.1 --silent' \
+            --health-interval 2s --health-timeout 4s --health-retries 30 \
+            'mysql:8.4.13@sha256:8c233bad33d520a7aae1c1e619c3a9775f4a1ba2d463d692fada04ec7f40be00' > "$state/mysql.id"
+          docker run --detach --label "org.rocketbrain.fixture=$owner" --publish 127.0.0.1:43307:3306 \
+            --env-file "$state/mariadb.env" --health-cmd 'healthcheck.sh --connect --innodb_initialized' \
+            --health-interval 2s --health-timeout 4s --health-retries 30 \
+            'mariadb:11.4.8@sha256:bc474f00629f0123c10f9e1bca193a45d18af15a274cf0656acda64f1086c3b6' > "$state/mariadb.id"
+          rm -f -- "$state/mysql.env" "$state/mariadb.env"
+          for engine in mysql mariadb; do
+            id="$(cat "$state/$engine.id")"
+            [[ "$id" =~ ^[0-9a-f]{64}$ ]]
+            for ((check=0; check<48; check++)); do
+              status="$(docker inspect --format '{{.State.Health.Status}}' "$id")"
+              if [[ "$status" == healthy ]]; then break; fi
+              sleep 2
+            done
+            test "$status" = healthy
+          done
+          printf 'RB_NATIVE_DB_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
+      - name: Run source breakpoints and local reads against both owned database fixtures
+        env:
+          ROCKETBRAIN_KOTLIN_NATIVE_LINUX_TEST: '1'
+          RB_NATIVE_DB_USER: rb_native
+          ROCKETBRAIN_KOTLIN_NATIVE_RECEIPT: ${{ runner.temp }}/rocketbrain-kotlin-native-linux.json
+        run: node --test test/kmp-native-debug.test.js
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rocketbrain-kotlin-native-linux
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/rocketbrain-kotlin-native-linux.json
+            test/fixtures/java/kmp-native-linux/build/bin/linuxX64/debugExecutable/rocketbrainNativeDebug.kexe
+      - name: Stop only this run's owned database containers
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="kotlin-native-debug-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          state="$RUNNER_TEMP/$owner"
+          if [[ ! -d "$state" ]]; then exit 0; fi
+          for engine in mysql mariadb; do
+            file="$state/$engine.id"
+            if [[ ! -s "$file" ]]; then continue; fi
+            id="$(cat "$file")"
+            [[ "$id" =~ ^[0-9a-f]{64}$ ]]
+            observed="$(docker inspect --format '{{index .Config.Labels "org.rocketbrain.fixture"}}' "$id")"
+            test "$observed" = "$owner"
+            docker rm --force "$id" >/dev/null
+          done
+          rm -f -- "$state/mysql.env" "$state/mariadb.env" "$state/mysql.id" "$state/mariadb.id"
+          rmdir -- "$state"
