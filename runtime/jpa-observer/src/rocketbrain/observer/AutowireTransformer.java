@@ -23,6 +23,7 @@ final class AutowireTransformer implements ClassFileTransformer {
     static final String CONSTRUCTOR="org/springframework/beans/factory/support/ConstructorResolver";
     static final String FACTORY="org/springframework/beans/factory/support/DefaultListableBeanFactory";
     static final String MEMBERS=FACTORY+"#member-autowire";
+    static final String PROVIDERS=FACTORY+"#provider-resolve";
     private static final String ANCESTORS="org/springframework/beans/factory/BeanFactoryUtils";
     private static final String LISTABLE="Lorg/springframework/beans/factory/ListableBeanFactory;";
     private static final String HIERARCHICAL="org/springframework/beans/factory/HierarchicalBeanFactory";
@@ -36,6 +37,7 @@ final class AutowireTransformer implements ClassFileTransformer {
     private static final String RESOLVE="("+DESCRIPTOR+TRAILING+")"+RESULT;
     private static final String OPTIONAL="("+DESCRIPTOR+"Ljava/lang/String;Ljava/util/Set;[Ljava/lang/Object;)Ljava/util/Optional;";
     private static final ClassDesc HELPER=ClassDesc.of("rocketbrain.observer.AutowireRuntime");
+    private static final ClassDesc PROVIDER_HELPER=ClassDesc.of("rocketbrain.observer.AutowireProviderTrace");
     private static final ClassDesc OBJECT=ClassDesc.of("java.lang.Object"), STRING=ClassDesc.of("java.lang.String");
     private static final ClassDesc VOID=ClassDesc.ofDescriptor("V");
     private static final ClassDesc BEANS=ClassDesc.of("org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory");
@@ -95,11 +97,16 @@ final class AutowireTransformer implements ClassFileTransformer {
                     ObserverRuntime.warning("Spring ancestor lookup observation unavailable for this resolution shape.");
                 }
                 try{
-                    byte[] members=memberHooks(cf,cf.parse(result));
+                    result=memberHooks(cf,cf.parse(result));
                     ObserverRuntime.instrumented(MEMBERS);
-                    return members;
                 }catch(Throwable ignored){
                     ObserverRuntime.warning("Spring field and method observation unavailable for this resolution shape.");
+                }
+                try{
+                    result=providerHooks(cf,cf.parse(result));
+                    ObserverRuntime.instrumented(PROVIDERS);
+                }catch(Throwable ignored){
+                    ObserverRuntime.warning("Spring lazy provider observation unavailable for this resolution shape.");
                 }
             }
             return result;
@@ -200,6 +207,77 @@ final class AutowireTransformer implements ClassFileTransformer {
         if(!java.util.Arrays.equals(matched,new int[]{1,1,1,1,2,1,1,3}))
             throw new IllegalStateException("Unknown Spring member resolution shape");
         return result;
+    }
+
+    private static byte[] providerHooks(ClassFile format,java.lang.classfile.ClassModel model){
+        int[] matched=new int[6];
+        byte[] result=format.transformClass(model,(builder,element)->{
+            if(element instanceof MethodModel method&&method.code().isPresent()&&supported(method,false)){
+                matched[0]++;
+                builder.transformMethod(method,MethodTransform.transformingCode(new ProviderResolution(matched)));
+            }else builder.with(element);
+        });
+        if(!java.util.Arrays.equals(matched,new int[]{1,1,1,2,1,1}))
+            throw new IllegalStateException("Unknown lazy provider selection shape");
+        return result;
+    }
+
+    private static final class ProviderResolution implements CodeTransform {
+        private static final String RESOLVABLE="Lorg/springframework/core/ResolvableType;";
+        private static final String BEAN_FACTORY="Lorg/springframework/beans/factory/BeanFactory;";
+        private static final String DESCRIPTOR_OWNER="org/springframework/beans/factory/config/DependencyDescriptor";
+        private final int[] matched;
+        private Label start,end,handler;
+        private int token,receiver,candidateType;
+        ProviderResolution(int[] matched){this.matched=matched;}
+        public void atStart(CodeBuilder code){
+            token=code.allocateLocal(TypeKind.REFERENCE);
+            receiver=code.allocateLocal(TypeKind.REFERENCE);
+            candidateType=code.allocateLocal(TypeKind.REFERENCE);
+            code.aload(0).aload(1).aload(2).invokestatic(PROVIDER_HELPER,"start",MethodTypeDesc.of(OBJECT,OBJECT,OBJECT,STRING))
+                .astore(token);
+            start=code.newLabel();end=code.newLabel();handler=code.newLabel();
+            code.labelBinding(start);
+        }
+        private static void named(CodeBuilder code,String hook) {
+            code.dup().aload(0).aload(1).invokestatic(PROVIDER_HELPER,hook,MethodTypeDesc.of(VOID,OBJECT,OBJECT,OBJECT));
+        }
+        public void accept(CodeBuilder code,CodeElement element){
+            if(call(element,FACTORY,"resolveBean","(Ljava/lang/String;"+RESOLVABLE+")"+RESULT)){
+                matched[1]++;
+                code.swap();
+                named(code,"beforeLookup");
+                code.swap();
+            }
+            if(call(element,DESCRIPTOR_OWNER,"resolveCandidate","(Ljava/lang/String;Ljava/lang/Class;"+BEAN_FACTORY+")"+RESULT)){
+                matched[2]++;
+                code.astore(receiver).astore(candidateType);
+                named(code,"beforeLookup");
+                code.aload(candidateType).aload(receiver);
+            }
+            if(call(element,FACTORY,"resolveInstance","(Ljava/lang/Object;"+DESCRIPTOR+"Ljava/lang/Class;Ljava/lang/String;)"+RESULT)){
+                matched[3]++;
+                named(code,"selected");
+            }
+            if(call(element,DESCRIPTOR_OWNER,"resolveNotUnique","("+RESOLVABLE+"Ljava/util/Map;)"+RESULT)){
+                matched[4]++;
+                code.aload(0).aload(1).invokestatic(PROVIDER_HELPER,"ambiguous",MethodTypeDesc.of(VOID,OBJECT,OBJECT));
+            }
+            if(element instanceof ReturnInstruction ret&&ret.typeKind()==TypeKind.REFERENCE)
+                code.dup().aload(token).aconst_null().invokestatic(PROVIDER_HELPER,"end",MethodTypeDesc.of(VOID,OBJECT,OBJECT,OBJECT));
+            code.with(element);
+            if(call(element,"java/util/Map","isEmpty","()Z")){
+                matched[5]++;
+                code.dup().aload(0).aload(1).invokestatic(PROVIDER_HELPER,"empty",
+                    MethodTypeDesc.of(VOID,ClassDesc.ofDescriptor("Z"),OBJECT,OBJECT));
+            }
+        }
+        public void atEnd(CodeBuilder code){
+            int error=code.allocateLocal(TypeKind.REFERENCE);
+            code.labelBinding(end).labelBinding(handler).astore(error).aconst_null().aload(token).aload(error)
+                .invokestatic(PROVIDER_HELPER,"end",MethodTypeDesc.of(VOID,OBJECT,OBJECT,OBJECT))
+                .aload(error).athrow().exceptionCatchAll(start,end,handler);
+        }
     }
 
     private static boolean supported(MethodModel method,boolean constructor){

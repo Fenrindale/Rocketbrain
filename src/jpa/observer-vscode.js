@@ -85,7 +85,9 @@ function registerObserver(context,vscode,output,{source}) {
   async function chooseObservedInjection(eventId, members=false) {
     trusted();
     if (!client) throw new ObserverError('NOT_CONNECTED','Connect a local JVM observer first.');
-    if (current.capabilities?.springAutowireTrace !== true) {
+    const providers=members==='provider';
+    const capability=providers?'springProviderTrace':'springAutowireTrace';
+    if (current.capabilities?.[capability] !== true) {
       throw new ObserverError('UNSUPPORTED_INJECTION','Start an observer that supports Spring injection capture.');
     }
     const candidate = client, epoch = generation;
@@ -93,25 +95,30 @@ function registerObserver(context,vscode,output,{source}) {
       trusted();
       if (candidate!==client || epoch!==generation) throw new ObserverError('STALE','The observer connection changed during inspection.');
     }
-    const fetchTrace=()=>members?candidate.observedMemberInjection():candidate.observedInjection();
+    const fetchTrace=()=>providers?candidate.observedProviderInjection():
+      members?candidate.observedMemberInjection():candidate.observedInjection();
     const trace = await fetchTrace();
     assertCurrent();
     if (trace.processId!==current.processId) throw new ObserverError('STALE','The JVM process changed. Reconnect before inspecting.');
     if (!trace.events.length && eventId===undefined) {
       await vscode.window.showInformationMessage(trace.state === 'disabled'
         ? 'Enable springAutowireTrace and its application packages in the agent startup configuration.'
-        : members?'No supported Spring field or method parameter resolutions have been captured.':
+        : providers?'No supported Spring provider dereferences have been captured.':
+          members?'No supported Spring field or method parameter resolutions have been captured.':
           'No supported Spring constructor resolutions have been captured.');
       return;
     }
     let event = trace.events.find(value=>value.id===eventId);
     if (eventId!==undefined && !event) throw new ObserverError('STALE','The injection resolution is no longer retained.');
     if (!event) {
+      const parameter=site=>site.parameterName||'parameter '+(site.parameterIndex+1);
       const item = await vscode.window.showQuickPick([...trace.events].reverse().map(value=>({
-        label:value.site.owner+' · '+(members?value.site.member+(value.site.kind==='method'?' / '+(value.site.parameterName||
-          'parameter '+(value.site.parameterIndex+1)):''):(value.site.parameterName||'parameter '+(value.site.parameterIndex+1))),
-        description:[value.state,value.selectedBean||value.selectedBeans?.join(', '),value.context.id,value.context.key].filter(Boolean).join(' · '), value
-      })), {title:members?'Observed Spring Field and Method Injection':'Observed Spring Constructor Injection'});
+        label:value.site.owner+' · '+(value.site.kind==='field'?value.site.member:
+          value.site.kind==='method'?value.site.member+' / '+parameter(value.site):parameter(value.site)),
+        description:[value.operation,value.state,value.selectedBean||value.selectedBeans?.join(', '),value.context.id,value.context.key]
+          .filter(Boolean).join(' · '), value
+      })), {title:providers?'Observed Spring Provider Dereferences':
+        members?'Observed Spring Field and Method Injection':'Observed Spring Constructor Injection'});
       if (!item) return;
       assertCurrent();
       event=item.value;
@@ -408,6 +415,8 @@ function registerObserver(context,vscode,output,{source}) {
   command('rocketbrain.jpa.observer.openObservedInjectionSource',openObservedInjectionSource);
   command('rocketbrain.jpa.observer.inspectObservedMemberInjection',eventId=>inspectObservedInjection(eventId,true));
   command('rocketbrain.jpa.observer.openObservedMemberSource',options=>openObservedInjectionSource(options,true));
+  command('rocketbrain.jpa.observer.inspectObservedProviderInjection',eventId=>inspectObservedInjection(eventId,'provider'));
+  command('rocketbrain.jpa.observer.openObservedProviderSource',options=>openObservedInjectionSource(options,'provider'));
   command('rocketbrain.jpa.observer.comparePersistenceBuild',options=>inspectPersistenceContexts(options,true));
   command('rocketbrain.jpa.observer.prepare',async()=>{trusted();const result=await require('./observer-install').prepareObserver(context,vscode);const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(result,null,2)});await vscode.window.showTextDocument(doc,{preview:true});return result;});
   return {snapshot,connect,refresh,disconnect,validate,compareSource,performance,inspectAttributeBinding,inspectEntityGraph,inspectPersistenceContexts,inspectObservedInjection,openObservedInjectionSource,onDidChange:events.event,dispose(){disposed=true;disconnect();for(const sub of subscriptions)sub.dispose();}};

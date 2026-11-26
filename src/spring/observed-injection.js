@@ -13,6 +13,9 @@ const contextKey = /^context-[1-9][0-9]{0,15}$/u;
 const primitive = new Set(['boolean','byte','short','int','long','char','float','double']);
 const aggregates=new Set(['java.util.List','java.util.Set','java.util.Collection','java.util.Map']);
 const optionalType='java.util.Optional';
+const objectProvider='org.springframework.beans.factory.ObjectProvider';
+const jakartaProvider='jakarta.inject.Provider';
+const providerTypes=new Set([objectProvider,jakartaProvider]);
 
 function bounded(value, expression, length=256) {
   return typeof value === 'string' && value.length <= length && value.trim().length && expression.test(value);
@@ -75,7 +78,7 @@ function normalizeHierarchy(value, consumer, names, hint) {
   return observed;
 }
 
-function normalizeObservedInjection(raw, members=false) {
+function normalizeObservedInjection(raw, members=false, providers=false) {
   if (!raw || !['observed','awaiting-hooks','disabled'].includes(raw.state) ||
       !Number.isSafeInteger(raw.processId) || raw.processId < 1 || !Number.isSafeInteger(raw.omitted) || raw.omitted < 0 ||
       raw.inspectionInvokedBeans !== false || raw.beanValuesRetained !== false || raw.observerExecutedSql !== false ||
@@ -88,22 +91,28 @@ function normalizeObservedInjection(raw, members=false) {
     if (!Number.isSafeInteger(value?.id) || value.id <= previous ||
         !bounded(context?.key,contextKey) || (context.id !== undefined && !bounded(context.id,label)) ||
         !bounded(site?.owner,ownerType) || !bounded(site.requestingBean,label) ||
-        !['resolved','ambiguous','unproved',...(members?['missing','aggregated']:[])].includes(value.state) ||
+        !(providers?['resolved','ambiguous','missing']:
+          ['resolved','ambiguous','unproved',...(members?['missing','aggregated']:[])]).includes(value.state) ||
         (value.state === 'resolved' ? !bounded(value.selectedBean,label) : value.selectedBean !== undefined) ||
         (value.suggestedName !== undefined && (!bounded(value.suggestedName,label)||members&&value.suggestedName!==value.selectedBean))) {
       throw Error('Invalid Spring injection event.');
     }
     let member, selection;
     if(members){
-      if(!['field','method'].includes(site.kind)||!bounded(site.member,localType)||
+      if(!(providers?['field','method','constructor']:['field','method']).includes(site.kind)||
+          (site.kind==='constructor'?site.member!==undefined:!bounded(site.member,localType))||
           !bounded(site.requestedType,memberType)||!bounded(site.dependencyType,ownerType)||
           (site.kind==='field'&&(site.parameterTypes!==undefined||site.parameterIndex!==undefined||site.parameterName!==undefined))) {
         throw Error('Invalid Spring member injection site.');
       }
       const aggregate=aggregates.has(site.requestedType)||site.requestedType===site.dependencyType+'[]';
-      if((!aggregate&&site.requestedType!==site.dependencyType&&site.requestedType!==optionalType)||
+      if(providers){
+        const validOperation=site.requestedType===objectProvider?['getObject','getIfAvailable'].includes(value.operation):
+          site.requestedType===jakartaProvider&&value.operation==='get';
+        if(!validOperation||value.suggestedName!==undefined)throw Error('Invalid Spring provider operation.');
+      }else if((!aggregate&&site.requestedType!==site.dependencyType&&site.requestedType!==optionalType)||
           (value.state==='aggregated'&&!aggregate))throw Error('Invalid Spring dependency type.');
-      member={kind:site.kind,member:site.member,requestedType:site.requestedType,dependencyType:site.dependencyType};
+      member={kind:site.kind,...(site.member&&{member:site.member}),requestedType:site.requestedType,dependencyType:site.dependencyType};
       if(value.state==='aggregated'){
         if(!Array.isArray(value.selectedBeans)||!value.selectedBeans.length||value.selectedBeans.length>12||
             value.selectedBeans.some(name=>!bounded(name,label))||new Set(value.selectedBeans).size!==value.selectedBeans.length) {
@@ -113,7 +122,7 @@ function normalizeObservedInjection(raw, members=false) {
       }else if(value.selectedBeans!==undefined)throw Error('Unexpected Spring aggregate selections.');
     }
     let parameter;
-    if(!members||site.kind==='method'){
+    if(!members||site.kind!=='field'){
       if(!Array.isArray(site.parameterTypes)||!site.parameterTypes.length||site.parameterTypes.length>24||
           site.parameterTypes.some(name=>!bounded(name,members?memberType:ownerType))||!Number.isInteger(site.parameterIndex)||
           site.parameterIndex<0||site.parameterIndex>=site.parameterTypes.length||
@@ -126,20 +135,25 @@ function normalizeObservedInjection(raw, members=false) {
     previous = value.id;
     const hierarchy=normalizeHierarchy(value.hierarchy,context,selection?.selectedBeans||
       (value.state==='resolved'?[value.selectedBean]:[]),value.suggestedName);
+    if(providers&&((value.state==='resolved'&&!hierarchy?.owners?.length)||
+        (value.state!=='resolved'&&hierarchy!==undefined)))throw Error('Invalid Spring provider ownership.');
     return { id:value.id, state:value.state, context:{key:context.key,...(context.id && {id:context.id})},
       site:{ owner:site.owner, requestingBean:site.requestingBean,...member,...parameter },...selection,
       ...(value.selectedBean && {selectedBean:value.selectedBean}), ...(value.suggestedName && {suggestedName:value.suggestedName}),
-      ...(hierarchy&&{hierarchy}) };
+      ...(hierarchy&&{hierarchy}),...(providers&&{operation:value.operation}) };
   });
   return { processId:raw.processId, state:raw.state, omitted:raw.omitted, events,
     inspectionInvokedBeans:false,beanValuesRetained:false,observerExecutedSql:false };
 }
 
 const normalizeObservedMembers=raw=>normalizeObservedInjection(raw,true);
+const normalizeObservedProviders=raw=>normalizeObservedInjection(raw,true,true);
 
 function sourceMember(file,site){
   if(typeof file?.text!=='string'||Buffer.byteLength(file.text,'utf8')>262144||!site||
-      !bounded(site.owner,ownerType)||!bounded(site.member,localType)||!['field','method'].includes(site.kind)||
+      !bounded(site.owner,ownerType)||
+      (site.kind==='constructor'?site.member!==undefined||!providerTypes.has(site.requestedType):
+        !bounded(site.member,localType)||!['field','method'].includes(site.kind))||
       !bounded(site.requestedType,memberType)||!bounded(site.dependencyType,ownerType))return;
   const lexical=lexJava(file.text);
   if(lexical.issues.length)return;
@@ -172,7 +186,8 @@ function sourceMember(file,site){
     if(!raw||type.raw.endsWith('[][]'))return;
     if(type.raw===base+'[]')return {requested:raw+'[]',dependency:raw};
     if(type.raw===base)return {requested:raw,dependency:raw};
-    if((raw!==optionalType&&!aggregates.has(raw))||type.arguments.length!==(raw==='java.util.Map'?2:1))return {requested:raw};
+    if((raw!==optionalType&&!aggregates.has(raw)&&!providerTypes.has(raw))||
+        type.arguments.length!==(raw==='java.util.Map'?2:1))return {requested:raw};
     if(raw==='java.util.Map'&&resolve(type.arguments[0].raw)!=='java.lang.String')return {requested:raw};
     const dependency=resolve(type.arguments.at(-1).raw);
     return dependency?{requested:raw,dependency}:undefined;
@@ -189,7 +204,9 @@ function sourceMember(file,site){
     if(!Array.isArray(site.parameterTypes)||!Number.isInteger(site.parameterIndex)||
         site.parameterIndex<0||site.parameterIndex>=site.parameterTypes.length)return;
     targets=declaration.methods.filter(method=>{
-      if(method.constructor||method.name!==site.member||!injected(method)||method.parameters.length!==site.parameterTypes.length)return false;
+      const matchesDeclaration=site.kind==='constructor'?method.constructor:
+        !method.constructor&&method.name===site.member&&injected(method);
+      if(!matchesDeclaration||method.parameters.length!==site.parameterTypes.length)return false;
       const open=lexical.tokens.findIndex(token=>token.start>=method.end);
       const close=lexical.tokens[open]?.text==='('?matching(lexical.tokens,open):-1;
       if(close<0||splitTop(lexical.tokens.slice(open+1,close)).length!==method.parameters.length)return false;
@@ -298,4 +315,4 @@ async function readObservedSource(file) {
   } finally { await handle.close(); }
 }
 
-module.exports={ normalizeObservedInjection, normalizeObservedMembers, sourceParameter, sourceMember, sourceBeanDefinition, readObservedSource };
+module.exports={ normalizeObservedInjection, normalizeObservedMembers, normalizeObservedProviders, sourceParameter, sourceMember, sourceBeanDefinition, readObservedSource };

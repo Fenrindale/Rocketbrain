@@ -47,7 +47,7 @@ public final class AutowireRuntime {
         if(flag==scopes.isEmpty())throw new IllegalArgumentException("Choose explicit constructor trace packages when enabling the trace");
         prefixes=List.copyOf(scopes);
         enabled=flag;
-        if(!enabled){retained.clear();members.clear();sequence=0;dropped=0;droppedMembers=0;}
+        if(!enabled){retained.clear();members.clear();sequence=0;dropped=0;droppedMembers=0;AutowireProviderTrace.reset();}
     }
     static boolean enabled(){return enabled;}
 
@@ -81,20 +81,20 @@ public final class AutowireRuntime {
         }
     }
 
-    private static String label(Object value){
+    static String label(Object value){
         return value instanceof String text&&text.matches("[A-Za-z0-9_.$:@ -]{1,180}")&&!text.isBlank()?text:null;
     }
-    private static String type(Class<?> value){
+    static String type(Class<?> value){
         String name=value.getName();
         return !value.isArray()&&name.length()<=256&&name.matches("[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*")?name:null;
     }
-    private static String memberType(Class<?> value){
+    static String memberType(Class<?> value){
         if(value.isArray()&&value.getComponentType().isArray())return null;
         String name=type(value.isArray()?value.getComponentType():value);
         return name==null?null:name+(value.isArray()?"[]":"");
     }
-    private static boolean inScope(String name){return name!=null&&prefixes.stream().anyMatch(name::startsWith);}
-    private static Object metadata(Object value,String declaring,String name)throws ReflectiveOperationException{
+    static boolean inScope(String name){return name!=null&&prefixes.stream().anyMatch(name::startsWith);}
+    static Object metadata(Object value,String declaring,String name)throws ReflectiveOperationException{
         if(value==null)return null;
         Method method=value.getClass().getMethod(name);
         return method.getDeclaringClass().getName().equals(declaring)?method.invoke(value):null;

@@ -840,6 +840,18 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.jpa.observer.inspectObservedProviderInjection",
+        "title": "Inspect Observed Spring Provider Dereference",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.jpa.observer.openObservedProviderSource",
+        "title": "Open Observed Spring Provider Source",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.jpa.observer.inspectTransactions",
         "title": "Inspect Spring JPA Transaction Outcomes",
         "category": "Rocketbrain",
