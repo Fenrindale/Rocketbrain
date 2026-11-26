@@ -132,7 +132,13 @@ async function verifyCatalogUsages(adapter) {
       } finally {
         await actor.end();
         if (file) await fs.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
-        if (folder) await fs.rmdir(folder);
+        if (folder && adapter.native) {
+          // Explorer can hold a directory handle until the isolated test window closes.
+          // The generated SQL must be gone even while the test window is open.
+          assert.deepEqual(await fs.readdir(folder), []);
+        } else if (folder) {
+          await fs.rmdir(folder);
+        }
       }
     }
   }
