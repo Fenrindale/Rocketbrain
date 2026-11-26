@@ -64,7 +64,7 @@ Maven·Gradle 권고 보고서에서 **Inspect Java Advisory Call Sites**로 선
 
 **Docker** 보기에서 시스템 Docker CLI가 제공하는 컨텍스트를 선택해 컨테이너·이미지·Compose 프로젝트를 탐색할 수 있습니다. 컨테이너 로그와 승인된 시작·중지·재시작, 레지스트리 매니페스트 조회를 제공합니다. [Docker 워크벤치](docs/docker.md)
 
-Dev Container 명령은 이미지나 Dockerfile 구성과 함께 명시한 Docker Compose 파일을 지원합니다. 파일, 작업 서비스와 종속 서비스를 검토한 뒤 시작하고, 확인한 컨테이너에서 명령을 실행하거나 해당 세션을 중지할 수 있습니다. [Dev Container 사용 절차](docs/devcontainer.md)
+Dev Container 명령은 이미지나 Dockerfile 구성과 함께 명시한 Docker Compose 파일을 지원합니다. 작업 서비스와 종속 서비스를 검토해 시작한 뒤 명령을 실행할 수 있습니다. 실행 중인 컨테이너의 TCP 포트를 검토해 로컬 루프백으로 연결하고, 열린 포트를 확인하거나 닫을 수 있습니다. [Dev Container 사용 절차](docs/devcontainer.md)
 
 **Select Python Interpreter**로 프로젝트 가상환경을 선택합니다. Python Outline과 구문 오류는 해당 인터프리터의 AST에서 얻습니다. **Run Python File**로 저장한 파일을 실행하고 `debugpy`가 설치된 환경에서 **Debug Python File**로 중단점·변수를 볼 수 있습니다. [debugpy](https://github.com/microsoft/debugpy)
 4. **Build Java Project / Choose Build Task**, 저장한 **Run / Debug / Stop** 구성을 사용합니다.

@@ -5,6 +5,7 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { createHash, randomUUID } = require('node:crypto');
 const { observeCompose, assertComposeSources, projectIds, locateProject, validateSavedCompose } = require('./compose');
+const { bridgeArgs, createPortForwards } = require('./ports');
 
 const cliVersion = '0.91.0';
 const sessionLabel = 'rocketbrain.devcontainer.session';
@@ -158,11 +159,12 @@ function summarize(result, file) {
   };
 }
 
-function createDevContainers({ trusted, settings, run = invoke, readSession, writeSession } = {}) {
+function createDevContainers({ trusted, settings, run = invoke, readSession, writeSession, workspaceOpen, startBridge } = {}) {
   const memory = new Map();
   const load = readSession || (key => memory.get(key));
   const save = writeSession || ((key, value) => value ? memory.set(key, value) : memory.delete(key));
   const busy = new Set(), offers = new Map();
+  const forwards = createPortForwards({ startBridge, observe: observeForward, healthy: verifyForward });
 
   function rootFor(workspace) {
     if (!trusted?.()) throw Error('Trust the selected local workspace to use Dev Containers.');
@@ -236,14 +238,14 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
     return saved;
   }
 
-  async function verifyContainer(target, session, id) {
+  async function verifyContainer(target, session, id, timeout = timeLimit.inspect) {
     if (!containerId.test(id)) throw Error('The local Docker service did not return an exact container ID.');
-    const actual = json(await docker(target, ['container', 'inspect', '--format', '{{json .}}', id]),
+    const actual = json(await docker(target, ['container', 'inspect', '--format', '{{json .}}', id], timeout),
       'The exact Dev Container could not be found on the local Docker service.');
     if (actual?.Id !== id || actual.Config?.Labels?.[sessionLabel] !== session.session || typeof actual.State?.Running !== 'boolean') {
       throw Error('Container ownership could not be verified for this workspace session.');
     }
-    return { id, running: actual.State.Running };
+    return { id, running: actual.State.Running, startedAt: actual.State.StartedAt, networkMode: actual.HostConfig?.NetworkMode };
   }
 
   async function locate(target, session) {
@@ -384,6 +386,46 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
     return {state:observed.length?'stopped':'missing',kind:'compose',project:session.compose.project,...(app&&{id:app.id}),services:after};
   }
 
+  async function verifyForward(binding) {
+    const { root, key, target, session, containerId, startedAt } = binding;
+    if (!trusted?.() || workspaceOpen && !workspaceOpen(root)) throw Error('The trusted local workspace is no longer open.');
+    const saved = checkedSession(key);
+    if (saved?.id !== containerId || saved.session !== session.session || saved.host !== target.host) {
+      throw Error('The reviewed Dev Container session changed.');
+    }
+    currentConfig(root, session);
+    const exact = await verifyContainer(target, session, containerId, 4500);
+    if (!exact.running || !startedAt || exact.startedAt !== startedAt) throw Error('The reviewed Dev Container stopped or restarted.');
+    if (exact.networkMode !== binding.networkMode) throw Error('The verified container network identity changed.');
+  }
+
+  async function observeForward(binding) {
+    await verifyForward(binding);
+    const { root, target, session, containerId } = binding;
+    const options = settings(root);
+    const selected = await dockerEnvironment(root, options);
+    if (selected.host !== target.host || selected.docker !== target.docker) {
+      throw Error('The selected local Docker route changed. Open a fresh review.');
+    }
+    if (session.compose) {
+      const project = await locateCompose(target, session);
+      const plan = await inspectWith(root, cli(root, options), target, session.compose.project);
+      if (project[0]?.id !== containerId || !project[0].running || plan.compose?.signature !== session.compose.signature ||
+          plan.file !== session.file || plan.fingerprint !== session.fingerprint) {
+        throw Error('The reviewed Compose workspace or configuration changed.');
+      }
+      assertComposeSources(root, plan.compose);
+    }
+    commandOutput(await docker(target, bridgeArgs(containerId, undefined, true), 4500),
+      'Port forwarding requires Python 3 in the managed Linux Dev Container.');
+    await verifyForward(binding);
+  }
+
+  function withForwards(key, outcome) {
+    const active = forwards.list(key);
+    return active.length ? { ...outcome, forwards: active } : outcome;
+  }
+
   return {
     inspect(workspace) {
       return exclusive(workspace, async root => {
@@ -459,14 +501,15 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
         const session = checkedSession(key);
         if (!session) return { state: 'none' };
         const target=await dockerEnvironment(root,settings(root));
-        if(session.compose)return statusCompose(target,session,key);
+        if(session.compose)return withForwards(key,await statusCompose(target,session,key));
         const actual = await locate(target, session);
         if (!actual) return { state: session.id ? 'missing' : 'unconfirmed' };
-        return { state: actual.running ? 'running' : 'stopped', id: actual.id };
+        return withForwards(key, { state: actual.running ? 'running' : 'stopped', id: actual.id });
       });
     },
     stop(workspace) {
       return exclusive(workspace, async (root, key) => {
+        forwards.closeWorkspace(key);
         const session = checkedSession(key);
         if (!session) return { state: 'none' };
         const target = await dockerEnvironment(root, settings(root));
@@ -484,7 +527,34 @@ function createDevContainers({ trusted, settings, run = invoke, readSession, wri
         await save(key, undefined);
         return actual ? { state: 'stopped', id: actual.id } : { state: 'missing' };
       });
-    }
+    },
+    inspectPort(workspace, requested) {
+      return exclusive(workspace, async (root, key) => {
+        const session = checkedSession(key);
+        if (!session?.id) throw Error('Start the managed Dev Container before forwarding a port.');
+        const target = await dockerEnvironment(root, settings(root));
+        if (target.host !== session.host) throw Error('Switch back to the local Docker context used for this session.');
+        const exact = await verifyContainer(target, session, session.id, 4500);
+        if (!exact.running || typeof exact.startedAt !== 'string' || !Date.parse(exact.startedAt)) {
+          throw Error('The managed Dev Container is no longer running.');
+        }
+        if (!exact.networkMode || /^(?:host$|container:)/i.test(exact.networkMode)) {
+          throw Error('Direct port forwarding requires the managed container to have its own network namespace.');
+        }
+        return forwards.inspect(key, { root, key, target, session, containerId: session.id,
+          startedAt: exact.startedAt, networkMode: exact.networkMode }, requested);
+      });
+    },
+    forwardPort(workspace, confirmation) {
+      return exclusive(workspace, async (_root, key) => forwards.open(key, confirmation));
+    },
+    forwardedPorts(workspace) {
+      return exclusive(workspace, async (_root, key) => forwards.list(key));
+    },
+    closePort(workspace, id) {
+      return exclusive(workspace, async (_root, key) => forwards.close(key, id));
+    },
+    dispose() { forwards.dispose(); }
   };
 }
 
