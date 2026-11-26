@@ -6,6 +6,7 @@ const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { stripVTControlCharacters } = require('node:util');
 const { createHelmReleaseActions } = require('./kubernetes-helm');
+const { parseExecCredential, createCredentialReview } = require('./kubernetes-credential');
 
 const maxConfigBytes = 512 * 1024;
 const maxListBytes = 1024 * 1024;
@@ -19,6 +20,7 @@ const resourceKinds = { deployments: 'Deployment', services: 'Service', pods: 'P
 const allowedContext = new Set(['cluster', 'namespace', 'user', 'extensions']);
 const allowedCluster = new Set(['server', 'tls-server-name', 'certificate-authority-data', 'insecure-skip-tls-verify', 'extensions']);
 const allowedUser = new Set(['token', 'client-certificate-data', 'client-key-data', 'extensions']);
+const allowedExecUser = new Set(['exec', 'extensions']);
 
 function podName(value) {
   return typeof value === 'string' && value.length <= 253 && value.split('.').every(name => label.test(name));
@@ -152,9 +154,13 @@ function approvedContexts(configuration) {
     const { cluster, user, namespace = 'default' } = context;
     if (!namespaceName(namespace)) continue;
     const route = validCluster(clusters.get(cluster)?.cluster);
-    const auth = validCredential(users.get(user)?.user);
+    const userConfig = users.get(user)?.user;
+    const provider = onlyFields(userConfig, allowedExecUser) ? parseExecCredential(userConfig.exec) : null;
+    const auth = provider ? {} : validCredential(userConfig);
     if (!route || !auth) continue;
-    approved.set(name, { display: { name, cluster, user, namespace, server: route.server, tlsServerName: route['tls-server-name'] },
+    approved.set(name, { ...(provider && { provider }),
+      display: { name, cluster, user, namespace, server: route.server, tlsServerName: route['tls-server-name'],
+        ...(provider && { credential: 'reviewed-executable' }) },
       config: { apiVersion: 'v1', kind: 'Config', 'current-context': name,
         clusters: [{ name: cluster, cluster: route }], users: [{ name: user, user: auth }],
         contexts: [{ name, context: { cluster, user, namespace } }] } });
@@ -225,6 +231,7 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
   const folder = await fs.mkdtemp(path.join(temporary, 'rocketbrain-kubernetes-'));
   const stageFile = path.join(folder, 'source.kubeconfig');
   const configFile = path.join(folder, 'approved.kubeconfig');
+  const credential = createCredentialReview(folder);
   const active = new Set();
   const stop = new AbortController();
   let closing, contexts, selected, disposed = false;
@@ -258,7 +265,7 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
       'Kubeconfig inspection', maxConfigBytes, signal);
     contexts = approvedContexts(parseJson(raw, 'Kubeconfig inspection'));
     await fs.unlink(stageFile);
-    if (!contexts.size) throw Error('No supported TLS context with an embedded token or client certificate was found.');
+    if (!contexts.size) throw Error('No TLS context with an eligible embedded or executable credential was found.');
   } catch (error) {
     await close();
     throw error;
@@ -276,13 +283,26 @@ async function prepareKubernetesConfig({ file, kubectl, helm, signal }, run = ru
   return {
     choices: () => [...contexts.values()].map(item => ({ ...item.display })),
     close,
-    async select(name) {
+    async reviewCredential(name) {
+      if (disposed || selected) throw Error('Choose a fresh Kubernetes context.');
+      const entry = contexts.get(name);
+      if (!entry) throw Error('Choose an eligible context from the reviewed kubeconfig.');
+      return entry.provider ? credential.review(entry.provider) : null;
+    },
+    async select(name, { credentialReview, approvedExecutable } = {}) {
       if (disposed || selected) throw Error('Choose one context for this Kubernetes session.');
       const entry = contexts.get(name);
       if (!entry) throw Error('Choose an eligible context from the reviewed kubeconfig.');
+      if (entry.provider && (approvedExecutable !== true || !credentialReview)) {
+        throw Error('Approve the reviewed credential executable for this context.');
+      }
       selected = entry.display;
       contexts.clear();
-      const written = fs.writeFile(configFile, JSON.stringify(entry.config), { flag: 'wx', mode: 0o600 });
+      const written = (async () => {
+        if (entry.provider) entry.config.users[0].user = await credential.stage(entry.provider, credentialReview);
+        if (disposed) throw Error('The Kubernetes explorer session is closed.');
+        await fs.writeFile(configFile, JSON.stringify(entry.config), { flag: 'wx', mode: 0o600 });
+      })();
       active.add(written);
       try { await written; }
       finally { active.delete(written); }

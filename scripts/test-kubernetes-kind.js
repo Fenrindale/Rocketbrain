@@ -53,10 +53,14 @@ async function verifyKindFixture() {
   const selectedFile = path.join(folder, 'selected-kubeconfig.json');
   const ambientFile = path.join(folder, 'ambient-kubeconfig.json');
   const scalerFile = path.join(folder, 'scaler-kubeconfig.json');
+  const providerConfig = path.join(folder, 'provider-kubeconfig.json');
+  const provider = path.join(folder, 'reviewed-credential-helper');
+  const providerResponse = path.join(folder, 'credential-response.json');
+  const providerCalls = path.join(folder, 'credential-calls');
   const config = (clusters, contexts) => JSON.stringify({ apiVersion: 'v1', kind: 'Config',
     'current-context': ambient, users: [auth], clusters, contexts });
   const oldAmbient = process.env.KUBECONFIG;
-  let staged, scaler, helmFixture;
+  let staged, scaler, helmFixture, execFixture;
   try {
     await fs.writeFile(selectedFile, config([observed, dead], [context(chosen, observed), context(ambient, dead)]), { mode: 0o600, flag: 'wx' });
     await fs.writeFile(ambientFile, config([dead], [context(ambient, dead)]), { mode: 0o600, flag: 'wx' });
@@ -145,6 +149,37 @@ async function verifyKindFixture() {
     await assert.rejects(helmSession.helm.apply(rollback, { approved: true }), /Approve a current/);
     assert.equal(await readMarker(), 'first');
     assert.deepEqual((await history()).map(row => [row.revision, row.status]), [[3, 'deployed'], [2, 'superseded'], [1, 'superseded']]);
+    const baseProvider = await fs.realpath(process.env.ROCKETBRAIN_KUBE_EXEC_PROVIDER);
+    assert.equal(baseProvider, path.join(folder, 'credential-helper'));
+    await fs.writeFile(provider, await fs.readFile(baseProvider), { flag: 'wx', mode: 0o500 });
+    const versionName = 'client.authentication.k8s.io/v1';
+    await fs.writeFile(providerResponse, JSON.stringify({ apiVersion: versionName, kind: 'ExecCredential',
+      status: { token, expirationTimestamp: new Date(Date.now() + 5 * 60000).toISOString() } }), { flag: 'wx', mode: 0o600 });
+    const providerContext = 'reviewed-provider';
+    await fs.writeFile(providerConfig, JSON.stringify({
+      apiVersion: 'v1', kind: 'Config', 'current-context': providerContext, clusters: [observed],
+      users: [{ name: 'provider', user: { exec: { apiVersion: versionName, command: provider,
+        args: [providerResponse, providerCalls], interactiveMode: 'Never', provideClusterInfo: false } } }],
+      contexts: [{ name: providerContext, context: { cluster: observed.name, user: 'provider', namespace } }]
+    }), { flag: 'wx', mode: 0o600 });
+    execFixture = await prepareKubernetesConfig({ file: providerConfig, kubectl, helm });
+    assert.equal(execFixture.choices()[0].credential, 'reviewed-executable');
+    const providerReview = await execFixture.reviewCredential(providerContext);
+    assert.equal(providerReview.file, provider);
+    assert.match(providerReview.sha256, /^[a-f0-9]{64}$/);
+    await assert.rejects(execFixture.select(providerContext), /Approve the reviewed credential executable/);
+    await assert.rejects(fs.stat(providerCalls), { code: 'ENOENT' });
+    const providerSession = await execFixture.select(providerContext, {
+      credentialReview: providerReview, approvedExecutable: true
+    });
+    await assert.rejects(fs.stat(providerCalls), { code: 'ENOENT' });
+    await fs.chmod(provider, 0o700);
+    await fs.writeFile(provider, 'changed after the reviewed bytes were staged');
+    assert.ok((await providerSession.resources('deployments', namespace)).rows.some(row => row.name === deploymentName));
+    assert.ok((await providerSession.releases(namespace)).rows.some(row => row.name === releaseName && row.revision === '3'));
+    assert.ok((await fs.readFile(providerCalls)).length >= 2);
+    await assert.rejects(providerSession.resources('pods', otherNamespace), /lacks permission/);
+    assert.ok(!JSON.stringify(providerSession.scope).includes(token));
     assert.ok((await fs.readFile(admin)).equals(adminBytes), 'The fixture admin kubeconfig must remain unchanged.');
     return { sourceCommit: process.env.GITHUB_SHA, kubernetes: version.serverVersion.gitVersion, kubectl: version.clientVersion.gitVersion,
       pinnedContext: true, wrongAmbientIgnored: true, sourceChangeIgnored: true, namespaceRows: namespaces.rows.length,
@@ -155,13 +190,17 @@ async function verifyKindFixture() {
         replayRejected: true, readerDenied: true, singleResourceAccount: true },
       helmRollback: { approvedRevision: 1, previousRevision: 2, recordedRevision: 3,
         serverDryRunPreserved: true, changedResourceRestored: true, approvalRequired: true,
-        forgedRejected: true, replayRejected: true } };
+        forgedRejected: true, replayRejected: true },
+      execCredential: { kubectlAccepted: true, helmAccepted: true, authVersion: versionName, approvalRequired: true,
+        noExecutionWhileReviewing: true, reviewedSnapshotStayedActive: true, otherNamespaceDenied: true } };
   } finally {
-    try { await Promise.all([staged?.close(), scaler?.close(), helmFixture?.close()]); }
+    try { await Promise.all([staged?.close(), scaler?.close(), helmFixture?.close(), execFixture?.close()]); }
     finally {
       if (oldAmbient === undefined) delete process.env.KUBECONFIG;
       else process.env.KUBECONFIG = oldAmbient;
-      for (const file of [selectedFile, ambientFile, scalerFile]) await fs.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
+      for (const file of [selectedFile, ambientFile, scalerFile, providerConfig, provider, providerResponse, providerCalls]) {
+        await fs.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
+      }
     }
   }
 }

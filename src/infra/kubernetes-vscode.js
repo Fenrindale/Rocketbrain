@@ -131,12 +131,17 @@ function registerKubernetesExplorer(context, vscode) {
         { title: 'Choose an Eligible Kubernetes Context', ignoreFocusOut: true });
       if (!choice || controller.signal.aborted) return;
       const { scope } = choice;
+      const executableReview = await staged.reviewCredential(scope.name);
+      if (controller.signal.aborted) return;
+      const credentialDetail = executableReview ? ['Credential executable ' + executableReview.file,
+        'Arguments ' + JSON.stringify(executableReview.args), 'SHA-256 ' + executableReview.sha256,
+        'Cluster tools will run this reviewed executable when they need credentials.'] : [];
       const approval = await vscode.window.showInformationMessage('Connect this Kubernetes explorer?',
         { modal: true, detail: [file.fsPath, scope.name, scope.server, 'Namespace ' + scope.namespace, 'Account ' + scope.user,
-          scope.tlsServerName && 'TLS name ' + scope.tlsServerName].filter(Boolean).join('\n') }, 'Open Explorer');
+          scope.tlsServerName && 'TLS name ' + scope.tlsServerName, ...credentialDetail].filter(Boolean).join('\n') }, 'Open Explorer');
       if (approval !== 'Open Explorer' || controller.signal.aborted) return;
       trusted();
-      const session = await staged.select(scope.name);
+      const session = await staged.select(scope.name, { credentialReview: executableReview, approvedExecutable: !!executableReview });
       if (controller.signal.aborted) return;
       const old = current;
       retained = true;
