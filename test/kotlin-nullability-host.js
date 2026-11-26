@@ -3,13 +3,21 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { fileURLToPath } = require('node:url');
 const { until, positionOf } = require('./helpers/stdio-lsp');
 const { javaFile, kotlinFile, prepareNullabilityFixture, brokenCalls, restoreCalls, runJdbc } =
   require('./helpers/mixed-nullability-fixture');
 
 async function runKotlinNullabilityChecks(api, vscode, checks) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
-  const project = await fs.mkdtemp(path.join(workspace, 'rb-kotlin-nullability-'));
+  const prepared = process.env.ROCKETBRAIN_V113_NULLABILITY_WORKSPACE;
+  const project = prepared ? await fs.realpath(prepared) : await fs.mkdtemp(path.join(workspace,'rb-kotlin-nullability-'));
+  const parent = prepared ? path.dirname(workspace) : workspace;
+  if (prepared) {
+    assert.equal(path.relative(parent,path.dirname(project)),'');
+    assert.match(path.basename(project),/^rb-kotlin-nullability-(?:mysql|mariadb)$/u);
+    assert.equal(path.relative(vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project)).uri.fsPath,project),'');
+  }
   const uri = vscode.Uri.file(project);
   const javaSettings = vscode.workspace.getConfiguration('rocketbrain.java', uri);
   const kotlinSettings = vscode.workspace.getConfiguration('rocketbrain.kotlinEditor', uri);
@@ -24,16 +32,19 @@ async function runKotlinNullabilityChecks(api, vscode, checks) {
   const service = api.java.kotlinEditor.nullability;
 
   try {
-    await prepareNullabilityFixture(project, tools);
+    if (!prepared) await prepareNullabilityFixture(project, tools);
     const before = await runJdbc(project, tools, config, spring.dbEngine);
     const original = await fs.readFile(javaPath);
     const saved = await brokenCalls(project, ['checked', 'items', 'ordinary']);
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(testFile));
     await vscode.window.showTextDocument(document, { preview: false });
     await api.java.start();
+    const dependency = await vscode.workspace.openTextDocument(vscode.Uri.file(javaPath));
     await until(async () => {
-      const cp = await api.java.executeWorkspaceCommand('java.project.getClasspaths', uri.toString(), { scope: 'runtime' });
-      return cp?.projectRoot && cp.classpaths.some(file => file.endsWith('jspecify-1.0.1.jar'));
+      const cp = await api.java.executeWorkspaceCommand('java.project.getClasspaths',dependency.uri.toString(),{scope:'runtime'});
+      const root = cp?.projectRoot && (cp.projectRoot.startsWith('file:') ? fileURLToPath(cp.projectRoot) : cp.projectRoot);
+      return root && path.isAbsolute(root) && path.relative(project,root)==='' &&
+        cp.classpaths?.some(file => file.endsWith('jspecify-1.0.1.jar'));
     }, 100000);
     await api.java.kotlinEditor.start({ document });
     const point = name => {
@@ -82,9 +93,9 @@ async function runKotlinNullabilityChecks(api, vscode, checks) {
     });
     if (tabs.length) await vscode.window.tabGroups.close(tabs);
     const real = await fs.realpath(project);
-    assert.equal(path.relative(workspace, path.dirname(real)), '');
+    assert.equal(path.relative(parent,path.dirname(real)),'');
     assert.match(path.basename(real), /^rb-kotlin-nullability-[^/\\]+$/u);
-    await fs.rm(real, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+    if (!prepared) await fs.rm(real,{recursive:true,force:true,maxRetries:8,retryDelay:250});
   }
 }
 
