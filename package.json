@@ -1155,6 +1155,7 @@
         "title": "Add Java Run Configuration",
         "category": "Rocketbrain"
       },
+      { "command": "rocketbrain.java.workbench.sourceTarget", "title": "Inspect Java Source Build Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == java" },
       { "command": "rocketbrain.java.workbench.mavenResolution", "title": "Inspect Maven Dependency Resolution", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.workbench.reviewRuntimes", "title": "Review Java Runtime Compatibility", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.workbench.changeRuntime", "title": "Change Saved Java Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -1464,6 +1465,7 @@
         { "command": "rocketbrain.sqlNotebook.unpinResult", "when": "notebookType == rocketbrain-sql-notebook && notebookCellType == code", "group": "rocketbrain" }
       ],
       "editor/context": [
+        { "command": "rocketbrain.java.workbench.sourceTarget", "when": "editorLangId == java && resourceScheme == file && isWorkspaceTrusted", "group": "navigation" },
         {
           "command": "rocketbrain.openSharedConsole",
           "when": "editorLangId == sql && (rocketbrain.mysqlConnected || rocketbrain.profileConsole) && isWorkspaceTrusted",
