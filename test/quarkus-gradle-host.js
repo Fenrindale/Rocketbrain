@@ -62,9 +62,13 @@ async function ownedDatabase(work) {
 }
 
 async function web(url,route,format='text',timeoutMs=10000) {
-  const response=await fetch(url+route,{signal:AbortSignal.timeout(timeoutMs),redirect:'error'});
-  assert.equal(response.status,200,route);
-  return response[format]();
+  try {
+    const response=await fetch(url+route,{signal:AbortSignal.timeout(timeoutMs),redirect:'error'});
+    assert.equal(response.status,200,route);
+    return await response[format]();
+  } catch(error) {
+    throw new Error(`GET ${route} (${timeoutMs} ms deadline): ${error.message}`,{cause:error});
+  }
 }
 
 async function verifyServed(url,profile) {
@@ -245,20 +249,41 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
   return ownedDatabase(()=>openNativeFixture(vscode,async(workspace,root)=>{
     const service=api.java.quarkus, projectUri=vscode.Uri.file(root).toString();
     const options={projectUri,allowProjectExecution:true};
-    await importedSpring(api,workspace);
     let breakpoint, tracker, request;
+    let phase, phaseStart, failure;
+    const begin=label=>{phase=label;phaseStart=performance.now();};
+    const phases=[];
+    const complete=()=>{
+      phases.push({phase,elapsedMs:Math.round(performance.now()-phaseStart)});
+    };
     try {
+      begin('Spring workspace import');
+      await importedSpring(api,workspace);
+      complete();
+      begin('Quarkus Gradle project import');
       const imported=await api.java.workbench.resyncProject(options);
       assert.ok(imported.projects.some(project=>project.tool==='gradle'&&!path.relative(project.root,root)));
       assert.equal((await service.inspect(options)).version,'3.40.1.2');
+      complete();
+      begin('Quarkus Gradle test');
       assert.equal((await service.runTests(options)).state,'succeeded');
       const tests=await testCount(root);
+      complete();
+      begin('Quarkus Gradle fast-jar build');
       const build=await service.build(options);
       assert.equal(build.state,'succeeded');assert.equal(build.task,':quarkusBuild');
+      complete();
+      begin('dev listener startup');
       const dev=await service.startDev(options);
+      complete();
+      begin('dev HTTP verification');
       await verifyServed(dev.baseUrl,'dev');
+      complete();
+      begin('dev loopback shutdown');
       await service.stopDev();
       await assertStopped(dev.baseUrl);
+      complete();
+      begin('packaged debugger startup and owned JVM attach');
       await assert.rejects(service.debug({projectUri}),/Explicitly choose Quarkus debugging/);
       const source=vscode.Uri.file(path.join(root,sourceRelative)), line=await breakpointLine(source.fsPath);
       breakpoint=new vscode.SourceBreakpoint(new vscode.Location(source,new vscode.Position(line-1,0)),true);
@@ -276,25 +301,44 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
       assert.equal(active?.id,session.sessionId);
       assert.equal(api.java.debug.verifiedLocalPid(active),session.debug.pid);
       await until(()=>events.some(event=>event.id===active.id&&event.configured),26000);
+      complete();
+      begin('packaged GET /proof at the source breakpoint');
       request=web(session.baseUrl,'/proof','text',50000);
       request.catch(()=>{});
       const stopped=await until(()=>events.find(event=>event.id===active.id&&event.reason==='breakpoint'),40000);
       const frame=(await active.customRequest('stackTrace',{threadId:stopped.threadId})).stackFrames[0];
       assert.equal(frame.line,line);
       assert.match(frame.name,/FixtureResource\.greeting/u);
+      complete();
+      begin('packaged GET /proof after debugger continue');
       await active.customRequest('continue',{threadId:stopped.threadId});
       assert.equal(await request,'packaged-fixture-ready');
+      complete();
+      vscode.debug.removeBreakpoints([breakpoint]);
+      breakpoint=undefined;
+      begin('packaged HTTP verification after breakpoint removal');
       await verifyServed(session.baseUrl,'packaged');
+      complete();
+      begin('packaged HTTP and JDWP shutdown');
       await service.stopDev();
       await assertStopped(session.baseUrl);
       await assertDebugClosed(session.debug.port);
+      complete();
       checks.push('Imported Quarkus Gradle in Java Projects, ran its observed tests and fast-jar build, and hit a source breakpoint in its verified owned JVM.');
       return {tool:'gradle',version:'3.40.1.2',tests,buildTask:build.task,frame:{line,source:sourceRelative},nativeView:true,
-        ownedLoopbackListener:true,ownedShutdown:true,devProfile:true,quarkusJdbc:true};
+        ownedLoopbackListener:true,ownedShutdown:true,devProfile:true,quarkusJdbc:true,phases};
+    } catch(error) {
+      failure=new Error(`Quarkus Gradle ${phase} failed after ${Math.round(performance.now()-phaseStart)} ms: ${error.message}`,
+        {cause:error});
+      throw failure;
     } finally {
       if(breakpoint)vscode.debug.removeBreakpoints([breakpoint]);
       tracker?.dispose();
       try { await service.stopDev(); }
+      catch(error) {
+        if(!failure)throw error;
+        failure.message+=` (shutdown also failed: ${error.message})`;
+      }
       finally {
         await request?.catch(()=>{});
         await api.java.executeWorkspaceCommand('java.project.changeImportedProjects',[],[],[projectUri]).catch(()=>{});
