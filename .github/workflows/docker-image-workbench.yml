@@ -8,11 +8,15 @@ on:
       - '.github/workflows/docker-image-workbench.yml'
       - 'src/docker/**'
       - 'test/docker-images.test.js'
+      - 'test/docker-registry-permissions.test.js'
+      - 'test/helpers/registry-permissions-fixture.js'
   pull_request:
     paths:
       - '.github/workflows/docker-image-workbench.yml'
       - 'src/docker/**'
       - 'test/docker-images.test.js'
+      - 'test/docker-registry-permissions.test.js'
+      - 'test/helpers/registry-permissions-fixture.js'
 
 permissions:
   contents: read
@@ -33,9 +37,20 @@ jobs:
           ROCKETBRAIN_DOCKER_IMAGE_TEST: '1'
           ROCKETBRAIN_DOCKER_IMAGE_RECEIPT: ${{ runner.temp }}/rocketbrain-docker-image.json
         run: node --test test/docker-images.test.js
+      - name: Verify grants on a separate private TLS registry
+        env:
+          ROCKETBRAIN_DOCKER_REGISTRY_PERMISSION_TEST: '1'
+          ROCKETBRAIN_DOCKER_REGISTRY_PERMISSION_RECEIPT: ${{ runner.temp }}/rocketbrain-docker-registry-permissions.json
+        run: node --test test/docker-registry-permissions.test.js
       - uses: actions/upload-artifact@v4
         with:
           name: rocketbrain-docker-image
           path: ${{ runner.temp }}/rocketbrain-docker-image.json
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-docker-registry-permissions
+          path: ${{ runner.temp }}/rocketbrain-docker-registry-permissions.json
           if-no-files-found: error
           retention-days: 7
