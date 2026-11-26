@@ -92,7 +92,7 @@ async function stopProcess(session) {
   }
 }
 
-function createQuarkusDev({log=()=>{},startupMs=180000} = {}) {
+function createQuarkusDev({log=()=>{},startupMs=180000,resolveDescendant} = {}) {
   let active,beginning=false,disposed=false,generation=0;
 
   async function stop() {
@@ -111,7 +111,13 @@ function createQuarkusDev({log=()=>{},startupMs=180000} = {}) {
   async function verifyDebugTarget(cancellation) {
     const session=active;
     if (!session?.debugPort||session.exited||session.stopping||disposed) throw fail('The owned Quarkus debug JVM is unavailable.');
-    const proof=await waitForOwnedListener({pid:session.child.pid,port:session.debugPort,cancellation,timeoutMs:5000});
+    let pid=session.child.pid;
+    if (session.liveDebug) {
+      const owner=await resolveDescendant({ancestorPid:pid,port:session.debugPort},cancellation);
+      pid=owner.pid;
+      await waitForOwnedListener({pid,port:session.port,cancellation,timeoutMs:5000});
+    }
+    const proof=await waitForOwnedListener({pid,port:session.debugPort,cancellation,timeoutMs:5000});
     if (session!==active||session.exited||session.stopping||disposed||cancelled(cancellation))
       throw fail('The owned Quarkus debug target changed.');
     return proof;
@@ -123,6 +129,11 @@ function createQuarkusDev({log=()=>{},startupMs=180000} = {}) {
     }
     if (active||beginning) throw fail('Stop the current owned Quarkus dev session first.');
     if (cancelled(cancellation)) throw fail('Quarkus dev startup cancelled.');
+    const liveDebug=debug==='development';
+    const packagedDebug=debug===true;
+    if (liveDebug && typeof resolveDescendant!=='function') {
+      throw fail('Configure Java process discovery before debugging Quarkus dev mode.');
+    }
     beginning=true;
     const ticket=generation;
     try {
@@ -137,15 +148,17 @@ function createQuarkusDev({log=()=>{},startupMs=180000} = {}) {
       }
       if (disposed || ticket!==generation || cancelled(cancellation)) throw fail('Quarkus startup cancelled.');
       if (buildFingerprint(project.root)!==metadata.buildFingerprint) throw fail('Saved Quarkus build files changed before launch.');
-      const artifact=debug?fastJar(project):null;
-      const spec=debug?debugSpec(project,javaHome,artifact,debugPort):buildSpec(project,{javaHome,mavenHome,gradleHome},
+      const artifact=packagedDebug?fastJar(project):null;
+      const spec=packagedDebug?debugSpec(project,javaHome,artifact,debugPort):buildSpec(project,{javaHome,mavenHome,gradleHome},
         [project.tool==='gradle'?':quarkusDev':metadata.plugin+':dev']);
+      const launchOptions=packagedDebug?['-jar',spec.artifact]:
+        liveDebug?['-Ddebug='+debugPort,'-DdebugHost=127.0.0.1','-Dsuspend=n']:['-Ddebug=false'];
       const args=[...spec.args,'-Dquarkus.http.host=127.0.0.1','-Dquarkus.http.port='+port,
         '-Dquarkus.console.enabled=false','-Dquarkus.test.continuous-testing=disabled',
-        '-Dquarkus.analytics.disabled=true',...(debug?['-jar',spec.artifact]:['-Ddebug=false'])];
+        '-Dquarkus.analytics.disabled=true',...launchOptions];
       const child=spawn(spec.command,args,{cwd:spec.cwd,env:spec.env,windowsHide:true,
         detached:process.platform !== 'win32',stdio:['ignore','pipe','pipe']});
-      const session={child,baseUrl,debugPort,exited:false,error:null,tail:'',stopping:null};
+      const session={child,baseUrl,port,debugPort,liveDebug,exited:false,error:null,tail:'',stopping:null};
       active=session;
       session.done=new Promise(resolve => child.once('close',() => {session.exited=true;resolve();}));
       child.once('error',error => {session.error=error;});
@@ -164,7 +177,7 @@ function createQuarkusDev({log=()=>{},startupMs=180000} = {}) {
           if (session.tail.includes('Listening on: '+baseUrl) && await listening(baseUrl)) {
             if (session.stopping || session.exited || cancelled(cancellation) || disposed) throw fail('Quarkus dev startup cancelled.');
             const ownership=debug?await verifyDebugTarget(cancellation):undefined;
-            return {state:'ready',profile:debug?'prod':'dev',baseUrl,projectUri:project.uri,version:metadata.version,
+            return {state:'ready',profile:packagedDebug?'prod':'dev',baseUrl,projectUri:project.uri,version:metadata.version,
               tool:metadata.tool,...(ownership?{debug:ownership}:{}),...(artifact?{artifact}:{})};
           }
           await pause(200);
