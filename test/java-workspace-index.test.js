@@ -18,7 +18,7 @@ function uri(file) {
 }
 
 function owned(t, release) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'rb-java-index-'));
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'rb-java-index-')));
   const workspace = path.join(base, 'workspace'), storage = path.join(base, 'storage');
   for (const folder of [workspace, storage]) fs.mkdirSync(folder);
   const folders = [{ uri: uri(workspace), name: 'index-fixture' }];
@@ -27,8 +27,8 @@ function owned(t, release) {
   const memento = { get: key => records.get(key), update: async (key, value) => records.set(key, value) };
   t.after(async () => {
     await release?.();
-    const prefix = path.join(fs.realpathSync(os.tmpdir()), 'rb-java-index-');
-    const current = fs.realpathSync(base);
+    const prefix = path.join(fs.realpathSync.native(os.tmpdir()), 'rb-java-index-');
+    const current = fs.realpathSync.native(base);
     assert.ok(current.startsWith(prefix), 'Clean up only the owned Java index fixture');
     fs.rmSync(current, { recursive: true, force: true });
   });
