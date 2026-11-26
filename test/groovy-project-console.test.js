@@ -11,7 +11,7 @@ const { captureClasspath, stageClasspath } = require('../src/java/groovy-project
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { execute } = require('../src/java/testing/provision');
-const { resource, scripts, typedMemberScript, prepareGroovyProject, rangeFor, withGroovyDatabase, expectedOutput } =
+const { resource, scripts, typedMemberScript, inferredMemberScripts, prepareGroovyProject, rangeFor, withGroovyDatabase, expectedOutput } =
   require('./helpers/groovy-project-fixture');
 
 const runtimeFile = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
@@ -257,7 +257,7 @@ test('real Buildship Groovy project loader resolves approved Gradle outputs on b
     JSON.stringify({ tool: 'gradle', liveBuildship: true, actualGradleBuild: true, copiedProjectClassAndResources: true, database: jdbc }, null, 2) + '\n');
 });
 
-for (const tool of ['maven', 'gradle']) test('real ' + tool + ' typed Groovy methods complete and navigate via compiler attribution', {
+for (const tool of ['maven', 'gradle']) test('real ' + tool + ' Groovy Java receivers complete and navigate via compiler attribution', {
   skip: !runtimeFile || (tool === 'maven' ? !mavenHome : !process.env.ROCKETBRAIN_GROOVY_PROJECT_GRADLE_CACHE) ||
     !dbs.every(([, file]) => file), timeout: 350000
 }, async t => {
@@ -278,8 +278,12 @@ for (const tool of ['maven', 'gradle']) test('real ' + tool + ' typed Groovy met
   const script = typedMemberScript;
   const scriptPath = path.join(root, 'scripts', 'typed.groovy');
   await fs.writeFile(scriptPath, script, { flag: 'wx' });
-  const dynamicPath = path.join(root, 'scripts', 'dynamic.groovy');
-  await fs.writeFile(dynamicPath, script.replace('Probe service', 'def service'), { flag: 'wx' });
+  const dynamicPaths = {};
+  for (const [strategy, text] of Object.entries(inferredMemberScripts)) {
+    const file = path.join(root, 'scripts', strategy === 'constructor' ? 'dynamic.groovy' : 'factory.groovy');
+    await fs.writeFile(file, text, { flag: 'wx' });
+    dynamicPaths[strategy] = file;
+  }
   const settings = serverSettings([{ name: 'JavaSE-25', path: runtime.javaHome, default: true }],
     { gradleHome: runtime.gradleHome, gradleJavaHome: runtime.javaHome });
   settings.java.import.gradle.wrapper.enabled = false;
@@ -315,13 +319,16 @@ for (const tool of ['maven', 'gradle']) test('real ' + tool + ' typed Groovy met
   service = ui.service;
   assert.ok(ui.commands.has(COMMANDS.members) && ui.commands.has(COMMANDS.declaration));
   process.env[variable] = marker;
-  const source = await document(scriptPath), dynamic = await document(dynamicPath);
+  const source = await document(scriptPath);
   const caret = doc => doc.positionAt(doc.getText().indexOf('service.quer') + 'service.quer'.length);
   const inspect = doc => service.project.members.inspect({ document: doc, position: caret(doc), projectUri: fixture.uri, scope: 'runtime' });
-  const edit = { document: source, edit: async perform => { perform({ replace: (range, value) => source.replace(range, value) }); return true; } };
+  const edit = doc => ({ document: doc, edit: async perform => {
+    perform({ replace: (range, value) => doc.replace(range, value) }); return true;
+  } });
   const plan = await inspect(source);
   assert.equal(plan.project.tool, tool);
   assert.equal(plan.receiver.type, 'fixture.groovyproject.ProjectProbe');
+  assert.equal(plan.receiver.strategy, 'explicit');
   assert.equal(source.getText(plan.receiver), 'service');
   assert.equal(plan.prefix, 'quer');
   assert.deepEqual(plan.members.map(member => [member.name, member.parameters.length]), [['query', 1], ['query', 3]]);
@@ -332,33 +339,78 @@ for (const tool of ['maven', 'gradle']) test('real ' + tool + ' typed Groovy met
   assert.equal(shown.document.getText(shown.options.selection), 'query');
   assert.match(shown.document.getText().split('\n')[shown.options.selection.start.line], /String url, String user, String password/u);
   await assert.rejects(fs.stat(marker), { code: 'ENOENT' });
-  await assert.rejects(inspect(dynamic), /explicitly typed local receiver/u);
   if (tool === 'maven') {
     const artifact = path.join(root, resource);
     await fs.writeFile(artifact, '3\n');
-    try { await assert.rejects(service.project.members.apply({ id: plan.id, key: selected.key, editor: edit }), /classpath changed/u); }
+    try { await assert.rejects(service.project.members.apply({ id: plan.id, key: selected.key, editor: edit(source) }), /classpath changed/u); }
     finally { await fs.writeFile(artifact, '2\n'); }
     const stale = await inspect(source);
     source.version++;
-    await assert.rejects(service.project.members.apply({ id: stale.id, key: selected.key, editor: edit }), /source changed/u);
+    await assert.rejects(service.project.members.apply({ id: stale.id, key: selected.key, editor: edit(source) }), /source changed/u);
   }
   const current = await inspect(source);
-  assert.equal((await service.project.members.apply({ id: current.id, key: selected.key, editor: edit })).name, 'query');
+  assert.equal((await service.project.members.apply({ id: current.id, key: selected.key, editor: edit(source) })).name, 'query');
   assert.equal(source.getText(), script.replace('service.quer(', 'service.query('));
   await assert.rejects(fs.stat(marker), { code: 'ENOENT' });
-  await fs.writeFile(scriptPath, source.getText());
+  const staleJava = path.join(root, fixture.nativeSource);
+  const staleBytes = await fs.readFile(staleJava);
+  if (tool === 'maven') {
+    const negatives = {
+      reassignment: inferredMemberScripts.constructor.replace('\n}\n', '\n  service = new Probe()\n}\n'),
+      escaped: inferredMemberScripts.constructor.replace('\n}\n', '\n  def later = { service }\n}\n'),
+      dispatchHook: inferredMemberScripts.constructor.replace('compute()\n', 'Probe.metaClass.query = { null }\ncompute()\n'),
+      unknownFactory: inferredMemberScripts['factory:open'].replace('Probe.open()', 'Probe.unknown()'),
+      overloadedFactory: inferredMemberScripts['factory:open'].replace('Probe.open()', 'Probe.ambiguous()')
+    };
+    for (const [name, text] of Object.entries(negatives)) {
+      const file = path.join(root, 'scripts', name + '.groovy');
+      await fs.writeFile(file, text, { flag: 'wx' });
+      await assert.rejects(inspect(await document(file)), /did not prove|could not prove/u, name);
+    }
+  }
+  const checkedReceivers = [];
+  for (const [strategy, file] of Object.entries(dynamicPaths)) {
+    const dynamic = await document(file);
+    const inferred = await inspect(dynamic);
+    assert.equal(inferred.receiver.type, plan.receiver.type);
+    assert.equal(inferred.receiver.strategy, strategy);
+    assert.match(inferred.receiver.initializer, new RegExp(strategy === 'constructor' ? 'ProjectProbe' : 'open'));
+    assert.equal(dynamic.getText(inferred.receiver), 'service');
+    assert.deepEqual(inferred.members.map(member => member.key), plan.members.map(member => member.key));
+    if (tool === 'maven' && strategy === 'factory:open') {
+      await fs.writeFile(staleJava, staleBytes.toString('utf8').replace('ProjectProbe open()', 'ProjectProbe next()'));
+      try {
+        await assert.rejects(service.project.members.apply({ id: inferred.id, key: selected.key, editor: edit(dynamic) }), /Java receiver source changed/u);
+        await assert.rejects(inspect(dynamic), /current Java source contract differs/u);
+      } finally { await fs.writeFile(staleJava, staleBytes); }
+    }
+    const found = await service.project.members.openDeclaration({ id: inferred.id, key: selected.key });
+    assert.ok(same(found.file, staleJava));
+    const viewed = ui.displayed.at(-1);
+    assert.equal(viewed.document.getText(viewed.options.selection), 'query');
+    assert.match(viewed.document.getText().split('\n')[viewed.options.selection.start.line], /String url, String user, String password/u);
+    assert.equal((await service.project.members.apply({ id: inferred.id, key: selected.key, editor: edit(dynamic) })).name, 'query');
+    const completed = inferredMemberScripts[strategy].replace('service.quer(', 'service.query(');
+    assert.equal(dynamic.getText(), completed);
+    await fs.writeFile(file, completed);
+    checkedReceivers.push({ strategy, initializer: inferred.receiver.initializer, dynamic, completed });
+  }
+  await assert.rejects(fs.stat(marker), { code: 'ENOENT' });
   const jdbc = [];
-  for (const [engine, config] of dbs) jdbc.push(await withGroovyDatabase(await read(config), engine, async () => {
-    const text = source.getText();
-    const review = await service.project.review({ document: source,
-      range: { start: source.positionAt(0), end: source.positionAt(text.length) }, projectUri: fixture.uri, scope: 'runtime' });
-    return expectedOutput(await service.project.run({ id: review.id, allowExecution: true }), engine);
-  }));
+  for (const { strategy, dynamic, completed } of checkedReceivers) {
+    for (const [engine, config] of dbs) jdbc.push(await withGroovyDatabase(await read(config), engine, async () => {
+      const review = await service.project.review({ document: dynamic,
+        range: { start: dynamic.positionAt(0), end: dynamic.positionAt(completed.length) }, projectUri: fixture.uri, scope: 'runtime' });
+      return { strategy, ...expectedOutput(await service.project.run({ id: review.id, allowExecution: true }), engine) };
+    }));
+  }
   assert.equal(await fs.readFile(marker, 'utf8'), 'initialized');
   assert.ok(calls.every(command => ['java.project.getAll', 'java.project.getSettings', 'java.project.getClasspaths'].includes(command)));
   if (process.env.ROCKETBRAIN_GROOVY_STATIC_RECEIPT) await fs.writeFile(
     process.env.ROCKETBRAIN_GROOVY_STATIC_RECEIPT + '-' + tool + '.json',
     JSON.stringify({ tool, receiver: plan.receiver.type, overloads: plan.members.length, exactSourceOverload: selected.key,
-      dynamicRefused: true, noProjectTypeInitializationDuringAnalysis: true, completedExactPrefix: true,
+      inferredReceivers: checkedReceivers.map(({ strategy, initializer }) => ({ strategy, initializer })),
+      unsafeDynamicRefused: tool === 'maven', staleJavaContractRefused: tool === 'maven',
+      noProjectTypeInitializationDuringAnalysis: true, completedExactPrefix: true,
       staleEditorAndClasspathRefused: tool === 'maven', database: jdbc }, null, 2) + '\n');
 });

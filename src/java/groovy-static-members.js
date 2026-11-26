@@ -48,16 +48,19 @@ function createGroovyMemberTools(vscode, { roots, configuration, observe, reques
     const project = await observe(projectUri, scope, check, cancellation);
     const options = configuration(project.project.root);
     const runtime = await runtimeKey(options);
-    const result = await inspectGroovyMembers({ source: snapshot.source, position: snapshot.offset, project, options, cancellation, check });
+    const result = await inspectGroovyMembers({ source: snapshot.source, position: snapshot.offset, project, options, cancellation, check,
+      projectSource: owner => readJavaDeclaration(owner, project, check, cancellation) });
     const id = randomUUID();
     const record = { ticket, version: snapshot.version, digest: snapshot.digest, offset: snapshot.offset, projectUri, scope,
       document, position, result, runtime, projectKey: project.key, expires: Date.now() + ttl };
     current(record);
+    await currentJavaSource(result.source);
     check();
     while (plans.size >= 8) plans.delete(plans.keys().next().value);
     plans.set(id, record);
     return { id, project: project.project, scope, prefix: result.token.prefix, members: structuredClone(result.members),
-      receiver: { type: result.receiver.type, start: document.positionAt(result.receiver.start), end: document.positionAt(result.receiver.end) } };
+      receiver: { type: result.receiver.type, strategy: result.receiver.strategy, initializer: result.receiver.initializer,
+        start: document.positionAt(result.receiver.start), end: document.positionAt(result.receiver.end) } };
   }
 
   async function fresh(id, key, cancellation) {
@@ -72,6 +75,12 @@ function createGroovyMemberTools(vscode, { roots, configuration, observe, reques
     if (project.key !== record.projectKey) throw fail('The Groovy project classpath changed. Inspect the member again.');
     const options = configuration(project.project.root);
     if (await runtimeKey(options) !== record.runtime) throw fail('The Groovy compiler runtime changed. Inspect the member again.');
+    const source = record.result.source;
+    if (source) {
+      const now = await readJavaDeclaration(member.owner, project, check, cancellation);
+      if (now.uri !== source.uri || !now.bytes.equals(source.bytes)) throw changedJavaSource();
+      await currentJavaSource(source);
+    }
     current(record);
     check();
     return { record, member, project, options, check };
@@ -89,13 +98,12 @@ function createGroovyMemberTools(vscode, { roots, configuration, observe, reques
     return { name: member.name, key: member.key };
   }
 
-  async function openDeclaration({ id, key, cancellation } = {}) {
-    const { record, member, project, options, check } = await fresh(id, key, cancellation);
+  async function readJavaDeclaration(owner, project, check, cancellation) {
     const settings = await requests(check, cancellation)('java.project.getSettings', [project.project.uri, [sourcePaths]]);
     const directories = settings?.[sourcePaths];
     if (!Array.isArray(directories) || directories.length > 100) throw fail('JDT did not provide bounded Java source roots.');
     const found = [];
-    const relative = member.owner.split('.').join(path.sep) + '.java';
+    const relative = owner.split('.').join(path.sep) + '.java';
     for (const value of directories) {
       let candidate;
       try {
@@ -107,11 +115,27 @@ function createGroovyMemberTools(vscode, { roots, configuration, observe, reques
       } catch { continue; }
       if (!found.some(file => !path.relative(file, candidate))) found.push(candidate);
     }
-    if (found.length !== 1) throw fail('Locate one current workspace Java source file for this attributed method.');
+    if (found.length !== 1) throw fail('Locate one current workspace Java source file for this receiver.');
     const file = found[0], stat = await fs.lstat(file);
     if (!stat.isFile() || stat.size > 1024 * 1024) throw fail('Use a bounded local Java declaration source.');
     const bytes = await readExact(file, stat.size);
-    const javaSource = { uri: pathToFileURL(file).href, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
+    return { file, bytes, uri: pathToFileURL(file).href, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
+  }
+
+  const changedJavaSource = () => fail('The Java receiver source changed. Inspect the Groovy member again.');
+
+  async function currentJavaSource(source) {
+    if (!source) return;
+    const edited = vscode.workspace.textDocuments.some(item => item.uri?.scheme === 'file' &&
+      !path.relative(item.uri.fsPath, source.file) && item.isDirty);
+    const bytes = !edited && await readExact(source.file, source.bytes.length).catch(() => undefined);
+    if (!bytes || !source.bytes.equals(bytes)) throw changedJavaSource();
+  }
+
+  async function openDeclaration({ id, key, cancellation } = {}) {
+    const { record, member, project, options, check } = await fresh(id, key, cancellation);
+    const javaSource = record.result.source || await readJavaDeclaration(member.owner, project, check, cancellation);
+    const { file, bytes } = javaSource;
     const location = await findGroovyJavaDeclaration({ member, javaSource, project, options, cancellation, check });
     if (!location || location.uri !== javaSource.uri || javaSource.text.slice(location.start, location.end) !== member.name) {
       throw fail('The current Java source declaration does not match the attributed project member.');
@@ -123,7 +147,7 @@ function createGroovyMemberTools(vscode, { roots, configuration, observe, reques
     };
     const range = new vscode.Range(...coordinates(location.start), ...coordinates(location.end));
     if (document.isDirty || document.isClosed || normalize(document.getText()) !== normalize(javaSource.text) ||
-        !bytes.equals(await readExact(file, stat.size))) {
+        !bytes.equals(await readExact(file, bytes.length))) {
       throw fail('The Java declaration changed before navigation.');
     }
     const verified = await fresh(id, key, cancellation);

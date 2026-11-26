@@ -35,6 +35,12 @@ const typedMemberScript = [
   '}',
   'compute()', ''
 ].join('\n');
+const inferredMemberScripts = {
+  constructor: typedMemberScript.replace('import groovy.transform.CompileStatic\n@CompileStatic\n', '')
+    .replace('Probe service', 'def service'),
+  'factory:open': typedMemberScript.replace('import groovy.transform.CompileStatic\n@CompileStatic\n', '')
+    .replace('Probe service = new Probe()', 'def service = Probe.open()')
+};
 
 const dependency = (group, name, version) => '<dependency><groupId>' + group + '</groupId><artifactId>' + name +
   '</artifactId><version>' + version + '</version></dependency>';
@@ -67,6 +73,10 @@ async function prepareGroovyProject(root, { javaHome, mavenHome, gradleHome, gra
     '    if (marker != null) try { java.nio.file.Files.writeString(java.nio.file.Path.of(marker), "initialized"); }',
     '    catch (java.io.IOException error) { throw new java.io.UncheckedIOException(error); }',
     '  }',
+    '  public static ProjectProbe open() { return new ProjectProbe(); }',
+    '  public static Object unknown() { return new ProjectProbe(); }',
+    '  public static ProjectProbe ambiguous() { return new ProjectProbe(); }',
+    '  public static ProjectProbe ambiguous(Object... ignored) { return new ProjectProbe(); }',
     '  public String query(String url, String user, String password) throws Exception { return read(url, user, password); }',
     '  public String query(String url) throws Exception { return read(url, System.getenv("RB_GROOVY_PROJECT_USER"), System.getenv("RB_GROOVY_PROJECT_PASSWORD")); }',
     '  private String queryHidden() { return "private"; }',
@@ -145,4 +155,4 @@ async function withGroovyDatabase(database, engine, operation) {
   }
 }
 
-module.exports = { resource, scripts, typedMemberScript, prepareGroovyProject, rangeFor, withGroovyDatabase, expectedOutput };
+module.exports = { resource, scripts, typedMemberScript, inferredMemberScripts, prepareGroovyProject, rangeFor, withGroovyDatabase, expectedOutput };

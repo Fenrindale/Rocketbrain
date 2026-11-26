@@ -330,25 +330,25 @@ function registerGroovyWorkbench(vscode,java,{ specificationRunner } = {}) {
     }));
   });
   register(COMMANDS.stopDebug,() => applicationDebug.stop());
-  async function typedMember(action) {
+  async function projectMember(action) {
     const editor = vscode.window.activeTextEditor;
-    if (editor?.document.languageId !== 'groovy') throw fail('Open a Groovy source editor to inspect a typed member.');
+    if (editor?.document.languageId !== 'groovy') throw fail('Open a Groovy source editor to inspect a Java member.');
     const { document, selection } = editor, position = selection.active;
     const chosen = await chooseProject();
     if (!chosen) return;
-    const plan = await progress('Inspect Typed Groovy Members', cancellation => projectConsole.members.inspect({
+    const plan = await progress('Inspect Groovy Java Members', cancellation => projectConsole.members.inspect({
       document, position, projectUri: chosen.selected.project.uri, scope: chosen.scope.value, cancellation
     }));
     if (!plan.members.length) throw fail('No attributable public Java methods match this Groovy member prefix.');
     const selected = await vscode.window.showQuickPick(plan.members.map(member => ({
       label: member.name, description: '(' + member.parameters.join(', ') + ')',
       detail: member.owner + ' → ' + member.returnType, member
-    })), { title: action === 'apply' ? 'Complete Typed Groovy Member' : 'Open Typed Groovy Member Declaration' });
-    if (selected) return progress('Verify Typed Groovy Member', cancellation =>
+    })), { title: action === 'apply' ? 'Complete Groovy Java Member' : 'Open Groovy Java Member Declaration' });
+    if (selected) return progress('Verify Groovy Java Member', cancellation =>
       projectConsole.members[action]({ id: plan.id, key: selected.member.key, editor, cancellation }));
   }
-  register(COMMANDS.members,() => typedMember('apply'));
-  register(COMMANDS.declaration,() => typedMember('openDeclaration'));
+  register(COMMANDS.members,() => projectMember('apply'));
+  register(COMMANDS.declaration,() => projectMember('openDeclaration'));
   subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => diagnostics.delete(event.document.uri)));
   if (vscode.workspace.onDidChangeWorkspaceFolders) subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
     void reset().catch(() => {});

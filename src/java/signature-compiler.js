@@ -57,8 +57,9 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   }
   else if(inspection.kind==='groovyMembers'&&typeof inspection.receiver==='string'&&inspection.receiver.length<512&&
     inspection.receiver.includes('.')&&inspection.receiver.split('.').every(validIdentifier)&&
-    typeof inspection.prefix==='string'&&/^[A-Za-z_$][\w$]{0,127}$|^$/u.test(inspection.prefix)){
-   query.push(inspection.kind,inspection.receiver,inspection.prefix);
+    typeof inspection.prefix==='string'&&/^(?:[A-Za-z_$][\w$]{0,127})?$/u.test(inspection.prefix)&&
+    (inspection.strategy===undefined||typeof inspection.strategy==='string'&&/^(?:constructor|factory:[A-Za-z_$][\w$]{0,127})$/u.test(inspection.strategy))){
+   query.push(inspection.kind,inspection.receiver,inspection.prefix,...(inspection.strategy?[inspection.strategy]:[]));
   }
   else if(inspection.kind==='parameterNameBindings'&&Number.isInteger(inspection.ordinal)&&inspection.ordinal>=0&&inspection.ordinal<30&&
     Array.isArray(inspection.methods)&&inspection.methods.length>0&&inspection.methods.length<=30&&

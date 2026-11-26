@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { until } = require('./helpers/stdio-lsp');
-const { prepareGroovyProject, typedMemberScript, withGroovyDatabase, expectedOutput } = require('./helpers/groovy-project-fixture');
+const { prepareGroovyProject, inferredMemberScripts, withGroovyDatabase, expectedOutput } = require('./helpers/groovy-project-fixture');
 
 async function runGroovyStaticMemberChecks(api, vscode, checks) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
@@ -25,8 +25,9 @@ async function runGroovyStaticMemberChecks(api, vscode, checks) {
   try {
     await api.java.start();
     const fixture = await prepareGroovyProject(root, { javaHome: api.java.getState().javaHome, mavenHome: setup.get('mavenHome') });
-    const script = path.join(root, 'scripts', 'typed.groovy');
-    await fs.writeFile(script, typedMemberScript, { flag: 'wx' });
+    const strategy = spring.dbEngine === 'mysql' ? 'constructor' : 'factory:open';
+    const script = path.join(root, 'scripts', 'inferred.groovy');
+    await fs.writeFile(script, inferredMemberScripts[strategy], { flag: 'wx' });
     const descriptor = vscode.Uri.file(path.join(root, 'pom.xml')).toString();
     const javaSource = vscode.Uri.file(path.join(root, fixture.nativeSource)).toString();
     await api.java.executeWorkspaceCommand('java.project.changeImportedProjects', [descriptor], [], []);
@@ -45,6 +46,8 @@ async function runGroovyStaticMemberChecks(api, vscode, checks) {
     process.env[variable] = marker;
     const result = await inspect();
     assert.equal(result.receiver.type, 'fixture.groovyproject.ProjectProbe');
+    assert.equal(result.receiver.strategy, strategy);
+    assert.match(result.receiver.initializer, new RegExp(strategy === 'constructor' ? 'ProjectProbe' : 'open'));
     assert.equal(document.getText(new vscode.Range(result.receiver.start, result.receiver.end)), 'service');
     assert.deepEqual(result.members.map(member => [member.name, member.parameters.length]), [['query', 1], ['query', 3]]);
     const selection = result.members.find(member => member.parameters.length === 3);
@@ -70,10 +73,10 @@ async function runGroovyStaticMemberChecks(api, vscode, checks) {
       return expectedOutput(await service.run({ id: review.id, allowExecution: true }), spring.dbEngine);
     });
     assert.equal(await fs.readFile(marker, 'utf8'), 'initialized');
-    checks.push('Groovy completes an attributed Java member on the exact editor token and opens the selected Java overload declaration.');
+    checks.push('Groovy infers the direct Java initializer of a dynamic local, completes the exact editor token and opens the Java overload declaration.');
     checks.push('Undo and Redo preserve the exact edit. Compiler inspection leaves the project type uninitialized. Explicit execution returns 42.');
     return { receiver: result.receiver.type, overloads: result.members.length, exactSourceOverload: selection.key,
-      noProjectTypeInitializationDuringAnalysis: true, nativeUndoRedo: true, jdbc: receipt };
+      strategy, initializer: result.receiver.initializer, noProjectTypeInitializationDuringAnalysis: true, nativeUndoRedo: true, jdbc: receipt };
   } finally {
     if (prior === undefined) delete process.env[variable]; else process.env[variable] = prior;
     try {

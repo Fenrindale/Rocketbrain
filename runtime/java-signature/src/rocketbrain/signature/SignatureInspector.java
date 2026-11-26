@@ -421,7 +421,7 @@ public final class SignatureInspector {
                 !(args.length == 7 && args[4].equals("dataflow")) &&
                 !(args.length == 9 && args[4].equals("callFlow")) &&
                 !(args.length == 6 && args[4].equals("conversion")) &&
-                !(args.length == 7 && args[4].equals("groovyMembers")) &&
+                !((args.length == 7 || args.length == 8) && args[4].equals("groovyMembers")) &&
                 !(args.length >= 7 && args.length <= 36 && args[4].equals("parameterNameBindings")) &&
                 !(args.length == 6 && args[4].equals("binaryBeanLifecycle")) &&
                 !(args.length == 8 && args[4].equals("springResourceImports")) &&
@@ -484,6 +484,9 @@ public final class SignatureInspector {
                     }
                     else if (args[4].equals("groovyMembers")) {
                         report.put("groovyMembers", GroovyJavaMembers.inspect(elements, trees, args[5], args[6]));
+                        if (args.length == 8) {
+                            report.put("groovyReceiver", GroovyJavaMembers.receiver(elements, trees, files, args[5], args[7]));
+                        }
                     }
                     else if (args[4].equals("parameterNameBindings")) {
                         report.put("parameterNameBindings", ParameterNameBindings.inspect(task, units,

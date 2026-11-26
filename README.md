@@ -100,6 +100,8 @@ Dev Container 명령은 이미지나 Dockerfile 구성과 함께 명시한 Docke
 
 저장한 `src/main/groovy` 클래스에서 **Debug Groovy Gradle Application**을 선택하면, Groovy와 Application 플러그인을 적용한 단일 Gradle 프로젝트의 `:run`을 검토하고 실행합니다. 방금 컴파일한 클래스와 실행 중인 JVM의 바이트코드가 일치하는 줄에 기본 줄 중단점을 적용합니다. 디버그 화면에서 소스와 지역 변수를 확인하고 한 줄씩 진행할 수 있습니다. **Stop Groovy Gradle Application Debugger**로 해당 실행을 종료합니다. Java 엔진을 업데이트해 Groovy 소스 줄을 지원하는 독립 디버그 번들을 설치합니다.
 
+Groovy 편집기에서 **Complete Groovy Java Member** 또는 **Open Groovy Java Member Declaration**을 실행해 프로젝트 Java 메서드를 완성하거나 원본 선언에 이동합니다. 명시적으로 타입을 지정한 지역 변수와 함께, 메서드나 스크립트 처음에 `def service = new Probe()` 또는 `def service = Probe.open()`처럼 선언하고 바로 호출하는 경우도 지원합니다. 인자 없는 생성자와 같은 `final` 타입을 돌려주는 인자 없는 정적 팩터리는 현재 Java 소스와 Maven·Gradle 빌드 산출물의 계약을 대조합니다. 재할당, 별칭·클로저로 전달하거나 소스에서 동적 메타클래스를 조작하는 경우에는 후보를 제공하지 않습니다.
+
 **JPA: Show Entity Relationship Diagram**으로 워크스페이스 선언이나 실행 중인 Hibernate의 엔티티 관계를 엽니다. 엔티티 연결과 매핑 선언을 탐색하고, 카드 위치와 숨김 상태를 워크스페이스에 저장합니다. [JPA 관계도 사용 범위](docs/jpa-relationship-diagram.md)
 
 **Inspect Spring Security Runtime**은 연결한 로컬 Actuator의 `beans`, `conditions`, `auditevents`를 읽습니다. Security 필터 체인 Bean과 조건, 애플리케이션이 기록한 인증 성공·실패와 인가 거부를 확인합니다. 감사 조회는 시간 범위·이벤트 유형·주체로 좁힐 수 있습니다. 앱에서 감사 저장소를 구성하고 연결 계정에 관리 엔드포인트의 읽기 권한을 부여해야 합니다.
