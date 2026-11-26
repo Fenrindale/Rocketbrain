@@ -81,15 +81,18 @@ async function verifyMongoAggregation(platform, bin, vscode) {
       nativeEditor = true;
       const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'rb-mongo-pipeline-'));
       const file = path.join(folder, 'totals.mongo-aggregate.json');
+      const fileUri = vscode.Uri.file(file);
       try {
         await fs.writeFile(file, content, { flag: 'wx' });
-        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(file)));
+        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(fileUri));
         const saved = await vscode.commands.executeCommand('rocketbrain.mongodb.runAggregation');
         assert.deepEqual(saved.documents, typed.documents);
         savedPipeline = true;
       } finally {
-        await fs.rm(file, { force: true });
-        await fs.rmdir(folder);
+        const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab =>
+          tab.input?.uri?.toString() === fileUri.toString() && !tab.isDirty);
+        if (tabs.length) await vscode.window.tabGroups.close(tabs, true);
+        await fs.rm(folder, { recursive: true, maxRetries: 20, retryDelay: 100 });
       }
     }
     return { version: fixture.version, driver: '7.9.1', authorizedCollection: true, nativeEditor, savedPipeline,
