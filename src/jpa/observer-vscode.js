@@ -1,7 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
 const { workspaceRoots, workspacePath } = require('../java/workbench-model');
-const { sourceParameter, sourceMember, readObservedSource } = require('../spring/observed-injection');
+const { sourceParameter, sourceMember, sourceBeanDefinition, readObservedSource } = require('../spring/observed-injection');
 const {ObserverClient,ObserverError,emptySnapshot} = require('./observer-client');
 const {validateRuntimeUrl} = require('../spring/runtime-client');
 const {summarizePerformance} = require('./fetch-performance');
@@ -133,8 +133,23 @@ function registerObserver(context,vscode,output,{source}) {
     const selection=await chooseObservedInjection(options?.eventId,members);
     if (!selection) return;
     const {fetchTrace,trace,event,assertCurrent}=selection;
+    const origins=(event.hierarchy?.owners||[]).filter(owner=>owner.source);
+    let origin;
+    if(options?.target==='bean-definition') {
+      origin=origins.find(owner=>owner.beanName===options.beanName)||(options.beanName===undefined&&origins.length===1?origins[0]:undefined);
+      if(!origin)throw new ObserverError('UNPROVED_SOURCE','Choose an observed Bean definition with source metadata.');
+    } else if (!options&&origins.length) {
+      const choices=[{label:'Injection site'},...origins.map(owner=>({
+        label:owner.beanName+' · Bean definition',
+        description:[owner.context.id,owner.context.key,'distance '+owner.distance].filter(Boolean).join(' · '),owner
+      }))];
+      const selected=await vscode.window.showQuickPick(choices,{title:'Open Observed Spring Source'});
+      if(!selected)return;
+      origin=selected.owner;
+    }
     const uri=options?.sourceUri??(await vscode.window.showOpenDialog({canSelectFiles:true,canSelectFolders:false,
-      canSelectMany:false,filters:{Java:['java']},openLabel:members?'Choose the Injection Source':'Choose the Constructor Source'}))?.[0];
+      canSelectMany:false,filters:{Java:['java']},openLabel:origin?'Choose the Bean Definition Source':
+        members?'Choose the Injection Source':'Choose the Constructor Source'}))?.[0];
     if (!uri) return;
     assertCurrent();
     if (uri.scheme!=='file' || !uri.fsPath.endsWith('.java')) throw new ObserverError('INVALID_SOURCE','Choose a local Java source file.');
@@ -144,10 +159,10 @@ function registerObserver(context,vscode,output,{source}) {
     if (document.isDirty||document.isClosed||document.languageId!=='java'||document.getText()!==saved.text) {
       throw new ObserverError('INVALID_SOURCE','Save or reload the Java source before navigating.');
     }
-    const locate=members?sourceMember:sourceParameter;
-    const matched=locate({uri:uri.toString(),text:saved.text},event.site);
-    if (!matched) throw new ObserverError('UNPROVED_SOURCE',members?'The selected file has no unique matching injection declaration.':
-      'The selected file has no unique matching constructor and parameter.');
+    const locate=origin?sourceBeanDefinition:members?sourceMember:sourceParameter;
+    const matched=locate({uri:uri.toString(),text:saved.text},origin?.source||event.site);
+    if (!matched) throw new ObserverError('UNPROVED_SOURCE',origin?'The selected file has no unique matching Bean declaration.':
+      members?'The selected file has no unique matching injection declaration.':'The selected file has no unique matching constructor and parameter.');
     const version=document.version;
     const latest=await fetchTrace();
     const rechecked=await readObservedSource(file);
@@ -159,6 +174,8 @@ function registerObserver(context,vscode,output,{source}) {
     }
     const range=new vscode.Range(document.positionAt(matched.start),document.positionAt(matched.end));
     await vscode.window.showTextDocument(document,{selection:range,preview:false});
+    if(origin)return {eventId:event.id,uri,definition:matched.name,beanName:origin.beanName,
+      owningContext:origin.context,range,sameSourceRevisionVerified:false};
     return {eventId:event.id,uri,...(event.site.kind==='field'?{field:matched.name}:{parameter:matched.name}),range,sameSourceRevisionVerified:false};
   }
   async function inspectPersistenceContexts(options, compare = false) {

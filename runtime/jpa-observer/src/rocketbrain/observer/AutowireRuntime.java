@@ -24,6 +24,7 @@ public final class AutowireRuntime {
     private static final Set<Class<?>> AGGREGATES=Set.of(List.class,Set.class,Collection.class,Map.class);
     private static final StackWalker CALLERS=StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
     private static final ThreadLocal<Frame> active=new ThreadLocal<>();
+    private static final ThreadLocal<Frame> ancestorLookup=new ThreadLocal<>();
     private static final ArrayDeque<Map<String,Object>> retained=new ArrayDeque<>();
     private static final ArrayDeque<Map<String,Object>> members=new ArrayDeque<>();
     private static volatile List<String> prefixes=List.of();
@@ -54,20 +55,29 @@ public final class AutowireRuntime {
         final Frame parent;
         final Object factory, descriptor;
         final Map<String,Object> context, site;
+        final List<AutowireHierarchy.Level> levels;
+        final Map<String,AutowireHierarchy.Located> observedDefinitions=new LinkedHashMap<>();
+        final List<Map<String,Object>> shadowed=new ArrayList<>();
         final int depth;
         final boolean member,optional,aggregate;
         Object nestedDescriptor;
         List<String> aggregateNames;
         String selected, suggested;
-        boolean multiple, conflictingHint, reportedNonUnique, noCandidates;
+        boolean multiple, conflictingHint, reportedNonUnique, noCandidates, observedLookup;
         Frame(Frame parent,Object factory,Object descriptor,Map<String,Object> context,Map<String,Object> site,
                 boolean member,boolean optional,boolean aggregate){
             this.parent=parent;this.factory=factory;this.descriptor=descriptor;this.context=context;this.site=site;
             this.member=member;this.optional=optional;this.aggregate=aggregate;
+            levels=AutowireHierarchy.observe(factory);
             depth=parent==null?1:parent.depth+1;
         }
         boolean matches(Object factory,Object descriptor){
             return this.factory==factory&&(this.descriptor==descriptor||nestedDescriptor!=null&&nestedDescriptor==descriptor);
+        }
+        void recordDefinition(String name)throws ReflectiveOperationException{
+            if(observedDefinitions.containsKey(name))return;
+            var located=AutowireHierarchy.locate(levels,0,name);
+            if(located!=null)observedDefinitions.put(name,located);
         }
     }
 
@@ -218,6 +228,7 @@ public final class AutowireRuntime {
                 observed.add(bean);
             }
             frame.aggregateNames=observed.stream().sorted().toList();
+            for(String name:frame.aggregateNames)frame.recordDefinition(name);
         }catch(Throwable ignored){}
     }
 
@@ -228,7 +239,10 @@ public final class AutowireRuntime {
             String name=label(candidate);
             if(name==null){frame.multiple=true;return;}
             if(frame.selected!=null&&!frame.selected.equals(name))frame.multiple=true;
-            else frame.selected=name;
+            else{
+                frame.selected=name;
+                frame.recordDefinition(name);
+            }
         }catch(Throwable ignored){}
     }
     public static void suggested(Object candidate,Object factory,Object descriptor){
@@ -249,12 +263,53 @@ public final class AutowireRuntime {
         }catch(Throwable ignored){}
     }
 
+    public static Object enterAncestorLookup(Object factory,Object descriptor){
+        Frame previous=ancestorLookup.get();
+        try{
+            Frame frame=active.get();
+            if(frame!=null&&frame.matches(factory,descriptor)&&!frame.aggregate&&frame.levels.size()>1){
+                ancestorLookup.set(frame);
+                frame.observedLookup=true;
+            }else ancestorLookup.remove();
+        }catch(Throwable ignored){}
+        return previous;
+    }
+
+    public static void exitAncestorLookup(Object previous){
+        if(previous instanceof Frame frame)ancestorLookup.set(frame);else ancestorLookup.remove();
+    }
+
+    public static void mergedAncestorNames(Object result,Object local,Object inherited,Object factory){
+        try{
+            Frame frame=ancestorLookup.get();
+            if(frame==null||frame!=active.get()||!(result instanceof String[] merged)||
+                !(local instanceof String[] owned)||!(inherited instanceof String[] ancestors)||
+                merged.length>64||owned.length>64||ancestors.length>64)return;
+            int level=-1;
+            for(var entry:frame.levels)if(entry.factory()==factory){level=entry.distance();break;}
+            if(level<0)return;
+            List<String> localNames=java.util.Arrays.asList(owned), mergedNames=java.util.Arrays.asList(merged);
+            for(String name:ancestors){
+                if(label(name)==null||frame.shadowed.size()>=AutowireHierarchy.SHADOW_LIMIT)continue;
+                boolean replaced=localNames.contains(name);
+                if(!replaced&&mergedNames.contains(name))continue;
+                var hidden=AutowireHierarchy.shadow(name,frame.levels,level,replaced?"replaced":"hidden");
+                if(hidden!=null&&!frame.shadowed.contains(hidden))frame.shadowed.add(hidden);
+            }
+        }catch(Throwable ignored){}
+    }
+
     public static void end(Object resolved,Object token,Object failure){
         try{
             if(!(token instanceof Frame frame)||active.get()!=frame)return;
             if(frame.parent==null)active.remove();else active.set(frame.parent);
             Map<String,Object> event=new LinkedHashMap<>();
             event.put("context",frame.context);event.put("site",frame.site);
+            List<String> names=frame.aggregateNames!=null?frame.aggregateNames:
+                frame.selected!=null?List.of(frame.selected):List.of();
+            boolean levelProof=frame.levels.equals(AutowireHierarchy.observe(frame.factory));
+            List<Map<String,Object>> origins=levelProof&&!names.isEmpty()?
+                AutowireHierarchy.selected(frame.levels,names,frame.observedDefinitions,AutowireRuntime::inScope):null;
             if(!frame.conflictingHint&&frame.suggested!=null&&(!frame.member||frame.suggested.equals(frame.selected)))
                 event.put("suggestedName",frame.suggested);
             if(frame.reportedNonUnique&&failure!=null&&failure.getClass().getName().equals(AMBIGUOUS)){
@@ -262,16 +317,24 @@ public final class AutowireRuntime {
             }else if(failure==null&&frame.member&&frame.noCandidates&&frame.selected==null&&frame.aggregateNames==null&&
                 (resolved==null||resolved instanceof Optional<?> optional&&optional.isEmpty())){
                 event.put("state","missing");
-            }else if(failure==null&&resolved!=null&&!frame.multiple&&frame.aggregateNames!=null&&frame.selected==null&&
-                localDefinitions(frame,frame.aggregateNames)){
+            }else if(failure==null&&resolved!=null&&!frame.multiple&&frame.aggregateNames!=null&&frame.selected==null&&origins!=null){
                 event.put("state","aggregated");
                 event.put("selectedBeans",frame.aggregateNames);
             }else if(failure==null&&resolved!=null&&!frame.multiple&&frame.selected!=null&&frame.aggregateNames==null&&
-                (!(resolved instanceof Optional<?> optional)||optional.isPresent())&&localDefinitions(frame,List.of(frame.selected))){
+                (!(resolved instanceof Optional<?> optional)||optional.isPresent())&&origins!=null){
                 event.put("state","resolved");event.put("selectedBean",frame.selected);
             }else if(failure==null){
                 event.put("state","unproved");
             }else return;
+            if(levelProof&&frame.levels.size()>1){
+                Map<String,Object> evidence=new LinkedHashMap<>();
+                if(origins!=null&&("resolved".equals(event.get("state"))||"aggregated".equals(event.get("state"))))
+                    evidence.put("owners",origins);
+                if(!frame.shadowed.isEmpty())evidence.put("shadowed",List.copyOf(frame.shadowed));
+                if(frame.observedLookup)evidence.put("byTypeLookupObserved",true);
+                if(!frame.conflictingHint&&frame.suggested!=null)evidence.put("resolverHint",frame.suggested);
+                if(!evidence.isEmpty())event.put("hierarchy",Map.copyOf(evidence));
+            }
             synchronized(AutowireRuntime.class){
                 event.put("id",++sequence);
                 ArrayDeque<Map<String,Object>> queue=frame.member?members:retained;
@@ -282,13 +345,6 @@ public final class AutowireRuntime {
                 queue.addLast(Map.copyOf(event));
             }
         }catch(Throwable ignored){}
-    }
-
-    private static boolean localDefinitions(Frame frame,List<String> names)throws ReflectiveOperationException{
-        // The exact Spring class's own map lookup. Never ask for a candidate instance.
-        Method exists=frame.factory.getClass().getDeclaredMethod("containsBeanDefinition",String.class);
-        for(String name:names)if(!Boolean.TRUE.equals(exists.invoke(frame.factory,name)))return false;
-        return true;
     }
 
     static synchronized Map<String,Object> snapshot(List<String> instruments){
