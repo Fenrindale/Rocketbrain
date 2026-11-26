@@ -17,6 +17,7 @@ final class AutowireHierarchy {
     private static final Set<String> CLASSES=Set.of(SUPPORT+"GenericBeanDefinition", SUPPORT+"RootBeanDefinition",
         ANNOTATED+"AnnotatedGenericBeanDefinition", "org.springframework.context.annotation.ScannedGenericBeanDefinition");
     static final int LIMIT=8, SHADOW_LIMIT=12;
+    private static final int SOURCE_PARAMETER_CHARS=1024;
 
     record Level(Object factory, Map<String,Object> context, int distance) {}
     record Located(Level level, Object definition) {}
@@ -107,7 +108,7 @@ final class AutowireHierarchy {
                 String owner=safeType(method.getDeclaringClass().getName()), returns=memberType(method.getReturnType());
                 if(owner==null||returns==null||!method.getName().matches("[A-Za-z_$][A-Za-z0-9_$]{0,179}"))return null;
                 List<String> parameters=Arrays.stream(method.getParameterTypes()).map(AutowireHierarchy::memberType).toList();
-                if(parameters.contains(null))return null;
+                if(parameters.contains(null)||parameters.stream().mapToInt(String::length).sum()>SOURCE_PARAMETER_CHARS)return null;
                 return Map.of("kind","bean-method","owner",owner,"member",method.getName(),
                     "returnType",returns,"parameterTypes",parameters);
             }

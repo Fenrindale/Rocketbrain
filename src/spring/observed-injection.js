@@ -48,7 +48,8 @@ function normalizeHierarchy(value, consumer, names, hint) {
         if (source.kind==='bean-method') {
           if (!bounded(source.member,localType)||!bounded(source.returnType,memberType)||
               !Array.isArray(source.parameterTypes)||source.parameterTypes.length>24||
-              source.parameterTypes.some(name=>!bounded(name,memberType))) invalid();
+              source.parameterTypes.some(name=>!bounded(name,memberType))||
+              source.parameterTypes.reduce((length,name)=>length+name.length,0)>1024) invalid();
           Object.assign(result.source,{member:source.member,returnType:source.returnType,parameterTypes:[...source.parameterTypes]});
         }
       }

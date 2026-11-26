@@ -38,6 +38,7 @@ test('hierarchy evidence binds exact selected labels, context distances, shadow 
     {owners:[owners[0],{...owners[1],context:event.context}]},
     {owners:[owners[0],{...owners[1],distance:0}]},
     {owners:[owners[0],{...owners[1],source:{...source,parameterTypes:['../source']}}]},
+    {owners:[owners[0],{...owners[1],source:{...source,parameterTypes:Array(5).fill('a'.repeat(240))}}]},
     {...observed,shadowed:[shadow]},
     {...observed,byTypeLookupObserved:true,shadowed:[{...shadow,hiddenByDistance:1}]}
   ])assert.throws(()=>tryHierarchy(malformed),/hierarchy/u);
