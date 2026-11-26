@@ -96,12 +96,14 @@ async function runJavaSourceTargetChecks(api, vscode, checks,
     const observed = observeComposite ? await runObservedGradleComposite(service, root, targets) : undefined;
     const mavenExecution = declareMaven ? await runDeclaredMavenExecution(service, root, mavenExecutionSource, choice => {
       const editor = vscode.window.activeTextEditor;
-      assert.equal(editor.document.uri.toString(), choice.declaration.uri);
+      assert.equal(editor.document.uri.scheme, 'file');
+      assert.equal(path.relative(editor.document.uri.fsPath, fileURLToPath(choice.declaration.uri)), '');
       assert.match(editor.document.getText(editor.selection), /<id>second-slice<\/id>/u);
     }) : undefined;
     const mavenProfile = declareMavenProfile ? await runDeclaredMavenProfileExecution(service, root, mavenProfileSource, choice => {
       const editor = vscode.window.activeTextEditor;
-      assert.equal(editor.document.uri.toString(), choice.declaration.uri);
+      assert.equal(editor.document.uri.scheme, 'file');
+      assert.equal(path.relative(editor.document.uri.fsPath, fileURLToPath(choice.declaration.uri)), '');
       assert.match(editor.document.getText(editor.selection), /<id>profile-slice<\/id>/u);
     }) : undefined;
     const jdbc = await runTargets(root, tools, classpath, database, spring.dbEngine, { declareMavenProfile });
