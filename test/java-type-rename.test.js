@@ -215,6 +215,8 @@ test('pinned JDT and Javac review one public class and saved Spring XML loads be
   assert.equal(typeRename.xmlFiles, 1);
   assert.equal(edit.documentChanges.at(-1).newUri, makeUri(target).toString());
   assert.equal(options.allowedBeanClassEdits.length, 1);
+  assert.equal(options.guards.find(guard => guard.uri === makeUri(caller).toString()).diskGuard, undefined);
+  assert.match(options.guards.find(guard => guard.uri === makeUri(extra).toString()).diskGuard.diskHash, /^[a-f0-9]{64}$/u);
   const values = [];
   for (const [engine, file] of dbFiles) {
     const config = await read(file), classpath = await springTypeRenameClasspath(classpathFile, engine);

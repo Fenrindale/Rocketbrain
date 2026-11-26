@@ -150,6 +150,8 @@ async function prepareJavaTypeRename(deps, { document, position, newName, cancel
     throw Error('Choose a distinct valid class name. Case-only file renames require a separate review.');
   }
   const initial = document.getText();
+  const initiallyOpen = new Set((vscode.workspace.textDocuments || []).filter(item => !item.isClosed &&
+    item.uri.scheme === 'file').map(item => scopeApi.key(item.uri.fsPath)));
   const selected = declaration({ uri, text: initial }, oldName);
   const offset = position && document.offsetAt(position);
   if (!Number.isInteger(offset) || offset < selected.start || offset >= selected.end) {
@@ -210,7 +212,11 @@ async function prepareJavaTypeRename(deps, { document, position, newName, cancel
   const plan = await refactoring.previewWorkspaceEdit({ documentChanges: [...entries, ...contracts.entries, rename] }, {
     kind: KIND, title: 'Rename public Java class ' + oldName + ' to ' + newName,
     anchorDocument: document, cancellation, allowedResourceOperations: ['rename'], allowedBeanClassEdits: contracts.permissions,
-    guards: sources.map(source => ({ uri: source.uri })),
+    // Opening every dependency a second time can evict unchanged hidden
+    // models. The compiler snapshot already pins those dependencies' bytes.
+    guards: sources.map(source => initiallyOpen.has(scopeApi.key(source.file)) ? { uri: source.uri } : {
+      uri: source.uri, diskGuard: { hash: source.hash, diskHash: source.diskHash }
+    }),
     validate: async () => {
       await scopeApi.validateScope(scope, vscode, request, document.uri, document.uri, cancellation);
       preApply();

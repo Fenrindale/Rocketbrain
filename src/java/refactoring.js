@@ -155,9 +155,27 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    if(bean&&(doc.isDirty||!disk.equals(Buffer.from(before))||hash(disk)!==bean.beforeSha256||hash(after)!==bean.afterSha256))throw Error('A Spring XML buffer or its exact reviewed edit changed.');
    return {uri:uri.toString(),version:doc.version,hash:hash(before),diskHash:hash(disk),before,after,edits:changes,...(eol?{formattingEndOfLine:eol}:{}),...(kotlinFormatting?{kotlinFormatting:true}:{}),...(kotlinRename?{kotlinRename:true}:{}),...(resource?{resourceOperation:resource.kind,newUri:resource.newUri,...(resource.resourceSha256?{resourceSha256:resource.resourceSha256}:{})}:{}),...(service?{serviceDescriptor:true}:{}),...(bean?{beanClassReference:true}:{}),...(guard?{guard:true}:{})};
   }
+  function captureDiskGuard(uri,expected){
+   if(kind!=='refactor.rename.java.type'||!/^[a-f0-9]{64}$/.test(expected.diskHash)||!/^[a-f0-9]{64}$/.test(expected.hash)){
+    throw Error('A saved Java type rename dependency requires exact disk and buffer hashes.');
+   }
+   const disk=fs.readFileSync(uri.fsPath);
+   size+=disk.length;
+   if(size>8*1024*1024)throw Error('Refactoring review exceeds its source or edit limit.');
+   const saved={uri:uri.toString(),guard:true,diskGuard:true,diskHash:expected.diskHash,hash:expected.hash};
+   checkDiskGuard(saved,uri,hash(disk));
+   return saved;
+  }
   for(const {uri,edits:changes}of edits.values()){cancelled(cancellation);const resource=resources.find(value=>value.uri===uri.toString());documents.push(resource?.binary?captureBinary(uri,resource,changes):await capture(uri,changes,false));}
   if(creation){size+=Buffer.byteLength(creation.after);if(size>8*1024*1024)throw Error('Refactoring review exceeds its source limit.');documents.push(creation);}
-  const captured=new Set(documents.map(saved=>key(vscode.Uri.parse(saved.uri).fsPath)));for(const value of guards){const uri=sourceUri(typeof value==='string'?value:value.uri,{guard:true}),id=key(uri.fsPath);if(!captured.has(id)){cancelled(cancellation);guardSnapshots.push(await capture(uri,[],true));captured.add(id);}}
+  const captured=new Set(documents.map(saved=>key(vscode.Uri.parse(saved.uri).fsPath)));
+  for(const value of guards){
+   const uri=sourceUri(typeof value==='string'?value:value.uri,{guard:true}),id=key(uri.fsPath);
+   if(captured.has(id))continue;
+   cancelled(cancellation);
+   guardSnapshots.push(value?.diskGuard?captureDiskGuard(uri,value.diskGuard):await capture(uri,[],true));
+   captured.add(id);
+  }
   trusted();cancelled(cancellation);if(anchor&&(anchor.document.isClosed||anchor.document.version!==anchor.version||anchor.document.getText()!==anchor.text))throw Error('The selected source changed during refactoring review.');
   for(const [id,plan]of plans)if(Date.now()>plan.expiresAt)removePlan(id);while(plans.size>=10)removePlan(plans.keys().next().value);
   const id=crypto.randomUUID(),plan={id,title,kind,documents,resourceOperations:resources,guardCount:guardSnapshots.length,warnings:[...warnings],expiresAt:Date.now()+120000};plans.set(id,{...plan,guardSnapshots});validators.set(id,{validate:extraValidate,preApply});
@@ -179,8 +197,14 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   }
  }
  function reviewedUri(saved,value=saved.uri){return sourceUri(value,{guard:!!saved.guard,resource:!!saved.resourceSha256||!!saved.serviceDescriptor||!!saved.beanClassReference,kotlinFormatting:!!saved.kotlinFormatting,kotlinRename:!!saved.kotlinRename});}
- async function validate(id,cancellation){trusted();cancelled(cancellation);const plan=plans.get(id);if(!plan||Date.now()>plan.expiresAt)throw Error('The Java refactoring review expired. Preview it again.');const custom=validators.get(id)?.validate;if(custom)await custom(cancellation);trusted();cancelled(cancellation);const checked=[];for(const saved of [...plan.documents,...plan.guardSnapshots]){if(saved.created)continue;const uri=reviewedUri(saved),doc=saved.binary?null:await vscode.workspace.openTextDocument(uri);checked.push({saved,doc,uri});cancelled(cancellation);}checkSnapshots(checked);checkResources(plan);checkedPlans.set(id,checked);return {state:'fresh',id,documents:plan.documents.length,resourceOperations:plan.resourceOperations.length};}
- function checkSnapshots(checked){trusted();for(const {saved,doc,uri}of checked){reviewedUri(saved,uri);if(saved.binary){if((vscode.workspace.textDocuments||[]).some(value=>!value.isClosed&&key(value.uri.fsPath)===key(uri.fsPath))||JSON.stringify(binaryIdentity(uri.fsPath))!==JSON.stringify(saved.identity)||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash)throw Error('A reviewed binary resource or text buffer changed after review.');continue;}if(doc.isClosed||doc.version!==saved.version||hash(doc.getText())!==saved.hash||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash||((saved.resourceOperation||saved.serviceDescriptor||saved.beanClassReference)&&doc.isDirty))throw Error('A refactoring source file changed after review. Preview again.');}}
+ function checkDiskGuard(saved,uri,diskHash=hash(fs.readFileSync(uri.fsPath))){
+  const fileKey=key(uri.fsPath);
+  const changedBuffer=(vscode.workspace.textDocuments||[]).some(doc=>!doc.isClosed&&doc.uri.scheme==='file'&&
+   key(doc.uri.fsPath)===fileKey&&(doc.isDirty||hash(doc.getText())!==saved.hash));
+  if(diskHash!==saved.diskHash||changedBuffer)throw Error('A reviewed Java type rename dependency changed after review. Preview again.');
+ }
+ async function validate(id,cancellation){trusted();cancelled(cancellation);const plan=plans.get(id);if(!plan||Date.now()>plan.expiresAt)throw Error('The Java refactoring review expired. Preview it again.');const custom=validators.get(id)?.validate;if(custom)await custom(cancellation);trusted();cancelled(cancellation);const checked=[];for(const saved of [...plan.documents,...plan.guardSnapshots]){if(saved.created)continue;const uri=reviewedUri(saved),doc=saved.binary||saved.diskGuard?null:await vscode.workspace.openTextDocument(uri);checked.push({saved,doc,uri});cancelled(cancellation);}checkSnapshots(checked);checkResources(plan);checkedPlans.set(id,checked);return {state:'fresh',id,documents:plan.documents.length,resourceOperations:plan.resourceOperations.length};}
+ function checkSnapshots(checked){trusted();for(const {saved,doc,uri}of checked){reviewedUri(saved,uri);if(saved.binary){if((vscode.workspace.textDocuments||[]).some(value=>!value.isClosed&&key(value.uri.fsPath)===key(uri.fsPath))||JSON.stringify(binaryIdentity(uri.fsPath))!==JSON.stringify(saved.identity)||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash)throw Error('A reviewed binary resource or text buffer changed after review.');continue;}if(saved.diskGuard){checkDiskGuard(saved,uri);continue;}if(doc.isClosed||doc.version!==saved.version||hash(doc.getText())!==saved.hash||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash||((saved.resourceOperation||saved.serviceDescriptor||saved.beanClassReference)&&doc.isDirty))throw Error('A refactoring source file changed after review. Preview again.');}}
  function runFinalGuard(id,cancellation) {
   const guard=validators.get(id)?.preApply;
   if(guard){const value=guard(cancellation);if(value?.then)throw Error('The final refactoring guard must be synchronous.');}
