@@ -3,6 +3,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.apache.catalina.Context;
 import org.apache.catalina.connector.Connector;
 import org.apache.catalina.startup.Tomcat;
@@ -17,26 +19,52 @@ class JakartaWarHost {
         var server = new Tomcat();
         server.setBaseDir(args[0]);
         Files.createDirectories(Path.of(args[0], "webapps"));
-        server.getHost().setAutoDeploy(false);
-        server.getHost().setDeployOnStartup(false);
+        var host = server.getHost();
+        host.setAutoDeploy(false);
+        host.setDeployOnStartup(false);
         server.getServer().setPort(-1);
         var connector = new Connector("HTTP/1.1");
         connector.setProperty("address", "127.0.0.1");
         connector.setPort(0);
         server.setConnector(connector);
-        String contextPath = "/" + args[1];
-        Path war = Path.of(args[2]);
-        Context context = server.addWebapp(contextPath, war.toString());
+
+        String token = args[1];
+        Map<String, Context> applications = new LinkedHashMap<>();
         try {
+            for (int index = 2; index < args.length; index += 2) {
+                String name = args[index];
+                applications.put(name, server.addWebapp("/" + name, args[index + 1]));
+            }
             server.start();
             int port = connector.getLocalPort();
-            if (!context.getState().isAvailable() || port <= 0) {
-                throw new IllegalStateException("The WAR context or HTTP connector did not start.");
+            if (port <= 0 || applications.values().stream().anyMatch(app -> !app.getState().isAvailable())) {
+                throw new IllegalStateException("A reviewed WAR context or the HTTP connector did not start.");
             }
-            System.out.printf("rocketbrain-tomcat:%s:%s:%d%n", args[3], version, port);
+            System.out.printf("rocketbrain-tomcat:%s:%s:%d%n", token, version, port);
             System.out.flush();
-            // Closing the extension-owned stdin also stops the application.
-            new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)).readLine();
+
+            // An extension-owned pipe handles removal and shuts the server down on EOF.
+            var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+            String line;
+            while ((line = input.readLine()) != null) {
+                if (line.isEmpty()) break;
+                String[] fields = line.split(" ", -1);
+                if (fields.length != 3 || !fields[0].equals("remove") || !fields[1].matches("[a-f0-9-]{36}")) {
+                    throw new IllegalArgumentException("Invalid Tomcat management message.");
+                }
+                String name = fields[2];
+                Context app = applications.get(name);
+                if (app == null || host.findChild(app.getName()) != app) {
+                    throw new IllegalStateException("The reviewed Tomcat context has changed.");
+                }
+                host.removeChild(app);
+                if (app.getState().isAvailable() || host.findChild(app.getName()) != null) {
+                    throw new IllegalStateException("Tomcat did not confirm removal of the reviewed context.");
+                }
+                applications.remove(name);
+                System.out.printf("rocketbrain-tomcat:%s:removed:%s:%s%n", token, fields[1], name);
+                System.out.flush();
+            }
         } finally {
             try {
                 server.stop();
