@@ -37,13 +37,23 @@ test('owned Spring prepared WITH UPDATE uses physical lookup dependencies and a 
       await assert.rejects(control.db.analyzeSchemaPrograms({ routines: [control.alien] }), /Expected JOIN/u);
       await control.dropAlien();
 
-      const staleReview = await control.review();
+      const staleReview = await control.db.previewSchemaRebuild({
+        current: control.current, desired: control.desired, tables: [control.base]
+      });
       fixture.assertPlan(staleReview.plan, control);
       await control.removeLookupKey();
       try {
         await assert.rejects(inspect, /unique lookup key/u);
         await assert.rejects(control.review(), /unique lookup key/u);
-        await assert.rejects(control.db.applySchemaRebuild({ reviewId: staleReview.reviewId, ...fixture.flags }), /unique lookup key/u);
+        const refused = await control.db.applySchemaRebuild({
+          reviewId: staleReview.reviewId, autoRecover: false, ...fixture.flags
+        });
+        assert.equal(refused.state, 'needs-recovery');
+        assert.match(refused.error?.message || '', /unique lookup key/u);
+        const artifacts = staleReview.plan.steps.flatMap(step => [step.backup, step.shadow, step.quarantine]);
+        const [rows] = await control.actor.execute('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME IN (?,?,?)',
+          [control.main, ...artifacts]);
+        assert.deepEqual(rows, []);
       } finally { await control.restoreLookupKey(); }
       assert.deepEqual(await control.kinds(), [1, 2]);
 
