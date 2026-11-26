@@ -33,8 +33,9 @@ class WatchObject(private val side: WatchSideEffect) {
 
 object KotlinWatchInspection {
     private fun allowFixtureFieldChange(target: WatchObject) {
-        val signal = System.getenv("RB_KOTLIN_TEST_FIELD_SIGNAL")?.let { Path.of(it) } ?: return
-        Thread {
+        val signalName = System.getenv("RB_KOTLIN_TEST_FIELD_SIGNAL") ?: return
+        val signal = Path.of(signalName)
+        val worker = Thread {
             val deadline = System.nanoTime() + 50_000_000_000L
             while (System.nanoTime() < deadline) {
                 if (Files.isRegularFile(signal)) {
@@ -44,7 +45,9 @@ object KotlinWatchInspection {
                 }
                 Thread.sleep(25)
             }
-        }.apply { isDaemon = true; start() }
+        }
+        worker.isDaemon = true
+        worker.start()
     }
 
     @JvmStatic

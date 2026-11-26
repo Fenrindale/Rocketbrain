@@ -80,6 +80,7 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
       }
       const [frame] = (await send('stackTrace', { threadId: stopped.threadId, startFrame: 0, levels: 1 })).stackFrames;
       assert.match(frame.name, /paused/u);
+      assert.ok(frame.source?.path, engine+' did not map the paused Kotlin source frame '+JSON.stringify(frame));
       assert.equal(path.relative(source, frame.source.path), '');
       const values = await assertKotlinWatchValues(send, frame.id);
       const indexed = bundle.build !== WATCH_BUILD ? await assertIndexedKotlinWatchValues(send, frame.id) : undefined;
