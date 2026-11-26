@@ -53,7 +53,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.python.typeServerHome", "rocketbrain.python.typeNodePath", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.react.nodePath", "rocketbrain.react.enableProps", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.python.typeServerHome", "rocketbrain.python.typeNodePath", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.react.nodePath", "rocketbrain.react.enableProps", "rocketbrain.angular.nodePath", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
@@ -190,6 +190,9 @@
       { "command": "rocketbrain.vue.checkProject", "title": "Check Vue Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.react.checkProps", "title": "Check React Props", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == typescriptreact" },
       { "command": "rocketbrain.vue.startDevServer", "title": "Start Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.angular.start", "title": "Start Angular Template Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.angular.check", "title": "Check Angular Templates", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.angular.stop", "title": "Stop Angular Template Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
       { "command": "rocketbrain.jupyter.reset", "title": "Reset Notebook Python Kernel", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-jupyter" },
@@ -2290,6 +2293,12 @@
         "rocketbrain.localCodeModel.model": {
           "type": "string", "default": "", "scope": "machine-overridable",
           "description": "Model name exposed by the configured local chat server."
+        },
+        "rocketbrain.angular.nodePath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Absolute path to the standalone Node.js executable for reviewed Angular analysis. An empty value uses Node.js on PATH."
         },
         "rocketbrain.vue.nodePath": {
           "type": "string", "default": "", "scope": "machine-overridable",

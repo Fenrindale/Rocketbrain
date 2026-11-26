@@ -7,25 +7,26 @@ const { maxSourceBytes } = require('./java-mapping');
 const maxFrameBytes = 1024 * 1024;
 const cleanText = text => text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/gu, '');
 
-function boundedMessages() {
+function boundedMessages(label = 'Container Java') {
   let buffer = Buffer.alloc(0);
+  const headerLabel=label==='Container Java'?'container Java':label;
   return new Transform({
     transform(chunk, _encoding, done) {
-      if (chunk.length > maxFrameBytes) return done(Error('Container Java message exceeds the protocol limit.'));
+      if (chunk.length > maxFrameBytes) return done(Error(label+' message exceeds the protocol limit.'));
       buffer = Buffer.concat([buffer, chunk]);
       while (buffer.length) {
         const headerEnd = buffer.indexOf('\r\n\r\n');
         if (headerEnd < 0) {
-          if (buffer.length > 4096) return done(Error('Invalid container Java message header.'));
+          if (buffer.length > 4096) return done(Error('Invalid '+headerLabel+' message header.'));
           break;
         }
-        if (headerEnd > 4096) return done(Error('Invalid container Java message header.'));
+        if (headerEnd > 4096) return done(Error('Invalid '+headerLabel+' message header.'));
         const headers = buffer.subarray(0, headerEnd).toString('ascii').split('\r\n');
         const lengths = headers.filter(header => /^Content-Length:/i.test(header));
         const length = lengths.length === 1 && /^Content-Length:\s*([0-9]{1,7})$/i.exec(lengths[0]);
         const size = Number(length?.[1]);
         if (!Number.isInteger(size) || size <= 0 || size > maxFrameBytes) {
-          return done(Error('Container Java message exceeds the protocol limit.'));
+          return done(Error(label+' message exceeds the protocol limit.'));
         }
         const end = headerEnd + 4 + size;
         if (buffer.length < end) break;
